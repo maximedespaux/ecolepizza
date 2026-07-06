@@ -1,0 +1,19 @@
+# Dépendances
+node_modules/
+
+# Build front
+src/app/dist-react/
+
+# Environnement / secrets
+.env
+.env.*
+!.env.example
+src/api/config/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+.DS_Store
