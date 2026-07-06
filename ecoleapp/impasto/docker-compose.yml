@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16
+    container_name: impasto-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: impasto
+      POSTGRES_PASSWORD: impasto
+      POSTGRES_DB: impasto
+    ports:
+      - "5432:5432"
+    volumes:
+      - impasto_db:/var/lib/postgresql/data
+
+  # Conversion DOCX → PDF via LibreOffice headless (utilisé par le module documents)
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: impasto-gotenberg
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    command:
+      - "gotenberg"
+      - "--libreoffice-disable-routes=false"
+
+volumes:
+  impasto_db:

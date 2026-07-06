@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "impasto",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd impasto && npm run dev"],
+      "port": 3000
+    }
+  ]
+}
