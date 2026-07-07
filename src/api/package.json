@@ -22,9 +22,9 @@
     "mysql2": "^3.14.3",
     "pdf-lib": "^1.17.1",
     "pizzip": "^3.2.0",
-    "uuid": "^13.0.0",
-    "nodemon": "^3.1.10"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "nodemon": "^3.1.10"
   }
 }
