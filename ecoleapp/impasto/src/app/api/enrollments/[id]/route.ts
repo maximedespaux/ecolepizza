@@ -10,6 +10,38 @@ import { prisma } from "@/lib/db";
 // Étapes qui exigent devis signé ET acompte reçu (blocage strict du pipeline).
 const REQUIRE_CONFIRMED = new Set<CrmStage>(["INSCRIT", "EN_FORMATION", "TERMINE", "EVALUATION_ENVOYEE"]);
 
+const ORDRE_DOC = ["PROGRAMME", "FICHE_SEMAINE", "TEST_POSITIONNEMENT", "DEVIS", "CONTRAT", "CONVENTION", "DROIT_IMAGE", "CONVOCATION", "INVITATION", "CGV", "EMARGEMENT", "EVALUATION_FINANCEUR", "EVALUATION_MANAGEUR", "ATTESTATION_HYGIENE", "CERTIFICAT_REALISATION"];
+const num = (v: unknown) => (v == null ? 0 : Number(v));
+
+// GET /api/enrollments/[id] — profil complet du dossier (pipeline T2).
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const e = await prisma.enrollment.findUnique({
+    where: { id },
+    include: {
+      learner: { include: { company: true } },
+      session: { include: { program: true } },
+      documents: { select: { id: true, type: true, status: true, numberPrefix: true } },
+      notes: { orderBy: { createdAt: "desc" } },
+    },
+  });
+  if (!e) return NextResponse.json({ error: "Dossier introuvable" }, { status: 404 });
+
+  const documents = [...e.documents].sort((a, b) => ORDRE_DOC.indexOf(a.type) - ORDRE_DOC.indexOf(b.type));
+  const prix = num(e.prix), acompte = num(e.acompte), priseEnCharge = num(e.priseEnCharge);
+  const resteAcharge = Math.max(0, prix - priseEnCharge - acompte);
+  const modeFinancement = priseEnCharge > 0 ? "PRIS_EN_CHARGE" : "AUTO"; // auto-financement vs tiers
+
+  return NextResponse.json({
+    data: {
+      ...e,
+      prix, acompte, priseEnCharge,
+      documents,
+      finance: { prix, acompte, priseEnCharge, resteAcharge, modeFinancement },
+    },
+  });
+}
+
 const Patch = z.object({
   crmStage: z.nativeEnum(CrmStage).optional(),
   financement: z.nativeEnum(Financement).optional(),
@@ -18,6 +50,9 @@ const Patch = z.object({
   priseEnCharge: z.coerce.number().nonnegative().optional(),
   devisSigne: z.boolean().optional(),
   acompteRecu: z.boolean().optional(),
+  // Suivi 6 mois
+  aRecontacter: z.boolean().optional(),
+  note: z.string().trim().min(1).optional(),
 });
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -64,6 +99,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     data,
     include: { learner: { include: { company: true } }, session: { include: { program: true } } },
   });
+
+  // Suivi 6 mois : « à recontacter » (sur le stagiaire) + note de suivi.
+  if (parsed.data.aRecontacter !== undefined) {
+    await prisma.learner.update({ where: { id: current.learnerId }, data: { aRecontacter: parsed.data.aRecontacter } });
+  }
+  if (parsed.data.note) {
+    await prisma.enrollmentNote.create({ data: { enrollmentId: id, body: parsed.data.note } });
+  }
 
   await prisma.auditLog.create({
     data: { organizationId: enrollment.session.organizationId, action: "enrollment.update", entity: "Enrollment", entityId: id },

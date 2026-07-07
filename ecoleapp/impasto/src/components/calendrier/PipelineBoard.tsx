@@ -1,6 +1,7 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "@/lib/toast";
+import ProfilDrawer from "./ProfilDrawer";
 import {
   PIPELINE_COLUMNS, columnFor, colorOf, learnerName, initials, frDate, sessionRange,
   LearnerLite, FINANCEMENT_LABEL,
@@ -20,6 +21,8 @@ export default function PipelineBoard() {
   const [items, setItems] = useState<PipeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null); // profil ouvert
+  const didDrag = useRef(false);
   const [overCol, setOverCol] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -93,9 +96,12 @@ export default function PipelineBoard() {
                 <div
                   key={c.id}
                   className={`kcard${dragId === c.id ? " drag" : ""}`}
+                  style={{ cursor: "pointer" }}
                   draggable
-                  onDragStart={(e) => { setDragId(c.id); e.dataTransfer.effectAllowed = "move"; }}
-                  onDragEnd={() => { setDragId(null); setOverCol(null); }}
+                  onDragStart={(e) => { setDragId(c.id); didDrag.current = true; e.dataTransfer.effectAllowed = "move"; }}
+                  onDragEnd={() => { setDragId(null); setOverCol(null); setTimeout(() => { didDrag.current = false; }, 50); }}
+                  onClick={() => { if (!didDrag.current) setOpenId(c.id); }}
+                  title="Ouvrir le profil"
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                     <span className="avatar" style={{ width: 30, height: 30, fontSize: 11, flex: "0 0 30px" }}>{initials(c.learner)}</span>
@@ -122,6 +128,7 @@ export default function PipelineBoard() {
           </div>
         );
       })}
+      {openId && <ProfilDrawer enrollmentId={openId} onClose={() => setOpenId(null)} onChanged={load} />}
     </div>
   );
 }
