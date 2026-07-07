@@ -5,12 +5,12 @@ const db = require('../config/database.js');
  */
 const getPrograms = (req, res) => {
     db.query(
-        `SELECT id, organization_id, code, title, days, hours, price, audience,
+        `SELECT id, organization_id, code, level, title, days, hours, price, audience,
                 objectives, objective_general, duration_detail, program_detail,
-                rs_code, hygiene, active, created_at
+                rs_code, hygiene, active, sort_order, created_at
          FROM training_program
          WHERE organization_id = ?
-         ORDER BY code`,
+         ORDER BY sort_order, code`,
         [req.user.organization_id],
         (err, results) => {
             if (err) {
@@ -46,15 +46,15 @@ const getProgram = (req, res) => {
  * POST /api/formations
  */
 const createProgram = (req, res) => {
-    const { code, title, days, hours, price, rs_code, hygiene, objectives } = req.body;
+    const { code, level, title, days, hours, price, rs_code, hygiene, objectives } = req.body;
     if (!code || !title) {
         return res.status(422).json({ error: 'Code et intitulé requis' });
     }
     db.query(
         `INSERT INTO training_program
-            (id, organization_id, code, title, days, hours, price, rs_code, hygiene, objectives)
-         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [req.user.organization_id, code, title, days, hours, price, rs_code || null,
+            (id, organization_id, code, level, title, days, hours, price, rs_code, hygiene, objectives)
+         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.user.organization_id, code, level || null, title, days, hours, price, rs_code || null,
          hygiene ? 1 : 0, objectives || null],
         (err) => {
             if (err) {
@@ -71,9 +71,9 @@ const createProgram = (req, res) => {
  */
 const updateProgram = (req, res) => {
     const ALLOWED = [
-        'title', 'days', 'hours', 'price', 'audience', 'objectives',
+        'code', 'title', 'level', 'days', 'hours', 'price', 'audience', 'objectives',
         'objective_general', 'duration_detail', 'program_detail',
-        'rs_code', 'hygiene', 'active',
+        'rs_code', 'hygiene', 'active', 'sort_order',
     ];
     const sets = [];
     const values = [];
@@ -81,7 +81,10 @@ const updateProgram = (req, res) => {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];
         if (f === 'hygiene' || f === 'active') v = v ? 1 : 0;
-        else if (v === '') v = null; // champ vidé -> NULL
+        else if (f === 'code') {
+            v = String(v).trim();
+            if (!v) continue; // le code est obligatoire : on ignore une valeur vide
+        } else if (v === '') v = null; // champ vidé -> NULL
         sets.push(`${f} = ?`);
         values.push(v);
     }
@@ -94,6 +97,9 @@ const updateProgram = (req, res) => {
         values,
         (err, result) => {
             if (err) {
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ error: 'Ce code de formation est déjà utilisé.' });
+                }
                 console.error('Erreur mise à jour formation :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
@@ -105,4 +111,28 @@ const updateProgram = (req, res) => {
     );
 };
 
-module.exports = { getPrograms, getProgram, createProgram, updateProgram };
+/**
+ * PUT /api/formations/reorder — définit l'ordre d'affichage des formations.
+ * Corps : { ids: [id ordonnés] }.
+ */
+const reorderPrograms = (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : null;
+    if (!ids || !ids.length) return res.status(422).json({ error: 'Liste ordonnée requise.' });
+    const conn = db.promise();
+    (async () => {
+        try {
+            for (let i = 0; i < ids.length; i++) {
+                await conn.query(
+                    'UPDATE training_program SET sort_order = ? WHERE id = ? AND organization_id = ?',
+                    [(i + 1) * 10, ids[i], req.user.organization_id]
+                );
+            }
+            res.json({ success: true, message: 'Ordre enregistré.' });
+        } catch (e) {
+            console.error('Erreur réordonnancement formations :', e);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    })();
+};
+
+module.exports = { getPrograms, getProgram, createProgram, updateProgram, reorderPrograms };

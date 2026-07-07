@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  getComptabilite, getComptaPerformance, createExpense, deleteExpense,
-  createRevenue, deleteRevenue, saveComptaTargets,
+  getComptabilite, getComptaPerformance, createExpense, deleteExpense, saveComptaTargets,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -15,11 +14,6 @@ const CATS = [
   { v: "MARKETING", label: "Marketing & envois" },
   { v: "ENERGIE", label: "Énergie" },
   { v: "DIVERS", label: "Divers" },
-];
-const REVENU_CATS = [
-  { v: "COMMISSION", label: "Commission partenaire" },
-  { v: "SUBVENTION", label: "Subvention" },
-  { v: "AUTRE", label: "Autre produit" },
 ];
 // Palette validée daltonisme (Okabe-Ito) définie en variables CSS (clair + sombre)
 // dans app.css : voir --cat-* et --ca-*.
@@ -41,9 +35,7 @@ function Comptabilite() {
   const [status, setStatus] = useState(null);
 
   const [dep, setDep] = useState({ label: "", categorie: "MATIERES_PREMIERES", montantHT: "", date: today() });
-  const [rev, setRev] = useState({ label: "", categorie: "COMMISSION", montant: "", date: today() });
   const [savingDep, setSavingDep] = useState(false);
-  const [savingRev, setSavingRev] = useState(false);
 
   const [editCibles, setEditCibles] = useState(false);
   const [cibleForm, setCibleForm] = useState({});
@@ -78,25 +70,9 @@ function Comptabilite() {
     finally { setSavingDep(false); }
   }
 
-  async function submitRev() {
-    if (!rev.label.trim() || !rev.montant) { setStatus({ type: "error", message: "Libellé et montant requis." }); return; }
-    setSavingRev(true);
-    try {
-      await createRevenue(rev);
-      setRev({ label: "", categorie: rev.categorie, montant: "", date: today() });
-      setStatus({ type: "success", message: "Produit enregistré." });
-      load(annee);
-    } catch (e) { setStatus({ type: "error", message: e.message }); }
-    finally { setSavingRev(false); }
-  }
-
   async function delDep(d) {
     if (!window.confirm(`Supprimer « ${d.label} » ?`)) return;
     try { await deleteExpense(d.id); load(annee); } catch (e) { setStatus({ type: "error", message: e.message }); }
-  }
-  async function delRev(v) {
-    if (!window.confirm(`Supprimer « ${v.label} » ?`)) return;
-    try { await deleteRevenue(v.id); load(annee); } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   async function saveCibles() {
@@ -186,7 +162,7 @@ function Comptabilite() {
               <SourceCA n={2} color={CA_COLORS.mat} titre="Ventes de matériel" montant={euro(data.ca.materiel)}
                 desc="Fours, pétrins, matières premières… vendus aux stagiaires." href="/ventes" lien="Enregistrer une vente →" />
               <SourceCA n={3} color={CA_COLORS.extra} titre="Produits divers" montant={euro(data.ca.extra)}
-                desc="Commissions, subventions, remboursements. Se saisit ci-dessous." href={null} lien="Formulaire « produit divers » ↓" />
+                desc="Commissions, subventions, remboursements. Se saisit sur la page Partenaires." href="/partenaires" lien="Enregistrer une commission →" />
             </div>
           </Card>
 
@@ -264,41 +240,14 @@ function Comptabilite() {
                 {savingDep ? "Enregistrement…" : "+ Ajouter la dépense"}
               </button>
             </Card>
-
-            <Card title="Enregistrer un produit divers">
-              <p className="sub" style={{ marginTop: -4, marginBottom: 8 }}>Commissions partenaires, subventions, remboursements… (les ventes de matériel se saisissent dans « Ventes »).</p>
-              <p className="ca-add" style={{ marginTop: 0, marginBottom: 12 }}>+ Ajouté au chiffre d'affaires</p>
-              <div className="field"><label>Libellé</label>
-                <input className="inp" value={rev.label} onChange={(e) => setRev({ ...rev, label: e.target.value })} placeholder="Commission Le 5 Stagioni…" /></div>
-              <div className="row2">
-                <div className="field"><label>Type</label>
-                  <select value={rev.categorie} onChange={(e) => setRev({ ...rev, categorie: e.target.value })}>
-                    {REVENU_CATS.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
-                  </select></div>
-                <div className="field"><label>Montant (€)</label>
-                  <input className="inp" inputMode="decimal" value={rev.montant} onChange={(e) => setRev({ ...rev, montant: e.target.value })} placeholder="0" /></div>
-              </div>
-              <div className="field"><label>Date</label>
-                <input className="inp" type="date" value={rev.date} onChange={(e) => setRev({ ...rev, date: e.target.value })} /></div>
-              <button className="btn primary" style={{ width: "100%" }} disabled={savingRev} onClick={submitRev}>
-                {savingRev ? "Enregistrement…" : "+ Ajouter le produit"}
-              </button>
-            </Card>
           </div>
 
-          {/* Listes */}
-          <div className="grid cols-2">
+          {/* Liste des dépenses */}
+          <div className="grid">
             <Card title={`Dépenses ${annee}`}>
               {data.depenses.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucune dépense saisie.</p> : (
                 <div>{data.depenses.map((d) => (
                   <ListRow key={d.id} titre={d.label} sous={`${CATS.find((c) => c.v === d.category)?.label ?? d.category} · ${new Date(d.date).toLocaleDateString("fr-FR")}`} montant={euro(d.amount_ht)} onDel={() => delDep(d)} />
-                ))}</div>
-              )}
-            </Card>
-            <Card title={`Produits divers ${annee}`}>
-              {data.revenus.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucun produit divers saisi.</p> : (
-                <div>{data.revenus.map((v) => (
-                  <ListRow key={v.id} titre={v.label} sous={`${REVENU_CATS.find((c) => c.v === v.category)?.label ?? v.category} · ${new Date(v.date).toLocaleDateString("fr-FR")}`} montant={euro(v.amount)} onDel={() => delRev(v)} />
                 ))}</div>
               )}
             </Card>

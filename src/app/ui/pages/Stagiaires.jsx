@@ -8,6 +8,7 @@ import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { initials } from "../lib/format.js";
+import { LEVELS, LEVEL_LABEL, colorForLevel } from "../lib/levels.js";
 
 // --- Options (reprises de la fiche d'expression du stagiaire) ---
 const CIVILITES = ["M.", "Mme"];
@@ -22,7 +23,7 @@ const EMPTY = {
   diploma_level: "", diploma_name: "", diploma_year: "", last_experience: "",
   experience_value: "", experience_unit: "", professional_status: "", cpf_amount: "",
   france_travail_id: "", current_contract: "", social_security: "",
-  financing: "PARTICULIER",
+  financing: "PARTICULIER", levels: "",
   project_creation: false, project_takeover: false, project_oven: false, project_truck: false, project_job: false,
   company: {
     name: "", legal_status: "", siret: "", naf_ape: "", address: "", zip_code: "", town: "",
@@ -117,6 +118,12 @@ function Stagiaires() {
 
   const set = (field) => (e) => setForm((p) => ({ ...p, [field]: e.target.value }));
   const toggle = (field) => (e) => setForm((p) => ({ ...p, [field]: e.target.checked }));
+  // Ajoute/retire un code niveau dans la liste CSV form.levels.
+  const toggleLevel = (code) => setForm((p) => {
+    const set = new Set((p.levels || "").split(",").map((s) => s.trim()).filter(Boolean));
+    set.has(code) ? set.delete(code) : set.add(code);
+    return { ...p, levels: [...set].join(",") };
+  });
   const setCompany = (field) => (e) =>
     setForm((p) => ({ ...p, company: { ...p.company, [field]: e.target.value } }));
 
@@ -256,6 +263,21 @@ function Stagiaires() {
             </SelectField>
           </div>
 
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 6px" }}>Niveaux / accès (plusieurs possibles)</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+            {LEVELS.map((l) => {
+              const on = (form.levels || "").split(",").map((s) => s.trim()).includes(l.v);
+              return (
+                <label key={l.v} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                  <input type="checkbox" checked={on} onChange={() => toggleLevel(l.v)} />
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <i style={{ width: 11, height: 11, borderRadius: "50%", background: l.color, display: "inline-block" }} /> {l.label}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+
           <div className="divider" />
 
           {/* Projet */}
@@ -337,13 +359,20 @@ function Stagiaires() {
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{l.last_name} {l.first_name}</b>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"} · {l.phone || "—"}</span>
-                    {l.has_account && (
-                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-                        🔑 <span className="mono">{revealed[l.id] ? (l.account_password || "—") : "••••••••"}</span>
-                      </span>
-                    )}
                   </span>
                 </Link>
+                {l.has_account && (
+                  <span className="pwcell" title={revealed[l.id] ? "Cliquez pour sélectionner, puis copiez" : "Cliquez sur 👁 pour afficher"}>
+                    🔑 <span className="mono pw" onClick={(e) => { if (revealed[l.id]) { const r = document.createRange(); r.selectNodeContents(e.currentTarget); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } }}>
+                      {revealed[l.id] ? (l.account_password || "—") : "••••••••"}
+                    </span>
+                  </span>
+                )}
+                {(l.levels || "").split(",").map((s) => s.trim()).filter(Boolean).map((lv) => (
+                  <span key={lv} className="lvl-chip" title={LEVEL_LABEL[lv] || lv} style={{ background: colorForLevel(lv) }}>
+                    {(LEVEL_LABEL[lv] || lv).replace("Certifiante (RS)", "RS")}
+                  </span>
+                ))}
                 {l.professional_status && <Badge tone="n">{l.professional_status}</Badge>}
                 {l.has_account && (
                   <button

@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
+const { resolveTokens } = require('./tokens.js');
 
 const TPL_DIR = path.join(__dirname, '..', 'templates');
 
@@ -55,7 +56,9 @@ function templateSlugFor(type, o = {}) {
     }
 }
 
-// Modèle par défaut fourni avec l'application (Buffer) pour un slug, ou null.
+// Modèle .docx par défaut fourni avec l'application (Buffer) pour un slug, ou null.
+// Conservé pour la compatibilité avec un éventuel fichier .docx téléversé ; il
+// n'y a plus de modèles par défaut fournis (chaque modèle est créé de zéro).
 function defaultTemplateBuffer(slug) {
     const entry = SLUG_MAP[slug];
     if (!entry) return null;
@@ -63,64 +66,9 @@ function defaultTemplateBuffer(slug) {
     return fs.existsSync(p) ? fs.readFileSync(p) : null;
 }
 
-// --- Formatage ---
-const pad = (n) => String(n).padStart(2, '0');
-function frDate(v) {
-    if (!v) return '';
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return String(v);
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-}
-function euro(v) {
-    const n = Number(v);
-    if (!Number.isFinite(n) || n === 0) return '';
-    return n.toLocaleString('fr-FR') + ' €';
-}
-function businessDay(startStr, offset) {
-    if (!startStr) return '';
-    const d = new Date(startStr);
-    if (Number.isNaN(d.getTime())) return '';
-    let added = 0;
-    while (added < offset) {
-        d.setDate(d.getDate() + 1);
-        const wd = d.getDay();
-        if (wd !== 0 && wd !== 6) added += 1;
-    }
-    return frDate(d);
-}
-
-/** Table de jetons { Jeton: valeur } à partir du contexte. */
+/** Table de jetons { Jeton: valeur } à partir du contexte (catalogue partagé). */
 function buildTokens(ctx) {
-    const l = ctx.learner || {};
-    const c = ctx.company || {};
-    const f = (ctx.formations && ctx.formations[0]) || {};
-    const forms = ctx.formations || [];
-
-    const fullName = [l.civility, l.first_name, l.last_name].filter(Boolean).join(' ').trim();
-    const address = [l.address, [l.zip_code, l.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-    const totalPrice = forms.reduce((s, x) => s + Number(x.enroll_price || x.price || 0), 0) || Number(f.price || 0);
-    const totalAcompte = forms.reduce((s, x) => s + Number(x.acompte || 0), 0);
-    const start = f.start_date || '';
-    const today = frDate(new Date());
-
-    return {
-        Personne: fullName, Nom: l.last_name || '', 'Prénom': l.first_name || '',
-        Adresse: address, Email: l.email || '', 'Téléphone': l.phone || '', D_Naissance: frDate(l.birthday),
-        'Niveau suggérer': f.title || '', Formation: f.title || '',
-        Objectifs: f.objectives || '', ObjectifG: f.objective_general || '',
-        'DuréeDétail': f.duration_detail || '', 'Déroulé': f.program_detail || '', Public: f.audience || '',
-        Heures: f.hours != null ? String(f.hours) : '', Jours: f.days != null ? String(f.days) : '',
-        TmpTotSem: f.hours != null ? String(f.hours) : '',
-        Prix: euro(totalPrice), Acompte: euro(totalAcompte), Offre: euro(totalPrice),
-        Date: today, Today: today, Jour1: frDate(start), endDate: frDate(f.end_date),
-        'Semaine de la formation': f.week ? `Semaine ${f.week} — ${f.year || ''}`.trim() : frDate(start),
-        Lundi: businessDay(start, 0), Mardi: businessDay(start, 1), Mercredi: businessDay(start, 2),
-        Jeudi: businessDay(start, 3), Vendredi: businessDay(start, 4),
-        'Nom entreprise': c.name || '', "Nom de l’entreprise": c.name || '',
-        Siret: c.siret || '', 'Civ représentant': c.representative_civ || '',
-        'Nom représentant': c.representative_name || '', 'Responsable entreprise': c.representative_name || '',
-        OPCO: c.opco || '',
-    };
+    return resolveTokens(ctx);
 }
 
 /** Remplit un modèle .docx (Buffer) avec le contexte. Renvoie { buffer, filename }. */
@@ -156,5 +104,6 @@ function fillDocument(type, ctx, loadTemplate) {
 }
 
 module.exports = {
-    TEMPLATE_SLUGS, templateSlugFor, defaultTemplateBuffer, renderTemplate, buildTokens, fillDocument,
+    TEMPLATE_SLUGS, templateSlugFor, defaultTemplateBuffer,
+    renderTemplate, buildTokens, fillDocument,
 };

@@ -27,8 +27,8 @@ function findSoffice() {
     return null;
 }
 
-/** Convertit un Buffer .docx en Buffer PDF. Lève une erreur (code NO_SOFFICE) si LibreOffice est absent. */
-function docxToPdf(docxBuffer) {
+/** Convertit un Buffer source (.docx ou .html) en Buffer PDF via LibreOffice. */
+function convertToPdf(inputBuffer, ext) {
     const bin = findSoffice();
     if (!bin) {
         const e = new Error('LibreOffice introuvable — installez-le ou définissez SOFFICE_PATH.');
@@ -36,10 +36,10 @@ function docxToPdf(docxBuffer) {
         throw e;
     }
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'impasto-pdf-'));
-    const inPath = path.join(dir, 'doc.docx');
+    const inPath = path.join(dir, `doc.${ext}`);
     const outPath = path.join(dir, 'doc.pdf');
     try {
-        fs.writeFileSync(inPath, docxBuffer);
+        fs.writeFileSync(inPath, inputBuffer);
         // Profil utilisateur isolé par appel -> évite le verrou « another instance ».
         const r = spawnSync(bin, [
             '--headless', '--norestore',
@@ -56,4 +56,14 @@ function docxToPdf(docxBuffer) {
     }
 }
 
-module.exports = { docxToPdf, findSoffice };
+/** Convertit un Buffer .docx en Buffer PDF. Lève une erreur (code NO_SOFFICE) si LibreOffice est absent. */
+function docxToPdf(docxBuffer) {
+    return convertToPdf(docxBuffer, 'docx');
+}
+
+/** Convertit une chaîne HTML complète en Buffer PDF (modèles construits dans l'app). */
+function htmlToPdf(html) {
+    return convertToPdf(Buffer.from(html, 'utf8'), 'html');
+}
+
+module.exports = { docxToPdf, htmlToPdf, convertToPdf, findSoffice };

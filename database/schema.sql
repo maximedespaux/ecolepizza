@@ -80,6 +80,8 @@ CREATE TABLE user (
     last_name       varchar(120) DEFAULT NULL,
     email           varchar(255) NOT NULL,
     phone           varchar(30)  DEFAULT NULL,
+    active          tinyint(1)   NOT NULL DEFAULT 1,    -- 0 = accès désactivé (connexion refusée)
+    last_login_at   timestamp    NULL DEFAULT NULL,     -- dernière connexion réussie
     password        varchar(255) NOT NULL,             -- hash bcrypt (authentification)
     password_plain_enc varchar(255) DEFAULT NULL,      -- DEV UNIQUEMENT : copie chiffrée du mot de passe généré (à retirer)
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
@@ -136,6 +138,10 @@ CREATE TABLE learner (
     address             varchar(255) DEFAULT NULL,
     zip_code            varchar(10)  DEFAULT NULL,
     town                varchar(120) DEFAULT NULL,
+    lat                 decimal(9,6) DEFAULT NULL,       -- géolocalisation précise (carte)
+    lng                 decimal(9,6) DEFAULT NULL,
+    geo_precision       varchar(20)  DEFAULT NULL,       -- housenumber|street|locality|municipality
+    geocoded_at         timestamp    NULL DEFAULT NULL,
     -- Parcours scolaire
     diploma_level       varchar(120) DEFAULT NULL,       -- niveau du diplôme le plus élevé
     diploma_name        varchar(180) DEFAULT NULL,       -- nom du diplôme
@@ -145,6 +151,7 @@ CREATE TABLE learner (
     experience_unit     varchar(20)  DEFAULT NULL,       -- durée : mois / année
     -- Statut actuel & financement
     professional_status varchar(120) DEFAULT NULL,       -- « Êtes-vous ? » : en activité, demandeur d'emploi…
+    levels              varchar(120) DEFAULT NULL,       -- étiquettes niveau/accès (CSV : NIV1,NIV1_PRO…)
     cpf_amount          decimal(10,2) DEFAULT NULL,      -- « Combien de CPF »
     france_travail_id   varchar(60)  DEFAULT NULL,       -- Id France Travail (Pôle emploi)
     current_contract    varchar(60)  DEFAULT NULL,       -- contrat actuel (si en activité)
@@ -176,6 +183,7 @@ CREATE TABLE training_program (
     id              uuid          NOT NULL DEFAULT uuid(),
     organization_id uuid          NOT NULL,
     code            varchar(40)   NOT NULL,          -- NIV1, NIV1H, RS7404…
+    level           varchar(20)   DEFAULT NULL,      -- NIV1|NIV1_PRO|NIV2|EXPERT|RS (code couleur carte)
     title           varchar(255)  NOT NULL,
     days            int           DEFAULT NULL,
     hours           int           DEFAULT NULL,
@@ -188,6 +196,7 @@ CREATE TABLE training_program (
     rs_code         varchar(40)   DEFAULT NULL,      -- RS7404 si certifiante
     hygiene         tinyint(1)    NOT NULL DEFAULT 0,
     active          tinyint(1)    NOT NULL DEFAULT 1,
+    sort_order      int           NOT NULL DEFAULT 100, -- ordre d'affichage (réorganisation)
     created_at      timestamp     NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     UNIQUE KEY uq_program_org_code (organization_id, code),
@@ -349,6 +358,7 @@ CREATE TABLE invoice (
     number          varchar(40)   NOT NULL,
     amount_net      decimal(10,2) NOT NULL,
     tva_exoneree    tinyint(1)    NOT NULL DEFAULT 1,     -- art. 261-4-4° du CGI
+    payment_method  varchar(30)   DEFAULT NULL,           -- Espèces / CB / Virement / Chèque (boutique)
     status          enum('BROUILLON','EMISE','PAYEE','IMPAYEE','ANNULEE')
                     NOT NULL DEFAULT 'BROUILLON',
     due_date        date          DEFAULT NULL,
@@ -428,6 +438,8 @@ CREATE TABLE partner (
     website         varchar(255) DEFAULT NULL,
     town            varchar(120) DEFAULT NULL,
     discount_pct    float        DEFAULT NULL,
+    offer           varchar(500) DEFAULT NULL,       -- ce que le partenaire propose
+    notes           text         DEFAULT NULL,       -- notes de suivi
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     KEY idx_partner_org (organization_id, category),
@@ -504,6 +516,7 @@ CREATE TABLE revenue_extra (
     date             date          NOT NULL DEFAULT current_timestamp(),
     label            varchar(255)  NOT NULL,
     category         varchar(30)   NOT NULL DEFAULT 'COMMISSION',
+    partner_id       uuid          DEFAULT NULL,          -- commission liée à un partenaire
     amount           decimal(10,2) NOT NULL,
     note             varchar(255)  DEFAULT NULL,
     created_at       timestamp     NOT NULL DEFAULT current_timestamp(),
@@ -527,6 +540,23 @@ CREATE TABLE accounting_settings (
         REFERENCES organization (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- Paramètres de la boutique (facturation matériel : numérotation, mentions, paiement, TVA)
+CREATE TABLE shop_settings (
+    id               uuid         NOT NULL DEFAULT uuid(),
+    organization_id  uuid         NOT NULL,
+    invoice_prefix   varchar(20)  NOT NULL DEFAULT 'F',
+    next_number      int          NOT NULL DEFAULT 1,
+    payment_methods  varchar(255) NOT NULL DEFAULT 'Espèces,CB,Virement,Chèque',
+    legal_mentions   text         DEFAULT NULL,
+    tva_applies      tinyint(1)   NOT NULL DEFAULT 1,      -- 1 = TVA appliquée ; 0 = exonérée
+    created_at       timestamp    NOT NULL DEFAULT current_timestamp(),
+    updated_at       timestamp    NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_shop_org (organization_id),
+    CONSTRAINT fk_shop_org FOREIGN KEY (organization_id)
+        REFERENCES organization (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- ---------------------------------------------------------------------------
 -- Modèles de documents par organisme (.docx téléversés, multi-tenant)
 -- ---------------------------------------------------------------------------
@@ -536,6 +566,10 @@ CREATE TABLE document_template (
     slug             varchar(60)  NOT NULL,
     label            varchar(255) DEFAULT NULL,      -- intitulé de l'étape
     doc_type         varchar(40)  DEFAULT NULL,      -- type du generated_document (DEVIS…)
+    kind             varchar(10)  NOT NULL DEFAULT 'builder', -- 'builder' (corps HTML) | 'docx' (fichier)
+    body_html        longtext     DEFAULT NULL,       -- corps du modèle construit dans l'app (jetons {…})
+    header_html      longtext     DEFAULT NULL,       -- en-tête éditable (sinon papier à en-tête auto)
+    footer_html      longtext     DEFAULT NULL,       -- pied de page éditable
     sort_order       int          NOT NULL DEFAULT 100,
     signable         tinyint(1)   NOT NULL DEFAULT 0,
     stagiaire_sign   tinyint(1)   NOT NULL DEFAULT 0,

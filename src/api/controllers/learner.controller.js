@@ -28,7 +28,7 @@ const LEARNER_FIELDS = [
     'phone', 'birthday', 'birth_place', 'address', 'zip_code', 'town',
     'diploma_level', 'diploma_name', 'diploma_year', 'last_experience',
     'experience_value', 'experience_unit', 'professional_status', 'cpf_amount',
-    'france_travail_id', 'current_contract', 'social_security', 'financing',
+    'france_travail_id', 'current_contract', 'social_security', 'financing', 'levels',
     'project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job',
 ];
 
@@ -50,7 +50,7 @@ const getLearners = (req, res) => {
 
     db.query(
         `SELECT l.id, l.organization_id, l.first_name, l.last_name, l.email, l.phone,
-                l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.created_at,
+                l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.levels, l.created_at,
                 u.email AS account_email, u.password_plain_enc
          FROM learner l
          LEFT JOIN user u ON u.id = l.user_id

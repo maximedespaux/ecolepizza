@@ -10,6 +10,7 @@
 const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
 const STAFF = [...ADMIN, "FORMATEUR"];        // bureau + formateur (lecture pédagogique)
 const AUDIT = [...ADMIN, "AUDITEUR"];         // bureau + auditeur
+const OWNER = ["SUPER_ADMIN", "ADMIN_ORGANISME"]; // propriétaire + admins (gestion des accès)
 
 export const NAV = [
   {
@@ -33,9 +34,8 @@ export const NAV = [
       { to: "/formations", ic: "◍", label: "Formations", roles: STAFF },
       { to: "/produit-divers", ic: "💶", label: "Produit divers", roles: ["FORMATEUR"] },
       { to: "/carte", ic: "🗺", label: "Carte des stagiaires", roles: ADMIN },
-      { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: ADMIN },
-      { to: "/inventaire", ic: "📦", label: "Inventaire", roles: ADMIN },
-      { to: "/ventes", ic: "🛒", label: "Ventes", roles: ADMIN },
+      { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: STAFF },
+      { to: "/ventes", ic: "🛒", label: "Ventes & Inventaire", roles: ADMIN },
       { to: "/factures", ic: "🧾", label: "Facturation", roles: ADMIN },
       { to: "/comptabilite", ic: "€", label: "Comptabilité", roles: ADMIN },
     ],
@@ -44,6 +44,7 @@ export const NAV = [
     grp: "Système",
     items: [
       { to: "/reglages", ic: "⚙", label: "Organisme", roles: ADMIN },
+      { to: "/equipe", ic: "👥", label: "Équipe & accès", roles: OWNER },
       { to: "/modeles", ic: "⎙", label: "Modèles de documents", roles: ADMIN },
       { to: "/audit", ic: "🔒", label: "Journal d'audit", roles: AUDIT },
     ],
@@ -62,10 +63,11 @@ export const PAGE_TITLES = {
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
   "/inventaire": "Inventaire",
-  "/ventes": "Ventes de matériel",
+  "/ventes": "Ventes de Matériels et Inventaire",
   "/factures": "Facturation",
   "/comptabilite": "Comptabilité",
   "/reglages": "Organisme",
+  "/equipe": "Équipe & accès",
   "/modeles": "Modèles de documents",
   "/audit": "Journal d'audit",
   "/notifications": "Notifications",

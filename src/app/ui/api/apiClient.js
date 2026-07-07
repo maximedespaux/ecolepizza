@@ -48,6 +48,12 @@ export function deleteSale(id) {
 export function checkoutSale(payload) {
   return request("/ventes/checkout", { method: "POST", body: JSON.stringify(payload) });
 }
+export function getShopSettings() {
+  return request("/ventes/settings");
+}
+export function saveShopSettings(payload) {
+  return request("/ventes/settings", { method: "PUT", body: JSON.stringify(payload) });
+}
 
 // --- Émargement ---
 export function getAttendance(sessionId) {
@@ -168,6 +174,10 @@ export function downloadInvoiceXml(id, number) {
 export function getCarte() {
   return request("/carte");
 }
+// Géocode par lots les stagiaires sans coordonnées (API adresse gouv).
+export function geocodeCarte(limit = 80) {
+  return request("/carte/geocode", { method: "POST", body: JSON.stringify({ limit }) });
+}
 
 // --- Comptabilité / Gestion ---
 export function getComptabilite(annee) {
@@ -222,6 +232,11 @@ export function logout() {
   return request("/auth/logout", { method: "POST" });
 }
 
+// L'utilisateur connecté change son propre mot de passe.
+export function changeMyPassword(payload) {
+  return request("/auth/password", { method: "PATCH", body: JSON.stringify(payload) });
+}
+
 // --- Stagiaires ---
 export function getStagiaires(q = "") {
   const query = q ? `?q=${encodeURIComponent(q)}` : "";
@@ -259,6 +274,10 @@ export function getFormations() {
 }
 export function updateFormation(id, payload) {
   return request(`/formations/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+// Réordonne les formations (glisser-déposer).
+export function reorderFormations(ids) {
+  return request("/formations/reorder", { method: "PUT", body: JSON.stringify({ ids }) });
 }
 
 // --- Sessions ---
@@ -376,6 +395,18 @@ export function resetTemplate(slug) {
 export function downloadTemplateFile(slug) {
   return download(`/templates/${slug}/file`, `${slug}.docx`);
 }
+// Catalogue des jetons (regroupé par table) pour la palette de l'éditeur.
+export function getTokenCatalog() {
+  return request("/templates/tokens");
+}
+// Corps HTML d'un modèle (propre à l'organisme ou modèle par défaut).
+export function getTemplateBody(slug) {
+  return request(`/templates/${slug}/body`);
+}
+// Enregistre le contenu construit dans l'éditeur (corps + en-tête + pied de page).
+export function saveTemplateBody(slug, payload) {
+  return request(`/templates/${slug}`, { method: "PUT", body: JSON.stringify(payload) });
+}
 export async function uploadTemplate(slug, file) {
   const fd = new FormData();
   fd.append("file", file);
@@ -391,6 +422,20 @@ export async function uploadTemplate(slug, file) {
   return data;
 }
 
+// --- Équipe (comptes ayant accès au panneau) ---
+export function getTeam() {
+  return request("/equipe");
+}
+export function createMember(payload) {
+  return request("/equipe", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateMember(id, payload) {
+  return request(`/equipe/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deleteMember(id) {
+  return request(`/equipe/${id}`, { method: "DELETE" });
+}
+
 // --- Partenaires ---
 export function getPartenaires(category = "") {
   const query = category ? `?category=${encodeURIComponent(category)}` : "";
@@ -399,4 +444,10 @@ export function getPartenaires(category = "") {
 
 export function createPartenaire(payload) {
   return request("/partenaires", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updatePartenaire(id, payload) {
+  return request(`/partenaires/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deletePartenaire(id) {
+  return request(`/partenaires/${id}`, { method: "DELETE" });
 }

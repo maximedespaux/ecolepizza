@@ -29,6 +29,16 @@ export function monthMatrix(year, month) {
   return weeks;
 }
 
+/** Numéro de semaine ISO 8601 (lundi ; semaine 1 = celle du 1er jeudi). */
+export function isoWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = (d.getUTCDay() + 6) % 7; // lundi = 0
+  d.setUTCDate(d.getUTCDate() - dayNum + 3); // jeudi de la semaine
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const diff = (d - firstThursday) / 86400000;
+  return 1 + Math.round((diff - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+}
+
 export function isWeekend(d) {
   const w = d.getDay();
   return w === 0 || w === 6;

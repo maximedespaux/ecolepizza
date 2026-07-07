@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSessions, getFormations, createSession } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
@@ -6,7 +6,7 @@ import Card from "../components/Card.jsx";
 import { SelectField, Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { colorOf } from "../lib/format.js";
-import { MONTHS, DOW, monthMatrix, ymd, isWeekend, inRange, isToday } from "../lib/calendar.js";
+import { MONTHS, DOW, monthMatrix, ymd, isWeekend, inRange, isToday, isoWeek } from "../lib/calendar.js";
 
 function Sessions() {
   const navigate = useNavigate();
@@ -125,34 +125,40 @@ function Sessions() {
           </button>
         </div>
 
-        <div className="cal-grid">
+        <div className="cal-grid withweeks">
+          <div className="cal-dow cal-wk-h">Sem.</div>
           {DOW.map((d) => <div key={d} className="cal-dow">{d}</div>)}
-          {weeks.flat().map((day) => {
-            const dayStr = ymd(day);
-            const inMonth = day.getMonth() === month;
-            const wknd = isWeekend(day);
-            const daySessions = wknd ? [] : sessionsOn(dayStr);
-            return (
-              <div
-                key={dayStr}
-                className={`cal-cell${inMonth ? "" : " out"}${wknd ? " wknd" : ""}${isToday(day) ? " today" : ""}`}
-              >
-                <div className="cal-daynum">{day.getDate()}</div>
-                {daySessions.map((s) => (
+          {weeks.map((week, wi) => (
+            <Fragment key={wi}>
+              <div className="cal-week" title={`Semaine ${isoWeek(week[0])}`}>{isoWeek(week[0])}</div>
+              {week.map((day) => {
+                const dayStr = ymd(day);
+                const inMonth = day.getMonth() === month;
+                const wknd = isWeekend(day);
+                const daySessions = wknd ? [] : sessionsOn(dayStr);
+                return (
                   <div
-                    key={s.id}
-                    className="cal-evt"
-                    style={{ background: colorOf(s.program_code) }}
-                    title={`${s.program_title} — ${s.stagiaires} stagiaire(s)`}
-                    onClick={() => navigate(`/sessions/${s.id}`)}
+                    key={dayStr}
+                    className={`cal-cell${inMonth ? "" : " out"}${wknd ? " wknd" : ""}${isToday(day) ? " today" : ""}`}
                   >
-                    {s.program_code}
-                    <span className="n">👤 {s.stagiaires}</span>
+                    <div className="cal-daynum">{day.getDate()}</div>
+                    {daySessions.map((s) => (
+                      <div
+                        key={s.id}
+                        className="cal-evt"
+                        style={{ background: colorOf(s.program_code) }}
+                        title={`${s.program_title} — ${s.stagiaires} stagiaire(s)`}
+                        onClick={() => navigate(`/sessions/${s.id}`)}
+                      >
+                        {s.program_code}
+                        <span className="n">👤 {s.stagiaires}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            );
-          })}
+                );
+              })}
+            </Fragment>
+          ))}
         </div>
 
         {legend.length > 0 && (

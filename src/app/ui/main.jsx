@@ -26,6 +26,8 @@ import ProduitDivers from "./pages/ProduitDivers.jsx";
 import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import Modeles from "./pages/Modeles.jsx";
+import TemplateEditor from "./pages/TemplateEditor.jsx";
+import Equipe from "./pages/Equipe.jsx";
 import Audit from "./pages/Audit.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
@@ -46,6 +48,7 @@ function RoleRoute({ roles, children }) {
 const STAFF = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"];
 const SUIVI = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "AUDITEUR"];
 const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
+const OWNER = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
 
 /** Choisit l'application selon le rôle : espace stagiaire vs application admin. */
 function AppRoutes() {
@@ -86,7 +89,7 @@ function AppRoutes() {
           <Route path="sessions" element={<RoleRoute roles={STAFF}><Sessions /></RoleRoute>} />
           <Route path="sessions/:id" element={<RoleRoute roles={STAFF}><SessionDetail /></RoleRoute>} />
           <Route path="formations" element={<RoleRoute roles={STAFF}><Formations /></RoleRoute>} />
-          <Route path="partenaires" element={<RoleRoute roles={ADMIN}><Partenaires /></RoleRoute>} />
+          <Route path="partenaires" element={<RoleRoute roles={STAFF}><Partenaires /></RoleRoute>} />
           <Route path="ventes" element={<RoleRoute roles={ADMIN}><Ventes /></RoleRoute>} />
           <Route path="inventaire" element={<RoleRoute roles={ADMIN}><Inventaire /></RoleRoute>} />
           <Route path="factures" element={<RoleRoute roles={ADMIN}><Factures /></RoleRoute>} />
@@ -95,6 +98,8 @@ function AppRoutes() {
           <Route path="carte" element={<RoleRoute roles={ADMIN}><Carte /></RoleRoute>} />
           <Route path="reglages" element={<RoleRoute roles={ADMIN}><Reglages /></RoleRoute>} />
           <Route path="modeles" element={<RoleRoute roles={ADMIN}><Modeles /></RoleRoute>} />
+          <Route path="modeles/:slug/editeur" element={<RoleRoute roles={ADMIN}><TemplateEditor /></RoleRoute>} />
+          <Route path="equipe" element={<RoleRoute roles={OWNER}><Equipe /></RoleRoute>} />
           <Route path="audit" element={<RoleRoute roles={SUIVI}><Audit /></RoleRoute>} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="suivi" element={<RoleRoute roles={SUIVI}><Suivi /></RoleRoute>} />

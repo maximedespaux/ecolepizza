@@ -5,19 +5,42 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet } = require('../lib/documents.js');
+const { TOKEN_CATALOG } = require('../lib/tokens.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
-const META_COLS = 'slug, label, doc_type, sort_order, signable, stagiaire_sign, applies_when, active';
+const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active';
 
-// Lit les lignes document_template d'un organisme (métadonnées + présence de fichier).
+// Lit les lignes document_template d'un organisme (métadonnées + présence de contenu).
 async function loadRows(organizationId) {
     const [rows] = await db.promise().query(
-        `SELECT ${META_COLS}, name, (file IS NOT NULL) AS has_file,
+        `SELECT ${META_COLS}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
          FROM document_template WHERE organization_id = ?`,
         [organizationId]
     );
     return rows;
+}
+
+/**
+ * Contenu de rendu pour un organisme + slug.
+ * Renvoie { kind:'builder', html } (corps propre ou défaut) ou
+ * { kind:'docx', buffer } (ancien mode fichier), ou null si aucune source.
+ */
+async function getTemplateContent(organizationId, slug) {
+    const [rows] = await db.promise().query(
+        'SELECT kind, body_html, header_html, footer_html, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+        [organizationId, slug]
+    );
+    const row = rows[0];
+    if (row) {
+        if (row.kind === 'docx') {
+            if (row.file) return { kind: 'docx', buffer: row.file };
+        } else if (row.body_html) {
+            return { kind: 'builder', html: row.body_html, header: row.header_html || '', footer: row.footer_html || '' };
+        }
+    }
+    // Aucun modèle par défaut : le modèle doit être créé dans l'éditeur.
+    return null;
 }
 
 /** Étapes de l'organisme (défauts fusionnés avec ses lignes) — objets normalisés. */
@@ -50,7 +73,9 @@ const listTemplates = async (req, res) => {
         const raw = Object.fromEntries(rows.map((r) => [r.slug, r]));
         const steps = mergeSteps(rows).map((s) => ({
             ...s,
-            has_default_file: !!defaultTemplateBuffer(s.slug),
+            kind: raw[s.slug]?.kind || 'builder',
+            has_body: !!raw[s.slug]?.has_body,
+            has_file: !!raw[s.slug]?.has_file,
             file_name: raw[s.slug]?.name || null,
             updated_at: raw[s.slug]?.updated_at || null,
         }));
@@ -96,12 +121,38 @@ const saveTemplate = async (req, res) => {
     if (b.stagiaire_sign !== undefined) fields.stagiaire_sign = b.stagiaire_sign ? 1 : 0;
     if (b.applies_when !== undefined) fields.applies_when = b.applies_when ? JSON.stringify(b.applies_when) : null;
     if (b.active !== undefined) fields.active = b.active ? 1 : 0;
+    // Corps construit dans l'éditeur : passe l'étape en mode « builder ».
+    if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
+    if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }
+    if (b.footer_html !== undefined) { fields.footer_html = b.footer_html || null; fields.kind = 'builder'; }
+    if (b.kind !== undefined && (b.kind === 'builder' || b.kind === 'docx')) fields.kind = b.kind;
     try {
         await upsertTemplate(db.promise(), req.user.organization_id, slug, fields);
         logAudit(req, 'template.save', 'DocumentTemplate', slug);
         res.status(200).json({ success: true, message: 'Étape enregistrée' });
     } catch (err) {
         console.error('Erreur enregistrement étape :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** GET /api/templates/tokens — catalogue des jetons (regroupé par table) pour la palette. */
+const getTokens = (req, res) => {
+    res.json({ data: TOKEN_CATALOG });
+};
+
+/** GET /api/templates/:slug/body — corps HTML du modèle (propre à l'organisme ou défaut). */
+const getTemplateBody = async (req, res) => {
+    try {
+        const content = await getTemplateContent(req.user.organization_id, req.params.slug);
+        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: '', header_html: '', footer_html: '' } });
+        if (content.kind === 'docx') {
+            // Ancien modèle .docx sans corps éditable : on renvoie un corps vide à composer.
+            return res.json({ data: { slug: req.params.slug, kind: 'docx', body_html: '', header_html: '', footer_html: '' } });
+        }
+        res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: content.html, header_html: content.header || '', footer_html: content.footer || '' } });
+    } catch (err) {
+        console.error('Erreur lecture corps modèle :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -166,6 +217,7 @@ const resetTemplate = async (req, res) => {
 };
 
 module.exports = {
-    getTemplateBuffer, loadOrgSteps, documentSetForOrg,
+    getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
+    getTokens, getTemplateBody,
 };
