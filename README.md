@@ -51,7 +51,7 @@ npm run dev                           # http://localhost:3000
 # Front (src/app)
 cd src/app
 npm install
-npm run dev:react                     # http://localhost:5173
+npm run dev                           # http://localhost:5173
 ```
 
 La base MySQL est créée à partir du script SQL fourni ; aucune conteneurisation
