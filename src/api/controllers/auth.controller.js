@@ -54,6 +54,14 @@ const userAuthentification = async (req, res) => {
             return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
         }
 
+        // Accès désactivé par un administrateur (colonne `active` — cf. migration 011).
+        if (user.active === 0) {
+            return res.status(403).json({ message: 'Compte désactivé. Contactez un administrateur.' });
+        }
+
+        // Trace de la dernière connexion (non bloquant : ignoré si la colonne n'existe pas encore).
+        db.query('UPDATE user SET last_login_at = NOW() WHERE id = ?', [user.id], () => {});
+
         // Toujours une expiration (pas de jeton éternel) : 7 j si « rester connecté », sinon 1 h.
         const token = jwt.sign(
             { id: user.id, email: user.email, role: user.role, organization_id: user.organization_id },

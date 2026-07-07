@@ -391,6 +391,20 @@ export async function uploadTemplate(slug, file) {
   return data;
 }
 
+// --- Équipe (comptes ayant accès au panneau) ---
+export function getTeam() {
+  return request("/equipe");
+}
+export function createMember(payload) {
+  return request("/equipe", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateMember(id, payload) {
+  return request(`/equipe/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deleteMember(id) {
+  return request(`/equipe/${id}`, { method: "DELETE" });
+}
+
 // --- Partenaires ---
 export function getPartenaires(category = "") {
   const query = category ? `?category=${encodeURIComponent(category)}` : "";

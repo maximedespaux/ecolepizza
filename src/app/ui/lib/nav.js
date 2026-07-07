@@ -10,6 +10,7 @@
 const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
 const STAFF = [...ADMIN, "FORMATEUR"];        // bureau + formateur (lecture pédagogique)
 const AUDIT = [...ADMIN, "AUDITEUR"];         // bureau + auditeur
+const OWNER = ["SUPER_ADMIN", "ADMIN_ORGANISME"]; // propriétaire + admins (gestion des accès)
 
 export const NAV = [
   {
@@ -44,6 +45,7 @@ export const NAV = [
     grp: "Système",
     items: [
       { to: "/reglages", ic: "⚙", label: "Organisme", roles: ADMIN },
+      { to: "/equipe", ic: "👥", label: "Équipe & accès", roles: OWNER },
       { to: "/modeles", ic: "⎙", label: "Modèles de documents", roles: ADMIN },
       { to: "/audit", ic: "🔒", label: "Journal d'audit", roles: AUDIT },
     ],
@@ -66,6 +68,7 @@ export const PAGE_TITLES = {
   "/factures": "Facturation",
   "/comptabilite": "Comptabilité",
   "/reglages": "Organisme",
+  "/equipe": "Équipe & accès",
   "/modeles": "Modèles de documents",
   "/audit": "Journal d'audit",
   "/notifications": "Notifications",

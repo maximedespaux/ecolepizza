@@ -26,6 +26,7 @@ import ProduitDivers from "./pages/ProduitDivers.jsx";
 import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import Modeles from "./pages/Modeles.jsx";
+import Equipe from "./pages/Equipe.jsx";
 import Audit from "./pages/Audit.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
@@ -46,6 +47,7 @@ function RoleRoute({ roles, children }) {
 const STAFF = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"];
 const SUIVI = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "AUDITEUR"];
 const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
+const OWNER = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
 
 /** Choisit l'application selon le rôle : espace stagiaire vs application admin. */
 function AppRoutes() {
@@ -95,6 +97,7 @@ function AppRoutes() {
           <Route path="carte" element={<RoleRoute roles={ADMIN}><Carte /></RoleRoute>} />
           <Route path="reglages" element={<RoleRoute roles={ADMIN}><Reglages /></RoleRoute>} />
           <Route path="modeles" element={<RoleRoute roles={ADMIN}><Modeles /></RoleRoute>} />
+          <Route path="equipe" element={<RoleRoute roles={OWNER}><Equipe /></RoleRoute>} />
           <Route path="audit" element={<RoleRoute roles={SUIVI}><Audit /></RoleRoute>} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="suivi" element={<RoleRoute roles={SUIVI}><Suivi /></RoleRoute>} />

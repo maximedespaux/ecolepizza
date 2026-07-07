@@ -359,3 +359,10 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 
 /* Aperçu PDF fidèle du modèle (modale document) */
 .doc-pdf-frame{width:100%;height:72vh;border:none;background:#e9eaf0;display:block}
+
+/* Équipe & accès : bouton supprimer discret + encart identifiants */
+.btn.ghost.danger{color:var(--ember1);background:transparent}
+.btn.ghost.danger:hover{background:rgba(200,60,40,.08)}
+.cred-box{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel2,rgba(0,0,0,.02))}
+.cred-box>div{display:flex;align-items:center;gap:12px}
+.cred-k{display:inline-block;width:110px;font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
