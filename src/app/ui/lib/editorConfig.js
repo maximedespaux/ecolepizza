@@ -27,7 +27,7 @@ export function buildExtensions({ tokens = true } = {}) {
     LineHeight,
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     Link.configure({ openOnClick: false, autolink: true }),
-    ResizableImage.configure({ inline: false, allowBase64: true }),
+    ResizableImage.configure({ inline: true, allowBase64: true }),
     Table.configure({ resizable: true }),
     TableRow,
     TableHeader,

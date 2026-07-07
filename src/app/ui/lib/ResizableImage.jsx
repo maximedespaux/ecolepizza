@@ -1,24 +1,15 @@
 import Image from "@tiptap/extension-image";
-import { mergeAttributes } from "@tiptap/core";
 import { ReactNodeViewRenderer, NodeViewWrapper } from "@tiptap/react";
 
-// Marges selon l'alignement (élément bloc de largeur définie).
-const ALIGN_MARGIN = {
-  left: { marginLeft: "0", marginRight: "auto" },
-  center: { marginLeft: "auto", marginRight: "auto" },
-  right: { marginLeft: "auto", marginRight: "0" },
-};
-
 /**
- * Image redimensionnable : on garde l'extension Image de base, on ajoute les
- * attributs width/height (sérialisés comme vrais attributs HTML, donc conservés
- * dans le PDF) et une poignée de redimensionnement à la souris.
- *   · glisser le coin  = redimensionne en conservant les proportions
- *   · Maj + glisser     = largeur/hauteur indépendantes
+ * Image en ligne et redimensionnable.
+ *   · inline : plusieurs images peuvent tenir sur une même ligne (comme du texte) ;
+ *   · width/height : sérialisés comme vrais attributs HTML (conservés dans le PDF) ;
+ *   · alignement : géré par l'alignement du paragraphe (gauche / centre / droite) ;
+ *   · poignée de coin : glisser = proportionnel, Maj + glisser = largeur/hauteur libres.
  */
 function ImageView({ node, updateAttributes, selected }) {
-  const { src, alt, title, width, height, align } = node.attrs;
-  const wrapStyle = { display: "block", width: "fit-content", ...(ALIGN_MARGIN[align] || ALIGN_MARGIN.left) };
+  const { src, alt, title, width, height } = node.attrs;
 
   function startResize(e) {
     e.preventDefault();
@@ -33,8 +24,8 @@ function ImageView({ node, updateAttributes, selected }) {
 
     const onMove = (ev) => {
       const free = ev.shiftKey;
-      let w = Math.max(30, Math.round(startW + (ev.clientX - startX)));
-      let h = free ? Math.max(20, Math.round(startH + (ev.clientY - startY))) : Math.round(w / ratio);
+      const w = Math.max(30, Math.round(startW + (ev.clientX - startX)));
+      const h = free ? Math.max(20, Math.round(startH + (ev.clientY - startY))) : Math.round(w / ratio);
       updateAttributes({ width: w, height: h });
     };
     const onUp = () => {
@@ -46,7 +37,7 @@ function ImageView({ node, updateAttributes, selected }) {
   }
 
   return (
-    <NodeViewWrapper as="span" className={"img-node" + (selected ? " sel" : "")} style={wrapStyle}>
+    <NodeViewWrapper as="span" className={"img-node" + (selected ? " sel" : "")}>
       <img
         src={src}
         alt={alt || ""}
@@ -84,23 +75,7 @@ export const ResizableImage = Image.extend({
         parseHTML: (el) => num(el.getAttribute("height") || el.style.height),
         renderHTML: (attrs) => (attrs.height ? { height: attrs.height } : {}),
       },
-      align: {
-        default: "left",
-        parseHTML: (el) => el.getAttribute("data-align")
-          || el.closest("[data-align]")?.getAttribute("data-align")
-          || "left",
-        renderHTML: (attrs) => ({ "data-align": attrs.align || "left" }),
-      },
     };
-  },
-  // Rendu (aperçu + PDF) : image encadrée dans un bloc aligné (compatible LibreOffice).
-  renderHTML({ HTMLAttributes, node }) {
-    const align = node.attrs.align || "left";
-    return [
-      "div",
-      { class: "img-align", style: `text-align:${align}` },
-      ["img", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)],
-    ];
   },
   addNodeView() {
     return ReactNodeViewRenderer(ImageView);

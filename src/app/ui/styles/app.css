@@ -423,7 +423,7 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .ProseMirror:focus{outline:none}
 .doc-canvas img{max-width:100%}
 /* Image redimensionnable */
-.img-node{display:inline-block;position:relative;max-width:100%;line-height:0}
+.img-node{display:inline-block;position:relative;max-width:100%;line-height:0;margin:0 3px;vertical-align:bottom}
 .img-node img{display:inline-block;max-width:100%}
 .img-node.sel img{outline:2px solid #1d6fb8;outline-offset:1px}
 .img-handle{position:absolute;right:-6px;bottom:-6px;width:14px;height:14px;background:#1d6fb8;border:2px solid #fff;border-radius:3px;cursor:nwse-resize;box-shadow:0 1px 3px rgba(0,0,0,.3)}
