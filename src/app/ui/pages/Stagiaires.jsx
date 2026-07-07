@@ -337,13 +337,15 @@ function Stagiaires() {
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{l.last_name} {l.first_name}</b>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"} · {l.phone || "—"}</span>
-                    {l.has_account && (
-                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-                        🔑 <span className="mono">{revealed[l.id] ? (l.account_password || "—") : "••••••••"}</span>
-                      </span>
-                    )}
                   </span>
                 </Link>
+                {l.has_account && (
+                  <span className="pwcell" title={revealed[l.id] ? "Cliquez pour sélectionner, puis copiez" : "Cliquez sur 👁 pour afficher"}>
+                    🔑 <span className="mono pw" onClick={(e) => { if (revealed[l.id]) { const r = document.createRange(); r.selectNodeContents(e.currentTarget); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } }}>
+                      {revealed[l.id] ? (l.account_password || "—") : "••••••••"}
+                    </span>
+                  </span>
+                )}
                 {l.professional_status && <Badge tone="n">{l.professional_status}</Badge>}
                 {l.has_account && (
                   <button
