@@ -1,6 +1,6 @@
 import { startLoading, stopLoading } from "../lib/loading.js";
 
-const API_BASE_URL = "http://localhost:3000/api";
+const API_BASE_URL = "https://doc-gestionary-api.onrender.com/api";
 
 async function request(path, options = {}) {
   const { silent, ...opts } = options; // `silent` = pas de barre de chargement (polls)
