@@ -20,6 +20,10 @@
   --text:#1e2140; --muted:#5b6079; --dim:#9aa0bb;
   --green:#2f9e6f; --green-bg:#e6f5ee; --blue:#2c3371; --blue-bg:#e9eaf5;
   --amber-bg:#fdeede; --rosso-bg:#fdeaea;
+  /* Palette catégorielle validée daltonisme (Okabe-Ito) — comptabilité (thème clair) */
+  --ca-insc:#0072b2; --ca-mat:#d55e00; --ca-extra:#e69f00;
+  --cat-mp:#d55e00; --cat-sal:#0072b2; --cat-loy:#e69f00;
+  --cat-mkt:#009e73; --cat-ene:#56b4e9; --cat-div:#cc79a7;
 }
 [data-theme="dark"]{
   --bg:#12142a; --bg2:#171a34; --surface:#1d2040; --surface2:#242848; --surface3:#2d3159;
@@ -27,6 +31,10 @@
   --text:#eef0fb; --muted:#a7add0; --dim:#727aa3;
   --green:#5fc08e; --green-bg:rgba(95,192,142,.14); --blue:#8ea2e0; --blue-bg:rgba(142,162,224,.16);
   --amber-bg:rgba(240,164,60,.14); --rosso-bg:rgba(220,62,55,.16);
+  /* Palette catégorielle validée daltonisme (Okabe-Ito, éclaircie) — comptabilité (thème sombre) */
+  --ca-insc:#4a9fd8; --ca-mat:#ef7d3a; --ca-extra:#f0b84e;
+  --cat-mp:#ef7d3a; --cat-sal:#4a9fd8; --cat-loy:#f0b84e;
+  --cat-mkt:#33c495; --cat-ene:#7fc9f0; --cat-div:#d98fbb;
 }
 
 *{box-sizing:border-box}
@@ -75,11 +83,12 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .content{padding:26px 32px 70px;max-width:1240px;width:100%;margin:0 auto}
 
 /* Page header -------------------------------------------------------- */
-.pagehead{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--border-soft);flex-wrap:wrap}
-.pagehead::after{content:"";position:absolute;left:0;bottom:-1px;width:64px;height:2px;background:var(--grad-ember);border-radius:2px}
-.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:600;background:var(--grad-ember);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
-.pagehead h1{font-size:30px}
-.lead{color:var(--muted);margin:8px 0 0;max-width:640px;font-size:14.5px}
+.pagehead{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:30px;padding-bottom:26px;border-bottom:1px solid var(--border-soft);flex-wrap:wrap}
+.pagehead::after{content:"";position:absolute;left:0;bottom:-2px;width:96px;height:4px;background:var(--grad-ember);border-radius:3px}
+.eyebrow{font-size:12.5px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;background:var(--grad-ember);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:10px}
+.pagehead h1{font-size:42px;line-height:1.05;letter-spacing:-.015em}
+.lead{color:var(--muted);margin:12px 0 0;max-width:720px;font-size:16.5px;line-height:1.5}
+@media(max-width:640px){.pagehead h1{font-size:32px}.lead{font-size:15px}}
 
 /* Buttons ------------------------------------------------------------ */
 .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:9px 15px;border-radius:11px;font-size:14px;font-weight:600;transition:.16s var(--ease);white-space:nowrap;position:relative;overflow:hidden}
@@ -269,3 +278,76 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
   .topbar .menu-btn{display:block}.content{padding:18px 14px 70px}
 }
 @media(max-width:560px){.cols-4{grid-template-columns:1fr}.row3,.row2{grid-template-columns:1fr}}
+
+/* ===== Comptabilité ===================================================== */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border-soft);margin:4px 0 18px}
+.tab{background:none;border:none;padding:9px 16px;font:600 14px/1 var(--font-b);color:var(--muted);
+  border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;transition:color .15s,border-color .15s}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--text);border-color:var(--ember1)}
+
+.poste-bar{position:relative;height:10px;border-radius:999px;background:var(--surface3);overflow:visible}
+.poste-bar > span{display:block;height:100%;border-radius:999px}
+.poste-bar .poste-target{position:absolute;top:-3px;height:16px;width:2px;background:var(--navy);opacity:.75}
+
+.src-ca{border:1px solid var(--border-soft);background:var(--bg2);border-radius:var(--r-sm);padding:14px}
+.src-n{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;color:#fff;font:700 11px/1 var(--font-b)}
+.src-link{color:var(--ember1);font-weight:600;font-size:12.5px;text-decoration:none}
+.src-link:hover{text-decoration:underline}
+
+.list-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border-soft)}
+.list-row:first-child{border-top:none}
+
+.donut-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:20px}
+.donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;text-align:center;padding:0 16px;pointer-events:none;line-height:1.1}
+.donut-center>div{max-width:118px}
+.legend-row{display:flex;align-items:center;gap:10px;padding:4px 8px;margin:0 -8px;border-radius:8px;font-size:13px;transition:opacity .15s,background .15s}
+.mini-kpi{border:1px solid var(--border-soft);background:var(--bg2);border-radius:var(--r-sm);padding:12px}
+.stack-bar{display:flex;height:20px;width:100%;overflow:hidden;border-radius:8px;background:var(--surface3);margin-top:8px}
+.stack-bar > span{display:block;height:100%;border-right:2px solid var(--surface)}
+.stack-bar > span:last-child{border-right:none}
+
+/* ===== Pipeline CRM ===================================================== */
+.pipe{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}
+.pipe-col{flex:0 0 240px;background:var(--bg2);border:1px solid var(--border-soft);border-radius:var(--r);display:flex;flex-direction:column;max-height:calc(100vh - 220px)}
+.pipe-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;font:600 13px/1 var(--font-b);color:var(--text);border-bottom:1px solid var(--border-soft)}
+.pipe-body{padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.pipe-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px;box-shadow:0 1px 2px rgba(20,24,60,.05)}
+.pipe-name{display:block;font-weight:600;color:var(--navy);text-decoration:none;font-size:13.5px}
+.pipe-name:hover{text-decoration:underline}
+.pipe-meta{display:flex;align-items:center;gap:6px;margin:6px 0;flex-wrap:wrap}
+.chip{display:inline-block;padding:2px 7px;border-radius:999px;background:var(--surface2);border:1px solid var(--border-soft);font:600 11px/1.4 var(--font-b);color:var(--navy)}
+.pipe-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:8px}
+.pipe-moves{display:flex;gap:4px}
+.pipe-moves .iconbtn{width:26px;height:26px;font-size:11px}
+.iconbtn:disabled{opacity:.35;cursor:not-allowed}
+
+/* ===== Atelier pâte (espace stagiaire) ================================== */
+.dough-result{color:#fff;background:linear-gradient(135deg,var(--navy),var(--navy-dark))}
+.dough-line{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.10);border-radius:12px;padding:10px 12px;margin-bottom:9px}
+
+/* Indice « ce montant s'ajoute au CA » (produit divers) */
+.ca-add{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--green);
+  background:var(--green-bg);border-radius:999px;padding:3px 10px}
+
+/* ===== Carte des stagiaires =========================================== */
+/* isolation + z-index:0 : confine les z-index élevés de Leaflet (panes/contrôles
+   jusqu'à 1000) dans un contexte d'empilement local, pour qu'ils ne passent plus
+   au-dessus de la barre latérale (z-index 40) ni du bandeau (z-index 30). */
+.carte-wrap{position:relative;z-index:0;isolation:isolate;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface2)}
+.carte-wrap .leaflet-pane,.carte-wrap .leaflet-top,.carte-wrap .leaflet-bottom{z-index:1}
+.carte-map{height:560px;width:100%}
+.carte-map .leaflet-popup-content{font-family:var(--font-b);font-size:13px}
+.carte-loading{position:absolute;inset:0;z-index:500;display:grid;place-items:center;background:rgba(0,0,0,.04);color:var(--muted);font-size:14px}
+
+/* ===== Fenêtres modales (édition, signature, notes…) =================== */
+.overlay{position:fixed;inset:0;background:rgba(15,17,40,.55);backdrop-filter:blur(3px);display:grid;place-items:center;z-index:100;padding:20px}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);width:100%;max-width:560px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 70px -16px rgba(10,12,30,.5);animation:rise .25s var(--ease) both}
+.modal.wide{max-width:840px}
+.mhead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border-soft)}
+.mhead h3{font-size:17px}
+.modal .x{background:none;border:none;font-size:24px;line-height:1;color:var(--muted);padding:0 6px;border-radius:8px}
+.modal .x:hover{color:var(--text);background:var(--surface2)}
+.mbody{padding:18px 20px;overflow-y:auto}
+.mfoot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
+.mbody textarea.inp{width:100%;resize:vertical;line-height:1.45}

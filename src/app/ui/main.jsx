@@ -14,18 +14,23 @@ import Stagiaires from "./pages/Stagiaires.jsx";
 import StagiaireDetail from "./pages/StagiaireDetail.jsx";
 import Formations from "./pages/Formations.jsx";
 import Sessions from "./pages/Sessions.jsx";
+import Pipeline from "./pages/Pipeline.jsx";
 import SessionDetail from "./pages/SessionDetail.jsx";
 import Suivi from "./pages/Suivi.jsx";
 import Partenaires from "./pages/Partenaires.jsx";
 import Ventes from "./pages/Ventes.jsx";
 import Inventaire from "./pages/Inventaire.jsx";
 import Factures from "./pages/Factures.jsx";
+import Comptabilite from "./pages/Comptabilite.jsx";
+import ProduitDivers from "./pages/ProduitDivers.jsx";
+import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import Audit from "./pages/Audit.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
 import MesFormations from "./pages/MesFormations.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
+import Atelier from "./pages/Atelier.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -66,6 +71,7 @@ function AppRoutes() {
           <Route path="mon-espace" element={<MonEspace />} />
           <Route path="formations" element={<MesFormations />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
+          <Route path="atelier" element={<Atelier />} />
           <Route path="*" element={<Navigate to="/mon-espace" replace />} />
         </Route>
       ) : (
@@ -75,13 +81,17 @@ function AppRoutes() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="stagiaires" element={<RoleRoute roles={STAFF}><Stagiaires /></RoleRoute>} />
           <Route path="stagiaires/:id" element={<RoleRoute roles={STAFF}><StagiaireDetail /></RoleRoute>} />
+          <Route path="pipeline" element={<RoleRoute roles={ADMIN}><Pipeline /></RoleRoute>} />
           <Route path="sessions" element={<RoleRoute roles={STAFF}><Sessions /></RoleRoute>} />
           <Route path="sessions/:id" element={<RoleRoute roles={STAFF}><SessionDetail /></RoleRoute>} />
           <Route path="formations" element={<RoleRoute roles={STAFF}><Formations /></RoleRoute>} />
-          <Route path="partenaires" element={<RoleRoute roles={STAFF}><Partenaires /></RoleRoute>} />
-          <Route path="ventes" element={<RoleRoute roles={STAFF}><Ventes /></RoleRoute>} />
-          <Route path="inventaire" element={<RoleRoute roles={STAFF}><Inventaire /></RoleRoute>} />
+          <Route path="partenaires" element={<RoleRoute roles={ADMIN}><Partenaires /></RoleRoute>} />
+          <Route path="ventes" element={<RoleRoute roles={ADMIN}><Ventes /></RoleRoute>} />
+          <Route path="inventaire" element={<RoleRoute roles={ADMIN}><Inventaire /></RoleRoute>} />
           <Route path="factures" element={<RoleRoute roles={ADMIN}><Factures /></RoleRoute>} />
+          <Route path="comptabilite" element={<RoleRoute roles={ADMIN}><Comptabilite /></RoleRoute>} />
+          <Route path="produit-divers" element={<RoleRoute roles={STAFF}><ProduitDivers /></RoleRoute>} />
+          <Route path="carte" element={<RoleRoute roles={ADMIN}><Carte /></RoleRoute>} />
           <Route path="reglages" element={<RoleRoute roles={ADMIN}><Reglages /></RoleRoute>} />
           <Route path="audit" element={<RoleRoute roles={SUIVI}><Audit /></RoleRoute>} />
           <Route path="notifications" element={<Notifications />} />

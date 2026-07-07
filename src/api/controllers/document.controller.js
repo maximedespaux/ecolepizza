@@ -17,8 +17,8 @@ const STAGIAIRE_SIGN_TYPES = ['DEVIS', 'CONTRAT', 'CONVENTION', 'DROIT_IMAGE'];
 
 // Charge le contexte de fusion (organisme, stagiaire, entreprise, formations).
 async function loadContext(conn, organizationId, learnerId, documentId) {
-    const [[org]] = [await conn.query('SELECT * FROM organization WHERE id = ?', [organizationId])];
-    const [[learner]] = [await conn.query('SELECT * FROM learner WHERE id = ?', [learnerId])];
+    const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [organizationId]);
+    const [[learner]] = await conn.query('SELECT * FROM learner WHERE id = ?', [learnerId]);
     let company = null;
     const [formations] = await conn.query(
         `SELECT p.code, p.title, p.days, p.hours, p.price, p.hygiene, p.rs_code AS rs_code,

@@ -21,7 +21,7 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     if (rows.length === 0) return null;
     const inv = rows[0];
 
-    const [[org]] = [await conn.query('SELECT * FROM organization WHERE id = ?', [orgId])];
+    const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
     const o = org[0] || {};
 
     // Client : nom libre > entreprise > stagiaire du dossier.

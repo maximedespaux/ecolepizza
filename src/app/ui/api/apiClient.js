@@ -164,6 +164,37 @@ export function downloadInvoiceXml(id, number) {
   return download(`/factures/${id}/xml`, `${number}.xml`);
 }
 
+// --- Carte des stagiaires ---
+export function getCarte() {
+  return request("/carte");
+}
+
+// --- Comptabilité / Gestion ---
+export function getComptabilite(annee) {
+  return request(`/comptabilite?annee=${annee}`);
+}
+export function getComptaPerformance(annee) {
+  return request(`/comptabilite/performance?annee=${annee}`);
+}
+export function createExpense(payload) {
+  return request("/comptabilite/depenses", { method: "POST", body: JSON.stringify(payload) });
+}
+export function deleteExpense(id) {
+  return request(`/comptabilite/depenses/${id}`, { method: "DELETE" });
+}
+export function getRevenues(annee) {
+  return request(`/comptabilite/revenus?annee=${annee}`);
+}
+export function createRevenue(payload) {
+  return request("/comptabilite/revenus", { method: "POST", body: JSON.stringify(payload) });
+}
+export function deleteRevenue(id) {
+  return request(`/comptabilite/revenus/${id}`, { method: "DELETE" });
+}
+export function saveComptaTargets(payload) {
+  return request("/comptabilite/cibles", { method: "PUT", body: JSON.stringify(payload) });
+}
+
 // --- Notifications ---
 export function getNotifications() {
   return request("/notifications", { silent: true });
@@ -226,6 +257,9 @@ export function createCompany(payload) {
 export function getFormations() {
   return request("/formations");
 }
+export function updateFormation(id, payload) {
+  return request(`/formations/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
 
 // --- Sessions ---
 export function getSessions() {
@@ -259,6 +293,10 @@ export function createEnrollment(payload) {
 
 export function deleteEnrollment(id) {
   return request(`/enrollments/${id}`, { method: "DELETE" });
+}
+
+export function updateEnrollment(id, payload) {
+  return request(`/enrollments/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 
 // --- Espace stagiaire ---

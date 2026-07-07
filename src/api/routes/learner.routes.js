@@ -2,16 +2,18 @@ const express = require('express');
 const {
     getLearners, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
 } = require('../controllers/learner.controller.js');
-const { authenticateToken, authorizeRoles, STAFF_ROLES } = require('../middlewares/auth.middleware.js');
+const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
-router.use(authenticateToken, authorizeRoles(...STAFF_ROLES));
+router.use(authenticateToken);
 
-router.get('/', authenticateToken, getLearners);
-router.get('/:id', authenticateToken, getLearner);
-router.post('/', authenticateToken, createLearner);
-router.post('/:id/reset-password', authenticateToken, resetStagiairePassword);
-router.patch('/:id', authenticateToken, updateLearner);
-router.delete('/:id', authenticateToken, deleteLearner);
+// Lecture : tout le personnel, y compris le formateur (consultation des stagiaires).
+router.get('/', authorizeRoles(...STAFF_ROLES), getLearners);
+router.get('/:id', authorizeRoles(...STAFF_ROLES), getLearner);
+// Écriture / comptes : bureau uniquement (pas le formateur).
+router.post('/', authorizeRoles(...ADMIN_ROLES), createLearner);
+router.post('/:id/reset-password', authorizeRoles(...ADMIN_ROLES), resetStagiairePassword);
+router.patch('/:id', authorizeRoles(...ADMIN_ROLES), updateLearner);
+router.delete('/:id', authorizeRoles(...ADMIN_ROLES), deleteLearner);
 
 module.exports = router;

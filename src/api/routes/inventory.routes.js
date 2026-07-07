@@ -2,10 +2,10 @@ const express = require('express');
 const {
     getItems, createItem, adjustItem, updateItem, sellItem, deleteItem,
 } = require('../controllers/inventory.controller.js');
-const { authenticateToken, authorizeRoles, STAFF_ROLES } = require('../middlewares/auth.middleware.js');
+const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
-router.use(authenticateToken, authorizeRoles(...STAFF_ROLES));
+router.use(authenticateToken, authorizeRoles(...ADMIN_ROLES));
 
 router.get('/', authenticateToken, getItems);
 router.post('/', authenticateToken, createItem);

@@ -5,8 +5,9 @@ const db = require('../config/database.js');
  */
 const getPrograms = (req, res) => {
     db.query(
-        `SELECT id, organization_id, code, title, days, hours, price, rs_code,
-                hygiene, objectives, created_at
+        `SELECT id, organization_id, code, title, days, hours, price, audience,
+                objectives, objective_general, duration_detail, program_detail,
+                rs_code, hygiene, active, created_at
          FROM training_program
          WHERE organization_id = ?
          ORDER BY code`,
@@ -65,4 +66,43 @@ const createProgram = (req, res) => {
     );
 };
 
-module.exports = { getPrograms, getProgram, createProgram };
+/**
+ * PATCH /api/formations/:id — modifier une formation (champs éditables).
+ */
+const updateProgram = (req, res) => {
+    const ALLOWED = [
+        'title', 'days', 'hours', 'price', 'audience', 'objectives',
+        'objective_general', 'duration_detail', 'program_detail',
+        'rs_code', 'hygiene', 'active',
+    ];
+    const sets = [];
+    const values = [];
+    for (const f of ALLOWED) {
+        if (req.body[f] === undefined) continue;
+        let v = req.body[f];
+        if (f === 'hygiene' || f === 'active') v = v ? 1 : 0;
+        else if (v === '') v = null; // champ vidé -> NULL
+        sets.push(`${f} = ?`);
+        values.push(v);
+    }
+    if (sets.length === 0) {
+        return res.status(400).json({ message: 'Aucun champ valide à mettre à jour' });
+    }
+    values.push(req.params.id, req.user.organization_id);
+    db.query(
+        `UPDATE training_program SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`,
+        values,
+        (err, result) => {
+            if (err) {
+                console.error('Erreur mise à jour formation :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ message: 'Formation introuvable' });
+            }
+            res.status(200).json({ success: true, message: 'Formation mise à jour' });
+        }
+    );
+};
+
+module.exports = { getPrograms, getProgram, createProgram, updateProgram };

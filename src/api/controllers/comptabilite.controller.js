@@ -1,0 +1,320 @@
+const crypto = require('crypto');
+const db = require('../config/database.js');
+const { logAudit } = require('../lib/audit.js');
+const {
+    EXPENSE_CATEGORIES, CATEGORY_LABELS, DEFAULT_DIVIDENDE_CIBLE,
+    REVENU_CATEGORIES, statutFor, conseilFor, mergeTargets,
+} = require('../lib/compta.js');
+
+const num = (v) => (v == null ? 0 : Number(v));
+const currentYear = () => new Date().getFullYear();
+
+// Agrège les trois sources de CA + les dépenses pour une année donnée (org).
+async function computeYear(conn, orgId, annee) {
+    const [[inscr]] = await conn.query(
+        `SELECT COALESCE(SUM(e.price), 0) AS ca, COUNT(*) AS nb,
+                COUNT(DISTINCT e.learner_id) AS nb_stagiaires
+         FROM enrollment e
+         JOIN training_session s ON s.id = e.session_id
+         WHERE e.organization_id = ? AND s.year = ?`,
+        [orgId, annee]
+    );
+    const [[mat]] = await conn.query(
+        `SELECT COALESCE(SUM(amount * quantity), 0) AS ca
+         FROM material_sale
+         WHERE organization_id = ? AND YEAR(date) = ?`,
+        [orgId, annee]
+    );
+    const [[extra]] = await conn.query(
+        `SELECT COALESCE(SUM(amount), 0) AS ca
+         FROM revenue_extra
+         WHERE organization_id = ? AND YEAR(date) = ?`,
+        [orgId, annee]
+    );
+    const [[sess]] = await conn.query(
+        'SELECT COUNT(*) AS nb FROM training_session WHERE organization_id = ? AND year = ?',
+        [orgId, annee]
+    );
+    const [postesRows] = await conn.query(
+        `SELECT category, COALESCE(SUM(amount_ht), 0) AS total
+         FROM expense
+         WHERE organization_id = ? AND YEAR(date) = ?
+         GROUP BY category`,
+        [orgId, annee]
+    );
+
+    const postes = {};
+    for (const c of EXPENSE_CATEGORIES) postes[c] = 0;
+    for (const r of postesRows) if (postes[r.category] !== undefined) postes[r.category] = num(r.total);
+
+    const caInscriptions = num(inscr.ca);
+    const caMateriel = num(mat.ca);
+    const caExtra = num(extra.ca);
+    const caTotal = caInscriptions + caMateriel + caExtra;
+    const depensesTotal = Object.values(postes).reduce((s, v) => s + v, 0);
+
+    return {
+        annee,
+        caTotal, caInscriptions, caMateriel, caExtra,
+        nbInscriptions: num(inscr.nb),
+        nbStagiaires: num(inscr.nb_stagiaires),
+        nbSessions: num(sess.nb),
+        ticketMoyen: num(inscr.nb) ? Math.round(caInscriptions / num(inscr.nb)) : 0,
+        stagiairesMoyens: num(sess.nb) ? Math.round((num(inscr.nb) / num(sess.nb)) * 10) / 10 : 0,
+        depensesTotal,
+        marge: caTotal - depensesTotal,
+        postes,
+    };
+}
+
+async function loadSettings(conn, orgId) {
+    const [rows] = await conn.query('SELECT * FROM accounting_settings WHERE organization_id = ?', [orgId]);
+    const row = rows[0];
+    let targetsRaw = null;
+    if (row && row.targets) { try { targetsRaw = JSON.parse(row.targets); } catch { targetsRaw = null; } }
+    return {
+        targets: mergeTargets(targetsRaw),
+        dividendeCible: row ? num(row.dividende_cible) : DEFAULT_DIVIDENDE_CIBLE,
+    };
+}
+
+/**
+ * GET /api/comptabilite?annee=YYYY — tableau de gestion (module A).
+ */
+const getGestion = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const annee = Number(req.query.annee) || currentYear();
+    try {
+        const conn = db.promise();
+        const [year, settings] = await Promise.all([
+            computeYear(conn, orgId, annee),
+            loadSettings(conn, orgId),
+        ]);
+        const [depenses] = await conn.query(
+            `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount_ht, note
+             FROM expense WHERE organization_id = ? AND YEAR(date) = ?
+             ORDER BY date DESC, created_at DESC`,
+            [orgId, annee]
+        );
+        const [revenus] = await conn.query(
+            `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount, note
+             FROM revenue_extra WHERE organization_id = ? AND YEAR(date) = ?
+             ORDER BY date DESC, created_at DESC`,
+            [orgId, annee]
+        );
+        const [yearsRows] = await conn.query(
+            'SELECT DISTINCT year FROM training_session WHERE organization_id = ? ORDER BY year DESC',
+            [orgId]
+        );
+
+        const ca = year.caTotal;
+        const postes = EXPENSE_CATEGORIES.map((cat) => {
+            const total = year.postes[cat];
+            const pct = ca > 0 ? Math.round((total / ca) * 1000) / 10 : 0;
+            const cible = settings.targets[cat];
+            const statut = statutFor(pct, cible);
+            return { categorie: cat, label: CATEGORY_LABELS[cat], total, pct, cible, statut, conseil: conseilFor(cat, statut, pct, cible) };
+        });
+
+        const marge = year.marge;
+        const margePct = ca > 0 ? Math.round((marge / ca) * 1000) / 10 : 0;
+        const dividendeCible = settings.dividendeCible || DEFAULT_DIVIDENDE_CIBLE;
+        const dividendeVise = Math.max(0, Math.round(ca * (dividendeCible / 100)));
+        const dividendePossible = Math.max(0, Math.round(marge));
+        const dividendeRealiste = Math.min(dividendeVise, dividendePossible);
+        const partRealistePct = ca > 0 ? Math.round((dividendeRealiste / ca) * 1000) / 10 : 0;
+        const dividendeStatut = marge <= 0 ? 'impossible' : dividendePossible >= dividendeVise ? 'atteignable' : 'partiel';
+        const dividendeMessage =
+            marge <= 0
+                ? "Aucune distribution possible : les dépenses dépassent le CA. Réduisez d'abord les postes en rouge."
+                : dividendePossible >= dividendeVise
+                    ? `Objectif atteignable : la marge couvre les ${dividendeCible}% visés.`
+                    : `Distribution réaliste plafonnée par la marge (${dividendeRealiste.toLocaleString('fr-FR')} € sur ${dividendeVise.toLocaleString('fr-FR')} € visés).`;
+
+        const annees = Array.from(new Set([annee, currentYear(), ...yearsRows.map((r) => r.year)])).sort((a, b) => b - a);
+
+        res.json({
+            data: {
+                annee,
+                ca: { total: ca, inscriptions: year.caInscriptions, materiel: year.caMateriel, extra: year.caExtra },
+                postes, totalDepenses: year.depensesTotal,
+                marge, margePct,
+                dividendeCible, dividendeVise, dividendePossible, dividendeRealiste,
+                partRealistePct, dividendeStatut, dividendeMessage,
+                targets: settings.targets,
+                depenses: depenses.map((d) => ({ ...d, amount_ht: num(d.amount_ht) })),
+                revenus: revenus.map((r) => ({ ...r, amount: num(r.amount) })),
+                annees,
+            },
+        });
+    } catch (err) {
+        console.error('Erreur comptabilité (gestion) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/comptabilite/performance?annee=YYYY — récap annuel + comparaison N-1.
+ */
+const getPerformance = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const annee = Number(req.query.annee) || currentYear();
+    try {
+        const conn = db.promise();
+        const [current, previous] = await Promise.all([
+            computeYear(conn, orgId, annee),
+            computeYear(conn, orgId, annee - 1),
+        ]);
+        const postesLabels = EXPENSE_CATEGORIES.map((c) => ({ categorie: c, label: CATEGORY_LABELS[c] }));
+        res.json({ data: { annee, anneePrec: annee - 1, current, previous, postesLabels } });
+    } catch (err) {
+        console.error('Erreur comptabilité (performance) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/comptabilite/depenses — enregistrer une dépense.
+ */
+const createExpense = async (req, res) => {
+    const { label, categorie, montantHT, date, note } = req.body;
+    const cat = EXPENSE_CATEGORIES.includes(categorie) ? categorie : 'DIVERS';
+    const amount = Number(montantHT);
+    if (!label || !String(label).trim() || !Number.isFinite(amount) || amount < 0) {
+        return res.status(422).json({ error: 'Libellé et montant valides requis.' });
+    }
+    try {
+        const id = crypto.randomUUID();
+        await db.promise().query(
+            `INSERT INTO expense (id, organization_id, date, category, label, amount_ht, note)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [id, req.user.organization_id, date || new Date().toISOString().slice(0, 10),
+             cat, String(label).trim().slice(0, 255), amount.toFixed(2), note ? String(note).slice(0, 255) : null]
+        );
+        logAudit(req, 'expense.create', 'Expense', id);
+        res.status(201).json({ message: 'Dépense enregistrée', id });
+    } catch (err) {
+        console.error('Erreur création dépense :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * DELETE /api/comptabilite/depenses/:id
+ */
+const deleteExpense = async (req, res) => {
+    try {
+        const [r] = await db.promise().query(
+            'DELETE FROM expense WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]
+        );
+        if (r.affectedRows === 0) return res.status(404).json({ message: 'Dépense introuvable' });
+        logAudit(req, 'expense.delete', 'Expense', req.params.id);
+        res.status(200).json({ success: true, message: 'Dépense supprimée' });
+    } catch (err) {
+        console.error('Erreur suppression dépense :', err);
+        res.status(400).json({ message: 'Erreur suppression' });
+    }
+};
+
+/**
+ * GET /api/comptabilite/revenus?annee=YYYY — liste des produits divers de l'année.
+ * Accessible au formateur (surface allégée « Produit divers »).
+ */
+const listRevenues = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const annee = Number(req.query.annee) || currentYear();
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount, note
+             FROM revenue_extra WHERE organization_id = ? AND YEAR(date) = ?
+             ORDER BY date DESC, created_at DESC`,
+            [orgId, annee]
+        );
+        const data = rows.map((r) => ({ ...r, amount: num(r.amount) }));
+        const total = data.reduce((s, r) => s + r.amount, 0);
+        res.json({ data, total, annee });
+    } catch (err) {
+        console.error('Erreur liste produits divers :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/comptabilite/revenus — enregistrer un produit divers.
+ */
+const createRevenue = async (req, res) => {
+    const { label, categorie, montant, date, note } = req.body;
+    const cat = REVENU_CATEGORIES.includes(categorie) ? categorie : 'COMMISSION';
+    const amount = Number(montant);
+    if (!label || !String(label).trim() || !Number.isFinite(amount) || amount < 0) {
+        return res.status(422).json({ error: 'Libellé et montant valides requis.' });
+    }
+    try {
+        const id = crypto.randomUUID();
+        await db.promise().query(
+            `INSERT INTO revenue_extra (id, organization_id, date, label, category, amount, note)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [id, req.user.organization_id, date || new Date().toISOString().slice(0, 10),
+             String(label).trim().slice(0, 255), cat, amount.toFixed(2), note ? String(note).slice(0, 255) : null]
+        );
+        logAudit(req, 'revenueextra.create', 'RevenueExtra', id);
+        res.status(201).json({ message: 'Produit enregistré', id });
+    } catch (err) {
+        console.error('Erreur création produit :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * DELETE /api/comptabilite/revenus/:id
+ */
+const deleteRevenue = async (req, res) => {
+    try {
+        const [r] = await db.promise().query(
+            'DELETE FROM revenue_extra WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]
+        );
+        if (r.affectedRows === 0) return res.status(404).json({ message: 'Produit introuvable' });
+        logAudit(req, 'revenueextra.delete', 'RevenueExtra', req.params.id);
+        res.status(200).json({ success: true, message: 'Produit supprimé' });
+    } catch (err) {
+        console.error('Erreur suppression produit :', err);
+        res.status(400).json({ message: 'Erreur suppression' });
+    }
+};
+
+/**
+ * PUT /api/comptabilite/cibles — cibles (% du CA) + dividende visé.
+ */
+const saveTargets = async (req, res) => {
+    const targets = mergeTargets(req.body.targets);
+    let dividende = Number(req.body.dividendeCible);
+    if (!Number.isFinite(dividende) || dividende < 0 || dividende > 100) dividende = DEFAULT_DIVIDENDE_CIBLE;
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [existing] = await conn.query('SELECT id FROM accounting_settings WHERE organization_id = ?', [orgId]);
+        if (existing.length) {
+            await conn.query(
+                'UPDATE accounting_settings SET targets = ?, dividende_cible = ? WHERE organization_id = ?',
+                [JSON.stringify(targets), dividende.toFixed(2), orgId]
+            );
+        } else {
+            await conn.query(
+                'INSERT INTO accounting_settings (id, organization_id, targets, dividende_cible) VALUES (?, ?, ?, ?)',
+                [crypto.randomUUID(), orgId, JSON.stringify(targets), dividende.toFixed(2)]
+            );
+        }
+        logAudit(req, 'accountingsettings.update', 'AccountingSettings');
+        res.status(200).json({ data: { targets, dividendeCible: dividende } });
+    } catch (err) {
+        console.error('Erreur enregistrement cibles :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = {
+    getGestion, getPerformance, createExpense, deleteExpense,
+    listRevenues, createRevenue, deleteRevenue, saveTargets,
+};

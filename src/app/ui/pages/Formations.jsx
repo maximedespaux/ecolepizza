@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getFormations } from "../api/apiClient.js";
+import { getFormations, updateFormation } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -8,22 +8,27 @@ import { euro, colorOf } from "../lib/format.js";
 function Formations() {
   const [programs, setPrograms] = useState([]);
   const [status, setStatus] = useState(null);
+  const [editing, setEditing] = useState(null); // formation en cours d'édition
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const response = await getFormations();
-        setPrograms(response.data);
-      } catch (err) {
-        setStatus({ type: "error", message: err.message });
-      }
+  async function load() {
+    try {
+      const response = await getFormations();
+      setPrograms(response.data);
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
     }
+  }
+  useEffect(() => { load(); }, []);
+
+  function onSaved() {
+    setEditing(null);
+    setStatus({ type: "success", message: "Formation mise à jour." });
     load();
-  }, []);
+  }
 
   return (
     <>
-      <PageHead eyebrow="Catalogue" title="Formations" lead="Les programmes proposés par l'École Pizza." />
+      <PageHead eyebrow="Catalogue" title="Formations" lead="Les programmes proposés par l'École Pizza. Cliquez sur « Modifier » pour éditer le contenu pédagogique d'une formation." />
       <StatusMessage status={status} />
 
       <div className="tablewrap">
@@ -35,6 +40,7 @@ function Formations() {
               <th>Jours</th>
               <th>Heures</th>
               <th>Prix</th>
+              <th></th>
               <th></th>
             </tr>
           </thead>
@@ -49,12 +55,113 @@ function Formations() {
                 <td>{p.hours}</td>
                 <td className="mono">{euro(p.price)}</td>
                 <td>{p.rs_code ? <Badge tone="b">Certifiante</Badge> : p.hygiene ? <Badge tone="a">Hygiène</Badge> : null}</td>
+                <td style={{ textAlign: "right" }}>
+                  <button className="btn sm ghost" onClick={() => setEditing(p)}>✎ Modifier</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {editing && (
+        <FormationModal
+          program={editing}
+          onClose={() => setEditing(null)}
+          onSaved={onSaved}
+          onError={(m) => setStatus({ type: "error", message: m })}
+        />
+      )}
     </>
+  );
+}
+
+// Champs éditables (miroir des colonnes du tableau fourni).
+const FIELDS = [
+  "title", "days", "hours", "price",
+  "audience", "objective_general", "objectives", "duration_detail", "program_detail",
+  "rs_code", "hygiene", "active",
+];
+
+function FormationModal({ program, onClose, onSaved, onError }) {
+  const [form, setForm] = useState(() => {
+    const f = {};
+    for (const k of FIELDS) f[k] = program[k] ?? (k === "hygiene" || k === "active" ? 0 : "");
+    return f;
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
+  const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
+
+  async function save() {
+    if (!String(form.title).trim()) { onError("L'intitulé est requis."); return; }
+    setSaving(true);
+    try {
+      await updateFormation(program.id, form);
+      onSaved();
+    } catch (e) {
+      onError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <h3>Modifier — <span className="mono" style={{ color: colorOf(program.code) }}>{program.code}</span></h3>
+          <button className="x" onClick={onClose} aria-label="Fermer">×</button>
+        </div>
+        <div className="mbody">
+          <div className="field"><label>Titre</label>
+            <input className="inp" value={form.title} onChange={set("title")} /></div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
+            <div className="field"><label>Durée (jours)</label>
+              <input className="inp" type="number" min="0" value={form.days} onChange={set("days")} /></div>
+            <div className="field"><label>Nombre d'heures</label>
+              <input className="inp" type="number" min="0" value={form.hours} onChange={set("hours")} /></div>
+            <div className="field"><label>Montant net (€)</label>
+              <input className="inp" type="number" min="0" step="0.01" value={form.price} onChange={set("price")} /></div>
+          </div>
+
+          <div className="field"><label>Public</label>
+            <textarea className="inp" rows={2} value={form.audience} onChange={set("audience")} /></div>
+
+          <div className="field"><label>Objectif général (ObjectifG)</label>
+            <textarea className="inp" rows={3} value={form.objective_general} onChange={set("objective_general")} /></div>
+
+          <div className="field"><label>Objectifs pédagogiques</label>
+            <textarea className="inp" rows={8} value={form.objectives} onChange={set("objectives")} /></div>
+
+          <div className="field"><label>Détail des horaires (DuréeDétail)</label>
+            <textarea className="inp" rows={4} value={form.duration_detail} onChange={set("duration_detail")} /></div>
+
+          <div className="field"><label>Déroulé (programme jour par jour)</label>
+            <textarea className="inp" rows={12} value={form.program_detail} onChange={set("program_detail")} /></div>
+
+          <div className="row2" style={{ alignItems: "center" }}>
+            <div className="field"><label>Code RS (certifiante)</label>
+              <input className="inp" value={form.rs_code} onChange={set("rs_code")} placeholder="RS7404 (laisser vide sinon)" /></div>
+            <div style={{ display: "flex", gap: 18, alignItems: "center", paddingTop: 18 }}>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={!!form.hygiene} onChange={setChk("hygiene")} /> Hygiène
+              </label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={!!form.active} onChange={setChk("active")} /> Active
+              </label>
+            </div>
+          </div>
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={onClose}>Annuler</button>
+          <button className="btn primary" onClick={save} disabled={saving}>
+            {saving ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

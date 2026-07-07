@@ -5,7 +5,9 @@ import Kpi from "../components/Kpi.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
-import { scoreBadge, euro } from "../lib/format.js";
+import { scoreBadge, euro, colorOf } from "../lib/format.js";
+
+const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
 const QUICK = [
   ["/stagiaires", "☺ Ajouter un stagiaire"],
@@ -21,6 +23,7 @@ const ACTION_LABEL = {
 
 function Dashboard() {
   const [stats, setStats] = useState({ stagiaires: 0, formations: 0, sessions: 0, dossiers: 0, ca: 0 });
+  const [upcoming, setUpcoming] = useState([]);
   const [recent, setRecent] = useState([]);
   const [activity, setActivity] = useState([]);
   const [org, setOrg] = useState(null);
@@ -32,15 +35,39 @@ function Dashboard() {
         getStagiaires(), getFormations(), getSessions(), getEnrollments(), getSales(), getAudit(), getOrganisation(),
       ]);
       const val = (r, def) => (r.status === "fulfilled" ? r.value : def);
+
+      // On ne compte que les formations à venir / en cours : une session est
+      // « passée » si sa date de fin (ou de début à défaut) est antérieure à
+      // aujourd'hui. Les dossiers rattachés à une session passée sont exclus.
+      const pad = (n) => String(n).padStart(2, "0");
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      const isPast = (sess) => {
+        const d = sess.end_date || sess.start_date;
+        return d ? d < todayStr : false; // sans date → on garde (indéterminé)
+      };
+
+      const sessions = val(se, { data: [] }).data;
+      const activeSessions = sessions.filter((sess) => !isPast(sess));
+      const activeIds = new Set(activeSessions.map((sess) => sess.id));
+
+      // Prochaines sessions : à venir/en cours, triées par date de début.
+      const nextSessions = [...activeSessions].sort((a, b) =>
+        String(a.start_date || "9999").localeCompare(String(b.start_date || "9999"))
+      );
+      setUpcoming(nextSessions.slice(0, 6));
+
       const enr = val(e, { data: [] }).data;
+      const activeEnr = enr.filter((x) => activeIds.has(x.session_id));
+
       setStats({
         stagiaires: val(s, { data: [] }).data.length,
         formations: val(f, { data: [] }).data.length,
-        sessions: val(se, { data: [] }).data.length,
-        dossiers: enr.length,
+        sessions: activeSessions.length,
+        dossiers: activeEnr.length,
         ca: val(v, { total: 0 }).total || 0,
       });
-      setRecent(enr.slice(0, 5));
+      setRecent(activeEnr.slice(0, 5));
       setActivity(val(a, { data: [] }).data.slice(0, 6));
       setOrg(val(o, { data: null }).data);
       if ([s, f, se, e].every((r) => r.status === "rejected")) {
@@ -67,10 +94,46 @@ function Dashboard() {
 
       <div className="grid cols-4" style={{ marginBottom: 16 }}>
         <Kpi label="Stagiaires" value={stats.stagiaires} sub="Voir →" to="/stagiaires" />
-        <Kpi label="Dossiers" value={stats.dossiers} sub="Voir →" to="/suivi" />
-        <Kpi label="Sessions" value={stats.sessions} sub="Voir →" to="/sessions" />
+        <Kpi label="Dossiers actifs" value={stats.dossiers} sub="Hors formations passées →" to="/suivi" />
+        <Kpi label="Sessions à venir" value={stats.sessions} sub="Hors formations passées →" to="/sessions" />
         <Kpi label="Ventes (CA)" value={euro(stats.ca)} sub="Voir →" to="/ventes" />
       </div>
+
+      <Card title="Prochaines sessions" className="fade" more={<Link to="/sessions" className="card-more">Planning →</Link>} style={{ marginBottom: 16 }}>
+        {upcoming.length === 0 ? (
+          <p className="lead" style={{ margin: 0 }}>Aucune session à venir.</p>
+        ) : (
+          <div className="tablewrap" style={{ border: "none" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Formation</th>
+                  <th style={{ textAlign: "center" }}>Inscrits</th>
+                  <th>Date</th>
+                  <th style={{ textAlign: "center" }}>Semaine</th>
+                </tr>
+              </thead>
+              <tbody>
+                {upcoming.map((s) => (
+                  <tr key={s.id}>
+                    <td>
+                      <Link to={`/sessions/${s.id}`} style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: 999, background: colorOf(s.program_code), flex: "0 0 9px" }} />
+                        {s.program_title || s.program_code || "Formation"}
+                      </Link>
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <span className="pill" style={{ fontSize: 12 }}>👥 {s.stagiaires ?? 0}</span>
+                    </td>
+                    <td className="tnum" style={{ whiteSpace: "nowrap" }}>{frDate(s.start_date)}</td>
+                    <td className="tnum" style={{ textAlign: "center", color: "var(--muted)" }}>S{s.week} · {s.year}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <div className="grid cols-2">
         <Card title="Derniers dossiers" more={<Link to="/suivi" className="card-more">Suivi →</Link>}>

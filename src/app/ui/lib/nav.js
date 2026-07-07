@@ -1,8 +1,15 @@
 /**
  * Navigation latérale — groupée par domaine, avec les rôles autorisés par page.
+ *
+ * Trois niveaux d'accès internes :
+ *  · ADMIN     — bureau (super admin, admin organisme, secrétariat) : accès complet.
+ *  · FORMATEUR — accès pédagogique restreint (sessions/émargement, formations,
+ *                consultation des stagiaires, saisie d'un produit divers).
+ *  · AUDITEUR  — consultation (suivi Qualiopi, journal d'audit).
  */
-const STAFF = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"];
 const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
+const STAFF = [...ADMIN, "FORMATEUR"];        // bureau + formateur (lecture pédagogique)
+const AUDIT = [...ADMIN, "AUDITEUR"];         // bureau + auditeur
 
 export const NAV = [
   {
@@ -15,25 +22,29 @@ export const NAV = [
     grp: "Secrétariat",
     items: [
       { to: "/stagiaires", ic: "☺", label: "Stagiaires", roles: STAFF },
+      { to: "/pipeline", ic: "▚", label: "Pipeline CRM", roles: ADMIN },
       { to: "/sessions", ic: "▦", label: "Sessions", roles: STAFF },
-      { to: "/suivi", ic: "▤", label: "Suivi Qualiopi", roles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "AUDITEUR"] },
+      { to: "/suivi", ic: "▤", label: "Suivi Qualiopi", roles: AUDIT },
     ],
   },
   {
     grp: "Développement",
     items: [
       { to: "/formations", ic: "◍", label: "Formations", roles: STAFF },
-      { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: STAFF },
-      { to: "/inventaire", ic: "📦", label: "Inventaire", roles: STAFF },
-      { to: "/ventes", ic: "🛒", label: "Ventes", roles: STAFF },
+      { to: "/produit-divers", ic: "💶", label: "Produit divers", roles: ["FORMATEUR"] },
+      { to: "/carte", ic: "🗺", label: "Carte des stagiaires", roles: ADMIN },
+      { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: ADMIN },
+      { to: "/inventaire", ic: "📦", label: "Inventaire", roles: ADMIN },
+      { to: "/ventes", ic: "🛒", label: "Ventes", roles: ADMIN },
       { to: "/factures", ic: "🧾", label: "Facturation", roles: ADMIN },
+      { to: "/comptabilite", ic: "€", label: "Comptabilité", roles: ADMIN },
     ],
   },
   {
     grp: "Système",
     items: [
       { to: "/reglages", ic: "⚙", label: "Organisme", roles: ADMIN },
-      { to: "/audit", ic: "🔒", label: "Journal d'audit", roles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "AUDITEUR"] },
+      { to: "/audit", ic: "🔒", label: "Journal d'audit", roles: AUDIT },
     ],
   },
 ];
@@ -42,13 +53,17 @@ export const NAV = [
 export const PAGE_TITLES = {
   "/dashboard": "Tableau de bord",
   "/stagiaires": "Stagiaires",
+  "/pipeline": "Pipeline CRM",
   "/sessions": "Sessions",
   "/suivi": "Suivi Qualiopi",
   "/formations": "Formations",
+  "/produit-divers": "Produit divers",
+  "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
   "/inventaire": "Inventaire",
   "/ventes": "Ventes de matériel",
   "/factures": "Facturation",
+  "/comptabilite": "Comptabilité",
   "/reglages": "Organisme",
   "/audit": "Journal d'audit",
   "/notifications": "Notifications",

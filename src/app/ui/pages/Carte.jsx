@@ -1,0 +1,185 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getCarte } from "../api/apiClient.js";
+import PageHead from "../components/PageHead.jsx";
+import StatusMessage from "../components/StatusMessage.jsx";
+
+// Centroïdes (préfecture) par département — suffisant pour une carte à bulles.
+const DEPTS = {
+  "01": [46.20, 5.23, "Ain"], "02": [49.56, 3.62, "Aisne"], "03": [46.34, 3.43, "Allier"],
+  "04": [44.09, 6.24, "Alpes-de-Haute-Provence"], "05": [44.56, 6.08, "Hautes-Alpes"],
+  "06": [43.70, 7.27, "Alpes-Maritimes"], "07": [44.74, 4.60, "Ardèche"], "08": [49.77, 4.72, "Ardennes"],
+  "09": [42.96, 1.61, "Ariège"], "10": [48.30, 4.08, "Aube"], "11": [43.21, 2.35, "Aude"],
+  "12": [44.35, 2.57, "Aveyron"], "13": [43.30, 5.37, "Bouches-du-Rhône"], "14": [49.18, -0.37, "Calvados"],
+  "15": [44.93, 2.44, "Cantal"], "16": [45.65, 0.16, "Charente"], "17": [46.16, -1.15, "Charente-Maritime"],
+  "18": [47.08, 2.40, "Cher"], "19": [45.27, 1.77, "Corrèze"], "20": [42.15, 9.10, "Corse"],
+  "21": [47.32, 5.04, "Côte-d'Or"], "22": [48.51, -2.77, "Côtes-d'Armor"], "23": [46.17, 1.87, "Creuse"],
+  "24": [45.18, 0.72, "Dordogne"], "25": [47.24, 6.02, "Doubs"], "26": [44.93, 4.89, "Drôme"],
+  "27": [49.02, 1.15, "Eure"], "28": [48.44, 1.49, "Eure-et-Loir"], "29": [48.00, -4.10, "Finistère"],
+  "30": [43.84, 4.36, "Gard"], "31": [43.60, 1.44, "Haute-Garonne"], "32": [43.65, 0.59, "Gers"],
+  "33": [44.84, -0.58, "Gironde"], "34": [43.61, 3.88, "Hérault"], "35": [48.11, -1.68, "Ille-et-Vilaine"],
+  "36": [46.81, 1.69, "Indre"], "37": [47.39, 0.69, "Indre-et-Loire"], "38": [45.19, 5.72, "Isère"],
+  "39": [46.67, 5.55, "Jura"], "40": [43.89, -0.50, "Landes"], "41": [47.59, 1.34, "Loir-et-Cher"],
+  "42": [45.44, 4.39, "Loire"], "43": [45.04, 3.88, "Haute-Loire"], "44": [47.22, -1.55, "Loire-Atlantique"],
+  "45": [47.90, 1.90, "Loiret"], "46": [44.45, 1.44, "Lot"], "47": [44.20, 0.62, "Lot-et-Garonne"],
+  "48": [44.52, 3.50, "Lozère"], "49": [47.47, -0.55, "Maine-et-Loire"], "50": [49.12, -1.09, "Manche"],
+  "51": [48.96, 4.36, "Marne"], "52": [48.11, 5.14, "Haute-Marne"], "53": [48.07, -0.77, "Mayenne"],
+  "54": [48.69, 6.18, "Meurthe-et-Moselle"], "55": [48.77, 5.16, "Meuse"], "56": [47.66, -2.76, "Morbihan"],
+  "57": [49.12, 6.18, "Moselle"], "58": [47.00, 3.16, "Nièvre"], "59": [50.63, 3.06, "Nord"],
+  "60": [49.42, 2.83, "Oise"], "61": [48.43, 0.09, "Orne"], "62": [50.29, 2.78, "Pas-de-Calais"],
+  "63": [45.78, 3.08, "Puy-de-Dôme"], "64": [43.30, -0.37, "Pyrénées-Atlantiques"],
+  "65": [43.23, 0.07, "Hautes-Pyrénées"], "66": [42.70, 2.90, "Pyrénées-Orientales"],
+  "67": [48.58, 7.75, "Bas-Rhin"], "68": [47.75, 7.34, "Haut-Rhin"], "69": [45.76, 4.84, "Rhône"],
+  "70": [47.62, 6.15, "Haute-Saône"], "71": [46.78, 4.85, "Saône-et-Loire"], "72": [48.00, 0.20, "Sarthe"],
+  "73": [45.57, 5.92, "Savoie"], "74": [45.90, 6.13, "Haute-Savoie"], "75": [48.86, 2.35, "Paris"],
+  "76": [49.44, 1.10, "Seine-Maritime"], "77": [48.54, 2.66, "Seine-et-Marne"], "78": [48.80, 2.13, "Yvelines"],
+  "79": [46.32, -0.46, "Deux-Sèvres"], "80": [49.89, 2.30, "Somme"], "81": [43.93, 2.15, "Tarn"],
+  "82": [44.02, 1.35, "Tarn-et-Garonne"], "83": [43.12, 5.93, "Var"], "84": [43.95, 4.81, "Vaucluse"],
+  "85": [46.67, -1.43, "Vendée"], "86": [46.58, 0.34, "Vienne"], "87": [45.83, 1.26, "Haute-Vienne"],
+  "88": [48.17, 6.45, "Vosges"], "89": [47.80, 3.57, "Yonne"], "90": [47.64, 6.86, "Territoire de Belfort"],
+  "91": [48.63, 2.44, "Essonne"], "92": [48.89, 2.24, "Hauts-de-Seine"], "93": [48.91, 2.44, "Seine-Saint-Denis"],
+  "94": [48.79, 2.46, "Val-de-Marne"], "95": [49.05, 2.08, "Val-d'Oise"],
+  "971": [16.24, -61.53, "Guadeloupe"], "972": [14.60, -61.07, "Martinique"], "973": [4.94, -52.33, "Guyane"],
+  "974": [-20.88, 55.45, "La Réunion"], "976": [-12.78, 45.23, "Mayotte"],
+};
+const deptName = (d) => (DEPTS[d] ? DEPTS[d][2] : "Département " + d);
+
+function loadCss(href) {
+  if (document.querySelector(`link[data-lf="${href}"]`)) return;
+  const l = document.createElement("link");
+  l.rel = "stylesheet"; l.href = href; l.setAttribute("data-lf", href);
+  document.head.appendChild(l);
+}
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const ex = document.querySelector(`script[data-lf="${src}"]`);
+    if (ex) { if (ex._loaded) res(); else ex.addEventListener("load", () => res()); return; }
+    const el = document.createElement("script");
+    el.src = src; el.setAttribute("data-lf", src);
+    el.onload = () => { el._loaded = true; res(); };
+    el.onerror = () => rej(new Error("load")); document.body.appendChild(el);
+  });
+}
+
+function Carte() {
+  const [data, setData] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [q, setQ] = useState("");
+  const mapDiv = useRef(null);
+  const mapRef = useRef(null);
+  const layerRef = useRef(null);
+  const LRef = useRef(null);
+
+  // Charge les données + la librairie Leaflet (CDN, comme dans la version d'origine).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try { const j = await getCarte(); if (alive) setData(j.data); }
+      catch (e) { if (alive) setStatus({ type: "error", message: e.message }); }
+      loadCss("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
+      try { await loadScript("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"); }
+      catch { return; }
+      if (!alive || !mapDiv.current || mapRef.current) { if (alive) setMapReady(true); return; }
+      const L = window.L; LRef.current = L;
+      const map = L.map(mapDiv.current, { center: [46.6, 2.4], zoom: 5, scrollWheelZoom: true });
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19, attribution: "© OpenStreetMap © CARTO",
+      }).addTo(map);
+      mapRef.current = map;
+      setMapReady(true);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    const n = q.trim().toLowerCase();
+    if (!n) return data.byDept;
+    return data.byDept.filter((d) =>
+      d.dept.includes(n) ||
+      deptName(d.dept).toLowerCase().includes(n) ||
+      d.towns.some((t) => t.town.toLowerCase().includes(n))
+    );
+  }, [data, q]);
+
+  const maxCount = useMemo(() => Math.max(1, ...(data?.byDept || []).map((d) => d.count)), [data]);
+
+  // (re)dessine les bulles à chaque changement de filtre.
+  useEffect(() => {
+    const L = LRef.current, map = mapRef.current;
+    if (!L || !map) return;
+    if (layerRef.current) map.removeLayer(layerRef.current);
+    const group = L.layerGroup();
+    for (const d of filtered) {
+      const c = DEPTS[d.dept];
+      if (!c) continue;
+      const radius = 8 + Math.round((d.count / maxCount) * 22);
+      const m = L.circleMarker([c[0], c[1]], {
+        radius, weight: 1.5, color: "#fff", fillColor: "#2c3371", fillOpacity: 0.78,
+      });
+      const towns = d.towns.map((t) => `${t.town} (${t.n})`).join(", ");
+      m.bindPopup(
+        `<b>${deptName(d.dept)} (${d.dept})</b><br><b style="color:#dc3e37">${d.count}</b> stagiaire(s)` +
+        (towns ? `<br><span style="color:#555">${towns}</span>` : "")
+      );
+      m.bindTooltip(`${deptName(d.dept)} · ${d.count}`, { direction: "top" });
+      group.addLayer(m);
+    }
+    map.addLayer(group);
+    layerRef.current = group;
+  }, [filtered, maxCount, mapReady]);
+
+  const total = data?.total ?? 0;
+  const ungeo = data?.ungeo ?? 0;
+  const nbDepts = data?.byDept.length ?? 0;
+  const top = data?.byDept[0];
+
+  return (
+    <>
+      <PageHead
+        eyebrow="Développement · Démarchage"
+        title="Carte des stagiaires"
+        lead="Répartition géographique de vos stagiaires par département (calculée depuis le code postal). Utile pour cibler le démarchage, la vente de matériel et les sessions de proximité."
+        actions={
+          <input className="inp" style={{ minWidth: 240 }} value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Filtrer (département, ville)…" aria-label="Filtrer" />
+        }
+      />
+      <StatusMessage status={status} />
+
+      <div className="grid cols-4" style={{ marginBottom: 16 }}>
+        <div className="kpi"><div className="lbl">Stagiaires géolocalisés</div><div className="val tnum">{total}</div></div>
+        <div className="kpi"><div className="lbl">Départements couverts</div><div className="val tnum">{nbDepts}</div></div>
+        <div className="kpi"><div className="lbl">Département principal</div><div className="val tnum" style={{ fontSize: 20 }}>{top ? `${deptName(top.dept)}` : "—"}</div>{top && <div className="sub">{top.count} stagiaire(s)</div>}</div>
+        <div className="kpi"><div className="lbl">Code postal manquant</div><div className="val tnum" style={{ color: ungeo ? "var(--ember1)" : "var(--green)" }}>{ungeo}</div></div>
+      </div>
+
+      <div className="carte-wrap">
+        {!mapReady && <div className="carte-loading">Chargement de la carte…</div>}
+        <div ref={mapDiv} className="carte-map" />
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-head"><h3>Répartition par département</h3><span className="sub">{filtered.length} affiché(s)</span></div>
+        {!data ? <p className="lead" style={{ margin: 0 }}>Chargement…</p>
+          : filtered.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucun département ne correspond.</p> : (
+            <div className="grid" style={{ gap: 10 }}>
+              {filtered.map((d) => (
+                <div key={d.dept} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ width: 190, flexShrink: 0, fontSize: 13 }}>
+                    <b>{deptName(d.dept)}</b> <span className="sub" style={{ color: "var(--dim)" }}>({d.dept})</span>
+                  </span>
+                  <div style={{ flex: 1, height: 8, borderRadius: 999, background: "var(--surface3)", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${(d.count / maxCount) * 100}%`, background: "var(--navy)", borderRadius: 999 }} />
+                  </div>
+                  <b className="tnum" style={{ width: 34, textAlign: "right", color: "var(--navy)" }}>{d.count}</b>
+                </div>
+              ))}
+            </div>
+          )}
+      </div>
+    </>
+  );
+}
+
+export default Carte;
