@@ -77,11 +77,20 @@ function RichToolbar({ editor, compact = false }) {
       <Btn title="Paragraphe" active={editor.isActive("paragraph")} on={() => c().setParagraph().run()}>¶</Btn>
 
       <Sep />
-      {/* Alignement */}
-      <Btn title="Aligner à gauche" active={editor.isActive({ textAlign: "left" })} on={() => c().setTextAlign("left").run()}>⯇</Btn>
-      <Btn title="Centrer" active={editor.isActive({ textAlign: "center" })} on={() => c().setTextAlign("center").run()}>≡</Btn>
-      <Btn title="Aligner à droite" active={editor.isActive({ textAlign: "right" })} on={() => c().setTextAlign("right").run()}>⯈</Btn>
-      <Btn title="Justifier" active={editor.isActive({ textAlign: "justify" })} on={() => c().setTextAlign("justify").run()}>▤</Btn>
+      {/* Alignement — déplace l'image si une image est sélectionnée, sinon le texte */}
+      {(() => {
+        const img = editor.isActive("image");
+        const setAlign = (a) => (img ? c().updateAttributes("image", { align: a }).run() : c().setTextAlign(a).run());
+        const isAlign = (a) => (img ? editor.isActive("image", { align: a }) : editor.isActive({ textAlign: a }));
+        return (
+          <>
+            <Btn title={img ? "Image à gauche" : "Aligner à gauche"} active={isAlign("left")} on={() => setAlign("left")}>⯇</Btn>
+            <Btn title={img ? "Image centrée" : "Centrer"} active={isAlign("center")} on={() => setAlign("center")}>≡</Btn>
+            <Btn title={img ? "Image à droite" : "Aligner à droite"} active={isAlign("right")} on={() => setAlign("right")}>⯈</Btn>
+            {!img && <Btn title="Justifier" active={editor.isActive({ textAlign: "justify" })} on={() => c().setTextAlign("justify").run()}>▤</Btn>}
+          </>
+        );
+      })()}
       <select className="tb-sel" title="Interligne" value=""
         onChange={(e) => { if (e.target.value) c().setLineHeight(e.target.value).run(); }}>
         <option value="">↕</option>
