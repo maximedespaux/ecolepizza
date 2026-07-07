@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getCarte } from "../api/apiClient.js";
+import { getCarte, geocodeCarte } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
+import { LEVELS, colorForLevel, LEVEL_LABEL } from "../lib/levels.js";
 
 // Centroïdes (préfecture) par département — suffisant pour une carte à bulles.
 const DEPTS = {
@@ -65,12 +66,18 @@ function Carte() {
   const [status, setStatus] = useState(null);
   const [mapReady, setMapReady] = useState(false);
   const [q, setQ] = useState("");
+  const [dept, setDept] = useState(null);   // département sélectionné (filtre)
+  const [geo, setGeo] = useState(false);     // géocodage en cours
   const mapDiv = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const LRef = useRef(null);
 
-  // Charge les données + la librairie Leaflet (CDN, comme dans la version d'origine).
+  async function reload() {
+    try { const j = await getCarte(); setData(j.data); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -91,6 +98,17 @@ function Carte() {
     return () => { alive = false; };
   }, []);
 
+  // Lance le géocodage (par lots) puis recharge.
+  async function runGeocode() {
+    setGeo(true); setStatus(null);
+    try {
+      const { data: r } = await geocodeCarte(120);
+      await reload();
+      setStatus({ type: "success", message: `${r.done} stagiaire(s) géolocalisé(s).` + (r.remaining ? ` ${r.remaining} restant(s) — relancez.` : "") });
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setGeo(false); }
+  }
+
   const filtered = useMemo(() => {
     if (!data) return [];
     const n = q.trim().toLowerCase();
@@ -103,56 +121,99 @@ function Carte() {
   }, [data, q]);
 
   const maxCount = useMemo(() => Math.max(1, ...(data?.byDept || []).map((d) => d.count)), [data]);
+  const deptPoints = useMemo(
+    () => (data && dept ? data.points.filter((p) => p.dept === dept) : []),
+    [data, dept]
+  );
 
-  // (re)dessine les bulles à chaque changement de filtre.
+  // (re)dessine : bulles par département, ou points précis colorés par niveau du département sélectionné.
   useEffect(() => {
     const L = LRef.current, map = mapRef.current;
     if (!L || !map) return;
     if (layerRef.current) map.removeLayer(layerRef.current);
     const group = L.layerGroup();
-    for (const d of filtered) {
-      const c = DEPTS[d.dept];
-      if (!c) continue;
-      const radius = 8 + Math.round((d.count / maxCount) * 22);
-      const m = L.circleMarker([c[0], c[1]], {
-        radius, weight: 1.5, color: "#fff", fillColor: "#2c3371", fillOpacity: 0.78,
-      });
-      const towns = d.towns.map((t) => `${t.town} (${t.n})`).join(", ");
-      m.bindPopup(
-        `<b>${deptName(d.dept)} (${d.dept})</b><br><b style="color:#dc3e37">${d.count}</b> stagiaire(s)` +
-        (towns ? `<br><span style="color:#555">${towns}</span>` : "")
-      );
-      m.bindTooltip(`${deptName(d.dept)} · ${d.count}`, { direction: "top" });
-      group.addLayer(m);
+
+    if (dept) {
+      // Points précis (stagiaires géocodés) du département, colorés par niveau.
+      const pts = [];
+      for (const p of deptPoints) {
+        const m = L.circleMarker([p.lat, p.lng], {
+          radius: 7, weight: 1.5, color: "#fff", fillColor: colorForLevel(p.level), fillOpacity: 0.9,
+        });
+        m.bindPopup(`<b>${p.name}</b><br>${p.town || ""}<br><span style="color:${colorForLevel(p.level)}">${LEVEL_LABEL[p.level] || "Niveau non défini"}</span>`);
+        m.bindTooltip(p.name, { direction: "top" });
+        group.addLayer(m);
+        pts.push([p.lat, p.lng]);
+      }
+      map.addLayer(group);
+      layerRef.current = group;
+      if (pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 12 });
+      else { const c = DEPTS[dept]; if (c) map.setView([c[0], c[1]], 9); }
+    } else {
+      // Vue d'ensemble : bulles cliquables par département.
+      for (const d of filtered) {
+        const c = DEPTS[d.dept];
+        if (!c) continue;
+        const radius = 8 + Math.round((d.count / maxCount) * 22);
+        const m = L.circleMarker([c[0], c[1]], {
+          radius, weight: 1.5, color: "#fff", fillColor: "#2c3371", fillOpacity: 0.78,
+        });
+        m.on("click", () => setDept(d.dept));
+        m.bindTooltip(`${deptName(d.dept)} · ${d.count} — cliquer pour filtrer`, { direction: "top" });
+        group.addLayer(m);
+      }
+      map.addLayer(group);
+      layerRef.current = group;
+      map.setView([46.6, 2.4], 5);
     }
-    map.addLayer(group);
-    layerRef.current = group;
-  }, [filtered, maxCount, mapReady]);
+  }, [filtered, maxCount, mapReady, dept, deptPoints]);
 
   const total = data?.total ?? 0;
   const ungeo = data?.ungeo ?? 0;
+  const geocoded = data?.geocoded ?? 0;
+  const pending = data?.pending ?? 0;
   const nbDepts = data?.byDept.length ?? 0;
-  const top = data?.byDept[0];
 
   return (
     <>
       <PageHead
         eyebrow="Développement · Démarchage"
         title="Carte des stagiaires"
-        lead="Répartition géographique de vos stagiaires par département (calculée depuis le code postal). Utile pour cibler le démarchage, la vente de matériel et les sessions de proximité."
+        lead="Répartition géographique précise de vos stagiaires. Cliquez un département pour voir ses stagiaires, colorés par niveau de formation."
         actions={
-          <input className="inp" style={{ minWidth: 240 }} value={q} onChange={(e) => setQ(e.target.value)}
-            placeholder="Filtrer (département, ville)…" aria-label="Filtrer" />
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="inp" style={{ minWidth: 200 }} value={q} onChange={(e) => setQ(e.target.value)}
+              placeholder="Filtrer (département, ville)…" aria-label="Filtrer" />
+            <button className="btn primary" onClick={runGeocode} disabled={geo || pending === 0}
+              title={pending === 0 ? "Tous les stagiaires géolocalisables le sont" : `${pending} à géolocaliser`}>
+              {geo ? "Géolocalisation…" : `📍 Géolocaliser${pending ? ` (${pending})` : ""}`}
+            </button>
+          </div>
         }
       />
       <StatusMessage status={status} />
 
       <div className="grid cols-4" style={{ marginBottom: 16 }}>
-        <div className="kpi"><div className="lbl">Stagiaires géolocalisés</div><div className="val tnum">{total}</div></div>
+        <div className="kpi"><div className="lbl">Stagiaires (avec code postal)</div><div className="val tnum">{total}</div></div>
+        <div className="kpi"><div className="lbl">Points précis géolocalisés</div><div className="val tnum" style={{ color: "var(--green)" }}>{geocoded}</div></div>
         <div className="kpi"><div className="lbl">Départements couverts</div><div className="val tnum">{nbDepts}</div></div>
-        <div className="kpi"><div className="lbl">Département principal</div><div className="val tnum" style={{ fontSize: 20 }}>{top ? `${deptName(top.dept)}` : "—"}</div>{top && <div className="sub">{top.count} stagiaire(s)</div>}</div>
-        <div className="kpi"><div className="lbl">Code postal manquant</div><div className="val tnum" style={{ color: ungeo ? "var(--ember1)" : "var(--green)" }}>{ungeo}</div></div>
+        <div className="kpi"><div className="lbl">À géolocaliser / sans CP</div><div className="val tnum" style={{ color: (pending + ungeo) ? "var(--ember1)" : "var(--green)" }}>{pending + ungeo}</div></div>
       </div>
+
+      {/* Légende des niveaux */}
+      <div className="level-legend">
+        {LEVELS.map((l) => (
+          <span key={l.v} className="lg-item"><i style={{ background: l.color }} /> {l.label}</span>
+        ))}
+        <span className="lg-item"><i style={{ background: "#9aa0b4" }} /> Non défini</span>
+      </div>
+
+      {dept && (
+        <div className="dept-banner">
+          <b>{deptName(dept)} ({dept})</b> — {deptPoints.length} stagiaire(s) géolocalisé(s)
+          <button className="btn sm ghost" onClick={() => setDept(null)}>← Tous les départements</button>
+        </div>
+      )}
 
       <div className="carte-wrap">
         {!mapReady && <div className="carte-loading">Chargement de la carte…</div>}
@@ -160,20 +221,20 @@ function Carte() {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-head"><h3>Répartition par département</h3><span className="sub">{filtered.length} affiché(s)</span></div>
+        <div className="card-head"><h3>Répartition par département</h3><span className="sub">{filtered.length} affiché(s) · cliquer pour filtrer</span></div>
         {!data ? <p className="lead" style={{ margin: 0 }}>Chargement…</p>
           : filtered.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucun département ne correspond.</p> : (
             <div className="grid" style={{ gap: 10 }}>
               {filtered.map((d) => (
-                <div key={d.dept} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ width: 190, flexShrink: 0, fontSize: 13 }}>
+                <button key={d.dept} className={"dept-row" + (dept === d.dept ? " on" : "")} onClick={() => setDept(d.dept)}>
+                  <span style={{ width: 190, flexShrink: 0, fontSize: 13, textAlign: "left" }}>
                     <b>{deptName(d.dept)}</b> <span className="sub" style={{ color: "var(--dim)" }}>({d.dept})</span>
                   </span>
                   <div style={{ flex: 1, height: 8, borderRadius: 999, background: "var(--surface3)", overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${(d.count / maxCount) * 100}%`, background: "var(--navy)", borderRadius: 999 }} />
                   </div>
                   <b className="tnum" style={{ width: 34, textAlign: "right", color: "var(--navy)" }}>{d.count}</b>
-                </div>
+                </button>
               ))}
             </div>
           )}

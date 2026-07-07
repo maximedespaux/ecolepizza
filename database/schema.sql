@@ -138,6 +138,10 @@ CREATE TABLE learner (
     address             varchar(255) DEFAULT NULL,
     zip_code            varchar(10)  DEFAULT NULL,
     town                varchar(120) DEFAULT NULL,
+    lat                 decimal(9,6) DEFAULT NULL,       -- géolocalisation précise (carte)
+    lng                 decimal(9,6) DEFAULT NULL,
+    geo_precision       varchar(20)  DEFAULT NULL,       -- housenumber|street|locality|municipality
+    geocoded_at         timestamp    NULL DEFAULT NULL,
     -- Parcours scolaire
     diploma_level       varchar(120) DEFAULT NULL,       -- niveau du diplôme le plus élevé
     diploma_name        varchar(180) DEFAULT NULL,       -- nom du diplôme
@@ -178,6 +182,7 @@ CREATE TABLE training_program (
     id              uuid          NOT NULL DEFAULT uuid(),
     organization_id uuid          NOT NULL,
     code            varchar(40)   NOT NULL,          -- NIV1, NIV1H, RS7404…
+    level           varchar(20)   DEFAULT NULL,      -- NIV1|NIV1_PRO|NIV2|EXPERT|RS (code couleur carte)
     title           varchar(255)  NOT NULL,
     days            int           DEFAULT NULL,
     hours           int           DEFAULT NULL,
@@ -190,6 +195,7 @@ CREATE TABLE training_program (
     rs_code         varchar(40)   DEFAULT NULL,      -- RS7404 si certifiante
     hygiene         tinyint(1)    NOT NULL DEFAULT 0,
     active          tinyint(1)    NOT NULL DEFAULT 1,
+    sort_order      int           NOT NULL DEFAULT 100, -- ordre d'affichage (réorganisation)
     created_at      timestamp     NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     UNIQUE KEY uq_program_org_code (organization_id, code),

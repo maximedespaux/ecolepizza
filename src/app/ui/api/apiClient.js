@@ -168,6 +168,10 @@ export function downloadInvoiceXml(id, number) {
 export function getCarte() {
   return request("/carte");
 }
+// Géocode par lots les stagiaires sans coordonnées (API adresse gouv).
+export function geocodeCarte(limit = 80) {
+  return request("/carte/geocode", { method: "POST", body: JSON.stringify({ limit }) });
+}
 
 // --- Comptabilité / Gestion ---
 export function getComptabilite(annee) {

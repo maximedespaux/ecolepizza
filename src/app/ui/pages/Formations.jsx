@@ -4,6 +4,7 @@ import PageHead from "../components/PageHead.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { euro, colorOf } from "../lib/format.js";
+import { LEVELS } from "../lib/levels.js";
 
 function Formations() {
   const [programs, setPrograms] = useState([]);
@@ -78,7 +79,7 @@ function Formations() {
 
 // Champs éditables (miroir des colonnes du tableau fourni).
 const FIELDS = [
-  "title", "days", "hours", "price",
+  "title", "level", "days", "hours", "price",
   "audience", "objective_general", "objectives", "duration_detail", "program_detail",
   "rs_code", "hygiene", "active",
 ];
@@ -114,8 +115,16 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="mbody">
-          <div className="field"><label>Titre</label>
-            <input className="inp" value={form.title} onChange={set("title")} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+            <div className="field"><label>Titre</label>
+              <input className="inp" value={form.title} onChange={set("title")} /></div>
+            <div className="field"><label>Niveau (couleur carte)</label>
+              <select value={form.level || ""} onChange={set("level")}>
+                <option value="">— Non défini —</option>
+                {LEVELS.map((l) => <option key={l.v} value={l.v}>{l.label}</option>)}
+              </select>
+            </div>
+          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
             <div className="field"><label>Durée (jours)</label>

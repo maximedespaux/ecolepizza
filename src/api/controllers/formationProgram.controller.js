@@ -5,12 +5,12 @@ const db = require('../config/database.js');
  */
 const getPrograms = (req, res) => {
     db.query(
-        `SELECT id, organization_id, code, title, days, hours, price, audience,
+        `SELECT id, organization_id, code, level, title, days, hours, price, audience,
                 objectives, objective_general, duration_detail, program_detail,
-                rs_code, hygiene, active, created_at
+                rs_code, hygiene, active, sort_order, created_at
          FROM training_program
          WHERE organization_id = ?
-         ORDER BY code`,
+         ORDER BY sort_order, code`,
         [req.user.organization_id],
         (err, results) => {
             if (err) {
@@ -46,15 +46,15 @@ const getProgram = (req, res) => {
  * POST /api/formations
  */
 const createProgram = (req, res) => {
-    const { code, title, days, hours, price, rs_code, hygiene, objectives } = req.body;
+    const { code, level, title, days, hours, price, rs_code, hygiene, objectives } = req.body;
     if (!code || !title) {
         return res.status(422).json({ error: 'Code et intitulé requis' });
     }
     db.query(
         `INSERT INTO training_program
-            (id, organization_id, code, title, days, hours, price, rs_code, hygiene, objectives)
-         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [req.user.organization_id, code, title, days, hours, price, rs_code || null,
+            (id, organization_id, code, level, title, days, hours, price, rs_code, hygiene, objectives)
+         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.user.organization_id, code, level || null, title, days, hours, price, rs_code || null,
          hygiene ? 1 : 0, objectives || null],
         (err) => {
             if (err) {
@@ -71,9 +71,9 @@ const createProgram = (req, res) => {
  */
 const updateProgram = (req, res) => {
     const ALLOWED = [
-        'title', 'days', 'hours', 'price', 'audience', 'objectives',
+        'title', 'level', 'days', 'hours', 'price', 'audience', 'objectives',
         'objective_general', 'duration_detail', 'program_detail',
-        'rs_code', 'hygiene', 'active',
+        'rs_code', 'hygiene', 'active', 'sort_order',
     ];
     const sets = [];
     const values = [];
