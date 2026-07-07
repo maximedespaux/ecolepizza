@@ -34,30 +34,28 @@ npm run dev                 # http://localhost:3000  → /dashboard
 
 Outils utiles : `npm run db:studio` (explorateur Prisma), `npm run typecheck`.
 
-## État (Phase 1 — fondation posée)
+## État
 
 | Brique | État |
 |---|---|
-| Schéma Prisma (20 modèles) | ✅ `prisma/schema.prisma` |
-| Données École Pizza (identité + 9 formations) | ✅ `src/lib/ecole-pizza/`, seed |
-| Règles métier documents + dates ISO | ✅ `src/lib/documents/rules.ts` |
-| Registre des 24 templates + jetons | ✅ `src/lib/documents/templates.ts` |
-| Génération DOCX→PDF | ✅ module `src/lib/documents/generate.ts` (à brancher) |
-| Client Yousign v3 | ✅ `src/lib/signature/yousign.ts` |
-| Webhook Yousign (HMAC) | ✅ `src/app/api/webhooks/yousign/route.ts` |
-| Stockage Drive | ✅ stub `src/lib/storage/drive.ts` |
-| API stagiaires (GET/POST + Zod + audit) | ✅ `src/app/api/stagiaires/route.ts` |
-| Dashboard connecté (Prisma) | ✅ `src/app/dashboard/page.tsx` |
-| Authentification NextAuth | ⏳ à câbler |
+| Schéma Prisma (31 modèles) | ✅ `prisma/schema.prisma` |
+| Données École Pizza (identité + 9 formations + 23 partenaires) | ✅ `src/lib/ecole-pizza/`, seed |
+| CRUD Stagiaires / Formations / Sessions | ✅ (+ glisser-déposer formations) |
+| **CRM / Pipeline** 8 colonnes + blocage strict | ✅ `components/calendrier/PipelineBoard.tsx` |
+| **Génération DOCX + PDF** (Gotenberg) rangés par stagiaire | ✅ `documents/generate.ts`, `storage/local.ts` |
+| **Signature électronique** (dessin + OTP + SHA-256 + PDF signé) | ✅ `signatures/[token]/sign`, `signature/attestation.ts` |
+| **Espace stagiaire** (docs par formation, accès conditionné serveur) | ✅ `MonEspaceClient.tsx` |
+| **Comptabilité** (Gestion + Performance N-1) | ✅ `ComptabiliteClient.tsx`, `lib/compta/` |
+| **Carte des stagiaires** (filtres, recherche, ciblage upsell) | ✅ `CarteClient.tsx` |
+| Suivi Qualiopi · Partenaires · Ventes · Audit chaîné | ✅ |
+| Authentification NextAuth (serveur) | ⏳ à câbler (démo par profil + login stagiaire réel) |
+| Google (Gmail/Drive/Calendar) · Stripe · Brevo (emails) | ⏳ à venir |
 
-## Feuille de route
+## Feuille de route restante
 
-- **Phase 1** Auth · CRUD stagiaires/formations/sessions · génération DOCX/PDF · suivi.
-- **Phase 2** Google (Gmail, Drive, Calendar, import Sheets/Forms).
-- **Phase 3** Signature Yousign · webhooks · preuve · PDF signé.
-- **Phase 4** Qualiopi (checklist, preuves, score de conformité, export audit).
-- **Phase 5** Facturation · Stripe · relances.
-- **Phase 6** Extranets stagiaire / formateur / entreprise.
-- **Phase 7** Assistant IA administratif.
+- **Pipeline T2** — profil stagiaire (financement paramétrable, docs, conformité, suivi 6 mois, archivage).
+- **Auth serveur** (NextAuth) + rôles réels.
+- **Automatisations / relances** (Brevo + planificateur).
+- **Google** (Drive réel, import Sheets/Forms) · **Stripe** (paiement acompte) · **Assistant IA**.
 
-Voir `docs/01_ARCHITECTURE.md` à `docs/07_API.md`.
+Voir `docs/01_ARCHITECTURE.md` à `docs/08_MISE_A_JOUR.md` et le `README.md` racine.
