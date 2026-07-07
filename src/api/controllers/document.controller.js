@@ -177,7 +177,7 @@ async function fillForRequest(req, res) {
     if (!slug) { res.status(404).json({ message: 'Aucun modèle pour ce type de document.' }); return null; }
     // Contenu propre à l'organisme s'il existe, sinon modèle par défaut fourni.
     const content = await getTemplateContent(doc.organization_id, slug);
-    if (!content) { res.status(404).json({ message: 'Modèle introuvable.' }); return null; }
+    if (!content) { res.status(404).json({ message: 'Aucun modèle pour cette étape. Créez-le dans Modèles → Éditer.' }); return null; }
 
     const who = [ctx.learner?.first_name, ctx.learner?.last_name].filter(Boolean).join(' ').trim();
     const label = TYPE_LABELS[doc.type] || doc.type || 'document';

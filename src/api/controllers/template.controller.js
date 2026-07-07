@@ -3,7 +3,7 @@ const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
-const { defaultTemplateBuffer, defaultTemplateHtml } = require('../lib/docxfill.js');
+const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet } = require('../lib/documents.js');
 const { TOKEN_CATALOG } = require('../lib/tokens.js');
 
@@ -39,11 +39,8 @@ async function getTemplateContent(organizationId, slug) {
             return { kind: 'builder', html: row.body_html, header: row.header_html || '', footer: row.footer_html || '' };
         }
     }
-    // Défauts fournis : d'abord le corps « builder », sinon l'ancien .docx.
-    const html = defaultTemplateHtml(slug);
-    if (html) return { kind: 'builder', html, header: '', footer: '' };
-    const buf = defaultTemplateBuffer(slug);
-    return buf ? { kind: 'docx', buffer: buf } : null;
+    // Aucun modèle par défaut : le modèle doit être créé dans l'éditeur.
+    return null;
 }
 
 /** Étapes de l'organisme (défauts fusionnés avec ses lignes) — objets normalisés. */
@@ -78,8 +75,7 @@ const listTemplates = async (req, res) => {
             ...s,
             kind: raw[s.slug]?.kind || 'builder',
             has_body: !!raw[s.slug]?.has_body,
-            has_default_body: !!defaultTemplateHtml(s.slug),
-            has_default_file: !!defaultTemplateBuffer(s.slug),
+            has_file: !!raw[s.slug]?.has_file,
             file_name: raw[s.slug]?.name || null,
             updated_at: raw[s.slug]?.updated_at || null,
         }));

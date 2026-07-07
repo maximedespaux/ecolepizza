@@ -56,20 +56,14 @@ function templateSlugFor(type, o = {}) {
     }
 }
 
-// Modèle par défaut fourni avec l'application (Buffer) pour un slug, ou null.
+// Modèle .docx par défaut fourni avec l'application (Buffer) pour un slug, ou null.
+// Conservé pour la compatibilité avec un éventuel fichier .docx téléversé ; il
+// n'y a plus de modèles par défaut fournis (chaque modèle est créé de zéro).
 function defaultTemplateBuffer(slug) {
     const entry = SLUG_MAP[slug];
     if (!entry) return null;
     const p = path.join(TPL_DIR, entry.file);
     return fs.existsSync(p) ? fs.readFileSync(p) : null;
-}
-
-// Corps HTML par défaut (modèle « builder » fourni avec l'application) pour un slug.
-const HTML_DIR = path.join(__dirname, '..', 'templates_html');
-function defaultTemplateHtml(slug) {
-    if (!/^[a-z0-9-]+$/.test(String(slug || ''))) return null;
-    const p = path.join(HTML_DIR, `${slug}.html`);
-    return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
 }
 
 /** Table de jetons { Jeton: valeur } à partir du contexte (catalogue partagé). */
@@ -110,6 +104,6 @@ function fillDocument(type, ctx, loadTemplate) {
 }
 
 module.exports = {
-    TEMPLATE_SLUGS, templateSlugFor, defaultTemplateBuffer, defaultTemplateHtml,
+    TEMPLATE_SLUGS, templateSlugFor, defaultTemplateBuffer,
     renderTemplate, buildTokens, fillDocument,
 };
