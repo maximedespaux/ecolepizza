@@ -222,6 +222,11 @@ export function logout() {
   return request("/auth/logout", { method: "POST" });
 }
 
+// L'utilisateur connecté change son propre mot de passe.
+export function changeMyPassword(payload) {
+  return request("/auth/password", { method: "PATCH", body: JSON.stringify(payload) });
+}
+
 // --- Stagiaires ---
 export function getStagiaires(q = "") {
   const query = q ? `?q=${encodeURIComponent(q)}` : "";

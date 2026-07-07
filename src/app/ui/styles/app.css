@@ -70,9 +70,18 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .loadbar span{position:absolute;top:0;height:100%;width:35%;border-radius:0 3px 3px 0;background:var(--grad-ember);box-shadow:var(--shadow-glow);animation:loadslide 1.05s var(--ease) infinite}
 @keyframes loadslide{0%{left:-35%;width:20%}50%{width:45%}100%{left:100%;width:20%}}
 @media (prefers-reduced-motion:reduce){.loadbar span{animation:none;left:0;width:100%;opacity:.6}}
-.side-foot{padding:11px 16px;border-top:1px solid var(--border-soft);display:flex;align-items:center;gap:10px}
+.side-foot-wrap{position:relative;border-top:1px solid var(--border-soft)}
+.side-foot{width:100%;padding:11px 16px;display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;cursor:pointer;color:inherit;font:inherit}
+.side-foot:hover,.side-foot.open{background:var(--hover,rgba(0,0,0,.04))}
+.side-foot .chev{margin-left:auto;color:var(--dim);font-size:11px}
 .avatar{width:34px;height:34px;border-radius:50%;background:var(--grad-ember);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;flex:0 0 34px}
 .side-foot .who{font-size:12.5px;font-weight:600;line-height:1.2}.side-foot .role{font-size:11px;color:var(--dim)}
+/* Menu profil (au-dessus du pied de barre) */
+.profile-menu{position:absolute;left:12px;right:12px;bottom:calc(100% + 6px);background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:6px;z-index:40;display:flex;flex-direction:column;gap:2px}
+.profile-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:none;background:none;border-radius:7px;cursor:pointer;color:inherit;font:inherit;font-size:13.5px;text-align:left}
+.profile-menu button:hover{background:var(--hover,rgba(0,0,0,.05))}
+.profile-menu button.danger{color:var(--ember1)}
+.profile-menu .ic{width:18px;text-align:center}
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
 .topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;padding:12px 28px;background:var(--glass);backdrop-filter:blur(16px) saturate(140%);border-bottom:1px solid var(--border-soft)}
 .topbar .menu-btn{display:none;background:transparent;border:none;color:var(--text);font-size:20px}

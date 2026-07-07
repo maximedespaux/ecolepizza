@@ -89,6 +89,42 @@ const userAuthentification = async (req, res) => {
 };
 
 /**
+ * PATCH /api/auth/password — l'utilisateur connecté change son propre mot de
+ * passe (vérification du mot de passe actuel obligatoire).
+ */
+const changePassword = (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: 'Mot de passe actuel et nouveau mot de passe requis.' });
+    }
+    if (String(newPassword).length < 8) {
+        return res.status(400).json({ message: 'Le nouveau mot de passe doit contenir au moins 8 caractères.' });
+    }
+
+    db.query('SELECT password FROM user WHERE id = ?', [req.user.id], async (err, results) => {
+        if (err) {
+            console.error('Erreur changement de mot de passe :', err);
+            return res.status(500).json({ error: 'Internal Server Error' });
+        }
+        if (results.length === 0) {
+            return res.status(404).json({ message: 'Utilisateur introuvable' });
+        }
+        const isMatch = await bcrypt.compare(currentPassword, results[0].password);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Mot de passe actuel incorrect.' });
+        }
+        const hashed = await bcrypt.hash(newPassword, 10);
+        db.query('UPDATE user SET password = ? WHERE id = ?', [hashed, req.user.id], (uErr) => {
+            if (uErr) {
+                console.error('Erreur mise à jour mot de passe :', uErr);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            res.json({ success: true, message: 'Mot de passe modifié.' });
+        });
+    });
+};
+
+/**
  * POST /api/auth/logout — supprime le cookie.
  */
 const logout = (req, res) => {
@@ -96,4 +132,4 @@ const logout = (req, res) => {
     return res.status(200).json({ success: true, message: 'Déconnexion réussie' });
 };
 
-module.exports = { userAuthentification, getCurrentUser, logout };
+module.exports = { userAuthentification, getCurrentUser, changePassword, logout };
