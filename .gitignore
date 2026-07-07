@@ -1,0 +1,11 @@
+# Sécurité : ne jamais committer dépendances, builds, secrets, fichiers OS.
+**/node_modules/
+**/.next/
+**/.storage/
+**/.env
+**/.env.local
+**/.env*.local
+.DS_Store
+**/.DS_Store
+*.log
+**/tsconfig.tsbuildinfo
