@@ -7,11 +7,17 @@ import { z } from "zod";
 import { Prisma, Financement, CrmStage } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
+// Étapes qui exigent devis signé ET acompte reçu (blocage strict du pipeline).
+const REQUIRE_CONFIRMED = new Set<CrmStage>(["INSCRIT", "EN_FORMATION", "TERMINE", "EVALUATION_ENVOYEE"]);
+
 const Patch = z.object({
   crmStage: z.nativeEnum(CrmStage).optional(),
   financement: z.nativeEnum(Financement).optional(),
   prix: z.coerce.number().nonnegative().optional(),
   acompte: z.coerce.number().nonnegative().optional(),
+  priseEnCharge: z.coerce.number().nonnegative().optional(),
+  devisSigne: z.boolean().optional(),
+  acompteRecu: z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -21,11 +27,37 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const parsed = Patch.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Validation échouée", details: parsed.error.flatten() }, { status: 422 });
 
+  const current = await prisma.enrollment.findUnique({ where: { id } });
+  if (!current) return NextResponse.json({ error: "Inscription introuvable" }, { status: 404 });
+
   const data: Prisma.EnrollmentUpdateInput = {};
-  if (parsed.data.crmStage !== undefined) data.crmStage = parsed.data.crmStage;
   if (parsed.data.financement !== undefined) data.financement = parsed.data.financement;
   if (parsed.data.prix !== undefined) data.prix = new Prisma.Decimal(parsed.data.prix);
   if (parsed.data.acompte !== undefined) data.acompte = new Prisma.Decimal(parsed.data.acompte);
+  if (parsed.data.priseEnCharge !== undefined) data.priseEnCharge = new Prisma.Decimal(parsed.data.priseEnCharge);
+  if (parsed.data.devisSigne !== undefined) data.devisSigne = parsed.data.devisSigne;
+  if (parsed.data.acompteRecu !== undefined) data.acompteRecu = parsed.data.acompteRecu;
+
+  if (parsed.data.crmStage !== undefined) {
+    const target = parsed.data.crmStage;
+    // Atterrir sur une colonne-jalon valide les drapeaux correspondants.
+    let devisSigne = parsed.data.devisSigne ?? current.devisSigne;
+    let acompteRecu = parsed.data.acompteRecu ?? current.acompteRecu;
+    if (target === "DEVIS_SIGNE") devisSigne = true;
+    if (target === "ACOMPTE_PAYE") { devisSigne = true; acompteRecu = true; } // acompte implique devis
+
+    // Blocage strict : « Inscrit » et au-delà exigent devis signé + acompte reçu.
+    if (REQUIRE_CONFIRMED.has(target) && !(devisSigne && acompteRecu)) {
+      const manque = [!devisSigne && "le devis signé", !acompteRecu && "l'acompte reçu"].filter(Boolean).join(" et ");
+      return NextResponse.json(
+        { error: `Impossible d'inscrire : il manque ${manque}. Passez d'abord par « Devis signé » puis « Acompte reçu ».` },
+        { status: 409 },
+      );
+    }
+    data.crmStage = target;
+    data.devisSigne = devisSigne;
+    data.acompteRecu = acompteRecu;
+  }
 
   const enrollment = await prisma.enrollment.update({
     where: { id },

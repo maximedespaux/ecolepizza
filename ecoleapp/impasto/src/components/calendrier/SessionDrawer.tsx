@@ -77,6 +77,32 @@ export default function SessionDrawer({
     else toast("Mise à jour impossible", "err");
   };
 
+  // Déplacer la session (semaine / année → dates recalculées côté serveur).
+  const [move, setMove] = useState({ annee: "", semaine: "" });
+  useEffect(() => { if (detail) setMove({ annee: String(detail.annee), semaine: String(detail.semaine) }); }, [detail?.id]);
+  const moveSession = async () => {
+    if (!detail) return;
+    const annee = Number(move.annee), semaine = Number(move.semaine);
+    if (!annee || semaine < 1 || semaine > 53) { toast("Semaine (1–53) et année requises", "err"); return; }
+    if (annee === detail.annee && semaine === detail.semaine) return;
+    setBusy(true);
+    const res = await fetch(`/api/sessions/${detail.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ annee, semaine }),
+    });
+    setBusy(false);
+    if (res.ok) { toast("Session déplacée", "ok"); await loadDetail(); onChanged(); }
+    else { const j = await res.json().catch(() => ({})); toast(j.error ?? "Déplacement impossible", "err"); }
+  };
+
+  const deleteSession = async () => {
+    if (!detail) return;
+    if (!confirm(`Supprimer la session « ${detail.program.titre} » (Sem. ${detail.semaine}/${detail.annee}) ?`)) return;
+    const res = await fetch(`/api/sessions/${detail.id}`, { method: "DELETE" });
+    if (res.ok) { toast("Session supprimée", "ok"); onChanged(); onClose(); }
+    else { const j = await res.json().catch(() => ({})); toast(j.error ?? "Suppression impossible", "err"); }
+  };
+
   const count = detail?.enrollments.length ?? 0;
 
   return (
@@ -110,6 +136,18 @@ export default function SessionDrawer({
                 <select value={detail.status} onChange={(e) => changeStatus(e.target.value)}>
                   {SESSION_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                 </select>
+              </div>
+
+              {/* Déplacer la session (les dates se recalculent depuis la semaine ISO) */}
+              <div className="field">
+                <label>Déplacer la session <span className="hint">semaine / année</span></label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input className="inp" style={{ width: 90 }} inputMode="numeric" aria-label="Semaine"
+                    value={move.semaine} onChange={(e) => setMove((m) => ({ ...m, semaine: e.target.value }))} placeholder="Sem." />
+                  <input className="inp" style={{ width: 100 }} inputMode="numeric" aria-label="Année"
+                    value={move.annee} onChange={(e) => setMove((m) => ({ ...m, annee: e.target.value }))} placeholder="Année" />
+                  <button className="btn sm" disabled={busy} onClick={moveSession}>Déplacer</button>
+                </div>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "18px 0 10px" }}>
@@ -166,7 +204,7 @@ export default function SessionDrawer({
             </div>
 
             <div className="dfoot">
-              <span className={`badge ${STATUS_BADGE[detail.status] ?? "n"}`}>{STATUS_LABEL[detail.status] ?? detail.status}</span>
+              <button className="btn ghost danger" onClick={deleteSession} title={count > 0 ? "Retirez les stagiaires d'abord" : "Supprimer la session"}>Supprimer</button>
               <span style={{ flex: 1 }} />
               <a className="btn ghost" href="/documents">Documents</a>
               <button className="btn primary" onClick={onClose}>Terminé</button>

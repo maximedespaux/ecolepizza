@@ -9,7 +9,10 @@ import { prisma } from "@/lib/db";
 const ORG = "org-ecole-pizza";
 
 export async function GET(_req: NextRequest) {
-  const data = await prisma.trainingProgram.findMany({ where: { organizationId: ORG }, orderBy: { prix: "desc" } });
+  const data = await prisma.trainingProgram.findMany({
+    where: { organizationId: ORG },
+    orderBy: [{ ordre: "asc" }, { prix: "desc" }],
+  });
   return NextResponse.json({ data });
 }
 
@@ -24,6 +27,7 @@ const CreateInput = z.object({
   deroule: z.string().optional(),
   hygiene: z.boolean().optional(),
   rsCode: z.string().optional(),
+  image: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -33,12 +37,15 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Validation échouée" }, { status: 422 });
   const d = parsed.data;
   try {
+    // Nouvelle formation placée en fin de liste.
+    const last = await prisma.trainingProgram.findFirst({ where: { organizationId: ORG }, orderBy: { ordre: "desc" }, select: { ordre: true } });
     const program = await prisma.trainingProgram.create({
       data: {
         organizationId: ORG, code: d.code.toUpperCase(), titre: d.titre,
         prix: new Prisma.Decimal(d.prix), jours: d.jours, heures: d.heures,
         public: d.public || null, objectifs: d.objectifs || null, deroule: d.deroule || null,
         hygiene: d.hygiene ?? false, rsCode: d.rsCode?.trim() || null,
+        image: d.image?.trim() || null, ordre: (last?.ordre ?? -1) + 1,
       },
     });
     await prisma.auditLog.create({ data: { organizationId: ORG, action: "program.create", entity: "TrainingProgram", entityId: program.id } });

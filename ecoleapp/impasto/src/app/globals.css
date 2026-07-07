@@ -15,6 +15,9 @@
   --font-d:"Mulish",system-ui,sans-serif; --font-b:"Mulish",system-ui,sans-serif; --font-m:"Space Mono",ui-monospace,monospace;
   --r:16px; --r-sm:11px; --ease:cubic-bezier(.22,.61,.36,1);
   --shadow-glow:0 8px 30px -8px rgba(220,62,55,.4);
+  /* Palette catégorielle graphiques (validée CVD, clair). Postes de dépense + CA. */
+  --cat-mp:#dc3e37; --cat-sal:#4b6bd6; --cat-loy:#2f9e6f; --cat-mkt:#c67f1e; --cat-ene:#7d5bd0; --cat-div:#a86b3c;
+  --ca-insc:#4b6bd6; --ca-mat:#dc3e37; --ca-extra:#c67f1e;
 }
 [data-theme="light"]{
   --bg:#f5f6fb; --bg2:#eef0f8; --surface:#ffffff; --surface2:#f5f6fb; --surface3:#eaecf5;
@@ -29,6 +32,9 @@
   --text:#eef0fb; --muted:#a7add0; --dim:#727aa3;
   --green:#5fc08e; --green-bg:rgba(95,192,142,.14); --blue:#8ea2e0; --blue-bg:rgba(142,162,224,.16);
   --amber-bg:rgba(240,164,60,.14); --rosso-bg:rgba(220,62,55,.16);
+  /* Palette catégorielle graphiques (validée CVD, sombre). */
+  --cat-mp:#e5564f; --cat-sal:#6f8ae4; --cat-loy:#33966d; --cat-mkt:#c4841f; --cat-ene:#9a7de6; --cat-div:#c47d3d;
+  --ca-insc:#6f8ae4; --ca-mat:#e5564f; --ca-extra:#c4841f;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}

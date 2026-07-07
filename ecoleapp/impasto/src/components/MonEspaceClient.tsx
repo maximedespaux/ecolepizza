@@ -5,15 +5,27 @@ import { MODULES, unlockedModules, PedaModule, QuizQ, VraiFaux, Ordre, Flashcard
 import { colorOf } from "./calendrier/shared";
 import DoughCalculator from "./student/DoughCalculator";
 
-interface Enr { id: string; crmStage: string; session: { annee: number; semaine: number; program: { code: string; titre: string; jours: number } } }
-interface Doc { id: string; type: string; status: string; numberPrefix?: string }
+interface Enr {
+  id: string; crmStage: string; devisSigne: boolean; acompteRecu: boolean;
+  session: { annee: number; semaine: number; dateDebut: string | null; dateFin: string | null; program: { code: string; titre: string; jours: number } };
+}
+interface Doc { id: string; type: string; status: string; numberPrefix?: string; enrollmentId?: string }
 
 const DOC_LABEL: Record<string, string> = {
   PROGRAMME: "Programme", FICHE_SEMAINE: "Fiche d'expression", TEST_POSITIONNEMENT: "Test de positionnement",
-  DEVIS: "Devis", CONTRAT: "Contrat / Convention", CONVOCATION: "Convocation", INVITATION: "Invitation",
-  DROIT_IMAGE: "Droit à l'image", EMARGEMENT: "Feuille d'émargement", ATTESTATION_HYGIENE: "Attestation Hygiène",
-  CERTIFICAT_REALISATION: "Certificat de réalisation", EVALUATION_FINANCEUR: "Évaluation",
+  DEVIS: "Devis", CONTRAT: "Contrat / Convention", CONVENTION: "Convention de formation", CONVOCATION: "Convocation", INVITATION: "Invitation",
+  DROIT_IMAGE: "Droit à l'image", CGV: "Conditions générales de vente", EMARGEMENT: "Feuille d'émargement",
+  ATTESTATION_HYGIENE: "Attestation Hygiène", CERTIFICAT_REALISATION: "Certificat de réalisation",
+  EVALUATION_FINANCEUR: "Évaluation à chaud / à froid", EVALUATION_MANAGEUR: "Évaluation manageur",
 };
+
+// Ordre FIXE d'affichage (2 sections) — on trie sur l'index, jamais par texte.
+const INSCRIPTION = ["PROGRAMME", "FICHE_SEMAINE", "TEST_POSITIONNEMENT", "DEVIS", "CONTRAT", "CONVENTION", "DROIT_IMAGE", "CONVOCATION", "INVITATION", "CGV"];
+const FIN = ["EMARGEMENT", "EVALUATION_FINANCEUR", "EVALUATION_MANAGEUR", "ATTESTATION_HYGIENE", "CERTIFICAT_REALISATION"];
+// Documents accessibles même dossier incomplet (à signer pour débloquer).
+const A_SIGNER_LIBRE = new Set(["DEVIS", "DROIT_IMAGE"]);
+const ordered = (docs: Doc[], order: string[]) =>
+  docs.filter((d) => order.includes(d.type)).sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
 // Décalage horizontal des nœuds du parcours (effet serpentin type Duolingo).
 const WAVE = [0, 58, 86, 58, 0, -58, -86];
 
@@ -21,6 +33,7 @@ export default function MonEspaceClient() {
   const { profile } = useRole();
   const [enrollments, setEnrollments] = useState<Enr[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
+  const [docsByEnr, setDocsByEnr] = useState<Record<string, Doc[]>>({});
   const [loading, setLoading] = useState(true);
   const [openModule, setOpenModule] = useState<PedaModule | null>(null);
   const [tool, setTool] = useState<null | "pate" | "docs" | "certif" | "mercuriale">(null);
@@ -36,9 +49,19 @@ export default function MonEspaceClient() {
     } catch { /* */ }
     setEnrollments(enr);
     const all: Doc[] = [];
+    const byEnr: Record<string, Doc[]> = {};
     for (const e of enr) {
-      try { const j = await (await fetch("/api/documents?enrollmentId=" + e.id)).json(); (j.data || []).forEach((d: Doc) => all.push(d)); } catch { /* */ }
+      try {
+        const j = await (await fetch("/api/documents?enrollmentId=" + e.id)).json();
+        const list: Doc[] = j.data || [];
+        // Dé-duplication : un seul document par type et par dossier.
+        const seen = new Set<string>();
+        const dedup = list.filter((d) => (seen.has(d.type) ? false : (seen.add(d.type), true)));
+        byEnr[e.id] = dedup;
+        dedup.forEach((d) => all.push({ ...d, enrollmentId: e.id }));
+      } catch { byEnr[e.id] = []; }
     }
+    setDocsByEnr(byEnr);
     setDocs(all);
     setLoading(false);
   }, [profile]);
@@ -133,7 +156,7 @@ export default function MonEspaceClient() {
       </div>
 
       {openModule && <ModuleModal module={openModule} onClose={() => setOpenModule(null)} />}
-      {tool && <ToolModal tool={tool} docs={docs} certif={certif} onClose={() => setTool(null)} />}
+      {tool && <ToolModal tool={tool} docs={docs} certif={certif} enrollments={enrollments} docsByEnr={docsByEnr} learnerId={profile?.learnerId} onRefresh={load} onClose={() => setTool(null)} />}
     </div>
   );
 }
@@ -336,7 +359,8 @@ function FlashcardsGame({ cards }: { cards: Flashcard[] }) {
   );
 }
 
-function ToolModal({ tool, docs, certif, onClose }: { tool: string; docs: Doc[]; certif?: Doc; onClose: () => void }) {
+function ToolModal({ tool, docs, certif, enrollments, docsByEnr, learnerId, onRefresh, onClose }: { tool: string; docs: Doc[]; certif?: Doc; enrollments: Enr[]; docsByEnr: Record<string, Doc[]>; learnerId?: string; onRefresh: () => void; onClose: () => void }) {
+  void docs;
   if (tool === "pate") return <Modal title="🧮 Calcul de recette — empâtement" wide onClose={onClose}><DoughCalculator /></Modal>;
   if (tool === "certif") return (
     <Modal title="🏅 Mon certificat" onClose={onClose}>
@@ -354,20 +378,128 @@ function ToolModal({ tool, docs, certif, onClose }: { tool: string; docs: Doc[];
       <div className="text-center py-6 text-muted">📦 Le catalogue des produits et le calcul du coût matière des recettes arrivent très bientôt dans votre espace.</div>
     </Modal>
   );
-  // docs
+  // docs → dossiers par formation
   return (
-    <Modal title="📄 Mes documents" onClose={onClose}>
-      {docs.length === 0 ? <div className="text-center py-6 text-muted">Aucun document pour le moment.</div> : (
-        <div className="divide-y divide-[var(--border-soft)]">
-          {docs.map((d) => (
-            <div key={d.id} className="flex items-center gap-3 py-2.5">
-              <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface-2 text-sm font-mono text-muted">{d.numberPrefix}</span>
-              <span className="flex-1 text-sm font-semibold text-ink">{DOC_LABEL[d.type] ?? d.type}</span>
-              <a href={`/api/documents/${d.id}/download`} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-navy transition">⬇ Word</a>
-            </div>
-          ))}
-        </div>
-      )}
+    <Modal title="Mes documents" wide onClose={onClose}>
+      <MesDocuments enrollments={enrollments} docsByEnr={docsByEnr} learnerId={learnerId} onRefresh={onRefresh} />
     </Modal>
+  );
+}
+
+// ---- Espace étudiant : documents groupés par formation, ordre fixe, verrouillage ----
+const frDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "—");
+const dateRange = (se: Enr["session"]) => (se.dateDebut ? `${frDate(se.dateDebut)} → ${frDate(se.dateFin)}` : `Sem. ${se.semaine}/${se.annee}`);
+
+function MesDocuments({ enrollments, docsByEnr, learnerId, onRefresh }: { enrollments: Enr[]; docsByEnr: Record<string, Doc[]>; learnerId?: string; onRefresh: () => void }) {
+  const [open, setOpen] = useState<string | null>(enrollments[0]?.id ?? null);
+
+  const sign = async (docId: string) => {
+    const r = await fetch("/api/signatures", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentId: docId }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.data?.token) window.open(`/signer/${j.data.token}`, "_blank");
+  };
+
+  if (enrollments.length === 0) return <div className="text-center py-6 text-muted">Aucune formation pour le moment.</div>;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <button onClick={onRefresh} className="text-xs font-semibold text-ember hover:underline">↻ Rafraîchir</button>
+      </div>
+      {enrollments.map((e) => {
+        const docs = docsByEnr[e.id] ?? [];
+        const dossierComplet = e.devisSigne && e.acompteRecu;
+        const isOpen = open === e.id;
+        const devis = docs.find((d) => d.type === "DEVIS");
+        const insc = ordered(docs, INSCRIPTION);
+        // Certificat : uniquement s'il est obtenu (signé / archivé).
+        const fin = ordered(docs, FIN).filter((d) => d.type !== "CERTIFICAT_REALISATION" || d.status === "SIGNE" || d.status === "ARCHIVE");
+        return (
+          <div key={e.id} className="rounded-2xl border border-line bg-surface overflow-hidden">
+            <button onClick={() => setOpen(isOpen ? null : e.id)} className="w-full flex items-center gap-3 p-4 text-left">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-white text-[11px] font-bold" style={{ background: colorOf(e.session.program.code) }}>{e.session.program.code}</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-ink text-sm truncate">{e.session.program.titre}</div>
+                <div className="text-xs text-muted">{dateRange(e.session)}</div>
+              </div>
+              <span className={`badge ${dossierComplet ? "g" : "a"}`}>{dossierComplet ? "Dossier complet" : "À compléter"}</span>
+              <span className="text-dim">{isOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {isOpen && (
+              <div className="px-4 pb-4">
+                {!dossierComplet && <LockNotice e={e} devis={devis} onSign={sign} />}
+                <DocSection title="Inscription" docs={insc} complet={dossierComplet} learnerId={learnerId} onSign={sign} />
+                {fin.length > 0 && <DocSection title="Fin de formation" docs={fin} complet={dossierComplet} learnerId={learnerId} onSign={sign} />}
+                {insc.length === 0 && fin.length === 0 && <div className="text-sm text-muted py-3">Aucun document généré pour ce dossier.</div>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function LockNotice({ e, devis, onSign }: { e: Enr; devis?: Doc; onSign: (id: string) => void }) {
+  const devisSigne = e.devisSigne || devis?.status === "SIGNE";
+  return (
+    <div className="rounded-xl border border-[var(--amber-bg)] bg-[var(--amber-bg)] p-3.5 my-3">
+      {!devisSigne ? (
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[13px] text-ink font-medium flex-1">🔒 Signez votre devis pour accéder à vos documents.</span>
+          {devis && <button onClick={() => onSign(devis.id)} className="rounded-lg px-3.5 py-2 text-xs font-bold text-white shadow" style={{ background: "linear-gradient(135deg,var(--ember1),var(--ember2))" }}>Signer mon devis</button>}
+        </div>
+      ) : (
+        <span className="text-[13px] text-ink font-medium">⏳ Devis signé — en attente de validation de l&apos;acompte par le secrétariat.</span>
+      )}
+    </div>
+  );
+}
+
+function DocSection({ title, docs, complet, learnerId, onSign }: { title: string; docs: Doc[]; complet: boolean; learnerId?: string; onSign: (id: string) => void }) {
+  if (docs.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-dim mb-1.5">{title}</div>
+      <div className="divide-y divide-[var(--border-soft)]">
+        {docs.map((d) => <DocRow key={d.id} d={d} complet={complet} learnerId={learnerId} onSign={onSign} />)}
+      </div>
+    </div>
+  );
+}
+
+function DocRow({ d, complet, learnerId, onSign }: { d: Doc; complet: boolean; learnerId?: string; onSign: (id: string) => void }) {
+  const lp = learnerId ? `learnerId=${learnerId}` : "";
+  const isDevis = d.type === "DEVIS";
+  const isDroit = d.type === "DROIT_IMAGE";
+  const signed = d.status === "SIGNE";
+  const locked = !complet && !A_SIGNER_LIBRE.has(d.type);
+
+  let badge: [string, string]; // [classe, libellé]
+  if (isDevis && !signed) badge = ["r", "À signer"];
+  else if (signed) badge = ["g", "Signé"];
+  else if (locked) badge = ["n", "Verrouillé"];
+  else badge = ["b", "Disponible"];
+
+  return (
+    <div className="flex items-center gap-3 py-2.5" style={{ opacity: locked ? 0.55 : 1 }}>
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-2 text-sm">{locked ? "🔒" : "📄"}</span>
+      <span className="flex-1 text-sm font-semibold text-ink">{DOC_LABEL[d.type] ?? d.type}</span>
+      <span className={`badge ${badge[0]}`}>{badge[1]}</span>
+      {/* Actions */}
+      {isDevis && !signed ? (
+        <button onClick={() => onSign(d.id)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-white shadow" style={{ background: "linear-gradient(135deg,var(--ember1),var(--ember2))" }}>Signer</button>
+      ) : isDevis && signed ? (
+        <a href={`/api/documents/${d.id}/download?signed=1&inline=1&${lp}`} target="_blank" rel="noopener" className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-navy transition">PDF signé</a>
+      ) : locked ? (
+        <span className="text-[11px] text-dim">Indisponible</span>
+      ) : (
+        <>
+          {isDroit && !signed && <button onClick={() => onSign(d.id)} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy transition">Signer</button>}
+          <a href={`/api/documents/${d.id}/download?format=pdf&inline=1&${lp}`} target="_blank" rel="noopener" className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-navy transition">Télécharger</a>
+        </>
+      )}
+    </div>
   );
 }

@@ -2,7 +2,10 @@
 import { useEffect, useState, useCallback } from "react";
 
 interface Learner { id: string; nom: string; prenom?: string; financement: string }
-interface Program { id: string; code: string; titre: string; prix: string; rsCode?: string | null }
+interface SessionOpt {
+  id: string; annee: number; semaine: number; dateDebut: string | null; dateFin: string | null;
+  program: { code: string; titre: string };
+}
 interface Dossier {
   id: string; financement: string; conformite: string;
   learner: { nom: string; prenom?: string };
@@ -25,6 +28,9 @@ const STATUS: Record<string, [string, string]> = {
 };
 const CONF: Record<string, [string, string]> = { VERT: ["g", "Complet"], ORANGE: ["a", "À compléter"], ROUGE: ["r", "Incomplet"] };
 
+const frD = (d: string | null) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", timeZone: "UTC" }) : "—");
+const sessionDatesLabel = (s: { dateDebut: string | null; dateFin: string | null }) => `${frD(s.dateDebut)} → ${frD(s.dateFin)}`;
+
 function nextStatus(type: string, cur: string) {
   const order = SIGNABLE.has(type)
     ? ["A_FAIRE", "GENERE", "ENVOYE", "CONSULTE", "SIGNE", "ARCHIVE"]
@@ -34,9 +40,9 @@ function nextStatus(type: string, cur: string) {
 
 export default function DocumentsClient() {
   const [learners, setLearners] = useState<Learner[]>([]);
-  const [programs, setPrograms] = useState<Program[]>([]);
+  const [sessions, setSessions] = useState<SessionOpt[]>([]);
   const [dossiers, setDossiers] = useState<Dossier[]>([]);
-  const [form, setForm] = useState({ learnerId: "", programId: "", annee: String(new Date().getFullYear()), semaine: "" });
+  const [form, setForm] = useState({ learnerId: "", sessionId: "" });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -48,8 +54,8 @@ export default function DocumentsClient() {
   }, []);
   useEffect(() => {
     (async () => {
-      const [l, p] = await Promise.all([fetch("/api/stagiaires").then((r) => r.json()), fetch("/api/formations").then((r) => r.json())]);
-      setLearners(l.data ?? []); setPrograms(p.data ?? []);
+      const [l, s] = await Promise.all([fetch("/api/stagiaires").then((r) => r.json()), fetch("/api/sessions").then((r) => r.json())]);
+      setLearners(l.data ?? []); setSessions(s.data ?? []);
     })();
     loadDossiers();
   }, [loadDossiers]);
@@ -62,7 +68,7 @@ export default function DocumentsClient() {
 
   const generate = async () => {
     setMsg("");
-    if (!form.learnerId || !form.programId || !form.semaine) { setMsg("Choisissez un stagiaire, une formation et une semaine."); return; }
+    if (!form.learnerId || !form.sessionId) { setMsg("Choisissez un stagiaire et une session programmée."); return; }
     setBusy(true);
     const r = await fetch("/api/documents/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
     setBusy(false);
@@ -120,26 +126,27 @@ export default function DocumentsClient() {
       </div>
 
       <div className="card" style={{ marginBottom: 18 }}>
-        <h3 style={{ fontSize: 16, marginBottom: 12 }}>Générer un dossier</h3>
+        <h3 style={{ fontSize: 16, marginBottom: 4 }}>Générer un dossier</h3>
+        <p className="hint" style={{ marginBottom: 12 }}>Les documents se génèrent sur une <b>session programmée</b> (dates déjà définies dans Sessions &amp; planning / Calendrier). Choisissez la personne et la session.</p>
         {msg && <div className="badge a" style={{ marginBottom: 12 }}>{msg}</div>}
-        <div className="row3">
+        <div className="row2">
           <div className="field"><label>Stagiaire</label>
             <select className="inp" value={form.learnerId} onChange={(e) => set("learnerId", e.target.value)}>
               <option value="">— Choisir —</option>
               {learners.map((l) => <option key={l.id} value={l.id}>{l.nom} {l.prenom}</option>)}
             </select></div>
-          <div className="field"><label>Formation</label>
-            <select className="inp" value={form.programId} onChange={(e) => set("programId", e.target.value)}>
-              <option value="">— Choisir —</option>
-              {programs.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.titre.slice(0, 36)}</option>)}
-            </select></div>
-          <div className="field"><label>Année / Semaine</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input className="inp tnum" value={form.annee} onChange={(e) => set("annee", e.target.value)} style={{ width: 90 }} />
-              <input className="inp tnum" placeholder="Sem." value={form.semaine} onChange={(e) => set("semaine", e.target.value)} />
-            </div></div>
+          <div className="field"><label>Session programmée</label>
+            {sessions.length === 0 ? (
+              <a className="btn ghost" href="/calendrier" style={{ width: "100%" }}>Aucune session — planifier dans le Calendrier →</a>
+            ) : (
+              <select className="inp" value={form.sessionId} onChange={(e) => set("sessionId", e.target.value)}>
+                <option value="">— Choisir une session —</option>
+                {sessions.map((s) => <option key={s.id} value={s.id}>{s.program.code} · SEM {s.semaine}/{s.annee} · {sessionDatesLabel(s)}</option>)}
+              </select>
+            )}
+          </div>
         </div>
-        <button className="btn primary" onClick={generate} disabled={busy}>{busy ? "Génération…" : "⎙ Générer les documents (1 → 11)"}</button>
+        <button className="btn primary" onClick={generate} disabled={busy} style={{ marginTop: 4 }}>{busy ? "Génération…" : "⎙ Générer les documents (1 → 11)"}</button>
       </div>
 
       <h3 style={{ fontSize: 16, margin: "6px 0 12px" }}>Dossiers</h3>
@@ -170,8 +177,10 @@ export default function DocumentsClient() {
                       <div className="mono" style={{ width: 26, height: 26, borderRadius: 7, background: "var(--surface3)", display: "grid", placeItems: "center", fontSize: 12, color: "var(--muted)" }}>{doc.numberPrefix}</div>
                       <div style={{ flex: 1, fontSize: 13.5, fontWeight: 500 }}>{LABEL[doc.type] ?? doc.type}</div>
                       {previewable && <button className="btn ghost sm" onClick={() => setPreview(doc)}>Aperçu</button>}
+                      <a className="btn ghost sm" href={`/api/documents/${doc.id}/download?format=pdf&inline=1`} target="_blank" rel="noopener" title="Ouvrir le PDF fidèle (Gotenberg)" onClick={(e) => e.stopPropagation()}>📄 PDF</a>
                       <a className="btn ghost sm" href={`/api/documents/${doc.id}/download`} title="Télécharger le document Word rempli" onClick={(e) => e.stopPropagation()}>⬇ Word</a>
                       {SIGNABLE.has(doc.type) && doc.status !== "SIGNE" && <button className="btn ghost sm" onClick={() => createAndOpenSign(doc.id)} title="Signature électronique">✍ Signer</button>}
+                      {doc.status === "SIGNE" && <a className="btn ghost sm" href={`/api/documents/${doc.id}/download?signed=1&inline=1`} target="_blank" rel="noopener" title="PDF signé + attestation" onClick={(e) => e.stopPropagation()} style={{ color: "var(--green)" }}>📄 PDF signé</a>}
                       <span className={"badge " + sc} style={{ cursor: "pointer" }} title="Cliquez pour faire avancer le statut" onClick={() => cycle(doc)}>{sl}</span>
                     </div>
                   );

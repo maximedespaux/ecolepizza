@@ -6,7 +6,7 @@ export async function GET() {
   const data = await prisma.learner.findMany({
     where: { organizationId: "org-ecole-pizza", lat: { not: null } },
     select: {
-      id: true, nom: true, ville: true, codePostal: true, departement: true,
+      id: true, nom: true, prenom: true, ville: true, codePostal: true, departement: true,
       lat: true, lng: true, niveauRealise: true, anneeRealisee: true,
       entrepriseNom: true, telephone: true, email: true, statut: true, aRecontacter: true,
     },

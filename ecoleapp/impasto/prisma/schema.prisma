@@ -391,6 +391,8 @@ model TrainingProgram {
   hygiene        Boolean  @default(false)
   rsCode         String?  // RS7404 si certifiante
   actif          Boolean  @default(true)
+  ordre          Int      @default(0)   // position d'affichage (glisser-déposer)
+  image          String?                // visuel du niveau (ex. /ecole/niv1.jpg)
 
   sessions       TrainingSession[]
 
@@ -444,6 +446,12 @@ model Enrollment {
   crmStage       CrmStage @default(INSCRIT)
   leadSource     String?
   conformite     ConformiteScore @default(ROUGE)
+  // Jalons du pipeline (blocage strict avant « Inscrit »)
+  devisSigne     Boolean  @default(false)
+  acompteRecu    Boolean  @default(false)
+  // Financement : montant pris en charge par un tiers (OPCO, France Travail…).
+  // Reste à charge = prix - priseEnCharge - acompte (complément payé pendant la formation).
+  priseEnCharge  Decimal? @db.Decimal(10, 2)
 
   documents      GeneratedDocument[]
   signatures     SignatureRequest[]
@@ -834,4 +842,66 @@ model MaterialSale {
   updatedAt      DateTime @updatedAt
 
   @@index([organizationId])
+}
+
+// ------------------------- COMPTABILITÉ / GESTION --------------------------
+// Tableau de gestion (module A) — PAS de la comptabilité légale.
+// CA = inscriptions (Enrollment.prix) + ventes matériel (MaterialSale) + RevenueExtra.
+
+enum ExpenseCategory {
+  MATIERES_PREMIERES
+  SALAIRES
+  LOYER
+  MARKETING
+  ENERGIE
+  DIVERS
+}
+
+// Dépense (poste de gestion). fournisseurId reste un String libre tant que le
+// module Approvisionnement (Supplier) n'existe pas.
+model Expense {
+  id             String   @id @default(cuid())
+  organizationId String
+  date           DateTime @default(now())
+  categorie      ExpenseCategory
+  libelle        String
+  montantHT      Decimal  @db.Decimal(10, 2)
+  fournisseurId  String?
+  note           String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([date])
+}
+
+// Produits divers hors inscriptions et hors ventes de matériel (MaterialSale) :
+// commissions partenaires, subventions, remboursements… Évite le double-comptage.
+model RevenueExtra {
+  id             String   @id @default(cuid())
+  organizationId String
+  date           DateTime @default(now())
+  libelle        String
+  categorie      String   @default("COMMISSION") // COMMISSION | SUBVENTION | AUTRE
+  montant        Decimal  @db.Decimal(10, 2)
+  note           String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([date])
+}
+
+// Cibles de gestion éditables par organisme (défauts dans src/lib/compta/targets.ts).
+// targets = { MATIERES_PREMIERES: 27.5, SALAIRES: 30, ... } en % du CA.
+model AccountingSettings {
+  id             String   @id @default(cuid())
+  organizationId String   @unique
+  targets        Json
+  dividendeCible Decimal  @default(10) @db.Decimal(5, 2)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

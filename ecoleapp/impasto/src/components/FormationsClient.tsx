@@ -1,23 +1,27 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { toast } from "@/lib/toast";
+import { LEVEL_IMAGE_CHOICES, imageForCode } from "@/lib/ecole-pizza/assets";
 
 interface Formation {
   id: string; code: string; titre: string; prix: string; jours: number; heures: number;
   public?: string | null; objectifs?: string | null; deroule?: string | null;
-  hygiene: boolean; rsCode?: string | null;
+  hygiene: boolean; rsCode?: string | null; image?: string | null; ordre: number;
 }
 
 type Draft = {
   id: string; code: string; titre: string; prix: string; jours: string; heures: string;
-  public: string; objectifs: string; deroule: string; hygiene: boolean; rsCode: string;
+  public: string; objectifs: string; deroule: string; hygiene: boolean; rsCode: string; image: string;
 };
 
-const blank: Draft = { id: "", code: "", titre: "", prix: "0", jours: "5", heures: "35", public: "", objectifs: "", deroule: "", hygiene: false, rsCode: "" };
+const blank: Draft = { id: "", code: "", titre: "", prix: "0", jours: "5", heures: "35", public: "", objectifs: "", deroule: "", hygiene: false, rsCode: "", image: "" };
 const toDraft = (f: Formation): Draft => ({
   id: f.id, code: f.code, titre: f.titre, prix: String(f.prix), jours: String(f.jours), heures: String(f.heures),
-  public: f.public ?? "", objectifs: f.objectifs ?? "", deroule: f.deroule ?? "", hygiene: f.hygiene, rsCode: f.rsCode ?? "",
+  public: f.public ?? "", objectifs: f.objectifs ?? "", deroule: f.deroule ?? "", hygiene: f.hygiene, rsCode: f.rsCode ?? "", image: f.image ?? "",
 });
+
+// Image effective d'une carte : image enregistrée, sinon défaut par code.
+const cardImage = (f: Formation) => f.image || imageForCode(f.code);
 
 export default function FormationsClient() {
   const [items, setItems] = useState<Formation[]>([]);
@@ -26,6 +30,12 @@ export default function FormationsClient() {
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+
+  // Glisser-déposer : poignée « armée » (ref pour éviter la course d'état).
+  const armed = useRef(false);
+  const dragId = useRef<string | null>(null);
+  const didDrag = useRef(false);
+  const [overId, setOverId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,7 +55,7 @@ export default function FormationsClient() {
     setSaving(true); setErr("");
     const payload = {
       code: draft.code, titre: draft.titre, prix: draft.prix, jours: draft.jours, heures: draft.heures,
-      public: draft.public, objectifs: draft.objectifs, deroule: draft.deroule, hygiene: draft.hygiene, rsCode: draft.rsCode,
+      public: draft.public, objectifs: draft.objectifs, deroule: draft.deroule, hygiene: draft.hygiene, rsCode: draft.rsCode, image: draft.image,
     };
     const res = await fetch(isNew ? "/api/formations" : "/api/formations/" + draft.id, {
       method: isNew ? "POST" : "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
@@ -63,11 +73,34 @@ export default function FormationsClient() {
     else { const j = await res.json().catch(() => ({})); toast(j.error || "Suppression impossible", "err"); }
   };
 
+  // --- Réordonnancement ---
+  const persist = async (arr: Formation[]) => {
+    const r = await fetch("/api/formations/reorder", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: arr.map((f) => f.id) }),
+    });
+    if (!r.ok) { toast("Réorganisation non enregistrée", "err"); load(); }
+  };
+  const move = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    const from = items.findIndex((f) => f.id === fromId);
+    const to = items.findIndex((f) => f.id === toId);
+    if (from < 0 || to < 0) return;
+    const next = [...items];
+    const [m] = next.splice(from, 1);
+    next.splice(to, 0, m);
+    setItems(next);
+    persist(next);
+  };
+  const cleanup = () => {
+    setOverId(null); dragId.current = null; armed.current = false;
+    setTimeout(() => { didDrag.current = false; }, 50);
+  };
+
   return (
     <>
       <div className="pagehead">
         <div><div className="eyebrow">Catalogue</div><h1>Formations</h1>
-          <p className="lead">Vos programmes. Ajoutez, modifiez (tarif, durée, code, objectifs…) ou supprimez — ces données alimentent le calendrier, les devis et les contrats.</p></div>
+          <p className="lead">Vos programmes. Glissez la poignée <span aria-hidden>⠿</span> pour réordonner, cliquez une carte pour la modifier (tarif, durée, visuel…). Ces données alimentent le calendrier, les devis et les contrats.</p></div>
         <button className="btn primary" onClick={openNew}>+ Nouvelle formation</button>
       </div>
 
@@ -75,21 +108,50 @@ export default function FormationsClient() {
         <div className="empty"><div className="big">◍</div><h3>Aucune formation</h3><p>Ajoutez votre première formation.</p></div>
       ) : (
         <div className="grid cols-3">
-          {items.map((f) => (
-            <div key={f.id} className="card hover" onClick={() => openEdit(f)}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-                <span className={"badge " + (f.rsCode ? "r" : "n")}>{f.code}{f.rsCode ? " · certifiante" : ""}</span>
-                <span style={{ fontFamily: "var(--font-d)", fontSize: 24, fontWeight: 700, color: "var(--ember1)" }}>{Number(f.prix).toLocaleString("fr-FR")} €</span>
+          {items.map((f) => {
+            const img = cardImage(f);
+            const over = overId === f.id && dragId.current !== f.id;
+            return (
+              <div
+                key={f.id}
+                className="card hover"
+                style={{ padding: 0, overflow: "hidden", position: "relative", outline: over ? "2px dashed var(--ember1)" : undefined, outlineOffset: -2 }}
+                draggable
+                onDragStart={(e) => { if (!armed.current) { e.preventDefault(); return; } dragId.current = f.id; didDrag.current = true; e.dataTransfer.effectAllowed = "move"; }}
+                onDragEnter={() => setOverId(f.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); if (dragId.current) move(dragId.current, f.id); cleanup(); }}
+                onDragEnd={cleanup}
+                onClick={() => { if (!didDrag.current) openEdit(f); }}
+              >
+                {/* Bannière visuelle du niveau */}
+                <div style={{ height: 104, background: img ? `center/cover url(${img})` : "var(--grad-ember)", position: "relative" }}>
+                  <span
+                    className="fdrag"
+                    title="Glisser pour réordonner"
+                    onMouseDown={() => { armed.current = true; }}
+                    onMouseUp={() => { armed.current = false; }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ position: "absolute", top: 8, left: 8, cursor: "grab", background: "var(--glass)", backdropFilter: "blur(6px)", borderRadius: 8, padding: "2px 7px", fontSize: 15, color: "var(--text)", userSelect: "none" }}
+                  >⠿</span>
+                  <span className={"badge " + (f.rsCode ? "r" : "n")} style={{ position: "absolute", top: 8, right: 8 }}>{f.code}{f.rsCode ? " · certifiante" : ""}</span>
+                </div>
+
+                <div style={{ padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 8 }}>
+                    <h3 style={{ fontSize: 15.5, margin: 0, lineHeight: 1.25 }}>{f.titre}</h3>
+                    <span style={{ fontFamily: "var(--font-d)", fontSize: 20, fontWeight: 700, color: "var(--ember1)", whiteSpace: "nowrap" }}>{Number(f.prix).toLocaleString("fr-FR")} €</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "var(--muted)", minHeight: 32, marginTop: 6 }}>{f.objectifs}</div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                    <span className="badge n">{f.jours} jours</span><span className="badge n">{f.heures} h</span>
+                    {f.hygiene && <span className="badge n">+ hygiène</span>}
+                    <span className="badge a" style={{ marginLeft: "auto" }}>✎ Modifier</span>
+                  </div>
+                </div>
               </div>
-              <h3 style={{ fontSize: 16, margin: "12px 0 6px" }}>{f.titre}</h3>
-              <div style={{ fontSize: 12.5, color: "var(--muted)", minHeight: 32 }}>{f.objectifs}</div>
-              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                <span className="badge n">{f.jours} jours</span><span className="badge n">{f.heures} h</span>
-                {f.hygiene && <span className="badge n">+ hygiène</span>}
-                <span className="badge a" style={{ marginLeft: "auto" }}>✎ Modifier</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -104,6 +166,19 @@ export default function FormationsClient() {
                 <div className="field"><label>Code RS <span className="hint">si certifiante</span></label><input className="inp" value={draft.rsCode} onChange={(e) => set("rsCode", e.target.value)} placeholder="RS7404" /></div>
               </div>
               <div className="field"><label>Intitulé</label><input className="inp" value={draft.titre} onChange={(e) => set("titre", e.target.value)} placeholder="Niveau I – Pizza Classique" /></div>
+
+              {/* Visuel du niveau */}
+              <div className="field">
+                <label>Visuel du niveau <span className="hint">affiché sur la carte</span></label>
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <div style={{ width: 88, height: 58, borderRadius: 10, flexShrink: 0, border: "1px solid var(--border)", background: (draft.image || imageForCode(draft.code)) ? `center/cover url(${draft.image || imageForCode(draft.code)})` : "var(--grad-ember)" }} />
+                  <select className="inp" value={draft.image} onChange={(e) => set("image", e.target.value)}>
+                    <option value="">Par défaut (selon le code)</option>
+                    {LEVEL_IMAGE_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
+              </div>
+
               <div className="row3">
                 <div className="field"><label>Tarif net (€)</label><input className="inp tnum" value={draft.prix} onChange={(e) => set("prix", e.target.value)} /></div>
                 <div className="field"><label>Jours</label><input className="inp tnum" value={draft.jours} onChange={(e) => set("jours", e.target.value)} /></div>

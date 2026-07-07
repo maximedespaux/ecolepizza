@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://localhost:3000/calendrier\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://localhost:3000/api/sessions\")",
+      "Bash(curl -s \"http://localhost:3000/api/sessions\")",
+      "Skill(dataviz)",
+      "Bash(node scripts/validate_palette.js \"#e5564f,#6f8ae4,#3fae7f,#d1912f,#9a7de6,#c47d3d\" --mode dark --surface \"#1d2040\")",
+      "Bash(node scripts/validate_palette.js \"#e5564f,#6f8ae4,#33966d,#c4841f,#9a7de6,#c47d3d\" --mode dark --surface \"#1d2040\")",
+      "Bash(node scripts/validate_palette.js \"#4b6bd6,#dc3e37,#c67f1e\" --mode light)",
+      "Bash(node scripts/validate_palette.js \"#6f8ae4,#e5564f,#c4841f\" --mode dark --surface \"#1d2040\")"
+    ]
+  }
+}

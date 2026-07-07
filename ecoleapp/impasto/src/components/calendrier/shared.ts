@@ -80,6 +80,28 @@ export const CRM_STAGES: { value: string; label: string; badge: string }[] = [
 ];
 export const CRM_LABEL: Record<string, string> = Object.fromEntries(CRM_STAGES.map((s) => [s.value, s.label]));
 
+// Colonnes du pipeline École Pizza (flux réel, sans « Prospect »). `also` regroupe
+// d'anciens statuts dans la colonne (ex. PROSPECT → Contacté).
+export const PIPELINE_COLUMNS: { stage: string; label: string; badge: string; also?: string[] }[] = [
+  { stage: "CONTACTE", label: "Contacté", badge: "n", also: ["PROSPECT"] },
+  { stage: "DEVIS_ENVOYE", label: "Documents envoyés", badge: "b" },
+  { stage: "DEVIS_SIGNE", label: "Devis signé", badge: "b" },
+  { stage: "ACOMPTE_PAYE", label: "Acompte reçu", badge: "a" },
+  { stage: "INSCRIT", label: "Inscrit", badge: "a" },
+  { stage: "EN_FORMATION", label: "En formation", badge: "a" },
+  { stage: "TERMINE", label: "Suivi 6 mois", badge: "g", also: ["EVALUATION_ENVOYEE"] },
+  { stage: "ARCHIVE", label: "Archivé", badge: "n" },
+];
+
+// Étapes qui exigent un devis signé ET un acompte reçu (blocage strict).
+export const STAGES_REQUIRE_CONFIRMED = new Set(["INSCRIT", "EN_FORMATION", "TERMINE", "EVALUATION_ENVOYEE"]);
+
+// Dans quelle colonne afficher un crmStage donné.
+export function columnFor(crmStage: string): string {
+  const col = PIPELINE_COLUMNS.find((c) => c.stage === crmStage || c.also?.includes(crmStage));
+  return col?.stage ?? "CONTACTE";
+}
+
 export const DOW = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 export const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 

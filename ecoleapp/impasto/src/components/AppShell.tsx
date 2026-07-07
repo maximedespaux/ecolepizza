@@ -22,6 +22,12 @@ const NAV = [
     ],
   },
   {
+    grp: "Gestion",
+    items: [
+      { href: "/comptabilite", ic: "€", label: "Comptabilité" },
+    ],
+  },
+  {
     grp: "Développement",
     items: [
       { href: "/formations", ic: "◍", label: "Formations" },
@@ -42,7 +48,7 @@ const NAV = [
 const TITLES: Record<string, string> = {
   "/dashboard": "Tableau de bord", "/mon-espace": "Mon espace", "/stagiaires": "Stagiaires",
   "/calendrier": "Calendrier", "/sessions": "Sessions & planning", "/documents": "Génération de documents",
-  "/suivi": "Suivi Qualiopi", "/formations": "Formations", "/partenaires": "Partenaires",
+  "/suivi": "Suivi Qualiopi", "/comptabilite": "Comptabilité", "/formations": "Formations", "/partenaires": "Partenaires",
   "/carte": "Carte des stagiaires", "/ventes": "Ventes de matériel", "/reglages": "Organisme", "/audit": "Journal d'audit",
 };
 

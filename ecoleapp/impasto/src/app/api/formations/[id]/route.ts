@@ -18,6 +18,7 @@ const Patch = z.object({
   hygiene: z.boolean().optional(),
   rsCode: z.string().optional(),
   actif: z.boolean().optional(),
+  image: z.string().optional(),
 });
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -30,6 +31,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (parsed.data.code !== undefined) data.code = parsed.data.code.toUpperCase();
   if (parsed.data.prix !== undefined) data.prix = new Prisma.Decimal(parsed.data.prix);
   if (parsed.data.rsCode !== undefined) data.rsCode = parsed.data.rsCode.trim() || null;
+  if (parsed.data.image !== undefined) data.image = parsed.data.image.trim() || null;
 
   try {
     const program = await prisma.trainingProgram.update({ where: { id }, data });

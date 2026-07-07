@@ -9,11 +9,17 @@ import { computeConformite } from "@/lib/documents/conformite";
 
 async function getOrganizationId(_req: NextRequest) { return "org-ecole-pizza"; }
 
+// On génère TOUJOURS à partir d'une session programmée (Sessions & planning /
+// Calendrier). `sessionId` est la voie recommandée ; l'ancien couple
+// programId+semaine reste accepté (trouve la session, ne la crée que si absente).
 const Input = z.object({
   learnerId: z.string().min(1),
-  programId: z.string().min(1),
+  sessionId: z.string().optional(),
+  programId: z.string().optional(),
   annee: z.coerce.number().int().min(2020).max(2100).default(new Date().getFullYear()),
-  semaine: z.coerce.number().int().min(1).max(53),
+  semaine: z.coerce.number().int().min(1).max(53).optional(),
+}).refine((d) => d.sessionId || (d.programId && d.semaine), {
+  message: "Sélectionnez une session programmée (ou une formation + semaine).",
 });
 
 export async function POST(req: NextRequest) {
@@ -21,23 +27,32 @@ export async function POST(req: NextRequest) {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "JSON invalide" }, { status: 400 }); }
   const parsed = Input.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: "Validation échouée", details: parsed.error.flatten() }, { status: 422 });
-  const { learnerId, programId, annee, semaine } = parsed.data;
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Validation échouée" }, { status: 422 });
+  const { learnerId, sessionId } = parsed.data;
 
-  const [learner, program] = await Promise.all([
-    prisma.learner.findUnique({ where: { id: learnerId }, include: { company: true } }),
-    prisma.trainingProgram.findUnique({ where: { id: programId } }),
-  ]);
-  if (!learner || !program) return NextResponse.json({ error: "Stagiaire ou formation introuvable" }, { status: 404 });
+  const learner = await prisma.learner.findUnique({ where: { id: learnerId }, include: { company: true } });
+  if (!learner) return NextResponse.json({ error: "Stagiaire introuvable" }, { status: 404 });
 
-  // Session (trouver ou créer)
-  let session = await prisma.trainingSession.findFirst({ where: { organizationId, programId, annee, semaine } });
-  if (!session) {
-    const { debut, fin } = sessionDates(annee, semaine, program.jours);
+  // Résolution de la session programmée.
+  let session = sessionId
+    ? await prisma.trainingSession.findFirst({ where: { id: sessionId, organizationId }, include: { program: true } })
+    : await prisma.trainingSession.findFirst({ where: { organizationId, programId: parsed.data.programId, annee: parsed.data.annee, semaine: parsed.data.semaine }, include: { program: true } });
+
+  // Repli : ancienne voie programId+semaine sans session existante → on la crée.
+  if (!session && parsed.data.programId && parsed.data.semaine) {
+    const prog = await prisma.trainingProgram.findUnique({ where: { id: parsed.data.programId } });
+    if (!prog) return NextResponse.json({ error: "Formation introuvable" }, { status: 404 });
+    const { debut, fin } = sessionDates(parsed.data.annee, parsed.data.semaine, prog.jours);
     session = await prisma.trainingSession.create({
-      data: { organizationId, programId, annee, semaine, dateDebut: debut, dateFin: fin },
+      data: { organizationId, programId: prog.id, annee: parsed.data.annee, semaine: parsed.data.semaine, dateDebut: debut, dateFin: fin },
+      include: { program: true },
     });
   }
+  if (!session) return NextResponse.json({ error: "Session programmée introuvable. Planifiez-la d'abord dans le Calendrier." }, { status: 404 });
+
+  const program = session.program;
+  const annee = session.annee;
+  const semaine = session.semaine;
 
   // Inscription (dossier)
   const financement = learner.financement as Financement;
@@ -45,8 +60,10 @@ export async function POST(req: NextRequest) {
     where: { learnerId_sessionId: { learnerId, sessionId: session.id } },
   });
   if (!enrollment) {
+    // Nouveau dossier → entre dans le pipeline à « Documents envoyés »
+    // (devis/contrat à signer, acompte à recevoir avant « Inscrit »).
     enrollment = await prisma.enrollment.create({
-      data: { learnerId, sessionId: session.id, financement, prix: program.prix, crmStage: "INSCRIT" },
+      data: { learnerId, sessionId: session.id, financement, prix: program.prix, crmStage: "DEVIS_ENVOYE" },
     });
   }
 
