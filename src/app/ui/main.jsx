@@ -89,7 +89,7 @@ function AppRoutes() {
           <Route path="sessions" element={<RoleRoute roles={STAFF}><Sessions /></RoleRoute>} />
           <Route path="sessions/:id" element={<RoleRoute roles={STAFF}><SessionDetail /></RoleRoute>} />
           <Route path="formations" element={<RoleRoute roles={STAFF}><Formations /></RoleRoute>} />
-          <Route path="partenaires" element={<RoleRoute roles={ADMIN}><Partenaires /></RoleRoute>} />
+          <Route path="partenaires" element={<RoleRoute roles={STAFF}><Partenaires /></RoleRoute>} />
           <Route path="ventes" element={<RoleRoute roles={ADMIN}><Ventes /></RoleRoute>} />
           <Route path="inventaire" element={<RoleRoute roles={ADMIN}><Inventaire /></RoleRoute>} />
           <Route path="factures" element={<RoleRoute roles={ADMIN}><Factures /></RoleRoute>} />

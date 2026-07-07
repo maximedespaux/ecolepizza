@@ -364,6 +364,14 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .mfoot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
 .mbody textarea.inp{width:100%;resize:vertical;line-height:1.45}
 
+/* Partenaires : grille de fiches de suivi */
+.partner-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.partner-meta{display:flex;flex-direction:column;gap:3px;font-size:13px;margin:6px 0}
+.partner-meta a{color:#1d6fb8}
+.partner-commission{display:flex;align-items:baseline;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line,#eee)}
+.partner-commission b{color:var(--green,#2e9e5b);font-size:16px}
+.partner-commission .sub{margin-left:auto;font-size:11px;color:var(--dim)}
+
 /* Étiquettes de niveau (stagiaires) */
 .lvl-chip{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;color:#fff;white-space:nowrap}
 

@@ -445,3 +445,9 @@ export function getPartenaires(category = "") {
 export function createPartenaire(payload) {
   return request("/partenaires", { method: "POST", body: JSON.stringify(payload) });
 }
+export function updatePartenaire(id, payload) {
+  return request(`/partenaires/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deletePartenaire(id) {
+  return request(`/partenaires/${id}`, { method: "DELETE" });
+}

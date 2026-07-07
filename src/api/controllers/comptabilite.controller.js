@@ -226,9 +226,12 @@ const listRevenues = async (req, res) => {
     const annee = Number(req.query.annee) || currentYear();
     try {
         const [rows] = await db.promise().query(
-            `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount, note
-             FROM revenue_extra WHERE organization_id = ? AND YEAR(date) = ?
-             ORDER BY date DESC, created_at DESC`,
+            `SELECT re.id, DATE_FORMAT(re.date, '%Y-%m-%d') AS date, re.label, re.category, re.amount, re.note,
+                    re.partner_id, p.name AS partner_name
+             FROM revenue_extra re
+             LEFT JOIN partner p ON p.id = re.partner_id
+             WHERE re.organization_id = ? AND YEAR(re.date) = ?
+             ORDER BY re.date DESC, re.created_at DESC`,
             [orgId, annee]
         );
         const data = rows.map((r) => ({ ...r, amount: num(r.amount) }));
@@ -244,7 +247,7 @@ const listRevenues = async (req, res) => {
  * POST /api/comptabilite/revenus — enregistrer un produit divers.
  */
 const createRevenue = async (req, res) => {
-    const { label, categorie, montant, date, note } = req.body;
+    const { label, categorie, montant, date, note, partner_id } = req.body;
     const cat = REVENU_CATEGORIES.includes(categorie) ? categorie : 'COMMISSION';
     const amount = Number(montant);
     if (!label || !String(label).trim() || !Number.isFinite(amount) || amount < 0) {
@@ -253,10 +256,10 @@ const createRevenue = async (req, res) => {
     try {
         const id = crypto.randomUUID();
         await db.promise().query(
-            `INSERT INTO revenue_extra (id, organization_id, date, label, category, amount, note)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO revenue_extra (id, organization_id, date, label, category, partner_id, amount, note)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [id, req.user.organization_id, date || new Date().toISOString().slice(0, 10),
-             String(label).trim().slice(0, 255), cat, amount.toFixed(2), note ? String(note).slice(0, 255) : null]
+             String(label).trim().slice(0, 255), cat, partner_id || null, amount.toFixed(2), note ? String(note).slice(0, 255) : null]
         );
         logAudit(req, 'revenueextra.create', 'RevenueExtra', id);
         res.status(201).json({ message: 'Produit enregistré', id });

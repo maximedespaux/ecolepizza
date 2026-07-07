@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getRevenues, createRevenue, deleteRevenue } from "../api/apiClient.js";
+import { getRevenues, createRevenue, deleteRevenue, getPartenaires } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -22,7 +22,10 @@ function ProduitDivers() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [rev, setRev] = useState({ label: "", categorie: "COMMISSION", montant: "", date: today() });
+  const [rev, setRev] = useState({ label: "", categorie: "COMMISSION", montant: "", date: today(), partner_id: "" });
+  const [partners, setPartners] = useState([]);
+
+  useEffect(() => { getPartenaires().then((r) => setPartners(r.data)).catch(() => {}); }, []);
 
   const load = useCallback(async (an) => {
     setLoading(true);
@@ -43,7 +46,7 @@ function ProduitDivers() {
     setSaving(true);
     try {
       await createRevenue(rev);
-      setRev({ label: "", categorie: rev.categorie, montant: "", date: today() });
+      setRev({ label: "", categorie: rev.categorie, montant: "", date: today(), partner_id: "" });
       setStatus({ type: "success", message: "Produit enregistré." });
       load(annee);
     } catch (e) { setStatus({ type: "error", message: e.message }); }
@@ -82,6 +85,13 @@ function ProduitDivers() {
             <div className="field"><label>Montant (€)</label>
               <input className="inp" inputMode="decimal" value={rev.montant} onChange={(e) => setRev({ ...rev, montant: e.target.value })} placeholder="0" /></div>
           </div>
+          {rev.categorie === "COMMISSION" && (
+            <div className="field"><label>Partenaire concerné</label>
+              <select value={rev.partner_id} onChange={(e) => setRev({ ...rev, partner_id: e.target.value })}>
+                <option value="">— Aucun / non précisé —</option>
+                {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select></div>
+          )}
           <div className="field"><label>Date</label>
             <input className="inp" type="date" value={rev.date} onChange={(e) => setRev({ ...rev, date: e.target.value })} /></div>
           <button className="btn primary" style={{ width: "100%" }} disabled={saving} onClick={submit}>
@@ -97,7 +107,8 @@ function ProduitDivers() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.label}</div>
                     <div className="sub" style={{ color: "var(--dim)" }}>
-                      {REVENU_CATS.find((c) => c.v === v.category)?.label ?? v.category} · {new Date(v.date).toLocaleDateString("fr-FR")}
+                      {REVENU_CATS.find((c) => c.v === v.category)?.label ?? v.category}
+                      {v.partner_name ? ` · ${v.partner_name}` : ""} · {new Date(v.date).toLocaleDateString("fr-FR")}
                     </div>
                   </div>
                   <b className="tnum" style={{ color: "var(--navy)" }}>{euro(v.amount)}</b>

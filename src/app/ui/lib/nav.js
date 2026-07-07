@@ -34,7 +34,7 @@ export const NAV = [
       { to: "/formations", ic: "◍", label: "Formations", roles: STAFF },
       { to: "/produit-divers", ic: "💶", label: "Produit divers", roles: ["FORMATEUR"] },
       { to: "/carte", ic: "🗺", label: "Carte des stagiaires", roles: ADMIN },
-      { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: ADMIN },
+      { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: STAFF },
       { to: "/ventes", ic: "🛒", label: "Ventes & Inventaire", roles: ADMIN },
       { to: "/factures", ic: "🧾", label: "Facturation", roles: ADMIN },
       { to: "/comptabilite", ic: "€", label: "Comptabilité", roles: ADMIN },

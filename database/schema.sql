@@ -438,6 +438,8 @@ CREATE TABLE partner (
     website         varchar(255) DEFAULT NULL,
     town            varchar(120) DEFAULT NULL,
     discount_pct    float        DEFAULT NULL,
+    offer           varchar(500) DEFAULT NULL,       -- ce que le partenaire propose
+    notes           text         DEFAULT NULL,       -- notes de suivi
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     KEY idx_partner_org (organization_id, category),
@@ -514,6 +516,7 @@ CREATE TABLE revenue_extra (
     date             date          NOT NULL DEFAULT current_timestamp(),
     label            varchar(255)  NOT NULL,
     category         varchar(30)   NOT NULL DEFAULT 'COMMISSION',
+    partner_id       uuid          DEFAULT NULL,          -- commission liée à un partenaire
     amount           decimal(10,2) NOT NULL,
     note             varchar(255)  DEFAULT NULL,
     created_at       timestamp     NOT NULL DEFAULT current_timestamp(),
