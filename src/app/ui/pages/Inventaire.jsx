@@ -22,7 +22,7 @@ function stockState(item) {
   return { tone: "g", label: "En stock", color: "var(--green)" };
 }
 
-function Inventaire() {
+function Inventaire({ embedded = false }) {
   const [items, setItems] = useState([]);
   const [totals, setTotals] = useState({ items: 0, units: 0, value: 0, low: 0 });
   const [form, setForm] = useState(EMPTY);
@@ -93,12 +93,18 @@ function Inventaire() {
 
   return (
     <>
-      <PageHead
-        eyebrow="Développement"
-        title="Inventaire"
-        lead="Stock de matériel à vendre. Ajustez les quantités, vendez, suivez les ruptures."
-        actions={<button className="btn primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ Fermer" : "＋ Ajouter un article"}</button>}
-      />
+      {embedded ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button className="btn primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ Fermer" : "＋ Ajouter un article"}</button>
+        </div>
+      ) : (
+        <PageHead
+          eyebrow="Développement"
+          title="Inventaire"
+          lead="Stock de matériel à vendre. Ajustez les quantités, vendez, suivez les ruptures."
+          actions={<button className="btn primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ Fermer" : "＋ Ajouter un article"}</button>}
+        />
+      )}
       <StatusMessage status={status} />
 
       <div className="grid cols-4" style={{ marginBottom: 16 }}>

@@ -48,6 +48,12 @@ export function deleteSale(id) {
 export function checkoutSale(payload) {
   return request("/ventes/checkout", { method: "POST", body: JSON.stringify(payload) });
 }
+export function getShopSettings() {
+  return request("/ventes/settings");
+}
+export function saveShopSettings(payload) {
+  return request("/ventes/settings", { method: "PUT", body: JSON.stringify(payload) });
+}
 
 // --- Émargement ---
 export function getAttendance(sessionId) {
