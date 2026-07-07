@@ -100,7 +100,7 @@ function Formations() {
 
 // Champs éditables (miroir des colonnes du tableau fourni).
 const FIELDS = [
-  "title", "level", "days", "hours", "price",
+  "code", "title", "level", "days", "hours", "price",
   "audience", "objective_general", "objectives", "duration_detail", "program_detail",
   "rs_code", "hygiene", "active",
 ];
@@ -136,7 +136,9 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="mbody">
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr", gap: 12 }}>
+            <div className="field"><label>Code</label>
+              <input className="inp mono" value={form.code} onChange={set("code")} placeholder="NIV1, RS7404…" /></div>
             <div className="field"><label>Titre</label>
               <input className="inp" value={form.title} onChange={set("title")} /></div>
             <div className="field"><label>Niveau (couleur carte)</label>

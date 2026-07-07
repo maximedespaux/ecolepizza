@@ -71,7 +71,7 @@ const createProgram = (req, res) => {
  */
 const updateProgram = (req, res) => {
     const ALLOWED = [
-        'title', 'level', 'days', 'hours', 'price', 'audience', 'objectives',
+        'code', 'title', 'level', 'days', 'hours', 'price', 'audience', 'objectives',
         'objective_general', 'duration_detail', 'program_detail',
         'rs_code', 'hygiene', 'active', 'sort_order',
     ];
@@ -81,7 +81,10 @@ const updateProgram = (req, res) => {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];
         if (f === 'hygiene' || f === 'active') v = v ? 1 : 0;
-        else if (v === '') v = null; // champ vidé -> NULL
+        else if (f === 'code') {
+            v = String(v).trim();
+            if (!v) continue; // le code est obligatoire : on ignore une valeur vide
+        } else if (v === '') v = null; // champ vidé -> NULL
         sets.push(`${f} = ?`);
         values.push(v);
     }
@@ -94,6 +97,9 @@ const updateProgram = (req, res) => {
         values,
         (err, result) => {
             if (err) {
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ error: 'Ce code de formation est déjà utilisé.' });
+                }
                 console.error('Erreur mise à jour formation :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
