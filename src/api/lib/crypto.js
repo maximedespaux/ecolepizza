@@ -15,7 +15,13 @@ function getKey() {
     if (/^[0-9a-fA-F]{64}$/.test(raw)) {
         return Buffer.from(raw, 'hex');
     }
-    // Sinon, dérive une clé de 32 octets depuis la valeur fournie (ou un défaut de dev).
+    // En production, refuser de démarrer avec une clé faible/absente : les données
+    // sensibles (n° de sécurité sociale) seraient chiffrées avec une clé connue.
+    if (process.env.NODE_ENV === 'production' && !raw) {
+        throw new Error('SSN_ENC_KEY manquante : définissez une clé de 64 caractères hexadécimaux en production.');
+    }
+    if (!raw) console.warn('[sécurité] SSN_ENC_KEY absente — clé de développement utilisée (NE PAS utiliser en production).');
+    // Dérive une clé de 32 octets depuis la valeur fournie (ou un défaut de dev).
     return crypto.scryptSync(raw || 'impasto-dev-key', 'impasto-ssn-salt', 32);
 }
 

@@ -54,10 +54,11 @@ const userAuthentification = async (req, res) => {
             return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
         }
 
+        // Toujours une expiration (pas de jeton éternel) : 7 j si « rester connecté », sinon 1 h.
         const token = jwt.sign(
             { id: user.id, email: user.email, role: user.role, organization_id: user.organization_id },
             JWT_SECRET,
-            stayConnected ? {} : { expiresIn: '1h' }
+            { algorithm: 'HS256', expiresIn: stayConnected ? '7d' : '1h' }
         );
 
         const maxAge = stayConnected ? 1000 * 60 * 60 * 24 * 7 : 1000 * 60 * 60;
@@ -65,7 +66,7 @@ const userAuthentification = async (req, res) => {
         res.cookie('auth_token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'None',
+            sameSite: 'Lax', // protège du CSRF cross-site (front & API sont same-site)
             maxAge,
         });
 
@@ -83,7 +84,7 @@ const userAuthentification = async (req, res) => {
  * POST /api/auth/logout — supprime le cookie.
  */
 const logout = (req, res) => {
-    res.clearCookie('auth_token', { httpOnly: true, sameSite: 'None', secure: process.env.NODE_ENV === 'production' });
+    res.clearCookie('auth_token', { httpOnly: true, sameSite: 'Lax', secure: process.env.NODE_ENV === 'production' });
     return res.status(200).json({ success: true, message: 'Déconnexion réussie' });
 };
 

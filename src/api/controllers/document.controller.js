@@ -123,6 +123,14 @@ const getDocument = async (req, res) => {
         );
         if (rows.length === 0) return res.status(404).json({ message: 'Document introuvable' });
         const doc = rows[0];
+
+        // Anti-IDOR : un non-membre du personnel ne peut lire que ses propres documents.
+        const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
+        if (!STAFF.includes(req.user.role)) {
+            const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [doc.learner_id, req.user.id]);
+            if (own.length === 0) return res.status(403).json({ message: 'Accès refusé' });
+        }
+
         const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
         const html = renderDocumentHTML(doc.type, ctx, doc.title);
         res.json({

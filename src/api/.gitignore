@@ -14,5 +14,7 @@ src/api/config/.env
 *.log
 npm-debug.log*
 
+.fuse_hidden*
+
 # OS
 .DS_Store

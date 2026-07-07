@@ -20,27 +20,29 @@ const getUsers = (req, res) => {
 /**
  * POST /api/user — création d'un compte.
  */
+const ASSIGNABLE_ROLES = ['ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'STAGIAIRE', 'ENTREPRISE', 'FINANCEUR', 'AUDITEUR'];
+
 const createUser = async (req, res) => {
     try {
-        const {
-            organization_id,
-            role = 'SECRETARIAT',
-            first_name,
-            last_name,
-            email,
-            phone,
-            password,
-        } = req.body;
+        const { role = 'SECRETARIAT', first_name, last_name, email, phone, password } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email et mot de passe requis' });
+        }
+        // Sécurité : l'organisme vient du jeton (jamais du corps) et le rôle est
+        // restreint (seul un SUPER_ADMIN peut créer un SUPER_ADMIN).
+        const organization_id = req.user.organization_id;
+        let safeRole = ASSIGNABLE_ROLES.includes(role) ? role : 'SECRETARIAT';
+        if (role === 'SUPER_ADMIN') {
+            if (req.user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Rôle non autorisé' });
+            safeRole = 'SUPER_ADMIN';
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         db.query(
             `INSERT INTO user (id, organization_id, role, first_name, last_name, email, phone, password)
              VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)`,
-            [organization_id, role, first_name, last_name, email, phone, hashedPassword],
+            [organization_id, safeRole, first_name, last_name, email, phone, hashedPassword],
             (err) => {
                 if (err) {
                     console.error('Erreur création utilisateur :', err);

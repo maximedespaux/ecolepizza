@@ -3,9 +3,10 @@ const {
     getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice,
     getInvoiceXml, getInvoiceFacturX,
 } = require('../controllers/invoice.controller.js');
-const { authenticateToken } = require('../middlewares/auth.middleware.js');
+const { authenticateToken, authorizeRoles, STAFF_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
+router.use(authenticateToken, authorizeRoles(...STAFF_ROLES));
 
 router.get('/', authenticateToken, getInvoices);
 router.post('/', authenticateToken, createInvoice);

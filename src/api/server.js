@@ -46,9 +46,18 @@ app.use(cors({
     credentials: true,
 }));
 
+// En-têtes de sécurité de base (sans dépendance).
+app.use((req, res, next) => {
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('X-Frame-Options', 'DENY');
+    res.set('Referrer-Policy', 'no-referrer');
+    res.set('X-Permitted-Cross-Domain-Policies', 'none');
+    next();
+});
+
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '2mb' })); // limite la taille du corps (signatures dataURL)
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // --- Endpoints ---
 app.use('/api/auth', authRoutes);

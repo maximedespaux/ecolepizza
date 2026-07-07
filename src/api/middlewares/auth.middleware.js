@@ -21,7 +21,8 @@ function authenticateToken(req, res, next) {
         return res.status(401).json({ message: 'Token manquant' });
     }
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    // Algorithme épinglé (HS256) pour éviter toute confusion d'algorithme.
+    jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }, (err, user) => {
         if (err) {
             return res.status(401).json({ message: 'Token invalide' });
         }
@@ -29,6 +30,11 @@ function authenticateToken(req, res, next) {
         next();
     });
 }
+
+// Groupes de rôles réutilisables pour les gardes d'accès.
+const STAFF_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
+const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'];
+const AUDIT_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'AUDITEUR'];
 
 /**
  * Restreint l'accès à une liste de rôles.
@@ -43,4 +49,4 @@ function authorizeRoles(...roles) {
     };
 }
 
-module.exports = { authenticateToken, authorizeRoles };
+module.exports = { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES, AUDIT_ROLES };

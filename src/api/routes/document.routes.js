@@ -2,15 +2,18 @@ const express = require('express');
 const {
     listDocuments, createDocument, getDocument, sendDocument, signDocument, deleteDocument,
 } = require('../controllers/document.controller.js');
-const { authenticateToken } = require('../middlewares/auth.middleware.js');
+const { authenticateToken, authorizeRoles, STAFF_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
 
-router.get('/', authenticateToken, listDocuments);
-router.post('/', authenticateToken, createDocument);
+// Actions d'administration : réservées au personnel.
+router.get('/', authenticateToken, authorizeRoles(...STAFF_ROLES), listDocuments);
+router.post('/', authenticateToken, authorizeRoles(...STAFF_ROLES), createDocument);
+router.post('/:id/send', authenticateToken, authorizeRoles(...STAFF_ROLES), sendDocument);
+router.delete('/:id', authenticateToken, authorizeRoles(...STAFF_ROLES), deleteDocument);
+
+// Consultation / signature : accessibles au stagiaire (contrôle de propriété dans le contrôleur).
 router.get('/:id', authenticateToken, getDocument);
-router.post('/:id/send', authenticateToken, sendDocument);
 router.post('/:id/sign', authenticateToken, signDocument);
-router.delete('/:id', authenticateToken, deleteDocument);
 
 module.exports = router;

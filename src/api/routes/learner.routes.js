@@ -2,9 +2,10 @@ const express = require('express');
 const {
     getLearners, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
 } = require('../controllers/learner.controller.js');
-const { authenticateToken } = require('../middlewares/auth.middleware.js');
+const { authenticateToken, authorizeRoles, STAFF_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
+router.use(authenticateToken, authorizeRoles(...STAFF_ROLES));
 
 router.get('/', authenticateToken, getLearners);
 router.get('/:id', authenticateToken, getLearner);
