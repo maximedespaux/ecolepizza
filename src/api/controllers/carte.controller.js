@@ -20,7 +20,7 @@ const getCarte = (req, res) => {
     // Niveau = celui de la formation de l'inscription la plus récente du stagiaire.
     const sql = `
         SELECT l.id, l.first_name, l.last_name, l.town, l.zip_code, l.address,
-               l.lat, l.lng, l.geo_precision,
+               l.lat, l.lng, l.geo_precision, l.levels,
                (SELECT p.level
                   FROM enrollment e
                   JOIN training_session s ON s.id = e.session_id
@@ -52,13 +52,15 @@ const getCarte = (req, res) => {
             }
             if (r.lat != null && r.lng != null) {
                 geocoded++;
+                // Priorité à l'étiquette du stagiaire (1re du CSV), sinon niveau de sa formation.
+                const tag = (r.levels || '').split(',').map((s) => s.trim()).filter(Boolean)[0];
                 points.push({
                     id: r.id,
                     name: [r.first_name, r.last_name].filter(Boolean).join(' '),
                     town: r.town || '',
                     dept: d,
                     lat: Number(r.lat), lng: Number(r.lng),
-                    level: r.level || null,
+                    level: tag || r.level || null,
                 });
             } else if (r.address || r.zip_code) {
                 pending++; // géocodable mais pas encore géocodé

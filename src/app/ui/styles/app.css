@@ -364,6 +364,9 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .mfoot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
 .mbody textarea.inp{width:100%;resize:vertical;line-height:1.45}
 
+/* Étiquettes de niveau (stagiaires) */
+.lvl-chip{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;color:#fff;white-space:nowrap}
+
 /* Réorganisation par glisser-déposer (Formations) */
 .drag-row{cursor:default}
 .drag-row.dragging{opacity:.45}

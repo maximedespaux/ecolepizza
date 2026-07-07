@@ -151,6 +151,7 @@ CREATE TABLE learner (
     experience_unit     varchar(20)  DEFAULT NULL,       -- durée : mois / année
     -- Statut actuel & financement
     professional_status varchar(120) DEFAULT NULL,       -- « Êtes-vous ? » : en activité, demandeur d'emploi…
+    levels              varchar(120) DEFAULT NULL,       -- étiquettes niveau/accès (CSV : NIV1,NIV1_PRO…)
     cpf_amount          decimal(10,2) DEFAULT NULL,      -- « Combien de CPF »
     france_travail_id   varchar(60)  DEFAULT NULL,       -- Id France Travail (Pôle emploi)
     current_contract    varchar(60)  DEFAULT NULL,       -- contrat actuel (si en activité)
