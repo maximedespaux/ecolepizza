@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire } from "../api/apiClient.js";
+import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, createRevenue } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -11,6 +11,12 @@ import { euro } from "../lib/format.js";
 
 const CATEGORIES = ["FARINE", "MATERIEL", "FOUR", "CHARCUTERIE", "FROMAGE", "CONSERVE", "DISTRIBUTION", "AUTRE"];
 const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
+const REVENU_CATS = [
+  { v: "COMMISSION", label: "Commission partenaire" },
+  { v: "SUBVENTION", label: "Subvention" },
+  { v: "AUTRE", label: "Autre produit" },
+];
+const today = () => new Date().toISOString().slice(0, 10);
 const EMPTY = {
   name: "", category: "AUTRE", contact_name: "", contact_email: "", contact_phone: "",
   website: "", town: "", discount_pct: "", offer: "", notes: "",
@@ -23,12 +29,27 @@ function Partenaires() {
   const [status, setStatus] = useState(null);
   const [editing, setEditing] = useState(null); // partenaire édité ou { _new: true }
   const [cat, setCat] = useState("");
+  // Saisie d'un produit divers (commission…) — déplacée depuis « Produit divers ».
+  const [rec, setRec] = useState({ label: "", categorie: "COMMISSION", montant: "", date: today(), partner_id: "" });
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     try { const { data } = await getPartenaires(); setPartners(data); }
     catch (err) { setStatus({ type: "error", message: err.message }); }
   }
   useEffect(() => { load(); }, []);
+
+  async function recordRevenue() {
+    if (!rec.label.trim() || !rec.montant) { setStatus({ type: "error", message: "Libellé et montant requis." }); return; }
+    setSaving(true); setStatus(null);
+    try {
+      await createRevenue(rec);
+      setRec({ label: "", categorie: rec.categorie, montant: "", date: today(), partner_id: "" });
+      setStatus({ type: "success", message: "Produit enregistré (ajouté au chiffre d'affaires)." });
+      load(); // rafraîchit les commissions cumulées par partenaire
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setSaving(false); }
+  }
 
   const filtered = useMemo(
     () => (cat ? partners.filter((p) => p.category === cat) : partners),
@@ -60,6 +81,32 @@ function Partenaires() {
         <div className="kpi"><div className="lbl">Commissions cumulées</div><div className="val tnum" style={{ color: "var(--green)" }}>{euro(totalCommissions)}</div></div>
         <div className="kpi"><div className="lbl">Catégories</div><div className="val tnum">{new Set(partners.map((p) => p.category)).size}</div></div>
       </div>
+
+      <Card title="Enregistrer un produit divers" style={{ marginBottom: 16 }}>
+        <p className="ca-add" style={{ marginTop: -4, marginBottom: 12 }}>+ Ajouté au chiffre d'affaires</p>
+        <div className="row3" style={{ alignItems: "end" }}>
+          <div className="field"><label>Libellé</label>
+            <input className="inp" value={rec.label} onChange={(e) => setRec({ ...rec, label: e.target.value })} placeholder="Commission Le 5 Stagioni…" /></div>
+          <div className="field"><label>Type</label>
+            <select value={rec.categorie} onChange={(e) => setRec({ ...rec, categorie: e.target.value })}>
+              {REVENU_CATS.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
+            </select></div>
+          <div className="field"><label>Montant (€)</label>
+            <input className="inp" inputMode="decimal" value={rec.montant} onChange={(e) => setRec({ ...rec, montant: e.target.value })} placeholder="0" /></div>
+        </div>
+        <div className="row3" style={{ alignItems: "end" }}>
+          {rec.categorie === "COMMISSION" && (
+            <div className="field"><label>Partenaire concerné</label>
+              <select value={rec.partner_id} onChange={(e) => setRec({ ...rec, partner_id: e.target.value })}>
+                <option value="">— Aucun / non précisé —</option>
+                {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select></div>
+          )}
+          <div className="field"><label>Date</label>
+            <input className="inp" type="date" value={rec.date} onChange={(e) => setRec({ ...rec, date: e.target.value })} /></div>
+          <button className="btn primary" disabled={saving} onClick={recordRevenue}>{saving ? "Enregistrement…" : "+ Ajouter le produit"}</button>
+        </div>
+      </Card>
 
       <div className="searchbar" style={{ marginBottom: 12 }}>
         <select className="inp" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 240 }}>
