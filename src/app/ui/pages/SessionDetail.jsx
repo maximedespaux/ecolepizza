@@ -6,6 +6,8 @@ import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import Emargement from "../components/Emargement.jsx";
+import NotesModal from "../components/NotesModal.jsx";
 import { colorOf, initials, scoreBadge } from "../lib/format.js";
 
 function SessionDetail() {
@@ -15,6 +17,7 @@ function SessionDetail() {
   const [allLearners, setAllLearners] = useState([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(null);
+  const [notesFor, setNotesFor] = useState(null);
 
   async function load() {
     try {
@@ -158,6 +161,7 @@ function SessionDetail() {
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{e.email || "—"}</span>
                   </button>
                   <Badge tone={scoreBadge(e.conformite_score)}>{e.conformite_score}</Badge>
+                  <button className="iconbtn" title="Notes de suivi" onClick={() => setNotesFor({ id: e.id, name: `${e.last_name} ${e.first_name}` })}>📝</button>
                   <button className="iconbtn del" title="Retirer de la session" onClick={() => removeStagiaire(e.id)}>🗑</button>
                 </div>
               ))}
@@ -165,6 +169,14 @@ function SessionDetail() {
           )}
         </Card>
       </div>
+
+      <div style={{ marginTop: 16 }}>
+        <Emargement sessionId={id} />
+      </div>
+
+      {notesFor && (
+        <NotesModal enrollmentId={notesFor.id} name={notesFor.name} onClose={() => setNotesFor(null)} />
+      )}
     </>
   );
 }

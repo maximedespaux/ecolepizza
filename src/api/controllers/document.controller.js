@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { renderDocumentHTML } = require('../lib/render.js');
+const { logAudit } = require('../lib/audit.js');
+const { notify } = require('./notification.controller.js');
 
 const TYPE_LABELS = {
     DEVIS: 'Devis', CONTRAT: 'Contrat de formation', CONVENTION: 'Convention de formation',
@@ -154,6 +156,7 @@ const sendDocument = (req, res) => {
             if (result.affectedRows === 0) {
                 return res.status(400).json({ message: 'Document déjà envoyé ou introuvable.' });
             }
+            logAudit(req, 'document.send', 'GeneratedDocument', req.params.id);
             res.status(200).json({ success: true, message: 'Document envoyé au stagiaire' });
         }
     );
@@ -184,6 +187,8 @@ const signDocument = async (req, res) => {
              WHERE id = ?`,
             [signer_name, signature_data || null, req.params.id]
         );
+        logAudit(req, 'document.sign', 'GeneratedDocument', req.params.id);
+        notify(req.user.organization_id, { type: 'SIGNATURE', title: 'Document signé', body: `Signé par ${signer_name}` });
         res.status(200).json({ success: true, message: 'Document signé' });
     } catch (err) {
         console.error('Erreur signature document :', err);

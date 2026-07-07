@@ -7,6 +7,7 @@ import "./styles/app.css";
 
 import AppLayout from "./layouts/AppLayout.jsx";
 import StudentLayout from "./layouts/StudentLayout.jsx";
+import LoadingBar from "./components/LoadingBar.jsx";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Stagiaires from "./pages/Stagiaires.jsx";
@@ -16,6 +17,12 @@ import Sessions from "./pages/Sessions.jsx";
 import SessionDetail from "./pages/SessionDetail.jsx";
 import Suivi from "./pages/Suivi.jsx";
 import Partenaires from "./pages/Partenaires.jsx";
+import Ventes from "./pages/Ventes.jsx";
+import Inventaire from "./pages/Inventaire.jsx";
+import Factures from "./pages/Factures.jsx";
+import Reglages from "./pages/Reglages.jsx";
+import Audit from "./pages/Audit.jsx";
+import Notifications from "./pages/Notifications.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
 import MesFormations from "./pages/MesFormations.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
@@ -32,6 +39,7 @@ function RoleRoute({ roles, children }) {
 
 const STAFF = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"];
 const SUIVI = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "AUDITEUR"];
+const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
 
 /** Choisit l'application selon le rôle : espace stagiaire vs application admin. */
 function AppRoutes() {
@@ -71,6 +79,12 @@ function AppRoutes() {
           <Route path="sessions/:id" element={<RoleRoute roles={STAFF}><SessionDetail /></RoleRoute>} />
           <Route path="formations" element={<RoleRoute roles={STAFF}><Formations /></RoleRoute>} />
           <Route path="partenaires" element={<RoleRoute roles={STAFF}><Partenaires /></RoleRoute>} />
+          <Route path="ventes" element={<RoleRoute roles={STAFF}><Ventes /></RoleRoute>} />
+          <Route path="inventaire" element={<RoleRoute roles={STAFF}><Inventaire /></RoleRoute>} />
+          <Route path="factures" element={<RoleRoute roles={ADMIN}><Factures /></RoleRoute>} />
+          <Route path="reglages" element={<RoleRoute roles={ADMIN}><Reglages /></RoleRoute>} />
+          <Route path="audit" element={<RoleRoute roles={SUIVI}><Audit /></RoleRoute>} />
+          <Route path="notifications" element={<Notifications />} />
           <Route path="suivi" element={<RoleRoute roles={SUIVI}><Suivi /></RoleRoute>} />
           <Route path="*" element={<NotFound />} />
         </Route>
@@ -83,6 +97,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>
       <UserProvider>
+        <LoadingBar />
         <BrowserRouter>
           <AppRoutes />
         </BrowserRouter>

@@ -18,6 +18,7 @@ CREATE DATABASE IF NOT EXISTS gds_doc_gestionary
 USE gds_doc_gestionary;
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS inventory_item;
 DROP TABLE IF EXISTS material_sale;
 DROP TABLE IF EXISTS partner_contract;
 DROP TABLE IF EXISTS partner;
@@ -53,6 +54,7 @@ CREATE TABLE organization (
     short_name  varchar(120) DEFAULT NULL,
     manager     varchar(255) DEFAULT NULL,
     siret       varchar(20)  DEFAULT NULL,
+    vat_number  varchar(30)  DEFAULT NULL,          -- n° TVA intracommunautaire
     nda         varchar(20)  DEFAULT NULL,          -- n° de déclaration d'activité
     naf_ape     varchar(10)  DEFAULT NULL,
     address     varchar(255) DEFAULT NULL,
@@ -403,6 +405,8 @@ CREATE TABLE invoice (
     organization_id uuid          NOT NULL,
     enrollment_id   uuid          DEFAULT NULL,
     company_id      uuid          DEFAULT NULL,
+    buyer_name      varchar(255)  DEFAULT NULL,      -- acheteur libre (vente comptoir)
+    description     varchar(255)  DEFAULT NULL,      -- libellé de la ligne (produits vendus)
     type            enum('DEVIS','ACOMPTE','FACTURE','AVOIR') NOT NULL,
     number          varchar(40)   NOT NULL,
     amount_net      decimal(10,2) NOT NULL,
@@ -569,4 +573,24 @@ CREATE TABLE material_sale (
         REFERENCES organization (id) ON DELETE CASCADE,
     CONSTRAINT fk_sale_learner FOREIGN KEY (learner_id)
         REFERENCES learner (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ---------------------------------------------------------------------------
+-- Inventaire (stock de matériel à vendre)
+-- ---------------------------------------------------------------------------
+CREATE TABLE inventory_item (
+    id              uuid          NOT NULL DEFAULT uuid(),
+    organization_id uuid          NOT NULL,
+    name            varchar(255)  NOT NULL,
+    category        varchar(120)  DEFAULT NULL,
+    sku             varchar(60)   DEFAULT NULL,
+    quantity        int           NOT NULL DEFAULT 0,
+    unit_price      decimal(10,2) DEFAULT NULL,          -- prix HT
+    tax_rate        decimal(5,2)  NOT NULL DEFAULT 20.00, -- taux de TVA (%)
+    threshold       int           NOT NULL DEFAULT 0,
+    created_at      timestamp     NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    KEY idx_inventory_org (organization_id),
+    CONSTRAINT fk_inventory_org FOREIGN KEY (organization_id)
+        REFERENCES organization (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

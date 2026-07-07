@@ -1,7 +1,9 @@
 import { NavLink } from "react-router-dom";
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import { NAV, canAccess } from "../lib/nav.js";
+import { getBadges } from "../api/apiClient.js";
+import { onBadgesRefresh } from "../lib/events.js";
 import { initials } from "../lib/format.js";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -21,6 +23,16 @@ const ROLE_LABELS = {
 function Sidebar({ open }) {
   const { user } = useContext(UserContext);
   const role = user?.role;
+  const [badges, setBadges] = useState({});
+
+  useEffect(() => {
+    let active = true;
+    const load = () => getBadges().then((r) => { if (active) setBadges(r.data || {}); }).catch(() => {});
+    load();
+    const t = setInterval(load, 60000);
+    const off = onBadgesRefresh(load); // rafraîchit après une action (suppression, paiement…)
+    return () => { active = false; clearInterval(t); off(); };
+  }, []);
 
   return (
     <aside className={"sidebar" + (open ? " open" : "")}>
@@ -42,6 +54,7 @@ function Sidebar({ open }) {
               {items.map((it) => (
                 <NavLink key={it.to} to={it.to} className={({ isActive }) => (isActive ? "on" : "")}>
                   <span className="ic">{it.ic}</span> {it.label}
+                  {badges[it.to] > 0 && <span className="count">{badges[it.to]}</span>}
                 </NavLink>
               ))}
             </div>

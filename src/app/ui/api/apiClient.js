@@ -1,22 +1,178 @@
+import { startLoading, stopLoading } from "../lib/loading.js";
+
 const API_BASE_URL = "http://localhost:3000/api";
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  const { silent, ...opts } = options; // `silent` = pas de barre de chargement (polls)
+  if (!silent) startLoading();
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(opts.headers || {}),
+      },
+      ...opts,
+    });
 
-  const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
 
-  if (!response.ok) {
-    throw new Error(data.message || data.error || "Requête échouée");
+    if (!response.ok) {
+      throw new Error(data.message || data.error || "Requête échouée");
+    }
+
+    return data;
+  } finally {
+    if (!silent) stopLoading();
   }
+}
 
-  return data;
+// --- Organisme (réglages) ---
+export function getOrganisation() {
+  return request("/organisation");
+}
+export function updateOrganisation(payload) {
+  return request("/organisation", { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+// --- Ventes de matériel ---
+export function getSales() {
+  return request("/ventes");
+}
+export function createSale(payload) {
+  return request("/ventes", { method: "POST", body: JSON.stringify(payload) });
+}
+export function deleteSale(id) {
+  return request(`/ventes/${id}`, { method: "DELETE" });
+}
+export function checkoutSale(payload) {
+  return request("/ventes/checkout", { method: "POST", body: JSON.stringify(payload) });
+}
+
+// --- Émargement ---
+export function getAttendance(sessionId) {
+  return request(`/attendance/${sessionId}`);
+}
+export function generateAttendance(sessionId) {
+  return request(`/attendance/${sessionId}/generate`, { method: "POST" });
+}
+export function setPresence(recordId, present) {
+  return request(`/attendance/record/${recordId}`, { method: "PATCH", body: JSON.stringify({ present }) });
+}
+
+// --- Journal d'audit ---
+export function getAudit(q = "") {
+  const query = q ? `?q=${encodeURIComponent(q)}` : "";
+  return request(`/audit${query}`);
+}
+
+// --- Notes CRM (dossier) ---
+export function getNotes(enrollmentId) {
+  return request(`/enrollments/${enrollmentId}/notes`);
+}
+export function createNote(enrollmentId, payload) {
+  return request(`/enrollments/${enrollmentId}/notes`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function deleteNote(enrollmentId, noteId) {
+  return request(`/enrollments/${enrollmentId}/notes/${noteId}`, { method: "DELETE" });
+}
+
+// --- Pastilles de navigation ---
+export function getBadges() {
+  return request("/badges", { silent: true });
+}
+
+// --- Inventaire ---
+export function getInventory() {
+  return request("/inventaire");
+}
+export function createItem(payload) {
+  return request("/inventaire", { method: "POST", body: JSON.stringify(payload) });
+}
+export function adjustItem(id, delta) {
+  return request(`/inventaire/${id}/adjust`, { method: "PATCH", body: JSON.stringify({ delta }) });
+}
+export function updateItem(id, payload) {
+  return request(`/inventaire/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function sellItem(id, quantity) {
+  return request(`/inventaire/${id}/sell`, { method: "POST", body: JSON.stringify({ quantity }) });
+}
+export function deleteItem(id) {
+  return request(`/inventaire/${id}`, { method: "DELETE" });
+}
+
+// --- Facturation ---
+export function getInvoices() {
+  return request("/factures");
+}
+export function createInvoice(payload) {
+  return request("/factures", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateInvoice(id, payload) {
+  return request(`/factures/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function recordPayment(id, amount) {
+  return request(`/factures/${id}/payments`, { method: "POST", body: JSON.stringify({ amount }) });
+}
+export function deleteInvoice(id) {
+  return request(`/factures/${id}`, { method: "DELETE" });
+}
+
+// Téléchargement binaire (Factur-X PDF / XML) avec authentification par cookie.
+async function download(path, filename) {
+  startLoading();
+  let res;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, { credentials: "include" });
+  } finally {
+    stopLoading();
+  }
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.message || d.error || "Téléchargement échoué");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+export function downloadFacturX(id, number) {
+  return download(`/factures/${id}/facturx`, `${number}.pdf`);
+}
+// Renvoie une URL blob du PDF (pour l'aperçu dans un onglet).
+export async function facturXUrl(id) {
+  startLoading();
+  let res;
+  try {
+    res = await fetch(`${API_BASE_URL}/factures/${id}/facturx`, { credentials: "include" });
+  } finally {
+    stopLoading();
+  }
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.message || d.error || "Aperçu impossible");
+  }
+  return URL.createObjectURL(await res.blob());
+}
+export function downloadInvoiceXml(id, number) {
+  return download(`/factures/${id}/xml`, `${number}.xml`);
+}
+
+// --- Notifications ---
+export function getNotifications() {
+  return request("/notifications", { silent: true });
+}
+export function markNotificationRead(id) {
+  return request(`/notifications/${id}/read`, { method: "PATCH" });
+}
+export function markAllNotificationsRead() {
+  return request("/notifications/read-all", { method: "POST" });
 }
 
 // --- Authentification ---

@@ -54,6 +54,14 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .menu a.on{color:var(--text);background:var(--surface)}
 .menu a.on::before{content:"";position:absolute;left:-12px;top:50%;transform:translateY(-50%);width:4px;height:22px;border-radius:0 4px 4px 0;background:var(--grad-ember)}
 .menu a.on .ic{color:var(--ember1);opacity:1}
+.menu a .count{margin-left:auto;min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;font-size:10.5px;font-weight:700;background:var(--ember1);color:#fff;border-radius:99px;line-height:1}
+
+/* Barre de chargement globale */
+.loadbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:400;pointer-events:none;overflow:hidden;opacity:0;transition:opacity .25s var(--ease)}
+.loadbar.on{opacity:1}
+.loadbar span{position:absolute;top:0;height:100%;width:35%;border-radius:0 3px 3px 0;background:var(--grad-ember);box-shadow:var(--shadow-glow);animation:loadslide 1.05s var(--ease) infinite}
+@keyframes loadslide{0%{left:-35%;width:20%}50%{width:45%}100%{left:100%;width:20%}}
+@media (prefers-reduced-motion:reduce){.loadbar span{animation:none;left:0;width:100%;opacity:.6}}
 .side-foot{padding:11px 16px;border-top:1px solid var(--border-soft);display:flex;align-items:center;gap:10px}
 .avatar{width:34px;height:34px;border-radius:50%;background:var(--grad-ember);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;flex:0 0 34px}
 .side-foot .who{font-size:12.5px;font-weight:600;line-height:1.2}.side-foot .role{font-size:11px;color:var(--dim)}

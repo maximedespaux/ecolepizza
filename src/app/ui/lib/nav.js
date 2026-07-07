@@ -1,27 +1,39 @@
 /**
  * Navigation latérale — groupée par domaine, avec les rôles autorisés par page.
- * (Ne liste que les pages implémentées dans cette fondation.)
  */
+const STAFF = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"];
+const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
+
 export const NAV = [
   {
     grp: "Pilotage",
     items: [
-      { to: "/dashboard", ic: "◧", label: "Tableau de bord", roles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"] },
+      { to: "/dashboard", ic: "◧", label: "Tableau de bord", roles: STAFF },
     ],
   },
   {
     grp: "Secrétariat",
     items: [
-      { to: "/stagiaires", ic: "☺", label: "Stagiaires", roles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"] },
-      { to: "/sessions", ic: "▦", label: "Sessions", roles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"] },
+      { to: "/stagiaires", ic: "☺", label: "Stagiaires", roles: STAFF },
+      { to: "/sessions", ic: "▦", label: "Sessions", roles: STAFF },
       { to: "/suivi", ic: "▤", label: "Suivi Qualiopi", roles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "AUDITEUR"] },
     ],
   },
   {
     grp: "Développement",
     items: [
-      { to: "/formations", ic: "◍", label: "Formations", roles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"] },
-      { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"] },
+      { to: "/formations", ic: "◍", label: "Formations", roles: STAFF },
+      { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: STAFF },
+      { to: "/inventaire", ic: "📦", label: "Inventaire", roles: STAFF },
+      { to: "/ventes", ic: "🛒", label: "Ventes", roles: STAFF },
+      { to: "/factures", ic: "🧾", label: "Facturation", roles: ADMIN },
+    ],
+  },
+  {
+    grp: "Système",
+    items: [
+      { to: "/reglages", ic: "⚙", label: "Organisme", roles: ADMIN },
+      { to: "/audit", ic: "🔒", label: "Journal d'audit", roles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "AUDITEUR"] },
     ],
   },
 ];
@@ -34,6 +46,12 @@ export const PAGE_TITLES = {
   "/suivi": "Suivi Qualiopi",
   "/formations": "Formations",
   "/partenaires": "Partenaires",
+  "/inventaire": "Inventaire",
+  "/ventes": "Ventes de matériel",
+  "/factures": "Facturation",
+  "/reglages": "Organisme",
+  "/audit": "Journal d'audit",
+  "/notifications": "Notifications",
 };
 
 /** Un rôle peut-il accéder à cette page ? */

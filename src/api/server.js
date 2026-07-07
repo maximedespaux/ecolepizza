@@ -21,6 +21,14 @@ const partnerRoutes = require('./routes/partner.routes.js');
 const espaceRoutes = require('./routes/espace.routes.js');
 const documentRoutes = require('./routes/document.routes.js');
 const suiviRoutes = require('./routes/suivi.routes.js');
+const organizationRoutes = require('./routes/organization.routes.js');
+const saleRoutes = require('./routes/sale.routes.js');
+const attendanceRoutes = require('./routes/attendance.routes.js');
+const auditRoutes = require('./routes/audit.routes.js');
+const invoiceRoutes = require('./routes/invoice.routes.js');
+const notificationRoutes = require('./routes/notification.routes.js');
+const inventoryRoutes = require('./routes/inventory.routes.js');
+const badgesRoutes = require('./routes/badges.routes.js');
 
 // --- CORS ---
 const allowedOrigins = [
@@ -54,6 +62,14 @@ app.use('/api/partenaires', partnerRoutes);
 app.use('/api/mon-espace', espaceRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/suivi', suiviRoutes);
+app.use('/api/organisation', organizationRoutes);
+app.use('/api/ventes', saleRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/factures', invoiceRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/inventaire', inventoryRoutes);
+app.use('/api/badges', badgesRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impasto-api' }));
 
