@@ -271,10 +271,8 @@ CREATE TABLE generated_document (
     organization_id uuid       NOT NULL,
     learner_id    uuid         DEFAULT NULL,          -- stagiaire propriétaire du document
     enrollment_id uuid         DEFAULT NULL,          -- dossier principal (facultatif : cf. document_formation)
-    type          enum('PROGRAMME','FICHE_SEMAINE','TEST_POSITIONNEMENT','DEVIS','CONTRAT',
-                       'CONVENTION','CONVOCATION','INVITATION','DROIT_IMAGE','EMARGEMENT',
-                       'ATTESTATION_HYGIENE','CERTIFICAT_REALISATION','CGV',
-                       'EVALUATION_FINANCEUR','EVALUATION_MANAGEUR') NOT NULL,
+    type          varchar(40)  NOT NULL,               -- DEVIS, CONTRAT… (ou type personnalisé)
+    template_slug varchar(60)  DEFAULT NULL,            -- modèle/étape ayant produit le document
     title         varchar(255) DEFAULT NULL,
     status        enum('A_FAIRE','GENERE','ENVOYE','CONSULTE','SIGNE','ARCHIVE')
                   NOT NULL DEFAULT 'A_FAIRE',
@@ -526,5 +524,30 @@ CREATE TABLE accounting_settings (
     PRIMARY KEY (id),
     UNIQUE KEY uq_accset_org (organization_id),
     CONSTRAINT fk_accset_org FOREIGN KEY (organization_id)
+        REFERENCES organization (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ---------------------------------------------------------------------------
+-- Modèles de documents par organisme (.docx téléversés, multi-tenant)
+-- ---------------------------------------------------------------------------
+CREATE TABLE document_template (
+    id               uuid         NOT NULL DEFAULT uuid(),
+    organization_id  uuid         NOT NULL,
+    slug             varchar(60)  NOT NULL,
+    label            varchar(255) DEFAULT NULL,      -- intitulé de l'étape
+    doc_type         varchar(40)  DEFAULT NULL,      -- type du generated_document (DEVIS…)
+    sort_order       int          NOT NULL DEFAULT 100,
+    signable         tinyint(1)   NOT NULL DEFAULT 0,
+    stagiaire_sign   tinyint(1)   NOT NULL DEFAULT 0,
+    applies_when     longtext     DEFAULT NULL,       -- JSON {financing?,rs?,hygiene?,jours?}
+    active           tinyint(1)   NOT NULL DEFAULT 1,
+    name             varchar(255) DEFAULT NULL,       -- nom de fichier d'origine
+    mime             varchar(120) DEFAULT 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    file             longblob     DEFAULT NULL,       -- .docx (facultatif : étape sans modèle)
+    created_at       timestamp    NOT NULL DEFAULT current_timestamp(),
+    updated_at       timestamp    NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_tpl_org_slug (organization_id, slug),
+    CONSTRAINT fk_tpl_org FOREIGN KEY (organization_id)
         REFERENCES organization (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

@@ -14,6 +14,16 @@ src/api/config/.env
 *.log
 npm-debug.log*
 
-# OS
+# OS / éditeurs / artefacts FUSE
 .DS_Store
-.DS_Store
+.fuse_hidden*
+*~
+.idea/
+.vscode/
+
+# Données locales sensibles — NE PAS versionner
+# seed.sql contient des données personnelles réelles (stagiaires) ; les
+# dumps de base sont propres à un poste et ne doivent pas être poussés.
+database/seed.sql
+database/*_dump.sql
+database/gds_*.sql

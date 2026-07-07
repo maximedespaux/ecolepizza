@@ -31,6 +31,7 @@ const inventoryRoutes = require('./routes/inventory.routes.js');
 const badgesRoutes = require('./routes/badges.routes.js');
 const comptabiliteRoutes = require('./routes/comptabilite.routes.js');
 const carteRoutes = require('./routes/carte.routes.js');
+const templateRoutes = require('./routes/template.routes.js');
 
 // --- CORS ---
 const allowedOrigins = [
@@ -83,6 +84,7 @@ app.use('/api/inventaire', inventoryRoutes);
 app.use('/api/badges', badgesRoutes);
 app.use('/api/comptabilite', comptabiliteRoutes);
 app.use('/api/carte', carteRoutes);
+app.use('/api/templates', templateRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impasto-api' }));
 

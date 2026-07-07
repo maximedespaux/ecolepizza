@@ -1,5 +1,6 @@
 const db = require('../config/database.js');
-const { documentSetFor } = require('../lib/documents.js');
+const { stepsToDocSet } = require('../lib/documents.js');
+const { loadOrgSteps } = require('./template.controller.js');
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 
@@ -23,6 +24,7 @@ const getSuivi = async (req, res) => {
             [req.user.organization_id]
         );
 
+        const steps = await loadOrgSteps(req.user.organization_id);
         const dossiers = [];
         for (const e of enrollments) {
             // Statuts réels des documents rattachés à ce dossier.
@@ -36,7 +38,7 @@ const getSuivi = async (req, res) => {
             const statusByType = {};
             for (const r of rows) statusByType[r.type] = r.status; // dernier gagne
 
-            const required = documentSetFor({
+            const required = stepsToDocSet(steps, {
                 hygiene: !!e.program_hygiene,
                 rsCode: e.program_rs,
                 jours: e.program_days || 1,
