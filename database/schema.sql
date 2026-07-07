@@ -538,6 +538,8 @@ CREATE TABLE document_template (
     slug             varchar(60)  NOT NULL,
     label            varchar(255) DEFAULT NULL,      -- intitulé de l'étape
     doc_type         varchar(40)  DEFAULT NULL,      -- type du generated_document (DEVIS…)
+    kind             varchar(10)  NOT NULL DEFAULT 'builder', -- 'builder' (corps HTML) | 'docx' (fichier)
+    body_html        longtext     DEFAULT NULL,       -- corps du modèle construit dans l'app (jetons {…})
     sort_order       int          NOT NULL DEFAULT 100,
     signable         tinyint(1)   NOT NULL DEFAULT 0,
     stagiaire_sign   tinyint(1)   NOT NULL DEFAULT 0,

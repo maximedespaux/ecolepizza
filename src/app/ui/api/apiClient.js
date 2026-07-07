@@ -381,6 +381,18 @@ export function resetTemplate(slug) {
 export function downloadTemplateFile(slug) {
   return download(`/templates/${slug}/file`, `${slug}.docx`);
 }
+// Catalogue des jetons (regroupé par table) pour la palette de l'éditeur.
+export function getTokenCatalog() {
+  return request("/templates/tokens");
+}
+// Corps HTML d'un modèle (propre à l'organisme ou modèle par défaut).
+export function getTemplateBody(slug) {
+  return request(`/templates/${slug}/body`);
+}
+// Enregistre le corps construit dans l'éditeur.
+export function saveTemplateBody(slug, body_html) {
+  return request(`/templates/${slug}`, { method: "PUT", body: JSON.stringify({ body_html }) });
+}
 export async function uploadTemplate(slug, file) {
   const fd = new FormData();
   fd.append("file", file);

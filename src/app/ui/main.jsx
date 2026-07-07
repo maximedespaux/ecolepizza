@@ -26,6 +26,7 @@ import ProduitDivers from "./pages/ProduitDivers.jsx";
 import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import Modeles from "./pages/Modeles.jsx";
+import TemplateEditor from "./pages/TemplateEditor.jsx";
 import Equipe from "./pages/Equipe.jsx";
 import Audit from "./pages/Audit.jsx";
 import Notifications from "./pages/Notifications.jsx";
@@ -97,6 +98,7 @@ function AppRoutes() {
           <Route path="carte" element={<RoleRoute roles={ADMIN}><Carte /></RoleRoute>} />
           <Route path="reglages" element={<RoleRoute roles={ADMIN}><Reglages /></RoleRoute>} />
           <Route path="modeles" element={<RoleRoute roles={ADMIN}><Modeles /></RoleRoute>} />
+          <Route path="modeles/:slug/editeur" element={<RoleRoute roles={ADMIN}><TemplateEditor /></RoleRoute>} />
           <Route path="equipe" element={<RoleRoute roles={OWNER}><Equipe /></RoleRoute>} />
           <Route path="audit" element={<RoleRoute roles={SUIVI}><Audit /></RoleRoute>} />
           <Route path="notifications" element={<Notifications />} />

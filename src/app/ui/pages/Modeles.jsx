@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getTemplates, uploadTemplate, saveTemplate, resetTemplate, downloadTemplateFile } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -22,6 +23,7 @@ function condLabel(a = {}) {
 }
 
 function Modeles() {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -55,7 +57,7 @@ function Modeles() {
       <PageHead
         eyebrow="Système"
         title="Modèles & workflow documentaire"
-        lead="Composez le jeu de documents de vos dossiers : intitulé, ordre, signature, conditions d'application, et votre propre fichier Word (.docx). Conservez les jetons entre accolades ({Personne}, {Prix}…) : ils sont remplis automatiquement."
+        lead="Composez le jeu de documents de vos dossiers : intitulé, ordre, signature, conditions d'application. Cliquez sur « Éditer » pour construire le document dans l'éditeur intégré et y glisser les champs (nom, prix, dates…) qui se remplissent automatiquement."
         actions={<button className="btn primary" onClick={() => setEditing({ _new: true, sort_order: 100, applies_when: {} })}>＋ Ajouter un document</button>}
       />
       <StatusMessage status={status} />
@@ -89,22 +91,23 @@ function Modeles() {
                   </td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when)}</td>
                   <td>
-                    {t.has_file ? <Badge tone="g">Personnalisé</Badge>
-                      : t.has_default_file ? <Badge tone="n">Par défaut</Badge>
-                        : <span style={{ color: "var(--dim)", fontSize: 12 }}>aucun</span>}
+                    {t.has_body ? <Badge tone="g">Personnalisé</Badge>
+                      : t.has_default_body ? <Badge tone="n">Par défaut</Badge>
+                        : t.has_file ? <Badge tone="b">Word</Badge>
+                          : <span style={{ color: "var(--dim)", fontSize: 12 }}>aucun</span>}
                   </td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <input ref={(el) => (inputs.current[t.slug] = el)} type="file" accept=".docx" style={{ display: "none" }}
                       onChange={(e) => onFile(t.slug, e.target.files[0])} />
-                    <button className="btn sm ghost" title="Modifier l'étape" onClick={() => setEditing({ ...t })}>✎</button>{" "}
-                    <button className="btn sm ghost" title="Téléverser un .docx" disabled={busy === t.slug}
-                      onClick={() => inputs.current[t.slug]?.click()}>{busy === t.slug ? "…" : "⬆"}</button>{" "}
+                    <button className="btn sm primary" title="Ouvrir l'éditeur de document"
+                      onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>🖋 Éditer</button>{" "}
+                    <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>✎</button>{" "}
                     {(t.has_file || t.has_default_file) && (
                       <button className="btn sm ghost" title="Télécharger le modèle"
                         onClick={() => downloadTemplateFile(t.slug).catch((e) => setStatus({ type: "error", message: e.message }))}>⬇</button>
                     )}{" "}
-                    {t.customized && (
-                      <button className="btn sm ghost" title="Réinitialiser" disabled={busy === t.slug} onClick={() => onReset(t.slug)}>↺</button>
+                    {(t.customized || t.has_body || t.has_file) && (
+                      <button className="btn sm ghost" title="Réinitialiser (revenir au modèle par défaut)" disabled={busy === t.slug} onClick={() => onReset(t.slug)}>↺</button>
                     )}
                   </td>
                 </tr>

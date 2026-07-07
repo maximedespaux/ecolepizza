@@ -2,8 +2,9 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { renderDocumentHTML } = require('../lib/render.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
-const { getTemplateBuffer } = require('./template.controller.js');
-const { docxToPdf } = require('../lib/docxpdf.js');
+const { getTemplateContent } = require('./template.controller.js');
+const { renderTemplateHtml } = require('../lib/htmlfill.js');
+const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
 const { logAudit } = require('../lib/audit.js');
 const { notify } = require('./notification.controller.js');
 
@@ -173,25 +174,32 @@ async function fillForRequest(req, res) {
     const f = (ctx.formations && ctx.formations[0]) || {};
     // Slug enregistré sur le document en priorité, sinon dérivé du type + contexte.
     const slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
-    if (!slug) { res.status(404).json({ message: 'Aucun modèle Word pour ce type de document.' }); return null; }
-    // Modèle propre à l'organisme s'il existe, sinon modèle par défaut fourni.
-    const tpl = await getTemplateBuffer(doc.organization_id, slug);
-    if (!tpl) { res.status(404).json({ message: 'Modèle introuvable.' }); return null; }
-    const out = renderTemplate(tpl, ctx, slug);
-    return { doc, out };
+    if (!slug) { res.status(404).json({ message: 'Aucun modèle pour ce type de document.' }); return null; }
+    // Contenu propre à l'organisme s'il existe, sinon modèle par défaut fourni.
+    const content = await getTemplateContent(doc.organization_id, slug);
+    if (!content) { res.status(404).json({ message: 'Modèle introuvable.' }); return null; }
+
+    const who = [ctx.learner?.first_name, ctx.learner?.last_name].filter(Boolean).join(' ').trim();
+    const label = TYPE_LABELS[doc.type] || doc.type || 'document';
+    const baseName = (who ? `${doc.title || label} - ${who}` : (doc.title || label)).replace(/[\\/:*?"<>|]/g, '');
+    return { doc, ctx, slug, content, baseName };
 }
 
 /**
- * GET /api/documents/:id/docx — modèle Word réel rempli (source éditable, secours).
+ * GET /api/documents/:id/docx — modèle Word rempli (uniquement pour les modèles .docx hérités).
  */
 const downloadDocx = async (req, res) => {
     try {
         const r = await fillForRequest(req, res);
         if (!r) return;
+        if (r.content.kind !== 'docx') {
+            return res.status(400).json({ message: 'Ce modèle est géré dans l\'éditeur intégré : disponible en PDF.' });
+        }
+        const out = renderTemplate(r.content.buffer, r.ctx, r.slug);
         logAudit(req, 'document.docx', 'GeneratedDocument', r.doc.id);
         res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-        res.set('Content-Disposition', `attachment; filename="${encodeURIComponent(r.out.filename)}"`);
-        res.send(r.out.buffer);
+        res.set('Content-Disposition', `attachment; filename="${encodeURIComponent(out.filename)}"`);
+        res.send(out.buffer);
     } catch (err) {
         console.error('Erreur génération .docx :', err);
         res.status(500).json({ error: 'Génération du document impossible' });
@@ -208,7 +216,13 @@ const downloadPdf = async (req, res) => {
         if (!r) return;
         let pdf;
         try {
-            pdf = docxToPdf(r.out.buffer);
+            if (r.content.kind === 'builder') {
+                const html = renderTemplateHtml(r.content.html, r.ctx, { title: r.doc.title || r.baseName });
+                pdf = htmlToPdf(html);
+            } else {
+                const out = renderTemplate(r.content.buffer, r.ctx, r.slug);
+                pdf = docxToPdf(out.buffer);
+            }
         } catch (e) {
             if (e.code === 'NO_SOFFICE') {
                 return res.status(501).json({ error: 'PDF indisponible', message: 'LibreOffice n\'est pas installé sur le serveur (nécessaire pour convertir en PDF).' });
@@ -216,7 +230,7 @@ const downloadPdf = async (req, res) => {
             throw e;
         }
         logAudit(req, 'document.pdf', 'GeneratedDocument', r.doc.id);
-        const filename = r.out.filename.replace(/\.docx$/i, '.pdf');
+        const filename = r.baseName + '.pdf';
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
         res.send(pdf);
