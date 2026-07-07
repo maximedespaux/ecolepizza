@@ -1,5 +1,6 @@
 const db = require('../config/database.js');
-const { documentSetFor } = require('../lib/documents.js');
+const { stepsToDocSet } = require('../lib/documents.js');
+const { loadOrgSteps } = require('./template.controller.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -10,7 +11,7 @@ async function learnerForUser(conn, userId) {
 }
 
 // Complétude d'un dossier : dernier jour passé + documents à signer tous signés.
-async function completionOf(conn, e) {
+async function completionOf(conn, e, steps) {
     const [rows] = await conn.query(
         `SELECT gd.type, gd.status
          FROM generated_document gd
@@ -21,7 +22,7 @@ async function completionOf(conn, e) {
     const statusByType = {};
     for (const r of rows) statusByType[r.type] = r.status;
 
-    const required = documentSetFor({
+    const required = stepsToDocSet(steps, {
         hygiene: !!e.program_hygiene, rsCode: e.program_rs,
         jours: e.program_days || 1, financing: e.financing,
     }).filter((d) => d.stagiaireSign);
@@ -105,9 +106,10 @@ const getMyFormations = async (req, res) => {
         );
 
         // Meilleure inscription par formation (on privilégie une formation complète).
+        const steps = await loadOrgSteps(learner.organization_id);
         const byProgram = {};
         for (const e of enrollments) {
-            const c = await completionOf(conn, e);
+            const c = await completionOf(conn, e, steps);
             const info = {
                 enrollment_id: e.enrollment_id, complete: c.complete, dayPassed: c.dayPassed,
                 signed: c.signed, total: c.total, start_date: e.start_date, end_date: e.end_date,
@@ -167,7 +169,8 @@ const getMyFormation = async (req, res) => {
         if (rows.length === 0) return res.status(404).json({ message: 'Formation introuvable.' });
         const e = rows[0];
 
-        const c = await completionOf(conn, e);
+        const steps = await loadOrgSteps(learner.organization_id);
+        const c = await completionOf(conn, e, steps);
         if (!c.complete) return res.status(403).json({ message: 'Formation non terminée.' });
 
         const [documents] = await conn.query(

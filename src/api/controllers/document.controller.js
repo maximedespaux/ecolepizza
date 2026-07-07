@@ -1,6 +1,9 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { renderDocumentHTML } = require('../lib/render.js');
+const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
+const { getTemplateBuffer } = require('./template.controller.js');
+const { docxToPdf } = require('../lib/docxpdf.js');
 const { logAudit } = require('../lib/audit.js');
 const { notify } = require('./notification.controller.js');
 
@@ -22,10 +25,11 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     let company = null;
     const [formations] = await conn.query(
         `SELECT p.code, p.title, p.days, p.hours, p.price, p.hygiene, p.rs_code AS rs_code,
+                p.audience, p.objectives, p.objective_general, p.duration_detail, p.program_detail,
                 s.year, s.week,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                 DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
-                e.financing
+                e.financing, e.price AS enroll_price, e.acompte
          FROM document_formation df
          JOIN enrollment e ON e.id = df.enrollment_id
          LEFT JOIN training_session s ON s.id = e.session_id
@@ -86,7 +90,7 @@ const listDocuments = async (req, res) => {
  * Corps : { learner_id, type, title?, enrollment_ids: [] }.
  */
 const createDocument = async (req, res) => {
-    const { learner_id, type, title, enrollment_ids } = req.body;
+    const { learner_id, type, title, enrollment_ids, template_slug } = req.body;
     if (!learner_id || !type || !Array.isArray(enrollment_ids) || enrollment_ids.length === 0) {
         return res.status(422).json({ error: 'Stagiaire, type et au moins une formation requis.' });
     }
@@ -94,9 +98,9 @@ const createDocument = async (req, res) => {
         const conn = db.promise();
         const documentId = crypto.randomUUID();
         await conn.query(
-            `INSERT INTO generated_document (id, organization_id, learner_id, type, title, status)
-             VALUES (?, ?, ?, ?, ?, 'A_FAIRE')`,
-            [documentId, req.user.organization_id, learner_id, type, title || TYPE_LABELS[type] || type]
+            `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status)
+             VALUES (?, ?, ?, ?, ?, ?, 'A_FAIRE')`,
+            [documentId, req.user.organization_id, learner_id, type, template_slug || null, title || TYPE_LABELS[type] || type]
         );
         for (const eid of enrollment_ids) {
             await conn.query(
@@ -145,6 +149,80 @@ const getDocument = async (req, res) => {
     } catch (err) {
         console.error('Erreur lecture document :', err);
         res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+// Charge le document + contexte + remplit le modèle Word. Renvoie { doc, out } ou
+// une réponse d'erreur (retourne null si déjà répondu).
+async function fillForRequest(req, res) {
+    const conn = db.promise();
+    const [rows] = await conn.query(
+        'SELECT * FROM generated_document WHERE id = ? AND organization_id = ?',
+        [req.params.id, req.user.organization_id]
+    );
+    if (rows.length === 0) { res.status(404).json({ message: 'Document introuvable' }); return null; }
+    const doc = rows[0];
+
+    const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
+    if (!STAFF.includes(req.user.role)) {
+        const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [doc.learner_id, req.user.id]);
+        if (own.length === 0) { res.status(403).json({ message: 'Accès refusé' }); return null; }
+    }
+
+    const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
+    const f = (ctx.formations && ctx.formations[0]) || {};
+    // Slug enregistré sur le document en priorité, sinon dérivé du type + contexte.
+    const slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
+    if (!slug) { res.status(404).json({ message: 'Aucun modèle Word pour ce type de document.' }); return null; }
+    // Modèle propre à l'organisme s'il existe, sinon modèle par défaut fourni.
+    const tpl = await getTemplateBuffer(doc.organization_id, slug);
+    if (!tpl) { res.status(404).json({ message: 'Modèle introuvable.' }); return null; }
+    const out = renderTemplate(tpl, ctx, slug);
+    return { doc, out };
+}
+
+/**
+ * GET /api/documents/:id/docx — modèle Word réel rempli (source éditable, secours).
+ */
+const downloadDocx = async (req, res) => {
+    try {
+        const r = await fillForRequest(req, res);
+        if (!r) return;
+        logAudit(req, 'document.docx', 'GeneratedDocument', r.doc.id);
+        res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        res.set('Content-Disposition', `attachment; filename="${encodeURIComponent(r.out.filename)}"`);
+        res.send(r.out.buffer);
+    } catch (err) {
+        console.error('Erreur génération .docx :', err);
+        res.status(500).json({ error: 'Génération du document impossible' });
+    }
+};
+
+/**
+ * GET /api/documents/:id/pdf — document final NON MODIFIABLE (PDF) envoyé au client.
+ * Rendu fidèle au modèle Word via LibreOffice. Servi « inline » (aperçu + téléchargement).
+ */
+const downloadPdf = async (req, res) => {
+    try {
+        const r = await fillForRequest(req, res);
+        if (!r) return;
+        let pdf;
+        try {
+            pdf = docxToPdf(r.out.buffer);
+        } catch (e) {
+            if (e.code === 'NO_SOFFICE') {
+                return res.status(501).json({ error: 'PDF indisponible', message: 'LibreOffice n\'est pas installé sur le serveur (nécessaire pour convertir en PDF).' });
+            }
+            throw e;
+        }
+        logAudit(req, 'document.pdf', 'GeneratedDocument', r.doc.id);
+        const filename = r.out.filename.replace(/\.docx$/i, '.pdf');
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+        res.send(pdf);
+    } catch (err) {
+        console.error('Erreur génération PDF :', err);
+        res.status(500).json({ error: 'Génération du PDF impossible' });
     }
 };
 
@@ -221,4 +299,4 @@ const deleteDocument = (req, res) => {
     );
 };
 
-module.exports = { listDocuments, createDocument, getDocument, sendDocument, signDocument, deleteDocument };
+module.exports = { listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, sendDocument, signDocument, deleteDocument };

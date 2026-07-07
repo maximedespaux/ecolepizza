@@ -44,6 +44,7 @@ export const NAV = [
     grp: "Système",
     items: [
       { to: "/reglages", ic: "⚙", label: "Organisme", roles: ADMIN },
+      { to: "/modeles", ic: "⎙", label: "Modèles de documents", roles: ADMIN },
       { to: "/audit", ic: "🔒", label: "Journal d'audit", roles: AUDIT },
     ],
   },
@@ -65,6 +66,7 @@ export const PAGE_TITLES = {
   "/factures": "Facturation",
   "/comptabilite": "Comptabilité",
   "/reglages": "Organisme",
+  "/modeles": "Modèles de documents",
   "/audit": "Journal d'audit",
   "/notifications": "Notifications",
 };

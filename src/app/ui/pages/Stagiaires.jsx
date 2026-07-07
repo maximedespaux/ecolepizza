@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { getStagiaires, getStagiaire, createStagiaire, updateStagiaire, resetStagiairePassword } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -330,16 +331,19 @@ function Stagiaires() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {learners.map((l) => (
               <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                <span className="avatar">{initials(l.first_name, l.last_name)}</span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <b>{l.last_name} {l.first_name}</b>
-                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"} · {l.phone || "—"}</span>
-                  {l.has_account && (
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-                      🔑 <span className="mono">{revealed[l.id] ? (l.account_password || "—") : "••••••••"}</span>
-                    </span>
-                  )}
-                </span>
+                <Link to={`/stagiaires/${l.id}`} className="rowlink" title="Ouvrir le dossier (workflow documents)"
+                  style={{ display: "flex", alignItems: "center", gap: 11, flex: 1, minWidth: 0, color: "inherit" }}>
+                  <span className="avatar">{initials(l.first_name, l.last_name)}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b>{l.last_name} {l.first_name}</b>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"} · {l.phone || "—"}</span>
+                    {l.has_account && (
+                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                        🔑 <span className="mono">{revealed[l.id] ? (l.account_password || "—") : "••••••••"}</span>
+                      </span>
+                    )}
+                  </span>
+                </Link>
                 {l.professional_status && <Badge tone="n">{l.professional_status}</Badge>}
                 {l.has_account && (
                   <button

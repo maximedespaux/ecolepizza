@@ -325,6 +325,32 @@ export function getDocument(id) {
   return request(`/documents/${id}`);
 }
 
+// Télécharge le vrai document Word (.docx) rempli (source, secours).
+export function downloadDocumentDocx(id, filename = "document.docx") {
+  return download(`/documents/${id}/docx`, filename);
+}
+// Document final PDF (non modifiable) — téléchargement.
+export function downloadDocumentPdf(id, filename = "document.pdf") {
+  return download(`/documents/${id}/pdf`, filename);
+}
+// URL blob du PDF pour l'aperçu (iframe). Lève une erreur si indisponible (LibreOffice manquant).
+export async function documentPdfUrl(id) {
+  startLoading();
+  let res;
+  try {
+    res = await fetch(`${API_BASE_URL}/documents/${id}/pdf`, { credentials: "include" });
+  } finally {
+    stopLoading();
+  }
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    const err = new Error(d.message || d.error || "Aperçu PDF impossible");
+    err.status = res.status;
+    throw err;
+  }
+  return URL.createObjectURL(await res.blob());
+}
+
 export function sendDocument(id) {
   return request(`/documents/${id}/send`, { method: "POST" });
 }
@@ -335,6 +361,34 @@ export function signDocument(id, payload) {
 
 export function deleteDocument(id) {
   return request(`/documents/${id}`, { method: "DELETE" });
+}
+
+// --- Modèles de documents (par organisme) ---
+export function getTemplates() {
+  return request("/templates");
+}
+export function saveTemplate(slug, payload) {
+  return request(`/templates/${slug}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function resetTemplate(slug) {
+  return request(`/templates/${slug}`, { method: "DELETE" });
+}
+export function downloadTemplateFile(slug) {
+  return download(`/templates/${slug}/file`, `${slug}.docx`);
+}
+export async function uploadTemplate(slug, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  startLoading();
+  let res;
+  try {
+    res = await fetch(`${API_BASE_URL}/templates/${slug}`, { method: "POST", credentials: "include", body: fd });
+  } finally {
+    stopLoading();
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || data.message || data.error || "Téléversement échoué");
+  return data;
 }
 
 // --- Partenaires ---
