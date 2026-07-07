@@ -261,6 +261,9 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .cal-toolbar{display:flex;align-items:center;gap:10px;margin:4px 0 16px;flex-wrap:wrap}
 .cal-title{font-family:var(--font-d);font-size:20px;text-transform:capitalize;min-width:170px;margin:0}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.cal-grid.withweeks{grid-template-columns:36px repeat(7,1fr)}
+.cal-wk-h{font-size:10px !important;color:var(--dim)}
+.cal-week{display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--navy,#2c3371);background:var(--surface2,rgba(0,0,0,.03));border:1px solid var(--border);border-radius:8px;min-width:30px}
 .cal-dow{font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding:4px 0}
 .cal-cell{min-height:104px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px 7px;display:flex;flex-direction:column;gap:4px}
 .cal-cell.out{opacity:.45;background:var(--surface2)}
@@ -360,6 +363,12 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .mbody{padding:18px 20px;overflow-y:auto}
 .mfoot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
 .mbody textarea.inp{width:100%;resize:vertical;line-height:1.45}
+
+/* Réorganisation par glisser-déposer (Formations) */
+.drag-row{cursor:default}
+.drag-row.dragging{opacity:.45}
+.drag-handle{cursor:grab;color:var(--dim);font-size:16px;text-align:center;-webkit-user-select:none;user-select:none}
+.drag-handle:active{cursor:grabbing}
 
 /* Carte : légende niveaux, bannière département, lignes cliquables */
 .level-legend{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:12px;font-size:12.5px;color:var(--muted)}

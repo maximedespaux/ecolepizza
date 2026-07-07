@@ -269,6 +269,10 @@ export function getFormations() {
 export function updateFormation(id, payload) {
   return request(`/formations/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
+// Réordonne les formations (glisser-déposer).
+export function reorderFormations(ids) {
+  return request("/formations/reorder", { method: "PUT", body: JSON.stringify({ ids }) });
+}
 
 // --- Sessions ---
 export function getSessions() {

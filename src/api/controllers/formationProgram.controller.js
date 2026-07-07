@@ -105,4 +105,28 @@ const updateProgram = (req, res) => {
     );
 };
 
-module.exports = { getPrograms, getProgram, createProgram, updateProgram };
+/**
+ * PUT /api/formations/reorder — définit l'ordre d'affichage des formations.
+ * Corps : { ids: [id ordonnés] }.
+ */
+const reorderPrograms = (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : null;
+    if (!ids || !ids.length) return res.status(422).json({ error: 'Liste ordonnée requise.' });
+    const conn = db.promise();
+    (async () => {
+        try {
+            for (let i = 0; i < ids.length; i++) {
+                await conn.query(
+                    'UPDATE training_program SET sort_order = ? WHERE id = ? AND organization_id = ?',
+                    [(i + 1) * 10, ids[i], req.user.organization_id]
+                );
+            }
+            res.json({ success: true, message: 'Ordre enregistré.' });
+        } catch (e) {
+            console.error('Erreur réordonnancement formations :', e);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    })();
+};
+
+module.exports = { getPrograms, getProgram, createProgram, updateProgram, reorderPrograms };

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getFormations, updateFormation } from "../api/apiClient.js";
+import { getFormations, updateFormation, reorderFormations } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -10,6 +10,7 @@ function Formations() {
   const [programs, setPrograms] = useState([]);
   const [status, setStatus] = useState(null);
   const [editing, setEditing] = useState(null); // formation en cours d'édition
+  const [drag, setDrag] = useState(null);        // index de la ligne déplacée
 
   async function load() {
     try {
@@ -21,6 +22,17 @@ function Formations() {
   }
   useEffect(() => { load(); }, []);
 
+  // Glisser-déposer : réordonne localement puis persiste.
+  function onDrop(toIdx) {
+    if (drag === null || drag === toIdx) { setDrag(null); return; }
+    const next = [...programs];
+    const [moved] = next.splice(drag, 1);
+    next.splice(toIdx, 0, moved);
+    setPrograms(next);
+    setDrag(null);
+    reorderFormations(next.map((p) => p.id)).catch((e) => { setStatus({ type: "error", message: e.message }); load(); });
+  }
+
   function onSaved() {
     setEditing(null);
     setStatus({ type: "success", message: "Formation mise à jour." });
@@ -29,13 +41,14 @@ function Formations() {
 
   return (
     <>
-      <PageHead eyebrow="Catalogue" title="Formations" lead="Les programmes proposés par l'École Pizza. Cliquez sur « Modifier » pour éditer le contenu pédagogique d'une formation." />
+      <PageHead eyebrow="Catalogue" title="Formations" lead="Les programmes proposés par l'École Pizza. Glissez une ligne (poignée ⠿) pour réorganiser l'ordre ; cliquez « Modifier » pour éditer le contenu pédagogique et le niveau." />
       <StatusMessage status={status} />
 
       <div className="tablewrap">
         <table>
           <thead>
             <tr>
+              <th style={{ width: 30 }}></th>
               <th>Code</th>
               <th>Intitulé</th>
               <th>Jours</th>
@@ -46,8 +59,16 @@ function Formations() {
             </tr>
           </thead>
           <tbody>
-            {programs.map((p) => (
-              <tr key={p.id}>
+            {programs.map((p, i) => (
+              <tr key={p.id}
+                className={"drag-row" + (drag === i ? " dragging" : "")}
+                draggable
+                onDragStart={() => setDrag(i)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => onDrop(i)}
+                onDragEnd={() => setDrag(null)}
+              >
+                <td className="drag-handle" title="Glisser pour réorganiser">⠿</td>
                 <td>
                   <span className="badge n mono" style={{ color: "#fff", background: colorOf(p.code), borderColor: "transparent" }}>{p.code}</span>
                 </td>
