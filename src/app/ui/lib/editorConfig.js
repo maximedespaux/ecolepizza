@@ -6,7 +6,7 @@ import Highlight from "@tiptap/extension-highlight";
 import FontFamily from "@tiptap/extension-font-family";
 import TextAlign from "@tiptap/extension-text-align";
 import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
+import { ResizableImage } from "./ResizableImage.jsx";
 import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
@@ -27,7 +27,7 @@ export function buildExtensions({ tokens = true } = {}) {
     LineHeight,
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     Link.configure({ openOnClick: false, autolink: true }),
-    Image.configure({ inline: false, allowBase64: true }),
+    ResizableImage.configure({ inline: false, allowBase64: true }),
     Table.configure({ resizable: true }),
     TableRow,
     TableHeader,
