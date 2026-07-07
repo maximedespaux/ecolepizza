@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { TokenNode } from "../lib/TokenNode.js";
+import { buildExtensions } from "../lib/editorConfig.js";
+import RichToolbar from "../components/RichToolbar.jsx";
 import { getTokenCatalog, getTemplateBody, saveTemplateBody } from "../api/apiClient.js";
 import StatusMessage from "../components/StatusMessage.jsx";
+
+const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 
 // Remplace les jetons par des valeurs d'exemple pour l'aperçu (côté client).
 function previewFill(html, sampleMap) {
@@ -16,31 +18,7 @@ function previewFill(html, sampleMap) {
   }
   return out;
 }
-
-function Toolbar({ editor }) {
-  if (!editor) return null;
-  const B = ({ on, active, children, title }) => (
-    <button type="button" className={"tb-btn" + (active ? " on" : "")} title={title}
-      onMouseDown={(e) => { e.preventDefault(); on(); }}>{children}</button>
-  );
-  const c = () => editor.chain().focus();
-  return (
-    <div className="tb">
-      <B title="Gras" active={editor.isActive("bold")} on={() => c().toggleBold().run()}><b>B</b></B>
-      <B title="Italique" active={editor.isActive("italic")} on={() => c().toggleItalic().run()}><i>I</i></B>
-      <span className="tb-sep" />
-      <B title="Titre 1" active={editor.isActive("heading", { level: 1 })} on={() => c().toggleHeading({ level: 1 }).run()}>H1</B>
-      <B title="Titre 2" active={editor.isActive("heading", { level: 2 })} on={() => c().toggleHeading({ level: 2 }).run()}>H2</B>
-      <B title="Paragraphe" active={editor.isActive("paragraph")} on={() => c().setParagraph().run()}>¶</B>
-      <span className="tb-sep" />
-      <B title="Liste à puces" active={editor.isActive("bulletList")} on={() => c().toggleBulletList().run()}>•</B>
-      <B title="Liste numérotée" active={editor.isActive("orderedList")} on={() => c().toggleOrderedList().run()}>1.</B>
-      <span className="tb-sep" />
-      <B title="Annuler" on={() => c().undo().run()}>↶</B>
-      <B title="Rétablir" on={() => c().redo().run()}>↷</B>
-    </div>
-  );
-}
+const clean = (html) => (EMPTY.test(html || "") ? "" : html);
 
 function TemplateEditor() {
   const { slug } = useParams();
@@ -50,36 +28,36 @@ function TemplateEditor() {
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [openGroups, setOpenGroups] = useState({});
-  const wrapRef = useRef(null);
+  const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
+  const [, force] = useState(0);
 
-  const editor = useEditor({
-    extensions: [StarterKit, TokenNode],
+  const opts = (cls) => ({
+    extensions: buildExtensions(),
     content: "",
-    editorProps: { attributes: { class: "doc-canvas" } },
+    editorProps: { attributes: { class: cls } },
+    onFocus: ({ editor }) => setActive(editor),
+    onSelectionUpdate: () => force((n) => n + 1), // rafraîchit l'état actif de la barre
   });
+  const header = useEditor(opts("doc-canvas hf"));
+  const body = useEditor(opts("doc-canvas"));
+  const footer = useEditor(opts("doc-canvas hf"));
 
-  // Charge catalogue + corps du modèle.
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const [cat, body] = await Promise.all([getTokenCatalog(), getTemplateBody(slug)]);
+        const [cat, res] = await Promise.all([getTokenCatalog(), getTemplateBody(slug)]);
         if (!alive) return;
         setCatalog(cat.data || []);
         setOpenGroups(Object.fromEntries((cat.data || []).map((g, i) => [g.group, i === 0])));
+        const d = res.data || {};
+        if (body) body.commands.setContent(d.body_html || "<p></p>");
+        if (header) header.commands.setContent(d.header_html || "");
+        if (footer) footer.commands.setContent(d.footer_html || "");
       } catch (e) { if (alive) setStatus({ type: "error", message: e.message }); }
     })();
     return () => { alive = false; };
-  }, [slug]);
-
-  // Injecte le corps une fois l'éditeur prêt.
-  useEffect(() => {
-    if (!editor) return;
-    let alive = true;
-    getTemplateBody(slug).then(({ data }) => { if (alive && editor) editor.commands.setContent(data.body_html || "<p></p>"); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [editor, slug]);
+  }, [slug, body, header, footer]);
 
   const sampleMap = useMemo(() => {
     const m = {};
@@ -87,28 +65,43 @@ function TemplateEditor() {
     return m;
   }, [catalog]);
 
+  const target = active || body;
+
   function insertToken(t) {
-    editor?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
+    target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
   }
-  function onDrop(e) {
-    const raw = e.dataTransfer.getData("application/x-token");
-    if (!raw || !editor) return;
-    e.preventDefault();
-    const t = JSON.parse(raw);
-    const pos = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
-    const at = pos ? pos.pos : editor.state.selection.to;
-    editor.chain().focus().insertTokenAt(at, { token: t.key, label: t.label }).run();
+  function onDrop(ed) {
+    return (e) => {
+      const raw = e.dataTransfer.getData("application/x-token");
+      if (!raw || !ed) return;
+      e.preventDefault();
+      const t = JSON.parse(raw);
+      const pos = ed.view.posAtCoords({ left: e.clientX, top: e.clientY });
+      const at = pos ? pos.pos : ed.state.selection.to;
+      ed.chain().focus().insertTokenAt(at, { token: t.key, label: t.label }).run();
+    };
   }
 
   async function save() {
-    if (!editor) return;
+    if (!body) return;
     setSaving(true); setStatus(null);
     try {
-      await saveTemplateBody(slug, editor.getHTML());
+      await saveTemplateBody(slug, {
+        body_html: body.getHTML(),
+        header_html: clean(header?.getHTML()),
+        footer_html: clean(footer?.getHTML()),
+      });
       setStatus({ type: "success", message: "Modèle enregistré." });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSaving(false); }
   }
+
+  const previewHtml = () => {
+    const h = clean(header?.getHTML()); const f = clean(footer?.getHTML());
+    return (h ? `<div class="pv-hf">${previewFill(h, sampleMap)}</div>` : "")
+      + previewFill(body?.getHTML() || "", sampleMap)
+      + (f ? `<div class="pv-hf pv-foot">${previewFill(f, sampleMap)}</div>` : "");
+  };
 
   return (
     <div className="tpl-editor">
@@ -125,23 +118,31 @@ function TemplateEditor() {
 
       <StatusMessage status={status} />
 
+      {!showPreview && <RichToolbar editor={target} />}
+
       <div className="tpl-editor-body">
-        <div className="tpl-doc">
-          {!showPreview && <Toolbar editor={editor} />}
-          {showPreview ? (
-            <div className="doc-canvas preview"
-              dangerouslySetInnerHTML={{ __html: previewFill(editor?.getHTML() || "", sampleMap) }} />
-          ) : (
-            <div ref={wrapRef} onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
-              <EditorContent editor={editor} />
+        {showPreview ? (
+          <div className="tpl-doc"><div className="doc-canvas preview" dangerouslySetInnerHTML={{ __html: previewHtml() }} /></div>
+        ) : (
+          <div className="tpl-doc">
+            <div className="hf-zone">
+              <div className="hf-label">En-tête <span>· laissé vide = papier à en-tête automatique</span></div>
+              <div onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
             </div>
-          )}
-        </div>
+            <div className="body-zone" onDrop={onDrop(body)} onDragOver={(e) => e.preventDefault()}>
+              <EditorContent editor={body} />
+            </div>
+            <div className="hf-zone">
+              <div className="hf-label">Pied de page</div>
+              <div onDrop={onDrop(footer)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={footer} /></div>
+            </div>
+          </div>
+        )}
 
         <aside className="tpl-palette">
           <div className="tpl-palette-hd">Champs disponibles</div>
           <p className="sub" style={{ margin: "0 10px 8px", fontSize: 11 }}>
-            Cliquez ou glissez un champ dans le document. Il sera remplacé automatiquement par la donnée réelle.
+            Cliquez ou glissez un champ dans l'en-tête, le corps ou le pied de page. Il sera remplacé par la donnée réelle.
           </p>
           {catalog.map((g) => (
             <div key={g.group} className="tok-group">

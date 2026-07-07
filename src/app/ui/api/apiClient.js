@@ -389,9 +389,9 @@ export function getTokenCatalog() {
 export function getTemplateBody(slug) {
   return request(`/templates/${slug}/body`);
 }
-// Enregistre le corps construit dans l'éditeur.
-export function saveTemplateBody(slug, body_html) {
-  return request(`/templates/${slug}`, { method: "PUT", body: JSON.stringify({ body_html }) });
+// Enregistre le contenu construit dans l'éditeur (corps + en-tête + pied de page).
+export function saveTemplateBody(slug, payload) {
+  return request(`/templates/${slug}`, { method: "PUT", body: JSON.stringify(payload) });
 }
 export async function uploadTemplate(slug, file) {
   const fd = new FormData();

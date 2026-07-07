@@ -28,7 +28,7 @@ async function loadRows(organizationId) {
  */
 async function getTemplateContent(organizationId, slug) {
     const [rows] = await db.promise().query(
-        'SELECT kind, body_html, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+        'SELECT kind, body_html, header_html, footer_html, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
         [organizationId, slug]
     );
     const row = rows[0];
@@ -36,12 +36,12 @@ async function getTemplateContent(organizationId, slug) {
         if (row.kind === 'docx') {
             if (row.file) return { kind: 'docx', buffer: row.file };
         } else if (row.body_html) {
-            return { kind: 'builder', html: row.body_html };
+            return { kind: 'builder', html: row.body_html, header: row.header_html || '', footer: row.footer_html || '' };
         }
     }
     // Défauts fournis : d'abord le corps « builder », sinon l'ancien .docx.
     const html = defaultTemplateHtml(slug);
-    if (html) return { kind: 'builder', html };
+    if (html) return { kind: 'builder', html, header: '', footer: '' };
     const buf = defaultTemplateBuffer(slug);
     return buf ? { kind: 'docx', buffer: buf } : null;
 }
@@ -127,6 +127,8 @@ const saveTemplate = async (req, res) => {
     if (b.active !== undefined) fields.active = b.active ? 1 : 0;
     // Corps construit dans l'éditeur : passe l'étape en mode « builder ».
     if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
+    if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }
+    if (b.footer_html !== undefined) { fields.footer_html = b.footer_html || null; fields.kind = 'builder'; }
     if (b.kind !== undefined && (b.kind === 'builder' || b.kind === 'docx')) fields.kind = b.kind;
     try {
         await upsertTemplate(db.promise(), req.user.organization_id, slug, fields);
@@ -147,12 +149,12 @@ const getTokens = (req, res) => {
 const getTemplateBody = async (req, res) => {
     try {
         const content = await getTemplateContent(req.user.organization_id, req.params.slug);
-        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: '' } });
+        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: '', header_html: '', footer_html: '' } });
         if (content.kind === 'docx') {
             // Ancien modèle .docx sans corps éditable : on renvoie un corps vide à composer.
-            return res.json({ data: { slug: req.params.slug, kind: 'docx', body_html: '' } });
+            return res.json({ data: { slug: req.params.slug, kind: 'docx', body_html: '', header_html: '', footer_html: '' } });
         }
-        res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: content.html } });
+        res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: content.html, header_html: content.header || '', footer_html: content.footer || '' } });
     } catch (err) {
         console.error('Erreur lecture corps modèle :', err);
         res.status(500).json({ error: 'Internal Server Error' });

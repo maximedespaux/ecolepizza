@@ -540,6 +540,8 @@ CREATE TABLE document_template (
     doc_type         varchar(40)  DEFAULT NULL,      -- type du generated_document (DEVIS…)
     kind             varchar(10)  NOT NULL DEFAULT 'builder', -- 'builder' (corps HTML) | 'docx' (fichier)
     body_html        longtext     DEFAULT NULL,       -- corps du modèle construit dans l'app (jetons {…})
+    header_html      longtext     DEFAULT NULL,       -- en-tête éditable (sinon papier à en-tête auto)
+    footer_html      longtext     DEFAULT NULL,       -- pied de page éditable
     sort_order       int          NOT NULL DEFAULT 100,
     signable         tinyint(1)   NOT NULL DEFAULT 0,
     stagiaire_sign   tinyint(1)   NOT NULL DEFAULT 0,

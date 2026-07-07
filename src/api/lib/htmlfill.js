@@ -45,10 +45,19 @@ function letterhead(org = {}) {
     </header>`;
 }
 
-/** Document HTML complet (en-tête + corps rempli + CSS d'impression) prêt pour le PDF. */
+/** Document HTML complet (en-tête + corps rempli + pied de page + CSS) prêt pour le PDF. */
 function renderTemplateHtml(bodyHtml, ctx, opts = {}) {
     const filled = fillHtml(bodyHtml, ctx);
-    const head = opts.letterhead === false ? '' : letterhead(ctx.org || {});
+    const org = ctx.org || {};
+    // En-tête : personnalisé (éditeur) prioritaire, sinon papier à en-tête auto.
+    let head = '';
+    if (opts.headerHtml && opts.headerHtml.trim()) {
+        head = `<header class="doc-head custom">${fillHtml(opts.headerHtml, ctx)}</header>`;
+    } else if (opts.letterhead !== false) {
+        head = letterhead(org);
+    }
+    const foot = (opts.footerHtml && opts.footerHtml.trim())
+        ? `<footer class="doc-foot">${fillHtml(opts.footerHtml, ctx)}</footer>` : '';
     const title = escapeHtml(opts.title || '');
     return `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"><title>${title}</title>
@@ -59,14 +68,16 @@ function renderTemplateHtml(bodyHtml, ctx, opts = {}) {
   .doc-head { border-bottom: 1.5px solid #c0392b; padding-bottom: 8px; margin-bottom: 22px; }
   .doc-head .org { font-size: 15pt; font-weight: 700; color: #c0392b; }
   .doc-head .org-l { font-size: 8.5pt; color: #555; }
+  .doc-foot { border-top: 1px solid #999; margin-top: 26px; padding-top: 8px; font-size: 8.5pt; color: #555; }
   h1 { font-size: 16pt; } h2 { font-size: 13pt; } h3 { font-size: 11.5pt; }
   p { margin: 0 0 8px; }
   table { border-collapse: collapse; width: 100%; margin: 10px 0; }
   th, td { border: 1px solid #999; padding: 5px 7px; font-size: 10pt; text-align: left; }
   ul, ol { margin: 0 0 8px 18px; }
+  img { max-width: 100%; }
   .doc-body { margin-top: 4px; }
 </style></head>
-<body>${head}<main class="doc-body">${filled}</main></body></html>`;
+<body>${head}<main class="doc-body">${filled}</main>${foot}</body></html>`;
 }
 
 module.exports = { fillHtml, renderTemplateHtml, escapeHtml };

@@ -217,7 +217,10 @@ const downloadPdf = async (req, res) => {
         let pdf;
         try {
             if (r.content.kind === 'builder') {
-                const html = renderTemplateHtml(r.content.html, r.ctx, { title: r.doc.title || r.baseName });
+                const html = renderTemplateHtml(r.content.html, r.ctx, {
+                    title: r.doc.title || r.baseName,
+                    headerHtml: r.content.header, footerHtml: r.content.footer,
+                });
                 pdf = htmlToPdf(html);
             } else {
                 const out = renderTemplate(r.content.buffer, r.ctx, r.slug);
