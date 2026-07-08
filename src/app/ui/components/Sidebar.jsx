@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import { NAV, canOpen } from "../lib/nav.js";
@@ -23,7 +23,11 @@ const ROLE_LABELS = {
 /** Barre latérale : marque, menu groupé filtré par rôle, pied utilisateur. */
 function Sidebar({ open }) {
   const { user, logout } = useContext(UserContext);
+  const navigate = useNavigate();
   const role = user?.role;
+  // Paramètres organisme visibles si l'utilisateur a accès à au moins une rubrique « Configuration ».
+  const configGroup = NAV.find((g) => g.grp === "Configuration");
+  const hasParams = (configGroup?.items || []).some((it) => canOpen(user, it));
   const [badges, setBadges] = useState({});
   const [menuOpen, setMenuOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -79,6 +83,11 @@ function Sidebar({ open }) {
       <div className="side-foot-wrap" ref={footRef}>
         {menuOpen && (
           <div className="profile-menu" role="menu">
+            {hasParams && (
+              <button role="menuitem" onClick={() => { setMenuOpen(false); navigate("/parametres"); }}>
+                <span className="ic">⚙</span> Paramètres
+              </button>
+            )}
             <button role="menuitem" onClick={() => { setMenuOpen(false); setPwOpen(true); }}>
               <span className="ic">🔑</span> Changer le mot de passe
             </button>

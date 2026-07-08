@@ -27,6 +27,7 @@ import Comptabilite from "./pages/Comptabilite.jsx";
 import ProduitDivers from "./pages/ProduitDivers.jsx";
 import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
+import Parametres from "./pages/Parametres.jsx";
 import Modeles from "./pages/Modeles.jsx";
 import Opcos from "./pages/Opcos.jsx";
 import TemplateEditor from "./pages/TemplateEditor.jsx";
@@ -155,6 +156,7 @@ function AppRoutes() {
           <Route path="equipe" element={<Guard nav="/equipe" roles={OWNER}><Equipe /></Guard>} />
           <Route path="roles" element={<Guard nav="/roles" roles={["SUPER_ADMIN"]}><AccessRoles /></Guard>} />
           <Route path="audit" element={<Guard nav="/audit" roles={SUIVI}><Audit /></Guard>} />
+          <Route path="parametres" element={<Parametres />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="suivi" element={<Guard nav="/suivi" roles={SUIVI}><Suivi /></Guard>} />
           <Route path="*" element={<NotFound />} />
