@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { getAttendance, generateAttendance, setPresence, signAttendanceSheet } from "../api/apiClient.js";
+import { getAttendance, generateAttendance, signAttendanceSheet } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import Card from "./Card.jsx";
 import StatusMessage from "./StatusMessage.jsx";
@@ -57,12 +57,6 @@ function Emargement({ sessionId }) {
     }
   }
 
-  async function toggle(rec) {
-    const present = rec.present ? 0 : 1;
-    setRecords((rs) => rs.map((r) => (r.id === rec.id ? { ...r, present } : r)));
-    try { await setPresence(rec.id, present); } catch { load(); }
-  }
-
   async function onSignSheet({ signer_name, signature_data }) {
     try {
       await signAttendanceSheet(signSheetRec.id, { signer_name, signature_data });
@@ -109,7 +103,7 @@ function Emargement({ sessionId }) {
                         {!rec ? "—" : rec.has_signature ? (
                           <span title={`Signé par ${rec.signer_name || l.last_name}${rec.signed_at ? ` · ${rec.signed_at}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}>✍</span>
                         ) : (
-                          <input type="checkbox" checked={!!rec.present} onChange={() => toggle(rec)} title="Présent (pointage manuel)" />
+                          <span title="En attente de la signature du stagiaire" style={{ color: "var(--dim)" }}>—</span>
                         )}
                       </td>
                     );
