@@ -310,9 +310,13 @@ export function saveFormationSteps(id, steps) {
 export function getSessions() {
   return request("/sessions");
 }
-// Tableau kanban d'une session (colonnes = documents, cartes = stagiaires).
+// Tableau kanban d'une session (colonnes = étapes du parcours, cartes = stagiaires).
 export function getSessionBoard(id) {
   return request(`/sessions/${id}/board`);
+}
+// Parcours (cycle de vie) d'un dossier stagiaire.
+export function getEnrollmentParcours(id) {
+  return request(`/enrollments/${id}/parcours`);
 }
 
 export function getSession(id) {

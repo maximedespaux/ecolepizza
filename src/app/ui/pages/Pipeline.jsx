@@ -46,7 +46,7 @@ function Pipeline() {
       <PageHead
         eyebrow="Secrétariat · Suivi"
         title="Pipeline de session"
-        lead="Choisissez une session : chaque colonne est un document du parcours de la formation, chaque stagiaire avance jusqu'à son prochain document à produire."
+        lead="Choisissez une session : chaque colonne est une étape du parcours (de l'inscription au suivi), chaque stagiaire est positionné sur son étape en cours."
         actions={
           <select className="inp" style={{ minWidth: 260 }} value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
             {sessions.length === 0 && <option value="">— Aucune session —</option>}
@@ -61,7 +61,7 @@ function Pipeline() {
       ) : !board ? (
         <p className="lead">Sélectionnez une session.</p>
       ) : board.columns.length === 0 ? (
-        <p className="lead">Cette formation n'a aucun document dans son parcours. Définissez-le dans Formations → Parcours documentaire.</p>
+        <p className="lead">Aucune étape à afficher.</p>
       ) : (
         <div className="pipe">
           {columns.map((col) => {
@@ -69,7 +69,7 @@ function Pipeline() {
             return (
               <div className={"pipe-col" + (col.final ? " pipe-done" : "")} key={col.key}>
                 <div className="pipe-head">
-                  <span>{col.label}</span>
+                  <span>{col.ic ? `${col.ic} ` : ""}{col.label}</span>
                   <b className="tnum">{items.length}</b>
                 </div>
                 <div className="pipe-body">
@@ -78,7 +78,7 @@ function Pipeline() {
                   ) : items.map((r) => (
                     <div className="pipe-card" key={r.enrollment_id}>
                       <Link to={`/stagiaires/${r.learner_id}`} className="pipe-name">{r.name}</Link>
-                      <div className="pipe-docs" style={{ marginTop: 6 }}>📄 {r.done}/{r.total} fait{r.done > 1 ? "s" : ""}</div>
+                      <div className="pipe-docs" style={{ marginTop: 6 }}>Étape {Math.min(r.done + 1, r.total)}/{r.total}{r.percent != null ? ` · ${r.percent}%` : ""}</div>
                     </div>
                   ))}
                 </div>

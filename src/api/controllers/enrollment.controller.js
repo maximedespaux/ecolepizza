@@ -1,4 +1,5 @@
 const db = require('../config/database.js');
+const { computeParcours } = require('../lib/parcours.js');
 
 const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
 
@@ -56,6 +57,58 @@ const getEnrollments = async (req, res) => {
         res.json({ data: results });
     } catch (err) {
         console.error('Erreur récupération dossiers :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/enrollments/:id/parcours — parcours (cycle de vie) d'un dossier :
+ * étapes de l'inscription au suivi, avec l'étape en cours et l'avancement.
+ */
+const getParcours = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[e]] = await conn.query(
+            `SELECT e.id, e.crm_stage, e.financing,
+                    p.title AS program_title, p.code AS program_code,
+                    s.year, s.week,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                    DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
+                    l.opco
+             FROM enrollment e
+             LEFT JOIN training_session s ON s.id = e.session_id
+             LEFT JOIN training_program p ON p.id = s.program_id
+             LEFT JOIN learner l ON l.id = e.learner_id
+             WHERE e.id = ? AND e.organization_id = ?`,
+            [req.params.id, req.user.organization_id]
+        );
+        if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
+
+        const [docs] = await conn.query(
+            `SELECT gd.id, gd.type, gd.status FROM generated_document gd
+             JOIN document_formation df ON df.document_id = gd.id
+             WHERE df.enrollment_id = ?`,
+            [req.params.id]
+        );
+
+        const today = new Date().toISOString().slice(0, 10);
+        const parc = computeParcours({ crmStage: e.crm_stage, startDate: e.start_date, endDate: e.end_date, today, docs });
+
+        res.json({
+            data: {
+                header: {
+                    title: e.program_title || '—',
+                    code: e.program_code || '',
+                    session: e.week ? `SEM ${e.week}/${e.year || ''}` : '',
+                    dates: e.start_date ? `${e.start_date}${e.end_date ? ` → ${e.end_date}` : ''}` : '',
+                    financing: e.financing === 'PROFESSIONNEL' ? 'Entreprise' : 'Particulier',
+                    opco: e.opco || null,
+                },
+                ...parc,
+            },
+        });
+    } catch (err) {
+        console.error('Erreur parcours dossier :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -139,4 +192,4 @@ const updateEnrollment = (req, res) => {
     );
 };
 
-module.exports = { getEnrollments, createEnrollment, updateEnrollment, deleteEnrollment };
+module.exports = { getEnrollments, getParcours, createEnrollment, updateEnrollment, deleteEnrollment };

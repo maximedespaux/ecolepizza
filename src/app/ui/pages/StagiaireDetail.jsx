@@ -9,6 +9,7 @@ import Badge from "../components/Badge.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
+import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import { initials, euro } from "../lib/format.js";
 import { OPCOS } from "../lib/opco.js";
 
@@ -41,6 +42,7 @@ function StagiaireDetail() {
   const [prep, setPrep] = useState({ slug: "", title: "", enrollment_ids: [] });
   const [viewId, setViewId] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [parcoursEnr, setParcoursEnr] = useState(null);
 
   function loadLearner() {
     return getStagiaire(id).then((r) => setL(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
@@ -222,6 +224,29 @@ function StagiaireDetail() {
         )}
       </div>
 
+      {enrollments.length > 0 && (
+        <Card title="Parcours d'inscription" className="fade">
+          {enrollments.length > 1 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+              {enrollments.map((e) => {
+                const on = (parcoursEnr || enrollments[0].id) === e.id;
+                return (
+                  <button key={e.id} type="button" className={"btn sm " + (on ? "primary" : "ghost")} onClick={() => setParcoursEnr(e.id)}>
+                    {e.program_code}{e.week ? ` · S${e.week}` : ""}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <EnrollmentParcours
+            enrollmentId={parcoursEnr || enrollments[0].id}
+            onOpenDoc={(docId) => setViewId(docId)}
+            onGoto={() => document.getElementById("sd-documents")?.scrollIntoView({ behavior: "smooth" })}
+          />
+        </Card>
+      )}
+
+      <div id="sd-documents" />
       <Card title="Documents" className="fade">
         <form onSubmit={handlePrepare} style={{ marginBottom: 16 }}>
           <div className="row2">

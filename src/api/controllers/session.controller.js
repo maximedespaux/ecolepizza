@@ -1,5 +1,5 @@
 const db = require('../config/database.js');
-const { formationSteps } = require('./formationProgram.controller.js');
+const { STAGES, computeParcours } = require('../lib/parcours.js');
 
 // Libellé court par type de document (colonnes du tableau de session).
 const DOC_LABELS = {
@@ -176,61 +176,32 @@ const getSessionBoard = async (req, res) => {
         );
         if (!s) return res.status(404).json({ message: 'Session introuvable' });
 
-        const program = { id: s.program_id, code: s.code, days: s.days, hygiene: s.hygiene, rs_code: s.rs_code };
-        const steps = (await formationSteps(conn, req.user.organization_id, program)).filter((st) => st.active);
-
-        // Clé d'une étape : un QCM est identifié par son quiz_id (plusieurs QCM
-        // partagent le type 'QCM'), un document par son type.
-        const keyOf = (st) => (st.quiz_id ? `Q:${st.quiz_id}` : st.doc_type);
-        const labelOf = (st) => (st.quiz_id ? st.label : (DOC_LABELS[st.doc_type] || st.doc_type));
-
-        // Colonnes = paliers de sort_order (regroupe les variantes : devis, contrat/convention…).
-        const byOrder = new Map();
-        const tiers = [];
-        for (const st of steps) {
-            const key = keyOf(st);
-            let t = byOrder.get(st.sort_order);
-            if (!t) { t = { order: st.sort_order, keys: [], signKeys: [], labels: [] }; byOrder.set(st.sort_order, t); tiers.push(t); }
-            if (!t.keys.includes(key)) { t.keys.push(key); t.labels.push(labelOf(st)); }
-            if (st.stagiaire_sign && !t.signKeys.includes(key)) t.signKeys.push(key);
-        }
-        tiers.sort((a, b) => a.order - b.order);
-        const columns = tiers.map((t, i) => ({
-            index: i, key: String(t.order),
-            label: [...new Set(t.labels)].join(' / '),
-            keys: t.keys, signKeys: t.signKeys,
-        }));
+        // Colonnes = étapes du parcours (cycle de vie du dossier).
+        const columns = STAGES.map((st, i) => ({ index: i, key: st.key, label: st.label, ic: st.ic }));
 
         const [enr] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.learner_id, l.first_name, l.last_name
+            `SELECT e.id AS enrollment_id, e.learner_id, e.crm_stage, l.first_name, l.last_name
              FROM enrollment e LEFT JOIN learner l ON l.id = e.learner_id
              WHERE e.session_id = ? AND e.organization_id = ?
              ORDER BY l.last_name, l.first_name`,
             [req.params.id, req.user.organization_id]
         );
 
+        const today = new Date().toISOString().slice(0, 10);
         const cards = [];
         for (const e of enr) {
             const [docs] = await conn.query(
-                `SELECT gd.type, gd.status, gd.quiz_id FROM generated_document gd
+                `SELECT gd.id, gd.type, gd.status FROM generated_document gd
                  JOIN document_formation df ON df.document_id = gd.id
                  WHERE df.enrollment_id = ?`,
                 [e.enrollment_id]
             );
-            const statusByKey = {};
-            for (const d of docs) statusByKey[d.quiz_id ? `Q:${d.quiz_id}` : d.type] = d.status;
-            const doneCol = columns.map((c) => c.keys.some((k) => {
-                const st = statusByKey[k];
-                if (!st) return false;
-                return c.signKeys.includes(k) ? st === 'SIGNE' : DONE_STATUSES.includes(st);
-            }));
-            const done = doneCol.filter(Boolean).length;
-            let column = doneCol.findIndex((d) => !d);
-            if (column < 0) column = columns.length; // tout fait
+            const parc = computeParcours({ crmStage: e.crm_stage, startDate: s.start_date, endDate: s.end_date, today, docs });
             cards.push({
                 learner_id: e.learner_id, enrollment_id: e.enrollment_id,
                 name: `${e.last_name || ''} ${e.first_name || ''}`.trim(),
-                column, done, total: columns.length,
+                column: parc.currentIndex, done: parc.currentIndex, total: STAGES.length,
+                stage: parc.currentKey, percent: parc.percent,
             });
         }
 
