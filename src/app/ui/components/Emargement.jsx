@@ -121,6 +121,13 @@ function Emargement({ sessionId }) {
                   })}
                 </tr>
               ))}
+              {/* Séparateur : section formateur(s), distincte des stagiaires */}
+              <tr>
+                <td colSpan={sheets.length + 1}
+                  style={{ padding: "12px 0 4px", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--dim)", borderTop: "2px solid var(--border-soft)" }}>
+                  Formateur{trainers.length > 1 ? "s" : ""}
+                </td>
+              </tr>
               {/* Une ligne de signature par formateur affecté à la session */}
               {trainers.length === 0 ? (
                 <tr>
