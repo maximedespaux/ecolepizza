@@ -4,12 +4,50 @@ const { logAudit } = require('../lib/audit.js');
 
 const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+// Date (YYYY-MM-DD) du jour ouvré N à partir d'une date de début (offset = N-1).
+function businessDayISO(startStr, offset) {
+    if (!startStr) return null;
+    const d = new Date(startStr);
+    if (Number.isNaN(d.getTime())) return null;
+    let added = 0;
+    while (added < offset) {
+        d.setDate(d.getDate() + 1);
+        const wd = d.getDay();
+        if (wd !== 0 && wd !== 6) added += 1;
+    }
+    return d.toISOString().slice(0, 10);
+}
+
+// Sessions de la formation où le QCM peut être envoyé AUJOURD'HUI :
+// le jour J est arrivé (dayDate <= today) et la session n'est pas terminée.
+async function eligibleSessionsFor(conn, orgId, programId, day) {
+    if (!programId || day == null || day === '') return [];
+    const [sessions] = await conn.query(
+        `SELECT s.id, DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date
+         FROM training_session s
+         WHERE s.organization_id = ? AND s.program_id = ?`,
+        [orgId, programId]
+    );
+    const today = todayISO();
+    return sessions.filter((s) => {
+        const dayDate = businessDayISO(s.start_date, (Number(day) || 1) - 1);
+        if (!dayDate) return false;
+        if (dayDate > today) return false;                 // le jour J n'est pas encore arrivé
+        if (s.end_date && s.end_date < today) return false; // session terminée
+        return true;
+    });
+}
+
 /* ------------------------------ Administration ------------------------------ */
 
 /** GET /api/quizzes — liste des QCM de l'organisme. */
 const listQuizzes = async (req, res) => {
     try {
-        const [rows] = await db.promise().query(
+        const conn = db.promise();
+        const [rows] = await conn.query(
             `SELECT q.id, q.title, q.kind, q.day, q.auto_send, q.pass_score, q.active, q.program_id,
                     p.code AS program_code, p.title AS program_title,
                     (SELECT COUNT(*) FROM quiz_question qq WHERE qq.quiz_id = q.id) AS n_questions
@@ -17,6 +55,24 @@ const listQuizzes = async (req, res) => {
              WHERE q.organization_id = ? ORDER BY q.created_at DESC`,
             [req.user.organization_id]
         );
+        // Calcule, pour chaque QCM, s'il est envoyable aujourd'hui (session du bon jour).
+        for (const q of rows) {
+            let eligible_count = 0, send_reason = null;
+            if (!q.program_id) send_reason = 'Rattachez ce QCM à une formation.';
+            else if (q.day == null) send_reason = 'Définissez le jour de la formation.';
+            else {
+                const sessions = await eligibleSessionsFor(conn, req.user.organization_id, q.program_id, q.day);
+                if (!sessions.length) send_reason = `Aucune session de ${q.program_code || 'cette formation'} au jour ${q.day} en cours aujourd'hui.`;
+                else {
+                    const [[c]] = await conn.query('SELECT COUNT(*) AS n FROM enrollment WHERE session_id IN (?)', [sessions.map((s) => s.id)]);
+                    eligible_count = c.n;
+                    if (!eligible_count) send_reason = 'Aucun stagiaire inscrit sur la session concernée.';
+                }
+            }
+            q.eligible_count = eligible_count;
+            q.sendable = eligible_count > 0;
+            q.send_reason = send_reason;
+        }
         res.json({ data: rows });
     } catch (err) {
         console.error('Erreur liste QCM :', err);
@@ -235,17 +291,22 @@ const submitQuiz = async (req, res) => {
 const sendQuiz = async (req, res) => {
     try {
         const conn = db.promise();
-        const [[quiz]] = await conn.query('SELECT id, program_id, title FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        const [[quiz]] = await conn.query('SELECT id, program_id, day, title FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!quiz) return res.status(404).json({ message: 'QCM introuvable' });
         if (!quiz.program_id) return res.status(422).json({ error: 'Rattachez d\'abord ce QCM à une formation.' });
+        if (quiz.day == null) return res.status(422).json({ error: 'Définissez d\'abord le jour de la formation.' });
 
+        // Seules les sessions dont le jour J est arrivé (et non terminées) sont éligibles.
+        let sessions = await eligibleSessionsFor(conn, req.user.organization_id, quiz.program_id, quiz.day);
         const sessionId = req.body && req.body.session_id;
-        const params = [req.user.organization_id, quiz.program_id];
-        let sql = `SELECT e.id AS enrollment_id, e.learner_id
-                   FROM enrollment e JOIN training_session s ON s.id = e.session_id
-                   WHERE e.organization_id = ? AND s.program_id = ?`;
-        if (sessionId) { sql += ' AND e.session_id = ?'; params.push(sessionId); }
-        const [enr] = await conn.query(sql, params);
+        if (sessionId) sessions = sessions.filter((s) => s.id === sessionId);
+        if (!sessions.length) {
+            return res.status(422).json({ error: `Aucune session de cette formation n'est au jour ${quiz.day} aujourd'hui.` });
+        }
+        const [enr] = await conn.query(
+            `SELECT e.id AS enrollment_id, e.learner_id FROM enrollment e WHERE e.session_id IN (?)`,
+            [sessions.map((s) => s.id)]
+        );
 
         let sent = 0;
         for (const e of enr) {

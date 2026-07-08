@@ -84,7 +84,9 @@ function Quiz() {
                     <td>{q.kind === "SURVEY" ? <Badge tone="n">Enquête</Badge> : <Badge tone="b">Noté</Badge>}</td>
                     <td className="tnum">{q.n_questions}</td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button className="btn sm ghost" title="Envoyer aux stagiaires" onClick={() => onSend(q)}>📤 Envoyer</button>{" "}
+                      <button className="btn sm ghost" disabled={!q.sendable}
+                        title={q.sendable ? `Envoyer aux stagiaires (${q.eligible_count})` : (q.send_reason || "Envoi indisponible")}
+                        onClick={() => onSend(q)}>📤 Envoyer</button>{" "}
                       <button className="btn sm ghost" onClick={() => onEdit(q)}>✎ Éditer</button>{" "}
                       <button className="btn sm ghost danger" onClick={() => onDelete(q)}>🗑</button>
                     </td>
