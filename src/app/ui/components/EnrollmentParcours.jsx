@@ -99,7 +99,7 @@ function EnrollmentParcours({ enrollmentId, onOpenDoc, onPrepare }) {
       </div>
 
       {/* Détail de l'étape sélectionnée */}
-      <div className="card" style={{ padding: 20, position: "sticky", top: 12 }}>
+      <div className="card" style={{ padding: 20, position: "sticky", top: 74, maxHeight: "calc(100vh - 90px)", overflowY: "auto" }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <span style={{
             width: 44, height: 44, borderRadius: 11, display: "grid", placeItems: "center",
