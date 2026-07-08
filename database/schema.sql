@@ -52,6 +52,7 @@ CREATE TABLE organization (
     id          uuid         NOT NULL DEFAULT uuid(),
     legal_name  varchar(255) NOT NULL,
     short_name  varchar(120) DEFAULT NULL,
+    code        varchar(24)  DEFAULT NULL,          -- code court unique (saisi à la connexion, multi-tenant)
     manager     varchar(255) DEFAULT NULL,
     siret       varchar(20)  DEFAULT NULL,
     vat_number  varchar(30)  DEFAULT NULL,          -- n° TVA intracommunautaire
@@ -64,7 +65,8 @@ CREATE TABLE organization (
     email       varchar(255) DEFAULT NULL,
     qualiopi    tinyint(1)   NOT NULL DEFAULT 0,
     created_at  timestamp    NOT NULL DEFAULT current_timestamp(),
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_org_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ---------------------------------------------------------------------------
@@ -73,7 +75,7 @@ CREATE TABLE organization (
 CREATE TABLE user (
     id              uuid         NOT NULL DEFAULT uuid(),
     organization_id uuid         DEFAULT NULL,
-    role            enum('SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT','FORMATEUR',
+    role            enum('PLATFORM_OWNER','SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT','FORMATEUR',
                          'STAGIAIRE','ENTREPRISE','FINANCEUR','AUDITEUR')
                     NOT NULL DEFAULT 'SECRETARIAT',
     first_name      varchar(120) DEFAULT NULL,
@@ -81,12 +83,13 @@ CREATE TABLE user (
     email           varchar(255) NOT NULL,
     phone           varchar(30)  DEFAULT NULL,
     active          tinyint(1)   NOT NULL DEFAULT 1,    -- 0 = accès désactivé (connexion refusée)
+    nav_access      text         DEFAULT NULL,          -- accès menu par utilisateur (JSON de chemins) ; NULL = rien accordé
     last_login_at   timestamp    NULL DEFAULT NULL,     -- dernière connexion réussie
     password        varchar(255) NOT NULL,             -- hash bcrypt (authentification)
     password_plain_enc varchar(255) DEFAULT NULL,      -- DEV UNIQUEMENT : copie chiffrée du mot de passe généré (à retirer)
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
-    UNIQUE KEY uq_user_email (email),
+    UNIQUE KEY uq_user_org_email (organization_id, email),
     KEY idx_user_org (organization_id),
     CONSTRAINT fk_user_org FOREIGN KEY (organization_id)
         REFERENCES organization (id) ON DELETE SET NULL
@@ -157,6 +160,7 @@ CREATE TABLE learner (
     current_contract    varchar(60)  DEFAULT NULL,       -- contrat actuel (si en activité)
     social_security     varchar(255) DEFAULT NULL,       -- n° de sécurité sociale (chiffré AES-256-GCM au repos)
     financing           enum('PARTICULIER','PROFESSIONNEL') NOT NULL DEFAULT 'PARTICULIER',
+    opco                varchar(120) DEFAULT NULL,       -- OPCO / financeur (AGEFICE, AKTO, FIF PL…)
     company_id          uuid         DEFAULT NULL,
     user_id             uuid         DEFAULT NULL,      -- compte de connexion du stagiaire (rôle STAGIAIRE)
     -- Projet (« Votre projet »)
@@ -282,6 +286,7 @@ CREATE TABLE generated_document (
     enrollment_id uuid         DEFAULT NULL,          -- dossier principal (facultatif : cf. document_formation)
     type          varchar(40)  NOT NULL,               -- DEVIS, CONTRAT… (ou type personnalisé)
     template_slug varchar(60)  DEFAULT NULL,            -- modèle/étape ayant produit le document
+    quiz_id       uuid         DEFAULT NULL,            -- document adossé à un QCM
     title         varchar(255) DEFAULT NULL,
     status        enum('A_FAIRE','GENERE','ENVOYE','CONSULTE','SIGNE','ARCHIVE')
                   NOT NULL DEFAULT 'A_FAIRE',
@@ -584,4 +589,22 @@ CREATE TABLE document_template (
     UNIQUE KEY uq_tpl_org_slug (organization_id, slug),
     CONSTRAINT fk_tpl_org FOREIGN KEY (organization_id)
         REFERENCES organization (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Parcours documentaire par formation (quels documents / dans quel ordre)
+CREATE TABLE program_step (
+    id               uuid       NOT NULL DEFAULT uuid(),
+    organization_id  uuid       NOT NULL,
+    program_id       uuid       NOT NULL,
+    slug             varchar(60) NOT NULL,       -- étape (cf. DEFAULT_STEPS / document_template)
+    sort_order       int        NOT NULL DEFAULT 100,
+    active           tinyint(1) NOT NULL DEFAULT 1,
+    created_at       timestamp  NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_progstep (program_id, slug),
+    KEY idx_progstep_org (organization_id),
+    CONSTRAINT fk_progstep_org FOREIGN KEY (organization_id)
+        REFERENCES organization (id) ON DELETE CASCADE,
+    CONSTRAINT fk_progstep_prog FOREIGN KEY (program_id)
+        REFERENCES training_program (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

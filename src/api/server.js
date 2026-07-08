@@ -31,8 +31,10 @@ const inventoryRoutes = require('./routes/inventory.routes.js');
 const badgesRoutes = require('./routes/badges.routes.js');
 const comptabiliteRoutes = require('./routes/comptabilite.routes.js');
 const carteRoutes = require('./routes/carte.routes.js');
+const quizRoutes = require('./routes/quiz.routes.js');
 const templateRoutes = require('./routes/template.routes.js');
 const equipeRoutes = require('./routes/equipe.routes.js');
+const platformRoutes = require('./routes/platform.routes.js');
 
 // --- CORS ---
 const allowedOrigins = [
@@ -64,6 +66,10 @@ app.use(cookieParser());
 app.use(express.json({ limit: '2mb' })); // limite la taille du corps (signatures dataURL)
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
+// Accès menu par utilisateur : bloque les modifications sur une rubrique en lecture seule.
+const { enforceSectionMode } = require('./middlewares/sectionAccess.middleware.js');
+app.use(enforceSectionMode);
+
 // --- Endpoints ---
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
@@ -86,8 +92,10 @@ app.use('/api/inventaire', inventoryRoutes);
 app.use('/api/badges', badgesRoutes);
 app.use('/api/comptabilite', comptabiliteRoutes);
 app.use('/api/carte', carteRoutes);
+app.use('/api/quizzes', quizRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/equipe', equipeRoutes);
+app.use('/api/platform', platformRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impasto-api' }));
 

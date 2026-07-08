@@ -1,4 +1,17 @@
 const db = require('../config/database.js');
+const { formationSteps } = require('./formationProgram.controller.js');
+
+// Libellé court par type de document (colonnes du tableau de session).
+const DOC_LABELS = {
+    FICHE_SEMAINE: "Fiche d'expression", DEVIS: 'Devis', CGV: 'CGV',
+    CONTRAT: 'Contrat', CONVENTION: 'Convention', INVITATION: 'Invitation',
+    CONVOCATION: 'Convocation', LIVRET_ACCUEIL: "Livret d'accueil",
+    TEST_POSITIONNEMENT: 'Test position.', DROIT_IMAGE: "Droit à l'image",
+    EMARGEMENT: 'Émargement', ATTESTATION_HYGIENE: 'Att. hygiène',
+    CERTIFICAT_REALISATION: 'Certificat', ATTESTATION_ASSIDUITE: "Att. assiduité",
+    DIPLOME: 'Diplôme', EVALUATION_SATISFACTION: 'Éval. satisfaction', PROGRAMME: 'Programme',
+};
+const DONE_STATUSES = ['GENERE', 'ENVOYE', 'CONSULTE', 'SIGNE'];
 
 // --- Utilitaires de dates (jours ouvrés + semaine ISO) ---------------------
 
@@ -143,4 +156,92 @@ const deleteSession = (req, res) => {
     );
 };
 
-module.exports = { getSessions, getSession, createSession, deleteSession };
+/**
+ * GET /api/sessions/:id/board — tableau de la session : colonnes = étapes
+ * documentaires de la formation ; cartes = stagiaires positionnés sur leur
+ * prochain document à faire.
+ */
+const getSessionBoard = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[s]] = await conn.query(
+            `SELECT s.id, s.program_id, s.year, s.week,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                    DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
+                    p.code, p.title, p.days, p.hygiene, p.rs_code
+             FROM training_session s
+             JOIN training_program p ON p.id = s.program_id
+             WHERE s.id = ? AND s.organization_id = ?`,
+            [req.params.id, req.user.organization_id]
+        );
+        if (!s) return res.status(404).json({ message: 'Session introuvable' });
+
+        const program = { id: s.program_id, code: s.code, days: s.days, hygiene: s.hygiene, rs_code: s.rs_code };
+        const steps = (await formationSteps(conn, req.user.organization_id, program)).filter((st) => st.active);
+
+        // Clé d'une étape : un QCM est identifié par son quiz_id (plusieurs QCM
+        // partagent le type 'QCM'), un document par son type.
+        const keyOf = (st) => (st.quiz_id ? `Q:${st.quiz_id}` : st.doc_type);
+        const labelOf = (st) => (st.quiz_id ? st.label : (DOC_LABELS[st.doc_type] || st.doc_type));
+
+        // Colonnes = paliers de sort_order (regroupe les variantes : devis, contrat/convention…).
+        const byOrder = new Map();
+        const tiers = [];
+        for (const st of steps) {
+            const key = keyOf(st);
+            let t = byOrder.get(st.sort_order);
+            if (!t) { t = { order: st.sort_order, keys: [], signKeys: [], labels: [] }; byOrder.set(st.sort_order, t); tiers.push(t); }
+            if (!t.keys.includes(key)) { t.keys.push(key); t.labels.push(labelOf(st)); }
+            if (st.stagiaire_sign && !t.signKeys.includes(key)) t.signKeys.push(key);
+        }
+        tiers.sort((a, b) => a.order - b.order);
+        const columns = tiers.map((t, i) => ({
+            index: i, key: String(t.order),
+            label: [...new Set(t.labels)].join(' / '),
+            keys: t.keys, signKeys: t.signKeys,
+        }));
+
+        const [enr] = await conn.query(
+            `SELECT e.id AS enrollment_id, e.learner_id, l.first_name, l.last_name
+             FROM enrollment e LEFT JOIN learner l ON l.id = e.learner_id
+             WHERE e.session_id = ? AND e.organization_id = ?
+             ORDER BY l.last_name, l.first_name`,
+            [req.params.id, req.user.organization_id]
+        );
+
+        const cards = [];
+        for (const e of enr) {
+            const [docs] = await conn.query(
+                `SELECT gd.type, gd.status, gd.quiz_id FROM generated_document gd
+                 JOIN document_formation df ON df.document_id = gd.id
+                 WHERE df.enrollment_id = ?`,
+                [e.enrollment_id]
+            );
+            const statusByKey = {};
+            for (const d of docs) statusByKey[d.quiz_id ? `Q:${d.quiz_id}` : d.type] = d.status;
+            const doneCol = columns.map((c) => c.keys.some((k) => {
+                const st = statusByKey[k];
+                if (!st) return false;
+                return c.signKeys.includes(k) ? st === 'SIGNE' : DONE_STATUSES.includes(st);
+            }));
+            const done = doneCol.filter(Boolean).length;
+            let column = doneCol.findIndex((d) => !d);
+            if (column < 0) column = columns.length; // tout fait
+            cards.push({
+                learner_id: e.learner_id, enrollment_id: e.enrollment_id,
+                name: `${e.last_name || ''} ${e.first_name || ''}`.trim(),
+                column, done, total: columns.length,
+            });
+        }
+
+        res.json({ data: {
+            session: { id: s.id, code: s.code, title: s.title, year: s.year, week: s.week, start_date: s.start_date, end_date: s.end_date },
+            columns, cards,
+        } });
+    } catch (err) {
+        console.error('Erreur tableau session :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getSessions, getSession, createSession, deleteSession, getSessionBoard };

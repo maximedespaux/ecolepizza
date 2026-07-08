@@ -33,34 +33,44 @@ const getCurrentUser = (req, res) => {
  */
 const userAuthentification = async (req, res) => {
     const { email, password } = req.body;
+    const orgCode = String(req.body.org_code || '').trim().toUpperCase();
     const stayConnected = req.body.stayConnected !== false;
 
     if (!email || !password) {
         return res.status(400).json({ success: false, message: 'Email et mot de passe requis' });
     }
 
-    db.query('SELECT * FROM user WHERE email = ?', [email], async (err, results) => {
-        if (err) {
-            console.error('Erreur récupération utilisateur :', err);
-            return res.status(500).json({ error: 'Internal Server Error' });
-        }
-        if (results.length === 0) {
-            return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
+    try {
+        const conn = db.promise();
+        let user;
+
+        if (orgCode) {
+            // Connexion ciblée sur un organisme précis (multi-tenant).
+            const [[org]] = await conn.query('SELECT id FROM organization WHERE code = ?', [orgCode]);
+            if (!org) return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
+            const [rows] = await conn.query('SELECT * FROM user WHERE email = ? AND organization_id = ?', [email, org.id]);
+            user = rows[0];
+        } else {
+            // Sans code : rétro-compatible tant que l'e-mail est unique globalement.
+            const [rows] = await conn.query('SELECT * FROM user WHERE email = ?', [email]);
+            if (rows.length > 1) {
+                return res.status(409).json({ message: "Plusieurs organismes utilisent cet e-mail. Précisez le code organisme." });
+            }
+            user = rows[0];
         }
 
-        const user = results[0];
+        if (!user) return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
+
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
-        }
+        if (!isMatch) return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
 
         // Accès désactivé par un administrateur (colonne `active` — cf. migration 011).
         if (user.active === 0) {
             return res.status(403).json({ message: 'Compte désactivé. Contactez un administrateur.' });
         }
 
-        // Trace de la dernière connexion (non bloquant : ignoré si la colonne n'existe pas encore).
-        db.query('UPDATE user SET last_login_at = NOW() WHERE id = ?', [user.id], () => {});
+        // Trace de la dernière connexion (non bloquant).
+        conn.query('UPDATE user SET last_login_at = NOW() WHERE id = ?', [user.id]).catch(() => {});
 
         // Toujours une expiration (pas de jeton éternel) : 7 j si « rester connecté », sinon 1 h.
         const token = jwt.sign(
@@ -85,7 +95,10 @@ const userAuthentification = async (req, res) => {
             token,
             data: userWithoutPassword,
         });
-    });
+    } catch (err) {
+        console.error('Erreur récupération utilisateur :', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /**

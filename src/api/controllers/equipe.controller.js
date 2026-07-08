@@ -15,7 +15,7 @@ const OWNER_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME'];
 const ASSIGNABLE_BY_ADMIN = ['ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'];
 
 const PUBLIC_FIELDS =
-    'id, role, first_name, last_name, email, phone, active, last_login_at, created_at';
+    'id, role, first_name, last_name, email, phone, active, nav_access, last_login_at, created_at';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -58,7 +58,11 @@ const listTeam = async (req, res) => {
              ORDER BY active DESC, FIELD(role, ${TEAM_ROLES.map(() => '?').join(',')}), last_name, first_name`,
             [req.user.organization_id, TEAM_ROLES, ...TEAM_ROLES]
         );
-        const data = rows.map((r) => ({ ...r, is_self: r.id === req.user.id }));
+        const data = rows.map((r) => {
+            let nav_access = null;
+            if (r.nav_access) { try { nav_access = JSON.parse(r.nav_access); } catch { nav_access = null; } }
+            return { ...r, nav_access, is_self: r.id === req.user.id };
+        });
         res.json({ data });
     } catch (err) {
         console.error('Erreur liste équipe :', err);
@@ -159,6 +163,35 @@ const updateMember = async (req, res) => {
         if (req.body.email !== undefined) {
             if (!EMAIL_RE.test(req.body.email)) return res.status(400).json({ error: 'Adresse e-mail invalide.' });
             updates.push('email = ?'); values.push(req.body.email.trim());
+        }
+
+        // --- Accès menu (par utilisateur) — réservé au SUPER_ADMIN ---
+        if (req.body.nav_access !== undefined) {
+            if (req.user.role !== 'SUPER_ADMIN') {
+                return res.status(403).json({ error: "La configuration des accès menu est réservée au super administrateur." });
+            }
+            if (OWNER_ROLES.includes(target.role)) {
+                return res.status(400).json({ error: "Les administrateurs conservent toujours l'accès complet au menu." });
+            }
+            const nav = req.body.nav_access;
+            if (nav === null) { updates.push('nav_access = ?'); values.push(null); }
+            else if (Array.isArray(nav)) {
+                // Ancien format : liste de chemins => tout en écriture.
+                const map = {};
+                for (const p of nav) if (typeof p === 'string' && p.startsWith('/')) map[p] = 'write';
+                updates.push('nav_access = ?'); values.push(JSON.stringify(map));
+            } else if (nav && typeof nav === 'object') {
+                // Nouveau format : { "/chemin": "read" | "write" }.
+                const map = {};
+                let n = 0;
+                for (const [p, mode] of Object.entries(nav)) {
+                    if (n >= 50) break;
+                    if (typeof p === 'string' && p.startsWith('/')) { map[p] = mode === 'read' ? 'read' : 'write'; n++; }
+                }
+                updates.push('nav_access = ?'); values.push(JSON.stringify(map));
+            } else {
+                return res.status(400).json({ error: 'nav_access doit être un objet { chemin: "read"|"write" } ou null.' });
+            }
         }
 
         // --- Réinitialisation du mot de passe ---

@@ -468,3 +468,23 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 /* Aperçu en-tête / pied de page */
 .pv-hf{border-bottom:1.5px solid #c0392b;padding-bottom:8px;margin-bottom:16px;font-size:.9em}
 .pv-hf.pv-foot{border-bottom:none;border-top:1px solid #999;margin:18px 0 0;padding:8px 0 0;color:#555;font-size:.82em}
+
+/* Actions alignées en colonnes dans le tableau des Modèles */
+.tpl-actions{display:inline-grid;grid-template-columns:auto 32px 32px 32px;gap:6px;align-items:center;justify-items:center}
+.tpl-actions>.btn.sm.ghost,.tpl-actions>.slot{width:32px;padding:0;justify-content:center}
+
+/* Table de sélection des formations (préparation de document) */
+.enroll-table tbody tr:hover{background:var(--surface2)}
+.enroll-table tbody tr.on{background:var(--blue-bg)}
+
+/* Avancement documentaire sur les cartes du pipeline */
+.pipe-docs{font-size:11.5px;color:var(--muted);margin-top:4px}
+
+/* Colonne finale « Terminé » du tableau de session */
+.pipe-col.pipe-done{background:var(--green-bg)}
+.pipe-col.pipe-done .pipe-head{color:var(--green)}
+
+/* Options de QCM (espace stagiaire) */
+.quiz-opt{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:14.5px}
+.quiz-opt:hover{background:var(--surface2)}
+.quiz-opt.sel{border-color:var(--ember1);background:var(--rosso-bg)}

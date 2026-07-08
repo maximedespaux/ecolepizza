@@ -8,8 +8,9 @@ const { encrypt, decrypt, generatePassword } = require('../lib/crypto.js');
 // NB : password_plain_enc = copie chiffrée du mot de passe (DEV uniquement).
 async function createStagiaireAccount(conn, organizationId, { email, first_name, last_name, phone }) {
     if (!email) return null;
-    const [existing] = await conn.query('SELECT id FROM user WHERE email = ?', [email]);
-    if (existing.length > 0) return null; // email déjà pris : pas de compte auto
+    // Unicité par organisme : le même e-mail peut exister dans un autre organisme.
+    const [existing] = await conn.query('SELECT id FROM user WHERE email = ? AND organization_id = ?', [email, organizationId]);
+    if (existing.length > 0) return null; // email déjà pris dans CET organisme : pas de compte auto
     const userId = crypto.randomUUID();
     const password = generatePassword();
     const hash = await bcrypt.hash(password, 10);
@@ -28,7 +29,7 @@ const LEARNER_FIELDS = [
     'phone', 'birthday', 'birth_place', 'address', 'zip_code', 'town',
     'diploma_level', 'diploma_name', 'diploma_year', 'last_experience',
     'experience_value', 'experience_unit', 'professional_status', 'cpf_amount',
-    'france_travail_id', 'current_contract', 'social_security', 'financing', 'levels',
+    'france_travail_id', 'current_contract', 'social_security', 'financing', 'opco', 'levels',
     'project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job',
 ];
 

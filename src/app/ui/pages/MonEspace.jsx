@@ -6,6 +6,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
+import QuizModal from "../components/QuizModal.jsx";
 
 const STATUS = { ENVOYE: ["À signer", "a"], CONSULTE: ["À signer", "a"], SIGNE: ["Signé ✓", "g"] };
 
@@ -14,6 +15,7 @@ function MonEspace() {
   const [data, setData] = useState(null);
   const [status, setStatus] = useState(null);
   const [viewId, setViewId] = useState(null);
+  const [quizDoc, setQuizDoc] = useState(null);
 
   async function load() {
     try {
@@ -54,10 +56,16 @@ function MonEspace() {
                       {d.formations || ""}{d.signed_at ? ` · signé le ${d.signed_at}` : d.sent_at ? ` · reçu le ${d.sent_at}` : ""}
                     </span>
                   </span>
-                  <Badge tone={tone}>{label}</Badge>
-                  <button className="btn sm primary" onClick={() => setViewId(d.id)}>
-                    {d.status === "SIGNE" ? "Consulter" : "Consulter / signer"}
-                  </button>
+                  <Badge tone={d.quiz_id && d.status !== "SIGNE" ? "b" : tone}>{d.quiz_id ? (d.status === "SIGNE" ? "Répondu ✓" : "QCM à faire") : label}</Badge>
+                  {d.quiz_id ? (
+                    <button className="btn sm primary" onClick={() => setQuizDoc(d.id)}>
+                      {d.status === "SIGNE" ? "Voir mon QCM" : "📝 Répondre au QCM"}
+                    </button>
+                  ) : (
+                    <button className="btn sm primary" onClick={() => setViewId(d.id)}>
+                      {d.status === "SIGNE" ? "Consulter" : "Consulter / signer"}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -73,6 +81,10 @@ function MonEspace() {
           onClose={() => setViewId(null)}
           onChanged={load}
         />
+      )}
+
+      {quizDoc && (
+        <QuizModal documentId={quizDoc} onClose={() => { setQuizDoc(null); load(); }} />
       )}
     </>
   );

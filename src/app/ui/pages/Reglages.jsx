@@ -49,6 +49,13 @@ function Reglages() {
                 <Field key={k} label={label} value={form[k] || ""} onChange={set(k)} />
               ))}
             </div>
+            <div className="field" style={{ marginTop: 4 }}>
+              <label>Code organisme (connexion)</label>
+              <input className="inp mono" value={form.code || ""} onChange={set("code")} placeholder="ex. EPB33" />
+              <span className="sub" style={{ fontSize: 11 }}>
+                Code court unique. Les utilisateurs le saisissent à la connexion lorsqu'une même adresse e-mail existe dans plusieurs organismes.
+              </span>
+            </div>
             <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "10px 0 14px", fontSize: 14 }}>
               <input type="checkbox" checked={!!form.qualiopi} onChange={(e) => setForm((p) => ({ ...p, qualiopi: e.target.checked ? 1 : 0 }))} />
               Certifié Qualiopi

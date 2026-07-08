@@ -12,7 +12,7 @@ function Login() {
   const { setUser } = useContext(UserContext);
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({ email: "", password: "", stayConnected: true });
+  const [form, setForm] = useState({ org_code: "", email: "", password: "", stayConnected: true });
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -28,7 +28,8 @@ function Login() {
     try {
       const response = await login(form);
       setUser(response.data);
-      navigate(response.data.role === "STAGIAIRE" ? "/mon-espace" : "/dashboard");
+      const role = response.data.role;
+      navigate(role === "STAGIAIRE" ? "/mon-espace" : role === "PLATFORM_OWNER" ? "/organisations" : "/dashboard");
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     } finally {
@@ -63,6 +64,14 @@ function Login() {
           <div className="eyebrow">Connexion</div>
           <h1>Espace secrétariat</h1>
           <form onSubmit={handleSubmit}>
+            <Field
+              label="Code organisme (optionnel)"
+              type="text"
+              value={form.org_code}
+              onChange={update("org_code")}
+              placeholder="Laisser vide si vous n'en avez pas"
+              autoComplete="off"
+            />
             <Field
               label="Email"
               type="email"

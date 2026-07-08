@@ -1,112 +1,86 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getEnrollments, updateEnrollment } from "../api/apiClient.js";
+import { getSessions, getSessionBoard } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
-// Étapes du tunnel commercial (ordre = progression du dossier).
-const STAGES = [
-  { v: "PROSPECT", label: "Prospect", color: "#8a8fa8" },
-  { v: "CONTACTE", label: "Contacté", color: "#6a86c4" },
-  { v: "DEVIS_ENVOYE", label: "Devis envoyé", color: "#4c6fb3" },
-  { v: "DEVIS_SIGNE", label: "Devis signé", color: "#4c6fb3" },
-  { v: "ACOMPTE_PAYE", label: "Acompte payé", color: "#c9922b" },
-  { v: "INSCRIT", label: "Inscrit", color: "#2f8f6b" },
-  { v: "EN_FORMATION", label: "En formation", color: "#2f8f6b" },
-  { v: "TERMINE", label: "Terminé", color: "#2c3371" },
-  { v: "EVALUATION_ENVOYEE", label: "Éval. envoyée", color: "#2c3371" },
-  { v: "ARCHIVE", label: "Archivé", color: "#8a8fa8" },
-];
-const STAGE_INDEX = Object.fromEntries(STAGES.map((s, i) => [s.v, i]));
-const CONF_CLASS = { VERT: "g", ORANGE: "n", ROUGE: "r" };
-const CONF_LABEL = { VERT: "Complet", ORANGE: "À compléter", ROUGE: "Incomplet" };
-
+// Tableau par session : chaque colonne est un document du parcours de la
+// formation, chaque stagiaire (carte) est positionné sur son prochain document.
 function Pipeline() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [sessions, setSessions] = useState([]);
+  const [sessionId, setSessionId] = useState("");
+  const [board, setBoard] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
 
-  async function load() {
+  useEffect(() => {
+    getSessions()
+      .then((r) => { setSessions(r.data || []); if (r.data && r.data.length) setSessionId(r.data[0].id); })
+      .catch((e) => setStatus({ type: "error", message: e.message }));
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId) { setBoard(null); return; }
     setLoading(true);
-    try {
-      const { data } = await getEnrollments();
-      setRows(data);
-    } catch (e) {
-      setStatus({ type: "error", message: e.message });
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => { load(); }, []);
+    getSessionBoard(sessionId)
+      .then((r) => setBoard(r.data))
+      .catch((e) => setStatus({ type: "error", message: e.message }))
+      .finally(() => setLoading(false));
+  }, [sessionId]);
 
-  const byStage = useMemo(() => {
-    const map = Object.fromEntries(STAGES.map((s) => [s.v, []]));
-    for (const r of rows) (map[r.crm_stage] || map.PROSPECT).push(r);
-    return map;
-  }, [rows]);
+  // Colonnes du parcours + une colonne finale « Terminé ».
+  const columns = useMemo(() => {
+    if (!board) return [];
+    return [...board.columns, { index: board.columns.length, key: "__done", label: "Terminé ✓", final: true }];
+  }, [board]);
+  const cardsByCol = useMemo(() => {
+    const m = {};
+    for (const c of (board?.cards || [])) (m[c.column] = m[c.column] || []).push(c);
+    return m;
+  }, [board]);
 
-  async function move(row, dir) {
-    const idx = STAGE_INDEX[row.crm_stage] ?? 0;
-    const next = STAGES[idx + dir];
-    if (!next) return;
-    // Optimiste : on déplace la carte tout de suite.
-    setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, crm_stage: next.v } : r)));
-    try {
-      await updateEnrollment(row.id, { crm_stage: next.v });
-    } catch (e) {
-      setStatus({ type: "error", message: e.message });
-      load(); // resynchronise en cas d'échec
-    }
-  }
+  const sessLabel = (s) => `${s.program_code} — S${s.week} ${s.year} · ${s.stagiaires} stag.`;
 
   return (
     <>
       <PageHead
-        eyebrow="Secrétariat · CRM"
-        title="Pipeline commercial"
-        lead="Suivez chaque dossier du premier contact jusqu'à l'archivage. Utilisez les flèches pour faire avancer ou reculer un dossier d'étape."
+        eyebrow="Secrétariat · Suivi"
+        title="Pipeline de session"
+        lead="Choisissez une session : chaque colonne est un document du parcours de la formation, chaque stagiaire avance jusqu'à son prochain document à produire."
+        actions={
+          <select className="inp" style={{ minWidth: 260 }} value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+            {sessions.length === 0 && <option value="">— Aucune session —</option>}
+            {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
+          </select>
+        }
       />
       <StatusMessage status={status} />
 
       {loading ? (
         <p className="lead">Chargement…</p>
+      ) : !board ? (
+        <p className="lead">Sélectionnez une session.</p>
+      ) : board.columns.length === 0 ? (
+        <p className="lead">Cette formation n'a aucun document dans son parcours. Définissez-le dans Formations → Parcours documentaire.</p>
       ) : (
         <div className="pipe">
-          {STAGES.map((st) => {
-            const items = byStage[st.v] || [];
+          {columns.map((col) => {
+            const items = cardsByCol[col.index] || [];
             return (
-              <div className="pipe-col" key={st.v}>
+              <div className={"pipe-col" + (col.final ? " pipe-done" : "")} key={col.key}>
                 <div className="pipe-head">
-                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <i style={{ width: 9, height: 9, borderRadius: 999, background: st.color }} />
-                    {st.label}
-                  </span>
+                  <span>{col.label}</span>
                   <b className="tnum">{items.length}</b>
                 </div>
                 <div className="pipe-body">
                   {items.length === 0 ? (
-                    <p className="sub" style={{ textAlign: "center", padding: "10px 0", color: "var(--dim)" }}>—</p>
-                  ) : items.map((r) => {
-                    const idx = STAGE_INDEX[r.crm_stage] ?? 0;
-                    return (
-                      <div className="pipe-card" key={r.id}>
-                        <Link to={`/stagiaires/${r.learner_id}`} className="pipe-name">
-                          {r.first_name} {r.last_name}
-                        </Link>
-                        <div className="pipe-meta">
-                          {r.program_code && <span className="chip">{r.program_code}</span>}
-                          {r.year && <span className="sub">S{r.week}·{r.year}</span>}
-                        </div>
-                        <div className="pipe-foot">
-                          <span className={`badge ${CONF_CLASS[r.conformite_score] || "r"}`}>{CONF_LABEL[r.conformite_score] || "Incomplet"}</span>
-                          <span className="pipe-moves">
-                            <button className="iconbtn" title="Reculer" disabled={idx === 0} onClick={() => move(r, -1)}>◀</button>
-                            <button className="iconbtn" title="Avancer" disabled={idx === STAGES.length - 1} onClick={() => move(r, +1)}>▶</button>
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                    <p className="sub" style={{ textAlign: "center", padding: "8px 0", color: "var(--dim)" }}>—</p>
+                  ) : items.map((r) => (
+                    <div className="pipe-card" key={r.enrollment_id}>
+                      <Link to={`/stagiaires/${r.learner_id}`} className="pipe-name">{r.name}</Link>
+                      <div className="pipe-docs" style={{ marginTop: 6 }}>📄 {r.done}/{r.total} fait{r.done > 1 ? "s" : ""}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
             );

@@ -217,11 +217,19 @@ export function markAllNotificationsRead() {
 }
 
 // --- Authentification ---
-export function login({ email, password, stayConnected }) {
+export function login({ email, password, org_code, stayConnected }) {
   return request("/auth", {
     method: "POST",
-    body: JSON.stringify({ email, password, stayConnected }),
+    body: JSON.stringify({ email, password, org_code, stayConnected }),
   });
+}
+
+// --- Plateforme (propriétaire de plateforme) ---
+export function getOrganizations() {
+  return request("/platform/organizations");
+}
+export function createOrganization(payload) {
+  return request("/platform/organizations", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function getCurrentUser() {
@@ -280,9 +288,31 @@ export function reorderFormations(ids) {
   return request("/formations/reorder", { method: "PUT", body: JSON.stringify({ ids }) });
 }
 
+// --- QCM ---
+export function getQuizzes() { return request("/quizzes"); }
+export function getQuiz(id) { return request(`/quizzes/${id}`); }
+export function createQuiz(payload) { return request("/quizzes", { method: "POST", body: JSON.stringify(payload) }); }
+export function saveQuiz(id, payload) { return request(`/quizzes/${id}`, { method: "PUT", body: JSON.stringify(payload) }); }
+export function deleteQuiz(id) { return request(`/quizzes/${id}`, { method: "DELETE" }); }
+export function sendQuiz(id, session_id) { return request(`/quizzes/${id}/send`, { method: "POST", body: JSON.stringify({ session_id: session_id || null }) }); }
+export function takeQuiz(documentId) { return request(`/quizzes/take/${documentId}`); }
+export function submitQuiz(documentId, answers) { return request(`/quizzes/take/${documentId}/submit`, { method: "POST", body: JSON.stringify({ answers }) }); }
+
+// --- Parcours documentaire par formation ---
+export function getFormationSteps(id) {
+  return request(`/formations/${id}/steps`);
+}
+export function saveFormationSteps(id, steps) {
+  return request(`/formations/${id}/steps`, { method: "PUT", body: JSON.stringify({ steps }) });
+}
+
 // --- Sessions ---
 export function getSessions() {
   return request("/sessions");
+}
+// Tableau kanban d'une session (colonnes = documents, cartes = stagiaires).
+export function getSessionBoard(id) {
+  return request(`/sessions/${id}/board`);
 }
 
 export function getSession(id) {
@@ -391,6 +421,10 @@ export function saveTemplate(slug, payload) {
 }
 export function resetTemplate(slug) {
   return request(`/templates/${slug}`, { method: "DELETE" });
+}
+// Réordonne les modèles (glisser-déposer).
+export function reorderTemplates(slugs) {
+  return request("/templates/reorder", { method: "PUT", body: JSON.stringify({ slugs }) });
 }
 export function downloadTemplateFile(slug) {
   return download(`/templates/${slug}/file`, `${slug}.docx`);

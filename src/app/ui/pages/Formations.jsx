@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getFormations, updateFormation, reorderFormations } from "../api/apiClient.js";
+import { getFormations, updateFormation, reorderFormations, getFormationSteps, saveFormationSteps } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -112,14 +112,28 @@ function FormationModal({ program, onClose, onSaved, onError }) {
     return f;
   });
   const [saving, setSaving] = useState(false);
+  const [steps, setSteps] = useState([]);
+  const [sdrag, setSdrag] = useState(null);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
+
+  useEffect(() => { getFormationSteps(program.id).then((r) => setSteps(r.data || [])).catch(() => {}); }, [program.id]);
+
+  function stepDrop(toIdx) {
+    if (sdrag === null || sdrag === toIdx) { setSdrag(null); return; }
+    const next = [...steps];
+    const [m] = next.splice(sdrag, 1);
+    next.splice(toIdx, 0, m);
+    setSteps(next); setSdrag(null);
+  }
+  const toggleStep = (slug) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, active: !s.active } : s)));
 
   async function save() {
     if (!String(form.title).trim()) { onError("L'intitulé est requis."); return; }
     setSaving(true);
     try {
       await updateFormation(program.id, form);
+      await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })));
       onSaved();
     } catch (e) {
       onError(e.message);
@@ -185,6 +199,30 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               </label>
             </div>
           </div>
+
+          <div className="divider" />
+          <h3 style={{ fontSize: 15, marginBottom: 6 }}>Parcours documentaire</h3>
+          <p className="hint" style={{ marginTop: 0 }}>Documents requis pour cette formation, dans l'ordre. Glissez (⠿) pour réordonner, décochez pour exclure. Les QCM rattachés à la formation y figurent aussi. Ces étapes composent le tableau de session.</p>
+          {steps.length === 0 ? (
+            <p className="hint">Aucun document candidat.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {steps.map((s, i) => (
+                <div key={s.slug}
+                  className={"drag-row" + (sdrag === i ? " dragging" : "")}
+                  draggable onDragStart={() => setSdrag(i)} onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => stepDrop(i)} onDragEnd={() => setSdrag(null)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", border: "1px solid var(--border-soft)", borderRadius: 8, opacity: s.active ? 1 : 0.5 }}>
+                  <span className="drag-handle" title="Glisser">⠿</span>
+                  <input type="checkbox" checked={!!s.active} onChange={() => toggleStep(s.slug)} />
+                  <span style={{ flex: 1 }}>{s.label}</span>
+                  {s.doc_type === "QCM"
+                    ? <span className="hint" style={{ color: "var(--accent)" }}>QCM{s.day != null && s.day !== "" ? ` · ${Number(s.day) < 0 ? `J${s.day}` : `J${Number(s.day) < 1 ? 1 : s.day}`}` : ""}</span>
+                    : s.stagiaire_sign ? <span className="hint">à signer</span> : null}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>

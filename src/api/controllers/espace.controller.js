@@ -1,8 +1,76 @@
+const crypto = require('crypto');
 const db = require('../config/database.js');
 const { stepsToDocSet } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+// Date (YYYY-MM-DD) du jour ouvré N à partir d'une date de début (offset = N-1).
+function businessDayISO(startStr, offset) {
+    if (!startStr) return null;
+    const d = new Date(startStr);
+    if (Number.isNaN(d.getTime())) return null;
+    let added = 0;
+    while (added < offset) {
+        d.setDate(d.getDate() + 1);
+        const wd = d.getDay();
+        if (wd !== 0 && wd !== 6) added += 1;
+    }
+    return d.toISOString().slice(0, 10);
+}
+
+// Date où le QCM doit être rempli : day>=1 = jour ouvré du stage ;
+// day<=0 = |day| jours calendaires avant le début (test de positionnement, etc.).
+function quizDayDate(startStr, day) {
+    if (!startStr || day == null || day === '') return null;
+    const d = Number(day);
+    if (!Number.isFinite(d)) return null;
+    if (d < 0) {
+        const dt = new Date(startStr);
+        if (Number.isNaN(dt.getTime())) return null;
+        dt.setDate(dt.getDate() + d);
+        return dt.toISOString().slice(0, 10);
+    }
+    return businessDayISO(startStr, d <= 1 ? 0 : d - 1);
+}
+
+// Matérialise les QCM « auto » dont le jour de formation est arrivé (envoi paresseux).
+async function releaseAutoQuizzes(conn, learner) {
+    const [enr] = await conn.query(
+        `SELECT e.id AS enrollment_id, s.program_id, DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date
+         FROM enrollment e JOIN training_session s ON s.id = e.session_id
+         WHERE e.learner_id = ? AND s.program_id IS NOT NULL`,
+        [learner.id]
+    );
+    if (!enr.length) return;
+    const progIds = [...new Set(enr.map((e) => e.program_id))];
+    const [quizzes] = await conn.query(
+        `SELECT id, program_id, day, title FROM quiz
+         WHERE organization_id = ? AND active = 1 AND auto_send = 1 AND day IS NOT NULL AND program_id IN (?)`,
+        [learner.organization_id, progIds]
+    );
+    const today = todayISO();
+    for (const q of quizzes) {
+        for (const e of enr) {
+            if (e.program_id !== q.program_id) continue;
+            const dayDate = quizDayDate(e.start_date, q.day);
+            if (!dayDate || dayDate > today) continue; // pas encore le jour J
+            const [[ex]] = await conn.query(
+                `SELECT gd.id FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
+                 WHERE gd.quiz_id = ? AND df.enrollment_id = ? LIMIT 1`,
+                [q.id, e.enrollment_id]
+            );
+            if (ex) continue;
+            const docId = crypto.randomUUID();
+            await conn.query(
+                `INSERT INTO generated_document (id, organization_id, learner_id, type, quiz_id, title, status, sent_at)
+                 VALUES (?, ?, ?, 'QCM', ?, ?, 'ENVOYE', NOW())`,
+                [docId, learner.organization_id, learner.id, q.id, q.title]
+            );
+            await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [docId, e.enrollment_id]);
+        }
+    }
+}
 
 // Retrouve le stagiaire (learner) lié au compte connecté.
 async function learnerForUser(conn, userId) {
@@ -11,7 +79,7 @@ async function learnerForUser(conn, userId) {
 }
 
 // Complétude d'un dossier : dernier jour passé + documents à signer tous signés.
-async function completionOf(conn, e, steps) {
+async function completionOf(conn, e, steps, agefice = false) {
     const [rows] = await conn.query(
         `SELECT gd.type, gd.status
          FROM generated_document gd
@@ -24,7 +92,7 @@ async function completionOf(conn, e, steps) {
 
     const required = stepsToDocSet(steps, {
         hygiene: !!e.program_hygiene, rsCode: e.program_rs,
-        jours: e.program_days || 1, financing: e.financing,
+        jours: e.program_days || 1, financing: e.financing, agefice,
     }).filter((d) => d.stagiaireSign);
 
     const signed = required.filter((d) => statusByType[d.type] === 'SIGNE').length;
@@ -43,8 +111,10 @@ const getMonEspace = async (req, res) => {
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: "Aucune fiche stagiaire liée à ce compte." });
 
+        await releaseAutoQuizzes(conn, learner); // matérialise les QCM du jour (auto)
+
         const [documents] = await conn.query(
-            `SELECT d.id, d.type, d.title, d.status,
+            `SELECT d.id, d.type, d.title, d.status, d.quiz_id,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at, d.signer_name,
                     GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations
@@ -109,7 +179,7 @@ const getMyFormations = async (req, res) => {
         const steps = await loadOrgSteps(learner.organization_id);
         const byProgram = {};
         for (const e of enrollments) {
-            const c = await completionOf(conn, e, steps);
+            const c = await completionOf(conn, e, steps, (learner.opco || "").toUpperCase() === "AGEFICE");
             const info = {
                 enrollment_id: e.enrollment_id, complete: c.complete, dayPassed: c.dayPassed,
                 signed: c.signed, total: c.total, start_date: e.start_date, end_date: e.end_date,
@@ -170,7 +240,7 @@ const getMyFormation = async (req, res) => {
         const e = rows[0];
 
         const steps = await loadOrgSteps(learner.organization_id);
-        const c = await completionOf(conn, e, steps);
+        const c = await completionOf(conn, e, steps, (learner.opco || "").toUpperCase() === "AGEFICE");
         if (!c.complete) return res.status(403).json({ message: 'Formation non terminée.' });
 
         const [documents] = await conn.query(

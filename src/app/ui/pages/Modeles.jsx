@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getTemplates, uploadTemplate, saveTemplate, resetTemplate, downloadTemplateFile } from "../api/apiClient.js";
+import { getTemplates, saveTemplate, resetTemplate, reorderTemplates } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -28,26 +28,52 @@ function Modeles() {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(null);
   const [editing, setEditing] = useState(null); // étape en cours d'édition (ou {} pour nouveau)
-  const inputs = useRef({});
+  const [drag, setDrag] = useState(null);        // index de la ligne déplacée
 
   async function load() {
-    try { const { data } = await getTemplates(); setItems(data); }
+    try { const { data } = await getTemplates(); setItems([...data].sort((a, b) => a.sort_order - b.sort_order)); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   useEffect(() => { load(); }, []);
 
-  async function onFile(slug, file) {
-    if (!file) return;
-    setStatus(null); setBusy(slug);
-    try { await uploadTemplate(slug, file); setStatus({ type: "success", message: "Modèle mis à jour." }); await load(); }
-    catch (e) { setStatus({ type: "error", message: e.message }); }
-    finally { setBusy(null); if (inputs.current[slug]) inputs.current[slug].value = ""; }
+  // Glisser-déposer : réordonne localement puis persiste l'ordre complet.
+  function onDrop(toIdx) {
+    if (drag === null || drag === toIdx) { setDrag(null); return; }
+    const next = [...items];
+    const [moved] = next.splice(drag, 1);
+    next.splice(toIdx, 0, moved);
+    setItems(next);
+    setDrag(null);
+    reorderTemplates(next.map((t) => t.slug)).catch((e) => { setStatus({ type: "error", message: e.message }); load(); });
   }
 
-  async function onReset(slug) {
-    if (!window.confirm("Vider ce modèle ? Le contenu créé dans l'éditeur sera supprimé.")) return;
-    setBusy(slug);
-    try { await resetTemplate(slug); setStatus({ type: "success", message: "Modèle vidé." }); await load(); }
+  // Vide seulement le contenu composé dans l'éditeur (les réglages sont conservés).
+  async function onClearBody(t) {
+    if (!window.confirm(`Vider le contenu de « ${t.label} » ? Le document composé dans l'éditeur sera effacé (les réglages sont conservés).`)) return;
+    setBusy(t.slug);
+    try { await saveTemplate(t.slug, { body_html: null, header_html: null, footer_html: null }); setStatus({ type: "success", message: "Contenu vidé." }); await load(); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setBusy(null); }
+  }
+
+  // Supprime la ligne. Un document ajouté est supprimé définitivement ; un
+  // document du socle ne peut pas l'être : il est désactivé (ou réactivé).
+  async function onDelete(t) {
+    if (!t.is_default) {
+      if (!window.confirm(`Supprimer définitivement le document « ${t.label} » ?\nCette action est irréversible.`)) return;
+      setBusy(t.slug);
+      try { await resetTemplate(t.slug); setStatus({ type: "success", message: "Document supprimé." }); await load(); }
+      catch (e) { setStatus({ type: "error", message: e.message }); }
+      finally { setBusy(null); }
+      return;
+    }
+    const activate = !t.active;
+    const ok = activate
+      ? window.confirm(`Réactiver « ${t.label} » ?`)
+      : window.confirm(`« ${t.label} » fait partie du socle documentaire et ne peut pas être supprimé.\n\nVoulez-vous le désactiver (le retirer du workflow) ?`);
+    if (!ok) return;
+    setBusy(t.slug);
+    try { await saveTemplate(t.slug, { active: activate }); setStatus({ type: "success", message: activate ? "Document réactivé." : "Document désactivé." }); await load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setBusy(null); }
   }
@@ -57,8 +83,8 @@ function Modeles() {
       <PageHead
         eyebrow="Système"
         title="Modèles & workflow documentaire"
-        lead="Composez le jeu de documents de vos dossiers : intitulé, ordre, signature, conditions d'application. Cliquez sur « Éditer » pour construire le document dans l'éditeur intégré et y glisser les champs (nom, prix, dates…) qui se remplissent automatiquement."
-        actions={<button className="btn primary" onClick={() => setEditing({ _new: true, sort_order: 100, applies_when: {} })}>＋ Ajouter un document</button>}
+        lead="Composez le jeu de documents de vos dossiers : intitulé, signature, conditions d'application. Glissez une ligne (poignée ⠿) pour changer l'ordre. Cliquez sur « Éditer » pour construire le document dans l'éditeur intégré et y glisser les champs (nom, prix, dates…) qui se remplissent automatiquement."
+        actions={<button className="btn primary" onClick={() => setEditing({ _new: true, sort_order: Math.max(0, ...items.map((i) => i.sort_order || 0)) + 10, applies_when: {} })}>＋ Ajouter un document</button>}
       />
       <StatusMessage status={status} />
 
@@ -67,19 +93,27 @@ function Modeles() {
           <table>
             <thead>
               <tr>
-                <th style={{ width: 44 }}>#</th>
+                <th style={{ width: 30 }}></th>
                 <th>Document</th>
                 <th>Type</th>
                 <th>Signature</th>
                 <th>Conditions</th>
-                <th>Modèle</th>
+                <th>État</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {items.map((t) => (
-                <tr key={t.slug} style={{ opacity: t.active ? 1 : 0.5 }}>
-                  <td className="tnum" style={{ color: "var(--dim)" }}>{t.sort_order}</td>
+              {items.map((t, i) => (
+                <tr key={t.slug}
+                  className={"drag-row" + (drag === i ? " dragging" : "")}
+                  style={{ opacity: t.active ? 1 : 0.5 }}
+                  draggable
+                  onDragStart={() => setDrag(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => onDrop(i)}
+                  onDragEnd={() => setDrag(null)}
+                >
+                  <td className="drag-handle" title="Glisser pour réordonner">⠿</td>
                   <td>
                     <b>{t.label}</b>
                     <span style={{ display: "block", fontSize: 11, color: "var(--dim)" }} className="mono">{t.slug}{!t.active && " · inactif"}</span>
@@ -91,23 +125,23 @@ function Modeles() {
                   </td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when)}</td>
                   <td>
-                    {t.has_body ? <Badge tone="g">Créé</Badge>
-                      : t.has_file ? <Badge tone="b">Word</Badge>
-                        : <span style={{ color: "var(--dim)", fontSize: 12 }}>à créer</span>}
+                    {t.has_body
+                      ? <Badge tone="g">Créé</Badge>
+                      : <span style={{ color: "var(--dim)", fontSize: 12 }}>à créer</span>}
                   </td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    <input ref={(el) => (inputs.current[t.slug] = el)} type="file" accept=".docx" style={{ display: "none" }}
-                      onChange={(e) => onFile(t.slug, e.target.files[0])} />
-                    <button className="btn sm primary" title="Ouvrir l'éditeur de document"
-                      onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>🖋 Éditer</button>{" "}
-                    <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>✎</button>{" "}
-                    {t.has_file && (
-                      <button className="btn sm ghost" title="Télécharger le fichier Word"
-                        onClick={() => downloadTemplateFile(t.slug).catch((e) => setStatus({ type: "error", message: e.message }))}>⬇</button>
-                    )}{" "}
-                    {(t.has_body || t.has_file) && (
-                      <button className="btn sm ghost" title="Vider le modèle" disabled={busy === t.slug} onClick={() => onReset(t.slug)}>🗑</button>
-                    )}
+                  <td>
+                    <div className="tpl-actions">
+                      <button className="btn sm primary" title="Ouvrir l'éditeur de document"
+                        onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>🖋 Éditer</button>
+                      <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>✎</button>
+                      {t.has_body ? (
+                        <button className="btn sm ghost" title="Vider le contenu de l'éditeur" disabled={busy === t.slug} onClick={() => onClearBody(t)}>🧹</button>
+                      ) : <span className="slot" />}
+                      <button className="btn sm ghost danger"
+                        title={t.is_default ? (t.active ? "Désactiver (document du socle, non supprimable)" : "Réactiver ce document") : "Supprimer définitivement"}
+                        disabled={busy === t.slug}
+                        onClick={() => onDelete(t)}>{t.is_default && !t.active ? "↺" : "🗑"}</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -183,13 +217,9 @@ function StepModal({ step, onClose, onSaved, onError }) {
           )}
           <div className="field"><label>Intitulé</label>
             <input className="inp" value={form.label} onChange={set("label")} placeholder="ex. Attestation de TVA" /></div>
-          <div className="row2">
-            <div className="field"><label>Type de document</label>
-              <input className="inp" list="doctypes" value={form.doc_type} onChange={set("doc_type")} placeholder="DEVIS, CONTRAT…" />
-              <datalist id="doctypes">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
-            </div>
-            <div className="field"><label>Ordre</label>
-              <input className="inp" type="number" value={form.sort_order} onChange={set("sort_order")} /></div>
+          <div className="field"><label>Type de document</label>
+            <input className="inp" list="doctypes" value={form.doc_type} onChange={set("doc_type")} placeholder="DEVIS, CONTRAT…" />
+            <datalist id="doctypes">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
           </div>
 
           <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "6px 0 4px" }}>Conditions d'application</label>
@@ -226,7 +256,7 @@ function StepModal({ step, onClose, onSaved, onError }) {
             <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
               <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
           </div>
-          <p className="sub" style={{ marginTop: 10 }}>Après enregistrement, utilisez « ⬆ » sur la ligne pour téléverser le fichier Word de ce document.</p>
+          <p className="sub" style={{ marginTop: 10 }}>Après enregistrement, utilisez « 🖋 Éditer » sur la ligne pour composer le document.</p>
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>

@@ -216,8 +216,26 @@ const resetTemplate = async (req, res) => {
     }
 };
 
+/** PUT /api/templates/reorder — définit l'ordre des modèles (slugs ordonnés). */
+const reorderTemplates = async (req, res) => {
+    const slugs = Array.isArray(req.body?.slugs) ? req.body.slugs : null;
+    if (!slugs || !slugs.length) return res.status(422).json({ error: 'Liste ordonnée de slugs requise.' });
+    try {
+        const conn = db.promise();
+        for (let i = 0; i < slugs.length; i++) {
+            const slug = String(slugs[i]).trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
+            if (slug) await upsertTemplate(conn, req.user.organization_id, slug, { sort_order: (i + 1) * 10 });
+        }
+        logAudit(req, 'template.reorder', 'DocumentTemplate', null);
+        res.json({ success: true, message: 'Ordre enregistré.' });
+    } catch (err) {
+        console.error('Erreur réordonnancement modèles :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
-    getTokens, getTemplateBody,
+    getTokens, getTemplateBody, reorderTemplates,
 };
