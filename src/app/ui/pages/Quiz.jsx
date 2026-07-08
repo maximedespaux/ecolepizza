@@ -20,6 +20,23 @@ const QTYPES = [
 ];
 const blankQuestion = () => ({ text: "", type: "SINGLE", points: 1, scale_max: 5, options: [{ text: "", is_correct: false }, { text: "", is_correct: false }] });
 
+// Regroupe les QCM par formation ; les QCM non rattachés en dernier, chaque groupe trié par jour.
+function groupByFormation(quizzes) {
+  const map = new Map();
+  for (const q of quizzes) {
+    const key = q.program_id || "__none__";
+    if (!map.has(key)) map.set(key, { key, program_code: q.program_code || "", program_title: q.program_title || "", items: [] });
+    map.get(key).items.push(q);
+  }
+  const groups = [...map.values()];
+  groups.forEach((g) => g.items.sort((a, b) => (a.day || 99) - (b.day || 99) || a.title.localeCompare(b.title)));
+  return groups.sort((a, b) => {
+    if (!a.program_code) return 1;
+    if (!b.program_code) return -1;
+    return a.program_code.localeCompare(b.program_code);
+  });
+}
+
 function Quiz() {
   const [quizzes, setQuizzes] = useState([]);
   const [status, setStatus] = useState(null);
@@ -72,35 +89,39 @@ function Quiz() {
         actions={<button className="btn primary" onClick={onNew}>＋ Nouveau QCM</button>} />
       <StatusMessage status={status} />
 
-      <Card title={`QCM (${quizzes.length})`}>
-        {quizzes.length === 0 ? <EmptyState icon="❓">Aucun QCM.</EmptyState> : (
-          <div className="tablewrap" style={{ border: "none" }}>
-            <table>
-              <thead><tr><th>Titre</th><th>Formation</th><th>Jour</th><th>Envoi</th><th>Type</th><th>Questions</th><th></th></tr></thead>
-              <tbody>
-                {quizzes.map((q) => (
-                  <tr key={q.id}>
-                    <td><b>{q.title}</b></td>
-                    <td>{q.program_code || <span className="hint">—</span>}</td>
-                    <td className="tnum">{q.day ? `J${q.day}` : "—"}</td>
-                    <td>{q.auto_send ? <Badge tone="g">Auto</Badge> : <span className="hint">Manuel</span>}</td>
-                    <td>{q.kind === "SURVEY" ? <Badge tone="n">Enquête</Badge> : <Badge tone="b">Noté</Badge>}</td>
-                    <td className="tnum">{q.n_questions}</td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button className="btn sm ghost"
-                        style={q.sendable ? undefined : { opacity: 0.45 }}
-                        title={q.sendable ? `Envoyer aux stagiaires (${q.eligible_count})` : (q.send_reason || "Envoi indisponible")}
-                        onClick={() => onSend(q)}>📤 Envoyer</button>{" "}
-                      <button className="btn sm ghost" onClick={() => onEdit(q)}>✎ Éditer</button>{" "}
-                      <button className="btn sm ghost danger" onClick={() => onDelete(q)}>🗑</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+      {quizzes.length === 0 ? (
+        <Card title="QCM (0)"><EmptyState icon="❓">Aucun QCM.</EmptyState></Card>
+      ) : (
+        groupByFormation(quizzes).map((g) => (
+          <Card key={g.key} title={g.program_code ? `${g.program_code} — ${g.program_title}` : "Non rattachés à une formation"}
+            more={<Badge tone="n">{g.items.length}</Badge>}>
+            <div className="tablewrap" style={{ border: "none" }}>
+              <table>
+                <thead><tr><th>Titre</th><th>Jour</th><th>Envoi</th><th>Type</th><th>Questions</th><th></th></tr></thead>
+                <tbody>
+                  {g.items.map((q) => (
+                    <tr key={q.id}>
+                      <td><b>{q.title}</b></td>
+                      <td className="tnum">{q.day ? `J${q.day}` : "—"}</td>
+                      <td>{q.auto_send ? <Badge tone="g">Auto</Badge> : <span className="hint">Manuel</span>}</td>
+                      <td>{q.kind === "SURVEY" ? <Badge tone="n">Enquête</Badge> : <Badge tone="b">Noté</Badge>}</td>
+                      <td className="tnum">{q.n_questions}</td>
+                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                        <button className="btn sm ghost"
+                          style={q.sendable ? undefined : { opacity: 0.45 }}
+                          title={q.sendable ? `Envoyer aux stagiaires (${q.eligible_count})` : (q.send_reason || "Envoi indisponible")}
+                          onClick={() => onSend(q)}>📤 Envoyer</button>{" "}
+                        <button className="btn sm ghost" onClick={() => onEdit(q)}>✎ Éditer</button>{" "}
+                        <button className="btn sm ghost danger" onClick={() => onDelete(q)}>🗑</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        ))
+      )}
     </>
   );
 }
