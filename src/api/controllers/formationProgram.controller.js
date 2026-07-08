@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { matchFormation } = require('../lib/documents.js');
+const { matchFormation, matchStep } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 
 /**
@@ -22,6 +22,7 @@ async function formationSteps(conn, orgId, program) {
         const o = overlay.get(s.slug);
         return {
             slug: s.slug, label: s.label, doc_type: s.doc_type, quiz_id: null, day: null,
+            applies_when: s.applies_when || {},
             signable: !!s.signable, stagiaire_sign: !!s.stagiaire_sign,
             sort_order: o ? o.sort_order : s.sort_order,
             active: o ? !!o.active : true,
@@ -47,6 +48,17 @@ async function formationSteps(conn, orgId, program) {
     });
 
     return [...docSteps, ...quizSteps].sort((a, b) => a.sort_order - b.sort_order);
+}
+
+/**
+ * Parcours documentaire d'un DOSSIER précis : parcours de la formation filtré par
+ * les conditions du dossier (financement, AGEFICE…) pour ne garder que la bonne
+ * variante (devis particulier/entreprise, attestation d'assiduité, etc.).
+ * ctx = { financing, rsCode, hygiene, jours, agefice }.
+ */
+async function enrollmentSteps(conn, orgId, program, ctx) {
+    const steps = await formationSteps(conn, orgId, program);
+    return steps.filter((s) => s.active && (s.quiz_id || matchStep(s.applies_when, ctx)));
 }
 
 /**
@@ -230,5 +242,5 @@ const saveFormationSteps = async (req, res) => {
 
 module.exports = {
     getPrograms, getProgram, createProgram, updateProgram, reorderPrograms,
-    getFormationSteps, saveFormationSteps, formationSteps,
+    getFormationSteps, saveFormationSteps, formationSteps, enrollmentSteps,
 };

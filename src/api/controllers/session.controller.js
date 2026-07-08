@@ -1,5 +1,6 @@
 const db = require('../config/database.js');
-const { STAGES, computeParcours } = require('../lib/parcours.js');
+const { computeDocParcours } = require('../lib/parcours.js');
+const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
 
 // Libellé court par type de document (colonnes du tableau de session).
 const DOC_LABELS = {
@@ -176,32 +177,44 @@ const getSessionBoard = async (req, res) => {
         );
         if (!s) return res.status(404).json({ message: 'Session introuvable' });
 
-        // Colonnes = étapes du parcours (cycle de vie du dossier).
-        const columns = STAGES.map((st, i) => ({ index: i, key: st.key, label: st.label, ic: st.ic }));
+        const program = { id: s.program_id, code: s.code, days: s.days, hygiene: s.hygiene, rs_code: s.rs_code };
+        // Colonnes = parcours documentaire de la formation (toutes variantes confondues).
+        const colSteps = (await formationSteps(conn, req.user.organization_id, program)).filter((st) => st.active);
+        const columns = colSteps.map((st, i) => ({
+            index: i, key: st.quiz_id ? `quiz:${st.quiz_id}` : st.slug, label: st.label,
+            ic: st.quiz_id ? '❓' : (st.stagiaire_sign ? '✍️' : '📄'),
+        }));
+        const keyIndex = new Map(columns.map((c) => [c.key, c.index]));
 
         const [enr] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.learner_id, e.crm_stage, l.first_name, l.last_name
+            `SELECT e.id AS enrollment_id, e.learner_id, e.financing, l.first_name, l.last_name, l.opco
              FROM enrollment e LEFT JOIN learner l ON l.id = e.learner_id
              WHERE e.session_id = ? AND e.organization_id = ?
              ORDER BY l.last_name, l.first_name`,
             [req.params.id, req.user.organization_id]
         );
 
-        const today = new Date().toISOString().slice(0, 10);
         const cards = [];
         for (const e of enr) {
+            const ctx = {
+                financing: e.financing, rsCode: s.rs_code, hygiene: !!s.hygiene,
+                jours: s.days, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
+            };
+            const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx);
             const [docs] = await conn.query(
-                `SELECT gd.id, gd.type, gd.status FROM generated_document gd
+                `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id FROM generated_document gd
                  JOIN document_formation df ON df.document_id = gd.id
                  WHERE df.enrollment_id = ?`,
                 [e.enrollment_id]
             );
-            const parc = computeParcours({ crmStage: e.crm_stage, startDate: s.start_date, endDate: s.end_date, today, docs });
+            const parc = computeDocParcours({ steps, docs });
+            const column = parc.currentKey == null
+                ? columns.length
+                : (keyIndex.has(parc.currentKey) ? keyIndex.get(parc.currentKey) : columns.length);
             cards.push({
                 learner_id: e.learner_id, enrollment_id: e.enrollment_id,
                 name: `${e.last_name || ''} ${e.first_name || ''}`.trim(),
-                column: parc.currentIndex, done: parc.currentIndex, total: STAGES.length,
-                stage: parc.currentKey, percent: parc.percent,
+                column, done: parc.currentIndex, total: steps.length, percent: parc.percent,
             });
         }
 

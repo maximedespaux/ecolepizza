@@ -1,80 +1,64 @@
-// Parcours (cycle de vie) d'un dossier stagiaire dans une session — dérivé de
-// l'étape CRM, des documents produits et des dates de session. Un même calcul
-// alimente la fiche stagiaire (parcours détaillé) et le tableau de session (pipeline).
+// Parcours d'un dossier stagiaire = parcours DOCUMENTAIRE de sa formation.
+// Chaque étape est un document (ou un QCM) défini dans le « Parcours documentaire »
+// de la formation, filtré aux conditions du dossier. Le statut de chaque étape est
+// déduit du document généré correspondant (produit / envoyé / signé).
+// Un même calcul alimente la fiche stagiaire et le tableau de session (pipeline).
 
-const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
-const SIGN_TYPES = ['DEVIS', 'CONTRAT', 'CONVENTION', 'DROIT_IMAGE'];
 const SENT = ['ENVOYE', 'CONSULTE', 'SIGNE'];
 
-// Étapes macro du parcours (ordre = déroulé de l'inscription au suivi).
-const STAGES = [
-    { key: 'inscription', ic: '📝', label: 'Inscription', sub: 'Expression du stagiaire — confirmation secrétariat' },
-    { key: 'generation', ic: '📄', label: 'Génération des documents', sub: 'documents — secrétariat + espace étudiant (sauvegarde)' },
-    { key: 'envoi', ic: '✉️', label: 'Envoi automatique', sub: 'Documents envoyés par e-mail' },
-    { key: 'signature', ic: '✍️', label: 'Signature électronique', sub: 'Devis & convention à signer' },
-    { key: 'acompte', ic: '💳', label: 'Acompte / Prise en charge', sub: 'Stripe · chèque · virement · OPCO — confirmé par le secrétariat' },
-    { key: 'convocation', ic: '📧', label: 'Convocation (J-30)', sub: 'Convocation + liste matériel + brochure' },
-    { key: 'rappel', ic: '🔔', label: 'Rappel (J-3)', sub: 'Matériel, brochure, accès plateforme' },
-    { key: 'formation', ic: '👨‍🍳', label: 'Formation', sub: 'Émargement · questionnaire du niveau' },
-    { key: 'evaluation', ic: '😊', label: 'Évaluation à chaud', sub: 'Questionnaire de satisfaction' },
-    { key: 'fin', ic: '🎓', label: 'Fin de stage', sub: 'Attestation · Certificat · Facture (par mail)' },
-    { key: 'suivi', ic: '⭐', label: 'Suivi 6 mois (formateur)', sub: 'Situation, débouchés, matériel, emploi, formations' },
-];
+const iconFor = (s) => (s.quiz_id ? '❓' : (s.stagiaire_sign ? '✍️' : '📄'));
+const keyFor = (s) => (s.quiz_id ? `quiz:${s.quiz_id}` : s.slug);
+function subFor(s) {
+    if (s.quiz_id) return 'QCM' + (s.day != null && s.day !== '' ? ` · jour ${s.day}` : '');
+    if (s.stagiaire_sign) return 'À signer par le stagiaire';
+    return s.doc_type || '';
+}
 
-const toDate = (iso) => new Date(iso + 'T00:00:00');
-function shiftDays(iso, n) { const d = toDate(iso); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
-function shiftMonths(iso, n) { const d = toDate(iso); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); }
+// Retrouve le document produit pour une étape : par slug de modèle en priorité,
+// sinon par type ; par quiz_id pour un QCM.
+function matchDoc(step, docs) {
+    if (step.quiz_id) return docs.find((d) => d.quiz_id === step.quiz_id) || null;
+    return docs.find((d) => d.template_slug && d.template_slug === step.slug)
+        || docs.find((d) => d.type === step.doc_type) || null;
+}
+
+// Étape « faite » : QCM/signable => signé ; autre document => produit et envoyé.
+function stepDone(step, doc) {
+    if (!doc) return false;
+    if (step.quiz_id || step.stagiaire_sign) return doc.status === 'SIGNE';
+    return SENT.includes(doc.status);
+}
 
 /**
- * Calcule le parcours d'un dossier.
- * ctx = { crmStage, startDate, endDate, today, docs:[{id,type,status}] }.
- * Renvoie { steps:[{...STAGE, status:'done'|'current'|'todo'}], percent, currentIndex,
- *           currentKey, signableDocId }.
+ * Calcule le parcours documentaire d'un dossier.
+ * steps = étapes ordonnées (cf. enrollmentSteps) ; docs = generated_document du
+ * dossier [{ id, type, status, template_slug, quiz_id }].
+ * Renvoie { steps:[{key,ic,label,sub,signable,quiz,docId,docStatus,status}],
+ *           percent, currentIndex, currentKey }.
  */
-function computeParcours(ctx = {}) {
-    const docs = ctx.docs || [];
-    const today = ctx.today || new Date().toISOString().slice(0, 10);
-    const crmIdx = STAGE_ORDER.indexOf(ctx.crmStage);
-    const start = ctx.startDate || null;
-    const end = ctx.endDate || null;
+function computeDocParcours({ steps = [], docs = [] } = {}) {
+    const rows = steps.map((s) => {
+        const doc = matchDoc(s, docs);
+        return { s, doc, done: stepDone(s, doc) };
+    });
 
-    const sentOf = (t) => docs.some((d) => d.type === t && SENT.includes(d.status));
-    const has = (t) => docs.some((d) => d.type === t);
-    const sentCount = docs.filter((d) => SENT.includes(d.status)).length;
-    const signable = docs.filter((d) => SIGN_TYPES.includes(d.type));
-    const signablePendingDoc = signable.find((d) => d.status !== 'SIGNE') || null;
-    const signableSignedAll = signable.length > 0 && !signablePendingDoc;
+    let currentIndex = rows.findIndex((r) => !r.done);
+    if (currentIndex < 0) currentIndex = rows.length;
 
-    const done = {
-        inscription: crmIdx >= 1 || has('FICHE_SEMAINE'),
-        generation: docs.length > 0,
-        envoi: sentCount > 0 || crmIdx >= 2,
-        signature: signable.length > 0 ? signableSignedAll : crmIdx >= 3,
-        acompte: crmIdx >= 4,
-        convocation: sentOf('CONVOCATION') || sentOf('INVITATION'),
-        rappel: !!start && today >= shiftDays(start, -3),
-        formation: crmIdx >= STAGE_ORDER.indexOf('TERMINE') || (!!end && today > end),
-        evaluation: crmIdx >= STAGE_ORDER.indexOf('EVALUATION_ENVOYEE') || sentOf('EVALUATION_SATISFACTION'),
-        fin: sentOf('CERTIFICAT_REALISATION') || sentOf('ATTESTATION_ASSIDUITE'),
-        suivi: !!end && today >= shiftMonths(end, 6),
-    };
-
-    // Parcours linéaire : la 1re étape non faite est « en cours ».
-    let currentIndex = STAGES.findIndex((s) => !done[s.key]);
-    if (currentIndex < 0) currentIndex = STAGES.length;
-
-    const steps = STAGES.map((s, i) => ({
-        key: s.key, ic: s.ic, label: s.label, sub: s.sub,
+    const outSteps = rows.map((r, i) => ({
+        key: keyFor(r.s), ic: iconFor(r.s), label: r.s.label, sub: subFor(r.s),
+        signable: !!r.s.stagiaire_sign, quiz: !!r.s.quiz_id,
+        docId: r.doc ? r.doc.id : null,
+        docStatus: r.doc ? r.doc.status : null,
         status: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo',
     }));
 
     return {
-        steps,
-        percent: Math.round((currentIndex / STAGES.length) * 100),
+        steps: outSteps,
+        percent: rows.length ? Math.round((currentIndex / rows.length) * 100) : 0,
         currentIndex,
-        currentKey: currentIndex < STAGES.length ? STAGES[currentIndex].key : null,
-        signableDocId: signablePendingDoc ? signablePendingDoc.id : null,
+        currentKey: currentIndex < outSteps.length ? outSteps[currentIndex].key : null,
     };
 }
 
-module.exports = { STAGES, STAGE_ORDER, computeParcours };
+module.exports = { computeDocParcours };

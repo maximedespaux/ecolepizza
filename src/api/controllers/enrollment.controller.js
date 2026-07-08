@@ -1,5 +1,6 @@
 const db = require('../config/database.js');
-const { computeParcours } = require('../lib/parcours.js');
+const { computeDocParcours } = require('../lib/parcours.js');
+const { enrollmentSteps } = require('./formationProgram.controller.js');
 
 const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
 
@@ -69,8 +70,9 @@ const getParcours = async (req, res) => {
     try {
         const conn = db.promise();
         const [[e]] = await conn.query(
-            `SELECT e.id, e.crm_stage, e.financing,
-                    p.title AS program_title, p.code AS program_code,
+            `SELECT e.id, e.crm_stage, e.financing, e.session_id,
+                    p.id AS program_id, p.title AS program_title, p.code AS program_code,
+                    p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs,
                     s.year, s.week,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
@@ -85,14 +87,22 @@ const getParcours = async (req, res) => {
         if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
 
         const [docs] = await conn.query(
-            `SELECT gd.id, gd.type, gd.status FROM generated_document gd
+            `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id FROM generated_document gd
              JOIN document_formation df ON df.document_id = gd.id
              WHERE df.enrollment_id = ?`,
             [req.params.id]
         );
 
-        const today = new Date().toISOString().slice(0, 10);
-        const parc = computeParcours({ crmStage: e.crm_stage, startDate: e.start_date, endDate: e.end_date, today, docs });
+        let parc = { steps: [], percent: 0, currentIndex: 0, currentKey: null };
+        if (e.program_id) {
+            const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
+            const ctx = {
+                financing: e.financing, rsCode: e.program_rs, hygiene: !!e.program_hygiene,
+                jours: e.program_days, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
+            };
+            const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx);
+            parc = computeDocParcours({ steps, docs });
+        }
 
         res.json({
             data: {
