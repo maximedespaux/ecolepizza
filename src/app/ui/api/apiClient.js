@@ -35,6 +35,20 @@ export function updateOrganisation(payload) {
   return request("/organisation", { method: "PATCH", body: JSON.stringify(payload) });
 }
 
+// --- Rôles d'accès personnalisés (profils de menu) ---
+export function getAccessProfiles() {
+  return request("/access-profiles");
+}
+export function createAccessProfile(payload) {
+  return request("/access-profiles", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateAccessProfile(id, payload) {
+  return request(`/access-profiles/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deleteAccessProfile(id) {
+  return request(`/access-profiles/${id}`, { method: "DELETE" });
+}
+
 // --- OPCO / financeurs (référentiel) ---
 export function getOpcos() {
   return request("/opcos");

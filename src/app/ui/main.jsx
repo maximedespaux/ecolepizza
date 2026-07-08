@@ -31,6 +31,7 @@ import Modeles from "./pages/Modeles.jsx";
 import Opcos from "./pages/Opcos.jsx";
 import TemplateEditor from "./pages/TemplateEditor.jsx";
 import Equipe from "./pages/Equipe.jsx";
+import AccessRoles from "./pages/AccessRoles.jsx";
 import Audit from "./pages/Audit.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import Platform from "./pages/Platform.jsx";
@@ -152,6 +153,7 @@ function AppRoutes() {
           <Route path="modeles" element={<Guard nav="/modeles" roles={ADMIN}><Modeles /></Guard>} />
           <Route path="modeles/:slug/editeur" element={<Guard nav="/modeles" roles={ADMIN}><TemplateEditor /></Guard>} />
           <Route path="equipe" element={<Guard nav="/equipe" roles={OWNER}><Equipe /></Guard>} />
+          <Route path="roles" element={<Guard nav="/roles" roles={["SUPER_ADMIN"]}><AccessRoles /></Guard>} />
           <Route path="audit" element={<Guard nav="/audit" roles={SUIVI}><Audit /></Guard>} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="suivi" element={<Guard nav="/suivi" roles={SUIVI}><Suivi /></Guard>} />

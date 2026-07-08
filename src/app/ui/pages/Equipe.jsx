@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { getTeam, createMember, updateMember, deleteMember } from "../api/apiClient.js";
+import { getTeam, createMember, updateMember, deleteMember, getAccessProfiles, createAccessProfile } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { GRANTABLE_NAV, canAccess, OWNER_ROLES } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
@@ -216,6 +216,19 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
   };
   const [modes, setModes] = useState(seed);
   const [saving, setSaving] = useState(false);
+  const [roles, setRoles] = useState([]);
+  useEffect(() => { getAccessProfiles().then((r) => setRoles(r.data || [])).catch(() => {}); }, []);
+
+  function applyRole(id) {
+    const r = roles.find((x) => x.id === id);
+    if (r) setModes({ ...(r.nav_access || {}) });
+  }
+  async function saveAsRole() {
+    const name = window.prompt("Nom du nouveau rôle :", "");
+    if (!name || !name.trim()) return;
+    try { await createAccessProfile({ name: name.trim(), nav_access: modes }); const r = await getAccessProfiles(); setRoles(r.data || []); }
+    catch (e) { onError(e.message); }
+  }
 
   const granted = (to) => Object.prototype.hasOwnProperty.call(modes, to);
   const toggle = (to) => setModes((p) => {
@@ -252,10 +265,20 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
             Cochez les rubriques accessibles, puis choisissez <b>Modifier</b> (peut créer / éditer / supprimer)
             ou <b>Lecture</b> (consultation seule). Les administrateurs conservent toujours l'accès complet.
           </p>
+          {roles.length > 0 && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>Appliquer un rôle :</label>
+              <select className="inp" style={{ maxWidth: 220 }} value="" onChange={(e) => { if (e.target.value) applyRole(e.target.value); }}>
+                <option value="">— Choisir un rôle —</option>
+                {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
             <button type="button" className="btn sm ghost" onClick={() => setAll(true)}>Tout cocher</button>
             <button type="button" className="btn sm ghost" onClick={() => setAll(false)}>Tout décocher</button>
             <button type="button" className="btn sm ghost" onClick={() => setModes(roleDefaults())}>Défauts du rôle</button>
+            <button type="button" className="btn sm ghost" onClick={saveAsRole}>Enregistrer comme rôle…</button>
           </div>
           {GRANTABLE_NAV.map((g) => (
             <div key={g.grp} style={{ marginBottom: 12 }}>

@@ -645,6 +645,18 @@ CREATE TABLE session_trainer (
     CONSTRAINT fk_st_user    FOREIGN KEY (user_id)    REFERENCES user (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- Rôles d'accès personnalisés : profils réutilisables d'accès au menu.
+CREATE TABLE access_profile (
+    id              uuid         NOT NULL DEFAULT uuid(),
+    organization_id uuid         NOT NULL,
+    name            varchar(120) NOT NULL,
+    nav_access      text         DEFAULT NULL,
+    created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    KEY idx_ap_org (organization_id),
+    CONSTRAINT fk_ap_org FOREIGN KEY (organization_id) REFERENCES organization (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- Référentiel OPCO / financeurs (un enregistrement par OPCO), avec coordonnées.
 CREATE TABLE opco (
     id                 uuid         NOT NULL DEFAULT uuid(),
