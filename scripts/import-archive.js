@@ -88,31 +88,53 @@ async function main() {
         }
     }
 
-    let inserted = 0, skippedStag = 0, skippedExist = 0, keptStag = 0;
+    const MAX_MB = 24; // garde-fou (max_allowed_packet) : au-delà, on saute + on journalise
+    let inserted = 0, skippedStag = 0, skippedExist = 0, keptStag = 0, failed = 0, tooBig = 0;
+    const perCode = {};       // code formation -> nb stagiaires
+    const perYearCode = {};   // "année · code" -> nb stagiaires
+
     for (const g of groups.values()) {
         if (g.files.length < 2) { skippedStag++; continue; }
         keptStag++;
         const formation = inferFormation(g.files.map((x) => x.title));
+        perCode[formation] = (perCode[formation] || 0) + 1;
+        const yk = `${g.year} · ${formation}`;
+        perYearCode[yk] = (perYearCode[yk] || 0) + 1;
+
         for (const file of g.files) {
-            const [[ex]] = await conn.query(
-                'SELECT id FROM archive_document WHERE organization_id = ? AND year <=> ? AND week <=> ? AND learner_name = ? AND title = ? LIMIT 1',
-                [orgId, g.year, g.week, g.stagiaire, file.title.slice(0, 255)]
-            );
-            if (ex) { skippedExist++; continue; }
-            if (dryRun) { inserted++; continue; }
-            const buf = fs.readFileSync(file.path);
-            await conn.query(
-                `INSERT INTO archive_document
-                    (id, organization_id, year, week, formation_label, learner_name, title, status, mime, file)
-                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ARCHIVE', 'application/pdf', ?)`,
-                [orgId, g.year, g.week, formation, g.stagiaire, file.title.slice(0, 255), buf]
-            );
-            inserted++;
+            try {
+                const [[ex]] = await conn.query(
+                    'SELECT id FROM archive_document WHERE organization_id = ? AND year <=> ? AND week <=> ? AND learner_name = ? AND title = ? LIMIT 1',
+                    [orgId, g.year, g.week, g.stagiaire, file.title.slice(0, 255)]
+                );
+                if (ex) { skippedExist++; continue; }
+                if (dryRun) { inserted++; continue; }
+                const st = fs.statSync(file.path);
+                if (st.size > MAX_MB * 1024 * 1024) { tooBig++; console.warn(`  ⚠ trop volumineux (${(st.size / 1048576).toFixed(1)} Mo), sauté : ${file.path}`); continue; }
+                const buf = fs.readFileSync(file.path);
+                await conn.query(
+                    `INSERT INTO archive_document
+                        (id, organization_id, year, week, formation_label, learner_name, title, status, mime, file)
+                     VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ARCHIVE', 'application/pdf', ?)`,
+                    [orgId, g.year, g.week, formation, g.stagiaire, file.title.slice(0, 255), buf]
+                );
+                inserted++;
+                if (inserted % 100 === 0) console.log(`  … ${inserted} importés`);
+            } catch (e) {
+                failed++;
+                console.warn(`  ✗ échec : ${file.path} — ${e.code || e.message}`);
+            }
         }
     }
 
-    console.log(`\n${dryRun ? '[DRY-RUN] ' : ''}Stagiaires gardés : ${keptStag} · ignorés (<2 PDF) : ${skippedStag}`);
-    console.log(`${dryRun ? 'À insérer' : 'Insérés'} : ${inserted} · déjà présents (sautés) : ${skippedExist}`);
+    // Récapitulatif de la classification (comme l'aperçu tableur).
+    console.log(`\n${dryRun ? '[DRY-RUN] ' : ''}Classement par formation :`);
+    for (const [yk, n] of Object.entries(perYearCode).sort()) console.log(`   ${yk.padEnd(24)} ${n} stagiaire(s)`);
+
+    console.log(`\nStagiaires gardés : ${keptStag} · ignorés (<2 PDF) : ${skippedStag}`);
+    console.log(`${dryRun ? 'À insérer' : 'Insérés'} : ${inserted} · déjà présents : ${skippedExist}` +
+        (tooBig ? ` · trop volumineux : ${tooBig}` : '') + (failed ? ` · échecs : ${failed}` : ''));
+    if (dryRun) console.log('\n(DRY-RUN : rien n’a été écrit. Relancez sans --dry-run pour importer.)');
     process.exit(0);
 }
 
