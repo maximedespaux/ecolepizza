@@ -20,6 +20,22 @@ const QTYPES = [
 ];
 const blankQuestion = () => ({ text: "", type: "SINGLE", points: 1, scale_max: 5, options: [{ text: "", is_correct: false }, { text: "", is_correct: false }] });
 
+// Étiquette courte du jour : J2, ou J-3 (avant le début).
+function dayTag(day) {
+  if (day == null || day === "") return "—";
+  const d = Number(day);
+  if (!Number.isFinite(d)) return "—";
+  return d < 0 ? `J${d}` : `J${d < 1 ? 1 : d}`;
+}
+// Phrase pour le jour d'envoi.
+function dayPhrase(day) {
+  if (day == null || day === "") return "le jour J";
+  const d = Number(day);
+  if (!Number.isFinite(d)) return "le jour J";
+  if (d < 0) return `${Math.abs(d)} jour(s) avant le début`;
+  return `le matin du jour ${d < 1 ? 1 : d}`;
+}
+
 // Regroupe les QCM par formation ; les QCM non rattachés en dernier, chaque groupe trié par jour.
 function groupByFormation(quizzes) {
   const map = new Map();
@@ -102,7 +118,7 @@ function Quiz() {
                   {g.items.map((q) => (
                     <tr key={q.id}>
                       <td><b>{q.title}</b></td>
-                      <td className="tnum">{q.day ? `J${q.day}` : "—"}</td>
+                      <td className="tnum">{dayTag(q.day)}</td>
                       <td>{q.auto_send ? <Badge tone="g">Auto</Badge> : <span className="hint">Manuel</span>}</td>
                       <td>{q.kind === "SURVEY" ? <Badge tone="n">Enquête</Badge> : <Badge tone="b">Noté</Badge>}</td>
                       <td className="tnum">{q.n_questions}</td>
@@ -175,7 +191,7 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
               {formations.map((f) => <option key={f.id} value={f.id}>{f.code} — {f.title}</option>)}
             </select></div>
           <div className="field"><label>Jour de la formation</label>
-            <input className="inp" type="number" min="1" value={form.day} onChange={set("day")} placeholder="ex. 2 (= jour 2)" /></div>
+            <input className="inp" type="number" value={form.day} onChange={set("day")} placeholder="ex. 2, ou -3 (avant)" /></div>
           {form.kind === "GRADED" && (
             <div className="field"><label>Seuil de réussite (%)</label>
               <input className="inp" type="number" min="0" max="100" value={form.pass_score} onChange={set("pass_score")} placeholder="ex. 60" /></div>
@@ -183,12 +199,12 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
         </div>
         <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, marginBottom: 6 }}>
           <input type="checkbox" checked={form.auto_send} onChange={(e) => setForm((p) => ({ ...p, auto_send: e.target.checked }))} />
-          Envoi automatique le matin du jour {form.day || "J"} (sinon envoi manuel avec « Envoyer »)
+          Envoi automatique {dayPhrase(form.day)} (sinon envoi manuel avec « Envoyer »)
         </label>
         <p className="hint" style={{ margin: 0 }}>
-          {form.day
-            ? `Le QCM sera proposé aux stagiaires de cette formation ${form.auto_send ? "automatiquement" : "après envoi manuel"} le jour ${form.day}.`
-            : "Indiquez le jour de formation où ce QCM doit être rempli."}
+          {form.day === "" || form.day == null
+            ? "Indiquez le jour où ce QCM doit être rempli : un nombre positif = jour de stage (J1 = 1er jour), un nombre négatif = jours avant le début (ex. -3 pour un test de positionnement 3 jours avant)."
+            : `Le QCM sera proposé aux stagiaires ${form.auto_send ? "automatiquement" : "après envoi manuel"} ${dayPhrase(form.day)}.`}
         </p>
       </Card>
 

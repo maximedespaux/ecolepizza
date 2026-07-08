@@ -179,20 +179,26 @@ const getSessionBoard = async (req, res) => {
         const program = { id: s.program_id, code: s.code, days: s.days, hygiene: s.hygiene, rs_code: s.rs_code };
         const steps = (await formationSteps(conn, req.user.organization_id, program)).filter((st) => st.active);
 
+        // Clé d'une étape : un QCM est identifié par son quiz_id (plusieurs QCM
+        // partagent le type 'QCM'), un document par son type.
+        const keyOf = (st) => (st.quiz_id ? `Q:${st.quiz_id}` : st.doc_type);
+        const labelOf = (st) => (st.quiz_id ? st.label : (DOC_LABELS[st.doc_type] || st.doc_type));
+
         // Colonnes = paliers de sort_order (regroupe les variantes : devis, contrat/convention…).
         const byOrder = new Map();
         const tiers = [];
         for (const st of steps) {
+            const key = keyOf(st);
             let t = byOrder.get(st.sort_order);
-            if (!t) { t = { order: st.sort_order, types: [], signTypes: [] }; byOrder.set(st.sort_order, t); tiers.push(t); }
-            if (!t.types.includes(st.doc_type)) t.types.push(st.doc_type);
-            if (st.stagiaire_sign && !t.signTypes.includes(st.doc_type)) t.signTypes.push(st.doc_type);
+            if (!t) { t = { order: st.sort_order, keys: [], signKeys: [], labels: [] }; byOrder.set(st.sort_order, t); tiers.push(t); }
+            if (!t.keys.includes(key)) { t.keys.push(key); t.labels.push(labelOf(st)); }
+            if (st.stagiaire_sign && !t.signKeys.includes(key)) t.signKeys.push(key);
         }
         tiers.sort((a, b) => a.order - b.order);
         const columns = tiers.map((t, i) => ({
             index: i, key: String(t.order),
-            label: [...new Set(t.types.map((d) => DOC_LABELS[d] || d))].join(' / '),
-            types: t.types, signTypes: t.signTypes,
+            label: [...new Set(t.labels)].join(' / '),
+            keys: t.keys, signKeys: t.signKeys,
         }));
 
         const [enr] = await conn.query(
@@ -206,17 +212,17 @@ const getSessionBoard = async (req, res) => {
         const cards = [];
         for (const e of enr) {
             const [docs] = await conn.query(
-                `SELECT gd.type, gd.status FROM generated_document gd
+                `SELECT gd.type, gd.status, gd.quiz_id FROM generated_document gd
                  JOIN document_formation df ON df.document_id = gd.id
                  WHERE df.enrollment_id = ?`,
                 [e.enrollment_id]
             );
-            const statusByType = {};
-            for (const d of docs) statusByType[d.type] = d.status;
-            const doneCol = columns.map((c) => c.types.some((tp) => {
-                const st = statusByType[tp];
+            const statusByKey = {};
+            for (const d of docs) statusByKey[d.quiz_id ? `Q:${d.quiz_id}` : d.type] = d.status;
+            const doneCol = columns.map((c) => c.keys.some((k) => {
+                const st = statusByKey[k];
                 if (!st) return false;
-                return c.signTypes.includes(tp) ? st === 'SIGNE' : DONE_STATUSES.includes(st);
+                return c.signKeys.includes(k) ? st === 'SIGNE' : DONE_STATUSES.includes(st);
             }));
             const done = doneCol.filter(Boolean).length;
             let column = doneCol.findIndex((d) => !d);

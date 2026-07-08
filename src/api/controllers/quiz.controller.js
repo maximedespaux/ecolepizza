@@ -20,6 +20,22 @@ function businessDayISO(startStr, offset) {
     return d.toISOString().slice(0, 10);
 }
 
+// Date où le QCM doit être rempli, selon le jour paramétré :
+//  · day >= 1 : jour ouvré `day` de la session (J1 = premier jour) ;
+//  · day <= 0 : |day| jours calendaires AVANT le début (J-3 = 3 jours avant).
+function quizDayDate(startStr, day) {
+    if (!startStr || day == null || day === '') return null;
+    const d = Number(day);
+    if (!Number.isFinite(d)) return null;
+    if (d < 0) {
+        const dt = new Date(startStr);
+        if (Number.isNaN(dt.getTime())) return null;
+        dt.setDate(dt.getDate() + d);          // d négatif → avant le début
+        return dt.toISOString().slice(0, 10);
+    }
+    return businessDayISO(startStr, d <= 1 ? 0 : d - 1);
+}
+
 // Sessions de la formation où le QCM peut être envoyé AUJOURD'HUI :
 // le jour J est arrivé (dayDate <= today) et la session n'est pas terminée.
 async function eligibleSessionsFor(conn, orgId, programId, day) {
@@ -33,7 +49,7 @@ async function eligibleSessionsFor(conn, orgId, programId, day) {
     );
     const today = todayISO();
     return sessions.filter((s) => {
-        const dayDate = businessDayISO(s.start_date, (Number(day) || 1) - 1);
+        const dayDate = quizDayDate(s.start_date, day);
         if (!dayDate) return false;
         if (dayDate > today) return false;                 // le jour J n'est pas encore arrivé
         if (s.end_date && s.end_date < today) return false; // session terminée

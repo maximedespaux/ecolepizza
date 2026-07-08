@@ -16,17 +16,37 @@ async function formationSteps(conn, orgId, program) {
         [program.id]
     );
     const overlay = new Map(rows.map((r) => [r.slug, r]));
-    return candidates
-        .map((s) => {
-            const o = overlay.get(s.slug);
-            return {
-                slug: s.slug, label: s.label, doc_type: s.doc_type,
-                signable: !!s.signable, stagiaire_sign: !!s.stagiaire_sign,
-                sort_order: o ? o.sort_order : s.sort_order,
-                active: o ? !!o.active : true,
-            };
-        })
-        .sort((a, b) => a.sort_order - b.sort_order);
+
+    // Étapes documentaires classiques.
+    const docSteps = candidates.map((s) => {
+        const o = overlay.get(s.slug);
+        return {
+            slug: s.slug, label: s.label, doc_type: s.doc_type, quiz_id: null, day: null,
+            signable: !!s.signable, stagiaire_sign: !!s.stagiaire_sign,
+            sort_order: o ? o.sort_order : s.sort_order,
+            active: o ? !!o.active : true,
+        };
+    });
+
+    // QCM rattachés à la formation, ajoutés comme étapes (slug « quiz:<id> »).
+    const [quizzes] = await conn.query(
+        'SELECT id, title, day FROM quiz WHERE organization_id = ? AND program_id = ? AND active = 1',
+        [orgId, program.id]
+    );
+    const quizSteps = quizzes.map((q) => {
+        const slug = `quiz:${q.id}`;
+        const o = overlay.get(slug);
+        // Ordre par défaut d'après le jour : négatif (avant) en tête, sinon intercalé (jour*10+5).
+        const dflt = q.day != null ? Number(q.day) * 10 + 5 : 555;
+        return {
+            slug, label: q.title, doc_type: 'QCM', quiz_id: q.id, day: q.day,
+            signable: true, stagiaire_sign: true,
+            sort_order: o ? o.sort_order : dflt,
+            active: o ? !!o.active : true,
+        };
+    });
+
+    return [...docSteps, ...quizSteps].sort((a, b) => a.sort_order - b.sort_order);
 }
 
 /**

@@ -202,7 +202,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
 
           <div className="divider" />
           <h3 style={{ fontSize: 15, marginBottom: 6 }}>Parcours documentaire</h3>
-          <p className="hint" style={{ marginTop: 0 }}>Documents requis pour cette formation, dans l'ordre. Glissez (⠿) pour réordonner, décochez pour exclure. Ces étapes composent le tableau de session.</p>
+          <p className="hint" style={{ marginTop: 0 }}>Documents requis pour cette formation, dans l'ordre. Glissez (⠿) pour réordonner, décochez pour exclure. Les QCM rattachés à la formation y figurent aussi. Ces étapes composent le tableau de session.</p>
           {steps.length === 0 ? (
             <p className="hint">Aucun document candidat.</p>
           ) : (
@@ -216,7 +216,9 @@ function FormationModal({ program, onClose, onSaved, onError }) {
                   <span className="drag-handle" title="Glisser">⠿</span>
                   <input type="checkbox" checked={!!s.active} onChange={() => toggleStep(s.slug)} />
                   <span style={{ flex: 1 }}>{s.label}</span>
-                  {s.stagiaire_sign ? <span className="hint">à signer</span> : null}
+                  {s.doc_type === "QCM"
+                    ? <span className="hint" style={{ color: "var(--accent)" }}>QCM{s.day != null && s.day !== "" ? ` · ${Number(s.day) < 0 ? `J${s.day}` : `J${Number(s.day) < 1 ? 1 : s.day}`}` : ""}</span>
+                    : s.stagiaire_sign ? <span className="hint">à signer</span> : null}
                 </div>
               ))}
             </div>

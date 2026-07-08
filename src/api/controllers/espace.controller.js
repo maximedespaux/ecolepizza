@@ -19,6 +19,21 @@ function businessDayISO(startStr, offset) {
     return d.toISOString().slice(0, 10);
 }
 
+// Date où le QCM doit être rempli : day>=1 = jour ouvré du stage ;
+// day<=0 = |day| jours calendaires avant le début (test de positionnement, etc.).
+function quizDayDate(startStr, day) {
+    if (!startStr || day == null || day === '') return null;
+    const d = Number(day);
+    if (!Number.isFinite(d)) return null;
+    if (d < 0) {
+        const dt = new Date(startStr);
+        if (Number.isNaN(dt.getTime())) return null;
+        dt.setDate(dt.getDate() + d);
+        return dt.toISOString().slice(0, 10);
+    }
+    return businessDayISO(startStr, d <= 1 ? 0 : d - 1);
+}
+
 // Matérialise les QCM « auto » dont le jour de formation est arrivé (envoi paresseux).
 async function releaseAutoQuizzes(conn, learner) {
     const [enr] = await conn.query(
@@ -38,7 +53,7 @@ async function releaseAutoQuizzes(conn, learner) {
     for (const q of quizzes) {
         for (const e of enr) {
             if (e.program_id !== q.program_id) continue;
-            const dayDate = businessDayISO(e.start_date, (q.day || 1) - 1);
+            const dayDate = quizDayDate(e.start_date, q.day);
             if (!dayDate || dayDate > today) continue; // pas encore le jour J
             const [[ex]] = await conn.query(
                 `SELECT gd.id FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
