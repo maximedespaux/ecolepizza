@@ -49,9 +49,12 @@ function Quiz() {
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function onSend(q) {
-    if (!q.program_id) { setStatus({ type: "error", message: "Rattachez ce QCM à une formation d'abord." }); return; }
-    if (!window.confirm(`Envoyer « ${q.title} » aux stagiaires inscrits à cette formation ?`)) return;
-    try { const { data } = await sendQuiz(q.id); setStatus({ type: "success", message: `Envoyé à ${data.sent} stagiaire(s).` }); }
+    if (!q.sendable) {
+      window.alert(`Envoi impossible : ${q.send_reason || "les conditions d'envoi ne sont pas réunies."}`);
+      return;
+    }
+    if (!window.confirm(`Envoyer « ${q.title} » à ${q.eligible_count} stagiaire(s) de la session en cours ?`)) return;
+    try { const { data } = await sendQuiz(q.id); setStatus({ type: "success", message: `Envoyé à ${data.sent} stagiaire(s).` }); load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
@@ -84,7 +87,8 @@ function Quiz() {
                     <td>{q.kind === "SURVEY" ? <Badge tone="n">Enquête</Badge> : <Badge tone="b">Noté</Badge>}</td>
                     <td className="tnum">{q.n_questions}</td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button className="btn sm ghost" disabled={!q.sendable}
+                      <button className="btn sm ghost"
+                        style={q.sendable ? undefined : { opacity: 0.45 }}
                         title={q.sendable ? `Envoyer aux stagiaires (${q.eligible_count})` : (q.send_reason || "Envoi indisponible")}
                         onClick={() => onSend(q)}>📤 Envoyer</button>{" "}
                       <button className="btn sm ghost" onClick={() => onEdit(q)}>✎ Éditer</button>{" "}
