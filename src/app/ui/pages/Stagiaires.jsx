@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getStagiaires, getStagiaire, createStagiaire, updateStagiaire, resetStagiairePassword } from "../api/apiClient.js";
+import { getStagiaires, getStagiaire, createStagiaire, updateStagiaire, resetStagiairePassword, getOpcos } from "../api/apiClient.js";
+import { OPCOS } from "../lib/opco.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -60,6 +61,10 @@ function Stagiaires() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [revealed, setRevealed] = useState({}); // DEV : ids dont le mot de passe est affiché
+  const [opcos, setOpcos] = useState([]);
+
+  useEffect(() => { getOpcos().then((r) => setOpcos(r.data || [])).catch(() => {}); }, []);
+  const opcoNames = opcos.length ? opcos.filter((o) => o.active).map((o) => o.name) : OPCOS;
 
   const toggleReveal = (id) => setRevealed((r) => ({ ...r, [id]: !r[id] }));
 
@@ -332,7 +337,10 @@ function Stagiaires() {
                 <Field label="Fonction" value={form.company.representative_role} onChange={setCompany("representative_role")} />
               </div>
               <div className="row2">
-                <Field label="OPCO" value={form.company.opco} onChange={setCompany("opco")} />
+                <SelectField label="OPCO / financeur" value={form.company.opco} onChange={setCompany("opco")}>
+                  <option value="">— Sélectionner —</option>
+                  {[...new Set([...(form.company.opco ? [form.company.opco] : []), ...opcoNames])].map((o) => <option key={o} value={o}>{o}</option>)}
+                </SelectField>
               </div>
             </>
           )}
