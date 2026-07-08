@@ -16,9 +16,10 @@ function lineFor(s) {
   return "⏳ En cours.";
 }
 function actionFor(s) {
-  if (s.status !== "current") return null;
+  if (s.status !== "current" && s.status !== "todo") return null;
   if (s.docId) return { label: s.signable ? "Ouvrir la signature" : s.quiz ? "Voir le QCM" : "Voir le document", kind: "open" };
-  return { label: "Préparer le document", kind: "documents" };
+  if (s.quiz) return null; // l'envoi d'un QCM se fait depuis « Modèles de QCM »
+  return { label: "Préparer ce document", kind: "prepare" };
 }
 
 /**
@@ -26,7 +27,7 @@ function actionFor(s) {
  * la formation, dans l'ordre), détail de l'étape sélectionnée à droite.
  * `onOpenDoc(docId)` ouvre l'aperçu/signature ; `onGoto('documents')` remonte à la section Documents.
  */
-function EnrollmentParcours({ enrollmentId, onOpenDoc, onGoto }) {
+function EnrollmentParcours({ enrollmentId, onOpenDoc, onPrepare }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
@@ -50,7 +51,7 @@ function EnrollmentParcours({ enrollmentId, onOpenDoc, onGoto }) {
   function runAction() {
     if (!action) return;
     if (action.kind === "open" && step.docId) onOpenDoc?.(step.docId);
-    else if (action.kind === "documents") onGoto?.("documents");
+    else if (action.kind === "prepare") onPrepare?.(step.key);
   }
 
   const h = data.header || {};

@@ -158,6 +158,15 @@ function StagiaireDetail() {
   }
   const canPrepare = enrollments.length > 0 && prep.enrollment_ids.length > 0 && !!selTpl && !gateReason;
 
+  // Dossier dont on affiche le parcours (onglet sélectionné).
+  const curEnrId = parcoursEnr || enrollments[0]?.id || null;
+  // Depuis une étape du parcours : pré-remplit le modèle + le dossier courant,
+  // puis descend au formulaire (le groupement de formations reste possible).
+  function prepareStep(slug) {
+    setPrep((p) => ({ ...p, slug, title: "", enrollment_ids: curEnrId ? [curEnrId] : p.enrollment_ids }));
+    setTimeout(() => document.getElementById("sd-prepare")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+  }
+
   return (
     <>
       <PageHead
@@ -224,30 +233,32 @@ function StagiaireDetail() {
         )}
       </div>
 
-      {enrollments.length > 0 && (
-        <Card title="Parcours d'inscription" className="fade">
-          {enrollments.length > 1 && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-              {enrollments.map((e) => {
-                const on = (parcoursEnr || enrollments[0].id) === e.id;
-                return (
-                  <button key={e.id} type="button" className={"btn sm " + (on ? "primary" : "ghost")} onClick={() => setParcoursEnr(e.id)}>
-                    {e.program_code}{e.week ? ` · S${e.week}` : ""}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <EnrollmentParcours
-            enrollmentId={parcoursEnr || enrollments[0].id}
-            onOpenDoc={(docId) => setViewId(docId)}
-            onGoto={() => document.getElementById("sd-documents")?.scrollIntoView({ behavior: "smooth" })}
-          />
-        </Card>
-      )}
+      <Card title="Parcours & documents" className="fade">
+        {enrollments.length > 0 && (
+          <>
+            {enrollments.length > 1 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                {enrollments.map((e) => {
+                  const on = curEnrId === e.id;
+                  return (
+                    <button key={e.id} type="button" className={"btn sm " + (on ? "primary" : "ghost")} onClick={() => setParcoursEnr(e.id)}>
+                      {e.program_code}{e.week ? ` · S${e.week}` : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <EnrollmentParcours
+              enrollmentId={curEnrId}
+              onOpenDoc={(docId) => setViewId(docId)}
+              onPrepare={prepareStep}
+            />
+            <div className="divider" style={{ margin: "18px 0" }} />
+          </>
+        )}
 
-      <div id="sd-documents" />
-      <Card title="Documents" className="fade">
+        <div id="sd-prepare" />
+        <h3 style={{ fontSize: 15, margin: "0 0 10px" }}>Préparer un document</h3>
         <form onSubmit={handlePrepare} style={{ marginBottom: 16 }}>
           <div className="row2">
             <SelectField label="Modèle de document" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
