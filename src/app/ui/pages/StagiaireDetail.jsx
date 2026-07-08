@@ -205,22 +205,37 @@ function StagiaireDetail() {
             {enrollments.length === 0 ? (
               <p className="hint" style={{ margin: 0 }}>Ce stagiaire n'est inscrit à aucune formation. Inscrivez-le depuis une session.</p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {enrollments.map((e) => {
-                  const fr = (v) => (v ? new Date(v).toLocaleDateString("fr-FR") : "");
-                  const dates = e.start_date ? `${fr(e.start_date)}${e.end_date ? ` → ${fr(e.end_date)}` : ""}` : "";
-                  return (
-                    <label key={e.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5 }}>
-                      <input type="checkbox" checked={prep.enrollment_ids.includes(e.id)} onChange={() => toggleEnroll(e.id)} />
-                      <span>
-                        {e.program_code} — {e.program_title}
-                        {e.week ? <span className="hint"> · Sem. {e.week}{e.year ? ` ${e.year}` : ""}</span> : null}
-                        {dates ? <span className="hint"> · {dates}</span> : null}
-                        <span className="hint"> ({e.financing === "PROFESSIONNEL" ? "entreprise" : "particulier"})</span>
-                      </span>
-                    </label>
-                  );
-                })}
+              <div className="tablewrap" style={{ border: "none" }}>
+                <table className="enroll-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 34 }}></th>
+                      <th>Code</th>
+                      <th>Formation</th>
+                      <th>Semaine</th>
+                      <th>Dates</th>
+                      <th>Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {enrollments.map((e) => {
+                      const fr = (v) => (v ? new Date(v).toLocaleDateString("fr-FR") : "");
+                      const checked = prep.enrollment_ids.includes(e.id);
+                      return (
+                        <tr key={e.id} className={checked ? "on" : ""} onClick={() => toggleEnroll(e.id)} style={{ cursor: "pointer" }}>
+                          <td style={{ textAlign: "center" }}>
+                            <input type="checkbox" checked={checked} onChange={() => toggleEnroll(e.id)} onClick={(ev) => ev.stopPropagation()} />
+                          </td>
+                          <td><span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span></td>
+                          <td>{e.program_title}</td>
+                          <td className="tnum">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "—"}</td>
+                          <td style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>{e.start_date ? `${fr(e.start_date)}${e.end_date ? ` → ${fr(e.end_date)}` : ""}` : "—"}</td>
+                          <td style={{ fontSize: 12.5 }}>{e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
