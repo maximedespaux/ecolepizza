@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getTemplates, uploadTemplate, saveTemplate, resetTemplate, downloadTemplateFile, reorderTemplates } from "../api/apiClient.js";
+import { getTemplates, saveTemplate, resetTemplate, reorderTemplates } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -29,7 +29,6 @@ function Modeles() {
   const [busy, setBusy] = useState(null);
   const [editing, setEditing] = useState(null); // étape en cours d'édition (ou {} pour nouveau)
   const [drag, setDrag] = useState(null);        // index de la ligne déplacée
-  const inputs = useRef({});
 
   async function load() {
     try { const { data } = await getTemplates(); setItems([...data].sort((a, b) => a.sort_order - b.sort_order)); }
@@ -46,14 +45,6 @@ function Modeles() {
     setItems(next);
     setDrag(null);
     reorderTemplates(next.map((t) => t.slug)).catch((e) => { setStatus({ type: "error", message: e.message }); load(); });
-  }
-
-  async function onFile(slug, file) {
-    if (!file) return;
-    setStatus(null); setBusy(slug);
-    try { await uploadTemplate(slug, file); setStatus({ type: "success", message: "Modèle mis à jour." }); await load(); }
-    catch (e) { setStatus({ type: "error", message: e.message }); }
-    finally { setBusy(null); if (inputs.current[slug]) inputs.current[slug].value = ""; }
   }
 
   async function onReset(slug) {
@@ -84,6 +75,7 @@ function Modeles() {
                 <th>Type</th>
                 <th>Signature</th>
                 <th>Conditions</th>
+                <th>État</th>
                 <th></th>
               </tr>
             </thead>
@@ -110,17 +102,16 @@ function Modeles() {
                   </td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when)}</td>
                   <td>
-                    <input ref={(el) => (inputs.current[t.slug] = el)} type="file" accept=".docx" style={{ display: "none" }}
-                      onChange={(e) => onFile(t.slug, e.target.files[0])} />
+                    {t.has_body
+                      ? <Badge tone="g">Créé</Badge>
+                      : <span style={{ color: "var(--dim)", fontSize: 12 }}>à créer</span>}
+                  </td>
+                  <td>
                     <div className="tpl-actions">
                       <button className="btn sm primary" title="Ouvrir l'éditeur de document"
                         onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>🖋 Éditer</button>
                       <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>✎</button>
-                      {t.has_file ? (
-                        <button className="btn sm ghost" title="Télécharger le fichier Word"
-                          onClick={() => downloadTemplateFile(t.slug).catch((e) => setStatus({ type: "error", message: e.message }))}>⬇</button>
-                      ) : <span className="slot" />}
-                      {(t.has_body || t.has_file) ? (
+                      {t.has_body ? (
                         <button className="btn sm ghost" title="Vider le modèle" disabled={busy === t.slug} onClick={() => onReset(t.slug)}>🗑</button>
                       ) : <span className="slot" />}
                     </div>
