@@ -98,7 +98,13 @@ const getSession = async (req, res) => {
              ORDER BY l.last_name, l.first_name`,
             [req.params.id, req.user.organization_id]
         );
-        res.json({ data: { ...rows[0], enrollments } });
+        const [trainers] = await conn.query(
+            `SELECT u.id, u.first_name, u.last_name
+             FROM session_trainer st JOIN user u ON u.id = st.user_id
+             WHERE st.session_id = ? ORDER BY u.last_name, u.first_name`,
+            [req.params.id]
+        );
+        res.json({ data: { ...rows[0], enrollments, trainers } });
     } catch (err) {
         console.error('Erreur récupération session :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -228,4 +234,54 @@ const getSessionBoard = async (req, res) => {
     }
 };
 
-module.exports = { getSessions, getSession, createSession, deleteSession, getSessionBoard };
+/**
+ * GET /api/sessions/trainers — membres de l'équipe pouvant être formateurs.
+ */
+const listTrainers = async (req, res) => {
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT id, first_name, last_name, role FROM user
+             WHERE organization_id = ? AND active = 1
+               AND role IN ('SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT','FORMATEUR')
+             ORDER BY FIELD(role,'FORMATEUR','SECRETARIAT','ADMIN_ORGANISME','SUPER_ADMIN'), last_name, first_name`,
+            [req.user.organization_id]
+        );
+        res.json({ data: rows });
+    } catch (err) {
+        console.error('Erreur liste formateurs :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PUT /api/sessions/:id/trainers — définit les formateurs de la session.
+ * Corps : { user_ids: [] }.
+ */
+const setSessionTrainers = async (req, res) => {
+    const ids = Array.isArray(req.body?.user_ids) ? req.body.user_ids : null;
+    if (!ids) return res.status(422).json({ error: 'Liste de formateurs requise.' });
+    try {
+        const conn = db.promise();
+        const [[s]] = await conn.query('SELECT id FROM training_session WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        if (!s) return res.status(404).json({ message: 'Session introuvable' });
+        await conn.query('DELETE FROM session_trainer WHERE session_id = ?', [req.params.id]);
+        for (const uid of ids) {
+            // N'accepte que des membres de l'organisme.
+            const [[u]] = await conn.query('SELECT id FROM user WHERE id = ? AND organization_id = ?', [uid, req.user.organization_id]);
+            if (u) await conn.query('INSERT IGNORE INTO session_trainer (id, session_id, user_id) VALUES (UUID(), ?, ?)', [req.params.id, uid]);
+        }
+        // Reflète aussi les noms dans le champ texte (compatibilité affichage / documents).
+        const [names] = await conn.query(
+            `SELECT u.first_name, u.last_name FROM session_trainer st JOIN user u ON u.id = st.user_id WHERE st.session_id = ?`,
+            [req.params.id]
+        );
+        const label = names.map((n) => `${n.first_name || ''} ${n.last_name || ''}`.trim()).filter(Boolean).join(', ') || null;
+        await conn.query('UPDATE training_session SET trainer = ? WHERE id = ?', [label, req.params.id]);
+        res.json({ success: true, message: 'Formateurs enregistrés.' });
+    } catch (err) {
+        console.error('Erreur formateurs session :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getSessions, getSession, createSession, deleteSession, getSessionBoard, listTrainers, setSessionTrainers };

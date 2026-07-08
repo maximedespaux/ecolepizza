@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const { regenEmargement } = require('../lib/emargement.js');
 
 const SLOTS = ['MATIN', 'APRES_MIDI'];
 
@@ -158,6 +159,13 @@ const signSheet = async (req, res) => {
         );
         logAudit(req, 'attendance.sign', 'AttendanceSheet', req.params.id);
         res.json({ success: true, message: 'Feuille signée.' });
+
+        // Régénère les feuilles d'émargement archivées des stagiaires de la session (non bloquant).
+        const [[sh]] = await conn.query('SELECT session_id FROM attendance_sheet WHERE id = ?', [req.params.id]);
+        if (sh) {
+            const [enr] = await conn.query('SELECT id FROM enrollment WHERE session_id = ?', [sh.session_id]);
+            for (const en of enr) regenEmargement(conn, req.user.organization_id, en.id).catch(() => {});
+        }
     } catch (err) {
         console.error('Erreur signature feuille :', err);
         res.status(500).json({ error: 'Internal Server Error' });

@@ -617,11 +617,25 @@ CREATE TABLE program_step (
         REFERENCES training_program (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- Formateurs affectés à une session (plusieurs possibles), choisis dans l'équipe.
+CREATE TABLE session_trainer (
+    id         uuid      NOT NULL DEFAULT uuid(),
+    session_id uuid      NOT NULL,
+    user_id    uuid      NOT NULL,
+    created_at timestamp NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_session_trainer (session_id, user_id),
+    KEY idx_st_session (session_id),
+    CONSTRAINT fk_st_session FOREIGN KEY (session_id) REFERENCES training_session (id) ON DELETE CASCADE,
+    CONSTRAINT fk_st_user    FOREIGN KEY (user_id)    REFERENCES user (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- Coffre documentaire : documents historiques importés (PDF), classés par
 -- année / semaine / formation / stagiaire (libellés texte). Cf. Suivi → Archives.
 CREATE TABLE archive_document (
     id              uuid         NOT NULL DEFAULT uuid(),
     organization_id uuid         NOT NULL,
+    ref             varchar(80)  DEFAULT NULL,          -- réf. stable pour upsert (ex. emarg:<enrollment_id>)
     year            int          DEFAULT NULL,
     week            int          DEFAULT NULL,
     formation_label varchar(255) DEFAULT NULL,
@@ -633,6 +647,7 @@ CREATE TABLE archive_document (
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     KEY idx_archdoc_org (organization_id),
+    UNIQUE KEY uq_archdoc_ref (organization_id, ref),
     CONSTRAINT fk_archdoc_org FOREIGN KEY (organization_id)
         REFERENCES organization (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

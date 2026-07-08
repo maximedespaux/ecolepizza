@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { stepsToDocSet } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
+const { regenEmargement } = require('../lib/emargement.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -307,7 +308,7 @@ const signMyEmargement = async (req, res) => {
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Fiche stagiaire introuvable.' });
         const [[rec]] = await conn.query(
-            `SELECT ar.id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date
+            `SELECT ar.id, s.session_id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date
              FROM attendance_record ar JOIN attendance_sheet s ON s.id = ar.sheet_id
              WHERE ar.id = ? AND ar.learner_id = ?`,
             [req.params.recordId, learner.id]
@@ -320,6 +321,10 @@ const signMyEmargement = async (req, res) => {
             [name, signature_data || null, req.params.recordId]
         );
         res.json({ success: true, message: 'Émargement signé.' });
+
+        // Met à jour la feuille d'émargement archivée du dossier (non bloquant).
+        const [[enr]] = await conn.query('SELECT id FROM enrollment WHERE session_id = ? AND learner_id = ? LIMIT 1', [rec.session_id, learner.id]);
+        if (enr) regenEmargement(conn, learner.organization_id, enr.id).catch(() => {});
     } catch (err) {
         console.error('Erreur signature émargement :', err);
         res.status(500).json({ error: 'Internal Server Error' });

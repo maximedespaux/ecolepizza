@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession } from "../api/apiClient.js";
+import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers } from "../api/apiClient.js";
+import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -13,8 +14,11 @@ import { colorOf, initials, scoreBadge } from "../lib/format.js";
 function SessionDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useContext(UserContext);
+  const isAdmin = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
   const [session, setSession] = useState(null);
   const [allLearners, setAllLearners] = useState([]);
+  const [team, setTeam] = useState([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(null);
   const [notesFor, setNotesFor] = useState(null);
@@ -31,7 +35,15 @@ function SessionDetail() {
   useEffect(() => {
     load();
     getStagiaires().then((r) => setAllLearners(r.data)).catch(() => {});
+    getAssignableTrainers().then((r) => setTeam(r.data)).catch(() => {});
   }, [id]);
+
+  async function toggleTrainer(uid) {
+    const current = (session.trainers || []).map((t) => t.id);
+    const next = current.includes(uid) ? current.filter((x) => x !== uid) : [...current, uid];
+    try { await setSessionTrainers(id, next); load(); }
+    catch (err) { setStatus({ type: "error", message: err.message }); }
+  }
 
   // Stagiaires pas encore inscrits à cette session.
   const available = useMemo(() => {
@@ -165,6 +177,34 @@ function SessionDetail() {
                   <button className="iconbtn del" title="Retirer de la session" onClick={() => removeStagiaire(e.id)}>🗑</button>
                 </div>
               ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <Card title={`Formateurs (${(session.trainers || []).length})`}>
+          {isAdmin ? (
+            team.length === 0 ? (
+              <p className="hint" style={{ margin: 0 }}>Aucun membre d'équipe. Ajoutez des formateurs depuis Équipe & accès.</p>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                {team.map((t) => {
+                  const on = (session.trainers || []).some((x) => x.id === t.id);
+                  return (
+                    <label key={t.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, border: "1px solid var(--border-soft)", borderRadius: 8, padding: "6px 10px", cursor: "pointer", background: on ? "var(--surface-2,#fff)" : "transparent" }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleTrainer(t.id)} />
+                      {t.first_name} {t.last_name}
+                    </label>
+                  );
+                })}
+              </div>
+            )
+          ) : (session.trainers || []).length === 0 ? (
+            <p className="hint" style={{ margin: 0 }}>Aucun formateur affecté.</p>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {session.trainers.map((t) => <Badge key={t.id} tone="b">{t.first_name} {t.last_name}</Badge>)}
             </div>
           )}
         </Card>

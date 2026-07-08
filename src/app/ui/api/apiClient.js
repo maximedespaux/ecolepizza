@@ -65,6 +65,13 @@ export function generateAttendance(sessionId) {
 export function setPresence(recordId, present) {
   return request(`/attendance/record/${recordId}`, { method: "PATCH", body: JSON.stringify({ present }) });
 }
+// Formateurs d'une session (affectation depuis l'équipe).
+export function getAssignableTrainers() {
+  return request("/sessions/trainers");
+}
+export function setSessionTrainers(id, user_ids) {
+  return request(`/sessions/${id}/trainers`, { method: "PUT", body: JSON.stringify({ user_ids }) });
+}
 // Signature de la feuille d'émargement par le formateur.
 export function signAttendanceSheet(sheetId, payload) {
   return request(`/attendance/sheet/${sheetId}/sign`, { method: "POST", body: JSON.stringify(payload) });
