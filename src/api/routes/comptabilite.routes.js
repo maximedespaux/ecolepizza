@@ -1,7 +1,7 @@
 const express = require('express');
 const {
     getGestion, getPerformance, createExpense, deleteExpense,
-    listRevenues, createRevenue, deleteRevenue, saveTargets,
+    listRevenues, createRevenue, updateRevenue, deleteRevenue, saveTargets,
 } = require('../controllers/comptabilite.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -18,6 +18,7 @@ router.put('/cibles', authorizeRoles(...ADMIN_ROLES), saveTargets);
 // Produits divers : le formateur peut en enregistrer et consulter les siens.
 router.get('/revenus', authorizeRoles(...STAFF_ROLES), listRevenues);
 router.post('/revenus', authorizeRoles(...STAFF_ROLES), createRevenue);
+router.patch('/revenus/:id', authorizeRoles(...STAFF_ROLES), updateRevenue);
 router.delete('/revenus/:id', authorizeRoles(...STAFF_ROLES), deleteRevenue);
 
 module.exports = router;

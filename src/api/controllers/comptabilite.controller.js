@@ -270,6 +270,35 @@ const createRevenue = async (req, res) => {
 };
 
 /**
+ * PATCH /api/comptabilite/revenus/:id — modifie un produit / une commission.
+ */
+const updateRevenue = async (req, res) => {
+    const b = req.body || {};
+    const fields = {};
+    if (b.label !== undefined) fields.label = String(b.label).trim().slice(0, 255);
+    if (b.categorie !== undefined) fields.category = REVENU_CATEGORIES.includes(b.categorie) ? b.categorie : 'COMMISSION';
+    if (b.montant !== undefined) { const a = Number(b.montant); if (Number.isFinite(a) && a >= 0) fields.amount = a.toFixed(2); }
+    if (b.date !== undefined) fields.date = b.date || null;
+    if (b.partner_id !== undefined) fields.partner_id = b.partner_id || null;
+    if (b.note !== undefined) fields.note = b.note ? String(b.note).slice(0, 255) : null;
+    if (fields.label !== undefined && !fields.label) return res.status(422).json({ error: 'Libellé requis.' });
+    const keys = Object.keys(fields);
+    if (!keys.length) return res.status(400).json({ message: 'Aucun champ à mettre à jour' });
+    try {
+        const [r] = await db.promise().query(
+            `UPDATE revenue_extra SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND organization_id = ?`,
+            [...keys.map((k) => fields[k]), req.params.id, req.user.organization_id]
+        );
+        if (r.affectedRows === 0) return res.status(404).json({ message: 'Produit introuvable' });
+        logAudit(req, 'revenueextra.update', 'RevenueExtra', req.params.id);
+        res.json({ success: true, message: 'Produit mis à jour' });
+    } catch (err) {
+        console.error('Erreur maj produit :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
  * DELETE /api/comptabilite/revenus/:id
  */
 const deleteRevenue = async (req, res) => {
@@ -319,5 +348,5 @@ const saveTargets = async (req, res) => {
 
 module.exports = {
     getGestion, getPerformance, createExpense, deleteExpense,
-    listRevenues, createRevenue, deleteRevenue, saveTargets,
+    listRevenues, createRevenue, updateRevenue, deleteRevenue, saveTargets,
 };

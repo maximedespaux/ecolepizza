@@ -230,6 +230,9 @@ export function getRevenues(annee) {
 export function createRevenue(payload) {
   return request("/comptabilite/revenus", { method: "POST", body: JSON.stringify(payload) });
 }
+export function updateRevenue(id, payload) {
+  return request(`/comptabilite/revenus/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
 export function deleteRevenue(id) {
   return request(`/comptabilite/revenus/${id}`, { method: "DELETE" });
 }

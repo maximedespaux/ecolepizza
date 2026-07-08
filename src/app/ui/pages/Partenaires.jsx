@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, createRevenue } from "../api/apiClient.js";
+import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, createRevenue, updateRevenue, deleteRevenue } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -33,6 +33,20 @@ function Partenaires() {
   const [rec, setRec] = useState({ label: "", categorie: "COMMISSION", montant: "", date: today(), partner_id: "" });
   const [saving, setSaving] = useState(false);
   const [openDetails, setOpenDetails] = useState({}); // détail des commissions déplié par partenaire
+  const [editLine, setEditLine] = useState(null); // ligne de commission en édition
+
+  async function delLine(c) {
+    if (!window.confirm(`Supprimer « ${c.label} » ?`)) return;
+    try { await deleteRevenue(c.id); load(); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+  async function saveLine() {
+    if (!editLine.label.trim() || editLine.amount === "") { setStatus({ type: "error", message: "Libellé et montant requis." }); return; }
+    try {
+      await updateRevenue(editLine.id, { label: editLine.label, montant: editLine.amount, date: editLine.date });
+      setEditLine(null); load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
 
   async function load() {
     try { const { data } = await getPartenaires(); setPartners(data); }
@@ -144,14 +158,28 @@ function Partenaires() {
                   </button>
                   {openDetails[p.id] && (
                     <div style={{ marginTop: 6, display: "flex", flexDirection: "column" }}>
-                      {p.commissions.map((c) => (
-                        <div key={c.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "4px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                      {p.commissions.map((c) => (editLine && editLine.id === c.id ? (
+                        <div key={c.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "4px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                          <input className="inp" style={{ flex: 1, minWidth: 0 }} value={editLine.label} onChange={(e) => setEditLine({ ...editLine, label: e.target.value })} />
+                          <input className="inp" style={{ width: 70 }} inputMode="decimal" value={editLine.amount} onChange={(e) => setEditLine({ ...editLine, amount: e.target.value })} />
+                          <input className="inp" type="date" style={{ width: 132 }} value={editLine.date} onChange={(e) => setEditLine({ ...editLine, date: e.target.value })} />
+                          <button type="button" className="btn sm primary" onClick={saveLine}>OK</button>
+                          <button type="button" className="btn sm ghost" onClick={() => setEditLine(null)}>×</button>
+                        </div>
+                      ) : (
+                        <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 12.5, padding: "4px 0", borderBottom: "1px solid var(--border-soft)" }}>
                           <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {c.label}<span style={{ color: "var(--dim)" }}> · {new Date(c.date).toLocaleDateString("fr-FR")}</span>
                           </span>
                           <b className="tnum">{euro(Number(c.amount))}</b>
+                          {canEdit && (
+                            <>
+                              <button type="button" className="iconbtn" title="Modifier" onClick={() => setEditLine({ id: c.id, label: c.label, amount: String(c.amount), date: c.date })}>✎</button>
+                              <button type="button" className="iconbtn del" title="Supprimer" onClick={() => delLine(c)}>🗑</button>
+                            </>
+                          )}
                         </div>
-                      ))}
+                      )))}
                     </div>
                   )}
                 </>
