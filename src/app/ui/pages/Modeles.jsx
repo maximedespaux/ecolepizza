@@ -84,7 +84,6 @@ function Modeles() {
                 <th>Type</th>
                 <th>Signature</th>
                 <th>Conditions</th>
-                <th>Modèle</th>
                 <th></th>
               </tr>
             </thead>
@@ -110,11 +109,6 @@ function Modeles() {
                     {t.stagiaire_sign ? " 👤" : ""}
                   </td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when)}</td>
-                  <td>
-                    {t.has_body ? <Badge tone="g">Créé</Badge>
-                      : t.has_file ? <Badge tone="b">Word</Badge>
-                        : <span style={{ color: "var(--dim)", fontSize: 12 }}>à créer</span>}
-                  </td>
                   <td>
                     <input ref={(el) => (inputs.current[t.slug] = el)} type="file" accept=".docx" style={{ display: "none" }}
                       onChange={(e) => onFile(t.slug, e.target.files[0])} />
