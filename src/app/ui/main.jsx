@@ -34,6 +34,7 @@ import Audit from "./pages/Audit.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import Platform from "./pages/Platform.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
+import EmargementStagiaire from "./pages/EmargementStagiaire.jsx";
 import MesFormations from "./pages/MesFormations.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
 import Atelier from "./pages/Atelier.jsx";
@@ -119,6 +120,7 @@ function AppRoutes() {
         <Route path="/" element={<StudentLayout />}>
           <Route index element={<Navigate to="/mon-espace" replace />} />
           <Route path="mon-espace" element={<MonEspace />} />
+          <Route path="emargement" element={<EmargementStagiaire />} />
           <Route path="formations" element={<MesFormations />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
           <Route path="atelier" element={<Atelier />} />

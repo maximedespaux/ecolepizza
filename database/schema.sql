@@ -331,6 +331,9 @@ CREATE TABLE attendance_sheet (
     session_id uuid      NOT NULL,
     date       date      NOT NULL,
     slot       enum('MATIN','APRES_MIDI','EXAMEN','DISTANCIEL') NOT NULL,
+    trainer_name      varchar(255) DEFAULT NULL,        -- formateur signataire
+    trainer_signature longtext     DEFAULT NULL,        -- signature manuscrite (data URL)
+    trainer_signed_at datetime     DEFAULT NULL,
     created_at timestamp NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     UNIQUE KEY uq_sheet (session_id, date, slot),
@@ -343,6 +346,8 @@ CREATE TABLE attendance_record (
     sheet_id   uuid      NOT NULL,
     learner_id uuid      DEFAULT NULL,
     present    tinyint(1) NOT NULL DEFAULT 0,
+    signer_name    varchar(255) DEFAULT NULL,           -- stagiaire signataire
+    signature_data longtext     DEFAULT NULL,           -- signature manuscrite (data URL)
     signed_at  datetime  DEFAULT NULL,
     PRIMARY KEY (id),
     KEY idx_record_sheet (sheet_id),

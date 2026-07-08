@@ -266,4 +266,64 @@ const getMyFormation = async (req, res) => {
     }
 };
 
-module.exports = { getMonEspace, getMyFormations, getMyFormation };
+/**
+ * GET /api/mon-espace/emargement — demi-journées d'émargement du stagiaire
+ * (ses sessions), avec l'état de sa signature.
+ */
+const getMyEmargement = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: "Aucune fiche stagiaire liée à ce compte." });
+        const [rows] = await conn.query(
+            `SELECT ar.id AS record_id, ar.present,
+                    (ar.signature_data IS NOT NULL) AS signed, ar.signer_name,
+                    DATE_FORMAT(ar.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                    DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.slot, s.session_id,
+                    p.code AS program_code, p.title AS program_title
+             FROM attendance_record ar
+             JOIN attendance_sheet s ON s.id = ar.sheet_id
+             JOIN training_session ts ON ts.id = s.session_id
+             LEFT JOIN training_program p ON p.id = ts.program_id
+             WHERE ar.learner_id = ?
+             ORDER BY s.date, FIELD(s.slot, 'MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL')`,
+            [learner.id]
+        );
+        res.json({ data: { today: todayISO(), records: rows } });
+    } catch (err) {
+        console.error('Erreur émargement stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/mon-espace/emargement/:recordId/sign — le stagiaire signe sa présence
+ * pour une demi-journée. Corps : { signature_data, signer_name? }.
+ */
+const signMyEmargement = async (req, res) => {
+    const { signature_data, signer_name } = req.body || {};
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Fiche stagiaire introuvable.' });
+        const [[rec]] = await conn.query(
+            `SELECT ar.id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date
+             FROM attendance_record ar JOIN attendance_sheet s ON s.id = ar.sheet_id
+             WHERE ar.id = ? AND ar.learner_id = ?`,
+            [req.params.recordId, learner.id]
+        );
+        if (!rec) return res.status(404).json({ message: 'Émargement introuvable.' });
+        if (rec.date > todayISO()) return res.status(400).json({ message: 'Impossible de signer une demi-journée à venir.' });
+        const name = (signer_name && signer_name.trim()) || `${learner.first_name || ''} ${learner.last_name || ''}`.trim();
+        await conn.query(
+            'UPDATE attendance_record SET present = 1, signed_at = NOW(), signer_name = ?, signature_data = ? WHERE id = ?',
+            [name, signature_data || null, req.params.recordId]
+        );
+        res.json({ success: true, message: 'Émargement signé.' });
+    } catch (err) {
+        console.error('Erreur signature émargement :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement };

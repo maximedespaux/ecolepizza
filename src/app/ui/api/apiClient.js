@@ -65,6 +65,17 @@ export function generateAttendance(sessionId) {
 export function setPresence(recordId, present) {
   return request(`/attendance/record/${recordId}`, { method: "PATCH", body: JSON.stringify({ present }) });
 }
+// Signature de la feuille d'émargement par le formateur.
+export function signAttendanceSheet(sheetId, payload) {
+  return request(`/attendance/sheet/${sheetId}/sign`, { method: "POST", body: JSON.stringify(payload) });
+}
+// Émargement du stagiaire (espace) : liste + signature d'une demi-journée.
+export function getMyEmargement() {
+  return request("/mon-espace/emargement");
+}
+export function signMyEmargement(recordId, payload) {
+  return request(`/mon-espace/emargement/${recordId}/sign`, { method: "POST", body: JSON.stringify(payload) });
+}
 
 // --- Journal d'audit ---
 export function getAudit(q = "") {

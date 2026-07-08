@@ -33,6 +33,7 @@ function StudentLayout() {
         </div>
         <nav style={{ display: "flex", gap: 6, marginLeft: 8 }}>
           <NavLink to="/mon-espace" className={navClass}>Mes documents</NavLink>
+          <NavLink to="/emargement" className={navClass}>Émargement</NavLink>
           <NavLink to="/formations" className={navClass}>Mes formations</NavLink>
           <NavLink to="/atelier" className={navClass}>Atelier pâte</NavLink>
         </nav>

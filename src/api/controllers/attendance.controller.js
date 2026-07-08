@@ -31,12 +31,16 @@ const getAttendance = async (req, res) => {
     try {
         const conn = db.promise();
         const [sheets] = await conn.query(
-            `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, slot
+            `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, slot,
+                    trainer_name, (trainer_signature IS NOT NULL) AS trainer_signed,
+                    DATE_FORMAT(trainer_signed_at, '%Y-%m-%d %H:%i') AS trainer_signed_at
              FROM attendance_sheet WHERE session_id = ? ORDER BY date, FIELD(slot,'MATIN','APRES_MIDI','EXAMEN','DISTANCIEL')`,
             [req.params.sessionId]
         );
         const [records] = await conn.query(
-            `SELECT r.id, r.sheet_id, r.learner_id, r.present,
+            `SELECT r.id, r.sheet_id, r.learner_id, r.present, r.signer_name,
+                    (r.signature_data IS NOT NULL) AS has_signature,
+                    DATE_FORMAT(r.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
                     l.first_name, l.last_name
              FROM attendance_record r
              JOIN attendance_sheet s ON s.id = r.sheet_id
@@ -132,4 +136,32 @@ const setPresence = (req, res) => {
     );
 };
 
-module.exports = { getAttendance, generateSheets, setPresence };
+/**
+ * POST /api/attendance/sheet/:id/sign — le formateur signe la feuille (demi-journée).
+ * Corps : { signature_data, signer_name? }.
+ */
+const signSheet = async (req, res) => {
+    const { signature_data, signer_name } = req.body || {};
+    try {
+        const conn = db.promise();
+        const [[sheet]] = await conn.query(
+            `SELECT s.id FROM attendance_sheet s
+             JOIN training_session ts ON ts.id = s.session_id
+             WHERE s.id = ? AND ts.organization_id = ?`,
+            [req.params.id, req.user.organization_id]
+        );
+        if (!sheet) return res.status(404).json({ message: 'Feuille introuvable.' });
+        const name = (signer_name && signer_name.trim()) || req.user.email;
+        await conn.query(
+            'UPDATE attendance_sheet SET trainer_name = ?, trainer_signature = ?, trainer_signed_at = NOW() WHERE id = ?',
+            [name, signature_data || null, req.params.id]
+        );
+        logAudit(req, 'attendance.sign', 'AttendanceSheet', req.params.id);
+        res.json({ success: true, message: 'Feuille signée.' });
+    } catch (err) {
+        console.error('Erreur signature feuille :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getAttendance, generateSheets, setPresence, signSheet };
