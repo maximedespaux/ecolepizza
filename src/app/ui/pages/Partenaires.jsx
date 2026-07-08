@@ -32,6 +32,7 @@ function Partenaires() {
   // Saisie d'un produit divers (commission…) — déplacée depuis « Produit divers ».
   const [rec, setRec] = useState({ label: "", categorie: "COMMISSION", montant: "", date: today(), partner_id: "" });
   const [saving, setSaving] = useState(false);
+  const [openDetails, setOpenDetails] = useState({}); // détail des commissions déplié par partenaire
 
   async function load() {
     try { const { data } = await getPartenaires(); setPartners(data); }
@@ -135,6 +136,26 @@ function Partenaires() {
                 <b>{euro(Number(p.commissions_total || 0))}</b>
                 <span className="sub">{p.commissions_count || 0} · {p.last_commission ? `dernière ${p.last_commission}` : "aucune"}</span>
               </div>
+              {p.commissions && p.commissions.length > 0 && (
+                <>
+                  <button type="button" className="btn sm ghost" style={{ marginTop: 6 }}
+                    onClick={() => setOpenDetails((o) => ({ ...o, [p.id]: !o[p.id] }))}>
+                    {openDetails[p.id] ? "Masquer le détail" : `Voir le détail (${p.commissions.length})`}
+                  </button>
+                  {openDetails[p.id] && (
+                    <div style={{ marginTop: 6, display: "flex", flexDirection: "column" }}>
+                      {p.commissions.map((c) => (
+                        <div key={c.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "4px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {c.label}<span style={{ color: "var(--dim)" }}> · {new Date(c.date).toLocaleDateString("fr-FR")}</span>
+                          </span>
+                          <b className="tnum">{euro(Number(c.amount))}</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
               {p.notes && <p className="sub" style={{ marginBottom: 0 }}>{p.notes}</p>}
               {canEdit && (
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>

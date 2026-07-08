@@ -11,27 +11,39 @@ const PARTNER_FIELDS = [
  * GET /api/partenaires — annuaire + suivi (contacts, offre, commissions cumulées).
  * Filtre ?category=
  */
-const getPartners = (req, res) => {
-    const params = [req.user.organization_id];
-    let sql = `
-        SELECT p.id, p.name, p.category, p.contact_name, p.contact_email, p.contact_phone,
-               p.website, p.town, p.discount_pct, p.offer, p.notes, p.created_at,
-               COALESCE(SUM(re.amount), 0) AS commissions_total,
-               COUNT(re.id) AS commissions_count,
-               DATE_FORMAT(MAX(re.date), '%Y-%m-%d') AS last_commission
-          FROM partner p
-          LEFT JOIN revenue_extra re ON re.partner_id = p.id
-         WHERE p.organization_id = ?`;
-    if (req.query.category) { sql += ' AND p.category = ?'; params.push(req.query.category); }
-    sql += ' GROUP BY p.id ORDER BY p.name';
+const getPartners = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const params = [req.user.organization_id];
+        let sql = `
+            SELECT p.id, p.name, p.category, p.contact_name, p.contact_email, p.contact_phone,
+                   p.website, p.town, p.discount_pct, p.offer, p.notes, p.created_at,
+                   COALESCE(SUM(re.amount), 0) AS commissions_total,
+                   COUNT(re.id) AS commissions_count,
+                   DATE_FORMAT(MAX(re.date), '%Y-%m-%d') AS last_commission
+              FROM partner p
+              LEFT JOIN revenue_extra re ON re.partner_id = p.id
+             WHERE p.organization_id = ?`;
+        if (req.query.category) { sql += ' AND p.category = ?'; params.push(req.query.category); }
+        sql += ' GROUP BY p.id ORDER BY p.name';
+        const [results] = await conn.query(sql, params);
 
-    db.query(sql, params, (err, results) => {
-        if (err) {
-            console.error('Erreur récupération partenaires :', err);
-            return res.status(500).json({ error: 'Internal Server Error' });
-        }
+        // Détail des commissions par partenaire (libellé, date, montant).
+        const [lines] = await conn.query(
+            `SELECT re.id, re.partner_id, re.label, re.amount, DATE_FORMAT(re.date, '%Y-%m-%d') AS date
+             FROM revenue_extra re JOIN partner p ON p.id = re.partner_id
+             WHERE p.organization_id = ? ORDER BY re.date DESC, re.created_at DESC`,
+            [req.user.organization_id]
+        );
+        const byPartner = {};
+        for (const l of lines) (byPartner[l.partner_id] = byPartner[l.partner_id] || []).push(l);
+        for (const p of results) p.commissions = byPartner[p.id] || [];
+
         res.json({ data: results });
-    });
+    } catch (err) {
+        console.error('Erreur récupération partenaires :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /** POST /api/partenaires */
