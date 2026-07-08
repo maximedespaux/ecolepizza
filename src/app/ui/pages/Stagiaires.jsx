@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getStagiaires, getStagiaire, createStagiaire, updateStagiaire, resetStagiairePassword, getOpcos } from "../api/apiClient.js";
+import { getStagiaires, getStagiaire, createStagiaire, updateStagiaire, resetStagiairePassword, deleteStagiaire, getOpcos } from "../api/apiClient.js";
 import { OPCOS } from "../lib/opco.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -67,6 +67,18 @@ function Stagiaires() {
   const opcoNames = opcos.length ? opcos.filter((o) => o.active).map((o) => o.name) : OPCOS;
 
   const toggleReveal = (id) => setRevealed((r) => ({ ...r, [id]: !r[id] }));
+
+  async function removeLearner(l) {
+    if (!window.confirm(`Supprimer définitivement le stagiaire ${l.first_name} ${l.last_name} ?\nSes dossiers et documents seront également supprimés. Cette action est irréversible.`)) return;
+    setStatus(null);
+    try {
+      await deleteStagiaire(l.id);
+      setStatus({ type: "success", message: "Stagiaire supprimé." });
+      load(query);
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    }
+  }
 
   async function resetPassword(id) {
     setStatus(null);
@@ -408,6 +420,15 @@ function Stagiaires() {
                   onClick={() => openEdit(l.id)}
                 >
                   ✎
+                </button>
+                <button
+                  type="button"
+                  className="iconbtn del"
+                  title="Supprimer le stagiaire"
+                  aria-label={`Supprimer ${l.first_name} ${l.last_name}`}
+                  onClick={() => removeLearner(l)}
+                >
+                  🗑
                 </button>
               </div>
             ))}
