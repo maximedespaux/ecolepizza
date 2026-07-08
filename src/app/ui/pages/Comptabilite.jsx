@@ -41,8 +41,8 @@ function Comptabilite() {
   const [cibleForm, setCibleForm] = useState({});
   const [dividendeForm, setDividendeForm] = useState("10");
 
-  const load = useCallback(async (an) => {
-    setLoading(true);
+  const load = useCallback(async (an, { silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const { data: d } = await getComptabilite(an);
       setData(d);
@@ -65,14 +65,14 @@ function Comptabilite() {
       await createExpense(dep);
       setDep({ label: "", categorie: dep.categorie, montantHT: "", date: today() });
       setStatus({ type: "success", message: "Dépense enregistrée." });
-      load(annee);
+      load(annee, { silent: true });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSavingDep(false); }
   }
 
   async function delDep(d) {
     if (!window.confirm(`Supprimer « ${d.label} » ?`)) return;
-    try { await deleteExpense(d.id); load(annee); } catch (e) { setStatus({ type: "error", message: e.message }); }
+    try { await deleteExpense(d.id); load(annee, { silent: true }); } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   async function saveCibles() {
@@ -82,7 +82,7 @@ function Comptabilite() {
       await saveComptaTargets({ targets, dividendeCible: Number(dividendeForm) });
       setEditCibles(false);
       setStatus({ type: "success", message: "Cibles enregistrées." });
-      load(annee);
+      load(annee, { silent: true });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
@@ -297,7 +297,7 @@ function ListRow({ titre, sous, montant, onDel }) {
         <div className="sub" style={{ color: "var(--dim)" }}>{sous}</div>
       </div>
       <b className="tnum" style={{ color: "var(--navy)" }}>{montant}</b>
-      <button className="iconbtn del" title="Supprimer" onClick={onDel}>🗑</button>
+      <button type="button" className="iconbtn del" title="Supprimer" onClick={onDel}>🗑</button>
     </div>
   );
 }
