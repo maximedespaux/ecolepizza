@@ -13,6 +13,7 @@ function Sessions() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
+  const [view, setView] = useState("mois"); // mois | trimestre | semestre | annee
   const [sessions, setSessions] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [status, setStatus] = useState(null);
@@ -35,11 +36,27 @@ function Sessions() {
 
   const weeks = useMemo(() => monthMatrix(year, month), [year, month]);
 
-  function prevMonth() {
-    if (month === 0) { setYear((y) => y - 1); setMonth(11); } else setMonth((m) => m - 1);
-  }
-  function nextMonth() {
-    if (month === 11) { setYear((y) => y + 1); setMonth(0); } else setMonth((m) => m + 1);
+  // Mois affichés selon la vue (mois / trimestre / semestre / année).
+  const monthsToShow = useMemo(() => {
+    if (view === "mois") return [{ y: year, m: month }];
+    let start, count;
+    if (view === "trimestre") { start = Math.floor(month / 3) * 3; count = 3; }
+    else if (view === "semestre") { start = month < 6 ? 0 : 6; count = 6; }
+    else { start = 0; count = 12; }
+    return Array.from({ length: count }, (_, i) => ({ y: year, m: start + i }));
+  }, [view, year, month]);
+
+  const periodTitle = view === "mois" ? `${MONTHS[month]} ${year}`
+    : view === "trimestre" ? `T${Math.floor(month / 3) + 1} · ${year}`
+    : view === "semestre" ? `S${month < 6 ? 1 : 2} · ${year}`
+    : `${year}`;
+
+  function shift(dir) {
+    const step = view === "trimestre" ? 3 : view === "semestre" ? 6 : view === "annee" ? 12 : 1;
+    let m = month + dir * step, y = year;
+    while (m < 0) { m += 12; y -= 1; }
+    while (m > 11) { m -= 12; y += 1; }
+    setYear(y); setMonth(m);
   }
 
   // Sessions actives un jour donné (hors week-end).
@@ -116,15 +133,27 @@ function Sessions() {
 
       <Card>
         <div className="cal-toolbar">
-          <button className="btn sm" onClick={prevMonth}>←</button>
-          <h2 className="cal-title">{MONTHS[month]} {year}</h2>
-          <button className="btn sm" onClick={nextMonth}>→</button>
+          <button className="btn sm" onClick={() => shift(-1)}>←</button>
+          <h2 className="cal-title" style={{ textTransform: "capitalize" }}>{periodTitle}</h2>
+          <button className="btn sm" onClick={() => shift(1)}>→</button>
+          <div style={{ display: "flex", gap: 4, marginLeft: 12 }}>
+            {[["mois", "Mois"], ["trimestre", "Trimestre"], ["semestre", "Semestre"], ["annee", "Année"]].map(([v, l]) => (
+              <button key={v} className={"btn sm " + (view === v ? "primary" : "ghost")} onClick={() => setView(v)}>{l}</button>
+            ))}
+          </div>
           <div className="spacer" />
           <button className="btn sm ghost" onClick={() => { setYear(now.getFullYear()); setMonth(now.getMonth()); }}>
             Aujourd'hui
           </button>
         </div>
 
+        {view !== "mois" ? (
+          <div className="cal-multi">
+            {monthsToShow.map(({ y, m }) => (
+              <MiniMonth key={`${y}-${m}`} y={y} m={m} sessionsOn={sessionsOn} onOpen={(id) => navigate(`/sessions/${id}`)} />
+            ))}
+          </div>
+        ) : (
         <div className="cal-grid withweeks">
           <div className="cal-dow cal-wk-h">Sem.</div>
           {DOW.map((d) => <div key={d} className="cal-dow">{d}</div>)}
@@ -160,6 +189,7 @@ function Sessions() {
             </Fragment>
           ))}
         </div>
+        )}
 
         {legend.length > 0 && (
           <div className="cal-legend">
@@ -172,6 +202,38 @@ function Sessions() {
         )}
       </Card>
     </>
+  );
+}
+
+// Mini-calendrier compact d'un mois (vues trimestre / semestre / année).
+function MiniMonth({ y, m, sessionsOn, onOpen }) {
+  const days = monthMatrix(y, m).flat();
+  return (
+    <div className="cal-mini">
+      <div className="cal-mini-title">{MONTHS[m]} {y}</div>
+      <div className="cal-mini-grid">
+        {DOW.map((d) => <div key={d} className="cal-mini-dow">{d[0]}</div>)}
+        {days.map((day) => {
+          const dayStr = ymd(day);
+          const inMonth = day.getMonth() === m;
+          const evts = isWeekend(day) ? [] : sessionsOn(dayStr);
+          return (
+            <div key={dayStr} className={`cal-mini-cell${inMonth ? "" : " out"}${isToday(day) ? " today" : ""}`}>
+              <span className="d">{day.getDate()}</span>
+              {evts.length > 0 && (
+                <span className="dots">
+                  {evts.slice(0, 4).map((s) => (
+                    <i key={s.id} style={{ background: colorOf(s.program_code) }}
+                      title={`${s.program_code} — ${s.program_title} · ${s.stagiaires} stag.`}
+                      onClick={() => onOpen(s.id)} />
+                  ))}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

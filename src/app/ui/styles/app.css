@@ -470,6 +470,19 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .pv-hf.pv-foot{border-bottom:none;border-top:1px solid #999;margin:18px 0 0;padding:8px 0 0;color:#555;font-size:.82em}
 
 /* Actions alignées en colonnes dans le tableau des Modèles */
+/* Calendrier multi-mois (vues trimestre / semestre / année) */
+.cal-multi{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:14px}
+.cal-mini{border:1px solid var(--border-soft);border-radius:10px;padding:8px}
+.cal-mini-title{font-weight:700;font-size:13px;margin-bottom:6px;text-transform:capitalize}
+.cal-mini-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-mini-dow{font-size:9px;color:var(--dim);text-align:center;padding-bottom:2px}
+.cal-mini-cell{min-height:26px;border-radius:5px;padding:2px 3px;font-size:10px;background:var(--bg2)}
+.cal-mini-cell.out{opacity:.4}
+.cal-mini-cell.today{outline:1.5px solid var(--ember1);outline-offset:-1px}
+.cal-mini-cell .d{color:var(--muted)}
+.cal-mini-cell .dots{display:flex;gap:1px;flex-wrap:wrap;margin-top:1px}
+.cal-mini-cell .dots i{width:6px;height:6px;border-radius:2px;cursor:pointer}
+
 .tpl-actions{display:inline-grid;grid-template-columns:auto 32px 32px 32px;gap:6px;align-items:center;justify-items:center}
 .tpl-actions>.btn.sm.ghost,.tpl-actions>.slot{width:32px;padding:0;justify-content:center}
 
