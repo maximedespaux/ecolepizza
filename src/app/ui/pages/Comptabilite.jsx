@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  getComptabilite, getComptaPerformance, createExpense, deleteExpense, saveComptaTargets,
+  getComptabilite, getComptaPerformance, createExpense, deleteExpense, saveComptaTargets, deleteRevenue,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
+const REV_LABEL = { COMMISSION: "Commission partenaire", SUBVENTION: "Subvention", AUTRE: "Autre produit" };
 const CATS = [
   { v: "MATIERES_PREMIERES", label: "Matières premières" },
   { v: "SALAIRES", label: "Salaires & charges" },
@@ -73,6 +74,11 @@ function Comptabilite() {
   async function delDep(d) {
     if (!window.confirm(`Supprimer « ${d.label} » ?`)) return;
     try { await deleteExpense(d.id); load(annee, { silent: true }); } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+
+  async function delRev(r) {
+    if (!window.confirm(`Supprimer le produit « ${r.label} » (${euro(r.amount)}) ?`)) return;
+    try { await deleteRevenue(r.id); load(annee, { silent: true }); } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   async function saveCibles() {
@@ -242,12 +248,19 @@ function Comptabilite() {
             </Card>
           </div>
 
-          {/* Liste des dépenses */}
-          <div className="grid">
+          {/* Listes dépenses + produits divers */}
+          <div className="grid cols-2">
             <Card title={`Dépenses ${annee}`}>
               {data.depenses.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucune dépense saisie.</p> : (
                 <div>{data.depenses.map((d) => (
                   <ListRow key={d.id} titre={d.label} sous={`${CATS.find((c) => c.v === d.category)?.label ?? d.category} · ${new Date(d.date).toLocaleDateString("fr-FR")}`} montant={euro(d.amount_ht)} onDel={() => delDep(d)} />
+                ))}</div>
+              )}
+            </Card>
+            <Card title={`Produits divers ${annee} · ${euro(data.ca.extra)}`}>
+              {(!data.revenus || data.revenus.length === 0) ? <p className="lead" style={{ margin: 0 }}>Aucun produit divers. Se saisit sur la page Partenaires.</p> : (
+                <div>{data.revenus.map((r) => (
+                  <ListRow key={r.id} titre={r.label} sous={`${REV_LABEL[r.category] ?? r.category} · ${new Date(r.date).toLocaleDateString("fr-FR")}`} montant={euro(r.amount)} onDel={() => delRev(r)} />
                 ))}</div>
               )}
             </Card>
