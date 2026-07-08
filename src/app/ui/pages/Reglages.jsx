@@ -56,6 +56,15 @@ function Reglages() {
                 Code court unique. Les utilisateurs le saisissent à la connexion lorsqu'une même adresse e-mail existe dans plusieurs organismes.
               </span>
             </div>
+
+            <div className="divider" />
+            <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Coordonnées bancaires (RIB)</h3>
+            <p className="sub" style={{ marginTop: 0 }}>Utilisées sur les devis, conventions et factures — jetons {"{IBAN}"}, {"{BIC}"}, {"{Banque}"}.</p>
+            <div className="row3">
+              <Field label="IBAN" value={form.iban || ""} onChange={set("iban")} placeholder="FR76 3000 4000 0100 0001 2345 678" />
+              <Field label="BIC / SWIFT" value={form.bic || ""} onChange={set("bic")} placeholder="AGRIFRPP" />
+              <Field label="Domiciliation (banque)" value={form.bank_name || ""} onChange={set("bank_name")} placeholder="Crédit Agricole Aquitaine" />
+            </div>
             <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "10px 0 14px", fontSize: 14 }}>
               <input type="checkbox" checked={!!form.qualiopi} onChange={(e) => setForm((p) => ({ ...p, qualiopi: e.target.checked ? 1 : 0 }))} />
               Certifié Qualiopi

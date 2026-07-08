@@ -118,6 +118,9 @@ const TOKEN_CATALOG = [
             { key: 'Ville organisme', label: 'Ville', sample: 'Bordeaux' },
             { key: 'Téléphone organisme', label: 'Téléphone', sample: '05 56 00 00 00' },
             { key: 'Email organisme', label: 'E-mail', sample: 'contact@ecole-pizza.fr' },
+            { key: 'IBAN', label: 'IBAN (RIB)', sample: 'FR76 3000 4000 0100 0001 2345 678' },
+            { key: 'BIC', label: 'BIC / SWIFT', sample: 'AGRIFRPP' },
+            { key: 'Banque', label: 'Domiciliation bancaire', sample: 'Crédit Agricole' },
         ],
     },
     {
@@ -209,6 +212,7 @@ function resolveTokens(ctx = {}) {
         'Siret organisme': o.siret || '', 'TVA organisme': o.vat_number || '', NDA: o.nda || '',
         'Adresse organisme': orgAddress, 'Ville organisme': o.town || '',
         'Téléphone organisme': o.phone || '', 'Email organisme': o.email || '',
+        IBAN: o.iban || '', BIC: o.bic || '', Banque: o.bank_name || '',
         // Dates
         Date: today, Today: today,
         // Boucle docxtemplater : {#formations}{Titre} — {PrixLigne}{/formations}
