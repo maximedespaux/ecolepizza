@@ -343,6 +343,30 @@ export function getSuivi() {
 export function getArchives() {
   return request("/suivi/archives");
 }
+// Import de PDF historiques (dossier). `files` = File[], `paths` = chemins relatifs alignés.
+export async function importArchives(files, paths) {
+  const fd = new FormData();
+  files.forEach((f) => fd.append("files", f));
+  fd.append("paths", JSON.stringify(paths));
+  startLoading();
+  try {
+    const res = await fetch(`${API_BASE_URL}/suivi/archives/import`, { method: "POST", credentials: "include", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Import échoué");
+    return data;
+  } finally {
+    stopLoading();
+  }
+}
+export function archiveFileUrl(id) {
+  return `${API_BASE_URL}/suivi/archives/${id}/file`;
+}
+export function downloadArchiveFile(id, filename) {
+  return download(`/suivi/archives/${id}/file`, filename);
+}
+export function deleteArchive(id) {
+  return request(`/suivi/archives/${id}`, { method: "DELETE" });
+}
 
 export function createEnrollment(payload) {
   return request("/enrollments", { method: "POST", body: JSON.stringify(payload) });

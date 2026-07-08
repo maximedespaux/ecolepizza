@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSuivi, getArchives, downloadDocumentPdf } from "../api/apiClient.js";
+import {
+  getSuivi, getArchives, downloadDocumentPdf,
+  importArchives, archiveFileUrl, downloadArchiveFile, deleteArchive,
+} from "../api/apiClient.js";
+import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -11,7 +15,7 @@ import Roadmap from "../components/Roadmap.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf } from "../lib/format.js";
 
-const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé ✓", "g"] };
+const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé ✓", "g"], ARCHIVE: ["Archivé", "n"] };
 const SIGN_TYPES = new Set(["DEVIS", "CONTRAT", "CONVENTION", "DROIT_IMAGE"]);
 const docIcon = (d) => (d.quiz_id ? "❓" : SIGN_TYPES.has(d.type) ? "✍️" : "📄");
 
@@ -87,7 +91,10 @@ function Suivi() {
           </Card>
         </>
       ) : (
-        <ArchivesView onError={(m) => setStatus({ type: "error", message: m })} />
+        <ArchivesView
+          onError={(m) => setStatus({ type: "error", message: m })}
+          onInfo={(m) => setStatus({ type: "success", message: m })}
+        />
       )}
     </>
   );
@@ -119,14 +126,39 @@ function buildTree(rows) {
   return yr;
 }
 
-function ArchivesView({ onError }) {
+function ArchivesView({ onError, onInfo }) {
+  const { user } = useContext(UserContext);
+  const isAdmin = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState("");
   const [viewId, setViewId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
 
-  useEffect(() => {
+  function load() {
     getArchives().then((r) => setRows(r.data)).catch((e) => { setRows([]); onError?.(e.message); });
-  }, []);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function onPick(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    const paths = files.map((f) => f.webkitRelativePath || f.name);
+    setBusy(true);
+    try {
+      const { data } = await importArchives(files, paths);
+      onInfo?.(`${data.imported} document(s) importé(s)${data.skipped ? `, ${data.skipped} ignoré(s) (non PDF)` : ""}.`);
+      load();
+    } catch (err) { onError?.(err.message); }
+    finally { setBusy(false); }
+  }
+
+  async function onDelete(d) {
+    if (!window.confirm(`Supprimer définitivement « ${d.title} » de l'archive ?`)) return;
+    try { await deleteArchive(d.doc_id); load(); }
+    catch (err) { onError?.(err.message); }
+  }
 
   const tree = useMemo(() => {
     if (!rows) return [];
@@ -141,8 +173,24 @@ function ArchivesView({ onError }) {
 
   return (
     <Card title={`Archives documentaires (${rows.length})`}>
-      <input className="inp" placeholder="Rechercher un stagiaire, une formation, un document…" value={q}
-        onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 14, maxWidth: 460 }} />
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+        <input className="inp" placeholder="Rechercher un stagiaire, une formation, un document…" value={q}
+          onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 460, flex: 1, minWidth: 220 }} />
+        {isAdmin && (
+          <>
+            <input ref={fileRef} type="file" webkitdirectory="" directory="" multiple accept="application/pdf,.pdf"
+              style={{ display: "none" }} onChange={onPick} />
+            <button className="btn primary" disabled={busy} onClick={() => fileRef.current?.click()}>
+              {busy ? "Import en cours…" : "🗄 Importer un dossier"}
+            </button>
+          </>
+        )}
+      </div>
+      {isAdmin && (
+        <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
+          Choisissez un dossier organisé en <b>année / semaine / (formation) / stagiaire</b>. Seuls les PDF sont importés ; pour de gros volumes, importez année par année ou semaine par semaine.
+        </p>
+      )}
 
       {tree.length === 0 ? (
         <EmptyState icon="🗄">Aucun document partagé pour l'instant.</EmptyState>
@@ -178,8 +226,13 @@ function ArchivesView({ onError }) {
                                           </span>
                                         </span>
                                         <Badge tone={tone}>{lab}</Badge>
-                                        <button className="iconbtn" title="Aperçu" onClick={() => setViewId(d.doc_id)}>👁</button>
-                                        <button className="iconbtn" title="Télécharger le PDF" onClick={() => downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}>⬇</button>
+                                        <button className="iconbtn" title="Aperçu"
+                                          onClick={() => d.source === "archive" ? window.open(archiveFileUrl(d.doc_id), "_blank", "noopener") : setViewId(d.doc_id)}>👁</button>
+                                        <button className="iconbtn" title="Télécharger le PDF"
+                                          onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}>⬇</button>
+                                        {isAdmin && d.source === "archive" && (
+                                          <button className="iconbtn del" title="Supprimer de l'archive" onClick={() => onDelete(d)}>🗑</button>
+                                        )}
                                       </div>
                                     );
                                   })}
