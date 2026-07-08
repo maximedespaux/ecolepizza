@@ -229,7 +229,7 @@ function StepModal({ step, onClose, onSaved, onError }) {
             <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
               <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
           </div>
-          <p className="sub" style={{ marginTop: 10 }}>Après enregistrement, utilisez « ⬆ » sur la ligne pour téléverser le fichier Word de ce document.</p>
+          <p className="sub" style={{ marginTop: 10 }}>Après enregistrement, utilisez « 🖋 Éditer » sur la ligne pour composer le document.</p>
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>
