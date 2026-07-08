@@ -20,34 +20,44 @@ export const NAV = [
     ],
   },
   {
-    grp: "Secrétariat",
+    grp: "Formation",            // cœur pédagogique : qui, quand, quoi
     items: [
       { to: "/stagiaires", ic: "☺", label: "Stagiaires", roles: STAFF },
-      { to: "/pipeline", ic: "▚", label: "Pipeline CRM", roles: ADMIN },
       { to: "/sessions", ic: "▦", label: "Sessions", roles: STAFF },
-      { to: "/suivi", ic: "▤", label: "Suivi Qualiopi", roles: AUDIT },
+      { to: "/formations", ic: "◍", label: "Formations", roles: STAFF },
     ],
   },
   {
-    grp: "Développement",
+    grp: "Commercial",           // acquisition & relations
     items: [
-      { to: "/formations", ic: "◍", label: "Formations", roles: STAFF },
-      { to: "/produit-divers", ic: "💶", label: "Produit divers", roles: ["FORMATEUR"] },
-      { to: "/carte", ic: "🗺", label: "Carte des stagiaires", roles: ADMIN },
+      { to: "/pipeline", ic: "▚", label: "Pipeline CRM", roles: ADMIN },
       { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: STAFF },
+      { to: "/carte", ic: "🗺", label: "Carte des stagiaires", roles: ADMIN },
+    ],
+  },
+  {
+    grp: "Ventes & Finance",     // encaissement, stock, compta
+    items: [
       { to: "/ventes", ic: "🛒", label: "Ventes & Inventaire", roles: ADMIN },
+      { to: "/produit-divers", ic: "💶", label: "Produit divers", roles: ["FORMATEUR"] },
       { to: "/factures", ic: "🧾", label: "Facturation", roles: ADMIN },
       { to: "/comptabilite", ic: "€", label: "Comptabilité", roles: ADMIN },
     ],
   },
   {
-    grp: "Système",
+    grp: "Qualité & conformité", // Qualiopi + traçabilité
+    items: [
+      { to: "/suivi", ic: "▤", label: "Suivi Qualiopi", roles: AUDIT },
+      { to: "/audit", ic: "🔒", label: "Journal d'audit", roles: AUDIT },
+    ],
+  },
+  {
+    grp: "Configuration",        // paramétrage de l'organisme & modèles
     items: [
       { to: "/reglages", ic: "⚙", label: "Organisme", roles: ADMIN },
       { to: "/equipe", ic: "👥", label: "Équipe & accès", roles: OWNER },
       { to: "/modeles", ic: "⎙", label: "Modèles de documents", roles: ADMIN },
       { to: "/qcm", ic: "❓", label: "Modèles de QCM", roles: ADMIN },
-      { to: "/audit", ic: "🔒", label: "Journal d'audit", roles: AUDIT },
     ],
   },
 ];
