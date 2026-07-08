@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getEnrollments, downloadFacturX, downloadInvoiceXml, facturXUrl } from "../api/apiClient.js";
+import { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getEnrollments, getCompanies, downloadFacturX, downloadInvoiceXml, facturXUrl } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -12,13 +12,15 @@ import { bumpBadges } from "../lib/events.js";
 
 const TYPES = [["DEVIS", "Devis"], ["ACOMPTE", "Acompte"], ["FACTURE", "Facture"], ["AVOIR", "Avoir"]];
 const STATUS = { BROUILLON: ["Brouillon", "n"], EMISE: ["Émise", "b"], PAYEE: ["Payée ✓", "g"], IMPAYEE: ["Impayée", "r"], ANNULEE: ["Annulée", "n"] };
-const EMPTY = { type: "FACTURE", enrollment_id: "", amount_net: "", tva_exoneree: 1, due_date: "" };
+const emptyLine = () => ({ enrollment_id: "", description: "", amount_net: "" });
+const makeEmpty = () => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, due_date: "", lines: [emptyLine()] });
 
 function Factures() {
   const [invoices, setInvoices] = useState([]);
   const [totals, setTotals] = useState({ emis: 0, paye: 0, impaye: 0 });
   const [enrollments, setEnrollments] = useState([]);
-  const [form, setForm] = useState(EMPTY);
+  const [companies, setCompanies] = useState([]);
+  const [form, setForm] = useState(makeEmpty);
   const [status, setStatus] = useState(null);
   const [showForm, setShowForm] = useState(false);
 
@@ -33,16 +35,25 @@ function Factures() {
   useEffect(() => {
     load();
     getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
+    getCompanies().then((r) => setCompanies(r.data)).catch(() => {});
   }, []);
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
+  const setLine = (i, k, v) => setForm((p) => ({ ...p, lines: p.lines.map((l, j) => (j === i ? { ...l, [k]: v } : l)) }));
+  const addLine = () => setForm((p) => ({ ...p, lines: [...p.lines, emptyLine()] }));
+  const delLine = (i) => setForm((p) => ({ ...p, lines: p.lines.length > 1 ? p.lines.filter((_, j) => j !== i) : p.lines }));
+  const formTotal = form.lines.reduce((s, l) => s + (Number(l.amount_net) || 0), 0);
 
   async function add(e) {
     e.preventDefault();
     setStatus(null);
     try {
-      const r = await createInvoice(form);
-      setForm(EMPTY);
+      const r = await createInvoice({
+        type: form.type, company_id: form.company_id || null,
+        tva_exoneree: form.tva_exoneree, due_date: form.due_date || null,
+        lines: form.lines,
+      });
+      setForm(makeEmpty());
       setShowForm(false);
       setStatus({ type: "success", message: `Créé : ${r.number}` });
       load();
@@ -101,22 +112,39 @@ function Factures() {
               <SelectField label="Type" value={form.type} onChange={set("type")}>
                 {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </SelectField>
-              <Field label="Montant net (€)" type="number" step="0.01" value={form.amount_net} onChange={set("amount_net")} required />
+              <SelectField label="Client / entreprise (facultatif)" value={form.company_id} onChange={set("company_id")}>
+                <option value="">— Aucune —</option>
+                {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </SelectField>
               <Field label="Échéance" type="date" value={form.due_date} onChange={set("due_date")} />
             </div>
-            <div className="row2">
-              <SelectField label="Dossier (facultatif)" value={form.enrollment_id} onChange={set("enrollment_id")}>
-                <option value="">— Aucun —</option>
-                {enrollments.map((e) => (
-                  <option key={e.id} value={e.id}>{e.last_name} {e.first_name} — {e.program_code}</option>
-                ))}
-              </SelectField>
-              <label style={{ display: "flex", gap: 8, alignItems: "flex-end", paddingBottom: 10, fontSize: 14 }}>
-                <input type="checkbox" checked={!!form.tva_exoneree} onChange={(e) => setForm((p) => ({ ...p, tva_exoneree: e.target.checked ? 1 : 0 }))} />
-                TVA exonérée
-              </label>
+
+            <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "4px 0 6px" }}>Dossiers / lignes facturées</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {form.lines.map((l, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "1.4fr 1.6fr 0.8fr auto", gap: 8, alignItems: "center" }}>
+                  <select className="inp" value={l.enrollment_id} onChange={(e) => setLine(i, "enrollment_id", e.target.value)}>
+                    <option value="">— Dossier —</option>
+                    {enrollments.map((e) => (
+                      <option key={e.id} value={e.id}>{e.last_name} {e.first_name} — {e.program_code}</option>
+                    ))}
+                  </select>
+                  <input className="inp" placeholder="Libellé (par défaut : la formation)" value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} />
+                  <input className="inp" type="number" step="0.01" placeholder="Montant HT" value={l.amount_net} onChange={(e) => setLine(i, "amount_net", e.target.value)} />
+                  <button type="button" className="iconbtn del" title="Retirer la ligne" onClick={() => delLine(i)} disabled={form.lines.length <= 1}>✕</button>
+                </div>
+              ))}
             </div>
-            <button type="submit" className="btn primary">Créer</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+              <button type="button" className="btn sm ghost" onClick={addLine}>＋ Ajouter une ligne</button>
+              <span style={{ fontWeight: 700 }}>Total HT : {euro(formTotal)}</span>
+            </div>
+
+            <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "12px 0", fontSize: 14 }}>
+              <input type="checkbox" checked={!!form.tva_exoneree} onChange={(e) => setForm((p) => ({ ...p, tva_exoneree: e.target.checked ? 1 : 0 }))} />
+              TVA exonérée (art. 261-4-4° du CGI)
+            </label>
+            <button type="submit" className="btn primary" disabled={formTotal <= 0}>Créer</button>
           </form>
         </Card>
       )}
@@ -136,7 +164,7 @@ function Factures() {
                     <tr key={i.id}>
                       <td className="mono">{i.number}</td>
                       <td>{i.type}</td>
-                      <td>{who}{i.program_code ? ` · ${i.program_code}` : ""}</td>
+                      <td>{who}{Number(i.n_lines) > 1 ? ` · ${i.n_lines} dossiers` : i.program_code ? ` · ${i.program_code}` : ""}</td>
                       <td className="mono" style={{ textAlign: "right" }}>{euro(i.amount_net)}{Number(i.paid) > 0 && <span style={{ display: "block", fontSize: 11, color: "var(--green)" }}>payé {euro(i.paid)}</span>}</td>
                       <td><Badge tone={tone}>{label}</Badge></td>
                       <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>

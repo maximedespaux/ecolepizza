@@ -40,6 +40,24 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         if (l[0]) buyer = { name: `${l[0].first_name || ''} ${l[0].last_name || ''}`.trim(), siret: null, address: { line: l[0].address, zip: l[0].zip_code, city: l[0].town } };
     }
 
+    // Lignes de la facture (plusieurs dossiers possibles) ; repli sur ligne unique.
+    const [lineRows] = await conn.query(
+        `SELECT il.description, il.amount_net, p.title AS program_title, l.first_name, l.last_name
+         FROM invoice_line il
+         LEFT JOIN enrollment e ON e.id = il.enrollment_id
+         LEFT JOIN training_session s ON s.id = e.session_id
+         LEFT JOIN training_program p ON p.id = s.program_id
+         LEFT JOIN learner l ON l.id = e.learner_id
+         WHERE il.invoice_id = ? ORDER BY il.sort_order, il.id`,
+        [invoiceId]
+    );
+    const lineName = (r) => r.description
+        || [r.program_title, (r.last_name ? `${r.last_name} ${r.first_name || ''}`.trim() : '')].filter(Boolean).join(' — ')
+        || 'Prestation de formation';
+    const lines = lineRows.length
+        ? lineRows.map((r) => ({ name: lineName(r), amount: Number(r.amount_net) }))
+        : [{ name: inv.description || inv.program_title || 'Prestation de formation', amount: Number(inv.amount_net) }];
+
     return {
         number: inv.number,
         type: inv.type,
@@ -48,6 +66,7 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         dueDate: inv.due_ymd || null,
         amountNet: inv.amount_net,
         tvaExoneree: !!inv.tva_exoneree,
+        lines,
         lineName: inv.description || inv.program_title || 'Prestation de formation',
         seller: {
             name: o.legal_name || 'Organisme',
@@ -69,6 +88,7 @@ const getInvoices = (req, res) => {
                 DATE_FORMAT(i.created_at, '%Y-%m-%d') AS created_at,
                 i.enrollment_id, i.company_id,
                 l.first_name, l.last_name, p.code AS program_code, c.name AS company_name,
+                (SELECT COUNT(*) FROM invoice_line il WHERE il.invoice_id = i.id) AS n_lines,
                 (SELECT COALESCE(SUM(amount),0) FROM payment WHERE invoice_id = i.id AND status = 'REUSSI') AS paid
          FROM invoice i
          LEFT JOIN enrollment e ON e.id = i.enrollment_id
@@ -101,10 +121,24 @@ const getInvoices = (req, res) => {
  * POST /api/factures — crée un document de facturation (numéro auto).
  */
 const createInvoice = async (req, res) => {
-    const { type, enrollment_id, company_id, amount_net, tva_exoneree = 1, due_date } = req.body;
-    if (!type || !PREFIX[type] || amount_net === undefined || amount_net === '') {
-        return res.status(422).json({ error: 'Type et montant requis' });
+    const { type, enrollment_id, company_id, buyer_name, amount_net, tva_exoneree = 1, due_date, lines } = req.body;
+    if (!type || !PREFIX[type]) return res.status(422).json({ error: 'Type requis' });
+
+    // Lignes multiples (plusieurs dossiers) ou montant unique (rétro-compatible).
+    const hasLines = Array.isArray(lines) && lines.length > 0;
+    let cleanLines = [];
+    let total;
+    if (hasLines) {
+        cleanLines = lines
+            .map((l) => ({ enrollment_id: l.enrollment_id || null, description: (l.description || '').trim() || null, amount_net: Number(l.amount_net) || 0 }))
+            .filter((l) => l.enrollment_id || l.description || l.amount_net);
+        if (cleanLines.length === 0) return res.status(422).json({ error: 'Au moins une ligne requise.' });
+        total = cleanLines.reduce((s, l) => s + l.amount_net, 0);
+    } else {
+        if (amount_net === undefined || amount_net === '') return res.status(422).json({ error: 'Type et montant requis' });
+        total = Number(amount_net);
     }
+
     try {
         const conn = db.promise();
         const year = new Date().getFullYear();
@@ -113,14 +147,25 @@ const createInvoice = async (req, res) => {
             [req.user.organization_id, type, year]
         );
         const number = `${PREFIX[type]}-${year}-${String(cnt[0].n + 1).padStart(4, '0')}`;
+        const mainEnroll = hasLines ? (cleanLines.find((l) => l.enrollment_id)?.enrollment_id || null) : (enrollment_id || null);
+        const invoiceId = crypto.randomUUID();
 
         await conn.query(
-            `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, type, number, amount_net, tva_exoneree, status, due_date)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?)`,
-            [crypto.randomUUID(), req.user.organization_id, enrollment_id || null, company_id || null,
-             type, number, amount_net, tva_exoneree ? 1 : 0, due_date || null]
+            `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?)`,
+            [invoiceId, req.user.organization_id, mainEnroll, company_id || null, buyer_name || null,
+             type, number, total, tva_exoneree ? 1 : 0, due_date || null]
         );
-        logAudit(req, 'invoice.create', 'Invoice');
+        if (hasLines) {
+            for (let i = 0; i < cleanLines.length; i++) {
+                const l = cleanLines[i];
+                await conn.query(
+                    'INSERT INTO invoice_line (id, invoice_id, enrollment_id, description, amount_net, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+                    [crypto.randomUUID(), invoiceId, l.enrollment_id, l.description, l.amount_net, i]
+                );
+            }
+        }
+        logAudit(req, 'invoice.create', 'Invoice', invoiceId);
         res.status(201).json({ message: 'Document créé', number });
     } catch (err) {
         console.error('Erreur création facture :', err);

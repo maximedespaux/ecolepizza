@@ -645,6 +645,20 @@ CREATE TABLE session_trainer (
     CONSTRAINT fk_st_user    FOREIGN KEY (user_id)    REFERENCES user (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- Lignes de facture : une facture peut couvrir plusieurs dossiers / formations.
+CREATE TABLE invoice_line (
+    id            uuid          NOT NULL DEFAULT uuid(),
+    invoice_id    uuid          NOT NULL,
+    enrollment_id uuid          DEFAULT NULL,
+    description   varchar(255)  DEFAULT NULL,
+    amount_net    decimal(10,2) NOT NULL DEFAULT 0.00,
+    sort_order    int           NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_iline_invoice (invoice_id),
+    CONSTRAINT fk_iline_invoice    FOREIGN KEY (invoice_id)    REFERENCES invoice (id) ON DELETE CASCADE,
+    CONSTRAINT fk_iline_enrollment FOREIGN KEY (enrollment_id) REFERENCES enrollment (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- Coffre documentaire : documents historiques importés (PDF), classés par
 -- année / semaine / formation / stagiaire (libellés texte). Cf. Suivi → Archives.
 CREATE TABLE archive_document (

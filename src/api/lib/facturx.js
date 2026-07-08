@@ -57,6 +57,25 @@ function buildCII(d) {
     const grand = net + tax;
     const typeCode = TYPE_CODE[d.type] || '380';
 
+    // Une ou plusieurs lignes (plusieurs dossiers/formations sur une facture).
+    const lines = (d.lines && d.lines.length) ? d.lines : [{ name: d.lineName, amount: net }];
+    const lineItems = lines.map((ln, i) => `<ram:IncludedSupplyChainTradeLineItem>
+      <ram:AssociatedDocumentLineDocument><ram:LineID>${i + 1}</ram:LineID></ram:AssociatedDocumentLineDocument>
+      <ram:SpecifiedTradeProduct><ram:Name>${esc(ln.name || 'Prestation de formation')}</ram:Name></ram:SpecifiedTradeProduct>
+      <ram:SpecifiedLineTradeAgreement>
+        <ram:NetPriceProductTradePrice><ram:ChargeAmount>${money(Number(ln.amount))}</ram:ChargeAmount></ram:NetPriceProductTradePrice>
+      </ram:SpecifiedLineTradeAgreement>
+      <ram:SpecifiedLineTradeDelivery><ram:BilledQuantity unitCode="C62">1.00</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>
+      <ram:SpecifiedLineTradeSettlement>
+        <ram:ApplicableTradeTax>
+          <ram:TypeCode>VAT</ram:TypeCode>
+          <ram:CategoryCode>${cat}</ram:CategoryCode>
+          <ram:RateApplicablePercent>${rate}</ram:RateApplicablePercent>
+        </ram:ApplicableTradeTax>
+        <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>${money(Number(ln.amount))}</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
+      </ram:SpecifiedLineTradeSettlement>
+    </ram:IncludedSupplyChainTradeLineItem>`).join('\n    ');
+
     const addr = (a) => `<ram:PostalTradeAddress>
         ${a.zip ? `<ram:PostcodeCode>${esc(a.zip)}</ram:PostcodeCode>` : ''}
         ${a.line ? `<ram:LineOne>${esc(a.line)}</ram:LineOne>` : ''}
@@ -91,22 +110,7 @@ function buildCII(d) {
     <ram:IssueDateTime><udt:DateTimeString format="102">${d.issueDate}</udt:DateTimeString></ram:IssueDateTime>
   </rsm:ExchangedDocument>
   <rsm:SupplyChainTradeTransaction>
-    <ram:IncludedSupplyChainTradeLineItem>
-      <ram:AssociatedDocumentLineDocument><ram:LineID>1</ram:LineID></ram:AssociatedDocumentLineDocument>
-      <ram:SpecifiedTradeProduct><ram:Name>${esc(d.lineName)}</ram:Name></ram:SpecifiedTradeProduct>
-      <ram:SpecifiedLineTradeAgreement>
-        <ram:NetPriceProductTradePrice><ram:ChargeAmount>${money(net)}</ram:ChargeAmount></ram:NetPriceProductTradePrice>
-      </ram:SpecifiedLineTradeAgreement>
-      <ram:SpecifiedLineTradeDelivery><ram:BilledQuantity unitCode="C62">1.00</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>
-      <ram:SpecifiedLineTradeSettlement>
-        <ram:ApplicableTradeTax>
-          <ram:TypeCode>VAT</ram:TypeCode>
-          <ram:CategoryCode>${cat}</ram:CategoryCode>
-          <ram:RateApplicablePercent>${rate}</ram:RateApplicablePercent>
-        </ram:ApplicableTradeTax>
-        <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>${money(net)}</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
-      </ram:SpecifiedLineTradeSettlement>
-    </ram:IncludedSupplyChainTradeLineItem>
+    ${lineItems}
     <ram:ApplicableHeaderTradeAgreement>
       <ram:SellerTradeParty>
         <ram:Name>${esc(d.seller.name)}</ram:Name>
@@ -192,7 +196,10 @@ async function buildFacturXPdf(d, xml) {
     const tax = d.tvaExoneree ? 0 : Math.round(net * 20) / 100;
     y -= 34; text('Désignation', 40, 9, bold); text('Montant HT', 460, 9, bold);
     y -= 4; page.drawLine({ start: { x: 40, y }, end: { x: 555, y }, thickness: 1, color: red });
-    y -= 16; text(d.lineName, 40, 10); text(`${net.toFixed(2)} €`, 460, 10);
+    const pdfLines = (d.lines && d.lines.length) ? d.lines : [{ name: d.lineName, amount: net }];
+    for (const ln of pdfLines) {
+        y -= 16; text(String(ln.name || 'Prestation de formation').slice(0, 78), 40, 10); text(`${Number(ln.amount).toFixed(2)} €`, 460, 10);
+    }
     y -= 24; text('Total HT', 380, 10); text(`${net.toFixed(2)} €`, 460, 10);
     y -= 14; text('TVA', 380, 10); text(`${tax.toFixed(2)} €`, 460, 10);
     y -= 14; text('Total TTC', 380, 11, bold); text(`${(net + tax).toFixed(2)} €`, 460, 11, bold);
