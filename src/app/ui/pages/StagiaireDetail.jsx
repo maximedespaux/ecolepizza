@@ -140,6 +140,22 @@ function StagiaireDetail() {
 
   const c = l.company;
 
+  // Verrouillage de la préparation selon l'avancement de la formation.
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const END_TYPES = new Set(["CERTIFICAT_REALISATION", "DIPLOME", "ATTESTATION_ASSIDUITE", "EVALUATION_SATISFACTION", "ATTESTATION_HYGIENE"]);
+  const DURING_TYPES = new Set(["EMARGEMENT"]);
+  const selTpl = templates.find((t) => t.slug === prep.slug);
+  const selEnr = enrollments.filter((e) => prep.enrollment_ids.includes(e.id));
+  const phase = selTpl ? (END_TYPES.has(selTpl.doc_type) ? "end" : DURING_TYPES.has(selTpl.doc_type) ? "during" : "any") : "any";
+  const startedAll = selEnr.length > 0 && selEnr.every((e) => e.start_date && e.start_date <= todayISO);
+  const finishedAll = selEnr.length > 0 && selEnr.every((e) => e.end_date && e.end_date <= todayISO);
+  let gateReason = "";
+  if (prep.enrollment_ids.length > 0) {
+    if (phase === "during" && !startedAll) gateReason = "Disponible une fois la formation commencée.";
+    else if (phase === "end" && !finishedAll) gateReason = "Disponible une fois la formation terminée.";
+  }
+  const canPrepare = enrollments.length > 0 && prep.enrollment_ids.length > 0 && !!selTpl && !gateReason;
+
   return (
     <>
       <PageHead
@@ -254,7 +270,11 @@ function StagiaireDetail() {
               </div>
             )}
           </div>
-          <button type="submit" className="btn primary" disabled={enrollments.length === 0}>Préparer le document</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button type="submit" className="btn primary" disabled={!canPrepare}>Préparer le document</button>
+            {gateReason && <span className="hint" style={{ color: "var(--amber, #b8860b)" }}>🔒 {gateReason}</span>}
+            {!gateReason && prep.enrollment_ids.length === 0 && enrollments.length > 0 && <span className="hint">Sélectionnez au moins une formation.</span>}
+          </div>
         </form>
 
         {docs.length === 0 ? (

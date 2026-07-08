@@ -97,6 +97,12 @@ function Pipeline() {
                           {r.program_code && <span className="chip">{r.program_code}</span>}
                           {r.year && <span className="sub">S{r.week}·{r.year}</span>}
                         </div>
+                        {r.doc_total > 0 && (
+                          <div className="pipe-docs" title="Documents créés / signés">
+                            📄 {r.doc_signed}/{r.doc_total} signé{r.doc_signed > 1 ? "s" : ""}
+                            {r.doc_total - r.doc_signed > 0 && <span className="sub"> · {r.doc_total - r.doc_signed} à signer</span>}
+                          </div>
+                        )}
                         <div className="pipe-foot">
                           <span className={`badge ${CONF_CLASS[r.conformite_score] || "r"}`}>{CONF_LABEL[r.conformite_score] || "Incomplet"}</span>
                           <span className="pipe-moves">

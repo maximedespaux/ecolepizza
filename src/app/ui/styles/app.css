@@ -476,3 +476,6 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 /* Table de sélection des formations (préparation de document) */
 .enroll-table tbody tr:hover{background:var(--surface2)}
 .enroll-table tbody tr.on{background:var(--blue-bg)}
+
+/* Avancement documentaire sur les cartes du pipeline */
+.pipe-docs{font-size:11.5px;color:var(--muted);margin-top:4px}

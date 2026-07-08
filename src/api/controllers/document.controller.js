@@ -282,9 +282,10 @@ const sendDocument = async (req, res) => {
         if (result.affectedRows === 0) {
             return res.status(400).json({ message: 'Document déjà envoyé ou introuvable.' });
         }
-        // Pipeline : un devis envoyé fait passer le dossier à « Devis envoyé ».
+        // Pipeline : devis envoyé -> « Devis envoyé » ; éval. envoyée -> « Éval. envoyée ».
         const [[doc]] = await conn.query('SELECT type FROM generated_document WHERE id = ?', [req.params.id]);
         if (doc && doc.type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_ENVOYE');
+        else if (doc && doc.type === 'EVALUATION_SATISFACTION') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'EVALUATION_ENVOYEE');
         logAudit(req, 'document.send', 'GeneratedDocument', req.params.id);
         res.status(200).json({ success: true, message: 'Document envoyé au stagiaire' });
     } catch (err) {
@@ -318,8 +319,9 @@ const signDocument = async (req, res) => {
              WHERE id = ?`,
             [signer_name, signature_data || null, req.params.id]
         );
-        // Pipeline : un devis signé fait passer le dossier à « Devis signé ».
+        // Pipeline : devis signé -> « Devis signé » ; contrat/convention signé -> « Inscrit ».
         if (rows[0].type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_SIGNE');
+        else if (rows[0].type === 'CONTRAT' || rows[0].type === 'CONVENTION') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'INSCRIT');
         logAudit(req, 'document.sign', 'GeneratedDocument', req.params.id);
         notify(req.user.organization_id, { type: 'SIGNATURE', title: 'Document signé', body: `Signé par ${signer_name}` });
         res.status(200).json({ success: true, message: 'Document signé' });
