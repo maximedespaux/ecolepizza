@@ -71,12 +71,15 @@ const listDocuments = async (req, res) => {
             [learnerId, req.user.organization_id]
         );
         const [enrollments] = await conn.query(
-            `SELECT e.id, e.financing, p.code AS program_code, p.title AS program_title
+            `SELECT e.id, e.financing, p.code AS program_code, p.title AS program_title,
+                    s.year, s.week,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                    DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date
              FROM enrollment e
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
              WHERE e.learner_id = ? AND e.organization_id = ?
-             ORDER BY p.code`,
+             ORDER BY s.year, s.week, p.code`,
             [learnerId, req.user.organization_id]
         );
         res.json({ data: { documents, enrollments } });

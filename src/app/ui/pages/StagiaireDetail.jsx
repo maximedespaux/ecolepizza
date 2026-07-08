@@ -206,12 +206,21 @@ function StagiaireDetail() {
               <p className="hint" style={{ margin: 0 }}>Ce stagiaire n'est inscrit à aucune formation. Inscrivez-le depuis une session.</p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {enrollments.map((e) => (
-                  <label key={e.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5 }}>
-                    <input type="checkbox" checked={prep.enrollment_ids.includes(e.id)} onChange={() => toggleEnroll(e.id)} />
-                    {e.program_code} — {e.program_title} <span className="hint">({e.financing === "PROFESSIONNEL" ? "entreprise" : "particulier"})</span>
-                  </label>
-                ))}
+                {enrollments.map((e) => {
+                  const fr = (v) => (v ? new Date(v).toLocaleDateString("fr-FR") : "");
+                  const dates = e.start_date ? `${fr(e.start_date)}${e.end_date ? ` → ${fr(e.end_date)}` : ""}` : "";
+                  return (
+                    <label key={e.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5 }}>
+                      <input type="checkbox" checked={prep.enrollment_ids.includes(e.id)} onChange={() => toggleEnroll(e.id)} />
+                      <span>
+                        {e.program_code} — {e.program_title}
+                        {e.week ? <span className="hint"> · Sem. {e.week}{e.year ? ` ${e.year}` : ""}</span> : null}
+                        {dates ? <span className="hint"> · {dates}</span> : null}
+                        <span className="hint"> ({e.financing === "PROFESSIONNEL" ? "entreprise" : "particulier"})</span>
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             )}
           </div>
