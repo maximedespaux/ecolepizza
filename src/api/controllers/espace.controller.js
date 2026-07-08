@@ -1,8 +1,61 @@
+const crypto = require('crypto');
 const db = require('../config/database.js');
 const { stepsToDocSet } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+// Date (YYYY-MM-DD) du jour ouvré N à partir d'une date de début (offset = N-1).
+function businessDayISO(startStr, offset) {
+    if (!startStr) return null;
+    const d = new Date(startStr);
+    if (Number.isNaN(d.getTime())) return null;
+    let added = 0;
+    while (added < offset) {
+        d.setDate(d.getDate() + 1);
+        const wd = d.getDay();
+        if (wd !== 0 && wd !== 6) added += 1;
+    }
+    return d.toISOString().slice(0, 10);
+}
+
+// Matérialise les QCM « auto » dont le jour de formation est arrivé (envoi paresseux).
+async function releaseAutoQuizzes(conn, learner) {
+    const [enr] = await conn.query(
+        `SELECT e.id AS enrollment_id, s.program_id, DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date
+         FROM enrollment e JOIN training_session s ON s.id = e.session_id
+         WHERE e.learner_id = ? AND s.program_id IS NOT NULL`,
+        [learner.id]
+    );
+    if (!enr.length) return;
+    const progIds = [...new Set(enr.map((e) => e.program_id))];
+    const [quizzes] = await conn.query(
+        `SELECT id, program_id, day, title FROM quiz
+         WHERE organization_id = ? AND active = 1 AND auto_send = 1 AND day IS NOT NULL AND program_id IN (?)`,
+        [learner.organization_id, progIds]
+    );
+    const today = todayISO();
+    for (const q of quizzes) {
+        for (const e of enr) {
+            if (e.program_id !== q.program_id) continue;
+            const dayDate = businessDayISO(e.start_date, (q.day || 1) - 1);
+            if (!dayDate || dayDate > today) continue; // pas encore le jour J
+            const [[ex]] = await conn.query(
+                `SELECT gd.id FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
+                 WHERE gd.quiz_id = ? AND df.enrollment_id = ? LIMIT 1`,
+                [q.id, e.enrollment_id]
+            );
+            if (ex) continue;
+            const docId = crypto.randomUUID();
+            await conn.query(
+                `INSERT INTO generated_document (id, organization_id, learner_id, type, quiz_id, title, status, sent_at)
+                 VALUES (?, ?, ?, 'QCM', ?, ?, 'ENVOYE', NOW())`,
+                [docId, learner.organization_id, learner.id, q.id, q.title]
+            );
+            await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [docId, e.enrollment_id]);
+        }
+    }
+}
 
 // Retrouve le stagiaire (learner) lié au compte connecté.
 async function learnerForUser(conn, userId) {
@@ -43,15 +96,13 @@ const getMonEspace = async (req, res) => {
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: "Aucune fiche stagiaire liée à ce compte." });
 
+        await releaseAutoQuizzes(conn, learner); // matérialise les QCM du jour (auto)
+
         const [documents] = await conn.query(
-            `SELECT d.id, d.type, d.title, d.status,
+            `SELECT d.id, d.type, d.title, d.status, d.quiz_id,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at, d.signer_name,
-                    GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations,
-                    (SELECT q.id FROM quiz q
-                       WHERE q.organization_id = d.organization_id AND q.active = 1
-                         AND (q.program_id = s.program_id OR q.program_id IS NULL)
-                         AND q.slug = d.template_slug LIMIT 1) AS quiz_id
+                    GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations
              FROM generated_document d
              LEFT JOIN document_formation df ON df.document_id = d.id
              LEFT JOIN enrollment e ON e.id = df.enrollment_id

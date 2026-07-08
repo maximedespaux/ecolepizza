@@ -283,6 +283,7 @@ CREATE TABLE generated_document (
     enrollment_id uuid         DEFAULT NULL,          -- dossier principal (facultatif : cf. document_formation)
     type          varchar(40)  NOT NULL,               -- DEVIS, CONTRAT… (ou type personnalisé)
     template_slug varchar(60)  DEFAULT NULL,            -- modèle/étape ayant produit le document
+    quiz_id       uuid         DEFAULT NULL,            -- document adossé à un QCM
     title         varchar(255) DEFAULT NULL,
     status        enum('A_FAIRE','GENERE','ENVOYE','CONSULTE','SIGNE','ARCHIVE')
                   NOT NULL DEFAULT 'A_FAIRE',

@@ -10,7 +10,7 @@ const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
 const listQuizzes = async (req, res) => {
     try {
         const [rows] = await db.promise().query(
-            `SELECT q.id, q.title, q.kind, q.slug, q.pass_score, q.active, q.program_id,
+            `SELECT q.id, q.title, q.kind, q.day, q.auto_send, q.pass_score, q.active, q.program_id,
                     p.code AS program_code, p.title AS program_title,
                     (SELECT COUNT(*) FROM quiz_question qq WHERE qq.quiz_id = q.id) AS n_questions
              FROM quiz q LEFT JOIN training_program p ON p.id = q.program_id
@@ -52,9 +52,11 @@ const createQuiz = async (req, res) => {
     try {
         const id = crypto.randomUUID();
         await db.promise().query(
-            `INSERT INTO quiz (id, organization_id, program_id, slug, title, kind, pass_score, active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
-            [id, req.user.organization_id, b.program_id || null, b.slug || null, String(b.title).slice(0, 255),
+            `INSERT INTO quiz (id, organization_id, program_id, day, auto_send, title, kind, pass_score, active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+            [id, req.user.organization_id, b.program_id || null,
+             b.day != null && b.day !== '' ? Number(b.day) : null, b.auto_send ? 1 : 0,
+             String(b.title).slice(0, 255),
              b.kind === 'SURVEY' ? 'SURVEY' : 'GRADED', b.pass_score != null && b.pass_score !== '' ? Number(b.pass_score) : null]
         );
         logAudit(req, 'quiz.create', 'Quiz', id);
@@ -74,9 +76,9 @@ const saveQuiz = async (req, res) => {
         if (!quiz) return res.status(404).json({ message: 'QCM introuvable' });
 
         await conn.query(
-            `UPDATE quiz SET title = ?, kind = ?, program_id = ?, slug = ?, pass_score = ?, active = ? WHERE id = ?`,
+            `UPDATE quiz SET title = ?, kind = ?, program_id = ?, day = ?, auto_send = ?, pass_score = ?, active = ? WHERE id = ?`,
             [String(b.title || '').slice(0, 255), b.kind === 'SURVEY' ? 'SURVEY' : 'GRADED',
-             b.program_id || null, b.slug || null,
+             b.program_id || null, b.day != null && b.day !== '' ? Number(b.day) : null, b.auto_send ? 1 : 0,
              b.pass_score != null && b.pass_score !== '' ? Number(b.pass_score) : null,
              b.active === false ? 0 : 1, req.params.id]
         );
@@ -126,10 +128,10 @@ const deleteQuiz = async (req, res) => {
 
 /* ------------------------------ Passage (stagiaire) ------------------------------ */
 
-// Résout le QCM rattaché à un document (formation + slug), avec vérif d'accès.
+// Résout le QCM rattaché à un document (via quiz_id), avec vérif d'accès.
 async function quizForDocument(conn, documentId, user) {
     const [[doc]] = await conn.query(
-        `SELECT d.id, d.organization_id, d.template_slug, d.status, l.user_id
+        `SELECT d.id, d.organization_id, d.quiz_id, d.status, l.user_id
          FROM generated_document d LEFT JOIN learner l ON l.id = d.learner_id
          WHERE d.id = ? AND d.organization_id = ?`,
         [documentId, user.organization_id]
@@ -137,20 +139,11 @@ async function quizForDocument(conn, documentId, user) {
     if (!doc) return { error: 404, message: 'Document introuvable' };
     const isOwner = doc.user_id && doc.user_id === user.id;
     if (!isOwner && !STAFF.includes(user.role)) return { error: 403, message: 'Accès refusé' };
+    if (!doc.quiz_id) return { error: 404, message: 'Aucun QCM pour ce document' };
 
-    const [[row]] = await conn.query(
-        `SELECT e.id AS enrollment_id, s.program_id
-         FROM document_formation df JOIN enrollment e ON e.id = df.enrollment_id
-         LEFT JOIN training_session s ON s.id = e.session_id
-         WHERE df.document_id = ? LIMIT 1`,
-        [documentId]
-    );
-    const [[quiz]] = await conn.query(
-        `SELECT * FROM quiz WHERE organization_id = ? AND active = 1
-           AND (program_id = ? OR program_id IS NULL) AND slug = ? LIMIT 1`,
-        [user.organization_id, row ? row.program_id : null, doc.template_slug]
-    );
-    if (!quiz) return { error: 404, message: 'Aucun QCM pour ce document' };
+    const [[quiz]] = await conn.query('SELECT * FROM quiz WHERE id = ? AND organization_id = ?', [doc.quiz_id, user.organization_id]);
+    if (!quiz) return { error: 404, message: 'QCM introuvable' };
+    const [[row]] = await conn.query('SELECT enrollment_id FROM document_formation WHERE document_id = ? LIMIT 1', [documentId]);
     return { doc, enrollment_id: row ? row.enrollment_id : null, quiz };
 }
 
@@ -238,4 +231,45 @@ const submitQuiz = async (req, res) => {
     }
 };
 
-module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz, takeQuiz, submitQuiz };
+/** POST /api/quizzes/:id/send — envoie le QCM aux stagiaires (d'une session, ou de toute la formation). */
+const sendQuiz = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[quiz]] = await conn.query('SELECT id, program_id, title FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        if (!quiz) return res.status(404).json({ message: 'QCM introuvable' });
+        if (!quiz.program_id) return res.status(422).json({ error: 'Rattachez d\'abord ce QCM à une formation.' });
+
+        const sessionId = req.body && req.body.session_id;
+        const params = [req.user.organization_id, quiz.program_id];
+        let sql = `SELECT e.id AS enrollment_id, e.learner_id
+                   FROM enrollment e JOIN training_session s ON s.id = e.session_id
+                   WHERE e.organization_id = ? AND s.program_id = ?`;
+        if (sessionId) { sql += ' AND e.session_id = ?'; params.push(sessionId); }
+        const [enr] = await conn.query(sql, params);
+
+        let sent = 0;
+        for (const e of enr) {
+            const [[ex]] = await conn.query(
+                `SELECT gd.id FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
+                 WHERE gd.quiz_id = ? AND df.enrollment_id = ? LIMIT 1`,
+                [quiz.id, e.enrollment_id]
+            );
+            if (ex) continue;
+            const docId = crypto.randomUUID();
+            await conn.query(
+                `INSERT INTO generated_document (id, organization_id, learner_id, type, quiz_id, title, status, sent_at)
+                 VALUES (?, ?, ?, 'QCM', ?, ?, 'ENVOYE', NOW())`,
+                [docId, req.user.organization_id, e.learner_id, quiz.id, quiz.title]
+            );
+            await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [docId, e.enrollment_id]);
+            sent++;
+        }
+        logAudit(req, 'quiz.send', 'Quiz', quiz.id);
+        res.json({ data: { sent, total: enr.length } });
+    } catch (err) {
+        console.error('Erreur envoi QCM :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz };

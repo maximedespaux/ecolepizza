@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  getQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz,
-  getFormations, getFormationSteps,
+  getQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz, sendQuiz,
+  getFormations,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -48,6 +48,12 @@ function Quiz() {
     try { await deleteQuiz(q.id); setStatus({ type: "success", message: "QCM supprimé." }); load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
+  async function onSend(q) {
+    if (!q.program_id) { setStatus({ type: "error", message: "Rattachez ce QCM à une formation d'abord." }); return; }
+    if (!window.confirm(`Envoyer « ${q.title} » aux stagiaires inscrits à cette formation ?`)) return;
+    try { const { data } = await sendQuiz(q.id); setStatus({ type: "success", message: `Envoyé à ${data.sent} stagiaire(s).` }); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
 
   if (editing) {
     return <QuizEditor quiz={editing} formations={formations}
@@ -67,16 +73,18 @@ function Quiz() {
         {quizzes.length === 0 ? <EmptyState icon="❓">Aucun QCM.</EmptyState> : (
           <div className="tablewrap" style={{ border: "none" }}>
             <table>
-              <thead><tr><th>Titre</th><th>Formation</th><th>Étape</th><th>Type</th><th>Questions</th><th></th></tr></thead>
+              <thead><tr><th>Titre</th><th>Formation</th><th>Jour</th><th>Envoi</th><th>Type</th><th>Questions</th><th></th></tr></thead>
               <tbody>
                 {quizzes.map((q) => (
                   <tr key={q.id}>
                     <td><b>{q.title}</b></td>
-                    <td>{q.program_code || <span className="hint">toutes</span>}</td>
-                    <td><span className="mono" style={{ fontSize: 12 }}>{q.slug || "—"}</span></td>
+                    <td>{q.program_code || <span className="hint">—</span>}</td>
+                    <td className="tnum">{q.day ? `J${q.day}` : "—"}</td>
+                    <td>{q.auto_send ? <Badge tone="g">Auto</Badge> : <span className="hint">Manuel</span>}</td>
                     <td>{q.kind === "SURVEY" ? <Badge tone="n">Enquête</Badge> : <Badge tone="b">Noté</Badge>}</td>
                     <td className="tnum">{q.n_questions}</td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button className="btn sm ghost" title="Envoyer aux stagiaires" onClick={() => onSend(q)}>📤 Envoyer</button>{" "}
                       <button className="btn sm ghost" onClick={() => onEdit(q)}>✎ Éditer</button>{" "}
                       <button className="btn sm ghost danger" onClick={() => onDelete(q)}>🗑</button>
                     </td>
@@ -94,17 +102,11 @@ function Quiz() {
 function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
   const [form, setForm] = useState({
     title: quiz.title || "", kind: quiz.kind || "GRADED", program_id: quiz.program_id || "",
-    slug: quiz.slug || "", pass_score: quiz.pass_score ?? "",
+    day: quiz.day ?? "", auto_send: !!quiz.auto_send, pass_score: quiz.pass_score ?? "",
     questions: quiz.questions && quiz.questions.length ? quiz.questions : [blankQuestion()],
   });
-  const [steps, setSteps] = useState([]);
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
-
-  useEffect(() => {
-    if (!form.program_id) { setSteps([]); return; }
-    getFormationSteps(form.program_id).then((r) => setSteps(r.data || [])).catch(() => setSteps([]));
-  }, [form.program_id]);
 
   const setQ = (i, patch) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => (j === i ? { ...q, ...patch } : q)) }));
   const setOpt = (qi, oi, patch) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, options: q.options.map((o, k) => (k === oi ? { ...o, ...patch } : o)) }) }));
@@ -141,21 +143,26 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
         </div>
         <div className="row3">
           <div className="field"><label>Formation</label>
-            <select value={form.program_id} onChange={(e) => setForm((p) => ({ ...p, program_id: e.target.value, slug: "" }))}>
-              <option value="">Toutes</option>
+            <select value={form.program_id} onChange={set("program_id")}>
+              <option value="">— Choisir —</option>
               {formations.map((f) => <option key={f.id} value={f.id}>{f.code} — {f.title}</option>)}
             </select></div>
-          <div className="field"><label>Étape documentaire remplacée</label>
-            <select value={form.slug} onChange={set("slug")} disabled={!form.program_id}>
-              <option value="">— Choisir —</option>
-              {steps.map((s) => <option key={s.slug} value={s.slug}>{s.label}</option>)}
-            </select></div>
+          <div className="field"><label>Jour de la formation</label>
+            <input className="inp" type="number" min="1" value={form.day} onChange={set("day")} placeholder="ex. 2 (= jour 2)" /></div>
           {form.kind === "GRADED" && (
             <div className="field"><label>Seuil de réussite (%)</label>
               <input className="inp" type="number" min="0" max="100" value={form.pass_score} onChange={set("pass_score")} placeholder="ex. 60" /></div>
           )}
         </div>
-        <p className="hint" style={{ margin: 0 }}>Le stagiaire répond à ce QCM à la place du document « {form.slug || "(étape)"} » dans son espace.</p>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, marginBottom: 6 }}>
+          <input type="checkbox" checked={form.auto_send} onChange={(e) => setForm((p) => ({ ...p, auto_send: e.target.checked }))} />
+          Envoi automatique le matin du jour {form.day || "J"} (sinon envoi manuel avec « Envoyer »)
+        </label>
+        <p className="hint" style={{ margin: 0 }}>
+          {form.day
+            ? `Le QCM sera proposé aux stagiaires de cette formation ${form.auto_send ? "automatiquement" : "après envoi manuel"} le jour ${form.day}.`
+            : "Indiquez le jour de formation où ce QCM doit être rempli."}
+        </p>
       </Card>
 
       {form.questions.map((q, i) => (
