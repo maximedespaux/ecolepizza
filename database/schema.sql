@@ -617,6 +617,21 @@ CREATE TABLE program_step (
         REFERENCES training_program (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- Signature d'émargement par formateur et par demi-journée.
+CREATE TABLE attendance_trainer_sign (
+    id             uuid      NOT NULL DEFAULT uuid(),
+    sheet_id       uuid      NOT NULL,
+    user_id        uuid      NOT NULL,
+    signer_name    varchar(255) DEFAULT NULL,
+    signature_data longtext     DEFAULT NULL,
+    signed_at      datetime     DEFAULT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_ats (sheet_id, user_id),
+    KEY idx_ats_sheet (sheet_id),
+    CONSTRAINT fk_ats_sheet FOREIGN KEY (sheet_id) REFERENCES attendance_sheet (id) ON DELETE CASCADE,
+    CONSTRAINT fk_ats_user  FOREIGN KEY (user_id)  REFERENCES user (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- Formateurs affectés à une session (plusieurs possibles), choisis dans l'équipe.
 CREATE TABLE session_trainer (
     id         uuid      NOT NULL DEFAULT uuid(),

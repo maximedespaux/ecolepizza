@@ -1,6 +1,7 @@
 const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
+const { notify } = require('./notification.controller.js');
 
 // Libellé court par type de document (colonnes du tableau de session).
 const DOC_LABELS = {
@@ -262,13 +263,29 @@ const setSessionTrainers = async (req, res) => {
     if (!ids) return res.status(422).json({ error: 'Liste de formateurs requise.' });
     try {
         const conn = db.promise();
-        const [[s]] = await conn.query('SELECT id FROM training_session WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        const [[s]] = await conn.query(
+            `SELECT s.id, s.week, s.year, p.code AS program_code
+             FROM training_session s LEFT JOIN training_program p ON p.id = s.program_id
+             WHERE s.id = ? AND s.organization_id = ?`,
+            [req.params.id, req.user.organization_id]
+        );
         if (!s) return res.status(404).json({ message: 'Session introuvable' });
+        // Formateurs déjà affectés (pour ne notifier que les nouveaux).
+        const [prev] = await conn.query('SELECT user_id FROM session_trainer WHERE session_id = ?', [req.params.id]);
+        const prevIds = new Set(prev.map((r) => r.user_id));
         await conn.query('DELETE FROM session_trainer WHERE session_id = ?', [req.params.id]);
         for (const uid of ids) {
             // N'accepte que des membres de l'organisme.
             const [[u]] = await conn.query('SELECT id FROM user WHERE id = ? AND organization_id = ?', [uid, req.user.organization_id]);
-            if (u) await conn.query('INSERT IGNORE INTO session_trainer (id, session_id, user_id) VALUES (UUID(), ?, ?)', [req.params.id, uid]);
+            if (!u) continue;
+            await conn.query('INSERT IGNORE INTO session_trainer (id, session_id, user_id) VALUES (UUID(), ?, ?)', [req.params.id, uid]);
+            // Demande de signature d'émargement au nouveau formateur.
+            if (!prevIds.has(uid)) {
+                notify(req.user.organization_id, {
+                    userId: uid, type: 'INFO', title: 'Émargement à signer',
+                    body: `Vous êtes formateur sur la session ${s.program_code || ''} S${s.week || ''} · ${s.year || ''}. Signez votre feuille d'émargement.`.trim(),
+                });
+            }
         }
         // Reflète aussi les noms dans le champ texte (compatibilité affichage / documents).
         const [names] = await conn.query(

@@ -13,6 +13,8 @@ function Emargement({ sessionId }) {
   const { user } = useContext(UserContext);
   const [sheets, setSheets] = useState([]);
   const [records, setRecords] = useState([]);
+  const [trainers, setTrainers] = useState([]);
+  const [trainerSigns, setTrainerSigns] = useState([]);
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [signSheetRec, setSignSheetRec] = useState(null); // feuille que le formateur signe
@@ -22,6 +24,8 @@ function Emargement({ sessionId }) {
       const r = await getAttendance(sessionId);
       setSheets(r.data.sheets);
       setRecords(r.data.records);
+      setTrainers(r.data.trainers || []);
+      setTrainerSigns(r.data.trainerSigns || []);
     } catch (e) {
       setStatus({ type: "error", message: e.message });
     }
@@ -36,6 +40,13 @@ function Emargement({ sessionId }) {
     }
     return [...map.values()].sort((a, b) => (a.last_name || "").localeCompare(b.last_name || ""));
   }, [records]);
+
+  // Index signatures formateur : sheetId|userId -> signature.
+  const trainerByKey = useMemo(() => {
+    const m = {};
+    for (const t of trainerSigns) m[`${t.sheet_id}|${t.user_id}`] = t;
+    return m;
+  }, [trainerSigns]);
 
   // Index présence : learnerId|sheetId -> record.
   const byKey = useMemo(() => {
@@ -110,19 +121,35 @@ function Emargement({ sessionId }) {
                   })}
                 </tr>
               ))}
-              {/* Ligne de signature du formateur, par demi-journée */}
-              <tr>
-                <td style={{ whiteSpace: "nowrap", fontWeight: 600, color: "var(--muted)" }}>Formateur</td>
-                {sheets.map((s) => (
-                  <td key={s.id} style={{ textAlign: "center" }}>
-                    {s.trainer_signed ? (
-                      <span title={`Signé par ${s.trainer_name || ""}${s.trainer_signed_at ? ` · ${s.trainer_signed_at}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}>✍</span>
-                    ) : (
-                      <button className="btn sm ghost" title="Signer cette demi-journée" onClick={() => setSignSheetRec(s)}>Signer</button>
-                    )}
+              {/* Une ligne de signature par formateur affecté à la session */}
+              {trainers.length === 0 ? (
+                <tr>
+                  <td colSpan={sheets.length + 1} style={{ color: "var(--dim)", fontSize: 12, padding: "8px 0" }}>
+                    Aucun formateur affecté. Ajoutez-en dans la section « Formateurs » ci-dessus.
                   </td>
-                ))}
-              </tr>
+                </tr>
+              ) : trainers.map((t) => (
+                <tr key={t.id}>
+                  <td style={{ whiteSpace: "nowrap", fontWeight: 600, color: "var(--muted)" }}>
+                    {t.first_name} {t.last_name}
+                  </td>
+                  {sheets.map((s) => {
+                    const sg = trainerByKey[`${s.id}|${t.id}`];
+                    const isMe = user?.id === t.id;
+                    return (
+                      <td key={s.id} style={{ textAlign: "center" }}>
+                        {sg && sg.signed ? (
+                          <span title={`Signé par ${sg.signer_name || ""}${sg.signed_at ? ` · ${sg.signed_at}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}>✍</span>
+                        ) : isMe ? (
+                          <button className="btn sm ghost" title="Signer cette demi-journée" onClick={() => setSignSheetRec(s)}>Signer</button>
+                        ) : (
+                          <span style={{ color: "var(--dim)" }} title="En attente de la signature du formateur">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

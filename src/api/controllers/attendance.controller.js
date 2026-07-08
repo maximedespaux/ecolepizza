@@ -49,7 +49,24 @@ const getAttendance = async (req, res) => {
              WHERE s.session_id = ?`,
             [req.params.sessionId]
         );
-        res.json({ data: { sheets, records } });
+        // Formateurs affectés à la session (une ligne d'émargement chacun).
+        const [trainers] = await conn.query(
+            `SELECT u.id, u.first_name, u.last_name
+             FROM session_trainer st JOIN user u ON u.id = st.user_id
+             WHERE st.session_id = ? ORDER BY u.last_name, u.first_name`,
+            [req.params.sessionId]
+        );
+        // Signatures formateur par (feuille, formateur).
+        const [trainerSigns] = await conn.query(
+            `SELECT ats.sheet_id, ats.user_id, ats.signer_name,
+                    (ats.signature_data IS NOT NULL) AS signed,
+                    DATE_FORMAT(ats.signed_at, '%Y-%m-%d %H:%i') AS signed_at
+             FROM attendance_trainer_sign ats
+             JOIN attendance_sheet s ON s.id = ats.sheet_id
+             WHERE s.session_id = ?`,
+            [req.params.sessionId]
+        );
+        res.json({ data: { sheets, records, trainers, trainerSigns } });
     } catch (err) {
         console.error('Erreur émargement :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -146,26 +163,32 @@ const signSheet = async (req, res) => {
     try {
         const conn = db.promise();
         const [[sheet]] = await conn.query(
-            `SELECT s.id FROM attendance_sheet s
+            `SELECT s.id, s.session_id FROM attendance_sheet s
              JOIN training_session ts ON ts.id = s.session_id
              WHERE s.id = ? AND ts.organization_id = ?`,
             [req.params.id, req.user.organization_id]
         );
         if (!sheet) return res.status(404).json({ message: 'Feuille introuvable.' });
+        // Le signataire doit être un formateur affecté à la session (il signe sa propre ligne).
+        const [[assigned]] = await conn.query(
+            'SELECT 1 AS ok FROM session_trainer WHERE session_id = ? AND user_id = ?',
+            [sheet.session_id, req.user.id]
+        );
+        if (!assigned) return res.status(403).json({ message: "Vous n'êtes pas formateur affecté à cette session." });
+
         const name = (signer_name && signer_name.trim()) || req.user.email;
         await conn.query(
-            'UPDATE attendance_sheet SET trainer_name = ?, trainer_signature = ?, trainer_signed_at = NOW() WHERE id = ?',
-            [name, signature_data || null, req.params.id]
+            `INSERT INTO attendance_trainer_sign (id, sheet_id, user_id, signer_name, signature_data, signed_at)
+             VALUES (?, ?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE signer_name = VALUES(signer_name), signature_data = VALUES(signature_data), signed_at = NOW()`,
+            [crypto.randomUUID(), req.params.id, req.user.id, name, signature_data || null]
         );
         logAudit(req, 'attendance.sign', 'AttendanceSheet', req.params.id);
         res.json({ success: true, message: 'Feuille signée.' });
 
         // Régénère les feuilles d'émargement archivées des stagiaires de la session (non bloquant).
-        const [[sh]] = await conn.query('SELECT session_id FROM attendance_sheet WHERE id = ?', [req.params.id]);
-        if (sh) {
-            const [enr] = await conn.query('SELECT id FROM enrollment WHERE session_id = ?', [sh.session_id]);
-            for (const en of enr) regenEmargement(conn, req.user.organization_id, en.id).catch(() => {});
-        }
+        const [enr] = await conn.query('SELECT id FROM enrollment WHERE session_id = ?', [sheet.session_id]);
+        for (const en of enr) regenEmargement(conn, req.user.organization_id, en.id).catch(() => {});
     } catch (err) {
         console.error('Erreur signature feuille :', err);
         res.status(500).json({ error: 'Internal Server Error' });

@@ -9,10 +9,13 @@ const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</
 const sig = (d) => (d ? `<img src="${d}" style="height:38px;max-width:150px" />` : '—');
 
 function renderEmargementHtml({ org, e, rows }) {
+    const trainerCell = (list) => (list && list.length
+        ? list.map((t) => `${sig(t.signature_data)}<div class="nm">${esc(t.signer_name || '')}</div>`).join('')
+        : '—');
     const trs = rows.map((r) => `<tr>
         <td>${esc(r.date)}</td><td>${SLOT[r.slot] || esc(r.slot)}</td>
         <td>${sig(r.signature_data)}<div class="nm">${esc(r.signature_data ? (r.signer_name || '') : '')}</div></td>
-        <td>${sig(r.trainer_signature)}<div class="nm">${esc(r.trainer_signature ? (r.trainer_name || '') : '')}</div></td>
+        <td>${trainerCell(r.trainers)}</td>
     </tr>`).join('');
     return `<!doctype html><html><head><meta charset="utf-8"><style>
         body{font-family:Arial,sans-serif;font-size:12px;color:#111}
@@ -52,8 +55,7 @@ async function regenEmargement(conn, orgId, enrollmentId) {
         if (!e) return;
         const [[org]] = await conn.query('SELECT legal_name FROM organization WHERE id = ?', [orgId]);
         const [rows] = await conn.query(
-            `SELECT DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.slot,
-                    s.trainer_name, s.trainer_signature,
+            `SELECT s.id AS sheet_id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.slot,
                     ar.signer_name, ar.signature_data
              FROM attendance_sheet s
              LEFT JOIN attendance_record ar ON ar.sheet_id = s.id AND ar.learner_id = ?
@@ -62,6 +64,16 @@ async function regenEmargement(conn, orgId, enrollmentId) {
             [e.learner_id, e.session_id]
         );
         if (!rows.length) return;
+        // Signatures formateur par feuille (plusieurs formateurs possibles).
+        const [tsigns] = await conn.query(
+            `SELECT ats.sheet_id, ats.signer_name, ats.signature_data
+             FROM attendance_trainer_sign ats JOIN attendance_sheet s ON s.id = ats.sheet_id
+             WHERE s.session_id = ? AND ats.signature_data IS NOT NULL`,
+            [e.session_id]
+        );
+        const bySheet = {};
+        for (const t of tsigns) (bySheet[t.sheet_id] = bySheet[t.sheet_id] || []).push(t);
+        for (const r of rows) r.trainers = bySheet[r.sheet_id] || [];
 
         let pdf;
         try { pdf = htmlToPdf(renderEmargementHtml({ org, e, rows })); }
@@ -70,7 +82,7 @@ async function regenEmargement(conn, orgId, enrollmentId) {
         const learnerName = `${e.last_name || ''} ${e.first_name || ''}`.trim();
         const ref = `emarg:${enrollmentId}`;
         const title = `Feuille d'émargement — ${e.program_code || ''} SEM ${e.week || ''}`.trim();
-        const allSigned = rows.every((r) => r.signature_data && r.trainer_signature);
+        const allSigned = rows.every((r) => r.signature_data && r.trainers.length > 0);
         const status = allSigned ? 'SIGNE' : 'ARCHIVE';
 
         const [[ex]] = await conn.query('SELECT id FROM archive_document WHERE organization_id = ? AND ref = ?', [orgId, ref]);
