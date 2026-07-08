@@ -64,8 +64,8 @@ function Quiz() {
 
   return (
     <>
-      <PageHead eyebrow="Pédagogie" title="QCM & tests"
-        lead="Créez des questionnaires (test de positionnement, évaluation…) rattachés à une étape d'une formation. Le stagiaire y répond dans son espace."
+      <PageHead eyebrow="Modèles" title="Modèles de QCM"
+        lead="Créez des questionnaires (test de positionnement, évaluation…) rattachés à une formation et à un jour. Envoi manuel ou automatique le matin du jour J ; le stagiaire y répond dans son espace."
         actions={<button className="btn primary" onClick={onNew}>＋ Nouveau QCM</button>} />
       <StatusMessage status={status} />
 
