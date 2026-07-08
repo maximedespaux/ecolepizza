@@ -483,3 +483,8 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 /* Colonne finale « Terminé » du tableau de session */
 .pipe-col.pipe-done{background:var(--green-bg)}
 .pipe-col.pipe-done .pipe-head{color:var(--green)}
+
+/* Options de QCM (espace stagiaire) */
+.quiz-opt{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:14.5px}
+.quiz-opt:hover{background:var(--surface2)}
+.quiz-opt.sel{border-color:var(--ember1);background:var(--rosso-bg)}

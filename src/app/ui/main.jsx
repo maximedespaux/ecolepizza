@@ -13,6 +13,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Stagiaires from "./pages/Stagiaires.jsx";
 import StagiaireDetail from "./pages/StagiaireDetail.jsx";
 import Formations from "./pages/Formations.jsx";
+import Quiz from "./pages/Quiz.jsx";
 import Sessions from "./pages/Sessions.jsx";
 import Pipeline from "./pages/Pipeline.jsx";
 import SessionDetail from "./pages/SessionDetail.jsx";
@@ -89,6 +90,7 @@ function AppRoutes() {
           <Route path="sessions" element={<RoleRoute roles={STAFF}><Sessions /></RoleRoute>} />
           <Route path="sessions/:id" element={<RoleRoute roles={STAFF}><SessionDetail /></RoleRoute>} />
           <Route path="formations" element={<RoleRoute roles={STAFF}><Formations /></RoleRoute>} />
+          <Route path="qcm" element={<RoleRoute roles={ADMIN}><Quiz /></RoleRoute>} />
           <Route path="partenaires" element={<RoleRoute roles={STAFF}><Partenaires /></RoleRoute>} />
           <Route path="ventes" element={<RoleRoute roles={ADMIN}><Ventes /></RoleRoute>} />
           <Route path="inventaire" element={<RoleRoute roles={ADMIN}><Inventaire /></RoleRoute>} />

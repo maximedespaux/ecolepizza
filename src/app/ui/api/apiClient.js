@@ -280,6 +280,15 @@ export function reorderFormations(ids) {
   return request("/formations/reorder", { method: "PUT", body: JSON.stringify({ ids }) });
 }
 
+// --- QCM ---
+export function getQuizzes() { return request("/quizzes"); }
+export function getQuiz(id) { return request(`/quizzes/${id}`); }
+export function createQuiz(payload) { return request("/quizzes", { method: "POST", body: JSON.stringify(payload) }); }
+export function saveQuiz(id, payload) { return request(`/quizzes/${id}`, { method: "PUT", body: JSON.stringify(payload) }); }
+export function deleteQuiz(id) { return request(`/quizzes/${id}`, { method: "DELETE" }); }
+export function takeQuiz(documentId) { return request(`/quizzes/take/${documentId}`); }
+export function submitQuiz(documentId, answers) { return request(`/quizzes/take/${documentId}/submit`, { method: "POST", body: JSON.stringify({ answers }) }); }
+
 // --- Parcours documentaire par formation ---
 export function getFormationSteps(id) {
   return request(`/formations/${id}/steps`);

@@ -32,6 +32,7 @@ export const NAV = [
     grp: "Développement",
     items: [
       { to: "/formations", ic: "◍", label: "Formations", roles: STAFF },
+      { to: "/qcm", ic: "❓", label: "QCM & tests", roles: ADMIN },
       { to: "/produit-divers", ic: "💶", label: "Produit divers", roles: ["FORMATEUR"] },
       { to: "/carte", ic: "🗺", label: "Carte des stagiaires", roles: ADMIN },
       { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: STAFF },
@@ -59,6 +60,7 @@ export const PAGE_TITLES = {
   "/sessions": "Sessions",
   "/suivi": "Suivi Qualiopi",
   "/formations": "Formations",
+  "/qcm": "QCM & tests",
   "/produit-divers": "Produit divers",
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",

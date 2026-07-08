@@ -47,7 +47,11 @@ const getMonEspace = async (req, res) => {
             `SELECT d.id, d.type, d.title, d.status,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at, d.signer_name,
-                    GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations
+                    GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations,
+                    (SELECT q.id FROM quiz q
+                       WHERE q.organization_id = d.organization_id AND q.active = 1
+                         AND (q.program_id = s.program_id OR q.program_id IS NULL)
+                         AND q.slug = d.template_slug LIMIT 1) AS quiz_id
              FROM generated_document d
              LEFT JOIN document_formation df ON df.document_id = d.id
              LEFT JOIN enrollment e ON e.id = df.enrollment_id
