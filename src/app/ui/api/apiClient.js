@@ -392,6 +392,10 @@ export function saveTemplate(slug, payload) {
 export function resetTemplate(slug) {
   return request(`/templates/${slug}`, { method: "DELETE" });
 }
+// Réordonne les modèles (glisser-déposer).
+export function reorderTemplates(slugs) {
+  return request("/templates/reorder", { method: "PUT", body: JSON.stringify({ slugs }) });
+}
 export function downloadTemplateFile(slug) {
   return download(`/templates/${slug}/file`, `${slug}.docx`);
 }

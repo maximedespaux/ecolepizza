@@ -154,7 +154,23 @@ function resolveTokens(ctx = {}) {
     const orgAddress = [o.address, [o.zip_code, o.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const totalPrice = forms.reduce((s, x) => s + Number(x.enroll_price || x.price || 0), 0) || Number(f.price || 0);
     const totalAcompte = forms.reduce((s, x) => s + Number(x.acompte || 0), 0);
-    const start = f.start_date || '';
+
+    // Agrégations multi-formations (un document peut couvrir plusieurs formations).
+    const multi = forms.length > 1;
+    const uniq = (arr) => [...new Set(arr.filter(Boolean))];
+    const joinTitles = uniq(forms.map((x) => x.title)).join(', ') || (f.title || '');
+    const sumHours = forms.reduce((s, x) => s + (Number(x.hours) || 0), 0);
+    const sumDays = forms.reduce((s, x) => s + (Number(x.days) || 0), 0);
+    const block = (field) => (!multi
+        ? (f[field] || '')
+        : forms.map((x) => (x[field] ? (x.title ? `${x.title} :\n${x[field]}` : x[field]) : '')).filter(Boolean).join('\n\n'));
+    const durationDetail = multi
+        ? forms.map((x) => [x.title, x.duration_detail].filter(Boolean).join(' : ')).filter(Boolean).join('\n')
+        : (f.duration_detail || '');
+    const starts = uniq(forms.map((x) => x.start_date)).sort();
+    const ends = uniq(forms.map((x) => x.end_date)).sort();
+    const start = starts[0] || f.start_date || '';
+    const end = ends[ends.length - 1] || f.end_date || '';
     const today = frDate(new Date());
     const semaine = f.week ? `Semaine ${f.week} — ${f.year || ''}`.trim() : frDate(start);
 
@@ -164,14 +180,19 @@ function resolveTokens(ctx = {}) {
         Adresse: address, CP: l.zip_code || '', Ville: l.town || '',
         Email: l.email || '', 'Téléphone': l.phone || '',
         D_Naissance: frDate(l.birthday), 'Lieu naissance': l.birth_place || '', Statut: l.professional_status || '',
-        // Formation
-        Formation: f.title || '', 'Niveau suggérer': f.title || '', Code: f.code || f.rs_code || '',
-        Public: f.audience || '', Objectifs: f.objectives || '', ObjectifG: f.objective_general || '',
-        'DuréeDétail': f.duration_detail || '', 'Déroulé': f.program_detail || '',
-        Heures: f.hours != null ? String(f.hours) : '', Jours: f.days != null ? String(f.days) : '',
-        TmpTotSem: f.hours != null ? String(f.hours) : '', PrixFormation: euro(f.price),
+        // Formation (agrégées si plusieurs)
+        Formation: joinTitles, 'Niveau suggérer': joinTitles,
+        Code: uniq(forms.map((x) => x.code || x.rs_code)).join(', ') || (f.code || f.rs_code || ''),
+        Public: multi ? uniq(forms.map((x) => x.audience)).join(', ') : (f.audience || ''),
+        Objectifs: block('objectives'),
+        ObjectifG: multi ? uniq(forms.map((x) => x.objective_general)).join('\n') : (f.objective_general || ''),
+        'DuréeDétail': durationDetail, 'Déroulé': block('program_detail'),
+        Heures: sumHours ? String(sumHours) : (f.hours != null ? String(f.hours) : ''),
+        Jours: sumDays ? String(sumDays) : (f.days != null ? String(f.days) : ''),
+        TmpTotSem: sumHours ? String(sumHours) : (f.hours != null ? String(f.hours) : ''),
+        PrixFormation: euro(totalPrice),
         // Session
-        Jour1: frDate(start), endDate: frDate(f.end_date), Semaine: semaine,
+        Jour1: frDate(start), endDate: frDate(end), Semaine: semaine,
         'Semaine de la formation': semaine, Formateur: f.trainer || '',
         Lundi: businessDay(start, 0), Mardi: businessDay(start, 1), Mercredi: businessDay(start, 2),
         Jeudi: businessDay(start, 3), Vendredi: businessDay(start, 4),
@@ -190,6 +211,13 @@ function resolveTokens(ctx = {}) {
         'Téléphone organisme': o.phone || '', 'Email organisme': o.email || '',
         // Dates
         Date: today, Today: today,
+        // Boucle docxtemplater : {#formations}{Titre} — {PrixLigne}{/formations}
+        formations: forms.map((x) => ({
+            Titre: x.title || '', Code: x.code || '', Heures: x.hours != null ? String(x.hours) : '',
+            Jours: x.days != null ? String(x.days) : '', PrixLigne: euro(x.enroll_price || x.price || 0),
+            Objectifs: x.objectives || '', 'Déroulé': x.program_detail || '', 'DuréeDétail': x.duration_detail || '',
+            Debut: frDate(x.start_date), Fin: frDate(x.end_date),
+        })),
     };
 }
 

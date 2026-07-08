@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument,
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -11,14 +11,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { initials, euro } from "../lib/format.js";
 
-const DOC_TYPES = [
-  ["DEVIS", "Devis"], ["CONTRAT", "Contrat de formation"], ["CONVENTION", "Convention de formation"],
-  ["DROIT_IMAGE", "Droit à l'image"], ["CONVOCATION", "Convocation à l'examen"], ["INVITATION", "Invitation"],
-  ["CERTIFICAT_REALISATION", "Certificat de réalisation"], ["PROGRAMME", "Programme de formation"],
-  ["ATTESTATION_HYGIENE", "Attestation Hygiène"], ["EVALUATION_MANAGEUR", "Évaluation Manageur"],
-  ["EVALUATION_FINANCEUR", "Évaluation Financeur"],
-];
-const DOC_STATUS = { A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé ✓", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
+const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé ✓", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
 
 function Row({ label, value }) {
   if (value === null || value === undefined || value === "" || value === "0.00") return null;
@@ -39,13 +32,25 @@ function StagiaireDetail() {
   const [status, setStatus] = useState(null);
   const [docs, setDocs] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
-  const [prep, setPrep] = useState({ type: "DEVIS", title: "", enrollment_ids: [] });
+  const [templates, setTemplates] = useState([]);
+  const [prep, setPrep] = useState({ slug: "", title: "", enrollment_ids: [] });
   const [viewId, setViewId] = useState(null);
 
   useEffect(() => {
     getStagiaire(id).then((r) => setL(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
     loadDocs();
   }, [id]);
+
+  // Charge la liste des modèles de documents (choix par nom du document).
+  useEffect(() => {
+    getTemplates()
+      .then((r) => {
+        const list = (r.data || []).filter((t) => t.active);
+        setTemplates(list);
+        setPrep((p) => (p.slug ? p : { ...p, slug: list[0]?.slug || "" }));
+      })
+      .catch(() => {});
+  }, []);
 
   async function loadDocs() {
     try {
@@ -67,13 +72,19 @@ function StagiaireDetail() {
   async function handlePrepare(e) {
     e.preventDefault();
     setStatus(null);
+    const tpl = templates.find((t) => t.slug === prep.slug);
+    if (!tpl) {
+      setStatus({ type: "error", message: "Sélectionnez un modèle de document." });
+      return;
+    }
     if (prep.enrollment_ids.length === 0) {
       setStatus({ type: "error", message: "Sélectionnez au moins une formation." });
       return;
     }
     try {
-      await createDocument({ learner_id: id, type: prep.type, title: prep.title, enrollment_ids: prep.enrollment_ids });
-      setPrep({ type: "DEVIS", title: "", enrollment_ids: [] });
+      const type = tpl.doc_type || tpl.slug.toUpperCase().replace(/-/g, "_");
+      await createDocument({ learner_id: id, type, template_slug: tpl.slug, title: prep.title, enrollment_ids: prep.enrollment_ids });
+      setPrep({ slug: templates[0]?.slug || "", title: "", enrollment_ids: [] });
       setStatus({ type: "success", message: "Document préparé. Vérifiez-le puis envoyez-le." });
       loadDocs();
     } catch (err) {
@@ -183,8 +194,9 @@ function StagiaireDetail() {
       <Card title="Documents" className="fade">
         <form onSubmit={handlePrepare} style={{ marginBottom: 16 }}>
           <div className="row2">
-            <SelectField label="Type de document" value={prep.type} onChange={(e) => setPrep((p) => ({ ...p, type: e.target.value }))}>
-              {DOC_TYPES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+            <SelectField label="Modèle de document" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
+              {templates.length === 0 && <option value="">— Aucun modèle disponible —</option>}
+              {templates.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
             </SelectField>
             <Field label="Titre (facultatif)" value={prep.title} onChange={(e) => setPrep((p) => ({ ...p, title: e.target.value }))} placeholder="Laisser vide pour le titre par défaut" />
           </div>

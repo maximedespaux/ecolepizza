@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getTemplates, uploadTemplate, saveTemplate, resetTemplate, downloadTemplateFile } from "../api/apiClient.js";
+import { getTemplates, uploadTemplate, saveTemplate, resetTemplate, downloadTemplateFile, reorderTemplates } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -28,13 +28,25 @@ function Modeles() {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(null);
   const [editing, setEditing] = useState(null); // étape en cours d'édition (ou {} pour nouveau)
+  const [drag, setDrag] = useState(null);        // index de la ligne déplacée
   const inputs = useRef({});
 
   async function load() {
-    try { const { data } = await getTemplates(); setItems(data); }
+    try { const { data } = await getTemplates(); setItems([...data].sort((a, b) => a.sort_order - b.sort_order)); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   useEffect(() => { load(); }, []);
+
+  // Glisser-déposer : réordonne localement puis persiste l'ordre complet.
+  function onDrop(toIdx) {
+    if (drag === null || drag === toIdx) { setDrag(null); return; }
+    const next = [...items];
+    const [moved] = next.splice(drag, 1);
+    next.splice(toIdx, 0, moved);
+    setItems(next);
+    setDrag(null);
+    reorderTemplates(next.map((t) => t.slug)).catch((e) => { setStatus({ type: "error", message: e.message }); load(); });
+  }
 
   async function onFile(slug, file) {
     if (!file) return;
@@ -57,8 +69,8 @@ function Modeles() {
       <PageHead
         eyebrow="Système"
         title="Modèles & workflow documentaire"
-        lead="Composez le jeu de documents de vos dossiers : intitulé, ordre, signature, conditions d'application. Cliquez sur « Éditer » pour construire le document dans l'éditeur intégré et y glisser les champs (nom, prix, dates…) qui se remplissent automatiquement."
-        actions={<button className="btn primary" onClick={() => setEditing({ _new: true, sort_order: 100, applies_when: {} })}>＋ Ajouter un document</button>}
+        lead="Composez le jeu de documents de vos dossiers : intitulé, signature, conditions d'application. Glissez une ligne (poignée ⠿) pour changer l'ordre. Cliquez sur « Éditer » pour construire le document dans l'éditeur intégré et y glisser les champs (nom, prix, dates…) qui se remplissent automatiquement."
+        actions={<button className="btn primary" onClick={() => setEditing({ _new: true, sort_order: Math.max(0, ...items.map((i) => i.sort_order || 0)) + 10, applies_when: {} })}>＋ Ajouter un document</button>}
       />
       <StatusMessage status={status} />
 
@@ -67,7 +79,7 @@ function Modeles() {
           <table>
             <thead>
               <tr>
-                <th style={{ width: 44 }}>#</th>
+                <th style={{ width: 30 }}></th>
                 <th>Document</th>
                 <th>Type</th>
                 <th>Signature</th>
@@ -77,9 +89,17 @@ function Modeles() {
               </tr>
             </thead>
             <tbody>
-              {items.map((t) => (
-                <tr key={t.slug} style={{ opacity: t.active ? 1 : 0.5 }}>
-                  <td className="tnum" style={{ color: "var(--dim)" }}>{t.sort_order}</td>
+              {items.map((t, i) => (
+                <tr key={t.slug}
+                  className={"drag-row" + (drag === i ? " dragging" : "")}
+                  style={{ opacity: t.active ? 1 : 0.5 }}
+                  draggable
+                  onDragStart={() => setDrag(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => onDrop(i)}
+                  onDragEnd={() => setDrag(null)}
+                >
+                  <td className="drag-handle" title="Glisser pour réordonner">⠿</td>
                   <td>
                     <b>{t.label}</b>
                     <span style={{ display: "block", fontSize: 11, color: "var(--dim)" }} className="mono">{t.slug}{!t.active && " · inactif"}</span>
@@ -183,13 +203,9 @@ function StepModal({ step, onClose, onSaved, onError }) {
           )}
           <div className="field"><label>Intitulé</label>
             <input className="inp" value={form.label} onChange={set("label")} placeholder="ex. Attestation de TVA" /></div>
-          <div className="row2">
-            <div className="field"><label>Type de document</label>
-              <input className="inp" list="doctypes" value={form.doc_type} onChange={set("doc_type")} placeholder="DEVIS, CONTRAT…" />
-              <datalist id="doctypes">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
-            </div>
-            <div className="field"><label>Ordre</label>
-              <input className="inp" type="number" value={form.sort_order} onChange={set("sort_order")} /></div>
+          <div className="field"><label>Type de document</label>
+            <input className="inp" list="doctypes" value={form.doc_type} onChange={set("doc_type")} placeholder="DEVIS, CONTRAT…" />
+            <datalist id="doctypes">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
           </div>
 
           <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "6px 0 4px" }}>Conditions d'application</label>
