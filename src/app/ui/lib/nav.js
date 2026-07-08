@@ -58,6 +58,7 @@ export const NAV = [
       { to: "/equipe", ic: "👥", label: "Équipe & accès", roles: OWNER },
       { to: "/modeles", ic: "⎙", label: "Modèles de documents", roles: ADMIN },
       { to: "/qcm", ic: "❓", label: "Modèles de QCM", roles: ADMIN },
+      { to: "/opcos", ic: "€", label: "OPCO / financeurs", roles: ADMIN },
     ],
   },
 ];
@@ -81,6 +82,7 @@ export const PAGE_TITLES = {
   "/reglages": "Organisme",
   "/equipe": "Équipe & accès",
   "/modeles": "Modèles de documents",
+  "/opcos": "OPCO / financeurs",
   "/audit": "Journal d'audit",
   "/notifications": "Notifications",
 };

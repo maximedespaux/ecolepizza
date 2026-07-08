@@ -35,6 +35,7 @@ const quizRoutes = require('./routes/quiz.routes.js');
 const templateRoutes = require('./routes/template.routes.js');
 const equipeRoutes = require('./routes/equipe.routes.js');
 const platformRoutes = require('./routes/platform.routes.js');
+const opcoRoutes = require('./routes/opco.routes.js');
 
 // --- CORS ---
 const allowedOrigins = [
@@ -96,6 +97,7 @@ app.use('/api/quizzes', quizRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/equipe', equipeRoutes);
 app.use('/api/platform', platformRoutes);
+app.use('/api/opcos', opcoRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impasto-api' }));
 

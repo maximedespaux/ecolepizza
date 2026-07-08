@@ -645,6 +645,27 @@ CREATE TABLE session_trainer (
     CONSTRAINT fk_st_user    FOREIGN KEY (user_id)    REFERENCES user (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- Référentiel OPCO / financeurs (un enregistrement par OPCO), avec coordonnées.
+CREATE TABLE opco (
+    id                 uuid         NOT NULL DEFAULT uuid(),
+    organization_id    uuid         NOT NULL,
+    code               varchar(40)  DEFAULT NULL,
+    name               varchar(160) NOT NULL,
+    address            varchar(255) DEFAULT NULL,
+    zip_code           varchar(10)  DEFAULT NULL,
+    town               varchar(120) DEFAULT NULL,
+    email              varchar(255) DEFAULT NULL,
+    phone              varchar(30)  DEFAULT NULL,
+    website            varchar(160) DEFAULT NULL,
+    triggers_assiduite tinyint(1)   NOT NULL DEFAULT 0,
+    active             tinyint(1)    NOT NULL DEFAULT 1,
+    sort_order         int           NOT NULL DEFAULT 100,
+    created_at         timestamp     NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    KEY idx_opco_org (organization_id),
+    CONSTRAINT fk_opco_org FOREIGN KEY (organization_id) REFERENCES organization (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- Lignes de facture : une facture peut couvrir plusieurs dossiers / formations.
 CREATE TABLE invoice_line (
     id            uuid          NOT NULL DEFAULT uuid(),

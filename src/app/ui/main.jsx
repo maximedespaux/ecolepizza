@@ -28,6 +28,7 @@ import ProduitDivers from "./pages/ProduitDivers.jsx";
 import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import Modeles from "./pages/Modeles.jsx";
+import Opcos from "./pages/Opcos.jsx";
 import TemplateEditor from "./pages/TemplateEditor.jsx";
 import Equipe from "./pages/Equipe.jsx";
 import Audit from "./pages/Audit.jsx";
@@ -139,6 +140,7 @@ function AppRoutes() {
           <Route path="sessions/:id" element={<Guard nav="/sessions" roles={STAFF}><SessionDetail /></Guard>} />
           <Route path="formations" element={<Guard nav="/formations" roles={STAFF}><Formations /></Guard>} />
           <Route path="qcm" element={<Guard nav="/qcm" roles={ADMIN}><Quiz /></Guard>} />
+          <Route path="opcos" element={<Guard nav="/opcos" roles={ADMIN}><Opcos /></Guard>} />
           <Route path="partenaires" element={<Guard nav="/partenaires" roles={STAFF}><Partenaires /></Guard>} />
           <Route path="ventes" element={<Guard nav="/ventes" roles={ADMIN}><Ventes /></Guard>} />
           <Route path="inventaire" element={<Guard nav="/ventes" roles={ADMIN}><Inventaire /></Guard>} />

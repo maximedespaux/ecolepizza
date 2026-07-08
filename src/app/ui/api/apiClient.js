@@ -35,6 +35,20 @@ export function updateOrganisation(payload) {
   return request("/organisation", { method: "PATCH", body: JSON.stringify(payload) });
 }
 
+// --- OPCO / financeurs (référentiel) ---
+export function getOpcos() {
+  return request("/opcos");
+}
+export function createOpco(payload) {
+  return request("/opcos", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateOpco(id, payload) {
+  return request(`/opcos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deleteOpco(id) {
+  return request(`/opcos/${id}`, { method: "DELETE" });
+}
+
 // --- Ventes de matériel ---
 export function getSales() {
   return request("/ventes");
@@ -279,6 +293,9 @@ export function createStagiaire(payload) {
 
 export function updateStagiaire(id, payload) {
   return request(`/stagiaires/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deleteStagiaire(id) {
+  return request(`/stagiaires/${id}`, { method: "DELETE" });
 }
 
 export function resetStagiairePassword(id) {

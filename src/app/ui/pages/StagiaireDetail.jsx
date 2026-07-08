@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, updateStagiaire,
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, updateStagiaire, deleteStagiaire, getOpcos,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -119,6 +119,17 @@ function StagiaireDetail() {
       await deleteDocument(docId);
       loadDocs();
     } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    }
+  }
+
+  async function handleDeleteLearner() {
+    if (!window.confirm(`Supprimer définitivement le stagiaire ${l.first_name} ${l.last_name} ?\nSes dossiers et documents seront également supprimés. Cette action est irréversible.`)) return;
+    try {
+      await deleteStagiaire(id);
+      navigate("/stagiaires");
+    } catch (err) {
+      setEditOpen(false);
       setStatus({ type: "error", message: err.message });
     }
   }
@@ -348,6 +359,7 @@ function StagiaireDetail() {
           onClose={() => setEditOpen(false)}
           onSaved={() => { setEditOpen(false); setStatus({ type: "success", message: "Fiche mise à jour." }); loadLearner(); }}
           onError={(m) => setStatus({ type: "error", message: m })}
+          onDelete={handleDeleteLearner}
         />
       )}
     </>
@@ -362,7 +374,7 @@ const EDIT_FIELDS = [
 ];
 const BOOLS = ["project_creation", "project_takeover", "project_oven", "project_truck", "project_job"];
 
-function EditLearnerModal({ learner, onClose, onSaved, onError }) {
+function EditLearnerModal({ learner, onClose, onSaved, onError, onDelete }) {
   const [form, setForm] = useState(() => {
     const f = {};
     for (const k of EDIT_FIELDS) f[k] = learner[k] ?? "";
@@ -373,6 +385,8 @@ function EditLearnerModal({ learner, onClose, onSaved, onError }) {
     return f;
   });
   const [saving, setSaving] = useState(false);
+  const [opcos, setOpcos] = useState([]);
+  useEffect(() => { getOpcos().then((r) => setOpcos(r.data || [])).catch(() => {}); }, []);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const chk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked }));
 
@@ -443,7 +457,7 @@ function EditLearnerModal({ learner, onClose, onSaved, onError }) {
             </SelectField>
             <SelectField label="OPCO / financeur" value={form.opco} onChange={set("opco")}>
               <option value="">—</option>
-              {OPCOS.map((o) => <option key={o} value={o}>{o}</option>)}
+              {[...new Set([...(form.opco ? [form.opco] : []), ...(opcos.length ? opcos.map((o) => o.name) : OPCOS)])].map((o) => <option key={o} value={o}>{o}</option>)}
             </SelectField>
           </div>
           <div className="row2">
@@ -467,9 +481,12 @@ function EditLearnerModal({ learner, onClose, onSaved, onError }) {
             ))}
           </div>
         </div>
-        <div className="mfoot">
-          <button className="btn ghost" onClick={onClose}>Annuler</button>
-          <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
+        <div className="mfoot" style={{ justifyContent: "space-between" }}>
+          <button className="btn ghost danger" onClick={onDelete}>Supprimer le stagiaire</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn ghost" onClick={onClose}>Annuler</button>
+            <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
+          </div>
         </div>
       </div>
     </div>
