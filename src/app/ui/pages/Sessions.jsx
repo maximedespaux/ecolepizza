@@ -18,7 +18,7 @@ function Sessions() {
   const [programs, setPrograms] = useState([]);
   const [status, setStatus] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ program_id: "", start_date: "" });
+  const [addForm, setAddForm] = useState({ program_id: "", start_date: ymd(now) });
 
   async function loadSessions() {
     try {
@@ -73,7 +73,7 @@ function Sessions() {
     }
     try {
       await createSession(addForm);
-      setAddForm({ program_id: "", start_date: "" });
+      setAddForm({ program_id: "", start_date: ymd(now) });
       setShowAdd(false);
       setStatus({ type: "success", message: "Formation ajoutée au calendrier." });
       loadSessions();
