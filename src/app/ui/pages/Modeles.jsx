@@ -47,10 +47,33 @@ function Modeles() {
     reorderTemplates(next.map((t) => t.slug)).catch((e) => { setStatus({ type: "error", message: e.message }); load(); });
   }
 
-  async function onReset(slug) {
-    if (!window.confirm("Vider ce modèle ? Le contenu créé dans l'éditeur sera supprimé.")) return;
-    setBusy(slug);
-    try { await resetTemplate(slug); setStatus({ type: "success", message: "Modèle vidé." }); await load(); }
+  // Vide seulement le contenu composé dans l'éditeur (les réglages sont conservés).
+  async function onClearBody(t) {
+    if (!window.confirm(`Vider le contenu de « ${t.label} » ? Le document composé dans l'éditeur sera effacé (les réglages sont conservés).`)) return;
+    setBusy(t.slug);
+    try { await saveTemplate(t.slug, { body_html: null, header_html: null, footer_html: null }); setStatus({ type: "success", message: "Contenu vidé." }); await load(); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setBusy(null); }
+  }
+
+  // Supprime la ligne. Un document ajouté est supprimé définitivement ; un
+  // document du socle ne peut pas l'être : il est désactivé (ou réactivé).
+  async function onDelete(t) {
+    if (!t.is_default) {
+      if (!window.confirm(`Supprimer définitivement le document « ${t.label} » ?\nCette action est irréversible.`)) return;
+      setBusy(t.slug);
+      try { await resetTemplate(t.slug); setStatus({ type: "success", message: "Document supprimé." }); await load(); }
+      catch (e) { setStatus({ type: "error", message: e.message }); }
+      finally { setBusy(null); }
+      return;
+    }
+    const activate = !t.active;
+    const ok = activate
+      ? window.confirm(`Réactiver « ${t.label} » ?`)
+      : window.confirm(`« ${t.label} » fait partie du socle documentaire et ne peut pas être supprimé.\n\nVoulez-vous le désactiver (le retirer du workflow) ?`);
+    if (!ok) return;
+    setBusy(t.slug);
+    try { await saveTemplate(t.slug, { active: activate }); setStatus({ type: "success", message: activate ? "Document réactivé." : "Document désactivé." }); await load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setBusy(null); }
   }
@@ -112,8 +135,12 @@ function Modeles() {
                         onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>🖋 Éditer</button>
                       <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>✎</button>
                       {t.has_body ? (
-                        <button className="btn sm ghost" title="Vider le modèle" disabled={busy === t.slug} onClick={() => onReset(t.slug)}>🗑</button>
+                        <button className="btn sm ghost" title="Vider le contenu de l'éditeur" disabled={busy === t.slug} onClick={() => onClearBody(t)}>🧹</button>
                       ) : <span className="slot" />}
+                      <button className="btn sm ghost danger"
+                        title={t.is_default ? (t.active ? "Désactiver (document du socle, non supprimable)" : "Réactiver ce document") : "Supprimer définitivement"}
+                        disabled={busy === t.slug}
+                        onClick={() => onDelete(t)}>{t.is_default && !t.active ? "↺" : "🗑"}</button>
                     </div>
                   </td>
                 </tr>
