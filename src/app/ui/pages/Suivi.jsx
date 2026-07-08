@@ -16,8 +16,6 @@ import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf } from "../lib/format.js";
 
 const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé ✓", "g"], ARCHIVE: ["Archivé", "n"] };
-const SIGN_TYPES = new Set(["DEVIS", "CONTRAT", "CONVENTION", "DROIT_IMAGE"]);
-const docIcon = (d) => (d.quiz_id ? "❓" : SIGN_TYPES.has(d.type) ? "✍️" : "📄");
 
 function Suivi() {
   const navigate = useNavigate();
@@ -220,7 +218,7 @@ function ArchivesView({ onError, onInfo }) {
                                     return (
                                       <div key={d.doc_id} className="arch-doc">
                                         <span style={{ flex: 1, minWidth: 0 }}>
-                                          {docIcon(d)} <b>{d.title}</b>
+                                          <b>{d.title}</b>
                                           <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
                                             {d.signed_at ? `signé le ${d.signed_at}` : d.sent_at ? `envoyé le ${d.sent_at}` : ""}
                                           </span>
