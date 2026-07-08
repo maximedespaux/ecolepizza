@@ -64,10 +64,15 @@ function Factures() {
     try { await updateInvoice(id, { status: s }); load(); } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
   async function pay(inv) {
-    const rest = Number(inv.amount_net) - Number(inv.paid);
-    const amount = window.prompt("Montant du paiement (€) :", rest > 0 ? rest.toFixed(2) : inv.amount_net);
-    if (amount === null) return;
-    try { await recordPayment(inv.id, amount); load(); } catch (err) { setStatus({ type: "error", message: err.message }); }
+    // Un clic = encaisse le solde restant et marque la facture payée.
+    const rest = Math.max(0, Number(inv.amount_net) - Number(inv.paid));
+    const amount = rest > 0 ? rest : Number(inv.amount_net);
+    if (!window.confirm(`Marquer « ${inv.number} » comme payée et encaisser ${euro(amount)} ?`)) return;
+    try {
+      await recordPayment(inv.id, amount);
+      setStatus({ type: "success", message: `Encaissé : ${euro(amount)} · ${inv.number} payée.` });
+      load();
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
   async function remove(id) {
     if (!window.confirm("Supprimer ce document ?")) return;
@@ -169,7 +174,7 @@ function Factures() {
                       <td><Badge tone={tone}>{label}</Badge></td>
                       <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                         {i.status === "BROUILLON" && <button className="btn sm" title="Émettre" onClick={() => setStatusOf(i.id, "EMISE")}>Émettre</button>}{" "}
-                        {i.status !== "PAYEE" && i.status !== "ANNULEE" && (i.type === "FACTURE" || i.type === "ACOMPTE") && <button className="btn sm" title="Encaisser" onClick={() => pay(i)}>Payer</button>}{" "}
+                        {i.status !== "PAYEE" && i.status !== "ANNULEE" && (i.type === "FACTURE" || i.type === "ACOMPTE") && <button className="btn sm" title="Encaisser le solde et marquer payée" onClick={() => pay(i)}>Payer</button>}{" "}
                         <button className="btn sm" title="Aperçu de la facture" onClick={() => preview(i)}>Aperçu</button>{" "}
                         <button className="btn sm" title="Télécharger la facture Factur-X (PDF)" onClick={() => dl(downloadFacturX, i)}>Factur-X</button>{" "}
                         <button className="iconbtn" title="Télécharger le XML" onClick={() => dl(downloadInvoiceXml, i)}>⭳</button>{" "}
