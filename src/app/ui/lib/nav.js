@@ -168,3 +168,19 @@ export function landingPath(user) {
 export const GRANTABLE_NAV = NAV
   .map((g) => ({ grp: g.grp, items: g.items.filter((it) => it.to !== "/equipe") }))
   .filter((g) => g.items.length > 0);
+
+// Rôles « système » (intégrés) : servent de modèles d'accès réutilisables.
+export const BUILTIN_ROLES = [
+  { role: "SUPER_ADMIN", name: "Super administrateur" },
+  { role: "ADMIN_ORGANISME", name: "Administrateur" },
+  { role: "SECRETARIAT", name: "Secrétariat" },
+  { role: "FORMATEUR", name: "Formateur" },
+  { role: "AUDITEUR", name: "Auditeur" },
+];
+
+// Accès menu par défaut d'un rôle système (toutes les pages qu'il peut ouvrir, en écriture).
+export function builtinRoleAccess(roleCode) {
+  const o = {};
+  for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(roleCode, it.roles)) o[it.to] = "write";
+  return o;
+}

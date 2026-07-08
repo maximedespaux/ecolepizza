@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAccessProfiles, createAccessProfile, updateAccessProfile, deleteAccessProfile } from "../api/apiClient.js";
-import { GRANTABLE_NAV } from "../lib/nav.js";
+import { GRANTABLE_NAV, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -37,9 +37,32 @@ function AccessRoles() {
       />
       <StatusMessage status={status} />
 
-      <Card title={`Rôles (${roles.length})`}>
+      <Card title="Rôles système">
+        <p className="sub" style={{ marginTop: 0 }}>Rôles intégrés (non modifiables). Cliquez « Dupliquer » pour créer un rôle personnalisé à partir de leur accès.</p>
+        <div className="tablewrap" style={{ border: "none" }}>
+          <table>
+            <thead><tr><th>Rôle</th><th>Pages accordées</th><th></th></tr></thead>
+            <tbody>
+              {BUILTIN_ROLES.map((b) => {
+                const acc = builtinRoleAccess(b.role);
+                return (
+                  <tr key={b.role}>
+                    <td><b>{b.name}</b> <Badge tone="n">système</Badge></td>
+                    <td><Badge tone="b">{Object.keys(acc).length} page(s)</Badge></td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button className="btn sm ghost" onClick={() => setEditing({ _new: true, name: `${b.name} (copie)`, nav_access: acc })}>Dupliquer</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card title={`Rôles personnalisés (${roles.length})`}>
         {roles.length === 0 ? (
-          <EmptyState icon="👥">Aucun rôle. Créez-en un puis appliquez-le à vos membres.</EmptyState>
+          <EmptyState icon="👥">Aucun rôle personnalisé. Créez-en un ou dupliquez un rôle système.</EmptyState>
         ) : (
           <div className="tablewrap" style={{ border: "none" }}>
             <table>

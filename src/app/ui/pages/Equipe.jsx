@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { getTeam, createMember, updateMember, deleteMember, getAccessProfiles, createAccessProfile } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
-import { GRANTABLE_NAV, canAccess, OWNER_ROLES } from "../lib/nav.js";
+import { GRANTABLE_NAV, canAccess, OWNER_ROLES, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -219,8 +219,9 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
   const [roles, setRoles] = useState([]);
   useEffect(() => { getAccessProfiles().then((r) => setRoles(r.data || [])).catch(() => {}); }, []);
 
-  function applyRole(id) {
-    const r = roles.find((x) => x.id === id);
+  function applyRole(val) {
+    if (val.startsWith("builtin:")) { setModes(builtinRoleAccess(val.slice(8))); return; }
+    const r = roles.find((x) => x.id === val);
     if (r) setModes({ ...(r.nav_access || {}) });
   }
   async function saveAsRole() {
@@ -265,15 +266,20 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
             Cochez les rubriques accessibles, puis choisissez <b>Modifier</b> (peut créer / éditer / supprimer)
             ou <b>Lecture</b> (consultation seule). Les administrateurs conservent toujours l'accès complet.
           </p>
-          {roles.length > 0 && (
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-              <label style={{ fontSize: 13, fontWeight: 600 }}>Appliquer un rôle :</label>
-              <select className="inp" style={{ maxWidth: 220 }} value="" onChange={(e) => { if (e.target.value) applyRole(e.target.value); }}>
-                <option value="">— Choisir un rôle —</option>
-                {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-            </div>
-          )}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 13, fontWeight: 600 }}>Appliquer un rôle :</label>
+            <select className="inp" style={{ maxWidth: 240 }} value="" onChange={(e) => { if (e.target.value) applyRole(e.target.value); }}>
+              <option value="">— Choisir un rôle —</option>
+              <optgroup label="Rôles système">
+                {BUILTIN_ROLES.map((b) => <option key={b.role} value={`builtin:${b.role}`}>{b.name}</option>)}
+              </optgroup>
+              {roles.length > 0 && (
+                <optgroup label="Rôles personnalisés">
+                  {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </optgroup>
+              )}
+            </select>
+          </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
             <button type="button" className="btn sm ghost" onClick={() => setAll(true)}>Tout cocher</button>
             <button type="button" className="btn sm ghost" onClick={() => setAll(false)}>Tout décocher</button>
