@@ -52,6 +52,7 @@ CREATE TABLE organization (
     id          uuid         NOT NULL DEFAULT uuid(),
     legal_name  varchar(255) NOT NULL,
     short_name  varchar(120) DEFAULT NULL,
+    code        varchar(24)  DEFAULT NULL,          -- code court unique (saisi à la connexion, multi-tenant)
     manager     varchar(255) DEFAULT NULL,
     siret       varchar(20)  DEFAULT NULL,
     vat_number  varchar(30)  DEFAULT NULL,          -- n° TVA intracommunautaire
@@ -64,7 +65,8 @@ CREATE TABLE organization (
     email       varchar(255) DEFAULT NULL,
     qualiopi    tinyint(1)   NOT NULL DEFAULT 0,
     created_at  timestamp    NOT NULL DEFAULT current_timestamp(),
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_org_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ---------------------------------------------------------------------------
@@ -73,7 +75,7 @@ CREATE TABLE organization (
 CREATE TABLE user (
     id              uuid         NOT NULL DEFAULT uuid(),
     organization_id uuid         DEFAULT NULL,
-    role            enum('SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT','FORMATEUR',
+    role            enum('PLATFORM_OWNER','SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT','FORMATEUR',
                          'STAGIAIRE','ENTREPRISE','FINANCEUR','AUDITEUR')
                     NOT NULL DEFAULT 'SECRETARIAT',
     first_name      varchar(120) DEFAULT NULL,
@@ -87,7 +89,7 @@ CREATE TABLE user (
     password_plain_enc varchar(255) DEFAULT NULL,      -- DEV UNIQUEMENT : copie chiffrée du mot de passe généré (à retirer)
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
-    UNIQUE KEY uq_user_email (email),
+    UNIQUE KEY uq_user_org_email (organization_id, email),
     KEY idx_user_org (organization_id),
     CONSTRAINT fk_user_org FOREIGN KEY (organization_id)
         REFERENCES organization (id) ON DELETE SET NULL

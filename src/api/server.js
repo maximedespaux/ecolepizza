@@ -34,6 +34,7 @@ const carteRoutes = require('./routes/carte.routes.js');
 const quizRoutes = require('./routes/quiz.routes.js');
 const templateRoutes = require('./routes/template.routes.js');
 const equipeRoutes = require('./routes/equipe.routes.js');
+const platformRoutes = require('./routes/platform.routes.js');
 
 // --- CORS ---
 const allowedOrigins = [
@@ -94,6 +95,7 @@ app.use('/api/carte', carteRoutes);
 app.use('/api/quizzes', quizRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/equipe', equipeRoutes);
+app.use('/api/platform', platformRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impasto-api' }));
 

@@ -217,11 +217,19 @@ export function markAllNotificationsRead() {
 }
 
 // --- Authentification ---
-export function login({ email, password, stayConnected }) {
+export function login({ email, password, org_code, stayConnected }) {
   return request("/auth", {
     method: "POST",
-    body: JSON.stringify({ email, password, stayConnected }),
+    body: JSON.stringify({ email, password, org_code, stayConnected }),
   });
+}
+
+// --- Plateforme (propriétaire de plateforme) ---
+export function getOrganizations() {
+  return request("/platform/organizations");
+}
+export function createOrganization(payload) {
+  return request("/platform/organizations", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function getCurrentUser() {

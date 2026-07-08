@@ -23,16 +23,21 @@ const getOrganization = (req, res) => {
  * PATCH /api/organisation — met à jour l'organisme (admin / secrétariat).
  */
 const updateOrganization = (req, res) => {
-    const allowed = ['legal_name', 'short_name', 'manager', 'siret', 'vat_number', 'nda', 'naf_ape',
+    const allowed = ['legal_name', 'short_name', 'code', 'manager', 'siret', 'vat_number', 'nda', 'naf_ape',
         'address', 'zip_code', 'town', 'phone', 'email', 'qualiopi'];
 
     const updates = [];
     const values = [];
     for (const f of allowed) {
-        if (req.body[f] !== undefined) {
-            updates.push(`${f} = ?`);
-            values.push(f === 'qualiopi' ? (req.body[f] ? 1 : 0) : req.body[f]);
+        if (req.body[f] === undefined) continue;
+        let v = req.body[f];
+        if (f === 'qualiopi') v = v ? 1 : 0;
+        else if (f === 'code') {
+            // Code court unique : majuscules, alphanumérique + tiret, ou NULL si vidé.
+            v = String(v).trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 24) || null;
         }
+        updates.push(`${f} = ?`);
+        values.push(v);
     }
     if (updates.length === 0) {
         return res.status(400).json({ message: 'Aucun champ à mettre à jour' });
@@ -44,6 +49,9 @@ const updateOrganization = (req, res) => {
         values,
         (err) => {
             if (err) {
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ error: 'Ce code organisme est déjà utilisé.' });
+                }
                 console.error('Erreur mise à jour organisme :', err);
                 return res.status(400).json({ message: 'Erreur mise à jour' });
             }

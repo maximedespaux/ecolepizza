@@ -1,6 +1,6 @@
 import React, { useContext } from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { UserProvider, UserContext } from "./context/UserContext.jsx";
 import { landingPath, navAllowed, OWNER_ROLES } from "./lib/nav.js";
@@ -32,6 +32,7 @@ import TemplateEditor from "./pages/TemplateEditor.jsx";
 import Equipe from "./pages/Equipe.jsx";
 import Audit from "./pages/Audit.jsx";
 import Notifications from "./pages/Notifications.jsx";
+import Platform from "./pages/Platform.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
 import MesFormations from "./pages/MesFormations.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
@@ -56,6 +57,14 @@ function Guard({ nav, roles, children }) {
   // Utilisateur non-propriétaire : accès défini par le super administrateur.
   if (!navAllowed(user, nav)) return <Navigate to={landingPath(user)} replace />;
   return children;
+}
+
+/** Garde minimale pour l'espace plateforme (sans barre latérale organisme). */
+function PlatformGate() {
+  const { isConnected, isLoading } = useContext(UserContext);
+  if (isLoading) return null;
+  if (!isConnected) return <Navigate to="/login" replace />;
+  return <Outlet />;
 }
 
 /** Redirige la racine vers la page d'atterrissage de l'utilisateur. */
@@ -92,12 +101,20 @@ function AppRoutes() {
   }
 
   const isStudent = user?.role === "STAGIAIRE";
+  const isPlatform = user?.role === "PLATFORM_OWNER";
 
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
 
-      {isStudent ? (
+      {isPlatform ? (
+        // --- Console plateforme (revente : gestion des organismes) ---
+        <Route path="/" element={<PlatformGate />}>
+          <Route index element={<Navigate to="/organisations" replace />} />
+          <Route path="organisations" element={<Platform />} />
+          <Route path="*" element={<Navigate to="/organisations" replace />} />
+        </Route>
+      ) : isStudent ? (
         // --- Espace stagiaire (pas de barre latérale admin) ---
         <Route path="/" element={<StudentLayout />}>
           <Route index element={<Navigate to="/mon-espace" replace />} />
