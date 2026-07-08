@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { UserProvider, UserContext } from "./context/UserContext.jsx";
+import { landingPath, navAllowed, OWNER_ROLES } from "./lib/nav.js";
 import "./styles/app.css";
 
 import AppLayout from "./layouts/AppLayout.jsx";
@@ -39,11 +40,38 @@ import NotFound from "./pages/NotFound.jsx";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 
-/** Restreint une route à certains rôles (redirige vers le dashboard sinon). */
-function RoleRoute({ roles, children }) {
+/**
+ * Garde de route. Deux dimensions :
+ *  · rôle (sécurité de base, inchangée) pour les propriétaires ;
+ *  · accès menu par utilisateur (configuré par le super admin) pour les autres.
+ * `nav` = chemin du menu correspondant (pour les sous-pages, le chemin parent).
+ */
+function Guard({ nav, roles, children }) {
   const { user } = useContext(UserContext);
-  if (roles && user && !roles.includes(user.role)) return <Navigate to="/dashboard" replace />;
+  if (!user) return null;
+  if (OWNER_ROLES.includes(user.role)) {
+    if (roles && !roles.includes(user.role)) return <Navigate to={landingPath(user)} replace />;
+    return children;
+  }
+  // Utilisateur non-propriétaire : accès défini par le super administrateur.
+  if (!navAllowed(user, nav)) return <Navigate to={landingPath(user)} replace />;
   return children;
+}
+
+/** Redirige la racine vers la page d'atterrissage de l'utilisateur. */
+function IndexRedirect() {
+  const { user } = useContext(UserContext);
+  return <Navigate to={landingPath(user)} replace />;
+}
+
+/** Écran affiché quand aucun accès n'a encore été accordé à l'utilisateur. */
+function NoAccess() {
+  return (
+    <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>
+      <h2 style={{ marginBottom: 8 }}>Aucun accès accordé</h2>
+      <p>Votre compte n'a pas encore d'accès au menu. Contactez un administrateur.</p>
+    </div>
+  );
 }
 
 const STAFF = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"];
@@ -82,29 +110,30 @@ function AppRoutes() {
       ) : (
         // --- Application (secrétariat / administration) ---
         <Route path="/" element={<AppLayout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="stagiaires" element={<RoleRoute roles={STAFF}><Stagiaires /></RoleRoute>} />
-          <Route path="stagiaires/:id" element={<RoleRoute roles={STAFF}><StagiaireDetail /></RoleRoute>} />
-          <Route path="pipeline" element={<RoleRoute roles={ADMIN}><Pipeline /></RoleRoute>} />
-          <Route path="sessions" element={<RoleRoute roles={STAFF}><Sessions /></RoleRoute>} />
-          <Route path="sessions/:id" element={<RoleRoute roles={STAFF}><SessionDetail /></RoleRoute>} />
-          <Route path="formations" element={<RoleRoute roles={STAFF}><Formations /></RoleRoute>} />
-          <Route path="qcm" element={<RoleRoute roles={ADMIN}><Quiz /></RoleRoute>} />
-          <Route path="partenaires" element={<RoleRoute roles={STAFF}><Partenaires /></RoleRoute>} />
-          <Route path="ventes" element={<RoleRoute roles={ADMIN}><Ventes /></RoleRoute>} />
-          <Route path="inventaire" element={<RoleRoute roles={ADMIN}><Inventaire /></RoleRoute>} />
-          <Route path="factures" element={<RoleRoute roles={ADMIN}><Factures /></RoleRoute>} />
-          <Route path="comptabilite" element={<RoleRoute roles={ADMIN}><Comptabilite /></RoleRoute>} />
-          <Route path="produit-divers" element={<RoleRoute roles={STAFF}><ProduitDivers /></RoleRoute>} />
-          <Route path="carte" element={<RoleRoute roles={ADMIN}><Carte /></RoleRoute>} />
-          <Route path="reglages" element={<RoleRoute roles={ADMIN}><Reglages /></RoleRoute>} />
-          <Route path="modeles" element={<RoleRoute roles={ADMIN}><Modeles /></RoleRoute>} />
-          <Route path="modeles/:slug/editeur" element={<RoleRoute roles={ADMIN}><TemplateEditor /></RoleRoute>} />
-          <Route path="equipe" element={<RoleRoute roles={OWNER}><Equipe /></RoleRoute>} />
-          <Route path="audit" element={<RoleRoute roles={SUIVI}><Audit /></RoleRoute>} />
+          <Route index element={<IndexRedirect />} />
+          <Route path="aucun-acces" element={<NoAccess />} />
+          <Route path="dashboard" element={<Guard nav="/dashboard" roles={STAFF}><Dashboard /></Guard>} />
+          <Route path="stagiaires" element={<Guard nav="/stagiaires" roles={STAFF}><Stagiaires /></Guard>} />
+          <Route path="stagiaires/:id" element={<Guard nav="/stagiaires" roles={STAFF}><StagiaireDetail /></Guard>} />
+          <Route path="pipeline" element={<Guard nav="/pipeline" roles={ADMIN}><Pipeline /></Guard>} />
+          <Route path="sessions" element={<Guard nav="/sessions" roles={STAFF}><Sessions /></Guard>} />
+          <Route path="sessions/:id" element={<Guard nav="/sessions" roles={STAFF}><SessionDetail /></Guard>} />
+          <Route path="formations" element={<Guard nav="/formations" roles={STAFF}><Formations /></Guard>} />
+          <Route path="qcm" element={<Guard nav="/qcm" roles={ADMIN}><Quiz /></Guard>} />
+          <Route path="partenaires" element={<Guard nav="/partenaires" roles={STAFF}><Partenaires /></Guard>} />
+          <Route path="ventes" element={<Guard nav="/ventes" roles={ADMIN}><Ventes /></Guard>} />
+          <Route path="inventaire" element={<Guard nav="/ventes" roles={ADMIN}><Inventaire /></Guard>} />
+          <Route path="factures" element={<Guard nav="/factures" roles={ADMIN}><Factures /></Guard>} />
+          <Route path="comptabilite" element={<Guard nav="/comptabilite" roles={ADMIN}><Comptabilite /></Guard>} />
+          <Route path="produit-divers" element={<Guard nav="/produit-divers" roles={STAFF}><ProduitDivers /></Guard>} />
+          <Route path="carte" element={<Guard nav="/carte" roles={ADMIN}><Carte /></Guard>} />
+          <Route path="reglages" element={<Guard nav="/reglages" roles={ADMIN}><Reglages /></Guard>} />
+          <Route path="modeles" element={<Guard nav="/modeles" roles={ADMIN}><Modeles /></Guard>} />
+          <Route path="modeles/:slug/editeur" element={<Guard nav="/modeles" roles={ADMIN}><TemplateEditor /></Guard>} />
+          <Route path="equipe" element={<Guard nav="/equipe" roles={OWNER}><Equipe /></Guard>} />
+          <Route path="audit" element={<Guard nav="/audit" roles={SUIVI}><Audit /></Guard>} />
           <Route path="notifications" element={<Notifications />} />
-          <Route path="suivi" element={<RoleRoute roles={SUIVI}><Suivi /></RoleRoute>} />
+          <Route path="suivi" element={<Guard nav="/suivi" roles={SUIVI}><Suivi /></Guard>} />
           <Route path="*" element={<NotFound />} />
         </Route>
       )}

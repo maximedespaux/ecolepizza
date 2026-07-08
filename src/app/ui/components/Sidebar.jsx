@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { NAV, canAccess } from "../lib/nav.js";
+import { NAV, canOpen } from "../lib/nav.js";
 import { getBadges } from "../api/apiClient.js";
 import { onBadgesRefresh } from "../lib/events.js";
 import { initials } from "../lib/format.js";
@@ -60,7 +60,7 @@ function Sidebar({ open }) {
 
       <nav className="menu">
         {NAV.map((group) => {
-          const items = group.items.filter((it) => canAccess(role, it.roles));
+          const items = group.items.filter((it) => canOpen(user, it));
           if (items.length === 0) return null;
           return (
             <div key={group.grp}>

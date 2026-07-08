@@ -81,6 +81,7 @@ CREATE TABLE user (
     email           varchar(255) NOT NULL,
     phone           varchar(30)  DEFAULT NULL,
     active          tinyint(1)   NOT NULL DEFAULT 1,    -- 0 = accès désactivé (connexion refusée)
+    nav_access      text         DEFAULT NULL,          -- accès menu par utilisateur (JSON de chemins) ; NULL = rien accordé
     last_login_at   timestamp    NULL DEFAULT NULL,     -- dernière connexion réussie
     password        varchar(255) NOT NULL,             -- hash bcrypt (authentification)
     password_plain_enc varchar(255) DEFAULT NULL,      -- DEV UNIQUEMENT : copie chiffrée du mot de passe généré (à retirer)

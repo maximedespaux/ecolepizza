@@ -89,3 +89,38 @@ export const PAGE_TITLES = {
 export function canAccess(role, roles) {
   return !roles || (role && roles.includes(role));
 }
+
+// Rôles propriétaires : toujours accès complet à leur menu (jamais restreints par
+// la configuration d'accès menu ; ce sont eux qui la définissent).
+export const OWNER_ROLES = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
+
+/** L'utilisateur a-t-il ce chemin dans sa liste d'accès menu ? (non-propriétaires) */
+export function navAllowed(user, path) {
+  const allow = Array.isArray(user?.nav_access) ? user.nav_access : [];
+  return allow.includes(path);
+}
+
+/**
+ * L'utilisateur peut-il voir/ouvrir cet item de menu ?
+ *  · propriétaires (SUPER_ADMIN / ADMIN_ORGANISME) : selon leur rôle ;
+ *  · autres : uniquement les chemins explicitement accordés (rien tant que non accordé).
+ */
+export function canOpen(user, item) {
+  if (!user) return false;
+  if (OWNER_ROLES.includes(user.role)) return canAccess(user.role, item.roles);
+  return navAllowed(user, item.to);
+}
+
+/** Page d'atterrissage : dashboard pour un propriétaire, 1er accès accordé sinon. */
+export function landingPath(user) {
+  if (!user) return "/login";
+  if (OWNER_ROLES.includes(user.role)) return "/dashboard";
+  for (const g of NAV) for (const it of g.items) if (navAllowed(user, it.to)) return it.to;
+  return "/aucun-acces";
+}
+
+// Items de menu que le super administrateur peut accorder (tout sauf la gestion
+// d'équipe, réservée aux propriétaires).
+export const GRANTABLE_NAV = NAV
+  .map((g) => ({ grp: g.grp, items: g.items.filter((it) => it.to !== "/equipe") }))
+  .filter((g) => g.items.length > 0);

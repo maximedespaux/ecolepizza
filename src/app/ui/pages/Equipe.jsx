@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { getTeam, createMember, updateMember, deleteMember } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
+import { GRANTABLE_NAV, canAccess, OWNER_ROLES } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -58,7 +59,10 @@ function Equipe() {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(null);
   const [editing, setEditing] = useState(null); // membre en édition, ou { _new: true }
+  const [navEditing, setNavEditing] = useState(null); // membre dont on configure l'accès menu
   const [credential, setCredential] = useState(null); // { email, password } affiché une fois
+
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   async function load() {
     try { const { data } = await getTeam(); setItems(data); }
@@ -146,6 +150,10 @@ function Equipe() {
                       {canManageRow(m) && (
                         <>
                           <button className="btn sm ghost" title="Modifier" onClick={() => setEditing({ ...m })}>✎</button>{" "}
+                          {isSuperAdmin && !m.is_self && !OWNER_ROLES.includes(m.role) && (
+                            <button className="btn sm ghost" title="Configurer l'accès au menu"
+                              onClick={() => setNavEditing(m)}>🧭</button>
+                          )}{" "}
                           {!m.is_self && (
                             <button className="btn sm ghost" title={m.active ? "Désactiver l'accès" : "Réactiver l'accès"}
                               disabled={busy === m.id} onClick={() => toggleActive(m)}>{m.active ? "⏸" : "▶"}</button>
@@ -178,7 +186,85 @@ function Equipe() {
           onSaved={(cred) => { setEditing(null); if (cred) setCredential(cred); setStatus({ type: "success", message: "Membre mis à jour." }); load(); }}
         />
       )}
+
+      {navEditing && (
+        <NavAccessModal
+          member={navEditing}
+          onClose={() => setNavEditing(null)}
+          onError={(m) => setStatus({ type: "error", message: m })}
+          onSaved={() => { setNavEditing(null); setStatus({ type: "success", message: "Accès menu enregistré." }); load(); }}
+        />
+      )}
     </>
+  );
+}
+
+/** Configuration de l'accès au menu d'un membre (super administrateur uniquement). */
+function NavAccessModal({ member, onClose, onError, onSaved }) {
+  // Amorce : accès déjà enregistré, sinon les pages par défaut du rôle.
+  const seed = () => {
+    if (Array.isArray(member.nav_access)) return new Set(member.nav_access);
+    const s = new Set();
+    for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(member.role, it.roles)) s.add(it.to);
+    return s;
+  };
+  const [sel, setSel] = useState(seed);
+  const [saving, setSaving] = useState(false);
+  const allPaths = GRANTABLE_NAV.flatMap((g) => g.items.map((it) => it.to));
+  const toggle = (to) => setSel((prev) => { const n = new Set(prev); n.has(to) ? n.delete(to) : n.add(to); return n; });
+  const setAll = (on) => setSel(on ? new Set(allPaths) : new Set());
+  const resetRole = () => {
+    const s = new Set();
+    for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(member.role, it.roles)) s.add(it.to);
+    setSel(s);
+  };
+
+  async function save() {
+    setSaving(true);
+    try { await updateMember(member.id, { nav_access: [...sel] }); onSaved(); }
+    catch (e) { onError(e.message); }
+    finally { setSaving(false); }
+  }
+
+  const who = [member.first_name, member.last_name].filter(Boolean).join(" ") || member.email;
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <h3>Accès menu — {who}</h3>
+          <button className="x" onClick={onClose} aria-label="Fermer">×</button>
+        </div>
+        <div className="mbody">
+          <p className="sub" style={{ marginTop: 0 }}>
+            Cochez les rubriques de navigation accessibles à ce membre. Les actions restent soumises
+            aux permissions de son rôle côté serveur.
+          </p>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            <button type="button" className="btn sm ghost" onClick={() => setAll(true)}>Tout cocher</button>
+            <button type="button" className="btn sm ghost" onClick={() => setAll(false)}>Tout décocher</button>
+            <button type="button" className="btn sm ghost" onClick={resetRole}>Défauts du rôle</button>
+          </div>
+          {GRANTABLE_NAV.map((g) => (
+            <div key={g.grp} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "var(--dim)", marginBottom: 4 }}>{g.grp}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {g.items.map((it) => (
+                  <label key={it.to} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
+                    <input type="checkbox" checked={sel.has(it.to)} onChange={() => toggle(it.to)} />
+                    <span style={{ width: 20, textAlign: "center" }}>{it.ic}</span> {it.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={onClose}>Annuler</button>
+          <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
