@@ -253,6 +253,9 @@ const createRevenue = async (req, res) => {
     if (!label || !String(label).trim() || !Number.isFinite(amount) || amount < 0) {
         return res.status(422).json({ error: 'Libellé et montant valides requis.' });
     }
+    if (cat === 'COMMISSION' && !partner_id) {
+        return res.status(422).json({ error: 'Une commission doit être rattachée à un partenaire.' });
+    }
     try {
         const id = crypto.randomUUID();
         await db.promise().query(
@@ -282,6 +285,9 @@ const updateRevenue = async (req, res) => {
     if (b.partner_id !== undefined) fields.partner_id = b.partner_id || null;
     if (b.note !== undefined) fields.note = b.note ? String(b.note).slice(0, 255) : null;
     if (fields.label !== undefined && !fields.label) return res.status(422).json({ error: 'Libellé requis.' });
+    if (fields.category === 'COMMISSION' && fields.partner_id === null) {
+        return res.status(422).json({ error: 'Une commission doit être rattachée à un partenaire.' });
+    }
     const keys = Object.keys(fields);
     if (!keys.length) return res.status(400).json({ message: 'Aucun champ à mettre à jour' });
     try {

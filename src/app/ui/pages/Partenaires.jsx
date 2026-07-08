@@ -56,6 +56,7 @@ function Partenaires() {
 
   async function recordRevenue() {
     if (!rec.label.trim() || !rec.montant) { setStatus({ type: "error", message: "Libellé et montant requis." }); return; }
+    if (rec.categorie === "COMMISSION" && !rec.partner_id) { setStatus({ type: "error", message: "Sélectionnez le partenaire concerné pour une commission." }); return; }
     setSaving(true); setStatus(null);
     try {
       await createRevenue(rec);
@@ -111,9 +112,9 @@ function Partenaires() {
         </div>
         <div className="row3" style={{ alignItems: "end" }}>
           {rec.categorie === "COMMISSION" && (
-            <div className="field"><label>Partenaire concerné</label>
-              <select value={rec.partner_id} onChange={(e) => setRec({ ...rec, partner_id: e.target.value })}>
-                <option value="">— Aucun / non précisé —</option>
+            <div className="field"><label>Partenaire concerné <span style={{ color: "var(--ember1)" }}>*</span></label>
+              <select value={rec.partner_id} onChange={(e) => setRec({ ...rec, partner_id: e.target.value })} required>
+                <option value="">— Sélectionner un partenaire —</option>
                 {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select></div>
           )}
