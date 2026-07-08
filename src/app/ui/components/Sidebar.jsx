@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { NAV, canOpen } from "../lib/nav.js";
+import { NAV, canOpen, SETTINGS_PATHS } from "../lib/nav.js";
 import { getBadges } from "../api/apiClient.js";
 import { onBadgesRefresh } from "../lib/events.js";
 import { initials } from "../lib/format.js";
@@ -25,9 +25,9 @@ function Sidebar({ open }) {
   const { user, logout } = useContext(UserContext);
   const navigate = useNavigate();
   const role = user?.role;
-  // Paramètres organisme visibles si l'utilisateur a accès à au moins une rubrique « Configuration ».
-  const configGroup = NAV.find((g) => g.grp === "Configuration");
-  const hasParams = (configGroup?.items || []).some((it) => canOpen(user, it));
+  // Rubriques « Paramètres » (Organisme, Équipe, Rôles) : accessibles via le menu profil.
+  const settingsItems = NAV.flatMap((g) => g.items).filter((it) => SETTINGS_PATHS.includes(it.to));
+  const hasParams = settingsItems.some((it) => canOpen(user, it));
   const [badges, setBadges] = useState({});
   const [menuOpen, setMenuOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -64,7 +64,7 @@ function Sidebar({ open }) {
 
       <nav className="menu">
         {NAV.map((group) => {
-          const items = group.items.filter((it) => canOpen(user, it));
+          const items = group.items.filter((it) => canOpen(user, it) && !SETTINGS_PATHS.includes(it.to));
           if (items.length === 0) return null;
           return (
             <div key={group.grp}>

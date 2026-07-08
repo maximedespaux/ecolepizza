@@ -1,16 +1,16 @@
 import { useContext } from "react";
 import { Link } from "react-router-dom";
-import { NAV, canOpen } from "../lib/nav.js";
+import { NAV, canOpen, SETTINGS_PATHS } from "../lib/nav.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 
-/** Regroupe les réglages / référentiels de l'organisme (groupe « Configuration » du menu). */
+/** Regroupe les réglages de l'organisme (Organisme, Équipe & accès, Rôles d'accès). */
 function Parametres() {
   const { user } = useContext(UserContext);
-  const group = NAV.find((g) => g.grp === "Configuration");
-  const items = (group?.items || []).filter((it) => canOpen(user, it));
+  const byPath = Object.fromEntries(NAV.flatMap((g) => g.items).map((it) => [it.to, it]));
+  const items = SETTINGS_PATHS.map((p) => byPath[p]).filter((it) => it && canOpen(user, it));
 
   return (
     <>

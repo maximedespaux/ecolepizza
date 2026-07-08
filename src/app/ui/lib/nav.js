@@ -98,6 +98,9 @@ export function canAccess(role, roles) {
 // la configuration d'accès menu ; ce sont eux qui la définissent).
 export const OWNER_ROLES = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
 
+// Rubriques déplacées dans le hub « Paramètres » (menu profil) et retirées de la barre latérale.
+export const SETTINGS_PATHS = ["/reglages", "/equipe", "/roles"];
+
 // Normalise nav_access en objet { chemin: "read" | "write" }.
 // Rétro-compat : un tableau (ancien format) = tout en écriture.
 function navMap(user) {
