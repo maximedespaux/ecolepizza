@@ -123,22 +123,22 @@ function Partenaires() {
             <Card key={p.id} title={p.name} more={<Badge tone="n">{p.category}</Badge>}>
               {p.offer && <p style={{ marginTop: 0, fontSize: 13.5 }}>{p.offer}</p>}
               <div className="partner-meta">
-                {p.contact_name && <div>👤 {p.contact_name}</div>}
-                {p.contact_phone && <div>📞 <a href={`tel:${p.contact_phone}`}>{p.contact_phone}</a></div>}
-                {p.contact_email && <div>✉️ <a href={`mailto:${p.contact_email}`}>{p.contact_email}</a></div>}
-                {p.website && <div>🔗 <a href={p.website.startsWith("http") ? p.website : `https://${p.website}`} target="_blank" rel="noreferrer">{p.website}</a></div>}
-                {p.town && <div>📍 {p.town}</div>}
-                {p.discount_pct != null && <div>🏷️ Remise {p.discount_pct}%</div>}
+                {p.contact_name && <div>{p.contact_name}</div>}
+                {p.contact_phone && <div><a href={`tel:${p.contact_phone}`}>{p.contact_phone}</a></div>}
+                {p.contact_email && <div><a href={`mailto:${p.contact_email}`}>{p.contact_email}</a></div>}
+                {p.website && <div><a href={p.website.startsWith("http") ? p.website : `https://${p.website}`} target="_blank" rel="noreferrer">{p.website}</a></div>}
+                {p.town && <div>{p.town}</div>}
+                {p.discount_pct != null && <div>Remise {p.discount_pct}%</div>}
               </div>
               <div className="partner-commission">
                 <span>Commissions</span>
                 <b>{euro(Number(p.commissions_total || 0))}</b>
                 <span className="sub">{p.commissions_count || 0} · {p.last_commission ? `dernière ${p.last_commission}` : "aucune"}</span>
               </div>
-              {p.notes && <p className="sub" style={{ marginBottom: 0 }}>📝 {p.notes}</p>}
+              {p.notes && <p className="sub" style={{ marginBottom: 0 }}>{p.notes}</p>}
               {canEdit && (
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <button className="btn sm ghost" onClick={() => setEditing({ ...p })}>✎ Modifier</button>
+                  <button className="btn sm ghost" onClick={() => setEditing({ ...p })}>Modifier</button>
                   <button className="btn sm ghost danger" onClick={() => onDelete(p)}>🗑</button>
                 </div>
               )}

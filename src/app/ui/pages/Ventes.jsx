@@ -15,10 +15,10 @@ import { bumpBadges } from "../lib/events.js";
 
 const ttc = (ht, rate) => Number(ht || 0) * (1 + Number(rate || 0) / 100);
 const TABS = [
-  { v: "caisse", label: "🛒 Caisse" },
-  { v: "historique", label: "🧾 Historique" },
-  { v: "inventaire", label: "📦 Inventaire" },
-  { v: "reglages", label: "⚙ Réglages" },
+  { v: "caisse", label: "Caisse" },
+  { v: "historique", label: "Historique" },
+  { v: "inventaire", label: "Inventaire" },
+  { v: "reglages", label: "Réglages" },
 ];
 
 function Ventes() {
@@ -138,7 +138,7 @@ function Ventes() {
           </div>
 
           <div className="grid cols-2">
-            <Card title="🛒 Point de vente">
+            <Card title="Point de vente">
               <div className="row3" style={{ alignItems: "end" }}>
                 <div className="field" style={{ gridColumn: "span 2" }}>
                   <label>Produit</label>

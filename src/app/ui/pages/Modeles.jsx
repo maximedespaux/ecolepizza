@@ -132,7 +132,7 @@ function Modeles() {
                   <td>
                     <div className="tpl-actions">
                       <button className="btn sm primary" title="Ouvrir l'éditeur de document"
-                        onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>🖋 Éditer</button>
+                        onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>Éditer</button>
                       <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>✎</button>
                       {t.has_body ? (
                         <button className="btn sm ghost" title="Vider le contenu de l'éditeur" disabled={busy === t.slug} onClick={() => onClearBody(t)}>🧹</button>
@@ -256,7 +256,7 @@ function StepModal({ step, onClose, onSaved, onError }) {
             <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
               <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
           </div>
-          <p className="sub" style={{ marginTop: 10 }}>Après enregistrement, utilisez « 🖋 Éditer » sur la ligne pour composer le document.</p>
+          <p className="sub" style={{ marginTop: 10 }}>Après enregistrement, utilisez « Éditer » sur la ligne pour composer le document.</p>
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>

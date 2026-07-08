@@ -58,7 +58,7 @@ function QuizModal({ documentId, onClose, onDone }) {
                 {result.kind === "GRADED" ? (
                   <p className="lead" style={{ margin: 0 }}>
                     Score : <b>{result.score}/{result.max_score}</b>{result.percent != null ? ` (${result.percent} %)` : ""}
-                    {result.pass != null && <div style={{ marginTop: 6 }}>{result.pass ? "✅ Réussi" : "❌ En dessous du seuil"}</div>}
+                    {result.pass != null && <div style={{ marginTop: 6 }}>{result.pass ? "Réussi" : "En dessous du seuil"}</div>}
                   </p>
                 ) : <p className="lead" style={{ margin: 0 }}>Merci pour votre retour.</p>}
               </div>

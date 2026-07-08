@@ -110,7 +110,7 @@ function TemplateEditor() {
         <h2 style={{ margin: 0, fontSize: 17 }}>Éditeur — <span className="mono">{slug}</span></h2>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button className={"btn sm ghost" + (showPreview ? " on" : "")} onClick={() => setShowPreview((v) => !v)}>
-            {showPreview ? "✎ Édition" : "👁 Aperçu"}
+            {showPreview ? "Édition" : "Aperçu"}
           </button>
           <button className="btn sm primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
         </div>

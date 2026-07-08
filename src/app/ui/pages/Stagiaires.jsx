@@ -363,7 +363,7 @@ function Stagiaires() {
                 </Link>
                 {l.has_account && (
                   <span className="pwcell" title={revealed[l.id] ? "Cliquez pour sélectionner, puis copiez" : "Cliquez sur 👁 pour afficher"}>
-                    🔑 <span className="mono pw" onClick={(e) => { if (revealed[l.id]) { const r = document.createRange(); r.selectNodeContents(e.currentTarget); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } }}>
+                    <span className="mono pw" onClick={(e) => { if (revealed[l.id]) { const r = document.createRange(); r.selectNodeContents(e.currentTarget); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } }}>
                       {revealed[l.id] ? (l.account_password || "—") : "••••••••"}
                     </span>
                   </span>

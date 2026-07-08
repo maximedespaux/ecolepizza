@@ -78,7 +78,7 @@ function Formations() {
                 <td className="mono">{euro(p.price)}</td>
                 <td>{p.rs_code ? <Badge tone="b">Certifiante</Badge> : p.hygiene ? <Badge tone="a">Hygiène</Badge> : null}</td>
                 <td style={{ textAlign: "right" }}>
-                  <button className="btn sm ghost" onClick={() => setEditing(p)}>✎ Modifier</button>
+                  <button className="btn sm ghost" onClick={() => setEditing(p)}>Modifier</button>
                 </td>
               </tr>
             ))}

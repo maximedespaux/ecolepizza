@@ -42,7 +42,7 @@ function Platform() {
             <div style={{ fontWeight: 700 }}>Impasto · Plateforme</div>
             <div style={{ fontSize: 12, color: "var(--dim)" }}>{user?.email}</div>
           </div>
-          <button className="btn sm ghost" onClick={logout}>⏻ Déconnexion</button>
+          <button className="btn sm ghost" onClick={logout}>Déconnexion</button>
         </div>
 
         <main className="content">

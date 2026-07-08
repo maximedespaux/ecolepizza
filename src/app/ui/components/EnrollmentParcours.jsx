@@ -3,17 +3,17 @@ import { getEnrollmentParcours } from "../api/apiClient.js";
 
 // Ligne d'état de l'étape sélectionnée (selon son statut et le document lié).
 function lineFor(s) {
-  if (s.status === "done") return s.signable || s.quiz ? "✓ Complété / signé." : "✓ Document produit et envoyé.";
+  if (s.status === "done") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
   if (s.status === "todo") return "À venir.";
-  if (s.quiz) return s.docId ? "⏳ En attente de réponse du stagiaire au QCM." : "⏳ QCM à envoyer au stagiaire.";
+  if (s.quiz) return s.docId ? "En attente de réponse du stagiaire au QCM." : "QCM à envoyer au stagiaire.";
   if (s.signable) {
-    if (!s.docId) return "⏳ Document à préparer, puis à faire signer.";
-    if (s.docStatus === "A_FAIRE") return "⏳ Document préparé — à envoyer au stagiaire.";
-    return "⏳ En attente de signature du stagiaire.";
+    if (!s.docId) return "Document à préparer, puis à faire signer.";
+    if (s.docStatus === "A_FAIRE") return "Document préparé — à envoyer au stagiaire.";
+    return "En attente de signature du stagiaire.";
   }
-  if (!s.docId) return "⏳ Document à préparer.";
-  if (s.docStatus === "A_FAIRE") return "⏳ Document préparé — à envoyer.";
-  return "⏳ En cours.";
+  if (!s.docId) return "Document à préparer.";
+  if (s.docStatus === "A_FAIRE") return "Document préparé — à envoyer.";
+  return "En cours.";
 }
 function actionFor(s) {
   if (s.status !== "current" && s.status !== "todo") return null;
@@ -113,7 +113,7 @@ function EnrollmentParcours({ enrollmentId, onOpenDoc, onPrepare }) {
         {step.sub && <p style={{ color: "var(--muted)", marginTop: 8 }}>{step.sub}</p>}
         <p style={{ fontWeight: 600, marginTop: 14, color: step.status === "done" ? "#2e9e5b" : "inherit" }}>{lineFor(step)}</p>
         {action && (
-          <button className="btn primary" onClick={runAction} style={{ marginTop: 4 }}>✍ {action.label}</button>
+          <button className="btn primary" onClick={runAction} style={{ marginTop: 4 }}>{action.label}</button>
         )}
       </div>
     </div>

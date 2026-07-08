@@ -151,7 +151,7 @@ function Sessions() {
                         onClick={() => navigate(`/sessions/${s.id}`)}
                       >
                         {s.program_code}
-                        <span className="n">👤 {s.stagiaires}</span>
+                        <span className="n">{s.stagiaires}</span>
                       </div>
                     ))}
                   </div>

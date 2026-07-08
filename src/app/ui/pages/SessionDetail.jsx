@@ -107,7 +107,7 @@ function SessionDetail() {
             <span className="badge n" style={{ background: colorOf(session.program_code), color: "#fff", borderColor: "transparent" }}>
               {session.program_code}
             </span>
-            <button className="btn danger" onClick={removeSession}>🗑 Supprimer la session</button>
+            <button className="btn danger" onClick={removeSession}>Supprimer la session</button>
           </>
         }
       />

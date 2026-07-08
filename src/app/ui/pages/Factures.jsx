@@ -142,7 +142,7 @@ function Factures() {
                       <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                         {i.status === "BROUILLON" && <button className="btn sm" title="Émettre" onClick={() => setStatusOf(i.id, "EMISE")}>Émettre</button>}{" "}
                         {i.status !== "PAYEE" && i.status !== "ANNULEE" && (i.type === "FACTURE" || i.type === "ACOMPTE") && <button className="btn sm" title="Encaisser" onClick={() => pay(i)}>Payer</button>}{" "}
-                        <button className="btn sm" title="Aperçu de la facture" onClick={() => preview(i)}>👁 Aperçu</button>{" "}
+                        <button className="btn sm" title="Aperçu de la facture" onClick={() => preview(i)}>Aperçu</button>{" "}
                         <button className="btn sm" title="Télécharger la facture Factur-X (PDF)" onClick={() => dl(downloadFacturX, i)}>Factur-X</button>{" "}
                         <button className="iconbtn" title="Télécharger le XML" onClick={() => dl(downloadInvoiceXml, i)}>⭳</button>{" "}
                         <button className="iconbtn del" title="Supprimer" onClick={() => remove(i.id)}>🗑</button>

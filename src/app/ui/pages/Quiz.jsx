@@ -126,8 +126,8 @@ function Quiz() {
                         <button className="btn sm ghost"
                           style={q.sendable ? undefined : { opacity: 0.45 }}
                           title={q.sendable ? `Envoyer aux stagiaires (${q.eligible_count})` : (q.send_reason || "Envoi indisponible")}
-                          onClick={() => onSend(q)}>📤 Envoyer</button>{" "}
-                        <button className="btn sm ghost" onClick={() => onEdit(q)}>✎ Éditer</button>{" "}
+                          onClick={() => onSend(q)}>Envoyer</button>{" "}
+                        <button className="btn sm ghost" onClick={() => onEdit(q)}>Éditer</button>{" "}
                         <button className="btn sm ghost danger" onClick={() => onDelete(q)}>🗑</button>
                       </td>
                     </tr>
@@ -209,7 +209,7 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
       </Card>
 
       {form.questions.map((q, i) => (
-        <Card key={i} title={`Question ${i + 1}`} more={<button className="btn sm ghost danger" onClick={() => delQ(i)}>🗑 Supprimer</button>}>
+        <Card key={i} title={`Question ${i + 1}`} more={<button className="btn sm ghost danger" onClick={() => delQ(i)}>Supprimer</button>}>
           <div className="field"><label>Énoncé</label>
             <textarea className="inp" rows={2} value={q.text} onChange={(e) => setQ(i, { text: e.target.value })} /></div>
           <div className="row3">

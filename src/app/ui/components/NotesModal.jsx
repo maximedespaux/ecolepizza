@@ -63,7 +63,7 @@ function NotesModal({ enrollmentId, name, onClose }) {
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <span style={{ fontSize: 12, color: "var(--muted)" }}>
                       {n.created_at} · {[n.first_name, n.last_name].filter(Boolean).join(" ") || "—"}
-                      {n.reminder_at && <span className="badge a" style={{ marginLeft: 8 }}>⏰ {n.reminder_at}</span>}
+                      {n.reminder_at && <span className="badge a" style={{ marginLeft: 8 }}>Rappel : {n.reminder_at}</span>}
                     </span>
                     <button className="iconbtn del" title="Supprimer" onClick={() => remove(n.id)}>🗑</button>
                   </div>

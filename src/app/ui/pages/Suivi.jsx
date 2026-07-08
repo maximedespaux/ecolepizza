@@ -42,7 +42,7 @@ function Suivi() {
         actions={
           <div style={{ display: "flex", gap: 8 }}>
             <button className={"btn sm " + (tab === "conformite" ? "primary" : "ghost")} onClick={() => setTab("conformite")}>Conformité</button>
-            <button className={"btn sm " + (tab === "archives" ? "primary" : "ghost")} onClick={() => setTab("archives")}>🗄 Archives</button>
+            <button className={"btn sm " + (tab === "archives" ? "primary" : "ghost")} onClick={() => setTab("archives")}>Archives</button>
           </div>
         }
       />
@@ -51,9 +51,9 @@ function Suivi() {
       {tab === "conformite" ? (
         <>
           <div className="grid cols-3" style={{ marginBottom: 16 }}>
-            <Kpi label="🔴 Incomplets" value={count("ROUGE")} />
-            <Kpi label="🟠 En cours" value={count("ORANGE")} />
-            <Kpi label="🟢 Complets" value={count("VERT")} />
+            <Kpi label="Incomplets" value={count("ROUGE")} />
+            <Kpi label="En cours" value={count("ORANGE")} />
+            <Kpi label="Complets" value={count("VERT")} />
           </div>
 
           <Card title={`Dossiers (${dossiers.length})`}>
@@ -181,7 +181,7 @@ function ArchivesView({ onError, onInfo }) {
             <input ref={fileRef} type="file" webkitdirectory="" directory="" multiple accept="application/pdf,.pdf"
               style={{ display: "none" }} onChange={onPick} />
             <button className="btn primary" disabled={busy} onClick={() => fileRef.current?.click()}>
-              {busy ? "Import en cours…" : "🗄 Importer un dossier"}
+              {busy ? "Import en cours…" : "Importer un dossier"}
             </button>
           </>
         )}
@@ -198,11 +198,11 @@ function ArchivesView({ onError, onInfo }) {
         <div className="arch">
           {tree.map((Y) => (
             <details key={Y.label} open>
-              <summary className="arch-sum arch-y">📅 {Y.label} <span className="arch-count">{Y.total}</span></summary>
+              <summary className="arch-sum arch-y">{Y.label} <span className="arch-count">{Y.total}</span></summary>
               <div className="arch-in">
                 {Y.weeksArr.map((W) => (
                   <details key={W.week}>
-                    <summary className="arch-sum">🗓 {W.week ? `Semaine ${W.week}` : "Sans session"} <span className="arch-count">{W.total}</span></summary>
+                    <summary className="arch-sum">{W.week ? `Semaine ${W.week}` : "Sans session"} <span className="arch-count">{W.total}</span></summary>
                     <div className="arch-in">
                       {W.formationsArr.map((F) => (
                         <details key={F.code}>
@@ -213,7 +213,7 @@ function ArchivesView({ onError, onInfo }) {
                           <div className="arch-in">
                             {F.learnersArr.map((L) => (
                               <details key={L.learner_id || L.name}>
-                                <summary className="arch-sum">👤 {L.name} <span className="arch-count">{L.docs.length}</span></summary>
+                                <summary className="arch-sum">{L.name} <span className="arch-count">{L.docs.length}</span></summary>
                                 <div className="arch-docs">
                                   {L.docs.map((d) => {
                                     const [lab, tone] = DOC_STATUS[d.status] || [d.status, "n"];

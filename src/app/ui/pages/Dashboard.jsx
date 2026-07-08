@@ -12,7 +12,7 @@ const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-dig
 const QUICK = [
   ["/stagiaires", "☺ Ajouter un stagiaire"],
   ["/sessions", "▦ Planifier une session"],
-  ["/ventes", "🛒 Enregistrer une vente"],
+  ["/ventes", "Enregistrer une vente"],
   ["/suivi", "▤ Vérifier la conformité Qualiopi"],
 ];
 
@@ -81,7 +81,7 @@ function Dashboard() {
     <>
       <div className="hero">
         <div className="eyebrow">Secrétariat · {org?.short_name || "École Pizza"}</div>
-        <h1>Bonjour 👋</h1>
+        <h1>Bonjour</h1>
         <p>{org ? `${org.legal_name} — SIRET ${org.siret || "—"} · NDA ${org.nda || "—"}` : "Tableau de bord"}{org?.qualiopi ? " · Certifié Qualiopi." : ""}</p>
         <div className="badge-row">
           {org?.qualiopi && <span className="pill">✓ Qualiopi actif</span>}
@@ -123,7 +123,7 @@ function Dashboard() {
                       </Link>
                     </td>
                     <td style={{ textAlign: "center" }}>
-                      <span className="pill" style={{ fontSize: 12 }}>👥 {s.stagiaires ?? 0}</span>
+                      <span className="pill" style={{ fontSize: 12 }}>{s.stagiaires ?? 0}</span>
                     </td>
                     <td className="tnum" style={{ whiteSpace: "nowrap" }}>{frDate(s.start_date)}</td>
                     <td className="tnum" style={{ textAlign: "center", color: "var(--muted)" }}>S{s.week} · {s.year}</td>

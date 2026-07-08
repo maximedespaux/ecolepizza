@@ -181,7 +181,7 @@ function Inventaire({ embedded = false }) {
                   <button className="btn sm" onClick={() => adjust(it, 1)}>+1</button>
                   <button className="btn sm" onClick={() => adjust(it, 10)}>+10</button>
                   <div className="spacer" />
-                  <button className="btn sm primary" onClick={() => sell(it)} disabled={it.quantity <= 0} title="Vendre (enregistre une vente)">🛒 Vendre</button>
+                  <button className="btn sm primary" onClick={() => sell(it)} disabled={it.quantity <= 0} title="Vendre (enregistre une vente)">Vendre</button>
                   <button className="iconbtn" title="Modifier l'article" onClick={() => openEdit(it)}>✎</button>
                   <button className="iconbtn del" title="Supprimer" onClick={() => remove(it)}>🗑</button>
                 </div>

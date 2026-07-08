@@ -175,7 +175,7 @@ function StagiaireDetail() {
         lead={l.professional_status || ""}
         actions={
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button className="btn ghost" onClick={() => setEditOpen(true)}>✎ Modifier la fiche</button>
+            <button className="btn ghost" onClick={() => setEditOpen(true)}>Modifier la fiche</button>
             <span className="avatar" style={{ width: 44, height: 44, fontSize: 15 }}>{initials(l.first_name, l.last_name)}</span>
           </div>
         }
@@ -308,7 +308,7 @@ function StagiaireDetail() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button type="submit" className="btn primary" disabled={!canPrepare}>Préparer le document</button>
-            {gateReason && <span className="hint" style={{ color: "var(--amber, #b8860b)" }}>🔒 {gateReason}</span>}
+            {gateReason && <span className="hint" style={{ color: "var(--amber, #b8860b)" }}>{gateReason}</span>}
             {!gateReason && prep.enrollment_ids.length === 0 && enrollments.length > 0 && <span className="hint">Sélectionnez au moins une formation.</span>}
           </div>
         </form>

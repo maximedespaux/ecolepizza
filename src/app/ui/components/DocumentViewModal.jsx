@@ -75,9 +75,9 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
             <a className="btn ghost sm" href={pdfUrl} target="_blank" rel="noreferrer">↗ Ouvrir</a>
           )}
           {doc && (
-            <button className="btn" onClick={() => dl(downloadDocumentPdf(id, `${doc.title || "document"}.pdf`))}>⬇ PDF</button>
+            <button className="btn" onClick={() => dl(downloadDocumentPdf(id, `${doc.title || "document"}.pdf`))}>PDF</button>
           )}
-          {showSign && <button className="btn primary" onClick={() => setSigning(true)}>✎ Signer</button>}
+          {showSign && <button className="btn primary" onClick={() => setSigning(true)}>Signer</button>}
         </div>
       </div>
 

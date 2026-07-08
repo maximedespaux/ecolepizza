@@ -34,7 +34,7 @@ function MonEspace() {
     <>
       <div className="hero">
         <div className="eyebrow">Espace stagiaire</div>
-        <h1>Bonjour {user?.first_name} 👋</h1>
+        <h1>Bonjour {user?.first_name}</h1>
         <p>Voici les documents que l'administration vous a envoyés. Consultez-les et signez ceux qui le nécessitent.</p>
         {toSign > 0 && <div className="badge-row"><span className="pill">{toSign} document(s) à signer</span></div>}
       </div>
@@ -59,7 +59,7 @@ function MonEspace() {
                   <Badge tone={d.quiz_id && d.status !== "SIGNE" ? "b" : tone}>{d.quiz_id ? (d.status === "SIGNE" ? "Répondu ✓" : "QCM à faire") : label}</Badge>
                   {d.quiz_id ? (
                     <button className="btn sm primary" onClick={() => setQuizDoc(d.id)}>
-                      {d.status === "SIGNE" ? "Voir mon QCM" : "📝 Répondre au QCM"}
+                      {d.status === "SIGNE" ? "Voir mon QCM" : "Répondre au QCM"}
                     </button>
                   ) : (
                     <button className="btn sm primary" onClick={() => setViewId(d.id)}>

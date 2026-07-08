@@ -64,7 +64,7 @@ function MesFormations() {
                   {f.complete
                     ? "Terminée — documents disponibles →"
                     : !f.enrolled
-                      ? "🔒 Non suivie"
+                      ? "Non suivie"
                       : !f.dayPassed
                         ? "En cours"
                         : `${f.signed}/${f.total} document(s) signé(s)`}

@@ -61,7 +61,7 @@ function EmargementStagiaire() {
                   ) : future ? (
                     <span className="hint">À venir</span>
                   ) : (
-                    <button className="btn sm primary" onClick={() => setSigning(r)}>✍ Signer</button>
+                    <button className="btn sm primary" onClick={() => setSigning(r)}>Signer</button>
                   )}
                 </div>
               );

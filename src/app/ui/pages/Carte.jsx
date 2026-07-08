@@ -186,7 +186,7 @@ function Carte() {
               placeholder="Filtrer (département, ville)…" aria-label="Filtrer" />
             <button className="btn primary" onClick={runGeocode} disabled={geo || pending === 0}
               title={pending === 0 ? "Tous les stagiaires géolocalisables le sont" : `${pending} à géolocaliser`}>
-              {geo ? "Géolocalisation…" : `📍 Géolocaliser${pending ? ` (${pending})` : ""}`}
+              {geo ? "Géolocalisation…" : `Géolocaliser${pending ? ` (${pending})` : ""}`}
             </button>
           </div>
         }

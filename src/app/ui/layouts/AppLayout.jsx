@@ -52,7 +52,7 @@ function AppLayout() {
               background: "rgba(230,160,30,.12)", border: "1px solid rgba(230,160,30,.35)",
               color: "var(--muted)", fontSize: 13, display: "flex", gap: 8, alignItems: "center",
             }}>
-              <span>🔒</span> Lecture seule — vous pouvez consulter cette rubrique mais pas la modifier.
+              Lecture seule — vous pouvez consulter cette rubrique mais pas la modifier.
             </div>
           )}
           <div

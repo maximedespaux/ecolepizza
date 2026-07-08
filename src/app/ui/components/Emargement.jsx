@@ -118,7 +118,7 @@ function Emargement({ sessionId }) {
               ))}
               {/* Ligne de signature du formateur, par demi-journée */}
               <tr>
-                <td style={{ whiteSpace: "nowrap", fontWeight: 600, color: "var(--muted)" }}>👨‍🏫 Formateur</td>
+                <td style={{ whiteSpace: "nowrap", fontWeight: 600, color: "var(--muted)" }}>Formateur</td>
                 {sheets.map((s) => (
                   <td key={s.id} style={{ textAlign: "center" }}>
                     {s.trainer_signed ? (
