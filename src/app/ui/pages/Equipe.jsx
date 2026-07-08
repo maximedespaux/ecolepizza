@@ -201,27 +201,39 @@ function Equipe() {
 
 /** Configuration de l'accès au menu d'un membre (super administrateur uniquement). */
 function NavAccessModal({ member, onClose, onError, onSaved }) {
-  // Amorce : accès déjà enregistré, sinon les pages par défaut du rôle.
-  const seed = () => {
-    if (Array.isArray(member.nav_access)) return new Set(member.nav_access);
-    const s = new Set();
-    for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(member.role, it.roles)) s.add(it.to);
-    return s;
+  // Défauts du rôle (en écriture) — sert d'amorce et de bouton « réinitialiser ».
+  const roleDefaults = () => {
+    const o = {};
+    for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(member.role, it.roles)) o[it.to] = "write";
+    return o;
   };
-  const [sel, setSel] = useState(seed);
+  // Amorce : accès déjà enregistré (objet { chemin: mode }), sinon défauts du rôle.
+  const seed = () => {
+    const na = member.nav_access;
+    if (na && !Array.isArray(na) && typeof na === "object") return { ...na };
+    if (Array.isArray(na)) { const o = {}; na.forEach((p) => { o[p] = "write"; }); return o; }
+    return roleDefaults();
+  };
+  const [modes, setModes] = useState(seed);
   const [saving, setSaving] = useState(false);
-  const allPaths = GRANTABLE_NAV.flatMap((g) => g.items.map((it) => it.to));
-  const toggle = (to) => setSel((prev) => { const n = new Set(prev); n.has(to) ? n.delete(to) : n.add(to); return n; });
-  const setAll = (on) => setSel(on ? new Set(allPaths) : new Set());
-  const resetRole = () => {
-    const s = new Set();
-    for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(member.role, it.roles)) s.add(it.to);
-    setSel(s);
+
+  const granted = (to) => Object.prototype.hasOwnProperty.call(modes, to);
+  const toggle = (to) => setModes((p) => {
+    const n = { ...p };
+    if (granted(to)) delete n[to]; else n[to] = "write";
+    return n;
+  });
+  const setMode = (to, mode) => setModes((p) => ({ ...p, [to]: mode }));
+  const setAll = (on) => {
+    if (!on) { setModes({}); return; }
+    const o = {};
+    for (const g of GRANTABLE_NAV) for (const it of g.items) o[it.to] = modes[it.to] || "write";
+    setModes(o);
   };
 
   async function save() {
     setSaving(true);
-    try { await updateMember(member.id, { nav_access: [...sel] }); onSaved(); }
+    try { await updateMember(member.id, { nav_access: modes }); onSaved(); }
     catch (e) { onError(e.message); }
     finally { setSaving(false); }
   }
@@ -237,24 +249,38 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
         </div>
         <div className="mbody">
           <p className="sub" style={{ marginTop: 0 }}>
-            Cochez les rubriques de navigation accessibles à ce membre. Les actions restent soumises
-            aux permissions de son rôle côté serveur.
+            Cochez les rubriques accessibles, puis choisissez <b>Modifier</b> (peut créer / éditer / supprimer)
+            ou <b>Lecture</b> (consultation seule). Les administrateurs conservent toujours l'accès complet.
           </p>
           <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
             <button type="button" className="btn sm ghost" onClick={() => setAll(true)}>Tout cocher</button>
             <button type="button" className="btn sm ghost" onClick={() => setAll(false)}>Tout décocher</button>
-            <button type="button" className="btn sm ghost" onClick={resetRole}>Défauts du rôle</button>
+            <button type="button" className="btn sm ghost" onClick={() => setModes(roleDefaults())}>Défauts du rôle</button>
           </div>
           {GRANTABLE_NAV.map((g) => (
             <div key={g.grp} style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "var(--dim)", marginBottom: 4 }}>{g.grp}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {g.items.map((it) => (
-                  <label key={it.to} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
-                    <input type="checkbox" checked={sel.has(it.to)} onChange={() => toggle(it.to)} />
-                    <span style={{ width: 20, textAlign: "center" }}>{it.ic}</span> {it.label}
-                  </label>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {g.items.map((it) => {
+                  const on = granted(it.to);
+                  const mode = modes[it.to];
+                  return (
+                    <div key={it.to} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: "pointer" }}>
+                        <input type="checkbox" checked={on} onChange={() => toggle(it.to)} />
+                        <span style={{ width: 20, textAlign: "center" }}>{it.ic}</span> {it.label}
+                      </label>
+                      {on && (
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button type="button" className={"btn sm " + (mode !== "read" ? "primary" : "ghost")}
+                            onClick={() => setMode(it.to, "write")}>Modifier</button>
+                          <button type="button" className={"btn sm " + (mode === "read" ? "primary" : "ghost")}
+                            onClick={() => setMode(it.to, "read")}>Lecture</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}

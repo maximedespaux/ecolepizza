@@ -65,6 +65,10 @@ app.use(cookieParser());
 app.use(express.json({ limit: '2mb' })); // limite la taille du corps (signatures dataURL)
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
+// Accès menu par utilisateur : bloque les modifications sur une rubrique en lecture seule.
+const { enforceSectionMode } = require('./middlewares/sectionAccess.middleware.js');
+app.use(enforceSectionMode);
+
 // --- Endpoints ---
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);

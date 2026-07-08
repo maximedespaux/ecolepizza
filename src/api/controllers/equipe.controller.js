@@ -176,10 +176,21 @@ const updateMember = async (req, res) => {
             const nav = req.body.nav_access;
             if (nav === null) { updates.push('nav_access = ?'); values.push(null); }
             else if (Array.isArray(nav)) {
-                const clean = [...new Set(nav.filter((p) => typeof p === 'string' && p.startsWith('/')))].slice(0, 50);
-                updates.push('nav_access = ?'); values.push(JSON.stringify(clean));
+                // Ancien format : liste de chemins => tout en écriture.
+                const map = {};
+                for (const p of nav) if (typeof p === 'string' && p.startsWith('/')) map[p] = 'write';
+                updates.push('nav_access = ?'); values.push(JSON.stringify(map));
+            } else if (nav && typeof nav === 'object') {
+                // Nouveau format : { "/chemin": "read" | "write" }.
+                const map = {};
+                let n = 0;
+                for (const [p, mode] of Object.entries(nav)) {
+                    if (n >= 50) break;
+                    if (typeof p === 'string' && p.startsWith('/')) { map[p] = mode === 'read' ? 'read' : 'write'; n++; }
+                }
+                updates.push('nav_access = ?'); values.push(JSON.stringify(map));
             } else {
-                return res.status(400).json({ error: 'nav_access doit être une liste de chemins ou null.' });
+                return res.status(400).json({ error: 'nav_access doit être un objet { chemin: "read"|"write" } ou null.' });
             }
         }
 

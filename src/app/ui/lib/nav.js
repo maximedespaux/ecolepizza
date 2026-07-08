@@ -94,10 +94,47 @@ export function canAccess(role, roles) {
 // la configuration d'accès menu ; ce sont eux qui la définissent).
 export const OWNER_ROLES = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
 
+// Normalise nav_access en objet { chemin: "read" | "write" }.
+// Rétro-compat : un tableau (ancien format) = tout en écriture.
+function navMap(user) {
+  const na = user?.nav_access;
+  if (!na) return {};
+  if (Array.isArray(na)) { const o = {}; na.forEach((p) => { o[p] = "write"; }); return o; }
+  return typeof na === "object" ? na : {};
+}
+
 /** L'utilisateur a-t-il ce chemin dans sa liste d'accès menu ? (non-propriétaires) */
 export function navAllowed(user, path) {
-  const allow = Array.isArray(user?.nav_access) ? user.nav_access : [];
-  return allow.includes(path);
+  return Object.prototype.hasOwnProperty.call(navMap(user), path);
+}
+
+/**
+ * Mode d'accès de l'utilisateur pour ce chemin :
+ *  · "write" (modification) / "read" (lecture seule) / null (non accordé).
+ * Les propriétaires sont toujours en écriture.
+ */
+export function navMode(user, path) {
+  if (OWNER_ROLES.includes(user?.role)) return "write";
+  const v = navMap(user)[path];
+  return v === "read" ? "read" : (v ? "write" : null);
+}
+
+// Chemin de navigation (rubrique) correspondant à un chemin de route.
+// Les sous-pages (détails) partagent la rubrique parente.
+const SECTION_OF = {
+  "/stagiaires": "/stagiaires", "/sessions": "/sessions", "/formations": "/formations",
+  "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
+  "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
+  "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",
+  "/reglages": "/reglages", "/modeles": "/modeles", "/equipe": "/equipe",
+  "/audit": "/audit", "/suivi": "/suivi", "/dashboard": "/dashboard",
+};
+
+/** Mode d'accès pour l'URL courante (rubrique déduite du 1er segment). */
+export function modeForPath(user, pathname) {
+  const seg = "/" + (pathname || "").split("/").filter(Boolean)[0];
+  const section = SECTION_OF[seg] || seg;
+  return navMode(user, section);
 }
 
 /**
