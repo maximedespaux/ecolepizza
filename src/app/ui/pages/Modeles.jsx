@@ -115,19 +115,21 @@ function Modeles() {
                       : t.has_file ? <Badge tone="b">Word</Badge>
                         : <span style={{ color: "var(--dim)", fontSize: 12 }}>à créer</span>}
                   </td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <td>
                     <input ref={(el) => (inputs.current[t.slug] = el)} type="file" accept=".docx" style={{ display: "none" }}
                       onChange={(e) => onFile(t.slug, e.target.files[0])} />
-                    <button className="btn sm primary" title="Ouvrir l'éditeur de document"
-                      onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>🖋 Éditer</button>{" "}
-                    <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>✎</button>{" "}
-                    {t.has_file && (
-                      <button className="btn sm ghost" title="Télécharger le fichier Word"
-                        onClick={() => downloadTemplateFile(t.slug).catch((e) => setStatus({ type: "error", message: e.message }))}>⬇</button>
-                    )}{" "}
-                    {(t.has_body || t.has_file) && (
-                      <button className="btn sm ghost" title="Vider le modèle" disabled={busy === t.slug} onClick={() => onReset(t.slug)}>🗑</button>
-                    )}
+                    <div className="tpl-actions">
+                      <button className="btn sm primary" title="Ouvrir l'éditeur de document"
+                        onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>🖋 Éditer</button>
+                      <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>✎</button>
+                      {t.has_file ? (
+                        <button className="btn sm ghost" title="Télécharger le fichier Word"
+                          onClick={() => downloadTemplateFile(t.slug).catch((e) => setStatus({ type: "error", message: e.message }))}>⬇</button>
+                      ) : <span className="slot" />}
+                      {(t.has_body || t.has_file) ? (
+                        <button className="btn sm ghost" title="Vider le modèle" disabled={busy === t.slug} onClick={() => onReset(t.slug)}>🗑</button>
+                      ) : <span className="slot" />}
+                    </div>
                   </td>
                 </tr>
               ))}
