@@ -28,7 +28,7 @@ const LEARNER_FIELDS = [
     'phone', 'birthday', 'birth_place', 'address', 'zip_code', 'town',
     'diploma_level', 'diploma_name', 'diploma_year', 'last_experience',
     'experience_value', 'experience_unit', 'professional_status', 'cpf_amount',
-    'france_travail_id', 'current_contract', 'social_security', 'financing', 'levels',
+    'france_travail_id', 'current_contract', 'social_security', 'financing', 'opco', 'levels',
     'project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job',
 ];
 

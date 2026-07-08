@@ -11,7 +11,7 @@ async function learnerForUser(conn, userId) {
 }
 
 // Complétude d'un dossier : dernier jour passé + documents à signer tous signés.
-async function completionOf(conn, e, steps) {
+async function completionOf(conn, e, steps, agefice = false) {
     const [rows] = await conn.query(
         `SELECT gd.type, gd.status
          FROM generated_document gd
@@ -24,7 +24,7 @@ async function completionOf(conn, e, steps) {
 
     const required = stepsToDocSet(steps, {
         hygiene: !!e.program_hygiene, rsCode: e.program_rs,
-        jours: e.program_days || 1, financing: e.financing,
+        jours: e.program_days || 1, financing: e.financing, agefice,
     }).filter((d) => d.stagiaireSign);
 
     const signed = required.filter((d) => statusByType[d.type] === 'SIGNE').length;
@@ -109,7 +109,7 @@ const getMyFormations = async (req, res) => {
         const steps = await loadOrgSteps(learner.organization_id);
         const byProgram = {};
         for (const e of enrollments) {
-            const c = await completionOf(conn, e, steps);
+            const c = await completionOf(conn, e, steps, (learner.opco || "").toUpperCase() === "AGEFICE");
             const info = {
                 enrollment_id: e.enrollment_id, complete: c.complete, dayPassed: c.dayPassed,
                 signed: c.signed, total: c.total, start_date: e.start_date, end_date: e.end_date,
@@ -170,7 +170,7 @@ const getMyFormation = async (req, res) => {
         const e = rows[0];
 
         const steps = await loadOrgSteps(learner.organization_id);
-        const c = await completionOf(conn, e, steps);
+        const c = await completionOf(conn, e, steps, (learner.opco || "").toUpperCase() === "AGEFICE");
         if (!c.complete) return res.status(403).json({ message: 'Formation non terminée.' });
 
         const [documents] = await conn.query(

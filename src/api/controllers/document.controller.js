@@ -19,6 +19,26 @@ const TYPE_LABELS = {
 };
 const STAGIAIRE_SIGN_TYPES = ['DEVIS', 'CONTRAT', 'CONVENTION', 'DROIT_IMAGE'];
 
+// Ordre des étapes du pipeline CRM (avancement automatique, jamais en arrière).
+const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
+
+/** Fait avancer les dossiers liés à un document jusqu'à `targetStage` (sans reculer). */
+async function advanceEnrollments(conn, orgId, documentId, targetStage) {
+    const ti = STAGE_ORDER.indexOf(targetStage);
+    if (ti < 0) return;
+    const [rows] = await conn.query(
+        `SELECT e.id, e.crm_stage FROM document_formation df
+         JOIN enrollment e ON e.id = df.enrollment_id WHERE df.document_id = ?`,
+        [documentId]
+    );
+    for (const e of rows) {
+        if (STAGE_ORDER.indexOf(e.crm_stage) < ti) {
+            await conn.query('UPDATE enrollment SET crm_stage = ? WHERE id = ? AND organization_id = ?',
+                [targetStage, e.id, orgId]);
+        }
+    }
+}
+
 // Charge le contexte de fusion (organisme, stagiaire, entreprise, formations).
 async function loadContext(conn, organizationId, learnerId, documentId) {
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [organizationId]);
@@ -112,6 +132,8 @@ const createDocument = async (req, res) => {
                 [documentId, eid]
             );
         }
+        // Pipeline : la fiche d'expression fait passer le dossier à « Contacté ».
+        if (type === 'FICHE_SEMAINE') await advanceEnrollments(conn, req.user.organization_id, documentId, 'CONTACTE');
         res.status(201).json({ message: 'Document préparé', id: documentId });
     } catch (err) {
         console.error('Erreur création document :', err);
@@ -249,23 +271,26 @@ const downloadPdf = async (req, res) => {
 /**
  * POST /api/documents/:id/send — envoie le document au stagiaire (demande de signature).
  */
-const sendDocument = (req, res) => {
-    db.query(
-        `UPDATE generated_document SET status = 'ENVOYE', sent_at = NOW()
-         WHERE id = ? AND organization_id = ? AND status = 'A_FAIRE'`,
-        [req.params.id, req.user.organization_id],
-        (err, result) => {
-            if (err) {
-                console.error('Erreur envoi document :', err);
-                return res.status(500).json({ error: 'Internal Server Error' });
-            }
-            if (result.affectedRows === 0) {
-                return res.status(400).json({ message: 'Document déjà envoyé ou introuvable.' });
-            }
-            logAudit(req, 'document.send', 'GeneratedDocument', req.params.id);
-            res.status(200).json({ success: true, message: 'Document envoyé au stagiaire' });
+const sendDocument = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [result] = await conn.query(
+            `UPDATE generated_document SET status = 'ENVOYE', sent_at = NOW()
+             WHERE id = ? AND organization_id = ? AND status = 'A_FAIRE'`,
+            [req.params.id, req.user.organization_id]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(400).json({ message: 'Document déjà envoyé ou introuvable.' });
         }
-    );
+        // Pipeline : un devis envoyé fait passer le dossier à « Devis envoyé ».
+        const [[doc]] = await conn.query('SELECT type FROM generated_document WHERE id = ?', [req.params.id]);
+        if (doc && doc.type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_ENVOYE');
+        logAudit(req, 'document.send', 'GeneratedDocument', req.params.id);
+        res.status(200).json({ success: true, message: 'Document envoyé au stagiaire' });
+    } catch (err) {
+        console.error('Erreur envoi document :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /**
@@ -279,7 +304,7 @@ const signDocument = async (req, res) => {
         const conn = db.promise();
         // Vérifie l'accès : même organisme, et si stagiaire, propriétaire du document.
         const [rows] = await conn.query(
-            `SELECT d.id FROM generated_document d
+            `SELECT d.id, d.type FROM generated_document d
              LEFT JOIN learner l ON l.id = d.learner_id
              WHERE d.id = ? AND d.organization_id = ?
                AND (l.user_id = ? OR ? IN ('SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT'))`,
@@ -293,6 +318,8 @@ const signDocument = async (req, res) => {
              WHERE id = ?`,
             [signer_name, signature_data || null, req.params.id]
         );
+        // Pipeline : un devis signé fait passer le dossier à « Devis signé ».
+        if (rows[0].type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_SIGNE');
         logAudit(req, 'document.sign', 'GeneratedDocument', req.params.id);
         notify(req.user.organization_id, { type: 'SIGNATURE', title: 'Document signé', body: `Signé par ${signer_name}` });
         res.status(200).json({ success: true, message: 'Document signé' });

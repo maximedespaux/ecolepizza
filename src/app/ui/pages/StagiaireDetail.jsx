@@ -10,6 +10,7 @@ import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { initials, euro } from "../lib/format.js";
+import { OPCOS } from "../lib/opco.js";
 
 const CIVILITES = ["M.", "Mme"];
 const STATUTS = ["En activité", "Demandeur d'emploi", "Sans activité", "Étudiant", "Retraité", "Autre"];
@@ -179,6 +180,7 @@ function StagiaireDetail() {
         <Card title="Statut & financement">
           <Row label="Statut" value={l.professional_status} />
           <Row label="Type de devis" value={l.financing === "PROFESSIONNEL" ? "Professionnel" : "Particulier"} />
+          <Row label="OPCO / financeur" value={l.opco} />
           <Row label="Montant CPF" value={l.cpf_amount ? euro(l.cpf_amount) : null} />
           <Row label="Identifiant France Travail" value={l.france_travail_id} />
           <Row label="Contrat actuel" value={l.current_contract} />
@@ -300,7 +302,7 @@ const EDIT_FIELDS = [
   "civility", "first_name", "last_name", "birthday", "birth_place", "phone", "email",
   "address", "zip_code", "town", "contacted_at", "contacted_by",
   "diploma_level", "diploma_name", "diploma_year", "last_experience", "experience_value", "experience_unit",
-  "professional_status", "financing", "cpf_amount", "france_travail_id", "current_contract", "social_security",
+  "professional_status", "financing", "opco", "cpf_amount", "france_travail_id", "current_contract", "social_security",
 ];
 const BOOLS = ["project_creation", "project_takeover", "project_oven", "project_truck", "project_job"];
 
@@ -383,6 +385,12 @@ function EditLearnerModal({ learner, onClose, onSaved, onError }) {
               <option value="PARTICULIER">Particulier</option>
               <option value="PROFESSIONNEL">Professionnel</option>
             </SelectField>
+            <SelectField label="OPCO / financeur" value={form.opco} onChange={set("opco")}>
+              <option value="">—</option>
+              {OPCOS.map((o) => <option key={o} value={o}>{o}</option>)}
+            </SelectField>
+          </div>
+          <div className="row2">
             <Field label="Montant CPF (€)" type="number" step="0.01" value={form.cpf_amount} onChange={set("cpf_amount")} />
           </div>
           <div className="row3">

@@ -13,7 +13,7 @@ const getSuivi = async (req, res) => {
         const conn = db.promise();
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.crm_stage,
-                    l.first_name, l.last_name,
+                    l.first_name, l.last_name, l.opco,
                     p.code AS program_code, p.title AS program_title,
                     p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
              FROM enrollment e
@@ -43,6 +43,7 @@ const getSuivi = async (req, res) => {
                 rsCode: e.program_rs,
                 jours: e.program_days || 1,
                 financing: e.financing,
+                agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
             });
             const documents = required.map((d) => ({ ...d, status: statusByType[d.type] || 'A_FAIRE' }));
 

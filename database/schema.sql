@@ -157,6 +157,7 @@ CREATE TABLE learner (
     current_contract    varchar(60)  DEFAULT NULL,       -- contrat actuel (si en activité)
     social_security     varchar(255) DEFAULT NULL,       -- n° de sécurité sociale (chiffré AES-256-GCM au repos)
     financing           enum('PARTICULIER','PROFESSIONNEL') NOT NULL DEFAULT 'PARTICULIER',
+    opco                varchar(120) DEFAULT NULL,       -- OPCO / financeur (AGEFICE, AKTO, FIF PL…)
     company_id          uuid         DEFAULT NULL,
     user_id             uuid         DEFAULT NULL,      -- compte de connexion du stagiaire (rôle STAGIAIRE)
     -- Projet (« Votre projet »)
