@@ -586,3 +586,21 @@ CREATE TABLE document_template (
     CONSTRAINT fk_tpl_org FOREIGN KEY (organization_id)
         REFERENCES organization (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Parcours documentaire par formation (quels documents / dans quel ordre)
+CREATE TABLE program_step (
+    id               uuid       NOT NULL DEFAULT uuid(),
+    organization_id  uuid       NOT NULL,
+    program_id       uuid       NOT NULL,
+    slug             varchar(60) NOT NULL,       -- étape (cf. DEFAULT_STEPS / document_template)
+    sort_order       int        NOT NULL DEFAULT 100,
+    active           tinyint(1) NOT NULL DEFAULT 1,
+    created_at       timestamp  NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_progstep (program_id, slug),
+    KEY idx_progstep_org (organization_id),
+    CONSTRAINT fk_progstep_org FOREIGN KEY (organization_id)
+        REFERENCES organization (id) ON DELETE CASCADE,
+    CONSTRAINT fk_progstep_prog FOREIGN KEY (program_id)
+        REFERENCES training_program (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

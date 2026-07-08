@@ -280,9 +280,21 @@ export function reorderFormations(ids) {
   return request("/formations/reorder", { method: "PUT", body: JSON.stringify({ ids }) });
 }
 
+// --- Parcours documentaire par formation ---
+export function getFormationSteps(id) {
+  return request(`/formations/${id}/steps`);
+}
+export function saveFormationSteps(id, steps) {
+  return request(`/formations/${id}/steps`, { method: "PUT", body: JSON.stringify({ steps }) });
+}
+
 // --- Sessions ---
 export function getSessions() {
   return request("/sessions");
+}
+// Tableau kanban d'une session (colonnes = documents, cartes = stagiaires).
+export function getSessionBoard(id) {
+  return request(`/sessions/${id}/board`);
 }
 
 export function getSession(id) {

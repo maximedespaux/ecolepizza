@@ -1,4 +1,33 @@
+const crypto = require('crypto');
 const db = require('../config/database.js');
+const { matchFormation } = require('../lib/documents.js');
+const { loadOrgSteps } = require('./template.controller.js');
+
+/**
+ * Étapes documentaires d'une formation : documents candidats (selon rs/hygiène/
+ * jours) + surcharge program_step (inclusion/ordre). Renvoie la liste ordonnée
+ * avec un drapeau `active`.
+ */
+async function formationSteps(conn, orgId, program) {
+    const orgSteps = await loadOrgSteps(orgId);
+    const candidates = orgSteps.filter((s) => s.active && matchFormation(s.applies_when, program));
+    const [rows] = await conn.query(
+        'SELECT slug, sort_order, active FROM program_step WHERE program_id = ?',
+        [program.id]
+    );
+    const overlay = new Map(rows.map((r) => [r.slug, r]));
+    return candidates
+        .map((s) => {
+            const o = overlay.get(s.slug);
+            return {
+                slug: s.slug, label: s.label, doc_type: s.doc_type,
+                signable: !!s.signable, stagiaire_sign: !!s.stagiaire_sign,
+                sort_order: o ? o.sort_order : s.sort_order,
+                active: o ? !!o.active : true,
+            };
+        })
+        .sort((a, b) => a.sort_order - b.sort_order);
+}
 
 /**
  * GET /api/formations — catalogue des formations de l'organisme.
@@ -135,4 +164,51 @@ const reorderPrograms = (req, res) => {
     })();
 };
 
-module.exports = { getPrograms, getProgram, createProgram, updateProgram, reorderPrograms };
+/** GET /api/formations/:id/steps — parcours documentaire de la formation. */
+const getFormationSteps = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[program]] = await conn.query(
+            'SELECT id, code, days, hygiene, rs_code FROM training_program WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]
+        );
+        if (!program) return res.status(404).json({ message: 'Formation introuvable' });
+        res.json({ data: await formationSteps(conn, req.user.organization_id, program) });
+    } catch (err) {
+        console.error('Erreur étapes formation :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/formations/:id/steps — enregistre le parcours (ordre + inclusion). */
+const saveFormationSteps = async (req, res) => {
+    const steps = Array.isArray(req.body?.steps) ? req.body.steps : null;
+    if (!steps) return res.status(422).json({ error: 'Liste des étapes requise.' });
+    try {
+        const conn = db.promise();
+        const [[program]] = await conn.query(
+            'SELECT id FROM training_program WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]
+        );
+        if (!program) return res.status(404).json({ message: 'Formation introuvable' });
+        await conn.query('DELETE FROM program_step WHERE program_id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        for (let i = 0; i < steps.length; i++) {
+            const slug = String(steps[i].slug || '').trim().toLowerCase();
+            if (!slug) continue;
+            await conn.query(
+                'INSERT INTO program_step (id, organization_id, program_id, slug, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)',
+                [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, steps[i].active ? 1 : 0]
+            );
+        }
+        res.json({ success: true, message: 'Parcours enregistré.' });
+    } catch (err) {
+        console.error('Erreur enregistrement parcours :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = {
+    getPrograms, getProgram, createProgram, updateProgram, reorderPrograms,
+    getFormationSteps, saveFormationSteps, formationSteps,
+};

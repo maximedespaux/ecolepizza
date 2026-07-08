@@ -117,4 +117,15 @@ function documentSetFor(ctx) {
     return stepsToDocSet(mergeSteps([]), ctx);
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, matchStep, parseApplies, mergeSteps, stepsToDocSet, documentSetFor };
+// Conditions AU NIVEAU FORMATION uniquement (rs / hygiène / jours). On ignore
+// financing/agefice (propres au dossier) : c'est la liste des documents candidats
+// d'une formation, avant application des conditions du dossier.
+function matchFormation(applies, program) {
+    const a = parseApplies(applies);
+    if (a.rs != null && !!program.rs_code !== !!a.rs) return false;
+    if (a.hygiene != null && !!program.hygiene !== !!a.hygiene) return false;
+    if (a.jours != null && Number(program.days) !== Number(a.jours)) return false;
+    return true;
+}
+
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor };
