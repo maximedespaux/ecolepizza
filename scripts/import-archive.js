@@ -21,16 +21,16 @@ const fs = require('fs');
 const path = require('path');
 const db = require(path.join(__dirname, '..', 'src', 'api', 'config', 'database.js'));
 
-// --- Déduction de la formation depuis les noms de fichiers d'un stagiaire ---
+// --- Déduction du CODE formation (convention app) depuis les noms de fichiers ---
 function inferFormation(names) {
     const b = names.join(' ').toLowerCase();
-    if (/niveau ii|niv\.?\s*ii|niveau 2/.test(b)) return 'Niveau II';
-    if (/rs\s*7404|rs74|fabriquer des pizzas artisanales/.test(b)) return 'Fabriquer des pizzas artisanales (RS7404)';
-    if (/teglia/.test(b)) return 'Teglia';
-    if ((/niveau i\s*pro|\bpro\b/.test(b)) && b.includes('niveau i')) return 'Niveau I PRO';
-    if (b.includes('niveau i') || b.includes('niveau 1')) return /hygièn|hygien/.test(b) ? 'Niveau I + Hygiène' : 'Niveau I';
-    if (/hygièn|hygien/.test(b)) return 'Hygiène';
-    return 'À préciser';
+    if (/niveau ii|niv\.?\s*ii|niveau 2/.test(b)) return 'NIV2';
+    if (/rs\s*7404|rs74|fabriquer des pizzas artisanales/.test(b)) return 'RS7404';
+    if (/teglia/.test(b)) return 'TEGLIA';
+    if ((/niveau i\s*pro|\bpro\b/.test(b)) && b.includes('niveau i')) return 'NIV1PRO';
+    if (b.includes('niveau i') || b.includes('niveau 1')) return /hygièn|hygien/.test(b) ? 'NIV1H' : 'NIV1';
+    if (/hygièn|hygien/.test(b)) return 'NIV1H';
+    return '?';
 }
 const surnameFrom = (fn) => (fn.match(/\b([A-ZÀ-Ÿ]{2,}(?:\s+[A-ZÀ-Ÿ][a-zà-ÿ]+)?)/) || [])[1] || null;
 
