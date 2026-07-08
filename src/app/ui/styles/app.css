@@ -473,6 +473,19 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .tpl-actions{display:inline-grid;grid-template-columns:auto 32px 32px 32px;gap:6px;align-items:center;justify-items:center}
 .tpl-actions>.btn.sm.ghost,.tpl-actions>.slot{width:32px;padding:0;justify-content:center}
 
+/* Coffre documentaire (Suivi → Archives) : arborescence dépliable */
+.arch-in{margin-left:16px;padding-left:8px;border-left:1px solid var(--border-soft)}
+.arch-sum{cursor:pointer;padding:7px 8px;border-radius:8px;list-style:none;display:flex;align-items:center;gap:8px;font-size:14px}
+.arch-sum::-webkit-details-marker{display:none}
+.arch-sum::before{content:"▶";font-size:9px;color:var(--dim);transition:.15s var(--ease);display:inline-block}
+details[open]>.arch-sum::before{transform:rotate(90deg)}
+.arch-sum:hover{background:var(--bg2)}
+.arch-y{font-weight:700;font-size:15px}
+.arch-count{margin-left:auto;font-size:11px;font-weight:600;color:var(--dim);background:var(--bg2);border:1px solid var(--border-soft);border-radius:20px;padding:1px 9px}
+.arch-docs{margin-left:16px;padding:2px 6px 8px;border-left:1px solid var(--border-soft)}
+.arch-doc{display:flex;align-items:center;gap:10px;padding:6px 4px}
+.arch-doc+.arch-doc{border-top:1px solid var(--border-soft)}
+
 /* Table de sélection des formations (préparation de document) */
 .enroll-table tbody tr:hover{background:var(--surface2)}
 .enroll-table tbody tr.on{background:var(--blue-bg)}

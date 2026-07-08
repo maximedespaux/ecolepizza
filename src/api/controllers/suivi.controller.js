@@ -3,6 +3,8 @@ const { stepsToDocSet } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
+// Statuts « partagé avec le stagiaire » (envoyé / consulté / signé).
+const SHARED = ['ENVOYE', 'CONSULTE', 'SIGNE'];
 
 /**
  * GET /api/suivi — suivi Qualiopi par dossier (inscription) : jeu de documents
@@ -84,4 +86,36 @@ const getSuivi = async (req, res) => {
     }
 };
 
-module.exports = { getSuivi };
+/**
+ * GET /api/suivi/archives — coffre documentaire : tous les documents partagés/
+ * signés avec les stagiaires, à plat, avec session (année/semaine), formation et
+ * stagiaire. Le regroupement (année → semaine → formation → stagiaire) est fait
+ * côté client. Un document couvrant plusieurs formations apparaît sous chacune.
+ */
+const getArchive = async (req, res) => {
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id,
+                    DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
+                    DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                    s.year, s.week,
+                    p.code AS program_code, p.title AS program_title,
+                    l.id AS learner_id, l.first_name, l.last_name
+             FROM generated_document gd
+             JOIN learner l ON l.id = gd.learner_id
+             LEFT JOIN document_formation df ON df.document_id = gd.id
+             LEFT JOIN enrollment e ON e.id = df.enrollment_id
+             LEFT JOIN training_session s ON s.id = e.session_id
+             LEFT JOIN training_program p ON p.id = s.program_id
+             WHERE gd.organization_id = ? AND gd.status IN (?)
+             ORDER BY s.year DESC, s.week DESC, p.code, l.last_name, l.first_name, gd.sent_at`,
+            [req.user.organization_id, SHARED]
+        );
+        res.json({ data: rows });
+    } catch (err) {
+        console.error('Erreur archives documents :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getSuivi, getArchive };

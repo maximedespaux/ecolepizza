@@ -339,6 +339,10 @@ export function getEnrollments() {
 export function getSuivi() {
   return request("/suivi");
 }
+// Coffre documentaire : documents partagés/signés (année → semaine → formation → stagiaire).
+export function getArchives() {
+  return request("/suivi/archives");
+}
 
 export function createEnrollment(payload) {
   return request("/enrollments", { method: "POST", body: JSON.stringify(payload) });
