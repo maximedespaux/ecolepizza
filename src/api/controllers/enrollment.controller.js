@@ -157,18 +157,29 @@ const createEnrollment = (req, res) => {
 /**
  * DELETE /api/enrollments/:id — retire un stagiaire d'une session.
  */
-const deleteEnrollment = (req, res) => {
-    db.query(
-        'DELETE FROM enrollment WHERE id = ? AND organization_id = ?',
-        [req.params.id, req.user.organization_id],
-        (err) => {
-            if (err) {
-                console.error('Erreur suppression dossier :', err);
-                return res.status(400).json({ message: 'Erreur suppression' });
-            }
-            res.status(200).json({ success: true, message: 'Stagiaire retiré' });
-        }
-    );
+const deleteEnrollment = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[e]] = await conn.query(
+            'SELECT id, session_id, learner_id FROM enrollment WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]
+        );
+        if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
+        // Nettoie l'émargement du stagiaire pour cette session + sa feuille archivée.
+        await conn.query(
+            `DELETE ar FROM attendance_record ar JOIN attendance_sheet s ON s.id = ar.sheet_id
+             WHERE s.session_id = ? AND ar.learner_id = ?`,
+            [e.session_id, e.learner_id]
+        );
+        await conn.query('DELETE FROM archive_document WHERE organization_id = ? AND ref = ?',
+            [req.user.organization_id, `emarg:${e.id}`]);
+        await conn.query('DELETE FROM enrollment WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        res.status(200).json({ success: true, message: 'Stagiaire retiré' });
+    } catch (err) {
+        console.error('Erreur suppression dossier :', err);
+        res.status(400).json({ message: 'Erreur suppression' });
+    }
 };
 
 /**

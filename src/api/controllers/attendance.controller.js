@@ -96,6 +96,22 @@ const generateSheets = async (req, res) => {
             [req.params.sessionId]
         );
 
+        // Purge les présences des stagiaires qui ne sont plus inscrits à la session.
+        const enrolledIds = learners.map((l) => l.learner_id).filter(Boolean);
+        if (enrolledIds.length) {
+            await conn.query(
+                `DELETE ar FROM attendance_record ar JOIN attendance_sheet s ON s.id = ar.sheet_id
+                 WHERE s.session_id = ? AND (ar.learner_id IS NULL OR ar.learner_id NOT IN (?))`,
+                [req.params.sessionId, enrolledIds]
+            );
+        } else {
+            await conn.query(
+                `DELETE ar FROM attendance_record ar JOIN attendance_sheet s ON s.id = ar.sheet_id
+                 WHERE s.session_id = ?`,
+                [req.params.sessionId]
+            );
+        }
+
         for (const day of days) {
             for (const slot of SLOTS) {
                 // Feuille (unique par session+date+slot).
