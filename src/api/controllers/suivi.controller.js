@@ -1,6 +1,6 @@
 const db = require('../config/database.js');
-const { stepsToDocSet } = require('../lib/documents.js');
-const { loadOrgSteps } = require('./template.controller.js');
+const { computeDocParcours } = require('../lib/parcours.js');
+const { enrollmentSteps } = require('./formationProgram.controller.js');
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 // Statuts « partagé avec le stagiaire » (envoyé / consulté / signé).
@@ -16,7 +16,7 @@ const getSuivi = async (req, res) => {
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.crm_stage,
                     l.first_name, l.last_name, l.opco,
-                    p.code AS program_code, p.title AS program_title,
+                    p.id AS program_id, p.code AS program_code, p.title AS program_title,
                     p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
              FROM enrollment e
              LEFT JOIN learner l ON l.id = e.learner_id
@@ -26,37 +26,40 @@ const getSuivi = async (req, res) => {
             [req.user.organization_id]
         );
 
-        const steps = await loadOrgSteps(req.user.organization_id);
         const dossiers = [];
         for (const e of enrollments) {
-            // Statuts réels des documents rattachés à ce dossier.
-            const [rows] = await conn.query(
-                `SELECT gd.type, gd.status
-                 FROM generated_document gd
-                 JOIN document_formation df ON df.document_id = gd.id
-                 WHERE df.enrollment_id = ?`,
-                [e.enrollment_id]
-            );
-            const statusByType = {};
-            for (const r of rows) statusByType[r.type] = r.status; // dernier gagne
-
-            const required = stepsToDocSet(steps, {
-                hygiene: !!e.program_hygiene,
-                rsCode: e.program_rs,
-                jours: e.program_days || 1,
-                financing: e.financing,
-                agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
-            });
-            const documents = required.map((d) => ({ ...d, status: statusByType[d.type] || 'A_FAIRE' }));
-
-            // Conformité : VERT si tous les documents à signer sont signés,
-            // ORANGE si des documents sont en cours, ROUGE si rien n'est engagé.
-            const signable = documents.filter((d) => d.stagiaireSign);
-            const signed = signable.filter((d) => d.status === 'SIGNE').length;
-            const anyHandled = documents.some((d) => ['GENERE', 'ENVOYE', 'CONSULTE', 'SIGNE'].includes(d.status));
-            const score = signable.length > 0 && signed === signable.length
-                ? 'VERT'
-                : anyHandled ? 'ORANGE' : 'ROUGE';
+            // Parcours = celui de la formation (Parcours documentaire), filtré aux
+            // conditions du dossier, et progression réelle du stagiaire.
+            let documents = [], score = 'ROUGE', signed = 0, toSign = 0, percent = 0, done = 0, total = 0;
+            if (e.program_id) {
+                const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
+                const ctx = {
+                    financing: e.financing, rsCode: e.program_rs, hygiene: !!e.program_hygiene,
+                    jours: e.program_days || 1, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
+                };
+                const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx);
+                const [docs] = await conn.query(
+                    `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id
+                     FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
+                     WHERE df.enrollment_id = ?`,
+                    [e.enrollment_id]
+                );
+                const parc = computeDocParcours({ steps, docs });
+                total = parc.steps.length;
+                done = parc.currentIndex;
+                percent = parc.percent;
+                // Format attendu par la feuille de route (Roadmap).
+                documents = parc.steps.map((s, i) => ({
+                    num: i + 1, type: s.key, label: s.label,
+                    stagiaireSign: !!s.signable, quiz: !!s.quiz,
+                    status: s.docStatus || 'A_FAIRE',
+                }));
+                const signable = parc.steps.filter((s) => s.signable || s.quiz);
+                toSign = signable.length;
+                signed = signable.filter((s) => s.docStatus === 'SIGNE').length;
+                const anyHandled = parc.steps.some((s) => ['GENERE', 'ENVOYE', 'CONSULTE', 'SIGNE'].includes(s.docStatus));
+                score = total > 0 && done >= total ? 'VERT' : (done > 0 || anyHandled) ? 'ORANGE' : 'ROUGE';
+            }
 
             dossiers.push({
                 enrollment_id: e.enrollment_id,
@@ -69,7 +72,10 @@ const getSuivi = async (req, res) => {
                 crm_stage: e.crm_stage,
                 score,
                 signed,
-                to_sign: signable.length,
+                to_sign: toSign,
+                percent,
+                done,
+                total,
                 documents,
             });
         }

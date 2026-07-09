@@ -69,7 +69,15 @@ function Suivi() {
                         <span className="badge n mono" style={{ background: colorOf(d.program_code), color: "#fff", borderColor: "transparent" }}>{d.program_code}</span>
                         <span style={{ flex: 1, minWidth: 0 }}>
                           <b>{d.last_name} {d.first_name}</b>
-                          <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{d.program_title} · {d.signed}/{d.to_sign} signé(s)</span>
+                          <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                            {d.program_title} · {d.done}/{d.total} étape(s){d.to_sign ? ` · ${d.signed}/${d.to_sign} signé(s)` : ""}
+                          </span>
+                        </span>
+                        <span style={{ width: 90, flexShrink: 0 }} title={`${d.percent}% du parcours`}>
+                          <span style={{ display: "block", height: 6, borderRadius: 4, background: "var(--border-soft, #e3e3e6)", overflow: "hidden" }}>
+                            <span style={{ display: "block", height: "100%", width: `${d.percent || 0}%`, background: "var(--ember1, #c0392b)" }} />
+                          </span>
+                          <span style={{ display: "block", fontSize: 11, color: "var(--muted)", textAlign: "right", marginTop: 2 }}>{d.percent || 0}%</span>
                         </span>
                         <Badge tone={scoreBadge(d.score)}>{d.score}</Badge>
                       </button>
