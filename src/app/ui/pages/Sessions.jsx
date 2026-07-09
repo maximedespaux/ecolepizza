@@ -40,9 +40,12 @@ function Sessions() {
   // chevauchent ont des voies différentes, mais une session garde la même voie sur
   // tous ses jours → les formations restent alignées sur la même ligne horizontale.
   const laneOf = useMemo(() => {
+    const dur = (s) => (new Date(s.end_date || s.start_date) - new Date(s.start_date)) || 0;
+    // Les formations les plus LONGUES d'abord : elles obtiennent les voies du haut,
+    // les plus courtes se placent en dessous.
     const sorted = [...sessions]
       .filter((s) => s.start_date)
-      .sort((a, b) => (a.start_date || "").localeCompare(b.start_date || "") || (a.end_date || "").localeCompare(b.end_date || ""));
+      .sort((a, b) => dur(b) - dur(a) || (a.start_date || "").localeCompare(b.start_date || ""));
     const laneEnds = []; // date de fin de la dernière session de chaque voie
     const map = {};
     for (const s of sorted) {
