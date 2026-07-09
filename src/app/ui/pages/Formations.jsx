@@ -4,7 +4,7 @@ import PageHead from "../components/PageHead.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { euro, colorOf } from "../lib/format.js";
-import { LEVELS } from "../lib/levels.js";
+import { LEVELS, setBadgeColors } from "../lib/levels.js";
 
 function Formations() {
   const [programs, setPrograms] = useState([]);
@@ -16,6 +16,10 @@ function Formations() {
     try {
       const response = await getFormations();
       setPrograms(response.data);
+      // Enregistre les couleurs personnalisées (badges cohérents partout).
+      const map = {};
+      for (const f of response.data || []) if (f.color) { if (f.code) map[f.code] = f.color; if (f.level) map[f.level] = f.color; }
+      setBadgeColors(map);
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     }
@@ -70,7 +74,7 @@ function Formations() {
               >
                 <td className="drag-handle" title="Glisser pour réorganiser">⠿</td>
                 <td>
-                  <span className="badge n mono" style={{ color: "#fff", background: colorOf(p.code), borderColor: "transparent" }}>{p.code}</span>
+                  <span className="badge n mono" style={{ color: "#fff", background: p.color || colorOf(p.code), borderColor: "transparent" }}>{p.code}</span>
                 </td>
                 <td><b>{p.title}</b></td>
                 <td>{p.days}</td>
@@ -100,7 +104,7 @@ function Formations() {
 
 // Champs éditables (miroir des colonnes du tableau fourni).
 const FIELDS = [
-  "code", "title", "level", "days", "hours", "price",
+  "code", "title", "level", "color", "days", "hours", "price",
   "audience", "objective_general", "objectives", "duration_detail", "program_detail",
   "rs_code", "hygiene", "active",
 ];
@@ -116,6 +120,9 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [tab, setTab] = useState("infos"); // "infos" | "parcours"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
+  // Couleur effective du badge + valeur hexadécimale pour le sélecteur natif.
+  const effColor = form.color || colorOf(form.code || "");
+  const pickerHex = /^#[0-9a-fA-F]{6}$/.test(effColor) ? effColor : "#5b6079";
 
   useEffect(() => { getFormationSteps(program.id).then((r) => setSteps(r.data || [])).catch(() => {}); }, [program.id]);
 
@@ -139,7 +146,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
-          <h3>Modifier — <span className="mono" style={{ color: colorOf(program.code) }}>{program.code}</span></h3>
+          <h3>Modifier — <span className="mono" style={{ color: effColor }}>{program.code}</span></h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, padding: "0 16px", borderBottom: "1px solid var(--border-soft)" }}>
@@ -160,6 +167,18 @@ function FormationModal({ program, onClose, onSaved, onError }) {
                 <option value="">— Non défini —</option>
                 {LEVELS.map((l) => <option key={l.v} value={l.v}>{l.label}</option>)}
               </select>
+            </div>
+          </div>
+
+          <div className="field">
+            <label>Couleur du badge</label>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <input type="color" value={pickerHex} onChange={set("color")}
+                style={{ width: 46, height: 34, padding: 2, border: "1px solid var(--border-soft)", borderRadius: 8, cursor: "pointer" }} />
+              <span className="badge n mono" style={{ background: effColor, color: "#fff", borderColor: "transparent" }}>{form.code || "CODE"}</span>
+              {form.color
+                ? <button type="button" className="btn sm ghost" onClick={() => setForm((p) => ({ ...p, color: "" }))}>Auto</button>
+                : <span className="sub" style={{ fontSize: 12 }}>Auto (déduite du code / niveau)</span>}
             </div>
           </div>
 

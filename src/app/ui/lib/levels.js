@@ -30,11 +30,22 @@ function hashColor(s) {
   return `hsl(${h % 360}, 52%, 42%)`;
 }
 
+// Surcharges définies par l'utilisateur (couleur choisie sur une formation) :
+// { CODE|NIVEAU: "#rrggbb" }. Priment sur la palette par défaut.
+let OVERRIDES = {};
+export function setBadgeColors(map) {
+  if (!map) return;
+  for (const [k, v] of Object.entries(map)) {
+    if (k && v) OVERRIDES[String(k).trim().toUpperCase()] = v;
+  }
+}
+
 /** Couleur unifiée d'un badge (niveau ou code de formation). */
 export function badgeColor(v) {
   if (v == null || v === "") return UNKNOWN_COLOR;
   const k = String(v).trim();
-  return PALETTE[k] || PALETTE[k.toUpperCase()] || hashColor(k.toUpperCase());
+  const K = k.toUpperCase();
+  return OVERRIDES[K] || PALETTE[k] || PALETTE[K] || hashColor(K);
 }
 
 // Rétro-compat : les anciens appels passent désormais par la palette unifiée.

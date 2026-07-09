@@ -1,7 +1,9 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Outlet, Navigate, useLocation } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import { modeForPath } from "../lib/nav.js";
+import { getFormations } from "../api/apiClient.js";
+import { setBadgeColors } from "../lib/levels.js";
 import Sidebar from "../components/Sidebar.jsx";
 import Topbar from "../components/Topbar.jsx";
 
@@ -21,8 +23,20 @@ const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 function AppLayout() {
   const { user, isConnected, isLoading } = useContext(UserContext);
   const [open, setOpen] = useState(false);
+  const [, bumpColors] = useState(0);
   const location = useLocation();
   const readOnly = user ? modeForPath(user, location.pathname) === "read" : false;
+
+  // Charge une fois les couleurs personnalisées des formations pour que les
+  // badges (formation / stagiaire / session) soient cohérents partout.
+  useEffect(() => {
+    if (!isConnected) return;
+    getFormations().then((r) => {
+      const map = {};
+      for (const f of r.data || []) if (f.color) { if (f.code) map[f.code] = f.color; if (f.level) map[f.level] = f.color; }
+      if (Object.keys(map).length) { setBadgeColors(map); bumpColors((v) => v + 1); }
+    }).catch(() => {});
+  }, [isConnected]);
 
   if (isLoading) {
     return (

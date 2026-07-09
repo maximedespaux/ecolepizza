@@ -191,6 +191,7 @@ CREATE TABLE training_program (
     organization_id uuid          NOT NULL,
     code            varchar(40)   NOT NULL,          -- NIV1, NIV1H, RS7404…
     level           varchar(20)   DEFAULT NULL,      -- NIV1|NIV1_PRO|NIV2|EXPERT|RS (code couleur carte)
+    color           varchar(20)   DEFAULT NULL,      -- couleur personnalisée du badge (sinon déduite)
     title           varchar(255)  NOT NULL,
     days            int           DEFAULT NULL,
     hours           int           DEFAULT NULL,

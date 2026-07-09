@@ -66,7 +66,7 @@ async function enrollmentSteps(conn, orgId, program, ctx) {
  */
 const getPrograms = (req, res) => {
     db.query(
-        `SELECT id, organization_id, code, level, title, days, hours, price, audience,
+        `SELECT id, organization_id, code, level, color, title, days, hours, price, audience,
                 objectives, objective_general, duration_detail, program_detail,
                 rs_code, hygiene, active, sort_order, created_at
          FROM training_program
@@ -107,15 +107,15 @@ const getProgram = (req, res) => {
  * POST /api/formations
  */
 const createProgram = (req, res) => {
-    const { code, level, title, days, hours, price, rs_code, hygiene, objectives } = req.body;
+    const { code, level, color, title, days, hours, price, rs_code, hygiene, objectives } = req.body;
     if (!code || !title) {
         return res.status(422).json({ error: 'Code et intitulé requis' });
     }
     db.query(
         `INSERT INTO training_program
-            (id, organization_id, code, level, title, days, hours, price, rs_code, hygiene, objectives)
-         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [req.user.organization_id, code, level || null, title, days, hours, price, rs_code || null,
+            (id, organization_id, code, level, color, title, days, hours, price, rs_code, hygiene, objectives)
+         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.user.organization_id, code, level || null, color || null, title, days, hours, price, rs_code || null,
          hygiene ? 1 : 0, objectives || null],
         (err) => {
             if (err) {
@@ -132,7 +132,7 @@ const createProgram = (req, res) => {
  */
 const updateProgram = (req, res) => {
     const ALLOWED = [
-        'code', 'title', 'level', 'days', 'hours', 'price', 'audience', 'objectives',
+        'code', 'title', 'level', 'color', 'days', 'hours', 'price', 'audience', 'objectives',
         'objective_general', 'duration_detail', 'program_detail',
         'rs_code', 'hygiene', 'active', 'sort_order',
     ];
