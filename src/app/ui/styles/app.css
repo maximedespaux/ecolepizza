@@ -273,6 +273,9 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .cal-cell.today .cal-daynum{color:var(--ember1)}
 .cal-evt{font-size:11px;font-weight:700;color:#fff;padding:3px 7px;border-radius:6px;display:flex;align-items:center;gap:6px;cursor:pointer;transition:.12s var(--ease);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .cal-evt:hover{filter:brightness(1.09);transform:translateY(-1px)}
+/* Emplacement vide : réserve la même hauteur qu'un événement pour aligner les voies */
+.cal-evt-ghost{visibility:hidden;background:none;cursor:default;pointer-events:none}
+.cal-evt-ghost:hover{filter:none;transform:none}
 .cal-evt .n{margin-left:auto;background:rgba(255,255,255,.28);border-radius:99px;padding:0 6px;font-size:10px;font-weight:700}
 .cal-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
 .cal-legitem{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}

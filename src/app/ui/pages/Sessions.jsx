@@ -36,6 +36,26 @@ function Sessions() {
 
   const weeks = useMemo(() => monthMatrix(year, month), [year, month]);
 
+  // Attribue à chaque session une « voie » (ligne) stable : deux sessions qui se
+  // chevauchent ont des voies différentes, mais une session garde la même voie sur
+  // tous ses jours → les formations restent alignées sur la même ligne horizontale.
+  const laneOf = useMemo(() => {
+    const sorted = [...sessions]
+      .filter((s) => s.start_date)
+      .sort((a, b) => (a.start_date || "").localeCompare(b.start_date || "") || (a.end_date || "").localeCompare(b.end_date || ""));
+    const laneEnds = []; // date de fin de la dernière session de chaque voie
+    const map = {};
+    for (const s of sorted) {
+      const start = s.start_date, end = s.end_date || s.start_date;
+      let placed = false;
+      for (let i = 0; i < laneEnds.length; i++) {
+        if (laneEnds[i] < start) { laneEnds[i] = end; map[s.id] = i; placed = true; break; }
+      }
+      if (!placed) { map[s.id] = laneEnds.length; laneEnds.push(end); }
+    }
+    return map;
+  }, [sessions]);
+
   // Mois affichés selon la vue (mois / trimestre / semestre / année).
   const monthsToShow = useMemo(() => {
     if (view === "mois") return [{ y: year, m: month }];
@@ -157,7 +177,13 @@ function Sessions() {
         <div className="cal-grid withweeks">
           <div className="cal-dow cal-wk-h">Sem.</div>
           {DOW.map((d) => <div key={d} className="cal-dow">{d}</div>)}
-          {weeks.map((week, wi) => (
+          {weeks.map((week, wi) => {
+            // Nombre de voies à afficher pour cette semaine (max des voies utilisées).
+            const weekLaneCount = week.reduce((mx, d) => {
+              if (isWeekend(d)) return mx;
+              return sessionsOn(ymd(d)).reduce((m, s) => Math.max(m, (laneOf[s.id] ?? 0) + 1), mx);
+            }, 0);
+            return (
             <Fragment key={wi}>
               <div className="cal-week" title={`Semaine ${isoWeek(week[0])}`}>{isoWeek(week[0])}</div>
               {week.map((day) => {
@@ -165,29 +191,36 @@ function Sessions() {
                 const inMonth = day.getMonth() === month;
                 const wknd = isWeekend(day);
                 const daySessions = wknd ? [] : sessionsOn(dayStr);
+                const byLane = {};
+                for (const s of daySessions) byLane[laneOf[s.id] ?? 0] = s;
                 return (
                   <div
                     key={dayStr}
                     className={`cal-cell${inMonth ? "" : " out"}${wknd ? " wknd" : ""}${isToday(day) ? " today" : ""}`}
                   >
                     <div className="cal-daynum">{day.getDate()}</div>
-                    {daySessions.map((s) => (
-                      <div
-                        key={s.id}
-                        className="cal-evt"
-                        style={{ background: colorOf(s.program_code) }}
-                        title={`${s.program_title} — ${s.stagiaires} stagiaire(s)`}
-                        onClick={() => navigate(`/sessions/${s.id}`)}
-                      >
-                        {s.program_code}
-                        <span className="n">{s.stagiaires}</span>
-                      </div>
-                    ))}
+                    {Array.from({ length: weekLaneCount }, (_, i) => {
+                      const s = byLane[i];
+                      if (!s) return <div key={i} className="cal-evt cal-evt-ghost" aria-hidden="true">&nbsp;</div>;
+                      return (
+                        <div
+                          key={i}
+                          className="cal-evt"
+                          style={{ background: colorOf(s.program_code) }}
+                          title={`${s.program_title} — ${s.stagiaires} stagiaire(s)`}
+                          onClick={() => navigate(`/sessions/${s.id}`)}
+                        >
+                          {s.program_code}
+                          <span className="n">{s.stagiaires}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
             </Fragment>
-          ))}
+            );
+          })}
         </div>
         )}
 
