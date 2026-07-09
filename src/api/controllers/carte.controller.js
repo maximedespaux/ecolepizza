@@ -53,14 +53,15 @@ const getCarte = (req, res) => {
             if (r.lat != null && r.lng != null) {
                 geocoded++;
                 // Priorité à l'étiquette du stagiaire (1re du CSV), sinon niveau de sa formation.
-                const tag = (r.levels || '').split(',').map((s) => s.trim()).filter(Boolean)[0];
+                const badges = (r.levels || '').split(',').map((s) => s.trim()).filter(Boolean);
                 points.push({
                     id: r.id,
                     name: [r.first_name, r.last_name].filter(Boolean).join(' '),
                     town: r.town || '',
                     dept: d,
                     lat: Number(r.lat), lng: Number(r.lng),
-                    level: tag || r.level || null,
+                    level: badges[0] || r.level || null,
+                    badges: badges.length ? badges : (r.level ? [r.level] : []),
                 });
             } else if (r.address || r.zip_code) {
                 pending++; // géocodable mais pas encore géocodé
@@ -83,13 +84,16 @@ const getCarte = (req, res) => {
  * POST /api/carte/geocode — géocode les stagiaires ayant une adresse mais pas
  * encore de coordonnées (par lots pour rester poli avec l'API publique).
  */
+const GEOCODABLE = `(l.zip_code IS NOT NULL OR l.town IS NOT NULL OR c.address IS NOT NULL OR c.zip_code IS NOT NULL)`;
+
 const geocodeLearners = (req, res) => {
     const orgId = req.user.organization_id;
     const limit = Math.min(Number(req.body?.limit) || 80, 200);
     db.query(
-        `SELECT id, address, zip_code, town FROM learner
-          WHERE organization_id = ? AND lat IS NULL
-            AND (address IS NOT NULL OR zip_code IS NOT NULL)
+        `SELECT l.id, l.financing, l.zip_code, l.town, l.company_id,
+                c.address AS c_address, c.zip_code AS c_zip, c.town AS c_town
+           FROM learner l LEFT JOIN company c ON c.id = l.company_id
+          WHERE l.organization_id = ? AND l.lat IS NULL AND ${GEOCODABLE}
           LIMIT ?`,
         [orgId, limit],
         async (err, rows) => {
@@ -99,9 +103,19 @@ const geocodeLearners = (req, res) => {
             }
             if (!rows.length) return res.json({ data: { done: 0, remaining: 0 } });
 
+            // Adresse géocodée selon le financement :
+            //  · professionnel avec entreprise → adresse EXACTE de l'entreprise ;
+            //  · particulier → VILLE uniquement (confidentialité : jamais l'adresse perso).
+            const inputs = rows.map((r) => {
+                const pro = r.financing === 'PROFESSIONNEL' && (r.c_address || r.c_zip || r.c_town);
+                return pro
+                    ? { id: r.id, address: r.c_address, zip_code: r.c_zip, town: r.c_town }
+                    : { id: r.id, address: null, zip_code: r.zip_code, town: r.town };
+            });
+
             const conn = db.promise();
             try {
-                const done = await geocodeBatch(rows, async (id, geo) => {
+                const done = await geocodeBatch(inputs, async (id, geo) => {
                     if (!geo) return;
                     await conn.query(
                         'UPDATE learner SET lat = ?, lng = ?, geo_precision = ?, geocoded_at = NOW() WHERE id = ? AND organization_id = ?',
@@ -109,9 +123,8 @@ const geocodeLearners = (req, res) => {
                     );
                 });
                 const [[{ remaining }]] = await conn.query(
-                    `SELECT COUNT(*) AS remaining FROM learner
-                      WHERE organization_id = ? AND lat IS NULL
-                        AND (address IS NOT NULL OR zip_code IS NOT NULL)`,
+                    `SELECT COUNT(*) AS remaining FROM learner l LEFT JOIN company c ON c.id = l.company_id
+                      WHERE l.organization_id = ? AND l.lat IS NULL AND ${GEOCODABLE}`,
                     [orgId]
                 );
                 res.json({ data: { done, remaining } });

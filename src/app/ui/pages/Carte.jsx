@@ -67,6 +67,7 @@ function Carte() {
   const [mapReady, setMapReady] = useState(false);
   const [q, setQ] = useState("");
   const [dept, setDept] = useState(null);   // département sélectionné (filtre)
+  const [forms, setForms] = useState([]);   // formations (codes) cochées
   const [geo, setGeo] = useState(false);     // géocodage en cours
   const mapDiv = useRef(null);
   const mapRef = useRef(null);
@@ -109,21 +110,38 @@ function Carte() {
     finally { setGeo(false); }
   }
 
-  const filtered = useMemo(() => {
+  // Options de formation (badges/codes présents parmi les points géolocalisés).
+  const formationOptions = useMemo(() => {
+    const s = new Set();
+    for (const p of (data?.points || [])) (p.badges || []).forEach((b) => s.add(b));
+    return [...s].sort();
+  }, [data]);
+  const pointMatch = (p) => !forms.length || (p.badges || []).some((b) => forms.includes(b));
+  const shownPoints = useMemo(() => (data?.points || []).filter(pointMatch), [data, forms]);
+
+  // Répartition par département : globale, ou recalculée depuis les points filtrés.
+  const byDeptView = useMemo(() => {
     if (!data) return [];
+    if (!forms.length) return data.byDept;
+    const m = new Map();
+    for (const p of shownPoints) { if (!p.dept) continue; m.set(p.dept, (m.get(p.dept) || 0) + 1); }
+    return [...m.entries()].map(([dp, count]) => ({ dept: dp, count, towns: [] })).sort((a, b) => b.count - a.count);
+  }, [data, forms, shownPoints]);
+
+  const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
-    if (!n) return data.byDept;
-    return data.byDept.filter((d) =>
+    if (!n) return byDeptView;
+    return byDeptView.filter((d) =>
       d.dept.includes(n) ||
       deptName(d.dept).toLowerCase().includes(n) ||
       d.towns.some((t) => t.town.toLowerCase().includes(n))
     );
-  }, [data, q]);
+  }, [byDeptView, q]);
 
-  const maxCount = useMemo(() => Math.max(1, ...(data?.byDept || []).map((d) => d.count)), [data]);
+  const maxCount = useMemo(() => Math.max(1, ...byDeptView.map((d) => d.count)), [byDeptView]);
   const deptPoints = useMemo(
-    () => (data && dept ? data.points.filter((p) => p.dept === dept) : []),
-    [data, dept]
+    () => (dept ? shownPoints.filter((p) => p.dept === dept) : []),
+    [shownPoints, dept]
   );
 
   // (re)dessine : bulles par département, ou points précis colorés par niveau du département sélectionné.
@@ -179,7 +197,7 @@ function Carte() {
       <PageHead
         eyebrow="Développement · Démarchage"
         title="Carte des stagiaires"
-        lead="Répartition géographique précise de vos stagiaires. Cliquez un département pour voir ses stagiaires, colorés par niveau de formation."
+        lead="Répartition géographique de vos stagiaires. Les particuliers sont localisés à la ville (confidentialité) ; les professionnels à l'adresse de leur entreprise. Cliquez un département pour voir ses stagiaires, colorés par formation."
         actions={
           <div style={{ display: "flex", gap: 8 }}>
             <input className="inp" style={{ minWidth: 200 }} value={q} onChange={(e) => setQ(e.target.value)}
@@ -207,6 +225,30 @@ function Carte() {
         ))}
         <span className="lg-item"><i style={{ background: "#9aa0b4" }} /> Non défini</span>
       </div>
+
+      {/* Filtre par formation (cases) : n'affiche que les stagiaires de ces formations */}
+      {formationOptions.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "0 0 14px" }}>
+          <span className="sub" style={{ fontSize: 12, color: "var(--muted)" }}>Formations :</span>
+          {formationOptions.map((code) => {
+            const on = forms.includes(code);
+            return (
+              <button key={code} type="button" className="btn sm"
+                onClick={() => setForms((f) => (f.includes(code) ? f.filter((x) => x !== code) : [...f, code]))}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  background: on ? colorForLevel(code) : "transparent",
+                  color: on ? "#fff" : "inherit",
+                  border: `1.5px solid ${on ? colorForLevel(code) : "var(--border-soft)"}`,
+                }}>
+                <i style={{ width: 10, height: 10, borderRadius: "50%", background: colorForLevel(code), display: "inline-block" }} />
+                {LEVEL_LABEL[code] || code}
+              </button>
+            );
+          })}
+          {forms.length > 0 && <button className="btn sm ghost" onClick={() => setForms([])}>✕ Toutes</button>}
+        </div>
+      )}
 
       {dept && (
         <div className="dept-banner">
