@@ -288,44 +288,51 @@ function ParcoursFlow({ steps, onToggle, onReorder }) {
   }
 
   return (
-    <div className="parcours-flow">
-      {groups.map((g, i) => (
-        <div className="pf-wrap" key={g.steps[0].slug}>
-          <div className={"pf-node" + (gdrag === i ? " drag" : "")}
-            draggable onDragStart={() => setGdrag(i)} onDragOver={(e) => e.preventDefault()}
-            onDrop={() => drop(i)} onDragEnd={() => setGdrag(null)}>
-            <span className="pf-grip" title="Glisser pour réordonner le jalon">⠿</span>
-            {g.steps.map((s, j) => (
-              <div key={s.slug}>
-                {j > 0 && <div className="pf-or">OU</div>}
-                <div className="pf-opt">
-                  <span className="pf-label">{s.label}</span>
-                  {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
-                  <button type="button" className="pf-x" title="Retirer cette étape" onClick={() => onToggle(s.slug)}>✕</button>
+    <div className="parcours" ref={addRef}>
+      <div className="parcours-flow">
+        {groups.map((g, i) => (
+          <div className="pf-wrap" key={g.steps[0].slug}>
+            <div className={"pf-node" + (gdrag === i ? " drag" : "")}
+              draggable onDragStart={() => setGdrag(i)} onDragOver={(e) => e.preventDefault()}
+              onDrop={() => drop(i)} onDragEnd={() => setGdrag(null)}>
+              <span className="pf-grip" title="Glisser pour réordonner le jalon">⠿</span>
+              {g.steps.map((s, j) => (
+                <div key={s.slug}>
+                  {j > 0 && <div className="pf-or">OU</div>}
+                  <div className="pf-opt">
+                    <span className="pf-label">{s.label}</span>
+                    {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
+                    <button type="button" className="pf-x" title="Retirer cette étape" onClick={() => onToggle(s.slug)}>✕</button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <span className="pf-arrow" aria-hidden="true">→</span>
           </div>
-          <span className="pf-arrow" aria-hidden="true">→</span>
-        </div>
-      ))}
+        ))}
+        <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
+          ＋ Ajouter une étape
+        </button>
+      </div>
 
-      {/* Bouton d'ajout d'étape (étapes disponibles / retirées) */}
-      <div className="pf-add-wrap" ref={addRef}>
-        <button type="button" className="pf-add" onClick={() => setAdding((a) => !a)}>＋ Ajouter une étape</button>
-        {adding && (
-          <div className="pf-add-menu">
-            {available.length === 0
-              ? <div className="pf-add-empty">Toutes les étapes disponibles sont déjà dans le parcours.</div>
-              : available.map((s) => (
+      {/* Panneau des étapes disponibles (dans le flux : pas de débordement/clipping) */}
+      {adding && (
+        <div className="pf-add-panel">
+          <div className="pf-add-title">Étapes disponibles</div>
+          {available.length === 0 ? (
+            <div className="pf-add-empty">Toutes les étapes disponibles sont déjà dans le parcours.</div>
+          ) : (
+            <div className="pf-add-grid">
+              {available.map((s) => (
                 <button type="button" key={s.slug} className="pf-add-item" onClick={() => { onToggle(s.slug); setAdding(false); }}>
                   <span className="pf-label">{s.label}</span>
                   {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
                 </button>
               ))}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

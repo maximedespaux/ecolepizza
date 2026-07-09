@@ -316,17 +316,19 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .pf-x{margin-left:2px;border:none;background:none;color:var(--dim,#b4b4b4);cursor:pointer;font-size:12px;
   line-height:1;padding:2px 3px;border-radius:5px;flex-shrink:0}
 .pf-x:hover{background:var(--ember-soft,#fdeae6);color:var(--ember1,#c0392b)}
-/* Bouton + menu d'ajout d'étape */
-.pf-add-wrap{position:relative;display:flex;align-items:center;flex-shrink:0}
-.pf-add{border:1.5px dashed var(--border-soft,#d5d5d8);background:none;color:var(--muted,#666);
+/* Bouton d'ajout d'étape (dans la rangée du flux) */
+.pf-add{flex-shrink:0;border:1.5px dashed var(--border-soft,#d5d5d8);background:none;color:var(--muted,#666);
   border-radius:12px;padding:12px 14px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;min-height:52px}
-.pf-add:hover{border-color:var(--ember1,#c0392b);color:var(--ember1,#c0392b)}
-.pf-add-menu{position:absolute;top:100%;left:0;z-index:40;margin-top:6px;min-width:220px;max-height:260px;overflow-y:auto;
-  padding:6px;background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16)}
-.pf-add-item{display:flex;align-items:center;gap:7px;width:100%;text-align:left;border:none;background:none;
-  cursor:pointer;padding:7px 8px;border-radius:7px;font-size:13px;color:inherit}
-.pf-add-item:hover{background:var(--hover,rgba(0,0,0,.06))}
-.pf-add-empty{padding:10px 8px;font-size:12px;color:var(--muted,#666)}
+.pf-add:hover,.pf-add.on{border-color:var(--ember1,#c0392b);color:var(--ember1,#c0392b)}
+/* Panneau des étapes disponibles — dans le flux normal (pas d'overlay clippé) */
+.pf-add-panel{margin-top:8px;padding:12px 14px;border:1px solid var(--line,#e3e3e6);border-radius:12px;
+  background:var(--surface2,rgba(0,0,0,.02))}
+.pf-add-title{font-size:12px;font-weight:700;color:var(--muted,#666);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px}
+.pf-add-grid{display:flex;flex-wrap:wrap;gap:8px}
+.pf-add-item{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-soft,#e3e3e6);
+  background:var(--panel,#fff);cursor:pointer;padding:8px 12px;border-radius:20px;font-size:13px;color:inherit}
+.pf-add-item:hover{border-color:var(--ember1,#c0392b);background:var(--ember-soft,#fdeae6)}
+.pf-add-empty{font-size:13px;color:var(--muted,#666)}
 
 .poste-bar{position:relative;height:10px;border-radius:999px;background:var(--surface3);overflow:visible}
 .poste-bar > span{display:block;height:100%;border-radius:999px}
