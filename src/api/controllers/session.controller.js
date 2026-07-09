@@ -1,7 +1,32 @@
 const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
+const { parseApplies } = require('../lib/documents.js');
 const { notify } = require('./notification.controller.js');
+
+// Deux étapes sont des « variantes » du même jalon si elles ne peuvent JAMAIS
+// s'appliquer au même dossier (conditions incompatibles : financement, RS, hygiène
+// ou durée) ET qu'elles relèvent du même jalon (même type de document ou même rang).
+// Ex. Devis particulier / Devis entreprise / Devis RS → une seule colonne « Devis ».
+function areExclusiveVariants(a, b) {
+    if (a.quiz_id || b.quiz_id) return false;
+    if (!a.doc_type || a.doc_type !== b.doc_type) return false; // même type de document
+    const A = parseApplies(a.applies_when), B = parseApplies(b.applies_when);
+    const conflicts = (k) => A[k] != null && B[k] != null && A[k] !== B[k];
+    // Incompatibles = jamais applicables au même dossier → une seule colonne « OU ».
+    return conflicts('financing') || conflicts('rs') || conflicts('hygiene') || conflicts('jours');
+}
+
+// Libellé générique d'une colonne fusionnée : préfixe commun tronqué à la limite
+// d'un mot (« Devis particulier »/« Devis entreprise » → « Devis »), sinon jonction.
+function mergedLabel(labels) {
+    if (labels.length === 1) return labels[0];
+    let p = labels[0];
+    for (const l of labels.slice(1)) { let i = 0; while (i < p.length && i < l.length && p[i] === l[i]) i++; p = p.slice(0, i); }
+    const cut = Math.max(p.lastIndexOf(' '), p.lastIndexOf('-'), p.lastIndexOf('/'));
+    if (cut <= 0) return [...new Set(labels)].join(' / ');
+    return p.slice(0, cut).trim().replace(/[\s\-–—:,/]+$/, '').trim();
+}
 
 // Libellé court par type de document (colonnes du tableau de session).
 const DOC_LABELS = {
@@ -185,13 +210,26 @@ const getSessionBoard = async (req, res) => {
         if (!s) return res.status(404).json({ message: 'Session introuvable' });
 
         const program = { id: s.program_id, code: s.code, days: s.days, hygiene: s.hygiene, rs_code: s.rs_code };
-        // Colonnes = parcours documentaire de la formation (toutes variantes confondues).
+        // Colonnes = jalons du parcours. Les variantes mutuellement exclusives d'un
+        // même jalon (ex. Devis particulier / entreprise) sont fusionnées en UNE colonne
+        // (condition « OU » : un dossier n'en fait qu'une seule).
         const colSteps = (await formationSteps(conn, req.user.organization_id, program)).filter((st) => st.active);
-        const columns = colSteps.map((st, i) => ({
-            index: i, key: st.quiz_id ? `quiz:${st.quiz_id}` : st.slug, label: st.label,
-            ic: st.quiz_id ? '❓' : (st.stagiaire_sign ? '✍️' : '📄'),
-        }));
-        const keyIndex = new Map(columns.map((c) => [c.key, c.index]));
+        const groups = []; // { steps: [...] }
+        for (const st of colSteps) {
+            const g = groups.find((grp) => grp.steps.some((v) => areExclusiveVariants(v, st)));
+            if (g) g.steps.push(st); else groups.push({ steps: [st] });
+        }
+        const keyOf = (st) => (st.quiz_id ? `quiz:${st.quiz_id}` : st.slug);
+        const columns = groups.map((g, i) => {
+            const head = g.steps[0];
+            return {
+                index: i, key: keyOf(head), label: mergedLabel(g.steps.map((v) => v.label)),
+                ic: head.quiz_id ? '❓' : (head.stagiaire_sign ? '✍️' : '📄'),
+            };
+        });
+        // Chaque variante (slug/quiz) pointe vers l'index de sa colonne fusionnée.
+        const keyIndex = new Map();
+        groups.forEach((g, i) => g.steps.forEach((st) => keyIndex.set(keyOf(st), i)));
 
         const [enr] = await conn.query(
             `SELECT e.id AS enrollment_id, e.learner_id, e.financing, l.first_name, l.last_name, l.opco
