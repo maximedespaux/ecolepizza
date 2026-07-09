@@ -119,13 +119,6 @@ function FormationModal({ program, onClose, onSaved, onError }) {
 
   useEffect(() => { getFormationSteps(program.id).then((r) => setSteps(r.data || [])).catch(() => {}); }, [program.id]);
 
-  function stepDrop(toIdx) {
-    if (sdrag === null || sdrag === toIdx) { setSdrag(null); return; }
-    const next = [...steps];
-    const [m] = next.splice(sdrag, 1);
-    next.splice(toIdx, 0, m);
-    setSteps(next); setSdrag(null);
-  }
   const toggleStep = (slug) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, active: !s.active } : s)));
 
   async function save() {
@@ -248,6 +241,12 @@ function groupMilestones(steps) {
     if (g) g.steps.push(st); else groups.push({ steps: [st] });
   }
   return groups;
+}
+// Étiquette de jour d'un QCM : J2, ou J-3 (avant le début).
+function dayTag(day) {
+  const d = Number(day);
+  if (!Number.isFinite(d)) return "QCM";
+  return d < 0 ? `J${d}` : `J${d < 1 ? 1 : d}`;
 }
 // Petit badge de condition affiché sur une variante.
 function stepBadge(s) {
