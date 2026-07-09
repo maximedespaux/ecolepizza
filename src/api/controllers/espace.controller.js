@@ -3,6 +3,7 @@ const db = require('../config/database.js');
 const { stepsToDocSet } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
+const { encrypt } = require('../lib/crypto.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -339,9 +340,11 @@ const signMyEmargement = async (req, res) => {
         if (!rec) return res.status(404).json({ message: 'Émargement introuvable.' });
         if (rec.date > todayISO()) return res.status(400).json({ message: 'Impossible de signer une demi-journée à venir.' });
         const name = (signer_name && signer_name.trim()) || `${learner.first_name || ''} ${learner.last_name || ''}`.trim();
+        const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || req.socket?.remoteAddress || null;
+        const ua = (req.headers['user-agent'] || '').slice(0, 400);
         await conn.query(
-            'UPDATE attendance_record SET present = 1, signed_at = NOW(), signer_name = ?, signature_data = ? WHERE id = ?',
-            [name, signature_data || null, req.params.recordId]
+            'UPDATE attendance_record SET present = 1, signed_at = NOW(), signer_name = ?, signature_data = ?, signer_ip = ?, signer_user_agent = ? WHERE id = ?',
+            [name, encrypt(signature_data || null), encrypt(ip), encrypt(ua), req.params.recordId]
         );
         res.json({ success: true, message: 'Émargement signé.' });
 

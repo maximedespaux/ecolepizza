@@ -1,5 +1,6 @@
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const { encrypt, decrypt } = require('../lib/crypto.js');
 
 /**
  * GET /api/organisation — l'organisme de l'utilisateur connecté.
@@ -14,7 +15,12 @@ const getOrganization = (req, res) => {
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
             if (results.length === 0) return res.status(404).json({ message: 'Organisme introuvable' });
-            res.json({ data: results[0] });
+            const org = results[0];
+            // Champs chiffrés au repos : on déchiffre l'image de signature ;
+            // le certificat de scellement (chiffré) n'est jamais renvoyé au client.
+            org.signature_image = decrypt(org.signature_image);
+            delete org.sign_cert;
+            res.json({ data: org });
         }
     );
 };
@@ -36,6 +42,7 @@ const updateOrganization = (req, res) => {
             // Code court unique : majuscules, alphanumérique + tiret, ou NULL si vidé.
             v = String(v).trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 24) || null;
         }
+        else if (f === 'signature_image') v = encrypt(v || null); // chiffrée au repos
         updates.push(`${f} = ?`);
         values.push(v);
     }

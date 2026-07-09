@@ -67,6 +67,7 @@ CREATE TABLE organization (
     bic         varchar(11)  DEFAULT NULL,          -- RIB : BIC / SWIFT
     bank_name   varchar(120) DEFAULT NULL,          -- RIB : domiciliation bancaire
     signature_image longtext  DEFAULT NULL,          -- signature de l'organisme (data URL) pour les documents
+    sign_cert   longtext     DEFAULT NULL,          -- certificat PAdES de scellement (PKCS#12 chiffré, base64)
     qualiopi    tinyint(1)   NOT NULL DEFAULT 0,
     created_at  timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
@@ -300,6 +301,9 @@ CREATE TABLE generated_document (
     signed_at     datetime     DEFAULT NULL,          -- horodatage de signature
     signer_name   varchar(255) DEFAULT NULL,          -- nom saisi par le signataire
     signature_data longtext    DEFAULT NULL,          -- image de signature (data URL)
+    signer_ip     varchar(255) DEFAULT NULL,          -- traçabilité : IP du signataire (chiffrée au repos)
+    signer_user_agent varchar(1000) DEFAULT NULL,     -- traçabilité : appareil/navigateur (chiffré au repos)
+    signed_hash   char(64)     DEFAULT NULL,          -- SHA-256 du contenu signé
     created_at    timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     KEY idx_doc_org (organization_id, type),
@@ -349,6 +353,8 @@ CREATE TABLE attendance_record (
     present    tinyint(1) NOT NULL DEFAULT 0,
     signer_name    varchar(255) DEFAULT NULL,           -- stagiaire signataire
     signature_data longtext     DEFAULT NULL,           -- signature manuscrite (data URL)
+    signer_ip      varchar(255) DEFAULT NULL,           -- traçabilité : IP du signataire (chiffrée au repos)
+    signer_user_agent varchar(1000) DEFAULT NULL,       -- traçabilité : appareil/navigateur (chiffré au repos)
     signed_at  datetime  DEFAULT NULL,
     PRIMARY KEY (id),
     KEY idx_record_sheet (sheet_id),

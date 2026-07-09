@@ -7,7 +7,39 @@ const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { findMissingTokens } = require('../lib/tokens.js');
 const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
 const { logAudit } = require('../lib/audit.js');
+const { encrypt, decrypt } = require('../lib/crypto.js');
 const { notify } = require('./notification.controller.js');
+
+// IP « client » (best-effort, derrière proxy éventuel).
+function clientIp(req) {
+    return (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+        || req.ip || req.socket?.remoteAddress || null;
+}
+
+// Certificat de scellement de l'organisme (génère + stocke chiffré au 1er usage).
+async function getOrgSigner(conn, orgId, orgName) {
+    const { generateOrgP12 } = require('../lib/pdfseal.js');
+    const [[org]] = await conn.query('SELECT sign_cert FROM organization WHERE id = ?', [orgId]);
+    if (org && org.sign_cert) {
+        const b64 = decrypt(org.sign_cert);
+        if (b64) return Buffer.from(b64, 'base64');
+    }
+    const p12 = generateOrgP12(orgName || 'Organisme');
+    await conn.query('UPDATE organization SET sign_cert = ? WHERE id = ?', [encrypt(p12.toString('base64')), orgId]);
+    return p12;
+}
+
+// Rend le HTML rempli d'un document (déterministe, sans LibreOffice) pour empreinte.
+async function buildDocHtml(conn, orgId, doc) {
+    const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
+    ctx.signature = { data: decrypt(doc.signature_data), name: doc.signer_name, date: doc.signed_at };
+    const f = (ctx.formations && ctx.formations[0]) || {};
+    const slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
+    if (!slug) return null;
+    const content = await getTemplateContent(orgId, slug);
+    if (!content || content.kind !== 'builder') return null;
+    return renderTemplateHtml(content.html, ctx, { title: doc.title || '', headerHtml: content.header, footerHtml: content.footer });
+}
 
 const TYPE_LABELS = {
     DEVIS: 'Devis', CONTRAT: 'Contrat de formation', CONVENTION: 'Convention de formation',
@@ -43,6 +75,7 @@ async function advanceEnrollments(conn, orgId, documentId, targetStage) {
 // Charge le contexte de fusion (organisme, stagiaire, entreprise, formations).
 async function loadContext(conn, organizationId, learnerId, documentId) {
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [organizationId]);
+    if (org) org.signature_image = decrypt(org.signature_image); // signature organisme chiffrée au repos
     const [[learner]] = await conn.query('SELECT * FROM learner WHERE id = ?', [learnerId]);
     let company = null;
     const [formations] = await conn.query(
@@ -185,8 +218,12 @@ const getDocument = async (req, res) => {
             data: {
                 id: doc.id, type: doc.type, title: doc.title, status: doc.status,
                 sent_at: doc.sent_at, signed_at: doc.signed_at, signer_name: doc.signer_name,
-                signature_data: doc.signature_data,
+                signature_data: decrypt(doc.signature_data),
                 signable: STAGIAIRE_SIGN_TYPES.includes(doc.type),
+                // Traçabilité de la signature électronique (déchiffrée pour l'affichage).
+                signer_ip: decrypt(doc.signer_ip) || null,
+                signer_user_agent: decrypt(doc.signer_user_agent) || null,
+                signed_hash: doc.signed_hash || null,
                 html,
             },
         });
@@ -215,7 +252,7 @@ async function fillForRequest(req, res) {
 
     const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
     // Signature du document (stagiaire/signataire) pour le jeton {Signature stagiaire}.
-    ctx.signature = { data: doc.signature_data, name: doc.signer_name, date: doc.signed_at };
+    ctx.signature = { data: decrypt(doc.signature_data), name: doc.signer_name, date: doc.signed_at };
     const f = (ctx.formations && ctx.formations[0]) || {};
     // Slug enregistré sur le document en priorité, sinon dérivé du type + contexte.
     const slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
@@ -293,6 +330,20 @@ const downloadPdf = async (req, res) => {
             }
             throw e;
         }
+        // Cachet PAdES de l'organisme : rend le PDF infalsifiable + vérifiable (intégrité).
+        try {
+            const { sealPdf } = require('../lib/pdfseal.js');
+            const conn = db.promise();
+            const org = r.ctx.org || {};
+            const p12 = await getOrgSigner(conn, r.doc.organization_id, org.legal_name || org.short_name);
+            pdf = await sealPdf(pdf, p12, {
+                orgName: org.legal_name || org.short_name || 'Organisme',
+                reason: `Document ${r.doc.type} scellé électroniquement`,
+                contact: org.email || '', location: org.town || '',
+            });
+        } catch (e) {
+            console.error('Scellement PAdES ignoré :', e.message); // repli : PDF non scellé
+        }
         logAudit(req, 'document.pdf', 'GeneratedDocument', r.doc.id);
         const filename = r.baseName + '.pdf';
         res.set('Content-Type', 'application/pdf');
@@ -363,7 +414,7 @@ const signDocument = async (req, res) => {
         const conn = db.promise();
         // Vérifie l'accès : même organisme, et si stagiaire, propriétaire du document.
         const [rows] = await conn.query(
-            `SELECT d.id, d.type, d.learner_id FROM generated_document d
+            `SELECT d.id, d.type, d.learner_id, d.template_slug, d.title FROM generated_document d
              LEFT JOIN learner l ON l.id = d.learner_id
              WHERE d.id = ? AND d.organization_id = ?
                AND (l.user_id = ? OR ? IN ('SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT'))`,
@@ -371,11 +422,22 @@ const signDocument = async (req, res) => {
         );
         if (rows.length === 0) return res.status(403).json({ message: 'Document non autorisé.' });
 
+        // Empreinte du contenu signé (SHA-256 du HTML rempli, signature incluse) : preuve
+        // que CE contenu précis a été signé (le document ne peut plus être modifié après coup).
+        let signedHash = null;
+        try {
+            const html = await buildDocHtml(conn, req.user.organization_id, {
+                ...rows[0], signature_data: signature_data || null, signer_name, signed_at: new Date(),
+            });
+            if (html) signedHash = crypto.createHash('sha256').update(html, 'utf8').digest('hex');
+        } catch (e) { console.error('Empreinte signature ignorée :', e.message); }
+
         await conn.query(
             `UPDATE generated_document
-             SET status = 'SIGNE', signed_at = NOW(), signer_name = ?, signature_data = ?
+             SET status = 'SIGNE', signed_at = NOW(), signer_name = ?, signature_data = ?,
+                 signer_ip = ?, signer_user_agent = ?, signed_hash = ?
              WHERE id = ?`,
-            [signer_name, signature_data || null, req.params.id]
+            [signer_name, encrypt(signature_data || null), encrypt(clientIp(req)), encrypt((req.headers['user-agent'] || '').slice(0, 400)), signedHash, req.params.id]
         );
         // Pipeline : devis signé -> « Devis signé » ; contrat/convention signé -> « Inscrit ».
         if (rows[0].type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_SIGNE');

@@ -88,6 +88,18 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
         </div>
         <div className="mbody" style={{ padding: 0, background: "var(--surface3)" }}>
           <StatusMessage status={status} />
+          {doc && doc.status === "SIGNE" && (
+            <div style={{ padding: "8px 14px", fontSize: 12, background: "rgba(22,163,74,.10)", borderBottom: "1px solid rgba(22,163,74,.30)" }}>
+              <b style={{ color: "#16a34a" }}>✔ Signé électroniquement</b> par <b>{doc.signer_name || "—"}</b>
+              {doc.signed_at ? ` le ${new Date(doc.signed_at).toLocaleString("fr-FR")}` : ""}
+              {doc.signer_ip ? ` · IP ${doc.signer_ip}` : ""}
+              {doc.signed_hash && (
+                <span style={{ display: "block", color: "var(--muted)", fontSize: 11, marginTop: 2 }}>
+                  Empreinte SHA-256 : <span className="mono">{doc.signed_hash.slice(0, 40)}…</span> · PDF scellé (cachet de l'organisme, intégrité vérifiable)
+                </span>
+              )}
+            </div>
+          )}
           {previewHtml ? (
             <iframe srcDoc={previewHtml} title="Aperçu du document" className="doc-pdf-frame" sandbox="allow-same-origin" />
           ) : missing ? (
