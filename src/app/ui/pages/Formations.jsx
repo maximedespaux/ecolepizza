@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getFormations, updateFormation, reorderFormations, getFormationSteps, saveFormationSteps } from "../api/apiClient.js";
+import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -37,15 +37,29 @@ function Formations() {
     reorderFormations(next.map((p) => p.id)).catch((e) => { setStatus({ type: "error", message: e.message }); load(); });
   }
 
-  function onSaved() {
+  function onSaved(msg) {
     setEditing(null);
-    setStatus({ type: "success", message: "Formation mise à jour." });
+    setStatus({ type: "success", message: msg || "Formation enregistrée." });
     load();
+  }
+
+  async function onDelete(p) {
+    if (!window.confirm(`Supprimer définitivement la formation « ${p.code} — ${p.title} » ?\nCette action est irréversible.`)) return;
+    try {
+      await deleteFormation(p.id);
+      setStatus({ type: "success", message: "Formation supprimée." });
+      load();
+    } catch (e) {
+      setStatus({ type: "error", message: e.message });
+    }
   }
 
   return (
     <>
-      <PageHead eyebrow="Catalogue" title="Formations" lead="Les programmes proposés par l'École Pizza. Glissez une ligne (poignée ⠿) pour réorganiser l'ordre ; cliquez « Modifier » pour éditer le contenu pédagogique et le niveau." />
+      <PageHead eyebrow="Catalogue" title="Formations"
+        lead="Les programmes proposés par l'École Pizza. Glissez une ligne (poignée ⠿) pour réorganiser l'ordre ; cliquez « Modifier » pour éditer le contenu pédagogique et le niveau."
+        actions={<button className="btn primary" onClick={() => setEditing({ _new: true })}>＋ Nouvelle formation</button>}
+      />
       <StatusMessage status={status} />
 
       <div className="tablewrap">
@@ -81,8 +95,9 @@ function Formations() {
                 <td>{p.hours}</td>
                 <td className="mono">{euro(p.price)}</td>
                 <td>{p.rs_code ? <Badge tone="b">Certifiante</Badge> : p.hygiene ? <Badge tone="a">Hygiène</Badge> : null}</td>
-                <td style={{ textAlign: "right" }}>
-                  <button className="btn sm ghost" onClick={() => setEditing(p)}>Modifier</button>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <button className="btn sm ghost" onClick={() => setEditing(p)}>Modifier</button>{" "}
+                  <button className="btn sm ghost danger" title="Supprimer la formation" onClick={() => onDelete(p)}>🗑</button>
                 </td>
               </tr>
             ))}
@@ -110,9 +125,10 @@ const FIELDS = [
 ];
 
 function FormationModal({ program, onClose, onSaved, onError }) {
+  const isNew = !program.id;
   const [form, setForm] = useState(() => {
     const f = {};
-    for (const k of FIELDS) f[k] = program[k] ?? (k === "hygiene" || k === "active" ? 0 : "");
+    for (const k of FIELDS) f[k] = program[k] ?? (k === "active" ? 1 : k === "hygiene" ? 0 : "");
     return f;
   });
   const [saving, setSaving] = useState(false);
@@ -124,17 +140,23 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const effColor = form.color || colorOf(form.code || "");
   const pickerHex = /^#[0-9a-fA-F]{6}$/.test(effColor) ? effColor : "#5b6079";
 
-  useEffect(() => { getFormationSteps(program.id).then((r) => setSteps(r.data || [])).catch(() => {}); }, [program.id]);
+  useEffect(() => { if (program.id) getFormationSteps(program.id).then((r) => setSteps(r.data || [])).catch(() => {}); }, [program.id]);
 
   const toggleStep = (slug) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, active: !s.active } : s)));
 
   async function save() {
+    if (!String(form.code).trim()) { onError("Le code est requis."); return; }
     if (!String(form.title).trim()) { onError("L'intitulé est requis."); return; }
     setSaving(true);
     try {
-      await updateFormation(program.id, form);
-      await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })));
-      onSaved();
+      if (isNew) {
+        await createFormation(form);
+        onSaved("Formation créée.");
+      } else {
+        await updateFormation(program.id, form);
+        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })));
+        onSaved("Formation mise à jour.");
+      }
     } catch (e) {
       onError(e.message);
     } finally {
@@ -146,14 +168,16 @@ function FormationModal({ program, onClose, onSaved, onError }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
-          <h3>Modifier — <span className="mono" style={{ color: effColor }}>{program.code}</span></h3>
+          <h3>{isNew ? "Nouvelle formation" : <>Modifier — <span className="mono" style={{ color: effColor }}>{program.code}</span></>}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, padding: "0 16px", borderBottom: "1px solid var(--border-soft)" }}>
           <button type="button" role="tab" className={"tab" + (tab === "infos" ? " on" : "")} onClick={() => setTab("infos")}>Informations</button>
-          <button type="button" role="tab" className={"tab" + (tab === "parcours" ? " on" : "")} onClick={() => setTab("parcours")}>
-            Parcours documentaire{steps.length ? ` (${steps.filter((s) => s.active).length}/${steps.length})` : ""}
-          </button>
+          {!isNew && (
+            <button type="button" role="tab" className={"tab" + (tab === "parcours" ? " on" : "")} onClick={() => setTab("parcours")}>
+              Parcours documentaire{steps.length ? ` (${steps.filter((s) => s.active).length}/${steps.length})` : ""}
+            </button>
+          )}
         </div>
         <div className="mbody">
           <div style={{ display: tab === "infos" ? "block" : "none" }}>
@@ -235,7 +259,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>
           <button className="btn primary" onClick={save} disabled={saving}>
-            {saving ? "Enregistrement…" : "Enregistrer"}
+            {saving ? "Enregistrement…" : isNew ? "Créer la formation" : "Enregistrer"}
           </button>
         </div>
       </div>

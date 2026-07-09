@@ -106,19 +106,32 @@ const getProgram = (req, res) => {
 /**
  * POST /api/formations
  */
+const CREATE_FIELDS = [
+    'code', 'title', 'level', 'color', 'days', 'hours', 'price', 'audience', 'objectives',
+    'objective_general', 'duration_detail', 'program_detail', 'rs_code', 'hygiene', 'active',
+];
 const createProgram = (req, res) => {
-    const { code, level, color, title, days, hours, price, rs_code, hygiene, objectives } = req.body;
-    if (!code || !title) {
+    const b = req.body || {};
+    if (!b.code || !b.title) {
         return res.status(422).json({ error: 'Code et intitulé requis' });
     }
+    const cols = [];
+    const vals = [];
+    for (const f of CREATE_FIELDS) {
+        if (b[f] === undefined) continue;
+        let v = b[f];
+        if (f === 'hygiene' || f === 'active') v = v ? 1 : 0;
+        else if (v === '') v = null; // champ vidé -> NULL (colonnes nullables)
+        cols.push(f);
+        vals.push(v);
+    }
     db.query(
-        `INSERT INTO training_program
-            (id, organization_id, code, level, color, title, days, hours, price, rs_code, hygiene, objectives)
-         VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [req.user.organization_id, code, level || null, color || null, title, days, hours, price, rs_code || null,
-         hygiene ? 1 : 0, objectives || null],
+        `INSERT INTO training_program (id, organization_id, ${cols.join(', ')})
+         VALUES (UUID(), ?, ${cols.map(() => '?').join(', ')})`,
+        [req.user.organization_id, ...vals],
         (err) => {
             if (err) {
+                if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Ce code de formation est déjà utilisé.' });
                 console.error('Erreur création formation :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
@@ -170,6 +183,36 @@ const updateProgram = (req, res) => {
             res.status(200).json({ success: true, message: 'Formation mise à jour' });
         }
     );
+};
+
+/**
+ * DELETE /api/formations/:id — supprime une formation. Refuse si des sessions
+ * l'utilisent (données planifiées) ; détache les QCM rattachés.
+ */
+const deleteProgram = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[prog]] = await conn.query(
+            'SELECT id FROM training_program WHERE id = ? AND organization_id = ?', [req.params.id, orgId]
+        );
+        if (!prog) return res.status(404).json({ message: 'Formation introuvable' });
+
+        const [[c]] = await conn.query(
+            'SELECT COUNT(*) AS n FROM training_session WHERE program_id = ? AND organization_id = ?', [req.params.id, orgId]
+        );
+        if (c.n > 0) {
+            return res.status(409).json({ error: `Impossible de supprimer : ${c.n} session(s) planifiée(s) utilisent cette formation. Supprimez-les d'abord.` });
+        }
+        // Détache les QCM et retire le parcours documentaire propre à la formation.
+        await conn.query('UPDATE quiz SET program_id = NULL WHERE program_id = ? AND organization_id = ?', [req.params.id, orgId]).catch(() => {});
+        await conn.query('DELETE FROM program_step WHERE program_id = ? AND organization_id = ?', [req.params.id, orgId]).catch(() => {});
+        await conn.query('DELETE FROM training_program WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        res.json({ success: true, message: 'Formation supprimée.' });
+    } catch (err) {
+        console.error('Erreur suppression formation :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /**
@@ -242,5 +285,5 @@ const saveFormationSteps = async (req, res) => {
 
 module.exports = {
     getPrograms, getProgram, createProgram, updateProgram, reorderPrograms,
-    getFormationSteps, saveFormationSteps, formationSteps, enrollmentSteps,
+    getFormationSteps, saveFormationSteps, formationSteps, enrollmentSteps, deleteProgram,
 };

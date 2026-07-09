@@ -338,8 +338,14 @@ export function createCompany(payload) {
 export function getFormations() {
   return request("/formations");
 }
+export function createFormation(payload) {
+  return request("/formations", { method: "POST", body: JSON.stringify(payload) });
+}
 export function updateFormation(id, payload) {
   return request(`/formations/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deleteFormation(id) {
+  return request(`/formations/${id}`, { method: "DELETE" });
 }
 // Réordonne les formations (glisser-déposer).
 export function reorderFormations(ids) {
