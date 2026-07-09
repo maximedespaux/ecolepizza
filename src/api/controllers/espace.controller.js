@@ -246,7 +246,7 @@ const getMyFormation = async (req, res) => {
 
         // Tous les documents partagés du dossier (envoyés / consultés / signés).
         const [documents] = await conn.query(
-            `SELECT gd.id, gd.type, gd.title, gd.status,
+            `SELECT gd.id, gd.type, gd.title, gd.status, gd.quiz_id,
                     DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at
              FROM generated_document gd
              JOIN document_formation df ON df.document_id = gd.id

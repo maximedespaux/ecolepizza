@@ -121,13 +121,13 @@ function AppRoutes() {
       ) : isStudent ? (
         // --- Espace stagiaire (pas de barre latérale admin) ---
         <Route path="/" element={<StudentLayout />}>
-          <Route index element={<Navigate to="/mon-espace" replace />} />
+          <Route index element={<Navigate to="/formations" replace />} />
           <Route path="mon-espace" element={<MonEspace />} />
           <Route path="emargement" element={<EmargementStagiaire />} />
           <Route path="formations" element={<MesFormations />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
           <Route path="atelier" element={<Atelier />} />
-          <Route path="*" element={<Navigate to="/mon-espace" replace />} />
+          <Route path="*" element={<Navigate to="/formations" replace />} />
         </Route>
       ) : (
         // --- Application (secrétariat / administration) ---

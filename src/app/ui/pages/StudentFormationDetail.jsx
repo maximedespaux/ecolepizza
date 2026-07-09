@@ -8,6 +8,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
+import QuizModal from "../components/QuizModal.jsx";
 
 const STATUS = { SIGNE: ["Signé ✓", "g"], ENVOYE: ["Reçu", "a"], CONSULTE: ["Consulté", "a"], A_FAIRE: ["—", "n"] };
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
@@ -20,6 +21,7 @@ function StudentFormationDetail() {
   const [data, setData] = useState(null);
   const [status, setStatus] = useState(null);
   const [viewId, setViewId] = useState(null);
+  const [quizDoc, setQuizDoc] = useState(null); // document QCM à répondre / consulter
   const [signing, setSigning] = useState(null); // demi-journée d'émargement à signer
 
   function load() {
@@ -64,8 +66,21 @@ function StudentFormationDetail() {
                       <b>{d.title}</b>
                       {d.signed_at && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>Signé le {d.signed_at}</span>}
                     </span>
-                    <Badge tone={tone}>{label}</Badge>
-                    <button className="btn sm primary" onClick={() => setViewId(d.id)}>Consulter</button>
+                    {d.quiz_id ? (
+                      <>
+                        <Badge tone={d.status === "SIGNE" ? "g" : "b"}>{d.status === "SIGNE" ? "Répondu ✓" : "QCM à faire"}</Badge>
+                        <button className="btn sm primary" onClick={() => setQuizDoc(d.id)}>
+                          {d.status === "SIGNE" ? "Voir mon QCM" : "Répondre au QCM"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <Badge tone={tone}>{label}</Badge>
+                        <button className="btn sm primary" onClick={() => setViewId(d.id)}>
+                          {d.status === "SIGNE" ? "Consulter" : "Consulter / signer"}
+                        </button>
+                      </>
+                    )}
                   </div>
                 );
               })}
@@ -103,7 +118,12 @@ function StudentFormationDetail() {
       )}
 
       {viewId && (
-        <DocumentViewModal id={viewId} onClose={() => setViewId(null)} />
+        <DocumentViewModal id={viewId} canSign defaultName={`${user?.first_name || ""} ${user?.last_name || ""}`.trim()}
+          onClose={() => setViewId(null)} onChanged={load} />
+      )}
+
+      {quizDoc && (
+        <QuizModal documentId={quizDoc} onClose={() => { setQuizDoc(null); load(); }} />
       )}
 
       {signing && (
