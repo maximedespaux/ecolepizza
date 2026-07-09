@@ -121,11 +121,28 @@ const createDocument = async (req, res) => {
     }
     try {
         const conn = db.promise();
+        const orgId = req.user.organization_id;
+
+        // Régénérer une étape REMPLACE sa version en attente (non signée) pour ces
+        // dossiers : évite les doublons qui faussent le parcours. Les documents déjà
+        // signés sont conservés.
+        const [dups] = await conn.query(
+            `SELECT DISTINCT gd.id FROM generated_document gd
+             JOIN document_formation df ON df.document_id = gd.id
+             WHERE gd.organization_id = ? AND df.enrollment_id IN (?)
+               AND gd.status <> 'SIGNE'
+               AND (${template_slug ? 'gd.template_slug = ?' : 'gd.type = ?'})`,
+            [orgId, enrollment_ids, template_slug || type]
+        );
+        for (const d of dups) {
+            await conn.query('DELETE FROM generated_document WHERE id = ? AND organization_id = ?', [d.id, orgId]);
+        }
+
         const documentId = crypto.randomUUID();
         await conn.query(
             `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status)
              VALUES (?, ?, ?, ?, ?, ?, 'A_FAIRE')`,
-            [documentId, req.user.organization_id, learner_id, type, template_slug || null, title || TYPE_LABELS[type] || type]
+            [documentId, orgId, learner_id, type, template_slug || null, title || TYPE_LABELS[type] || type]
         );
         for (const eid of enrollment_ids) {
             await conn.query(

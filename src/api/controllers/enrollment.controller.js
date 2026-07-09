@@ -90,7 +90,8 @@ const getParcours = async (req, res) => {
         const [docs] = await conn.query(
             `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id FROM generated_document gd
              JOIN document_formation df ON df.document_id = gd.id
-             WHERE df.enrollment_id = ?`,
+             WHERE df.enrollment_id = ?
+             ORDER BY gd.created_at DESC`,
             [req.params.id]
         );
 
