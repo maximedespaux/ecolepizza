@@ -18,7 +18,7 @@ const QTYPES = [
   { v: "MULTI", label: "Choix multiple (QCM)" },
   { v: "SCALE", label: "Échelle / note" },
 ];
-const blankQuestion = () => ({ text: "", type: "SINGLE", points: 1, scale_max: 5, options: [{ text: "", is_correct: false }, { text: "", is_correct: false }] });
+const blankQuestion = () => ({ text: "", type: "SINGLE", points: 1, partial_scoring: 0, scale_max: 5, options: [{ text: "", is_correct: false }, { text: "", is_correct: false }] });
 
 // Étiquette courte du jour : J2, ou J-3 (avant le début).
 function dayTag(day) {
@@ -219,11 +219,27 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
               <div className="field"><label>Note max</label>
                 <input className="inp" type="number" min="2" max="10" value={q.scale_max} onChange={(e) => setQ(i, { scale_max: Number(e.target.value) || 5 })} /></div>
             ) : form.kind === "GRADED" ? (
-              <div className="field"><label>Points</label>
-                <input className="inp" type="number" min="1" value={q.points} onChange={(e) => setQ(i, { points: Number(e.target.value) || 1 })} /></div>
+              <div className="field"><label>Points {q.type === "MULTI" && q.partial_scoring ? "(par bonne réponse)" : ""}</label>
+                <input className="inp" type="number" min="0" value={q.points}
+                  onChange={(e) => { const n = Number(e.target.value); setQ(i, { points: Number.isFinite(n) && n >= 0 ? n : 0 }); }} />
+                {Number(q.points) === 0 && <span className="hint">0 point : question non notée.</span>}
+              </div>
             ) : <div />}
             <div />
           </div>
+
+          {form.kind === "GRADED" && q.type === "MULTI" && (
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, margin: "2px 0 10px" }}>
+              <input type="checkbox" checked={!!q.partial_scoring}
+                onChange={(e) => setQ(i, { partial_scoring: e.target.checked ? 1 : 0 })} />
+              Points par bonne réponse
+              <span className="hint">
+                {q.partial_scoring
+                  ? "Chaque bonne réponse cochée rapporte les points ; une mauvaise en retire autant (min. 0)."
+                  : "Tout ou rien : il faut cocher exactement les bonnes réponses."}
+              </span>
+            </label>
+          )}
 
           {q.type !== "SCALE" && (
             <div className="field">

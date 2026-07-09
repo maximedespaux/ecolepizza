@@ -102,7 +102,7 @@ const getQuiz = async (req, res) => {
         const conn = db.promise();
         const [[quiz]] = await conn.query('SELECT * FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!quiz) return res.status(404).json({ message: 'QCM introuvable' });
-        const [questions] = await conn.query('SELECT id, position, text, type, scale_max, points FROM quiz_question WHERE quiz_id = ? ORDER BY position', [quiz.id]);
+        const [questions] = await conn.query('SELECT id, position, text, type, scale_max, points, partial_scoring FROM quiz_question WHERE quiz_id = ? ORDER BY position', [quiz.id]);
         const qids = questions.map((q) => q.id);
         let options = [];
         if (qids.length) {
@@ -161,11 +161,16 @@ const saveQuiz = async (req, res) => {
             const q = questions[i];
             if (!q.text || !String(q.text).trim()) continue;
             const qid = crypto.randomUUID();
+            const qType = ['SINGLE', 'MULTI', 'SCALE'].includes(q.type) ? q.type : 'SINGLE';
+            // Points : on autorise 0 (question sans note / informative).
+            const pts = Number(q.points);
+            const points = Number.isFinite(pts) && pts >= 0 ? Math.floor(pts) : 1;
+            // « Points par bonne réponse » : pertinent seulement pour les QCM (MULTI).
+            const partial = qType === 'MULTI' && q.partial_scoring ? 1 : 0;
             await conn.query(
-                `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                 [qid, req.params.id, i, String(q.text).slice(0, 2000),
-                 ['SINGLE', 'MULTI', 'SCALE'].includes(q.type) ? q.type : 'SINGLE',
-                 Number(q.scale_max) || 5, Number(q.points) || 1]
+                 qType, Number(q.scale_max) || 5, points, partial]
             );
             if (q.type !== 'SCALE') {
                 const opts = Array.isArray(q.options) ? q.options : [];
@@ -252,7 +257,7 @@ const submitQuiz = async (req, res) => {
         if (r.error) return res.status(r.error).json({ message: r.message });
         const graded = r.quiz.kind === 'GRADED';
 
-        const [questions] = await conn.query('SELECT id, type, points FROM quiz_question WHERE quiz_id = ?', [r.quiz.id]);
+        const [questions] = await conn.query('SELECT id, type, points, partial_scoring FROM quiz_question WHERE quiz_id = ?', [r.quiz.id]);
         const qids = questions.map((q) => q.id);
         let options = [];
         if (qids.length) [options] = await conn.query('SELECT id, question_id, is_correct FROM quiz_option WHERE question_id IN (?)', [qids]);
@@ -270,11 +275,21 @@ const submitQuiz = async (req, res) => {
                 const sel = Array.isArray(raw) ? raw : (raw ? [raw] : []);
                 value = sel.join(',');
                 if (graded) {
-                    maxScore += q.points;
                     const correct = correctByQ[q.id] || new Set();
-                    const selSet = new Set(sel);
-                    const ok = correct.size === selSet.size && [...correct].every((id) => selSet.has(id));
-                    if (ok && correct.size > 0) score += q.points;
+                    if (q.type === 'MULTI' && q.partial_scoring) {
+                        // Points par bonne réponse : +points par bonne cochée,
+                        // -points par mauvaise cochée ; contribution bornée à 0.
+                        maxScore += q.points * correct.size;
+                        let qScore = 0;
+                        for (const id of new Set(sel)) qScore += correct.has(id) ? q.points : -q.points;
+                        score += Math.max(0, qScore);
+                    } else {
+                        // Tout ou rien : la sélection doit être exactement l'ensemble correct.
+                        maxScore += q.points;
+                        const selSet = new Set(sel);
+                        const ok = correct.size === selSet.size && [...correct].every((id) => selSet.has(id));
+                        if (ok && correct.size > 0) score += q.points;
+                    }
                 }
             }
             answerRows.push({ question_id: q.id, value });
