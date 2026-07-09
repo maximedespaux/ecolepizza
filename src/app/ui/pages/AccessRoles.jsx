@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { getAccessProfiles, createAccessProfile, updateAccessProfile, deleteAccessProfile } from "../api/apiClient.js";
-import { GRANTABLE_NAV, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
+import { GRANTABLE_NAV, BUILTIN_ROLES, builtinRoleAccess, ROLE_COLORS } from "../lib/nav.js";
+
+const Dot = ({ color }) => <span style={{ width: 12, height: 12, borderRadius: 3, background: color || "#999", display: "inline-block", marginRight: 8, verticalAlign: "middle" }} />;
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -47,10 +49,10 @@ function AccessRoles() {
                 const acc = builtinRoleAccess(b.role);
                 return (
                   <tr key={b.role}>
-                    <td><b>{b.name}</b> <Badge tone="n">système</Badge></td>
+                    <td><Dot color={b.color} /><b>{b.name}</b> <Badge tone="n">système</Badge></td>
                     <td><Badge tone="b">{Object.keys(acc).length} page(s)</Badge></td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button className="btn sm ghost" onClick={() => setEditing({ _new: true, name: `${b.name} (copie)`, nav_access: acc })}>Dupliquer</button>
+                      <button className="btn sm ghost" onClick={() => setEditing({ _new: true, name: `${b.name} (copie)`, color: b.color, nav_access: acc })}>Dupliquer</button>
                     </td>
                   </tr>
                 );
@@ -70,7 +72,7 @@ function AccessRoles() {
               <tbody>
                 {roles.map((r) => (
                   <tr key={r.id}>
-                    <td><b>{r.name}</b></td>
+                    <td><Dot color={r.color} /><b>{r.name}</b></td>
                     <td><Badge tone="n">{pageCount(r.nav_access)} page(s)</Badge></td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       <button className="btn sm ghost" onClick={() => setEditing({ ...r })}>Éditer</button>{" "}
@@ -96,6 +98,7 @@ function AccessRoles() {
 function RoleModal({ role, onClose, onSaved, onError }) {
   const isNew = !!role._new;
   const [name, setName] = useState(role.name || "");
+  const [color, setColor] = useState(role.color || ROLE_COLORS[0]);
   const [modes, setModes] = useState({ ...(role.nav_access || {}) });
   const [saving, setSaving] = useState(false);
 
@@ -107,8 +110,8 @@ function RoleModal({ role, onClose, onSaved, onError }) {
     if (!name.trim()) { onError("Nom du rôle requis."); return; }
     setSaving(true);
     try {
-      if (isNew) await createAccessProfile({ name, nav_access: modes });
-      else await updateAccessProfile(role.id, { name, nav_access: modes });
+      if (isNew) await createAccessProfile({ name, color, nav_access: modes });
+      else await updateAccessProfile(role.id, { name, color, nav_access: modes });
       onSaved();
     } catch (e) { onError(e.message); }
     finally { setSaving(false); }
@@ -121,6 +124,18 @@ function RoleModal({ role, onClose, onSaved, onError }) {
           <button className="x" onClick={onClose} aria-label="Fermer">×</button></div>
         <div className="mbody">
           <Field label="Nom du rôle" value={name} onChange={(e) => setName(e.target.value)} placeholder="ex. Comptable, Assistant…" />
+          <div className="field">
+            <label>Couleur</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {ROLE_COLORS.map((c) => (
+                <button key={c} type="button" onClick={() => setColor(c)} title={c}
+                  style={{ width: 26, height: 26, borderRadius: 7, background: c, cursor: "pointer",
+                    border: color === c ? "3px solid var(--text)" : "2px solid var(--border-soft)" }} />
+              ))}
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)}
+                style={{ width: 34, height: 30, padding: 0, border: "1px solid var(--border-soft)", borderRadius: 7, background: "none", cursor: "pointer" }} title="Couleur personnalisée" />
+            </div>
+          </div>
           <p className="sub" style={{ margin: "6px 0 10px" }}>Cochez les pages accessibles, puis <b>Modifier</b> ou <b>Lecture</b>.</p>
           {GRANTABLE_NAV.map((g) => (
             <div key={g.grp} style={{ marginBottom: 12 }}>

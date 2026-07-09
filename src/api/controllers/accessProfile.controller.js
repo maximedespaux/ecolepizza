@@ -13,18 +13,19 @@ function cleanNav(nav) {
     }
     return out;
 }
+const cleanColor = (c) => (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : null);
 
 /** GET /api/access-profiles — rôles d'accès de l'organisme. */
 const listProfiles = async (req, res) => {
     try {
         const [rows] = await db.promise().query(
-            'SELECT id, name, nav_access FROM access_profile WHERE organization_id = ? ORDER BY name',
+            'SELECT id, name, color, nav_access FROM access_profile WHERE organization_id = ? ORDER BY name',
             [req.user.organization_id]
         );
         const data = rows.map((r) => {
             let nav = {};
             if (r.nav_access) { try { nav = JSON.parse(r.nav_access); } catch { nav = {}; } }
-            return { id: r.id, name: r.name, nav_access: nav };
+            return { id: r.id, name: r.name, color: r.color, nav_access: nav };
         });
         res.json({ data });
     } catch (err) {
@@ -40,8 +41,8 @@ const createProfile = async (req, res) => {
     try {
         const id = crypto.randomUUID();
         await db.promise().query(
-            'INSERT INTO access_profile (id, organization_id, name, nav_access) VALUES (?, ?, ?, ?)',
-            [id, req.user.organization_id, name.slice(0, 120), JSON.stringify(cleanNav(req.body?.nav_access))]
+            'INSERT INTO access_profile (id, organization_id, name, color, nav_access) VALUES (?, ?, ?, ?, ?)',
+            [id, req.user.organization_id, name.slice(0, 120), cleanColor(req.body?.color), JSON.stringify(cleanNav(req.body?.nav_access))]
         );
         logAudit(req, 'accessprofile.create', 'AccessProfile', id);
         res.status(201).json({ id, message: 'Rôle créé' });
@@ -55,6 +56,7 @@ const createProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
     const sets = [], vals = [];
     if (req.body?.name !== undefined) { sets.push('name = ?'); vals.push(String(req.body.name).trim().slice(0, 120)); }
+    if (req.body?.color !== undefined) { sets.push('color = ?'); vals.push(cleanColor(req.body.color)); }
     if (req.body?.nav_access !== undefined) { sets.push('nav_access = ?'); vals.push(JSON.stringify(cleanNav(req.body.nav_access))); }
     if (!sets.length) return res.status(400).json({ message: 'Aucun champ à mettre à jour' });
     vals.push(req.params.id, req.user.organization_id);

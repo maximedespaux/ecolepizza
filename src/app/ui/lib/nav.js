@@ -171,12 +171,15 @@ export const GRANTABLE_NAV = NAV
 
 // Rôles « système » (intégrés) : servent de modèles d'accès réutilisables.
 export const BUILTIN_ROLES = [
-  { role: "SUPER_ADMIN", name: "Super administrateur" },
-  { role: "ADMIN_ORGANISME", name: "Administrateur" },
-  { role: "SECRETARIAT", name: "Secrétariat" },
-  { role: "FORMATEUR", name: "Formateur" },
-  { role: "AUDITEUR", name: "Auditeur" },
+  { role: "SUPER_ADMIN", name: "Super administrateur", color: "#c0392b" },
+  { role: "ADMIN_ORGANISME", name: "Administrateur", color: "#2c3371" },
+  { role: "SECRETARIAT", name: "Secrétariat", color: "#2e9e5b" },
+  { role: "FORMATEUR", name: "Formateur", color: "#e0932e" },
+  { role: "AUDITEUR", name: "Auditeur", color: "#7b3f9e" },
 ];
+
+// Palette de couleurs proposée pour les rôles personnalisés.
+export const ROLE_COLORS = ["#c0392b", "#e0932e", "#b8860b", "#2e9e5b", "#2f9e6f", "#2c3371", "#3a4291", "#7b3f9e", "#8a5a2b", "#555b6e"];
 
 // Accès menu par défaut d'un rôle système (toutes les pages qu'il peut ouvrir, en écriture).
 export function builtinRoleAccess(roleCode) {

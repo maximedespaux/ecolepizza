@@ -650,6 +650,7 @@ CREATE TABLE access_profile (
     id              uuid         NOT NULL DEFAULT uuid(),
     organization_id uuid         NOT NULL,
     name            varchar(120) NOT NULL,
+    color           varchar(9)   DEFAULT NULL,
     nav_access      text         DEFAULT NULL,
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
