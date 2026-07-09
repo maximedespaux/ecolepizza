@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getStagiaires, getStagiaire, createStagiaire, updateStagiaire, resetStagiairePassword, deleteStagiaire, getOpcos } from "../api/apiClient.js";
+import { getStagiaires, getStagiaire, createStagiaire, updateStagiaire, resetStagiairePassword, deleteStagiaire, getOpcos, getFormations } from "../api/apiClient.js";
 import { OPCOS } from "../lib/opco.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -9,7 +9,7 @@ import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { initials } from "../lib/format.js";
-import { LEVELS, LEVEL_LABEL, colorForLevel } from "../lib/levels.js";
+import { LEVEL_LABEL, colorForLevel, setBadgeColors } from "../lib/levels.js";
 
 // --- Options (reprises de la fiche d'expression du stagiaire) ---
 const CIVILITES = ["M.", "Mme"];
@@ -61,7 +61,23 @@ function Stagiaires() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [opcos, setOpcos] = useState([]);
+  const [formations, setFormations] = useState([]);
   const [filters, setFilters] = useState({ level: "", financing: "", status: "", opco: "" });
+
+  // Codes de formation (badges attribuables) + couleur associée.
+  useEffect(() => {
+    getFormations().then((r) => {
+      const list = r.data || [];
+      setFormations(list);
+      const map = {};
+      for (const f of list) if (f.color) { if (f.code) map[f.code] = f.color; if (f.level) map[f.level] = f.color; }
+      setBadgeColors(map);
+    }).catch(() => {});
+  }, []);
+  const codeColor = (code) => {
+    const f = formations.find((x) => x.code === code);
+    return (f && f.color) || colorForLevel(code);
+  };
 
   const setFilter = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
   const clearFilters = () => setFilters({ level: "", financing: "", status: "", opco: "" });
@@ -213,8 +229,8 @@ function Stagiaires() {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "10px 0 4px" }}>
         <select className="inp" style={{ maxWidth: 190 }} value={filters.level} onChange={setFilter("level")}>
-          <option value="">Tous les niveaux</option>
-          {[...new Set([...LEVELS.map((l) => l.v), ...learners.flatMap((l) => (l.levels || "").split(",").map((s) => s.trim()).filter(Boolean))])]
+          <option value="">Tous les badges</option>
+          {[...new Set([...formations.map((f) => f.code).filter(Boolean), ...learners.flatMap((l) => (l.levels || "").split(",").map((s) => s.trim()).filter(Boolean))])]
             .map((v) => <option key={v} value={v}>{LEVEL_LABEL[v] || v}</option>)}
         </select>
         <select className="inp" style={{ maxWidth: 190 }} value={filters.financing} onChange={setFilter("financing")}>
@@ -320,20 +336,28 @@ function Stagiaires() {
             </SelectField>
           </div>
 
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 6px" }}>Niveaux / accès (plusieurs possibles)</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
-            {LEVELS.map((l) => {
-              const on = (form.levels || "").split(",").map((s) => s.trim()).includes(l.v);
-              return (
-                <label key={l.v} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-                  <input type="checkbox" checked={on} onChange={() => toggleLevel(l.v)} />
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <i style={{ width: 11, height: 11, borderRadius: "50%", background: l.color, display: "inline-block" }} /> {l.label}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 6px" }}>Niveaux / accès — codes formation (plusieurs possibles)</label>
+          {(() => {
+            const current = (form.levels || "").split(",").map((s) => s.trim()).filter(Boolean);
+            // Codes de formation disponibles + éventuels codes déjà attribués au stagiaire.
+            const codes = [...new Set([...formations.map((f) => f.code).filter(Boolean), ...current])];
+            if (codes.length === 0) return <p className="hint">Aucune formation. Créez-en dans « Formations ».</p>;
+            return (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+                {codes.map((code) => {
+                  const on = current.includes(code);
+                  return (
+                    <label key={code} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleLevel(code)} />
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <i style={{ width: 11, height: 11, borderRadius: "50%", background: codeColor(code), display: "inline-block" }} /> {code}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           <div className="divider" />
 
