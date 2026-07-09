@@ -3,6 +3,7 @@ const db = require('../config/database.js');
 const { stepsToDocSet } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
+const { encrypt } = require('../lib/crypto.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -343,7 +344,7 @@ const signMyEmargement = async (req, res) => {
         const ua = (req.headers['user-agent'] || '').slice(0, 400);
         await conn.query(
             'UPDATE attendance_record SET present = 1, signed_at = NOW(), signer_name = ?, signature_data = ?, signer_ip = ?, signer_user_agent = ? WHERE id = ?',
-            [name, signature_data || null, ip, ua, req.params.recordId]
+            [name, encrypt(signature_data || null), encrypt(ip), encrypt(ua), req.params.recordId]
         );
         res.json({ success: true, message: 'Émargement signé.' });
 

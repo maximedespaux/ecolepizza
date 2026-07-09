@@ -32,7 +32,7 @@ async function getOrgSigner(conn, orgId, orgName) {
 // Rend le HTML rempli d'un document (déterministe, sans LibreOffice) pour empreinte.
 async function buildDocHtml(conn, orgId, doc) {
     const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
-    ctx.signature = { data: doc.signature_data, name: doc.signer_name, date: doc.signed_at };
+    ctx.signature = { data: decrypt(doc.signature_data), name: doc.signer_name, date: doc.signed_at };
     const f = (ctx.formations && ctx.formations[0]) || {};
     const slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
     if (!slug) return null;
@@ -75,6 +75,7 @@ async function advanceEnrollments(conn, orgId, documentId, targetStage) {
 // Charge le contexte de fusion (organisme, stagiaire, entreprise, formations).
 async function loadContext(conn, organizationId, learnerId, documentId) {
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [organizationId]);
+    if (org) org.signature_image = decrypt(org.signature_image); // signature organisme chiffrée au repos
     const [[learner]] = await conn.query('SELECT * FROM learner WHERE id = ?', [learnerId]);
     let company = null;
     const [formations] = await conn.query(
@@ -217,11 +218,11 @@ const getDocument = async (req, res) => {
             data: {
                 id: doc.id, type: doc.type, title: doc.title, status: doc.status,
                 sent_at: doc.sent_at, signed_at: doc.signed_at, signer_name: doc.signer_name,
-                signature_data: doc.signature_data,
+                signature_data: decrypt(doc.signature_data),
                 signable: STAGIAIRE_SIGN_TYPES.includes(doc.type),
-                // Traçabilité de la signature électronique (certificat de signature).
-                signer_ip: doc.signer_ip || null,
-                signer_user_agent: doc.signer_user_agent || null,
+                // Traçabilité de la signature électronique (déchiffrée pour l'affichage).
+                signer_ip: decrypt(doc.signer_ip) || null,
+                signer_user_agent: decrypt(doc.signer_user_agent) || null,
                 signed_hash: doc.signed_hash || null,
                 html,
             },
@@ -251,7 +252,7 @@ async function fillForRequest(req, res) {
 
     const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
     // Signature du document (stagiaire/signataire) pour le jeton {Signature stagiaire}.
-    ctx.signature = { data: doc.signature_data, name: doc.signer_name, date: doc.signed_at };
+    ctx.signature = { data: decrypt(doc.signature_data), name: doc.signer_name, date: doc.signed_at };
     const f = (ctx.formations && ctx.formations[0]) || {};
     // Slug enregistré sur le document en priorité, sinon dérivé du type + contexte.
     const slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
@@ -436,7 +437,7 @@ const signDocument = async (req, res) => {
              SET status = 'SIGNE', signed_at = NOW(), signer_name = ?, signature_data = ?,
                  signer_ip = ?, signer_user_agent = ?, signed_hash = ?
              WHERE id = ?`,
-            [signer_name, signature_data || null, clientIp(req), (req.headers['user-agent'] || '').slice(0, 400), signedHash, req.params.id]
+            [signer_name, encrypt(signature_data || null), encrypt(clientIp(req)), encrypt((req.headers['user-agent'] || '').slice(0, 400)), signedHash, req.params.id]
         );
         // Pipeline : devis signé -> « Devis signé » ; contrat/convention signé -> « Inscrit ».
         if (rows[0].type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_SIGNE');

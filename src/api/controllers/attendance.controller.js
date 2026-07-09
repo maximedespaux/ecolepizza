@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { regenEmargement } = require('../lib/emargement.js');
+const { encrypt } = require('../lib/crypto.js');
 
 const SLOTS = ['MATIN', 'APRES_MIDI'];
 
@@ -212,7 +213,7 @@ const signSheet = async (req, res) => {
             `INSERT INTO attendance_trainer_sign (id, sheet_id, user_id, signer_name, signature_data, signed_at)
              VALUES (?, ?, ?, ?, ?, NOW())
              ON DUPLICATE KEY UPDATE signer_name = VALUES(signer_name), signature_data = VALUES(signature_data), signed_at = NOW()`,
-            [crypto.randomUUID(), req.params.id, req.user.id, name, signature_data || null]
+            [crypto.randomUUID(), req.params.id, req.user.id, name, encrypt(signature_data || null)]
         );
         logAudit(req, 'attendance.sign', 'AttendanceSheet', req.params.id);
         res.json({ success: true, message: 'Feuille signée.' });

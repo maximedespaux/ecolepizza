@@ -3,10 +3,12 @@
 // dans le coffre documentaire (archive_document, ref = 'emarg:<enrollment_id>').
 const crypto = require('crypto');
 const { htmlToPdf } = require('./docxpdf.js');
+const { decrypt } = require('./crypto.js');
 
 const SLOT = { MATIN: 'Matin', APRES_MIDI: 'Après-midi', EXAMEN: 'Examen', DISTANCIEL: 'Distanciel' };
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const sig = (d) => (d ? `<img src="${d}" style="height:38px;max-width:150px" />` : '—');
+// Les signatures sont chiffrées au repos : on déchiffre avant de les afficher.
+const sig = (d) => { const v = decrypt(d); return v ? `<img src="${v}" style="height:38px;max-width:150px" />` : '—'; };
 
 function renderEmargementHtml({ org, e, rows }) {
     const trainerCell = (list) => (list && list.length
