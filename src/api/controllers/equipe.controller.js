@@ -254,6 +254,17 @@ const deleteMember = async (req, res) => {
             return res.status(400).json({ error: "Impossible : c'est le dernier administrateur actif de l'organisme." });
         }
 
+        // Si le compte est AUSSI un stagiaire (ex-stagiaire converti), on ne le supprime
+        // pas : on le repasse STAGIAIRE (il garde son accès et sa fiche) et on retire ses
+        // affectations d'intervenant. Sinon, suppression définitive du compte.
+        const [[lc]] = await conn.query('SELECT COUNT(*) AS n FROM learner WHERE user_id = ?', [target.id]);
+        if (lc.n > 0) {
+            await conn.query("UPDATE user SET role = 'STAGIAIRE', nav_access = NULL WHERE id = ? AND organization_id = ?", [target.id, orgId]);
+            await conn.query('DELETE FROM session_intervenant WHERE user_id = ? AND organization_id = ?', [target.id, orgId]).catch(() => {});
+            logAudit(req, 'equipe.revert_stagiaire', 'User', target.id);
+            return res.json({ message: 'Compte repassé en stagiaire (accès et fiche conservés).', reverted: true });
+        }
+
         await conn.query('DELETE FROM user WHERE id = ? AND organization_id = ?', [target.id, orgId]);
         res.json({ message: 'Membre supprimé.' });
     } catch (err) {
