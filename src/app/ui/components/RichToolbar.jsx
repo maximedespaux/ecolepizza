@@ -1,5 +1,41 @@
-import { useRef } from "react";
-import { FONT_SIZES, FONTS, LINE_HEIGHTS, TEXT_COLORS, HIGHLIGHTS } from "../lib/editorConfig.js";
+import { useRef, useState, useEffect } from "react";
+import { FONT_SIZES, FONTS, LINE_HEIGHTS, COLOR_SWATCHES, HIGHLIGHT_SWATCHES } from "../lib/editorConfig.js";
+
+/** Sélecteur de couleur « façon Paint » : grille de carrés, sans roue chromatique. */
+function SwatchPicker({ label, title, swatches, current, onPick, onClear, clearLabel = "Aucune" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  return (
+    <span className="tb-swatch" ref={ref}>
+      <button type="button" className="tb-btn tb-swatch-btn" title={title}
+        onMouseDown={(e) => { e.preventDefault(); setOpen((o) => !o); }}>
+        <span className="tb-swatch-label">{label}</span>
+        <span className="tb-swatch-bar" style={{ background: current || "transparent" }} />
+      </button>
+      {open && (
+        <div className="tb-swatch-pop">
+          <div className="tb-swatch-grid">
+            {swatches.map((col) => (
+              <button key={col} type="button" className={"tb-swatch-cell" + (current === col ? " on" : "")}
+                style={{ background: col }} title={col}
+                onMouseDown={(e) => { e.preventDefault(); onPick(col); setOpen(false); }} />
+            ))}
+          </div>
+          {onClear && (
+            <button type="button" className="tb-swatch-clear"
+              onMouseDown={(e) => { e.preventDefault(); onClear(); setOpen(false); }}>{clearLabel}</button>
+          )}
+        </div>
+      )}
+    </span>
+  );
+}
 
 /** Barre d'outils riche (façon traitement de texte) pour un éditeur Tiptap. */
 function RichToolbar({ editor, compact = false }) {
@@ -35,24 +71,18 @@ function RichToolbar({ editor, compact = false }) {
       <Btn title="Barré" active={editor.isActive("strike")} on={() => c().toggleStrike().run()}><s>S</s></Btn>
 
       <Sep />
-      {/* Couleur du texte */}
-      <label className="tb-color" title="Couleur du texte">
-        <span style={{ color: editor.getAttributes("textStyle").color || "#1a1a1a" }}>A</span>
-        <input type="color" value={editor.getAttributes("textStyle").color || "#1a1a1a"}
-          onChange={(e) => c().setColor(e.target.value).run()} />
-      </label>
-      <select className="tb-sel" title="Couleur rapide" value=""
-        onChange={(e) => { if (e.target.value) c().setColor(e.target.value).run(); }}>
-        <option value="">🎨</option>
-        {TEXT_COLORS.map((col) => <option key={col} value={col} style={{ color: col }}>■ {col}</option>)}
-      </select>
-      {/* Surlignage */}
-      <select className="tb-sel" title="Surlignage" value=""
-        onChange={(e) => { const v = e.target.value; v === "none" ? c().unsetHighlight().run() : v && c().toggleHighlight({ color: v }).run(); }}>
-        <option value="">🖍</option>
-        {HIGHLIGHTS.map((col) => <option key={col} value={col}>▮ {col}</option>)}
-        <option value="none">Aucun</option>
-      </select>
+      {/* Couleur du texte — palette de carrés (façon Paint) */}
+      <SwatchPicker
+        label="A" title="Couleur du texte" swatches={COLOR_SWATCHES}
+        current={editor.getAttributes("textStyle").color || null}
+        onPick={(col) => c().setColor(col).run()}
+        onClear={() => c().unsetColor().run()} clearLabel="Couleur par défaut" />
+      {/* Surlignage — palette de carrés */}
+      <SwatchPicker
+        label="🖍" title="Surlignage" swatches={HIGHLIGHT_SWATCHES}
+        current={editor.getAttributes("highlight").color || null}
+        onPick={(col) => c().setHighlight({ color: col }).run()}
+        onClear={() => c().unsetHighlight().run()} clearLabel="Aucun surlignage" />
 
       <Sep />
       {/* Police + taille */}

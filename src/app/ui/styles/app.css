@@ -445,6 +445,18 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .tb-color{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:28px;border-radius:6px;cursor:pointer;font-weight:700}
 .tb-color:hover{background:var(--hover,rgba(0,0,0,.06))}
 .tb-color input[type=color]{position:absolute;inset:0;opacity:0;cursor:pointer;border:none;padding:0}
+/* Sélecteur de couleur en grille de carrés (façon Paint) */
+.tb-swatch{position:relative;display:inline-flex}
+.tb-swatch-btn{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:30px;height:28px;font-weight:700}
+.tb-swatch-label{line-height:1;font-size:13px}
+.tb-swatch-bar{width:18px;height:4px;border-radius:2px;border:1px solid rgba(0,0,0,.15)}
+.tb-swatch-pop{position:absolute;top:32px;left:0;z-index:40;padding:8px;background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.tb-swatch-grid{display:grid;grid-template-columns:repeat(8,18px);gap:4px}
+.tb-swatch-cell{width:18px;height:18px;padding:0;border:1px solid rgba(0,0,0,.18);border-radius:3px;cursor:pointer}
+.tb-swatch-cell:hover{transform:scale(1.15);box-shadow:0 0 0 1px var(--ember1,#c0392b)}
+.tb-swatch-cell.on{outline:2px solid var(--ember1,#c0392b);outline-offset:1px}
+.tb-swatch-clear{display:block;width:100%;margin-top:8px;padding:5px 6px;border:1px solid var(--line,#e3e3e6);border-radius:6px;background:var(--panel,#fff);color:inherit;font-size:12px;cursor:pointer}
+.tb-swatch-clear:hover{background:var(--hover,rgba(0,0,0,.06))}
 /* Zones en-tête / pied de page */
 .hf-zone{border-bottom:1px dashed var(--line,#e3e3e6)}
 .hf-zone:last-child{border-bottom:none;border-top:1px dashed var(--line,#e3e3e6)}
