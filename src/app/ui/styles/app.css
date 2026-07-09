@@ -298,6 +298,22 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .tab:hover{color:var(--text)}
 .tab.on{color:var(--text);border-color:var(--ember1)}
 
+/* Parcours documentaire — vue « flux » (jalons enchaînés, variantes en OU) */
+.parcours-flow{display:flex;align-items:stretch;gap:6px;overflow-x:auto;padding:10px 2px 16px}
+.pf-wrap{display:flex;align-items:center;gap:6px}
+.pf-node{position:relative;display:flex;flex-direction:column;gap:2px;min-width:160px;max-width:230px;
+  padding:12px 12px 11px;border:1.5px solid var(--border-soft,#e3e3e6);border-radius:12px;background:var(--panel,#fff)}
+.pf-node.drag{opacity:.5}
+.pf-node.off{opacity:.55;border-style:dashed}
+.pf-grip{position:absolute;top:5px;right:8px;cursor:grab;color:var(--dim,#b4b4b4);font-size:12px}
+.pf-or{text-align:center;font-size:10px;font-weight:700;color:var(--ember1,#c0392b);margin:3px 0;letter-spacing:.6px}
+.pf-opt{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;padding:1px 0}
+.pf-opt.excl{opacity:.5;text-decoration:line-through}
+.pf-label{flex:1;line-height:1.25}
+.pf-badge{font-size:10px;font-weight:600;padding:1px 7px;border-radius:20px;
+  background:var(--ember-soft,#fdeae6);color:var(--ember1,#c0392b);white-space:nowrap}
+.pf-arrow{color:var(--dim,#c2c2c2);font-size:20px;flex-shrink:0}
+
 .poste-bar{position:relative;height:10px;border-radius:999px;background:var(--surface3);overflow:visible}
 .poste-bar > span{display:block;height:100%;border-radius:999px}
 .poste-bar .poste-target{position:absolute;top:-3px;height:16px;width:2px;background:var(--navy);opacity:.75}

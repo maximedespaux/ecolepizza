@@ -113,7 +113,6 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   });
   const [saving, setSaving] = useState(false);
   const [steps, setSteps] = useState([]);
-  const [sdrag, setSdrag] = useState(null);
   const [tab, setTab] = useState("infos"); // "infos" | "parcours"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
@@ -211,26 +210,13 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           </div>
 
           <div style={{ display: tab === "parcours" ? "block" : "none" }}>
-          <p className="hint" style={{ marginTop: 0 }}>Documents requis pour cette formation, dans l'ordre. Glissez (⠿) pour réordonner, décochez pour exclure. Les QCM rattachés à la formation y figurent aussi. Ces étapes composent le tableau de session.</p>
+          <p className="hint" style={{ marginTop: 0 }}>
+            Enchaînement des documents de la formation. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Glissez un bloc pour réordonner, décochez une variante pour l'exclure. Les QCM rattachés y figurent aussi.
+          </p>
           {steps.length === 0 ? (
             <p className="hint">Aucun document candidat.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {steps.map((s, i) => (
-                <div key={s.slug}
-                  className={"drag-row" + (sdrag === i ? " dragging" : "")}
-                  draggable onDragStart={() => setSdrag(i)} onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => stepDrop(i)} onDragEnd={() => setSdrag(null)}
-                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", border: "1px solid var(--border-soft)", borderRadius: 8, opacity: s.active ? 1 : 0.5 }}>
-                  <span className="drag-handle" title="Glisser">⠿</span>
-                  <input type="checkbox" checked={!!s.active} onChange={() => toggleStep(s.slug)} />
-                  <span style={{ flex: 1 }}>{s.label}</span>
-                  {s.doc_type === "QCM"
-                    ? <span className="hint" style={{ color: "var(--accent)" }}>QCM{s.day != null && s.day !== "" ? ` · ${Number(s.day) < 0 ? `J${s.day}` : `J${Number(s.day) < 1 ? 1 : s.day}`}` : ""}</span>
-                    : s.stagiaire_sign ? <span className="hint">à signer</span> : null}
-                </div>
-              ))}
-            </div>
+            <ParcoursFlow steps={steps} onToggle={toggleStep} onReorder={setSteps} />
           )}
           </div>
         </div>
@@ -241,6 +227,77 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Deux étapes sont des variantes « OU » du même jalon si elles relèvent du même
+// type de document et ont des conditions incompatibles (jamais le même dossier).
+function exclusiveVariants(a, b) {
+  if (a.quiz_id || b.quiz_id) return false;
+  if (!a.doc_type || a.doc_type !== b.doc_type) return false;
+  const A = a.applies_when || {}, B = b.applies_when || {};
+  const c = (k) => A[k] != null && B[k] != null && A[k] !== B[k];
+  return c("financing") || c("rs") || c("hygiene") || c("jours");
+}
+// Regroupe les étapes ordonnées en jalons (chaque jalon = 1 ou plusieurs variantes).
+function groupMilestones(steps) {
+  const groups = [];
+  for (const st of steps) {
+    const g = groups.find((grp) => grp.steps.some((v) => exclusiveVariants(v, st)));
+    if (g) g.steps.push(st); else groups.push({ steps: [st] });
+  }
+  return groups;
+}
+// Petit badge de condition affiché sur une variante.
+function stepBadge(s) {
+  if (s.doc_type === "QCM" || s.quiz_id) return s.day != null && s.day !== "" ? dayTag(s.day) : "QCM";
+  const a = s.applies_when || {};
+  if (a.financing) return a.financing === "PROFESSIONNEL" ? "Pro" : "Particulier";
+  if (a.rs === true) return "Certifiante";
+  if (a.hygiene === true) return "Hygiène";
+  if (a.jours != null) return `${a.jours} j`;
+  if (s.stagiaire_sign) return "à signer";
+  return null;
+}
+
+// Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
+function ParcoursFlow({ steps, onToggle, onReorder }) {
+  const groups = groupMilestones(steps);
+  const [gdrag, setGdrag] = useState(null);
+  function drop(to) {
+    if (gdrag === null || gdrag === to) { setGdrag(null); return; }
+    const ng = [...groups];
+    const [m] = ng.splice(gdrag, 1);
+    ng.splice(to, 0, m);
+    setGdrag(null);
+    onReorder(ng.flatMap((g) => g.steps));
+  }
+  return (
+    <div className="parcours-flow">
+      {groups.map((g, i) => {
+        const anyActive = g.steps.some((s) => s.active);
+        return (
+          <div className="pf-wrap" key={g.steps[0].slug}>
+            <div className={"pf-node" + (anyActive ? "" : " off") + (gdrag === i ? " drag" : "")}
+              draggable onDragStart={() => setGdrag(i)} onDragOver={(e) => e.preventDefault()}
+              onDrop={() => drop(i)} onDragEnd={() => setGdrag(null)}>
+              <span className="pf-grip" title="Glisser pour réordonner le jalon">⠿</span>
+              {g.steps.map((s, j) => (
+                <div key={s.slug}>
+                  {j > 0 && <div className="pf-or">OU</div>}
+                  <label className={"pf-opt" + (s.active ? "" : " excl")} title={s.active ? "Inclus" : "Exclu"}>
+                    <input type="checkbox" checked={!!s.active} onChange={() => onToggle(s.slug)} />
+                    <span className="pf-label">{s.label}</span>
+                    {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
+                  </label>
+                </div>
+              ))}
+            </div>
+            {i < groups.length - 1 && <span className="pf-arrow" aria-hidden="true">→</span>}
+          </div>
+        );
+      })}
     </div>
   );
 }
