@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getCarte, geocodeCarte } from "../api/apiClient.js";
+import { getCarte, geocodeCarte, getFormations } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
-import { LEVELS, colorForLevel, LEVEL_LABEL } from "../lib/levels.js";
+import { LEVELS, colorForLevel, LEVEL_LABEL, setBadgeColors } from "../lib/levels.js";
 
 // Centroïdes (préfecture) par département — suffisant pour une carte à bulles.
 const DEPTS = {
@@ -68,6 +68,17 @@ function Carte() {
   const [q, setQ] = useState("");
   const [dept, setDept] = useState(null);   // département sélectionné (filtre)
   const [forms, setForms] = useState([]);   // formations (codes) cochées
+  const [programs, setPrograms] = useState([]); // catalogue des formations (pour le filtre)
+
+  useEffect(() => {
+    getFormations().then((r) => {
+      const list = r.data || [];
+      setPrograms(list);
+      const map = {};
+      for (const f of list) if (f.color) { if (f.code) map[f.code] = f.color; if (f.level) map[f.level] = f.color; }
+      setBadgeColors(map);
+    }).catch(() => {});
+  }, []);
   const [geo, setGeo] = useState(false);     // géocodage en cours
   const mapDiv = useRef(null);
   const mapRef = useRef(null);
@@ -110,13 +121,14 @@ function Carte() {
     finally { setGeo(false); }
   }
 
-  // Options de formation (badges/codes présents parmi les points géolocalisés).
+  // Options de formation : le catalogue (codes), complété par les codes présents
+  // sur les points (au cas où une formation aurait été supprimée du catalogue).
   const formationOptions = useMemo(() => {
-    const s = new Set();
-    for (const p of (data?.points || [])) (p.badges || []).forEach((b) => s.add(b));
+    const s = new Set(programs.map((p) => p.code).filter(Boolean));
+    for (const p of (data?.points || [])) (p.formations || []).forEach((c) => s.add(c));
     return [...s].sort();
-  }, [data]);
-  const pointMatch = (p) => !forms.length || (p.badges || []).some((b) => forms.includes(b));
+  }, [programs, data]);
+  const pointMatch = (p) => !forms.length || (p.formations || []).some((c) => forms.includes(c));
   const shownPoints = useMemo(() => (data?.points || []).filter(pointMatch), [data, forms]);
 
   // Répartition par département : globale, ou recalculée depuis les points filtrés.
@@ -242,7 +254,7 @@ function Carte() {
                   border: `1.5px solid ${on ? colorForLevel(code) : "var(--border-soft)"}`,
                 }}>
                 <i style={{ width: 10, height: 10, borderRadius: "50%", background: colorForLevel(code), display: "inline-block" }} />
-                {LEVEL_LABEL[code] || code}
+                {code}
               </button>
             );
           })}

@@ -26,7 +26,12 @@ const getCarte = (req, res) => {
                   JOIN training_session s ON s.id = e.session_id
                   JOIN training_program p ON p.id = s.program_id
                  WHERE e.learner_id = l.id
-                 ORDER BY e.created_at DESC LIMIT 1) AS level
+                 ORDER BY e.created_at DESC LIMIT 1) AS level,
+               (SELECT GROUP_CONCAT(DISTINCT p.code)
+                  FROM enrollment e
+                  JOIN training_session s ON s.id = e.session_id
+                  JOIN training_program p ON p.id = s.program_id
+                 WHERE e.learner_id = l.id) AS formation_codes
           FROM learner l
          WHERE l.organization_id = ?`;
     db.query(sql, [orgId], (err, rows) => {
@@ -54,6 +59,7 @@ const getCarte = (req, res) => {
                 geocoded++;
                 // Priorité à l'étiquette du stagiaire (1re du CSV), sinon niveau de sa formation.
                 const badges = (r.levels || '').split(',').map((s) => s.trim()).filter(Boolean);
+                const formations = (r.formation_codes || '').split(',').map((s) => s.trim()).filter(Boolean);
                 points.push({
                     id: r.id,
                     name: [r.first_name, r.last_name].filter(Boolean).join(' '),
@@ -61,7 +67,7 @@ const getCarte = (req, res) => {
                     dept: d,
                     lat: Number(r.lat), lng: Number(r.lng),
                     level: badges[0] || r.level || null,
-                    badges: badges.length ? badges : (r.level ? [r.level] : []),
+                    formations, // codes des formations suivies (pour le filtre)
                 });
             } else if (r.address || r.zip_code) {
                 pending++; // géocodable mais pas encore géocodé
