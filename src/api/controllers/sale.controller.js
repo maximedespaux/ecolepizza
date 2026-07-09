@@ -34,11 +34,20 @@ const createSale = (req, res) => {
     if (!product || amount === undefined || amount === '') {
         return res.status(422).json({ error: 'Produit et montant requis' });
     }
+    // Validation numérique : montant >= 0 fini, quantité entière >= 1.
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt < 0 || amt > 100000000) {
+        return res.status(422).json({ error: 'Montant invalide (nombre positif requis).' });
+    }
+    const qty = Number.parseInt(quantity, 10);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 100000) {
+        return res.status(422).json({ error: 'Quantité invalide (entier positif requis).' });
+    }
     db.query(
         `INSERT INTO material_sale (id, organization_id, date, product, category, quantity, amount, learner_id, note)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [crypto.randomUUID(), req.user.organization_id, date || new Date().toISOString().slice(0, 10),
-         product, category || null, quantity || 1, amount, learner_id || null, note || null],
+         product, category || null, qty, amt, learner_id || null, note || null],
         (err) => {
             if (err) {
                 console.error('Erreur création vente :', err);

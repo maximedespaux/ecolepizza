@@ -61,6 +61,13 @@ app.use((req, res, next) => {
     res.set('X-Frame-Options', 'DENY');
     res.set('Referrer-Policy', 'no-referrer');
     res.set('X-Permitted-Cross-Domain-Policies', 'none');
+    // L'API ne renvoie que du JSON/binaire : une CSP stricte limite l'impact
+    // d'une éventuelle injection (aucun script/ressource tiers autorisé).
+    res.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+    // HSTS en production (l'app est servie en HTTPS).
+    if (process.env.NODE_ENV === 'production') {
+        res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
     next();
 });
 

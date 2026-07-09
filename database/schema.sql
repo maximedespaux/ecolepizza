@@ -90,7 +90,6 @@ CREATE TABLE user (
     nav_access      text         DEFAULT NULL,          -- accès menu par utilisateur (JSON de chemins) ; NULL = rien accordé
     last_login_at   timestamp    NULL DEFAULT NULL,     -- dernière connexion réussie
     password        varchar(255) NOT NULL,             -- hash bcrypt (authentification)
-    password_plain_enc varchar(255) DEFAULT NULL,      -- DEV UNIQUEMENT : copie chiffrée du mot de passe généré (à retirer)
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     UNIQUE KEY uq_user_org_email (organization_id, email),

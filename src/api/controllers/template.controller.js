@@ -164,9 +164,27 @@ const uploadTemplate = async (req, res) => {
     if (!req.file || !req.file.buffer) return res.status(422).json({ error: 'Fichier .docx requis.' });
     const name = req.file.originalname || '';
     if (!/\.docx$/i.test(name)) return res.status(422).json({ error: 'Le fichier doit être un .docx.' });
+    // Vérifie la signature ZIP (un .docx est un conteneur OOXML = archive ZIP « PK »).
+    const b = req.file.buffer;
+    if (b.length < 4 || b[0] !== 0x50 || b[1] !== 0x4b) {
+        return res.status(422).json({ error: 'Fichier .docx invalide (format inattendu).' });
+    }
 
     try {
-        const zip = new PizZip(req.file.buffer);
+        const zip = new PizZip(b);
+        // Garde-fou anti « zip bomb » : borne la taille décompressée et le nombre
+        // d'entrées avant tout rendu (un .docx légitime reste petit).
+        const MAX_UNCOMPRESSED = 80 * 1024 * 1024; // 80 Mo
+        const MAX_ENTRIES = 500;
+        let totalUnc = 0, entries = 0;
+        for (const key of Object.keys(zip.files)) {
+            entries++;
+            if (entries > MAX_ENTRIES) return res.status(422).json({ error: 'Archive .docx trop complexe.' });
+            const data = zip.files[key]?._data;
+            const size = (data && (data.uncompressedSize ?? data.length)) || 0;
+            totalUnc += size;
+            if (totalUnc > MAX_UNCOMPRESSED) return res.status(422).json({ error: 'Archive .docx trop volumineuse une fois décompressée.' });
+        }
         const doc = new Docxtemplater(zip, { delimiters: { start: '{', end: '}' }, paragraphLoop: true, linebreaks: true, nullGetter: () => '' });
         doc.render({});
     } catch (e) {

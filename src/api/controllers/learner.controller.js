@@ -16,9 +16,9 @@ async function createStagiaireAccount(conn, organizationId, { email, first_name,
     const hash = await bcrypt.hash(password, 10);
     await conn.query(
         `INSERT INTO user
-            (id, organization_id, role, first_name, last_name, email, phone, password, password_plain_enc)
-         VALUES (?, ?, 'STAGIAIRE', ?, ?, ?, ?, ?, ?)`,
-        [userId, organizationId, first_name, last_name, email, phone || null, hash, encrypt(password)]
+            (id, organization_id, role, first_name, last_name, email, phone, password)
+         VALUES (?, ?, 'STAGIAIRE', ?, ?, ?, ?, ?)`,
+        [userId, organizationId, first_name, last_name, email, phone || null, hash]
     );
     return { userId, password };
 }
@@ -52,7 +52,7 @@ const getLearners = (req, res) => {
     db.query(
         `SELECT l.id, l.organization_id, l.first_name, l.last_name, l.email, l.phone,
                 l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.levels, l.created_at,
-                u.email AS account_email, u.password_plain_enc
+                u.email AS account_email
          FROM learner l
          LEFT JOIN user u ON u.id = l.user_id
          WHERE l.organization_id = ?
@@ -64,12 +64,9 @@ const getLearners = (req, res) => {
                 console.error('Erreur récupération stagiaires :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
-            // DEV : on déchiffre le mot de passe généré pour l'affichage admin.
-            const data = results.map(({ password_plain_enc, ...r }) => ({
-                ...r,
-                has_account: !!r.account_email,
-                account_password: decrypt(password_plain_enc),
-            }));
+            // Sécurité : on n'expose jamais les mots de passe. Le mot de passe généré
+            // n'est montré qu'une seule fois, à la création / réinitialisation.
+            const data = results.map((r) => ({ ...r, has_account: !!r.account_email }));
             res.json({ data });
         }
     );
@@ -247,28 +244,28 @@ const resetStagiairePassword = async (req, res) => {
         const learner = rows[0];
         const password = generatePassword();
         const hash = await bcrypt.hash(password, 10);
-        const encPlain = encrypt(password);
 
         let userId = learner.user_id;
         if (userId) {
-            await conn.query('UPDATE user SET password = ?, password_plain_enc = ? WHERE id = ?',
-                [hash, encPlain, userId]);
+            await conn.query('UPDATE user SET password = ? WHERE id = ? AND organization_id = ?',
+                [hash, userId, organizationId]);
         } else {
             if (!learner.email) {
                 return res.status(422).json({ error: "Ce stagiaire n'a pas d'email : impossible de créer un compte." });
             }
-            const [ex] = await conn.query('SELECT id FROM user WHERE email = ?', [learner.email]);
+            // Cloisonnement : ne rattacher/réinitialiser qu'un compte du MÊME organisme.
+            const [ex] = await conn.query('SELECT id FROM user WHERE email = ? AND organization_id = ?', [learner.email, organizationId]);
             if (ex.length > 0) {
                 userId = ex[0].id;
-                await conn.query('UPDATE user SET password = ?, password_plain_enc = ? WHERE id = ?',
-                    [hash, encPlain, userId]);
+                await conn.query('UPDATE user SET password = ? WHERE id = ? AND organization_id = ?',
+                    [hash, userId, organizationId]);
             } else {
                 userId = crypto.randomUUID();
                 await conn.query(
                     `INSERT INTO user
-                        (id, organization_id, role, first_name, last_name, email, phone, password, password_plain_enc)
-                     VALUES (?, ?, 'STAGIAIRE', ?, ?, ?, ?, ?, ?)`,
-                    [userId, organizationId, learner.first_name, learner.last_name, learner.email, learner.phone || null, hash, encPlain]
+                        (id, organization_id, role, first_name, last_name, email, phone, password)
+                     VALUES (?, ?, 'STAGIAIRE', ?, ?, ?, ?, ?)`,
+                    [userId, organizationId, learner.first_name, learner.last_name, learner.email, learner.phone || null, hash]
                 );
             }
             await conn.query('UPDATE learner SET user_id = ? WHERE id = ?', [userId, learner.id]);

@@ -83,13 +83,23 @@ const adjustItem = (req, res) => {
  */
 const updateItem = (req, res) => {
     const allowed = ['name', 'category', 'sku', 'quantity', 'unit_price', 'tax_rate', 'threshold'];
+    // Bornes des champs numériques (rejette négatifs / NaN / valeurs aberrantes).
+    const numericBounds = { quantity: [0, 1e9], unit_price: [0, 1e8], tax_rate: [0, 100], threshold: [0, 1e9] };
     const updates = [];
     const values = [];
     for (const f of allowed) {
-        if (req.body[f] !== undefined && req.body[f] !== '') {
-            updates.push(`${f} = ?`);
-            values.push(req.body[f]);
+        if (req.body[f] === undefined || req.body[f] === '') continue;
+        let v = req.body[f];
+        if (numericBounds[f]) {
+            const n = Number(v);
+            const [min, max] = numericBounds[f];
+            if (!Number.isFinite(n) || n < min || n > max) {
+                return res.status(422).json({ message: `Valeur invalide pour ${f}.` });
+            }
+            v = n;
         }
+        updates.push(`${f} = ?`);
+        values.push(v);
     }
     if (updates.length === 0) return res.status(400).json({ message: 'Aucun champ' });
     values.push(req.params.id, req.user.organization_id);

@@ -4,7 +4,9 @@ const db = require('../config/database.js');
  * GET /api/audit — journal des actions sensibles (100 dernières), filtre ?q=.
  */
 const getAudit = (req, res) => {
-    const q = req.query.q ? `%${req.query.q}%` : '%';
+    // Échappe les métacaractères LIKE (\ % _) pour éviter l'abus de jokers.
+    const escapeLike = (s) => String(s).replace(/[\\%_]/g, (c) => '\\' + c);
+    const q = req.query.q ? `%${escapeLike(req.query.q)}%` : '%';
     db.query(
         `SELECT a.id, a.action, a.entity, a.entity_id,
                 DATE_FORMAT(a.created_at, '%Y-%m-%d %H:%i') AS created_at,

@@ -6,6 +6,20 @@ const { buildCII, buildFacturXPdf } = require('../lib/facturx.js');
 const PREFIX = { DEVIS: 'D', ACOMPTE: 'A', FACTURE: 'F', AVOIR: 'AV' };
 const TYPE_LABEL = { DEVIS: 'Devis', ACOMPTE: 'Facture d\'acompte', FACTURE: 'Facture', AVOIR: 'Avoir' };
 
+// Montant financier valide : fini, >= 0, borné (évite négatifs / NaN / débordements).
+const MAX_AMOUNT = 100000000; // 100 M€ garde-fou
+function validAmount(v) {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 && n <= MAX_AMOUNT ? n : null;
+}
+
+// Vérifie qu'un id référencé (entreprise, dossier) appartient bien à l'organisme.
+async function belongsToOrg(conn, table, id, orgId) {
+    if (!id) return true; // null autorisé
+    const [[row]] = await conn.query(`SELECT 1 AS ok FROM ${table} WHERE id = ? AND organization_id = ? LIMIT 1`, [id, orgId]);
+    return !!row;
+}
+
 // Assemble les données de facturation (vendeur, client, ligne) pour Factur-X.
 async function loadInvoiceData(conn, orgId, invoiceId) {
     const [rows] = await conn.query(
@@ -29,7 +43,7 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     if (inv.buyer_name) {
         buyer = { name: inv.buyer_name, siret: null, address: {} };
     } else if (inv.company_id) {
-        const [c] = await conn.query('SELECT * FROM company WHERE id = ?', [inv.company_id]);
+        const [c] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [inv.company_id, orgId]);
         if (c[0]) buyer = { name: c[0].name, siret: c[0].siret, address: { line: c[0].address, zip: c[0].zip_code, city: c[0].town } };
     } else if (inv.enrollment_id) {
         const [l] = await conn.query(
@@ -130,17 +144,31 @@ const createInvoice = async (req, res) => {
     let total;
     if (hasLines) {
         cleanLines = lines
-            .map((l) => ({ enrollment_id: l.enrollment_id || null, description: (l.description || '').trim() || null, amount_net: Number(l.amount_net) || 0 }))
-            .filter((l) => l.enrollment_id || l.description || l.amount_net);
+            .map((l) => ({ enrollment_id: l.enrollment_id || null, description: (l.description || '').trim() || null, amount_net: validAmount(l.amount_net) }))
+            .filter((l) => l.enrollment_id || l.description || l.amount_net !== null);
         if (cleanLines.length === 0) return res.status(422).json({ error: 'Au moins une ligne requise.' });
+        if (cleanLines.some((l) => l.amount_net === null)) {
+            return res.status(422).json({ error: 'Montant de ligne invalide (doit être un nombre positif).' });
+        }
         total = cleanLines.reduce((s, l) => s + l.amount_net, 0);
     } else {
         if (amount_net === undefined || amount_net === '') return res.status(422).json({ error: 'Type et montant requis' });
-        total = Number(amount_net);
+        total = validAmount(amount_net);
+        if (total === null) return res.status(422).json({ error: 'Montant invalide (doit être un nombre positif).' });
     }
 
     try {
         const conn = db.promise();
+        // Cloisonnement : les références client/dossier doivent être du même organisme.
+        if (!await belongsToOrg(conn, 'company', company_id, req.user.organization_id)) {
+            return res.status(422).json({ error: 'Entreprise inconnue.' });
+        }
+        const enrollIds = hasLines ? cleanLines.map((l) => l.enrollment_id) : [enrollment_id];
+        for (const eid of enrollIds) {
+            if (!await belongsToOrg(conn, 'enrollment', eid, req.user.organization_id)) {
+                return res.status(422).json({ error: 'Dossier (inscription) inconnu.' });
+            }
+        }
         const year = new Date().getFullYear();
         const [cnt] = await conn.query(
             'SELECT COUNT(*) AS n FROM invoice WHERE organization_id = ? AND type = ? AND YEAR(created_at) = ?',
@@ -199,6 +227,8 @@ const updateInvoice = (req, res) => {
 const recordPayment = async (req, res) => {
     const { amount } = req.body;
     if (amount === undefined || amount === '') return res.status(422).json({ error: 'Montant requis' });
+    const amt = validAmount(amount);
+    if (amt === null || amt === 0) return res.status(422).json({ error: 'Montant invalide (nombre strictement positif requis).' });
     try {
         const conn = db.promise();
         const [inv] = await conn.query(
@@ -210,7 +240,7 @@ const recordPayment = async (req, res) => {
         await conn.query(
             `INSERT INTO payment (id, invoice_id, provider, amount, status, paid_at)
              VALUES (?, ?, 'manuel', ?, 'REUSSI', NOW())`,
-            [crypto.randomUUID(), req.params.id, amount]
+            [crypto.randomUUID(), req.params.id, amt]
         );
         const [sum] = await conn.query(
             "SELECT COALESCE(SUM(amount),0) AS paid FROM payment WHERE invoice_id = ? AND status = 'REUSSI'",

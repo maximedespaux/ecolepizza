@@ -9,6 +9,10 @@ const db = require('../config/database.js');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// Hash « leurre » : sert à égaliser le temps de réponse quand l'utilisateur
+// n'existe pas (évite l'énumération de comptes par mesure du temps de réponse).
+const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing-equalization', 10);
+
 /**
  * GET /api/auth/me — renvoie l'utilisateur connecté (sans le mot de passe).
  */
@@ -47,9 +51,10 @@ const userAuthentification = async (req, res) => {
         if (orgCode) {
             // Connexion ciblée sur un organisme précis (multi-tenant).
             const [[org]] = await conn.query('SELECT id FROM organization WHERE code = ?', [orgCode]);
-            if (!org) return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
-            const [rows] = await conn.query('SELECT * FROM user WHERE email = ? AND organization_id = ?', [email, org.id]);
-            user = rows[0];
+            if (org) {
+                const [rows] = await conn.query('SELECT * FROM user WHERE email = ? AND organization_id = ?', [email, org.id]);
+                user = rows[0];
+            }
         } else {
             // Sans code : rétro-compatible tant que l'e-mail est unique globalement.
             const [rows] = await conn.query('SELECT * FROM user WHERE email = ?', [email]);
@@ -59,10 +64,10 @@ const userAuthentification = async (req, res) => {
             user = rows[0];
         }
 
-        if (!user) return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
+        // Toujours effectuer une comparaison bcrypt (leurre si aucun utilisateur)
+        // afin d'égaliser le temps de réponse et d'éviter l'énumération de comptes.
+        const isMatch = await bcrypt.compare(password, user ? user.password : DUMMY_HASH);
+        if (!user || !isMatch) return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
 
         // Accès désactivé par un administrateur (colonne `active` — cf. migration 011).
         if (user.active === 0) {
@@ -89,10 +94,11 @@ const userAuthentification = async (req, res) => {
         });
 
         const { password: _pw, ...userWithoutPassword } = user;
+        // Le jeton n'est PAS renvoyé dans le corps : il vit uniquement dans le
+        // cookie httpOnly (non lisible par JavaScript). Réduit la surface d'exfiltration.
         return res.status(200).json({
             success: true,
             message: 'Connexion réussie',
-            token,
             data: userWithoutPassword,
         });
     } catch (err) {

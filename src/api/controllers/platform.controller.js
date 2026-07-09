@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
-const { encrypt, generatePassword } = require('../lib/crypto.js');
+const { generatePassword } = require('../lib/crypto.js');
 const { logAudit } = require('../lib/audit.js');
 
 /**
@@ -67,9 +67,9 @@ const createOrganization = async (req, res) => {
         const userId = crypto.randomUUID();
         const hash = await bcrypt.hash(password, 10);
         await conn.query(
-            `INSERT INTO user (id, organization_id, role, first_name, last_name, email, phone, password, password_plain_enc, active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-            [userId, orgId, role, admin.first_name || null, admin.last_name || null, adminEmail, admin.phone || null, hash, encrypt(password)]
+            `INSERT INTO user (id, organization_id, role, first_name, last_name, email, phone, password, active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+            [userId, orgId, role, admin.first_name || null, admin.last_name || null, adminEmail, admin.phone || null, hash]
         );
         logAudit(req, 'platform.org.create', 'Organization', orgId);
         res.status(201).json({

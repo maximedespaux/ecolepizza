@@ -31,6 +31,12 @@ function businessDays(startISO, endISO) {
 const getAttendance = async (req, res) => {
     try {
         const conn = db.promise();
+        // Cloisonnement multi-tenant : la session doit appartenir à l'organisme.
+        const [[sess]] = await conn.query(
+            'SELECT id FROM training_session WHERE id = ? AND organization_id = ?',
+            [req.params.sessionId, req.user.organization_id]
+        );
+        if (!sess) return res.status(404).json({ message: 'Session introuvable.' });
         const [sheets] = await conn.query(
             `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, slot,
                     trainer_name, (trainer_signature IS NOT NULL) AS trainer_signed,
@@ -157,13 +163,22 @@ const generateSheets = async (req, res) => {
  */
 const setPresence = (req, res) => {
     const present = req.body.present ? 1 : 0;
+    // Cloisonnement multi-tenant : on ne met à jour que si l'enregistrement
+    // appartient (via feuille → session) à l'organisme du demandeur.
     db.query(
-        `UPDATE attendance_record SET present = ?, signed_at = ${present ? 'NOW()' : 'NULL'} WHERE id = ?`,
-        [present, req.params.id],
-        (err) => {
+        `UPDATE attendance_record r
+         JOIN attendance_sheet s ON s.id = r.sheet_id
+         JOIN training_session ts ON ts.id = s.session_id
+         SET r.present = ?, r.signed_at = ${present ? 'NOW()' : 'NULL'}
+         WHERE r.id = ? AND ts.organization_id = ?`,
+        [present, req.params.id, req.user.organization_id],
+        (err, result) => {
             if (err) {
                 console.error('Erreur présence :', err);
                 return res.status(400).json({ message: 'Erreur mise à jour' });
+            }
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ message: 'Enregistrement introuvable.' });
             }
             res.status(200).json({ success: true });
         }

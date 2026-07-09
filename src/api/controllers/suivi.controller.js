@@ -195,7 +195,10 @@ const getArchiveFile = async (req, res) => {
         );
         if (!row || !row.file) return res.status(404).json({ message: 'Document introuvable.' });
         const name = (row.title || 'document').replace(/[\\/:*?"<>|]/g, '') + '.pdf';
-        res.set('Content-Type', row.mime || 'application/pdf');
+        // Les archives sont des PDF : on force le type (ne jamais renvoyer un mime
+        // fourni par le client, qui pourrait provoquer un rendu HTML/JS = XSS).
+        res.set('Content-Type', 'application/pdf');
+        res.set('X-Content-Type-Options', 'nosniff');
         res.set('Content-Disposition', `inline; filename="${encodeURIComponent(name)}"`);
         res.send(row.file);
     } catch (err) {

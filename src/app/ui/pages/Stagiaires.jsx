@@ -60,13 +60,11 @@ function Stagiaires() {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [revealed, setRevealed] = useState({}); // DEV : ids dont le mot de passe est affiché
   const [opcos, setOpcos] = useState([]);
 
   useEffect(() => { getOpcos().then((r) => setOpcos(r.data || [])).catch(() => {}); }, []);
   const opcoNames = opcos.length ? opcos.filter((o) => o.active).map((o) => o.name) : OPCOS;
 
-  const toggleReveal = (id) => setRevealed((r) => ({ ...r, [id]: !r[id] }));
 
   async function removeLearner(l) {
     if (!window.confirm(`Supprimer définitivement le stagiaire ${l.first_name} ${l.last_name} ?\nSes dossiers et documents seront également supprimés. Cette action est irréversible.`)) return;
@@ -381,29 +379,13 @@ function Stagiaires() {
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"} · {l.phone || "—"}</span>
                   </span>
                 </Link>
-                {l.has_account && (
-                  <span className="pwcell" title={revealed[l.id] ? "Cliquez pour sélectionner, puis copiez" : "Cliquez sur 👁 pour afficher"}>
-                    <span className="mono pw" onClick={(e) => { if (revealed[l.id]) { const r = document.createRange(); r.selectNodeContents(e.currentTarget); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } }}>
-                      {revealed[l.id] ? (l.account_password || "—") : "••••••••"}
-                    </span>
-                  </span>
-                )}
+                {l.has_account && <Badge tone="g" title="Compte d'accès actif">Compte</Badge>}
                 {(l.levels || "").split(",").map((s) => s.trim()).filter(Boolean).map((lv) => (
                   <span key={lv} className="lvl-chip" title={LEVEL_LABEL[lv] || lv} style={{ background: colorForLevel(lv) }}>
                     {(LEVEL_LABEL[lv] || lv).replace("Certifiante (RS)", "RS")}
                   </span>
                 ))}
                 {l.professional_status && <Badge tone="n">{l.professional_status}</Badge>}
-                {l.has_account && (
-                  <button
-                    type="button"
-                    className="iconbtn"
-                    title={revealed[l.id] ? "Masquer le mot de passe" : "Afficher le mot de passe (dev)"}
-                    onClick={() => toggleReveal(l.id)}
-                  >
-                    {revealed[l.id] ? "🙈" : "👁"}
-                  </button>
-                )}
                 <button
                   type="button"
                   className="iconbtn"
