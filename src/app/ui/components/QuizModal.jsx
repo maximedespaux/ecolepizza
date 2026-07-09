@@ -1,6 +1,42 @@
 import { useEffect, useState } from "react";
 import { takeQuiz, submitQuiz } from "../api/apiClient.js";
 
+// Correction d'un QCM : bonnes réponses (vert) + réponses données (croix si fausse).
+function ReviewList({ review }) {
+  return (
+    <div style={{ textAlign: "left", marginTop: 12, display: "flex", flexDirection: "column", gap: 14 }}>
+      {review.map((q, i) => (
+        <div key={q.id}>
+          <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>
+            {i + 1}. {q.text}{" "}
+            {q.correct === true && <span style={{ color: "#16a34a" }}>✓</span>}
+            {q.correct === false && <span style={{ color: "#c0392b" }}>✗</span>}
+          </div>
+          {q.type === "SCALE" ? (
+            <div className="hint">Votre réponse : {q.scaleValue ?? "—"}{q.scale_max ? ` / ${q.scale_max}` : ""}</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              {q.options.map((o) => {
+                const bg = o.correct ? "rgba(22,163,74,.13)" : o.selected ? "rgba(192,57,43,.10)" : "transparent";
+                const bd = o.correct ? "rgba(22,163,74,.55)" : o.selected ? "rgba(192,57,43,.45)" : "var(--border-soft)";
+                return (
+                  <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, border: `1px solid ${bd}`, background: bg, fontSize: 13 }}>
+                    <span style={{ width: 16, textAlign: "center", color: o.correct ? "#16a34a" : o.selected ? "#c0392b" : "var(--dim)" }}>
+                      {o.correct ? "✓" : o.selected ? "✗" : "•"}
+                    </span>
+                    <span style={{ flex: 1 }}>{o.text}</span>
+                    {o.selected && <span className="hint" style={{ fontSize: 11 }}>votre réponse</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Passage d'un QCM par le stagiaire : une question à la fois, puis résultat. */
 function QuizModal({ documentId, onClose, onDone }) {
   const [quiz, setQuiz] = useState(null);
@@ -12,12 +48,15 @@ function QuizModal({ documentId, onClose, onDone }) {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [alreadyDone, setAlreadyDone] = useState(null);
+  const [review, setReview] = useState(null);
+  const [showReview, setShowReview] = useState(false);
 
   useEffect(() => {
     takeQuiz(documentId)
       .then(({ data }) => {
         setQuiz(data.quiz); setQuestions(data.questions || []);
         if (data.done) setAlreadyDone(data.previous);
+        if (data.review) setReview(data.review);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -36,7 +75,7 @@ function QuizModal({ documentId, onClose, onDone }) {
 
   async function finish() {
     setSubmitting(true); setError(null);
-    try { const { data } = await submitQuiz(documentId, answers); setResult(data); }
+    try { const { data } = await submitQuiz(documentId, answers); setResult(data); if (data.review) setReview(data.review); }
     catch (e) { setError(e.message); }
     finally { setSubmitting(false); }
   }
@@ -61,12 +100,30 @@ function QuizModal({ documentId, onClose, onDone }) {
                     {result.pass != null && <div style={{ marginTop: 6 }}>{result.pass ? "Réussi" : "En dessous du seuil"}</div>}
                   </p>
                 ) : <p className="lead" style={{ margin: 0 }}>Merci pour votre retour.</p>}
+                {review && (
+                  <div style={{ marginTop: 12 }}>
+                    <button className="btn sm ghost" onClick={() => setShowReview((s) => !s)}>
+                      {showReview ? "Masquer la correction" : "Voir la correction"}
+                    </button>
+                    {showReview && <ReviewList review={review} />}
+                  </div>
+                )}
               </div>
             ) : alreadyDone ? (
-              <div style={{ textAlign: "center", padding: "12px 0" }}>
-                <div style={{ fontSize: 36 }}>✅</div>
-                <p className="lead">Vous avez déjà répondu à ce QCM{alreadyDone.completed_at ? ` le ${alreadyDone.completed_at}` : ""}.
-                  {alreadyDone.max_score ? <> Score : <b>{alreadyDone.score}/{alreadyDone.max_score}</b>.</> : null}</p>
+              <div style={{ padding: "12px 0" }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 36 }}>✅</div>
+                  <p className="lead">Vous avez déjà répondu à ce QCM{alreadyDone.completed_at ? ` le ${alreadyDone.completed_at}` : ""}.
+                    {alreadyDone.max_score ? <> Score : <b>{alreadyDone.score}/{alreadyDone.max_score}</b>.</> : null}</p>
+                </div>
+                {review && (
+                  <div style={{ marginTop: 6, textAlign: "center" }}>
+                    <button className="btn sm ghost" onClick={() => setShowReview((s) => !s)}>
+                      {showReview ? "Masquer la correction" : "Voir la correction"}
+                    </button>
+                    {showReview && <ReviewList review={review} />}
+                  </div>
+                )}
               </div>
             ) : questions.length === 0 ? <p className="lead">Ce QCM n'a pas de question.</p>
             : (

@@ -224,6 +224,27 @@ async function quizForDocument(conn, documentId, user) {
     return { doc, enrollment_id: row ? row.enrollment_id : null, quiz };
 }
 
+/**
+ * Construit la « correction » d'un QCM : pour chaque question, les options avec
+ * l'indication bonne réponse + la réponse donnée par le stagiaire.
+ * questions: [{id,text,type,scale_max}] ; optsByQ: {qid:[{id,text,is_correct}]} ;
+ * selByQ: {qid: Set(optionIds) | valeur d'échelle}.
+ */
+function buildReview(questions, optsByQ, selByQ) {
+    return questions.map((q) => {
+        if (q.type === 'SCALE') {
+            const v = selByQ[q.id];
+            return { id: q.id, text: q.text, type: q.type, scale_max: q.scale_max, scaleValue: (v == null || v === '') ? null : Number(v) };
+        }
+        const opts = optsByQ[q.id] || [];
+        const sel = selByQ[q.id] instanceof Set ? selByQ[q.id] : new Set();
+        const correctSet = new Set(opts.filter((o) => o.is_correct).map((o) => o.id));
+        const options = opts.map((o) => ({ id: o.id, text: o.text, correct: !!o.is_correct, selected: sel.has(o.id) }));
+        const allRight = correctSet.size > 0 && correctSet.size === sel.size && [...correctSet].every((id) => sel.has(id));
+        return { id: q.id, text: q.text, type: q.type, options, correct: correctSet.size > 0 ? allRight : null };
+    });
+}
+
 /** GET /api/quizzes/take/:documentId — questions du QCM (sans les bonnes réponses). */
 const takeQuiz = async (req, res) => {
     try {
@@ -236,11 +257,30 @@ const takeQuiz = async (req, res) => {
         if (qids.length) [options] = await conn.query('SELECT id, question_id, text FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
         const byQ = {};
         for (const o of options) (byQ[o.question_id] = byQ[o.question_id] || []).push({ id: o.id, text: o.text });
-        const [[prev]] = await conn.query('SELECT score, max_score, DATE_FORMAT(completed_at, "%Y-%m-%d %H:%i") AS completed_at FROM quiz_response WHERE quiz_id = ? AND document_id = ? ORDER BY completed_at DESC LIMIT 1', [r.quiz.id, req.params.documentId]);
+        const [[prev]] = await conn.query('SELECT id, score, max_score, DATE_FORMAT(completed_at, "%Y-%m-%d %H:%i") AS completed_at FROM quiz_response WHERE quiz_id = ? AND document_id = ? ORDER BY completed_at DESC LIMIT 1', [r.quiz.id, req.params.documentId]);
+
+        // Déjà répondu + QCM noté : on renvoie la correction (bonnes réponses + réponses données).
+        let review = null;
+        if (prev && r.quiz.kind === 'GRADED') {
+            const [opts2] = qids.length
+                ? await conn.query('SELECT id, question_id, text, is_correct FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids])
+                : [[]];
+            const optsByQ = {};
+            for (const o of opts2) (optsByQ[o.question_id] = optsByQ[o.question_id] || []).push(o);
+            const [ans] = await conn.query('SELECT question_id, value FROM quiz_answer WHERE response_id = ?', [prev.id]);
+            const selByQ = {};
+            const qtype = Object.fromEntries(questions.map((q) => [q.id, q.type]));
+            for (const a of ans) {
+                if (qtype[a.question_id] === 'SCALE') selByQ[a.question_id] = a.value;
+                else selByQ[a.question_id] = new Set(String(a.value || '').split(',').map((s) => s.trim()).filter(Boolean));
+            }
+            review = buildReview(questions, optsByQ, selByQ);
+        }
+
         res.json({ data: {
             quiz: { id: r.quiz.id, title: r.quiz.title, kind: r.quiz.kind },
             questions: questions.map((q) => ({ id: q.id, text: q.text, type: q.type, scale_max: q.scale_max, options: byQ[q.id] || [] })),
-            done: !!prev, previous: prev || null,
+            done: !!prev, previous: prev || null, review,
         } });
     } catch (err) {
         console.error('Erreur passage QCM :', err);
@@ -257,12 +297,17 @@ const submitQuiz = async (req, res) => {
         if (r.error) return res.status(r.error).json({ message: r.message });
         const graded = r.quiz.kind === 'GRADED';
 
-        const [questions] = await conn.query('SELECT id, type, points, partial_scoring FROM quiz_question WHERE quiz_id = ?', [r.quiz.id]);
+        const [questions] = await conn.query('SELECT id, text, type, scale_max, points, partial_scoring FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]);
         const qids = questions.map((q) => q.id);
         let options = [];
-        if (qids.length) [options] = await conn.query('SELECT id, question_id, is_correct FROM quiz_option WHERE question_id IN (?)', [qids]);
+        if (qids.length) [options] = await conn.query('SELECT id, question_id, text, is_correct FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
         const correctByQ = {};
-        for (const o of options) { correctByQ[o.question_id] = correctByQ[o.question_id] || new Set(); if (o.is_correct) correctByQ[o.question_id].add(o.id); }
+        const optsByQ = {};
+        for (const o of options) {
+            (optsByQ[o.question_id] = optsByQ[o.question_id] || []).push(o);
+            correctByQ[o.question_id] = correctByQ[o.question_id] || new Set();
+            if (o.is_correct) correctByQ[o.question_id].add(o.id);
+        }
 
         let score = 0, maxScore = 0;
         const answerRows = [];
@@ -311,7 +356,20 @@ const submitQuiz = async (req, res) => {
 
         const percent = graded && maxScore > 0 ? Math.round((score / maxScore) * 100) : null;
         const pass = graded && r.quiz.pass_score != null && percent != null ? percent >= r.quiz.pass_score : null;
-        res.json({ data: { kind: r.quiz.kind, score: graded ? score : null, max_score: graded ? maxScore : null, percent, pass } });
+
+        // Correction (bonnes réponses + réponses données) pour les QCM notés.
+        let review = null;
+        if (graded) {
+            const selByQ = {};
+            for (const q of questions) {
+                const raw = answers[q.id];
+                if (q.type === 'SCALE') selByQ[q.id] = raw;
+                else selByQ[q.id] = new Set(Array.isArray(raw) ? raw : (raw ? [raw] : []));
+            }
+            review = buildReview(questions, optsByQ, selByQ);
+        }
+
+        res.json({ data: { kind: r.quiz.kind, score: graded ? score : null, max_score: graded ? maxScore : null, percent, pass, review } });
     } catch (err) {
         console.error('Erreur soumission QCM :', err);
         res.status(500).json({ error: 'Internal Server Error' });
