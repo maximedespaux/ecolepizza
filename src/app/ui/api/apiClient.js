@@ -509,6 +509,10 @@ export function saveTemplate(slug, payload) {
 export function resetTemplate(slug) {
   return request(`/templates/${slug}`, { method: "DELETE" });
 }
+// Supprime DÉFINITIVEMENT un modèle (tombstone pour les étapes du socle).
+export function deleteTemplate(slug) {
+  return request(`/templates/${slug}?permanent=1`, { method: "DELETE" });
+}
 // Réordonne les modèles (glisser-déposer).
 export function reorderTemplates(slugs) {
   return request("/templates/reorder", { method: "PUT", body: JSON.stringify({ slugs }) });

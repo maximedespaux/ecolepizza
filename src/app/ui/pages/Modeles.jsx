@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getTemplates, saveTemplate, resetTemplate, reorderTemplates } from "../api/apiClient.js";
+import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -56,25 +56,31 @@ function Modeles() {
     finally { setBusy(null); }
   }
 
-  // Supprime la ligne. Un document ajouté est supprimé définitivement ; un
-  // document du socle ne peut pas l'être : il est désactivé (ou réactivé).
-  async function onDelete(t) {
-    if (!t.is_default) {
-      if (!window.confirm(`Supprimer définitivement le document « ${t.label} » ?\nCette action est irréversible.`)) return;
-      setBusy(t.slug);
-      try { await resetTemplate(t.slug); setStatus({ type: "success", message: "Document supprimé." }); await load(); }
-      catch (e) { setStatus({ type: "error", message: e.message }); }
-      finally { setBusy(null); }
-      return;
-    }
+  // Active / désactive une étape (la retire du workflow sans la supprimer).
+  async function onToggleActive(t) {
     const activate = !t.active;
-    const ok = activate
-      ? window.confirm(`Réactiver « ${t.label} » ?`)
-      : window.confirm(`« ${t.label} » fait partie du socle documentaire et ne peut pas être supprimé.\n\nVoulez-vous le désactiver (le retirer du workflow) ?`);
-    if (!ok) return;
     setBusy(t.slug);
-    try { await saveTemplate(t.slug, { active: activate }); setStatus({ type: "success", message: activate ? "Document réactivé." : "Document désactivé." }); await load(); }
-    catch (e) { setStatus({ type: "error", message: e.message }); }
+    try {
+      await saveTemplate(t.slug, { active: activate });
+      setStatus({ type: "success", message: activate ? "Document réactivé." : "Document désactivé." });
+      await load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setBusy(null); }
+  }
+
+  // Supprime DÉFINITIVEMENT le document (étape ajoutée = ligne effacée ;
+  // étape du socle = masquée par un « tombstone »). Irréversible.
+  async function onDelete(t) {
+    const socle = t.is_default
+      ? "\n\nCe document fait partie du socle : il sera masqué définitivement (vous pourrez le recréer manuellement)."
+      : "";
+    if (!window.confirm(`Supprimer DÉFINITIVEMENT le document « ${t.label} » ?\nCette action est irréversible.${socle}`)) return;
+    setBusy(t.slug);
+    try {
+      await deleteTemplate(t.slug);
+      setStatus({ type: "success", message: "Document supprimé définitivement." });
+      await load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setBusy(null); }
   }
 
@@ -137,10 +143,14 @@ function Modeles() {
                       {t.has_body ? (
                         <button className="btn sm ghost" title="Vider le contenu de l'éditeur" disabled={busy === t.slug} onClick={() => onClearBody(t)}>🧹</button>
                       ) : <span className="slot" />}
-                      <button className="btn sm ghost danger"
-                        title={t.is_default ? (t.active ? "Désactiver (document du socle, non supprimable)" : "Réactiver ce document") : "Supprimer définitivement"}
+                      <button className="btn sm ghost"
+                        title={t.active ? "Désactiver (retirer du workflow)" : "Réactiver ce document"}
                         disabled={busy === t.slug}
-                        onClick={() => onDelete(t)}>{t.is_default && !t.active ? "↺" : "🗑"}</button>
+                        onClick={() => onToggleActive(t)}>{t.active ? "🚫" : "↺"}</button>
+                      <button className="btn sm ghost danger"
+                        title="Supprimer définitivement"
+                        disabled={busy === t.slug}
+                        onClick={() => onDelete(t)}>🗑</button>
                     </div>
                   </td>
                 </tr>

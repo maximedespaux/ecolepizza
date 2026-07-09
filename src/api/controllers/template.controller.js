@@ -4,11 +4,11 @@ const Docxtemplater = require('docxtemplater');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
-const { mergeSteps, stepsToDocSet } = require('../lib/documents.js');
+const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS } = require('../lib/documents.js');
 const { TOKEN_CATALOG } = require('../lib/tokens.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
-const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active';
+const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
 
 // Lit les lignes document_template d'un organisme (métadonnées + présence de contenu).
 async function loadRows(organizationId) {
@@ -204,14 +204,29 @@ const downloadTemplate = async (req, res) => {
     }
 };
 
-/** DELETE /api/templates/:slug — supprime la personnalisation (revient au défaut / retire l'étape). */
+/**
+ * DELETE /api/templates/:slug — supprime la personnalisation (revient au défaut).
+ * Avec ?permanent=1 : suppression DÉFINITIVE. Pour une étape ajoutée, la ligne est
+ * effacée ; pour une étape du socle (définie en code), on pose un « tombstone »
+ * (deleted=1) qui la masque définitivement pour cet organisme.
+ */
 const resetTemplate = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const slug = req.params.slug;
+    const permanent = req.query.permanent === '1' || req.query.permanent === 'true';
     try {
-        await db.promise().query('DELETE FROM document_template WHERE organization_id = ? AND slug = ?', [req.user.organization_id, req.params.slug]);
-        logAudit(req, 'template.reset', 'DocumentTemplate', req.params.slug);
-        res.json({ success: true, message: 'Réinitialisé' });
+        if (permanent && DEFAULT_SLUGS.has(slug)) {
+            // Étape du socle : tombstone (reste masquée même après réinitialisation).
+            await upsertTemplate(db.promise(), orgId, slug, { deleted: 1, active: 0 });
+            logAudit(req, 'template.delete', 'DocumentTemplate', slug);
+            return res.json({ success: true, message: 'Modèle supprimé définitivement.' });
+        }
+        // Étape ajoutée (ou réinitialisation d'une personnalisation) : on efface la ligne.
+        await db.promise().query('DELETE FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
+        logAudit(req, permanent ? 'template.delete' : 'template.reset', 'DocumentTemplate', slug);
+        res.json({ success: true, message: permanent ? 'Modèle supprimé définitivement.' : 'Réinitialisé' });
     } catch (err) {
-        console.error('Erreur réinitialisation modèle :', err);
+        console.error('Erreur suppression modèle :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };

@@ -79,6 +79,8 @@ function mergeSteps(rows = []) {
         });
     }
     for (const r of rows) {
+        // Tombstone : étape supprimée définitivement pour cet organisme.
+        if (r.deleted) { bySlug.delete(r.slug); continue; }
         const base = bySlug.get(r.slug) || {
             slug: r.slug, label: r.slug, doc_type: r.doc_type || null, sort_order: 100,
             signable: 0, stagiaire_sign: 0, applies_when: {}, active: 1, has_file: false,

@@ -589,6 +589,7 @@ CREATE TABLE document_template (
     stagiaire_sign   tinyint(1)   NOT NULL DEFAULT 0,
     applies_when     longtext     DEFAULT NULL,       -- JSON {financing?,rs?,hygiene?,jours?}
     active           tinyint(1)   NOT NULL DEFAULT 1,
+    deleted          tinyint(1)   NOT NULL DEFAULT 0, -- tombstone : masque définitivement une étape du socle
     name             varchar(255) DEFAULT NULL,       -- nom de fichier d'origine
     mime             varchar(120) DEFAULT 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     file             longblob     DEFAULT NULL,       -- .docx (facultatif : étape sans modèle)
