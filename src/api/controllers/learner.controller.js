@@ -53,7 +53,12 @@ const getLearners = (req, res) => {
         `SELECT l.id, l.organization_id, l.first_name, l.last_name, l.email, l.phone,
                 l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.levels,
                 l.financing, l.opco, l.created_at,
-                u.email AS account_email
+                u.email AS account_email,
+                (SELECT GROUP_CONCAT(DISTINCT p.level)
+                   FROM enrollment e
+                   JOIN training_session s ON s.id = e.session_id
+                   JOIN training_program p ON p.id = s.program_id
+                  WHERE e.learner_id = l.id AND p.level IS NOT NULL AND p.level <> '') AS session_levels
          FROM learner l
          LEFT JOIN user u ON u.id = l.user_id
          WHERE l.organization_id = ?
@@ -65,9 +70,16 @@ const getLearners = (req, res) => {
                 console.error('Erreur récupération stagiaires :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
-            // Sécurité : on n'expose jamais les mots de passe. Le mot de passe généré
-            // n'est montré qu'une seule fois, à la création / réinitialisation.
-            const data = results.map((r) => ({ ...r, has_account: !!r.account_email }));
+            const data = results.map((r) => {
+                // Niveaux affichés = niveaux saisis + niveaux de TOUTES ses sessions
+                // (même anciennes), dédoublonnés. Un stagiaire peut en cumuler plusieurs.
+                const set = new Set([
+                    ...String(r.levels || '').split(','),
+                    ...String(r.session_levels || '').split(','),
+                ].map((s) => s.trim()).filter(Boolean));
+                const { session_levels, account_email, ...rest } = r;
+                return { ...rest, levels: [...set].join(','), has_account: !!account_email };
+            });
             res.json({ data });
         }
     );

@@ -61,10 +61,10 @@ function Stagiaires() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [opcos, setOpcos] = useState([]);
-  const [filters, setFilters] = useState({ level: "", financing: "", status: "", account: "", opco: "" });
+  const [filters, setFilters] = useState({ level: "", financing: "", status: "", opco: "" });
 
   const setFilter = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
-  const clearFilters = () => setFilters({ level: "", financing: "", status: "", account: "", opco: "" });
+  const clearFilters = () => setFilters({ level: "", financing: "", status: "", opco: "" });
   const activeFilters = Object.values(filters).filter(Boolean).length;
 
   // Filtrage local (en plus de la recherche texte serveur) sur les infos du stagiaire.
@@ -72,7 +72,6 @@ function Stagiaires() {
     if (filters.level && !(l.levels || "").split(",").map((s) => s.trim()).includes(filters.level)) return false;
     if (filters.financing && (l.financing || "PARTICULIER") !== filters.financing) return false;
     if (filters.status && l.professional_status !== filters.status) return false;
-    if (filters.account && (filters.account === "yes" ? !l.has_account : l.has_account)) return false;
     if (filters.opco && l.opco !== filters.opco) return false;
     return true;
   });
@@ -225,11 +224,6 @@ function Stagiaires() {
         <select className="inp" style={{ maxWidth: 190 }} value={filters.status} onChange={setFilter("status")}>
           <option value="">Tout statut</option>
           {STATUTS.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select className="inp" style={{ maxWidth: 160 }} value={filters.account} onChange={setFilter("account")}>
-          <option value="">Compte : tous</option>
-          <option value="yes">Avec compte</option>
-          <option value="no">Sans compte</option>
         </select>
         <select className="inp" style={{ maxWidth: 190 }} value={filters.opco} onChange={setFilter("opco")}>
           <option value="">Tout OPCO</option>
@@ -426,7 +420,6 @@ function Stagiaires() {
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"} · {l.phone || "—"}</span>
                   </span>
                 </Link>
-                {l.has_account && <Badge tone="g" title="Compte d'accès actif">Compte</Badge>}
                 {(l.levels || "").split(",").map((s) => s.trim()).filter(Boolean).map((lv) => (
                   <span key={lv} className="lvl-chip" title={LEVEL_LABEL[lv] || lv} style={{ background: colorForLevel(lv) }}>
                     {(LEVEL_LABEL[lv] || lv).replace("Certifiante (RS)", "RS")}
