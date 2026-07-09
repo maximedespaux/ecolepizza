@@ -211,10 +211,10 @@ function Carte() {
         title="Carte des stagiaires"
         lead="Répartition géographique de vos stagiaires. Les particuliers sont localisés à la ville (confidentialité) ; les professionnels à l'adresse de leur entreprise. Cliquez un département pour voir ses stagiaires, colorés par formation."
         actions={
-          <div style={{ display: "flex", gap: 8 }}>
-            <input className="inp" style={{ minWidth: 200 }} value={q} onChange={(e) => setQ(e.target.value)}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input className="inp" style={{ flex: 1, minWidth: 160 }} value={q} onChange={(e) => setQ(e.target.value)}
               placeholder="Filtrer (département, ville)…" aria-label="Filtrer" />
-            <button className="btn primary" onClick={runGeocode} disabled={geo || pending === 0}
+            <button className="btn primary" style={{ flexShrink: 0 }} onClick={runGeocode} disabled={geo || pending === 0}
               title={pending === 0 ? "Tous les stagiaires géolocalisables le sont" : `${pending} à géolocaliser`}>
               {geo ? "Géolocalisation…" : `Géolocaliser${pending ? ` (${pending})` : ""}`}
             </button>
