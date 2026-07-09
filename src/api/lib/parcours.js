@@ -5,12 +5,16 @@
 // Un même calcul alimente la fiche stagiaire et le tableau de session (pipeline).
 
 const SENT = ['ENVOYE', 'CONSULTE', 'SIGNE'];
+// Types de documents qui DOIVENT être signés par le stagiaire pour valider l'étape :
+// le parcours n'avance qu'une fois CE document reçu signé (jamais au simple envoi).
+const MUST_SIGN_TYPES = new Set(['DEVIS', 'CONTRAT', 'CONVENTION', 'DROIT_IMAGE']);
 
-const iconFor = (s) => (s.quiz_id ? '❓' : (s.stagiaire_sign ? '✍️' : '📄'));
+const mustSign = (s) => !!s.stagiaire_sign || MUST_SIGN_TYPES.has(s.doc_type);
+const iconFor = (s) => (s.quiz_id ? '❓' : (mustSign(s) ? '✍️' : '📄'));
 const keyFor = (s) => (s.quiz_id ? `quiz:${s.quiz_id}` : s.slug);
 function subFor(s) {
     if (s.quiz_id) return 'QCM' + (s.day != null && s.day !== '' ? ` · jour ${s.day}` : '');
-    if (s.stagiaire_sign) return 'À signer par le stagiaire';
+    if (mustSign(s)) return 'À signer par le stagiaire';
     return s.doc_type || '';
 }
 
@@ -22,10 +26,13 @@ function matchDoc(step, docs) {
         || docs.find((d) => d.type === step.doc_type) || null;
 }
 
-// Étape « faite » : QCM/signable => signé ; autre document => produit et envoyé.
+// Étape « faite » : QCM / document à signer par le stagiaire => statut SIGNÉ requis
+// (l'étape n'avance qu'à réception de CE document signé) ; autre document => envoyé.
 function stepDone(step, doc) {
     if (!doc) return false;
-    if (step.quiz_id || step.stagiaire_sign) return doc.status === 'SIGNE';
+    if (step.quiz_id || step.stagiaire_sign || MUST_SIGN_TYPES.has(step.doc_type)) {
+        return doc.status === 'SIGNE';
+    }
     return SENT.includes(doc.status);
 }
 
@@ -47,7 +54,7 @@ function computeDocParcours({ steps = [], docs = [] } = {}) {
 
     const outSteps = rows.map((r, i) => ({
         key: keyFor(r.s), ic: iconFor(r.s), label: r.s.label, sub: subFor(r.s),
-        signable: !!r.s.stagiaire_sign, quiz: !!r.s.quiz_id,
+        signable: mustSign(r.s), quiz: !!r.s.quiz_id,
         docId: r.doc ? r.doc.id : null,
         docStatus: r.doc ? r.doc.status : null,
         status: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo',
