@@ -12,6 +12,7 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
   const [doc, setDoc] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [pdfError, setPdfError] = useState(null); // message si PDF indisponible
+  const [missing, setMissing] = useState(null);   // infos manquantes (jetons vides)
   const [status, setStatus] = useState(null);
   const [signing, setSigning] = useState(false);
 
@@ -24,7 +25,7 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
     let url;
     documentPdfUrl(id)
       .then((u) => { url = u; setPdfUrl(u); })
-      .catch((e) => setPdfError(e.message));
+      .catch((e) => { setPdfError(e.message); setMissing(e.missing || null); });
     return () => { if (url) URL.revokeObjectURL(url); };
   }, [id]);
 
@@ -40,7 +41,31 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
   }
 
   const showSign = canSign && doc && doc.signable && doc.status !== "SIGNE";
-  const dl = (fn) => fn.catch((e) => setStatus({ type: "error", message: e.message }));
+  const dl = (fn) => fn.catch((e) => { setStatus({ type: "error", message: e.message }); if (e.missing) setMissing(e.missing); });
+
+  // Panneau des informations manquantes (regroupées par table d'origine).
+  function MissingPanel() {
+    if (!missing || !missing.length) return null;
+    const groups = {};
+    for (const m of missing) (groups[m.group || "Autres"] ||= []).push(m.label);
+    return (
+      <div style={{ padding: "16px 18px" }}>
+        <div className="status err" style={{ marginBottom: 12 }}>
+          <b>Document non généré :</b> {missing.length} information(s) manquante(s). Complétez la fiche puis réessayez.
+        </div>
+        <div className="doc-sheet" style={{ padding: 16 }}>
+          {Object.entries(groups).map(([g, labels]) => (
+            <div key={g} style={{ marginBottom: 10 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ember1)", marginBottom: 4 }}>{g}</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {labels.map((l) => <li key={l} style={{ fontSize: 13 }}>{l}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -60,6 +85,8 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
                 </a>
               </div>
             </object>
+          ) : missing ? (
+            <MissingPanel />
           ) : pdfError ? (
             <div style={{ padding: "16px 18px" }}>
               <div className="status err" style={{ marginBottom: 12 }}>Aperçu PDF indisponible : {pdfError}</div>
@@ -74,10 +101,10 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
           {pdfUrl && (
             <a className="btn ghost sm" href={pdfUrl} target="_blank" rel="noreferrer">↗ Ouvrir</a>
           )}
-          {doc && (
+          {doc && !missing && (
             <button className="btn" onClick={() => dl(downloadDocumentPdf(id, `${doc.title || "document"}.pdf`))}>PDF</button>
           )}
-          {showSign && <button className="btn primary" onClick={() => setSigning(true)}>Signer</button>}
+          {showSign && !missing && <button className="btn primary" onClick={() => setSigning(true)}>Signer</button>}
         </div>
       </div>
 

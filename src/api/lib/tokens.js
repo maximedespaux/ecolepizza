@@ -163,6 +163,55 @@ function catalogKeys() {
     return TOKEN_CATALOG.flatMap((g) => g.tokens.map((t) => t.key));
 }
 
+// Libellé lisible (+ groupe) de chaque jeton, pour les messages d'erreur.
+const TOKEN_LABELS = {};
+for (const g of TOKEN_CATALOG) for (const t of g.tokens) TOKEN_LABELS[t.key] = { label: t.label, group: g.group };
+
+// Jetons dont la valeur vide est NORMALE (renseignés plus tard, ou facultatifs) :
+// on ne les compte pas comme « information manquante » à la génération.
+const OPTIONAL_TOKENS = new Set([
+    'Signature stagiaire', 'Signature organisme', 'Nom signataire', 'Date signature',
+    'Today', 'Date',
+]);
+
+/** Extrait les clés de jetons utilisées dans un corps HTML (puces + {Clé}). */
+function usedTokenKeys(html) {
+    const s = String(html || '');
+    const keys = new Set();
+    // Puces de l'éditeur : <span … data-token="Clé" …>
+    for (const m of s.matchAll(/\sdata-token="([^"]+)"/g)) {
+        keys.add(m[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'"));
+    }
+    // Jetons en texte brut {Clé}
+    for (const m of s.matchAll(/\{([^{}]+)\}/g)) keys.add(m[1].trim());
+    return keys;
+}
+
+/**
+ * Recherche les informations manquantes pour générer un document : jetons présents
+ * dans le modèle (corps + en-tête + pied) dont la valeur résolue est vide.
+ * Renvoie [{ key, label, group }] (jetons facultatifs/signatures exclus).
+ */
+function findMissingTokens(htmlParts, ctx) {
+    const parts = Array.isArray(htmlParts) ? htmlParts : [htmlParts];
+    const used = new Set();
+    for (const p of parts) for (const k of usedTokenKeys(p)) used.add(k);
+    const values = resolveTokens(ctx);
+    const missing = [];
+    for (const key of used) {
+        if (OPTIONAL_TOKENS.has(key)) continue;
+        if (!(key in values)) continue; // clé inconnue : ignorée (texte libre)
+        const v = values[key];
+        if (v == null || String(v).trim() === '') {
+            const meta = TOKEN_LABELS[key] || { label: key, group: null };
+            missing.push({ key, label: meta.label, group: meta.group });
+        }
+    }
+    // Tri par groupe puis libellé pour un message lisible.
+    missing.sort((a, b) => String(a.group).localeCompare(String(b.group)) || a.label.localeCompare(b.label));
+    return missing;
+}
+
 /** Table { Jeton: valeur } à partir du contexte (org, learner, company, formations). */
 function resolveTokens(ctx = {}) {
     const o = ctx.org || {};
@@ -251,4 +300,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, catalogKeys, resolveTokens, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, frDate, euro, businessDay };

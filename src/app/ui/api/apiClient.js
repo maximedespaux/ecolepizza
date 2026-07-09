@@ -185,7 +185,10 @@ async function download(path, filename) {
   }
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
-    throw new Error(d.message || d.error || "Téléchargement échoué");
+    const err = new Error(d.message || d.error || "Téléchargement échoué");
+    err.status = res.status;
+    if (d.missing) err.missing = d.missing;
+    throw err;
   }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
@@ -482,6 +485,7 @@ export async function documentPdfUrl(id) {
     const d = await res.json().catch(() => ({}));
     const err = new Error(d.message || d.error || "Aperçu PDF impossible");
     err.status = res.status;
+    if (d.missing) err.missing = d.missing;
     throw err;
   }
   return URL.createObjectURL(await res.blob());

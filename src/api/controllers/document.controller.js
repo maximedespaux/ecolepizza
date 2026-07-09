@@ -4,6 +4,7 @@ const { renderDocumentHTML } = require('../lib/render.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { getTemplateContent } = require('./template.controller.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
+const { findMissingTokens } = require('../lib/tokens.js');
 const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
 const { logAudit } = require('../lib/audit.js');
 const { notify } = require('./notification.controller.js');
@@ -205,6 +206,22 @@ async function fillForRequest(req, res) {
     // Contenu propre à l'organisme s'il existe, sinon modèle par défaut fourni.
     const content = await getTemplateContent(doc.organization_id, slug);
     if (!content) { res.status(404).json({ message: 'Aucun modèle pour cette étape. Créez-le dans Modèles → Éditer.' }); return null; }
+
+    // Contrôle des informations obligatoires : si un jeton du modèle n'a pas de
+    // valeur (ex. adresse, entreprise, dates…), on annule et on liste ce qui manque.
+    // `?draft=1` permet un aperçu sans blocage.
+    const draft = req.query.draft === '1' || req.query.draft === 'true';
+    if (!draft && content.kind === 'builder') {
+        const missing = findMissingTokens([content.html, content.header, content.footer], ctx);
+        if (missing.length) {
+            res.status(422).json({
+                error: 'Informations manquantes',
+                message: `Document non généré : ${missing.length} information(s) manquante(s) dans la fiche.`,
+                missing,
+            });
+            return null;
+        }
+    }
 
     const who = [ctx.learner?.first_name, ctx.learner?.last_name].filter(Boolean).join(' ').trim();
     const label = TYPE_LABELS[doc.type] || doc.type || 'document';
