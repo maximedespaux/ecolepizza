@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getFormations, updateFormation, reorderFormations, getFormationSteps, saveFormationSteps } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Badge from "../components/Badge.jsx";
@@ -204,7 +204,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
 
           <div style={{ display: tab === "parcours" ? "block" : "none" }}>
           <p className="hint" style={{ marginTop: 0 }}>
-            Enchaînement des documents de la formation. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Glissez un bloc pour réordonner, décochez une variante pour l'exclure. Les QCM rattachés y figurent aussi.
+            Composez l'enchaînement des documents : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Glissez un bloc pour réordonner. Les QCM rattachés sont proposés à l'ajout.
           </p>
           {steps.length === 0 ? (
             <p className="hint">Aucun document candidat.</p>
@@ -261,42 +261,71 @@ function stepBadge(s) {
 }
 
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
+// Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
+// « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
 function ParcoursFlow({ steps, onToggle, onReorder }) {
-  const groups = groupMilestones(steps);
+  const included = steps.filter((s) => s.active);
+  const available = steps.filter((s) => !s.active);
+  const groups = groupMilestones(included);
   const [gdrag, setGdrag] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const addRef = useRef(null);
+
+  useEffect(() => {
+    if (!adding) return;
+    const close = (e) => { if (addRef.current && !addRef.current.contains(e.target)) setAdding(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [adding]);
+
   function drop(to) {
     if (gdrag === null || gdrag === to) { setGdrag(null); return; }
     const ng = [...groups];
     const [m] = ng.splice(gdrag, 1);
     ng.splice(to, 0, m);
     setGdrag(null);
-    onReorder(ng.flatMap((g) => g.steps));
+    onReorder([...ng.flatMap((g) => g.steps), ...available]); // ordre inclus + disponibles conservés
   }
+
   return (
     <div className="parcours-flow">
-      {groups.map((g, i) => {
-        const anyActive = g.steps.some((s) => s.active);
-        return (
-          <div className="pf-wrap" key={g.steps[0].slug}>
-            <div className={"pf-node" + (anyActive ? "" : " off") + (gdrag === i ? " drag" : "")}
-              draggable onDragStart={() => setGdrag(i)} onDragOver={(e) => e.preventDefault()}
-              onDrop={() => drop(i)} onDragEnd={() => setGdrag(null)}>
-              <span className="pf-grip" title="Glisser pour réordonner le jalon">⠿</span>
-              {g.steps.map((s, j) => (
-                <div key={s.slug}>
-                  {j > 0 && <div className="pf-or">OU</div>}
-                  <label className={"pf-opt" + (s.active ? "" : " excl")} title={s.active ? "Inclus" : "Exclu"}>
-                    <input type="checkbox" checked={!!s.active} onChange={() => onToggle(s.slug)} />
-                    <span className="pf-label">{s.label}</span>
-                    {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
-                  </label>
+      {groups.map((g, i) => (
+        <div className="pf-wrap" key={g.steps[0].slug}>
+          <div className={"pf-node" + (gdrag === i ? " drag" : "")}
+            draggable onDragStart={() => setGdrag(i)} onDragOver={(e) => e.preventDefault()}
+            onDrop={() => drop(i)} onDragEnd={() => setGdrag(null)}>
+            <span className="pf-grip" title="Glisser pour réordonner le jalon">⠿</span>
+            {g.steps.map((s, j) => (
+              <div key={s.slug}>
+                {j > 0 && <div className="pf-or">OU</div>}
+                <div className="pf-opt">
+                  <span className="pf-label">{s.label}</span>
+                  {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
+                  <button type="button" className="pf-x" title="Retirer cette étape" onClick={() => onToggle(s.slug)}>✕</button>
                 </div>
-              ))}
-            </div>
-            {i < groups.length - 1 && <span className="pf-arrow" aria-hidden="true">→</span>}
+              </div>
+            ))}
           </div>
-        );
-      })}
+          <span className="pf-arrow" aria-hidden="true">→</span>
+        </div>
+      ))}
+
+      {/* Bouton d'ajout d'étape (étapes disponibles / retirées) */}
+      <div className="pf-add-wrap" ref={addRef}>
+        <button type="button" className="pf-add" onClick={() => setAdding((a) => !a)}>＋ Ajouter une étape</button>
+        {adding && (
+          <div className="pf-add-menu">
+            {available.length === 0
+              ? <div className="pf-add-empty">Toutes les étapes disponibles sont déjà dans le parcours.</div>
+              : available.map((s) => (
+                <button type="button" key={s.slug} className="pf-add-item" onClick={() => { onToggle(s.slug); setAdding(false); }}>
+                  <span className="pf-label">{s.label}</span>
+                  {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
