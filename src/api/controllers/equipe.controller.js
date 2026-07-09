@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
+const { logAudit } = require('../lib/audit.js');
 
 /**
  * Gestion de l'équipe : comptes ayant accès au panneau de l'organisme.
@@ -80,28 +81,42 @@ const createMember = async (req, res) => {
         if (!email || !EMAIL_RE.test(email)) {
             return res.status(400).json({ error: 'Adresse e-mail invalide.' });
         }
-        if (!password || String(password).length < 8) {
-            return res.status(400).json({ error: 'Mot de passe requis (8 caractères minimum).' });
-        }
         if (!canAssignRole(req.user.role, role)) {
             return res.status(403).json({ error: "Vous n'êtes pas autorisé à attribuer ce rôle." });
         }
 
         const conn = db.promise();
-        const hashed = await bcrypt.hash(password, 10);
-        try {
-            const [result] = await conn.query(
-                `INSERT INTO user (id, organization_id, role, first_name, last_name, email, phone, password, active)
-                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1)`,
-                [req.user.organization_id, role, first_name || null, last_name || null, email.trim(), phone || null, hashed]
-            );
-            res.status(201).json({ message: 'Membre créé.', id: result.insertId });
-        } catch (e) {
-            if (e.code === 'ER_DUP_ENTRY') {
-                return res.status(409).json({ error: 'Cette adresse e-mail est déjà utilisée.' });
+        // Un compte existe-t-il déjà pour cet e-mail dans l'organisme ?
+        const [[existing]] = await conn.query(
+            'SELECT id, role FROM user WHERE email = ? AND organization_id = ?', [email.trim(), req.user.organization_id]);
+        if (existing) {
+            // Ancien STAGIAIRE -> on CONVERTIT son compte (il garde sa fiche stagiaire).
+            // Le mot de passe n'est mis à jour que s'il est fourni (sinon on garde le sien).
+            if (existing.role === 'STAGIAIRE') {
+                const updates = ['role = ?']; const values = [role];
+                if (first_name) { updates.push('first_name = ?'); values.push(first_name); }
+                if (last_name) { updates.push('last_name = ?'); values.push(last_name); }
+                if (phone) { updates.push('phone = ?'); values.push(phone); }
+                if (password && String(password).length >= 8) { updates.push('password = ?'); values.push(await bcrypt.hash(password, 10)); }
+                values.push(existing.id, req.user.organization_id);
+                await conn.query(`UPDATE user SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`, values);
+                logAudit(req, 'equipe.convert', 'User', existing.id);
+                return res.status(200).json({ message: 'Compte stagiaire existant converti.', id: existing.id, converted: true });
             }
-            throw e;
+            return res.status(409).json({ error: 'Cette adresse e-mail est déjà utilisée.' });
         }
+
+        // Nouveau compte : mot de passe requis.
+        if (!password || String(password).length < 8) {
+            return res.status(400).json({ error: 'Mot de passe requis (8 caractères minimum).' });
+        }
+        const hashed = await bcrypt.hash(password, 10);
+        const [result] = await conn.query(
+            `INSERT INTO user (id, organization_id, role, first_name, last_name, email, phone, password, active)
+             VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1)`,
+            [req.user.organization_id, role, first_name || null, last_name || null, email.trim(), phone || null, hashed]
+        );
+        res.status(201).json({ message: 'Membre créé.', id: result.insertId });
     } catch (err) {
         console.error('Erreur création membre :', err);
         res.status(500).json({ error: 'Internal Server Error' });
