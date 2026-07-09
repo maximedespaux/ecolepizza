@@ -2,6 +2,7 @@ const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
 const { parseApplies } = require('../lib/documents.js');
+const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { notify } = require('./notification.controller.js');
 
 // Deux étapes sont des « variantes » du même jalon si elles ne peuvent JAMAIS
@@ -201,7 +202,7 @@ const getSessionBoard = async (req, res) => {
             `SELECT s.id, s.program_id, s.year, s.week,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
-                    p.code, p.title, p.days, p.hygiene, p.rs_code
+                    p.code, p.title, p.level, p.days, p.hygiene, p.rs_code
              FROM training_session s
              JOIN training_program p ON p.id = s.program_id
              WHERE s.id = ? AND s.organization_id = ?`,
@@ -238,14 +239,19 @@ const getSessionBoard = async (req, res) => {
              ORDER BY l.last_name, l.first_name`,
             [req.params.id, req.user.organization_id]
         );
+        const condById = await loadConditionMap(conn, req.user.organization_id);
+        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id);
+        const factsMap = await loadDossierFactsMap(
+            conn, req.user.organization_id, enr.map((e) => e.enrollment_id), fieldCatalog);
 
         const cards = [];
         for (const e of enr) {
             const ctx = {
                 financing: e.financing, rsCode: s.rs_code, hygiene: !!s.hygiene,
                 jours: s.days, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
+                ...(factsMap.get(e.enrollment_id) || {}),
             };
-            const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx);
+            const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById);
             const [docs] = await conn.query(
                 `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id FROM generated_document gd
                  JOIN document_formation df ON df.document_id = gd.id

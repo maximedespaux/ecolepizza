@@ -1,5 +1,6 @@
 const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
+const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { enrollmentSteps } = require('./formationProgram.controller.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 
@@ -98,11 +99,17 @@ const getParcours = async (req, res) => {
         let parc = { steps: [], percent: 0, currentIndex: 0, currentKey: null };
         if (e.program_id) {
             const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
+            const [fieldCatalog, condById] = await Promise.all([
+                getEnabledFields(conn, req.user.organization_id),
+                loadConditionMap(conn, req.user.organization_id),
+            ]);
+            const factsMap = await loadDossierFactsMap(conn, req.user.organization_id, [e.id], fieldCatalog);
             const ctx = {
                 financing: e.financing, rsCode: e.program_rs, hygiene: !!e.program_hygiene,
                 jours: e.program_days, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
+                ...(factsMap.get(e.id) || {}),
             };
-            const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx);
+            const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById);
             parc = computeDocParcours({ steps, docs });
         }
 

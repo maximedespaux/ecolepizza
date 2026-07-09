@@ -93,8 +93,9 @@ function StagiaireDetail() {
       const type = tpl.doc_type || tpl.slug.toUpperCase().replace(/-/g, "_");
       await createDocument({ learner_id: id, type, template_slug: tpl.slug, title: prep.title, enrollment_ids: prep.enrollment_ids });
       setPrep({ slug: templates[0]?.slug || "", title: "", enrollment_ids: [] });
-      setStatus({ type: "success", message: "Document préparé. Vérifiez-le puis envoyez-le." });
+      setStatus({ type: "success", message: "Document généré. Vérifiez-le puis envoyez-le." });
       loadDocs();
+      setParcoursRefresh((n) => n + 1);
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     }
@@ -106,6 +107,7 @@ function StagiaireDetail() {
       await sendDocument(docId);
       setStatus({ type: "success", message: "Document envoyé au stagiaire." });
       loadDocs();
+      setParcoursRefresh((n) => n + 1);
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     }
@@ -115,6 +117,7 @@ function StagiaireDetail() {
     try {
       await deleteDocument(docId);
       loadDocs();
+      setParcoursRefresh((n) => n + 1);
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     }
@@ -316,7 +319,7 @@ function StagiaireDetail() {
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button type="submit" className="btn primary" disabled={!canPrepare}>Préparer le document</button>
+            <button type="submit" className="btn primary" disabled={!canPrepare}>Générer le document</button>
             {gateReason && <span className="hint" style={{ color: "var(--amber, #b8860b)" }}>{gateReason}</span>}
             {!gateReason && prep.enrollment_ids.length === 0 && enrollments.length > 0 && <span className="hint">Sélectionnez au moins une formation.</span>}
           </div>
@@ -348,7 +351,7 @@ function StagiaireDetail() {
       </Card>
 
       {viewId && (
-        <DocumentViewModal id={viewId} onClose={() => setViewId(null)} onChanged={loadDocs} />
+        <DocumentViewModal id={viewId} onClose={() => setViewId(null)} onChanged={() => { loadDocs(); setParcoursRefresh((n) => n + 1); }} />
       )}
 
       {editOpen && (

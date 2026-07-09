@@ -29,6 +29,7 @@ import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import Parametres from "./pages/Parametres.jsx";
 import Modeles from "./pages/Modeles.jsx";
+import ChampsDossier from "./pages/ChampsDossier.jsx";
 import Opcos from "./pages/Opcos.jsx";
 import TemplateEditor from "./pages/TemplateEditor.jsx";
 import Equipe from "./pages/Equipe.jsx";
@@ -153,6 +154,7 @@ function AppRoutes() {
           <Route path="reglages" element={<Guard nav="/reglages" roles={ADMIN}><Reglages /></Guard>} />
           <Route path="modeles" element={<Guard nav="/modeles" roles={ADMIN}><Modeles /></Guard>} />
           <Route path="modeles/:slug/editeur" element={<Guard nav="/modeles" roles={ADMIN}><TemplateEditor /></Guard>} />
+          <Route path="champs-dossier" element={<Guard nav="/champs-dossier" roles={ADMIN}><ChampsDossier /></Guard>} />
           <Route path="equipe" element={<Guard nav="/equipe" roles={OWNER}><Equipe /></Guard>} />
           <Route path="roles" element={<Guard nav="/roles" roles={OWNER}><AccessRoles /></Guard>} />
           <Route path="audit" element={<Guard nav="/audit" roles={SUIVI}><Audit /></Guard>} />

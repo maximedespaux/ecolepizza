@@ -536,8 +536,8 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .cal-mini-cell .dots{display:flex;gap:1px;flex-wrap:wrap;margin-top:1px}
 .cal-mini-cell .dots i{width:6px;height:6px;border-radius:2px;cursor:pointer}
 
-.tpl-actions{display:inline-grid;grid-template-columns:auto 32px 32px 32px;gap:6px;align-items:center;justify-items:center}
-.tpl-actions>.btn.sm.ghost,.tpl-actions>.slot{width:32px;padding:0;justify-content:center}
+.tpl-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+.tpl-actions>.btn.sm.ghost,.tpl-actions>.slot{width:32px;padding:0;justify-content:center;flex:0 0 auto}
 
 /* Coffre documentaire (Suivi → Archives) : arborescence dépliable */
 .arch-in{margin-left:16px;padding-left:8px;border-left:1px solid var(--border-soft)}

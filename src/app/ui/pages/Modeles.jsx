@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates } from "../api/apiClient.js";
+import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
+  getConditionCatalog, getConditions, createCondition, deleteCondition, getFieldValues } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -12,14 +13,27 @@ const DOC_TYPES = [
   "CERTIFICAT_REALISATION", "CGV", "EVALUATION_FINANCEUR", "EVALUATION_MANAGEUR",
 ];
 
-// Résumé lisible des conditions d'application.
-function condLabel(a = {}) {
+// Résumé lisible des conditions d'application. `condBySlug` = conditions
+// personnalisées de l'organisme (slug -> { label }) pour afficher leur intitulé.
+function condLabel(a = {}, condBySlug = {}) {
   const parts = [];
   if (a.financing) parts.push(a.financing === "PROFESSIONNEL" ? "Pro" : "Particulier");
   if (a.rs != null) parts.push(a.rs ? "Certifiante" : "Non certif.");
   if (a.hygiene != null) parts.push(a.hygiene ? "Hygiène" : "Sans hygiène");
   if (a.jours != null) parts.push(`${a.jours} j`);
+  if (a.agefice != null) parts.push(a.agefice ? "AGEFICE" : "Hors AGEFICE");
+  for (const slug of Array.isArray(a.conditions) ? a.conditions : []) {
+    parts.push(condBySlug[slug]?.label || slug);
+  }
   return parts.length ? parts.join(" · ") : "Toujours";
+}
+
+// Valeur lisible d'une condition personnalisée (pour la liste de gestion).
+function condValueLabel(c) {
+  if (c.op === "is_true") return "= Oui";
+  if (c.op === "is_false") return "= Non";
+  const v = Array.isArray(c.value) ? c.value.join(", ") : c.value;
+  return `${c.op} ${v ?? ""}`.trim();
 }
 
 function Modeles() {
@@ -29,12 +43,19 @@ function Modeles() {
   const [busy, setBusy] = useState(null);
   const [editing, setEditing] = useState(null); // étape en cours d'édition (ou {} pour nouveau)
   const [drag, setDrag] = useState(null);        // index de la ligne déplacée
+  const [conditions, setConditions] = useState([]);   // conditions personnalisées de l'organisme
+  const [catalog, setCatalog] = useState({ fields: [], operators: {} });
+  const [view, setView] = useState("documents");      // onglet : "documents" | "conditions"
+  const condBySlug = Object.fromEntries(conditions.map((c) => [c.slug, c]));
 
   async function load() {
     try { const { data } = await getTemplates(); setItems([...data].sort((a, b) => a.sort_order - b.sort_order)); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
-  useEffect(() => { load(); }, []);
+  async function loadConditions() {
+    try { const { data } = await getConditions(); setConditions(data || []); } catch { /* silencieux */ }
+  }
+  useEffect(() => { load(); loadConditions(); getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {}); }, []);
 
   // Glisser-déposer : réordonne localement puis persiste l'ordre complet.
   function onDrop(toIdx) {
@@ -47,26 +68,6 @@ function Modeles() {
     reorderTemplates(next.map((t) => t.slug)).catch((e) => { setStatus({ type: "error", message: e.message }); load(); });
   }
 
-  // Vide seulement le contenu composé dans l'éditeur (les réglages sont conservés).
-  async function onClearBody(t) {
-    if (!window.confirm(`Vider le contenu de « ${t.label} » ? Le document composé dans l'éditeur sera effacé (les réglages sont conservés).`)) return;
-    setBusy(t.slug);
-    try { await saveTemplate(t.slug, { body_html: null, header_html: null, footer_html: null }); setStatus({ type: "success", message: "Contenu vidé." }); await load(); }
-    catch (e) { setStatus({ type: "error", message: e.message }); }
-    finally { setBusy(null); }
-  }
-
-  // Active / désactive une étape (la retire du workflow sans la supprimer).
-  async function onToggleActive(t) {
-    const activate = !t.active;
-    setBusy(t.slug);
-    try {
-      await saveTemplate(t.slug, { active: activate });
-      setStatus({ type: "success", message: activate ? "Document réactivé." : "Document désactivé." });
-      await load();
-    } catch (e) { setStatus({ type: "error", message: e.message }); }
-    finally { setBusy(null); }
-  }
 
   // Supprime DÉFINITIVEMENT le document (étape ajoutée = ligne effacée ;
   // étape du socle = masquée par un « tombstone »). Irréversible.
@@ -90,10 +91,22 @@ function Modeles() {
         eyebrow="Système"
         title="Modèles & workflow documentaire"
         lead="Composez le jeu de documents de vos dossiers : intitulé, signature, conditions d'application. Glissez une ligne (poignée ⠿) pour changer l'ordre. Cliquez sur « Éditer » pour construire le document dans l'éditeur intégré et y glisser les champs (nom, prix, dates…) qui se remplissent automatiquement."
-        actions={<button className="btn primary" onClick={() => setEditing({ _new: true, sort_order: Math.max(0, ...items.map((i) => i.sort_order || 0)) + 10, applies_when: {} })}>＋ Ajouter un document</button>}
+        actions={view === "documents"
+          ? <button className="btn primary" onClick={() => setEditing({ _new: true, sort_order: Math.max(0, ...items.map((i) => i.sort_order || 0)) + 10, applies_when: {} })}>＋ Ajouter un document</button>
+          : null}
       />
       <StatusMessage status={status} />
 
+      <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, marginBottom: 14, borderBottom: "1px solid var(--border-soft)" }}>
+        <button type="button" role="tab" className={"tab" + (view === "documents" ? " on" : "")} onClick={() => setView("documents")}>
+          Documents ({items.length})
+        </button>
+        <button type="button" role="tab" className={"tab" + (view === "conditions" ? " on" : "")} onClick={() => setView("conditions")}>
+          Conditions ({conditions.length})
+        </button>
+      </div>
+
+      {view === "documents" && (
       <Card title={`Étapes (${items.length})`}>
         <div className="tablewrap" style={{ border: "none" }}>
           <table>
@@ -129,7 +142,7 @@ function Modeles() {
                     {t.signable ? <Badge tone="b">Signé</Badge> : <span style={{ color: "var(--dim)" }}>—</span>}
                     {t.stagiaire_sign ? " 👤" : ""}
                   </td>
-                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when)}</td>
+                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when, condBySlug)}</td>
                   <td>
                     {t.has_body
                       ? <Badge tone="g">Créé</Badge>
@@ -139,14 +152,7 @@ function Modeles() {
                     <div className="tpl-actions">
                       <button className="btn sm primary" title="Ouvrir l'éditeur de document"
                         onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>Éditer</button>
-                      <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>✎</button>
-                      {t.has_body ? (
-                        <button className="btn sm ghost" title="Vider le contenu de l'éditeur" disabled={busy === t.slug} onClick={() => onClearBody(t)}>🧹</button>
-                      ) : <span className="slot" />}
-                      <button className="btn sm ghost"
-                        title={t.active ? "Désactiver (retirer du workflow)" : "Réactiver ce document"}
-                        disabled={busy === t.slug}
-                        onClick={() => onToggleActive(t)}>{t.active ? "🚫" : "↺"}</button>
+                      <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>⚙</button>
                       <button className="btn sm ghost danger"
                         title="Supprimer définitivement"
                         disabled={busy === t.slug}
@@ -159,10 +165,21 @@ function Modeles() {
           </table>
         </div>
       </Card>
+      )}
+
+      {view === "conditions" && (
+        <ConditionsPanel
+          conditions={conditions}
+          catalog={catalog}
+          onChanged={loadConditions}
+          onStatus={setStatus}
+        />
+      )}
 
       {editing && (
         <StepModal
           step={editing}
+          conditions={conditions}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); setStatus({ type: "success", message: "Étape enregistrée." }); load(); }}
           onError={(m) => setStatus({ type: "error", message: m })}
@@ -172,7 +189,120 @@ function Modeles() {
   );
 }
 
-function StepModal({ step, onClose, onSaved, onError }) {
+// Espace de gestion des conditions personnalisées : liste + création (champ réel du
+// dossier + opérateur + valeur) + suppression.
+function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
+  const fields = catalog.fields || [];
+  const operators = catalog.operators || {};
+  const [field, setField] = useState("");
+  const [op, setOp] = useState("");
+  const [value, setValue] = useState("");
+  const [label, setLabel] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [suggestions, setSuggestions] = useState([]); // valeurs existantes pour ce champ
+
+  const curField = fields.find((f) => f.key === field);
+  const ops = curField ? (operators[curField.type] || []) : [];
+  const needsValue = op && op !== "is_true" && op !== "is_false";
+
+  function pickField(k) {
+    setField(k);
+    const f = fields.find((x) => x.key === k);
+    const first = (operators[f?.type] || [])[0];
+    setOp(first ? first.value : "");
+    setValue("");
+    setSuggestions([]);
+    // Charge les valeurs déjà présentes en base pour proposer une liste.
+    if (k && f && f.type === "text") getFieldValues(k).then((r) => setSuggestions(r.data || [])).catch(() => {});
+  }
+
+  async function add() {
+    if (!label.trim()) { onStatus({ type: "error", message: "Donnez un intitulé à la condition." }); return; }
+    if (!field || !op) { onStatus({ type: "error", message: "Choisissez un champ et un opérateur." }); return; }
+    setSaving(true);
+    try {
+      await createCondition({ label: label.trim(), field, op, value: needsValue ? value : null });
+      setLabel(""); setField(""); setOp(""); setValue("");
+      onStatus({ type: "success", message: "Condition créée." });
+      onChanged();
+    } catch (e) { onStatus({ type: "error", message: e.message }); }
+    finally { setSaving(false); }
+  }
+
+  async function remove(c) {
+    if (!window.confirm(`Supprimer la condition « ${c.label} » ? Les documents qui l'utilisent redeviendront sans cette condition.`)) return;
+    try { await deleteCondition(c.id); onStatus({ type: "success", message: "Condition supprimée." }); onChanged(); }
+    catch (e) { onStatus({ type: "error", message: e.message }); }
+  }
+
+  const fieldLabel = (k) => fields.find((f) => f.key === k)?.label || k;
+
+  return (
+    <Card title={`Conditions personnalisées (${conditions.length})`}>
+      <p className="hint" style={{ marginTop: 0 }}>
+        Créez des conditions basées sur les infos réelles du dossier (stagiaire, formation, financement).
+        Elles deviennent cochables sur chaque document (bouton ✎) : un document ne s'applique alors qu'aux dossiers qui les remplissent toutes.
+      </p>
+
+      {conditions.length > 0 && (
+        <div className="tablewrap" style={{ border: "none", marginBottom: 12 }}>
+          <table>
+            <thead><tr><th>Intitulé</th><th>Champ</th><th>Règle</th><th></th></tr></thead>
+            <tbody>
+              {conditions.map((c) => (
+                <tr key={c.id}>
+                  <td><b>{c.label}</b></td>
+                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{fieldLabel(c.field)}</td>
+                  <td style={{ fontSize: 12 }} className="mono">{condValueLabel(c)}</td>
+                  <td><button className="btn sm ghost danger" title="Supprimer" onClick={() => remove(c)}>🗑</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="row2" style={{ alignItems: "end" }}>
+        <div className="field"><label>Intitulé</label>
+          <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ex. Stagiaire mineur" /></div>
+        <div className="field"><label>Champ du dossier</label>
+          <select value={field} onChange={(e) => pickField(e.target.value)}>
+            <option value="">Choisir…</option>
+            {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+          </select></div>
+      </div>
+      <div className="row2" style={{ alignItems: "end" }}>
+        <div className="field"><label>Opérateur</label>
+          <select value={op} onChange={(e) => setOp(e.target.value)} disabled={!field}>
+            {ops.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select></div>
+        <div className="field"><label>Valeur</label>
+          {!needsValue ? (
+            <input className="inp" value="" disabled placeholder="—" />
+          ) : curField?.type === "enum" ? (
+            <select value={value} onChange={(e) => setValue(e.target.value)}>
+              <option value="">Choisir…</option>
+              {(curField.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          ) : curField?.type === "text" ? (
+            <>
+              <input className="inp" list="cond-values" value={value} onChange={(e) => setValue(e.target.value)}
+                placeholder={op === "in" ? "valeurs séparées par des virgules" : (suggestions.length ? "choisir ou saisir…" : "")} />
+              <datalist id="cond-values">{suggestions.map((v) => <option key={v} value={v} />)}</datalist>
+            </>
+          ) : (
+            <input className="inp" type="number" value={value} onChange={(e) => setValue(e.target.value)}
+              placeholder={op === "in" ? "valeurs séparées par des virgules" : ""} />
+          )}</div>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <button className="btn primary" disabled={saving} onClick={add}>＋ Ajouter la condition</button>
+      </div>
+    </Card>
+  );
+}
+
+function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
   const isNew = !!step._new;
   const a = step.applies_when || {};
   const [form, setForm] = useState({
@@ -187,7 +317,13 @@ function StepModal({ step, onClose, onSaved, onError }) {
     rs: a.rs == null ? "" : String(a.rs),
     hygiene: a.hygiene == null ? "" : String(a.hygiene),
     jours: a.jours == null ? "" : String(a.jours),
+    agefice: a.agefice == null ? "" : String(a.agefice),
+    conditions: Array.isArray(a.conditions) ? a.conditions : [],
   });
+  const toggleCond = (slug) => setForm((p) => ({
+    ...p,
+    conditions: p.conditions.includes(slug) ? p.conditions.filter((s) => s !== slug) : [...p.conditions, slug],
+  }));
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const chk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked }));
@@ -201,6 +337,8 @@ function StepModal({ step, onClose, onSaved, onError }) {
     if (form.rs !== "") applies_when.rs = form.rs === "true";
     if (form.hygiene !== "") applies_when.hygiene = form.hygiene === "true";
     if (form.jours !== "") applies_when.jours = Number(form.jours);
+    if (form.agefice !== "") applies_when.agefice = form.agefice === "true";
+    if (form.conditions.length) applies_when.conditions = form.conditions;
     setSaving(true);
     try {
       await saveTemplate(slug, {
@@ -257,6 +395,32 @@ function StepModal({ step, onClose, onSaved, onError }) {
             <div className="field"><label>Durée (jours)</label>
               <input className="inp" type="number" value={form.jours} onChange={set("jours")} placeholder="peu importe" /></div>
           </div>
+          <div className="row2">
+            <div className="field"><label>Financeur AGEFICE</label>
+              <select value={form.agefice} onChange={set("agefice")}>
+                <option value="">Peu importe</option>
+                <option value="true">Oui</option>
+                <option value="false">Non</option>
+              </select></div>
+            <div className="field" />
+          </div>
+
+          {conditions.length > 0 && (
+            <>
+              <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 4px" }}>
+                Conditions personnalisées
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {conditions.map((c) => (
+                  <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
+                    <input type="checkbox" checked={form.conditions.includes(c.slug)} onChange={() => toggleCond(c.slug)} />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+              <p className="hint" style={{ margin: "4px 0 0" }}>Le document ne s'applique qu'aux dossiers remplissant toutes les conditions cochées.</p>
+            </>
+          )}
 
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 6 }}>
             <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>

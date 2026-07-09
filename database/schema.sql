@@ -626,6 +626,41 @@ CREATE TABLE program_step (
         REFERENCES training_program (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- Conditions personnalisées d'application des documents (Modeles → Conditions) :
+-- champ réel du dossier + opérateur + valeur ; référencées par slug dans
+-- document_template.applies_when.conditions.
+CREATE TABLE document_condition (
+    id              uuid         NOT NULL DEFAULT uuid(),
+    organization_id uuid         NOT NULL,
+    slug            varchar(60)  NOT NULL,           -- identifiant court (référencé par les modèles)
+    label           varchar(160) NOT NULL,           -- intitulé lisible
+    field           varchar(60)  NOT NULL,           -- clé du champ (cf. FIELD_CATALOG)
+    op              varchar(20)  NOT NULL,           -- opérateur (eq, ne, in, lt, ge, is_true…)
+    value           longtext     DEFAULT NULL,       -- valeur (JSON : chaîne, nombre, booléen ou tableau)
+    created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_condition_org_slug (organization_id, slug),
+    KEY idx_condition_org (organization_id),
+    CONSTRAINT fk_condition_org FOREIGN KEY (organization_id)
+        REFERENCES organization (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Champs du dossier activés comme conditions (Réglages → Champs du dossier).
+CREATE TABLE condition_field (
+    id              uuid         NOT NULL DEFAULT uuid(),
+    organization_id uuid         NOT NULL,
+    source_table    varchar(64)  NOT NULL,           -- learner | enrollment | training_program | training_session | company | virtual
+    column_name     varchar(64)  NOT NULL,           -- nom de colonne (ou champ virtuel : age, has_company)
+    enabled         tinyint(1)   NOT NULL DEFAULT 1,
+    label           varchar(160) DEFAULT NULL,       -- libellé personnalisé (sinon commentaire de colonne)
+    created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_condfield_org_col (organization_id, source_table, column_name),
+    KEY idx_condfield_org (organization_id),
+    CONSTRAINT fk_condfield_org FOREIGN KEY (organization_id)
+        REFERENCES organization (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- Signature d'émargement par formateur et par demi-journée.
 CREATE TABLE attendance_trainer_sign (
     id             uuid      NOT NULL DEFAULT uuid(),

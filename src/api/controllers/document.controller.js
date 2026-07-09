@@ -2,7 +2,8 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { renderDocumentHTML } = require('../lib/render.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
-const { getTemplateContent } = require('./template.controller.js');
+const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
+const { stagiaireSignsDoc } = require('../lib/documents.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { findMissingTokens } = require('../lib/tokens.js');
 const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
@@ -50,7 +51,6 @@ const TYPE_LABELS = {
     EVALUATION_MANAGEUR: 'Évaluation Manageur', EVALUATION_FINANCEUR: 'Évaluation Financeur',
     CGV: 'Conditions générales de vente',
 };
-const STAGIAIRE_SIGN_TYPES = ['DEVIS', 'CONTRAT', 'CONVENTION', 'DROIT_IMAGE'];
 
 // Ordre des étapes du pipeline CRM (avancement automatique, jamais en arrière).
 const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
@@ -214,12 +214,14 @@ const getDocument = async (req, res) => {
 
         const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
         const html = renderDocumentHTML(doc.type, ctx, doc.title);
+        // Signature stagiaire pilotée par le modèle (Modeles de document : stagiaire_sign).
+        const orgSteps = await loadOrgSteps(doc.organization_id);
         res.json({
             data: {
                 id: doc.id, type: doc.type, title: doc.title, status: doc.status,
                 sent_at: doc.sent_at, signed_at: doc.signed_at, signer_name: doc.signer_name,
                 signature_data: decrypt(doc.signature_data),
-                signable: STAGIAIRE_SIGN_TYPES.includes(doc.type),
+                signable: stagiaireSignsDoc(orgSteps, doc),
                 // Traçabilité de la signature électronique (déchiffrée pour l'affichage).
                 signer_ip: decrypt(doc.signer_ip) || null,
                 signer_user_agent: decrypt(doc.signer_user_agent) || null,
@@ -421,6 +423,12 @@ const signDocument = async (req, res) => {
             [req.params.id, req.user.organization_id, req.user.id, req.user.role]
         );
         if (rows.length === 0) return res.status(403).json({ message: 'Document non autorisé.' });
+
+        // Le document doit être prévu pour signature stagiaire (Modeles : stagiaire_sign).
+        const orgSteps = await loadOrgSteps(req.user.organization_id);
+        if (!stagiaireSignsDoc(orgSteps, rows[0])) {
+            return res.status(422).json({ message: "Ce document n'est pas prévu pour être signé par le stagiaire." });
+        }
 
         // Empreinte du contenu signé (SHA-256 du HTML rempli, signature incluse) : preuve
         // que CE contenu précis a été signé (le document ne peut plus être modifié après coup).

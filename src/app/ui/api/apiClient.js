@@ -536,6 +536,29 @@ export function deleteDocument(id) {
 export function getTemplates() {
   return request("/templates");
 }
+// --- Conditions personnalisées d'application des documents ---
+export function getConditionCatalog() {
+  return request("/conditions/catalog");
+}
+export function getFieldValues(field) {
+  return request(`/conditions/field-values?field=${encodeURIComponent(field)}`);
+}
+export function getConditions() {
+  return request("/conditions");
+}
+export function createCondition(payload) {
+  return request("/conditions", { method: "POST", body: JSON.stringify(payload) });
+}
+export function deleteCondition(id) {
+  return request(`/conditions/${id}`, { method: "DELETE" });
+}
+// Champs du dossier : colonnes éligibles + activation.
+export function getFieldSettings() {
+  return request("/conditions/fields");
+}
+export function saveFieldSettings(fields) {
+  return request("/conditions/fields", { method: "PUT", body: JSON.stringify({ fields }) });
+}
 export function saveTemplate(slug, payload) {
   return request(`/templates/${slug}`, { method: "PUT", body: JSON.stringify(payload) });
 }

@@ -8,7 +8,13 @@ import EmptyState from "../components/EmptyState.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import QuizModal from "../components/QuizModal.jsx";
 
-const STATUS = { ENVOYE: ["À signer", "a"], CONSULTE: ["À signer", "a"], SIGNE: ["Signé ✓", "g"] };
+// Libellé d'état : « À signer » seulement si le document est réellement à signer
+// par le stagiaire (piloté par le modèle) ; sinon « À consulter ».
+function statusFor(d) {
+  if (d.status === "SIGNE") return ["Signé ✓", "g"];
+  if (d.signable) return ["À signer", "a"];
+  return ["À consulter", "n"];
+}
 
 function MonEspace() {
   const { user } = useContext(UserContext);
@@ -28,7 +34,7 @@ function MonEspace() {
   useEffect(() => { load(); }, []);
 
   const fullName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
-  const toSign = (data?.documents || []).filter((d) => d.status !== "SIGNE").length;
+  const toSign = (data?.documents || []).filter((d) => d.signable && d.status !== "SIGNE").length;
 
   return (
     <>
@@ -47,7 +53,7 @@ function MonEspace() {
         <Card title="Mes documents">
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {data.documents.map((d) => {
-              const [label, tone] = STATUS[d.status] || [d.status, "n"];
+              const [label, tone] = statusFor(d);
               return (
                 <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
                   <span style={{ flex: 1, minWidth: 0 }}>
@@ -63,7 +69,7 @@ function MonEspace() {
                     </button>
                   ) : (
                     <button className="btn sm primary" onClick={() => setViewId(d.id)}>
-                      {d.status === "SIGNE" ? "Consulter" : "Consulter / signer"}
+                      {d.status !== "SIGNE" && d.signable ? "Consulter / signer" : "Consulter"}
                     </button>
                   )}
                 </div>
@@ -76,7 +82,7 @@ function MonEspace() {
       {viewId && (
         <DocumentViewModal
           id={viewId}
-          canSign
+          canSign={!!data?.documents.find((d) => d.id === viewId)?.signable}
           defaultName={fullName}
           onClose={() => setViewId(null)}
           onChanged={load}

@@ -5,11 +5,10 @@
 // Un même calcul alimente la fiche stagiaire et le tableau de session (pipeline).
 
 const SENT = ['ENVOYE', 'CONSULTE', 'SIGNE'];
-// Types de documents qui DOIVENT être signés par le stagiaire pour valider l'étape :
-// le parcours n'avance qu'une fois CE document reçu signé (jamais au simple envoi).
-const MUST_SIGN_TYPES = new Set(['DEVIS', 'CONTRAT', 'CONVENTION', 'DROIT_IMAGE']);
-
-const mustSign = (s) => !!s.stagiaire_sign || MUST_SIGN_TYPES.has(s.doc_type);
+// Un document DOIT être signé par le stagiaire pour valider l'étape uniquement si
+// son modèle le prévoit (Modeles de document : stagiaire_sign). Le parcours n'avance
+// alors qu'une fois CE document reçu signé (jamais au simple envoi).
+const mustSign = (s) => !!s.stagiaire_sign;
 const iconFor = (s) => (s.quiz_id ? '❓' : (mustSign(s) ? '✍️' : '📄'));
 const keyFor = (s) => (s.quiz_id ? `quiz:${s.quiz_id}` : s.slug);
 function subFor(s) {
@@ -30,7 +29,7 @@ function matchDoc(step, docs) {
 // (l'étape n'avance qu'à réception de CE document signé) ; autre document => envoyé.
 function stepDone(step, doc) {
     if (!doc) return false;
-    if (step.quiz_id || step.stagiaire_sign || MUST_SIGN_TYPES.has(step.doc_type)) {
+    if (step.quiz_id || step.stagiaire_sign) {
         return doc.status === 'SIGNE';
     }
     return SENT.includes(doc.status);

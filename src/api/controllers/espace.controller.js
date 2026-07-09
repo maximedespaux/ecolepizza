@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { stepsToDocSet } = require('../lib/documents.js');
+const { stepsToDocSet, stagiaireSignsDoc } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { encrypt } = require('../lib/crypto.js');
@@ -116,7 +116,7 @@ const getMonEspace = async (req, res) => {
         await releaseAutoQuizzes(conn, learner); // matérialise les QCM du jour (auto)
 
         const [documents] = await conn.query(
-            `SELECT d.id, d.type, d.title, d.status, d.quiz_id,
+            `SELECT d.id, d.type, d.template_slug, d.title, d.status, d.quiz_id,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at, d.signer_name,
                     GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations
@@ -130,6 +130,10 @@ const getMonEspace = async (req, res) => {
              ORDER BY d.sent_at DESC`,
             [learner.id]
         );
+
+        // Le stagiaire doit-il signer chaque document ? Piloté par le modèle (Modeles).
+        const orgSteps = await loadOrgSteps(req.user.organization_id);
+        for (const d of documents) d.signable = d.quiz_id ? false : stagiaireSignsDoc(orgSteps, d);
 
         res.json({
             data: {

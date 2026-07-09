@@ -1,5 +1,6 @@
 const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
+const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { enrollmentSteps } = require('./formationProgram.controller.js');
 const { logAudit } = require('../lib/audit.js');
 
@@ -26,6 +27,11 @@ const getSuivi = async (req, res) => {
              WHERE e.organization_id = ?`,
             [req.user.organization_id]
         );
+        // Conditions + faits des dossiers chargés une seule fois pour toute la boucle.
+        const condById = await loadConditionMap(conn, req.user.organization_id);
+        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id);
+        const factsMap = await loadDossierFactsMap(
+            conn, req.user.organization_id, enrollments.map((e) => e.enrollment_id), fieldCatalog);
 
         const dossiers = [];
         for (const e of enrollments) {
@@ -37,8 +43,9 @@ const getSuivi = async (req, res) => {
                 const ctx = {
                     financing: e.financing, rsCode: e.program_rs, hygiene: !!e.program_hygiene,
                     jours: e.program_days || 1, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
+                    ...(factsMap.get(e.enrollment_id) || {}),
                 };
-                const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx);
+                const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById);
                 const [docs] = await conn.query(
                     `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id
                      FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id

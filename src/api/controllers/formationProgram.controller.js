@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { matchFormation, matchStep } = require('../lib/documents.js');
+const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
 const { loadOrgSteps } = require('./template.controller.js');
 
 /**
@@ -56,9 +57,12 @@ async function formationSteps(conn, orgId, program) {
  * variante (devis particulier/entreprise, attestation d'assiduité, etc.).
  * ctx = { financing, rsCode, hygiene, jours, agefice }.
  */
-async function enrollmentSteps(conn, orgId, program, ctx) {
+async function enrollmentSteps(conn, orgId, program, ctx, condById) {
     const steps = await formationSteps(conn, orgId, program);
-    return steps.filter((s) => s.active && (s.quiz_id || matchStep(s.applies_when, ctx)));
+    // Conditions personnalisées (Modeles → Conditions) évaluées en plus des intégrées.
+    const conds = condById || await loadConditionMap(conn, orgId);
+    return steps.filter((s) => s.active
+        && (s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds))));
 }
 
 /**

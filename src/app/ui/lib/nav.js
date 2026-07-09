@@ -58,6 +58,7 @@ export const NAV = [
       { to: "/equipe", ic: "👥", label: "Équipe & accès", roles: OWNER },
       { to: "/roles", ic: "🎫", label: "Rôles d'accès", roles: OWNER },
       { to: "/modeles", ic: "⎙", label: "Modèles de documents", roles: ADMIN },
+      { to: "/champs-dossier", ic: "🧩", label: "Champs du dossier", roles: ADMIN },
       { to: "/qcm", ic: "❓", label: "Modèles de QCM", roles: ADMIN },
       { to: "/opcos", ic: "€", label: "OPCO / financeurs", roles: ADMIN },
     ],
@@ -84,6 +85,7 @@ export const PAGE_TITLES = {
   "/equipe": "Équipe & accès",
   "/roles": "Rôles d'accès",
   "/modeles": "Modèles de documents",
+  "/champs-dossier": "Champs du dossier",
   "/opcos": "OPCO / financeurs",
   "/audit": "Journal d'audit",
   "/notifications": "Notifications",
@@ -133,7 +135,7 @@ const SECTION_OF = {
   "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",
-  "/reglages": "/reglages", "/modeles": "/modeles", "/equipe": "/equipe",
+  "/reglages": "/reglages", "/modeles": "/modeles", "/champs-dossier": "/champs-dossier", "/equipe": "/equipe",
   "/audit": "/audit", "/suivi": "/suivi", "/dashboard": "/dashboard",
 };
 
