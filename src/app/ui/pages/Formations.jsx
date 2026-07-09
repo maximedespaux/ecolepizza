@@ -114,6 +114,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [saving, setSaving] = useState(false);
   const [steps, setSteps] = useState([]);
   const [sdrag, setSdrag] = useState(null);
+  const [tab, setTab] = useState("infos"); // "infos" | "parcours"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
 
@@ -149,7 +150,14 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           <h3>Modifier — <span className="mono" style={{ color: colorOf(program.code) }}>{program.code}</span></h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
+        <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, padding: "0 16px", borderBottom: "1px solid var(--border-soft)" }}>
+          <button type="button" role="tab" className={"tab" + (tab === "infos" ? " on" : "")} onClick={() => setTab("infos")}>Informations</button>
+          <button type="button" role="tab" className={"tab" + (tab === "parcours" ? " on" : "")} onClick={() => setTab("parcours")}>
+            Parcours documentaire{steps.length ? ` (${steps.filter((s) => s.active).length}/${steps.length})` : ""}
+          </button>
+        </div>
         <div className="mbody">
+          <div style={{ display: tab === "infos" ? "block" : "none" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr", gap: 12 }}>
             <div className="field"><label>Code</label>
               <input className="inp mono" value={form.code} onChange={set("code")} placeholder="NIV1, RS7404…" /></div>
@@ -200,8 +208,9 @@ function FormationModal({ program, onClose, onSaved, onError }) {
             </div>
           </div>
 
-          <div className="divider" />
-          <h3 style={{ fontSize: 15, marginBottom: 6 }}>Parcours documentaire</h3>
+          </div>
+
+          <div style={{ display: tab === "parcours" ? "block" : "none" }}>
           <p className="hint" style={{ marginTop: 0 }}>Documents requis pour cette formation, dans l'ordre. Glissez (⠿) pour réordonner, décochez pour exclure. Les QCM rattachés à la formation y figurent aussi. Ces étapes composent le tableau de session.</p>
           {steps.length === 0 ? (
             <p className="hint">Aucun document candidat.</p>
@@ -223,6 +232,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               ))}
             </div>
           )}
+          </div>
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>
