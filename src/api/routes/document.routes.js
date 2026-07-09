@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, sendDocument, signDocument, deleteDocument,
+    listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument,
 } = require('../controllers/document.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -16,6 +16,7 @@ router.delete('/:id', authenticateToken, authorizeRoles(...ADMIN_ROLES), deleteD
 // Consultation / signature d'un document : stagiaire propriétaire ou personnel
 // (contrôle de propriété dans le contrôleur).
 router.get('/:id', authenticateToken, getDocument);
+router.get('/:id/preview', authenticateToken, previewHtml);
 router.get('/:id/pdf', authenticateToken, downloadPdf);
 router.get('/:id/docx', authenticateToken, downloadDocx);
 router.post('/:id/sign', authenticateToken, signDocument);

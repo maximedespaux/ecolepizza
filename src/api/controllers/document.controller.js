@@ -305,6 +305,28 @@ const downloadPdf = async (req, res) => {
 };
 
 /**
+ * GET /api/documents/:id/preview — aperçu HTML fidèle (même rendu que le PDF),
+ * affichable en ligne sans dépendre du lecteur PDF du navigateur.
+ */
+const previewHtml = async (req, res) => {
+    try {
+        const r = await fillForRequest(req, res);
+        if (!r) return; // 404 / 403 / 422 (informations manquantes) déjà répondus
+        if (r.content.kind !== 'builder') {
+            return res.status(400).json({ message: 'Aperçu HTML indisponible pour ce modèle (.docx) — utilisez le PDF.' });
+        }
+        const html = renderTemplateHtml(r.content.html, r.ctx, {
+            title: r.doc.title || r.baseName,
+            headerHtml: r.content.header, footerHtml: r.content.footer,
+        });
+        res.json({ data: { html } });
+    } catch (err) {
+        console.error('Erreur aperçu HTML :', err);
+        res.status(500).json({ error: 'Aperçu impossible' });
+    }
+};
+
+/**
  * POST /api/documents/:id/send — envoie le document au stagiaire (demande de signature).
  */
 const sendDocument = async (req, res) => {
@@ -384,4 +406,4 @@ const deleteDocument = (req, res) => {
     );
 };
 
-module.exports = { listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, sendDocument, signDocument, deleteDocument };
+module.exports = { listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument };

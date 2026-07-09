@@ -482,6 +482,25 @@ export function downloadDocumentDocx(id, filename = "document.docx") {
 export function downloadDocumentPdf(id, filename = "document.pdf") {
   return download(`/documents/${id}/pdf`, filename);
 }
+// Aperçu HTML fidèle du document (rendu identique au PDF), affichable en ligne
+// sans dépendre du lecteur PDF du navigateur. Renvoie { html }. Propage err.missing.
+export async function documentPreviewHtml(id) {
+  startLoading();
+  let res;
+  try {
+    res = await fetch(`${API_BASE_URL}/documents/${id}/preview`, { credentials: "include" });
+  } finally {
+    stopLoading();
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.message || data.error || "Aperçu impossible");
+    err.status = res.status;
+    if (data.missing) err.missing = data.missing;
+    throw err;
+  }
+  return data.data.html;
+}
 // URL blob du PDF pour l'aperçu (iframe). Lève une erreur si indisponible (LibreOffice manquant).
 export async function documentPdfUrl(id) {
   startLoading();

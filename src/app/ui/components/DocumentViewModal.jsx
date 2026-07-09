@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
-import { getDocument, signDocument, downloadDocumentPdf, documentPdfUrl } from "../api/apiClient.js";
+import { getDocument, signDocument, downloadDocumentPdf, documentPdfUrl, documentPreviewHtml } from "../api/apiClient.js";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
 
 /**
- * Aperçu FIDÈLE du document : le vrai modèle Word rempli, converti en PDF
- * (non modifiable) et affiché tel quel. Repli sur l'aperçu HTML si la
- * conversion PDF est indisponible (LibreOffice non installé côté serveur).
+ * Aperçu FIDÈLE du document : rendu HTML identique au PDF, affiché en ligne
+ * (iframe srcdoc, indépendant du lecteur PDF du navigateur). Boutons PDF / Ouvrir
+ * pour obtenir le PDF réel.
  */
 function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onChanged }) {
   const [doc, setDoc] = useState(null);
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [pdfError, setPdfError] = useState(null); // message si PDF indisponible
+  const [previewHtml, setPreviewHtml] = useState(null);
+  const [pdfError, setPdfError] = useState(null); // message si aperçu indisponible
   const [missing, setMissing] = useState(null);   // infos manquantes (jetons vides)
   const [status, setStatus] = useState(null);
   const [signing, setSigning] = useState(false);
@@ -20,14 +20,26 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
     getDocument(id).then((r) => setDoc(r.data)).catch((e) => setStatus({ type: "error", message: e.message }));
   }, [id]);
 
-  // Aperçu = PDF du modèle rempli.
+  // Aperçu = rendu HTML du modèle rempli (affiché en ligne, sans lecteur PDF).
   useEffect(() => {
-    let url;
-    documentPdfUrl(id)
-      .then((u) => { url = u; setPdfUrl(u); })
+    documentPreviewHtml(id)
+      .then((html) => setPreviewHtml(html))
       .catch((e) => { setPdfError(e.message); setMissing(e.missing || null); });
-    return () => { if (url) URL.revokeObjectURL(url); };
   }, [id]);
+
+  // Ouvre le PDF réel dans un nouvel onglet (à la demande).
+  async function openPdf() {
+    setStatus(null);
+    const w = window.open("", "_blank");
+    try {
+      const url = await documentPdfUrl(id);
+      if (w) w.location.href = url; else window.open(url, "_blank");
+    } catch (e) {
+      if (w) w.close();
+      setStatus({ type: "error", message: e.message });
+      if (e.missing) setMissing(e.missing);
+    }
+  }
 
   async function handleSign({ signer_name, signature_data }) {
     try {
@@ -76,13 +88,13 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
         </div>
         <div className="mbody" style={{ padding: 0, background: "var(--surface3)" }}>
           <StatusMessage status={status} />
-          {pdfUrl ? (
-            <iframe src={pdfUrl} title="Aperçu du document" className="doc-pdf-frame" />
+          {previewHtml ? (
+            <iframe srcDoc={previewHtml} title="Aperçu du document" className="doc-pdf-frame" sandbox="allow-same-origin" />
           ) : missing ? (
             <MissingPanel />
           ) : pdfError ? (
             <div style={{ padding: "16px 18px" }}>
-              <div className="status err" style={{ marginBottom: 12 }}>Aperçu PDF indisponible : {pdfError}</div>
+              <div className="status err" style={{ marginBottom: 12 }}>Aperçu indisponible : {pdfError}</div>
               {doc && <div className="doc-sheet" dangerouslySetInnerHTML={{ __html: doc.html }} />}
             </div>
           ) : (
@@ -91,8 +103,8 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Fermer</button>
-          {pdfUrl && (
-            <a className="btn ghost sm" href={pdfUrl} target="_blank" rel="noreferrer">↗ Ouvrir</a>
+          {!missing && (
+            <button className="btn ghost sm" onClick={openPdf}>↗ Ouvrir le PDF</button>
           )}
           {doc && !missing && (
             <button className="btn" onClick={() => dl(downloadDocumentPdf(id, `${doc.title || "document"}.pdf`))}>PDF</button>
