@@ -1,6 +1,7 @@
 const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
 const { enrollmentSteps } = require('./formationProgram.controller.js');
+const { createStagiaireAccount } = require('./learner.controller.js');
 
 const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
 
@@ -133,22 +134,53 @@ const createEnrollment = async (req, res) => {
     }
     try {
         const conn = db.promise();
-        // Le financement (type de devis) suit celui du stagiaire s'il n'est pas
-        // fourni explicitement, pour que le parcours documentaire soit cohérent.
+        const orgId = req.user.organization_id;
+        // Stagiaire + niveau de la formation de la session.
+        const [[l]] = await conn.query(
+            'SELECT id, financing, levels, user_id, email, first_name, last_name, phone FROM learner WHERE id = ? AND organization_id = ?',
+            [learner_id, orgId]
+        );
+        const [[sess]] = await conn.query(
+            `SELECT p.level FROM training_session s
+             JOIN training_program p ON p.id = s.program_id
+             WHERE s.id = ? AND s.organization_id = ?`,
+            [session_id, orgId]
+        );
+
+        // Le financement (type de devis) suit celui du stagiaire s'il n'est pas fourni.
         let financing = req.body.financing;
         if (financing !== 'PARTICULIER' && financing !== 'PROFESSIONNEL') {
-            const [[l]] = await conn.query(
-                'SELECT financing FROM learner WHERE id = ? AND organization_id = ?',
-                [learner_id, req.user.organization_id]
-            );
             financing = l && l.financing ? l.financing : 'PARTICULIER';
         }
+
         await conn.query(
             `INSERT INTO enrollment
                 (id, organization_id, learner_id, session_id, company_id, financing, crm_stage, conformite_score)
              VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ROUGE')`,
-            [req.user.organization_id, learner_id, session_id, company_id || null, financing, crm_stage]
+            [orgId, learner_id, session_id, company_id || null, financing, crm_stage]
         );
+
+        // À l'inscription : ajoute automatiquement le niveau de la formation au stagiaire.
+        if (l && sess && sess.level) {
+            const set = new Set((l.levels || '').split(',').map((s) => s.trim()).filter(Boolean));
+            if (!set.has(sess.level)) {
+                set.add(sess.level);
+                await conn.query('UPDATE learner SET levels = ? WHERE id = ? AND organization_id = ?',
+                    [[...set].join(','), learner_id, orgId]);
+            }
+        }
+
+        // À l'inscription : garantit un compte de connexion au stagiaire (si e-mail).
+        if (l && !l.user_id && l.email) {
+            const account = await createStagiaireAccount(conn, orgId, {
+                email: l.email, first_name: l.first_name, last_name: l.last_name, phone: l.phone,
+            });
+            if (account) {
+                await conn.query('UPDATE learner SET user_id = ? WHERE id = ? AND organization_id = ?',
+                    [account.userId, learner_id, orgId]);
+            }
+        }
+
         res.status(201).json({ message: 'Dossier créé' });
     } catch (err) {
         console.error('Erreur création dossier :', err);

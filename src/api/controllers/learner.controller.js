@@ -309,4 +309,5 @@ const deleteLearner = (req, res) => {
 
 module.exports = {
     getLearners, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
+    createStagiaireAccount,
 };

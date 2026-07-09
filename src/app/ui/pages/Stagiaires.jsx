@@ -172,8 +172,13 @@ function Stagiaires() {
         await updateStagiaire(editingId, payload);
         setStatus({ type: "success", message: "Stagiaire mis à jour." });
       } else {
-        await createStagiaire(payload);
-        setStatus({ type: "success", message: "Stagiaire ajouté." });
+        const res = await createStagiaire(payload);
+        setStatus({
+          type: "success",
+          message: res && res.password
+            ? `Stagiaire ajouté. Compte créé — mot de passe : ${res.password} (notez-le, il ne sera plus affiché).`
+            : "Stagiaire ajouté.",
+        });
       }
       closeForm();
       load(query);
