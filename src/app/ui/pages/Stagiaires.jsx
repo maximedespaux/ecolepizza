@@ -214,7 +214,8 @@ function Stagiaires() {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "10px 0 4px" }}>
         <select className="inp" style={{ maxWidth: 190 }} value={filters.level} onChange={setFilter("level")}>
           <option value="">Tous les niveaux</option>
-          {LEVELS.map((l) => <option key={l.v} value={l.v}>{l.label}</option>)}
+          {[...new Set([...LEVELS.map((l) => l.v), ...learners.flatMap((l) => (l.levels || "").split(",").map((s) => s.trim()).filter(Boolean))])]
+            .map((v) => <option key={v} value={v}>{LEVEL_LABEL[v] || v}</option>)}
         </select>
         <select className="inp" style={{ maxWidth: 190 }} value={filters.financing} onChange={setFilter("financing")}>
           <option value="">Tout financement</option>

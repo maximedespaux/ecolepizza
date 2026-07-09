@@ -140,8 +140,9 @@ const createEnrollment = async (req, res) => {
             'SELECT id, financing, levels, user_id, email, first_name, last_name, phone FROM learner WHERE id = ? AND organization_id = ?',
             [learner_id, orgId]
         );
+        // Badge de la formation : son niveau si défini, sinon son code.
         const [[sess]] = await conn.query(
-            `SELECT p.level FROM training_session s
+            `SELECT COALESCE(NULLIF(p.level, ''), p.code) AS badge FROM training_session s
              JOIN training_program p ON p.id = s.program_id
              WHERE s.id = ? AND s.organization_id = ?`,
             [session_id, orgId]
@@ -160,11 +161,11 @@ const createEnrollment = async (req, res) => {
             [orgId, learner_id, session_id, company_id || null, financing, crm_stage]
         );
 
-        // À l'inscription : ajoute automatiquement le niveau de la formation au stagiaire.
-        if (l && sess && sess.level) {
+        // À l'inscription : ajoute automatiquement le badge de la formation au stagiaire.
+        if (l && sess && sess.badge) {
             const set = new Set((l.levels || '').split(',').map((s) => s.trim()).filter(Boolean));
-            if (!set.has(sess.level)) {
-                set.add(sess.level);
+            if (!set.has(sess.badge)) {
+                set.add(sess.badge);
                 await conn.query('UPDATE learner SET levels = ? WHERE id = ? AND organization_id = ?',
                     [[...set].join(','), learner_id, orgId]);
             }

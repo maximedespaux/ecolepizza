@@ -54,11 +54,12 @@ const getLearners = (req, res) => {
                 l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.levels,
                 l.financing, l.opco, l.created_at,
                 u.email AS account_email,
-                (SELECT GROUP_CONCAT(DISTINCT p.level)
+                (SELECT GROUP_CONCAT(DISTINCT COALESCE(NULLIF(p.level, ''), p.code))
                    FROM enrollment e
                    JOIN training_session s ON s.id = e.session_id
                    JOIN training_program p ON p.id = s.program_id
-                  WHERE e.learner_id = l.id AND p.level IS NOT NULL AND p.level <> '') AS session_levels
+                  WHERE e.learner_id = l.id
+                    AND COALESCE(NULLIF(p.level, ''), p.code) IS NOT NULL) AS session_levels
          FROM learner l
          LEFT JOIN user u ON u.id = l.user_id
          WHERE l.organization_id = ?
