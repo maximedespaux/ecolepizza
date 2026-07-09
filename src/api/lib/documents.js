@@ -137,6 +137,23 @@ function stagiaireSignsDoc(steps, doc) {
     return false;
 }
 
+/**
+ * L'ORGANISME doit-il signer ce document ? Piloté par le flag `signable` du modèle
+ * (« À signer »). La signature organisme est appliquée automatiquement à l'envoi.
+ */
+function orgSignsDoc(steps, doc) {
+    if (!doc) return false;
+    if (doc.template_slug) {
+        const s = steps.find((x) => x.slug === doc.template_slug);
+        if (s) return !!s.signable;
+    }
+    if (doc.type) {
+        const byType = steps.filter((x) => x.doc_type === doc.type);
+        if (byType.length) return byType.some((x) => !!x.signable);
+    }
+    return false;
+}
+
 // Conditions AU NIVEAU FORMATION uniquement (rs / hygiène / jours). On ignore
 // financing/agefice (propres au dossier) : c'est la liste des documents candidats
 // d'une formation, avant application des conditions du dossier.
@@ -148,4 +165,4 @@ function matchFormation(applies, program) {
     return true;
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc };
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, orgSignsDoc };

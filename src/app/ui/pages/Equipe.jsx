@@ -14,11 +14,12 @@ const ROLE_META = {
   SECRETARIAT: { label: "Secrétariat", tone: "g" },
   FORMATEUR: { label: "Formateur", tone: "a" },
   AUDITEUR: { label: "Auditeur", tone: "n" },
+  INTERVENANT: { label: "Intervenant externe", tone: "a" },
 };
 
 // Rôles attribuables selon le rôle du demandeur.
 function assignableRoles(actorRole) {
-  const base = ["ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR", "AUDITEUR"];
+  const base = ["ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR", "AUDITEUR", "INTERVENANT"];
   return actorRole === "SUPER_ADMIN" ? ["SUPER_ADMIN", ...base] : base;
 }
 

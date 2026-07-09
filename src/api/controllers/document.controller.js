@@ -3,7 +3,7 @@ const db = require('../config/database.js');
 const { renderDocumentHTML } = require('../lib/render.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
-const { stagiaireSignsDoc } = require('../lib/documents.js');
+const { stagiaireSignsDoc, orgSignsDoc } = require('../lib/documents.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { findMissingTokens } = require('../lib/tokens.js');
 const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
@@ -76,6 +76,15 @@ async function advanceEnrollments(conn, orgId, documentId, targetStage) {
 async function loadContext(conn, organizationId, learnerId, documentId) {
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [organizationId]);
     if (org) org.signature_image = decrypt(org.signature_image); // signature organisme chiffrée au repos
+    // Si le document a été signé par l'organisme (à l'envoi), on affiche CETTE signature.
+    if (org && documentId) {
+        try {
+            const [[gd]] = await conn.query('SELECT org_signature_data FROM generated_document WHERE id = ?', [documentId]);
+            if (gd && gd.org_signature_data) org.signature_image = decrypt(gd.org_signature_data);
+        } catch (e) {
+            if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; // migration 049 non jouée : signature statique
+        }
+    }
     const [[learner]] = await conn.query('SELECT * FROM learner WHERE id = ?', [learnerId]);
     let company = null;
     const [formations] = await conn.query(
@@ -222,6 +231,10 @@ const getDocument = async (req, res) => {
                 sent_at: doc.sent_at, signed_at: doc.signed_at, signer_name: doc.signer_name,
                 signature_data: decrypt(doc.signature_data),
                 signable: stagiaireSignsDoc(orgSteps, doc),
+                org_signable: orgSignsDoc(orgSteps, doc),
+                org_signed: !!doc.org_signed_at,
+                org_signer_name: doc.org_signer_name || null,
+                org_signed_at: doc.org_signed_at || null,
                 // Traçabilité de la signature électronique (déchiffrée pour l'affichage).
                 signer_ip: decrypt(doc.signer_ip) || null,
                 signer_user_agent: decrypt(doc.signer_user_agent) || null,
@@ -385,16 +398,46 @@ const previewHtml = async (req, res) => {
 const sendDocument = async (req, res) => {
     try {
         const conn = db.promise();
-        const [result] = await conn.query(
-            `UPDATE generated_document SET status = 'ENVOYE', sent_at = NOW()
-             WHERE id = ? AND organization_id = ? AND status = 'A_FAIRE'`,
-            [req.params.id, req.user.organization_id]
+        const orgId = req.user.organization_id;
+        const [[doc]] = await conn.query(
+            'SELECT id, type, template_slug, status FROM generated_document WHERE id = ? AND organization_id = ?',
+            [req.params.id, orgId]
         );
-        if (result.affectedRows === 0) {
+        if (!doc || doc.status !== 'A_FAIRE') {
             return res.status(400).json({ message: 'Document déjà envoyé ou introuvable.' });
         }
+
+        // Signature de l'organisme AVANT envoi : appliquée automatiquement avec la
+        // signature enregistrée, uniquement si le modèle prévoit « À signer ».
+        let orgSet = '';
+        const orgVals = [];
+        try {
+            const orgSteps = await loadOrgSteps(orgId);
+            if (orgSignsDoc(orgSteps, doc)) {
+                const [[cur]] = await conn.query('SELECT org_signed_at FROM generated_document WHERE id = ?', [req.params.id]);
+                if (!cur || !cur.org_signed_at) {
+                    const [[org]] = await conn.query(
+                        'SELECT legal_name, short_name, manager, signature_image FROM organization WHERE id = ?', [orgId]);
+                    const img = decrypt(org && org.signature_image);
+                    if (!img) {
+                        return res.status(422).json({
+                            message: "Aucune signature d'organisme enregistrée. Ajoutez-la dans Organisme avant d'envoyer ce document à signer.",
+                        });
+                    }
+                    orgSet = ', org_signed_at = NOW(), org_signer_name = ?, org_signature_data = ?';
+                    orgVals.push(org.legal_name || org.short_name || org.manager || 'Organisme', encrypt(img));
+                }
+            }
+        } catch (e) {
+            if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; // migration 049 non jouée : envoi sans signature organisme
+        }
+
+        await conn.query(
+            `UPDATE generated_document SET status = 'ENVOYE', sent_at = NOW()${orgSet}
+             WHERE id = ? AND organization_id = ? AND status = 'A_FAIRE'`,
+            [...orgVals, req.params.id, orgId]
+        );
         // Pipeline : devis envoyé -> « Devis envoyé » ; éval. envoyée -> « Éval. envoyée ».
-        const [[doc]] = await conn.query('SELECT type FROM generated_document WHERE id = ?', [req.params.id]);
         if (doc && doc.type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_ENVOYE');
         else if (doc && doc.type === 'EVALUATION_SATISFACTION') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'EVALUATION_ENVOYEE');
         logAudit(req, 'document.send', 'GeneratedDocument', req.params.id);

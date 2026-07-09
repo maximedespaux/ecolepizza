@@ -144,11 +144,21 @@ const TOKEN_CATALOG = [
 const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme']);
 
 // Rend une image de signature (ou un emplacement en pointillés si absente).
+// Cadre de signature à TAILLE FIXE : l'image (dessin du stagiaire ou signature de
+// l'organisme) est contenue dans une boîte de dimensions constantes, quelle que soit
+// sa taille d'origine — la mise en page ne bouge pas. Le cadre vide (non signé) a la
+// même taille pour un rendu identique.
+const SIG_W = 200; // largeur du cadre de signature (px)
+const SIG_H = 64;  // hauteur du cadre de signature (px)
 function signatureBox(dataUrl, label) {
     if (dataUrl && /^data:image\//.test(dataUrl)) {
-        return `<img src="${dataUrl}" alt="${label}" style="max-height:64px;max-width:220px;object-fit:contain" />`;
+        return `<span style="display:inline-block;width:${SIG_W}px;height:${SIG_H}px;vertical-align:middle;overflow:hidden;text-align:center">`
+            + `<img src="${dataUrl}" alt="${label}" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain" />`
+            + `</span>`;
     }
-    return `<span style="display:inline-block;border:1px dashed #b0b0b0;color:#999;padding:14px 34px;border-radius:6px;font-size:9pt">${label}</span>`;
+    return `<span style="display:inline-block;width:${SIG_W}px;height:${SIG_H}px;box-sizing:border-box;`
+        + `border:1px dashed #b0b0b0;color:#999;text-align:center;line-height:${SIG_H}px;`
+        + `border-radius:6px;font-size:9pt;vertical-align:middle;overflow:hidden">${label}</span>`;
 }
 
 // Alias historiques : clés supplémentaires produites par le moteur pour que les

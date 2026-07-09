@@ -15,6 +15,7 @@ function Emargement({ sessionId }) {
   const [records, setRecords] = useState([]);
   const [trainers, setTrainers] = useState([]);
   const [trainerSigns, setTrainerSigns] = useState([]);
+  const [intervenants, setIntervenants] = useState([]);
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [signSheetRec, setSignSheetRec] = useState(null); // feuille que le formateur signe
@@ -26,6 +27,7 @@ function Emargement({ sessionId }) {
       setRecords(r.data.records);
       setTrainers(r.data.trainers || []);
       setTrainerSigns(r.data.trainerSigns || []);
+      setIntervenants(r.data.intervenants || []);
     } catch (e) {
       setStatus({ type: "error", message: e.message });
     }
@@ -157,6 +159,42 @@ function Emargement({ sessionId }) {
                   })}
                 </tr>
               ))}
+
+              {/* Section intervenants externes (une ligne chacun, sur leurs demi-journées) */}
+              {intervenants.length > 0 && (
+                <tr>
+                  <td colSpan={sheets.length + 1}
+                    style={{ padding: "12px 0 4px", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--dim)", borderTop: "2px solid var(--border-soft)" }}>
+                    Intervenant{intervenants.length > 1 ? "s" : ""} externe{intervenants.length > 1 ? "s" : ""}
+                  </td>
+                </tr>
+              )}
+              {intervenants.map((iv) => {
+                const slotSet = new Set((iv.slots || []).map((x) => `${x.date}|${x.slot}`));
+                return (
+                  <tr key={`iv-${iv.id}`}>
+                    <td style={{ whiteSpace: "nowrap", fontWeight: 600, color: "var(--muted)" }}>
+                      {iv.first_name} {iv.last_name}
+                      {iv.specialty ? <span style={{ display: "block", fontSize: 10, fontWeight: 400, color: "var(--dim)" }}>{iv.specialty}</span> : null}
+                    </td>
+                    {sheets.map((s) => {
+                      const assigned = slotSet.has(`${s.date}|${s.slot}`);
+                      const sg = trainerByKey[`${s.id}|${iv.id}`];
+                      return (
+                        <td key={s.id} style={{ textAlign: "center" }}>
+                          {!assigned ? (
+                            <span style={{ color: "var(--border-soft)" }}></span>
+                          ) : sg && sg.signed ? (
+                            <span title={`Signé par ${sg.signer_name || ""}${sg.signed_at ? ` · ${sg.signed_at}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}>✍</span>
+                          ) : (
+                            <span style={{ color: "var(--dim)" }} title="En attente de la signature de l'intervenant">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

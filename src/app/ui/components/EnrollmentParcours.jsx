@@ -18,7 +18,7 @@ function lineFor(s) {
 function actionFor(s) {
   if (s.status !== "current" && s.status !== "todo") return null;
   if (s.docId) return { label: s.signable ? "Ouvrir la signature" : s.quiz ? "Voir le QCM" : "Voir le document", kind: "open" };
-  if (s.quiz) return null; // l'envoi d'un QCM se fait depuis « Modèles de QCM »
+  if (s.quiz) return { label: "Envoyer le QCM", kind: "send-quiz" }; // envoi manuel au stagiaire
   return { label: "Préparer ce document", kind: "prepare" };
 }
 
@@ -27,7 +27,7 @@ function actionFor(s) {
  * la formation, dans l'ordre), détail de l'étape sélectionnée à droite.
  * `onOpenDoc(docId)` ouvre l'aperçu/signature ; `onGoto('documents')` remonte à la section Documents.
  */
-function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare }) {
+function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSendQuiz }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
@@ -52,6 +52,7 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare }) {
     if (!action) return;
     if (action.kind === "open" && step.docId) onOpenDoc?.(step.docId);
     else if (action.kind === "prepare") onPrepare?.(step.key);
+    else if (action.kind === "send-quiz" && step.key?.startsWith("quiz:")) onSendQuiz?.(step.key.slice(5));
   }
 
   const h = data.header || {};

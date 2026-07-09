@@ -13,23 +13,34 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // n'existe pas (évite l'énumération de comptes par mesure du temps de réponse).
 const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing-equalization', 10);
 
+// nav_access est stocké en JSON (colonne TEXT) : on le renvoie TOUJOURS désérialisé
+// (objet), sinon le front reçoit une chaîne et considère l'accès comme vide.
+function withParsedNav(user) {
+    if (user && typeof user.nav_access === 'string') {
+        try { user.nav_access = JSON.parse(user.nav_access); } catch { user.nav_access = null; }
+    }
+    return user;
+}
+
 /**
  * GET /api/auth/me — renvoie l'utilisateur connecté (sans le mot de passe).
  */
-const getCurrentUser = (req, res) => {
-    const userId = req.user.id;
-
-    db.query('SELECT * FROM user WHERE id = ?', [userId], (err, results) => {
-        if (err) {
-            console.error('Erreur récupération utilisateur :', err);
-            return res.status(500).json({ error: 'Internal Server Error' });
-        }
-        if (results.length === 0) {
-            return res.status(404).json({ message: 'Utilisateur introuvable' });
-        }
-        const { password, ...user } = results[0];
+const getCurrentUser = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [rows] = await conn.query('SELECT * FROM user WHERE id = ?', [req.user.id]);
+        if (!rows.length) return res.status(404).json({ message: 'Utilisateur introuvable' });
+        const { password, ...user } = rows[0];
+        withParsedNav(user);
+        // Ce compte est-il aussi rattaché à une fiche stagiaire ? (ex. intervenant
+        // ancien stagiaire) -> on lui redonne l'espace stagiaire en plus.
+        const [[lc]] = await conn.query('SELECT COUNT(*) AS n FROM learner WHERE user_id = ?', [req.user.id]);
+        user.has_learner = lc.n > 0;
         return res.status(200).json({ success: true, data: user });
-    });
+    } catch (err) {
+        console.error('Erreur récupération utilisateur :', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /**
@@ -94,6 +105,9 @@ const userAuthentification = async (req, res) => {
         });
 
         const { password: _pw, ...userWithoutPassword } = user;
+        withParsedNav(userWithoutPassword);
+        const [[lc]] = await conn.query('SELECT COUNT(*) AS n FROM learner WHERE user_id = ?', [user.id]);
+        userWithoutPassword.has_learner = lc.n > 0;
         // Le jeton n'est PAS renvoyé dans le corps : il vit uniquement dans le
         // cookie httpOnly (non lisible par JavaScript). Réduit la surface d'exfiltration.
         return res.status(200).json({

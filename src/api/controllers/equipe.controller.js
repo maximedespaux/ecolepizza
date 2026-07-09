@@ -7,12 +7,12 @@ const db = require('../config/database.js');
  * et réservées au propriétaire / administrateurs (voir equipe.routes.js).
  */
 
-// Rôles « accès au panneau » gérables depuis l'écran Équipe.
-const TEAM_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'];
+// Rôles « accès au panneau » gérables depuis l'écran Équipe (dont les intervenants externes).
+const TEAM_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR', 'INTERVENANT'];
 // Rôles « propriétaire » : il doit toujours en rester au moins un actif.
 const OWNER_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME'];
 // Rôles qu'un ADMIN_ORGANISME peut attribuer (un SUPER_ADMIN peut aussi attribuer SUPER_ADMIN).
-const ASSIGNABLE_BY_ADMIN = ['ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'];
+const ASSIGNABLE_BY_ADMIN = ['ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR', 'INTERVENANT'];
 
 const PUBLIC_FIELDS =
     'id, role, first_name, last_name, email, phone, active, nav_access, last_login_at, created_at';

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, deleteStagiaire,
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, deleteStagiaire, sendQuizToEnrollment,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -106,6 +106,19 @@ function StagiaireDetail() {
     try {
       await sendDocument(docId);
       setStatus({ type: "success", message: "Document envoyé au stagiaire." });
+      loadDocs();
+      setParcoursRefresh((n) => n + 1);
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    }
+  }
+
+  async function handleSendQuiz(quizId) {
+    if (!curEnrId) { setStatus({ type: "error", message: "Sélectionnez d'abord une formation." }); return; }
+    setStatus(null);
+    try {
+      await sendQuizToEnrollment(quizId, curEnrId);
+      setStatus({ type: "success", message: "QCM envoyé au stagiaire." });
       loadDocs();
       setParcoursRefresh((n) => n + 1);
     } catch (err) {
@@ -264,6 +277,7 @@ function StagiaireDetail() {
               refresh={parcoursRefresh}
               onOpenDoc={(docId) => setViewId(docId)}
               onPrepare={prepareStep}
+              onSendQuiz={handleSendQuiz}
             />
             <div className="divider" style={{ margin: "18px 0" }} />
           </>

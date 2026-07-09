@@ -359,6 +359,7 @@ export function createQuiz(payload) { return request("/quizzes", { method: "POST
 export function saveQuiz(id, payload) { return request(`/quizzes/${id}`, { method: "PUT", body: JSON.stringify(payload) }); }
 export function deleteQuiz(id) { return request(`/quizzes/${id}`, { method: "DELETE" }); }
 export function sendQuiz(id, session_id) { return request(`/quizzes/${id}/send`, { method: "POST", body: JSON.stringify({ session_id: session_id || null }) }); }
+export function sendQuizToEnrollment(id, enrollmentId) { return request(`/quizzes/${id}/send/${enrollmentId}`, { method: "POST" }); }
 export function takeQuiz(documentId) { return request(`/quizzes/take/${documentId}`); }
 export function submitQuiz(documentId, answers) { return request(`/quizzes/take/${documentId}/submit`, { method: "POST", body: JSON.stringify({ answers }) }); }
 
@@ -381,6 +382,33 @@ export function getSessionBoard(id) {
 // Parcours (cycle de vie) d'un dossier stagiaire.
 export function getEnrollmentParcours(id) {
   return request(`/enrollments/${id}/parcours`);
+}
+
+// --- Intervenants externes (affectation à une session) ---
+export function getSessionIntervenants(sessionId) {
+  return request(`/sessions/${sessionId}/intervenants`);
+}
+export function addSessionIntervenant(sessionId, payload) {
+  return request(`/sessions/${sessionId}/intervenants`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function setIntervenantSlots(sessionId, siId, slots) {
+  return request(`/sessions/${sessionId}/intervenants/${siId}/slots`, { method: "PUT", body: JSON.stringify({ slots }) });
+}
+export function removeSessionIntervenant(sessionId, siId) {
+  return request(`/sessions/${sessionId}/intervenants/${siId}`, { method: "DELETE" });
+}
+// Espace intervenant (rôle INTERVENANT).
+export function getMyIntervenantSheets() {
+  return request("/intervenant/emargement");
+}
+export function signMyIntervenantSheet(payload) {
+  return request("/intervenant/emargement/sign", { method: "POST", body: JSON.stringify(payload) });
+}
+export function getMyIntervenantProfile() {
+  return request("/intervenant/me");
+}
+export function setMyIntervenantSignature(signature_data) {
+  return request("/intervenant/signature", { method: "PUT", body: JSON.stringify({ signature_data }) });
 }
 
 export function getSession(id) {

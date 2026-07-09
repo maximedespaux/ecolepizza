@@ -81,7 +81,7 @@ CREATE TABLE user (
     id              uuid         NOT NULL DEFAULT uuid(),
     organization_id uuid         DEFAULT NULL,
     role            enum('PLATFORM_OWNER','SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT','FORMATEUR',
-                         'STAGIAIRE','ENTREPRISE','FINANCEUR','AUDITEUR')
+                         'STAGIAIRE','ENTREPRISE','FINANCEUR','AUDITEUR','INTERVENANT')
                     NOT NULL DEFAULT 'SECRETARIAT',
     first_name      varchar(120) DEFAULT NULL,
     last_name       varchar(120) DEFAULT NULL,
@@ -89,6 +89,7 @@ CREATE TABLE user (
     phone           varchar(30)  DEFAULT NULL,
     active          tinyint(1)   NOT NULL DEFAULT 1,    -- 0 = accès désactivé (connexion refusée)
     nav_access      text         DEFAULT NULL,          -- accès menu par utilisateur (JSON de chemins) ; NULL = rien accordé
+    signature_image longtext     DEFAULT NULL,          -- signature enregistrée (cachet/image, chiffrée au repos) — ex. intervenant société
     last_login_at   timestamp    NULL DEFAULT NULL,     -- dernière connexion réussie
     password        varchar(255) NOT NULL,             -- hash bcrypt (authentification)
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
@@ -304,6 +305,9 @@ CREATE TABLE generated_document (
     signer_ip     varchar(255) DEFAULT NULL,          -- traçabilité : IP du signataire (chiffrée au repos)
     signer_user_agent varchar(1000) DEFAULT NULL,     -- traçabilité : appareil/navigateur (chiffré au repos)
     signed_hash   char(64)     DEFAULT NULL,          -- SHA-256 du contenu signé
+    org_signed_at datetime     DEFAULT NULL,          -- signature organisme (appliquée à l'envoi)
+    org_signer_name varchar(255) DEFAULT NULL,        -- nom de l'organisme signataire
+    org_signature_data longtext DEFAULT NULL,         -- image de signature organisme (chiffrée au repos)
     created_at    timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     KEY idx_doc_org (organization_id, type),
@@ -674,6 +678,35 @@ CREATE TABLE attendance_trainer_sign (
     KEY idx_ats_sheet (sheet_id),
     CONSTRAINT fk_ats_sheet FOREIGN KEY (sheet_id) REFERENCES attendance_sheet (id) ON DELETE CASCADE,
     CONSTRAINT fk_ats_user  FOREIGN KEY (user_id)  REFERENCES user (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Intervenants externes affectés à une session (comptes rôle INTERVENANT), avec
+-- les demi-journées assurées (session_intervenant_slot). Ils signent l'émargement.
+CREATE TABLE session_intervenant (
+    id              uuid         NOT NULL DEFAULT uuid(),
+    organization_id uuid         NOT NULL,
+    session_id      uuid         NOT NULL,
+    user_id         uuid         NOT NULL,
+    specialty       varchar(160) DEFAULT NULL,
+    created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_session_interv (session_id, user_id),
+    KEY idx_si_org (organization_id),
+    CONSTRAINT fk_si_org     FOREIGN KEY (organization_id) REFERENCES organization (id) ON DELETE CASCADE,
+    CONSTRAINT fk_si_session FOREIGN KEY (session_id)      REFERENCES training_session (id) ON DELETE CASCADE,
+    CONSTRAINT fk_si_user    FOREIGN KEY (user_id)         REFERENCES user (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE session_intervenant_slot (
+    id                     uuid NOT NULL DEFAULT uuid(),
+    session_intervenant_id uuid NOT NULL,
+    date                   date NOT NULL,
+    slot                   enum('MATIN','APRES_MIDI','EXAMEN','DISTANCIEL') NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_sis (session_intervenant_id, date, slot),
+    KEY idx_sis_parent (session_intervenant_id),
+    CONSTRAINT fk_sis_parent FOREIGN KEY (session_intervenant_id)
+        REFERENCES session_intervenant (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Formateurs affectés à une session (plusieurs possibles), choisis dans l'équipe.

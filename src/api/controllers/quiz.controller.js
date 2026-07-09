@@ -422,4 +422,41 @@ const sendQuiz = async (req, res) => {
     }
 };
 
-module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz };
+/**
+ * POST /api/quizzes/:id/send/:enrollmentId — envoie CE QCM à CE dossier précis
+ * (action manuelle depuis le parcours du stagiaire). Idempotent : si le QCM a déjà
+ * été envoyé à ce dossier, renvoie le document existant.
+ */
+const sendQuizToEnrollment = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[quiz]] = await conn.query('SELECT id, title FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!quiz) return res.status(404).json({ message: 'QCM introuvable' });
+        const [[enr]] = await conn.query('SELECT id, learner_id FROM enrollment WHERE id = ? AND organization_id = ?', [req.params.enrollmentId, orgId]);
+        if (!enr) return res.status(404).json({ message: 'Dossier introuvable' });
+
+        // Déjà envoyé à ce dossier ? On ne recrée pas.
+        const [[ex]] = await conn.query(
+            `SELECT gd.id FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
+             WHERE gd.quiz_id = ? AND df.enrollment_id = ? LIMIT 1`,
+            [quiz.id, enr.id]
+        );
+        if (ex) return res.json({ data: { document_id: ex.id, already: true } });
+
+        const docId = crypto.randomUUID();
+        await conn.query(
+            `INSERT INTO generated_document (id, organization_id, learner_id, type, quiz_id, title, status, sent_at)
+             VALUES (?, ?, ?, 'QCM', ?, ?, 'ENVOYE', NOW())`,
+            [docId, orgId, enr.learner_id, quiz.id, quiz.title]
+        );
+        await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [docId, enr.id]);
+        logAudit(req, 'quiz.send', 'Quiz', quiz.id);
+        res.status(201).json({ data: { document_id: docId } });
+    } catch (err) {
+        console.error('Erreur envoi QCM (dossier) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment };

@@ -6,11 +6,10 @@ import ChangePasswordModal from "../components/ChangePasswordModal.jsx";
 import { initials } from "../lib/format.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
-
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 
-/** Coquille de l'espace stagiaire : en-tête simple, pas de barre latérale. */
-function StudentLayout() {
+/** Coquille de l'espace intervenant : en-tête simple, signature d'émargement. */
+function IntervenantLayout() {
   const { user, isConnected, isLoading, logout } = useContext(UserContext);
   const [pwOpen, setPwOpen] = useState(false);
 
@@ -30,13 +29,11 @@ function StudentLayout() {
           <img src={LOGO} alt="École Pizza" style={{ width: 36, height: 36, borderRadius: 9, background: "#fff", padding: 3, objectFit: "contain" }} />
           <div>
             <div className="name" style={{ fontSize: 17 }}>Impasto</div>
-            <div className="sub" style={{ fontSize: 10, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em" }}>Espace stagiaire</div>
+            <div className="sub" style={{ fontSize: 10, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em" }}>Espace intervenant</div>
           </div>
         </div>
         <nav style={{ display: "flex", gap: 6, marginLeft: 8 }}>
-          <NavLink to="/formations" className={navClass}>Mes formations</NavLink>
-          <NavLink to="/atelier" className={navClass}>Atelier pâte</NavLink>
-          {user?.role === "INTERVENANT" && <NavLink to="/intervention" className={navClass}>Intervention</NavLink>}
+          <NavLink to="/emargement" className={navClass}>Émargement</NavLink>
         </nav>
         <div className="spacer" />
         <ThemeToggle />
@@ -47,10 +44,9 @@ function StudentLayout() {
       <main className="content" style={{ maxWidth: 900 }}>
         <Outlet />
       </main>
-
       {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
     </div>
   );
 }
 
-export default StudentLayout;
+export default IntervenantLayout;

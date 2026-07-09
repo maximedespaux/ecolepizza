@@ -105,11 +105,15 @@ export const SETTINGS_PATHS = ["/reglages", "/equipe", "/roles"];
 
 // Normalise nav_access en objet { chemin: "read" | "write" }.
 // Rétro-compat : un tableau (ancien format) = tout en écriture.
+// Accès NON configuré (null/undefined) : on retombe sur les accès PAR DÉFAUT du rôle
+// (sinon un compte fraîchement créé, ex. Formateur, n'aurait accès à rien).
 function navMap(user) {
-  const na = user?.nav_access;
-  if (!na) return {};
+  let na = user?.nav_access;
+  if (na == null) return builtinRoleAccess(user?.role);
+  // Sécurité : si l'API renvoie encore le JSON en chaîne, on le désérialise.
+  if (typeof na === "string") { try { na = JSON.parse(na); } catch { return {}; } }
   if (Array.isArray(na)) { const o = {}; na.forEach((p) => { o[p] = "write"; }); return o; }
-  return typeof na === "object" ? na : {};
+  return typeof na === "object" && na ? na : {};
 }
 
 /** L'utilisateur a-t-il ce chemin dans sa liste d'accès menu ? (non-propriétaires) */

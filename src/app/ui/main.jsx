@@ -8,6 +8,8 @@ import "./styles/app.css";
 
 import AppLayout from "./layouts/AppLayout.jsx";
 import StudentLayout from "./layouts/StudentLayout.jsx";
+import IntervenantLayout from "./layouts/IntervenantLayout.jsx";
+import IntervenantEspace from "./pages/IntervenantEspace.jsx";
 import LoadingBar from "./components/LoadingBar.jsx";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -106,6 +108,7 @@ function AppRoutes() {
   }
 
   const isStudent = user?.role === "STAGIAIRE";
+  const isIntervenant = user?.role === "INTERVENANT";
   const isPlatform = user?.role === "PLATFORM_OWNER";
 
   return (
@@ -119,8 +122,15 @@ function AppRoutes() {
           <Route path="organisations" element={<Platform />} />
           <Route path="*" element={<Navigate to="/organisations" replace />} />
         </Route>
-      ) : isStudent ? (
-        // --- Espace stagiaire (pas de barre latérale admin) ---
+      ) : (isIntervenant && !user?.has_learner) ? (
+        // --- Espace intervenant externe seul (signature d'émargement) ---
+        <Route path="/" element={<IntervenantLayout />}>
+          <Route index element={<Navigate to="/emargement" replace />} />
+          <Route path="emargement" element={<IntervenantEspace />} />
+          <Route path="*" element={<Navigate to="/emargement" replace />} />
+        </Route>
+      ) : (isStudent || isIntervenant) ? (
+        // --- Espace stagiaire (+ onglet « Intervention » si le compte est aussi intervenant) ---
         <Route path="/" element={<StudentLayout />}>
           <Route index element={<Navigate to="/formations" replace />} />
           <Route path="mon-espace" element={<MonEspace />} />
@@ -128,6 +138,7 @@ function AppRoutes() {
           <Route path="formations" element={<MesFormations />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
           <Route path="atelier" element={<Atelier />} />
+          {isIntervenant && <Route path="intervention" element={<IntervenantEspace />} />}
           <Route path="*" element={<Navigate to="/formations" replace />} />
         </Route>
       ) : (

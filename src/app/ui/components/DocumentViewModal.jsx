@@ -88,6 +88,13 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
         </div>
         <div className="mbody" style={{ padding: 0, background: "var(--surface3)" }}>
           <StatusMessage status={status} />
+          {doc && doc.org_signable && (
+            <div style={{ padding: "6px 14px", fontSize: 12, background: doc.org_signed ? "rgba(22,163,74,.08)" : "rgba(184,134,11,.10)", borderBottom: "1px solid var(--border-soft)" }}>
+              {doc.org_signed
+                ? <><b style={{ color: "#16a34a" }}>✔ Signé par l'organisme</b>{doc.org_signer_name ? ` (${doc.org_signer_name})` : ""}{doc.org_signed_at ? ` le ${new Date(doc.org_signed_at).toLocaleDateString("fr-FR")}` : ""}</>
+                : <span style={{ color: "var(--amber, #b8860b)" }}>✍ L'organisme signera automatiquement à l'envoi (signature enregistrée requise).</span>}
+            </div>
+          )}
           {doc && doc.status === "SIGNE" && (
             <div style={{ padding: "8px 14px", fontSize: 12, background: "rgba(22,163,74,.10)", borderBottom: "1px solid rgba(22,163,74,.30)" }}>
               <b style={{ color: "#16a34a" }}>✔ Signé électroniquement</b> par <b>{doc.signer_name || "—"}</b>

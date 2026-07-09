@@ -73,7 +73,30 @@ const getAttendance = async (req, res) => {
              WHERE s.session_id = ?`,
             [req.params.sessionId]
         );
-        res.json({ data: { sheets, records, trainers, trainerSigns } });
+        // Intervenants externes affectés (avec leurs demi-journées) : une ligne chacun.
+        // Signatures récupérées via trainerSigns (même table attendance_trainer_sign).
+        let intervenants = [];
+        try {
+            const [ivRows] = await conn.query(
+                `SELECT si.user_id AS id, u.first_name, u.last_name, si.specialty,
+                        DATE_FORMAT(sis.date, '%Y-%m-%d') AS date, sis.slot
+                 FROM session_intervenant si
+                 JOIN user u ON u.id = si.user_id
+                 LEFT JOIN session_intervenant_slot sis ON sis.session_intervenant_id = si.id
+                 WHERE si.session_id = ?
+                 ORDER BY u.last_name, u.first_name`,
+                [req.params.sessionId]
+            );
+            const ivMap = {};
+            for (const r of ivRows) {
+                const iv = ivMap[r.id] || (ivMap[r.id] = { id: r.id, first_name: r.first_name, last_name: r.last_name, specialty: r.specialty, slots: [] });
+                if (r.date) iv.slots.push({ date: r.date, slot: r.slot });
+            }
+            intervenants = Object.values(ivMap);
+        } catch (e) {
+            if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; // migration 050 non jouée
+        }
+        res.json({ data: { sheets, records, trainers, trainerSigns, intervenants } });
     } catch (err) {
         console.error('Erreur émargement :', err);
         res.status(500).json({ error: 'Internal Server Error' });

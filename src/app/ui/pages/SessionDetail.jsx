@@ -8,6 +8,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Emargement from "../components/Emargement.jsx";
+import SessionIntervenants from "../components/SessionIntervenants.jsx";
 import NotesModal from "../components/NotesModal.jsx";
 import { colorOf, initials, scoreBadge } from "../lib/format.js";
 
@@ -52,14 +53,14 @@ function SessionDetail() {
     return allLearners.filter((l) => !enrolled.has(l.id));
   }, [session, allLearners]);
 
-  // Filtre par la recherche (nom, prénom, email).
+  // Filtre par la recherche (nom, prénom, email). La liste ne se déploie QUE si
+  // quelque chose est saisi (sinon rien affiché, pour ne pas dérouler tout le fichier).
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = q
-      ? available.filter((l) =>
-          `${l.first_name} ${l.last_name} ${l.email || ""}`.toLowerCase().includes(q))
-      : available;
-    return list.slice(0, 10);
+    if (!q) return [];
+    return available
+      .filter((l) => `${l.first_name} ${l.last_name} ${l.email || ""}`.toLowerCase().includes(q))
+      .slice(0, 10);
   }, [available, query]);
 
   async function addStagiaire(learnerId) {
@@ -136,7 +137,11 @@ function SessionDetail() {
           />
           {matches.length === 0 ? (
             <p className="hint" style={{ margin: 0 }}>
-              {available.length === 0 ? "Tous les stagiaires sont déjà inscrits." : "Aucun stagiaire ne correspond."}{" "}
+              {available.length === 0
+                ? "Tous les stagiaires sont déjà inscrits."
+                : !query.trim()
+                  ? "Tapez un nom, prénom ou email pour rechercher un stagiaire à inscrire."
+                  : "Aucun stagiaire ne correspond."}{" "}
               <Link to="/stagiaires" className="card-more">Créer un stagiaire →</Link>
             </p>
           ) : (
@@ -208,6 +213,10 @@ function SessionDetail() {
             </div>
           )}
         </Card>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <SessionIntervenants sessionId={id} startDate={session.start_date} endDate={session.end_date} canEdit={isAdmin} />
       </div>
 
       <div style={{ marginTop: 16 }}>
