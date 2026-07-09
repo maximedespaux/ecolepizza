@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getStagiaires, resetStagiairePassword, deleteStagiaire, getOpcos, getFormations } from "../api/apiClient.js";
 import { OPCOS } from "../lib/opco.js";
@@ -20,7 +20,17 @@ function Stagiaires() {
   const [editId, setEditId] = useState(undefined); // undefined = fermé, null = nouveau, id = édition
   const [opcos, setOpcos] = useState([]);
   const [formations, setFormations] = useState([]);
-  const [filters, setFilters] = useState({ level: "", financing: "", status: "", opco: "" });
+  const [filters, setFilters] = useState({ level: [], financing: "", status: "", opco: "" });
+  const [badgeOpen, setBadgeOpen] = useState(false);
+  const badgeRef = useRef(null);
+  useEffect(() => {
+    if (!badgeOpen) return;
+    const close = (e) => { if (badgeRef.current && !badgeRef.current.contains(e.target)) setBadgeOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [badgeOpen]);
+  const toggleBadgeFilter = (code) =>
+    setFilters((f) => ({ ...f, level: f.level.includes(code) ? f.level.filter((x) => x !== code) : [...f.level, code] }));
 
   // Codes de formation (badges attribuables) + couleur associée.
   useEffect(() => {
@@ -38,12 +48,18 @@ function Stagiaires() {
   };
 
   const setFilter = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
-  const clearFilters = () => setFilters({ level: "", financing: "", status: "", opco: "" });
-  const activeFilters = Object.values(filters).filter(Boolean).length;
+  const clearFilters = () => setFilters({ level: [], financing: "", status: "", opco: "" });
+  const activeFilters = (filters.level.length ? 1 : 0) + [filters.financing, filters.status, filters.opco].filter(Boolean).length;
+
+  const badgeOptions = [...new Set([
+    ...formations.map((f) => f.code).filter(Boolean),
+    ...learners.flatMap((l) => (l.levels || "").split(",").map((s) => s.trim()).filter(Boolean)),
+  ])];
 
   // Filtrage local (en plus de la recherche texte serveur) sur les infos du stagiaire.
   const filtered = learners.filter((l) => {
-    if (filters.level && !(l.levels || "").split(",").map((s) => s.trim()).includes(filters.level)) return false;
+    const badges = (l.levels || "").split(",").map((s) => s.trim());
+    if (filters.level.length && !filters.level.some((b) => badges.includes(b))) return false;
     if (filters.financing && (l.financing || "PARTICULIER") !== filters.financing) return false;
     if (filters.status && l.professional_status !== filters.status) return false;
     if (filters.opco && l.opco !== filters.opco) return false;
@@ -118,11 +134,31 @@ function Stagiaires() {
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "10px 0 4px" }}>
-        <select className="inp" style={{ maxWidth: 190 }} value={filters.level} onChange={setFilter("level")}>
-          <option value="">Tous les badges</option>
-          {[...new Set([...formations.map((f) => f.code).filter(Boolean), ...learners.flatMap((l) => (l.levels || "").split(",").map((s) => s.trim()).filter(Boolean))])]
-            .map((v) => <option key={v} value={v}>{v}</option>)}
-        </select>
+        <span ref={badgeRef} style={{ position: "relative" }}>
+          <button type="button" className="inp" style={{ cursor: "pointer", textAlign: "left", minWidth: 160, maxWidth: 220 }}
+            onClick={() => setBadgeOpen((o) => !o)}>
+            {filters.level.length ? `Badges (${filters.level.length})` : "Tous les badges"} ▾
+          </button>
+          {badgeOpen && (
+            <div style={{
+              position: "absolute", top: "100%", left: 0, zIndex: 40, marginTop: 4, minWidth: 200, maxHeight: 280, overflowY: "auto",
+              padding: 6, background: "var(--panel, #fff)", border: "1px solid var(--line, #e3e3e6)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.16)",
+            }}>
+              {badgeOptions.length === 0 ? (
+                <div style={{ padding: "8px", fontSize: 12, color: "var(--muted)" }}>Aucun badge.</div>
+              ) : badgeOptions.map((code) => (
+                <label key={code} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", cursor: "pointer", borderRadius: 6, fontSize: 13 }}>
+                  <input type="checkbox" checked={filters.level.includes(code)} onChange={() => toggleBadgeFilter(code)} />
+                  <i style={{ width: 11, height: 11, borderRadius: "50%", background: codeColor(code), display: "inline-block" }} /> {code}
+                </label>
+              ))}
+              {filters.level.length > 0 && (
+                <button type="button" className="btn sm ghost" style={{ width: "100%", marginTop: 4 }}
+                  onClick={() => setFilters((f) => ({ ...f, level: [] }))}>Tout décocher</button>
+              )}
+            </div>
+          )}
+        </span>
         <select className="inp" style={{ maxWidth: 190 }} value={filters.financing} onChange={setFilter("financing")}>
           <option value="">Tout financement</option>
           <option value="PARTICULIER">Particulier</option>

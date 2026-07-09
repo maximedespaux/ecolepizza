@@ -53,13 +53,7 @@ const getLearners = (req, res) => {
         `SELECT l.id, l.organization_id, l.first_name, l.last_name, l.email, l.phone,
                 l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.levels,
                 l.financing, l.opco, l.created_at,
-                u.email AS account_email,
-                (SELECT GROUP_CONCAT(DISTINCT COALESCE(NULLIF(p.level, ''), p.code))
-                   FROM enrollment e
-                   JOIN training_session s ON s.id = e.session_id
-                   JOIN training_program p ON p.id = s.program_id
-                  WHERE e.learner_id = l.id
-                    AND COALESCE(NULLIF(p.level, ''), p.code) IS NOT NULL) AS session_levels
+                u.email AS account_email
          FROM learner l
          LEFT JOIN user u ON u.id = l.user_id
          WHERE l.organization_id = ?
@@ -71,14 +65,10 @@ const getLearners = (req, res) => {
                 console.error('Erreur récupération stagiaires :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
-            const data = results.map((r) => {
-                // Niveaux affichés = niveaux saisis + niveaux de TOUTES ses sessions
-                // (même anciennes), dédoublonnés. Un stagiaire peut en cumuler plusieurs.
-                const set = new Set([
-                    ...String(r.levels || '').split(','),
-                    ...String(r.session_levels || '').split(','),
-                ].map((s) => s.trim()).filter(Boolean));
-                const { session_levels, account_email, ...rest } = r;
+            // Les badges (niveaux/codes) sont la source stockée sur le stagiaire :
+            // ajoutés automatiquement à l'inscription, mais entièrement modifiables à la main.
+            const data = results.map(({ account_email, levels, ...rest }) => {
+                const set = new Set(String(levels || '').split(',').map((s) => s.trim()).filter(Boolean));
                 return { ...rest, levels: [...set].join(','), has_account: !!account_email };
             });
             res.json({ data });
@@ -212,13 +202,17 @@ const updateLearner = async (req, res) => {
         }
 
         // Champs de la fiche stagiaire.
+        // `levels` (badges) doit pouvoir être VIDÉ : on autorise la chaîne vide
+        // (sinon décocher tous les badges ne serait jamais enregistré).
+        const CLEARABLE = new Set(['levels']);
         const updates = [];
         const values = [];
         for (const field of LEARNER_FIELDS) {
-            if (body[field] !== undefined && body[field] !== '') {
-                updates.push(`${field} = ?`);
-                values.push(field === 'social_security' ? encrypt(body[field]) : body[field]);
-            }
+            if (body[field] === undefined) continue;
+            if (body[field] === '' && !CLEARABLE.has(field)) continue;
+            updates.push(`${field} = ?`);
+            const raw = body[field];
+            values.push(field === 'social_security' ? encrypt(raw) : (raw === '' ? null : raw));
         }
         if (companyId && companyId !== rows[0].company_id) {
             updates.push('company_id = ?');
