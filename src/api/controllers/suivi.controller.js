@@ -1,6 +1,7 @@
 const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
 const { enrollmentSteps } = require('./formationProgram.controller.js');
+const { logAudit } = require('../lib/audit.js');
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 // Statuts « partagé avec le stagiaire » (envoyé / consulté / signé).
@@ -225,4 +226,37 @@ const deleteArchive = async (req, res) => {
     }
 };
 
-module.exports = { getSuivi, getArchive, importArchive, getArchiveFile, deleteArchive };
+/**
+ * POST /api/suivi/archives/delete — suppression groupée (semaine / formation /
+ * stagiaire / fichiers). Supprime en base les PDF importés (archive_document) et,
+ * si demandé, les documents générés (generated_document). Toujours cloisonné à l'organisme.
+ * Corps : { archive_ids: [...], document_ids: [...] }.
+ */
+const bulkDeleteArchive = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const clean = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string' && x) : []);
+    const archiveIds = clean(req.body?.archive_ids);
+    const documentIds = clean(req.body?.document_ids);
+    if (!archiveIds.length && !documentIds.length) {
+        return res.status(422).json({ error: 'Aucun document à supprimer.' });
+    }
+    try {
+        const conn = db.promise();
+        let deleted = 0;
+        if (archiveIds.length) {
+            const [r] = await conn.query('DELETE FROM archive_document WHERE organization_id = ? AND id IN (?)', [orgId, archiveIds]);
+            deleted += r.affectedRows || 0;
+        }
+        if (documentIds.length) {
+            const [r] = await conn.query('DELETE FROM generated_document WHERE organization_id = ? AND id IN (?)', [orgId, documentIds]);
+            deleted += r.affectedRows || 0;
+        }
+        logAudit(req, 'archive.bulk_delete', 'Archive', null);
+        res.json({ success: true, deleted });
+    } catch (err) {
+        console.error('Erreur suppression groupée archives :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getSuivi, getArchive, importArchive, getArchiveFile, deleteArchive, bulkDeleteArchive };

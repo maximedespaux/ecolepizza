@@ -425,6 +425,10 @@ export function downloadArchiveFile(id, filename) {
 export function deleteArchive(id) {
   return request(`/suivi/archives/${id}`, { method: "DELETE" });
 }
+// Suppression groupée (semaine / formation / stagiaire / fichiers) — supprime en base.
+export function bulkDeleteArchives(archive_ids, document_ids) {
+  return request("/suivi/archives/delete", { method: "POST", body: JSON.stringify({ archive_ids, document_ids }) });
+}
 
 export function createEnrollment(payload) {
   return request("/enrollments", { method: "POST", body: JSON.stringify(payload) });

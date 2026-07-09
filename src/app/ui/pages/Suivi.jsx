@@ -2,7 +2,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
-  importArchives, archiveFileUrl, downloadArchiveFile, deleteArchive,
+  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives,
 } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
@@ -160,11 +160,31 @@ function ArchivesView({ onError, onInfo }) {
     finally { setBusy(false); }
   }
 
-  async function onDelete(d) {
-    if (!window.confirm(`Supprimer définitivement « ${d.title} » de l'archive ?`)) return;
-    try { await deleteArchive(d.doc_id); load(); }
-    catch (err) { onError?.(err.message); }
+  // Supprime définitivement un ensemble de documents (en base). `docs` = lignes
+  // du coffre ; on sépare les PDF importés (archive) des documents générés (gen).
+  async function deleteDocs(docs, what) {
+    const archive_ids = docs.filter((d) => d.source === "archive").map((d) => d.doc_id);
+    const document_ids = docs.filter((d) => d.source === "gen").map((d) => d.doc_id);
+    const total = archive_ids.length + document_ids.length;
+    if (!total) { onError?.("Aucun document à supprimer ici."); return; }
+    const detail = document_ids.length && archive_ids.length
+      ? ` (${document_ids.length} généré(s), ${archive_ids.length} archivé(s))`
+      : "";
+    if (!window.confirm(`Supprimer définitivement ${total} document(s)${what ? ` — ${what}` : ""}${detail} ?\nCette action est irréversible et les supprime de la base.`)) return;
+    try {
+      const { deleted } = await bulkDeleteArchives(archive_ids, document_ids);
+      onInfo?.(`${deleted} document(s) supprimé(s).`);
+      load();
+    } catch (err) { onError?.(err.message); }
   }
+  const weekDocs = (W) => W.formationsArr.flatMap((F) => F.learnersArr.flatMap((L) => L.docs));
+  const formationDocs = (F) => F.learnersArr.flatMap((L) => L.docs);
+  // Bouton de suppression sur une ligne de regroupement (semaine / formation / stagiaire).
+  const DelBtn = ({ onClick, title }) => (
+    <button type="button" className="iconbtn del" title={title}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}
+      style={{ marginLeft: 8 }}>🗑</button>
+  );
 
   const tree = useMemo(() => {
     if (!rows) return [];
@@ -208,18 +228,23 @@ function ArchivesView({ onError, onInfo }) {
               <div className="arch-in">
                 {Y.weeksArr.map((W) => (
                   <details key={W.week}>
-                    <summary className="arch-sum">{W.week ? `Semaine ${W.week}` : "Sans session"} <span className="arch-count">{W.total}</span></summary>
+                    <summary className="arch-sum">{W.week ? `Semaine ${W.week}` : "Sans session"} <span className="arch-count">{W.total}</span>
+                      {isAdmin && <DelBtn title="Supprimer toute la semaine" onClick={() => deleteDocs(weekDocs(W), W.week ? `Semaine ${W.week}` : "Sans session")} />}
+                    </summary>
                     <div className="arch-in">
                       {W.formationsArr.map((F) => (
                         <details key={F.code}>
                           <summary className="arch-sum">
                             <span className="badge n mono" style={{ background: colorOf(F.code), color: "#fff", borderColor: "transparent" }}>{F.code}</span>
                             {" "}{F.title} <span className="arch-count">{F.total}</span>
+                            {isAdmin && <DelBtn title="Supprimer toute la formation" onClick={() => deleteDocs(formationDocs(F), F.title)} />}
                           </summary>
                           <div className="arch-in">
                             {F.learnersArr.map((L) => (
                               <details key={L.learner_id || L.name}>
-                                <summary className="arch-sum">{L.name} <span className="arch-count">{L.docs.length}</span></summary>
+                                <summary className="arch-sum">{L.name} <span className="arch-count">{L.docs.length}</span>
+                                  {isAdmin && <DelBtn title="Supprimer ce stagiaire" onClick={() => deleteDocs(L.docs, L.name)} />}
+                                </summary>
                                 <div className="arch-docs">
                                   {L.docs.map((d) => {
                                     const [lab, tone] = DOC_STATUS[d.status] || [d.status, "n"];
@@ -236,8 +261,8 @@ function ArchivesView({ onError, onInfo }) {
                                           onClick={() => d.source === "archive" ? window.open(archiveFileUrl(d.doc_id), "_blank", "noopener") : setViewId(d.doc_id)}>👁</button>
                                         <button className="iconbtn" title="Télécharger le PDF"
                                           onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}>⬇</button>
-                                        {isAdmin && d.source === "archive" && (
-                                          <button className="iconbtn del" title="Supprimer de l'archive" onClick={() => onDelete(d)}>🗑</button>
+                                        {isAdmin && (
+                                          <button className="iconbtn del" title="Supprimer ce document" onClick={() => deleteDocs([d], d.title)}>🗑</button>
                                         )}
                                       </div>
                                     );
