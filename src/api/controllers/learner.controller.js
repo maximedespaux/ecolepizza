@@ -51,7 +51,8 @@ const getLearners = (req, res) => {
 
     db.query(
         `SELECT l.id, l.organization_id, l.first_name, l.last_name, l.email, l.phone,
-                l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.levels, l.created_at,
+                l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.levels,
+                l.financing, l.opco, l.created_at,
                 u.email AS account_email
          FROM learner l
          LEFT JOIN user u ON u.id = l.user_id

@@ -61,6 +61,21 @@ function Stagiaires() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [opcos, setOpcos] = useState([]);
+  const [filters, setFilters] = useState({ level: "", financing: "", status: "", account: "", opco: "" });
+
+  const setFilter = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
+  const clearFilters = () => setFilters({ level: "", financing: "", status: "", account: "", opco: "" });
+  const activeFilters = Object.values(filters).filter(Boolean).length;
+
+  // Filtrage local (en plus de la recherche texte serveur) sur les infos du stagiaire.
+  const filtered = learners.filter((l) => {
+    if (filters.level && !(l.levels || "").split(",").map((s) => s.trim()).includes(filters.level)) return false;
+    if (filters.financing && (l.financing || "PARTICULIER") !== filters.financing) return false;
+    if (filters.status && l.professional_status !== filters.status) return false;
+    if (filters.account && (filters.account === "yes" ? !l.has_account : l.has_account)) return false;
+    if (filters.opco && l.opco !== filters.opco) return false;
+    return true;
+  });
 
   useEffect(() => { getOpcos().then((r) => setOpcos(r.data || [])).catch(() => {}); }, []);
   const opcoNames = opcos.length ? opcos.filter((o) => o.active).map((o) => o.name) : OPCOS;
@@ -82,7 +97,6 @@ function Stagiaires() {
     setStatus(null);
     try {
       const r = await resetStagiairePassword(id);
-      setRevealed((prev) => ({ ...prev, [id]: true }));
       setStatus({ type: "success", message: `Nouveau mot de passe : ${r.password}` });
       load(query);
     } catch (err) {
@@ -191,6 +205,34 @@ function Stagiaires() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "10px 0 4px" }}>
+        <select className="inp" style={{ maxWidth: 190 }} value={filters.level} onChange={setFilter("level")}>
+          <option value="">Tous les niveaux</option>
+          {LEVELS.map((l) => <option key={l.v} value={l.v}>{l.label}</option>)}
+        </select>
+        <select className="inp" style={{ maxWidth: 190 }} value={filters.financing} onChange={setFilter("financing")}>
+          <option value="">Tout financement</option>
+          <option value="PARTICULIER">Particulier</option>
+          <option value="PROFESSIONNEL">Professionnel</option>
+        </select>
+        <select className="inp" style={{ maxWidth: 190 }} value={filters.status} onChange={setFilter("status")}>
+          <option value="">Tout statut</option>
+          {STATUTS.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select className="inp" style={{ maxWidth: 160 }} value={filters.account} onChange={setFilter("account")}>
+          <option value="">Compte : tous</option>
+          <option value="yes">Avec compte</option>
+          <option value="no">Sans compte</option>
+        </select>
+        <select className="inp" style={{ maxWidth: 190 }} value={filters.opco} onChange={setFilter("opco")}>
+          <option value="">Tout OPCO</option>
+          {opcoNames.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        {activeFilters > 0 && (
+          <button type="button" className="btn sm ghost" onClick={clearFilters}>✕ Effacer les filtres ({activeFilters})</button>
+        )}
       </div>
 
       {showForm && (
@@ -364,12 +406,12 @@ function Stagiaires() {
       </Card>
       )}
 
-      <Card title={`Liste (${learners.length})`}>
-        {learners.length === 0 ? (
-          <EmptyState>Aucun stagiaire pour le moment.</EmptyState>
+      <Card title={`Liste (${filtered.length}${activeFilters ? ` / ${learners.length}` : ""})`}>
+        {filtered.length === 0 ? (
+          <EmptyState>{learners.length === 0 ? "Aucun stagiaire pour le moment." : "Aucun stagiaire ne correspond aux filtres."}</EmptyState>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {learners.map((l) => (
+            {filtered.map((l) => (
               <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
                 <Link to={`/stagiaires/${l.id}`} className="rowlink" title="Ouvrir le dossier (workflow documents)"
                   style={{ display: "flex", alignItems: "center", gap: 11, flex: 1, minWidth: 0, color: "inherit" }}>
