@@ -9,7 +9,7 @@ import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { initials } from "../lib/format.js";
-import { LEVEL_LABEL, colorForLevel, setBadgeColors } from "../lib/levels.js";
+import { colorForLevel, setBadgeColors } from "../lib/levels.js";
 
 // --- Options (reprises de la fiche d'expression du stagiaire) ---
 const CIVILITES = ["M.", "Mme"];
@@ -231,7 +231,7 @@ function Stagiaires() {
         <select className="inp" style={{ maxWidth: 190 }} value={filters.level} onChange={setFilter("level")}>
           <option value="">Tous les badges</option>
           {[...new Set([...formations.map((f) => f.code).filter(Boolean), ...learners.flatMap((l) => (l.levels || "").split(",").map((s) => s.trim()).filter(Boolean))])]
-            .map((v) => <option key={v} value={v}>{LEVEL_LABEL[v] || v}</option>)}
+            .map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
         <select className="inp" style={{ maxWidth: 190 }} value={filters.financing} onChange={setFilter("financing")}>
           <option value="">Tout financement</option>
@@ -445,11 +445,11 @@ function Stagiaires() {
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"} · {l.phone || "—"}</span>
                   </span>
                 </Link>
-                {(l.levels || "").split(",").map((s) => s.trim()).filter(Boolean).map((lv) => (
-                  <span key={lv} className="lvl-chip" title={LEVEL_LABEL[lv] || lv} style={{ background: colorForLevel(lv) }}>
-                    {(LEVEL_LABEL[lv] || lv).replace("Certifiante (RS)", "RS")}
-                  </span>
-                ))}
+                <span style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end", maxWidth: 300 }}>
+                  {(l.levels || "").split(",").map((s) => s.trim()).filter(Boolean).map((lv) => (
+                    <span key={lv} className="lvl-chip" title={lv} style={{ background: codeColor(lv) }}>{lv}</span>
+                  ))}
+                </span>
                 {l.professional_status && <Badge tone="n">{l.professional_status}</Badge>}
                 <button
                   type="button"
