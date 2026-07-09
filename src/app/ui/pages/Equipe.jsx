@@ -217,10 +217,11 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
   const [modes, setModes] = useState(seed);
   const [saving, setSaving] = useState(false);
   const [roles, setRoles] = useState([]);
-  useEffect(() => { getAccessProfiles().then((r) => setRoles(r.data || [])).catch(() => {}); }, []);
+  const [sysOv, setSysOv] = useState({});
+  useEffect(() => { getAccessProfiles().then((r) => { setRoles(r.data || []); setSysOv(r.systemOverrides || {}); }).catch(() => {}); }, []);
 
   function applyRole(val) {
-    if (val.startsWith("builtin:")) { setModes(builtinRoleAccess(val.slice(8))); return; }
+    if (val.startsWith("builtin:")) { const code = val.slice(8); setModes(sysOv[code]?.nav_access || builtinRoleAccess(code)); return; }
     const r = roles.find((x) => x.id === val);
     if (r) setModes({ ...(r.nav_access || {}) });
   }

@@ -56,7 +56,7 @@ export const NAV = [
     items: [
       { to: "/reglages", ic: "⚙", label: "Organisme", roles: ADMIN },
       { to: "/equipe", ic: "👥", label: "Équipe & accès", roles: OWNER },
-      { to: "/roles", ic: "🎫", label: "Rôles d'accès", roles: ["SUPER_ADMIN"] },
+      { to: "/roles", ic: "🎫", label: "Rôles d'accès", roles: OWNER },
       { to: "/modeles", ic: "⎙", label: "Modèles de documents", roles: ADMIN },
       { to: "/qcm", ic: "❓", label: "Modèles de QCM", roles: ADMIN },
       { to: "/opcos", ic: "€", label: "OPCO / financeurs", roles: ADMIN },

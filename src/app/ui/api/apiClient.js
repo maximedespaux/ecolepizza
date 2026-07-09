@@ -48,6 +48,9 @@ export function updateAccessProfile(id, payload) {
 export function deleteAccessProfile(id) {
   return request(`/access-profiles/${id}`, { method: "DELETE" });
 }
+export function upsertSystemRole(role, payload) {
+  return request(`/access-profiles/system/${role}`, { method: "PUT", body: JSON.stringify(payload) });
+}
 
 // --- OPCO / financeurs (référentiel) ---
 export function getOpcos() {

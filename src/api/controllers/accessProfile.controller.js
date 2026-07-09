@@ -15,21 +15,44 @@ function cleanNav(nav) {
 }
 const cleanColor = (c) => (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : null);
 
-/** GET /api/access-profiles — rôles d'accès de l'organisme. */
+const SYSTEM_ROLES = new Set(['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR']);
+const parseNav = (s) => { try { return JSON.parse(s || '{}') || {}; } catch { return {}; } };
+
+/** GET /api/access-profiles — rôles personnalisés + personnalisations des rôles système. */
 const listProfiles = async (req, res) => {
     try {
         const [rows] = await db.promise().query(
-            'SELECT id, name, color, nav_access FROM access_profile WHERE organization_id = ? ORDER BY name',
+            'SELECT id, name, system_role, color, nav_access FROM access_profile WHERE organization_id = ? ORDER BY name',
             [req.user.organization_id]
         );
-        const data = rows.map((r) => {
-            let nav = {};
-            if (r.nav_access) { try { nav = JSON.parse(r.nav_access); } catch { nav = {}; } }
-            return { id: r.id, name: r.name, color: r.color, nav_access: nav };
-        });
-        res.json({ data });
+        const data = [];
+        const systemOverrides = {};
+        for (const r of rows) {
+            if (r.system_role) systemOverrides[r.system_role] = { color: r.color, nav_access: parseNav(r.nav_access) };
+            else data.push({ id: r.id, name: r.name, color: r.color, nav_access: parseNav(r.nav_access) });
+        }
+        res.json({ data, systemOverrides });
     } catch (err) {
         console.error('Erreur rôles :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/access-profiles/system/:role — personnalise un rôle système (couleur + accès). */
+const upsertSystemRole = async (req, res) => {
+    const role = req.params.role;
+    if (!SYSTEM_ROLES.has(role)) return res.status(422).json({ error: 'Rôle système inconnu.' });
+    try {
+        const conn = db.promise();
+        await conn.query('DELETE FROM access_profile WHERE organization_id = ? AND system_role = ?', [req.user.organization_id, role]);
+        await conn.query(
+            'INSERT INTO access_profile (id, organization_id, name, system_role, color, nav_access) VALUES (?, ?, ?, ?, ?, ?)',
+            [crypto.randomUUID(), req.user.organization_id, role, role, cleanColor(req.body?.color), JSON.stringify(cleanNav(req.body?.nav_access))]
+        );
+        logAudit(req, 'accessprofile.system', 'AccessProfile', role);
+        res.json({ success: true, message: 'Rôle système personnalisé' });
+    } catch (err) {
+        console.error('Erreur personnalisation rôle système :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -80,4 +103,4 @@ const deleteProfile = async (req, res) => {
     }
 };
 
-module.exports = { listProfiles, createProfile, updateProfile, deleteProfile };
+module.exports = { listProfiles, createProfile, updateProfile, deleteProfile, upsertSystemRole };

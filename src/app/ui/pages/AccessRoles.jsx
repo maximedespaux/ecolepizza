@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getAccessProfiles, createAccessProfile, updateAccessProfile, deleteAccessProfile } from "../api/apiClient.js";
+import { getAccessProfiles, createAccessProfile, updateAccessProfile, deleteAccessProfile, upsertSystemRole } from "../api/apiClient.js";
 import { GRANTABLE_NAV, BUILTIN_ROLES, builtinRoleAccess, ROLE_COLORS } from "../lib/nav.js";
 
 const Dot = ({ color }) => <span style={{ width: 12, height: 12, borderRadius: 3, background: color || "#999", display: "inline-block", marginRight: 8, verticalAlign: "middle" }} />;
@@ -12,11 +12,12 @@ import EmptyState from "../components/EmptyState.jsx";
 
 function AccessRoles() {
   const [roles, setRoles] = useState([]);
+  const [sysOverrides, setSysOverrides] = useState({});
   const [status, setStatus] = useState(null);
-  const [editing, setEditing] = useState(null); // rôle édité ou { _new:true }
+  const [editing, setEditing] = useState(null); // rôle édité ou { _new:true } / { _system:'CODE' }
 
   async function load() {
-    try { const { data } = await getAccessProfiles(); setRoles(data); }
+    try { const r = await getAccessProfiles(); setRoles(r.data || []); setSysOverrides(r.systemOverrides || {}); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   useEffect(() => { load(); }, []);
@@ -46,13 +47,16 @@ function AccessRoles() {
             <thead><tr><th>Rôle</th><th>Pages accordées</th><th></th></tr></thead>
             <tbody>
               {BUILTIN_ROLES.map((b) => {
-                const acc = builtinRoleAccess(b.role);
+                const ov = sysOverrides[b.role];
+                const acc = ov ? (ov.nav_access || {}) : builtinRoleAccess(b.role);
+                const col = (ov && ov.color) || b.color;
                 return (
                   <tr key={b.role}>
-                    <td><Dot color={b.color} /><b>{b.name}</b> <Badge tone="n">système</Badge></td>
+                    <td><Dot color={col} /><b>{b.name}</b> <Badge tone="n">système</Badge>{ov && <Badge tone="a">personnalisé</Badge>}</td>
                     <td><Badge tone="b">{Object.keys(acc).length} page(s)</Badge></td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button className="btn sm ghost" onClick={() => setEditing({ _new: true, name: `${b.name} (copie)`, color: b.color, nav_access: acc })}>Dupliquer</button>
+                      <button className="btn sm ghost" onClick={() => setEditing({ _system: b.role, name: b.name, color: col, nav_access: acc })}>Modifier</button>{" "}
+                      <button className="btn sm ghost" onClick={() => setEditing({ _new: true, name: `${b.name} (copie)`, color: col, nav_access: acc })}>Dupliquer</button>
                     </td>
                   </tr>
                 );
@@ -97,6 +101,7 @@ function AccessRoles() {
 
 function RoleModal({ role, onClose, onSaved, onError }) {
   const isNew = !!role._new;
+  const isSystem = !!role._system;
   const [name, setName] = useState(role.name || "");
   const [color, setColor] = useState(role.color || ROLE_COLORS[0]);
   const [modes, setModes] = useState({ ...(role.nav_access || {}) });
@@ -107,10 +112,11 @@ function RoleModal({ role, onClose, onSaved, onError }) {
   const setMode = (to, mode) => setModes((p) => ({ ...p, [to]: mode }));
 
   async function save() {
-    if (!name.trim()) { onError("Nom du rôle requis."); return; }
+    if (!isSystem && !name.trim()) { onError("Nom du rôle requis."); return; }
     setSaving(true);
     try {
-      if (isNew) await createAccessProfile({ name, color, nav_access: modes });
+      if (isSystem) await upsertSystemRole(role._system, { color, nav_access: modes });
+      else if (isNew) await createAccessProfile({ name, color, nav_access: modes });
       else await updateAccessProfile(role.id, { name, color, nav_access: modes });
       onSaved();
     } catch (e) { onError(e.message); }
@@ -120,10 +126,14 @@ function RoleModal({ role, onClose, onSaved, onError }) {
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="mhead"><h3>{isNew ? "Nouveau rôle" : "Modifier le rôle"}</h3>
+        <div className="mhead"><h3>{isSystem ? `Rôle système — ${name}` : isNew ? "Nouveau rôle" : "Modifier le rôle"}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button></div>
         <div className="mbody">
-          <Field label="Nom du rôle" value={name} onChange={(e) => setName(e.target.value)} placeholder="ex. Comptable, Assistant…" />
+          {isSystem ? (
+            <p className="sub" style={{ marginTop: 0 }}>Personnalisation du rôle système <b>{name}</b> pour votre organisme (couleur + accès menu par défaut).</p>
+          ) : (
+            <Field label="Nom du rôle" value={name} onChange={(e) => setName(e.target.value)} placeholder="ex. Comptable, Assistant…" />
+          )}
           <div className="field">
             <label>Couleur</label>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

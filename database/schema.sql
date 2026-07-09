@@ -650,11 +650,13 @@ CREATE TABLE access_profile (
     id              uuid         NOT NULL DEFAULT uuid(),
     organization_id uuid         NOT NULL,
     name            varchar(120) NOT NULL,
+    system_role     varchar(30)  DEFAULT NULL,          -- si défini : personnalisation d'un rôle système
     color           varchar(9)   DEFAULT NULL,
     nav_access      text         DEFAULT NULL,
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     KEY idx_ap_org (organization_id),
+    UNIQUE KEY uq_ap_sys (organization_id, system_role),
     CONSTRAINT fk_ap_org FOREIGN KEY (organization_id) REFERENCES organization (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
