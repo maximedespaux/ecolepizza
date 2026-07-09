@@ -363,7 +363,7 @@ const signDocument = async (req, res) => {
         const conn = db.promise();
         // Vérifie l'accès : même organisme, et si stagiaire, propriétaire du document.
         const [rows] = await conn.query(
-            `SELECT d.id, d.type FROM generated_document d
+            `SELECT d.id, d.type, d.learner_id FROM generated_document d
              LEFT JOIN learner l ON l.id = d.learner_id
              WHERE d.id = ? AND d.organization_id = ?
                AND (l.user_id = ? OR ? IN ('SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT'))`,
@@ -381,7 +381,10 @@ const signDocument = async (req, res) => {
         if (rows[0].type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_SIGNE');
         else if (rows[0].type === 'CONTRAT' || rows[0].type === 'CONVENTION') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'INSCRIT');
         logAudit(req, 'document.sign', 'GeneratedDocument', req.params.id);
-        notify(req.user.organization_id, { type: 'SIGNATURE', title: 'Document signé', body: `Signé par ${signer_name}` });
+        notify(req.user.organization_id, {
+            type: 'SIGNATURE', title: 'Document signé', body: `Signé par ${signer_name}`,
+            link: rows[0].learner_id ? `/stagiaires/${rows[0].learner_id}` : '/suivi',
+        });
         res.status(200).json({ success: true, message: 'Document signé' });
     } catch (err) {
         console.error('Erreur signature document :', err);

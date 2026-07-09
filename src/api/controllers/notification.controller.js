@@ -4,10 +4,10 @@ const db = require('../config/database.js');
 /**
  * Crée une notification (best-effort). user_id null = visible par tout l'organisme.
  */
-function notify(orgId, { userId = null, type = 'INFO', title, body = null }) {
+function notify(orgId, { userId = null, type = 'INFO', title, body = null, link = null }) {
     db.query(
-        `INSERT INTO notification (id, organization_id, user_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)`,
-        [crypto.randomUUID(), orgId, userId, type, title, body],
+        `INSERT INTO notification (id, organization_id, user_id, type, title, body, link) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), orgId, userId, type, title, body, link],
         (err) => { if (err) console.error('notification:', err.message); }
     );
 }
@@ -17,7 +17,7 @@ function notify(orgId, { userId = null, type = 'INFO', title, body = null }) {
  */
 const getNotifications = (req, res) => {
     db.query(
-        `SELECT id, type, title, body, is_read,
+        `SELECT id, type, title, body, link, is_read,
                 DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at
          FROM notification
          WHERE organization_id = ? AND (user_id = ? OR user_id IS NULL)

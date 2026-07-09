@@ -323,6 +323,7 @@ const setSessionTrainers = async (req, res) => {
                 notify(req.user.organization_id, {
                     userId: uid, type: 'INFO', title: 'Émargement à signer',
                     body: `Vous êtes formateur sur la session ${s.program_code || ''} S${s.week || ''} · ${s.year || ''}. Signez votre feuille d'émargement.`.trim(),
+                    link: `/sessions/${req.params.id}`,
                 });
             }
         }

@@ -429,6 +429,7 @@ CREATE TABLE notification (
                     NOT NULL DEFAULT 'INFO',
     title           varchar(255) NOT NULL,
     body            varchar(255) DEFAULT NULL,
+    link            varchar(255) DEFAULT NULL,        -- chemin de redirection au clic
     is_read         tinyint(1)   NOT NULL DEFAULT 0,
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
