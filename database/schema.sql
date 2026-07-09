@@ -302,7 +302,7 @@ CREATE TABLE generated_document (
     signer_name   varchar(255) DEFAULT NULL,          -- nom saisi par le signataire
     signature_data longtext    DEFAULT NULL,          -- image de signature (data URL)
     signer_ip     varchar(255) DEFAULT NULL,          -- traçabilité : IP du signataire (chiffrée au repos)
-    signer_user_agent text     DEFAULT NULL,          -- traçabilité : appareil/navigateur (chiffré au repos)
+    signer_user_agent varchar(1000) DEFAULT NULL,     -- traçabilité : appareil/navigateur (chiffré au repos)
     signed_hash   char(64)     DEFAULT NULL,          -- SHA-256 du contenu signé
     created_at    timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
@@ -354,7 +354,7 @@ CREATE TABLE attendance_record (
     signer_name    varchar(255) DEFAULT NULL,           -- stagiaire signataire
     signature_data longtext     DEFAULT NULL,           -- signature manuscrite (data URL)
     signer_ip      varchar(255) DEFAULT NULL,           -- traçabilité : IP du signataire (chiffrée au repos)
-    signer_user_agent text     DEFAULT NULL,             -- traçabilité : appareil/navigateur (chiffré au repos)
+    signer_user_agent varchar(1000) DEFAULT NULL,       -- traçabilité : appareil/navigateur (chiffré au repos)
     signed_at  datetime  DEFAULT NULL,
     PRIMARY KEY (id),
     KEY idx_record_sheet (sheet_id),
