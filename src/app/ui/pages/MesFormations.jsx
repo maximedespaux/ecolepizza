@@ -20,7 +20,7 @@ function MesFormations() {
       <div className="hero">
         <div className="eyebrow">Espace stagiaire</div>
         <h1>Mes formations</h1>
-        <p>Chaque formation se déverrouille une fois terminée et tous les documents signés. Vous y retrouvez alors l'ensemble de vos documents.</p>
+        <p>Chaque formation se déverrouille dès votre inscription à une session. Vous y accédez à tous vos documents et à votre émargement.</p>
       </div>
 
       <StatusMessage status={status} />
@@ -33,18 +33,18 @@ function MesFormations() {
         <div className="grid cols-3">
           {formations.map((f) => {
             const color = colorOf(f.program_code);
-            const locked = !f.complete;
+            const locked = !f.enrolled; // déverrouillée dès l'inscription à une session
             return (
               <div
                 key={f.program_id}
                 className={`card${locked ? "" : " hover"}`}
                 style={{ cursor: locked ? "default" : "pointer", opacity: locked ? 0.66 : 1, borderTop: `3px solid ${color}` }}
                 onClick={locked ? undefined : () => navigate(`/formations/${f.enrollment_id}`)}
-                title={locked ? (f.enrolled ? "Disponible une fois la formation terminée" : "Formation non suivie") : "Voir mes documents"}
+                title={locked ? "Non suivie — inscrivez-vous à une session" : "Voir mes documents et mon émargement"}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <span className="badge n mono" style={{ background: color, color: "#fff", borderColor: "transparent" }}>{f.program_code}</span>
-                  <span style={{ fontSize: 18 }}>{locked ? "🔒" : "✅"}</span>
+                  <span style={{ fontSize: 18 }}>{locked ? "🔒" : f.complete ? "✅" : "📂"}</span>
                 </div>
                 <h3 style={{ fontSize: 15, margin: "10px 0 4px" }}>{f.program_title}</h3>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>
@@ -61,13 +61,11 @@ function MesFormations() {
                   </div>
                 )}
                 <p style={{ fontSize: 12, color: f.complete ? "var(--green)" : "var(--muted)", margin: f.enrolled ? 0 : "12px 0 0", fontWeight: 600 }}>
-                  {f.complete
-                    ? "Terminée — documents disponibles →"
-                    : !f.enrolled
-                      ? "Non suivie"
-                      : !f.dayPassed
-                        ? "En cours"
-                        : `${f.signed}/${f.total} document(s) signé(s)`}
+                  {!f.enrolled
+                    ? "Non suivie"
+                    : f.complete
+                      ? "Terminée — documents & émargement →"
+                      : `Documents & émargement · ${f.signed}/${f.total} signé(s) →`}
                 </p>
               </div>
             );

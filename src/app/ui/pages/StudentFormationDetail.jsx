@@ -1,25 +1,40 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getMyFormation } from "../api/apiClient.js";
+import { getMyFormation, signMyEmargement } from "../api/apiClient.js";
+import { UserContext } from "../context/UserContext.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
-import { colorOf } from "../lib/format.js";
+import SignatureModal from "../components/SignatureModal.jsx";
 
 const STATUS = { SIGNE: ["Signé ✓", "g"], ENVOYE: ["Reçu", "a"], CONSULTE: ["Consulté", "a"], A_FAIRE: ["—", "n"] };
+const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
+const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
 
 function StudentFormationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useContext(UserContext);
   const [data, setData] = useState(null);
   const [status, setStatus] = useState(null);
   const [viewId, setViewId] = useState(null);
+  const [signing, setSigning] = useState(null); // demi-journée d'émargement à signer
 
-  useEffect(() => {
+  function load() {
     getMyFormation(id).then((r) => setData(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
-  }, [id]);
+  }
+  useEffect(() => { load(); }, [id]);
+
+  async function onSign({ signer_name, signature_data }) {
+    try {
+      await signMyEmargement(signing.record_id, { signer_name, signature_data });
+      setSigning(null);
+      setStatus({ type: "success", message: "Émargement signé. Merci !" });
+      load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
 
   return (
     <>
@@ -59,8 +74,45 @@ function StudentFormationDetail() {
         </Card>
       )}
 
+      {data && (
+        <Card title="Émargement — ma présence">
+          {(!data.emargement || data.emargement.length === 0) ? (
+            <EmptyState icon="✍️">Aucune demi-journée à émarger pour cette session.</EmptyState>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {data.emargement.map((r) => {
+                const future = r.date > (data.today || "");
+                return (
+                  <div key={r.record_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <b style={{ textTransform: "capitalize" }}>{frDate(r.date)} — {SLOT[r.slot] || r.slot}</b>
+                    </span>
+                    {r.signed ? (
+                      <Badge tone="g">Signé{r.signed_at ? ` · ${r.signed_at}` : ""}</Badge>
+                    ) : future ? (
+                      <span className="hint">À venir</span>
+                    ) : (
+                      <button className="btn sm primary" onClick={() => setSigning(r)}>Signer</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
+
       {viewId && (
         <DocumentViewModal id={viewId} onClose={() => setViewId(null)} />
+      )}
+
+      {signing && (
+        <SignatureModal
+          doc={{ label: `Émargement — ${SLOT[signing.slot] || signing.slot} ${frDate(signing.date)}` }}
+          defaultName={`${user?.first_name || ""} ${user?.last_name || ""}`.trim()}
+          onConfirm={onSign}
+          onClose={() => setSigning(null)}
+        />
       )}
     </>
   );

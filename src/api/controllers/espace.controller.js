@@ -225,7 +225,7 @@ const getMyFormation = async (req, res) => {
         if (!learner) return res.status(404).json({ message: 'Fiche stagiaire introuvable.' });
 
         const [rows] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.financing,
+            `SELECT e.id AS enrollment_id, e.financing, e.session_id,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                     s.year, s.week,
@@ -240,25 +240,41 @@ const getMyFormation = async (req, res) => {
         if (rows.length === 0) return res.status(404).json({ message: 'Formation introuvable.' });
         const e = rows[0];
 
+        // Accès dès l'inscription à une session (plus besoin que la formation soit terminée).
         const steps = await loadOrgSteps(learner.organization_id);
         const c = await completionOf(conn, e, steps, (learner.opco || "").toUpperCase() === "AGEFICE");
-        if (!c.complete) return res.status(403).json({ message: 'Formation non terminée.' });
 
+        // Tous les documents partagés du dossier (envoyés / consultés / signés).
         const [documents] = await conn.query(
             `SELECT gd.id, gd.type, gd.title, gd.status,
                     DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at
              FROM generated_document gd
              JOIN document_formation df ON df.document_id = gd.id
-             WHERE df.enrollment_id = ?
+             WHERE df.enrollment_id = ? AND gd.status IN ('ENVOYE','CONSULTE','SIGNE')
              ORDER BY gd.created_at`,
             [e.enrollment_id]
         );
+
+        // Émargement de la session (demi-journées à signer par le stagiaire).
+        const [emargement] = e.session_id ? await conn.query(
+            `SELECT ar.id AS record_id, (ar.signature_data IS NOT NULL) AS signed,
+                    DATE_FORMAT(ar.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                    DATE_FORMAT(sh.date, '%Y-%m-%d') AS date, sh.slot
+             FROM attendance_record ar
+             JOIN attendance_sheet sh ON sh.id = ar.sheet_id
+             WHERE ar.learner_id = ? AND sh.session_id = ?
+             ORDER BY sh.date, FIELD(sh.slot, 'MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL')`,
+            [learner.id, e.session_id]
+        ) : [[]];
 
         res.json({
             data: {
                 program_code: e.program_code, program_title: e.program_title,
                 start_date: e.start_date, end_date: e.end_date, year: e.year, week: e.week,
-                program_hours: e.program_hours, documents,
+                program_hours: e.program_hours,
+                complete: c.complete, signed: c.signed, total: c.total,
+                today: todayISO(),
+                documents, emargement,
             },
         });
     } catch (err) {
