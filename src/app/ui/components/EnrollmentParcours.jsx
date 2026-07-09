@@ -27,7 +27,7 @@ function actionFor(s) {
  * la formation, dans l'ordre), détail de l'étape sélectionnée à droite.
  * `onOpenDoc(docId)` ouvre l'aperçu/signature ; `onGoto('documents')` remonte à la section Documents.
  */
-function EnrollmentParcours({ enrollmentId, onOpenDoc, onPrepare }) {
+function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
@@ -39,7 +39,7 @@ function EnrollmentParcours({ enrollmentId, onOpenDoc, onPrepare }) {
       .then((r) => { if (!active) return; setData(r.data); setSel(r.data.currentKey || r.data.steps[0]?.key || null); })
       .catch((e) => { if (active) setError(e.message); });
     return () => { active = false; };
-  }, [enrollmentId]);
+  }, [enrollmentId, refresh]);
 
   if (error) return <p className="hint" style={{ color: "var(--amber, #b8860b)" }}>{error}</p>;
   if (!data) return <p className="hint">Chargement du parcours…</p>;

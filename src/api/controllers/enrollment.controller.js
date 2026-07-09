@@ -126,32 +126,34 @@ const getParcours = async (req, res) => {
 /**
  * POST /api/enrollments — crée un dossier.
  */
-const createEnrollment = (req, res) => {
-    const {
-        learner_id,
-        session_id,
-        company_id,
-        financing = 'PARTICULIER',
-        crm_stage = 'PROSPECT',
-    } = req.body;
-
+const createEnrollment = async (req, res) => {
+    const { learner_id, session_id, company_id, crm_stage = 'PROSPECT' } = req.body;
     if (!learner_id || !session_id) {
         return res.status(422).json({ error: 'Stagiaire et session requis' });
     }
-
-    db.query(
-        `INSERT INTO enrollment
-            (id, organization_id, learner_id, session_id, company_id, financing, crm_stage, conformite_score)
-         VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ROUGE')`,
-        [req.user.organization_id, learner_id, session_id, company_id || null, financing, crm_stage],
-        (err) => {
-            if (err) {
-                console.error('Erreur création dossier :', err);
-                return res.status(500).json({ error: 'Internal Server Error' });
-            }
-            res.status(201).json({ message: 'Dossier créé' });
+    try {
+        const conn = db.promise();
+        // Le financement (type de devis) suit celui du stagiaire s'il n'est pas
+        // fourni explicitement, pour que le parcours documentaire soit cohérent.
+        let financing = req.body.financing;
+        if (financing !== 'PARTICULIER' && financing !== 'PROFESSIONNEL') {
+            const [[l]] = await conn.query(
+                'SELECT financing FROM learner WHERE id = ? AND organization_id = ?',
+                [learner_id, req.user.organization_id]
+            );
+            financing = l && l.financing ? l.financing : 'PARTICULIER';
         }
-    );
+        await conn.query(
+            `INSERT INTO enrollment
+                (id, organization_id, learner_id, session_id, company_id, financing, crm_stage, conformite_score)
+             VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ROUGE')`,
+            [req.user.organization_id, learner_id, session_id, company_id || null, financing, crm_stage]
+        );
+        res.status(201).json({ message: 'Dossier créé' });
+    } catch (err) {
+        console.error('Erreur création dossier :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /**

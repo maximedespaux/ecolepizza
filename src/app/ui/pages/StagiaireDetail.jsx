@@ -43,6 +43,7 @@ function StagiaireDetail() {
   const [viewId, setViewId] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [parcoursEnr, setParcoursEnr] = useState(null);
+  const [parcoursRefresh, setParcoursRefresh] = useState(0); // force le rechargement du parcours après édition
 
   function loadLearner() {
     return getStagiaire(id).then((r) => setL(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
@@ -261,6 +262,7 @@ function StagiaireDetail() {
             )}
             <EnrollmentParcours
               enrollmentId={curEnrId}
+              refresh={parcoursRefresh}
               onOpenDoc={(docId) => setViewId(docId)}
               onPrepare={prepareStep}
             />
@@ -357,7 +359,7 @@ function StagiaireDetail() {
         <EditLearnerModal
           learner={l}
           onClose={() => setEditOpen(false)}
-          onSaved={() => { setEditOpen(false); setStatus({ type: "success", message: "Fiche mise à jour." }); loadLearner(); }}
+          onSaved={() => { setEditOpen(false); setStatus({ type: "success", message: "Fiche mise à jour." }); loadLearner(); loadDocs(); setParcoursRefresh((n) => n + 1); }}
           onError={(m) => setStatus({ type: "error", message: m })}
           onDelete={handleDeleteLearner}
         />

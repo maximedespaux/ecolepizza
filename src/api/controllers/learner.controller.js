@@ -219,6 +219,17 @@ const updateLearner = async (req, res) => {
             );
         }
 
+        // Le « type de devis » (financement) pilote le parcours documentaire, qui est
+        // calculé à partir de enrollment.financing. On propage donc le changement à
+        // tous les dossiers du stagiaire pour que le parcours (Devis particulier /
+        // entreprise, contrat / convention…) reflète immédiatement le nouveau type.
+        if (body.financing === 'PARTICULIER' || body.financing === 'PROFESSIONNEL') {
+            await conn.query(
+                'UPDATE enrollment SET financing = ? WHERE learner_id = ? AND organization_id = ?',
+                [body.financing, learnerId, organizationId]
+            );
+        }
+
         res.status(200).json({ success: true, message: 'Stagiaire mis à jour' });
     } catch (err) {
         console.error('Erreur mise à jour stagiaire :', err);
