@@ -1,7 +1,8 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { Outlet, Navigate, NavLink } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
+import ChangePasswordModal from "../components/ChangePasswordModal.jsx";
 import { initials } from "../lib/format.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
@@ -11,6 +12,7 @@ const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 /** Coquille de l'espace stagiaire : en-tête simple, pas de barre latérale. */
 function StudentLayout() {
   const { user, isConnected, isLoading, logout } = useContext(UserContext);
+  const [pwOpen, setPwOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -37,12 +39,15 @@ function StudentLayout() {
         </nav>
         <div className="spacer" />
         <ThemeToggle />
+        <button className="btn sm ghost" onClick={() => setPwOpen(true)} title="Changer mon mot de passe">🔑 Mot de passe</button>
         <div className="avatar" title={`${user?.first_name} ${user?.last_name}`}>{initials(user?.first_name, user?.last_name)}</div>
         <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion">⏻</button>
       </header>
       <main className="content" style={{ maxWidth: 900 }}>
         <Outlet />
       </main>
+
+      {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
     </div>
   );
 }
