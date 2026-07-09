@@ -77,14 +77,7 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
         <div className="mbody" style={{ padding: 0, background: "var(--surface3)" }}>
           <StatusMessage status={status} />
           {pdfUrl ? (
-            <object data={pdfUrl} type="application/pdf" className="doc-pdf-frame">
-              <div style={{ padding: 22, textAlign: "center", color: "var(--muted)" }}>
-                L'aperçu ne s'affiche pas ici.{" "}
-                <a href={pdfUrl} target="_blank" rel="noreferrer" style={{ color: "var(--ember1)", fontWeight: 600 }}>
-                  Ouvrir le PDF dans un nouvel onglet
-                </a>
-              </div>
-            </object>
+            <iframe src={pdfUrl} title="Aperçu du document" className="doc-pdf-frame" />
           ) : missing ? (
             <MissingPanel />
           ) : pdfError ? (
