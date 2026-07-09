@@ -3,7 +3,7 @@
 // (<span data-token="Clé">…</span>) produite par l'éditeur, soit en texte brut
 // {Clé} (modèles convertis depuis les anciens fichiers Word). Les deux formes
 // sont remplacées par la valeur réelle issue du catalogue partagé.
-const { resolveTokens } = require('./tokens.js');
+const { resolveTokens, RAW_TOKENS } = require('./tokens.js');
 
 function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -16,16 +16,18 @@ function fillHtml(bodyHtml, ctx) {
     const values = resolveTokens(ctx);
     let out = String(bodyHtml || '');
 
+    const render = (key) => (RAW_TOKENS.has(key) ? values[key] : escapeHtml(values[key]));
+
     // 1) Puces de l'éditeur : <span … data-token="Clé" …>label</span>
     out = out.replace(/<span[^>]*\sdata-token="([^"]+)"[^>]*>[\s\S]*?<\/span>/g, (m, rawKey) => {
         const key = rawKey.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
-        return key in values ? escapeHtml(values[key]) : '';
+        return key in values ? render(key) : '';
     });
 
     // 2) Jetons en texte brut {Clé} (modèles hérités). On ne remplace que les clés connues.
-    for (const [key, val] of Object.entries(values)) {
+    for (const [key] of Object.entries(values)) {
         if (!out.includes('{' + key + '}')) continue;
-        out = out.split('{' + key + '}').join(escapeHtml(val));
+        out = out.split('{' + key + '}').join(render(key));
     }
     return out;
 }

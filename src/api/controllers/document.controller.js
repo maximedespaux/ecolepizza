@@ -196,6 +196,8 @@ async function fillForRequest(req, res) {
     }
 
     const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
+    // Signature du document (stagiaire/signataire) pour le jeton {Signature stagiaire}.
+    ctx.signature = { data: doc.signature_data, name: doc.signer_name, date: doc.signed_at };
     const f = (ctx.formations && ctx.formations[0]) || {};
     // Slug enregistré sur le document en priorité, sinon dérivé du type + contexte.
     const slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });

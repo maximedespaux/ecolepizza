@@ -129,7 +129,27 @@ const TOKEN_CATALOG = [
             { key: 'Date', label: 'Date du jour', sample: '06/07/2026' },
         ],
     },
+    {
+        group: 'Signature',
+        tokens: [
+            { key: 'Signature stagiaire', label: 'Signature du stagiaire', sample: '✍ (signée à la signature)' },
+            { key: 'Signature organisme', label: "Signature de l'organisme", sample: '✍ (image enregistrée)' },
+            { key: 'Nom signataire', label: 'Nom du signataire', sample: 'M. Jean Dupont' },
+            { key: 'Date signature', label: 'Date de signature', sample: '06/07/2026' },
+        ],
+    },
 ];
+
+// Jetons dont la valeur est du HTML (image de signature) : insérés SANS échappement.
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme']);
+
+// Rend une image de signature (ou un emplacement en pointillés si absente).
+function signatureBox(dataUrl, label) {
+    if (dataUrl && /^data:image\//.test(dataUrl)) {
+        return `<img src="${dataUrl}" alt="${label}" style="max-height:64px;max-width:220px;object-fit:contain" />`;
+    }
+    return `<span style="display:inline-block;border:1px dashed #b0b0b0;color:#999;padding:14px 34px;border-radius:6px;font-size:9pt">${label}</span>`;
+}
 
 // Alias historiques : clés supplémentaires produites par le moteur pour que les
 // anciens modèles continuent de fonctionner (non affichées dans la palette).
@@ -176,6 +196,7 @@ function resolveTokens(ctx = {}) {
     const end = ends[ends.length - 1] || f.end_date || '';
     const today = frDate(new Date());
     const semaine = f.week ? `Semaine ${f.week} — ${f.year || ''}`.trim() : frDate(start);
+    const sig = ctx.signature || {};
 
     return {
         // Stagiaire
@@ -215,6 +236,11 @@ function resolveTokens(ctx = {}) {
         IBAN: o.iban || '', BIC: o.bic || '', Banque: o.bank_name || '',
         // Dates
         Date: today, Today: today,
+        // Signature (valeurs HTML : cf. RAW_TOKENS)
+        'Signature stagiaire': signatureBox(sig.data, 'Signature du stagiaire'),
+        'Signature organisme': signatureBox(o.signature_image, "Signature de l'organisme"),
+        'Nom signataire': sig.name || '',
+        'Date signature': sig.date ? frDate(sig.date) : '',
         // Boucle docxtemplater : {#formations}{Titre} — {PrixLigne}{/formations}
         formations: forms.map((x) => ({
             Titre: x.title || '', Code: x.code || '', Heures: x.hours != null ? String(x.hours) : '',
@@ -225,4 +251,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, ALIAS_KEYS, catalogKeys, resolveTokens, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, catalogKeys, resolveTokens, frDate, euro, businessDay };

@@ -66,6 +66,7 @@ CREATE TABLE organization (
     iban        varchar(34)  DEFAULT NULL,          -- RIB : IBAN
     bic         varchar(11)  DEFAULT NULL,          -- RIB : BIC / SWIFT
     bank_name   varchar(120) DEFAULT NULL,          -- RIB : domiciliation bancaire
+    signature_image longtext  DEFAULT NULL,          -- signature de l'organisme (data URL) pour les documents
     qualiopi    tinyint(1)   NOT NULL DEFAULT 0,
     created_at  timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),

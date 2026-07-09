@@ -65,6 +65,44 @@ function Reglages() {
               <Field label="BIC / SWIFT" value={form.bic || ""} onChange={set("bic")} placeholder="AGRIFRPP" />
               <Field label="Domiciliation (banque)" value={form.bank_name || ""} onChange={set("bank_name")} placeholder="Crédit Agricole Aquitaine" />
             </div>
+            <div className="divider" />
+            <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Signature de l'organisme</h3>
+            <p className="sub" style={{ marginTop: 0 }}>Image insérée automatiquement sur les documents via le jeton {"{Signature organisme}"} (PNG à fond transparent conseillé).</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              {form.signature_image ? (
+                <img
+                  src={form.signature_image}
+                  alt="Signature organisme"
+                  style={{ maxHeight: 70, maxWidth: 240, border: "1px solid var(--border, #ddd)", borderRadius: 6, padding: 4, background: "#fff" }}
+                />
+              ) : (
+                <span className="sub" style={{ fontSize: 13 }}>Aucune signature enregistrée.</span>
+              )}
+              <label className="btn" style={{ cursor: "pointer" }}>
+                {form.signature_image ? "Remplacer" : "Importer une image"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files && e.target.files[0];
+                    if (!file) return;
+                    if (file.size > 1024 * 1024) { setStatus({ type: "error", message: "Image trop lourde (max 1 Mo)." }); return; }
+                    const reader = new FileReader();
+                    reader.onload = () => setForm((p) => ({ ...p, signature_image: reader.result }));
+                    reader.readAsDataURL(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {form.signature_image && (
+                <button type="button" className="btn ghost" onClick={() => setForm((p) => ({ ...p, signature_image: null }))}>
+                  Retirer
+                </button>
+              )}
+            </div>
+
+            <div className="divider" />
             <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "10px 0 14px", fontSize: 14 }}>
               <input type="checkbox" checked={!!form.qualiopi} onChange={(e) => setForm((p) => ({ ...p, qualiopi: e.target.checked ? 1 : 0 }))} />
               Certifié Qualiopi
