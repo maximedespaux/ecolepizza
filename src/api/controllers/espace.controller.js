@@ -156,9 +156,11 @@ const getMyFormations = async (req, res) => {
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: "Aucune fiche stagiaire liée à ce compte." });
 
-        // Catalogue complet des formations de l'organisme.
+        // Catalogue complet des formations de l'organisme (avec le descriptif,
+        // pour l'aperçu en lecture seule des formations non suivies).
         const [programs] = await conn.query(
-            `SELECT id, code, title, days, hours, hygiene, rs_code
+            `SELECT id, code, title, level, color, days, hours, price, hygiene, rs_code,
+                    audience, objectives, objective_general, duration_detail, program_detail
              FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
             [learner.organization_id]
         );
@@ -194,6 +196,11 @@ const getMyFormations = async (req, res) => {
             const e = byProgram[p.id] || null;
             return {
                 program_id: p.id, program_code: p.code, program_title: p.title,
+                // Descriptif (aperçu lecture seule).
+                level: p.level, color: p.color, days: p.days, hours: p.hours, price: p.price,
+                hygiene: p.hygiene, rs_code: p.rs_code,
+                audience: p.audience, objectives: p.objectives, objective_general: p.objective_general,
+                duration_detail: p.duration_detail, program_detail: p.program_detail,
                 enrolled: !!e,
                 enrollment_id: e ? e.enrollment_id : null,
                 complete: e ? e.complete : false,
