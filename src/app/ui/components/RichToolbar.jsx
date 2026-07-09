@@ -37,6 +37,41 @@ function SwatchPicker({ label, title, swatches, current, onPick, onClear, clearL
   );
 }
 
+/** Insertion de tableau avec choix des lignes/colonnes (grille survolée, façon Word). */
+function TableInserter({ onInsert }) {
+  const [open, setOpen] = useState(false);
+  const [hover, setHover] = useState({ r: 0, c: 0 });
+  const ref = useRef(null);
+  const MAX = 10;
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const cells = [];
+  for (let r = 1; r <= MAX; r++) for (let cc = 1; cc <= MAX; cc++) cells.push({ r, c: cc });
+  return (
+    <span className="tb-swatch" ref={ref}>
+      <button type="button" className="tb-btn" title="Insérer un tableau"
+        onMouseDown={(e) => { e.preventDefault(); setOpen((o) => !o); }}>▦</button>
+      {open && (
+        <div className="tb-swatch-pop tb-table-pop">
+          <div className="tb-table-grid" onMouseLeave={() => setHover({ r: 0, c: 0 })}>
+            {cells.map(({ r, c }) => (
+              <button key={r + "-" + c} type="button"
+                className={"tb-table-cell" + (r <= hover.r && c <= hover.c ? " on" : "")}
+                onMouseEnter={() => setHover({ r, c })}
+                onMouseDown={(e) => { e.preventDefault(); onInsert(r, c); setOpen(false); setHover({ r: 0, c: 0 }); }} />
+            ))}
+          </div>
+          <div className="tb-table-size">{hover.r || 0} × {hover.c || 0}</div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 /** Barre d'outils riche (façon traitement de texte) pour un éditeur Tiptap. */
 function RichToolbar({ editor, compact = false }) {
   const imgInput = useRef(null);
@@ -129,7 +164,7 @@ function RichToolbar({ editor, compact = false }) {
           {/* Insertions */}
           <Btn title="Lien" active={editor.isActive("link")} on={addLink}>🔗</Btn>
           <Btn title="Image" on={() => imgInput.current?.click()}>🖼</Btn>
-          <Btn title="Tableau 3×3" on={() => c().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>▦</Btn>
+          <TableInserter onInsert={(rows, cols) => c().insertTable({ rows, cols, withHeaderRow: true }).run()} />
           <Btn title="Ligne horizontale" on={() => c().setHorizontalRule().run()}>—</Btn>
           <input ref={imgInput} type="file" accept="image/*" style={{ display: "none" }}
             onChange={(e) => { addImageFile(e.target.files[0]); e.target.value = ""; }} />
@@ -139,8 +174,14 @@ function RichToolbar({ editor, compact = false }) {
       {editor.isActive("table") && !compact && (
         <>
           <Sep />
-          <Btn title="Ajouter une colonne" on={() => c().addColumnAfter().run()}>+col</Btn>
-          <Btn title="Ajouter une ligne" on={() => c().addRowAfter().run()}>+lig</Btn>
+          <Btn title="Insérer une colonne à gauche" on={() => c().addColumnBefore().run()}>⇤col</Btn>
+          <Btn title="Insérer une colonne à droite" on={() => c().addColumnAfter().run()}>col⇥</Btn>
+          <Btn title="Supprimer la colonne" on={() => c().deleteColumn().run()}>⌫col</Btn>
+          <Btn title="Insérer une ligne au-dessus" on={() => c().addRowBefore().run()}>⤒lig</Btn>
+          <Btn title="Insérer une ligne en dessous" on={() => c().addRowAfter().run()}>lig⤓</Btn>
+          <Btn title="Supprimer la ligne" on={() => c().deleteRow().run()}>⌫lig</Btn>
+          <Btn title="Ligne d'en-tête" active={editor.isActive("tableHeader")} on={() => c().toggleHeaderRow().run()}>⊤</Btn>
+          <Btn title="Fusionner / séparer les cellules" on={() => c().mergeOrSplit().run()}>⤄</Btn>
           <Btn title="Supprimer le tableau" on={() => c().deleteTable().run()}>⌫tab</Btn>
         </>
       )}
