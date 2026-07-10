@@ -758,9 +758,9 @@ function EmargementPreview({ cfg, org }) {
     </td>
   ) : <td key={i} style={{ border: "1px solid #cfd2d8", background: "#f4f4f6" }} />;
 
-  const rows = [{ name: "DESPAUX Guillaume", sub: "Stagiaire", on: () => true }];
-  if (cfg.show_formateurs) rows.push({ name: "DESPAUX Jean-Jacques", sub: "Formateur", on: () => true });
-  if (cfg.show_intervenants) rows.push({ name: "MARTIN Sophie", sub: "Hygiène (HACCP)", on: (i) => i >= shownSlots.length });
+  const rows = [{ name: "LEFEBVRE Camille", sub: "Stagiaire", on: () => true }];
+  if (cfg.show_formateurs) rows.push({ name: "MOREAU Julien", sub: "Formateur", on: () => true });
+  if (cfg.show_intervenants) rows.push({ name: "GIRARD Sophie", sub: "Hygiène (HACCP)", on: (i) => i >= shownSlots.length });
 
   // Largeur proportionnelle au format A4 (paysage 297 mm / portrait 210 mm) pour
   // que l'aperçu « suive » l'orientation. Le wrapper défile si la colonne est étroite.
