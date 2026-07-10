@@ -11,37 +11,29 @@
 // Parcours (hors RS) : Fiche → Devis+CGV → Contrat/Convention → Invitation+Livret
 // → Test positionnement → Droit image → Émargement → Certificat (+Attestation
 // d'assiduité si AGEFICE) → Diplôme → Évaluation de satisfaction.
+// Aucune condition d'application par défaut : chaque document démarre « sans
+// condition » ; l'organisme les définit lui-même (document settings / Conditions).
 const DEFAULT_STEPS = [
-    // 1. Fiche d'expression (profil stagiaire) -> pipeline « Contacté »
     { slug: 'fiche-semaine', label: "Fiche d'expression de besoin", doc_type: 'FICHE_SEMAINE', sort_order: 10, signable: 0, stagiaire_sign: 0, applies_when: {} },
-    // 2. Devis (+ CGV) -> pipeline « Devis envoyé »
-    { slug: 'devis-particulier', label: 'Devis particulier', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, or_group: 'devis', applies_when: { financing: 'PARTICULIER', rs: false } },
-    { slug: 'devis-entreprise', label: 'Devis entreprise', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, or_group: 'devis', applies_when: { financing: 'PROFESSIONNEL', rs: false } },
-    { slug: 'devis-rs7404', label: 'Devis RS7404', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, or_group: 'devis', applies_when: { rs: true } },
+    { slug: 'devis-particulier', label: 'Devis particulier', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, applies_when: {} },
+    { slug: 'devis-entreprise', label: 'Devis entreprise', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, applies_when: {} },
+    { slug: 'devis-rs7404', label: 'Devis RS7404', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, applies_when: {} },
     { slug: 'cgv', label: 'Conditions générales de vente (CGV)', doc_type: 'CGV', sort_order: 22, signable: 0, stagiaire_sign: 0, applies_when: {} },
-    // 4. Contrat (particulier) / Convention (professionnel)
-    { slug: 'contrat', label: 'Contrat de formation', doc_type: 'CONTRAT', sort_order: 30, signable: 1, stagiaire_sign: 1, or_group: 'contrat', applies_when: { financing: 'PARTICULIER', rs: false } },
-    { slug: 'contrat-rs7404', label: 'Contrat RS7404', doc_type: 'CONTRAT', sort_order: 30, signable: 1, stagiaire_sign: 1, or_group: 'contrat', applies_when: { rs: true } },
-    { slug: 'convention', label: 'Convention de formation', doc_type: 'CONVENTION', sort_order: 30, signable: 1, stagiaire_sign: 1, or_group: 'contrat', applies_when: { financing: 'PROFESSIONNEL', rs: false } },
-    // 5. Invitation (+ Livret d'accueil) ; RS -> Convocation à l'examen
-    { slug: 'invitation', label: 'Invitation', doc_type: 'INVITATION', sort_order: 40, signable: 0, stagiaire_sign: 0, applies_when: { rs: false } },
-    { slug: 'convocation', label: "Convocation à l'examen", doc_type: 'CONVOCATION', sort_order: 40, signable: 0, stagiaire_sign: 0, applies_when: { rs: true } },
+    { slug: 'contrat', label: 'Contrat de formation', doc_type: 'CONTRAT', sort_order: 30, signable: 1, stagiaire_sign: 1, applies_when: {} },
+    { slug: 'contrat-rs7404', label: 'Contrat RS7404', doc_type: 'CONTRAT', sort_order: 30, signable: 1, stagiaire_sign: 1, applies_when: {} },
+    { slug: 'convention', label: 'Convention de formation', doc_type: 'CONVENTION', sort_order: 30, signable: 1, stagiaire_sign: 1, applies_when: {} },
+    { slug: 'invitation', label: 'Invitation', doc_type: 'INVITATION', sort_order: 40, signable: 0, stagiaire_sign: 0, applies_when: {} },
+    { slug: 'convocation', label: "Convocation à l'examen", doc_type: 'CONVOCATION', sort_order: 40, signable: 0, stagiaire_sign: 0, applies_when: {} },
     { slug: 'livret-accueil', label: "Livret d'accueil", doc_type: 'LIVRET_ACCUEIL', sort_order: 42, signable: 0, stagiaire_sign: 0, applies_when: {} },
-    // 6. Test de positionnement (QCM)
     { slug: 'test-positionnement', label: 'Test de positionnement', doc_type: 'TEST_POSITIONNEMENT', sort_order: 50, signable: 0, stagiaire_sign: 0, applies_when: {} },
-    // 7. Droit à l'image
     { slug: 'droit-image', label: "Droit à l'image", doc_type: 'DROIT_IMAGE', sort_order: 60, signable: 1, stagiaire_sign: 1, applies_when: {} },
-    // 8. Feuille d'émargement (signée chaque jour de formation)
-    { slug: 'emargement-5j', label: "Feuille d'émargement 5J", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, or_group: 'emargement', applies_when: { hygiene: false, jours: 5 } },
-    { slug: 'emargement-4j', label: "Feuille d'émargement 4J", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, or_group: 'emargement', applies_when: { hygiene: false, jours: 4 } },
-    { slug: 'emargement-5j-hygiene', label: "Feuille d'émargement 5J + hygiène", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, or_group: 'emargement', applies_when: { hygiene: true } },
-    { slug: 'attestation-hygiene', label: 'Attestation Hygiène', doc_type: 'ATTESTATION_HYGIENE', sort_order: 75, signable: 0, stagiaire_sign: 0, applies_when: { hygiene: true } },
-    // 10. Certificat de réalisation (+ Attestation d'assiduité si AGEFICE)
+    { slug: 'emargement-5j', label: "Feuille d'émargement 5J", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, applies_when: {} },
+    { slug: 'emargement-4j', label: "Feuille d'émargement 4J", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, applies_when: {} },
+    { slug: 'emargement-5j-hygiene', label: "Feuille d'émargement 5J + hygiène", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, applies_when: {} },
+    { slug: 'attestation-hygiene', label: 'Attestation Hygiène', doc_type: 'ATTESTATION_HYGIENE', sort_order: 75, signable: 0, stagiaire_sign: 0, applies_when: {} },
     { slug: 'certificat-realisation', label: 'Certificat de réalisation', doc_type: 'CERTIFICAT_REALISATION', sort_order: 80, signable: 1, stagiaire_sign: 0, applies_when: {} },
-    { slug: 'attestation-assiduite', label: "Attestation d'assiduité", doc_type: 'ATTESTATION_ASSIDUITE', sort_order: 82, signable: 1, stagiaire_sign: 1, applies_when: { agefice: true } },
-    // 11. Diplôme
+    { slug: 'attestation-assiduite', label: "Attestation d'assiduité", doc_type: 'ATTESTATION_ASSIDUITE', sort_order: 82, signable: 1, stagiaire_sign: 1, applies_when: {} },
     { slug: 'diplome', label: 'Diplôme', doc_type: 'DIPLOME', sort_order: 90, signable: 0, stagiaire_sign: 0, applies_when: {} },
-    // 12. Évaluation de satisfaction
     { slug: 'evaluation-satisfaction', label: 'Évaluation de satisfaction', doc_type: 'EVALUATION_SATISFACTION', sort_order: 100, signable: 0, stagiaire_sign: 0, applies_when: {} },
 ];
 const DEFAULT_SLUGS = new Set(DEFAULT_STEPS.map((d) => d.slug));
