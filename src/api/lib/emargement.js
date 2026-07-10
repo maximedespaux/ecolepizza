@@ -24,7 +24,44 @@ function frDate(iso) {
 }
 const SLOT_ORDER = ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'];
 
-function renderEmargementHtml({ org, e, rows, participants = [] }) {
+// Configuration par défaut de la feuille d'émargement (mise en page actuelle).
+// Toute clé absente reprend cette valeur -> compatible avec les organismes qui
+// n'ont rien personnalisé.
+const DEFAULT_EMARG_CONFIG = {
+    title: "Feuille d'émargement",
+    accent: '#c0392b',
+    show_duration: true,
+    show_horaires: true,
+    show_lieu: true,
+    header_note: '',
+    show_formateurs: true,
+    show_intervenants: true,
+    sig_height: 30,
+    footer_left: '',                 // '' -> « Fait à {ville}, le {date} »
+    footer_caption: "Signature et cachet de l'organisme de formation",
+    show_stamp: true,
+};
+
+// Fusionne une config (objet ou JSON string, éventuellement partielle) sur les
+// valeurs par défaut, avec un minimum de coercition de types.
+function mergeEmargConfig(raw) {
+    let obj = raw;
+    if (typeof raw === 'string') { try { obj = JSON.parse(raw); } catch { obj = null; } }
+    if (!obj || typeof obj !== 'object') return { ...DEFAULT_EMARG_CONFIG };
+    const c = { ...DEFAULT_EMARG_CONFIG, ...obj };
+    c.title = String(c.title || DEFAULT_EMARG_CONFIG.title);
+    c.accent = /^#[0-9a-fA-F]{6}$/.test(c.accent) ? c.accent : DEFAULT_EMARG_CONFIG.accent;
+    c.header_note = String(c.header_note || '');
+    c.footer_left = String(c.footer_left || '');
+    c.footer_caption = String(c.footer_caption == null ? DEFAULT_EMARG_CONFIG.footer_caption : c.footer_caption);
+    const h = parseInt(c.sig_height, 10);
+    c.sig_height = Number.isFinite(h) ? Math.min(60, Math.max(16, h)) : DEFAULT_EMARG_CONFIG.sig_height;
+    for (const k of ['show_duration', 'show_horaires', 'show_lieu', 'show_formateurs', 'show_intervenants', 'show_stamp']) c[k] = !!c[k];
+    return c;
+}
+
+function renderEmargementHtml({ org, e, rows, participants = [], config }) {
+    const cfg = mergeEmargConfig(config);
     // Colonnes = jours (dates) × demi-journées présentes ce jour-là (grille paysage).
     const dates = [...new Set(rows.map((r) => r.date))].sort();
     const daySlots = {}; // date -> [slots présents]
@@ -45,15 +82,30 @@ function renderEmargementHtml({ org, e, rows, participants = [] }) {
 
     const today = frDate(new Date().toISOString().slice(0, 10));
     const orgAddr = [org && org.address, [org && org.zip_code, org && org.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-    const orgSig = decrypt(org && org.signature_image);
+    const orgSig = cfg.show_stamp ? decrypt(org && org.signature_image) : null;
     const durText = [e.program_days ? `${e.program_days} jour${e.program_days > 1 ? 's' : ''}` : '', e.program_hours ? `${e.program_hours} h` : ''].filter(Boolean).join(' · ');
+
+    // Lignes participants filtrées selon la config (le stagiaire est toujours affiché).
+    const shown = participants.filter((p) => p.role === 'stagiaire'
+        || (p.role === 'formateur' && cfg.show_formateurs)
+        || (p.role === 'intervenant' && cfg.show_intervenants));
+
+    // Ligne « Date(s) … » avec durée optionnelle.
+    const dureeFrag = (cfg.show_duration && durText) ? ` · Durée : ${esc(durText)}` : '';
+    const horairesFrag = (cfg.show_horaires && e.program_horaires)
+        ? `Horaires : ${esc(e.program_horaires).replace(/\r?\n/g, '<br/>')}<br/>` : '';
+    const lieuFrag = (cfg.show_lieu && orgAddr) ? `Lieu : ${esc(orgAddr)}` : '';
+    const noteFrag = cfg.header_note ? `${esc(cfg.header_note).replace(/\r?\n/g, '<br/>')}<br/>` : '';
+    const footLeft = cfg.footer_left
+        ? esc(cfg.footer_left).replace(/\r?\n/g, '<br/>')
+        : `Fait à ${esc(org && org.town || '')}, le ${esc(today)}`;
 
     return `<!doctype html><html><head><meta charset="utf-8"><style>
         @page{size:297mm 210mm;margin:10mm}
         *{box-sizing:border-box}
         body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:10px;color:#1e2140;margin:0}
-        h1{font-size:16px;margin:0 0 4px;color:#c0392b;letter-spacing:.03em;text-transform:uppercase}
-        .head{border-bottom:2px solid #c0392b;padding-bottom:8px;margin-bottom:10px}
+        h1{font-size:16px;margin:0 0 4px;color:${cfg.accent};letter-spacing:.03em;text-transform:uppercase}
+        .head{border-bottom:2px solid ${cfg.accent};padding-bottom:8px;margin-bottom:10px}
         .org{font-weight:700;font-size:11px}
         .meta{color:#444;font-size:10px;line-height:1.55;margin-top:3px}
         .meta b{color:#1e2140}
@@ -65,7 +117,7 @@ function renderEmargementHtml({ org, e, rows, participants = [] }) {
         td.nm .sub{font-weight:400;font-size:8px;color:#8a8f99}
         tbody td{height:38px}
         td.off{background:#f4f4f6}
-        .sg img{max-height:30px;max-width:100%;object-fit:contain}
+        .sg img{max-height:${cfg.sig_height}px;max-width:100%;object-fit:contain}
         .ln{display:block;border-bottom:1px dotted #b9bcc4;width:70%;margin:14px auto 0}
         .foot{margin-top:14px;display:flex;justify-content:space-between;align-items:flex-end;font-size:10px}
         .stamp{text-align:center}
@@ -73,12 +125,12 @@ function renderEmargementHtml({ org, e, rows, participants = [] }) {
         .stamp .cap{font-size:9px;color:#555}
     </style></head><body>
         <div class="head">
-            <h1>Feuille d'émargement</h1>
+            <h1>${esc(cfg.title)}</h1>
             <div class="org">${esc(org && org.legal_name || '')}</div>
             <div class="meta">
                 Intitulé de l'action de formation : <b>${esc(e.program_title || '')}</b> (${esc(e.program_code || '')})<br/>
-                Date(s) : <b>du ${esc(frDate(e.start_date))} au ${esc(frDate(e.end_date))}</b> — Semaine ${esc(e.week)}/${esc(e.year)}${durText ? ` · Durée : ${esc(durText)}` : ''}<br/>
-                ${e.program_horaires ? `Horaires : ${esc(e.program_horaires).replace(/\r?\n/g, '<br/>')}<br/>` : ''}${orgAddr ? `Lieu : ${esc(orgAddr)}` : ''}
+                Date(s) : <b>du ${esc(frDate(e.start_date))} au ${esc(frDate(e.end_date))}</b> — Semaine ${esc(e.week)}/${esc(e.year)}${dureeFrag}<br/>
+                ${horairesFrag}${noteFrag}${lieuFrag}
             </div>
         </div>
 
@@ -87,14 +139,14 @@ function renderEmargementHtml({ org, e, rows, participants = [] }) {
                 <tr><th class="who" rowspan="2">Nom et prénom</th>${dates.map((d) => `<th colspan="${daySlots[d].length}">${esc(frDay(d))}</th>`).join('')}</tr>
                 <tr>${cols.map((c) => `<th>${SLOT[c.slot] || esc(c.slot)}</th>`).join('')}</tr>
             </thead>
-            <tbody>${participants.map(rowFor).join('')}</tbody>
+            <tbody>${shown.map(rowFor).join('')}</tbody>
         </table>
 
         <div class="foot">
-            <div>Fait à ${esc(org && org.town || '')}, le ${esc(today)}</div>
+            <div>${footLeft}</div>
             <div class="stamp">
                 ${orgSig ? `<img src="${orgSig}" />` : ''}
-                <div class="cap">Signature et cachet de l'organisme de formation</div>
+                ${cfg.footer_caption ? `<div class="cap">${esc(cfg.footer_caption)}</div>` : ''}
             </div>
         </div>
     </body></html>`;
@@ -125,6 +177,12 @@ async function regenEmargement(conn, orgId, enrollmentId) {
         try {
             const [[h]] = await conn.query('SELECT horaires FROM training_program WHERE id = ?', [e.program_id]);
             e.program_horaires = h ? h.horaires : null;
+        } catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; }
+        // Config de mise en page (colonne 057) — tolérante à l'absence.
+        let emargConfig = null;
+        try {
+            const [[cf]] = await conn.query('SELECT emargement_config FROM organization WHERE id = ?', [orgId]);
+            emargConfig = cf ? cf.emargement_config : null;
         } catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; }
         const [[org]] = await conn.query('SELECT legal_name, address, zip_code, town, signature_image FROM organization WHERE id = ?', [orgId]);
         const [rows] = await conn.query(
@@ -206,7 +264,7 @@ async function regenEmargement(conn, orgId, enrollmentId) {
         const allSignedFlag = rows.every((r) => r.signature_data);
 
         let pdf;
-        try { pdf = htmlToPdf(renderEmargementHtml({ org, e, rows, participants })); }
+        try { pdf = htmlToPdf(renderEmargementHtml({ org, e, rows, participants, config: emargConfig })); }
         catch (err) { console.warn('Émargement PDF non généré :', err.code || err.message); return; }
 
         const ref = `emarg:${enrollmentId}`;
@@ -231,4 +289,4 @@ async function regenEmargement(conn, orgId, enrollmentId) {
     }
 }
 
-module.exports = { regenEmargement };
+module.exports = { regenEmargement, DEFAULT_EMARG_CONFIG, mergeEmargConfig };

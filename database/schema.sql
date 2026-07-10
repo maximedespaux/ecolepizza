@@ -68,6 +68,7 @@ CREATE TABLE organization (
     bank_name   varchar(120) DEFAULT NULL,          -- RIB : domiciliation bancaire
     signature_image longtext  DEFAULT NULL,          -- signature de l'organisme (data URL) pour les documents
     sign_cert   longtext     DEFAULT NULL,          -- certificat PAdES de scellement (PKCS#12 chiffré, base64)
+    emargement_config longtext DEFAULT NULL,         -- config JSON de la feuille d'émargement (mise en page personnalisable)
     qualiopi    tinyint(1)   NOT NULL DEFAULT 0,
     created_at  timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
