@@ -5,7 +5,7 @@ import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "../comp
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { euro, colorOf } from "../lib/format.js";
-import { LEVELS, setBadgeColors } from "../lib/levels.js";
+import { setBadgeColors } from "../lib/levels.js";
 
 function Formations() {
   const [programs, setPrograms] = useState([]);
@@ -215,17 +215,11 @@ function FormationModal({ program, onClose, onSaved, onError }) {
         </div>
         <div className="mbody">
           <div style={{ display: tab === "infos" ? "block" : "none" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12 }}>
             <div className="field"><label>Code</label>
               <input className="inp mono" value={form.code} onChange={set("code")} placeholder="NIV1, RS7404…" /></div>
             <div className="field"><label>Titre</label>
               <input className="inp" value={form.title} onChange={set("title")} /></div>
-            <div className="field"><label>Niveau (couleur carte)</label>
-              <select value={form.level || ""} onChange={set("level")}>
-                <option value="">— Non défini —</option>
-                {LEVELS.map((l) => <option key={l.v} value={l.v}>{l.label}</option>)}
-              </select>
-            </div>
           </div>
 
           <div className="field">
