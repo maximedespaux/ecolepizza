@@ -39,8 +39,7 @@ const DEFAULT_EMARG_CONFIG = {
     slots: ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'], // demi-journées affichées en colonnes
     show_formateurs: true,
     show_intervenants: true,
-    density: 'normal',               // 'compact' | 'normal' | 'large' (police + hauteur de ligne)
-    sig_height: 30,
+    density: 'normal',               // 'compact' | 'normal' | 'large' (police)
     margin_mm: 10,                   // marge de page
     footer_left: '',                 // '' -> « Fait à {ville}, le {date} »
     footer_caption: "Signature et cachet de l'organisme de formation",
@@ -70,13 +69,15 @@ function mergeEmargConfig(raw) {
     c.slots = validSlots.length ? validSlots : [...DEFAULT_EMARG_CONFIG.slots];
     c.footer_left = String(c.footer_left || '');
     c.footer_caption = String(c.footer_caption == null ? DEFAULT_EMARG_CONFIG.footer_caption : c.footer_caption);
-    const h = parseInt(c.sig_height, 10);
-    c.sig_height = Number.isFinite(h) ? Math.min(60, Math.max(16, h)) : DEFAULT_EMARG_CONFIG.sig_height;
+    delete c.sig_height; // option retirée : dimensionnement automatique
     const m = parseInt(c.margin_mm, 10);
     c.margin_mm = Number.isFinite(m) ? Math.min(25, Math.max(4, m)) : DEFAULT_EMARG_CONFIG.margin_mm;
     for (const k of ['show_logo', 'show_duration', 'show_horaires', 'show_lieu', 'show_formateurs', 'show_intervenants', 'show_stamp']) c[k] = !!c[k];
     return c;
 }
+
+// 1 mm ≈ 3.7795 px (96 dpi) — pour les attributs width/height des images.
+const MM = 3.7795;
 
 function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const cfg = mergeEmargConfig(config);
@@ -92,31 +93,61 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const cols = []; // colonnes ordonnées { date, slot }
     for (const d of dates) for (const sl of daySlots[d]) cols.push({ date: d, slot: sl });
 
-    // Cellule signature : image, ou case vide (à signer), ou grisée (pas concerné).
-    const cell = (dataUrl, applies) => {
-        if (!applies) return '<td class="off"></td>';
-        const v = decrypt(dataUrl);
-        return v ? `<td><span class="sg"><img src="${v}" /></span></td>` : '<td><span class="ln"></span></td>';
-    };
-    const rowFor = (p) => `<tr>
-        <td class="nm">${esc(p.name || '')}${p.specialty ? `<div class="sub">${esc(p.specialty)}</div>` : ''}${p.role === 'stagiaire' ? '<div class="sub">Stagiaire</div>' : p.role === 'intervenant' ? '<div class="sub">Intervenant</div>' : ''}</td>
-        ${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k)); }).join('')}
-    </tr>`;
-
-    const today = frDate(new Date().toISOString().slice(0, 10));
     const orgAddr = [org && org.address, [org && org.zip_code, org && org.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const orgSig = cfg.show_stamp ? decrypt(org && org.signature_image) : null;
     const orgLogo = cfg.show_logo ? (org && org.logo_image) || null : null;
-    // Format de page : paysage (297×210) ou portrait (210×297) + marge configurable.
-    const pageSize = cfg.orientation === 'portrait' ? '210mm 297mm' : '297mm 210mm';
-    const durText = [e.program_days ? `${e.program_days} jour${e.program_days > 1 ? 's' : ''}` : '', e.program_hours ? `${e.program_hours} h` : ''].filter(Boolean).join(' · ');
 
-    // Lignes participants filtrées selon la config (le stagiaire est toujours affiché).
+    // ── Dimensionnement automatique (en mm) pour tenir sur UNE page ────────────
+    // LibreOffice ignore table-layout:fixed / max-width : on fixe donc des largeurs
+    // et hauteurs explicites (colgroup + width/height sur les images).
+    const pageW = cfg.orientation === 'portrait' ? 210 : 297;
+    const pageH = cfg.orientation === 'portrait' ? 297 : 210;
+    const margin = cfg.margin_mm;
+    const contentW = pageW - 2 * margin;
+    const contentH = pageH - 2 * margin;
+    const nameW = Math.min(45, Math.max(28, contentW * 0.16)); // colonne « Nom et prénom »
+    const nCols = cols.length || 1;
+    // Largeur d'une colonne = (largeur utile - colonne nom) / nombre de demi-journées.
+    const colW = Math.max(7, (contentW - nameW) / nCols);
+    const tableW = nameW + colW * nCols;
+
+    // Participants affichés (le stagiaire est toujours là).
     const shown = participants.filter((p) => p.role === 'stagiaire'
         || (p.role === 'formateur' && cfg.show_formateurs)
         || (p.role === 'intervenant' && cfg.show_intervenants));
 
-    // Ligne « Date(s) … » avec durée optionnelle.
+    // Hauteur de ligne : on répartit la place verticale restante entre les lignes.
+    const horairesLines = (cfg.show_horaires && e.program_horaires) ? String(e.program_horaires).split(/\r?\n/).length : 0;
+    const noteLines = cfg.header_note ? String(cfg.header_note).split(/\r?\n/).length : 0;
+    const lieuLines = (cfg.show_lieu && orgAddr) ? 1 : 0;
+    const metaLines = 2 + horairesLines + noteLines + lieuLines; // intitulé + dates + …
+    const headerH = 16 + metaLines * 4.7;                 // en-tête (titre, organisme, méta)
+    const footerH = (orgSig ? 24 : 12) + 6;               // pied (mention + cachet)
+    const theadH = 16;                                    // 2 lignes d'en-tête de tableau
+    const availBody = Math.max(18, contentH - headerH - footerH - theadH - 14); // marge de sécurité anti-débordement
+    const nRows = Math.max(1, shown.length);
+    const rowH = Math.max(9, Math.min(26, availBody / nRows)); // borne haute/basse raisonnable
+    const sigW = Math.max(6, colW - 3);
+    const sigH = Math.max(6, rowH - 3);
+    const px = (mm) => Math.round(mm * MM);
+
+    const colWpx = px(colW), nameWpx = px(nameW), rowHpx = px(rowH);
+    // Cellule signature : image dimensionnée à la case, case vide, ou grisée (non concerné).
+    // LibreOffice respecte mieux les attributs HTML (width/height/bgcolor) que le CSS.
+    const cell = (dataUrl, applies) => {
+        if (!applies) return `<td width="${colWpx}" height="${rowHpx}" bgcolor="#f4f4f6"></td>`;
+        const v = decrypt(dataUrl);
+        if (v) return `<td width="${colWpx}" height="${rowHpx}"><img src="${v}" width="${px(sigW)}" height="${px(sigH)}" style="object-fit:contain"/></td>`;
+        return `<td width="${colWpx}" height="${rowHpx}"></td>`;
+    };
+    const rowFor = (p) => `<tr>
+        <td class="nm" width="${nameWpx}" height="${rowHpx}">${esc(p.name || '')}${p.specialty ? `<div class="sub">${esc(p.specialty)}</div>` : ''}${p.role === 'stagiaire' ? '<div class="sub">Stagiaire</div>' : p.role === 'intervenant' ? '<div class="sub">Intervenant</div>' : ''}</td>
+        ${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k)); }).join('')}
+    </tr>`;
+
+    const today = frDate(new Date().toISOString().slice(0, 10));
+    const pageSize = cfg.orientation === 'portrait' ? '210mm 297mm' : '297mm 210mm';
+    const durText = [e.program_days ? `${e.program_days} jour${e.program_days > 1 ? 's' : ''}` : '', e.program_hours ? `${e.program_hours} h` : ''].filter(Boolean).join(' · ');
     const dureeFrag = (cfg.show_duration && durText) ? ` · Durée : ${esc(durText)}` : '';
     const horairesFrag = (cfg.show_horaires && e.program_horaires)
         ? `Horaires : ${esc(e.program_horaires).replace(/\r?\n/g, '<br/>')}<br/>` : '';
@@ -127,32 +158,29 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
         : `Fait à ${esc(org && org.town || '')}, le ${esc(today)}`;
 
     return `<!doctype html><html><head><meta charset="utf-8"><style>
-        @page{size:${pageSize};margin:${cfg.margin_mm}mm}
+        @page{size:${pageSize};margin:${margin}mm}
         *{box-sizing:border-box}
-        body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:${dens.base + 1}px;color:#1e2140;margin:0}
-        h1{font-size:16px;margin:0 0 4px;color:${cfg.accent};letter-spacing:.03em;text-transform:uppercase}
-        .head{border-bottom:2px solid ${cfg.accent};padding-bottom:8px;margin-bottom:10px;position:relative}
-        .logo{position:absolute;top:0;right:0;max-height:52px;max-width:180px;object-fit:contain}
+        body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:${dens.base}px;color:#1e2140;margin:0}
+        h1{font-size:15px;margin:0 0 3px;color:${cfg.accent};letter-spacing:.03em;text-transform:uppercase}
+        .head{position:relative;margin-bottom:2px}
+        .rule{border:none;border-top:2px solid ${cfg.accent};height:0;margin:5px 0 8px}
+        .logo{position:absolute;top:0;right:0;max-height:52px;max-width:180px}
         .org{font-weight:700;font-size:11px}
-        .meta{color:#444;font-size:10px;line-height:1.55;margin-top:3px}
+        .meta{color:#444;font-size:9.5px;line-height:1.5;margin-top:2px}
         .meta b{color:#1e2140}
-        table{width:100%;border-collapse:collapse;table-layout:fixed}
-        th,td{border:1px solid #cfd2d8;padding:3px 4px;text-align:center;vertical-align:middle;font-size:${dens.base}px}
-        thead th{background:#f5f3f0;text-transform:uppercase;letter-spacing:.03em;color:#555;font-size:${dens.head}px}
-        .who{width:150px;text-align:left}
+        table{border-collapse:collapse}
+        th,td{text-align:center;vertical-align:middle;font-size:${dens.base}px}
+        thead th{background:#f5f3f0;text-transform:uppercase;color:#555;font-size:${dens.head}px}
         td.nm{text-align:left;font-weight:600;font-size:${dens.name}px}
         td.nm .sub{font-weight:400;font-size:${dens.sub}px;color:#8a8f99}
-        tbody td{height:${dens.row}px}
-        td.off{background:#f4f4f6}
-        .sg img{max-height:${cfg.sig_height}px;max-width:100%;object-fit:contain}
-        .ln{display:block;border-bottom:1px dotted #b9bcc4;width:70%;margin:${Math.round(dens.row / 2 - 5)}px auto 0}
-        .foot{margin-top:14px;display:flex;justify-content:space-between;align-items:flex-end;font-size:10px}
+        .foot{margin-top:10px;font-size:10px}
+        .foot td{vertical-align:bottom}
         .stamp{text-align:center}
-        .stamp img{max-height:60px;max-width:200px;object-fit:contain;display:block;margin:0 auto 2px}
+        .stamp img{max-height:56px;max-width:190px;display:block;margin:0 auto 2px}
         .stamp .cap{font-size:9px;color:#555}
     </style></head><body>
         <div class="head">
-            ${orgLogo ? `<img class="logo" src="${orgLogo}" />` : ''}
+            ${orgLogo ? `<img class="logo" src="${orgLogo}" width="${px(40)}" height="${px(14)}" style="object-fit:contain" />` : ''}
             <h1>${esc(cfg.title)}</h1>
             <div class="org">${esc(org && org.legal_name || '')}</div>
             <div class="meta">
@@ -161,22 +189,23 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
                 ${horairesFrag}${noteFrag}${lieuFrag}
             </div>
         </div>
+        <hr class="rule" />
 
-        <table>
+        <table border="1" bordercolor="#c9ccd3" cellspacing="0" cellpadding="2" width="${px(tableW)}">
             <thead>
-                <tr><th class="who" rowspan="2">Nom et prénom</th>${dates.map((d) => `<th colspan="${daySlots[d].length}">${esc(frDay(d))}</th>`).join('')}</tr>
-                <tr>${cols.map((c) => `<th>${SLOT[c.slot] || esc(c.slot)}</th>`).join('')}</tr>
+                <tr><th class="nm" rowspan="2" width="${nameWpx}" bgcolor="#f5f3f0" style="text-align:left">Nom et prénom</th>${dates.map((d) => `<th colspan="${daySlots[d].length}" bgcolor="#f5f3f0">${esc(frDay(d))}</th>`).join('')}</tr>
+                <tr>${cols.map((c) => `<th width="${colWpx}" bgcolor="#f5f3f0">${SLOT[c.slot] || esc(c.slot)}</th>`).join('')}</tr>
             </thead>
             <tbody>${shown.map(rowFor).join('')}</tbody>
         </table>
 
-        <div class="foot">
-            <div>${footLeft}</div>
-            <div class="stamp">
-                ${orgSig ? `<img src="${orgSig}" />` : ''}
+        <table cellspacing="0" cellpadding="0" width="${px(tableW)}" class="foot"><tr>
+            <td style="text-align:left">${footLeft}</td>
+            <td class="stamp" width="${px(Math.min(70, tableW * 0.35))}">
+                ${orgSig ? `<img src="${orgSig}" width="${px(44)}" height="${px(16)}" style="object-fit:contain" />` : ''}
                 ${cfg.footer_caption ? `<div class="cap">${esc(cfg.footer_caption)}</div>` : ''}
-            </div>
-        </div>
+            </td>
+        </tr></table>
     </body></html>`;
 }
 

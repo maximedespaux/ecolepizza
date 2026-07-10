@@ -496,7 +496,7 @@ const EMARG_DEFAULTS = {
   orientation: "landscape", title: "Feuille d'émargement", accent: "#c0392b", show_logo: false,
   show_duration: true, show_horaires: true, show_lieu: true, header_note: "",
   slots: ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"],
-  show_formateurs: true, show_intervenants: true, density: "normal", sig_height: 30, margin_mm: 10,
+  show_formateurs: true, show_intervenants: true, density: "normal", margin_mm: 10,
   footer_left: "", footer_caption: "Signature et cachet de l'organisme de formation", show_stamp: true,
 };
 const SLOT_ORDER = ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"];
@@ -702,10 +702,6 @@ function EmargementConfigPanel({ onStatus }) {
                   onChange={(e) => { setCfg((p) => ({ ...p, margin_mm: parseInt(e.target.value, 10) })); setDirty(true); }} style={{ width: "100%" }} /></div>
             </div>
 
-            <div className="field"><label>Hauteur des signatures : {cfg.sig_height} px</label>
-              <input type="range" min="16" max="60" value={cfg.sig_height}
-                onChange={(e) => { setCfg((p) => ({ ...p, sig_height: parseInt(e.target.value, 10) })); setDirty(true); }} style={{ width: "100%" }} /></div>
-
             <div className="field"><label>Pied de page — mention gauche (optionnel)</label>
               <input className="inp" value={cfg.footer_left} onChange={set("footer_left")}
                 placeholder="Par défaut : « Fait à {ville}, le {date} »" /></div>
@@ -753,8 +749,8 @@ function EmargementPreview({ cfg, org }) {
   const cell = (i, on) => on ? (
     <td key={i} style={{ border: "1px solid #cfd2d8", height: dens.row }}>
       {i % 2 === 0
-        ? <span style={{ fontFamily: "'Segoe Script','Brush Script MT',cursive", fontSize: Math.max(11, cfg.sig_height * 0.5), color: "#2b2f45" }}>Signé</span>
-        : <span style={{ display: "block", borderBottom: "1px dotted #b9bcc4", width: "70%", margin: `${Math.round(dens.row / 2 - 5)}px auto 0` }} />}
+        ? <span style={{ fontFamily: "'Segoe Script','Brush Script MT',cursive", fontSize: 15, color: "#2b2f45" }}>Signé</span>
+        : null}
     </td>
   ) : <td key={i} style={{ border: "1px solid #cfd2d8", background: "#f4f4f6" }} />;
 
