@@ -4,14 +4,11 @@
 // et arborescence d'archivage.
 const { mergeSteps, parseApplies } = require('./documents.js');
 
-// Équivalences par défaut (socle École Pizza) — toujours présentes, non supprimables.
-const DEFAULT_EQUIVALENCES = [
-    { key: 'def-devis', label: 'Devis', members: ['devis-particulier', 'devis-entreprise', 'devis-rs7404'] },
-    { key: 'def-contrat', label: 'Contrat / Convention', members: ['contrat', 'contrat-rs7404', 'convention'] },
-    { key: 'def-emargement', label: 'Émargement', members: ['emargement-5j', 'emargement-4j', 'emargement-5j-hygiene'] },
-];
+// Pas d'équivalences par défaut : la liste part vide (comme les conditions) ;
+// l'organisme les définit entièrement dans Modèles → Équivalences.
+const DEFAULT_EQUIVALENCES = [];
 
-// Charge les équivalences (défauts + personnalisées de l'organisme).
+// Charge les équivalences personnalisées de l'organisme.
 async function loadEquivalences(conn, orgId) {
     let rows = [];
     try {
