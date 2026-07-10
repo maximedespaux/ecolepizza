@@ -154,6 +154,8 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       if (raw) { try { t = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { t = { folders: [] }; } }
       setArchiveTree(t && t.folders ? t : { folders: [] });
       if (r.data && r.data.needs_emargement != null) setForm((p) => ({ ...p, needs_emargement: r.data.needs_emargement ? 1 : 0 }));
+      // horaires n'est pas renvoyé par la liste (getFormations) : on le charge ici.
+      if (r.data && "horaires" in r.data) setForm((p) => ({ ...p, horaires: r.data.horaires || "" }));
     }).catch(() => {});
   }, [program.id]);
   // Équivalences « OU » (org) : map slug -> groupe. Le regroupement est automatique.
