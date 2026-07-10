@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { getStagiaires, resetStagiairePassword, deleteStagiaire, getOpcos, getFormations } from "../api/apiClient.js";
+import { getStagiaires, resetStagiairePassword, deleteStagiaire, deleteStagiaireAccount, getOpcos, getFormations } from "../api/apiClient.js";
 import { OPCOS } from "../lib/opco.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -82,11 +82,25 @@ function Stagiaires() {
     }
   }
 
-  async function resetPassword(id) {
+  // Réinitialise le mot de passe (ou CRÉE le compte s'il n'existe pas encore).
+  async function resetPassword(l) {
     setStatus(null);
     try {
-      const r = await resetStagiairePassword(id);
-      setStatus({ type: "success", message: `Nouveau mot de passe : ${r.password}` });
+      const r = await resetStagiairePassword(l.id);
+      setStatus({ type: "success", message: `${l.has_account ? "Nouveau mot de passe" : "Compte créé — mot de passe"} : ${r.password}` });
+      load(query);
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    }
+  }
+
+  // Supprime UNIQUEMENT le compte de connexion (la fiche est conservée).
+  async function removeAccount(l) {
+    if (!window.confirm(`Supprimer le compte de connexion de ${l.first_name} ${l.last_name} ?\nLa fiche, les dossiers et documents sont conservés ; seul l'accès à l'application est retiré.`)) return;
+    setStatus(null);
+    try {
+      await deleteStagiaireAccount(l.id);
+      setStatus({ type: "success", message: "Compte de connexion supprimé (fiche conservée)." });
       load(query);
     } catch (err) {
       setStatus({ type: "error", message: err.message });
@@ -199,14 +213,15 @@ function Stagiaires() {
                   ))}
                 </span>
                 {l.professional_status && <Badge tone="n">{l.professional_status}</Badge>}
-                <button
-                  type="button"
-                  className="iconbtn"
-                  title="Réinitialiser le mot de passe"
-                  onClick={() => resetPassword(l.id)}
-                >
-                  🔑
-                </button>
+                {l.has_account ? (
+                  <>
+                    <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" onClick={() => resetPassword(l)}>🔑</button>
+                    <button type="button" className="iconbtn" title="Supprimer le compte de connexion (fiche conservée)"
+                      aria-label={`Supprimer le compte de ${l.first_name} ${l.last_name}`} onClick={() => removeAccount(l)}>🚫</button>
+                  </>
+                ) : (
+                  <button type="button" className="btn sm ghost" title="Créer un compte de connexion pour ce stagiaire" onClick={() => resetPassword(l)}>＋ Compte</button>
+                )}
                 <button
                   type="button"
                   className="iconbtn"

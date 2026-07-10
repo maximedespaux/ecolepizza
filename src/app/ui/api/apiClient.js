@@ -324,6 +324,10 @@ export function deleteStagiaire(id) {
 export function resetStagiairePassword(id) {
   return request(`/stagiaires/${id}/reset-password`, { method: "POST" });
 }
+// Supprime uniquement le compte de connexion (la fiche est conservée).
+export function deleteStagiaireAccount(id) {
+  return request(`/stagiaires/${id}/account`, { method: "DELETE" });
+}
 
 // --- Entreprises ---
 export function getCompanies() {

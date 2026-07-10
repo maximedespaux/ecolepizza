@@ -314,7 +314,29 @@ const deleteLearner = (req, res) => {
     );
 };
 
+/**
+ * DELETE /api/stagiaires/:id/account — supprime UNIQUEMENT le compte de connexion
+ * du stagiaire (la fiche, les dossiers et documents sont conservés).
+ */
+const deleteStagiaireAccount = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[learner]] = await conn.query(
+            'SELECT id, user_id FROM learner WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!learner) return res.status(404).json({ message: 'Stagiaire introuvable' });
+        if (!learner.user_id) return res.status(400).json({ message: "Ce stagiaire n'a pas de compte de connexion." });
+        // Détache la fiche puis supprime le compte (login) — la fiche reste intacte.
+        await conn.query('UPDATE learner SET user_id = NULL WHERE id = ?', [learner.id]);
+        await conn.query('DELETE FROM user WHERE id = ? AND organization_id = ?', [learner.user_id, orgId]);
+        res.json({ success: true, message: 'Compte de connexion supprimé (fiche conservée).' });
+    } catch (err) {
+        console.error('Erreur suppression compte stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
     getLearners, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
-    createStagiaireAccount,
+    deleteStagiaireAccount, createStagiaireAccount,
 };
