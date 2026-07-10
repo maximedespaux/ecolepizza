@@ -98,12 +98,16 @@ function Emargement({ sessionId }) {
       title="Émargement"
       more={
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn sm ghost" onClick={generate} disabled={busy}
+            title="Met à jour la grille : ajoute les lignes des nouveaux stagiaires, formateurs ou intervenants affectés à la session.">
+            {busy ? "…" : sheets.length ? "Mettre à jour les feuilles" : "Générer les feuilles"}
+          </button>
           {sheets.length > 0 && (
-            <button className="btn sm ghost" onClick={regenDocs} disabled={busy} title="Régénérer les feuilles d'émargement archivées (mise en page et infos à jour)">
-              {busy ? "…" : "Régénérer l'émargement"}
+            <button className="btn sm" onClick={regenDocs} disabled={busy}
+              title="Crée / régénère la feuille d'émargement archivée (visible dans le suivi Qualiopi du stagiaire).">
+              {busy ? "…" : "Générer le document"}
             </button>
           )}
-          <button className="btn sm" onClick={generate} disabled={busy}>{busy ? "…" : sheets.length ? "Régénérer les feuilles" : "Générer les feuilles"}</button>
         </div>
       }
     >
