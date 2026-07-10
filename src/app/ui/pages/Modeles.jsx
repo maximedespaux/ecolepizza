@@ -762,12 +762,14 @@ function EmargementPreview({ cfg, org }) {
   if (cfg.show_formateurs) rows.push({ name: "DESPAUX Jean-Jacques", sub: "Formateur", on: () => true });
   if (cfg.show_intervenants) rows.push({ name: "MARTIN Sophie", sub: "Hygiène (HACCP)", on: (i) => i >= shownSlots.length });
 
-  const maxW = cfg.orientation === "portrait" ? 460 : 720;
+  // Largeur proportionnelle au format A4 (paysage 297 mm / portrait 210 mm) pour
+  // que l'aperçu « suive » l'orientation. Le wrapper défile si la colonne est étroite.
+  const pageW = cfg.orientation === "portrait" ? 500 : 720;
 
   return (
     <div style={{ overflowX: "auto" }}>
       <div style={{ background: "#fff", color: "#1e2140", padding: 16, border: "1px solid var(--border-soft)", borderRadius: 8,
-        fontFamily: "'Helvetica Neue',Arial,sans-serif", fontSize: dens.base + 1, maxWidth: maxW, width: "100%" }}>
+        fontFamily: "'Helvetica Neue',Arial,sans-serif", fontSize: dens.base + 1, width: pageW }}>
         <div style={{ position: "relative", borderBottom: `2px solid ${accent}`, paddingBottom: 8, marginBottom: 10 }}>
           {cfg.show_logo && org.logo_image ? <img src={org.logo_image} alt="" style={{ position: "absolute", top: 0, right: 0, maxHeight: 44, maxWidth: 140, objectFit: "contain" }} /> : null}
           <div style={{ fontSize: 16, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".03em", color: accent }}>{cfg.title || "Feuille d'émargement"}</div>
