@@ -513,6 +513,8 @@ function EmargementConfigPanel({ onStatus }) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false); // saisie inline d'un nouveau modèle
+  const [newName, setNewName] = useState("");
 
   function loadOrg() {
     return getOrganisation().then((r) => {
@@ -540,10 +542,15 @@ function EmargementConfigPanel({ onStatus }) {
   const toggleSlot = (s) => { setCfg((p) => ({ ...p, slots: SLOT_ORDER.filter((x) => x === s ? !p.slots.includes(s) : p.slots.includes(x)) })); setDirty(true); };
 
   async function createNew() {
-    const nm = window.prompt("Nom du modèle d'émargement :", "Nouvelle feuille");
+    const nm = newName.trim();
     if (!nm) return;
     setBusy(true);
-    try { const r = await createEmargementTemplate({ name: nm, config: EMARG_DEFAULTS }); await loadTemplates(r.data?.id); onStatus({ type: "success", message: "Modèle créé." }); }
+    try {
+      const r = await createEmargementTemplate({ name: nm, config: EMARG_DEFAULTS });
+      setCreating(false); setNewName("");
+      await loadTemplates(r.data?.id);
+      onStatus({ type: "success", message: "Modèle créé." });
+    }
     catch (e) { onStatus({ type: "error", message: e.message }); }
     finally { setBusy(false); }
   }
@@ -592,9 +599,20 @@ function EmargementConfigPanel({ onStatus }) {
   return (
     <>
       <Card title={`Modèles d'émargement (${templates.length})`}
-        more={<button className="btn sm primary" onClick={createNew} disabled={busy}>＋ Nouveau modèle</button>}>
+        more={!creating
+          ? <button className="btn sm primary" onClick={() => { setCreating(true); setNewName("Nouvelle feuille"); }} disabled={busy}>＋ Nouveau modèle</button>
+          : null}>
+        {creating && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+            <input className="inp" autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") createNew(); if (e.key === "Escape") { setCreating(false); setNewName(""); } }}
+              placeholder="Nom du modèle (ex. Feuille 5 jours)" style={{ maxWidth: 320 }} />
+            <button className="btn sm primary" onClick={createNew} disabled={busy || !newName.trim()}>{busy ? "…" : "Créer"}</button>
+            <button className="btn sm ghost" onClick={() => { setCreating(false); setNewName(""); }} disabled={busy}>Annuler</button>
+          </div>
+        )}
         {templates.length === 0 ? (
-          <p className="hint" style={{ margin: 0 }}>Aucun modèle. Créez-en un : il deviendra attribuable dans le parcours documentaire d'une formation, comme les autres documents.</p>
+          !creating ? <p className="hint" style={{ margin: 0 }}>Aucun modèle. Créez-en un : il deviendra attribuable dans le parcours documentaire d'une formation, comme les autres documents.</p> : null
         ) : (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {templates.map((t) => (
