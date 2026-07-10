@@ -379,7 +379,10 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
                   </label>
                 ))}
               </div>
-              <p className="hint" style={{ margin: "4px 0 0" }}>Le document ne s'applique qu'aux dossiers remplissant toutes les conditions cochées.</p>
+              <p className="hint" style={{ margin: "4px 0 0" }}>
+                Cochez uniquement les conditions <b>requises</b> (elles doivent toutes être remplies). Une condition <b>non cochée est ignorée</b> :
+                le document s'applique quelle que soit sa valeur (ex. cocher « Financeur Particulier » sans cocher « Hygiène » = Particulier, avec ou sans hygiène).
+              </p>
             </>
           ) : (
             <p className="hint" style={{ margin: "6px 0 0" }}>
