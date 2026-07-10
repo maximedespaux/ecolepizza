@@ -244,7 +244,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               <input className="inp" type="number" min="0" step="0.01" value={form.price} onChange={set("price")} /></div>
           </div>
 
-          <div className="field"><label>Horaires (affiché sur la feuille d'émargement)<HelpDot text={"Une ligne par horaire — utile si les journées n'ont pas les mêmes horaires."} /></label>
+          <div className="field"><label>Horaires (affiché sur la feuille d'émargement)<HelpDot text={"Une ligne par horaire — utile si les journées n'ont pas les mêmes horaires.\n\nEx. :\n9h00 – 12h30 / 13h30 – 17h00\nJour 5 : 9h00 – 12h00"} /></label>
             <textarea className="inp" rows={3} value={form.horaires} onChange={set("horaires")} placeholder={"9h00 – 12h30 / 13h30 – 17h00\nJour 5 : 9h00 – 12h00"} /></div>
 
           <div className="field"><label>Public</label>
