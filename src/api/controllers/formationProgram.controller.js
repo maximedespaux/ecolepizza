@@ -135,19 +135,28 @@ const createProgram = (req, res) => {
         cols.push(f);
         vals.push(v);
     }
-    db.query(
-        `INSERT INTO training_program (id, organization_id, ${cols.join(', ')})
-         VALUES (UUID(), ?, ${cols.map(() => '?').join(', ')})`,
-        [req.user.organization_id, ...vals],
-        (err) => {
-            if (err) {
-                if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Ce code de formation est déjà utilisé.' });
-                console.error('Erreur création formation :', err);
-                return res.status(500).json({ error: 'Internal Server Error' });
+    const runInsert = (colList, valList, allowRetry) => {
+        db.query(
+            `INSERT INTO training_program (id, organization_id, ${colList.join(', ')})
+             VALUES (UUID(), ?, ${colList.map(() => '?').join(', ')})`,
+            [req.user.organization_id, ...valList],
+            (err) => {
+                if (err) {
+                    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Ce code de formation est déjà utilisé.' });
+                    if (err.code === 'ER_BAD_FIELD_ERROR' && allowRetry) {
+                        const drop = new Set(['horaires']);
+                        const fCols = [], fVals = [];
+                        colList.forEach((c, i) => { if (!drop.has(c)) { fCols.push(c); fVals.push(valList[i]); } });
+                        return runInsert(fCols, fVals, false);
+                    }
+                    console.error('Erreur création formation :', err);
+                    return res.status(500).json({ error: 'Internal Server Error' });
+                }
+                res.status(201).json({ message: 'Formation créée' });
             }
-            res.status(201).json({ message: 'Formation créée' });
-        }
-    );
+        );
+    };
+    runInsert(cols, vals, true);
 };
 
 /**
@@ -176,23 +185,43 @@ const updateProgram = (req, res) => {
         return res.status(400).json({ message: 'Aucun champ valide à mettre à jour' });
     }
     values.push(req.params.id, req.user.organization_id);
-    db.query(
-        `UPDATE training_program SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`,
-        values,
-        (err, result) => {
-            if (err) {
-                if (err.code === 'ER_DUP_ENTRY') {
-                    return res.status(409).json({ error: 'Ce code de formation est déjà utilisé.' });
+
+    // Exécution avec repli : si une colonne récente (ex. horaires) n'existe pas
+    // encore (migration non passée), on rejoue la requête sans ce champ pour ne
+    // pas bloquer l'enregistrement du reste.
+    const runUpdate = (setList, valList, allowRetry) => {
+        db.query(
+            `UPDATE training_program SET ${setList.join(', ')} WHERE id = ? AND organization_id = ?`,
+            valList,
+            (err, result) => {
+                if (err) {
+                    if (err.code === 'ER_DUP_ENTRY') {
+                        return res.status(409).json({ error: 'Ce code de formation est déjà utilisé.' });
+                    }
+                    if (err.code === 'ER_BAD_FIELD_ERROR' && allowRetry) {
+                        // Retire les colonnes récentes potentiellement absentes puis réessaie.
+                        const drop = new Set(['horaires']);
+                        const fSets = [], fVals = [];
+                        setList.forEach((s, i) => {
+                            const col = s.split(' = ')[0];
+                            if (drop.has(col)) return;
+                            fSets.push(s); fVals.push(valList[i]);
+                        });
+                        fVals.push(valList[valList.length - 2], valList[valList.length - 1]);
+                        if (fSets.length === 0) return res.status(200).json({ success: true, message: 'Formation mise à jour' });
+                        return runUpdate(fSets, fVals, false);
+                    }
+                    console.error('Erreur mise à jour formation :', err);
+                    return res.status(500).json({ error: 'Internal Server Error' });
                 }
-                console.error('Erreur mise à jour formation :', err);
-                return res.status(500).json({ error: 'Internal Server Error' });
+                if (result.affectedRows === 0) {
+                    return res.status(404).json({ message: 'Formation introuvable' });
+                }
+                res.status(200).json({ success: true, message: 'Formation mise à jour' });
             }
-            if (result.affectedRows === 0) {
-                return res.status(404).json({ message: 'Formation introuvable' });
-            }
-            res.status(200).json({ success: true, message: 'Formation mise à jour' });
-        }
-    );
+        );
+    };
+    runUpdate(sets, values, true);
 };
 
 /**
