@@ -265,6 +265,32 @@ const getFormationSteps = async (req, res) => {
     }
 };
 
+/** PUT /api/formations/:id/archive-tree — enregistre l'arborescence d'archivage. Corps : { tree }. */
+const saveArchiveTree = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[program]] = await conn.query(
+            'SELECT id FROM training_program WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        if (!program) return res.status(404).json({ message: 'Formation introuvable' });
+        const tree = req.body && req.body.tree;
+        const json = tree == null ? null : JSON.stringify(tree);
+        try {
+            await conn.query('UPDATE training_program SET archive_tree = ? WHERE id = ? AND organization_id = ?',
+                [json, req.params.id, req.user.organization_id]);
+        } catch (e) {
+            if (e && e.code === 'ER_BAD_FIELD_ERROR') {
+                return res.status(422).json({ error: "Migration requise (archive_tree) : appliquez 053_program_archive_tree.sql." });
+            }
+            throw e;
+        }
+        res.json({ success: true, message: 'Arborescence enregistrée.' });
+    } catch (err) {
+        console.error('Erreur enregistrement arborescence :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** PUT /api/formations/:id/steps — enregistre le parcours (ordre + inclusion). */
 const saveFormationSteps = async (req, res) => {
     const steps = Array.isArray(req.body?.steps) ? req.body.steps : null;
@@ -307,5 +333,5 @@ const saveFormationSteps = async (req, res) => {
 
 module.exports = {
     getPrograms, getProgram, createProgram, updateProgram, reorderPrograms,
-    getFormationSteps, saveFormationSteps, formationSteps, enrollmentSteps, deleteProgram,
+    getFormationSteps, saveFormationSteps, saveArchiveTree, formationSteps, enrollmentSteps, deleteProgram,
 };

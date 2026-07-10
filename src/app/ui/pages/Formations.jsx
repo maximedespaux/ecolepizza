@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps } from "../api/apiClient.js";
+import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
+import ArchiveTreeEditor from "../components/ArchiveTreeEditor.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { euro, colorOf } from "../lib/format.js";
@@ -133,7 +134,8 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   });
   const [saving, setSaving] = useState(false);
   const [steps, setSteps] = useState([]);
-  const [tab, setTab] = useState("infos"); // "infos" | "parcours"
+  const [archiveTree, setArchiveTree] = useState({ folders: [] });
+  const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
   // Couleur effective du badge + valeur hexadécimale pour le sélecteur natif.
@@ -141,6 +143,16 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const pickerHex = /^#[0-9a-fA-F]{6}$/.test(effColor) ? effColor : "#5b6079";
 
   useEffect(() => { if (program.id) getFormationSteps(program.id).then((r) => setSteps(r.data || [])).catch(() => {}); }, [program.id]);
+  // Arborescence d'archivage enregistrée sur la formation.
+  useEffect(() => {
+    if (!program.id) return;
+    getFormation(program.id).then((r) => {
+      const raw = r.data?.archive_tree;
+      let t = { folders: [] };
+      if (raw) { try { t = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { t = { folders: [] }; } }
+      setArchiveTree(t && t.folders ? t : { folders: [] });
+    }).catch(() => {});
+  }, [program.id]);
 
   // Retirer une étape (et la sortir de son groupe « OU »).
   const toggleStep = (slug) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, active: !s.active, or_group: s.active ? null : s.or_group } : s)));
@@ -171,6 +183,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       } else {
         await updateFormation(program.id, form);
         await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active, or_group: s.or_group || null })));
+        await saveArchiveTree(program.id, archiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved("Formation mise à jour.");
       }
     } catch (e) {
@@ -192,6 +205,11 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           {!isNew && (
             <button type="button" role="tab" className={"tab" + (tab === "parcours" ? " on" : "")} onClick={() => setTab("parcours")}>
               Parcours documentaire{steps.length ? ` (${steps.filter((s) => s.active).length}/${steps.length})` : ""}
+            </button>
+          )}
+          {!isNew && (
+            <button type="button" role="tab" className={"tab" + (tab === "archives" ? " on" : "")} onClick={() => setTab("archives")}>
+              Arborescence d'archivage
             </button>
           )}
         </div>
@@ -270,6 +288,11 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           ) : (
             <ParcoursFlow steps={steps} onToggle={toggleStep} onAdd={addStep} onDetach={detachStep} onReorder={setSteps} />
           )}
+          </div>
+
+          <div style={{ display: tab === "archives" ? "block" : "none" }}>
+            <ArchiveTreeEditor tree={archiveTree} onChange={setArchiveTree}
+              docs={steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id }))} />
           </div>
         </div>
         <div className="mfoot">

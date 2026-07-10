@@ -374,6 +374,12 @@ export function getFormationSteps(id) {
 export function saveFormationSteps(id, steps) {
   return request(`/formations/${id}/steps`, { method: "PUT", body: JSON.stringify({ steps }) });
 }
+export function getFormation(id) {
+  return request(`/formations/${id}`);
+}
+export function saveArchiveTree(id, tree) {
+  return request(`/formations/${id}/archive-tree`, { method: "PUT", body: JSON.stringify({ tree }) });
+}
 
 // --- Sessions ---
 export function getSessions() {

@@ -1,0 +1,77 @@
+import { useState } from "react";
+
+const uid = () => Math.random().toString(36).slice(2, 9);
+const newFolder = () => ({ id: uid(), name: "Nouveau dossier", per_learner: false, items: [], children: [] });
+
+// Un dossier de l'arborescence + ses documents attribués + ses sous-dossiers.
+function FolderNode({ folder, docs, depth, onChange, onDelete }) {
+  const set = (patch) => onChange({ ...folder, ...patch });
+  const items = folder.items || [];
+  const children = folder.children || [];
+
+  function addItem(slug) {
+    const d = docs.find((x) => x.slug === slug);
+    if (!d || items.some((it) => it.ref === slug)) return;
+    set({ items: [...items, { ref: d.slug, label: d.label, type: d.quiz_id ? "quiz" : "model" }] });
+  }
+
+  return (
+    <div style={{ marginLeft: depth ? 16 : 0, borderLeft: depth ? "1px solid var(--border-soft)" : "none", paddingLeft: depth ? 12 : 0, marginTop: 10 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span>📁</span>
+        <input className="inp" style={{ maxWidth: 220 }} value={folder.name} onChange={(e) => set({ name: e.target.value })} placeholder="Nom du dossier" />
+        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, color: "var(--muted)" }}>
+          <input type="checkbox" checked={!!folder.per_learner} onChange={(e) => set({ per_learner: e.target.checked })} /> un dossier par stagiaire
+        </label>
+        <button type="button" className="btn sm ghost" onClick={() => set({ children: [...children, newFolder()] })}>＋ Sous-dossier</button>
+        <button type="button" className="btn sm ghost danger" onClick={onDelete}>Supprimer</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", margin: "6px 0 2px" }}>
+        {items.map((it, i) => (
+          <span key={it.ref} className="pill" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            {it.type === "quiz" ? "❓" : "📄"} {it.label}
+            <button type="button" className="pf-x" title="Retirer" onClick={() => set({ items: items.filter((_, j) => j !== i) })}>✕</button>
+          </span>
+        ))}
+        <select value="" onChange={(e) => addItem(e.target.value)}>
+          <option value="">＋ Attribuer un document…</option>
+          {docs.filter((d) => !items.some((it) => it.ref === d.slug)).map((d) => (
+            <option key={d.slug} value={d.slug}>{d.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {children.map((c) => (
+        <FolderNode key={c.id} folder={c} docs={docs} depth={depth + 1}
+          onChange={(nc) => set({ children: children.map((x) => (x.id === c.id ? nc : x)) })}
+          onDelete={() => set({ children: children.filter((x) => x.id !== c.id) })} />
+      ))}
+    </div>
+  );
+}
+
+// Éditeur d'arborescence d'archivage. `docs` = documents disponibles (modèles + QCM
+// de la formation) ; `tree` = { folders:[...] } ; `onChange(tree)`.
+export default function ArchiveTreeEditor({ tree, docs = [], onChange }) {
+  const folders = tree?.folders || [];
+  const setFolders = (f) => onChange({ folders: f });
+
+  return (
+    <div>
+      <p className="hint" style={{ marginTop: 0 }}>
+        Racine automatique à l'export : <b>Année / Semaine / Code formation</b>. Composez ici l'intérieur — des dossiers, et les documents
+        (modèles &amp; QCM) attribués à chacun. Cochez « un dossier par stagiaire » pour un dossier répété par apprenant.
+      </p>
+      {folders.length === 0 && <p className="hint">Aucun dossier. Ajoutez-en un pour commencer.</p>}
+      {folders.map((f) => (
+        <FolderNode key={f.id} folder={f} docs={docs} depth={0}
+          onChange={(nf) => setFolders(folders.map((x) => (x.id === f.id ? nf : x)))}
+          onDelete={() => setFolders(folders.filter((x) => x.id !== f.id))} />
+      ))}
+      <button type="button" className="btn sm primary" style={{ marginTop: 12 }} onClick={() => setFolders([...folders, newFolder()])}>
+        ＋ Ajouter un dossier
+      </button>
+    </div>
+  );
+}
