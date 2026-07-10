@@ -350,9 +350,20 @@ async function regenEmargement(conn, orgId, enrollmentId) {
                 );
             }
         } else {
-            // Aucun modèle rattaché : comportement historique (feuille unique, config par défaut).
+            // Aucun modèle rattaché explicitement au parcours : feuille unique. On applique
+            // tout de même la mise en page du 1er modèle actif de l'organisme s'il en existe
+            // un (pour que le format défini dans Modèles s'applique sans rattachement), sinon
+            // la config par défaut de l'organisme.
+            let layout = emargConfig;
+            try {
+                const [[ft]] = await conn.query(
+                    'SELECT config FROM emargement_template WHERE organization_id = ? AND active = 1 ORDER BY sort_order, name LIMIT 1',
+                    [orgId]
+                );
+                if (ft && ft.config) layout = ft.config;
+            } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
             const title = `Feuille d'émargement — ${e.program_code || ''} ${sem}`.trim();
-            const ok = await upsert(`emarg:${enrollmentId}`, title, emargConfig);
+            const ok = await upsert(`emarg:${enrollmentId}`, title, layout);
             // Retire d'éventuelles feuilles par-modèle devenues obsolètes.
             if (ok) await conn.query('DELETE FROM archive_document WHERE organization_id = ? AND ref LIKE ?', [orgId, `emarg:${enrollmentId}:%`]);
         }

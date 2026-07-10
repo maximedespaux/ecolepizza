@@ -127,14 +127,28 @@ const getArchive = async (req, res) => {
              WHERE gd.organization_id = ? AND gd.status IN (?)`,
             [req.user.organization_id, SHARED]
         );
-        // Documents historiques importés (PDF).
+        // Documents archivés (PDF importés + feuilles d'émargement générées).
+        // Pour l'émargement (ref « emarg:<enrollment>[:<slug>] »), on résout le vrai
+        // stagiaire via le dossier, afin qu'il se range dans le MÊME dossier que ses
+        // autres documents (regroupement par learner_id côté client) et non dans un
+        // dossier « Nom Prénom » séparé.
         const [arch] = await conn.query(
-            `SELECT id AS doc_id, title, 'PDF' AS type, status, NULL AS quiz_id,
-                    NULL AS sent_at, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS signed_at,
-                    year, week,
-                    formation_label AS program_code, formation_label AS program_title,
-                    NULL AS learner_id, learner_name AS last_name, '' AS first_name, 'archive' AS source
-             FROM archive_document WHERE organization_id = ?`,
+            `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id,
+                    NULL AS sent_at, DATE_FORMAT(ad.created_at, '%Y-%m-%d %H:%i') AS signed_at,
+                    ad.year, ad.week,
+                    COALESCE(p.code, ad.formation_label) AS program_code,
+                    COALESCE(p.title, ad.formation_label) AS program_title,
+                    l.id AS learner_id,
+                    COALESCE(l.first_name, '') AS first_name,
+                    COALESCE(l.last_name, ad.learner_name) AS last_name,
+                    'archive' AS source
+             FROM archive_document ad
+             LEFT JOIN enrollment e ON ad.ref LIKE 'emarg:%'
+                  AND e.id = SUBSTRING_INDEX(SUBSTRING(ad.ref, 7), ':', 1)
+             LEFT JOIN learner l ON l.id = e.learner_id
+             LEFT JOIN training_session s ON s.id = e.session_id
+             LEFT JOIN training_program p ON p.id = s.program_id
+             WHERE ad.organization_id = ?`,
             [req.user.organization_id]
         );
         res.json({ data: [...gen, ...arch] });
