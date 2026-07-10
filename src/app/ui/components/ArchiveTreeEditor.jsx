@@ -3,6 +3,19 @@ import { useState } from "react";
 const uid = () => Math.random().toString(36).slice(2, 9);
 const newFolder = () => ({ id: uid(), name: "Nouveau dossier", per_learner: false, items: [], children: [] });
 
+// Squelette standard : Année > Semaine > Code formation > (dossier par stagiaire).
+const standardTree = () => ({
+  folders: [{
+    id: uid(), name: "{Année}", per_learner: false, items: [], children: [{
+      id: uid(), name: "{Semaine}", per_learner: false, items: [], children: [{
+        id: uid(), name: "{Code}", per_learner: false, items: [], children: [
+          { id: uid(), name: "{Stagiaire}", per_learner: true, items: [], children: [] },
+        ],
+      }],
+    }],
+  }],
+});
+
 // Champs dynamiques (résolus à l'export) utilisables dans les noms de dossier.
 const TOKENS = [
   { t: "{Année}", label: "Année de la session" },
@@ -74,13 +87,21 @@ export default function ArchiveTreeEditor({ tree, docs = [], onChange }) {
   return (
     <div>
       <p className="hint" style={{ marginTop: 0 }}>
-        Racine automatique à l'export : <b>Année / Semaine / Code formation</b>. Composez ici l'intérieur — des dossiers, et les documents
-        (modèles &amp; QCM) attribués à chacun. Cochez « un dossier par stagiaire » pour un dossier répété par apprenant.
+        Vous composez l'<b>arborescence complète</b> de l'archive, depuis la racine : les dossiers de premier niveau sont créés à la racine
+        de l'export. Utilisez les champs dynamiques pour les niveaux variables (année, semaine…) et cochez « un dossier par stagiaire »
+        pour un dossier répété par apprenant. Chaque dossier peut recevoir des documents (modèles &amp; QCM).
       </p>
       <p className="hint" style={{ marginTop: 0, fontSize: 12 }}>
         Champs dynamiques (remplacés à l'export) : {TOKENS.map((k) => <code key={k.t} style={{ marginRight: 6 }}>{k.t}</code>)}
       </p>
-      {folders.length === 0 && <p className="hint">Aucun dossier. Ajoutez-en un pour commencer.</p>}
+      {folders.length === 0 && (
+        <div style={{ margin: "8px 0" }}>
+          <p className="hint">Aucun dossier. Partez d'une structure standard ou créez la vôtre.</p>
+          <button type="button" className="btn sm ghost" onClick={() => onChange(standardTree())}>
+            Insérer la structure standard (Année / Semaine / Code / Stagiaire)
+          </button>
+        </div>
+      )}
       {folders.map((f) => (
         <FolderNode key={f.id} folder={f} docs={docs} depth={0}
           onChange={(nf) => setFolders(folders.map((x) => (x.id === f.id ? nf : x)))}
