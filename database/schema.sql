@@ -651,6 +651,19 @@ CREATE TABLE document_condition (
         REFERENCES organization (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- Équivalences de documents : ensembles de modèles alternatifs (« OU »).
+CREATE TABLE document_equivalence (
+    id              uuid         NOT NULL DEFAULT uuid(),
+    organization_id uuid         NOT NULL,
+    label           varchar(160) DEFAULT NULL,
+    members         longtext     NOT NULL,              -- JSON : tableau de slugs
+    created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    KEY idx_equiv_org (organization_id),
+    CONSTRAINT fk_equiv_org FOREIGN KEY (organization_id)
+        REFERENCES organization (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- Champs du dossier activés comme conditions (Réglages → Champs du dossier).
 CREATE TABLE condition_field (
     id              uuid         NOT NULL DEFAULT uuid(),
