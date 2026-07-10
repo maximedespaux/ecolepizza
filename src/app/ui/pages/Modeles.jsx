@@ -496,7 +496,7 @@ const EMARG_DEFAULTS = {
   orientation: "landscape", title: "Feuille d'émargement", accent: "#c0392b", show_logo: false,
   show_duration: true, show_horaires: true, show_lieu: true, header_note: "",
   slots: ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"],
-  show_formateurs: true, show_intervenants: true, density: "normal", margin_mm: 10,
+  show_formateurs: true, show_intervenants: true, show_hours: true, density: "normal", margin_mm: 10,
   footer_left: "", footer_caption: "Signature et cachet de l'organisme de formation", show_stamp: true,
 };
 const SLOT_ORDER = ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"];
@@ -688,6 +688,7 @@ function EmargementConfigPanel({ onStatus }) {
               <div style={{ display: "grid", gap: 8 }}>
                 <Toggle k="show_formateurs" label="Ligne(s) formateur(s)" />
                 <Toggle k="show_intervenants" label="Ligne(s) intervenant(s) externe(s)" />
+                <Toggle k="show_hours" label="Lignes récap horaires + volume (déduites du champ « Horaires »)" />
               </div></div>
 
             <div className="row2">
@@ -744,7 +745,15 @@ function EmargementPreview({ cfg, org }) {
   const exDays = [{ label: "Lun. 06/07" }, { label: "Mar. 07/07" }];
   const activeSlots = SLOT_ORDER.filter((s) => cfg.slots.includes(s)).filter((s) => s === "MATIN" || s === "APRES_MIDI"); // l'exemple n'a que matin/après-midi
   const shownSlots = activeSlots.length ? activeSlots : ["MATIN"];
-  const cols = exDays.flatMap((d) => shownSlots.map((s) => ({ d: d.label, s })));
+  const cols = exDays.flatMap((d, di) => shownSlots.map((s) => ({ d: d.label, s, di })));
+  // Horaires d'exemple (par jour × créneau) pour illustrer les lignes récap.
+  const sampleSched = [
+    { MATIN: ["8h45", "12h00"], APRES_MIDI: ["13h00", "17h15"] },
+    { MATIN: ["8h00", "12h00"], APRES_MIDI: ["13h00", "16h30"] },
+  ];
+  const toM = (t) => { const m = t.match(/(\d+)h(\d*)/); return +m[1] * 60 + (m[2] ? +m[2] : 0); };
+  const sTime = (c) => { const r = sampleSched[c.di] && sampleSched[c.di][c.s]; return r ? `${r[0]} – ${r[1]}` : ""; };
+  const sVol = (c) => { const r = sampleSched[c.di] && sampleSched[c.di][c.s]; if (!r) return ""; const d = toM(r[1]) - toM(r[0]); return `${Math.floor(d / 60)}h${String(d % 60).padStart(2, "0")}`; };
 
   const cell = (i, on) => on ? (
     <td key={i} style={{ border: "1px solid #cfd2d8", height: dens.row }}>
@@ -794,14 +803,29 @@ function EmargementPreview({ cfg, org }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, ri) => (
-              <tr key={ri}>
-                <td style={{ border: "1px solid #cfd2d8", textAlign: "left", fontWeight: 600, fontSize: dens.name, padding: "3px 4px" }}>
-                  {r.name}<div style={{ fontWeight: 400, fontSize: dens.sub, color: "#8a8f99" }}>{r.sub}</div>
-                </td>
-                {cols.map((c, i) => r.on(i) ? cell(i, true) : <td key={i} style={{ border: "1px solid #cfd2d8", background: "#f4f4f6" }} />)}
-              </tr>
-            ))}
+            {(() => {
+              const infoTr = (label, fn, key) => (
+                <tr key={key}>
+                  <td style={{ border: "1px solid #cfd2d8", textAlign: "left", fontWeight: 600, fontSize: dens.sub, color: "#333", background: "#faf7f2", padding: "2px 4px" }}>{label}</td>
+                  {cols.map((c, i) => <td key={i} style={{ border: "1px solid #cfd2d8", fontSize: dens.sub, color: "#555", background: "#faf7f2", padding: "2px 4px" }}>{fn(c)}</td>)}
+                </tr>
+              );
+              const out = [];
+              if (cfg.show_hours) out.push(infoTr("Horaires", sTime, "hr"));
+              let volDone = false;
+              rows.forEach((r, ri) => {
+                if (cfg.show_hours && !volDone && r.sub === "Formateur") { out.push(infoTr("Volume horaire", sVol, "vol")); volDone = true; }
+                out.push(
+                  <tr key={ri}>
+                    <td style={{ border: "1px solid #cfd2d8", textAlign: "left", fontWeight: 600, fontSize: dens.name, padding: "3px 4px" }}>
+                      {r.name}<div style={{ fontWeight: 400, fontSize: dens.sub, color: "#8a8f99" }}>{r.sub}</div>
+                    </td>
+                    {cols.map((c, i) => r.on(i) ? cell(i, true) : <td key={i} style={{ border: "1px solid #cfd2d8", background: "#f4f4f6" }} />)}
+                  </tr>
+                );
+              });
+              return out;
+            })()}
           </tbody>
         </table>
 

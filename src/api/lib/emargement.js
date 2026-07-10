@@ -24,6 +24,32 @@ function frDate(iso) {
 }
 const SLOT_ORDER = ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'];
 
+// ── Analyse du champ « Horaires » (texte libre) en plages par jour ────────────
+// Ex. : « Jour 1 : 8h45 - 12h00 / 13h00 - 17h15 » ; une ligne sans « Jour N » sert
+// de valeur par défaut pour les jours non précisés. Retourne { [jour]: {matin:[deb,fin], aprem:[deb,fin]} }.
+const toMin = (tok) => { const m = String(tok).match(/(\d{1,2})\s*h\s*(\d{0,2})/i); return m ? parseInt(m[1], 10) * 60 + (m[2] ? parseInt(m[2], 10) : 0) : null; };
+const fmtHM = (min) => { if (min == null) return ''; const h = Math.floor(min / 60), m = ((min % 60) + 60) % 60; return `${h}h${String(m).padStart(2, '0')}`; };
+const fmtDur = (min) => (min == null || min <= 0) ? '' : fmtHM(min);
+function parseDaySchedules(text, numDays) {
+    const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    let def = null; const byDay = {};
+    for (const line of lines) {
+        const times = (line.match(/\d{1,2}\s*h\s*\d{0,2}/gi) || []).map(toMin).filter((v) => v != null);
+        if (times.length < 2) continue;
+        const sched = { matin: [times[0], times[1]], aprem: times.length >= 4 ? [times[2], times[3]] : null };
+        const rng = line.match(/jours?\s*(\d+)\s*(?:à|au|-|–|et|,)\s*(\d+)/i);
+        const one = line.match(/jours?\s*(\d+)/i);
+        let days = [];
+        if (rng) { for (let d = +rng[1]; d <= +rng[2]; d++) days.push(d); }
+        else if (one) { days.push(+one[1]); }
+        if (days.length) { for (const d of days) byDay[d] = sched; }
+        else if (!def) def = sched;
+    }
+    const out = {};
+    for (let d = 1; d <= numDays; d++) out[d] = byDay[d] || def || null;
+    return out;
+}
+
 // Configuration par défaut de la feuille d'émargement (mise en page actuelle).
 // Toute clé absente reprend cette valeur -> compatible avec les organismes qui
 // n'ont rien personnalisé.
@@ -39,6 +65,7 @@ const DEFAULT_EMARG_CONFIG = {
     slots: ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'], // demi-journées affichées en colonnes
     show_formateurs: true,
     show_intervenants: true,
+    show_hours: true,                // lignes récap : horaires (au-dessus stagiaire) + volume (au-dessus formateur)
     density: 'normal',               // 'compact' | 'normal' | 'large' (police)
     margin_mm: 10,                   // marge de page
     footer_left: '',                 // '' -> « Fait à {ville}, le {date} »
@@ -72,7 +99,7 @@ function mergeEmargConfig(raw) {
     delete c.sig_height; // option retirée : dimensionnement automatique
     const m = parseInt(c.margin_mm, 10);
     c.margin_mm = Number.isFinite(m) ? Math.min(25, Math.max(4, m)) : DEFAULT_EMARG_CONFIG.margin_mm;
-    for (const k of ['show_logo', 'show_duration', 'show_horaires', 'show_lieu', 'show_formateurs', 'show_intervenants', 'show_stamp']) c[k] = !!c[k];
+    for (const k of ['show_logo', 'show_duration', 'show_horaires', 'show_lieu', 'show_formateurs', 'show_intervenants', 'show_hours', 'show_stamp']) c[k] = !!c[k];
     return c;
 }
 
@@ -92,6 +119,11 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const dates = Object.keys(daySlots).sort(); // jours ayant au moins une colonne
     const cols = []; // colonnes ordonnées { date, slot }
     for (const d of dates) for (const sl of daySlots[d]) cols.push({ date: d, slot: sl });
+
+    // Horaires détaillés par jour (récap), extraits du champ « Horaires » de la formation.
+    const schedules = cfg.show_hours ? parseDaySchedules(e.program_horaires, dates.length) : {};
+    const rangeFor = (c) => { const s = schedules[dates.indexOf(c.date) + 1]; if (!s) return null; return c.slot === 'MATIN' ? s.matin : c.slot === 'APRES_MIDI' ? s.aprem : null; };
+    const hasSched = cfg.show_hours && cols.some((c) => rangeFor(c));
 
     const orgAddr = [org && org.address, [org && org.zip_code, org && org.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const orgSig = cfg.show_stamp ? decrypt(org && org.signature_image) : null;
@@ -124,7 +156,8 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const headerH = 16 + metaLines * 4.7;                 // en-tête (titre, organisme, méta)
     const footerH = (orgSig ? 24 : 12) + 6;               // pied (mention + cachet)
     const theadH = 16;                                    // 2 lignes d'en-tête de tableau
-    const availBody = Math.max(18, contentH - headerH - footerH - theadH - 14); // marge de sécurité anti-débordement
+    const infoRowsH = hasSched ? 15 : 0;                  // 2 lignes récap (horaires + volume)
+    const availBody = Math.max(18, contentH - headerH - footerH - theadH - infoRowsH - 14); // marge de sécurité anti-débordement
     const nRows = Math.max(1, shown.length);
     const rowH = Math.max(9, Math.min(26, availBody / nRows)); // borne haute/basse raisonnable
     const sigW = Math.max(6, colW - 3);
@@ -144,6 +177,24 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
         <td class="nm" width="${nameWpx}" height="${rowHpx}">${esc(p.name || '')}${p.specialty ? `<div class="sub">${esc(p.specialty)}</div>` : ''}${p.role === 'stagiaire' ? '<div class="sub">Stagiaire</div>' : p.role === 'intervenant' ? '<div class="sub">Intervenant</div>' : ''}</td>
         ${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k)); }).join('')}
     </tr>`;
+
+    // Lignes récap (horaires / volume) : plage horaire et durée par demi-journée.
+    const infoRow = (label, fn) => `<tr class="info">
+        <td class="nm ilabel" width="${nameWpx}">${esc(label)}</td>
+        ${cols.map((c) => `<td width="${colWpx}">${esc(fn(c))}</td>`).join('')}
+    </tr>`;
+    const timeCell = (c) => { const r = rangeFor(c); return r ? `${fmtHM(r[0])} – ${fmtHM(r[1])}` : ''; };
+    const volCell = (c) => { const r = rangeFor(c); return r ? fmtDur(r[1] - r[0]) : ''; };
+
+    // Assemblage : ligne « Horaires » au-dessus du stagiaire, ligne « Volume horaire » au-dessus du 1er formateur.
+    const bodyParts = [];
+    if (hasSched) bodyParts.push(infoRow('Horaires', timeCell));
+    let volDone = false;
+    for (const p of shown) {
+        if (hasSched && !volDone && p.role === 'formateur') { bodyParts.push(infoRow('Volume horaire', volCell)); volDone = true; }
+        bodyParts.push(rowFor(p));
+    }
+    const tbodyHtml = bodyParts.join('');
 
     const today = frDate(new Date().toISOString().slice(0, 10));
     const pageSize = cfg.orientation === 'portrait' ? '210mm 297mm' : '297mm 210mm';
@@ -173,6 +224,8 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
         thead th{background:#f5f3f0;text-transform:uppercase;color:#555;font-size:${dens.head}px}
         td.nm{text-align:left;font-weight:600;font-size:${dens.name}px}
         td.nm .sub{font-weight:400;font-size:${dens.sub}px;color:#8a8f99}
+        tr.info td{background:#faf7f2;font-size:${dens.sub}px;color:#555;padding:1px 3px}
+        tr.info td.ilabel{font-weight:600;color:#333;text-align:left}
         .foot{margin-top:10px;font-size:10px}
         .foot td{vertical-align:bottom}
         .stamp{text-align:center}
@@ -196,7 +249,7 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
                 <tr><th class="nm" rowspan="2" width="${nameWpx}" bgcolor="#f5f3f0" style="text-align:left">Nom et prénom</th>${dates.map((d) => `<th colspan="${daySlots[d].length}" bgcolor="#f5f3f0">${esc(frDay(d))}</th>`).join('')}</tr>
                 <tr>${cols.map((c) => `<th width="${colWpx}" bgcolor="#f5f3f0">${SLOT[c.slot] || esc(c.slot)}</th>`).join('')}</tr>
             </thead>
-            <tbody>${shown.map(rowFor).join('')}</tbody>
+            <tbody>${tbodyHtml}</tbody>
         </table>
 
         <table cellspacing="0" cellpadding="0" width="${px(tableW)}" class="foot"><tr>
