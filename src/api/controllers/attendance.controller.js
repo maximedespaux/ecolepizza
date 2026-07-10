@@ -175,6 +175,15 @@ const generateSheets = async (req, res) => {
             }
         }
         logAudit(req, 'attendance.generate', 'AttendanceSheet', req.params.sessionId);
+
+        // Génère/actualise la feuille d'émargement archivée de chaque dossier pour
+        // qu'elle apparaisse immédiatement dans le suivi Qualiopi du stagiaire.
+        const [enr] = await conn.query(
+            'SELECT id FROM enrollment WHERE session_id = ? AND organization_id = ?',
+            [req.params.sessionId, req.user.organization_id]
+        );
+        for (const en of enr) { try { await regenEmargement(conn, req.user.organization_id, en.id); } catch { /* non bloquant */ } }
+
         res.status(201).json({ message: 'Feuilles générées' });
     } catch (err) {
         console.error('Erreur génération émargement :', err);
