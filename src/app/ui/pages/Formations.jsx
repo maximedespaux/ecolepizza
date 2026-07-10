@@ -250,7 +250,8 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           </div>
 
           <div className="field"><label>Horaires (affiché sur la feuille d'émargement)</label>
-            <input className="inp" value={form.horaires} onChange={set("horaires")} placeholder="9h00 – 12h30 / 13h30 – 17h00" /></div>
+            <textarea className="inp" rows={3} value={form.horaires} onChange={set("horaires")} placeholder={"9h00 – 12h30 / 13h30 – 17h00\nJour 5 : 9h00 – 12h00"} />
+            <span className="hint">Une ligne par horaire — utile si les journées n'ont pas les mêmes horaires.</span></div>
 
           <div className="field"><label>Public</label>
             <textarea className="inp" rows={2} value={form.audience} onChange={set("audience")} /></div>

@@ -78,7 +78,7 @@ function renderEmargementHtml({ org, e, rows, participants = [] }) {
             <div class="meta">
                 Intitulé de l'action de formation : <b>${esc(e.program_title || '')}</b> (${esc(e.program_code || '')})<br/>
                 Date(s) : <b>du ${esc(frDate(e.start_date))} au ${esc(frDate(e.end_date))}</b> — Semaine ${esc(e.week)}/${esc(e.year)}${durText ? ` · Durée : ${esc(durText)}` : ''}<br/>
-                ${e.program_horaires ? `Horaires : ${esc(e.program_horaires)}<br/>` : ''}${orgAddr ? `Lieu : ${esc(orgAddr)}` : ''}
+                ${e.program_horaires ? `Horaires : ${esc(e.program_horaires).replace(/\r?\n/g, '<br/>')}<br/>` : ''}${orgAddr ? `Lieu : ${esc(orgAddr)}` : ''}
             </div>
         </div>
 
