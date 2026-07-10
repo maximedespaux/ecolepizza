@@ -271,17 +271,21 @@ function FormationModal({ program, onClose, onSaved, onError }) {
 // type de document et ont des conditions incompatibles (jamais le même dossier).
 function exclusiveVariants(a, b) {
   if (a.quiz_id || b.quiz_id) return false;
-  if (!a.doc_type || a.doc_type !== b.doc_type) return false;
+  // Variantes « OU » : conditions mutuellement exclusives — MÊME de types différents
+  // (ex. Contrat particulier / Convention entreprise).
   const A = a.applies_when || {}, B = b.applies_when || {};
   const c = (k) => A[k] != null && B[k] != null && A[k] !== B[k];
   return c("financing") || c("rs") || c("hygiene") || c("jours");
 }
-// Regroupe les étapes ordonnées en jalons (chaque jalon = 1 ou plusieurs variantes).
+// Regroupe les étapes ORDONNÉES en jalons. Le regroupement est CONSÉCUTIF : une
+// étape ne rejoint un jalon « OU » que si elle est exclusive de l'étape juste avant
+// (sinon des étapes exclusives mais éloignées seraient fusionnées à tort).
 function groupMilestones(steps) {
   const groups = [];
   for (const st of steps) {
-    const g = groups.find((grp) => grp.steps.some((v) => exclusiveVariants(v, st)));
-    if (g) g.steps.push(st); else groups.push({ steps: [st] });
+    const last = groups[groups.length - 1];
+    if (last && last.steps.some((v) => exclusiveVariants(v, st))) last.steps.push(st);
+    else groups.push({ steps: [st] });
   }
   return groups;
 }

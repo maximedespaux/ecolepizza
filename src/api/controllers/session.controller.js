@@ -11,10 +11,10 @@ const { notify } = require('./notification.controller.js');
 // Ex. Devis particulier / Devis entreprise / Devis RS → une seule colonne « Devis ».
 function areExclusiveVariants(a, b) {
     if (a.quiz_id || b.quiz_id) return false;
-    if (!a.doc_type || a.doc_type !== b.doc_type) return false; // même type de document
+    // Conditions incompatibles (jamais le même dossier) — MÊME de types différents
+    // (ex. Contrat particulier / Convention entreprise) : une seule colonne « OU ».
     const A = parseApplies(a.applies_when), B = parseApplies(b.applies_when);
     const conflicts = (k) => A[k] != null && B[k] != null && A[k] !== B[k];
-    // Incompatibles = jamais applicables au même dossier → une seule colonne « OU ».
     return conflicts('financing') || conflicts('rs') || conflicts('hygiene') || conflicts('jours');
 }
 
@@ -215,10 +215,11 @@ const getSessionBoard = async (req, res) => {
         // même jalon (ex. Devis particulier / entreprise) sont fusionnées en UNE colonne
         // (condition « OU » : un dossier n'en fait qu'une seule).
         const colSteps = (await formationSteps(conn, req.user.organization_id, program)).filter((st) => st.active);
-        const groups = []; // { steps: [...] }
+        const groups = []; // { steps: [...] } — regroupement CONSÉCUTIF (jalon = variantes voisines exclusives)
         for (const st of colSteps) {
-            const g = groups.find((grp) => grp.steps.some((v) => areExclusiveVariants(v, st)));
-            if (g) g.steps.push(st); else groups.push({ steps: [st] });
+            const last = groups[groups.length - 1];
+            if (last && last.steps.some((v) => areExclusiveVariants(v, st))) last.steps.push(st);
+            else groups.push({ steps: [st] });
         }
         const keyOf = (st) => (st.quiz_id ? `quiz:${st.quiz_id}` : st.slug);
         const columns = groups.map((g, i) => {
