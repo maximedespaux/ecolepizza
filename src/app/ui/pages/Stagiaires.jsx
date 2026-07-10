@@ -20,7 +20,7 @@ function Stagiaires() {
   const [editId, setEditId] = useState(undefined); // undefined = fermé, null = nouveau, id = édition
   const [opcos, setOpcos] = useState([]);
   const [formations, setFormations] = useState([]);
-  const [filters, setFilters] = useState({ level: [], financing: "", status: "", opco: "" });
+  const [filters, setFilters] = useState({ level: [], financing: "", status: "", opco: "", account: "" });
   const [badgeOpen, setBadgeOpen] = useState(false);
   const badgeRef = useRef(null);
   useEffect(() => {
@@ -48,8 +48,8 @@ function Stagiaires() {
   };
 
   const setFilter = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
-  const clearFilters = () => setFilters({ level: [], financing: "", status: "", opco: "" });
-  const activeFilters = (filters.level.length ? 1 : 0) + [filters.financing, filters.status, filters.opco].filter(Boolean).length;
+  const clearFilters = () => setFilters({ level: [], financing: "", status: "", opco: "", account: "" });
+  const activeFilters = (filters.level.length ? 1 : 0) + [filters.financing, filters.status, filters.opco, filters.account].filter(Boolean).length;
 
   const badgeOptions = [...new Set([
     ...formations.map((f) => f.code).filter(Boolean),
@@ -63,6 +63,8 @@ function Stagiaires() {
     if (filters.financing && (l.financing || "PARTICULIER") !== filters.financing) return false;
     if (filters.status && l.professional_status !== filters.status) return false;
     if (filters.opco && l.opco !== filters.opco) return false;
+    if (filters.account === "yes" && !l.has_account) return false;
+    if (filters.account === "no" && l.has_account) return false;
     return true;
   });
 
@@ -185,6 +187,11 @@ function Stagiaires() {
         <select className="inp" style={{ maxWidth: 190 }} value={filters.opco} onChange={setFilter("opco")}>
           <option value="">Tout OPCO</option>
           {opcoNames.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <select className="inp" style={{ maxWidth: 190 }} value={filters.account} onChange={setFilter("account")}>
+          <option value="">Tout compte</option>
+          <option value="yes">Avec compte</option>
+          <option value="no">Sans compte</option>
         </select>
         {activeFilters > 0 && (
           <button type="button" className="btn sm ghost" onClick={clearFilters}>✕ Effacer les filtres ({activeFilters})</button>
