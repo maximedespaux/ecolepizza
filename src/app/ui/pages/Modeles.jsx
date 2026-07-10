@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
-  getConditionCatalog, getConditions, createCondition, deleteCondition, getFieldValues } from "../api/apiClient.js";
+  getConditionCatalog, getConditions, createCondition, deleteCondition, getFieldValues,
+  getEquivalences, createEquivalence, deleteEquivalence } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -104,6 +105,9 @@ function Modeles() {
         <button type="button" role="tab" className={"tab" + (view === "conditions" ? " on" : "")} onClick={() => setView("conditions")}>
           Conditions ({conditions.length})
         </button>
+        <button type="button" role="tab" className={"tab" + (view === "equivalences" ? " on" : "")} onClick={() => setView("equivalences")}>
+          Équivalences
+        </button>
       </div>
 
       {view === "documents" && (
@@ -175,6 +179,8 @@ function Modeles() {
           onStatus={setStatus}
         />
       )}
+
+      {view === "equivalences" && <EquivalencesPanel onStatus={setStatus} />}
 
       {editing && (
         <StepModal
@@ -438,6 +444,81 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Équivalences : ensembles de documents alternatifs (« OU »), choisis par condition.
+function EquivalencesPanel({ onStatus }) {
+  const [equivalences, setEquivalences] = useState([]);
+  const [docs, setDocs] = useState([]);
+  const [picked, setPicked] = useState([]);
+  const [label, setLabel] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    try { const { data } = await getEquivalences(); setEquivalences(data.equivalences || []); setDocs(data.docs || []); }
+    catch (e) { onStatus({ type: "error", message: e.message }); }
+  }
+  useEffect(() => { load(); }, []);
+
+  const toggle = (slug) => setPicked((p) => (p.includes(slug) ? p.filter((x) => x !== slug) : [...p, slug]));
+
+  async function create() {
+    if (picked.length < 2) { onStatus({ type: "error", message: "Sélectionnez au moins deux documents." }); return; }
+    setSaving(true);
+    try {
+      await createEquivalence({ label: label.trim() || null, members: picked });
+      setPicked([]); setLabel("");
+      onStatus({ type: "success", message: "Équivalence créée." });
+      load();
+    } catch (e) { onStatus({ type: "error", message: e.message }); }
+    finally { setSaving(false); }
+  }
+  async function remove(e) {
+    if (!window.confirm(`Supprimer l'équivalence « ${e.label} » ?`)) return;
+    try { await deleteEquivalence(e.id); onStatus({ type: "success", message: "Équivalence supprimée." }); load(); }
+    catch (err) { onStatus({ type: "error", message: err.message }); }
+  }
+
+  return (
+    <Card title={`Équivalences (${equivalences.length})`}>
+      <p className="hint" style={{ marginTop: 0 }}>
+        Regroupez des documents <b>alternatifs</b> (« OU ») : à un même point, un dossier n'en reçoit qu'un, choisi selon la <b>condition</b>
+        propre de chaque document (Financement, RS, Hygiène…). Les documents d'une équivalence doivent avoir des conditions différentes.
+      </p>
+
+      {equivalences.length > 0 && (
+        <div className="tablewrap" style={{ border: "none", marginBottom: 12 }}>
+          <table>
+            <thead><tr><th>Intitulé</th><th>Documents (OU)</th><th></th></tr></thead>
+            <tbody>
+              {equivalences.map((e) => (
+                <tr key={e.key}>
+                  <td><b>{e.label}</b>{e.is_default && <span className="hint" style={{ marginLeft: 6 }}>défaut</span>}</td>
+                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{(e.memberLabels || e.members).join(" / ")}</td>
+                  <td>{!e.is_default && <button type="button" className="btn sm ghost danger" onClick={() => remove(e)}>🗑</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="field"><label>Nouvelle équivalence — cochez les documents alternatifs</label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+          {docs.length === 0 ? <span className="hint">Aucun document.</span> : docs.map((d) => (
+            <label key={d.slug} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", cursor: "pointer" }}>
+              <input type="checkbox" checked={picked.includes(d.slug)} onChange={() => toggle(d.slug)} /> {d.label}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="row2" style={{ alignItems: "end" }}>
+        <div className="field"><label>Intitulé (optionnel)</label>
+          <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ex. Contrat / Convention" /></div>
+        <div><button type="button" className="btn primary" disabled={saving || picked.length < 2} onClick={create}>＋ Créer l'équivalence</button></div>
+      </div>
+    </Card>
   );
 }
 

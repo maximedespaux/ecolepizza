@@ -590,6 +590,16 @@ export function createCondition(payload) {
 export function deleteCondition(id) {
   return request(`/conditions/${id}`, { method: "DELETE" });
 }
+// --- Équivalences de documents (« OU ») ---
+export function getEquivalences() {
+  return request("/equivalences");
+}
+export function createEquivalence(payload) {
+  return request("/equivalences", { method: "POST", body: JSON.stringify(payload) });
+}
+export function deleteEquivalence(id) {
+  return request(`/equivalences/${id}`, { method: "DELETE" });
+}
 // Champs du dossier : colonnes éligibles + activation.
 export function getFieldSettings() {
   return request("/conditions/fields");
