@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
-import ArchiveTreeEditor, { treeHasEmptyName } from "../components/ArchiveTreeEditor.jsx";
+import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { euro, colorOf } from "../lib/format.js";
@@ -296,8 +296,14 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           </div>
 
           <div style={{ display: tab === "archives" ? "block" : "none" }}>
-            <ArchiveTreeEditor tree={archiveTree} onChange={setArchiveTree}
-              docs={steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id }))} />
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
+              <ArchiveTreeEditor tree={archiveTree} onChange={setArchiveTree}
+                docs={steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id }))} />
+              <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu</div>
+                <ArchiveTreePreview tree={archiveTree} code={form.code} title={form.title} />
+              </div>
+            </div>
           </div>
         </div>
         <div className="mfoot">

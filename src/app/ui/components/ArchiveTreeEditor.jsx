@@ -9,6 +9,41 @@ export function treeHasEmptyName(tree) {
   return check(tree && tree.folders);
 }
 
+// Remplace {champ} par sa valeur d'exemple pour l'aperçu.
+const fillTokens = (name, sample) => String(name || "").replace(/\{[^}]+\}/g, (m) => (sample && sample[m] != null ? sample[m] : m));
+
+// Aperçu (récursif) d'un dossier rendu.
+function PreviewFolder({ folder, sample, depth }) {
+  const name = fillTokens(folder.name, sample) || "(sans nom)";
+  return (
+    <div>
+      <div style={{ paddingLeft: depth * 16 }}>
+        📁 {name}{folder.per_learner ? <span style={{ color: "var(--dim)" }}> · un par stagiaire</span> : null}
+      </div>
+      {(folder.items || []).map((it) => (
+        <div key={it.ref} style={{ paddingLeft: (depth + 1) * 16, color: "var(--muted)" }}>{it.type === "quiz" ? "❓" : "📄"} {it.label}</div>
+      ))}
+      {(folder.children || []).map((c) => <PreviewFolder key={c.id} folder={c} sample={sample} depth={depth + 1} />)}
+    </div>
+  );
+}
+
+// Aperçu en temps réel de l'arborescence rendue (champs remplacés par des exemples).
+export function ArchiveTreePreview({ tree, code = "NIV1", title = "Formation" }) {
+  const sample = {
+    "{Année}": "2026", "{Semaine}": "S29", "{Code}": code || "NIV1",
+    "{Formation}": title || "Formation", "{Dates}": "13/07→17/07", "{Stagiaire}": "DUPONT Jean",
+  };
+  const folders = tree?.folders || [];
+  return (
+    <div style={{ fontFamily: "monospace", fontSize: 12.5, lineHeight: 1.7 }}>
+      {folders.length === 0
+        ? <span className="hint">L'aperçu apparaîtra ici.</span>
+        : folders.map((f) => <PreviewFolder key={f.id} folder={f} sample={sample} depth={0} />)}
+    </div>
+  );
+}
+
 // Squelette standard : Année > Semaine > Code formation > (dossier par stagiaire).
 const standardTree = () => ({
   folders: [{
