@@ -34,7 +34,7 @@ const getOrganization = (req, res) => {
 const updateOrganization = (req, res) => {
     const allowed = ['legal_name', 'short_name', 'code', 'manager', 'siret', 'vat_number', 'nda', 'naf_ape',
         'address', 'zip_code', 'town', 'phone', 'email', 'iban', 'bic', 'bank_name', 'signature_image',
-        'emargement_config', 'qualiopi'];
+        'logo_image', 'emargement_config', 'qualiopi'];
 
     const updates = [];
     const values = [];

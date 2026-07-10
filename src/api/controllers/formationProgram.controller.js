@@ -54,7 +54,28 @@ async function formationSteps(conn, orgId, program) {
         };
     });
 
-    return [...docSteps, ...quizSteps].sort((a, b) => a.sort_order - b.sort_order);
+    // Modèles de feuille d'émargement, ajoutés comme étapes attribuables (opt-in).
+    // Contrairement aux documents classiques, ils sont INACTIFS par défaut : on ne
+    // les génère que si on les ajoute explicitement au parcours de la formation.
+    let emargSteps = [];
+    try {
+        const [tpls] = await conn.query(
+            'SELECT slug, name, sort_order FROM emargement_template WHERE organization_id = ? AND active = 1 ORDER BY sort_order, name',
+            [orgId]
+        );
+        emargSteps = (tpls || []).map((t) => {
+            const o = overlay.get(t.slug);
+            return {
+                slug: t.slug, label: t.name, doc_type: 'EMARGEMENT', quiz_id: null, day: null,
+                applies_when: {}, signable: false, stagiaire_sign: false, or_group: o ? (o.or_group || null) : null,
+                emargement: true,
+                sort_order: o ? o.sort_order : (t.sort_order || 75),
+                active: o ? !!o.active : false,
+            };
+        });
+    } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+
+    return [...docSteps, ...quizSteps, ...emargSteps].sort((a, b) => a.sort_order - b.sort_order);
 }
 
 /**

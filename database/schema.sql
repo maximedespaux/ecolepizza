@@ -68,7 +68,8 @@ CREATE TABLE organization (
     bank_name   varchar(120) DEFAULT NULL,          -- RIB : domiciliation bancaire
     signature_image longtext  DEFAULT NULL,          -- signature de l'organisme (data URL) pour les documents
     sign_cert   longtext     DEFAULT NULL,          -- certificat PAdES de scellement (PKCS#12 chiffré, base64)
-    emargement_config longtext DEFAULT NULL,         -- config JSON de la feuille d'émargement (mise en page personnalisable)
+    logo_image  longtext     DEFAULT NULL,          -- logo de l'organisme (data URL) pour les en-têtes
+    emargement_config longtext DEFAULT NULL,         -- config JSON de la feuille d'émargement (mise en page par défaut)
     qualiopi    tinyint(1)   NOT NULL DEFAULT 0,
     created_at  timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
@@ -613,6 +614,24 @@ CREATE TABLE document_template (
     PRIMARY KEY (id),
     UNIQUE KEY uq_tpl_org_slug (organization_id, slug),
     CONSTRAINT fk_tpl_org FOREIGN KEY (organization_id)
+        REFERENCES organization (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Modèles de feuille d'émargement (mise en page réutilisable, rattachable au parcours)
+CREATE TABLE emargement_template (
+    id               uuid         NOT NULL DEFAULT uuid(),
+    organization_id  uuid         NOT NULL,
+    slug             varchar(60)  NOT NULL,             -- identifiant d'étape (parcours) unique par organisme
+    name             varchar(255) NOT NULL,             -- intitulé affiché
+    config           longtext     DEFAULT NULL,         -- mise en page JSON (orientation, colonnes, en-tête…)
+    active           tinyint(1)   NOT NULL DEFAULT 1,
+    sort_order       int          DEFAULT 100,
+    created_at       timestamp    NOT NULL DEFAULT current_timestamp(),
+    updated_at       timestamp    NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_emargtpl_org_slug (organization_id, slug),
+    KEY idx_emargtpl_org (organization_id),
+    CONSTRAINT fk_emargtpl_org FOREIGN KEY (organization_id)
         REFERENCES organization (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 

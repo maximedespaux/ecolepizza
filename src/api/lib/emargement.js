@@ -28,18 +28,29 @@ const SLOT_ORDER = ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'];
 // Toute clé absente reprend cette valeur -> compatible avec les organismes qui
 // n'ont rien personnalisé.
 const DEFAULT_EMARG_CONFIG = {
+    orientation: 'landscape',        // 'landscape' | 'portrait'
     title: "Feuille d'émargement",
     accent: '#c0392b',
+    show_logo: false,
     show_duration: true,
     show_horaires: true,
     show_lieu: true,
     header_note: '',
+    slots: ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'], // demi-journées affichées en colonnes
     show_formateurs: true,
     show_intervenants: true,
+    density: 'normal',               // 'compact' | 'normal' | 'large' (police + hauteur de ligne)
     sig_height: 30,
+    margin_mm: 10,                   // marge de page
     footer_left: '',                 // '' -> « Fait à {ville}, le {date} »
     footer_caption: "Signature et cachet de l'organisme de formation",
     show_stamp: true,
+};
+
+const DENSITY = {
+    compact: { base: 8.5, name: 8.5, sub: 7.5, head: 8, row: 30 },
+    normal: { base: 9, name: 9.5, sub: 8, head: 9, row: 38 },
+    large: { base: 10.5, name: 11, sub: 9, head: 10, row: 46 },
 };
 
 // Fusionne une config (objet ou JSON string, éventuellement partielle) sur les
@@ -47,25 +58,37 @@ const DEFAULT_EMARG_CONFIG = {
 function mergeEmargConfig(raw) {
     let obj = raw;
     if (typeof raw === 'string') { try { obj = JSON.parse(raw); } catch { obj = null; } }
-    if (!obj || typeof obj !== 'object') return { ...DEFAULT_EMARG_CONFIG };
+    if (!obj || typeof obj !== 'object') return { ...DEFAULT_EMARG_CONFIG, slots: [...DEFAULT_EMARG_CONFIG.slots] };
     const c = { ...DEFAULT_EMARG_CONFIG, ...obj };
+    c.orientation = c.orientation === 'portrait' ? 'portrait' : 'landscape';
     c.title = String(c.title || DEFAULT_EMARG_CONFIG.title);
     c.accent = /^#[0-9a-fA-F]{6}$/.test(c.accent) ? c.accent : DEFAULT_EMARG_CONFIG.accent;
     c.header_note = String(c.header_note || '');
+    c.density = ['compact', 'normal', 'large'].includes(c.density) ? c.density : 'normal';
+    // slots : sous-ensemble ordonné valide ; défaut = tous si vide/invalide.
+    const validSlots = Array.isArray(c.slots) ? SLOT_ORDER.filter((s) => c.slots.includes(s)) : [];
+    c.slots = validSlots.length ? validSlots : [...DEFAULT_EMARG_CONFIG.slots];
     c.footer_left = String(c.footer_left || '');
     c.footer_caption = String(c.footer_caption == null ? DEFAULT_EMARG_CONFIG.footer_caption : c.footer_caption);
     const h = parseInt(c.sig_height, 10);
     c.sig_height = Number.isFinite(h) ? Math.min(60, Math.max(16, h)) : DEFAULT_EMARG_CONFIG.sig_height;
-    for (const k of ['show_duration', 'show_horaires', 'show_lieu', 'show_formateurs', 'show_intervenants', 'show_stamp']) c[k] = !!c[k];
+    const m = parseInt(c.margin_mm, 10);
+    c.margin_mm = Number.isFinite(m) ? Math.min(25, Math.max(4, m)) : DEFAULT_EMARG_CONFIG.margin_mm;
+    for (const k of ['show_logo', 'show_duration', 'show_horaires', 'show_lieu', 'show_formateurs', 'show_intervenants', 'show_stamp']) c[k] = !!c[k];
     return c;
 }
 
 function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const cfg = mergeEmargConfig(config);
-    // Colonnes = jours (dates) × demi-journées présentes ce jour-là (grille paysage).
-    const dates = [...new Set(rows.map((r) => r.date))].sort();
+    const dens = DENSITY[cfg.density] || DENSITY.normal;
+    const slotSet = new Set(cfg.slots);
+    // Colonnes = jours (dates) × demi-journées présentes ce jour-là ET activées en config.
     const daySlots = {}; // date -> [slots présents]
-    for (const d of dates) daySlots[d] = SLOT_ORDER.filter((sl) => rows.some((r) => r.date === d && r.slot === sl));
+    for (const d of [...new Set(rows.map((r) => r.date))].sort()) {
+        const sl = SLOT_ORDER.filter((s) => slotSet.has(s) && rows.some((r) => r.date === d && r.slot === s));
+        if (sl.length) daySlots[d] = sl;
+    }
+    const dates = Object.keys(daySlots).sort(); // jours ayant au moins une colonne
     const cols = []; // colonnes ordonnées { date, slot }
     for (const d of dates) for (const sl of daySlots[d]) cols.push({ date: d, slot: sl });
 
@@ -83,6 +106,9 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const today = frDate(new Date().toISOString().slice(0, 10));
     const orgAddr = [org && org.address, [org && org.zip_code, org && org.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const orgSig = cfg.show_stamp ? decrypt(org && org.signature_image) : null;
+    const orgLogo = cfg.show_logo ? (org && org.logo_image) || null : null;
+    // Format de page : paysage (297×210) ou portrait (210×297) + marge configurable.
+    const pageSize = cfg.orientation === 'portrait' ? '210mm 297mm' : '297mm 210mm';
     const durText = [e.program_days ? `${e.program_days} jour${e.program_days > 1 ? 's' : ''}` : '', e.program_hours ? `${e.program_hours} h` : ''].filter(Boolean).join(' · ');
 
     // Lignes participants filtrées selon la config (le stagiaire est toujours affiché).
@@ -101,30 +127,32 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
         : `Fait à ${esc(org && org.town || '')}, le ${esc(today)}`;
 
     return `<!doctype html><html><head><meta charset="utf-8"><style>
-        @page{size:297mm 210mm;margin:10mm}
+        @page{size:${pageSize};margin:${cfg.margin_mm}mm}
         *{box-sizing:border-box}
-        body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:10px;color:#1e2140;margin:0}
+        body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:${dens.base + 1}px;color:#1e2140;margin:0}
         h1{font-size:16px;margin:0 0 4px;color:${cfg.accent};letter-spacing:.03em;text-transform:uppercase}
-        .head{border-bottom:2px solid ${cfg.accent};padding-bottom:8px;margin-bottom:10px}
+        .head{border-bottom:2px solid ${cfg.accent};padding-bottom:8px;margin-bottom:10px;position:relative}
+        .logo{position:absolute;top:0;right:0;max-height:52px;max-width:180px;object-fit:contain}
         .org{font-weight:700;font-size:11px}
         .meta{color:#444;font-size:10px;line-height:1.55;margin-top:3px}
         .meta b{color:#1e2140}
         table{width:100%;border-collapse:collapse;table-layout:fixed}
-        th,td{border:1px solid #cfd2d8;padding:3px 4px;text-align:center;vertical-align:middle;font-size:9px}
-        thead th{background:#f5f3f0;text-transform:uppercase;letter-spacing:.03em;color:#555}
+        th,td{border:1px solid #cfd2d8;padding:3px 4px;text-align:center;vertical-align:middle;font-size:${dens.base}px}
+        thead th{background:#f5f3f0;text-transform:uppercase;letter-spacing:.03em;color:#555;font-size:${dens.head}px}
         .who{width:150px;text-align:left}
-        td.nm{text-align:left;font-weight:600;font-size:9.5px}
-        td.nm .sub{font-weight:400;font-size:8px;color:#8a8f99}
-        tbody td{height:38px}
+        td.nm{text-align:left;font-weight:600;font-size:${dens.name}px}
+        td.nm .sub{font-weight:400;font-size:${dens.sub}px;color:#8a8f99}
+        tbody td{height:${dens.row}px}
         td.off{background:#f4f4f6}
         .sg img{max-height:${cfg.sig_height}px;max-width:100%;object-fit:contain}
-        .ln{display:block;border-bottom:1px dotted #b9bcc4;width:70%;margin:14px auto 0}
+        .ln{display:block;border-bottom:1px dotted #b9bcc4;width:70%;margin:${Math.round(dens.row / 2 - 5)}px auto 0}
         .foot{margin-top:14px;display:flex;justify-content:space-between;align-items:flex-end;font-size:10px}
         .stamp{text-align:center}
         .stamp img{max-height:60px;max-width:200px;object-fit:contain;display:block;margin:0 auto 2px}
         .stamp .cap{font-size:9px;color:#555}
     </style></head><body>
         <div class="head">
+            ${orgLogo ? `<img class="logo" src="${orgLogo}" />` : ''}
             <h1>${esc(cfg.title)}</h1>
             <div class="org">${esc(org && org.legal_name || '')}</div>
             <div class="meta">
@@ -178,13 +206,32 @@ async function regenEmargement(conn, orgId, enrollmentId) {
             const [[h]] = await conn.query('SELECT horaires FROM training_program WHERE id = ?', [e.program_id]);
             e.program_horaires = h ? h.horaires : null;
         } catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; }
-        // Config de mise en page (colonne 057) — tolérante à l'absence.
+        // Config de mise en page par défaut (colonne 057) — tolérante à l'absence.
         let emargConfig = null;
         try {
             const [[cf]] = await conn.query('SELECT emargement_config FROM organization WHERE id = ?', [orgId]);
             emargConfig = cf ? cf.emargement_config : null;
         } catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; }
         const [[org]] = await conn.query('SELECT legal_name, address, zip_code, town, signature_image FROM organization WHERE id = ?', [orgId]);
+        // Logo d'organisme (colonne 058) — tolérante à l'absence.
+        try {
+            const [[lg]] = await conn.query('SELECT logo_image FROM organization WHERE id = ?', [orgId]);
+            org.logo_image = lg ? lg.logo_image : null;
+        } catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; }
+        // Modèles d'émargement rattachés au parcours de cette formation (table 058).
+        // Opt-in : seuls les slugs marqués actifs dans program_step comptent.
+        let emargTemplates = [];
+        try {
+            const [tpls] = await conn.query(
+                `SELECT et.slug, et.name, et.config
+                 FROM emargement_template et
+                 JOIN program_step ps ON ps.slug = et.slug AND ps.organization_id = et.organization_id
+                 WHERE et.organization_id = ? AND et.active = 1 AND ps.active = 1 AND ps.program_id = ?
+                 ORDER BY et.sort_order, et.name`,
+                [orgId, e.program_id]
+            );
+            emargTemplates = tpls || [];
+        } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
         const [rows] = await conn.query(
             `SELECT s.id AS sheet_id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.slot,
                     ar.signer_name, ar.signature_data
@@ -262,27 +309,52 @@ async function regenEmargement(conn, orgId, enrollmentId) {
             })),
         ];
         const allSignedFlag = rows.every((r) => r.signature_data);
-
-        let pdf;
-        try { pdf = htmlToPdf(renderEmargementHtml({ org, e, rows, participants, config: emargConfig })); }
-        catch (err) { console.warn('Émargement PDF non généré :', err.code || err.message); return; }
-
-        const ref = `emarg:${enrollmentId}`;
-        const title = `Feuille d'émargement — ${e.program_code || ''} SEM ${e.week || ''}`.trim();
         const status = allSignedFlag ? 'SIGNE' : 'ARCHIVE';
 
-        const [[ex]] = await conn.query('SELECT id FROM archive_document WHERE organization_id = ? AND ref = ?', [orgId, ref]);
-        if (ex) {
-            await conn.query(
-                'UPDATE archive_document SET year=?, week=?, formation_label=?, learner_name=?, title=?, status=?, mime=?, file=? WHERE id=?',
-                [e.year, e.week, e.program_code || null, learnerName, title.slice(0, 255), status, 'application/pdf', pdf, ex.id]
-            );
+        // Upsert d'une feuille dans le coffre documentaire (clé = ref). Renvoie true si écrite.
+        const upsert = async (ref, title, config) => {
+            let pdf;
+            try { pdf = htmlToPdf(renderEmargementHtml({ org, e, rows, participants, config })); }
+            catch (err) { console.warn('Émargement PDF non généré :', err.code || err.message); return false; }
+            const [[ex]] = await conn.query('SELECT id FROM archive_document WHERE organization_id = ? AND ref = ?', [orgId, ref]);
+            if (ex) {
+                await conn.query(
+                    'UPDATE archive_document SET year=?, week=?, formation_label=?, learner_name=?, title=?, status=?, mime=?, file=? WHERE id=?',
+                    [e.year, e.week, e.program_code || null, learnerName, title.slice(0, 255), status, 'application/pdf', pdf, ex.id]
+                );
+            } else {
+                await conn.query(
+                    `INSERT INTO archive_document (id, organization_id, ref, year, week, formation_label, learner_name, title, status, mime, file)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [crypto.randomUUID(), orgId, ref, e.year, e.week, e.program_code || null, learnerName, title.slice(0, 255), status, 'application/pdf', pdf]
+                );
+            }
+            return true;
+        };
+
+        const sem = `SEM ${e.week || ''}`.trim();
+        if (emargTemplates.length) {
+            // Une feuille par modèle rattaché au parcours (ref = emarg:<dossier>:<slug>).
+            const keep = [];
+            for (const t of emargTemplates) {
+                const ref = `emarg:${enrollmentId}:${t.slug}`;
+                const title = `${t.name || "Feuille d'émargement"} — ${e.program_code || ''} ${sem}`.trim();
+                if (await upsert(ref, title, t.config)) keep.push(ref);
+            }
+            // Nettoyage : retire l'ancienne feuille unique + les modèles retirés (jamais si aucune écriture).
+            if (keep.length) {
+                await conn.query(
+                    `DELETE FROM archive_document WHERE organization_id = ?
+                     AND (ref = ? OR ref LIKE ?) AND ref NOT IN (${keep.map(() => '?').join(',')})`,
+                    [orgId, `emarg:${enrollmentId}`, `emarg:${enrollmentId}:%`, ...keep]
+                );
+            }
         } else {
-            await conn.query(
-                `INSERT INTO archive_document (id, organization_id, ref, year, week, formation_label, learner_name, title, status, mime, file)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [crypto.randomUUID(), orgId, ref, e.year, e.week, e.program_code || null, learnerName, title.slice(0, 255), status, 'application/pdf', pdf]
-            );
+            // Aucun modèle rattaché : comportement historique (feuille unique, config par défaut).
+            const title = `Feuille d'émargement — ${e.program_code || ''} ${sem}`.trim();
+            const ok = await upsert(`emarg:${enrollmentId}`, title, emargConfig);
+            // Retire d'éventuelles feuilles par-modèle devenues obsolètes.
+            if (ok) await conn.query('DELETE FROM archive_document WHERE organization_id = ? AND ref LIKE ?', [orgId, `emarg:${enrollmentId}:%`]);
         }
     } catch (err) {
         console.warn('regenEmargement :', err.message);

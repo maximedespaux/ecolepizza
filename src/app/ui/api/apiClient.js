@@ -35,6 +35,20 @@ export function updateOrganisation(payload) {
   return request("/organisation", { method: "PATCH", body: JSON.stringify(payload) });
 }
 
+// --- Modèles de feuille d'émargement ---
+export function getEmargementTemplates() {
+  return request("/emargement-templates");
+}
+export function createEmargementTemplate(payload) {
+  return request("/emargement-templates", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateEmargementTemplate(id, payload) {
+  return request(`/emargement-templates/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function deleteEmargementTemplate(id) {
+  return request(`/emargement-templates/${id}`, { method: "DELETE" });
+}
+
 // --- Rôles d'accès personnalisés (profils de menu) ---
 export function getAccessProfiles() {
   return request("/access-profiles");

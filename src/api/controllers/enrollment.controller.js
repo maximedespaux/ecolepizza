@@ -214,8 +214,9 @@ const deleteEnrollment = async (req, res) => {
              WHERE s.session_id = ? AND ar.learner_id = ?`,
             [e.session_id, e.learner_id]
         );
-        await conn.query('DELETE FROM archive_document WHERE organization_id = ? AND ref = ?',
-            [req.user.organization_id, `emarg:${e.id}`]);
+        // Feuille(s) d'émargement : feuille unique (emarg:<id>) + feuilles par modèle (emarg:<id>:<slug>).
+        await conn.query('DELETE FROM archive_document WHERE organization_id = ? AND (ref = ? OR ref LIKE ?)',
+            [req.user.organization_id, `emarg:${e.id}`, `emarg:${e.id}:%`]);
         await conn.query('DELETE FROM enrollment WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
         res.status(200).json({ success: true, message: 'Stagiaire retiré' });
