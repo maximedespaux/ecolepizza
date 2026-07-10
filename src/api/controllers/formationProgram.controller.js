@@ -118,7 +118,7 @@ const getProgram = (req, res) => {
  */
 const CREATE_FIELDS = [
     'code', 'title', 'level', 'color', 'days', 'hours', 'price', 'audience', 'objectives',
-    'objective_general', 'duration_detail', 'program_detail', 'rs_code', 'hygiene', 'active',
+    'objective_general', 'duration_detail', 'program_detail', 'rs_code', 'hygiene', 'needs_emargement', 'active',
 ];
 const createProgram = (req, res) => {
     const b = req.body || {};
@@ -130,7 +130,7 @@ const createProgram = (req, res) => {
     for (const f of CREATE_FIELDS) {
         if (b[f] === undefined) continue;
         let v = b[f];
-        if (f === 'hygiene' || f === 'active') v = v ? 1 : 0;
+        if (f === 'hygiene' || f === 'active' || f === 'needs_emargement') v = v ? 1 : 0;
         else if (v === '') v = null; // champ vidé -> NULL (colonnes nullables)
         cols.push(f);
         vals.push(v);
@@ -157,14 +157,14 @@ const updateProgram = (req, res) => {
     const ALLOWED = [
         'code', 'title', 'level', 'color', 'days', 'hours', 'price', 'audience', 'objectives',
         'objective_general', 'duration_detail', 'program_detail',
-        'rs_code', 'hygiene', 'active', 'sort_order',
+        'rs_code', 'hygiene', 'needs_emargement', 'active', 'sort_order',
     ];
     const sets = [];
     const values = [];
     for (const f of ALLOWED) {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];
-        if (f === 'hygiene' || f === 'active') v = v ? 1 : 0;
+        if (f === 'hygiene' || f === 'active' || f === 'needs_emargement') v = v ? 1 : 0;
         else if (f === 'code') {
             v = String(v).trim();
             if (!v) continue; // le code est obligatoire : on ignore une valeur vide

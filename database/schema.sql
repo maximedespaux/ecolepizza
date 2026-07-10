@@ -205,6 +205,7 @@ CREATE TABLE training_program (
     program_detail  longtext      DEFAULT NULL,      -- « Déroulé » (programme jour par jour)
     rs_code         varchar(40)   DEFAULT NULL,      -- RS7404 si certifiante
     hygiene         tinyint(1)    NOT NULL DEFAULT 0,
+    needs_emargement tinyint(1)   NOT NULL DEFAULT 1, -- la formation utilise-t-elle l'émargement ?
     archive_tree    longtext      DEFAULT NULL,      -- arborescence d'archivage (JSON) pour l'export ZIP Qualiopi
     active          tinyint(1)    NOT NULL DEFAULT 1,
     sort_order      int           NOT NULL DEFAULT 100, -- ordre d'affichage (réorganisation)

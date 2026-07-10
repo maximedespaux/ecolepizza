@@ -122,14 +122,14 @@ function Formations() {
 const FIELDS = [
   "code", "title", "level", "color", "days", "hours", "price",
   "audience", "objective_general", "objectives", "duration_detail", "program_detail",
-  "rs_code", "hygiene", "active",
+  "rs_code", "hygiene", "needs_emargement", "active",
 ];
 
 function FormationModal({ program, onClose, onSaved, onError }) {
   const isNew = !program.id;
   const [form, setForm] = useState(() => {
     const f = {};
-    for (const k of FIELDS) f[k] = program[k] ?? (k === "active" ? 1 : k === "hygiene" ? 0 : "");
+    for (const k of FIELDS) f[k] = program[k] ?? (k === "active" || k === "needs_emargement" ? 1 : k === "hygiene" ? 0 : "");
     return f;
   });
   const [saving, setSaving] = useState(false);
@@ -152,6 +152,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       let t = { folders: [] };
       if (raw) { try { t = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { t = { folders: [] }; } }
       setArchiveTree(t && t.folders ? t : { folders: [] });
+      if (r.data && r.data.needs_emargement != null) setForm((p) => ({ ...p, needs_emargement: r.data.needs_emargement ? 1 : 0 }));
     }).catch(() => {});
   }, [program.id]);
   // Équivalences « OU » (org) : map slug -> groupe. Le regroupement est automatique.
@@ -271,6 +272,9 @@ function FormationModal({ program, onClose, onSaved, onError }) {
                 <input type="checkbox" checked={!!form.hygiene} onChange={setChk("hygiene")} /> Hygiène
               </label>
               <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={!!form.needs_emargement} onChange={setChk("needs_emargement")} /> Feuille d'émargement
+              </label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
                 <input type="checkbox" checked={!!form.active} onChange={setChk("active")} /> Active
               </label>
             </div>
@@ -294,8 +298,8 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               <ArchiveTreeEditor tree={archiveTree} onChange={setArchiveTree} eqMap={eqMap}
                 docs={[
                   ...steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id })),
-                  // Documents « système » assemblés à partir des signatures (pas des modèles).
-                  { slug: "sys:emargement", label: "Feuille d'émargement (stagiaire + formateur(s) + intervenant(s))", system: true },
+                  // Documents « système » assemblés à partir des signatures (si la formation utilise l'émargement).
+                  ...(form.needs_emargement ? [{ slug: "sys:emargement", label: "Feuille d'émargement (stagiaire + formateur(s) + intervenant(s))", system: true }] : []),
                 ]} />
               <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
                 <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu</div>
