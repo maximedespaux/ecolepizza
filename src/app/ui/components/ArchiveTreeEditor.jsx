@@ -22,7 +22,7 @@ function PreviewFolder({ folder, sample, depth }) {
       </div>
       {(folder.items || []).map((it) => (
         <div key={it.group || it.ref} style={{ paddingLeft: (depth + 1) * 16, color: "var(--muted)" }}>
-          {it.type === "quiz" ? "❓" : "📄"} {it.label}{it.group ? " (le variant du dossier)" : ""}
+          {itemIcon(it.type)} {it.label}{it.group ? " (le variant du dossier)" : ""}
         </div>
       ))}
       {(folder.children || []).map((c) => <PreviewFolder key={c.id} folder={c} sample={sample} depth={depth + 1} />)}
@@ -87,11 +87,12 @@ function buildOptions(docs, eqMap) {
         label: members.map((m) => m.label).join(" / "), type: "model",
       });
     } else {
-      options.push({ key: `slug:${d.slug}`, ref: d.slug, label: d.label, type: d.quiz_id ? "quiz" : "model" });
+      options.push({ key: `slug:${d.slug}`, ref: d.slug, label: d.label, type: d.system ? "system" : (d.quiz_id ? "quiz" : "model") });
     }
   }
   return options;
 }
+const itemIcon = (t) => (t === "quiz" ? "❓" : t === "system" ? "📝" : "📄");
 const itemId = (x) => x.group || x.ref;
 
 // Un dossier de l'arborescence + ses documents attribués + ses sous-dossiers.
@@ -130,7 +131,7 @@ function FolderNode({ folder, options, depth, onChange, onDelete }) {
         {items.map((it, i) => (
           <span key={itemId(it)} className="pill" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}
             title={it.group ? "Choix « OU » : le bon variant est retenu selon le dossier" : undefined}>
-            {it.type === "quiz" ? "❓" : "📄"} {it.label}{it.group ? " (OU)" : ""}
+            {itemIcon(it.type)} {it.label}{it.group ? " (OU)" : ""}
             <button type="button" className="pf-x" title="Retirer" onClick={() => set({ items: items.filter((_, j) => j !== i) })}>✕</button>
           </span>
         ))}

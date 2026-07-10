@@ -292,7 +292,11 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           <div style={{ display: tab === "archives" ? "block" : "none" }}>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
               <ArchiveTreeEditor tree={archiveTree} onChange={setArchiveTree} eqMap={eqMap}
-                docs={steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id }))} />
+                docs={[
+                  ...steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id })),
+                  // Documents « système » assemblés à partir des signatures (pas des modèles).
+                  { slug: "sys:emargement", label: "Feuille d'émargement (stagiaire + formateur(s) + intervenant(s))", system: true },
+                ]} />
               <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
                 <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu</div>
                 <ArchiveTreePreview tree={archiveTree} code={form.code} title={form.title} />
