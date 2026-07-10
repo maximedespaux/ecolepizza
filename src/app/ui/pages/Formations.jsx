@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
-import ArchiveTreeEditor from "../components/ArchiveTreeEditor.jsx";
+import ArchiveTreeEditor, { treeHasEmptyName } from "../components/ArchiveTreeEditor.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { euro, colorOf } from "../lib/format.js";
@@ -175,6 +175,11 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   async function save() {
     if (!String(form.code).trim()) { onError("Le code est requis."); return; }
     if (!String(form.title).trim()) { onError("L'intitulé est requis."); return; }
+    if (!isNew && treeHasEmptyName(archiveTree)) {
+      setTab("archives");
+      onError("Nommez tous les dossiers de l'arborescence d'archivage avant d'enregistrer.");
+      return;
+    }
     setSaving(true);
     try {
       if (isNew) {

@@ -1,7 +1,13 @@
 import { useState } from "react";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
-const newFolder = () => ({ id: uid(), name: "Nouveau dossier", per_learner: false, items: [], children: [] });
+const newFolder = () => ({ id: uid(), name: "", per_learner: false, items: [], children: [] });
+
+// Un dossier sans nom empêche l'enregistrement (récursif).
+export function treeHasEmptyName(tree) {
+  const check = (folders) => (folders || []).some((f) => !String(f.name || "").trim() || check(f.children));
+  return check(tree && tree.folders);
+}
 
 // Squelette standard : Année > Semaine > Code formation > (dossier par stagiaire).
 const standardTree = () => ({
@@ -42,7 +48,8 @@ function FolderNode({ folder, docs, depth, onChange, onDelete }) {
     <div style={{ marginLeft: depth ? 16 : 0, borderLeft: depth ? "1px solid var(--border-soft)" : "none", paddingLeft: depth ? 12 : 0, marginTop: 10 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span>📁</span>
-        <input className="inp" style={{ maxWidth: 220 }} value={folder.name} onChange={(e) => set({ name: e.target.value })} placeholder="Nom du dossier ou {champ}" />
+        <input className="inp" style={{ maxWidth: 220, borderColor: String(folder.name || "").trim() ? undefined : "var(--ember1, #c0392b)" }}
+          value={folder.name} onChange={(e) => set({ name: e.target.value })} placeholder="Nom du dossier ou {champ}" />
         <select value="" title="Insérer un champ dynamique" onChange={(e) => { if (e.target.value) set({ name: (folder.name || "") + e.target.value }); }}>
           <option value="">＋ champ…</option>
           {TOKENS.map((k) => <option key={k.t} value={k.t}>{k.label}</option>)}
