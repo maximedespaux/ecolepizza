@@ -1,5 +1,5 @@
 const express = require('express');
-const { getAttendance, generateSheets, setPresence, signSheet } = require('../controllers/attendance.controller.js');
+const { getAttendance, generateSheets, setPresence, signSheet, regenerateEmargement } = require('../controllers/attendance.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -9,5 +9,6 @@ router.get('/:sessionId', authenticateToken, getAttendance);
 router.post('/:sessionId/generate', authenticateToken, generateSheets);
 router.patch('/record/:id', authenticateToken, setPresence);
 router.post('/sheet/:id/sign', authenticateToken, signSheet);
+router.post('/:sessionId/regenerate', authenticateToken, regenerateEmargement);
 
 module.exports = router;

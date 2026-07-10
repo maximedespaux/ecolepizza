@@ -118,7 +118,7 @@ const getProgram = (req, res) => {
  */
 const CREATE_FIELDS = [
     'code', 'title', 'level', 'color', 'days', 'hours', 'price', 'audience', 'objectives',
-    'objective_general', 'duration_detail', 'program_detail', 'rs_code', 'hygiene', 'needs_emargement', 'active',
+    'objective_general', 'duration_detail', 'program_detail', 'rs_code', 'hygiene', 'needs_emargement', 'horaires', 'active',
 ];
 const createProgram = (req, res) => {
     const b = req.body || {};
@@ -157,7 +157,7 @@ const updateProgram = (req, res) => {
     const ALLOWED = [
         'code', 'title', 'level', 'color', 'days', 'hours', 'price', 'audience', 'objectives',
         'objective_general', 'duration_detail', 'program_detail',
-        'rs_code', 'hygiene', 'needs_emargement', 'active', 'sort_order',
+        'rs_code', 'hygiene', 'needs_emargement', 'horaires', 'active', 'sort_order',
     ];
     const sets = [];
     const values = [];

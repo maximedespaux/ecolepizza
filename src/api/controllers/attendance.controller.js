@@ -250,4 +250,26 @@ const signSheet = async (req, res) => {
     }
 };
 
-module.exports = { getAttendance, generateSheets, setPresence, signSheet };
+/**
+ * POST /api/attendance/:sessionId/regenerate — régénère les feuilles d'émargement
+ * de tous les dossiers de la session (met à jour la mise en page / les infos).
+ */
+const regenerateEmargement = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[s]] = await conn.query('SELECT id FROM training_session WHERE id = ? AND organization_id = ?',
+            [req.params.sessionId, req.user.organization_id]);
+        if (!s) return res.status(404).json({ message: 'Session introuvable.' });
+        const [enr] = await conn.query('SELECT id FROM enrollment WHERE session_id = ? AND organization_id = ?',
+            [req.params.sessionId, req.user.organization_id]);
+        let n = 0;
+        for (const en of enr) { await regenEmargement(conn, req.user.organization_id, en.id); n++; }
+        logAudit(req, 'emargement.regenerate', 'TrainingSession', req.params.sessionId);
+        res.json({ success: true, message: `${n} feuille(s) d'émargement régénérée(s).` });
+    } catch (err) {
+        console.error('Erreur régénération émargement :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getAttendance, generateSheets, setPresence, signSheet, regenerateEmargement };

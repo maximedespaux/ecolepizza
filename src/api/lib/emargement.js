@@ -78,7 +78,7 @@ function renderEmargementHtml({ org, e, rows, participants = [] }) {
             <div class="meta">
                 Intitulé de l'action de formation : <b>${esc(e.program_title || '')}</b> (${esc(e.program_code || '')})<br/>
                 Date(s) : <b>du ${esc(frDate(e.start_date))} au ${esc(frDate(e.end_date))}</b> — Semaine ${esc(e.week)}/${esc(e.year)}${durText ? ` · Durée : ${esc(durText)}` : ''}<br/>
-                ${orgAddr ? `Lieu : ${esc(orgAddr)}` : ''}
+                ${e.program_horaires ? `Horaires : ${esc(e.program_horaires)}<br/>` : ''}${orgAddr ? `Lieu : ${esc(orgAddr)}` : ''}
             </div>
         </div>
 
@@ -112,7 +112,7 @@ async function regenEmargement(conn, orgId, enrollmentId) {
                     ts.year, ts.week,
                     DATE_FORMAT(ts.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(ts.end_date, '%Y-%m-%d') AS end_date,
-                    p.code AS program_code, p.title AS program_title, p.days AS program_days, p.hours AS program_hours
+                    p.code AS program_code, p.title AS program_title, p.days AS program_days, p.hours AS program_hours, p.id AS program_id
              FROM enrollment e
              JOIN training_session ts ON ts.id = e.session_id
              LEFT JOIN training_program p ON p.id = ts.program_id
@@ -121,6 +121,11 @@ async function regenEmargement(conn, orgId, enrollmentId) {
             [enrollmentId, orgId]
         );
         if (!e) return;
+        // Horaires détaillés (colonne ajoutée par 056) — lecture tolérante à l'absence.
+        try {
+            const [[h]] = await conn.query('SELECT horaires FROM training_program WHERE id = ?', [e.program_id]);
+            e.program_horaires = h ? h.horaires : null;
+        } catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; }
         const [[org]] = await conn.query('SELECT legal_name, address, zip_code, town, signature_image FROM organization WHERE id = ?', [orgId]);
         const [rows] = await conn.query(
             `SELECT s.id AS sheet_id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.slot,

@@ -93,6 +93,10 @@ export function getAttendance(sessionId) {
 export function generateAttendance(sessionId) {
   return request(`/attendance/${sessionId}/generate`, { method: "POST" });
 }
+// Régénère les feuilles d'émargement de tous les dossiers de la session.
+export function regenerateEmargement(sessionId) {
+  return request(`/attendance/${sessionId}/regenerate`, { method: "POST" });
+}
 export function setPresence(recordId, present) {
   return request(`/attendance/record/${recordId}`, { method: "PATCH", body: JSON.stringify({ present }) });
 }

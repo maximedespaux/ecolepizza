@@ -122,7 +122,7 @@ function Formations() {
 const FIELDS = [
   "code", "title", "level", "color", "days", "hours", "price",
   "audience", "objective_general", "objectives", "duration_detail", "program_detail",
-  "rs_code", "hygiene", "needs_emargement", "active",
+  "horaires", "rs_code", "hygiene", "needs_emargement", "active",
 ];
 
 function FormationModal({ program, onClose, onSaved, onError }) {
@@ -248,6 +248,9 @@ function FormationModal({ program, onClose, onSaved, onError }) {
             <div className="field"><label>Montant net (€)</label>
               <input className="inp" type="number" min="0" step="0.01" value={form.price} onChange={set("price")} /></div>
           </div>
+
+          <div className="field"><label>Horaires (affiché sur la feuille d'émargement)</label>
+            <input className="inp" value={form.horaires} onChange={set("horaires")} placeholder="9h00 – 12h30 / 13h30 – 17h00" /></div>
 
           <div className="field"><label>Public</label>
             <textarea className="inp" rows={2} value={form.audience} onChange={set("audience")} /></div>

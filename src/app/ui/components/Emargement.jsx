@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { getAttendance, generateAttendance, signAttendanceSheet } from "../api/apiClient.js";
+import { getAttendance, generateAttendance, signAttendanceSheet, regenerateEmargement } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import Card from "./Card.jsx";
 import StatusMessage from "./StatusMessage.jsx";
@@ -70,6 +70,20 @@ function Emargement({ sessionId }) {
     }
   }
 
+  // Régénère les feuilles d'émargement PDF archivées (mise en page / infos à jour).
+  async function regenDocs() {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const r = await regenerateEmargement(sessionId);
+      setStatus({ type: "success", message: r.message || "Feuilles d'émargement régénérées." });
+    } catch (e) {
+      setStatus({ type: "error", message: e.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onSignSheet({ signer_name, signature_data }) {
     try {
       await signAttendanceSheet(signSheetRec.id, { signer_name, signature_data });
@@ -82,7 +96,16 @@ function Emargement({ sessionId }) {
   return (
     <Card
       title="Émargement"
-      more={<button className="btn sm" onClick={generate} disabled={busy}>{busy ? "…" : sheets.length ? "Régénérer" : "Générer les feuilles"}</button>}
+      more={
+        <div style={{ display: "flex", gap: 8 }}>
+          {sheets.length > 0 && (
+            <button className="btn sm ghost" onClick={regenDocs} disabled={busy} title="Régénérer les feuilles d'émargement archivées (mise en page et infos à jour)">
+              {busy ? "…" : "Régénérer l'émargement"}
+            </button>
+          )}
+          <button className="btn sm" onClick={generate} disabled={busy}>{busy ? "…" : sheets.length ? "Régénérer les feuilles" : "Générer les feuilles"}</button>
+        </div>
+      }
     >
       <StatusMessage status={status} />
       {sheets.length === 0 ? (
