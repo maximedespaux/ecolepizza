@@ -24,84 +24,79 @@ function frDate(iso) {
 }
 const SLOT_ORDER = ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'];
 
-function renderEmargementHtml({ org, e, rows, intervenants = [] }) {
-    const learnerName = `${e.last_name || ''} ${e.first_name || ''}`.trim();
-    // Grille : lignes = jours, colonnes = créneaux réellement présents.
-    const slots = SLOT_ORDER.filter((sl) => rows.some((r) => r.slot === sl));
+function renderEmargementHtml({ org, e, rows, participants = [] }) {
+    // Colonnes = jours (dates) × demi-journées présentes ce jour-là (grille paysage).
     const dates = [...new Set(rows.map((r) => r.date))].sort();
-    const byKey = {};
-    for (const r of rows) byKey[`${r.date}|${r.slot}`] = r;
+    const daySlots = {}; // date -> [slots présents]
+    for (const d of dates) daySlots[d] = SLOT_ORDER.filter((sl) => rows.some((r) => r.date === d && r.slot === sl));
+    const cols = []; // colonnes ordonnées { date, slot }
+    for (const d of dates) for (const sl of daySlots[d]) cols.push({ date: d, slot: sl });
 
-    // Cellule de signature : image + nom (ou case vide à signer).
-    const sigCell = (dataUrl, name, absent) => {
+    // Cellule signature : image, ou case vide (à signer), ou grisée (pas concerné).
+    const cell = (dataUrl, applies) => {
+        if (!applies) return '<td class="off"></td>';
         const v = decrypt(dataUrl);
-        if (v) return `<div class="sg"><img src="${v}" /></div>${name ? `<div class="nm">${esc(name)}</div>` : ''}`;
-        return absent ? '<span class="na">—</span>' : '<div class="sg empty"></div>';
+        return v ? `<td><span class="sg"><img src="${v}" /></span></td>` : '<td><span class="ln"></span></td>';
     };
-    const headRow = `<tr><th class="d">Jour</th>${slots.map((sl) => `<th>${SLOT[sl] || esc(sl)}</th>`).join('')}</tr>`;
-    const gridBody = (cellFor) => dates.map((d) => `<tr>
-        <td class="d">${esc(frDay(d))}</td>
-        ${slots.map((sl) => `<td>${cellFor(byKey[`${d}|${sl}`])}</td>`).join('')}
-    </tr>`).join('');
+    const rowFor = (p) => `<tr>
+        <td class="nm">${esc(p.name || '')}${p.specialty ? `<div class="sub">${esc(p.specialty)}</div>` : ''}${p.role === 'stagiaire' ? '<div class="sub">Stagiaire</div>' : p.role === 'intervenant' ? '<div class="sub">Intervenant</div>' : ''}</td>
+        ${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k)); }).join('')}
+    </tr>`;
 
-    const learnerBody = gridBody((r) => (r ? sigCell(r.signature_data, r.signer_name || learnerName, false) : '<span class="na">—</span>'));
-    const trainerBody = gridBody((r) => (r && r.trainers && r.trainers.length
-        ? r.trainers.map((t) => sigCell(t.signature_data, t.signer_name, false)).join('')
-        : (r ? sigCell(null, '', false) : '<span class="na">—</span>')));
-
-    // Un bloc par intervenant externe (uniquement ses demi-journées).
-    const intervSections = intervenants.map((iv) => {
-        const k = {};
-        for (const s of (iv.slots || [])) k[`${s.date}|${s.slot}`] = s;
-        const body = dates.map((d) => `<tr><td class="d">${esc(frDay(d))}</td>${slots.map((sl) => {
-            const s = k[`${d}|${sl}`];
-            return `<td>${s ? sigCell(s.signature_data, iv.name, false) : ''}</td>`;
-        }).join('')}</tr>`).join('');
-        return `<div class="blk"><h2>Intervenant — ${esc(iv.name || '')}${iv.specialty ? ` · ${esc(iv.specialty)}` : ''}</h2>
-            <table><thead>${headRow}</thead><tbody>${body}</tbody></table></div>`;
-    }).join('');
+    const today = frDate(new Date().toISOString().slice(0, 10));
+    const orgAddr = [org && org.address, [org && org.zip_code, org && org.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    const orgSig = decrypt(org && org.signature_image);
+    const durText = [e.program_days ? `${e.program_days} jour${e.program_days > 1 ? 's' : ''}` : '', e.program_hours ? `${e.program_hours} h` : ''].filter(Boolean).join(' · ');
 
     return `<!doctype html><html><head><meta charset="utf-8"><style>
+        @page{size:297mm 210mm;margin:10mm}
         *{box-sizing:border-box}
-        body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;color:#1e2140;margin:0;padding:22px}
-        .head{border-bottom:2px solid #c0392b;padding-bottom:10px;margin-bottom:14px}
-        h1{font-size:18px;margin:0 0 6px;color:#c0392b;letter-spacing:.02em}
-        .org{font-weight:700;font-size:12px}
-        .meta{color:#555;font-size:10.5px;line-height:1.6;margin-top:4px}
+        body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:10px;color:#1e2140;margin:0}
+        h1{font-size:16px;margin:0 0 4px;color:#c0392b;letter-spacing:.03em;text-transform:uppercase}
+        .head{border-bottom:2px solid #c0392b;padding-bottom:8px;margin-bottom:10px}
+        .org{font-weight:700;font-size:11px}
+        .meta{color:#444;font-size:10px;line-height:1.55;margin-top:3px}
         .meta b{color:#1e2140}
-        .blk{margin-top:16px;page-break-inside:avoid}
-        h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#8a8f99;margin:0 0 6px}
         table{width:100%;border-collapse:collapse;table-layout:fixed}
-        th,td{border:1px solid #d9dbe0;padding:5px 6px;text-align:center;vertical-align:middle}
-        th{background:#f5f3f0;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#555}
-        td.d,th.d{width:110px;text-align:left;white-space:nowrap;font-weight:600}
-        td{height:44px}
-        .sg{height:34px;display:flex;align-items:center;justify-content:center}
-        .sg img{max-height:34px;max-width:100%;object-fit:contain}
-        .sg.empty{border-bottom:1px dotted #c9ccd2;height:20px;margin:6px 8px 0}
-        .nm{font-size:8px;color:#8a8f99;margin-top:1px}
-        .na{color:#c9ccd2}
-        .foot{margin-top:18px;font-size:9px;color:#8a8f99;border-top:1px solid #e6e6ea;padding-top:8px}
+        th,td{border:1px solid #cfd2d8;padding:3px 4px;text-align:center;vertical-align:middle;font-size:9px}
+        thead th{background:#f5f3f0;text-transform:uppercase;letter-spacing:.03em;color:#555}
+        .who{width:150px;text-align:left}
+        td.nm{text-align:left;font-weight:600;font-size:9.5px}
+        td.nm .sub{font-weight:400;font-size:8px;color:#8a8f99}
+        tbody td{height:38px}
+        td.off{background:#f4f4f6}
+        .sg img{max-height:30px;max-width:100%;object-fit:contain}
+        .ln{display:block;border-bottom:1px dotted #b9bcc4;width:70%;margin:14px auto 0}
+        .foot{margin-top:14px;display:flex;justify-content:space-between;align-items:flex-end;font-size:10px}
+        .stamp{text-align:center}
+        .stamp img{max-height:60px;max-width:200px;object-fit:contain;display:block;margin:0 auto 2px}
+        .stamp .cap{font-size:9px;color:#555}
     </style></head><body>
         <div class="head">
             <h1>Feuille d'émargement</h1>
             <div class="org">${esc(org && org.legal_name || '')}</div>
             <div class="meta">
-                Formation : <b>${esc(e.program_title || '')}</b> (${esc(e.program_code || '')}) — Semaine ${esc(e.week)}/${esc(e.year)}<br/>
-                Période : du <b>${esc(frDate(e.start_date))}</b> au <b>${esc(frDate(e.end_date))}</b><br/>
-                Stagiaire : <b>${esc(learnerName)}</b>
+                Intitulé de l'action de formation : <b>${esc(e.program_title || '')}</b> (${esc(e.program_code || '')})<br/>
+                Date(s) : <b>du ${esc(frDate(e.start_date))} au ${esc(frDate(e.end_date))}</b> — Semaine ${esc(e.week)}/${esc(e.year)}${durText ? ` · Durée : ${esc(durText)}` : ''}<br/>
+                ${orgAddr ? `Lieu : ${esc(orgAddr)}` : ''}
             </div>
         </div>
 
-        <div class="blk"><h2>Signature du stagiaire</h2>
-            <table><thead>${headRow}</thead><tbody>${learnerBody}</tbody></table></div>
+        <table>
+            <thead>
+                <tr><th class="who" rowspan="2">Nom et prénom</th>${dates.map((d) => `<th colspan="${daySlots[d].length}">${esc(frDay(d))}</th>`).join('')}</tr>
+                <tr>${cols.map((c) => `<th>${SLOT[c.slot] || esc(c.slot)}</th>`).join('')}</tr>
+            </thead>
+            <tbody>${participants.map(rowFor).join('')}</tbody>
+        </table>
 
-        <div class="blk"><h2>Signature du/des formateur(s)</h2>
-            <table><thead>${headRow}</thead><tbody>${trainerBody}</tbody></table></div>
-
-        ${intervSections}
-
-        <p class="foot">Document généré électroniquement — les signatures sont recueillies par voie électronique au fil de la formation.</p>
+        <div class="foot">
+            <div>Fait à ${esc(org && org.town || '')}, le ${esc(today)}</div>
+            <div class="stamp">
+                ${orgSig ? `<img src="${orgSig}" />` : ''}
+                <div class="cap">Signature et cachet de l'organisme de formation</div>
+            </div>
+        </div>
     </body></html>`;
 }
 
@@ -117,7 +112,7 @@ async function regenEmargement(conn, orgId, enrollmentId) {
                     ts.year, ts.week,
                     DATE_FORMAT(ts.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(ts.end_date, '%Y-%m-%d') AS end_date,
-                    p.code AS program_code, p.title AS program_title
+                    p.code AS program_code, p.title AS program_title, p.days AS program_days, p.hours AS program_hours
              FROM enrollment e
              JOIN training_session ts ON ts.id = e.session_id
              LEFT JOIN training_program p ON p.id = ts.program_id
@@ -126,7 +121,7 @@ async function regenEmargement(conn, orgId, enrollmentId) {
             [enrollmentId, orgId]
         );
         if (!e) return;
-        const [[org]] = await conn.query('SELECT legal_name FROM organization WHERE id = ?', [orgId]);
+        const [[org]] = await conn.query('SELECT legal_name, address, zip_code, town, signature_image FROM organization WHERE id = ?', [orgId]);
         const [rows] = await conn.query(
             `SELECT s.id AS sheet_id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.slot,
                     ar.signer_name, ar.signature_data
@@ -149,51 +144,69 @@ async function regenEmargement(conn, orgId, enrollmentId) {
              WHERE s.session_id = ? AND ats.signature_data IS NOT NULL`,
             [e.session_id]
         );
-        const trBySheet = {};
         const sheetInfo = {};
         for (const r of rows) sheetInfo[r.sheet_id] = { date: r.date, slot: r.slot };
-        // Colonne formateur + index des signatures d'intervenant (par personne/demi-journée).
-        const ivSig = {};
+        // Signatures (chiffrées) indexées par personne + demi-journée (date|slot).
+        const learnerSig = {};
+        for (const r of rows) if (r.signature_data) learnerSig[`${r.date}|${r.slot}`] = r.signature_data;
+        const trSig = {}; const ivSig = {};
         for (const t of tsigns) {
-            if (t.user_role === 'INTERVENANT') {
-                const info = sheetInfo[t.sheet_id];
-                if (info) ivSig[`${t.user_id}|${info.date}|${info.slot}`] = t.signature_data;
-            } else {
-                (trBySheet[t.sheet_id] = trBySheet[t.sheet_id] || []).push(t);
-            }
+            const info = sheetInfo[t.sheet_id];
+            if (!info) continue;
+            const target = t.user_role === 'INTERVENANT' ? ivSig : trSig;
+            target[`${t.user_id}|${info.date}|${info.slot}`] = t.signature_data;
         }
-        for (const r of rows) r.trainers = trBySheet[r.sheet_id] || [];
 
-        // Intervenants AFFECTÉS à la session (avec leurs demi-journées) — affichés même
-        // s'ils n'ont pas encore signé ; la signature est remplie là où elle existe.
+        // Formateurs affectés à la session (une ligne chacun, même sans signature).
+        const [formateurs] = await conn.query(
+            `SELECT u.id, u.first_name, u.last_name FROM session_trainer st JOIN user u ON u.id = st.user_id
+             WHERE st.session_id = ? ORDER BY u.last_name, u.first_name`,
+            [e.session_id]
+        );
+        // Intervenants affectés (avec leurs demi-journées).
         const [ivAssign] = await conn.query(
             `SELECT si.user_id, si.specialty, u.first_name, u.last_name,
                     DATE_FORMAT(sis.date, '%Y-%m-%d') AS date, sis.slot
              FROM session_intervenant si
              JOIN session_intervenant_slot sis ON sis.session_intervenant_id = si.id
              LEFT JOIN user u ON u.id = si.user_id
-             WHERE si.session_id = ?
-             ORDER BY u.last_name, u.first_name, sis.date, FIELD(sis.slot, 'MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL')`,
+             WHERE si.session_id = ?`,
             [e.session_id]
         );
         const ivByUser = {};
         for (const a of ivAssign) {
             const iv = ivByUser[a.user_id] || (ivByUser[a.user_id] = {
-                name: `${a.last_name || ''} ${a.first_name || ''}`.trim(), specialty: a.specialty, slots: [],
+                user_id: a.user_id, name: `${a.last_name || ''} ${a.first_name || ''}`.trim(),
+                specialty: a.specialty, assigned: new Set(),
             });
-            iv.slots.push({ date: a.date, slot: a.slot, signature_data: ivSig[`${a.user_id}|${a.date}|${a.slot}`] || null });
+            iv.assigned.add(`${a.date}|${a.slot}`);
         }
-        const intervenants = Object.values(ivByUser);
+
+        // Colonnes de la grille : demi-journées existantes (date|slot).
+        const sheetKeys = new Set(rows.map((r) => `${r.date}|${r.slot}`));
+        const learnerName = `${e.last_name || ''} ${e.first_name || ''}`.trim();
+        // Participants (lignes) : stagiaire, formateurs, intervenants. sigOf(key) -> data|null ;
+        // appliesTo(key) -> présent cette demi-journée ?
+        const participants = [
+            { role: 'stagiaire', name: learnerName, sigOf: (k) => learnerSig[k] || null, appliesTo: (k) => sheetKeys.has(k) },
+            ...formateurs.map((f) => ({
+                role: 'formateur', name: `${f.last_name || ''} ${f.first_name || ''}`.trim(),
+                sigOf: (k) => trSig[`${f.id}|${k}`] || null, appliesTo: (k) => sheetKeys.has(k),
+            })),
+            ...Object.values(ivByUser).map((iv) => ({
+                role: 'intervenant', name: iv.name, specialty: iv.specialty,
+                sigOf: (k) => ivSig[`${iv.user_id}|${k}`] || null, appliesTo: (k) => iv.assigned.has(k),
+            })),
+        ];
+        const allSignedFlag = rows.every((r) => r.signature_data);
 
         let pdf;
-        try { pdf = htmlToPdf(renderEmargementHtml({ org, e, rows, intervenants })); }
+        try { pdf = htmlToPdf(renderEmargementHtml({ org, e, rows, participants })); }
         catch (err) { console.warn('Émargement PDF non généré :', err.code || err.message); return; }
 
-        const learnerName = `${e.last_name || ''} ${e.first_name || ''}`.trim();
         const ref = `emarg:${enrollmentId}`;
         const title = `Feuille d'émargement — ${e.program_code || ''} SEM ${e.week || ''}`.trim();
-        const allSigned = rows.every((r) => r.signature_data && r.trainers.length > 0);
-        const status = allSigned ? 'SIGNE' : 'ARCHIVE';
+        const status = allSignedFlag ? 'SIGNE' : 'ARCHIVE';
 
         const [[ex]] = await conn.query('SELECT id FROM archive_document WHERE organization_id = ? AND ref = ?', [orgId, ref]);
         if (ex) {
