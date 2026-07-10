@@ -3,6 +3,16 @@ import { useState } from "react";
 const uid = () => Math.random().toString(36).slice(2, 9);
 const newFolder = () => ({ id: uid(), name: "Nouveau dossier", per_learner: false, items: [], children: [] });
 
+// Champs dynamiques (résolus à l'export) utilisables dans les noms de dossier.
+const TOKENS = [
+  { t: "{Année}", label: "Année de la session" },
+  { t: "{Semaine}", label: "Semaine (n°)" },
+  { t: "{Code}", label: "Code formation" },
+  { t: "{Formation}", label: "Nom de la formation" },
+  { t: "{Dates}", label: "Dates de la session" },
+  { t: "{Stagiaire}", label: "Nom du stagiaire" },
+];
+
 // Un dossier de l'arborescence + ses documents attribués + ses sous-dossiers.
 function FolderNode({ folder, docs, depth, onChange, onDelete }) {
   const set = (patch) => onChange({ ...folder, ...patch });
@@ -19,7 +29,11 @@ function FolderNode({ folder, docs, depth, onChange, onDelete }) {
     <div style={{ marginLeft: depth ? 16 : 0, borderLeft: depth ? "1px solid var(--border-soft)" : "none", paddingLeft: depth ? 12 : 0, marginTop: 10 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span>📁</span>
-        <input className="inp" style={{ maxWidth: 220 }} value={folder.name} onChange={(e) => set({ name: e.target.value })} placeholder="Nom du dossier" />
+        <input className="inp" style={{ maxWidth: 220 }} value={folder.name} onChange={(e) => set({ name: e.target.value })} placeholder="Nom du dossier ou {champ}" />
+        <select value="" title="Insérer un champ dynamique" onChange={(e) => { if (e.target.value) set({ name: (folder.name || "") + e.target.value }); }}>
+          <option value="">＋ champ…</option>
+          {TOKENS.map((k) => <option key={k.t} value={k.t}>{k.label}</option>)}
+        </select>
         <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, color: "var(--muted)" }}>
           <input type="checkbox" checked={!!folder.per_learner} onChange={(e) => set({ per_learner: e.target.checked })} /> un dossier par stagiaire
         </label>
@@ -62,6 +76,9 @@ export default function ArchiveTreeEditor({ tree, docs = [], onChange }) {
       <p className="hint" style={{ marginTop: 0 }}>
         Racine automatique à l'export : <b>Année / Semaine / Code formation</b>. Composez ici l'intérieur — des dossiers, et les documents
         (modèles &amp; QCM) attribués à chacun. Cochez « un dossier par stagiaire » pour un dossier répété par apprenant.
+      </p>
+      <p className="hint" style={{ marginTop: 0, fontSize: 12 }}>
+        Champs dynamiques (remplacés à l'export) : {TOKENS.map((k) => <code key={k.t} style={{ marginRight: 6 }}>{k.t}</code>)}
       </p>
       {folders.length === 0 && <p className="hint">Aucun dossier. Ajoutez-en un pour commencer.</p>}
       {folders.map((f) => (
