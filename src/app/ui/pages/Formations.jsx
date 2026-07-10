@@ -298,7 +298,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           <div style={{ display: tab === "archives" ? "block" : "none" }}>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
               <ArchiveTreeEditor tree={archiveTree} onChange={setArchiveTree}
-                docs={steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id, or_group: s.or_group }))} />
+                docs={steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id, or_group: s.or_group, doc_type: s.doc_type }))} />
               <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
                 <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu</div>
                 <ArchiveTreePreview tree={archiveTree} code={form.code} title={form.title} />

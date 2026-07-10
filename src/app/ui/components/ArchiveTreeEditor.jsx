@@ -69,19 +69,23 @@ const TOKENS = [
   { t: "{Stagiaire}", label: "Nom du stagiaire" },
 ];
 
-// Construit la liste des documents attribuables : les variantes « OU » (même
-// or_group) sont fusionnées en UNE option (résolue au bon variant par stagiaire).
+// Construit la liste des documents attribuables : les variantes « OU » sont
+// fusionnées en UNE option (résolue au bon variant par dossier à l'export).
+// Regroupement : d'abord le groupe explicite (or_group), sinon par TYPE de document
+// (ex. tous les DEVIS). Les QCM ne sont jamais regroupés par type.
 function buildOptions(docs) {
+  const groupKeyOf = (d) => (d.quiz_id ? null : (d.or_group ? `og:${d.or_group}` : (d.doc_type ? `dt:${d.doc_type}` : null)));
   const options = [];
-  const seen = new Set();
+  const done = new Set();
   for (const d of docs) {
-    if (d.or_group) {
-      if (seen.has(d.or_group)) continue;
-      seen.add(d.or_group);
-      const members = docs.filter((x) => x.or_group === d.or_group);
+    const gk = groupKeyOf(d);
+    const members = gk ? docs.filter((x) => groupKeyOf(x) === gk) : [d];
+    if (gk && members.length > 1) {
+      if (done.has(gk)) continue;
+      done.add(gk);
       options.push({
-        key: `group:${d.or_group}`, group: d.or_group, members: members.map((m) => m.slug),
-        label: members.map((m) => m.label).join(" / "), type: members[0].quiz_id ? "quiz" : "model",
+        key: `group:${gk}`, group: gk, members: members.map((m) => m.slug),
+        label: members.map((m) => m.label).join(" / "), type: "model",
       });
     } else {
       options.push({ key: `slug:${d.slug}`, ref: d.slug, label: d.label, type: d.quiz_id ? "quiz" : "model" });
