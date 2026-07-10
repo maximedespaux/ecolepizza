@@ -319,11 +319,6 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     signable: !!step.signable,
     stagiaire_sign: !!step.stagiaire_sign,
     active: step.active == null ? true : !!step.active,
-    financing: a.financing || "",
-    rs: a.rs == null ? "" : String(a.rs),
-    hygiene: a.hygiene == null ? "" : String(a.hygiene),
-    jours: a.jours == null ? "" : String(a.jours),
-    agefice: a.agefice == null ? "" : String(a.agefice),
     conditions: Array.isArray(a.conditions) ? a.conditions : [],
   });
   const toggleCond = (slug) => setForm((p) => ({
@@ -339,11 +334,6 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     if (!slug) { onError("Identifiant (slug) requis."); return; }
     if (!form.label.trim()) { onError("Intitulé requis."); return; }
     const applies_when = {};
-    if (form.financing) applies_when.financing = form.financing;
-    if (form.rs !== "") applies_when.rs = form.rs === "true";
-    if (form.hygiene !== "") applies_when.hygiene = form.hygiene === "true";
-    if (form.jours !== "") applies_when.jours = Number(form.jours);
-    if (form.agefice !== "") applies_when.agefice = form.agefice === "true";
     if (form.conditions.length) applies_when.conditions = form.conditions;
     setSaving(true);
     try {
@@ -376,42 +366,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
             <datalist id="doctypes">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
           </div>
 
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "6px 0 4px" }}>Conditions d'application</label>
-          <div className="row2">
-            <div className="field"><label>Financement</label>
-              <select value={form.financing} onChange={set("financing")}>
-                <option value="">Peu importe</option>
-                <option value="PARTICULIER">Particulier</option>
-                <option value="PROFESSIONNEL">Professionnel</option>
-              </select></div>
-            <div className="field"><label>Certifiante (RS)</label>
-              <select value={form.rs} onChange={set("rs")}>
-                <option value="">Peu importe</option>
-                <option value="true">Oui</option>
-                <option value="false">Non</option>
-              </select></div>
-          </div>
-          <div className="row2">
-            <div className="field"><label>Hygiène</label>
-              <select value={form.hygiene} onChange={set("hygiene")}>
-                <option value="">Peu importe</option>
-                <option value="true">Oui</option>
-                <option value="false">Non</option>
-              </select></div>
-            <div className="field"><label>Durée (jours)</label>
-              <input className="inp" type="number" value={form.jours} onChange={set("jours")} placeholder="peu importe" /></div>
-          </div>
-          <div className="row2">
-            <div className="field"><label>Financeur AGEFICE</label>
-              <select value={form.agefice} onChange={set("agefice")}>
-                <option value="">Peu importe</option>
-                <option value="true">Oui</option>
-                <option value="false">Non</option>
-              </select></div>
-            <div className="field" />
-          </div>
-
-          {conditions.length > 0 && (
+          {conditions.length > 0 ? (
             <>
               <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 4px" }}>
                 Conditions personnalisées
@@ -426,6 +381,10 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
               </div>
               <p className="hint" style={{ margin: "4px 0 0" }}>Le document ne s'applique qu'aux dossiers remplissant toutes les conditions cochées.</p>
             </>
+          ) : (
+            <p className="hint" style={{ margin: "6px 0 0" }}>
+              Aucune condition définie. Créez des conditions dans l'onglet « Conditions » pour restreindre l'application de ce document.
+            </p>
           )}
 
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 6 }}>
