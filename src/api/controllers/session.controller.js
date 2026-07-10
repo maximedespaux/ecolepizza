@@ -215,10 +215,11 @@ const getSessionBoard = async (req, res) => {
         // même jalon (ex. Devis particulier / entreprise) sont fusionnées en UNE colonne
         // (condition « OU » : un dossier n'en fait qu'une seule).
         const colSteps = (await formationSteps(conn, req.user.organization_id, program)).filter((st) => st.active);
-        const groups = []; // { steps: [...] } — regroupement CONSÉCUTIF (jalon = variantes voisines exclusives)
+        // Regroupement « OU » MANUEL : étapes consécutives partageant le même or_group.
+        const groups = [];
         for (const st of colSteps) {
             const last = groups[groups.length - 1];
-            if (last && last.steps.some((v) => areExclusiveVariants(v, st))) last.steps.push(st);
+            if (last && st.or_group && last.steps[0].or_group === st.or_group) last.steps.push(st);
             else groups.push({ steps: [st] });
         }
         const keyOf = (st) => (st.quiz_id ? `quiz:${st.quiz_id}` : st.slug);

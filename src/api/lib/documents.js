@@ -15,14 +15,14 @@ const DEFAULT_STEPS = [
     // 1. Fiche d'expression (profil stagiaire) -> pipeline « Contacté »
     { slug: 'fiche-semaine', label: "Fiche d'expression de besoin", doc_type: 'FICHE_SEMAINE', sort_order: 10, signable: 0, stagiaire_sign: 0, applies_when: {} },
     // 2. Devis (+ CGV) -> pipeline « Devis envoyé »
-    { slug: 'devis-particulier', label: 'Devis particulier', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, applies_when: { financing: 'PARTICULIER', rs: false } },
-    { slug: 'devis-entreprise', label: 'Devis entreprise', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, applies_when: { financing: 'PROFESSIONNEL', rs: false } },
-    { slug: 'devis-rs7404', label: 'Devis RS7404', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, applies_when: { rs: true } },
+    { slug: 'devis-particulier', label: 'Devis particulier', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, or_group: 'devis', applies_when: { financing: 'PARTICULIER', rs: false } },
+    { slug: 'devis-entreprise', label: 'Devis entreprise', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, or_group: 'devis', applies_when: { financing: 'PROFESSIONNEL', rs: false } },
+    { slug: 'devis-rs7404', label: 'Devis RS7404', doc_type: 'DEVIS', sort_order: 20, signable: 1, stagiaire_sign: 1, or_group: 'devis', applies_when: { rs: true } },
     { slug: 'cgv', label: 'Conditions générales de vente (CGV)', doc_type: 'CGV', sort_order: 22, signable: 0, stagiaire_sign: 0, applies_when: {} },
     // 4. Contrat (particulier) / Convention (professionnel)
-    { slug: 'contrat', label: 'Contrat de formation', doc_type: 'CONTRAT', sort_order: 30, signable: 1, stagiaire_sign: 1, applies_when: { financing: 'PARTICULIER', rs: false } },
-    { slug: 'contrat-rs7404', label: 'Contrat RS7404', doc_type: 'CONTRAT', sort_order: 30, signable: 1, stagiaire_sign: 1, applies_when: { rs: true } },
-    { slug: 'convention', label: 'Convention de formation', doc_type: 'CONVENTION', sort_order: 30, signable: 1, stagiaire_sign: 1, applies_when: { financing: 'PROFESSIONNEL', rs: false } },
+    { slug: 'contrat', label: 'Contrat de formation', doc_type: 'CONTRAT', sort_order: 30, signable: 1, stagiaire_sign: 1, or_group: 'contrat', applies_when: { financing: 'PARTICULIER', rs: false } },
+    { slug: 'contrat-rs7404', label: 'Contrat RS7404', doc_type: 'CONTRAT', sort_order: 30, signable: 1, stagiaire_sign: 1, or_group: 'contrat', applies_when: { rs: true } },
+    { slug: 'convention', label: 'Convention de formation', doc_type: 'CONVENTION', sort_order: 30, signable: 1, stagiaire_sign: 1, or_group: 'contrat', applies_when: { financing: 'PROFESSIONNEL', rs: false } },
     // 5. Invitation (+ Livret d'accueil) ; RS -> Convocation à l'examen
     { slug: 'invitation', label: 'Invitation', doc_type: 'INVITATION', sort_order: 40, signable: 0, stagiaire_sign: 0, applies_when: { rs: false } },
     { slug: 'convocation', label: "Convocation à l'examen", doc_type: 'CONVOCATION', sort_order: 40, signable: 0, stagiaire_sign: 0, applies_when: { rs: true } },
@@ -32,9 +32,9 @@ const DEFAULT_STEPS = [
     // 7. Droit à l'image
     { slug: 'droit-image', label: "Droit à l'image", doc_type: 'DROIT_IMAGE', sort_order: 60, signable: 1, stagiaire_sign: 1, applies_when: {} },
     // 8. Feuille d'émargement (signée chaque jour de formation)
-    { slug: 'emargement-5j', label: "Feuille d'émargement 5J", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, applies_when: { hygiene: false, jours: 5 } },
-    { slug: 'emargement-4j', label: "Feuille d'émargement 4J", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, applies_when: { hygiene: false, jours: 4 } },
-    { slug: 'emargement-5j-hygiene', label: "Feuille d'émargement 5J + hygiène", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, applies_when: { hygiene: true } },
+    { slug: 'emargement-5j', label: "Feuille d'émargement 5J", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, or_group: 'emargement', applies_when: { hygiene: false, jours: 5 } },
+    { slug: 'emargement-4j', label: "Feuille d'émargement 4J", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, or_group: 'emargement', applies_when: { hygiene: false, jours: 4 } },
+    { slug: 'emargement-5j-hygiene', label: "Feuille d'émargement 5J + hygiène", doc_type: 'EMARGEMENT', sort_order: 70, signable: 0, stagiaire_sign: 0, or_group: 'emargement', applies_when: { hygiene: true } },
     { slug: 'attestation-hygiene', label: 'Attestation Hygiène', doc_type: 'ATTESTATION_HYGIENE', sort_order: 75, signable: 0, stagiaire_sign: 0, applies_when: { hygiene: true } },
     // 10. Certificat de réalisation (+ Attestation d'assiduité si AGEFICE)
     { slug: 'certificat-realisation', label: 'Certificat de réalisation', doc_type: 'CERTIFICAT_REALISATION', sort_order: 80, signable: 1, stagiaire_sign: 0, applies_when: {} },
@@ -75,6 +75,7 @@ function mergeSteps(rows = []) {
         bySlug.set(d.slug, {
             slug: d.slug, label: d.label, doc_type: d.doc_type, sort_order: d.sort_order,
             signable: d.signable, stagiaire_sign: d.stagiaire_sign, applies_when: d.applies_when,
+            or_group: d.or_group || null,
             active: 1, has_file: false, is_default: true, customized: false,
         });
     }
@@ -83,7 +84,7 @@ function mergeSteps(rows = []) {
         if (r.deleted) { bySlug.delete(r.slug); continue; }
         const base = bySlug.get(r.slug) || {
             slug: r.slug, label: r.slug, doc_type: r.doc_type || null, sort_order: 100,
-            signable: 0, stagiaire_sign: 0, applies_when: {}, active: 1, has_file: false,
+            signable: 0, stagiaire_sign: 0, applies_when: {}, or_group: null, active: 1, has_file: false,
             is_default: false, customized: false,
         };
         const m = { ...base, customized: true };

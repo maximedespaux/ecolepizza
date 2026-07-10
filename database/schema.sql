@@ -620,6 +620,7 @@ CREATE TABLE program_step (
     slug             varchar(60) NOT NULL,       -- étape (cf. DEFAULT_STEPS / document_template)
     sort_order       int        NOT NULL DEFAULT 100,
     active           tinyint(1) NOT NULL DEFAULT 1,
+    or_group         varchar(60) DEFAULT NULL,    -- regroupement « OU » manuel (même valeur = une seule étape à choix)
     created_at       timestamp  NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     UNIQUE KEY uq_progstep (program_id, slug),

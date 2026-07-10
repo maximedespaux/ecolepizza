@@ -12,19 +12,25 @@ const { loadOrgSteps } = require('./template.controller.js');
 async function formationSteps(conn, orgId, program) {
     const orgSteps = await loadOrgSteps(orgId);
     const candidates = orgSteps.filter((s) => s.active && matchFormation(s.applies_when, program));
-    const [rows] = await conn.query(
-        'SELECT slug, sort_order, active FROM program_step WHERE program_id = ?',
-        [program.id]
-    );
+    let rows = [];
+    try {
+        [rows] = await conn.query('SELECT slug, sort_order, active, or_group FROM program_step WHERE program_id = ?', [program.id]);
+    } catch (e) {
+        // Colonne or_group absente (migration 052 non jouée) : on lit sans.
+        if (e && e.code === 'ER_BAD_FIELD_ERROR') {
+            [rows] = await conn.query('SELECT slug, sort_order, active FROM program_step WHERE program_id = ?', [program.id]);
+        } else { throw e; }
+    }
     const overlay = new Map(rows.map((r) => [r.slug, r]));
 
-    // Étapes documentaires classiques.
+    // Étapes documentaires classiques. or_group : surcharge program_step sinon défaut.
     const docSteps = candidates.map((s) => {
         const o = overlay.get(s.slug);
         return {
             slug: s.slug, label: s.label, doc_type: s.doc_type, quiz_id: null, day: null,
             applies_when: s.applies_when || {},
             signable: !!s.signable, stagiaire_sign: !!s.stagiaire_sign,
+            or_group: o ? (o.or_group || null) : (s.or_group || null),
             sort_order: o ? o.sort_order : s.sort_order,
             active: o ? !!o.active : true,
         };
@@ -272,13 +278,25 @@ const saveFormationSteps = async (req, res) => {
         if (!program) return res.status(404).json({ message: 'Formation introuvable' });
         await conn.query('DELETE FROM program_step WHERE program_id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
+        // Colonne or_group disponible ? (migration 052)
+        let hasOrGroup = true;
+        try { await conn.query('SELECT or_group FROM program_step LIMIT 1'); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasOrGroup = false; else throw e; }
         for (let i = 0; i < steps.length; i++) {
             const slug = String(steps[i].slug || '').trim().toLowerCase();
             if (!slug) continue;
-            await conn.query(
-                'INSERT INTO program_step (id, organization_id, program_id, slug, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)',
-                [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, steps[i].active ? 1 : 0]
-            );
+            const og = steps[i].or_group ? String(steps[i].or_group).slice(0, 60) : null;
+            if (hasOrGroup) {
+                await conn.query(
+                    'INSERT INTO program_step (id, organization_id, program_id, slug, sort_order, active, or_group) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, steps[i].active ? 1 : 0, og]
+                );
+            } else {
+                await conn.query(
+                    'INSERT INTO program_step (id, organization_id, program_id, slug, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)',
+                    [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, steps[i].active ? 1 : 0]
+                );
+            }
         }
         res.json({ success: true, message: 'Parcours enregistré.' });
     } catch (err) {
