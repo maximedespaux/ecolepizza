@@ -3,6 +3,7 @@ const { computeDocParcours } = require('../lib/parcours.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
 const { parseApplies } = require('../lib/documents.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
+const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { notify } = require('./notification.controller.js');
 
 // Deux étapes sont des « variantes » du même jalon si elles ne peuvent JAMAIS
@@ -215,11 +216,14 @@ const getSessionBoard = async (req, res) => {
         // même jalon (ex. Devis particulier / entreprise) sont fusionnées en UNE colonne
         // (condition « OU » : un dossier n'en fait qu'une seule).
         const colSteps = (await formationSteps(conn, req.user.organization_id, program)).filter((st) => st.active);
-        // Regroupement « OU » MANUEL : étapes consécutives partageant le même or_group.
+        // Regroupement « OU » d'après les ÉQUIVALENCES : étapes consécutives de la même équivalence.
+        const eqMap = equivalenceMap(await loadEquivalences(conn, req.user.organization_id));
+        const groupOf = (st) => (eqMap.get(st.slug) ? eqMap.get(st.slug).group : null);
         const groups = [];
         for (const st of colSteps) {
             const last = groups[groups.length - 1];
-            if (last && st.or_group && last.steps[0].or_group === st.or_group) last.steps.push(st);
+            const g = groupOf(st);
+            if (last && g && groupOf(last.steps[0]) === g) last.steps.push(st);
             else groups.push({ steps: [st] });
         }
         const keyOf = (st) => (st.quiz_id ? `quiz:${st.quiz_id}` : st.slug);

@@ -69,12 +69,11 @@ const TOKENS = [
   { t: "{Stagiaire}", label: "Nom du stagiaire" },
 ];
 
-// Construit la liste des documents attribuables : les variantes « OU » sont
-// fusionnées en UNE option (résolue au bon variant par dossier à l'export).
-// Regroupement : d'abord le groupe explicite (or_group), sinon par TYPE de document
-// (ex. tous les DEVIS). Les QCM ne sont jamais regroupés par type.
-function buildOptions(docs) {
-  const groupKeyOf = (d) => (d.quiz_id ? null : (d.or_group ? `og:${d.or_group}` : (d.doc_type ? `dt:${d.doc_type}` : null)));
+// Construit la liste des documents attribuables : les variantes « OU » (même
+// ÉQUIVALENCE, cf. Modèles → Équivalences) sont fusionnées en UNE option, résolue
+// au bon variant par dossier à l'export.
+function buildOptions(docs, eqMap) {
+  const groupKeyOf = (d) => (eqMap && eqMap.get(d.slug) ? eqMap.get(d.slug).group : null);
   const options = [];
   const done = new Set();
   for (const d of docs) {
@@ -154,9 +153,9 @@ function FolderNode({ folder, options, depth, onChange, onDelete }) {
 
 // Éditeur d'arborescence d'archivage. `docs` = documents disponibles (modèles + QCM
 // de la formation) ; `tree` = { folders:[...] } ; `onChange(tree)`.
-export default function ArchiveTreeEditor({ tree, docs = [], onChange }) {
+export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange }) {
   const folders = tree?.folders || [];
-  const options = buildOptions(docs);
+  const options = buildOptions(docs, eqMap);
   const setFolders = (f) => onChange({ folders: f });
 
   return (

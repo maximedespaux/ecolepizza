@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree } from "../api/apiClient.js";
+import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
 import Badge from "../components/Badge.jsx";
@@ -135,6 +135,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [saving, setSaving] = useState(false);
   const [steps, setSteps] = useState([]);
   const [archiveTree, setArchiveTree] = useState({ folders: [] });
+  const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
   const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
@@ -153,24 +154,17 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       setArchiveTree(t && t.folders ? t : { folders: [] });
     }).catch(() => {});
   }, [program.id]);
+  // Équivalences « OU » (org) : map slug -> groupe. Le regroupement est automatique.
+  useEffect(() => {
+    getEquivalences().then((r) => {
+      const m = new Map();
+      for (const e of r.data?.equivalences || []) for (const s of e.members) m.set(s, { group: e.key });
+      setEqMap(m);
+    }).catch(() => {});
+  }, []);
 
-  // Retirer une étape (et la sortir de son groupe « OU »).
-  const toggleStep = (slug) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, active: !s.active, or_group: s.active ? null : s.or_group } : s)));
-  // Détacher une variante d'un groupe « OU » (redevient une étape autonome).
-  const detachStep = (slug) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, or_group: null } : s)));
-  // Ajouter une étape : soit autonome (groupSteps null), soit en « OU » d'un jalon.
-  const addStep = (slug, groupSteps) => setSteps((ss) => {
-    let orGroup = null; let next = ss;
-    if (groupSteps && groupSteps.length) {
-      orGroup = groupSteps[0].or_group;
-      if (!orGroup) { // le jalon cible était autonome : on lui crée une clé de groupe
-        orGroup = `g${Date.now().toString(36)}`;
-        const set = new Set(groupSteps.map((x) => x.slug));
-        next = ss.map((s) => (set.has(s.slug) ? { ...s, or_group: orGroup } : s));
-      }
-    }
-    return next.map((s) => (s.slug === slug ? { ...s, active: true, or_group: orGroup } : s));
-  });
+  // Activer / retirer une étape (le « OU » est déterminé par les équivalences).
+  const toggleStep = (slug) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, active: !s.active } : s)));
 
   async function save() {
     if (!String(form.code).trim()) { onError("Le code est requis."); return; }
@@ -187,7 +181,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
         onSaved("Formation créée.");
       } else {
         await updateFormation(program.id, form);
-        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active, or_group: s.or_group || null })));
+        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })));
         await saveArchiveTree(program.id, archiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved("Formation mise à jour.");
       }
@@ -291,14 +285,14 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           {steps.length === 0 ? (
             <p className="hint">Aucun document candidat.</p>
           ) : (
-            <ParcoursFlow steps={steps} onToggle={toggleStep} onAdd={addStep} onDetach={detachStep} onReorder={setSteps} />
+            <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps} />
           )}
           </div>
 
           <div style={{ display: tab === "archives" ? "block" : "none" }}>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
-              <ArchiveTreeEditor tree={archiveTree} onChange={setArchiveTree}
-                docs={steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id, or_group: s.or_group, doc_type: s.doc_type }))} />
+              <ArchiveTreeEditor tree={archiveTree} onChange={setArchiveTree} eqMap={eqMap}
+                docs={steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id }))} />
               <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
                 <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu</div>
                 <ArchiveTreePreview tree={archiveTree} code={form.code} title={form.title} />
@@ -317,15 +311,15 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   );
 }
 
-// Deux étapes sont des variantes « OU » du même jalon si elles relèvent du même
-// type de document et ont des conditions incompatibles (jamais le même dossier).
-// Regroupe les étapes ORDONNÉES en jalons « OU » MANUELS : étapes consécutives
-// partageant la même valeur `or_group` (définie explicitement dans l'éditeur).
-function groupMilestones(steps) {
+// Regroupe les étapes ORDONNÉES en jalons « OU » d'après les ÉQUIVALENCES (org) :
+// étapes consécutives appartenant à la même équivalence. `eqMap` = slug -> { group }.
+function groupMilestones(steps, eqMap) {
+  const groupOf = (s) => (eqMap && eqMap.get(s.slug) ? eqMap.get(s.slug).group : null);
   const groups = [];
   for (const st of steps) {
     const last = groups[groups.length - 1];
-    if (last && st.or_group && last.steps[0].or_group === st.or_group) last.steps.push(st);
+    const g = groupOf(st);
+    if (last && g && groupOf(last.steps[0]) === g) last.steps.push(st);
     else groups.push({ steps: [st] });
   }
   return groups;
@@ -351,13 +345,12 @@ function stepBadge(s) {
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
-function ParcoursFlow({ steps, onToggle, onAdd, onDetach, onReorder }) {
+function ParcoursFlow({ steps, eqMap, onToggle, onReorder }) {
   const included = steps.filter((s) => s.active);
   const available = steps.filter((s) => !s.active);
-  const groups = groupMilestones(included);
+  const groups = groupMilestones(included, eqMap);
   const [gdrag, setGdrag] = useState(null);
   const [adding, setAdding] = useState(false);
-  const [addSel, setAddSel] = useState(null); // slug choisi, en attente du placement
   const addRef = useRef(null);
 
   useEffect(() => {
@@ -391,9 +384,6 @@ function ParcoursFlow({ steps, onToggle, onAdd, onDetach, onReorder }) {
                   <div className="pf-opt">
                     <span className="pf-label">{s.label}</span>
                     {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
-                    {g.steps.length > 1 && (
-                      <button type="button" className="pf-x" title="Détacher de ce « OU » (étape autonome)" onClick={() => onDetach(s.slug)}>⤪</button>
-                    )}
                     <button type="button" className="pf-x" title="Retirer cette étape" onClick={() => onToggle(s.slug)}>✕</button>
                   </div>
                 </div>
@@ -402,47 +392,26 @@ function ParcoursFlow({ steps, onToggle, onAdd, onDetach, onReorder }) {
             <span className="pf-arrow" aria-hidden="true">→</span>
           </div>
         ))}
-        <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => { setAdding((a) => !a); setAddSel(null); }}>
+        <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
           ＋ Ajouter une étape
         </button>
       </div>
 
-      {/* Ajout en 2 temps : 1) choisir le document, 2) choisir le placement (nouvelle étape ou « OU »). */}
+      {/* Les variantes « OU » sont regroupées automatiquement selon les Équivalences. */}
       {adding && (
         <div className="pf-add-panel">
-          {!addSel ? (
-            <>
-              <div className="pf-add-title">Choisir un document</div>
-              {available.length === 0 ? (
-                <div className="pf-add-empty">Toutes les étapes disponibles sont déjà dans le parcours.</div>
-              ) : (
-                <div className="pf-add-grid">
-                  {available.map((s) => (
-                    <button type="button" key={s.slug} className="pf-add-item" onClick={() => setAddSel(s.slug)}>
-                      <span className="pf-label">{s.label}</span>
-                      {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
+          <div className="pf-add-title">Étapes disponibles</div>
+          {available.length === 0 ? (
+            <div className="pf-add-empty">Toutes les étapes disponibles sont déjà dans le parcours.</div>
           ) : (
-            <>
-              <div className="pf-add-title">
-                Où placer « {available.find((s) => s.slug === addSel)?.label || addSel} » ?
-                <button type="button" className="btn sm ghost" style={{ marginLeft: 8 }} onClick={() => setAddSel(null)}>← Retour</button>
-              </div>
-              <div className="pf-add-grid">
-                <button type="button" className="pf-add-item" onClick={() => { onAdd(addSel, null); setAdding(false); setAddSel(null); }}>
-                  <span className="pf-label">＋ Nouvelle étape</span>
+            <div className="pf-add-grid">
+              {available.map((s) => (
+                <button type="button" key={s.slug} className="pf-add-item" onClick={() => { onToggle(s.slug); setAdding(false); }}>
+                  <span className="pf-label">{s.label}</span>
+                  {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
                 </button>
-                {groups.map((g, gi) => (
-                  <button type="button" key={gi} className="pf-add-item" onClick={() => { onAdd(addSel, g.steps); setAdding(false); setAddSel(null); }}>
-                    <span className="pf-label">OU avec : {g.steps.map((s) => s.label).join(" / ")}</span>
-                  </button>
-                ))}
-              </div>
-            </>
+              ))}
+            </div>
           )}
         </div>
       )}
