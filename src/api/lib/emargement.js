@@ -10,40 +10,98 @@ const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</
 // Les signatures sont chiffrées au repos : on déchiffre avant de les afficher.
 const sig = (d) => { const v = decrypt(d); return v ? `<img src="${v}" style="height:38px;max-width:150px" />` : '—'; };
 
+// Date FR courte : « Lun. 06/07 ». Date FR longue : « 06/07/2026 ».
+const DOW = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
+function frDay(iso) {
+    const d = new Date(`${iso}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return iso;
+    return `${DOW[d.getDay()]} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function frDate(iso) {
+    const d = new Date(`${iso}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return iso || '';
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+const SLOT_ORDER = ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'];
+
 function renderEmargementHtml({ org, e, rows, intervenants = [] }) {
-    const trainerCell = (list) => (list && list.length
-        ? list.map((t) => `${sig(t.signature_data)}<div class="nm">${esc(t.signer_name || '')}</div>`).join('')
-        : '—');
-    const trs = rows.map((r) => `<tr>
-        <td>${esc(r.date)}</td><td>${SLOT[r.slot] || esc(r.slot)}</td>
-        <td>${sig(r.signature_data)}<div class="nm">${esc(r.signature_data ? (r.signer_name || '') : '')}</div></td>
-        <td>${trainerCell(r.trainers)}</td>
+    const learnerName = `${e.last_name || ''} ${e.first_name || ''}`.trim();
+    // Grille : lignes = jours, colonnes = créneaux réellement présents.
+    const slots = SLOT_ORDER.filter((sl) => rows.some((r) => r.slot === sl));
+    const dates = [...new Set(rows.map((r) => r.date))].sort();
+    const byKey = {};
+    for (const r of rows) byKey[`${r.date}|${r.slot}`] = r;
+
+    // Cellule de signature : image + nom (ou case vide à signer).
+    const sigCell = (dataUrl, name, absent) => {
+        const v = decrypt(dataUrl);
+        if (v) return `<div class="sg"><img src="${v}" /></div>${name ? `<div class="nm">${esc(name)}</div>` : ''}`;
+        return absent ? '<span class="na">—</span>' : '<div class="sg empty"></div>';
+    };
+    const headRow = `<tr><th class="d">Jour</th>${slots.map((sl) => `<th>${SLOT[sl] || esc(sl)}</th>`).join('')}</tr>`;
+    const gridBody = (cellFor) => dates.map((d) => `<tr>
+        <td class="d">${esc(frDay(d))}</td>
+        ${slots.map((sl) => `<td>${cellFor(byKey[`${d}|${sl}`])}</td>`).join('')}
     </tr>`).join('');
 
-    // Une section d'émargement PAR intervenant externe, sous le tableau formateur.
+    const learnerBody = gridBody((r) => (r ? sigCell(r.signature_data, r.signer_name || learnerName, false) : '<span class="na">—</span>'));
+    const trainerBody = gridBody((r) => (r && r.trainers && r.trainers.length
+        ? r.trainers.map((t) => sigCell(t.signature_data, t.signer_name, false)).join('')
+        : (r ? sigCell(null, '', false) : '<span class="na">—</span>')));
+
+    // Un bloc par intervenant externe (uniquement ses demi-journées).
     const intervSections = intervenants.map((iv) => {
-        const ivRows = (iv.slots || [])
-            .slice().sort((a, b) => String(a.date).localeCompare(String(b.date)))
-            .map((s) => `<tr><td>${esc(s.date)}</td><td>${SLOT[s.slot] || esc(s.slot)}</td><td>${sig(s.signature_data)}</td></tr>`).join('');
-        return `<h2 class="ivh">Intervenant : ${esc(iv.name || '')}${iv.specialty ? ` — ${esc(iv.specialty)}` : ''}</h2>
-            <table><thead><tr><th>Date</th><th>Demi-journée</th><th>Signature intervenant</th></tr></thead>
-            <tbody>${ivRows}</tbody></table>`;
+        const k = {};
+        for (const s of (iv.slots || [])) k[`${s.date}|${s.slot}`] = s;
+        const body = dates.map((d) => `<tr><td class="d">${esc(frDay(d))}</td>${slots.map((sl) => {
+            const s = k[`${d}|${sl}`];
+            return `<td>${s ? sigCell(s.signature_data, iv.name, false) : ''}</td>`;
+        }).join('')}</tr>`).join('');
+        return `<div class="blk"><h2>Intervenant — ${esc(iv.name || '')}${iv.specialty ? ` · ${esc(iv.specialty)}` : ''}</h2>
+            <table><thead>${headRow}</thead><tbody>${body}</tbody></table></div>`;
     }).join('');
 
     return `<!doctype html><html><head><meta charset="utf-8"><style>
-        body{font-family:Arial,sans-serif;font-size:12px;color:#111}
-        h1{font-size:16px;margin:0 0 2px}h2.ivh{font-size:13px;margin:16px 0 6px}
-        .sub{color:#555;margin:0 0 12px;font-size:11px;line-height:1.5}
-        table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:middle}
-        th{background:#f3f3f3}.nm{font-size:9px;color:#666}td:nth-child(1),td:nth-child(2){white-space:nowrap}
+        *{box-sizing:border-box}
+        body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;color:#1e2140;margin:0;padding:22px}
+        .head{border-bottom:2px solid #c0392b;padding-bottom:10px;margin-bottom:14px}
+        h1{font-size:18px;margin:0 0 6px;color:#c0392b;letter-spacing:.02em}
+        .org{font-weight:700;font-size:12px}
+        .meta{color:#555;font-size:10.5px;line-height:1.6;margin-top:4px}
+        .meta b{color:#1e2140}
+        .blk{margin-top:16px;page-break-inside:avoid}
+        h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#8a8f99;margin:0 0 6px}
+        table{width:100%;border-collapse:collapse;table-layout:fixed}
+        th,td{border:1px solid #d9dbe0;padding:5px 6px;text-align:center;vertical-align:middle}
+        th{background:#f5f3f0;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#555}
+        td.d,th.d{width:110px;text-align:left;white-space:nowrap;font-weight:600}
+        td{height:44px}
+        .sg{height:34px;display:flex;align-items:center;justify-content:center}
+        .sg img{max-height:34px;max-width:100%;object-fit:contain}
+        .sg.empty{border-bottom:1px dotted #c9ccd2;height:20px;margin:6px 8px 0}
+        .nm{font-size:8px;color:#8a8f99;margin-top:1px}
+        .na{color:#c9ccd2}
+        .foot{margin-top:18px;font-size:9px;color:#8a8f99;border-top:1px solid #e6e6ea;padding-top:8px}
     </style></head><body>
-        <h1>Feuille d'émargement</h1>
-        <p class="sub">${esc(org && org.legal_name || '')} — ${esc(e.program_title || '')} (${esc(e.program_code || '')})<br/>
-        Semaine ${esc(e.week)} · ${esc(e.year)} · du ${esc(e.start_date)} au ${esc(e.end_date)}<br/>
-        Stagiaire : <b>${esc(`${e.last_name || ''} ${e.first_name || ''}`.trim())}</b></p>
-        <table><thead><tr><th>Date</th><th>Demi-journée</th><th>Signature stagiaire</th><th>Signature formateur</th></tr></thead>
-        <tbody>${trs}</tbody></table>
+        <div class="head">
+            <h1>Feuille d'émargement</h1>
+            <div class="org">${esc(org && org.legal_name || '')}</div>
+            <div class="meta">
+                Formation : <b>${esc(e.program_title || '')}</b> (${esc(e.program_code || '')}) — Semaine ${esc(e.week)}/${esc(e.year)}<br/>
+                Période : du <b>${esc(frDate(e.start_date))}</b> au <b>${esc(frDate(e.end_date))}</b><br/>
+                Stagiaire : <b>${esc(learnerName)}</b>
+            </div>
+        </div>
+
+        <div class="blk"><h2>Signature du stagiaire</h2>
+            <table><thead>${headRow}</thead><tbody>${learnerBody}</tbody></table></div>
+
+        <div class="blk"><h2>Signature du/des formateur(s)</h2>
+            <table><thead>${headRow}</thead><tbody>${trainerBody}</tbody></table></div>
+
         ${intervSections}
+
+        <p class="foot">Document généré électroniquement — les signatures sont recueillies par voie électronique au fil de la formation.</p>
     </body></html>`;
 }
 
