@@ -21,7 +21,9 @@ function PreviewFolder({ folder, sample, depth }) {
         📁 {name}{folder.per_learner ? <span style={{ color: "var(--dim)" }}> · un par stagiaire</span> : null}
       </div>
       {(folder.items || []).map((it) => (
-        <div key={it.ref} style={{ paddingLeft: (depth + 1) * 16, color: "var(--muted)" }}>{it.type === "quiz" ? "❓" : "📄"} {it.label}</div>
+        <div key={it.group || it.ref} style={{ paddingLeft: (depth + 1) * 16, color: "var(--muted)" }}>
+          {it.type === "quiz" ? "❓" : "📄"} {it.label}{it.group ? " (le variant du dossier)" : ""}
+        </div>
       ))}
       {(folder.children || []).map((c) => <PreviewFolder key={c.id} folder={c} sample={sample} depth={depth + 1} />)}
     </div>
@@ -67,16 +69,41 @@ const TOKENS = [
   { t: "{Stagiaire}", label: "Nom du stagiaire" },
 ];
 
+// Construit la liste des documents attribuables : les variantes « OU » (même
+// or_group) sont fusionnées en UNE option (résolue au bon variant par stagiaire).
+function buildOptions(docs) {
+  const options = [];
+  const seen = new Set();
+  for (const d of docs) {
+    if (d.or_group) {
+      if (seen.has(d.or_group)) continue;
+      seen.add(d.or_group);
+      const members = docs.filter((x) => x.or_group === d.or_group);
+      options.push({
+        key: `group:${d.or_group}`, group: d.or_group, members: members.map((m) => m.slug),
+        label: members.map((m) => m.label).join(" / "), type: members[0].quiz_id ? "quiz" : "model",
+      });
+    } else {
+      options.push({ key: `slug:${d.slug}`, ref: d.slug, label: d.label, type: d.quiz_id ? "quiz" : "model" });
+    }
+  }
+  return options;
+}
+const itemId = (x) => x.group || x.ref;
+
 // Un dossier de l'arborescence + ses documents attribués + ses sous-dossiers.
-function FolderNode({ folder, docs, depth, onChange, onDelete }) {
+function FolderNode({ folder, options, depth, onChange, onDelete }) {
   const set = (patch) => onChange({ ...folder, ...patch });
   const items = folder.items || [];
   const children = folder.children || [];
 
-  function addItem(slug) {
-    const d = docs.find((x) => x.slug === slug);
-    if (!d || items.some((it) => it.ref === slug)) return;
-    set({ items: [...items, { ref: d.slug, label: d.label, type: d.quiz_id ? "quiz" : "model" }] });
+  function addItem(key) {
+    const o = options.find((x) => x.key === key);
+    if (!o || items.some((it) => itemId(it) === itemId(o))) return;
+    const item = o.group
+      ? { type: o.type, group: o.group, members: o.members, label: o.label }
+      : { type: o.type, ref: o.ref, label: o.label };
+    set({ items: [...items, item] });
   }
 
   return (
@@ -98,21 +125,22 @@ function FolderNode({ folder, docs, depth, onChange, onDelete }) {
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", margin: "6px 0 2px" }}>
         {items.map((it, i) => (
-          <span key={it.ref} className="pill" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-            {it.type === "quiz" ? "❓" : "📄"} {it.label}
+          <span key={itemId(it)} className="pill" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}
+            title={it.group ? "Choix « OU » : le bon variant est retenu selon le dossier" : undefined}>
+            {it.type === "quiz" ? "❓" : "📄"} {it.label}{it.group ? " (OU)" : ""}
             <button type="button" className="pf-x" title="Retirer" onClick={() => set({ items: items.filter((_, j) => j !== i) })}>✕</button>
           </span>
         ))}
         <select value="" onChange={(e) => addItem(e.target.value)}>
           <option value="">＋ Attribuer un document…</option>
-          {docs.filter((d) => !items.some((it) => it.ref === d.slug)).map((d) => (
-            <option key={d.slug} value={d.slug}>{d.label}</option>
+          {options.filter((o) => !items.some((it) => itemId(it) === itemId(o))).map((o) => (
+            <option key={o.key} value={o.key}>{o.label}</option>
           ))}
         </select>
       </div>
 
       {children.map((c) => (
-        <FolderNode key={c.id} folder={c} docs={docs} depth={depth + 1}
+        <FolderNode key={c.id} folder={c} options={options} depth={depth + 1}
           onChange={(nc) => set({ children: children.map((x) => (x.id === c.id ? nc : x)) })}
           onDelete={() => set({ children: children.filter((x) => x.id !== c.id) })} />
       ))}
@@ -124,6 +152,7 @@ function FolderNode({ folder, docs, depth, onChange, onDelete }) {
 // de la formation) ; `tree` = { folders:[...] } ; `onChange(tree)`.
 export default function ArchiveTreeEditor({ tree, docs = [], onChange }) {
   const folders = tree?.folders || [];
+  const options = buildOptions(docs);
   const setFolders = (f) => onChange({ folders: f });
 
   return (
@@ -145,7 +174,7 @@ export default function ArchiveTreeEditor({ tree, docs = [], onChange }) {
         </div>
       )}
       {folders.map((f) => (
-        <FolderNode key={f.id} folder={f} docs={docs} depth={0}
+        <FolderNode key={f.id} folder={f} options={options} depth={0}
           onChange={(nf) => setFolders(folders.map((x) => (x.id === f.id ? nf : x)))}
           onDelete={() => setFolders(folders.filter((x) => x.id !== f.id))} />
       ))}
