@@ -89,15 +89,35 @@ function TemplateEditor() {
 
   const target = active || body;
 
-  // Hauteur (px) d'UNE page de contenu dans l'éditeur, pour caler le repère de fin de page.
-  // Colonne de contenu ≈ 174 mm rendue sur ~660 px → 3,79 px/mm. La zone utile du corps
-  // dépend des marges réservées à l'en-tête/pied (réduites en mode « bord à bord »).
+  // Mesure la hauteur RÉELLE des éditeurs d'en-tête et de pied (rendus à la même échelle
+  // que le corps) pour caler précisément le repère de fin de page.
+  const [hfPx, setHfPx] = useState({ h: 0, f: 0 });
+  useEffect(() => {
+    if (!header || !footer) return undefined;
+    const measure = () => setHfPx({
+      h: header.view?.dom?.offsetHeight || 0,
+      f: footer.view?.dom?.offsetHeight || 0,
+    });
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (header.view?.dom) ro.observe(header.view.dom);
+    if (footer.view?.dom) ro.observe(footer.view.dom);
+    return () => ro.disconnect();
+  }, [header, footer]);
+
+  // Hauteur (px) d'UNE page de contenu = A4 − marges réservées à l'en-tête et au pied.
+  // Colonne de contenu ≈ 174 mm rendue sur ~660 px → 3,79 px/mm.
   const PX_PER_MM = 660 / 174;
-  const headerHasImg = /<img/i.test(header?.getHTML() || "");
+  const HF_PAD = 20; // padding vertical des éditeurs en-tête/pied
+  const hasCustomHeader = !!clean(header?.getHTML());
   const hasFooter = !!clean(footer?.getHTML());
-  const topReserveMm = bleed.header ? 8 : (headerHasImg ? 46 : 26); // bannière image = plus haute
-  const botReserveMm = bleed.footer ? 8 : (hasFooter ? 30 : 18);
-  const pageContentPx = Math.round((297 - topReserveMm - botReserveMm) * PX_PER_MM);
+  const topReservePx = bleed.header ? 8 * PX_PER_MM
+    : hasCustomHeader ? (12 * PX_PER_MM + Math.max(0, hfPx.h - HF_PAD) + 4 * PX_PER_MM)
+      : 24 * PX_PER_MM; // papier à en-tête automatique
+  const botReservePx = bleed.footer ? 8 * PX_PER_MM
+    : hasFooter ? (Math.max(0, hfPx.f - HF_PAD) + 10 * PX_PER_MM + 4 * PX_PER_MM)
+      : 18 * PX_PER_MM;
+  const pageContentPx = Math.round(297 * PX_PER_MM - topReservePx - botReservePx);
 
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();

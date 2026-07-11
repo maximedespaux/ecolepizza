@@ -469,6 +469,8 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .doc-canvas h1{font-size:20px}.doc-canvas h2{font-size:16px}.doc-canvas h3{font-size:14px}
 .doc-canvas table{border-collapse:collapse;width:100%;margin:8px 0}
 .doc-canvas th,.doc-canvas td{border:1px solid var(--line,#bbb);padding:5px 7px}
+/* Les images ne débordent pas la colonne page (comme au rendu PDF, borné à la largeur utile). */
+.doc-canvas img{max-width:100%;height:auto}
 .doc-canvas.preview .prev-val{background:#eef6ee;border-radius:4px;padding:0 3px}
 /* Saut de page : invisible au rendu PDF, mais affiché comme séparateur dans l'éditeur. */
 .doc-canvas p.doc-pagebreak{position:relative;height:0;margin:20px 0;border:0;border-top:2px dashed var(--ember1,#c0392b);font-size:0;line-height:0;text-align:center;-webkit-user-select:none;user-select:none;cursor:pointer}
