@@ -7,6 +7,7 @@ const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS } = require('../lib/documents.js');
 const { TOKEN_CATALOG } = require('../lib/tokens.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
+const { getEnabledFields } = require('../lib/conditions.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
@@ -166,15 +167,40 @@ const saveTemplate = async (req, res) => {
     }
 };
 
-/** GET /api/templates/tokens — catalogue des jetons (regroupé par table) pour la palette. */
-const getTokens = (req, res) => {
-    res.json({ data: TOKEN_CATALOG });
+// Échantillon d'aperçu selon le type de champ.
+function sampleForField(f) {
+    if (f.type === 'bool') return 'Oui';
+    if (f.type === 'number') return '123';
+    if (f.type === 'enum') return (f.options && f.options[0] && f.options[0].value) || 'Valeur';
+    return f.label || 'Exemple';
+}
+
+// Jetons de la palette = CHAMPS DOCUMENTS activés (colonnes du dossier), regroupés par table.
+// Clé « field:<table.column> », remplie au rendu depuis le dossier réel.
+async function fieldTokenGroups(orgId) {
+    const fields = await getEnabledFields(db.promise(), orgId);
+    const by = {};
+    for (const f of fields) (by[f.tableLabel] || (by[f.tableLabel] = [])).push({ key: `field:${f.key}`, label: f.label, sample: sampleForField(f) });
+    return Object.entries(by).map(([group, tokens]) => ({ group, tokens }));
+}
+
+/** GET /api/templates/tokens — jetons de la palette (champs documents activés). */
+const getTokens = async (req, res) => {
+    try {
+        res.json({ data: await fieldTokenGroups(req.user.organization_id) });
+    } catch (e) {
+        console.error('Erreur jetons palette :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
-// Valeurs d'exemple { clé: échantillon } issues du catalogue (aperçu sans dossier réel).
-function sampleTokenValues() {
+// Valeurs d'exemple { clé: échantillon } pour l'aperçu (jetons intégrés hérités + champs documents).
+async function sampleTokenValues(orgId) {
     const m = {};
-    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || '';
+    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || ''; // modèles existants
+    try {
+        for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || '';
+    } catch { /* champs indisponibles : on garde les jetons intégrés */ }
     return m;
 }
 
@@ -191,7 +217,7 @@ const previewPdf = async (req, res) => {
             bodyHtml: body_html || '<p></p>',
             headerHtml: header_html, footerHtml: footer_html,
             ctx: { org: org || {} },
-            sampleValues: sampleTokenValues(),
+            sampleValues: await sampleTokenValues(req.user.organization_id),
             bleed: (layout && layout.bleed) || {},
         });
         res.set('Content-Type', 'application/pdf');
@@ -218,7 +244,7 @@ const pageMetrics = async (req, res) => {
         const m = computeReserves({
             headerHtml: header_html, footerHtml: footer_html,
             ctx: { org: org || {} },
-            sampleValues: sampleTokenValues(),
+            sampleValues: await sampleTokenValues(req.user.organization_id),
             bleed: (layout && layout.bleed) || {},
         });
         res.json({ data: m });

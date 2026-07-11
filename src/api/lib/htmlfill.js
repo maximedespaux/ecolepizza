@@ -19,7 +19,16 @@ const decodeEnt = (s) => String(s).replace(/&amp;/g, '&').replace(/&quot;/g, '"'
  * (ex. valeurs d'exemple pour l'aperçu d'un modèle, sans dossier réel).
  */
 function fillHtml(bodyHtml, ctx, valuesOverride) {
-    const values = valuesOverride || resolveTokens(ctx);
+    let values = valuesOverride || resolveTokens(ctx);
+    // Champs « documents » (colonnes du dossier activées) : jetons field:<table.column>,
+    // remplis depuis les valeurs réelles du dossier (ctx.fields). Fusionnés aux jetons
+    // intégrés pour que les modèles existants continuent de fonctionner.
+    if (ctx && ctx.fields) {
+        values = { ...values };
+        for (const [k, v] of Object.entries(ctx.fields)) {
+            values['field:' + k] = v == null ? '' : (v === true ? 'Oui' : v === false ? 'Non' : String(v));
+        }
+    }
     const slotSigs = (ctx && ctx.slotSignatures) || {}; // { slotKey: { data, name, date, label } }
     let out = String(bodyHtml || '');
 

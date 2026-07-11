@@ -195,6 +195,9 @@ function TemplateEditor() {
     };
   }
 
+  // Recharge la palette (les champs proposés = ceux activés dans Champs documents).
+  const reloadCatalog = () => getTokenCatalog().then((cat) => setCatalog(cat.data || [])).catch(() => {});
+
   async function save() {
     if (!body) return;
     setSaving(true); setStatus(null);
@@ -269,7 +272,13 @@ function TemplateEditor() {
           <div className="tpl-palette-hd">Champs disponibles</div>
           <p className="sub" style={{ margin: "0 10px 8px", fontSize: 11 }}>
             Cliquez ou glissez un champ dans l'en-tête, le corps ou le pied de page. Il sera remplacé par la donnée réelle.
+            Les champs proposés sont ceux activés dans <b>Champs documents</b>.
           </p>
+          {catalog.length === 0 && (
+            <p className="sub" style={{ margin: "0 10px 10px", fontSize: 11 }}>
+              Aucun champ activé. Ouvrez <button className="btn sm ghost" style={{ padding: "1px 6px", fontSize: 11 }} onClick={() => setShowFields(true)}>Champs documents</button> pour en activer.
+            </p>
+          )}
 
           <div className="tok-group">
             <div className="tok-group-hd" style={{ cursor: "default" }}><span>✍ Signatures</span></div>
@@ -318,21 +327,21 @@ function TemplateEditor() {
       </div>
 
       {showFields && (
-        <div className="overlay" onClick={() => setShowFields(false)}>
+        <div className="overlay" onClick={() => { setShowFields(false); reloadCatalog(); }}>
           <div className="modal" style={{ maxWidth: 720, width: "92%" }} onClick={(e) => e.stopPropagation()}>
             <div className="mhead">
               <h3>Champs documents</h3>
-              <button className="x" onClick={() => setShowFields(false)} aria-label="Fermer">×</button>
+              <button className="x" onClick={() => { setShowFields(false); reloadCatalog(); }} aria-label="Fermer">×</button>
             </div>
             <div className="mbody" style={{ maxHeight: "70vh", overflow: "auto" }}>
               <p className="sub" style={{ margin: "0 0 10px" }}>
-                Activez les champs du dossier utilisables dans les documents (conditions, valeurs). Vous pouvez renommer leur intitulé.
+                Activez les champs du dossier utilisables dans les documents. Les champs activés deviennent insérables dans le modèle (palette de droite) et sont remplis à la génération.
               </p>
               <FieldSettingsPanel ref={fieldsRef} onStatus={setStatus} />
             </div>
             <div className="mfoot">
-              <button className="btn ghost" onClick={() => setShowFields(false)}>Fermer</button>
-              <button className="btn primary" onClick={() => fieldsRef.current?.save()}>Enregistrer les champs</button>
+              <button className="btn ghost" onClick={() => { setShowFields(false); reloadCatalog(); }}>Fermer</button>
+              <button className="btn primary" onClick={async () => { await fieldsRef.current?.save(); reloadCatalog(); }}>Enregistrer les champs</button>
             </div>
           </div>
         </div>

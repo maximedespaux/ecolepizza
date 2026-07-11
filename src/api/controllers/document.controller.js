@@ -11,6 +11,7 @@ const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
 const { buildEmargementDocHtml } = require('../lib/emargement.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
+const { getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
 const { notify } = require('./notification.controller.js');
 
 // IP « client » (best-effort, derrière proxy éventuel).
@@ -117,7 +118,20 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             for (const s of sigs) slotSignatures[s.slot] = { data: decrypt(s.signature_data), name: s.signer_name, date: s.signed_at, label: s.label };
         } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
     }
-    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures };
+    // Champs « documents » (colonnes du dossier activées) : valeurs pour les jetons
+    // field:<table.column>. Chargées pour le dossier lié au document.
+    const fields = {};
+    if (documentId) {
+        try {
+            const [[df]] = await conn.query('SELECT enrollment_id FROM document_formation WHERE document_id = ? LIMIT 1', [documentId]);
+            if (df && df.enrollment_id) {
+                const catalog = await getEnabledFields(conn, organizationId);
+                const facts = (await loadDossierFactsMap(conn, organizationId, [df.enrollment_id], catalog)).get(df.enrollment_id) || {};
+                for (const [k, v] of Object.entries(facts)) fields[k] = (typeof v === 'string') ? decrypt(v) : v;
+            }
+        } catch (e) { /* champs indisponibles (migration non jouée) : on ignore */ }
+    }
+    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields };
 }
 
 // Un document d'émargement (type EMARGEMENT) : rendu via le moteur d'émargement
