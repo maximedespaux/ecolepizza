@@ -473,9 +473,11 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .doc-canvas img{max-width:100%;height:auto}
 .doc-canvas.preview .prev-val{background:#eef6ee;border-radius:4px;padding:0 3px}
 /* Saut de page : invisible au rendu PDF, mais affiché comme séparateur dans l'éditeur. */
-.doc-canvas p.doc-pagebreak{position:relative;height:0;margin:20px 0;border:0;border-top:2px dashed var(--ember1,#c0392b);font-size:0;line-height:0;text-align:center;-webkit-user-select:none;user-select:none;cursor:pointer}
-.doc-canvas p.doc-pagebreak::before{content:"Saut de page";position:absolute;left:50%;top:0;transform:translate(-50%,-50%);background:var(--panel,#fff);color:var(--ember1,#c0392b);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:0 8px}
-.doc-canvas p.doc-pagebreak.ProseMirror-selectednode{outline:2px solid var(--ember1,#c0392b);outline-offset:5px;border-radius:3px}
+/* Saut de page dans l'éditeur : bande cliquable (pour le sélectionner puis Suppr). */
+.doc-canvas p.doc-pagebreak{position:relative;margin:16px 0;min-height:16px;height:auto;border:0;padding:0;font-size:0;line-height:0;text-align:center;-webkit-user-select:none;user-select:none;cursor:pointer}
+.doc-canvas p.doc-pagebreak::after{content:"";position:absolute;left:0;right:0;top:50%;border-top:2px dashed var(--ember1,#c0392b)}
+.doc-canvas p.doc-pagebreak::before{content:"Saut de page";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--panel,#fff);color:var(--ember1,#c0392b);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:0 8px;z-index:1}
+.doc-canvas p.doc-pagebreak.ProseMirror-selectednode::before{outline:2px solid var(--ember1,#c0392b);outline-offset:3px;border-radius:3px}
 .tpl-palette{position:sticky;top:12px;background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:12px;padding:10px 0;max-height:82vh;overflow-y:auto}
 .tpl-palette-hd{font-weight:700;font-size:13px;padding:0 12px 6px}
 .tok-group{border-top:1px solid var(--line,#eee)}
