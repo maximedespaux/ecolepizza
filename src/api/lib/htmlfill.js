@@ -47,6 +47,10 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     }
     // 2b) Signatures multiples en texte brut {sig:<slot>}.
     out = out.replace(/\{(sig:[^{}]+)\}/g, (m, key) => renderSlot(key, ''));
+
+    // 3) Lignes vides : LibreOffice supprime un <p> vide (perte de l'espacement voulu par
+    //    l'utilisateur). On y place un espace insécable pour qu'il occupe bien une ligne.
+    out = out.replace(/<p\b([^>]*)>(?:\s|&nbsp;| |<br\s*\/?>)*<\/p>/gi, '<p$1> </p>');
     return out;
 }
 
