@@ -554,20 +554,28 @@ const signDocument = async (req, res) => {
 };
 
 /**
- * DELETE /api/documents/:id
+ * DELETE /api/documents/:id — supprime le document pour tout le monde (admin + stagiaire).
+ * Pour un émargement, retire AUSSI la feuille archivée correspondante (les deux
+ * représentations disparaissent — suppression complète).
  */
-const deleteDocument = (req, res) => {
-    db.query(
-        'DELETE FROM generated_document WHERE id = ? AND organization_id = ?',
-        [req.params.id, req.user.organization_id],
-        (err) => {
-            if (err) {
-                console.error('Erreur suppression document :', err);
-                return res.status(400).json({ message: 'Erreur suppression' });
-            }
-            res.status(200).json({ success: true, message: 'Document supprimé' });
+const deleteDocument = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[doc]] = await conn.query('SELECT id, type, enrollment_id FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!doc) return res.status(404).json({ message: 'Document introuvable' });
+        if (doc.type === 'EMARGEMENT') {
+            let enr = doc.enrollment_id;
+            if (!enr) { const [[df]] = await conn.query('SELECT enrollment_id FROM document_formation WHERE document_id = ? LIMIT 1', [doc.id]); enr = df && df.enrollment_id; }
+            if (enr) await conn.query('DELETE FROM archive_document WHERE organization_id = ? AND (ref = ? OR ref LIKE ?)', [orgId, `emarg:${enr}`, `emarg:${enr}:%`]);
         }
-    );
+        await conn.query('DELETE FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        logAudit(req, 'document.delete', 'GeneratedDocument', req.params.id);
+        res.status(200).json({ success: true, message: 'Document supprimé' });
+    } catch (err) {
+        console.error('Erreur suppression document :', err);
+        res.status(400).json({ message: 'Erreur suppression' });
+    }
 };
 
 module.exports = { listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument };
