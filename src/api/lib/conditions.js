@@ -1,7 +1,7 @@
 // Conditions personnalisées : filtres « ce document ne s'applique que si … » définis
 // par l'organisme, basés sur des CHAMPS RÉELS du dossier. Les champs disponibles sont
 // découverts dynamiquement dans le schéma (tables liées à un dossier) et activés/
-// désactivés par l'organisme (Réglages → Champs du dossier). Le moteur du parcours
+// désactivés par l'organisme (éditeur de document → « Champs documents »). Le moteur du parcours
 // évalue ces conditions en plus des conditions intégrées (financement, RS, hygiène…).
 const { parseApplies } = require('./documents.js');
 
