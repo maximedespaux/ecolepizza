@@ -102,7 +102,14 @@ const getQuiz = async (req, res) => {
         const conn = db.promise();
         const [[quiz]] = await conn.query('SELECT * FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!quiz) return res.status(404).json({ message: 'QCM introuvable' });
-        const [questions] = await conn.query('SELECT id, position, text, type, scale_max, points, partial_scoring FROM quiz_question WHERE quiz_id = ? ORDER BY position', [quiz.id]);
+        let questions;
+        try {
+            [questions] = await conn.query('SELECT id, position, text, type, scale_max, points, partial_scoring, image FROM quiz_question WHERE quiz_id = ? ORDER BY position', [quiz.id]);
+        } catch (e) {
+            if (e && e.code === 'ER_BAD_FIELD_ERROR') { // colonne image absente (migration 062)
+                [questions] = await conn.query('SELECT id, position, text, type, scale_max, points, partial_scoring FROM quiz_question WHERE quiz_id = ? ORDER BY position', [quiz.id]);
+            } else { throw e; }
+        }
         const qids = questions.map((q) => q.id);
         let options = [];
         if (qids.length) {
@@ -156,6 +163,10 @@ const saveQuiz = async (req, res) => {
         );
         // Remplace questions + options.
         await conn.query('DELETE FROM quiz_question WHERE quiz_id = ?', [req.params.id]);
+        // La colonne image existe-t-elle ? (migration 062) — sinon on insère sans.
+        let hasImage = true;
+        try { await conn.query('SELECT image FROM quiz_question LIMIT 1'); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasImage = false; else throw e; }
         const questions = Array.isArray(b.questions) ? b.questions : [];
         for (let i = 0; i < questions.length; i++) {
             const q = questions[i];
@@ -167,11 +178,18 @@ const saveQuiz = async (req, res) => {
             const points = Number.isFinite(pts) && pts >= 0 ? Math.floor(pts) : 1;
             // « Points par bonne réponse » : pertinent seulement pour les QCM (MULTI).
             const partial = qType === 'MULTI' && q.partial_scoring ? 1 : 0;
-            await conn.query(
-                `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [qid, req.params.id, i, String(q.text).slice(0, 2000),
-                 qType, Number(q.scale_max) || 5, points, partial]
-            );
+            const img = q.image && /^data:image\//.test(q.image) ? q.image : null;
+            if (hasImage) {
+                await conn.query(
+                    `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [qid, req.params.id, i, String(q.text).slice(0, 2000), qType, Number(q.scale_max) || 5, points, partial, img]
+                );
+            } else {
+                await conn.query(
+                    `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [qid, req.params.id, i, String(q.text).slice(0, 2000), qType, Number(q.scale_max) || 5, points, partial]
+                );
+            }
             if (q.type !== 'SCALE') {
                 const opts = Array.isArray(q.options) ? q.options : [];
                 for (let j = 0; j < opts.length; j++) {
@@ -251,7 +269,9 @@ const takeQuiz = async (req, res) => {
         const conn = db.promise();
         const r = await quizForDocument(conn, req.params.documentId, req.user);
         if (r.error) return res.status(r.error).json({ message: r.message });
-        const [questions] = await conn.query('SELECT id, text, type, scale_max FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]);
+        let questions;
+        try { [questions] = await conn.query('SELECT id, text, type, scale_max, image FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') { [questions] = await conn.query('SELECT id, text, type, scale_max FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]); } else { throw e; } }
         const qids = questions.map((q) => q.id);
         let options = [];
         if (qids.length) [options] = await conn.query('SELECT id, question_id, text FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
@@ -297,7 +317,9 @@ const submitQuiz = async (req, res) => {
         if (r.error) return res.status(r.error).json({ message: r.message });
         const graded = r.quiz.kind === 'GRADED';
 
-        const [questions] = await conn.query('SELECT id, text, type, scale_max, points, partial_scoring FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]);
+        let questions;
+        try { [questions] = await conn.query('SELECT id, text, type, scale_max, points, partial_scoring, image FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') { [questions] = await conn.query('SELECT id, text, type, scale_max, points, partial_scoring FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]); } else { throw e; } }
         const qids = questions.map((q) => q.id);
         let options = [];
         if (qids.length) [options] = await conn.query('SELECT id, question_id, text, is_correct FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);

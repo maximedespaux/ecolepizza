@@ -212,6 +212,19 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
         <Card key={i} title={`Question ${i + 1}`} more={<button className="btn sm ghost danger" onClick={() => delQ(i)}>Supprimer</button>}>
           <div className="field"><label>Énoncé</label>
             <textarea className="inp" rows={2} value={q.text} onChange={(e) => setQ(i, { text: e.target.value })} /></div>
+          <div className="field"><label>Image (optionnel)</label>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              {q.image ? <img src={q.image} alt="" style={{ height: 56, maxWidth: 120, objectFit: "contain", border: "1px solid var(--border-soft)", borderRadius: 6, padding: 2 }} /> : <span className="sub" style={{ fontSize: 12 }}>Aucune image</span>}
+              <label className="btn sm ghost" style={{ cursor: "pointer" }}>
+                {q.image ? "Remplacer" : "Ajouter"}
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+                  const f = e.target.files?.[0]; if (!f) return;
+                  if (f.size > 2 * 1024 * 1024) { onError && onError("Image trop lourde (max 2 Mo)."); return; }
+                  const rd = new FileReader(); rd.onload = () => setQ(i, { image: rd.result }); rd.readAsDataURL(f);
+                }} />
+              </label>
+              {q.image ? <button type="button" className="btn sm ghost" onClick={() => setQ(i, { image: null })}>Retirer</button> : null}
+            </div></div>
           <div className="row3">
             <div className="field"><label>Type</label>
               <select value={q.type} onChange={(e) => setQ(i, { type: e.target.value })}>{QTYPES.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}</select></div>

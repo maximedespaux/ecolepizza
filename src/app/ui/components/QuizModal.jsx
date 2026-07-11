@@ -12,6 +12,7 @@ function ReviewList({ review }) {
             {q.correct === true && <span style={{ color: "#16a34a" }}>✓</span>}
             {q.correct === false && <span style={{ color: "#c0392b" }}>✗</span>}
           </div>
+          {q.image ? <img src={q.image} alt="" style={{ maxWidth: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 6, margin: "0 0 8px", display: "block" }} /> : null}
           {q.type === "SCALE" ? (
             <div className="hint">Votre réponse : {q.scaleValue ?? "—"}{q.scale_max ? ` / ${q.scale_max}` : ""}</div>
           ) : (
@@ -130,6 +131,7 @@ function QuizModal({ documentId, onClose, onDone }) {
               <>
                 <div className="sub" style={{ marginBottom: 8 }}>Question {idx + 1} / {questions.length}</div>
                 <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>{q.text}</div>
+                {q.image ? <img src={q.image} alt="" style={{ maxWidth: "100%", maxHeight: 260, objectFit: "contain", borderRadius: 8, marginBottom: 12, display: "block" }} /> : null}
 
                 {q.type === "SCALE" ? (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
