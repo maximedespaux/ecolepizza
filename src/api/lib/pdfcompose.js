@@ -44,32 +44,42 @@ const TEXT_LINE_PT = 16; // hauteur d'une ligne de bandeau en <br> (interligne s
 const PT_PER_MM = 2.834645669;
 const A4H = 297 * PT_PER_MM;                  // hauteur A4 en points
 const PX_PER_MM = 96 / 25.4;                 // LibreOffice rend les images à 96 ppp
-const CONTENT_MM = 210 - 2 * 18;             // largeur utile (A4 − marges latérales 18mm)
-const CONTENT_PX = Math.round(CONTENT_MM * PX_PER_MM); // ≈ 657 px
+const SIDE_MM = 18;                          // marge latérale par défaut
+const CONTENT_PX = Math.round((210 - 2 * SIDE_MM) * PX_PER_MM); // ≈ 657 px
 
 const HEADER_TOP_MM = 12;   // marge haute de la page mobilier en-tête
 const FOOTER_BOTTOM_MM = 10; // distance BAS du pied ↔ bord bas de page
 const GAP_MM = 3;           // espace entre bandeau et corps
 
-// Réduit les images trop larges à la largeur utile : LibreOffice les rend à leur taille
+// Largeur utile (px @96ppp) selon la marge latérale — pour borner les images par zone.
+const contentPxFor = (sideMm) => Math.round((210 - 2 * sideMm) * PX_PER_MM);
+
+// Ajuste la largeur des images à la largeur cible : LibreOffice les rend à leur taille
 // px native (attribut width) en ignorant CSS max-width — sinon un bandeau déborde à droite.
-function capImages(html, maxPx = CONTENT_PX) {
+// - toujours RÉDUIT une image plus large que la cible (sinon débordement) ;
+// - si `fill` (mode bord à bord), AGRANDIT aussi une bannière (image occupant déjà
+//   ≥ 50 % de la cible) pour qu'elle occupe toute la largeur.
+function capImages(html, maxPx = CONTENT_PX, fill = false) {
     return String(html || '').replace(/<img\b[^>]*>/gi, (tag) => {
         const wm = tag.match(/\bwidth\s*=\s*["']?(\d+)/i) || tag.match(/width\s*:\s*(\d+)\s*px/i);
         const hm = tag.match(/\bheight\s*=\s*["']?(\d+)/i) || tag.match(/height\s*:\s*(\d+)\s*px/i);
         const w = wm ? Number(wm[1]) : null;
         const h = hm ? Number(hm[1]) : null;
-        if (!w || w <= maxPx) return tag;
-        const nh = h ? Math.round(h * maxPx / w) : null;
+        if (!w) return tag;
+        let target = null;
+        if (w > maxPx) target = maxPx;                       // trop large → réduire
+        else if (fill && w >= maxPx * 0.5) target = maxPx;   // bord à bord → agrandir la bannière
+        if (!target || target === w) return tag;
+        const nh = h ? Math.round(h * target / w) : null;
         let out = tag
-            .replace(/\bwidth\s*=\s*["']?\d+["']?/i, `width="${maxPx}"`)
-            .replace(/width\s*:\s*\d+\s*px/i, `width:${maxPx}px`);
+            .replace(/\bwidth\s*=\s*["']?\d+["']?/i, `width="${target}"`)
+            .replace(/width\s*:\s*\d+\s*px/i, `width:${target}px`);
         if (nh != null) {
             out = out
                 .replace(/\bheight\s*=\s*["']?\d+["']?/i, `height="${nh}"`)
                 .replace(/height\s*:\s*\d+\s*px/i, `height:${nh}px`);
         }
-        if (!/\bwidth\s*=/.test(out) && !/width\s*:/.test(out)) out = out.replace(/<img\b/i, `<img width="${maxPx}"`);
+        if (!/\bwidth\s*=/.test(out) && !/width\s*:/.test(out)) out = out.replace(/<img\b/i, `<img width="${target}"`);
         return out;
     });
 }
@@ -122,9 +132,9 @@ function flattenParagraphs(html) {
 // Page A4 « mobilier » (en-tête OU pied) : contenu calé en haut via la marge @page.
 // Le pied sera ensuite DÉCALÉ vers le bas par pdf-lib (le placer en bas via un tableau
 // valign casse le filet du bandeau, redessiné à chaque ligne par LibreOffice).
-function furnitureDoc(innerHtml) {
+function furnitureDoc(innerHtml, topMm, sideMm) {
     return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><style>
-  @page { size: A4; margin: ${HEADER_TOP_MM}mm 18mm; }
+  @page { size: A4; margin: ${topMm}mm ${sideMm}mm; }
   html, body { margin: 0; padding: 0; }
 ${STRIP_CSS}
   .doc-head { margin: 0; } .doc-foot { margin: 0; }
@@ -139,19 +149,27 @@ ${STRIP_CSS}
  * - useLetterhead : à défaut d'en-tête personnalisé, papier à en-tête auto.
  * Renvoie un Buffer PDF. Peut lever l'erreur NO_SOFFICE (LibreOffice absent).
  */
-async function composeDocumentPdf({ bodyHtml, headerHtml, footerHtml, ctx = {}, useLetterhead = true, sampleValues }) {
+async function composeDocumentPdf({ bodyHtml, headerHtml, footerHtml, ctx = {}, useLetterhead = true, sampleValues, bleed = {} }) {
     const org = ctx.org || {};
+
+    // « Bord à bord » (sans marge) par zone : marges latérales / de bord = 0, et images
+    // bornées à la LARGEUR PLEINE de la page (au lieu de la largeur utile).
+    const hSide = bleed.header ? 0 : SIDE_MM;
+    const hTop = bleed.header ? 0 : HEADER_TOP_MM;
+    const fSide = bleed.footer ? 0 : SIDE_MM;
+    const fBottom = bleed.footer ? 0 : FOOTER_BOTTOM_MM;
+    const bSide = bleed.body ? 0 : SIDE_MM;
 
     let headInner = '';
     if (headerHtml && headerHtml.trim()) {
-        const f = flattenParagraphs(capImages(fillHtml(headerHtml, ctx, sampleValues)));
+        const f = flattenParagraphs(capImages(fillHtml(headerHtml, ctx, sampleValues), contentPxFor(hSide), !!bleed.header));
         headInner = `<div class="doc-head custom"${f.align ? ` style="text-align:${f.align}"` : ''}>${f.html}</div>`;
     } else if (useLetterhead && (org.legal_name || org.short_name)) {
         headInner = letterhead(org);
     }
     let footInner = '';
     if (footerHtml && footerHtml.trim()) {
-        const f = flattenParagraphs(capImages(fillHtml(footerHtml, ctx, sampleValues)));
+        const f = flattenParagraphs(capImages(fillHtml(footerHtml, ctx, sampleValues), contentPxFor(fSide), !!bleed.footer));
         // <hr> = filet séparateur pleine largeur (fiable, contrairement à un border-top
         // sur du texte <br> centré, redessiné à chaque ligne par LibreOffice).
         footInner = `<div class="doc-foot"${f.align ? ` style="text-align:${f.align}"` : ''}><hr>${f.html}</div>`;
@@ -163,23 +181,23 @@ async function composeDocumentPdf({ bodyHtml, headerHtml, footerHtml, ctx = {}, 
     // Marges du corps adaptées à la hauteur réelle des bandeaux (évite le chevauchement
     // avec un bandeau haut, et le gaspillage avec un bandeau court).
     const topMm = hasHeader
-        ? clamp(HEADER_TOP_MM + estimateStripHeightPt(headInner) / PT_PER_MM + GAP_MM, 24, 110)
+        ? clamp(hTop + estimateStripHeightPt(headInner) / PT_PER_MM + GAP_MM, hTop + 6, 120)
         : 20;
     const bottomMm = hasFooter
-        ? clamp(FOOTER_BOTTOM_MM + estimateStripHeightPt(footInner) / PT_PER_MM + GAP_MM, 18, 90)
+        ? clamp(fBottom + estimateStripHeightPt(footInner) / PT_PER_MM + GAP_MM, fBottom + 6, 100)
         : 20;
 
-    const bodyPdf = htmlToPdf(renderBodyOnlyDoc(capImages(bodyHtml), ctx, { topMm, bottomMm, values: sampleValues }));
+    const bodyPdf = htmlToPdf(renderBodyOnlyDoc(capImages(bodyHtml, contentPxFor(bSide), !!bleed.body), ctx, { topMm, bottomMm, sideMm: bSide, values: sampleValues }));
     if (!hasHeader && !hasFooter) return bodyPdf;
 
     const doc = await PDFDocument.load(bodyPdf);
-    const [hEmb] = hasHeader ? await doc.embedPdf(htmlToPdf(furnitureDoc(headInner)), [0]) : [null];
-    const [fEmb] = hasFooter ? await doc.embedPdf(htmlToPdf(furnitureDoc(footInner)), [0]) : [null];
+    const [hEmb] = hasHeader ? await doc.embedPdf(htmlToPdf(furnitureDoc(headInner, hTop, hSide)), [0]) : [null];
+    const [fEmb] = hasFooter ? await doc.embedPdf(htmlToPdf(furnitureDoc(footInner, HEADER_TOP_MM, fSide)), [0]) : [null];
 
     // Le pied est rendu en HAUT de sa page mobilier (à HEADER_TOP_MM du bord haut) ; on le
-    // décale vers le bas pour amener son BAS à FOOTER_BOTTOM_MM du bord bas de la page.
+    // décale vers le bas pour amener son BAS à fBottom du bord bas de la page.
     const footerHpt = hasFooter ? estimateStripHeightPt(footInner) : 0;
-    const footerShift = FOOTER_BOTTOM_MM * PT_PER_MM - (A4H - HEADER_TOP_MM * PT_PER_MM - footerHpt);
+    const footerShift = fBottom * PT_PER_MM - (A4H - HEADER_TOP_MM * PT_PER_MM - footerHpt);
 
     for (const pg of doc.getPages()) {
         const { width, height } = pg.getSize();

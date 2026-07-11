@@ -10,6 +10,15 @@ import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
 
+// Bascule « bord à bord » (sans marge) d'une zone.
+function BleedToggle({ on, onChange }) {
+  return (
+    <label className="bleed-tog" title="Sans marge : le contenu occupe toute la largeur / le bord de la page">
+      <input type="checkbox" checked={on} onChange={onChange} /> bord à bord
+    </label>
+  );
+}
+
 function TemplateEditor() {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -20,6 +29,8 @@ function TemplateEditor() {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfErr, setPdfErr] = useState(null);
+  const [bleed, setBleed] = useState({ header: false, body: false, footer: false }); // « bord à bord » par zone
+  const toggleBleed = (k) => setBleed((p) => ({ ...p, [k]: !p[k] }));
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
@@ -50,6 +61,8 @@ function TemplateEditor() {
         if (body) body.commands.setContent(d.body_html || "<p></p>");
         if (header) header.commands.setContent(d.header_html || "");
         if (footer) footer.commands.setContent(d.footer_html || "");
+        const bl = (d.layout && d.layout.bleed) || {};
+        setBleed({ header: !!bl.header, body: !!bl.body, footer: !!bl.footer });
       } catch (e) { if (alive) setStatus({ type: "error", message: e.message }); }
     })();
     return () => { alive = false; };
@@ -65,13 +78,14 @@ function TemplateEditor() {
       body_html: body?.getHTML() || "<p></p>",
       header_html: clean(header?.getHTML()),
       footer_html: clean(footer?.getHTML()),
+      layout: { bleed },
     })
       .then((url) => { if (!alive) { URL.revokeObjectURL(url); return; } created = url; setPdfUrl(url); })
       .catch((e) => { if (alive) setPdfErr(e.message); })
       .finally(() => { if (alive) setPdfLoading(false); });
     return () => { alive = false; if (created) URL.revokeObjectURL(created); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPreview]);
+  }, [showPreview, bleed]);
 
   const target = active || body;
 
@@ -106,6 +120,7 @@ function TemplateEditor() {
         body_html: body.getHTML(),
         header_html: clean(header?.getHTML()),
         footer_html: clean(footer?.getHTML()),
+        layout: { bleed },
       });
       setStatus({ type: "success", message: "Modèle enregistré." });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
@@ -143,14 +158,17 @@ function TemplateEditor() {
         ) : (
           <div className="tpl-doc">
             <div className="hf-zone">
-              <div className="hf-label">En-tête <span>· laissé vide = papier à en-tête automatique</span></div>
+              <div className="hf-label">En-tête <span>· laissé vide = papier à en-tête automatique</span>
+                <BleedToggle on={bleed.header} onChange={() => toggleBleed("header")} />
+              </div>
               <div onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
             </div>
             <div className="body-zone" onDrop={onDrop(body)} onDragOver={(e) => e.preventDefault()}>
+              <div className="hf-label">Contenu<BleedToggle on={bleed.body} onChange={() => toggleBleed("body")} /></div>
               <EditorContent editor={body} />
             </div>
             <div className="hf-zone">
-              <div className="hf-label">Pied de page</div>
+              <div className="hf-label">Pied de page<BleedToggle on={bleed.footer} onChange={() => toggleBleed("footer")} /></div>
               <div onDrop={onDrop(footer)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={footer} /></div>
             </div>
           </div>

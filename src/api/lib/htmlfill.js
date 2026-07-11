@@ -113,12 +113,12 @@ ${DOC_CSS}
  * bandeaux répétés sur chaque page (superposés ensuite via pdf-lib, cf. pdfcompose).
  * topMm/bottomMm = marges haut/bas ; les côtés restent à 18mm.
  */
-function renderBodyOnlyDoc(bodyHtml, ctx, { topMm = 20, bottomMm = 20, values } = {}) {
+function renderBodyOnlyDoc(bodyHtml, ctx, { topMm = 20, bottomMm = 20, sideMm = 18, values } = {}) {
     const filled = fillHtml(bodyHtml, ctx, values);
     return `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
 <style>
-  @page { size: A4; margin: ${topMm}mm 18mm ${bottomMm}mm 18mm; }
+  @page { size: A4; margin: ${topMm}mm ${sideMm}mm ${bottomMm}mm ${sideMm}mm; }
 ${DOC_CSS}
 </style></head>
 <body><main class="doc-body">${filled}</main></body></html>`;

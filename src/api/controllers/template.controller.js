@@ -28,16 +28,28 @@ async function loadRows(organizationId) {
  * { kind:'docx', buffer } (ancien mode fichier), ou null si aucune source.
  */
 async function getTemplateContent(organizationId, slug) {
-    const [rows] = await db.promise().query(
-        'SELECT kind, body_html, header_html, footer_html, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
-        [organizationId, slug]
-    );
+    let rows;
+    try {
+        [rows] = await db.promise().query(
+            'SELECT kind, body_html, header_html, footer_html, layout, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+            [organizationId, slug]
+        );
+    } catch (e) {
+        if (e && e.code === 'ER_BAD_FIELD_ERROR') { // colonne layout absente (migration 065)
+            [rows] = await db.promise().query(
+                'SELECT kind, body_html, header_html, footer_html, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+                [organizationId, slug]
+            );
+        } else { throw e; }
+    }
     const row = rows[0];
     if (row) {
+        let layout = null;
+        if (row.layout) { try { layout = typeof row.layout === 'string' ? JSON.parse(row.layout) : row.layout; } catch { layout = null; } }
         if (row.kind === 'docx') {
             if (row.file) return { kind: 'docx', buffer: row.file };
         } else if (row.body_html) {
-            return { kind: 'builder', html: row.body_html, header: row.header_html || '', footer: row.footer_html || '' };
+            return { kind: 'builder', html: row.body_html, header: row.header_html || '', footer: row.footer_html || '', layout };
         }
     }
     // Aucun modèle par défaut : le modèle doit être créé dans l'éditeur.
@@ -90,20 +102,35 @@ const listTemplates = async (req, res) => {
 // Upsert d'une ligne (métadonnées et/ou fichier). Renvoie l'id.
 async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
-    const keys = Object.keys(fields);
-    if (ex.length) {
-        if (keys.length) {
-            await conn.query(`UPDATE document_template SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`,
-                [...keys.map((k) => fields[k]), ex[0].id]);
+    // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
+    // sans elles plutôt que d'échouer.
+    const OPTIONAL = ['layout'];
+    const run = async (f) => {
+        const keys = Object.keys(f);
+        if (ex.length) {
+            if (keys.length) {
+                await conn.query(`UPDATE document_template SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`,
+                    [...keys.map((k) => f[k]), ex[0].id]);
+            }
+            return ex[0].id;
         }
-        return ex[0].id;
+        const id = crypto.randomUUID();
+        await conn.query(
+            `INSERT INTO document_template (id, organization_id, slug, ${keys.join(', ')}) VALUES (?, ?, ?, ${keys.map(() => '?').join(', ')})`,
+            [id, orgId, slug, ...keys.map((k) => f[k])]
+        );
+        return id;
+    };
+    try {
+        return await run(fields);
+    } catch (e) {
+        if (e && e.code === 'ER_BAD_FIELD_ERROR' && OPTIONAL.some((k) => k in fields)) {
+            const f = { ...fields };
+            for (const k of OPTIONAL) delete f[k];
+            return run(f);
+        }
+        throw e;
     }
-    const id = crypto.randomUUID();
-    await conn.query(
-        `INSERT INTO document_template (id, organization_id, slug, ${keys.join(', ')}) VALUES (?, ?, ?, ${keys.map(() => '?').join(', ')})`,
-        [id, orgId, slug, ...keys.map((k) => fields[k])]
-    );
-    return id;
 }
 
 /**
@@ -127,6 +154,8 @@ const saveTemplate = async (req, res) => {
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }
     if (b.footer_html !== undefined) { fields.footer_html = b.footer_html || null; fields.kind = 'builder'; }
     if (b.kind !== undefined && (b.kind === 'builder' || b.kind === 'docx')) fields.kind = b.kind;
+    // Réglages de mise en page (bord à bord par zone…). Passe aussi en mode builder.
+    if (b.layout !== undefined) { fields.layout = b.layout ? JSON.stringify(b.layout) : null; fields.kind = fields.kind || 'builder'; }
     try {
         await upsertTemplate(db.promise(), req.user.organization_id, slug, fields);
         logAudit(req, 'template.save', 'DocumentTemplate', slug);
@@ -156,13 +185,14 @@ function sampleTokenValues() {
  */
 const previewPdf = async (req, res) => {
     try {
-        const { body_html, header_html, footer_html } = req.body || {};
+        const { body_html, header_html, footer_html, layout } = req.body || {};
         const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [req.user.organization_id]);
         const pdf = await composeDocumentPdf({
             bodyHtml: body_html || '<p></p>',
             headerHtml: header_html, footerHtml: footer_html,
             ctx: { org: org || {} },
             sampleValues: sampleTokenValues(),
+            bleed: (layout && layout.bleed) || {},
         });
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', 'inline; filename="apercu.pdf"');
@@ -180,12 +210,12 @@ const previewPdf = async (req, res) => {
 const getTemplateBody = async (req, res) => {
     try {
         const content = await getTemplateContent(req.user.organization_id, req.params.slug);
-        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: '', header_html: '', footer_html: '' } });
+        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: '', header_html: '', footer_html: '', layout: null } });
         if (content.kind === 'docx') {
             // Ancien modèle .docx sans corps éditable : on renvoie un corps vide à composer.
-            return res.json({ data: { slug: req.params.slug, kind: 'docx', body_html: '', header_html: '', footer_html: '' } });
+            return res.json({ data: { slug: req.params.slug, kind: 'docx', body_html: '', header_html: '', footer_html: '', layout: null } });
         }
-        res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: content.html, header_html: content.header || '', footer_html: content.footer || '' } });
+        res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: content.html, header_html: content.header || '', footer_html: content.footer || '', layout: content.layout || null } });
     } catch (err) {
         console.error('Erreur lecture corps modèle :', err);
         res.status(500).json({ error: 'Internal Server Error' });

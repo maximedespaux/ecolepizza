@@ -377,6 +377,7 @@ const downloadPdf = async (req, res) => {
                 pdf = await composeDocumentPdf({
                     bodyHtml: r.content.html, ctx: r.ctx,
                     headerHtml: r.content.header, footerHtml: r.content.footer,
+                    bleed: (r.content.layout && r.content.layout.bleed) || {},
                 });
             } else {
                 const out = renderTemplate(r.content.buffer, r.ctx, r.slug);
