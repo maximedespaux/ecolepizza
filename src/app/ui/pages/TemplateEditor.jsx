@@ -98,8 +98,13 @@ function TemplateEditor() {
       let line = 31.4;
       const dom = body.view?.dom;
       if (dom && dom.children.length >= 2) {
-        const d = dom.children[1].offsetTop - dom.children[0].offsetTop;
-        if (d > 8 && d < 120) line = d; // pas réel entre deux blocs
+        // Pas d'une ligne NORMALE : médiane des écarts (évite les titres/images plus hauts).
+        const gaps = [];
+        for (let i = 1; i < dom.children.length; i++) {
+          const d = dom.children[i].offsetTop - dom.children[i - 1].offsetTop;
+          if (d >= 16 && d <= 60) gaps.push(d);
+        }
+        if (gaps.length) { gaps.sort((a, b) => a - b); line = gaps[Math.floor(gaps.length / 2)]; }
       }
       setMetrics({
         h: header.view?.dom?.offsetHeight || 0,
