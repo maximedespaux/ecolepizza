@@ -219,6 +219,15 @@ async function loadOrgRow(orgId) {
     return org || {};
 }
 
+// Champs du LIEU de formation (jetons field:location.<colonne>), remplis au rendu depuis
+// le lieu de la session du dossier. Échantillons génériques pour l'aperçu.
+const LOCATION_FIELDS = [
+    ['name', 'Nom du lieu', 'Centre de formation Bordeaux'],
+    ['address', 'Adresse du lieu', '12 rue des Fours'],
+    ['zip_code', 'Code postal du lieu', '33000'],
+    ['town', 'Ville du lieu', 'Bordeaux'],
+];
+
 // Jetons de la palette = CHAMPS DOCUMENTS activés (colonnes du dossier), regroupés par table.
 // Clé « field:<table.column> », remplie au rendu depuis le dossier réel.
 async function fieldTokenGroups(orgId) {
@@ -254,6 +263,7 @@ const getTokens = async (req, res) => {
         const groups = await fieldTokenGroups(orgId);
         const org = await loadOrgRow(orgId);
         groups.push({ group: 'Organisme', tokens: ORG_FIELDS.map(([col, label]) => ({ key: `field:organization.${col}`, label, sample: org[col] || '' })) });
+        groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
         const defs = await loadCustomTokens(orgId);
         if (defs.length) groups.push({ group: 'Personnalisés', tokens: defs.map((d) => ({ key: `custom:${d.token_key}`, label: d.label, sample: '' })) });
@@ -272,6 +282,7 @@ async function sampleTokenValues(orgId) {
     catch { /* champs indisponibles : on garde les jetons intégrés */ }
     try { const org = await loadOrgRow(orgId); for (const [col] of ORG_FIELDS) m[`field:organization.${col}`] = org[col] || ''; }
     catch { /* organisme indisponible */ }
+    for (const [col, , sample] of LOCATION_FIELDS) m[`field:location.${col}`] = sample;
     try { Object.assign(m, resolveCustomTokens(await loadCustomTokens(orgId), m)); }
     catch { /* jetons personnalisés indisponibles */ }
     return m;

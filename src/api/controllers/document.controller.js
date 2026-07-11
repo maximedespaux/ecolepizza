@@ -128,6 +128,15 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 const catalog = await getEnabledFields(conn, organizationId);
                 const facts = (await loadDossierFactsMap(conn, organizationId, [df.enrollment_id], catalog)).get(df.enrollment_id) || {};
                 for (const [k, v] of Object.entries(facts)) fields[k] = (typeof v === 'string') ? decrypt(v) : v;
+                // Lieu de formation de la session (jetons field:location.<colonne>).
+                try {
+                    const [[loc]] = await conn.query(
+                        `SELECT tl.name, tl.address, tl.zip_code, tl.town
+                         FROM enrollment e JOIN training_session s ON s.id = e.session_id
+                         LEFT JOIN training_location tl ON tl.id = s.location_id
+                         WHERE e.id = ?`, [df.enrollment_id]);
+                    if (loc) for (const k of ['name', 'address', 'zip_code', 'town']) fields['location.' + k] = loc[k] || '';
+                } catch { /* migration des lieux (067) non appliquée */ }
             }
         } catch (e) { /* champs indisponibles (migration non jouée) : on ignore */ }
     }

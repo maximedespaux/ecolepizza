@@ -34,6 +34,9 @@ export function getOrganisation() {
 export function updateOrganisation(payload) {
   return request("/organisation", { method: "PATCH", body: JSON.stringify(payload) });
 }
+// Lieux de formation de l'organisme.
+export function getLocations() { return request("/organisation/locations"); }
+export function saveLocations(locations) { return request("/organisation/locations", { method: "PUT", body: JSON.stringify({ locations }) }); }
 
 // --- Modèles de feuille d'émargement ---
 export function getEmargementTemplates() {

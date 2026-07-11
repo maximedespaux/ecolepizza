@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSessions, getFormations, createSession } from "../api/apiClient.js";
+import { getSessions, getFormations, createSession, getLocations } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { SelectField, Field } from "../components/Field.jsx";
@@ -16,6 +16,7 @@ function Sessions() {
   const [view, setView] = useState("mois"); // mois | trimestre | semestre | annee
   const [sessions, setSessions] = useState([]);
   const [programs, setPrograms] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [status, setStatus] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState({ program_id: "", start_date: ymd(now) });
@@ -32,6 +33,7 @@ function Sessions() {
   useEffect(() => {
     loadSessions();
     getFormations().then((r) => setPrograms(r.data)).catch(() => {});
+    getLocations().then((r) => setLocations(r.data || [])).catch(() => {});
   }, []);
 
   const weeks = useMemo(() => monthMatrix(year, month), [year, month]);
@@ -149,6 +151,18 @@ function Sessions() {
                 required
               />
             </div>
+            {locations.length > 0 && (
+              <SelectField
+                label="Lieu de formation"
+                value={addForm.location_id || ""}
+                onChange={(e) => setAddForm((f) => ({ ...f, location_id: e.target.value }))}
+              >
+                <option value="">— Aucun / à définir —</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>{l.name}{l.town ? ` — ${l.town}` : ""}</option>
+                ))}
+              </SelectField>
+            )}
             <button type="submit" className="btn primary">Ajouter au calendrier</button>
           </form>
         </Card>
