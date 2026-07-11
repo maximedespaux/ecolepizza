@@ -6,6 +6,7 @@ import RichToolbar from "../components/RichToolbar.jsx";
 import { getTokenCatalog, getTemplateBody, saveTemplateBody, templatePreviewPdfUrl, templatePageMetrics } from "../api/apiClient.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
+import CustomTokenManager from "../components/CustomTokenManager.jsx";
 
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
@@ -35,6 +36,7 @@ function TemplateEditor() {
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
   const [showFields, setShowFields] = useState(false); // modale « Champs documents »
+  const [showCustom, setShowCustom] = useState(false); // modale « Jetons personnalisés »
   const fieldsRef = useRef(null);
   const [, force] = useState(0);
 
@@ -221,6 +223,7 @@ function TemplateEditor() {
           <h2 style={{ margin: 0, fontSize: 17 }}>Éditeur — <span className="mono">{slug}</span></h2>
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button className="btn sm ghost" onClick={() => setShowFields(true)} title="Gérer les champs disponibles du dossier">Champs documents</button>
+            <button className="btn sm ghost" onClick={() => setShowCustom(true)} title="Créer des jetons calculés (dates, combinaisons…)">Jetons perso</button>
             <button className={"btn sm ghost" + (showPreview ? " on" : "")} onClick={() => setShowPreview((v) => !v)}>
               {showPreview ? "Édition" : "Aperçu"}
             </button>
@@ -325,6 +328,10 @@ function TemplateEditor() {
           ))}
         </aside>
       </div>
+
+      {showCustom && (
+        <CustomTokenManager catalog={catalog} onClose={() => setShowCustom(false)} onSaved={reloadCatalog} />
+      )}
 
       {showFields && (
         <div className="overlay" onClick={() => { setShowFields(false); reloadCatalog(); }}>

@@ -8,6 +8,7 @@ const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS } = require('../lib/documents.j
 const { TOKEN_CATALOG } = require('../lib/tokens.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
 const { getEnabledFields } = require('../lib/conditions.js');
+const { resolveCustomTokens } = require('../lib/customtokens.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
@@ -184,25 +185,89 @@ async function fieldTokenGroups(orgId) {
     return Object.entries(by).map(([group, tokens]) => ({ group, tokens }));
 }
 
-/** GET /api/templates/tokens — jetons de la palette (champs documents activés). */
+// Groupe « Calculé / dates » : jetons INTÉGRÉS dérivés du dossier (dates de session,
+// semaine, durées…). Ils sont calculés au rendu par resolveTokens.
+const COMPUTED_KEYS = ['Jour1', 'endDate', 'Semaine', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Formateur', 'Heures', 'Jours', 'DuréeDétail', 'Prix', 'Acompte', 'Financement'];
+function computedGroup() {
+    const byKey = {};
+    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
+    const tokens = COMPUTED_KEYS.map((k) => byKey[k]).filter(Boolean).map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
+    return { group: 'Calculé / dates', tokens };
+}
+
+// Jetons personnalisés de l'organisme (table custom_token). Résilient si migration absente.
+async function loadCustomTokens(orgId) {
+    try {
+        const [rows] = await db.promise().query(
+            'SELECT token_key, label, template, sort_order FROM custom_token WHERE organization_id = ? ORDER BY sort_order, label', [orgId]);
+        return rows;
+    } catch (e) { if (e && e.code === 'ER_NO_SUCH_TABLE') return []; throw e; }
+}
+
+/** GET /api/templates/tokens — jetons de la palette (champs documents + calculés + personnalisés). */
 const getTokens = async (req, res) => {
     try {
-        res.json({ data: await fieldTokenGroups(req.user.organization_id) });
+        const orgId = req.user.organization_id;
+        const groups = await fieldTokenGroups(orgId);
+        groups.push(computedGroup());
+        const defs = await loadCustomTokens(orgId);
+        if (defs.length) groups.push({ group: 'Personnalisés', tokens: defs.map((d) => ({ key: `custom:${d.token_key}`, label: d.label, sample: '' })) });
+        res.json({ data: groups });
     } catch (e) {
         console.error('Erreur jetons palette :', e);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
 
-// Valeurs d'exemple { clé: échantillon } pour l'aperçu (jetons intégrés hérités + champs documents).
+// Valeurs d'exemple { clé: échantillon } pour l'aperçu (intégrés + champs documents + personnalisés).
 async function sampleTokenValues(orgId) {
     const m = {};
-    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || ''; // modèles existants
-    try {
-        for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || '';
-    } catch { /* champs indisponibles : on garde les jetons intégrés */ }
+    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || '';
+    try { for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || ''; }
+    catch { /* champs indisponibles : on garde les jetons intégrés */ }
+    try { Object.assign(m, resolveCustomTokens(await loadCustomTokens(orgId), m)); }
+    catch { /* jetons personnalisés indisponibles */ }
     return m;
 }
+
+/** GET /api/templates/custom-tokens — liste des jetons personnalisés. */
+const getCustomTokens = async (req, res) => {
+    try { res.json({ data: await loadCustomTokens(req.user.organization_id) }); }
+    catch (e) { console.error('Erreur lecture jetons personnalisés :', e); res.status(500).json({ error: 'Internal Server Error' }); }
+};
+
+/** PUT /api/templates/custom-tokens — remplace la liste { tokens: [{ token_key, label, template }] }. */
+const saveCustomTokens = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const list = Array.isArray(req.body && req.body.tokens) ? req.body.tokens : [];
+        const clean = [];
+        const seen = new Set();
+        for (let i = 0; i < list.length; i++) {
+            const t = list[i] || {};
+            const key = String(t.token_key || '').trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            clean.push({ token_key: key, label: String(t.label || key).slice(0, 120), template: String(t.template || '').slice(0, 2000), sort_order: i * 10 });
+        }
+        try {
+            await conn.query('DELETE FROM custom_token WHERE organization_id = ?', [orgId]);
+            for (const t of clean) {
+                await conn.query('INSERT INTO custom_token (id, organization_id, token_key, label, template, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+                    [crypto.randomUUID(), orgId, t.token_key, t.label, t.template, t.sort_order]);
+            }
+        } catch (e) {
+            if (e && e.code === 'ER_NO_SUCH_TABLE') return res.status(501).json({ message: "La table des jetons personnalisés n'existe pas (migration 066 non appliquée)." });
+            throw e;
+        }
+        logAudit(req, 'template.customTokens', 'Organization', orgId);
+        res.json({ success: true, message: 'Jetons personnalisés enregistrés.' });
+    } catch (e) {
+        console.error('Erreur enregistrement jetons personnalisés :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
 
 /**
  * POST /api/templates/:slug/preview-pdf — aperçu PDF FIDÈLE du modèle en cours d'édition.
@@ -389,4 +454,5 @@ module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
     getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
+    loadCustomTokens, getCustomTokens, saveCustomTokens,
 };

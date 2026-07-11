@@ -661,6 +661,9 @@ export function getTemplateBody(slug) {
 export function saveTemplateBody(slug, payload) {
   return request(`/templates/${slug}`, { method: "PUT", body: JSON.stringify(payload) });
 }
+// Jetons personnalisés de l'organisme (calculés à partir d'autres jetons).
+export function getCustomTokens() { return request("/templates/custom-tokens"); }
+export function saveCustomTokens(tokens) { return request("/templates/custom-tokens", { method: "PUT", body: JSON.stringify({ tokens }) }); }
 // Marges réservées (en-tête/pied) du modèle en cours d'édition — pour le repère de fin
 // de page. Calcul serveur identique au rendu PDF. { topMm, bottomMm, contentMm }.
 export function templatePageMetrics(slug, payload) {

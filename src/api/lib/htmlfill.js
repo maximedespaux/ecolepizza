@@ -4,6 +4,7 @@
 // {Clé} (modèles convertis depuis les anciens fichiers Word). Les deux formes
 // sont remplacées par la valeur réelle issue du catalogue partagé.
 const { resolveTokens, RAW_TOKENS, signatureBox } = require('./tokens.js');
+const { resolveCustomTokens } = require('./customtokens.js');
 
 function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -28,6 +29,10 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
         for (const [k, v] of Object.entries(ctx.fields)) {
             values['field:' + k] = v == null ? '' : (v === true ? 'Oui' : v === false ? 'Non' : String(v));
         }
+    }
+    // Jetons personnalisés (calculés à partir des autres) : jetons custom:<clé>.
+    if (ctx && ctx.customTokens && ctx.customTokens.length) {
+        values = { ...values, ...resolveCustomTokens(ctx.customTokens, values) };
     }
     const slotSigs = (ctx && ctx.slotSignatures) || {}; // { slotKey: { data, name, date, label } }
     let out = String(bodyHtml || '');
