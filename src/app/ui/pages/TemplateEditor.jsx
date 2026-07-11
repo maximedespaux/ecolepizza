@@ -89,20 +89,25 @@ function TemplateEditor() {
 
   const target = active || body;
 
-  // Mesure la hauteur RÉELLE des éditeurs d'en-tête et de pied (rendus à la même échelle
-  // que le corps) pour caler le repère de fin de page.
+  // Mesure la hauteur RÉELLE des zones d'en-tête et de pied (via refs sur les conteneurs
+  // DOM — plus fiable que editor.view.dom qui n'est pas encore monté au 1er rendu).
+  const headRef = useRef(null);
+  const footRef = useRef(null);
   const [metrics, setMetrics] = useState({ h: 0, f: 0 });
   useEffect(() => {
-    if (!header || !footer) return undefined;
+    if (showPreview) return undefined; // zones non montées en mode aperçu
     const measure = () => setMetrics({
-      h: header.view?.dom?.offsetHeight || 0,
-      f: footer.view?.dom?.offsetHeight || 0,
+      h: headRef.current?.offsetHeight || 0,
+      f: footRef.current?.offsetHeight || 0,
     });
     measure();
     const ro = new ResizeObserver(measure);
-    [header.view?.dom, footer.view?.dom].forEach((d) => d && ro.observe(d));
-    return () => ro.disconnect();
-  }, [header, footer]);
+    if (headRef.current) ro.observe(headRef.current);
+    if (footRef.current) ro.observe(footRef.current);
+    // Re-mesure après montage/chargement des images.
+    const t = setTimeout(measure, 300);
+    return () => { ro.disconnect(); clearTimeout(t); };
+  }, [showPreview]);
 
   // Position (px) de la FIN de page = zone utile A4 (hauteur physique), moins l'en-tête et
   // le pied. C'est une position GÉOMÉTRIQUE sur la page : indépendante de la taille du
@@ -196,7 +201,7 @@ function TemplateEditor() {
               <div className="hf-label">En-tête <span>· laissé vide = papier à en-tête automatique</span>
                 <BleedToggle on={bleed.header} onChange={() => toggleBleed("header")} />
               </div>
-              <div onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
+              <div ref={headRef} onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
             </div>
             <div className="body-zone" onDrop={onDrop(body)} onDragOver={(e) => e.preventDefault()}
               style={{ "--page-h": pageContentPx + "px" }}>
@@ -206,7 +211,7 @@ function TemplateEditor() {
             </div>
             <div className="hf-zone">
               <div className="hf-label">Pied de page<BleedToggle on={bleed.footer} onChange={() => toggleBleed("footer")} /></div>
-              <div onDrop={onDrop(footer)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={footer} /></div>
+              <div ref={footRef} onDrop={onDrop(footer)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={footer} /></div>
             </div>
           </div>
         )}
