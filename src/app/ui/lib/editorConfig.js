@@ -27,8 +27,7 @@ const StyledTable = Table.extend({
   },
 });
 import TableRow from "@tiptap/extension-table-row";
-import TableHeader from "@tiptap/extension-table-header";
-import TableCell from "@tiptap/extension-table-cell";
+import { ResizableTableCell, ResizableTableHeader } from "./ResizableCell.jsx";
 import { FontSize, LineHeight, PageBreak } from "./tiptapExtensions.js";
 import { TokenNode } from "./TokenNode.js";
 
@@ -49,8 +48,8 @@ export function buildExtensions({ tokens = true } = {}) {
     ResizableImage.configure({ inline: true, allowBase64: true }),
     StyledTable.configure({ resizable: true }),
     TableRow,
-    TableHeader,
-    TableCell,
+    ResizableTableHeader,
+    ResizableTableCell,
   ];
   if (tokens) ext.push(TokenNode);
   return ext;
