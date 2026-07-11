@@ -92,6 +92,9 @@ function renderTemplateHtml(bodyHtml, ctx, opts = {}) {
   ul, ol { margin: 0 0 8px 18px; }
   img { max-width: 100%; }
   .doc-body { margin-top: 4px; }
+  /* Saut de page manuel : LibreOffice ne respecte le saut que sur un <p> non vide,
+     d'où l'espace insécable ; on annule sa hauteur pour qu'il reste invisible. */
+  p.doc-pagebreak { page-break-after: always; height: 0; margin: 0; padding: 0; font-size: 0; line-height: 0; }
 </style></head>
 <body>${head}<main class="doc-body">${filled}</main>${foot}</body></html>`;
 }

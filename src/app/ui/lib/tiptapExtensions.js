@@ -1,4 +1,39 @@
-import { Extension } from "@tiptap/core";
+import { Extension, Node } from "@tiptap/core";
+
+/**
+ * PageBreak — saut de page manuel.
+ * Sérialisé en <p class="doc-pagebreak">&nbsp;</p> : c'est la SEULE forme respectée
+ * par LibreOffice à la conversion PDF (les <div> ou <p> vides sont ignorés ; le saut
+ * doit porter sur un <p> ayant un contenu, d'où l'espace insécable). Dans l'éditeur,
+ * il s'affiche comme un séparateur « Saut de page » (styles app.css).
+ * Bouton dans la barre d'outils + raccourci Ctrl/Cmd+Entrée.
+ */
+export const PageBreak = Node.create({
+  name: "pageBreak",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: true,
+  priority: 1100, // gagne sur le paragraphe pour parser <p class="doc-pagebreak">
+
+  parseHTML() {
+    return [{ tag: "p.doc-pagebreak" }, { tag: "div.doc-pagebreak" }];
+  },
+  renderHTML() {
+    return ["p", { class: "doc-pagebreak", contenteditable: "false" }, " "];
+  },
+  addCommands() {
+    return {
+      setPageBreak:
+        () =>
+        ({ chain }) =>
+          chain().insertContent({ type: this.name }).run(),
+    };
+  },
+  addKeyboardShortcuts() {
+    return { "Mod-Enter": () => this.editor.commands.setPageBreak() };
+  },
+});
 
 /**
  * FontSize — ajoute un attribut `font-size` au style de texte (nécessite TextStyle).

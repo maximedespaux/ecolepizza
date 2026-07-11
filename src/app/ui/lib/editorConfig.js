@@ -11,7 +11,7 @@ import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
-import { FontSize, LineHeight } from "./tiptapExtensions.js";
+import { FontSize, LineHeight, PageBreak } from "./tiptapExtensions.js";
 import { TokenNode } from "./TokenNode.js";
 
 /** Jeu d'extensions partagé par les éditeurs (corps, en-tête, pied de page). */
@@ -25,6 +25,7 @@ export function buildExtensions({ tokens = true } = {}) {
     FontFamily,
     FontSize,
     LineHeight,
+    PageBreak,
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     Link.configure({ openOnClick: false, autolink: true }),
     ResizableImage.configure({ inline: true, allowBase64: true }),

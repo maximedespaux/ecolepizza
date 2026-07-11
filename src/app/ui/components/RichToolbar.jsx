@@ -166,6 +166,7 @@ function RichToolbar({ editor, compact = false }) {
           <Btn title="Image" on={() => imgInput.current?.click()}>🖼</Btn>
           <TableInserter onInsert={(rows, cols) => c().insertTable({ rows, cols, withHeaderRow: true }).run()} />
           <Btn title="Ligne horizontale" on={() => c().setHorizontalRule().run()}>—</Btn>
+          <Btn title="Saut de page (Ctrl/Cmd + Entrée)" on={() => c().setPageBreak().run()}>⇟</Btn>
           <input ref={imgInput} type="file" accept="image/*" style={{ display: "none" }}
             onChange={(e) => { addImageFile(e.target.files[0]); e.target.value = ""; }} />
         </>
