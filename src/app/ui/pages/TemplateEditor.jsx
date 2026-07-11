@@ -89,6 +89,16 @@ function TemplateEditor() {
 
   const target = active || body;
 
+  // Hauteur (px) d'UNE page de contenu dans l'éditeur, pour caler le repère de fin de page.
+  // Colonne de contenu ≈ 174 mm rendue sur ~660 px → 3,79 px/mm. La zone utile du corps
+  // dépend des marges réservées à l'en-tête/pied (réduites en mode « bord à bord »).
+  const PX_PER_MM = 660 / 174;
+  const headerHasImg = /<img/i.test(header?.getHTML() || "");
+  const hasFooter = !!clean(footer?.getHTML());
+  const topReserveMm = bleed.header ? 8 : (headerHasImg ? 46 : 26); // bannière image = plus haute
+  const botReserveMm = bleed.footer ? 8 : (hasFooter ? 30 : 18);
+  const pageContentPx = Math.round((297 - topReserveMm - botReserveMm) * PX_PER_MM);
+
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
   }
@@ -163,8 +173,10 @@ function TemplateEditor() {
               </div>
               <div onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
             </div>
-            <div className="body-zone" onDrop={onDrop(body)} onDragOver={(e) => e.preventDefault()}>
-              <div className="hf-label">Contenu<BleedToggle on={bleed.body} onChange={() => toggleBleed("body")} /></div>
+            <div className="body-zone" onDrop={onDrop(body)} onDragOver={(e) => e.preventDefault()}
+              style={{ "--page-h": pageContentPx + "px" }}>
+              <div className="hf-label">Contenu <span>· le trait rouge indique la fin de page</span>
+                <BleedToggle on={bleed.body} onChange={() => toggleBleed("body")} /></div>
               <EditorContent editor={body} />
             </div>
             <div className="hf-zone">
