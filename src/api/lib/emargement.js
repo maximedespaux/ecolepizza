@@ -71,6 +71,9 @@ const DEFAULT_EMARG_CONFIG = {
     footer_left: '',                 // '' -> « Fait à {ville}, le {date} »
     footer_caption: "Signature et cachet de l'organisme de formation",
     show_stamp: true,
+    // Colonnes personnalisées ajoutées par l'organisme : { label, text, side, width_mm }.
+    // text = contenu fixe répété sur chaque ligne (vide = case à remplir). side = 'before'|'after' la grille.
+    extra_columns: [],
 };
 
 const DENSITY = {
@@ -100,6 +103,13 @@ function mergeEmargConfig(raw) {
     const m = parseInt(c.margin_mm, 10);
     c.margin_mm = Number.isFinite(m) ? Math.min(25, Math.max(4, m)) : DEFAULT_EMARG_CONFIG.margin_mm;
     for (const k of ['show_logo', 'show_duration', 'show_horaires', 'show_lieu', 'show_formateurs', 'show_intervenants', 'show_hours', 'show_stamp']) c[k] = !!c[k];
+    // Colonnes personnalisées : jusqu'à 6, label/texte bornés, largeur optionnelle.
+    c.extra_columns = Array.isArray(c.extra_columns) ? c.extra_columns.slice(0, 6).map((x) => ({
+        label: String((x && x.label) || '').slice(0, 40),
+        text: String((x && x.text) || '').slice(0, 80),
+        side: x && x.side === 'after' ? 'after' : 'before',
+        width_mm: Number.isFinite(parseInt(x && x.width_mm, 10)) ? Math.min(60, Math.max(12, parseInt(x.width_mm, 10))) : 24,
+    })).filter((x) => x.label || x.text) : [];
     return c;
 }
 
@@ -139,9 +149,14 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const contentH = pageH - 2 * margin;
     const nameW = Math.min(45, Math.max(28, contentW * 0.16)); // colonne « Nom et prénom »
     const nCols = cols.length || 1;
-    // Largeur d'une colonne = (largeur utile - colonne nom) / nombre de demi-journées.
-    const colW = Math.max(7, (contentW - nameW) / nCols);
-    const tableW = nameW + colW * nCols;
+    // Colonnes personnalisées (avant / après la grille) : on réserve leur largeur.
+    const extraCols = cfg.extra_columns || [];
+    const beforeEx = extraCols.filter((x) => x.side === 'before');
+    const afterEx = extraCols.filter((x) => x.side === 'after');
+    const extraW = extraCols.reduce((s, x) => s + (x.width_mm || 24), 0);
+    // Largeur d'une colonne de signature = (largeur utile - nom - colonnes perso) / nb demi-journées.
+    const colW = Math.max(7, (contentW - nameW - extraW) / nCols);
+    const tableW = nameW + extraW + colW * nCols;
 
     // Participants affichés (le stagiaire est toujours là).
     const shown = participants.filter((p) => p.role === 'stagiaire'
@@ -173,15 +188,18 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
         if (v) return `<td width="${colWpx}" height="${rowHpx}"><img src="${v}" width="${px(sigW)}" height="${px(sigH)}" style="object-fit:contain"/></td>`;
         return `<td width="${colWpx}" height="${rowHpx}"></td>`;
     };
+    // Cellules des colonnes personnalisées : texte fixe répété, ou case vide à remplir.
+    const exFilled = (arr) => arr.map((x) => `<td width="${px(x.width_mm)}" height="${rowHpx}">${esc(x.text || '')}</td>`).join('');
+    const exEmpty = (arr) => arr.map((x) => `<td width="${px(x.width_mm)}"></td>`).join('');
     const rowFor = (p) => `<tr>
         <td class="nm" width="${nameWpx}" height="${rowHpx}">${esc(p.name || '')}${p.specialty ? `<div class="sub">${esc(p.specialty)}</div>` : ''}${p.role === 'stagiaire' ? '<div class="sub">Stagiaire</div>' : p.role === 'intervenant' ? '<div class="sub">Intervenant</div>' : ''}</td>
-        ${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k)); }).join('')}
+        ${exFilled(beforeEx)}${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k)); }).join('')}${exFilled(afterEx)}
     </tr>`;
 
     // Lignes récap (horaires / volume) : plage horaire et durée par demi-journée.
     const infoRow = (label, fn) => `<tr class="info">
         <td class="nm ilabel" width="${nameWpx}">${esc(label)}</td>
-        ${cols.map((c) => `<td width="${colWpx}">${esc(fn(c))}</td>`).join('')}
+        ${exEmpty(beforeEx)}${cols.map((c) => `<td width="${colWpx}">${esc(fn(c))}</td>`).join('')}${exEmpty(afterEx)}
     </tr>`;
     const timeCell = (c) => { const r = rangeFor(c); return r ? `${fmtHM(r[0])} – ${fmtHM(r[1])}` : ''; };
     const volCell = (c) => { const r = rangeFor(c); return r ? fmtDur(r[1] - r[0]) : ''; };
@@ -246,7 +264,7 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
 
         <table border="1" bordercolor="#c9ccd3" cellspacing="0" cellpadding="2" width="${px(tableW)}">
             <thead>
-                <tr><th class="nm" rowspan="2" width="${nameWpx}" bgcolor="#f5f3f0" style="text-align:left">Nom et prénom</th>${dates.map((d) => `<th colspan="${daySlots[d].length}" bgcolor="#f5f3f0">${esc(frDay(d))}</th>`).join('')}</tr>
+                <tr><th class="nm" rowspan="2" width="${nameWpx}" bgcolor="#f5f3f0" style="text-align:left">Nom et prénom</th>${beforeEx.map((x) => `<th rowspan="2" width="${px(x.width_mm)}" bgcolor="#f5f3f0">${esc(x.label)}</th>`).join('')}${dates.map((d) => `<th colspan="${daySlots[d].length}" bgcolor="#f5f3f0">${esc(frDay(d))}</th>`).join('')}${afterEx.map((x) => `<th rowspan="2" width="${px(x.width_mm)}" bgcolor="#f5f3f0">${esc(x.label)}</th>`).join('')}</tr>
                 <tr>${cols.map((c) => `<th width="${colWpx}" bgcolor="#f5f3f0">${SLOT[c.slot] || esc(c.slot)}</th>`).join('')}</tr>
             </thead>
             <tbody>${tbodyHtml}</tbody>

@@ -11,6 +11,7 @@ export const EMARG_DEFAULTS = {
   slots: ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"],
   show_formateurs: true, show_intervenants: true, show_hours: true, density: "normal", margin_mm: 10,
   footer_left: "", footer_caption: "Signature et cachet de l'organisme de formation", show_stamp: true,
+  extra_columns: [],
 };
 const SLOT_ORDER = ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"];
 const SLOT_LABEL = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
@@ -44,6 +45,10 @@ export default function EmargementEditor() {
   const set = (k) => (e) => { setCfg((p) => ({ ...p, [k]: e.target.value })); setDirty(true); };
   const setChk = (k) => (e) => { setCfg((p) => ({ ...p, [k]: e.target.checked })); setDirty(true); };
   const toggleSlot = (s) => { setCfg((p) => ({ ...p, slots: SLOT_ORDER.filter((x) => x === s ? !p.slots.includes(s) : p.slots.includes(x)) })); setDirty(true); };
+  // Colonnes personnalisées.
+  const addCol = () => { setCfg((p) => ({ ...p, extra_columns: [...(p.extra_columns || []), { label: "Colonne", text: "", side: "before", width_mm: 24 }] })); setDirty(true); };
+  const setCol = (i, k, v) => { setCfg((p) => { const ec = [...(p.extra_columns || [])]; ec[i] = { ...ec[i], [k]: v }; return { ...p, extra_columns: ec }; }); setDirty(true); };
+  const delCol = (i) => { setCfg((p) => ({ ...p, extra_columns: (p.extra_columns || []).filter((_, j) => j !== i) })); setDirty(true); };
 
   async function save() {
     setSaving(true);
@@ -135,6 +140,23 @@ export default function EmargementEditor() {
               ))}
             </div></div>
 
+          <div className="field"><label>Colonnes personnalisées</label>
+            <div style={{ display: "grid", gap: 8 }}>
+              {(cfg.extra_columns || []).map((c, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: 6, alignItems: "center" }}>
+                  <input className="inp" value={c.label} onChange={(e) => setCol(i, "label", e.target.value)} placeholder="Titre (ex. Entreprise)" />
+                  <input className="inp" value={c.text} onChange={(e) => setCol(i, "text", e.target.value)} placeholder="Texte fixe (vide = à remplir)" />
+                  <select value={c.side} onChange={(e) => setCol(i, "side", e.target.value)} title="Position">
+                    <option value="before">Avant</option>
+                    <option value="after">Après</option>
+                  </select>
+                  <button className="btn sm ghost danger" title="Supprimer" onClick={() => delCol(i)}>🗑</button>
+                </div>
+              ))}
+              <div><button className="btn sm ghost" onClick={addCol} disabled={(cfg.extra_columns || []).length >= 6}>＋ Ajouter une colonne</button></div>
+            </div>
+            <span className="hint">Colonnes libres ajoutées au tableau, avant ou après la grille de signatures. Laissez le texte vide pour une colonne à remplir à la main.</span></div>
+
           <div className="field"><label>Lignes de signature</label>
             <div style={{ display: "grid", gap: 8 }}>
               <Toggle k="show_formateurs" label="Ligne(s) formateur(s)" />
@@ -209,6 +231,11 @@ export function EmargementPreview({ cfg, org }) {
   if (cfg.show_intervenants) rows.push({ name: "GIRARD Sophie", sub: "Hygiène (HACCP)", on: (i) => i >= shownSlots.length });
 
   const pageW = cfg.orientation === "portrait" ? 500 : 720;
+  const extra = cfg.extra_columns || [];
+  const beforeEx = extra.filter((x) => x.side !== "after");
+  const afterEx = extra.filter((x) => x.side === "after");
+  const exHead = (arr) => arr.map((x, j) => <th key={"eh" + x.side + j} rowSpan={2} style={{ border: "1px solid #cfd2d8", background: "#f5f3f0", textTransform: "uppercase", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>{x.label}</th>);
+  const exBody = (arr, info) => arr.map((x, j) => <td key={"eb" + x.side + j} style={{ border: "1px solid #cfd2d8", fontSize: dens.sub, color: "#555", padding: "2px 4px", background: info ? "#faf7f2" : undefined }}>{info ? "" : (x.text || "")}</td>);
 
   return (
     <div style={{ overflowX: "auto" }}>
@@ -230,7 +257,9 @@ export function EmargementPreview({ cfg, org }) {
           <thead>
             <tr>
               <th rowSpan={2} style={{ width: 130, textAlign: "left", border: "1px solid #cfd2d8", background: "#f5f3f0", textTransform: "uppercase", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>Nom et prénom</th>
+              {exHead(beforeEx)}
               {exDays.map((d) => (<th key={d.label} colSpan={shownSlots.length} style={{ border: "1px solid #cfd2d8", background: "#f5f3f0", textTransform: "uppercase", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>{d.label}</th>))}
+              {exHead(afterEx)}
             </tr>
             <tr>{cols.map((c, i) => (<th key={i} style={{ border: "1px solid #cfd2d8", background: "#f5f3f0", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>{SLOT_LABEL[c.s]}</th>))}</tr>
           </thead>
@@ -239,7 +268,9 @@ export function EmargementPreview({ cfg, org }) {
               const infoTr = (label, fn, key) => (
                 <tr key={key}>
                   <td style={{ border: "1px solid #cfd2d8", textAlign: "left", fontWeight: 600, fontSize: dens.sub, color: "#333", background: "#faf7f2", padding: "2px 4px" }}>{label}</td>
+                  {exBody(beforeEx, true)}
                   {cols.map((c, i) => <td key={i} style={{ border: "1px solid #cfd2d8", fontSize: dens.sub, color: "#555", background: "#faf7f2", padding: "2px 4px" }}>{fn(c)}</td>)}
+                  {exBody(afterEx, true)}
                 </tr>
               );
               const out = [];
@@ -250,7 +281,9 @@ export function EmargementPreview({ cfg, org }) {
                 out.push(
                   <tr key={ri}>
                     <td style={{ border: "1px solid #cfd2d8", textAlign: "left", fontWeight: 600, fontSize: dens.name, padding: "3px 4px" }}>{r.name}<div style={{ fontWeight: 400, fontSize: dens.sub, color: "#8a8f99" }}>{r.sub}</div></td>
+                    {exBody(beforeEx, false)}
                     {cols.map((c, i) => r.on(i) ? cell(i, true) : <td key={i} style={{ border: "1px solid #cfd2d8", background: "#f4f4f6" }} />)}
+                    {exBody(afterEx, false)}
                   </tr>
                 );
               });
