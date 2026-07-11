@@ -408,18 +408,35 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder }) {
       {/* Les variantes « OU » sont regroupées automatiquement selon les Équivalences. */}
       {adding && (
         <div className="pf-add-panel">
-          <div className="pf-add-title">Étapes disponibles</div>
           {available.length === 0 ? (
-            <div className="pf-add-empty">Toutes les étapes disponibles sont déjà dans le parcours.</div>
+            <>
+              <div className="pf-add-title">Étapes disponibles</div>
+              <div className="pf-add-empty">Toutes les étapes disponibles sont déjà dans le parcours.</div>
+            </>
           ) : (
-            <div className="pf-add-grid">
-              {available.map((s) => (
+            (() => {
+              const isQuiz = (s) => s.doc_type === "QCM" || !!s.quiz_id;
+              const docs = available.filter((s) => !isQuiz(s));
+              const quizzes = available.filter(isQuiz);
+              const renderItem = (s) => (
                 <button type="button" key={s.slug} className="pf-add-item" onClick={() => { onToggle(s.slug); setAdding(false); }}>
                   <span className="pf-label">{s.label}</span>
                   {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
                 </button>
-              ))}
-            </div>
+              );
+              return (
+                <>
+                  <div className="pf-add-title">Documents{docs.length ? ` (${docs.length})` : ""}</div>
+                  {docs.length === 0
+                    ? <div className="pf-add-empty">Aucun document disponible.</div>
+                    : <div className="pf-add-grid">{docs.map(renderItem)}</div>}
+                  <div className="pf-add-title" style={{ marginTop: 12 }}>QCM{quizzes.length ? ` (${quizzes.length})` : ""}</div>
+                  {quizzes.length === 0
+                    ? <div className="pf-add-empty">Aucun QCM disponible.</div>
+                    : <div className="pf-add-grid">{quizzes.map(renderItem)}</div>}
+                </>
+              );
+            })()
           )}
         </div>
       )}
