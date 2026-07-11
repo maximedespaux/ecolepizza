@@ -167,10 +167,12 @@ function Carte() {
       // Points précis (stagiaires géocodés) du département, colorés par niveau.
       const pts = [];
       for (const p of deptPoints) {
+        // Couleur du point = couleur de la formation suivie (la plus récente), sinon niveau.
+        const col = colorForLevel(p.program_code || p.level);
         const m = L.circleMarker([p.lat, p.lng], {
-          radius: 7, weight: 1.5, color: "#fff", fillColor: colorForLevel(p.level), fillOpacity: 0.9,
+          radius: 7, weight: 1.5, color: "#fff", fillColor: col, fillOpacity: 0.9,
         });
-        m.bindPopup(`<b>${p.name}</b><br>${p.town || ""}<br><span style="color:${colorForLevel(p.level)}">${LEVEL_LABEL[p.level] || "Niveau non défini"}</span>`);
+        m.bindPopup(`<b>${p.name}</b><br>${p.town || ""}<br><span style="color:${col}">${p.program_code || LEVEL_LABEL[p.level] || "Formation non définie"}</span>`);
         m.bindTooltip(p.name, { direction: "top" });
         group.addLayer(m);
         pts.push([p.lat, p.lng]);

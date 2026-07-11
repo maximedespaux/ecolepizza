@@ -27,6 +27,12 @@ const getCarte = (req, res) => {
                   JOIN training_program p ON p.id = s.program_id
                  WHERE e.learner_id = l.id
                  ORDER BY e.created_at DESC LIMIT 1) AS level,
+               (SELECT p.code
+                  FROM enrollment e
+                  JOIN training_session s ON s.id = e.session_id
+                  JOIN training_program p ON p.id = s.program_id
+                 WHERE e.learner_id = l.id
+                 ORDER BY e.created_at DESC LIMIT 1) AS program_code,
                (SELECT GROUP_CONCAT(DISTINCT p.code)
                   FROM enrollment e
                   JOIN training_session s ON s.id = e.session_id
@@ -67,6 +73,7 @@ const getCarte = (req, res) => {
                     dept: d,
                     lat: Number(r.lat), lng: Number(r.lng),
                     level: badges[0] || r.level || null,
+                    program_code: r.program_code || formations[0] || null, // formation la plus récente (couleur du point)
                     formations, // codes des formations suivies (pour le filtre)
                 });
             } else if (r.address || r.zip_code) {
