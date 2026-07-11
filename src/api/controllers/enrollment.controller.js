@@ -208,15 +208,15 @@ const deleteEnrollment = async (req, res) => {
             [req.params.id, req.user.organization_id]
         );
         if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
-        // Nettoie l'émargement du stagiaire pour cette session + sa feuille archivée.
+        // Retire les présences en cours du stagiaire pour cette session (grille éditable).
         await conn.query(
             `DELETE ar FROM attendance_record ar JOIN attendance_sheet s ON s.id = ar.sheet_id
              WHERE s.session_id = ? AND ar.learner_id = ?`,
             [e.session_id, e.learner_id]
         );
-        // Feuille(s) d'émargement : feuille unique (emarg:<id>) + feuilles par modèle (emarg:<id>:<slug>).
-        await conn.query('DELETE FROM archive_document WHERE organization_id = ? AND (ref = ? OR ref LIKE ?)',
-            [req.user.organization_id, `emarg:${e.id}`, `emarg:${e.id}:%`]);
+        // NB : on CONSERVE la/les feuille(s) d'émargement archivée(s) (archive_document
+        // ref emarg:<id>[:<slug>]) — preuve Qualiopi conservée même après retrait du dossier.
+        // Elles restent visibles dans le suivi (rattachées par le nom du stagiaire).
         await conn.query('DELETE FROM enrollment WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
         res.status(200).json({ success: true, message: 'Stagiaire retiré' });
