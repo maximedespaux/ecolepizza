@@ -469,6 +469,9 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .doc-canvas h1{font-size:20px}.doc-canvas h2{font-size:16px}.doc-canvas h3{font-size:14px}
 .doc-canvas table{border-collapse:collapse;width:100%;margin:8px 0}
 .doc-canvas th,.doc-canvas td{border:1px solid var(--line,#bbb);padding:5px 7px}
+/* Style de bordure du tableau (choisi dans la barre d'outils). */
+.doc-canvas table.tbl-b-dashed th,.doc-canvas table.tbl-b-dashed td{border:1px dashed var(--line,#999)}
+.doc-canvas table.tbl-b-none th,.doc-canvas table.tbl-b-none td{border:1px dotted #e2e2e6} /* repère léger dans l'éditeur ; aucune bordure au PDF */
 /* Les images ne débordent pas la colonne page (comme au rendu PDF, borné à la largeur utile). */
 .doc-canvas img{max-width:100%;height:auto}
 .doc-canvas.preview .prev-val{background:#eef6ee;border-radius:4px;padding:0 3px}

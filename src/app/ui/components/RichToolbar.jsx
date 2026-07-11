@@ -183,6 +183,10 @@ function RichToolbar({ editor, compact = false }) {
           <Btn title="Supprimer la ligne" on={() => c().deleteRow().run()}>⌫lig</Btn>
           <Btn title="Ligne d'en-tête" active={editor.isActive("tableHeader")} on={() => c().toggleHeaderRow().run()}>⊤</Btn>
           <Btn title="Fusionner / séparer les cellules" on={() => c().mergeOrSplit().run()}>⤄</Btn>
+          <Sep />
+          <Btn title="Bordures pleines" active={editor.getAttributes("table").borderStyle === "solid" || !editor.getAttributes("table").borderStyle} on={() => c().updateAttributes("table", { borderStyle: "solid" }).run()}>▦</Btn>
+          <Btn title="Bordures pointillées" active={editor.getAttributes("table").borderStyle === "dashed"} on={() => c().updateAttributes("table", { borderStyle: "dashed" }).run()}>┋</Btn>
+          <Btn title="Sans bordure" active={editor.getAttributes("table").borderStyle === "none"} on={() => c().updateAttributes("table", { borderStyle: "none" }).run()}>▢</Btn>
           <Btn title="Supprimer le tableau" on={() => c().deleteTable().run()}>⌫tab</Btn>
         </>
       )}

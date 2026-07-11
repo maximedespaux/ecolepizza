@@ -8,6 +8,24 @@ import TextAlign from "@tiptap/extension-text-align";
 import Link from "@tiptap/extension-link";
 import { ResizableImage } from "./ResizableImage.jsx";
 import Table from "@tiptap/extension-table";
+
+// Tableau avec un style de bordure choisi (solid / dashed / none), sérialisé en data-border
+// + classe. Le rendu PDF réinjecte des bordures EN LIGNE (LibreOffice ignore le CSS).
+const StyledTable = Table.extend({
+  addAttributes() {
+    return {
+      ...(this.parent?.() || {}),
+      borderStyle: {
+        default: "solid",
+        parseHTML: (el) => el.getAttribute("data-border") || "solid",
+        renderHTML: (attrs) => {
+          const b = attrs.borderStyle || "solid";
+          return { "data-border": b, class: `tbl-b-${b}` };
+        },
+      },
+    };
+  },
+});
 import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
@@ -29,7 +47,7 @@ export function buildExtensions({ tokens = true } = {}) {
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     Link.configure({ openOnClick: false, autolink: true }),
     ResizableImage.configure({ inline: true, allowBase64: true }),
-    Table.configure({ resizable: true }),
+    StyledTable.configure({ resizable: true }),
     TableRow,
     TableHeader,
     TableCell,

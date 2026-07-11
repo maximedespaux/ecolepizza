@@ -65,7 +65,28 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     // 3) Lignes vides : LibreOffice supprime un <p> vide (perte de l'espacement voulu par
     //    l'utilisateur). On y place un espace insécable pour qu'il occupe bien une ligne.
     out = out.replace(/<p\b([^>]*)>(?:\s|&nbsp;| |<br\s*\/?>)*<\/p>/gi, '<p$1> </p>');
+    // 4) Bordures de tableau : LibreOffice IGNORE le CSS des bordures de cellule ; on injecte
+    //    le style EN LIGNE sur chaque cellule selon le style choisi (data-border).
+    out = applyTableBorders(out);
     return out;
+}
+
+// Applique le style de bordure d'un tableau (data-border : solid|dashed|none, défaut solid)
+// en INLINE sur chaque cellule (seule forme respectée par LibreOffice) + un padding.
+function applyTableBorders(html) {
+    return String(html || '').replace(/<table\b([^>]*)>([\s\S]*?)<\/table>/gi, (m, attrs, inner) => {
+        const bm = /data-border\s*=\s*["']?(solid|dashed|none)/i.exec(attrs);
+        const kind = bm ? bm[1].toLowerCase() : 'solid';
+        const border = kind === 'none' ? 'none' : kind === 'dashed' ? '1px dashed #999' : '1px solid #999';
+        const cell = `padding:5px 7px;border:${border};`;
+        const newInner = inner.replace(/<(td|th)\b([^>]*)>/gi, (cm, tag, cattrs) => {
+            if (/\bstyle\s*=\s*["']/.test(cattrs)) {
+                return `<${tag}${cattrs.replace(/\bstyle\s*=\s*(["'])/i, (sm, q) => `style=${q}${cell}`)}>`;
+            }
+            return `<${tag}${cattrs} style="${cell}">`;
+        });
+        return `<table${attrs}>${newInner}</table>`;
+    });
 }
 
 /** En-tête (papier à en-tête) construit à partir de l'organisme. */
