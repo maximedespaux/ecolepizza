@@ -132,7 +132,15 @@ const getSession = async (req, res) => {
              WHERE st.session_id = ? ORDER BY u.last_name, u.first_name`,
             [req.params.id]
         );
-        res.json({ data: { ...rows[0], enrollments, trainers } });
+        // Lieu de formation (colonne/table récentes : résilient si migration 067 absente).
+        let location_id = null; let location_name = null;
+        try {
+            const [[loc]] = await conn.query(
+                'SELECT s.location_id, tl.name FROM training_session s LEFT JOIN training_location tl ON tl.id = s.location_id WHERE s.id = ?',
+                [req.params.id]);
+            if (loc) { location_id = loc.location_id || null; location_name = loc.name || null; }
+        } catch { /* migration des lieux non appliquée */ }
+        res.json({ data: { ...rows[0], location_id, location_name, enrollments, trainers } });
     } catch (err) {
         console.error('Erreur récupération session :', err);
         res.status(500).json({ error: 'Internal Server Error' });

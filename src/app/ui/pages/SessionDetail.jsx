@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers } from "../api/apiClient.js";
+import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers, getLocations, updateSession } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -21,6 +21,7 @@ function SessionDetail() {
   const [session, setSession] = useState(null);
   const [allLearners, setAllLearners] = useState([]);
   const [team, setTeam] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(null);
   const [notesFor, setNotesFor] = useState(null);
@@ -39,7 +40,14 @@ function SessionDetail() {
     load();
     getStagiaires().then((r) => setAllLearners(r.data)).catch(() => {});
     getAssignableTrainers().then((r) => setTeam(r.data)).catch(() => {});
+    getLocations().then((r) => setLocations(r.data || [])).catch(() => {});
   }, [id]);
+
+  async function changeLocation(location_id) {
+    setSession((s) => ({ ...s, location_id }));
+    try { await updateSession(id, { location_id: location_id || null }); }
+    catch (err) { setStatus({ type: "error", message: err.message }); load(); }
+  }
 
   async function toggleTrainer(uid) {
     const current = (session.trainers || []).map((t) => t.id);
@@ -127,6 +135,16 @@ function SessionDetail() {
         }
       />
       <StatusMessage status={status} />
+
+      {locations.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 14px", flexWrap: "wrap" }}>
+          <span className="hint">📍 Lieu de formation :</span>
+          <select className="inp" style={{ maxWidth: 320 }} value={session.location_id || ""} onChange={(e) => changeLocation(e.target.value)}>
+            <option value="">— Aucun / à définir —</option>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}{l.town ? ` — ${l.town}` : ""}</option>)}
+          </select>
+        </div>
+      )}
 
       <div className="grid cols-2">
         <Card title="Inscrire un stagiaire">

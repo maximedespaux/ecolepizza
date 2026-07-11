@@ -447,6 +447,9 @@ export function getSession(id) {
   return request(`/sessions/${id}`);
 }
 
+export function updateSession(id, payload) {
+  return request(`/sessions/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
 export function createSession(payload) {
   return request("/sessions", { method: "POST", body: JSON.stringify(payload) });
 }
