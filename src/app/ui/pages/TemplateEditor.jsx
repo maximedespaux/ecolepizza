@@ -89,35 +89,47 @@ function TemplateEditor() {
 
   const target = active || body;
 
-  // Mesure la hauteur RÉELLE des éditeurs d'en-tête et de pied (rendus à la même échelle
-  // que le corps) pour caler précisément le repère de fin de page.
-  const [hfPx, setHfPx] = useState({ h: 0, f: 0 });
+  // Mesure la hauteur RÉELLE des éditeurs d'en-tête/pied ET le pas d'une ligne du corps,
+  // pour caler le repère de fin de page sur le NOMBRE de lignes du rendu PDF.
+  const [metrics, setMetrics] = useState({ h: 0, f: 0, line: 31.4 });
   useEffect(() => {
-    if (!header || !footer) return undefined;
-    const measure = () => setHfPx({
-      h: header.view?.dom?.offsetHeight || 0,
-      f: footer.view?.dom?.offsetHeight || 0,
-    });
+    if (!header || !footer || !body) return undefined;
+    const measure = () => {
+      let line = 31.4;
+      const dom = body.view?.dom;
+      if (dom && dom.children.length >= 2) {
+        const d = dom.children[1].offsetTop - dom.children[0].offsetTop;
+        if (d > 8 && d < 120) line = d; // pas réel entre deux blocs
+      }
+      setMetrics({
+        h: header.view?.dom?.offsetHeight || 0,
+        f: footer.view?.dom?.offsetHeight || 0,
+        line,
+      });
+    };
     measure();
     const ro = new ResizeObserver(measure);
-    if (header.view?.dom) ro.observe(header.view.dom);
-    if (footer.view?.dom) ro.observe(footer.view.dom);
+    [header.view?.dom, footer.view?.dom, body.view?.dom].forEach((d) => d && ro.observe(d));
     return () => ro.disconnect();
-  }, [header, footer]);
+  }, [header, footer, body]);
 
-  // Hauteur (px) d'UNE page de contenu = A4 − marges réservées à l'en-tête et au pied.
-  // Colonne de contenu ≈ 174 mm rendue sur ~660 px → 3,79 px/mm.
-  const PX_PER_MM = 660 / 174;
-  const HF_PAD = 20; // padding vertical des éditeurs en-tête/pied
+  // Repère de fin de page = A4 moins l'en-tête et le pied, converti en NOMBRE de lignes
+  // du rendu PDF puis en pixels éditeur (le PDF a un interligne plus serré que l'éditeur,
+  // donc un simple ratio mm→px décalerait à chaque page).
+  const PX_PER_MM = 660 / 174;   // colonne page ≈ 174 mm sur ~660 px
+  const HF_PAD = 20;             // padding vertical des éditeurs en-tête/pied
+  const PDF_LINE_MM = 8.8;       // pas d'une ligne au rendu (corps 11 pt ≈ 24,9 pt)
+  const DENS = 0.7;              // le texte du PDF est plus serré que dans l'éditeur
+  const headerHasImg = /<img/i.test(header?.getHTML() || "");
   const hasCustomHeader = !!clean(header?.getHTML());
   const hasFooter = !!clean(footer?.getHTML());
-  const topReservePx = bleed.header ? 8 * PX_PER_MM
-    : hasCustomHeader ? (12 * PX_PER_MM + Math.max(0, hfPx.h - HF_PAD) + 4 * PX_PER_MM)
-      : 24 * PX_PER_MM; // papier à en-tête automatique
-  const botReservePx = bleed.footer ? 8 * PX_PER_MM
-    : hasFooter ? (Math.max(0, hfPx.f - HF_PAD) + 10 * PX_PER_MM + 4 * PX_PER_MM)
-      : 18 * PX_PER_MM;
-  const pageContentPx = Math.round(297 * PX_PER_MM - topReservePx - botReservePx);
+  // Hauteur du contenu du bandeau, en mm « rendu PDF » (image : 1:1 ; texte : ×DENS).
+  const headMm = (Math.max(0, metrics.h - HF_PAD) / PX_PER_MM) * (headerHasImg ? 1 : DENS);
+  const footMm = (Math.max(0, metrics.f - HF_PAD) / PX_PER_MM) * DENS;
+  const topReserveMm = bleed.header ? 8 : (hasCustomHeader ? 12 + headMm + 4 : 24);
+  const botReserveMm = bleed.footer ? 8 : (hasFooter ? footMm + 10 + 4 : 18);
+  const bodyAreaMm = Math.max(60, 297 - topReserveMm - botReserveMm);
+  const pageContentPx = Math.round((bodyAreaMm / PDF_LINE_MM) * metrics.line);
 
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
