@@ -525,15 +525,13 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 /* Éditeur « façon page » : carte de largeur A4 (contenu ≈ 174 mm), pour que les
    repères de fin de page correspondent au rendu PDF. */
 .tpl-editor-body .tpl-doc{max-width:720px}
-/* Repère de FIN DE PAGE : trait rouge répété toutes les hauteurs de page (--page-h),
-   calé sous le padding supérieur du canevas ; défile avec le contenu (attachment local). */
-.body-zone .doc-canvas{
-  background-image:repeating-linear-gradient(to bottom,
-    transparent 0, transparent calc(var(--page-h,900px) - 2px),
-    rgba(192,57,43,.35) calc(var(--page-h,900px) - 2px), rgba(192,57,43,.35) var(--page-h,900px));
-  background-attachment:local;
-  background-position:0 26px;
-}
+/* Repères de FIN DE PAGE : traits calculés (réinitialisés à chaque saut de page manuel),
+   superposés au corps et synchronisés au défilement. */
+.body-zone{position:relative}
+.pb-guides{position:absolute;pointer-events:none;overflow:hidden;z-index:3}
+.pb-guides-inner{position:absolute;left:0;right:0;top:0;will-change:transform}
+.pb-line{position:absolute;left:0;right:0;border-top:2px dashed rgba(192,57,43,.4)}
+.pb-line::after{content:"fin de page";position:absolute;right:6px;top:-8px;font-size:9px;font-weight:700;letter-spacing:.04em;color:rgba(192,57,43,.75);background:var(--panel,#fff);padding:0 4px}
 /* ProseMirror internes */
 .ProseMirror{outline:none}
 .ProseMirror:focus{outline:none}

@@ -109,6 +109,64 @@ function TemplateEditor() {
   }, [slug, hHTML, fHTML, bleed]);
   const pageContentPx = Math.round(pageMm * PX_PER_MM * BODY_RATIO);
 
+  // Repères de fin de page superposés au corps : une ligne à chaque hauteur de page, mais
+  // RÉINITIALISÉE à chaque saut de page manuel (qui démarre une nouvelle page).
+  const bodyZoneRef = useRef(null);
+  const pbInnerRef = useRef(null);
+  const [pbView, setPbView] = useState({ top: 0, left: 0, width: 0, height: 0, lines: [] });
+  useEffect(() => {
+    if (showPreview || !body) return undefined;
+    const syncScroll = () => {
+      const el = body.view?.dom;
+      if (el && pbInnerRef.current) pbInnerRef.current.style.transform = `translateY(${-el.scrollTop}px)`;
+    };
+    const compute = () => {
+      const el = body.view?.dom;
+      const bz = bodyZoneRef.current;
+      if (!el || !bz) return;
+      const bzRect = bz.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const lines = [];
+      if (pageContentPx >= 40) {
+        const breaks = Array.from(el.querySelectorAll(".doc-pagebreak"))
+          .map((n) => n.getBoundingClientRect().top - elRect.top + el.scrollTop)
+          .sort((a, b) => a - b);
+        const H = el.scrollHeight;
+        let start = 0, bi = 0, guard = 0;
+        while (start < H && guard++ < 100) {
+          while (bi < breaks.length && breaks[bi] <= start + 1) bi++;
+          const nb = bi < breaks.length ? breaks[bi] : Infinity;
+          const autoEnd = start + pageContentPx;
+          if (nb < autoEnd) { start = nb; bi++; }        // saut manuel : fin de page ici
+          else { lines.push(Math.round(autoEnd)); start = autoEnd; } // fin de page automatique
+        }
+      }
+      setPbView({ top: elRect.top - bzRect.top, left: elRect.left - bzRect.left, width: el.clientWidth, height: el.clientHeight, lines });
+      syncScroll();
+    };
+    let ro = null; let scrollEl = null;
+    const setup = () => {
+      compute();
+      const el = body.view?.dom;
+      if (el && !scrollEl) { // vue montée : on attache l'observateur et le défilement
+        scrollEl = el;
+        ro = new ResizeObserver(compute);
+        ro.observe(el);
+        el.addEventListener("scroll", syncScroll, { passive: true });
+      }
+    };
+    setup();
+    const t1 = setTimeout(setup, 350);   // la vue peut ne pas être montée au 1er passage
+    const t2 = setTimeout(setup, 1000);
+    const onUp = () => compute();
+    body.on("update", onUp);
+    return () => {
+      clearTimeout(t1); clearTimeout(t2); body.off("update", onUp);
+      if (ro) ro.disconnect();
+      if (scrollEl) scrollEl.removeEventListener("scroll", syncScroll);
+    };
+  }, [showPreview, body, pageContentPx]);
+
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
   }
@@ -183,10 +241,14 @@ function TemplateEditor() {
               </div>
               <div onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
             </div>
-            <div className="body-zone" onDrop={onDrop(body)} onDragOver={(e) => e.preventDefault()}
-              style={{ "--page-h": pageContentPx + "px" }}>
-              <div className="hf-label">Contenu <span>· le trait rouge indique la fin de page</span>
+            <div className="body-zone" ref={bodyZoneRef} onDrop={onDrop(body)} onDragOver={(e) => e.preventDefault()}>
+              <div className="hf-label">Contenu <span>· le trait indique la fin de page</span>
                 <BleedToggle on={bleed.body} onChange={() => toggleBleed("body")} /></div>
+              <div className="pb-guides" style={{ top: pbView.top, left: pbView.left, width: pbView.width, height: pbView.height }}>
+                <div className="pb-guides-inner" ref={pbInnerRef}>
+                  {pbView.lines.map((y, i) => <div key={i} className="pb-line" style={{ top: y }} />)}
+                </div>
+              </div>
               <EditorContent editor={body} />
             </div>
             <div className="hf-zone">
