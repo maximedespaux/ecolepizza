@@ -59,16 +59,28 @@ async function formationSteps(conn, orgId, program) {
     // les génère que si on les ajoute explicitement au parcours de la formation.
     let emargSteps = [];
     try {
-        const [tpls] = await conn.query(
-            'SELECT slug, name, sort_order FROM emargement_template WHERE organization_id = ? AND active = 1 ORDER BY sort_order, name',
-            [orgId]
-        );
+        let tpls;
+        try {
+            [tpls] = await conn.query(
+                'SELECT slug, name, sort_order, applies_when, config FROM emargement_template WHERE organization_id = ? AND active = 1 ORDER BY sort_order, name',
+                [orgId]
+            );
+        } catch (e2) {
+            if (e2 && e2.code === 'ER_BAD_FIELD_ERROR') {
+                [tpls] = await conn.query('SELECT slug, name, sort_order, config FROM emargement_template WHERE organization_id = ? AND active = 1 ORDER BY sort_order, name', [orgId]);
+            } else { throw e2; }
+        }
+        const parseJSON = (v) => { if (!v) return {}; try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return {}; } };
         emargSteps = (tpls || []).map((t) => {
+            const aw = parseJSON(t.applies_when);
+            const cfg = parseJSON(t.config);
+            return { slug: t.slug, name: t.name, sort_order: t.sort_order, applies_when: aw, config: cfg };
+        }).filter((t) => matchFormation(t.applies_when, program)).map((t) => {
             const o = overlay.get(t.slug);
             return {
                 slug: t.slug, label: t.name, doc_type: 'EMARGEMENT', quiz_id: null, day: null,
-                applies_when: {}, signable: false, stagiaire_sign: false, or_group: o ? (o.or_group || null) : null,
-                emargement: true,
+                applies_when: t.applies_when || {}, signable: true, stagiaire_sign: true,
+                or_group: o ? (o.or_group || null) : null, emargement: true,
                 sort_order: o ? o.sort_order : (t.sort_order || 75),
                 active: o ? !!o.active : false,
             };

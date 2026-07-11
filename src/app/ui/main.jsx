@@ -34,6 +34,7 @@ import Modeles from "./pages/Modeles.jsx";
 import ChampsDossier from "./pages/ChampsDossier.jsx";
 import Opcos from "./pages/Opcos.jsx";
 import TemplateEditor from "./pages/TemplateEditor.jsx";
+import EmargementEditor from "./pages/EmargementEditor.jsx";
 import Equipe from "./pages/Equipe.jsx";
 import AccessRoles from "./pages/AccessRoles.jsx";
 import Audit from "./pages/Audit.jsx";
@@ -165,6 +166,7 @@ function AppRoutes() {
           <Route path="reglages" element={<Guard nav="/reglages" roles={ADMIN}><Reglages /></Guard>} />
           <Route path="modeles" element={<Guard nav="/modeles" roles={ADMIN}><Modeles /></Guard>} />
           <Route path="modeles/:slug/editeur" element={<Guard nav="/modeles" roles={ADMIN}><TemplateEditor /></Guard>} />
+          <Route path="modeles/emargement/:id" element={<Guard nav="/modeles" roles={ADMIN}><EmargementEditor /></Guard>} />
           <Route path="champs-dossier" element={<Guard nav="/champs-dossier" roles={ADMIN}><ChampsDossier /></Guard>} />
           <Route path="equipe" element={<Guard nav="/equipe" roles={OWNER}><Equipe /></Guard>} />
           <Route path="roles" element={<Guard nav="/roles" roles={OWNER}><AccessRoles /></Guard>} />

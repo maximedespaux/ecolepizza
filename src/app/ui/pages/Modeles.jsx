@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
   getConditionCatalog, getConditions, createCondition, deleteCondition, getFieldValues,
   getEquivalences, createEquivalence, deleteEquivalence,
-  getOrganisation, updateOrganisation,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate } from "../api/apiClient.js";
+import { EMARG_DEFAULTS } from "./EmargementEditor.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -48,6 +48,7 @@ function Modeles() {
   const [drag, setDrag] = useState(null);        // index de la ligne déplacée
   const [conditions, setConditions] = useState([]);   // conditions personnalisées de l'organisme
   const [catalog, setCatalog] = useState({ fields: [], operators: {} });
+  const [emargItems, setEmargItems] = useState([]); // modèles de feuille d'émargement
   const [view, setView] = useState("documents");      // onglet : "documents" | "conditions"
   const condBySlug = Object.fromEntries(conditions.map((c) => [c.slug, c]));
 
@@ -55,17 +56,33 @@ function Modeles() {
     try { const { data } = await getTemplates(); setItems([...data].sort((a, b) => a.sort_order - b.sort_order)); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
+  async function loadEmarg() {
+    try {
+      const { data } = await getEmargementTemplates();
+      setEmargItems((data || []).map((t) => ({
+        ...t, kind: "emargement", doc_type: "EMARGEMENT", label: t.name,
+        signable: true, stagiaire_sign: true, has_body: true, applies_when: t.applies_when || {},
+      })));
+    } catch { /* table peut-être absente (migration) */ }
+  }
   async function loadConditions() {
     try { const { data } = await getConditions(); setConditions(data || []); } catch { /* silencieux */ }
   }
-  useEffect(() => { load(); loadConditions(); getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {}); }, []);
+  useEffect(() => { load(); loadEmarg(); loadConditions(); getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {}); }, []);
 
-  // Glisser-déposer : réordonne localement puis persiste l'ordre complet.
-  function onDrop(toIdx) {
-    if (drag === null || drag === toIdx) { setDrag(null); return; }
+  // Liste affichée : documents classiques + modèles d'émargement, triés par ordre.
+  const allItems = [...items.map((t) => ({ ...t, kind: t.kind || "document" })), ...emargItems]
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+  // Glisser-déposer : réordonne les documents (les feuilles d'émargement ne sont pas déplaçables).
+  function onDrop(target) {
+    if (!drag || target.kind === "emargement" || drag === target.slug) { setDrag(null); return; }
     const next = [...items];
-    const [moved] = next.splice(drag, 1);
-    next.splice(toIdx, 0, moved);
+    const from = next.findIndex((d) => d.slug === drag);
+    const to = next.findIndex((d) => d.slug === target.slug);
+    if (from < 0 || to < 0) { setDrag(null); return; }
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     setItems(next);
     setDrag(null);
     reorderTemplates(next.map((t) => t.slug)).catch((e) => { setStatus({ type: "error", message: e.message }); load(); });
@@ -88,6 +105,18 @@ function Modeles() {
     finally { setBusy(null); }
   }
 
+  // Suppression d'un modèle de feuille d'émargement.
+  async function onDeleteEmarg(t) {
+    if (!window.confirm(`Supprimer le modèle de feuille d'émargement « ${t.name} » ?\nIl sera retiré des parcours qui l'utilisent.`)) return;
+    setBusy(t.id);
+    try {
+      await deleteEmargementTemplate(t.id);
+      setStatus({ type: "success", message: "Feuille d'émargement supprimée." });
+      await loadEmarg();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setBusy(null); }
+  }
+
   return (
     <>
       <PageHead
@@ -95,14 +124,14 @@ function Modeles() {
         title="Modèles & workflow documentaire"
         lead="Composez le jeu de documents de vos dossiers : intitulé, signature, conditions d'application. Glissez une ligne (poignée ⠿) pour changer l'ordre. Cliquez sur « Éditer » pour construire le document dans l'éditeur intégré et y glisser les champs (nom, prix, dates…) qui se remplissent automatiquement."
         actions={view === "documents"
-          ? <button className="btn primary" onClick={() => setEditing({ _new: true, sort_order: Math.max(0, ...items.map((i) => i.sort_order || 0)) + 10, applies_when: {} })}>＋ Ajouter un document</button>
+          ? <button className="btn primary" onClick={() => setEditing({ _new: true, kind: "document", sort_order: Math.max(0, ...allItems.map((i) => i.sort_order || 0)) + 10, applies_when: {} })}>＋ Ajouter un document</button>
           : null}
       />
       <StatusMessage status={status} />
 
       <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, marginBottom: 14, borderBottom: "1px solid var(--border-soft)" }}>
         <button type="button" role="tab" className={"tab" + (view === "documents" ? " on" : "")} onClick={() => setView("documents")}>
-          Documents ({items.length})
+          Documents ({allItems.length})
         </button>
         <button type="button" role="tab" className={"tab" + (view === "conditions" ? " on" : "")} onClick={() => setView("conditions")}>
           Conditions ({conditions.length})
@@ -110,13 +139,10 @@ function Modeles() {
         <button type="button" role="tab" className={"tab" + (view === "equivalences" ? " on" : "")} onClick={() => setView("equivalences")}>
           Équivalences
         </button>
-        <button type="button" role="tab" className={"tab" + (view === "emargement" ? " on" : "")} onClick={() => setView("emargement")}>
-          Feuilles d'émargement
-        </button>
       </div>
 
       {view === "documents" && (
-      <Card title={`Étapes (${items.length})`}>
+      <Card title={`Étapes (${allItems.length})`}>
         <div className="tablewrap" style={{ border: "none" }}>
           <table>
             <thead>
@@ -131,45 +157,49 @@ function Modeles() {
               </tr>
             </thead>
             <tbody>
-              {items.map((t, i) => (
-                <tr key={t.slug}
-                  className={"drag-row" + (drag === i ? " dragging" : "")}
+              {allItems.map((t) => {
+                const isEmarg = t.kind === "emargement";
+                return (
+                <tr key={isEmarg ? `e:${t.id}` : t.slug}
+                  className={"drag-row" + (drag === t.slug ? " dragging" : "")}
                   style={{ opacity: t.active ? 1 : 0.5 }}
-                  draggable
-                  onDragStart={() => setDrag(i)}
+                  draggable={!isEmarg}
+                  onDragStart={() => !isEmarg && setDrag(t.slug)}
                   onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => onDrop(i)}
+                  onDrop={() => onDrop(t)}
                   onDragEnd={() => setDrag(null)}
                 >
-                  <td className="drag-handle" title="Glisser pour réordonner">⠿</td>
+                  <td className="drag-handle" title={isEmarg ? "" : "Glisser pour réordonner"}>{isEmarg ? "" : "⠿"}</td>
                   <td>
                     <b>{t.label}</b>
                     <span style={{ display: "block", fontSize: 11, color: "var(--dim)" }} className="mono">{t.slug}{!t.active && " · inactif"}</span>
                   </td>
-                  <td><span className="mono" style={{ fontSize: 12 }}>{t.doc_type || "—"}</span></td>
+                  <td>{isEmarg ? <Badge tone="a">Émargement</Badge> : <span className="mono" style={{ fontSize: 12 }}>{t.doc_type || "—"}</span>}</td>
                   <td style={{ fontSize: 12 }}>
-                    {t.signable ? <Badge tone="b">Signé</Badge> : <span style={{ color: "var(--dim)" }}>—</span>}
-                    {t.stagiaire_sign ? " 👤" : ""}
+                    {isEmarg
+                      ? <span title="Stagiaire, et formateur/intervenant si activés">👤{t.config?.show_formateurs ? " 🧑‍🏫" : ""}{t.config?.show_intervenants ? " 👥" : ""}</span>
+                      : <>{t.signable ? <Badge tone="b">Signé</Badge> : <span style={{ color: "var(--dim)" }}>—</span>}{t.stagiaire_sign ? " 👤" : ""}</>}
                   </td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when, condBySlug)}</td>
                   <td>
-                    {t.has_body
-                      ? <Badge tone="g">Créé</Badge>
-                      : <span style={{ color: "var(--dim)", fontSize: 12 }}>à créer</span>}
+                    {isEmarg
+                      ? <Badge tone="g">Mise en page</Badge>
+                      : (t.has_body ? <Badge tone="g">Créé</Badge> : <span style={{ color: "var(--dim)", fontSize: 12 }}>à créer</span>)}
                   </td>
                   <td>
                     <div className="tpl-actions">
-                      <button className="btn sm primary" title="Ouvrir l'éditeur de document"
-                        onClick={() => navigate(`/modeles/${t.slug}/editeur`)}>Éditer</button>
-                      <button className="btn sm ghost" title="Réglages de l'étape" onClick={() => setEditing({ ...t })}>⚙</button>
+                      <button className="btn sm primary" title={isEmarg ? "Éditer la mise en page" : "Ouvrir l'éditeur de document"}
+                        onClick={() => navigate(isEmarg ? `/modeles/emargement/${t.id}` : `/modeles/${t.slug}/editeur`)}>Éditer</button>
+                      <button className="btn sm ghost" title="Réglages" onClick={() => setEditing({ ...t })}>⚙</button>
                       <button className="btn sm ghost danger"
                         title="Supprimer définitivement"
-                        disabled={busy === t.slug}
-                        onClick={() => onDelete(t)}>🗑</button>
+                        disabled={busy === (isEmarg ? t.id : t.slug)}
+                        onClick={() => isEmarg ? onDeleteEmarg(t) : onDelete(t)}>🗑</button>
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -187,14 +217,12 @@ function Modeles() {
 
       {view === "equivalences" && <EquivalencesPanel onStatus={setStatus} />}
 
-      {view === "emargement" && <EmargementConfigPanel onStatus={setStatus} />}
-
       {editing && (
         <StepModal
           step={editing}
           conditions={conditions}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); setStatus({ type: "success", message: "Étape enregistrée." }); load(); }}
+          onSaved={() => { setEditing(null); setStatus({ type: "success", message: "Étape enregistrée." }); load(); loadEmarg(); }}
           onError={(m) => setStatus({ type: "error", message: m })}
         />
       )}
@@ -318,13 +346,17 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
 function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
   const isNew = !!step._new;
   const a = step.applies_when || {};
+  const [kind, setKind] = useState(step.kind || "document"); // "document" | "emargement"
+  const isEmarg = kind === "emargement";
   const [form, setForm] = useState({
     slug: step.slug || "",
-    label: step.label || "",
+    label: step.label || step.name || "",
     doc_type: step.doc_type || "",
     sort_order: step.sort_order ?? 100,
     signable: !!step.signable,
     stagiaire_sign: !!step.stagiaire_sign,
+    sign_formateur: !!(step.config && step.config.show_formateurs),
+    sign_intervenant: !!(step.config && step.config.show_intervenants),
     active: step.active == null ? true : !!step.active,
     conditions: Array.isArray(a.conditions) ? a.conditions : [],
   });
@@ -337,17 +369,25 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
   const chk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked }));
 
   async function save() {
-    const slug = isNew ? form.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-") : step.slug;
-    if (!slug) { onError("Identifiant (slug) requis."); return; }
     if (!form.label.trim()) { onError("Intitulé requis."); return; }
     const applies_when = {};
     if (form.conditions.length) applies_when.conditions = form.conditions;
     setSaving(true);
     try {
-      await saveTemplate(slug, {
-        label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
-        signable: form.signable, stagiaire_sign: form.stagiaire_sign, active: form.active, applies_when,
-      });
+      if (isEmarg) {
+        // La mise en page détaillée s'édite ensuite via « Éditer ». Ici : nom, conditions, signataires, actif.
+        const baseCfg = step.config || EMARG_DEFAULTS;
+        const config = { ...baseCfg, show_formateurs: form.sign_formateur, show_intervenants: form.sign_intervenant };
+        if (isNew) await createEmargementTemplate({ name: form.label, applies_when, config });
+        else await updateEmargementTemplate(step.id, { name: form.label, applies_when, active: form.active, config });
+      } else {
+        const slug = isNew ? form.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-") : step.slug;
+        if (!slug) { onError("Identifiant (slug) requis."); setSaving(false); return; }
+        await saveTemplate(slug, {
+          label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
+          signable: form.signable, stagiaire_sign: form.stagiaire_sign, active: form.active, applies_when,
+        });
+      }
       onSaved();
     } catch (e) { onError(e.message); }
     finally { setSaving(false); }
@@ -357,21 +397,31 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
-          <h3>{isNew ? "Nouveau document" : "Modifier l'étape"}</h3>
+          <h3>{isNew ? "Nouveau document" : (isEmarg ? "Réglages de la feuille d'émargement" : "Modifier l'étape")}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="mbody">
           {isNew && (
+            <div className="field"><label>Type</label>
+              <select value={kind} onChange={(e) => setKind(e.target.value)}>
+                <option value="document">Document</option>
+                <option value="emargement">Feuille d'émargement</option>
+              </select>
+            </div>
+          )}
+          {isNew && !isEmarg && (
             <div className="field"><label>Identifiant (slug)</label>
               <input className="inp mono" value={form.slug} onChange={set("slug")} placeholder="ex. attestation-tva" />
             </div>
           )}
           <div className="field"><label>Intitulé</label>
-            <input className="inp" value={form.label} onChange={set("label")} placeholder="ex. Attestation de TVA" /></div>
-          <div className="field"><label>Type de document</label>
-            <input className="inp" list="doctypes" value={form.doc_type} onChange={set("doc_type")} placeholder="DEVIS, CONTRAT…" />
-            <datalist id="doctypes">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
-          </div>
+            <input className="inp" value={form.label} onChange={set("label")} placeholder={isEmarg ? "ex. Feuille d'émargement 5 jours" : "ex. Attestation de TVA"} /></div>
+          {!isEmarg && (
+            <div className="field"><label>Type de document</label>
+              <input className="inp" list="doctypes" value={form.doc_type} onChange={set("doc_type")} placeholder="DEVIS, CONTRAT…" />
+              <datalist id="doctypes">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
+            </div>
+          )}
 
           {conditions.length > 0 ? (
             <>
@@ -397,15 +447,32 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
             </p>
           )}
 
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 6 }}>
-            <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-              <input type="checkbox" checked={form.signable} onChange={chk("signable")} /> À signer</label>
-            <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-              <input type="checkbox" checked={form.stagiaire_sign} onChange={chk("stagiaire_sign")} /> Signé par le stagiaire</label>
-            <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-              <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
-          </div>
-          <p className="sub" style={{ marginTop: 10 }}>Après enregistrement, utilisez « Éditer » sur la ligne pour composer le document.</p>
+          {isEmarg ? (
+            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 6 }}>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14, opacity: 0.7 }}>
+                <input type="checkbox" checked readOnly /> Signé par le stagiaire</label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={form.sign_formateur} onChange={chk("sign_formateur")} /> Signé par le(s) formateur(s)</label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={form.sign_intervenant} onChange={chk("sign_intervenant")} /> Signé par le(s) intervenant(s) externe(s)</label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 6 }}>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={form.signable} onChange={chk("signable")} /> À signer</label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={form.stagiaire_sign} onChange={chk("stagiaire_sign")} /> Signé par le stagiaire</label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
+            </div>
+          )}
+          <p className="sub" style={{ marginTop: 10 }}>
+            {isEmarg
+              ? "Après enregistrement, utilisez « Éditer » sur la ligne pour la mise en page (orientation, colonnes, logo…)."
+              : "Après enregistrement, utilisez « Éditer » sur la ligne pour composer le document."}
+          </p>
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>
@@ -488,357 +555,6 @@ function EquivalencesPanel({ onStatus }) {
         <div><button type="button" className="btn primary" disabled={saving || picked.length < 2} onClick={create}>＋ Créer l'équivalence</button></div>
       </div>
     </Card>
-  );
-}
-
-// Config par défaut (miroir de DEFAULT_EMARG_CONFIG côté serveur).
-const EMARG_DEFAULTS = {
-  orientation: "landscape", title: "Feuille d'émargement", accent: "#c0392b", show_logo: false,
-  show_duration: true, show_horaires: true, show_lieu: true, header_note: "",
-  slots: ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"],
-  show_formateurs: true, show_intervenants: true, show_hours: true, density: "normal", margin_mm: 10,
-  footer_left: "", footer_caption: "Signature et cachet de l'organisme de formation", show_stamp: true,
-};
-const SLOT_ORDER = ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"];
-const SLOT_LABEL = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
-const DENSITY_PX = { compact: { base: 8.5, name: 8.5, sub: 7.5, row: 30 }, normal: { base: 9, name: 9.5, sub: 8, row: 38 }, large: { base: 10.5, name: 11, sub: 9, row: 46 } };
-
-// Onglet « Feuilles d'émargement » : gestion de plusieurs modèles + aperçu live.
-function EmargementConfigPanel({ onStatus }) {
-  const [templates, setTemplates] = useState([]);
-  const [selId, setSelId] = useState(null);
-  const [org, setOrg] = useState({ legal_name: "Organisme de formation", town: "Ville", address: "", zip_code: "", logo_image: null });
-  const [cfg, setCfg] = useState(EMARG_DEFAULTS);
-  const [name, setName] = useState("");
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [creating, setCreating] = useState(false); // saisie inline d'un nouveau modèle
-  const [newName, setNewName] = useState("");
-
-  function loadOrg() {
-    return getOrganisation().then((r) => {
-      const d = r.data || {};
-      setOrg({ legal_name: d.legal_name || "Organisme de formation", town: d.town || "Ville", address: d.address || "", zip_code: d.zip_code || "", logo_image: d.logo_image || null });
-    }).catch(() => {});
-  }
-  function loadTemplates(keepSel) {
-    return getEmargementTemplates().then((r) => {
-      const list = r.data || [];
-      setTemplates(list);
-      const keep = keepSel && list.find((t) => t.id === keepSel);
-      const sel = keep || list[0];
-      if (sel) selectTemplate(sel);
-      else { setSelId(null); }
-    }).catch((e) => onStatus({ type: "error", message: e.message }));
-  }
-  function selectTemplate(t) {
-    setSelId(t.id); setName(t.name); setCfg({ ...EMARG_DEFAULTS, ...(t.config || {}) }); setDirty(false);
-  }
-  useEffect(() => { loadOrg(); loadTemplates(); }, []);
-
-  const set = (k) => (e) => { setCfg((p) => ({ ...p, [k]: e.target.value })); setDirty(true); };
-  const setChk = (k) => (e) => { setCfg((p) => ({ ...p, [k]: e.target.checked })); setDirty(true); };
-  const toggleSlot = (s) => { setCfg((p) => ({ ...p, slots: SLOT_ORDER.filter((x) => x === s ? !p.slots.includes(s) : p.slots.includes(x)) })); setDirty(true); };
-
-  async function createNew() {
-    const nm = newName.trim();
-    if (!nm) return;
-    setBusy(true);
-    try {
-      const r = await createEmargementTemplate({ name: nm, config: EMARG_DEFAULTS });
-      setCreating(false); setNewName("");
-      await loadTemplates(r.data?.id);
-      onStatus({ type: "success", message: "Modèle créé." });
-    }
-    catch (e) { onStatus({ type: "error", message: e.message }); }
-    finally { setBusy(false); }
-  }
-  async function save() {
-    if (!selId) return;
-    setSaving(true);
-    try { await updateEmargementTemplate(selId, { name, config: cfg }); setDirty(false); await loadTemplates(selId);
-      onStatus({ type: "success", message: "Modèle enregistré. Ajoutez-le au parcours d'une formation puis régénérez l'émargement." }); }
-    catch (e) { onStatus({ type: "error", message: e.message }); }
-    finally { setSaving(false); }
-  }
-  async function remove() {
-    if (!selId) return;
-    if (!window.confirm(`Supprimer le modèle « ${name} » ? Il sera retiré des parcours qui l'utilisent.`)) return;
-    setBusy(true);
-    try { await deleteEmargementTemplate(selId); onStatus({ type: "success", message: "Modèle supprimé." }); await loadTemplates(); }
-    catch (e) { onStatus({ type: "error", message: e.message }); }
-    finally { setBusy(false); }
-  }
-  async function toggleActive(t) {
-    try { await updateEmargementTemplate(t.id, { active: !t.active }); await loadTemplates(selId); }
-    catch (e) { onStatus({ type: "error", message: e.message }); }
-  }
-  // Logo organisme (partagé par tous les modèles) : upload data URL.
-  function onLogo(e) {
-    const f = e.target.files?.[0]; if (!f) return;
-    if (f.size > 1.5 * 1024 * 1024) { onStatus({ type: "error", message: "Logo trop lourd (max 1,5 Mo)." }); return; }
-    const rd = new FileReader();
-    rd.onload = async () => {
-      try { await updateOrganisation({ logo_image: rd.result }); setOrg((p) => ({ ...p, logo_image: rd.result })); onStatus({ type: "success", message: "Logo enregistré." }); }
-      catch (err) { onStatus({ type: "error", message: err.message }); }
-    };
-    rd.readAsDataURL(f);
-  }
-  async function removeLogo() {
-    try { await updateOrganisation({ logo_image: "" }); setOrg((p) => ({ ...p, logo_image: null })); }
-    catch (err) { onStatus({ type: "error", message: err.message }); }
-  }
-
-  const Toggle = ({ k, label }) => (
-    <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
-      <input type="checkbox" checked={!!cfg[k]} onChange={setChk(k)} /> {label}
-    </label>
-  );
-
-  return (
-    <>
-      <Card title={`Modèles d'émargement (${templates.length})`}
-        more={!creating
-          ? <button className="btn sm primary" onClick={() => { setCreating(true); setNewName("Nouvelle feuille"); }} disabled={busy}>＋ Nouveau modèle</button>
-          : null}>
-        {creating && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-            <input className="inp" autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") createNew(); if (e.key === "Escape") { setCreating(false); setNewName(""); } }}
-              placeholder="Nom du modèle (ex. Feuille 5 jours)" style={{ maxWidth: 320 }} />
-            <button className="btn sm primary" onClick={createNew} disabled={busy || !newName.trim()}>{busy ? "…" : "Créer"}</button>
-            <button className="btn sm ghost" onClick={() => { setCreating(false); setNewName(""); }} disabled={busy}>Annuler</button>
-          </div>
-        )}
-        {templates.length === 0 ? (
-          !creating ? <p className="hint" style={{ margin: 0 }}>Aucun modèle. Créez-en un : il deviendra attribuable dans le parcours documentaire d'une formation, comme les autres documents.</p> : null
-        ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {templates.map((t) => (
-              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, border: "1px solid var(--border-soft)",
-                borderRadius: 8, padding: "4px 8px", background: t.id === selId ? "var(--bg-soft, #f3f4f7)" : "transparent" }}>
-                <button className="btn sm ghost" style={{ fontWeight: t.id === selId ? 700 : 500 }} onClick={() => selectTemplate(t)}>
-                  {t.name}{!t.active ? " (inactif)" : ""}
-                </button>
-                <label title="Actif" style={{ display: "flex", alignItems: "center" }}>
-                  <input type="checkbox" checked={!!t.active} onChange={() => toggleActive(t)} />
-                </label>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {selId && (
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 380px) 1fr", gap: 16, alignItems: "start", marginTop: 14 }}>
-          <Card title="Mise en page">
-            <div className="field"><label>Nom du modèle</label>
-              <input className="inp" value={name} onChange={(e) => { setName(e.target.value); setDirty(true); }} /></div>
-
-            <div className="field"><label>Orientation</label>
-              <select value={cfg.orientation} onChange={set("orientation")}>
-                <option value="landscape">Paysage</option>
-                <option value="portrait">Portrait</option>
-              </select></div>
-
-            <div className="field"><label>Titre</label>
-              <input className="inp" value={cfg.title} onChange={set("title")} placeholder="Feuille d'émargement" /></div>
-
-            <div className="field"><label>Couleur d'accent (titre + filet)</label>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(cfg.accent) ? cfg.accent : "#c0392b"} onChange={set("accent")}
-                  style={{ width: 46, height: 34, padding: 2, border: "1px solid var(--border-soft)", borderRadius: 8, cursor: "pointer" }} />
-                <span className="mono" style={{ fontSize: 12 }}>{cfg.accent}</span>
-              </div></div>
-
-            <div className="field"><label>Logo de l'organisme</label>
-              <div style={{ display: "grid", gap: 8 }}>
-                <Toggle k="show_logo" label="Afficher le logo dans l'en-tête" />
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {org.logo_image ? <img src={org.logo_image} alt="logo" style={{ height: 34, maxWidth: 120, objectFit: "contain", border: "1px solid var(--border-soft)", borderRadius: 6, padding: 2 }} /> : <span className="sub" style={{ fontSize: 12 }}>Aucun logo</span>}
-                  <label className="btn sm ghost" style={{ cursor: "pointer" }}>
-                    {org.logo_image ? "Remplacer" : "Ajouter"} <input type="file" accept="image/*" onChange={onLogo} style={{ display: "none" }} />
-                  </label>
-                  {org.logo_image ? <button className="btn sm ghost" onClick={removeLogo}>Retirer</button> : null}
-                </div>
-              </div></div>
-
-            <div className="field"><label>En-tête</label>
-              <div style={{ display: "grid", gap: 8 }}>
-                <Toggle k="show_duration" label="Afficher la durée (jours · heures)" />
-                <Toggle k="show_horaires" label="Afficher les horaires de la formation" />
-                <Toggle k="show_lieu" label="Afficher le lieu (adresse organisme)" />
-              </div></div>
-
-            <div className="field"><label>Note d'en-tête (optionnel)</label>
-              <textarea className="inp" rows={2} value={cfg.header_note} onChange={set("header_note")}
-                placeholder="Ligne libre ajoutée sous les infos (ex. mention de financement)…" /></div>
-
-            <div className="field"><label>Colonnes (demi-journées)</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-                {SLOT_ORDER.map((s) => (
-                  <label key={s} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 14 }}>
-                    <input type="checkbox" checked={cfg.slots.includes(s)} onChange={() => toggleSlot(s)} /> {SLOT_LABEL[s]}
-                  </label>
-                ))}
-              </div></div>
-
-            <div className="field"><label>Lignes de signature</label>
-              <div style={{ display: "grid", gap: 8 }}>
-                <Toggle k="show_formateurs" label="Ligne(s) formateur(s)" />
-                <Toggle k="show_intervenants" label="Ligne(s) intervenant(s) externe(s)" />
-                <Toggle k="show_hours" label="Lignes récap horaires + volume (déduites du champ « Horaires »)" />
-              </div></div>
-
-            <div className="row2">
-              <div className="field"><label>Densité</label>
-                <select value={cfg.density} onChange={set("density")}>
-                  <option value="compact">Compacte</option>
-                  <option value="normal">Normale</option>
-                  <option value="large">Aérée</option>
-                </select></div>
-              <div className="field"><label>Marge de page : {cfg.margin_mm} mm</label>
-                <input type="range" min="4" max="25" value={cfg.margin_mm}
-                  onChange={(e) => { setCfg((p) => ({ ...p, margin_mm: parseInt(e.target.value, 10) })); setDirty(true); }} style={{ width: "100%" }} /></div>
-            </div>
-
-            <div className="field"><label>Pied de page — mention gauche (optionnel)</label>
-              <input className="inp" value={cfg.footer_left} onChange={set("footer_left")}
-                placeholder="Par défaut : « Fait à {ville}, le {date} »" /></div>
-
-            <div className="field"><label>Pied de page — légende du cachet</label>
-              <input className="inp" value={cfg.footer_caption} onChange={set("footer_caption")}
-                placeholder="Signature et cachet de l'organisme de formation" /></div>
-
-            <div className="field">
-              <Toggle k="show_stamp" label="Intégrer la signature/cachet enregistré(e) de l'organisme" />
-            </div>
-
-            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-              <button className="btn primary" onClick={save} disabled={saving || !dirty}>{saving ? "…" : "Enregistrer"}</button>
-              <button className="btn ghost" onClick={() => setCfg((p) => ({ ...EMARG_DEFAULTS, slots: [...EMARG_DEFAULTS.slots] }))} disabled={saving}>Réinitialiser la mise en page</button>
-              <button className="btn ghost" style={{ marginLeft: "auto", color: "#c0392b" }} onClick={remove} disabled={busy}>Supprimer</button>
-            </div>
-            <p className="hint" style={{ marginTop: 10 }}>
-              Les colonnes s'adaptent au nombre de jours de la formation. Ce modèle apparaît dans le parcours documentaire d'une formation (onglet Parcours) : ajoutez-le comme un document. Après l'avoir rattaché, cliquez sur « Générer le document » dans l'émargement d'une session.
-            </p>
-          </Card>
-
-          <Card title="Aperçu">
-            <EmargementPreview cfg={cfg} org={org} />
-          </Card>
-        </div>
-      )}
-    </>
-  );
-}
-
-// Aperçu HTML mimant le rendu PDF avec des données d'exemple (orientation, colonnes, densité…).
-function EmargementPreview({ cfg, org }) {
-  const accent = /^#[0-9a-fA-F]{6}$/.test(cfg.accent) ? cfg.accent : "#c0392b";
-  const dens = DENSITY_PX[cfg.density] || DENSITY_PX.normal;
-  const orgAddr = [org.address, [org.zip_code, org.town].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-  const today = new Date().toLocaleDateString("fr-FR");
-
-  // Jours d'exemple × demi-journées activées en config.
-  const exDays = [{ label: "Lun. 06/07" }, { label: "Mar. 07/07" }];
-  const activeSlots = SLOT_ORDER.filter((s) => cfg.slots.includes(s)).filter((s) => s === "MATIN" || s === "APRES_MIDI"); // l'exemple n'a que matin/après-midi
-  const shownSlots = activeSlots.length ? activeSlots : ["MATIN"];
-  const cols = exDays.flatMap((d, di) => shownSlots.map((s) => ({ d: d.label, s, di })));
-  // Horaires d'exemple (par jour × créneau) pour illustrer les lignes récap.
-  const sampleSched = [
-    { MATIN: ["8h45", "12h00"], APRES_MIDI: ["13h00", "17h15"] },
-    { MATIN: ["8h00", "12h00"], APRES_MIDI: ["13h00", "16h30"] },
-  ];
-  const toM = (t) => { const m = t.match(/(\d+)h(\d*)/); return +m[1] * 60 + (m[2] ? +m[2] : 0); };
-  const sTime = (c) => { const r = sampleSched[c.di] && sampleSched[c.di][c.s]; return r ? `${r[0]} – ${r[1]}` : ""; };
-  const sVol = (c) => { const r = sampleSched[c.di] && sampleSched[c.di][c.s]; if (!r) return ""; const d = toM(r[1]) - toM(r[0]); return `${Math.floor(d / 60)}h${String(d % 60).padStart(2, "0")}`; };
-
-  const cell = (i, on) => on ? (
-    <td key={i} style={{ border: "1px solid #cfd2d8", height: dens.row }}>
-      {i % 2 === 0
-        ? <span style={{ fontFamily: "'Segoe Script','Brush Script MT',cursive", fontSize: 15, color: "#2b2f45" }}>Signé</span>
-        : null}
-    </td>
-  ) : <td key={i} style={{ border: "1px solid #cfd2d8", background: "#f4f4f6" }} />;
-
-  const rows = [{ name: "LEFEBVRE Camille", sub: "Stagiaire", on: () => true }];
-  if (cfg.show_formateurs) rows.push({ name: "MOREAU Julien", sub: "Formateur", on: () => true });
-  if (cfg.show_intervenants) rows.push({ name: "GIRARD Sophie", sub: "Hygiène (HACCP)", on: (i) => i >= shownSlots.length });
-
-  // Largeur proportionnelle au format A4 (paysage 297 mm / portrait 210 mm) pour
-  // que l'aperçu « suive » l'orientation. Le wrapper défile si la colonne est étroite.
-  const pageW = cfg.orientation === "portrait" ? 500 : 720;
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <div style={{ background: "#fff", color: "#1e2140", padding: 16, border: "1px solid var(--border-soft)", borderRadius: 8,
-        fontFamily: "'Helvetica Neue',Arial,sans-serif", fontSize: dens.base + 1, width: pageW }}>
-        <div style={{ position: "relative", borderBottom: `2px solid ${accent}`, paddingBottom: 8, marginBottom: 10 }}>
-          {cfg.show_logo && org.logo_image ? <img src={org.logo_image} alt="" style={{ position: "absolute", top: 0, right: 0, maxHeight: 44, maxWidth: 140, objectFit: "contain" }} /> : null}
-          <div style={{ fontSize: 16, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".03em", color: accent }}>{cfg.title || "Feuille d'émargement"}</div>
-          <div style={{ fontWeight: 700, marginTop: 2 }}>{org.legal_name}</div>
-          <div style={{ color: "#444", lineHeight: 1.5, marginTop: 3 }}>
-            Intitulé de l'action de formation : <b>Pizzaïolo Niveau I</b> (NIV1)<br />
-            Date(s) : <b>du 06/07/2026 au 07/07/2026</b> — Semaine 28/2026{cfg.show_duration ? " · Durée : 2 jours · 14 h" : ""}<br />
-            {cfg.show_horaires ? <>Horaires : 9h00 – 12h30 / 13h30 – 17h00<br /></> : null}
-            {cfg.header_note ? <>{cfg.header_note}<br /></> : null}
-            {cfg.show_lieu && orgAddr ? `Lieu : ${orgAddr}` : null}
-          </div>
-        </div>
-
-        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <thead>
-            <tr>
-              <th rowSpan={2} style={{ width: 130, textAlign: "left", border: "1px solid #cfd2d8", background: "#f5f3f0", textTransform: "uppercase", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>Nom et prénom</th>
-              {exDays.map((d) => (
-                <th key={d.label} colSpan={shownSlots.length} style={{ border: "1px solid #cfd2d8", background: "#f5f3f0", textTransform: "uppercase", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>{d.label}</th>
-              ))}
-            </tr>
-            <tr>
-              {cols.map((c, i) => (
-                <th key={i} style={{ border: "1px solid #cfd2d8", background: "#f5f3f0", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>{SLOT_LABEL[c.s]}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {(() => {
-              const infoTr = (label, fn, key) => (
-                <tr key={key}>
-                  <td style={{ border: "1px solid #cfd2d8", textAlign: "left", fontWeight: 600, fontSize: dens.sub, color: "#333", background: "#faf7f2", padding: "2px 4px" }}>{label}</td>
-                  {cols.map((c, i) => <td key={i} style={{ border: "1px solid #cfd2d8", fontSize: dens.sub, color: "#555", background: "#faf7f2", padding: "2px 4px" }}>{fn(c)}</td>)}
-                </tr>
-              );
-              const out = [];
-              if (cfg.show_hours) out.push(infoTr("Horaires", sTime, "hr"));
-              let volDone = false;
-              rows.forEach((r, ri) => {
-                if (cfg.show_hours && !volDone && r.sub === "Formateur") { out.push(infoTr("Volume horaire", sVol, "vol")); volDone = true; }
-                out.push(
-                  <tr key={ri}>
-                    <td style={{ border: "1px solid #cfd2d8", textAlign: "left", fontWeight: 600, fontSize: dens.name, padding: "3px 4px" }}>
-                      {r.name}<div style={{ fontWeight: 400, fontSize: dens.sub, color: "#8a8f99" }}>{r.sub}</div>
-                    </td>
-                    {cols.map((c, i) => r.on(i) ? cell(i, true) : <td key={i} style={{ border: "1px solid #cfd2d8", background: "#f4f4f6" }} />)}
-                  </tr>
-                );
-              });
-              return out;
-            })()}
-          </tbody>
-        </table>
-
-        <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <div>{cfg.footer_left ? cfg.footer_left : `Fait à ${org.town}, le ${today}`}</div>
-          <div style={{ textAlign: "center" }}>
-            {cfg.show_stamp ? <div style={{ width: 120, height: 34, border: "1px dashed #cbd0d8", borderRadius: 4, margin: "0 auto 2px", display: "grid", placeItems: "center", color: "#aab", fontSize: 9 }}>cachet</div> : null}
-            {cfg.footer_caption ? <div style={{ fontSize: 9, color: "#555" }}>{cfg.footer_caption}</div> : null}
-          </div>
-        </div>
-        <div style={{ marginTop: 8, fontSize: 11, color: "var(--dim)" }}>Aperçu {cfg.orientation === "portrait" ? "portrait" : "paysage"} · marge {cfg.margin_mm} mm</div>
-      </div>
-    </div>
   );
 }
 

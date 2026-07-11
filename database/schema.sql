@@ -624,6 +624,7 @@ CREATE TABLE emargement_template (
     slug             varchar(60)  NOT NULL,             -- identifiant d'étape (parcours) unique par organisme
     name             varchar(255) NOT NULL,             -- intitulé affiché
     config           longtext     DEFAULT NULL,         -- mise en page JSON (orientation, colonnes, en-tête…)
+    applies_when     longtext     DEFAULT NULL,         -- conditions d'application JSON (comme document_template)
     active           tinyint(1)   NOT NULL DEFAULT 1,
     sort_order       int          DEFAULT 100,
     created_at       timestamp    NOT NULL DEFAULT current_timestamp(),
