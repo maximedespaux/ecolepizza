@@ -12,6 +12,7 @@ export default function FieldSettingsPanel({ onStatus }) {
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
+  const [open, setOpen] = useState({}); // sections repliées/dépliées
   const report = (s) => { setStatus(s); onStatus?.(s); };
 
   async function load() {
@@ -44,38 +45,53 @@ export default function FieldSettingsPanel({ onStatus }) {
   return (
     <>
       {!onStatus && <StatusMessage status={status} />}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "0 0 12px" }}>
-        <input className="inp" style={{ maxWidth: 320 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un champ…" />
+      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "0 0 12px", flexWrap: "wrap" }}>
+        <input className="inp" style={{ maxWidth: 280 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un champ…" />
         <span className="hint">{enabledCount} champ(s) activé(s) sur {fields.length}</span>
-        <button className="btn primary" style={{ marginLeft: "auto" }} disabled={saving} onClick={save}>{saving ? "…" : "Enregistrer"}</button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button className="btn sm ghost" onClick={() => setOpen(Object.fromEntries(groups.map(([t]) => [t, true])))}>Tout déplier</button>
+          <button className="btn sm ghost" onClick={() => setOpen({})}>Tout replier</button>
+          <button className="btn primary" disabled={saving} onClick={save}>{saving ? "…" : "Enregistrer"}</button>
+        </div>
       </div>
 
-      {groups.map(([tableLabel, list]) => (
-        <Card key={tableLabel} title={tableLabel}>
-          <div className="tablewrap" style={{ border: "none" }}>
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ width: 90 }}>Activé</th>
-                  <th>Intitulé affiché</th>
-                  <th>Colonne</th>
-                  <th style={{ width: 110 }}>Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((f) => (
-                  <tr key={f.key} style={{ opacity: f.enabled ? 1 : 0.6 }}>
-                    <td><input type="checkbox" checked={f.enabled} onChange={(e) => setField(f.key, { enabled: e.target.checked })} /></td>
-                    <td><input className="inp" value={f.label} onChange={(e) => setField(f.key, { label: e.target.value })} /></td>
-                    <td className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>{f.column}</td>
-                    <td style={{ fontSize: 12, color: "var(--muted)" }}>{TYPE_LABEL[f.type] || f.type}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {groups.map(([tableLabel, list]) => {
+        const isOpen = q.trim() ? true : !!open[tableLabel]; // recherche = tout ouvert ; sinon replié par défaut
+        const en = list.filter((f) => f.enabled).length;
+        return (
+          <div key={tableLabel} className="card" style={{ marginBottom: 10, padding: 0, overflow: "hidden" }}>
+            <button type="button" onClick={() => setOpen((p) => ({ ...p, [tableLabel]: !isOpen }))}
+              style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "10px 14px", background: "none", border: "none", cursor: "pointer", font: "inherit", textAlign: "left" }}>
+              <span style={{ fontWeight: 700 }}>{tableLabel} <span className="hint" style={{ fontWeight: 400 }}>· {en}/{list.length} activé(s)</span></span>
+              <span className="chev">{isOpen ? "▾" : "▸"}</span>
+            </button>
+            {isOpen && (
+              <div className="tablewrap" style={{ border: "none" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 90 }}>Activé</th>
+                      <th>Intitulé affiché</th>
+                      <th>Colonne</th>
+                      <th style={{ width: 110 }}>Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((f) => (
+                      <tr key={f.key} style={{ opacity: f.enabled ? 1 : 0.6 }}>
+                        <td><input type="checkbox" checked={f.enabled} onChange={(e) => setField(f.key, { enabled: e.target.checked })} /></td>
+                        <td><input className="inp" value={f.label} onChange={(e) => setField(f.key, { label: e.target.value })} /></td>
+                        <td className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>{f.column}</td>
+                        <td style={{ fontSize: 12, color: "var(--muted)" }}>{TYPE_LABEL[f.type] || f.type}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        </Card>
-      ))}
+        );
+      })}
 
       {fields.length === 0 && (
         <Card><p className="hint">Aucun champ disponible. Vérifiez que la migration des champs du dossier est appliquée.</p></Card>
