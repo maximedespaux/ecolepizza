@@ -31,6 +31,7 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
   const [list, setList] = useState([]);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [refFilter, setRefFilter] = useState(""); // filtre des références par table d'origine
   const focusRef = useRef({ idx: null, pos: 0 });
 
   useEffect(() => {
@@ -106,9 +107,15 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
           <button className="btn sm ghost" style={{ marginTop: 8 }} onClick={add}>＋ Ajouter un jeton</button>
 
           <div style={{ marginTop: 14 }}>
-            <div className="hf-label" style={{ padding: "0 0 6px" }}>Insérer une référence <span>· cliquez dans un « Modèle » puis sur un champ</span></div>
+            <div className="hf-label" style={{ padding: "0 0 6px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span>Insérer une référence <span style={{ textTransform: "none", fontWeight: 400 }}>· cliquez dans un « Modèle » puis sur un champ</span></span>
+              <select className="inp" style={{ marginLeft: "auto", maxWidth: 220, fontSize: 12 }} value={refFilter} onChange={(e) => setRefFilter(e.target.value)}>
+                <option value="">Toutes les tables</option>
+                {(catalog || []).map((g) => <option key={g.group} value={g.group}>{g.group}</option>)}
+              </select>
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5, maxHeight: 160, overflow: "auto" }}>
-              {(catalog || []).map((g) => g.tokens.map((t) => (
+              {(catalog || []).filter((g) => !refFilter || g.group === refFilter).map((g) => g.tokens.map((t) => (
                 <button key={t.key} type="button" className="tok-chip" title={`{${t.key}}`} onClick={() => insertRef(t.key)}>{t.label}</button>
               )))}
             </div>
