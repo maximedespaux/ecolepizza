@@ -42,14 +42,8 @@ function stepDone(step, doc) {
  * Renvoie { steps:[{key,ic,label,sub,signable,quiz,docId,docStatus,status}],
  *           percent, currentIndex, currentKey }.
  */
-function computeDocParcours({ steps = [], docs = [], emargStatus = {}, sessionId = null } = {}) {
+function computeDocParcours({ steps = [], docs = [] } = {}) {
     const rows = steps.map((s) => {
-        // Feuille d'émargement : signée via la grille (assiduité), pas via le flux
-        // document. Son état vient de l'archive emarg:<dossier>[:<slug>].
-        if (s.emargement) {
-            const st = emargStatus[s.slug] || emargStatus.__single__ || null;
-            return { s, doc: null, emarg: st, done: st === 'SIGNE' };
-        }
         const doc = matchDoc(s, docs);
         return { s, doc, done: stepDone(s, doc) };
     });
@@ -57,23 +51,13 @@ function computeDocParcours({ steps = [], docs = [], emargStatus = {}, sessionId
     let currentIndex = rows.findIndex((r) => !r.done);
     if (currentIndex < 0) currentIndex = rows.length;
 
-    const outSteps = rows.map((r, i) => {
-        const status = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo';
-        if (r.s.emargement) {
-            return {
-                key: keyFor(r.s), ic: '✍️', label: r.s.label, sub: "Émargement — signé par demi-journée",
-                emargement: true, sessionId, signable: true, quiz: false,
-                docId: null, docStatus: r.emarg, status,
-            };
-        }
-        return {
-            key: keyFor(r.s), ic: iconFor(r.s), label: r.s.label, sub: subFor(r.s),
-            signable: mustSign(r.s), quiz: !!r.s.quiz_id,
-            docId: r.doc ? r.doc.id : null,
-            docStatus: r.doc ? r.doc.status : null,
-            status,
-        };
-    });
+    const outSteps = rows.map((r, i) => ({
+        key: keyFor(r.s), ic: iconFor(r.s), label: r.s.label, sub: subFor(r.s),
+        signable: mustSign(r.s), quiz: !!r.s.quiz_id,
+        docId: r.doc ? r.doc.id : null,
+        docStatus: r.doc ? r.doc.status : null,
+        status: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo',
+    }));
 
     return {
         steps: outSteps,
