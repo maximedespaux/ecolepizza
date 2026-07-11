@@ -76,11 +76,11 @@ function TemplateEditor() {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
   }
   // Bloc de signature nommé : jeton « sig:<clé> » signé indépendamment par la personne attribuée.
+  const sigKey = (label) => "sig:" + String(label || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "").slice(0, 40);
   function insertSignature(label) {
     const lbl = String(label || "").trim();
     if (!lbl) return;
-    const key = "sig:" + lbl.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "").slice(0, 40);
-    target?.chain().focus().insertToken({ token: key, label: lbl }).run();
+    target?.chain().focus().insertToken({ token: sigKey(lbl), label: lbl }).run();
   }
   const SIG_PRESETS = ["Jury 1", "Jury 2", "Président du jury", "Formateur", "Intervenant", "Stagiaire 1", "Stagiaire 2", "Stagiaire 3", "Stagiaire 4"];
   function onDrop(ed) {
@@ -165,13 +165,19 @@ function TemplateEditor() {
                 Insérez un bloc de signature nommé. Chaque bloc est signé séparément par la personne attribuée, depuis son compte.
               </p>
               {SIG_PRESETS.map((s) => (
-                <button key={s} className="tok-chip" title={`Bloc de signature « ${s} »`} onClick={() => insertSignature(s)}>✍ {s}</button>
+                <button key={s} className="tok-chip" title={`Bloc de signature « ${s} » — cliquer ou glisser`}
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: sigKey(s), label: s }))}
+                  onClick={() => insertSignature(s)}>✍ {s}</button>
               ))}
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 <input className="inp" value={sigLabel} onChange={(e) => setSigLabel(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { insertSignature(sigLabel); setSigLabel(""); } }}
                   placeholder="Autre libellé…" style={{ fontSize: 12, padding: "4px 6px" }} />
-                <button className="btn sm ghost" onClick={() => { insertSignature(sigLabel); setSigLabel(""); }} disabled={!sigLabel.trim()}>＋</button>
+                <button className="btn sm ghost" title="Cliquer ou glisser dans le document"
+                  draggable={!!sigLabel.trim()}
+                  onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: sigKey(sigLabel.trim()), label: sigLabel.trim() }))}
+                  onClick={() => { insertSignature(sigLabel); setSigLabel(""); }} disabled={!sigLabel.trim()}>＋</button>
               </div>
             </div>
           </div>
