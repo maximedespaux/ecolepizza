@@ -168,12 +168,42 @@ const saveTemplate = async (req, res) => {
     }
 };
 
-// Échantillon d'aperçu selon le type de champ.
+// Échantillon d'aperçu RÉALISTE selon le type et le NOM de colonne (pas le libellé, qui
+// afficherait « Intitulé de la formation » au lieu d'une vraie valeur d'exemple).
 function sampleForField(f) {
     if (f.type === 'bool') return 'Oui';
-    if (f.type === 'number') return '123';
     if (f.type === 'enum') return (f.options && f.options[0] && f.options[0].value) || 'Valeur';
-    return f.label || 'Exemple';
+    const c = String(f.column || '').toLowerCase();
+    if (f.type === 'number') {
+        if (/price|amount|montant|prix|acompte|cpf|reste|total/.test(c)) return '1 500';
+        if (/day|jour/.test(c)) return '5';
+        if (/hour|heure/.test(c)) return '35';
+        if (/week|semaine/.test(c)) return '23';
+        if (/year|annee|an\b/.test(c)) return '2025';
+        if (/age/.test(c)) return '30';
+        return '123';
+    }
+    if (/first_?name|prenom/.test(c)) return 'Jean';
+    if (/(company|entreprise|societe|raison)/.test(c)) return 'Pizza Napoli SARL';
+    if (/last_?name|nom/.test(c)) return 'Dupont';
+    if (/civilit|gender|sexe/.test(c)) return 'M.';
+    if (/(intitul|titre|title|program|formation|libell)/.test(c)) return 'Fabriquer des pizzas artisanales';
+    if (/(email|mail|courriel)/.test(c)) return 'jean.dupont@email.fr';
+    if (/(phone|tel|mobile|portable|gsm)/.test(c)) return '06 12 34 56 78';
+    if (/(address|adresse|rue|voie)/.test(c)) return '12 rue des Fours';
+    if (/(city|ville|town|commune)/.test(c)) return 'Bordeaux';
+    if (/(zip|postal|cp\b)/.test(c)) return '33000';
+    if (/siret/.test(c)) return '123 456 789 00012';
+    if (/(naf|ape)/.test(c)) return '5610C';
+    if (/opco/.test(c)) return 'AKTO';
+    if (/(code|rs_)/.test(c)) return 'RS7404';
+    if (/(date|birth|naissance|debut|fin|jour1)/.test(c)) return '02/06/2025';
+    if (/(status|statut)/.test(c)) return "Demandeur d'emploi";
+    if (/(financ)/.test(c)) return 'CPF';
+    if (/(objectif|programme|deroul|contenu)/.test(c)) return 'Maîtriser la pâte, la cuisson…';
+    if (/(audience|public)/.test(c)) return 'Tout public';
+    if (/level|niveau/.test(c)) return 'Débutant';
+    return 'Exemple';
 }
 
 // Jetons de la palette = CHAMPS DOCUMENTS activés (colonnes du dossier), regroupés par table.
