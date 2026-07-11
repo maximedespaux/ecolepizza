@@ -32,11 +32,21 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
 
+  // Au changement de dossier seulement : on remet l'affichage en état de chargement.
+  // (Un simple rafraîchissement ne vide PAS l'affichage : évite le clignotement.)
+  useEffect(() => { setData(null); setSel(null); setError(null); }, [enrollmentId]);
+
   useEffect(() => {
     let active = true;
-    setData(null); setError(null);
     getEnrollmentParcours(enrollmentId)
-      .then((r) => { if (!active) return; setData(r.data); setSel(r.data.currentKey || r.data.steps[0]?.key || null); })
+      .then((r) => {
+        if (!active) return;
+        setData(r.data);
+        setError(null);
+        // Ne réinitialise la sélection que si aucune étape n'est encore choisie
+        // (sinon un rafraîchissement automatique ferait « sauter » la sélection).
+        setSel((cur) => cur || r.data.currentKey || r.data.steps[0]?.key || null);
+      })
       .catch((e) => { if (active) setError(e.message); });
     return () => { active = false; };
   }, [enrollmentId, refresh]);
