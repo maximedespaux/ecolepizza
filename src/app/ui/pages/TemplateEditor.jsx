@@ -10,6 +10,33 @@ import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
 
+// Estimation de la hauteur (pt) d'un bandeau — MÊME calcul que le rendu PDF côté serveur
+// (lib/pdfcompose.estimateStripHeightPt), pour que le repère de fin de page corresponde.
+const PT_PER_MM = 2.834645669;
+const CONTENT_PX = Math.round((210 - 36) * 96 / 25.4); // largeur utile (marges 18mm) ≈ 658 px
+const FULL_PX = Math.round(210 * 96 / 25.4);           // pleine largeur (bord à bord) ≈ 793 px
+const clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+function estimateStripPt(html, contentPx, fill) {
+  let pt = 0;
+  const imgs = String(html || "").match(/<img\b[^>]*>/gi) || [];
+  for (const tag of imgs) {
+    const wm = tag.match(/\bwidth\s*=\s*["']?(\d+)/i) || tag.match(/width\s*:\s*(\d+)\s*px/i);
+    const hm = tag.match(/\bheight\s*=\s*["']?(\d+)/i) || tag.match(/height\s*:\s*(\d+)\s*px/i);
+    let w = wm ? +wm[1] : contentPx;
+    let h = hm ? +hm[1] : 0;
+    let target = null;
+    if (w > contentPx) target = contentPx;                    // trop large → réduit
+    else if (fill && w >= contentPx * 0.5) target = contentPx; // bord à bord → étiré
+    if (target && h) h = h * target / w;
+    if (!h) h = (target || w) * 0.22;
+    pt += h * 72 / 96;
+  }
+  const textBlocks = (String(html || "").replace(/<img\b[^>]*>/gi, "").match(/<(p|div|h[1-6]|li|br)\b/gi) || []).length;
+  pt += Math.max(textBlocks, imgs.length ? 0 : 1) * 16;
+  pt += 14;
+  return pt;
+}
+
 // Bascule « bord à bord » (sans marge) d'une zone.
 function BleedToggle({ on, onChange }) {
   return (
@@ -44,6 +71,7 @@ function TemplateEditor() {
     editorProps: { attributes: { class: cls } },
     onFocus: ({ editor }) => setActive(editor),
     onSelectionUpdate: () => force((n) => n + 1), // rafraîchit l'état actif de la barre
+    onUpdate: () => force((n) => n + 1),          // recalcule le repère de fin de page
   });
   const header = useEditor(opts("doc-canvas hf"));
   const body = useEditor(opts("doc-canvas"));
@@ -89,43 +117,24 @@ function TemplateEditor() {
 
   const target = active || body;
 
-  // Mesure la hauteur RÉELLE des zones d'en-tête et de pied (via refs sur les conteneurs
-  // DOM — plus fiable que editor.view.dom qui n'est pas encore monté au 1er rendu).
-  const headRef = useRef(null);
-  const footRef = useRef(null);
-  const [metrics, setMetrics] = useState({ h: 0, f: 0 });
-  useEffect(() => {
-    if (showPreview) return undefined; // zones non montées en mode aperçu
-    const measure = () => setMetrics({
-      h: headRef.current?.offsetHeight || 0,
-      f: footRef.current?.offsetHeight || 0,
-    });
-    measure();
-    const ro = new ResizeObserver(measure);
-    if (headRef.current) ro.observe(headRef.current);
-    if (footRef.current) ro.observe(footRef.current);
-    // Re-mesure après montage/chargement des images.
-    const t = setTimeout(measure, 300);
-    return () => { ro.disconnect(); clearTimeout(t); };
-  }, [showPreview]);
-
-  // Position (px) de la FIN de page = zone utile A4 (hauteur physique), moins l'en-tête et
-  // le pied. C'est une position GÉOMÉTRIQUE sur la page : indépendante de la taille du
-  // texte (elle ne bouge pas quand la police change ; c'est le nombre de lignes au-dessus
-  // qui change). L'interligne est pris en compte car il agit pareil dans l'éditeur et le
-  // PDF. BODY_RATIO corrige le petit écart de rendu de ligne éditeur↔PDF.
+  // Marges réservées à l'en-tête et au pied, calculées EXACTEMENT comme le rendu PDF
+  // (à partir des dimensions du bandeau dans le HTML). La zone utile du corps en découle,
+  // convertie en pixels éditeur ; BODY_RATIO corrige le petit écart de rendu de ligne.
   const PX_PER_MM = 660 / 174;   // colonne page ≈ 174 mm sur ~660 px
-  const HF_PAD = 20;             // padding vertical des éditeurs en-tête/pied
-  const DENS = 0.7;              // le texte du PDF est plus serré que dans l'éditeur
   const BODY_RATIO = 0.94;       // ligne éditeur légèrement plus serrée que le PDF
-  const headerHasImg = /<img/i.test(header?.getHTML() || "");
-  const hasCustomHeader = !!clean(header?.getHTML());
-  const hasFooter = !!clean(footer?.getHTML());
-  // Hauteur du contenu du bandeau, en mm « rendu PDF » (image : 1:1 ; texte : ×DENS).
-  const headMm = (Math.max(0, metrics.h - HF_PAD) / PX_PER_MM) * (headerHasImg ? 1 : DENS);
-  const footMm = (Math.max(0, metrics.f - HF_PAD) / PX_PER_MM) * DENS;
-  const topReserveMm = bleed.header ? 8 : (hasCustomHeader ? 12 + headMm + 4 : 24);
-  const botReserveMm = bleed.footer ? 8 : (hasFooter ? footMm + 10 + 4 : 18);
+  const HEADER_TOP_MM = 12, FOOTER_BOTTOM_MM = 10, GAP_MM = 3;
+  const hHTML = header?.getHTML() || "";
+  const fHTML = footer?.getHTML() || "";
+  const hasCustomHeader = !!clean(hHTML);
+  const hasFooter = !!clean(fHTML);
+  const hTop = bleed.header ? 0 : HEADER_TOP_MM;
+  const fBot = bleed.footer ? 0 : FOOTER_BOTTOM_MM;
+  const topReserveMm = hasCustomHeader
+    ? clampN(hTop + estimateStripPt(hHTML, bleed.header ? FULL_PX : CONTENT_PX, bleed.header) / PT_PER_MM + GAP_MM, hTop + 6, 120)
+    : 34; // papier à en-tête automatique (approx.)
+  const botReserveMm = hasFooter
+    ? clampN(fBot + estimateStripPt(fHTML, bleed.footer ? FULL_PX : CONTENT_PX, bleed.footer) / PT_PER_MM + GAP_MM, fBot + 6, 100)
+    : 20;
   const bodyAreaMm = Math.max(60, 297 - topReserveMm - botReserveMm);
   const pageContentPx = Math.round(bodyAreaMm * PX_PER_MM * BODY_RATIO);
 
@@ -201,7 +210,7 @@ function TemplateEditor() {
               <div className="hf-label">En-tête <span>· laissé vide = papier à en-tête automatique</span>
                 <BleedToggle on={bleed.header} onChange={() => toggleBleed("header")} />
               </div>
-              <div ref={headRef} onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
+              <div onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
             </div>
             <div className="body-zone" onDrop={onDrop(body)} onDragOver={(e) => e.preventDefault()}
               style={{ "--page-h": pageContentPx + "px" }}>
@@ -211,7 +220,7 @@ function TemplateEditor() {
             </div>
             <div className="hf-zone">
               <div className="hf-label">Pied de page<BleedToggle on={bleed.footer} onChange={() => toggleBleed("footer")} /></div>
-              <div ref={footRef} onDrop={onDrop(footer)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={footer} /></div>
+              <div onDrop={onDrop(footer)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={footer} /></div>
             </div>
           </div>
         )}
