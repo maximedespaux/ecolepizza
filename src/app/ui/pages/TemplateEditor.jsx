@@ -212,21 +212,23 @@ function TemplateEditor() {
 
   return (
     <div className="tpl-editor">
-      <div className="tpl-editor-head">
-        <button className="btn ghost sm" onClick={() => navigate("/modeles")}>← Modèles</button>
-        <h2 style={{ margin: 0, fontSize: 17 }}>Éditeur — <span className="mono">{slug}</span></h2>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button className="btn sm ghost" onClick={() => setShowFields(true)} title="Gérer les champs disponibles du dossier">Champs documents</button>
-          <button className={"btn sm ghost" + (showPreview ? " on" : "")} onClick={() => setShowPreview((v) => !v)}>
-            {showPreview ? "Édition" : "Aperçu"}
-          </button>
-          <button className="btn sm primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
+      <div className="tpl-editor-sticky">
+        <div className="tpl-editor-head">
+          <button className="btn ghost sm" onClick={() => navigate("/modeles")}>← Modèles</button>
+          <h2 style={{ margin: 0, fontSize: 17 }}>Éditeur — <span className="mono">{slug}</span></h2>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            <button className="btn sm ghost" onClick={() => setShowFields(true)} title="Gérer les champs disponibles du dossier">Champs documents</button>
+            <button className={"btn sm ghost" + (showPreview ? " on" : "")} onClick={() => setShowPreview((v) => !v)}>
+              {showPreview ? "Édition" : "Aperçu"}
+            </button>
+            <button className="btn sm primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
+          </div>
         </div>
+
+        <StatusMessage status={status} />
+
+        {!showPreview && <RichToolbar editor={target} />}
       </div>
-
-      <StatusMessage status={status} />
-
-      {!showPreview && <RichToolbar editor={target} />}
 
       <div className="tpl-editor-body">
         {showPreview ? (
