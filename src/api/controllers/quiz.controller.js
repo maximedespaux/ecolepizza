@@ -11,14 +11,22 @@ const parseJSON = (v, dflt) => { if (v == null || v === '') return dflt; try { c
 async function loadGridRows(conn, qids, withCorrect) {
     const byQ = {};
     if (!qids.length) return byQ;
+    let rows;
     try {
-        const [rows] = await conn.query('SELECT id, question_id, position, text, correct FROM quiz_row WHERE question_id IN (?) ORDER BY position', [qids]);
-        for (const r of rows) {
-            (byQ[r.question_id] = byQ[r.question_id] || []).push(
-                withCorrect ? { id: r.id, text: r.text, correct: parseJSON(r.correct, []) } : { id: r.id, text: r.text }
-            );
-        }
-    } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
+        [rows] = await conn.query('SELECT id, question_id, position, text, correct, points FROM quiz_row WHERE question_id IN (?) ORDER BY position', [qids]);
+    } catch (e) {
+        if (e && e.code === 'ER_BAD_FIELD_ERROR') { // colonne points absente (migration 064)
+            try { [rows] = await conn.query('SELECT id, question_id, position, text, correct FROM quiz_row WHERE question_id IN (?) ORDER BY position', [qids]); }
+            catch (e2) { if (e2 && e2.code === 'ER_NO_SUCH_TABLE') return byQ; throw e2; }
+        } else if (e && e.code === 'ER_NO_SUCH_TABLE') { return byQ; }
+        else throw e;
+    }
+    for (const r of rows) {
+        const base = withCorrect
+            ? { id: r.id, text: r.text, correct: parseJSON(r.correct, []), points: r.points != null ? r.points : 1 }
+            : { id: r.id, text: r.text };
+        (byQ[r.question_id] = byQ[r.question_id] || []).push(base);
+    }
     return byQ;
 }
 
@@ -189,6 +197,10 @@ const saveQuiz = async (req, res) => {
         let hasImage = true;
         try { await conn.query('SELECT image FROM quiz_question LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasImage = false; else throw e; }
+        // Colonne points de ligne présente ? (migration 064)
+        let hasRowPoints = true;
+        try { await conn.query('SELECT points FROM quiz_row LIMIT 1'); }
+        catch (e) { if (e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE')) hasRowPoints = false; else throw e; }
         const questions = Array.isArray(b.questions) ? b.questions : [];
         for (let i = 0; i < questions.length; i++) {
             const q = questions[i];
@@ -233,11 +245,18 @@ const saveQuiz = async (req, res) => {
                     const rw = rows[j];
                     if (!rw.text || !String(rw.text).trim()) continue;
                     const correct = Array.isArray(rw.correct) ? rw.correct.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 0) : [];
+                    const rp = Number(rw.points);
+                    const rowPoints = Number.isFinite(rp) && rp >= 0 ? Math.floor(rp) : 1;
+                    const rid = crypto.randomUUID();
+                    const cj = correct.length ? JSON.stringify(correct) : null;
                     try {
-                        await conn.query(
-                            `INSERT INTO quiz_row (id, question_id, position, text, correct) VALUES (?, ?, ?, ?, ?)`,
-                            [crypto.randomUUID(), qid, j, String(rw.text).slice(0, 500), correct.length ? JSON.stringify(correct) : null]
-                        );
+                        if (hasRowPoints) {
+                            await conn.query(`INSERT INTO quiz_row (id, question_id, position, text, correct, points) VALUES (?, ?, ?, ?, ?, ?)`,
+                                [rid, qid, j, String(rw.text).slice(0, 500), cj, rowPoints]);
+                        } else {
+                            await conn.query(`INSERT INTO quiz_row (id, question_id, position, text, correct) VALUES (?, ?, ?, ?, ?)`,
+                                [rid, qid, j, String(rw.text).slice(0, 500), cj]);
+                        }
                     } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
                 }
             }
@@ -398,8 +417,9 @@ const submitQuiz = async (req, res) => {
                 });
                 value = JSON.stringify(compact).slice(0, 255);
                 if (graded && rows.length) {
-                    const per = q.points / rows.length;
                     rows.forEach((row, ri) => {
+                        const rp = Number(row.points);
+                        const per = Number.isFinite(rp) ? rp : 1; // points de la ligne
                         maxScore += per;
                         const correct = new Set((row.correct || []).map(Number));
                         const sel = new Set(compact[ri] || []);

@@ -21,7 +21,7 @@ const QTYPES = [
   { v: "GRID_MULTI", label: "Grille — plusieurs réponses par ligne" },
 ];
 const isGrid = (t) => t === "GRID_SINGLE" || t === "GRID_MULTI";
-const blankQuestion = () => ({ text: "", type: "SINGLE", points: 1, partial_scoring: 0, scale_max: 5, options: [{ text: "", is_correct: false }, { text: "", is_correct: false }], rows: [{ text: "", correct: [] }, { text: "", correct: [] }] });
+const blankQuestion = () => ({ text: "", type: "SINGLE", points: 1, partial_scoring: 0, scale_max: 5, options: [{ text: "", is_correct: false }, { text: "", is_correct: false }], rows: [{ text: "", correct: [], points: 1 }, { text: "", correct: [], points: 1 }] });
 
 // Étiquette courte du jour : J2, ou J-3 (avant le début).
 function dayTag(day) {
@@ -164,7 +164,7 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
   const setCorrect = (qi, oi, type) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, options: q.options.map((o, k) => ({ ...o, is_correct: k === oi ? !o.is_correct : (type === "SINGLE" ? false : o.is_correct) })) }) }));
   // Grille — lignes.
   const setRow = (qi, ri, patch) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, rows: (q.rows || []).map((rw, k) => (k === ri ? { ...rw, ...patch } : rw)) }) }));
-  const addRow = (qi) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, rows: [...(q.rows || []), { text: "", correct: [] }] }) }));
+  const addRow = (qi) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, rows: [...(q.rows || []), { text: "", correct: [], points: 1 }] }) }));
   const delRow = (qi, ri) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, rows: (q.rows || []).filter((_, k) => k !== ri) }) }));
   // Coche la colonne correcte d'une ligne (par position). single -> remplace ; multi -> ajoute/retire.
   const toggleRowCorrect = (qi, ri, colPos, single) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => {
@@ -250,6 +250,8 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
             {q.type === "SCALE" ? (
               <div className="field"><label>Note max</label>
                 <input className="inp" type="number" min="2" max="10" value={q.scale_max ?? ""} onChange={(e) => setQ(i, { scale_max: e.target.value })} /></div>
+            ) : form.kind === "GRADED" && isGrid(q.type) ? (
+              <div className="field"><label>Points</label><span className="hint" style={{ paddingTop: 8 }}>Définis par ligne (colonne « Pts »).</span></div>
             ) : form.kind === "GRADED" ? (
               <div className="field"><label>Points {q.type === "MULTI" && q.partial_scoring ? "(par bonne réponse)" : ""}</label>
                 <input className="inp" type="number" min="0" value={q.points ?? ""}
@@ -292,7 +294,7 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
                 {form.kind === "GRADED" ? (
                   <div style={{ overflowX: "auto" }}>
                     <table>
-                      <thead><tr><th></th>{q.options.map((o, oi) => <th key={oi} style={{ fontSize: 12, padding: "2px 6px", whiteSpace: "nowrap" }}>{o.text || `Col ${oi + 1}`}</th>)}<th></th></tr></thead>
+                      <thead><tr><th></th>{q.options.map((o, oi) => <th key={oi} style={{ fontSize: 12, padding: "2px 6px", whiteSpace: "nowrap" }}>{o.text || `Col ${oi + 1}`}</th>)}<th style={{ fontSize: 12 }}>Pts</th><th></th></tr></thead>
                       <tbody>
                         {(q.rows || []).map((rw, ri) => (
                           <tr key={ri}>
@@ -302,6 +304,7 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
                                 <input type={q.type === "GRID_SINGLE" ? "radio" : "checkbox"} name={`q${i}r${ri}`} checked={(rw.correct || []).includes(oi)} onChange={() => toggleRowCorrect(i, ri, oi, q.type === "GRID_SINGLE")} />
                               </td>
                             ))}
+                            <td><input className="inp" type="number" min="0" style={{ width: 56 }} value={rw.points ?? ""} onChange={(e) => setRow(i, ri, { points: e.target.value })} title="Points de cette ligne" /></td>
                             <td><button className="btn sm ghost" onClick={() => delRow(i, ri)} disabled={(q.rows || []).length <= 1}>✕</button></td>
                           </tr>
                         ))}
@@ -346,6 +349,11 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
       ))}
 
       <button className="btn" onClick={addQ}>＋ Ajouter une question</button>
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", margin: "18px 0 8px" }}>
+        <button className="btn ghost" onClick={onClose}>← Retour</button>
+        <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer le QCM"}</button>
+      </div>
     </>
   );
 }
