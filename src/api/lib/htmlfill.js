@@ -71,15 +71,20 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     return out;
 }
 
-// Applique le style de bordure d'un tableau (data-border : solid|dashed|none, défaut solid)
-// en INLINE sur chaque cellule (seule forme respectée par LibreOffice) + un padding.
+// Applique EN LIGNE (seule forme respectée par LibreOffice) le style de bordure d'un
+// tableau (data-border : solid|dashed|none) + un padding, et convertit la largeur de
+// colonne (attribut colwidth, issu du redimensionnement) en width sur la cellule.
 function applyTableBorders(html) {
     return String(html || '').replace(/<table\b([^>]*)>([\s\S]*?)<\/table>/gi, (m, attrs, inner) => {
         const bm = /data-border\s*=\s*["']?(solid|dashed|none)/i.exec(attrs);
         const kind = bm ? bm[1].toLowerCase() : 'solid';
         const border = kind === 'none' ? 'none' : kind === 'dashed' ? '1px dashed #999' : '1px solid #999';
-        const cell = `padding:5px 7px;border:${border};`;
         const newInner = inner.replace(/<(td|th)\b([^>]*)>/gi, (cm, tag, cattrs) => {
+            let cell = `padding:5px 7px;border:${border};`;
+            const cw = /\bcolwidth\s*=\s*["']?\s*(\d+)/i.exec(cattrs);   // largeur de colonne (px)
+            if (cw) cell += `width:${cw[1]}px;`;
+            const mh = /\bstyle\s*=\s*["'][^"']*min-height\s*:\s*(\d+)px/i.exec(cattrs); // hauteur de ligne
+            if (mh) cell += `height:${mh[1]}px;`;
             if (/\bstyle\s*=\s*["']/.test(cattrs)) {
                 return `<${tag}${cattrs.replace(/\bstyle\s*=\s*(["'])/i, (sm, q) => `style=${q}${cell}`)}>`;
             }
