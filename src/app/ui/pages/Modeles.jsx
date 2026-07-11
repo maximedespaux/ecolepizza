@@ -370,6 +370,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     stagiaire_sign: !!step.stagiaire_sign,
     sign_formateur: !!(step.config && step.config.show_formateurs),
     sign_intervenant: !!(step.config && step.config.show_intervenants),
+    sign_organization: !!(step.config && step.config.show_organization),
     active: step.active == null ? true : !!step.active,
     conditions: Array.isArray(a.conditions) ? a.conditions : [],
   });
@@ -390,7 +391,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
       if (isEmarg) {
         // La mise en page détaillée s'édite ensuite via « Éditer ». Ici : nom, conditions, signataires, actif.
         const baseCfg = step.config || EMARG_DEFAULTS;
-        const config = { ...baseCfg, show_formateurs: form.sign_formateur, show_intervenants: form.sign_intervenant };
+        const config = { ...baseCfg, show_formateurs: form.sign_formateur, show_intervenants: form.sign_intervenant, show_organization: form.sign_organization };
         if (isNew) await createEmargementTemplate({ name: form.label, applies_when, config });
         else await updateEmargementTemplate(step.id, { name: form.label, applies_when, active: form.active, config });
       } else {
@@ -468,6 +469,8 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
                 <input type="checkbox" checked={form.sign_formateur} onChange={chk("sign_formateur")} /> Signé par le(s) formateur(s)</label>
               <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
                 <input type="checkbox" checked={form.sign_intervenant} onChange={chk("sign_intervenant")} /> Signé par le(s) intervenant(s) externe(s)</label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={form.sign_organization} onChange={chk("sign_organization")} /> Signé par l'organisme</label>
               <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
                 <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
             </div>

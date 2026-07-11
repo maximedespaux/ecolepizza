@@ -9,7 +9,7 @@ export const EMARG_DEFAULTS = {
   orientation: "landscape", title: "Feuille d'émargement", accent: "#c0392b", show_logo: false,
   show_duration: true, show_horaires: true, show_lieu: true, header_note: "",
   slots: ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"],
-  show_formateurs: true, show_intervenants: true, show_hours: true, density: "normal", margin_mm: 10,
+  show_formateurs: true, show_intervenants: true, show_organization: false, show_hours: true, density: "normal", margin_mm: 10,
   footer_left: "", footer_caption: "Signature et cachet de l'organisme de formation", show_stamp: true,
   extra_columns: [],
 };
@@ -161,6 +161,7 @@ export default function EmargementEditor() {
             <div style={{ display: "grid", gap: 8 }}>
               <Toggle k="show_formateurs" label="Ligne(s) formateur(s)" />
               <Toggle k="show_intervenants" label="Ligne(s) intervenant(s) externe(s)" />
+              <Toggle k="show_organization" label="Ligne organisme (signature de l'organisme)" />
               <Toggle k="show_hours" label="Lignes récap horaires + volume" />
             </div></div>
 
@@ -229,6 +230,7 @@ export function EmargementPreview({ cfg, org }) {
   const rows = [{ name: "LEFEBVRE Camille", sub: "Stagiaire", on: () => true }];
   if (cfg.show_formateurs) rows.push({ name: "MOREAU Julien", sub: "Formateur", on: () => true });
   if (cfg.show_intervenants) rows.push({ name: "GIRARD Sophie", sub: "Hygiène (HACCP)", on: (i) => i >= shownSlots.length });
+  if (cfg.show_organization) rows.push({ name: org.legal_name || "Organisme de formation", sub: "Organisme de formation", on: () => true });
 
   const pageW = cfg.orientation === "portrait" ? 500 : 720;
   const extra = cfg.extra_columns || [];

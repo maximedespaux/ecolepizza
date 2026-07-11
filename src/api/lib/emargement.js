@@ -65,6 +65,7 @@ const DEFAULT_EMARG_CONFIG = {
     slots: ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'], // demi-journées affichées en colonnes
     show_formateurs: true,
     show_intervenants: true,
+    show_organization: false,        // ligne « organisme de formation » (signature de l'organisme dans la grille)
     show_hours: true,                // lignes récap : horaires (au-dessus stagiaire) + volume (au-dessus formateur)
     density: 'normal',               // 'compact' | 'normal' | 'large' (police)
     margin_mm: 10,                   // marge de page
@@ -102,7 +103,7 @@ function mergeEmargConfig(raw) {
     delete c.sig_height; // option retirée : dimensionnement automatique
     const m = parseInt(c.margin_mm, 10);
     c.margin_mm = Number.isFinite(m) ? Math.min(25, Math.max(4, m)) : DEFAULT_EMARG_CONFIG.margin_mm;
-    for (const k of ['show_logo', 'show_duration', 'show_horaires', 'show_lieu', 'show_formateurs', 'show_intervenants', 'show_hours', 'show_stamp']) c[k] = !!c[k];
+    for (const k of ['show_logo', 'show_duration', 'show_horaires', 'show_lieu', 'show_formateurs', 'show_intervenants', 'show_organization', 'show_hours', 'show_stamp']) c[k] = !!c[k];
     // Colonnes personnalisées : jusqu'à 6, label/texte bornés, largeur optionnelle.
     c.extra_columns = Array.isArray(c.extra_columns) ? c.extra_columns.slice(0, 6).map((x) => ({
         label: String((x && x.label) || '').slice(0, 40),
@@ -162,6 +163,10 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const shown = participants.filter((p) => p.role === 'stagiaire'
         || (p.role === 'formateur' && cfg.show_formateurs)
         || (p.role === 'intervenant' && cfg.show_intervenants));
+    // Ligne « organisme de formation » : signature de l'organisme (image enregistrée) sur chaque demi-journée.
+    if (cfg.show_organization) {
+        shown.push({ role: 'organisme', name: (org && org.legal_name) || 'Organisme de formation', sigOf: () => (org && org.signature_image) || null, appliesTo: () => true });
+    }
 
     // Hauteur de ligne : on répartit la place verticale restante entre les lignes.
     const horairesLines = (cfg.show_horaires && e.program_horaires) ? String(e.program_horaires).split(/\r?\n/).length : 0;
@@ -191,8 +196,9 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     // Cellules des colonnes personnalisées : texte fixe répété, ou case vide à remplir.
     const exFilled = (arr) => arr.map((x) => `<td width="${px(x.width_mm)}" height="${rowHpx}">${esc(x.text || '')}</td>`).join('');
     const exEmpty = (arr) => arr.map((x) => `<td width="${px(x.width_mm)}"></td>`).join('');
+    const roleSub = (r) => r === 'stagiaire' ? 'Stagiaire' : r === 'intervenant' ? 'Intervenant' : r === 'organisme' ? 'Organisme de formation' : '';
     const rowFor = (p) => `<tr>
-        <td class="nm" width="${nameWpx}" height="${rowHpx}">${esc(p.name || '')}${p.specialty ? `<div class="sub">${esc(p.specialty)}</div>` : ''}${p.role === 'stagiaire' ? '<div class="sub">Stagiaire</div>' : p.role === 'intervenant' ? '<div class="sub">Intervenant</div>' : ''}</td>
+        <td class="nm" width="${nameWpx}" height="${rowHpx}">${esc(p.name || '')}${p.specialty ? `<div class="sub">${esc(p.specialty)}</div>` : ''}${roleSub(p.role) ? `<div class="sub">${roleSub(p.role)}</div>` : ''}</td>
         ${exFilled(beforeEx)}${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k)); }).join('')}${exFilled(afterEx)}
     </tr>`;
 
