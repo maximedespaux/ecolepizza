@@ -310,4 +310,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, frDate, euro, businessDay };

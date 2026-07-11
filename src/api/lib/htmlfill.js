@@ -3,7 +3,7 @@
 // (<span data-token="Clé">…</span>) produite par l'éditeur, soit en texte brut
 // {Clé} (modèles convertis depuis les anciens fichiers Word). Les deux formes
 // sont remplacées par la valeur réelle issue du catalogue partagé.
-const { resolveTokens, RAW_TOKENS } = require('./tokens.js');
+const { resolveTokens, RAW_TOKENS, signatureBox } = require('./tokens.js');
 
 function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -11,16 +11,28 @@ function escapeHtml(s) {
         .replace(/"/g, '&quot;');
 }
 
+const decodeEnt = (s) => String(s).replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
 /** Remplace les jetons (puces + {Clé}) du corps par les valeurs du contexte. */
 function fillHtml(bodyHtml, ctx) {
     const values = resolveTokens(ctx);
+    const slotSigs = (ctx && ctx.slotSignatures) || {}; // { slotKey: { data, name, date, label } }
     let out = String(bodyHtml || '');
 
     const render = (key) => (RAW_TOKENS.has(key) ? values[key] : escapeHtml(values[key]));
+    // Jeton de signature multiple « sig:<slot> » : cadre de signature (rempli si signé, sinon vide).
+    const renderSlot = (key, label) => {
+        const s = slotSigs[key.slice(4)];
+        return signatureBox(s && s.data, label || (s && s.label) || 'Signature');
+    };
 
     // 1) Puces de l'éditeur : <span … data-token="Clé" …>label</span>
     out = out.replace(/<span[^>]*\sdata-token="([^"]+)"[^>]*>[\s\S]*?<\/span>/g, (m, rawKey) => {
-        const key = rawKey.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+        const key = decodeEnt(rawKey);
+        if (key.startsWith('sig:')) {
+            const lm = m.match(/\sdata-label="([^"]*)"/);
+            return renderSlot(key, lm ? decodeEnt(lm[1]) : '');
+        }
         return key in values ? render(key) : '';
     });
 
@@ -29,6 +41,8 @@ function fillHtml(bodyHtml, ctx) {
         if (!out.includes('{' + key + '}')) continue;
         out = out.split('{' + key + '}').join(render(key));
     }
+    // 2b) Signatures multiples en texte brut {sig:<slot>}.
+    out = out.replace(/\{(sig:[^{}]+)\}/g, (m, key) => renderSlot(key, ''));
     return out;
 }
 

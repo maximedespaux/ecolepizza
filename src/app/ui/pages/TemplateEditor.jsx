@@ -9,10 +9,14 @@ import StatusMessage from "../components/StatusMessage.jsx";
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 
 // Remplace les jetons par des valeurs d'exemple pour l'aperçu (côté client).
+const SIG_BOX = (label) => `<span style="display:inline-block;width:200px;height:64px;box-sizing:border-box;border:1px dashed #b0b0b0;color:#999;text-align:center;line-height:64px;border-radius:6px;font-size:9pt;vertical-align:middle;overflow:hidden">${label || "Signature"}</span>`;
+
 function previewFill(html, sampleMap) {
   let out = String(html || "");
-  out = out.replace(/<span[^>]*\sdata-token="([^"]+)"[^>]*>[\s\S]*?<\/span>/g,
-    (_m, key) => `<span class="prev-val">${sampleMap[key] ?? ""}</span>`);
+  out = out.replace(/<span[^>]*\sdata-token="([^"]+)"[^>]*>[\s\S]*?<\/span>/g, (m, key) => {
+    if (key.startsWith("sig:")) { const lm = m.match(/data-label="([^"]*)"/); return SIG_BOX(lm ? lm[1] : "Signature"); }
+    return `<span class="prev-val">${sampleMap[key] ?? ""}</span>`;
+  });
   for (const [k, v] of Object.entries(sampleMap)) {
     if (out.includes("{" + k + "}")) out = out.split("{" + k + "}").join(v);
   }
@@ -29,6 +33,7 @@ function TemplateEditor() {
   const [showPreview, setShowPreview] = useState(false);
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
+  const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
   const [, force] = useState(0);
 
   const opts = (cls) => ({
@@ -70,6 +75,14 @@ function TemplateEditor() {
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
   }
+  // Bloc de signature nommé : jeton « sig:<clé> » signé indépendamment par la personne attribuée.
+  function insertSignature(label) {
+    const lbl = String(label || "").trim();
+    if (!lbl) return;
+    const key = "sig:" + lbl.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "").slice(0, 40);
+    target?.chain().focus().insertToken({ token: key, label: lbl }).run();
+  }
+  const SIG_PRESETS = ["Jury 1", "Jury 2", "Président du jury", "Formateur", "Intervenant", "Stagiaire 1", "Stagiaire 2", "Stagiaire 3", "Stagiaire 4"];
   function onDrop(ed) {
     return (e) => {
       const raw = e.dataTransfer.getData("application/x-token");
@@ -144,6 +157,25 @@ function TemplateEditor() {
           <p className="sub" style={{ margin: "0 10px 8px", fontSize: 11 }}>
             Cliquez ou glissez un champ dans l'en-tête, le corps ou le pied de page. Il sera remplacé par la donnée réelle.
           </p>
+
+          <div className="tok-group">
+            <div className="tok-group-hd" style={{ cursor: "default" }}><span>✍ Signatures</span></div>
+            <div className="tok-list" style={{ padding: "0 10px 8px" }}>
+              <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
+                Insérez un bloc de signature nommé. Chaque bloc est signé séparément par la personne attribuée, depuis son compte.
+              </p>
+              {SIG_PRESETS.map((s) => (
+                <button key={s} className="tok-chip" title={`Bloc de signature « ${s} »`} onClick={() => insertSignature(s)}>✍ {s}</button>
+              ))}
+              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                <input className="inp" value={sigLabel} onChange={(e) => setSigLabel(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { insertSignature(sigLabel); setSigLabel(""); } }}
+                  placeholder="Autre libellé…" style={{ fontSize: 12, padding: "4px 6px" }} />
+                <button className="btn sm ghost" onClick={() => { insertSignature(sigLabel); setSigLabel(""); }} disabled={!sigLabel.trim()}>＋</button>
+              </div>
+            </div>
+          </div>
+
           {catalog.map((g) => (
             <div key={g.group} className="tok-group">
               <button className="tok-group-hd" onClick={() => setOpenGroups((p) => ({ ...p, [g.group]: !p[g.group] }))}>

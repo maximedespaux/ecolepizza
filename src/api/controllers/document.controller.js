@@ -106,7 +106,15 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
         const [cRows] = await conn.query('SELECT * FROM company WHERE id = ?', [learner.company_id]);
         company = cRows[0] || null;
     }
-    return { org: org || {}, learner: learner || {}, company, formations };
+    // Signatures multiples (jetons sig:<slot>) — chargées si la table existe (migration 061).
+    const slotSignatures = {};
+    if (documentId) {
+        try {
+            const [sigs] = await conn.query('SELECT slot, label, signature_data, signer_name, signed_at FROM document_signature WHERE document_id = ?', [documentId]);
+            for (const s of sigs) slotSignatures[s.slot] = { data: decrypt(s.signature_data), name: s.signer_name, date: s.signed_at, label: s.label };
+        } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+    }
+    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures };
 }
 
 /**
