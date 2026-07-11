@@ -128,16 +128,21 @@ function TemplateEditor() {
       const elRect = el.getBoundingClientRect();
       const lines = [];
       if (pageContentPx >= 40) {
+        // Un saut de page manuel occupe lui-même une ligne : la nouvelle page reprend
+        // APRÈS le saut (bord bas), pas à son sommet.
         const breaks = Array.from(el.querySelectorAll(".doc-pagebreak"))
-          .map((n) => n.getBoundingClientRect().top - elRect.top + el.scrollTop)
-          .sort((a, b) => a - b);
+          .map((n) => {
+            const r = n.getBoundingClientRect();
+            return { top: r.top - elRect.top + el.scrollTop, bottom: r.bottom - elRect.top + el.scrollTop };
+          })
+          .sort((a, b) => a.top - b.top);
         const H = el.scrollHeight;
         let start = 0, bi = 0, guard = 0;
         while (start < H && guard++ < 100) {
-          while (bi < breaks.length && breaks[bi] <= start + 1) bi++;
-          const nb = bi < breaks.length ? breaks[bi] : Infinity;
+          while (bi < breaks.length && breaks[bi].top <= start + 1) bi++;
+          const nb = bi < breaks.length ? breaks[bi] : null;
           const autoEnd = start + pageContentPx;
-          if (nb < autoEnd) { start = nb; bi++; }        // saut manuel : fin de page ici
+          if (nb && nb.top < autoEnd) { start = nb.bottom; bi++; } // saut manuel : nouvelle page après le saut
           else { lines.push(Math.round(autoEnd)); start = autoEnd; } // fin de page automatique
         }
       }
