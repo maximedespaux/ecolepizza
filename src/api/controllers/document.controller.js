@@ -5,6 +5,7 @@ const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
 const { stagiaireSignsDoc, orgSignsDoc } = require('../lib/documents.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
+const { composeDocumentPdf } = require('../lib/pdfcompose.js');
 const { findMissingTokens } = require('../lib/tokens.js');
 const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
 const { buildEmargementDocHtml } = require('../lib/emargement.js');
@@ -372,11 +373,11 @@ const downloadPdf = async (req, res) => {
                 if (!html) return res.status(422).json({ message: "Émargement pas encore disponible : générez d'abord les feuilles de présence de la session." });
                 pdf = htmlToPdf(html);
             } else if (r.content.kind === 'builder') {
-                const html = renderTemplateHtml(r.content.html, r.ctx, {
-                    title: r.doc.title || r.baseName,
+                // En-tête + pied de page répétés sur CHAQUE page (superposition pdf-lib).
+                pdf = await composeDocumentPdf({
+                    bodyHtml: r.content.html, ctx: r.ctx,
                     headerHtml: r.content.header, footerHtml: r.content.footer,
                 });
-                pdf = htmlToPdf(html);
             } else {
                 const out = renderTemplate(r.content.buffer, r.ctx, r.slug);
                 pdf = docxToPdf(out.buffer);

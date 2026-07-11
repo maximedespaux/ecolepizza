@@ -1,28 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { buildExtensions } from "../lib/editorConfig.js";
 import RichToolbar from "../components/RichToolbar.jsx";
-import { getTokenCatalog, getTemplateBody, saveTemplateBody } from "../api/apiClient.js";
+import { getTokenCatalog, getTemplateBody, saveTemplateBody, templatePreviewPdfUrl } from "../api/apiClient.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
-
-// Remplace les jetons par des valeurs d'exemple pour l'aperçu (côté client).
-const SIG_BOX = (label) => `<span style="display:inline-block;width:200px;height:64px;box-sizing:border-box;border:1px dashed #b0b0b0;color:#999;text-align:center;line-height:64px;border-radius:6px;font-size:9pt;vertical-align:middle;overflow:hidden">${label || "Signature"}</span>`;
-
-function previewFill(html, sampleMap) {
-  let out = String(html || "");
-  out = out.replace(/<span[^>]*\sdata-token="([^"]+)"[^>]*>[\s\S]*?<\/span>/g, (m, key) => {
-    if (key.startsWith("sig:")) { const lm = m.match(/data-label="([^"]*)"/); return SIG_BOX(lm ? lm[1] : "Signature"); }
-    return `<span class="prev-val">${sampleMap[key] ?? ""}</span>`;
-  });
-  for (const [k, v] of Object.entries(sampleMap)) {
-    if (out.includes("{" + k + "}")) out = out.split("{" + k + "}").join(v);
-  }
-  return out;
-}
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
 
 function TemplateEditor() {
@@ -32,6 +17,9 @@ function TemplateEditor() {
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfErr, setPdfErr] = useState(null);
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
@@ -67,11 +55,23 @@ function TemplateEditor() {
     return () => { alive = false; };
   }, [slug, body, header, footer]);
 
-  const sampleMap = useMemo(() => {
-    const m = {};
-    for (const g of catalog) for (const t of g.tokens) m[t.key] = t.sample || "";
-    return m;
-  }, [catalog]);
+  // Aperçu PDF fidèle : on rend le modèle en cours d'édition côté serveur (mêmes
+  // en-tête/pied répétés sur chaque page que le document final) et on l'affiche en iframe.
+  useEffect(() => {
+    if (!showPreview) return undefined;
+    let alive = true; let created = null;
+    setPdfLoading(true); setPdfErr(null);
+    templatePreviewPdfUrl(slug, {
+      body_html: body?.getHTML() || "<p></p>",
+      header_html: clean(header?.getHTML()),
+      footer_html: clean(footer?.getHTML()),
+    })
+      .then((url) => { if (!alive) { URL.revokeObjectURL(url); return; } created = url; setPdfUrl(url); })
+      .catch((e) => { if (alive) setPdfErr(e.message); })
+      .finally(() => { if (alive) setPdfLoading(false); });
+    return () => { alive = false; if (created) URL.revokeObjectURL(created); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPreview]);
 
   const target = active || body;
 
@@ -112,13 +112,6 @@ function TemplateEditor() {
     finally { setSaving(false); }
   }
 
-  const previewHtml = () => {
-    const h = clean(header?.getHTML()); const f = clean(footer?.getHTML());
-    return (h ? `<div class="pv-hf">${previewFill(h, sampleMap)}</div>` : "")
-      + previewFill(body?.getHTML() || "", sampleMap)
-      + (f ? `<div class="pv-hf pv-foot">${previewFill(f, sampleMap)}</div>` : "");
-  };
-
   return (
     <div className="tpl-editor">
       <div className="tpl-editor-head">
@@ -139,7 +132,14 @@ function TemplateEditor() {
 
       <div className="tpl-editor-body">
         {showPreview ? (
-          <div className="tpl-doc"><div className="doc-canvas preview" dangerouslySetInnerHTML={{ __html: previewHtml() }} /></div>
+          <div className="tpl-doc pdf-preview">
+            {pdfLoading && <p className="hint" style={{ padding: 24 }}>Génération de l'aperçu PDF…</p>}
+            {pdfErr && <p className="hint" style={{ padding: 24, color: "var(--amber, #b8860b)" }}>{pdfErr}</p>}
+            {pdfUrl && !pdfErr && (
+              <iframe title="Aperçu PDF" src={pdfUrl}
+                style={{ width: "100%", height: "80vh", border: "none", borderRadius: 8, background: "#525659" }} />
+            )}
+          </div>
         ) : (
           <div className="tpl-doc">
             <div className="hf-zone">

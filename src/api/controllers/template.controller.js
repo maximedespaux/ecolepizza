@@ -6,6 +6,7 @@ const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS } = require('../lib/documents.js');
 const { TOKEN_CATALOG } = require('../lib/tokens.js');
+const { composeDocumentPdf } = require('../lib/pdfcompose.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
@@ -139,6 +140,40 @@ const saveTemplate = async (req, res) => {
 /** GET /api/templates/tokens — catalogue des jetons (regroupé par table) pour la palette. */
 const getTokens = (req, res) => {
     res.json({ data: TOKEN_CATALOG });
+};
+
+// Valeurs d'exemple { clé: échantillon } issues du catalogue (aperçu sans dossier réel).
+function sampleTokenValues() {
+    const m = {};
+    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || '';
+    return m;
+}
+
+/**
+ * POST /api/templates/:slug/preview-pdf — aperçu PDF FIDÈLE du modèle en cours d'édition.
+ * Reçoit le HTML vivant (corps/en-tête/pied), remplit les jetons avec des valeurs
+ * d'exemple, et rend le PDF avec en-tête + pied répétés sur chaque page. Renvoie le PDF.
+ */
+const previewPdf = async (req, res) => {
+    try {
+        const { body_html, header_html, footer_html } = req.body || {};
+        const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [req.user.organization_id]);
+        const pdf = await composeDocumentPdf({
+            bodyHtml: body_html || '<p></p>',
+            headerHtml: header_html, footerHtml: footer_html,
+            ctx: { org: org || {} },
+            sampleValues: sampleTokenValues(),
+        });
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', 'inline; filename="apercu.pdf"');
+        res.send(pdf);
+    } catch (e) {
+        if (e.code === 'NO_SOFFICE') {
+            return res.status(501).json({ message: "LibreOffice n'est pas installé sur le serveur (nécessaire pour l'aperçu PDF)." });
+        }
+        console.error('Erreur aperçu PDF modèle :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /** GET /api/templates/:slug/body — corps HTML du modèle (propre à l'organisme ou défaut). */
@@ -275,5 +310,5 @@ const reorderTemplates = async (req, res) => {
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
-    getTokens, getTemplateBody, reorderTemplates,
+    getTokens, getTemplateBody, reorderTemplates, previewPdf,
 };

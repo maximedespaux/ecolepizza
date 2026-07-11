@@ -13,9 +13,13 @@ function escapeHtml(s) {
 
 const decodeEnt = (s) => String(s).replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 
-/** Remplace les jetons (puces + {Clé}) du corps par les valeurs du contexte. */
-function fillHtml(bodyHtml, ctx) {
-    const values = resolveTokens(ctx);
+/**
+ * Remplace les jetons (puces + {Clé}) du corps par les valeurs du contexte.
+ * `valuesOverride` (facultatif) = table { clé: valeur } utilisée telle quelle
+ * (ex. valeurs d'exemple pour l'aperçu d'un modèle, sans dossier réel).
+ */
+function fillHtml(bodyHtml, ctx, valuesOverride) {
+    const values = valuesOverride || resolveTokens(ctx);
     const slotSigs = (ctx && ctx.slotSignatures) || {}; // { slotKey: { data, name, date, label } }
     let out = String(bodyHtml || '');
 
@@ -61,6 +65,26 @@ function letterhead(org = {}) {
     </header>`;
 }
 
+// CSS partagé par tous les rendus (corps, aperçu, bandeaux en-tête/pied). Sans la
+// règle @page : chaque rendu fixe ses propres marges.
+const DOC_CSS = `
+  * { box-sizing: border-box; }
+  body { font-family: "Liberation Sans", Arial, sans-serif; font-size: 11pt; color: #1a1a1a; line-height: 1.5; }
+  .doc-head { border-bottom: 1.5px solid #c0392b; padding-bottom: 8px; margin-bottom: 22px; }
+  .doc-head .org { font-size: 15pt; font-weight: 700; color: #c0392b; }
+  .doc-head .org-l { font-size: 8.5pt; color: #555; }
+  .doc-foot { border-top: 1px solid #999; margin-top: 26px; padding-top: 8px; font-size: 8.5pt; color: #555; }
+  h1 { font-size: 16pt; } h2 { font-size: 13pt; } h3 { font-size: 11.5pt; }
+  p { margin: 0 0 8px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+  th, td { border: 1px solid #999; padding: 5px 7px; font-size: 10pt; text-align: left; }
+  ul, ol { margin: 0 0 8px 18px; }
+  img { max-width: 100%; }
+  .doc-body { margin-top: 4px; }
+  /* Saut de page manuel : LibreOffice ne respecte le saut que sur un <p> non vide,
+     d'où l'espace insécable ; on annule sa hauteur pour qu'il reste invisible. */
+  p.doc-pagebreak { page-break-after: always; height: 0; margin: 0; padding: 0; font-size: 0; line-height: 0; }`;
+
 /** Document HTML complet (en-tête + corps rempli + pied de page + CSS) prêt pour le PDF. */
 function renderTemplateHtml(bodyHtml, ctx, opts = {}) {
     const filled = fillHtml(bodyHtml, ctx);
@@ -79,24 +103,25 @@ function renderTemplateHtml(bodyHtml, ctx, opts = {}) {
 <html lang="fr"><head><meta charset="utf-8"><title>${title}</title>
 <style>
   @page { size: A4; margin: 20mm 18mm; }
-  * { box-sizing: border-box; }
-  body { font-family: "Liberation Sans", Arial, sans-serif; font-size: 11pt; color: #1a1a1a; line-height: 1.5; }
-  .doc-head { border-bottom: 1.5px solid #c0392b; padding-bottom: 8px; margin-bottom: 22px; }
-  .doc-head .org { font-size: 15pt; font-weight: 700; color: #c0392b; }
-  .doc-head .org-l { font-size: 8.5pt; color: #555; }
-  .doc-foot { border-top: 1px solid #999; margin-top: 26px; padding-top: 8px; font-size: 8.5pt; color: #555; }
-  h1 { font-size: 16pt; } h2 { font-size: 13pt; } h3 { font-size: 11.5pt; }
-  p { margin: 0 0 8px; }
-  table { border-collapse: collapse; width: 100%; margin: 10px 0; }
-  th, td { border: 1px solid #999; padding: 5px 7px; font-size: 10pt; text-align: left; }
-  ul, ol { margin: 0 0 8px 18px; }
-  img { max-width: 100%; }
-  .doc-body { margin-top: 4px; }
-  /* Saut de page manuel : LibreOffice ne respecte le saut que sur un <p> non vide,
-     d'où l'espace insécable ; on annule sa hauteur pour qu'il reste invisible. */
-  p.doc-pagebreak { page-break-after: always; height: 0; margin: 0; padding: 0; font-size: 0; line-height: 0; }
+${DOC_CSS}
 </style></head>
 <body>${head}<main class="doc-body">${filled}</main>${foot}</body></html>`;
 }
 
-module.exports = { fillHtml, renderTemplateHtml, escapeHtml };
+/**
+ * Corps SEUL (sans en-tête ni pied), avec marges @page réservant la place des
+ * bandeaux répétés sur chaque page (superposés ensuite via pdf-lib, cf. pdfcompose).
+ * topMm/bottomMm = marges haut/bas ; les côtés restent à 18mm.
+ */
+function renderBodyOnlyDoc(bodyHtml, ctx, { topMm = 20, bottomMm = 20, values } = {}) {
+    const filled = fillHtml(bodyHtml, ctx, values);
+    return `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: ${topMm}mm 18mm ${bottomMm}mm 18mm; }
+${DOC_CSS}
+</style></head>
+<body><main class="doc-body">${filled}</main></body></html>`;
+}
+
+module.exports = { fillHtml, renderTemplateHtml, renderBodyOnlyDoc, letterhead, escapeHtml, DOC_CSS };

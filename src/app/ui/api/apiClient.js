@@ -661,6 +661,20 @@ export function getTemplateBody(slug) {
 export function saveTemplateBody(slug, payload) {
   return request(`/templates/${slug}`, { method: "PUT", body: JSON.stringify(payload) });
 }
+// Aperçu PDF fidèle du modèle en cours d'édition. Renvoie une URL blob (à révoquer).
+export async function templatePreviewPdfUrl(slug, payload) {
+  const res = await fetch(`${API_BASE_URL}/templates/${slug}/preview-pdf`, {
+    method: "POST", credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    let m = "Aperçu PDF impossible";
+    try { m = (await res.json()).message || m; } catch { /* ignore */ }
+    throw new Error(m);
+  }
+  return URL.createObjectURL(await res.blob());
+}
 export async function uploadTemplate(slug, file) {
   const fd = new FormData();
   fd.append("file", file);
