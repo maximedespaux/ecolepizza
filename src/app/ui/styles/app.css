@@ -474,9 +474,6 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .doc-canvas table{table-layout:fixed}
 .doc-canvas .column-resize-handle{position:absolute;right:-2px;top:0;bottom:0;width:4px;z-index:20;background:var(--ember1,#c0392b);pointer-events:none}
 .doc-canvas.resize-cursor,.ProseMirror.resize-cursor{cursor:col-resize}
-/* Poignée de redimensionnement de LIGNE : bord bas de la cellule. */
-.doc-canvas td>.row-grip,.doc-canvas th>.row-grip{position:absolute;left:0;right:0;bottom:-3px;height:6px;cursor:row-resize;z-index:16}
-.doc-canvas td>.row-grip:hover,.doc-canvas th>.row-grip:hover{background:rgba(192,57,43,.3)}
 /* Style de bordure du tableau (choisi dans la barre d'outils). */
 .doc-canvas table.tbl-b-dashed th,.doc-canvas table.tbl-b-dashed td{border:1px dashed var(--line,#999)}
 .doc-canvas table.tbl-b-none th,.doc-canvas table.tbl-b-none td{border:1px dotted #e2e2e6} /* repère léger dans l'éditeur ; aucune bordure au PDF */
