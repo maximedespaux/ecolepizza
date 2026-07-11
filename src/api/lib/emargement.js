@@ -547,22 +547,10 @@ async function buildEmargementDocHtml(conn, orgId, enrollmentId, opts = {}) {
         ...Object.values(ivByUser).map((iv) => ({ role: 'intervenant', name: iv.name, specialty: iv.specialty, sigOf: (k) => ivSig[`${iv.user_id}|${k}`] || null, appliesTo: (k) => iv.assigned.has(k) })),
     ];
 
-    let html = renderEmargementHtml({ org, e, rows, participants, config: opts.config });
-    // Bloc de signatures ÉLECTRONIQUES (en plus des signatures visuelles de la grille).
-    const box = (img, label, sub) => `<td style="text-align:center;vertical-align:top;padding:8px 12px;width:50%">
-        <div style="font-size:10px;color:#333;font-weight:600;margin-bottom:4px">${esc(label)}</div>
-        ${img ? `<img src="${img}" style="max-height:58px;max-width:200px;object-fit:contain" />` : '<div style="height:58px;border:1px dashed #b0b0b0;border-radius:6px"></div>'}
-        ${sub ? `<div style="font-size:9px;color:#777;margin-top:3px">${esc(sub)}</div>` : ''}
-    </td>`;
-    const learnerSub = [opts.learnerName || learnerName, opts.signedAt ? `le ${frDate(opts.signedAt)}` : ''].filter(Boolean).join(' — ');
-    const elec = `<div style="margin-top:16px;border-top:1px solid #999;padding-top:6px">
-        <div style="font-size:10px;color:#333;font-weight:700;margin-bottom:2px">Signatures électroniques</div>
-        <table width="100%" cellspacing="0" cellpadding="0"><tr>
-            ${box(opts.learnerSig || null, 'Le stagiaire', opts.learnerSig ? learnerSub : 'En attente de signature')}
-            ${box(opts.orgSig || null, "L'organisme de formation", opts.orgName || (org && org.legal_name) || '')}
-        </tr></table>
-    </div>`;
-    return html.replace('</body>', `${elec}</body>`);
+    // La feuille = la grille (signatures visuelles par demi-journée). La signature
+    // électronique du stagiaire est portée par l'empreinte + le scellement PAdès du
+    // PDF (pas de bloc de signature redondant en pied).
+    return renderEmargementHtml({ org, e, rows, participants, config: opts.config });
 }
 
 module.exports = { regenEmargement, buildEmargementDocHtml, DEFAULT_EMARG_CONFIG, mergeEmargConfig };

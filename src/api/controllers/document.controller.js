@@ -263,7 +263,7 @@ const getDocument = async (req, res) => {
                 sent_at: doc.sent_at, signed_at: doc.signed_at, signer_name: doc.signer_name,
                 signature_data: decrypt(doc.signature_data),
                 signable: isEmargDoc(doc) || stagiaireSignsDoc(orgSteps, doc),
-                org_signable: isEmargDoc(doc) || orgSignsDoc(orgSteps, doc),
+                org_signable: orgSignsDoc(orgSteps, doc), // émargement : l'organisme ne signe pas à l'envoi (envoyé non signé)
                 org_signed: !!doc.org_signed_at,
                 org_signer_name: doc.org_signer_name || null,
                 org_signed_at: doc.org_signed_at || null,
