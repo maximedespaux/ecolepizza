@@ -133,7 +133,7 @@ const getMonEspace = async (req, res) => {
 
         // Le stagiaire doit-il signer chaque document ? Piloté par le modèle (Modeles).
         const orgSteps = await loadOrgSteps(req.user.organization_id);
-        for (const d of documents) d.signable = d.quiz_id ? false : stagiaireSignsDoc(orgSteps, d);
+        for (const d of documents) d.signable = d.quiz_id ? false : (d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d));
 
         res.json({
             data: {

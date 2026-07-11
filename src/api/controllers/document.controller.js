@@ -7,6 +7,7 @@ const { stagiaireSignsDoc, orgSignsDoc } = require('../lib/documents.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { findMissingTokens } = require('../lib/tokens.js');
 const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
+const { buildEmargementDocHtml } = require('../lib/emargement.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
 const { notify } = require('./notification.controller.js');
@@ -34,6 +35,7 @@ async function getOrgSigner(conn, orgId, orgName) {
 async function buildDocHtml(conn, orgId, doc) {
     const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
     ctx.signature = { data: decrypt(doc.signature_data), name: doc.signer_name, date: doc.signed_at };
+    if (isEmargDoc(doc)) return await renderEmargDoc(conn, orgId, doc, ctx);
     const f = (ctx.formations && ctx.formations[0]) || {};
     const slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
     if (!slug) return null;
@@ -115,6 +117,28 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
         } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
     }
     return { org: org || {}, learner: learner || {}, company, formations, slotSignatures };
+}
+
+// Un document d'émargement (type EMARGEMENT) : rendu via le moteur d'émargement
+// (grille visuelle) + un bloc de signatures ÉLECTRONIQUES (stagiaire + organisme).
+const isEmargDoc = (doc) => !!doc && doc.type === 'EMARGEMENT';
+async function renderEmargDoc(conn, orgId, doc, ctx) {
+    const [[df]] = await conn.query('SELECT enrollment_id FROM document_formation WHERE document_id = ? LIMIT 1', [doc.id]);
+    if (!df) return null;
+    let config = null;
+    if (doc.template_slug) {
+        try {
+            const [[t]] = await conn.query('SELECT config FROM emargement_template WHERE organization_id = ? AND slug = ?', [orgId, doc.template_slug]);
+            if (t) config = t.config;
+        } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+    }
+    const org = ctx.org || {};
+    return buildEmargementDocHtml(conn, orgId, df.enrollment_id, {
+        config,
+        learnerSig: decrypt(doc.signature_data), learnerName: doc.signer_name, signedAt: doc.signed_at,
+        orgSig: decrypt(doc.org_signature_data) || org.signature_image || null,
+        orgName: org.legal_name || org.short_name || '',
+    });
 }
 
 /**
@@ -238,8 +262,8 @@ const getDocument = async (req, res) => {
                 id: doc.id, type: doc.type, title: doc.title, status: doc.status,
                 sent_at: doc.sent_at, signed_at: doc.signed_at, signer_name: doc.signer_name,
                 signature_data: decrypt(doc.signature_data),
-                signable: stagiaireSignsDoc(orgSteps, doc),
-                org_signable: orgSignsDoc(orgSteps, doc),
+                signable: isEmargDoc(doc) || stagiaireSignsDoc(orgSteps, doc),
+                org_signable: isEmargDoc(doc) || orgSignsDoc(orgSteps, doc),
                 org_signed: !!doc.org_signed_at,
                 org_signer_name: doc.org_signer_name || null,
                 org_signed_at: doc.org_signed_at || null,
@@ -276,6 +300,12 @@ async function fillForRequest(req, res) {
     const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
     // Signature du document (stagiaire/signataire) pour le jeton {Signature stagiaire}.
     ctx.signature = { data: decrypt(doc.signature_data), name: doc.signer_name, date: doc.signed_at };
+    // Émargement : rendu par le moteur d'émargement (pas de modèle HTML ni de jetons).
+    if (isEmargDoc(doc)) {
+        const who = [ctx.learner?.first_name, ctx.learner?.last_name].filter(Boolean).join(' ').trim();
+        const baseName = (who ? `${doc.title || "Feuille d'émargement"} - ${who}` : (doc.title || "Feuille d'émargement")).replace(/[\\/:*?"<>|]/g, '');
+        return { doc, ctx, slug: doc.template_slug || 'emargement', content: { kind: 'emargement' }, baseName };
+    }
     const f = (ctx.formations && ctx.formations[0]) || {};
     // Slug enregistré sur le document en priorité, sinon dérivé du type + contexte.
     const slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
@@ -337,7 +367,11 @@ const downloadPdf = async (req, res) => {
         if (!r) return;
         let pdf;
         try {
-            if (r.content.kind === 'builder') {
+            if (r.content.kind === 'emargement') {
+                const html = await renderEmargDoc(db.promise(), r.doc.organization_id, r.doc, r.ctx);
+                if (!html) return res.status(422).json({ message: "Émargement pas encore disponible : générez d'abord les feuilles de présence de la session." });
+                pdf = htmlToPdf(html);
+            } else if (r.content.kind === 'builder') {
                 const html = renderTemplateHtml(r.content.html, r.ctx, {
                     title: r.doc.title || r.baseName,
                     headerHtml: r.content.header, footerHtml: r.content.footer,
@@ -386,13 +420,18 @@ const previewHtml = async (req, res) => {
     try {
         const r = await fillForRequest(req, res);
         if (!r) return; // 404 / 403 / 422 (informations manquantes) déjà répondus
-        if (r.content.kind !== 'builder') {
+        let html;
+        if (r.content.kind === 'emargement') {
+            html = await renderEmargDoc(db.promise(), r.doc.organization_id, r.doc, r.ctx);
+            if (!html) return res.status(422).json({ message: "Émargement pas encore disponible : générez d'abord les feuilles de présence de la session." });
+        } else if (r.content.kind === 'builder') {
+            html = renderTemplateHtml(r.content.html, r.ctx, {
+                title: r.doc.title || r.baseName,
+                headerHtml: r.content.header, footerHtml: r.content.footer,
+            });
+        } else {
             return res.status(400).json({ message: 'Aperçu HTML indisponible pour ce modèle (.docx) — utilisez le PDF.' });
         }
-        const html = renderTemplateHtml(r.content.html, r.ctx, {
-            title: r.doc.title || r.baseName,
-            headerHtml: r.content.header, footerHtml: r.content.footer,
-        });
         res.json({ data: { html } });
     } catch (err) {
         console.error('Erreur aperçu HTML :', err);
@@ -476,8 +515,9 @@ const signDocument = async (req, res) => {
         if (rows.length === 0) return res.status(403).json({ message: 'Document non autorisé.' });
 
         // Le document doit être prévu pour signature stagiaire (Modeles : stagiaire_sign).
+        // L'émargement est toujours signable électroniquement par le stagiaire.
         const orgSteps = await loadOrgSteps(req.user.organization_id);
-        if (!stagiaireSignsDoc(orgSteps, rows[0])) {
+        if (!isEmargDoc(rows[0]) && !stagiaireSignsDoc(orgSteps, rows[0])) {
             return res.status(422).json({ message: "Ce document n'est pas prévu pour être signé par le stagiaire." });
         }
 

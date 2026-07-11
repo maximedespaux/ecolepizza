@@ -472,4 +472,97 @@ async function regenEmargement(conn, orgId, enrollmentId) {
     }
 }
 
-module.exports = { regenEmargement, DEFAULT_EMARG_CONFIG, mergeEmargConfig };
+/**
+ * Construit le HTML de la feuille d'émargement d'un dossier POUR LE FLUX DOCUMENT
+ * (préparer/envoyer/signer électroniquement). = grille visuelle habituelle + un bloc
+ * de signatures ÉLECTRONIQUES (stagiaire + organisme) ajouté en pied.
+ * Renvoie le HTML, ou null si aucune feuille d'assiduité n'existe encore.
+ * opts = { config, learnerSig, learnerName, signedAt, orgSig, orgName }.
+ */
+async function buildEmargementDocHtml(conn, orgId, enrollmentId, opts = {}) {
+    const [[e]] = await conn.query(
+        `SELECT e.id, e.learner_id, e.session_id, l.first_name, l.last_name,
+                ts.year, ts.week,
+                DATE_FORMAT(ts.start_date, '%Y-%m-%d') AS start_date,
+                DATE_FORMAT(ts.end_date, '%Y-%m-%d') AS end_date,
+                p.code AS program_code, p.title AS program_title, p.days AS program_days, p.hours AS program_hours, p.id AS program_id
+         FROM enrollment e
+         JOIN training_session ts ON ts.id = e.session_id
+         LEFT JOIN training_program p ON p.id = ts.program_id
+         LEFT JOIN learner l ON l.id = e.learner_id
+         WHERE e.id = ? AND e.organization_id = ?`,
+        [enrollmentId, orgId]
+    );
+    if (!e) return null;
+    try { const [[h]] = await conn.query('SELECT horaires FROM training_program WHERE id = ?', [e.program_id]); e.program_horaires = h ? h.horaires : null; }
+    catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; }
+    const [[org]] = await conn.query('SELECT legal_name, address, zip_code, town, signature_image FROM organization WHERE id = ?', [orgId]);
+    try { const [[lg]] = await conn.query('SELECT logo_image FROM organization WHERE id = ?', [orgId]); org.logo_image = lg ? lg.logo_image : null; }
+    catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; }
+
+    const [rows] = await conn.query(
+        `SELECT s.id AS sheet_id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.slot, ar.signer_name, ar.signature_data
+         FROM attendance_sheet s
+         LEFT JOIN attendance_record ar ON ar.sheet_id = s.id AND ar.learner_id = ?
+         WHERE s.session_id = ?
+         ORDER BY s.date, FIELD(s.slot, 'MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL')`,
+        [e.learner_id, e.session_id]
+    );
+    if (!rows.length) return null;
+    const [tsigns] = await conn.query(
+        `SELECT ats.sheet_id, ats.user_id, ats.signature_data, u.role AS user_role, si.specialty
+         FROM attendance_trainer_sign ats
+         JOIN attendance_sheet s ON s.id = ats.sheet_id
+         LEFT JOIN user u ON u.id = ats.user_id
+         LEFT JOIN session_intervenant si ON si.user_id = ats.user_id AND si.session_id = s.session_id
+         WHERE s.session_id = ? AND ats.signature_data IS NOT NULL`,
+        [e.session_id]
+    );
+    const sheetInfo = {};
+    for (const r of rows) sheetInfo[r.sheet_id] = { date: r.date, slot: r.slot };
+    const learnerSig = {};
+    for (const r of rows) if (r.signature_data) learnerSig[`${r.date}|${r.slot}`] = r.signature_data;
+    const trSig = {}; const ivSig = {};
+    for (const t of tsigns) { const info = sheetInfo[t.sheet_id]; if (!info) continue; (t.user_role === 'INTERVENANT' ? ivSig : trSig)[`${t.user_id}|${info.date}|${info.slot}`] = t.signature_data; }
+    const [formateurs] = await conn.query(
+        `SELECT u.id, u.first_name, u.last_name FROM session_trainer st JOIN user u ON u.id = st.user_id WHERE st.session_id = ? ORDER BY u.last_name, u.first_name`,
+        [e.session_id]
+    );
+    const [ivAssign] = await conn.query(
+        `SELECT si.user_id, si.specialty, u.first_name, u.last_name, DATE_FORMAT(sis.date, '%Y-%m-%d') AS date, sis.slot
+         FROM session_intervenant si JOIN session_intervenant_slot sis ON sis.session_intervenant_id = si.id
+         LEFT JOIN user u ON u.id = si.user_id WHERE si.session_id = ?`,
+        [e.session_id]
+    );
+    const ivByUser = {};
+    for (const a of ivAssign) {
+        const iv = ivByUser[a.user_id] || (ivByUser[a.user_id] = { user_id: a.user_id, name: `${a.last_name || ''} ${a.first_name || ''}`.trim(), specialty: a.specialty, assigned: new Set() });
+        iv.assigned.add(`${a.date}|${a.slot}`);
+    }
+    const sheetKeys = new Set(rows.map((r) => `${r.date}|${r.slot}`));
+    const learnerName = `${e.last_name || ''} ${e.first_name || ''}`.trim();
+    const participants = [
+        { role: 'stagiaire', name: learnerName, sigOf: (k) => learnerSig[k] || null, appliesTo: (k) => sheetKeys.has(k) },
+        ...formateurs.map((f) => ({ role: 'formateur', name: `${f.last_name || ''} ${f.first_name || ''}`.trim(), sigOf: (k) => trSig[`${f.id}|${k}`] || null, appliesTo: (k) => sheetKeys.has(k) })),
+        ...Object.values(ivByUser).map((iv) => ({ role: 'intervenant', name: iv.name, specialty: iv.specialty, sigOf: (k) => ivSig[`${iv.user_id}|${k}`] || null, appliesTo: (k) => iv.assigned.has(k) })),
+    ];
+
+    let html = renderEmargementHtml({ org, e, rows, participants, config: opts.config });
+    // Bloc de signatures ÉLECTRONIQUES (en plus des signatures visuelles de la grille).
+    const box = (img, label, sub) => `<td style="text-align:center;vertical-align:top;padding:8px 12px;width:50%">
+        <div style="font-size:10px;color:#333;font-weight:600;margin-bottom:4px">${esc(label)}</div>
+        ${img ? `<img src="${img}" style="max-height:58px;max-width:200px;object-fit:contain" />` : '<div style="height:58px;border:1px dashed #b0b0b0;border-radius:6px"></div>'}
+        ${sub ? `<div style="font-size:9px;color:#777;margin-top:3px">${esc(sub)}</div>` : ''}
+    </td>`;
+    const learnerSub = [opts.learnerName || learnerName, opts.signedAt ? `le ${frDate(opts.signedAt)}` : ''].filter(Boolean).join(' — ');
+    const elec = `<div style="margin-top:16px;border-top:1px solid #999;padding-top:6px">
+        <div style="font-size:10px;color:#333;font-weight:700;margin-bottom:2px">Signatures électroniques</div>
+        <table width="100%" cellspacing="0" cellpadding="0"><tr>
+            ${box(opts.learnerSig || null, 'Le stagiaire', opts.learnerSig ? learnerSub : 'En attente de signature')}
+            ${box(opts.orgSig || null, "L'organisme de formation", opts.orgName || (org && org.legal_name) || '')}
+        </tr></table>
+    </div>`;
+    return html.replace('</body>', `${elec}</body>`);
+}
+
+module.exports = { regenEmargement, buildEmargementDocHtml, DEFAULT_EMARG_CONFIG, mergeEmargConfig };

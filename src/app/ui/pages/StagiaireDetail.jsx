@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, deleteStagiaire, sendQuizToEnrollment,
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -49,11 +49,13 @@ function StagiaireDetail() {
     loadDocs();
   }, [id]);
 
-  // Charge la liste des modèles de documents (choix par nom du document).
+  // Charge la liste des modèles de documents (+ feuilles d'émargement) sélectionnables.
   useEffect(() => {
-    getTemplates()
-      .then((r) => {
-        const list = (r.data || []).filter((t) => t.active);
+    Promise.all([getTemplates().catch(() => ({ data: [] })), getEmargementTemplates().catch(() => ({ data: [] }))])
+      .then(([tpl, emg]) => {
+        const docs = (tpl.data || []).filter((t) => t.active);
+        const emarg = (emg.data || []).filter((t) => t.active).map((t) => ({ slug: t.slug, label: `${t.name} (émargement)`, doc_type: "EMARGEMENT" }));
+        const list = [...docs, ...emarg];
         setTemplates(list);
         setPrep((p) => (p.slug ? p : { ...p, slug: list[0]?.slug || "" }));
       })
