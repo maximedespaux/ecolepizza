@@ -278,6 +278,7 @@ function StagiaireDetail() {
               onOpenDoc={(docId) => setViewId(docId)}
               onPrepare={prepareStep}
               onSendQuiz={handleSendQuiz}
+              onOpenEmargement={(sessionId) => sessionId && navigate(`/sessions/${sessionId}`)}
             />
             <div className="divider" style={{ margin: "18px 0" }} />
           </>

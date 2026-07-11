@@ -3,6 +3,11 @@ import { getEnrollmentParcours } from "../api/apiClient.js";
 
 // Ligne d'état de l'étape sélectionnée (selon son statut et le document lié).
 function lineFor(s) {
+  if (s.emargement) {
+    if (s.status === "done" || s.docStatus === "SIGNE") return "Émargement signé.";
+    if (s.docStatus) return "Émargement en cours : signatures des demi-journées à compléter.";
+    return "À signer dans l'émargement de la session (le stagiaire signe chaque demi-journée depuis son espace).";
+  }
   if (s.status === "done") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
   if (s.status === "todo") return "À venir.";
   if (s.quiz) return s.docId ? "En attente de réponse du stagiaire au QCM." : "QCM à envoyer au stagiaire.";
@@ -16,6 +21,7 @@ function lineFor(s) {
   return "En cours.";
 }
 function actionFor(s) {
+  if (s.emargement) return s.sessionId ? { label: "Ouvrir l'émargement", kind: "emargement" } : null;
   if (s.status !== "current" && s.status !== "todo") return null;
   if (s.docId) return { label: s.signable ? "Ouvrir la signature" : s.quiz ? "Voir le QCM" : "Voir le document", kind: "open" };
   if (s.quiz) return { label: "Envoyer le QCM", kind: "send-quiz" }; // envoi manuel au stagiaire
@@ -27,7 +33,7 @@ function actionFor(s) {
  * la formation, dans l'ordre), détail de l'étape sélectionnée à droite.
  * `onOpenDoc(docId)` ouvre l'aperçu/signature ; `onGoto('documents')` remonte à la section Documents.
  */
-function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSendQuiz }) {
+function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSendQuiz, onOpenEmargement }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
@@ -53,6 +59,7 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
     if (action.kind === "open" && step.docId) onOpenDoc?.(step.docId);
     else if (action.kind === "prepare") onPrepare?.(step.key);
     else if (action.kind === "send-quiz" && step.key?.startsWith("quiz:")) onSendQuiz?.(step.key.slice(5));
+    else if (action.kind === "emargement") onOpenEmargement?.(step.sessionId);
   }
 
   const h = data.header || {};

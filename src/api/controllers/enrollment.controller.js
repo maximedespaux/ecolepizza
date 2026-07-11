@@ -96,6 +96,17 @@ const getParcours = async (req, res) => {
             [req.params.id]
         );
 
+        // Émargement (grille) : état issu de l'archive emarg:<dossier>[:<slug>].
+        const emargStatus = {};
+        const [emg] = await conn.query(
+            'SELECT ref, status FROM archive_document WHERE organization_id = ? AND (ref = ? OR ref LIKE ?)',
+            [req.user.organization_id, `emarg:${req.params.id}`, `emarg:${req.params.id}:%`]
+        );
+        for (const r of emg) {
+            const parts = String(r.ref).split(':');
+            emargStatus[parts.length > 2 ? parts.slice(2).join(':') : '__single__'] = r.status;
+        }
+
         let parc = { steps: [], percent: 0, currentIndex: 0, currentKey: null };
         if (e.program_id) {
             const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
@@ -110,7 +121,7 @@ const getParcours = async (req, res) => {
                 ...(factsMap.get(e.id) || {}),
             };
             const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById);
-            parc = computeDocParcours({ steps, docs });
+            parc = computeDocParcours({ steps, docs, emargStatus, sessionId: e.session_id });
         }
 
         res.json({
