@@ -269,6 +269,86 @@ const saveQuiz = async (req, res) => {
     }
 };
 
+/** POST /api/quizzes/:id/duplicate — copie complète d'un QCM (questions, options, grilles). */
+const duplicateQuiz = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[src]] = await conn.query('SELECT * FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!src) return res.status(404).json({ message: 'QCM introuvable' });
+
+        // Colonnes optionnelles (migrations 062 / 064).
+        let hasImage = true;
+        try { await conn.query('SELECT image FROM quiz_question LIMIT 1'); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasImage = false; else throw e; }
+        let hasRowPoints = true;
+        try { await conn.query('SELECT points FROM quiz_row LIMIT 1'); }
+        catch (e) { if (e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE')) hasRowPoints = false; else throw e; }
+
+        // Questions source.
+        let questions;
+        const qCols = hasImage
+            ? 'id, position, text, type, scale_max, points, partial_scoring, image'
+            : 'id, position, text, type, scale_max, points, partial_scoring';
+        [questions] = await conn.query(`SELECT ${qCols} FROM quiz_question WHERE quiz_id = ? ORDER BY position`, [src.id]);
+        const qids = questions.map((q) => q.id);
+        let options = [];
+        if (qids.length) [options] = await conn.query('SELECT question_id, position, text, is_correct FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
+        const optsByQ = {};
+        for (const o of options) (optsByQ[o.question_id] = optsByQ[o.question_id] || []).push(o);
+        const gridQids = questions.filter((q) => GRID_TYPES.has(q.type)).map((q) => q.id);
+        const rowsByQ = await loadGridRows(conn, gridQids, true);
+
+        // Nouveau QCM : titre « … (copie) », non rattaché (program_id NULL) pour pouvoir l'ajouter partout.
+        const newId = crypto.randomUUID();
+        await conn.query(
+            'INSERT INTO quiz (id, organization_id, program_id, day, auto_send, title, kind, pass_score, active) VALUES (?, ?, NULL, NULL, 0, ?, ?, ?, 1)',
+            [newId, orgId, `${src.title || 'QCM'} (copie)`.slice(0, 255), src.kind === 'SURVEY' ? 'SURVEY' : 'GRADED', src.pass_score]
+        );
+
+        for (let i = 0; i < questions.length; i++) {
+            const q = questions[i];
+            const qid = crypto.randomUUID();
+            if (hasImage) {
+                await conn.query(
+                    'INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [qid, newId, q.position, q.text, q.type, q.scale_max, q.points, q.partial_scoring, q.image || null]
+                );
+            } else {
+                await conn.query(
+                    'INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    [qid, newId, q.position, q.text, q.type, q.scale_max, q.points, q.partial_scoring]
+                );
+            }
+            for (const o of (optsByQ[q.id] || [])) {
+                await conn.query('INSERT INTO quiz_option (id, question_id, position, text, is_correct) VALUES (?, ?, ?, ?, ?)',
+                    [crypto.randomUUID(), qid, o.position, o.text, o.is_correct ? 1 : 0]);
+            }
+            if (GRID_TYPES.has(q.type)) {
+                const rows = rowsByQ[q.id] || [];
+                for (let j = 0; j < rows.length; j++) {
+                    const rw = rows[j];
+                    const cj = Array.isArray(rw.correct) && rw.correct.length ? JSON.stringify(rw.correct) : null;
+                    try {
+                        if (hasRowPoints) {
+                            await conn.query('INSERT INTO quiz_row (id, question_id, position, text, correct, points) VALUES (?, ?, ?, ?, ?, ?)',
+                                [crypto.randomUUID(), qid, j, rw.text, cj, rw.points != null ? rw.points : 1]);
+                        } else {
+                            await conn.query('INSERT INTO quiz_row (id, question_id, position, text, correct) VALUES (?, ?, ?, ?, ?)',
+                                [crypto.randomUUID(), qid, j, rw.text, cj]);
+                        }
+                    } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
+                }
+            }
+        }
+        logAudit(req, 'quiz.duplicate', 'Quiz', newId);
+        res.status(201).json({ id: newId, message: 'QCM dupliqué' });
+    } catch (err) {
+        console.error('Erreur duplication QCM :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** DELETE /api/quizzes/:id */
 const deleteQuiz = async (req, res) => {
     try {
@@ -570,4 +650,4 @@ const sendQuizToEnrollment = async (req, res) => {
     }
 };
 
-module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment };
+module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment };

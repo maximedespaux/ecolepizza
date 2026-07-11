@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  getQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz, sendQuiz,
+  getQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz, duplicateQuiz, sendQuiz,
   getFormations,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
@@ -84,6 +84,10 @@ function Quiz() {
     try { await deleteQuiz(q.id); setStatus({ type: "success", message: "QCM supprimé." }); load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
+  async function onDuplicate(q) {
+    try { await duplicateQuiz(q.id); setStatus({ type: "success", message: `« ${q.title} » dupliqué.` }); load(); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
   async function onSend(q) {
     if (!q.sendable) {
       window.alert(`Envoi impossible : ${q.send_reason || "les conditions d'envoi ne sont pas réunies."}`);
@@ -131,6 +135,7 @@ function Quiz() {
                           title={q.sendable ? `Envoyer aux stagiaires (${q.eligible_count})` : (q.send_reason || "Envoi indisponible")}
                           onClick={() => onSend(q)}>Envoyer</button>{" "}
                         <button className="btn sm ghost" onClick={() => onEdit(q)}>Éditer</button>{" "}
+                        <button className="btn sm ghost" title="Dupliquer ce QCM" onClick={() => onDuplicate(q)}>Dupliquer</button>{" "}
                         <button className="btn sm ghost danger" onClick={() => onDelete(q)}>🗑</button>
                       </td>
                     </tr>

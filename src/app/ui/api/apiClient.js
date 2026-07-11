@@ -380,6 +380,7 @@ export function getQuiz(id) { return request(`/quizzes/${id}`); }
 export function createQuiz(payload) { return request("/quizzes", { method: "POST", body: JSON.stringify(payload) }); }
 export function saveQuiz(id, payload) { return request(`/quizzes/${id}`, { method: "PUT", body: JSON.stringify(payload) }); }
 export function deleteQuiz(id) { return request(`/quizzes/${id}`, { method: "DELETE" }); }
+export function duplicateQuiz(id) { return request(`/quizzes/${id}/duplicate`, { method: "POST" }); }
 export function sendQuiz(id, session_id) { return request(`/quizzes/${id}/send`, { method: "POST", body: JSON.stringify({ session_id: session_id || null }) }); }
 export function sendQuizToEnrollment(id, enrollmentId) { return request(`/quizzes/${id}/send/${enrollmentId}`, { method: "POST" }); }
 export function takeQuiz(documentId) { return request(`/quizzes/take/${documentId}`); }
