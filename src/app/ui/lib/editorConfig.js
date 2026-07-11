@@ -38,7 +38,7 @@ export function buildExtensions({ tokens = true } = {}) {
   return ext;
 }
 
-export const FONT_SIZES = ["9pt", "10pt", "11pt", "12pt", "14pt", "16pt", "18pt", "24pt", "32pt"];
+export const FONT_SIZES = ["6pt", "7pt", "8pt", "9pt", "10pt", "11pt", "12pt", "14pt", "16pt", "18pt", "24pt", "32pt"];
 export const FONTS = [
   { label: "Sans-serif", value: "Arial, sans-serif" },
   { label: "Serif", value: "Georgia, 'Times New Roman', serif" },
