@@ -230,12 +230,12 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
               <select value={q.type} onChange={(e) => setQ(i, { type: e.target.value })}>{QTYPES.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}</select></div>
             {q.type === "SCALE" ? (
               <div className="field"><label>Note max</label>
-                <input className="inp" type="number" min="2" max="10" value={q.scale_max} onChange={(e) => setQ(i, { scale_max: Number(e.target.value) || 5 })} /></div>
+                <input className="inp" type="number" min="2" max="10" value={q.scale_max ?? ""} onChange={(e) => setQ(i, { scale_max: e.target.value })} /></div>
             ) : form.kind === "GRADED" ? (
               <div className="field"><label>Points {q.type === "MULTI" && q.partial_scoring ? "(par bonne réponse)" : ""}</label>
-                <input className="inp" type="number" min="0" value={q.points}
-                  onChange={(e) => { const n = Number(e.target.value); setQ(i, { points: Number.isFinite(n) && n >= 0 ? n : 0 }); }} />
-                {Number(q.points) === 0 && <span className="hint">0 point : question non notée.</span>}
+                <input className="inp" type="number" min="0" value={q.points ?? ""}
+                  onChange={(e) => setQ(i, { points: e.target.value })} />
+                {(q.points === "" || q.points == null || Number(q.points) === 0) && <span className="hint">Vide ou 0 : question non notée.</span>}
               </div>
             ) : <div />}
             <div />
