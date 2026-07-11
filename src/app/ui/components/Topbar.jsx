@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import { PAGE_TITLES } from "../lib/nav.js";
 import { getNotifications } from "../api/apiClient.js";
+import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import ThemeToggle from "./ThemeToggle.jsx";
 
 /** Barre supérieure : fil d'Ariane, notifications, thème, déconnexion. */
@@ -13,13 +14,10 @@ function Topbar({ onMenu }) {
   const title = PAGE_TITLES[pathname] || "";
   const [unread, setUnread] = useState(0);
 
-  useEffect(() => {
-    let active = true;
-    const load = () => getNotifications().then((r) => { if (active) setUnread(r.unread || 0); }).catch(() => {});
-    load();
-    const t = setInterval(load, 60000); // rafraîchit toutes les minutes
-    return () => { active = false; clearInterval(t); };
-  }, [pathname]);
+  const loadNotifs = () => getNotifications().then((r) => setUnread(r.unread || 0)).catch(() => {});
+  useEffect(() => { loadNotifs(); }, [pathname]);
+  // Rafraîchit le compteur automatiquement (toutes les 25 s + au retour sur l'onglet).
+  useAutoRefresh(loadNotifs, { interval: 25000 });
 
   return (
     <header className="topbar">

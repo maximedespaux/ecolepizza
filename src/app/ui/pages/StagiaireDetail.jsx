@@ -11,6 +11,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
+import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro } from "../lib/format.js";
 
 const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé ✓", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
@@ -71,6 +72,9 @@ function StagiaireDetail() {
       setStatus({ type: "error", message: err.message });
     }
   }
+
+  // Rafraîchit documents + parcours automatiquement (signatures faites ailleurs, envois…).
+  useAutoRefresh(() => { loadDocs(); setParcoursRefresh((n) => n + 1); }, { interval: 20000 });
 
   const toggleEnroll = (eid) => setPrep((p) => ({
     ...p,

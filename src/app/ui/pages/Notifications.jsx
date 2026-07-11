@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from "../api/apiClient.js";
+import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -19,6 +20,7 @@ function Notifications() {
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   useEffect(() => { load(); }, []);
+  useAutoRefresh(load, { interval: 25000 });
 
   async function readAll() { try { await markAllNotificationsRead(); load(); } catch { /* ignore */ } }
 

@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import { getMonEspace } from "../api/apiClient.js";
+import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -32,6 +33,7 @@ function MonEspace() {
     }
   }
   useEffect(() => { load(); }, []);
+  useAutoRefresh(load, { interval: 25000 }); // documents reçus/à signer mis à jour automatiquement
 
   const fullName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
   const toSign = (data?.documents || []).filter((d) => d.signable && d.status !== "SIGNE").length;

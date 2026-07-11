@@ -8,6 +8,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Emargement from "../components/Emargement.jsx";
+import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import SessionIntervenants from "../components/SessionIntervenants.jsx";
 import NotesModal from "../components/NotesModal.jsx";
 import { colorOf, initials, scoreBadge } from "../lib/format.js";
@@ -32,6 +33,7 @@ function SessionDetail() {
       setStatus({ type: "error", message: err.message });
     }
   }
+  useAutoRefresh(load, { interval: 20000 });
 
   useEffect(() => {
     load();

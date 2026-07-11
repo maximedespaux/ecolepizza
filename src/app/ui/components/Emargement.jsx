@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { getAttendance, generateAttendance, signAttendanceSheet, regenerateEmargement } from "../api/apiClient.js";
+import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { UserContext } from "../context/UserContext.jsx";
 import Card from "./Card.jsx";
 import StatusMessage from "./StatusMessage.jsx";
@@ -33,6 +34,7 @@ function Emargement({ sessionId }) {
     }
   }
   useEffect(() => { load(); }, [sessionId]);
+  useAutoRefresh(load, { interval: 15000 }); // signatures (stagiaire / formateur) en direct
 
   // Stagiaires distincts (depuis les présences).
   const learners = useMemo(() => {
