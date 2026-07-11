@@ -36,9 +36,11 @@ async function formationSteps(conn, orgId, program) {
         };
     });
 
-    // QCM rattachés à la formation, ajoutés comme étapes (slug « quiz:<id> »).
+    // QCM ajoutables comme étapes (slug « quiz:<id> ») : ceux rattachés à cette
+    // formation, ET ceux non rattachés (program_id NULL) — pour qu'un QCM nouvellement
+    // créé soit proposé dans le parcours de n'importe quelle formation.
     const [quizzes] = await conn.query(
-        'SELECT id, title, day FROM quiz WHERE organization_id = ? AND program_id = ? AND active = 1',
+        'SELECT id, title, day FROM quiz WHERE organization_id = ? AND (program_id = ? OR program_id IS NULL) AND active = 1 ORDER BY (program_id IS NULL), title',
         [orgId, program.id]
     );
     const quizSteps = quizzes.map((q) => {
@@ -384,6 +386,12 @@ const saveFormationSteps = async (req, res) => {
                     'INSERT INTO program_step (id, organization_id, program_id, slug, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)',
                     [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, steps[i].active ? 1 : 0]
                 );
+            }
+            // QCM ajouté au parcours et non encore rattaché : on le lie à cette formation.
+            if (steps[i].active && slug.startsWith('quiz:')) {
+                const quizId = slug.slice(5);
+                await conn.query('UPDATE quiz SET program_id = ? WHERE id = ? AND organization_id = ? AND program_id IS NULL',
+                    [req.params.id, quizId, req.user.organization_id]).catch(() => {});
             }
         }
         res.json({ success: true, message: 'Parcours enregistré.' });
