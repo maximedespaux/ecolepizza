@@ -1,6 +1,7 @@
 const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
+const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { enrollmentSteps } = require('./formationProgram.controller.js');
 const { logAudit } = require('../lib/audit.js');
 
@@ -29,6 +30,7 @@ const getSuivi = async (req, res) => {
         );
         // Conditions + faits des dossiers chargés une seule fois pour toute la boucle.
         const condById = await loadConditionMap(conn, req.user.organization_id);
+        const eqMap = equivalenceMap(await loadEquivalences(conn, req.user.organization_id));
         const fieldCatalog = await getEnabledFields(conn, req.user.organization_id);
         const factsMap = await loadDossierFactsMap(
             conn, req.user.organization_id, enrollments.map((e) => e.enrollment_id), fieldCatalog);
@@ -45,7 +47,7 @@ const getSuivi = async (req, res) => {
                     jours: e.program_days || 1, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
                     ...(factsMap.get(e.enrollment_id) || {}),
                 };
-                const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById);
+                const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
                 const [docs] = await conn.query(
                     `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id
                      FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id

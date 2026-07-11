@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { matchFormation, matchStep } = require('../lib/documents.js');
 const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
+const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { loadOrgSteps } = require('./template.controller.js');
 
 /**
@@ -98,12 +99,32 @@ async function formationSteps(conn, orgId, program) {
  * variante (devis particulier/entreprise, attestation d'assiduité, etc.).
  * ctx = { financing, rsCode, hygiene, jours, agefice }.
  */
-async function enrollmentSteps(conn, orgId, program, ctx, condById) {
+async function enrollmentSteps(conn, orgId, program, ctx, condById, eqMap) {
     const steps = await formationSteps(conn, orgId, program);
     // Conditions personnalisées (Modeles → Conditions) évaluées en plus des intégrées.
     const conds = condById || await loadConditionMap(conn, orgId);
-    return steps.filter((s) => s.active
-        && (s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds))));
+    // Carte des équivalences « OU » (slug -> groupe) pour collapser les variantes.
+    const eq = eqMap || equivalenceMap(await loadEquivalences(conn, orgId));
+
+    const active = steps.filter((s) => s.active);
+    // Une étape « passe » si c'est un QCM ou si ses conditions correspondent au dossier.
+    const passes = (s) => s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds));
+    const groupOf = (s) => (eq && eq.get(s.slug) ? eq.get(s.slug).group : null);
+
+    // Pour un groupe « OU » : on garde UNE seule variante — celle qui s'applique au
+    // dossier, sinon la première (défaut) pour ne JAMAIS faire disparaître le jalon.
+    // Pour une étape isolée : filtrée par ses propres conditions.
+    const out = [];
+    const seen = new Set();
+    for (const s of active) {
+        const g = groupOf(s);
+        if (!g) { if (passes(s)) out.push(s); continue; }
+        if (seen.has(g)) continue;
+        seen.add(g);
+        const members = active.filter((m) => groupOf(m) === g);
+        out.push(members.find(passes) || members[0]);
+    }
+    return out;
 }
 
 /**

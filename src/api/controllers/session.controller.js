@@ -257,7 +257,7 @@ const getSessionBoard = async (req, res) => {
                 jours: s.days, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
                 ...(factsMap.get(e.enrollment_id) || {}),
             };
-            const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById);
+            const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
             const [docs] = await conn.query(
                 `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id FROM generated_document gd
                  JOIN document_formation df ON df.document_id = gd.id
