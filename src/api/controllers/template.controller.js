@@ -206,14 +206,6 @@ function sampleForField(f) {
     return 'Exemple';
 }
 
-// Champs de l'ORGANISME insérables (jetons field:organization.<colonne>), remplis au rendu
-// depuis la fiche organisme (ctx.org). Utiles pour l'en-tête/pied ou le corps.
-const ORG_FIELDS = [
-    ['legal_name', 'Raison sociale'], ['short_name', 'Nom court'], ['manager', 'Représentant'],
-    ['address', 'Adresse'], ['zip_code', 'Code postal'], ['town', 'Ville'],
-    ['siret', 'SIRET'], ['vat_number', 'N° TVA'], ['nda', "N° déclaration d'activité"], ['naf_ape', 'Code NAF/APE'],
-    ['phone', 'Téléphone'], ['email', 'E-mail'], ['iban', 'IBAN'], ['bic', 'BIC'], ['bank_name', 'Banque'],
-];
 async function loadOrgRow(orgId) {
     const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [orgId]);
     return org || {};
@@ -261,8 +253,7 @@ const getTokens = async (req, res) => {
     try {
         const orgId = req.user.organization_id;
         const groups = await fieldTokenGroups(orgId);
-        const org = await loadOrgRow(orgId);
-        groups.push({ group: 'Organisme', tokens: ORG_FIELDS.map(([col, label]) => ({ key: `field:organization.${col}`, label, sample: org[col] || '' })) });
+        // (Le groupe « Organisme » vient désormais des Champs documents, via fieldTokenGroups.)
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
         const defs = await loadCustomTokens(orgId);
@@ -280,8 +271,15 @@ async function sampleTokenValues(orgId) {
     for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || '';
     try { for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || ''; }
     catch { /* champs indisponibles : on garde les jetons intégrés */ }
-    try { const org = await loadOrgRow(orgId); for (const [col] of ORG_FIELDS) m[`field:organization.${col}`] = org[col] || ''; }
-    catch { /* organisme indisponible */ }
+    // Aperçu des champs Organisme : valeurs RÉELLES de la fiche organisme (plutôt qu'un exemple générique).
+    try {
+        const org = await loadOrgRow(orgId);
+        for (const k of Object.keys(m)) {
+            if (!k.startsWith('field:organization.')) continue;
+            const col = k.slice('field:organization.'.length);
+            if (org[col] != null && org[col] !== '') m[k] = String(org[col]);
+        }
+    } catch { /* organisme indisponible */ }
     for (const [col, , sample] of LOCATION_FIELDS) m[`field:location.${col}`] = sample;
     try { Object.assign(m, resolveCustomTokens(await loadCustomTokens(orgId), m)); }
     catch { /* jetons personnalisés indisponibles */ }
@@ -512,5 +510,5 @@ module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
     getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
-    loadCustomTokens, getCustomTokens, saveCustomTokens, ORG_FIELDS,
+    loadCustomTokens, getCustomTokens, saveCustomTokens,
 };

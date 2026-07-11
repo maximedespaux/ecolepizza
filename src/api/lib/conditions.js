@@ -7,11 +7,11 @@ const { parseApplies } = require('./documents.js');
 
 // Tables réellement rattachées à UN dossier (inscription). Alias SQL utilisés par
 // loadDossierFactsMap (jointures depuis enrollment).
-const ELIGIBLE_TABLES = ['learner', 'enrollment', 'training_program', 'training_session', 'company'];
-const TABLE_ALIAS = { learner: 'l', enrollment: 'e', training_program: 'p', training_session: 's', company: 'co' };
+const ELIGIBLE_TABLES = ['learner', 'enrollment', 'training_program', 'training_session', 'company', 'organization'];
+const TABLE_ALIAS = { learner: 'l', enrollment: 'e', training_program: 'p', training_session: 's', company: 'co', organization: 'o' };
 const TABLE_LABEL = {
     learner: 'Stagiaire', enrollment: 'Inscription', training_program: 'Formation',
-    training_session: 'Session', company: 'Entreprise',
+    training_session: 'Session', company: 'Entreprise', organization: 'Organisme',
 };
 
 // Colonnes techniques / sensibles exclues d'office (jamais proposées comme condition).
@@ -41,6 +41,10 @@ const DEFAULT_ENABLED = new Set([
     'enrollment.financing', 'enrollment.crm_stage', 'enrollment.price',
     'training_program.days', 'training_program.level', 'training_program.code',
     'training_program.rs_code', 'training_program.hygiene',
+    'organization.legal_name', 'organization.short_name', 'organization.manager',
+    'organization.siret', 'organization.vat_number', 'organization.nda', 'organization.naf_ape',
+    'organization.address', 'organization.zip_code', 'organization.town',
+    'organization.phone', 'organization.email',
     'virtual.age', 'virtual.has_company',
 ]);
 
@@ -198,6 +202,7 @@ async function loadDossierFactsMap(conn, orgId, enrollmentIds, catalog) {
          LEFT JOIN training_session s ON s.id = e.session_id
          LEFT JOIN training_program p ON p.id = s.program_id
          LEFT JOIN company co ON co.id = e.company_id
+         LEFT JOIN organization o ON o.id = e.organization_id
          WHERE e.organization_id = ? AND e.id IN (?)`,
         [orgId, enrollmentIds]
     );
