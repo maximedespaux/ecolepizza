@@ -89,42 +89,30 @@ function TemplateEditor() {
 
   const target = active || body;
 
-  // Mesure la hauteur RÉELLE des éditeurs d'en-tête/pied ET le pas d'une ligne du corps,
-  // pour caler le repère de fin de page sur le NOMBRE de lignes du rendu PDF.
-  const [metrics, setMetrics] = useState({ h: 0, f: 0, line: 31.4 });
+  // Mesure la hauteur RÉELLE des éditeurs d'en-tête et de pied (rendus à la même échelle
+  // que le corps) pour caler le repère de fin de page.
+  const [metrics, setMetrics] = useState({ h: 0, f: 0 });
   useEffect(() => {
-    if (!header || !footer || !body) return undefined;
-    const measure = () => {
-      let line = 31.4;
-      const dom = body.view?.dom;
-      if (dom && dom.children.length >= 2) {
-        // Pas d'une ligne NORMALE : médiane des écarts (évite les titres/images plus hauts).
-        const gaps = [];
-        for (let i = 1; i < dom.children.length; i++) {
-          const d = dom.children[i].offsetTop - dom.children[i - 1].offsetTop;
-          if (d >= 16 && d <= 60) gaps.push(d);
-        }
-        if (gaps.length) { gaps.sort((a, b) => a - b); line = gaps[Math.floor(gaps.length / 2)]; }
-      }
-      setMetrics({
-        h: header.view?.dom?.offsetHeight || 0,
-        f: footer.view?.dom?.offsetHeight || 0,
-        line,
-      });
-    };
+    if (!header || !footer) return undefined;
+    const measure = () => setMetrics({
+      h: header.view?.dom?.offsetHeight || 0,
+      f: footer.view?.dom?.offsetHeight || 0,
+    });
     measure();
     const ro = new ResizeObserver(measure);
-    [header.view?.dom, footer.view?.dom, body.view?.dom].forEach((d) => d && ro.observe(d));
+    [header.view?.dom, footer.view?.dom].forEach((d) => d && ro.observe(d));
     return () => ro.disconnect();
-  }, [header, footer, body]);
+  }, [header, footer]);
 
-  // Repère de fin de page = A4 moins l'en-tête et le pied, converti en NOMBRE de lignes
-  // du rendu PDF puis en pixels éditeur (le PDF a un interligne plus serré que l'éditeur,
-  // donc un simple ratio mm→px décalerait à chaque page).
+  // Position (px) de la FIN de page = zone utile A4 (hauteur physique), moins l'en-tête et
+  // le pied. C'est une position GÉOMÉTRIQUE sur la page : indépendante de la taille du
+  // texte (elle ne bouge pas quand la police change ; c'est le nombre de lignes au-dessus
+  // qui change). L'interligne est pris en compte car il agit pareil dans l'éditeur et le
+  // PDF. BODY_RATIO corrige le petit écart de rendu de ligne éditeur↔PDF.
   const PX_PER_MM = 660 / 174;   // colonne page ≈ 174 mm sur ~660 px
   const HF_PAD = 20;             // padding vertical des éditeurs en-tête/pied
-  const PDF_LINE_MM = 8.8;       // pas d'une ligne au rendu (corps 11 pt ≈ 24,9 pt)
   const DENS = 0.7;              // le texte du PDF est plus serré que dans l'éditeur
+  const BODY_RATIO = 0.94;       // ligne éditeur légèrement plus serrée que le PDF
   const headerHasImg = /<img/i.test(header?.getHTML() || "");
   const hasCustomHeader = !!clean(header?.getHTML());
   const hasFooter = !!clean(footer?.getHTML());
@@ -134,7 +122,7 @@ function TemplateEditor() {
   const topReserveMm = bleed.header ? 8 : (hasCustomHeader ? 12 + headMm + 4 : 24);
   const botReserveMm = bleed.footer ? 8 : (hasFooter ? footMm + 10 + 4 : 18);
   const bodyAreaMm = Math.max(60, 297 - topReserveMm - botReserveMm);
-  const pageContentPx = Math.round((bodyAreaMm / PDF_LINE_MM) * metrics.line);
+  const pageContentPx = Math.round(bodyAreaMm * PX_PER_MM * BODY_RATIO);
 
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
