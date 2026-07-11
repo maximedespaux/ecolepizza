@@ -33,6 +33,12 @@ const VIRTUALS = [
     { key: 'virtual.has_company', table: 'virtual', column: 'has_company', label: 'Rattaché à une entreprise', type: 'bool' },
 ];
 
+// Champs SPÉCIAUX (non introspectés). La signature de l'organisme est une image (jeton),
+// pas une colonne conditionnable — type 'image'. Gérée dans « Champs documents » (Organisme).
+const SPECIAL_FIELDS = [
+    { key: 'organization.signature_image', table: 'organization', column: 'signature_image', type: 'image', label: "Signature de l'organisme" },
+];
+
 // Activés par défaut (tant que l'organisme n'a rien personnalisé) — comportement utile d'emblée.
 const DEFAULT_ENABLED = new Set([
     'learner.opco', 'learner.professional_status', 'learner.diploma_level', 'learner.current_contract',
@@ -44,7 +50,7 @@ const DEFAULT_ENABLED = new Set([
     'organization.legal_name', 'organization.short_name', 'organization.manager',
     'organization.siret', 'organization.vat_number', 'organization.nda', 'organization.naf_ape',
     'organization.address', 'organization.zip_code', 'organization.town',
-    'organization.phone', 'organization.email',
+    'organization.phone', 'organization.email', 'organization.signature_image',
     'virtual.age', 'virtual.has_company',
 ]);
 
@@ -61,6 +67,7 @@ const OPERATORS = {
         { value: 'gt', label: '>' }, { value: 'ge', label: '≥' }, { value: 'in', label: 'parmi' },
     ],
     bool: [{ value: 'is_true', label: 'Oui' }, { value: 'is_false', label: 'Non' }],
+    image: [], // image (signature) : jeton uniquement, non conditionnable
 };
 const OPS_ALL = new Set(Object.values(OPERATORS).flat().map((o) => o.value));
 
@@ -149,7 +156,7 @@ async function loadFieldSettings(conn, orgId) {
 // Catalogue COMPLET (activés + désactivés) pour la page de réglages, groupé logiquement.
 async function getAllFields(conn, orgId) {
     const settings = await loadFieldSettings(conn, orgId);
-    const cols = [...VIRTUALS.map((v) => ({ ...v })), ...await introspectFields(conn)];
+    const cols = [...VIRTUALS.map((v) => ({ ...v })), ...SPECIAL_FIELDS.map((v) => ({ ...v })), ...await introspectFields(conn)];
     return cols.map((f) => {
         const key = `${f.table}.${f.column}`;
         const s = settings.get(key);
@@ -187,7 +194,7 @@ function computeAge(birthday) {
 async function loadDossierFactsMap(conn, orgId, enrollmentIds, catalog) {
     const map = new Map();
     if (!enrollmentIds || !enrollmentIds.length) return map;
-    const real = catalog.filter((f) => f.table !== 'virtual' && /^[a-z0-9_]+$/.test(f.column) && TABLE_ALIAS[f.table]);
+    const real = catalog.filter((f) => f.table !== 'virtual' && f.type !== 'image' && /^[a-z0-9_]+$/.test(f.column) && TABLE_ALIAS[f.table]);
     const needAge = catalog.some((f) => f.key === 'virtual.age');
     const needCompany = catalog.some((f) => f.key === 'virtual.has_company');
 

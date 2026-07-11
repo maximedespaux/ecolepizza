@@ -226,7 +226,14 @@ const LOCATION_FIELDS = [
 async function fieldTokenGroups(orgId) {
     const fields = await getEnabledFields(db.promise(), orgId);
     const by = {};
-    for (const f of fields) (by[f.tableLabel] || (by[f.tableLabel] = [])).push({ key: `field:${f.key}`, label: f.label, sample: sampleForField(f) });
+    for (const f of fields) {
+        // La signature de l'organisme (type image) utilise le jeton intégré « Signature
+        // organisme » (image insérée au rendu), pas un simple jeton texte field:….
+        const isSig = f.type === 'image' && f.column === 'signature_image';
+        const key = isSig ? 'Signature organisme' : `field:${f.key}`;
+        const sample = isSig ? '✍ (image enregistrée)' : sampleForField(f);
+        (by[f.tableLabel] || (by[f.tableLabel] = [])).push({ key, label: f.label, sample });
+    }
     return Object.entries(by).map(([group, tokens]) => ({ group, tokens }));
 }
 
@@ -254,12 +261,7 @@ const getTokens = async (req, res) => {
     try {
         const orgId = req.user.organization_id;
         const groups = await fieldTokenGroups(orgId);
-        // Le groupe « Organisme » vient des Champs documents (fieldTokenGroups). On y ajoute
-        // la SIGNATURE de l'organisme (jeton intégré, image insérée au rendu).
-        const sigToken = { key: 'Signature organisme', label: "Signature de l'organisme", sample: '✍ (image enregistrée)' };
-        const orgGroup = groups.find((g) => g.group === 'Organisme');
-        if (orgGroup) orgGroup.tokens.push(sigToken);
-        else groups.push({ group: 'Organisme', tokens: [sigToken] });
+        // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
         const defs = await loadCustomTokens(orgId);
