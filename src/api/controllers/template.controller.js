@@ -5,7 +5,8 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS } = require('../lib/documents.js');
-const { TOKEN_CATALOG } = require('../lib/tokens.js');
+const { TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
+const { decrypt } = require('../lib/crypto.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
 const { getEnabledFields } = require('../lib/conditions.js');
 const { resolveCustomTokens } = require('../lib/customtokens.js');
@@ -253,7 +254,12 @@ const getTokens = async (req, res) => {
     try {
         const orgId = req.user.organization_id;
         const groups = await fieldTokenGroups(orgId);
-        // (Le groupe « Organisme » vient désormais des Champs documents, via fieldTokenGroups.)
+        // Le groupe « Organisme » vient des Champs documents (fieldTokenGroups). On y ajoute
+        // la SIGNATURE de l'organisme (jeton intégré, image insérée au rendu).
+        const sigToken = { key: 'Signature organisme', label: "Signature de l'organisme", sample: '✍ (image enregistrée)' };
+        const orgGroup = groups.find((g) => g.group === 'Organisme');
+        if (orgGroup) orgGroup.tokens.push(sigToken);
+        else groups.push({ group: 'Organisme', tokens: [sigToken] });
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
         const defs = await loadCustomTokens(orgId);
@@ -279,6 +285,8 @@ async function sampleTokenValues(orgId) {
             const col = k.slice('field:organization.'.length);
             if (org[col] != null && org[col] !== '') m[k] = String(org[col]);
         }
+        // Signature de l'organisme : vraie image si enregistrée, sinon emplacement.
+        if (org.signature_image) m['Signature organisme'] = signatureBox(decrypt(org.signature_image), "Signature de l'organisme");
     } catch { /* organisme indisponible */ }
     for (const [col, , sample] of LOCATION_FIELDS) m[`field:location.${col}`] = sample;
     try { Object.assign(m, resolveCustomTokens(await loadCustomTokens(orgId), m)); }
