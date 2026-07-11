@@ -636,8 +636,14 @@ export function deleteTemplate(slug) {
   return request(`/templates/${slug}?permanent=1`, { method: "DELETE" });
 }
 // Réordonne les modèles (glisser-déposer).
-export function reorderTemplates(slugs) {
-  return request("/templates/reorder", { method: "PUT", body: JSON.stringify({ slugs }) });
+export function reorderTemplates(orders) {
+  // orders : [{ slug, sort_order }] (position globale) ; rétro-compat : tableau de slugs.
+  const body = Array.isArray(orders) && orders.length && typeof orders[0] === "string"
+    ? { slugs: orders } : { orders };
+  return request("/templates/reorder", { method: "PUT", body: JSON.stringify(body) });
+}
+export function reorderEmargementTemplates(orders) {
+  return request("/emargement-templates/reorder", { method: "PUT", body: JSON.stringify({ orders }) });
 }
 export function downloadTemplateFile(slug) {
   return download(`/templates/${slug}/file`, `${slug}.docx`);

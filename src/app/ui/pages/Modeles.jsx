@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
   getConditionCatalog, getConditions, createCondition, deleteCondition, getFieldValues,
   getEquivalences, createEquivalence, deleteEquivalence,
-  getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate } from "../api/apiClient.js";
+  getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
+  reorderEmargementTemplates } from "../api/apiClient.js";
 import { EMARG_DEFAULTS } from "./EmargementEditor.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -74,18 +75,30 @@ function Modeles() {
   const allItems = [...items.map((t) => ({ ...t, kind: t.kind || "document" })), ...emargItems]
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-  // Glisser-déposer : réordonne les documents (les feuilles d'émargement ne sont pas déplaçables).
+  // Clé unique d'une ligne (documents + émargement mélangés).
+  const keyOf = (t) => (t.kind === "emargement" ? `e:${t.id}` : `d:${t.slug}`);
+
+  // Glisser-déposer sur la liste fusionnée : réordonne globalement et persiste
+  // le sort_order des deux types (documents + feuilles d'émargement).
   function onDrop(target) {
-    if (!drag || target.kind === "emargement" || drag === target.slug) { setDrag(null); return; }
-    const next = [...items];
-    const from = next.findIndex((d) => d.slug === drag);
-    const to = next.findIndex((d) => d.slug === target.slug);
+    if (!drag || keyOf(target) === drag) { setDrag(null); return; }
+    const ordered = [...allItems];
+    const from = ordered.findIndex((t) => keyOf(t) === drag);
+    const to = ordered.findIndex((t) => keyOf(t) === keyOf(target));
     if (from < 0 || to < 0) { setDrag(null); return; }
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    setItems(next);
+    const [moved] = ordered.splice(from, 1);
+    ordered.splice(to, 0, moved);
+    const withOrder = ordered.map((t, i) => ({ ...t, sort_order: (i + 1) * 10 }));
+    // Applique le nouvel ordre localement (allItems se recalcule via items/emargItems).
+    setItems((prev) => prev.map((d) => { const u = withOrder.find((x) => x.kind !== "emargement" && x.slug === d.slug); return u ? { ...d, sort_order: u.sort_order } : d; }));
+    setEmargItems((prev) => prev.map((e) => { const u = withOrder.find((x) => x.kind === "emargement" && x.id === e.id); return u ? { ...e, sort_order: u.sort_order } : e; }));
     setDrag(null);
-    reorderTemplates(next.map((t) => t.slug)).catch((e) => { setStatus({ type: "error", message: e.message }); load(); });
+    const docOrders = withOrder.filter((t) => t.kind !== "emargement").map((t) => ({ slug: t.slug, sort_order: t.sort_order }));
+    const emargOrders = withOrder.filter((t) => t.kind === "emargement").map((t) => ({ id: t.id, sort_order: t.sort_order }));
+    Promise.all([
+      docOrders.length ? reorderTemplates(docOrders) : null,
+      emargOrders.length ? reorderEmargementTemplates(emargOrders) : null,
+    ]).catch((e) => { setStatus({ type: "error", message: e.message }); load(); loadEmarg(); });
   }
 
 
@@ -160,16 +173,16 @@ function Modeles() {
               {allItems.map((t) => {
                 const isEmarg = t.kind === "emargement";
                 return (
-                <tr key={isEmarg ? `e:${t.id}` : t.slug}
-                  className={"drag-row" + (drag === t.slug ? " dragging" : "")}
+                <tr key={keyOf(t)}
+                  className={"drag-row" + (drag === keyOf(t) ? " dragging" : "")}
                   style={{ opacity: t.active ? 1 : 0.5 }}
-                  draggable={!isEmarg}
-                  onDragStart={() => !isEmarg && setDrag(t.slug)}
+                  draggable
+                  onDragStart={() => setDrag(keyOf(t))}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => onDrop(t)}
                   onDragEnd={() => setDrag(null)}
                 >
-                  <td className="drag-handle" title={isEmarg ? "" : "Glisser pour réordonner"}>{isEmarg ? "" : "⠿"}</td>
+                  <td className="drag-handle" title="Glisser pour réordonner">⠿</td>
                   <td>
                     <b>{t.label}</b>
                     <span style={{ display: "block", fontSize: 11, color: "var(--dim)" }} className="mono">{t.slug}{!t.active && " · inactif"}</span>

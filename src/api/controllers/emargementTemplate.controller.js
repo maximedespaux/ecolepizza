@@ -135,4 +135,24 @@ const deleteTemplate = async (req, res) => {
     }
 };
 
-module.exports = { listTemplates, createTemplate, updateTemplate, deleteTemplate };
+/** PUT /api/emargement-templates/reorder — ordre global. Corps : { orders:[{id,sort_order}] }. */
+const reorderTemplates = async (req, res) => {
+    const orders = Array.isArray(req.body?.orders) ? req.body.orders : [];
+    try {
+        const conn = db.promise();
+        for (const o of orders) {
+            const so = Number(o.sort_order);
+            if (o.id && Number.isFinite(so)) {
+                await conn.query('UPDATE emargement_template SET sort_order = ? WHERE id = ? AND organization_id = ?',
+                    [so, o.id, req.user.organization_id]);
+            }
+        }
+        res.json({ success: true, message: 'Ordre enregistré.' });
+    } catch (err) {
+        if (err && err.code === 'ER_NO_SUCH_TABLE') return res.json({ success: true });
+        console.error('Erreur réordonnancement émargement :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { listTemplates, createTemplate, updateTemplate, deleteTemplate, reorderTemplates };

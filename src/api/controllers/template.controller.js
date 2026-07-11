@@ -251,13 +251,18 @@ const resetTemplate = async (req, res) => {
 
 /** PUT /api/templates/reorder — définit l'ordre des modèles (slugs ordonnés). */
 const reorderTemplates = async (req, res) => {
+    // `orders` = [{slug, sort_order}] (position globale explicite) ou `slugs` (position simple, legacy).
+    const orders = Array.isArray(req.body?.orders) ? req.body.orders : null;
     const slugs = Array.isArray(req.body?.slugs) ? req.body.slugs : null;
-    if (!slugs || !slugs.length) return res.status(422).json({ error: 'Liste ordonnée de slugs requise.' });
+    if (!orders && !slugs) return res.status(422).json({ error: 'Liste ordonnée requise.' });
+    const list = orders
+        ? orders.map((o) => ({ slug: o.slug, sort_order: Number(o.sort_order) }))
+        : slugs.map((s, i) => ({ slug: s, sort_order: (i + 1) * 10 }));
     try {
         const conn = db.promise();
-        for (let i = 0; i < slugs.length; i++) {
-            const slug = String(slugs[i]).trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
-            if (slug) await upsertTemplate(conn, req.user.organization_id, slug, { sort_order: (i + 1) * 10 });
+        for (const it of list) {
+            const slug = String(it.slug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
+            if (slug && Number.isFinite(it.sort_order)) await upsertTemplate(conn, req.user.organization_id, slug, { sort_order: it.sort_order });
         }
         logAudit(req, 'template.reorder', 'DocumentTemplate', null);
         res.json({ success: true, message: 'Ordre enregistré.' });
