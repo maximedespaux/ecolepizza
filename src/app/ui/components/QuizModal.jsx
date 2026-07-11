@@ -63,14 +63,27 @@ function QuizModal({ documentId, onClose, onDone }) {
       .finally(() => setLoading(false));
   }, [documentId]);
 
+  const isGrid = (t) => t === "GRID_SINGLE" || t === "GRID_MULTI";
   const q = questions[idx];
   const setAns = (v) => setAnswers((a) => ({ ...a, [q.id]: v }));
   const toggleMulti = (optId) => setAnswers((a) => {
     const cur = Array.isArray(a[q.id]) ? a[q.id] : [];
     return { ...a, [q.id]: cur.includes(optId) ? cur.filter((x) => x !== optId) : [...cur, optId] };
   });
+  // Grille : answers[q.id] = { <rowId>: [<colId>,...] }.
+  const setGridCell = (rowId, colId, single) => setAnswers((a) => {
+    const cur = { ...(a[q.id] && typeof a[q.id] === "object" && !Array.isArray(a[q.id]) ? a[q.id] : {}) };
+    const rowSel = new Set(cur[rowId] || []);
+    if (single) cur[rowId] = rowSel.has(colId) ? [] : [colId];
+    else { rowSel.has(colId) ? rowSel.delete(colId) : rowSel.add(colId); cur[rowId] = [...rowSel]; }
+    return { ...a, [q.id]: cur };
+  });
   const answered = (qq) => {
     const v = answers[qq.id];
+    if (isGrid(qq.type)) {
+      const g = v && typeof v === "object" ? v : {};
+      return (qq.rows || []).length > 0 && (qq.rows || []).every((rw) => Array.isArray(g[rw.id]) && g[rw.id].length > 0);
+    }
     return qq.type === "MULTI" ? Array.isArray(v) && v.length > 0 : v != null && v !== "";
   };
 
@@ -140,6 +153,34 @@ function QuizModal({ documentId, onClose, onDone }) {
                         className={"btn" + (String(answers[q.id]) === String(n) ? " primary" : " ghost")}
                         onClick={() => setAns(n)} style={{ minWidth: 44 }}>{n}</button>
                     ))}
+                  </div>
+                ) : isGrid(q.type) ? (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                      <thead>
+                        <tr>
+                          <th></th>
+                          {q.options.map((o) => <th key={o.id} style={{ fontSize: 12, padding: "4px 6px", textAlign: "center", fontWeight: 600 }}>{o.text}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(q.rows || []).map((rw) => {
+                          const g = answers[q.id] && typeof answers[q.id] === "object" ? answers[q.id] : {};
+                          const sel = new Set(g[rw.id] || []);
+                          return (
+                            <tr key={rw.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
+                              <td style={{ padding: "6px 8px", fontSize: 14 }}>{rw.text}</td>
+                              {q.options.map((o) => (
+                                <td key={o.id} style={{ textAlign: "center", padding: "6px 4px" }}>
+                                  <input type={q.type === "GRID_SINGLE" ? "radio" : "checkbox"} name={`q${q.id}r${rw.id}`}
+                                    checked={sel.has(o.id)} onChange={() => setGridCell(rw.id, o.id, q.type === "GRID_SINGLE")} />
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

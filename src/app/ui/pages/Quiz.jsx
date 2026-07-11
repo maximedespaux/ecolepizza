@@ -17,8 +17,11 @@ const QTYPES = [
   { v: "SINGLE", label: "Choix unique (QCU)" },
   { v: "MULTI", label: "Choix multiple (QCM)" },
   { v: "SCALE", label: "Échelle / note" },
+  { v: "GRID_SINGLE", label: "Grille — 1 réponse par ligne" },
+  { v: "GRID_MULTI", label: "Grille — plusieurs réponses par ligne" },
 ];
-const blankQuestion = () => ({ text: "", type: "SINGLE", points: 1, partial_scoring: 0, scale_max: 5, options: [{ text: "", is_correct: false }, { text: "", is_correct: false }] });
+const isGrid = (t) => t === "GRID_SINGLE" || t === "GRID_MULTI";
+const blankQuestion = () => ({ text: "", type: "SINGLE", points: 1, partial_scoring: 0, scale_max: 5, options: [{ text: "", is_correct: false }, { text: "", is_correct: false }], rows: [{ text: "", correct: [] }, { text: "", correct: [] }] });
 
 // Étiquette courte du jour : J2, ou J-3 (avant le début).
 function dayTag(day) {
@@ -159,6 +162,22 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
   const delOpt = (qi, oi) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, options: q.options.filter((_, k) => k !== oi) }) }));
   // QCU : une seule bonne réponse -> cocher exclut les autres.
   const setCorrect = (qi, oi, type) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, options: q.options.map((o, k) => ({ ...o, is_correct: k === oi ? !o.is_correct : (type === "SINGLE" ? false : o.is_correct) })) }) }));
+  // Grille — lignes.
+  const setRow = (qi, ri, patch) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, rows: (q.rows || []).map((rw, k) => (k === ri ? { ...rw, ...patch } : rw)) }) }));
+  const addRow = (qi) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, rows: [...(q.rows || []), { text: "", correct: [] }] }) }));
+  const delRow = (qi, ri) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, rows: (q.rows || []).filter((_, k) => k !== ri) }) }));
+  // Coche la colonne correcte d'une ligne (par position). single -> remplace ; multi -> ajoute/retire.
+  const toggleRowCorrect = (qi, ri, colPos, single) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => {
+    if (j !== qi) return q;
+    const rows = (q.rows || []).map((rw, k) => {
+      if (k !== ri) return rw;
+      const cur = new Set(rw.correct || []);
+      if (single) return { ...rw, correct: cur.has(colPos) ? [] : [colPos] };
+      if (cur.has(colPos)) cur.delete(colPos); else cur.add(colPos);
+      return { ...rw, correct: [...cur].sort((a, b) => a - b) };
+    });
+    return { ...q, rows };
+  }) }));
 
   async function save() {
     if (!form.title.trim()) { onError("Titre requis."); return; }
@@ -254,7 +273,57 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
             </label>
           )}
 
-          {q.type !== "SCALE" && (
+          {isGrid(q.type) && (
+            <>
+              <div className="field">
+                <label>Colonnes (choix proposés)</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {q.options.map((o, oi) => (
+                    <div key={oi} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <input className="inp" style={{ flex: 1 }} value={o.text} onChange={(e) => setOpt(i, oi, { text: e.target.value })} placeholder={`Colonne ${oi + 1}`} />
+                      <button className="btn sm ghost" onClick={() => delOpt(i, oi)} disabled={q.options.length <= 1}>✕</button>
+                    </div>
+                  ))}
+                </div>
+                <button className="btn sm ghost" style={{ marginTop: 6 }} onClick={() => addOpt(i)}>＋ Colonne</button>
+              </div>
+              <div className="field">
+                <label>Lignes {form.kind === "GRADED" && <span className="hint">(cochez la/les bonne(s) colonne(s) par ligne)</span>}</label>
+                {form.kind === "GRADED" ? (
+                  <div style={{ overflowX: "auto" }}>
+                    <table>
+                      <thead><tr><th></th>{q.options.map((o, oi) => <th key={oi} style={{ fontSize: 12, padding: "2px 6px", whiteSpace: "nowrap" }}>{o.text || `Col ${oi + 1}`}</th>)}<th></th></tr></thead>
+                      <tbody>
+                        {(q.rows || []).map((rw, ri) => (
+                          <tr key={ri}>
+                            <td><input className="inp" style={{ minWidth: 150 }} value={rw.text} onChange={(e) => setRow(i, ri, { text: e.target.value })} placeholder={`Ligne ${ri + 1}`} /></td>
+                            {q.options.map((o, oi) => (
+                              <td key={oi} style={{ textAlign: "center" }}>
+                                <input type={q.type === "GRID_SINGLE" ? "radio" : "checkbox"} name={`q${i}r${ri}`} checked={(rw.correct || []).includes(oi)} onChange={() => toggleRowCorrect(i, ri, oi, q.type === "GRID_SINGLE")} />
+                              </td>
+                            ))}
+                            <td><button className="btn sm ghost" onClick={() => delRow(i, ri)} disabled={(q.rows || []).length <= 1}>✕</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {(q.rows || []).map((rw, ri) => (
+                      <div key={ri} style={{ display: "flex", gap: 8 }}>
+                        <input className="inp" style={{ flex: 1 }} value={rw.text} onChange={(e) => setRow(i, ri, { text: e.target.value })} placeholder={`Ligne ${ri + 1}`} />
+                        <button className="btn sm ghost" onClick={() => delRow(i, ri)} disabled={(q.rows || []).length <= 1}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button className="btn sm ghost" style={{ marginTop: 6 }} onClick={() => addRow(i)}>＋ Ligne</button>
+              </div>
+            </>
+          )}
+
+          {!isGrid(q.type) && q.type !== "SCALE" && (
             <div className="field">
               <label>Réponses {form.kind === "GRADED" && <span className="hint">(cochez la/les bonne(s))</span>}</label>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

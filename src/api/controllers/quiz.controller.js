@@ -3,6 +3,24 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 
 const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
+const GRID_TYPES = new Set(['GRID_SINGLE', 'GRID_MULTI']);
+const parseJSON = (v, dflt) => { if (v == null || v === '') return dflt; try { const x = JSON.parse(v); return x == null ? dflt : x; } catch { return dflt; } };
+
+// Lignes des questions « grille » (quiz_row). Renvoie { [questionId]: [{id,text,correct:[positions]}] }.
+// `withCorrect` = false pour la passation (on ne révèle pas les bonnes réponses).
+async function loadGridRows(conn, qids, withCorrect) {
+    const byQ = {};
+    if (!qids.length) return byQ;
+    try {
+        const [rows] = await conn.query('SELECT id, question_id, position, text, correct FROM quiz_row WHERE question_id IN (?) ORDER BY position', [qids]);
+        for (const r of rows) {
+            (byQ[r.question_id] = byQ[r.question_id] || []).push(
+                withCorrect ? { id: r.id, text: r.text, correct: parseJSON(r.correct, []) } : { id: r.id, text: r.text }
+            );
+        }
+    } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
+    return byQ;
+}
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -117,7 +135,9 @@ const getQuiz = async (req, res) => {
         }
         const byQ = {};
         for (const o of options) (byQ[o.question_id] = byQ[o.question_id] || []).push({ id: o.id, text: o.text, is_correct: !!o.is_correct });
-        res.json({ data: { ...quiz, questions: questions.map((q) => ({ ...q, options: byQ[q.id] || [] })) } });
+        const gridQids = questions.filter((q) => GRID_TYPES.has(q.type)).map((q) => q.id);
+        const rowsByQ = await loadGridRows(conn, gridQids, true);
+        res.json({ data: { ...quiz, questions: questions.map((q) => ({ ...q, options: byQ[q.id] || [], rows: rowsByQ[q.id] || [] })) } });
     } catch (err) {
         console.error('Erreur lecture QCM :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -161,7 +181,9 @@ const saveQuiz = async (req, res) => {
              b.pass_score != null && b.pass_score !== '' ? Number(b.pass_score) : null,
              b.active === false ? 0 : 1, req.params.id]
         );
-        // Remplace questions + options.
+        // Remplace questions + options + lignes de grille.
+        try { await conn.query('DELETE qr FROM quiz_row qr JOIN quiz_question qq ON qq.id = qr.question_id WHERE qq.quiz_id = ?', [req.params.id]); }
+        catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
         await conn.query('DELETE FROM quiz_question WHERE quiz_id = ?', [req.params.id]);
         // La colonne image existe-t-elle ? (migration 062) — sinon on insère sans.
         let hasImage = true;
@@ -172,7 +194,7 @@ const saveQuiz = async (req, res) => {
             const q = questions[i];
             if (!q.text || !String(q.text).trim()) continue;
             const qid = crypto.randomUUID();
-            const qType = ['SINGLE', 'MULTI', 'SCALE'].includes(q.type) ? q.type : 'SINGLE';
+            const qType = ['SINGLE', 'MULTI', 'SCALE', 'GRID_SINGLE', 'GRID_MULTI'].includes(q.type) ? q.type : 'SINGLE';
             // Points : on autorise 0 (question sans note / informative).
             const pts = Number(q.points);
             const points = Number.isFinite(pts) && pts >= 0 ? Math.floor(pts) : 1;
@@ -191,14 +213,32 @@ const saveQuiz = async (req, res) => {
                 );
             }
             if (q.type !== 'SCALE') {
+                // Colonnes (grilles) OU options (SINGLE/MULTI) : même table quiz_option.
                 const opts = Array.isArray(q.options) ? q.options : [];
                 for (let j = 0; j < opts.length; j++) {
                     const o = opts[j];
                     if (!o.text || !String(o.text).trim()) continue;
+                    // Pour une grille, la justesse est PAR LIGNE (quiz_row.correct), pas sur la colonne.
+                    const correctOpt = GRID_TYPES.has(qType) ? 0 : (o.is_correct ? 1 : 0);
                     await conn.query(
                         `INSERT INTO quiz_option (id, question_id, position, text, is_correct) VALUES (?, ?, ?, ?, ?)`,
-                        [crypto.randomUUID(), qid, j, String(o.text).slice(0, 500), o.is_correct ? 1 : 0]
+                        [crypto.randomUUID(), qid, j, String(o.text).slice(0, 500), correctOpt]
                     );
+                }
+            }
+            // Lignes de grille (avec, pour un QCM noté, les positions de colonnes correctes).
+            if (GRID_TYPES.has(qType)) {
+                const rows = Array.isArray(q.rows) ? q.rows : [];
+                for (let j = 0; j < rows.length; j++) {
+                    const rw = rows[j];
+                    if (!rw.text || !String(rw.text).trim()) continue;
+                    const correct = Array.isArray(rw.correct) ? rw.correct.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 0) : [];
+                    try {
+                        await conn.query(
+                            `INSERT INTO quiz_row (id, question_id, position, text, correct) VALUES (?, ?, ?, ?, ?)`,
+                            [crypto.randomUUID(), qid, j, String(rw.text).slice(0, 500), correct.length ? JSON.stringify(correct) : null]
+                        );
+                    } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
                 }
             }
         }
@@ -277,6 +317,8 @@ const takeQuiz = async (req, res) => {
         if (qids.length) [options] = await conn.query('SELECT id, question_id, text FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
         const byQ = {};
         for (const o of options) (byQ[o.question_id] = byQ[o.question_id] || []).push({ id: o.id, text: o.text });
+        const gridQids = questions.filter((q) => GRID_TYPES.has(q.type)).map((q) => q.id);
+        const rowsByQ = await loadGridRows(conn, gridQids, false); // sans les bonnes réponses
         const [[prev]] = await conn.query('SELECT id, score, max_score, DATE_FORMAT(completed_at, "%Y-%m-%d %H:%i") AS completed_at FROM quiz_response WHERE quiz_id = ? AND document_id = ? ORDER BY completed_at DESC LIMIT 1', [r.quiz.id, req.params.documentId]);
 
         // Déjà répondu + QCM noté : on renvoie la correction (bonnes réponses + réponses données).
@@ -299,7 +341,7 @@ const takeQuiz = async (req, res) => {
 
         res.json({ data: {
             quiz: { id: r.quiz.id, title: r.quiz.title, kind: r.quiz.kind },
-            questions: questions.map((q) => ({ id: q.id, text: q.text, type: q.type, scale_max: q.scale_max, options: byQ[q.id] || [] })),
+            questions: questions.map((q) => ({ id: q.id, text: q.text, type: q.type, scale_max: q.scale_max, image: q.image || null, options: byQ[q.id] || [], rows: rowsByQ[q.id] || [] })),
             done: !!prev, previous: prev || null, review,
         } });
     } catch (err) {
@@ -330,6 +372,11 @@ const submitQuiz = async (req, res) => {
             correctByQ[o.question_id] = correctByQ[o.question_id] || new Set();
             if (o.is_correct) correctByQ[o.question_id].add(o.id);
         }
+        // Grilles : lignes (avec bonnes réponses) + index de position des colonnes.
+        const gridQids = questions.filter((q) => GRID_TYPES.has(q.type)).map((q) => q.id);
+        const rowsByQ = await loadGridRows(conn, gridQids, true);
+        const optPosByQ = {};
+        for (const [qid, opts] of Object.entries(optsByQ)) { const m = {}; opts.forEach((o, idx) => { m[o.id] = idx; }); optPosByQ[qid] = m; }
 
         let score = 0, maxScore = 0;
         const answerRows = [];
@@ -338,6 +385,28 @@ const submitQuiz = async (req, res) => {
             let value = '';
             if (q.type === 'SCALE') {
                 value = raw != null ? String(Number(raw) || '') : '';
+            } else if (GRID_TYPES.has(q.type)) {
+                // raw = { <rowId>: [<colId>,...] } -> stocké compact { <rowIndex>: [<colIndex>,...] }.
+                const gridAns = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+                const rows = rowsByQ[q.id] || [];
+                const optPos = optPosByQ[q.id] || {};
+                const compact = {};
+                rows.forEach((row, ri) => {
+                    const selCols = Array.isArray(gridAns[row.id]) ? gridAns[row.id] : (gridAns[row.id] ? [gridAns[row.id]] : []);
+                    const selPos = [...new Set(selCols.map((cid) => optPos[cid]).filter((x) => x != null))].sort((a, b) => a - b);
+                    if (selPos.length) compact[ri] = selPos;
+                });
+                value = JSON.stringify(compact).slice(0, 255);
+                if (graded && rows.length) {
+                    const per = q.points / rows.length;
+                    rows.forEach((row, ri) => {
+                        maxScore += per;
+                        const correct = new Set((row.correct || []).map(Number));
+                        const sel = new Set(compact[ri] || []);
+                        const ok = correct.size > 0 && correct.size === sel.size && [...correct].every((c) => sel.has(c));
+                        if (ok) score += per;
+                    });
+                }
             } else {
                 const sel = Array.isArray(raw) ? raw : (raw ? [raw] : []);
                 value = sel.join(',');
@@ -367,7 +436,7 @@ const submitQuiz = async (req, res) => {
             `INSERT INTO quiz_response (id, organization_id, quiz_id, learner_id, enrollment_id, document_id, score, max_score)
              VALUES (?, ?, ?, (SELECT learner_id FROM generated_document WHERE id = ?), ?, ?, ?, ?)`,
             [responseId, req.user.organization_id, r.quiz.id, req.params.documentId, r.enrollment_id, req.params.documentId,
-             graded ? score : null, graded ? maxScore : null]
+             graded ? Math.round(score) : null, graded ? Math.round(maxScore) : null]
         );
         for (const a of answerRows) {
             await conn.query('INSERT INTO quiz_answer (id, response_id, question_id, value) VALUES (?, ?, ?, ?)', [crypto.randomUUID(), responseId, a.question_id, a.value]);
