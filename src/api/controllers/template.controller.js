@@ -206,6 +206,19 @@ function sampleForField(f) {
     return 'Exemple';
 }
 
+// Champs de l'ORGANISME insérables (jetons field:organization.<colonne>), remplis au rendu
+// depuis la fiche organisme (ctx.org). Utiles pour l'en-tête/pied ou le corps.
+const ORG_FIELDS = [
+    ['legal_name', 'Raison sociale'], ['short_name', 'Nom court'], ['manager', 'Représentant'],
+    ['address', 'Adresse'], ['zip_code', 'Code postal'], ['town', 'Ville'],
+    ['siret', 'SIRET'], ['vat_number', 'N° TVA'], ['nda', "N° déclaration d'activité"], ['naf_ape', 'Code NAF/APE'],
+    ['phone', 'Téléphone'], ['email', 'E-mail'], ['iban', 'IBAN'], ['bic', 'BIC'], ['bank_name', 'Banque'],
+];
+async function loadOrgRow(orgId) {
+    const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [orgId]);
+    return org || {};
+}
+
 // Jetons de la palette = CHAMPS DOCUMENTS activés (colonnes du dossier), regroupés par table.
 // Clé « field:<table.column> », remplie au rendu depuis le dossier réel.
 async function fieldTokenGroups(orgId) {
@@ -239,6 +252,8 @@ const getTokens = async (req, res) => {
     try {
         const orgId = req.user.organization_id;
         const groups = await fieldTokenGroups(orgId);
+        const org = await loadOrgRow(orgId);
+        groups.push({ group: 'Organisme', tokens: ORG_FIELDS.map(([col, label]) => ({ key: `field:organization.${col}`, label, sample: org[col] || '' })) });
         groups.push(computedGroup());
         const defs = await loadCustomTokens(orgId);
         if (defs.length) groups.push({ group: 'Personnalisés', tokens: defs.map((d) => ({ key: `custom:${d.token_key}`, label: d.label, sample: '' })) });
@@ -255,6 +270,8 @@ async function sampleTokenValues(orgId) {
     for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || '';
     try { for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || ''; }
     catch { /* champs indisponibles : on garde les jetons intégrés */ }
+    try { const org = await loadOrgRow(orgId); for (const [col] of ORG_FIELDS) m[`field:organization.${col}`] = org[col] || ''; }
+    catch { /* organisme indisponible */ }
     try { Object.assign(m, resolveCustomTokens(await loadCustomTokens(orgId), m)); }
     catch { /* jetons personnalisés indisponibles */ }
     return m;
@@ -484,5 +501,5 @@ module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
     getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
-    loadCustomTokens, getCustomTokens, saveCustomTokens,
+    loadCustomTokens, getCustomTokens, saveCustomTokens, ORG_FIELDS,
 };

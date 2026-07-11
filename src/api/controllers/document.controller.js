@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { renderDocumentHTML } = require('../lib/render.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
-const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
+const { getTemplateContent, loadOrgSteps, loadCustomTokens, ORG_FIELDS } = require('./template.controller.js');
 const { stagiaireSignsDoc, orgSignsDoc } = require('../lib/documents.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { composeDocumentPdf } = require('../lib/pdfcompose.js');
@@ -131,6 +131,8 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             }
         } catch (e) { /* champs indisponibles (migration non jouée) : on ignore */ }
     }
+    // Champs de l'organisme (jetons field:organization.<colonne>).
+    for (const [col] of (ORG_FIELDS || [])) fields['organization.' + col] = (org && org[col] != null) ? org[col] : '';
     // Jetons personnalisés de l'organisme (calculés à partir des autres au rendu).
     let customTokens = [];
     try { customTokens = await loadCustomTokens(organizationId); } catch { /* migration absente */ }
