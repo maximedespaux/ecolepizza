@@ -6,7 +6,7 @@ const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS } = require('../lib/documents.js');
 const { TOKEN_CATALOG } = require('../lib/tokens.js');
-const { composeDocumentPdf } = require('../lib/pdfcompose.js');
+const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
@@ -206,6 +206,28 @@ const previewPdf = async (req, res) => {
     }
 };
 
+/**
+ * POST /api/templates/:slug/page-metrics — marges réservées (en-tête/pied) du modèle en
+ * cours d'édition, calculées EXACTEMENT comme le rendu PDF. Sert à placer le repère de fin
+ * de page dans l'éditeur. Calcul pur (pas de LibreOffice) → rapide.
+ */
+const pageMetrics = async (req, res) => {
+    try {
+        const { body_html, header_html, footer_html, layout } = req.body || {};
+        const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [req.user.organization_id]);
+        const m = computeReserves({
+            headerHtml: header_html, footerHtml: footer_html,
+            ctx: { org: org || {} },
+            sampleValues: sampleTokenValues(),
+            bleed: (layout && layout.bleed) || {},
+        });
+        res.json({ data: m });
+    } catch (e) {
+        console.error('Erreur métriques page :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** GET /api/templates/:slug/body — corps HTML du modèle (propre à l'organisme ou défaut). */
 const getTemplateBody = async (req, res) => {
     try {
@@ -340,5 +362,5 @@ const reorderTemplates = async (req, res) => {
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
-    getTokens, getTemplateBody, reorderTemplates, previewPdf,
+    getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
 };

@@ -149,9 +149,10 @@ ${STRIP_CSS}
  * - useLetterhead : à défaut d'en-tête personnalisé, papier à en-tête auto.
  * Renvoie un Buffer PDF. Peut lever l'erreur NO_SOFFICE (LibreOffice absent).
  */
-async function composeDocumentPdf({ bodyHtml, headerHtml, footerHtml, ctx = {}, useLetterhead = true, sampleValues, bleed = {} }) {
+// Prépare les bandeaux (HTML) et calcule les marges réservées EXACTEMENT comme au rendu
+// final. Partagé par composeDocumentPdf et l'API de métriques (repère de fin de page).
+function buildLayout({ headerHtml, footerHtml, ctx = {}, useLetterhead = true, sampleValues, bleed = {} }) {
     const org = ctx.org || {};
-
     // « Bord à bord » (sans marge) par zone : marges latérales / de bord = 0, et images
     // bornées à la LARGEUR PLEINE de la page (au lieu de la largeur utile).
     const hSide = bleed.header ? 0 : SIDE_MM;
@@ -177,15 +178,27 @@ async function composeDocumentPdf({ bodyHtml, headerHtml, footerHtml, ctx = {}, 
 
     const hasHeader = !!headInner;
     const hasFooter = !!footInner;
-
-    // Marges du corps adaptées à la hauteur réelle des bandeaux (évite le chevauchement
-    // avec un bandeau haut, et le gaspillage avec un bandeau court).
+    // Marges du corps adaptées à la hauteur réelle des bandeaux.
     const topMm = hasHeader
         ? clamp(hTop + estimateStripHeightPt(headInner) / PT_PER_MM + GAP_MM, hTop + 6, 120)
         : 20;
     const bottomMm = hasFooter
         ? clamp(fBottom + estimateStripHeightPt(footInner) / PT_PER_MM + GAP_MM, fBottom + 6, 100)
         : 20;
+
+    return { headInner, footInner, hasHeader, hasFooter, topMm, bottomMm, bSide, hTop, hSide, fSide, fBottom };
+}
+
+// Renvoie les marges (mm) du corps, telles qu'utilisées au rendu — pour le repère de fin
+// de page de l'éditeur. { topMm, bottomMm, contentMm }.
+function computeReserves(opts) {
+    const { topMm, bottomMm } = buildLayout(opts);
+    return { topMm, bottomMm, contentMm: Math.max(0, 297 - topMm - bottomMm) };
+}
+
+async function composeDocumentPdf({ bodyHtml, headerHtml, footerHtml, ctx = {}, useLetterhead = true, sampleValues, bleed = {} }) {
+    const { headInner, footInner, hasHeader, hasFooter, topMm, bottomMm, bSide, hTop, hSide, fSide, fBottom } =
+        buildLayout({ headerHtml, footerHtml, ctx, useLetterhead, sampleValues, bleed });
 
     const bodyPdf = htmlToPdf(renderBodyOnlyDoc(capImages(bodyHtml, contentPxFor(bSide), !!bleed.body), ctx, { topMm, bottomMm, sideMm: bSide, values: sampleValues }));
     if (!hasHeader && !hasFooter) return bodyPdf;
@@ -207,4 +220,4 @@ async function composeDocumentPdf({ bodyHtml, headerHtml, footerHtml, ctx = {}, 
     return Buffer.from(await doc.save());
 }
 
-module.exports = { composeDocumentPdf };
+module.exports = { composeDocumentPdf, computeReserves };

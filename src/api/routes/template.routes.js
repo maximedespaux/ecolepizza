@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const {
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
-    getTokens, getTemplateBody, reorderTemplates, previewPdf,
+    getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
 } = require('../controllers/template.controller.js');
 const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -18,6 +18,7 @@ router.put('/reorder', reorderTemplates);                 // ordre des modèles 
 router.get('/tokens', getTokens);                         // catalogue de jetons (palette)
 router.get('/:slug/body', getTemplateBody);               // corps HTML du modèle (éditeur)
 router.post('/:slug/preview-pdf', previewPdf);            // aperçu PDF fidèle (éditeur)
+router.post('/:slug/page-metrics', pageMetrics);         // marges réservées (repère fin de page)
 router.get('/:slug/file', downloadTemplate);
 router.put('/:slug', saveTemplate);                       // métadonnées (étape) + corps builder
 router.post('/:slug', upload.single('file'), uploadTemplate); // fichier .docx

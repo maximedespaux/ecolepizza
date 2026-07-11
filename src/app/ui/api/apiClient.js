@@ -661,6 +661,11 @@ export function getTemplateBody(slug) {
 export function saveTemplateBody(slug, payload) {
   return request(`/templates/${slug}`, { method: "PUT", body: JSON.stringify(payload) });
 }
+// Marges réservées (en-tête/pied) du modèle en cours d'édition — pour le repère de fin
+// de page. Calcul serveur identique au rendu PDF. { topMm, bottomMm, contentMm }.
+export function templatePageMetrics(slug, payload) {
+  return request(`/templates/${slug}/page-metrics`, { method: "POST", body: JSON.stringify(payload), silent: true });
+}
 // Aperçu PDF fidèle du modèle en cours d'édition. Renvoie une URL blob (à révoquer).
 export async function templatePreviewPdfUrl(slug, payload) {
   const res = await fetch(`${API_BASE_URL}/templates/${slug}/preview-pdf`, {
