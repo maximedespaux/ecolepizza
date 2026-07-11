@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { getFieldSettings, saveFieldSettings } from "../api/apiClient.js";
 import Card from "./Card.jsx";
 import StatusMessage from "./StatusMessage.jsx";
@@ -7,7 +7,7 @@ const TYPE_LABEL = { text: "Texte", number: "Nombre", bool: "Oui / Non", enum: "
 
 // Gestion des champs du dossier (découverts en base) : activer/renommer.
 // Réutilisé par la page dédiée et par l'éditeur de document (« Champs documents »).
-export default function FieldSettingsPanel({ onStatus }) {
+const FieldSettingsPanel = forwardRef(function FieldSettingsPanel({ onStatus }, ref) {
   const [fields, setFields] = useState([]);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -37,10 +37,12 @@ export default function FieldSettingsPanel({ onStatus }) {
     setSaving(true);
     try {
       await saveFieldSettings(fields.map((f) => ({ table: f.table, column: f.column, enabled: f.enabled, label: f.label || null })));
+      await load(); // relit depuis le serveur : l'affichage reflète toujours ce qui est réellement enregistré
       report({ type: "success", message: "Champs enregistrés." });
     } catch (e) { report({ type: "error", message: e.message }); }
     finally { setSaving(false); }
   }
+  useImperativeHandle(ref, () => ({ save }), [fields]);
 
   return (
     <>
@@ -98,4 +100,6 @@ export default function FieldSettingsPanel({ onStatus }) {
       )}
     </>
   );
-}
+});
+
+export default FieldSettingsPanel;

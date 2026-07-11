@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { buildExtensions } from "../lib/editorConfig.js";
@@ -36,6 +36,7 @@ function TemplateEditor() {
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
   const [showFields, setShowFields] = useState(false); // modale « Champs documents »
+  const fieldsRef = useRef(null);
   const [, force] = useState(0);
 
   const opts = (cls) => ({
@@ -218,10 +219,11 @@ function TemplateEditor() {
               <p className="sub" style={{ margin: "0 0 10px" }}>
                 Activez les champs du dossier utilisables dans les documents (conditions, valeurs). Vous pouvez renommer leur intitulé.
               </p>
-              <FieldSettingsPanel onStatus={setStatus} />
+              <FieldSettingsPanel ref={fieldsRef} onStatus={setStatus} />
             </div>
             <div className="mfoot">
               <button className="btn ghost" onClick={() => setShowFields(false)}>Fermer</button>
+              <button className="btn primary" onClick={() => fieldsRef.current?.save()}>Enregistrer les champs</button>
             </div>
           </div>
         </div>

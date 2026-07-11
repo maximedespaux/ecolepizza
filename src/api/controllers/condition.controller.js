@@ -67,15 +67,21 @@ const saveFields = async (req, res) => {
     const allowed = new Set([...ELIGIBLE_TABLES, 'virtual']);
     try {
         const conn = db.promise();
+        const orgId = req.user.organization_id;
         for (const f of list) {
             const table = String(f.table || '');
             const column = String(f.column || '');
             if (!allowed.has(table) || !/^[a-z0-9_]+$/.test(column)) continue; // ignore les entrées douteuses
+            // Suppression puis insertion (upsert robuste, indépendant de la clé unique,
+            // et nettoie d'éventuels doublons hérités).
+            await conn.query(
+                'DELETE FROM condition_field WHERE organization_id = ? AND source_table = ? AND column_name = ?',
+                [orgId, table, column]
+            );
             await conn.query(
                 `INSERT INTO condition_field (id, organization_id, source_table, column_name, enabled, label)
-                 VALUES (?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), label = VALUES(label)`,
-                [crypto.randomUUID(), req.user.organization_id, table, column, f.enabled ? 1 : 0,
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [crypto.randomUUID(), orgId, table, column, f.enabled ? 1 : 0,
                     f.label ? String(f.label).slice(0, 160) : null]
             );
         }
