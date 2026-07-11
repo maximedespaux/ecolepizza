@@ -108,13 +108,13 @@ function letterhead(org = {}) {
 // règle @page : chaque rendu fixe ses propres marges.
 const DOC_CSS = `
   * { box-sizing: border-box; }
-  body { font-family: "Liberation Sans", Arial, sans-serif; font-size: 11pt; color: #1a1a1a; line-height: 1.5; }
+  body { font-family: "Liberation Sans", Arial, sans-serif; font-size: 11pt; color: #1a1a1a; line-height: 1.35; }
   .doc-head { border-bottom: 1.5px solid #c0392b; padding-bottom: 8px; margin-bottom: 22px; }
   .doc-head .org { font-size: 15pt; font-weight: 700; color: #c0392b; }
   .doc-head .org-l { font-size: 8.5pt; color: #555; }
   .doc-foot { border-top: 1px solid #999; margin-top: 26px; padding-top: 8px; font-size: 8.5pt; color: #555; }
   h1 { font-size: 16pt; } h2 { font-size: 13pt; } h3 { font-size: 11.5pt; }
-  p { margin: 0 0 8px; }
+  p { margin: 0 0 5px; }
   table { border-collapse: collapse; width: 100%; margin: 10px 0; }
   th, td { border: 1px solid #999; padding: 5px 7px; font-size: 10pt; text-align: left; }
   ul, ol { margin: 0 0 8px 18px; }

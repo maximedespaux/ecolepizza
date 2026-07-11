@@ -100,24 +100,16 @@ function RichToolbar({ editor, compact = false }) {
 
   return (
     <div className="tb">
-      <Btn title="Gras" active={editor.isActive("bold")} on={() => c().toggleBold().run()}><b>B</b></Btn>
-      <Btn title="Italique" active={editor.isActive("italic")} on={() => c().toggleItalic().run()}><i>I</i></Btn>
-      <Btn title="Souligné" active={editor.isActive("underline")} on={() => c().toggleUnderline().run()}><u>U</u></Btn>
-      <Btn title="Barré" active={editor.isActive("strike")} on={() => c().toggleStrike().run()}><s>S</s></Btn>
+      {/* Historique */}
+      <Btn title="Annuler" on={() => c().undo().run()}>↶</Btn>
+      <Btn title="Rétablir" on={() => c().redo().run()}>↷</Btn>
 
       <Sep />
-      {/* Couleur du texte — palette de carrés (façon Paint) */}
-      <SwatchPicker
-        label="A" title="Couleur du texte" swatches={COLOR_SWATCHES}
-        current={editor.getAttributes("textStyle").color || null}
-        onPick={(col) => c().setColor(col).run()}
-        onClear={() => c().unsetColor().run()} clearLabel="Couleur par défaut" />
-      {/* Surlignage — palette de carrés */}
-      <SwatchPicker
-        label="🖍" title="Surlignage" swatches={HIGHLIGHT_SWATCHES}
-        current={editor.getAttributes("highlight").color || null}
-        onPick={(col) => c().setHighlight({ color: col }).run()}
-        onClear={() => c().unsetHighlight().run()} clearLabel="Aucun surlignage" />
+      {/* Style de bloc : paragraphe / titres */}
+      <Btn title="Paragraphe" active={editor.isActive("paragraph")} on={() => c().setParagraph().run()}>¶</Btn>
+      <Btn title="Titre 1" active={editor.isActive("heading", { level: 1 })} on={() => c().toggleHeading({ level: 1 }).run()}>H1</Btn>
+      <Btn title="Titre 2" active={editor.isActive("heading", { level: 2 })} on={() => c().toggleHeading({ level: 2 }).run()}>H2</Btn>
+      <Btn title="Titre 3" active={editor.isActive("heading", { level: 3 })} on={() => c().toggleHeading({ level: 3 }).run()}>H3</Btn>
 
       <Sep />
       {/* Police + taille */}
@@ -135,14 +127,26 @@ function RichToolbar({ editor, compact = false }) {
       </select>
 
       <Sep />
-      {/* Titres */}
-      <Btn title="Titre 1" active={editor.isActive("heading", { level: 1 })} on={() => c().toggleHeading({ level: 1 }).run()}>H1</Btn>
-      <Btn title="Titre 2" active={editor.isActive("heading", { level: 2 })} on={() => c().toggleHeading({ level: 2 }).run()}>H2</Btn>
-      <Btn title="Titre 3" active={editor.isActive("heading", { level: 3 })} on={() => c().toggleHeading({ level: 3 }).run()}>H3</Btn>
-      <Btn title="Paragraphe" active={editor.isActive("paragraph")} on={() => c().setParagraph().run()}>¶</Btn>
+      {/* Mise en forme du caractère */}
+      <Btn title="Gras" active={editor.isActive("bold")} on={() => c().toggleBold().run()}><b>B</b></Btn>
+      <Btn title="Italique" active={editor.isActive("italic")} on={() => c().toggleItalic().run()}><i>I</i></Btn>
+      <Btn title="Souligné" active={editor.isActive("underline")} on={() => c().toggleUnderline().run()}><u>U</u></Btn>
+      <Btn title="Barré" active={editor.isActive("strike")} on={() => c().toggleStrike().run()}><s>S</s></Btn>
+      {/* Couleur du texte — palette de carrés (façon Paint) */}
+      <SwatchPicker
+        label="A" title="Couleur du texte" swatches={COLOR_SWATCHES}
+        current={editor.getAttributes("textStyle").color || null}
+        onPick={(col) => c().setColor(col).run()}
+        onClear={() => c().unsetColor().run()} clearLabel="Couleur par défaut" />
+      {/* Surlignage — palette de carrés */}
+      <SwatchPicker
+        label="🖍" title="Surlignage" swatches={HIGHLIGHT_SWATCHES}
+        current={editor.getAttributes("highlight").color || null}
+        onPick={(col) => c().setHighlight({ color: col }).run()}
+        onClear={() => c().unsetHighlight().run()} clearLabel="Aucun surlignage" />
 
       <Sep />
-      {/* Alignement (paragraphe) — positionne aussi les images en ligne : gauche / centre / droite */}
+      {/* Paragraphe : alignement, interligne, listes */}
       <Btn title="Aligner à gauche" active={editor.isActive({ textAlign: "left" })} on={() => c().setTextAlign("left").run()}>⯇</Btn>
       <Btn title="Centrer" active={editor.isActive({ textAlign: "center" })} on={() => c().setTextAlign("center").run()}>≡</Btn>
       <Btn title="Aligner à droite" active={editor.isActive({ textAlign: "right" })} on={() => c().setTextAlign("right").run()}>⯈</Btn>
@@ -152,9 +156,6 @@ function RichToolbar({ editor, compact = false }) {
         <option value="">↕</option>
         {LINE_HEIGHTS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
       </select>
-
-      <Sep />
-      {/* Listes */}
       <Btn title="Liste à puces" active={editor.isActive("bulletList")} on={() => c().toggleBulletList().run()}>•</Btn>
       <Btn title="Liste numérotée" active={editor.isActive("orderedList")} on={() => c().toggleOrderedList().run()}>1.</Btn>
 
@@ -190,10 +191,6 @@ function RichToolbar({ editor, compact = false }) {
           <Btn title="Supprimer le tableau" on={() => c().deleteTable().run()}>⌫tab</Btn>
         </>
       )}
-
-      <Sep />
-      <Btn title="Annuler" on={() => c().undo().run()}>↶</Btn>
-      <Btn title="Rétablir" on={() => c().redo().run()}>↷</Btn>
     </div>
   );
 }

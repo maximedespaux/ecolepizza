@@ -63,7 +63,9 @@ export const FONTS = [
   { label: "Mono", value: "'Courier New', monospace" },
 ];
 export const LINE_HEIGHTS = [
-  { label: "Simple", value: "1.2" },
+  { label: "Serré", value: "1" },
+  { label: "Compact", value: "1.15" },
+  { label: "Simple", value: "1.3" },
   { label: "1,5", value: "1.5" },
   { label: "Double", value: "2" },
 ];

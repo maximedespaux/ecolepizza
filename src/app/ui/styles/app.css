@@ -463,9 +463,9 @@ tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
 .tb-btn:hover{background:var(--hover,rgba(0,0,0,.06))}
 .tb-btn.on{background:var(--ember-soft,#fdeae6);color:var(--ember1,#c0392b)}
 .tb-sep{width:1px;height:20px;background:var(--line,#e3e3e6);margin:0 4px}
-.doc-canvas{min-height:60vh;max-height:74vh;overflow-y:auto;padding:26px 30px;font-size:14px;line-height:1.6;outline:none}
+.doc-canvas{min-height:60vh;max-height:74vh;overflow-y:auto;padding:26px 30px;font-size:14px;line-height:1.35;outline:none}
 .doc-canvas:focus{outline:none}
-.doc-canvas p{margin:0 0 9px}
+.doc-canvas p{margin:0 0 5px}
 .doc-canvas h1{font-size:20px}.doc-canvas h2{font-size:16px}.doc-canvas h3{font-size:14px}
 .doc-canvas table{border-collapse:collapse;width:100%;margin:8px 0}
 .doc-canvas th,.doc-canvas td{border:1px solid var(--line,#bbb);padding:5px 7px}
