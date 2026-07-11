@@ -41,6 +41,7 @@ const equipeRoutes = require('./routes/equipe.routes.js');
 const platformRoutes = require('./routes/platform.routes.js');
 const opcoRoutes = require('./routes/opco.routes.js');
 const accessProfileRoutes = require('./routes/accessProfile.routes.js');
+const eventsRoutes = require('./routes/events.routes.js');
 
 // --- CORS ---
 const allowedOrigins = [
@@ -83,6 +84,10 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 const { enforceSectionMode } = require('./middlewares/sectionAccess.middleware.js');
 app.use(enforceSectionMode);
 
+// Diffusion temps réel : après toute modification réussie, notifie l'organisation (SSE).
+const { broadcastMutations } = require('./middlewares/realtime.middleware.js');
+app.use(broadcastMutations);
+
 // --- Endpoints ---
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
@@ -115,6 +120,7 @@ app.use('/api/equipe', equipeRoutes);
 app.use('/api/platform', platformRoutes);
 app.use('/api/opcos', opcoRoutes);
 app.use('/api/access-profiles', accessProfileRoutes);
+app.use('/api/events', eventsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impasto-api' }));
 
