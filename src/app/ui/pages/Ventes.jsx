@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
@@ -266,11 +266,35 @@ function Ventes() {
 function SalesHistory({ sales, onRemove }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [open, setOpen] = useState(() => new Set()); // factures dépliées
+  const toggle = (k) => setOpen((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   const filtered = useMemo(
     () => sales.filter((s) => (!from || s.date >= from) && (!to || s.date <= to)),
     [sales, from, to]
   );
+  // Regroupe les lignes de vente par facture (invoice_id). Les ventes sans facture
+  // (saisie directe / antérieures à la migration) forment chacune leur propre groupe.
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const s of filtered) {
+      const key = s.invoice_id || `sale:${s.id}`;
+      let g = map.get(key);
+      if (!g) {
+        g = {
+          key, invoice_id: s.invoice_id || null, invoice_number: s.invoice_number || null,
+          date: s.date, client: s.last_name ? `${s.last_name} ${s.first_name || ""}`.trim() : "—",
+          lines: [], total: 0, units: 0,
+        };
+        map.set(key, g);
+      }
+      g.lines.push(s);
+      g.total += Number(s.amount) * (s.quantity || 1);
+      g.units += Number(s.quantity) || 1;
+    }
+    return [...map.values()];
+  }, [filtered]);
+
   const ca = useMemo(() => filtered.reduce((sum, s) => sum + Number(s.amount) * (s.quantity || 1), 0), [filtered]);
   const units = useMemo(() => filtered.reduce((sum, s) => sum + (Number(s.quantity) || 1), 0), [filtered]);
 
@@ -286,7 +310,7 @@ function SalesHistory({ sales, onRemove }) {
       <div className="grid cols-3" style={{ marginBottom: 16 }}>
         <Kpi label={`Chiffre d'affaires HT${allTime ? "" : " (période)"}`} value={euro(ca)} />
         <Kpi label="Articles vendus" value={units} />
-        <Kpi label="Lignes de vente" value={filtered.length} />
+        <Kpi label="Ventes / factures" value={groups.length} />
       </div>
       <Card title="Historique des ventes">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end", marginBottom: 14 }}>
@@ -302,18 +326,38 @@ function SalesHistory({ sales, onRemove }) {
         ) : (
           <div className="tablewrap" style={{ border: "none" }}>
             <table>
-              <thead><tr><th>Date</th><th>Produit</th><th>Client</th><th>Qté</th><th className="ta-r">Montant HT</th><th></th></tr></thead>
+              <thead><tr><th style={{ width: 34 }}></th><th>Date</th><th>Facture</th><th>Client</th><th>Articles</th><th className="ta-r">Montant HT</th><th></th></tr></thead>
               <tbody>
-                {filtered.map((s) => (
-                  <tr key={s.id}>
-                    <td className="mono">{s.date}</td>
-                    <td><b>{s.product}</b>{s.category ? <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.category}</span> : null}</td>
-                    <td>{s.last_name ? `${s.last_name} ${s.first_name}` : "—"}</td>
-                    <td>{s.quantity}</td>
-                    <td className="mono tnum" style={{ textAlign: "right" }}>{euro(Number(s.amount) * (s.quantity || 1))}</td>
-                    <td style={{ textAlign: "right" }}><button className="iconbtn del" title="Supprimer" onClick={() => onRemove(s.id)}><Icon name="trash" size={15} /></button></td>
-                  </tr>
-                ))}
+                {groups.map((g) => {
+                  const isOpen = open.has(g.key);
+                  return (
+                    <Fragment key={g.key}>
+                      <tr style={{ cursor: "pointer" }} onClick={() => toggle(g.key)}>
+                        <td><button className="iconbtn" title={isOpen ? "Réduire" : "Voir le détail"} onClick={(e) => { e.stopPropagation(); toggle(g.key); }}><Icon name={isOpen ? "chevron-down" : "chevron-right"} size={15} /></button></td>
+                        <td className="mono">{g.date}</td>
+                        <td>{g.invoice_number ? <b>{g.invoice_number}</b> : <span className="hint">Vente directe</span>}</td>
+                        <td>{g.client}</td>
+                        <td>{g.units} <span className="hint">({g.lines.length} ligne{g.lines.length > 1 ? "s" : ""})</span></td>
+                        <td className="mono tnum" style={{ textAlign: "right" }}>{euro(g.total)}</td>
+                        <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                          {g.invoice_id && (
+                            <button className="iconbtn" title="Télécharger la facture (PDF)" onClick={() => downloadFacturX(g.invoice_id, g.invoice_number || "facture")}><Icon name="download" size={15} /></button>
+                          )}
+                        </td>
+                      </tr>
+                      {isOpen && g.lines.map((s) => (
+                        <tr key={s.id} style={{ background: "var(--surface2)" }}>
+                          <td></td>
+                          <td className="mono" style={{ color: "var(--muted)", fontSize: 12 }}>{s.date}</td>
+                          <td colSpan={2}><b>{s.product}</b>{s.category ? <span className="hint"> · {s.category}</span> : null}</td>
+                          <td>{s.quantity}</td>
+                          <td className="mono tnum" style={{ textAlign: "right" }}>{euro(Number(s.amount) * (s.quantity || 1))}</td>
+                          <td style={{ textAlign: "right" }}><button className="iconbtn del" title="Supprimer cette ligne" onClick={() => onRemove(s.id)}><Icon name="trash" size={14} /></button></td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

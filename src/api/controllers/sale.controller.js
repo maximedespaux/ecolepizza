@@ -2,28 +2,42 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 
+// La table material_sale porte-t-elle le lien vers la facture (migration 069) ?
+// Permet un fonctionnement dégradé tant que la migration n'est pas appliquée.
+async function saleHasInvoiceLink(conn) {
+    try {
+        const [c] = await conn.query(
+            `SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = 'material_sale' AND column_name = 'invoice_id' LIMIT 1`);
+        return c.length > 0;
+    } catch { return false; }
+}
+
 /**
- * GET /api/ventes — ventes de matériel + total.
+ * GET /api/ventes — ventes de matériel + total. Renvoie le lien facture
+ * (invoice_id / invoice_number) quand la migration 069 est appliquée.
  */
-const getSales = (req, res) => {
-    db.query(
-        `SELECT s.id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.product, s.category,
-                s.quantity, s.amount, s.note, s.learner_id,
-                l.first_name, l.last_name
-         FROM material_sale s
-         LEFT JOIN learner l ON l.id = s.learner_id
-         WHERE s.organization_id = ?
-         ORDER BY s.date DESC, s.created_at DESC`,
-        [req.user.organization_id],
-        (err, results) => {
-            if (err) {
-                console.error('Erreur récupération ventes :', err);
-                return res.status(500).json({ error: 'Internal Server Error' });
-            }
-            const total = results.reduce((sum, r) => sum + Number(r.amount) * (r.quantity || 1), 0);
-            res.json({ data: results, total });
-        }
-    );
+const getSales = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const hasInv = await saleHasInvoiceLink(conn);
+        const invCols = hasInv ? 's.invoice_id, s.invoice_number,' : '';
+        const [results] = await conn.query(
+            `SELECT s.id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.product, s.category,
+                    s.quantity, s.amount, s.note, s.learner_id, ${invCols}
+                    l.first_name, l.last_name
+             FROM material_sale s
+             LEFT JOIN learner l ON l.id = s.learner_id
+             WHERE s.organization_id = ?
+             ORDER BY s.date DESC, s.created_at DESC`,
+            [req.user.organization_id]
+        );
+        const total = results.reduce((sum, r) => sum + Number(r.amount) * (r.quantity || 1), 0);
+        res.json({ data: results, total });
+    } catch (err) {
+        console.error('Erreur récupération ventes :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /**
@@ -160,6 +174,15 @@ const checkout = async (req, res) => {
             ln._disc = Math.min(100, Math.max(0, Number(ln.discount_pct) || 0)); // remise ligne
         }
 
+        // Facture liée : identifiant + numéro générés AVANT les lignes, pour que chaque
+        // vente (material_sale) référence sa facture → regroupement de l'historique.
+        const hasInvLink = await saleHasInvoiceLink(conn);
+        const invoiceId = crypto.randomUUID();
+        const year = new Date().getFullYear();
+        const num = settings.next_number || 1;
+        const number = `${settings.invoice_prefix || 'F'}-${year}-${String(num).padStart(4, '0')}`;
+        await conn.query('UPDATE shop_settings SET next_number = ? WHERE organization_id = ?', [num + 1, orgId]);
+
         // Applique : décrément stock + vente par ligne (remise ligne puis globale).
         // On construit aussi les lignes de facture (invoice_line) → facture détaillée + PDF.
         let totalHT = 0;
@@ -170,13 +193,21 @@ const checkout = async (req, res) => {
             const unitNet = Number(it.unit_price || 0) * (1 - ln._disc / 100) * factor; // HT remisé
             const rate = tvaApplies ? Number(it.tax_rate || 0) : 0;
             const lineHT = Number((unitNet * ln._qty).toFixed(2));
+            const note = payMethod ? `Paiement : ${payMethod}` : null;
             await conn.query('UPDATE inventory_item SET quantity = quantity - ? WHERE id = ?', [ln._qty, ln.item_id]);
-            await conn.query(
-                `INSERT INTO material_sale (id, organization_id, date, product, category, quantity, amount, learner_id, note)
-                 VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?)`,
-                [crypto.randomUUID(), orgId, it.name, it.category, ln._qty, unitNet.toFixed(2), learner_id || null,
-                 payMethod ? `Paiement : ${payMethod}` : null]
-            );
+            if (hasInvLink) {
+                await conn.query(
+                    `INSERT INTO material_sale (id, organization_id, date, product, category, quantity, amount, learner_id, note, invoice_id, invoice_number)
+                     VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [crypto.randomUUID(), orgId, it.name, it.category, ln._qty, unitNet.toFixed(2), learner_id || null, note, invoiceId, number]
+                );
+            } else {
+                await conn.query(
+                    `INSERT INTO material_sale (id, organization_id, date, product, category, quantity, amount, learner_id, note)
+                     VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?)`,
+                    [crypto.randomUUID(), orgId, it.name, it.category, ln._qty, unitNet.toFixed(2), learner_id || null, note]
+                );
+            }
             totalHT += lineHT;
             const label = `${it.name}${ln._qty > 1 ? ` × ${ln._qty}` : ''}${ln._disc ? ` (remise ${ln._disc}%)` : ''}`;
             invLines.push({ description: label.slice(0, 255), amount_net: lineHT, rate });
@@ -193,15 +224,8 @@ const checkout = async (req, res) => {
         }
         if (!name) name = 'Vente comptoir';
 
-        // Facture : numérotation paramétrable (préfixe + n° incrémental).
-        const year = new Date().getFullYear();
-        const num = settings.next_number || 1;
-        const number = `${settings.invoice_prefix || 'F'}-${year}-${String(num).padStart(4, '0')}`;
-        await conn.query('UPDATE shop_settings SET next_number = ? WHERE organization_id = ?', [num + 1, orgId]);
-
         const remise = globalDisc > 0 ? ` (remise ${globalDisc}%)` : '';
         const description = ('Vente de matériel : ' + productNames.join(', ') + remise).slice(0, 255);
-        const invoiceId = crypto.randomUUID();
         await conn.query(
             `INSERT INTO invoice (id, organization_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status)
              VALUES (?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?)`,
