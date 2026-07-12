@@ -19,6 +19,7 @@ const sessionRoutes = require('./routes/session.routes.js');
 const enrollmentRoutes = require('./routes/enrollment.routes.js');
 const partnerRoutes = require('./routes/partner.routes.js');
 const espaceRoutes = require('./routes/espace.routes.js');
+const recipeRoutes = require('./routes/recipe.routes.js');
 const documentRoutes = require('./routes/document.routes.js');
 const suiviRoutes = require('./routes/suivi.routes.js');
 const organizationRoutes = require('./routes/organization.routes.js');
@@ -40,7 +41,6 @@ const emargementTemplateRoutes = require('./routes/emargementTemplate.routes.js'
 const equipeRoutes = require('./routes/equipe.routes.js');
 const platformRoutes = require('./routes/platform.routes.js');
 const opcoRoutes = require('./routes/opco.routes.js');
-const mercurialeRoutes = require('./routes/mercuriale.routes.js');
 const accessProfileRoutes = require('./routes/accessProfile.routes.js');
 const eventsRoutes = require('./routes/events.routes.js');
 
@@ -99,6 +99,7 @@ app.use('/api/sessions', sessionRoutes);
 app.use('/api/enrollments', enrollmentRoutes);
 app.use('/api/partenaires', partnerRoutes);
 app.use('/api/mon-espace', espaceRoutes);
+app.use('/api/recipes', recipeRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/suivi', suiviRoutes);
 app.use('/api/organisation', organizationRoutes);
@@ -120,7 +121,6 @@ app.use('/api/emargement-templates', emargementTemplateRoutes);
 app.use('/api/equipe', equipeRoutes);
 app.use('/api/platform', platformRoutes);
 app.use('/api/opcos', opcoRoutes);
-app.use('/api/mercuriale', mercurialeRoutes);
 app.use('/api/access-profiles', accessProfileRoutes);
 app.use('/api/events', eventsRoutes);
 

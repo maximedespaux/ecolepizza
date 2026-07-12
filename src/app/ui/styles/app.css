@@ -872,3 +872,12 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .quiz-opt{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:14.5px}
 .quiz-opt:hover{background:var(--surface2)}
 .quiz-opt.sel{border-color:var(--ember1);background:var(--rosso-bg)}
+
+/* Fiche technique — autocomplétion catalogue d'ingrédients */
+.cat-pop{position:absolute;z-index:50;top:calc(100% + 4px);left:0;right:0;max-height:280px;overflow:auto;background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.16);padding:4px}
+.cat-opt{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;background:none;border-radius:8px;cursor:pointer;text-align:left}
+.cat-opt:hover{background:var(--surface2)}
+.cat-thumb{width:30px;height:30px;flex:0 0 30px;border-radius:6px;object-fit:contain;background:#fff;border:1px solid var(--border-soft)}
+/* Communauté — liste des recettes partagées */
+.comm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border:none;background:none;border-bottom:1px solid var(--border-soft);cursor:pointer;color:var(--text)}
+.comm-row:hover,.comm-row.on{background:var(--surface2)}

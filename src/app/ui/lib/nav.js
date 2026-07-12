@@ -32,7 +32,6 @@ export const NAV = [
     items: [
       { to: "/pipeline", ic: "columns", label: "Pipeline CRM", roles: ADMIN },
       { to: "/partenaires", ic: "handshake", label: "Partenaires", roles: STAFF },
-      { to: "/mercuriale", ic: "table", label: "Mercuriale", roles: ADMIN },
       { to: "/carte", ic: "map", label: "Carte des stagiaires", roles: ADMIN },
     ],
   },

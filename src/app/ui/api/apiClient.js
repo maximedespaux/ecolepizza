@@ -535,6 +535,17 @@ export function saveMyQuest(progress) {
   return request("/mon-espace/quest", { method: "PUT", body: JSON.stringify({ progress }), silent: true });
 }
 
+// --- Fiches techniques (recettes) + catalogue d'ingrédients ---
+export function searchCatalog(q) {
+  return request(`/recipes/catalog?q=${encodeURIComponent(q || "")}`, { silent: true });
+}
+export function getMyRecipes() { return request("/recipes/mine"); }
+export function getSharedRecipes() { return request("/recipes/shared"); }
+export function getRecipe(id) { return request(`/recipes/${id}`); }
+export function createRecipe(payload) { return request("/recipes", { method: "POST", body: JSON.stringify(payload) }); }
+export function updateRecipe(id, payload) { return request(`/recipes/${id}`, { method: "PUT", body: JSON.stringify(payload) }); }
+export function deleteRecipe(id) { return request(`/recipes/${id}`, { method: "DELETE" }); }
+
 // --- Documents ---
 export function getLearnerDocuments(learnerId) {
   return request(`/documents?learner_id=${learnerId}`);
@@ -752,25 +763,3 @@ export function deleteContribution(id) {
   return request(`/partenaires/contributions/${id}`, { method: "DELETE" });
 }
 
-// --- Mercuriale (liste de prix de référence, comparaison multi-magasins) ---
-export function getMercuriale() {
-  return request("/mercuriale");
-}
-export function createMercStore(name) {
-  return request("/mercuriale/stores", { method: "POST", body: JSON.stringify({ name }) });
-}
-export function deleteMercStore(id) {
-  return request(`/mercuriale/stores/${id}`, { method: "DELETE" });
-}
-export function createMercItem(payload) {
-  return request("/mercuriale/items", { method: "POST", body: JSON.stringify(payload) });
-}
-export function updateMercItem(id, payload) {
-  return request(`/mercuriale/items/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
-}
-export function deleteMercItem(id) {
-  return request(`/mercuriale/items/${id}`, { method: "DELETE" });
-}
-export function setMercPrice(itemId, storeId, payload) {
-  return request(`/mercuriale/items/${itemId}/prices/${storeId}`, { method: "PUT", body: JSON.stringify(payload) });
-}
