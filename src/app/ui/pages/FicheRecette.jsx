@@ -52,6 +52,15 @@ const readKind = () => {
 };
 const INIT = () => ({ ...NEW(), kind: readKind() });
 
+// Extrait les hashtags (#truc) de la description → badges. Unicode (accents) accepté.
+const TAG_RE = /#[\p{L}\p{N}_-]+/gu;
+const parseTags = (s) => Array.from(new Set((String(s || "").match(TAG_RE) || []).map((t) => t.slice(1))));
+function Tags({ text, dark }) {
+  const tags = parseTags(text);
+  if (!tags.length) return null;
+  return <div className="tag-row">{tags.map((t) => <span key={t} className={"badge-tag" + (dark ? " on-dark" : "")}>#{t}</span>)}</div>;
+}
+
 const unitLabel = (tu) => (tu === "Piece" ? "pc" : tu === "L" ? "L" : "kg");
 const PAGE_SIZE = 12;
 const PRICE_MAX = 50; // borne haute du curseur (€/unité) ; au max = « sans limite »
@@ -413,8 +422,9 @@ function FicheRecette() {
               <input className="inp" value={r.name} onChange={set("name")} placeholder={isPrep ? "Ex. Sauce tomate San Marzano" : "Ex. Margherita du chef"} /></div>
             <div className="field"><label>Type</label>
               <select className="inp" value={r.type} onChange={set("type")}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
-            <div className="field" style={{ marginBottom: 0 }}><label>Description</label>
-              <textarea className="inp" rows={4} value={r.description} onChange={set("description")} placeholder="Style, histoire, cuisson, dressage…" /></div>
+            <div className="field" style={{ marginBottom: 0 }}><label>Description <span className="hint" style={{ fontWeight: 400 }}>· #tags pour catégoriser</span></label>
+              <textarea className="inp" rows={4} value={r.description} onChange={set("description")} placeholder="Style, histoire, cuisson… #signature #24h" />
+              <Tags text={r.description} /></div>
           </Card>
           )}
 
@@ -492,8 +502,9 @@ function FicheRecette() {
               <Slider label="Huile (facultatif)" val={num(dp.huile)} min={0} max={6} step={0.5} set={(v) => setDP("huile", v)} suffix=" %" />
               <Slider label="Levure" val={num(dp.levure)} min={0} max={2} step={0.05} set={(v) => setDP("levure", v)} suffix=" %" />
               {/* Description — en bas du calculateur */}
-              <div className="field" style={{ marginBottom: 0, marginTop: 14 }}><label>Description</label>
-                <textarea className="inp" rows={3} value={r.description} onChange={set("description")} placeholder="Hydratation, pointage/apprêt, cuisson…" /></div>
+              <div className="field" style={{ marginBottom: 0, marginTop: 14 }}><label>Description <span className="hint" style={{ fontWeight: 400 }}>· #tags pour catégoriser</span></label>
+                <textarea className="inp" rows={3} value={r.description} onChange={set("description")} placeholder="Pointage/apprêt, cuisson… #napolitaine #24h" />
+                <Tags text={r.description} /></div>
             </Card>
           ) : (
             <Card title={<span className="card-ttl"><Icon name="settings" size={16} /> Empâtement</span>}>
@@ -625,7 +636,8 @@ function FicheRecette() {
                 <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border-soft)" }}>
                   <span className="fiche-tag">{s.kind === "PATE" ? "Pâte" : s.kind === "PREPARATION" ? "Prépa" : "Recette"}</span>
                   <span style={{ flex: 1, minWidth: 0 }}><b>{s.name}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.type}{s.visibility === "SHARED" ? " · 🌍 partagée" : ""}</span></span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.type}{s.visibility === "SHARED" ? " · 🌍 partagée" : ""}</span>
+                    <Tags text={s.description} /></span>
                   <button className="btn sm ghost" onClick={() => openRecipe(s.id)}>Ouvrir</button>
                   <button className="iconbtn del" title="Supprimer" onClick={() => removeRecipe(s.id)}><Icon name="trash" size={14} /></button>
                 </div>
