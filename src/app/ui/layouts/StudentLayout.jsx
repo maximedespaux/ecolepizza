@@ -3,6 +3,7 @@ import { Outlet, Navigate, NavLink } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 import ChangePasswordModal from "../components/ChangePasswordModal.jsx";
+import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
@@ -40,9 +41,9 @@ function StudentLayout() {
         </nav>
         <div className="spacer" />
         <ThemeToggle />
-        <button className="btn sm ghost" onClick={() => setPwOpen(true)} title="Changer mon mot de passe">🔑 Mot de passe</button>
+        <button className="btn sm ghost" onClick={() => setPwOpen(true)} title="Changer mon mot de passe"><Icon name="key" size={15} /> Mot de passe</button>
         <div className="avatar" title={`${user?.first_name} ${user?.last_name}`}>{initials(user?.first_name, user?.last_name)}</div>
-        <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion">⏻</button>
+        <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion"><Icon name="power" size={18} /></button>
       </header>
       <main className="content" style={{ maxWidth: 900 }}>
         <Outlet />

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { buildExtensions } from "../lib/editorConfig.js";
@@ -284,7 +285,7 @@ function TemplateEditor() {
           )}
 
           <div className="tok-group">
-            <div className="tok-group-hd" style={{ cursor: "default" }}><span>✍ Signatures</span></div>
+            <div className="tok-group-hd" style={{ cursor: "default" }}><span><Icon name="pencil" size={13} /> Signatures</span></div>
             <div className="tok-list" style={{ padding: "0 10px 8px" }}>
               <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
                 Insérez un bloc de signature nommé. Chaque bloc est signé séparément par la personne attribuée, depuis son compte.
@@ -293,7 +294,7 @@ function TemplateEditor() {
                 <button key={s} className="tok-chip" title={`Bloc de signature « ${s} » — cliquer ou glisser`}
                   draggable
                   onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: sigKey(s), label: s }))}
-                  onClick={() => insertSignature(s)}>✍ {s}</button>
+                  onClick={() => insertSignature(s)}><Icon name="pencil" size={13} /> {s}</button>
               ))}
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 <input className="inp" value={sigLabel} onChange={(e) => setSigLabel(e.target.value)}
@@ -310,7 +311,7 @@ function TemplateEditor() {
           {catalog.map((g) => (
             <div key={g.group} className="tok-group">
               <button className="tok-group-hd" onClick={() => setOpenGroups((p) => ({ ...p, [g.group]: !p[g.group] }))}>
-                <span>{g.group}</span><span className="chev">{openGroups[g.group] ? "▾" : "▸"}</span>
+                <span>{g.group}</span><span className="chev"><Icon name="chevron-down" size={14} style={{ transform: openGroups[g.group] ? "none" : "rotate(-90deg)", transition: "transform .15s var(--ease)" }} /></span>
               </button>
               {openGroups[g.group] && (
                 <div className="tok-list">

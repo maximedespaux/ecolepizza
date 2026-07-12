@@ -30,3 +30,5 @@ database/gds_*.sql
 
 # Rapport d'audit de sécurité interne — ne jamais committer
 SECURITY_AUDIT.md
+
+.claude/

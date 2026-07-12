@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "./Icon.jsx";
 import { getNotes, createNote, deleteNote } from "../api/apiClient.js";
 import { Field } from "./Field.jsx";
 import StatusMessage from "./StatusMessage.jsx";
@@ -65,7 +66,7 @@ function NotesModal({ enrollmentId, name, onClose }) {
                       {n.created_at} · {[n.first_name, n.last_name].filter(Boolean).join(" ") || "—"}
                       {n.reminder_at && <span className="badge a" style={{ marginLeft: 8 }}>Rappel : {n.reminder_at}</span>}
                     </span>
-                    <button className="iconbtn del" title="Supprimer" onClick={() => remove(n.id)}>🗑</button>
+                    <button className="iconbtn del" title="Supprimer" onClick={() => remove(n.id)}><Icon name="trash" size={15} /></button>
                   </div>
                   <p style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{n.body}</p>
                 </div>

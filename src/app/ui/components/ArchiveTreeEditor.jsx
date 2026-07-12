@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Icon } from "./Icon.jsx";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const newFolder = () => ({ id: uid(), name: "", per_learner: false, items: [], children: [] });
@@ -18,7 +19,7 @@ function PreviewFolder({ folder, sample, depth }) {
   return (
     <div>
       <div style={{ paddingLeft: depth * 16 }}>
-        📁 {name}{folder.per_learner ? <span style={{ color: "var(--dim)" }}> · un par stagiaire</span> : null}
+        <Icon name="folder" size={13} style={{ verticalAlign: "text-bottom" }} /> {name}{folder.per_learner ? <span style={{ color: "var(--dim)" }}> · un par stagiaire</span> : null}
       </div>
       {(folder.items || []).map((it) => (
         <div key={it.group || it.ref} style={{ paddingLeft: (depth + 1) * 16, color: "var(--muted)" }}>
@@ -92,7 +93,7 @@ function buildOptions(docs, eqMap) {
   }
   return options;
 }
-const itemIcon = (t) => (t === "quiz" ? "❓" : t === "system" ? "📝" : "📄");
+const itemIcon = (t) => <Icon name={t === "quiz" ? "help" : "file-text"} size={13} style={{ verticalAlign: "text-bottom" }} />;
 const itemId = (x) => x.group || x.ref;
 
 // Un dossier de l'arborescence + ses documents attribués + ses sous-dossiers.
@@ -113,7 +114,7 @@ function FolderNode({ folder, options, depth, onChange, onDelete }) {
   return (
     <div style={{ marginLeft: depth ? 16 : 0, borderLeft: depth ? "1px solid var(--border-soft)" : "none", paddingLeft: depth ? 12 : 0, marginTop: 10 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <span>📁</span>
+        <span style={{ display: "inline-flex", color: "var(--muted)" }}><Icon name="folder" size={16} /></span>
         <input className="inp" style={{ maxWidth: 220, borderColor: String(folder.name || "").trim() ? undefined : "var(--ember1, #c0392b)" }}
           value={folder.name} onChange={(e) => set({ name: e.target.value })} placeholder="Nom du dossier ou {champ}" />
         <select value="" title="Insérer un champ dynamique" onChange={(e) => { if (e.target.value) set({ name: (folder.name || "") + e.target.value }); }}>
@@ -132,7 +133,7 @@ function FolderNode({ folder, options, depth, onChange, onDelete }) {
           <span key={itemId(it)} className="pill" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}
             title={it.group ? "Choix « OU » : le bon variant est retenu selon le dossier" : undefined}>
             {itemIcon(it.type)} {it.label}{it.group ? " (OU)" : ""}
-            <button type="button" className="pf-x" title="Retirer" onClick={() => set({ items: items.filter((_, j) => j !== i) })}>✕</button>
+            <button type="button" className="pf-x" title="Retirer" onClick={() => set({ items: items.filter((_, j) => j !== i) })}><Icon name="x" size={12} /></button>
           </span>
         ))}
         <select value="" onChange={(e) => addItem(e.target.value)}>

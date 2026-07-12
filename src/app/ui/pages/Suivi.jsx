@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
@@ -15,7 +16,7 @@ import Roadmap from "../components/Roadmap.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf } from "../lib/format.js";
 
-const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé ✓", "g"], ARCHIVE: ["Archivé", "n"] };
+const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"] };
 
 function Suivi() {
   const navigate = useNavigate();
@@ -56,7 +57,7 @@ function Suivi() {
 
           <Card title={`Dossiers (${dossiers.length})`}>
             {dossiers.length === 0 ? (
-              <EmptyState icon="▤">Aucun dossier à suivre.</EmptyState>
+              <EmptyState icon="clipboard-check">Aucun dossier à suivre.</EmptyState>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {dossiers.map((d) => {
@@ -65,7 +66,7 @@ function Suivi() {
                     <div key={d.enrollment_id} className="card" style={{ padding: 0, overflow: "hidden" }}>
                       <button type="button" onClick={() => toggle(d.enrollment_id)}
                         style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                        <span style={{ transition: ".15s", transform: isOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}>▶</span>
+                        <span style={{ transition: ".15s", transform: isOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
                         <span className="badge n mono" style={{ background: colorOf(d.program_code), color: "#fff", borderColor: "transparent" }}>{d.program_code}</span>
                         <span style={{ flex: 1, minWidth: 0 }}>
                           <b>{d.last_name} {d.first_name}</b>
@@ -183,7 +184,7 @@ function ArchivesView({ onError, onInfo }) {
   const DelBtn = ({ onClick, title }) => (
     <button type="button" className="iconbtn del" title={title}
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}
-      style={{ marginLeft: 8 }}>🗑</button>
+      style={{ marginLeft: 8 }}><Icon name="trash" size={15} /></button>
   );
 
   const tree = useMemo(() => {
@@ -219,7 +220,7 @@ function ArchivesView({ onError, onInfo }) {
       )}
 
       {tree.length === 0 ? (
-        <EmptyState icon="🗄">Aucun document partagé pour l'instant.</EmptyState>
+        <EmptyState icon="folder">Aucun document partagé pour l'instant.</EmptyState>
       ) : (
         <div className="arch">
           {tree.map((Y) => (
@@ -258,11 +259,11 @@ function ArchivesView({ onError, onInfo }) {
                                         </span>
                                         <Badge tone={tone}>{lab}</Badge>
                                         <button className="iconbtn" title="Aperçu"
-                                          onClick={() => d.source === "archive" ? window.open(archiveFileUrl(d.doc_id), "_blank", "noopener") : setViewId(d.doc_id)}>👁</button>
+                                          onClick={() => d.source === "archive" ? window.open(archiveFileUrl(d.doc_id), "_blank", "noopener") : setViewId(d.doc_id)}><Icon name="eye" size={16} /></button>
                                         <button className="iconbtn" title="Télécharger le PDF"
-                                          onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}>⬇</button>
+                                          onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
                                         {isAdmin && (
-                                          <button className="iconbtn del" title="Supprimer ce document" onClick={() => deleteDocs([d], d.title)}>🗑</button>
+                                          <button className="iconbtn del" title="Supprimer ce document" onClick={() => deleteDocs([d], d.title)}><Icon name="trash" size={15} /></button>
                                         )}
                                       </div>
                                     );

@@ -161,13 +161,15 @@ const checkout = async (req, res) => {
         }
 
         // Applique : décrément stock + vente par ligne (remise ligne puis globale).
-        let totalHT = 0, totalTVA = 0;
+        // On construit aussi les lignes de facture (invoice_line) → facture détaillée + PDF.
+        let totalHT = 0;
         const productNames = [];
+        const invLines = [];
         for (const ln of lines) {
             const it = ln._it;
             const unitNet = Number(it.unit_price || 0) * (1 - ln._disc / 100) * factor; // HT remisé
             const rate = tvaApplies ? Number(it.tax_rate || 0) : 0;
-            const lineHT = unitNet * ln._qty;
+            const lineHT = Number((unitNet * ln._qty).toFixed(2));
             await conn.query('UPDATE inventory_item SET quantity = quantity - ? WHERE id = ?', [ln._qty, ln.item_id]);
             await conn.query(
                 `INSERT INTO material_sale (id, organization_id, date, product, category, quantity, amount, learner_id, note)
@@ -176,9 +178,12 @@ const checkout = async (req, res) => {
                  payMethod ? `Paiement : ${payMethod}` : null]
             );
             totalHT += lineHT;
-            totalTVA += lineHT * rate / 100;
+            const label = `${it.name}${ln._qty > 1 ? ` × ${ln._qty}` : ''}${ln._disc ? ` (remise ${ln._disc}%)` : ''}`;
+            invLines.push({ description: label.slice(0, 255), amount_net: lineHT, rate });
             productNames.push(`${it.name} x${ln._qty}`);
         }
+        const totalTVA = invLines.reduce((s, l) => s + l.amount_net * l.rate / 100, 0);
+        totalHT = Number(totalHT.toFixed(2));
 
         // Nom du client (stagiaire choisi > nom libre > comptoir).
         let name = buyer_name || null;
@@ -202,6 +207,13 @@ const checkout = async (req, res) => {
              VALUES (?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?)`,
             [invoiceId, orgId, name, description, number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status]
         );
+        // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X.
+        for (let i = 0; i < invLines.length; i++) {
+            await conn.query(
+                'INSERT INTO invoice_line (id, invoice_id, enrollment_id, description, amount_net, sort_order) VALUES (?, ?, NULL, ?, ?, ?)',
+                [crypto.randomUUID(), invoiceId, invLines[i].description, invLines[i].amount_net, i]
+            );
+        }
         logAudit(req, 'sale.checkout', 'Invoice', invoiceId);
         res.status(201).json({
             success: true, invoice_number: number, invoice_id: invoiceId, buyer: name,

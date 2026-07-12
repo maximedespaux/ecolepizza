@@ -6,6 +6,7 @@ import { getBadges } from "../api/apiClient.js";
 import { onBadgesRefresh } from "../lib/events.js";
 import { initials } from "../lib/format.js";
 import ChangePasswordModal from "./ChangePasswordModal.jsx";
+import { Icon } from "./Icon.jsx";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 
@@ -71,7 +72,7 @@ function Sidebar({ open }) {
               <div className="grp">{group.grp}</div>
               {items.map((it) => (
                 <NavLink key={it.to} to={it.to} className={({ isActive }) => (isActive ? "on" : "")}>
-                  <span className="ic">{it.ic}</span> {it.label}
+                  <span className="ic"><Icon name={it.ic} size={18} /></span> {it.label}
                   {badges[it.to] > 0 && <span className="count">{badges[it.to]}</span>}
                 </NavLink>
               ))}
@@ -85,14 +86,14 @@ function Sidebar({ open }) {
           <div className="profile-menu" role="menu">
             {hasParams && (
               <button role="menuitem" onClick={() => { setMenuOpen(false); navigate("/parametres"); }}>
-                <span className="ic">⚙</span> Paramètres
+                <span className="ic"><Icon name="settings" size={16} /></span> Paramètres
               </button>
             )}
             <button role="menuitem" onClick={() => { setMenuOpen(false); setPwOpen(true); }}>
-              <span className="ic">🔑</span> Changer le mot de passe
+              <span className="ic"><Icon name="key" size={16} /></span> Changer le mot de passe
             </button>
             <button role="menuitem" className="danger" onClick={() => { setMenuOpen(false); logout(); }}>
-              <span className="ic">⏻</span> Déconnexion
+              <span className="ic"><Icon name="power" size={16} /></span> Déconnexion
             </button>
           </div>
         )}
@@ -109,7 +110,7 @@ function Sidebar({ open }) {
             <div className="who">{user ? `${user.first_name} ${user.last_name}` : "—"}</div>
             <div className="role">{ROLE_LABELS[role] || ""}</div>
           </div>
-          <span className="chev">{menuOpen ? "▾" : "▴"}</span>
+          <span className="chev"><Icon name="chevron-down" size={16} style={{ transform: menuOpen ? "none" : "rotate(180deg)", transition: "transform .2s var(--ease)" }} /></span>
         </button>
       </div>
 

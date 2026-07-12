@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { FONT_SIZES, FONTS, LINE_HEIGHTS, COLOR_SWATCHES, HIGHLIGHT_SWATCHES } from "../lib/editorConfig.js";
+import { Icon } from "./Icon.jsx";
 
 /** Sélecteur de couleur « façon Paint » : grille de carrés, sans roue chromatique. */
 function SwatchPicker({ label, title, swatches, current, onPick, onClear, clearLabel = "Aucune" }) {
@@ -54,7 +55,7 @@ function TableInserter({ onInsert }) {
   return (
     <span className="tb-swatch" ref={ref}>
       <button type="button" className="tb-btn" title="Insérer un tableau"
-        onMouseDown={(e) => { e.preventDefault(); setOpen((o) => !o); }}>▦</button>
+        onMouseDown={(e) => { e.preventDefault(); setOpen((o) => !o); }}><Icon name="table" size={16} /></button>
       {open && (
         <div className="tb-swatch-pop tb-table-pop">
           <div className="tb-table-grid" onMouseLeave={() => setHover({ r: 0, c: 0 })}>
@@ -140,17 +141,17 @@ function RichToolbar({ editor, compact = false }) {
         onClear={() => c().unsetColor().run()} clearLabel="Couleur par défaut" />
       {/* Surlignage — palette de carrés */}
       <SwatchPicker
-        label="🖍" title="Surlignage" swatches={HIGHLIGHT_SWATCHES}
+        label={<Icon name="highlighter" size={15} />} title="Surlignage" swatches={HIGHLIGHT_SWATCHES}
         current={editor.getAttributes("highlight").color || null}
         onPick={(col) => c().setHighlight({ color: col }).run()}
         onClear={() => c().unsetHighlight().run()} clearLabel="Aucun surlignage" />
 
       <Sep />
       {/* Paragraphe : alignement, interligne, listes */}
-      <Btn title="Aligner à gauche" active={editor.isActive({ textAlign: "left" })} on={() => c().setTextAlign("left").run()}>⯇</Btn>
-      <Btn title="Centrer" active={editor.isActive({ textAlign: "center" })} on={() => c().setTextAlign("center").run()}>≡</Btn>
-      <Btn title="Aligner à droite" active={editor.isActive({ textAlign: "right" })} on={() => c().setTextAlign("right").run()}>⯈</Btn>
-      <Btn title="Justifier" active={editor.isActive({ textAlign: "justify" })} on={() => c().setTextAlign("justify").run()}>▤</Btn>
+      <Btn title="Aligner à gauche" active={editor.isActive({ textAlign: "left" })} on={() => c().setTextAlign("left").run()}><Icon name="align-left" size={16} /></Btn>
+      <Btn title="Centrer" active={editor.isActive({ textAlign: "center" })} on={() => c().setTextAlign("center").run()}><Icon name="align-center" size={16} /></Btn>
+      <Btn title="Aligner à droite" active={editor.isActive({ textAlign: "right" })} on={() => c().setTextAlign("right").run()}><Icon name="align-right" size={16} /></Btn>
+      <Btn title="Justifier" active={editor.isActive({ textAlign: "justify" })} on={() => c().setTextAlign("justify").run()}><Icon name="align-justify" size={16} /></Btn>
       <select className="tb-sel" title="Interligne" value=""
         onChange={(e) => { if (e.target.value) c().setLineHeight(e.target.value).run(); }}>
         <option value="">↕</option>
@@ -163,8 +164,8 @@ function RichToolbar({ editor, compact = false }) {
         <>
           <Sep />
           {/* Insertions */}
-          <Btn title="Lien" active={editor.isActive("link")} on={addLink}>🔗</Btn>
-          <Btn title="Image" on={() => imgInput.current?.click()}>🖼</Btn>
+          <Btn title="Lien" active={editor.isActive("link")} on={addLink}><Icon name="link" size={16} /></Btn>
+          <Btn title="Image" on={() => imgInput.current?.click()}><Icon name="image" size={16} /></Btn>
           <TableInserter onInsert={(rows, cols) => c().insertTable({ rows, cols, withHeaderRow: true }).run()} />
           <Btn title="Ligne horizontale" on={() => c().setHorizontalRule().run()}>—</Btn>
           <Btn title="Saut de page (Ctrl/Cmd + Entrée)" on={() => c().setPageBreak().run()}>⇟</Btn>

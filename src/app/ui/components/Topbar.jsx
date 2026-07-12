@@ -1,9 +1,11 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import { PAGE_TITLES } from "../lib/nav.js";
 import { getNotifications } from "../api/apiClient.js";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
+import { playNotif, isNotifMuted, setNotifMuted } from "../lib/notifSound.js";
+import { Icon } from "./Icon.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
 
 /** Barre supérieure : fil d'Ariane, notifications, thème, déconnexion. */
@@ -13,35 +15,71 @@ function Topbar({ onMenu }) {
   const navigate = useNavigate();
   const title = PAGE_TITLES[pathname] || "";
   const [unread, setUnread] = useState(0);
+  const [muted, setMuted] = useState(isNotifMuted());
+  const [ringing, setRinging] = useState(false);
+  const prevUnread = useRef(null); // null = premier chargement (pas de son)
 
-  const loadNotifs = () => getNotifications().then((r) => setUnread(r.unread || 0)).catch(() => {});
+  const loadNotifs = () =>
+    getNotifications()
+      .then((r) => {
+        const n = r.unread || 0;
+        setUnread(n);
+        // Nouvelle notification (hausse du compteur, hors chargement initial) → son + secousse.
+        if (prevUnread.current !== null && n > prevUnread.current) {
+          playNotif();
+          setRinging(true);
+          setTimeout(() => setRinging(false), 820);
+        }
+        prevUnread.current = n;
+      })
+      .catch(() => {});
+
   useEffect(() => { loadNotifs(); }, [pathname]);
   // Rafraîchit le compteur automatiquement (toutes les 25 s + au retour sur l'onglet).
   useAutoRefresh(loadNotifs, { interval: 25000 });
 
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    setNotifMuted(next);
+    if (!next) playNotif(); // aperçu sonore à la réactivation
+  };
+
   return (
     <header className="topbar">
-      <button className="menu-btn" onClick={onMenu} aria-label="Ouvrir le menu">☰</button>
+      <button className="menu-btn icon-btn" onClick={onMenu} aria-label="Ouvrir le menu">
+        <Icon name="menu" size={20} />
+      </button>
       <div className="crumbs">
         Impasto <span style={{ opacity: 0.4 }}>/</span> <b>{title}</b>
       </div>
       <div className="spacer" />
+
       <button
         className="icon-btn"
+        onClick={toggleMute}
+        title={muted ? "Activer le son des notifications" : "Couper le son des notifications"}
+        aria-label={muted ? "Activer le son des notifications" : "Couper le son des notifications"}
+        aria-pressed={muted}
+      >
+        <Icon name={muted ? "volume-off" : "volume"} size={17} />
+      </button>
+
+      <button
+        className={"icon-btn bell" + (ringing ? " ring" : "")}
         style={{ position: "relative" }}
         onClick={() => navigate("/notifications")}
         title="Notifications"
-        aria-label="Notifications"
+        aria-label={unread > 0 ? `Notifications (${unread} non lues)` : "Notifications"}
       >
-        🔔
-        {unread > 0 && (
-          <span style={{ position: "absolute", top: -4, right: -4, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 99, background: "var(--ember1)", color: "#fff", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center" }}>
-            {unread > 9 ? "9+" : unread}
-          </span>
-        )}
+        <Icon name="bell" size={18} />
+        {unread > 0 && <span className="notif-dot">{unread > 9 ? "9+" : unread}</span>}
       </button>
+
       <ThemeToggle />
-      <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion">⏻</button>
+      <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion">
+        <Icon name="power" size={18} />
+      </button>
     </header>
   );
 }

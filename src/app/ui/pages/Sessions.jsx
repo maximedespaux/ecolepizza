@@ -1,11 +1,13 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSessions, getFormations, createSession, getLocations } from "../api/apiClient.js";
+import { getSessions, getFormations, createSession, getLocations, getEnrollments } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import EmptyState from "../components/EmptyState.jsx";
+import { Icon } from "../components/Icon.jsx";
 import { SelectField, Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
-import { colorOf } from "../lib/format.js";
+import { colorOf, initials } from "../lib/format.js";
 import { MONTHS, DOW, monthMatrix, ymd, isWeekend, inRange, isToday, isoWeek } from "../lib/calendar.js";
 
 function Sessions() {
@@ -15,6 +17,7 @@ function Sessions() {
   const [month, setMonth] = useState(now.getMonth());
   const [view, setView] = useState("mois"); // mois | trimestre | semestre | annee
   const [sessions, setSessions] = useState([]);
+  const [enrollments, setEnrollments] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [locations, setLocations] = useState([]);
   const [status, setStatus] = useState(null);
@@ -34,7 +37,25 @@ function Sessions() {
     loadSessions();
     getFormations().then((r) => setPrograms(r.data)).catch(() => {});
     getLocations().then((r) => setLocations(r.data || [])).catch(() => {});
+    getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
   }, []);
+
+  const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "—");
+
+  // Stagiaires inscrits regroupés par session (pour l'agenda).
+  const studentsBySession = useMemo(() => {
+    const map = {};
+    for (const e of enrollments) (map[e.session_id] ||= []).push(e);
+    return map;
+  }, [enrollments]);
+
+  // Prochaines sessions (à venir / en cours), triées par date de début.
+  const upcoming = useMemo(() => {
+    const today = ymd(new Date());
+    return sessions
+      .filter((s) => s.start_date && (s.end_date || s.start_date) >= today)
+      .sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)));
+  }, [sessions]);
 
   const weeks = useMemo(() => monthMatrix(year, month), [year, month]);
 
@@ -89,6 +110,13 @@ function Sessions() {
     return sessions.filter((s) => inRange(dayStr, s.start_date, s.end_date));
   }
 
+  // Ouvre le modal d'ajout avec le jour cliqué pré-rempli (modifiable).
+  function openAdd(dateStr) {
+    setStatus(null);
+    setAddForm({ program_id: "", start_date: dateStr || ymd(now) });
+    setShowAdd(true);
+  }
+
   async function handleAdd(e) {
     e.preventDefault();
     setStatus(null);
@@ -109,9 +137,12 @@ function Sessions() {
 
   // Programmes réellement planifiés ce mois (pour la légende).
   const legend = useMemo(() => {
-    const seen = new Map();
-    for (const s of sessions) seen.set(s.program_code, s.program_title);
-    return [...seen.entries()];
+    const m = new Map();
+    for (const s of sessions) {
+      const cur = m.get(s.program_code) || { title: s.program_title, n: 0 };
+      cur.n += 1; m.set(s.program_code, cur);
+    }
+    return [...m.entries()];
   }, [sessions]);
 
   return (
@@ -119,60 +150,73 @@ function Sessions() {
       <PageHead
         eyebrow="Planning"
         title="Sessions"
-        lead="Calendrier des formations. Ajoutez une formation en choisissant son premier jour ; la durée colore les jours suivants."
+        lead="Calendrier des formations. Cliquez un jour libre pour ajouter une formation, ou une case occupée pour ouvrir la session. La durée colore les jours suivants."
         actions={
-          <button className="btn primary" onClick={() => setShowAdd((v) => !v)}>
-            {showAdd ? "✕ Fermer" : "＋ Ajouter une formation"}
+          <button className="btn primary" onClick={() => openAdd(ymd(now))}>
+            <Icon name="plus" size={14} /> Ajouter une formation
           </button>
         }
       />
       <StatusMessage status={status} />
 
       {showAdd && (
-        <Card title="Ajouter une formation" className="fade" more={<button className="btn sm ghost" onClick={() => setShowAdd(false)}>✕</button>}>
-          <form onSubmit={handleAdd}>
-            <div className="row2">
-              <SelectField
-                label="Formation"
-                value={addForm.program_id}
-                onChange={(e) => setAddForm((f) => ({ ...f, program_id: e.target.value }))}
-                required
-              >
-                <option value="">— Choisir —</option>
-                {programs.map((p) => (
-                  <option key={p.id} value={p.id}>{p.code} — {p.title} ({p.days} j)</option>
-                ))}
-              </SelectField>
-              <Field
-                label="Premier jour"
-                type="date"
-                value={addForm.start_date}
-                onChange={(e) => setAddForm((f) => ({ ...f, start_date: e.target.value }))}
-                required
-              />
+        <div className="overlay" onClick={() => setShowAdd(false)}>
+          <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="mhead">
+              <h3>Ajouter une formation</h3>
+              <button className="x" onClick={() => setShowAdd(false)} aria-label="Fermer"><Icon name="x" size={16} /></button>
             </div>
-            {locations.length > 0 && (
-              <SelectField
-                label="Lieu de formation"
-                value={addForm.location_id || ""}
-                onChange={(e) => setAddForm((f) => ({ ...f, location_id: e.target.value }))}
-              >
-                <option value="">— Aucun / à définir —</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}{l.town ? ` — ${l.town}` : ""}</option>
-                ))}
-              </SelectField>
-            )}
-            <button type="submit" className="btn primary">Ajouter au calendrier</button>
-          </form>
-        </Card>
+            <form onSubmit={handleAdd}>
+              <div className="mbody">
+                <p className="sub" style={{ marginTop: 0 }}>
+                  Choisissez la formation — le premier jour est pré-rempli (modifiable). La durée colore les jours suivants.
+                </p>
+                <StatusMessage status={status} />
+                <SelectField
+                  label="Formation"
+                  value={addForm.program_id}
+                  onChange={(e) => setAddForm((f) => ({ ...f, program_id: e.target.value }))}
+                  required
+                >
+                  <option value="">— Choisir —</option>
+                  {programs.map((p) => (
+                    <option key={p.id} value={p.id}>{p.code} — {p.title} ({p.days} j)</option>
+                  ))}
+                </SelectField>
+                <Field
+                  label="Premier jour"
+                  type="date"
+                  value={addForm.start_date}
+                  onChange={(e) => setAddForm((f) => ({ ...f, start_date: e.target.value }))}
+                  required
+                />
+                {locations.length > 0 && (
+                  <SelectField
+                    label="Lieu de formation"
+                    value={addForm.location_id || ""}
+                    onChange={(e) => setAddForm((f) => ({ ...f, location_id: e.target.value }))}
+                  >
+                    <option value="">— Aucun / à définir —</option>
+                    {locations.map((l) => (
+                      <option key={l.id} value={l.id}>{l.name}{l.town ? ` — ${l.town}` : ""}</option>
+                    ))}
+                  </SelectField>
+                )}
+              </div>
+              <div className="mfoot">
+                <button type="button" className="btn ghost" onClick={() => setShowAdd(false)}>Annuler</button>
+                <button type="submit" className="btn primary"><Icon name="plus" size={14} /> Ajouter au calendrier</button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       <Card>
         <div className="cal-toolbar">
-          <button className="btn sm" onClick={() => shift(-1)}>←</button>
+          <button className="btn sm" onClick={() => shift(-1)} aria-label="Période précédente"><Icon name="chevron-left" size={16} /></button>
           <h2 className="cal-title" style={{ textTransform: "capitalize" }}>{periodTitle}</h2>
-          <button className="btn sm" onClick={() => shift(1)}>→</button>
+          <button className="btn sm" onClick={() => shift(1)} aria-label="Période suivante"><Icon name="chevron-right" size={16} /></button>
           <div style={{ display: "flex", gap: 4, marginLeft: 12 }}>
             {[["mois", "Mois"], ["trimestre", "Trimestre"], ["semestre", "Semestre"], ["annee", "Année"]].map(([v, l]) => (
               <button key={v} className={"btn sm " + (view === v ? "primary" : "ghost")} onClick={() => setView(v)}>{l}</button>
@@ -187,7 +231,7 @@ function Sessions() {
         {view !== "mois" ? (
           <div className="cal-multi">
             {monthsToShow.map(({ y, m }) => (
-              <MiniMonth key={`${y}-${m}`} y={y} m={m} sessionsOn={sessionsOn} onOpen={(id) => navigate(`/sessions/${id}`)} />
+              <MiniMonth key={`${y}-${m}`} y={y} m={m} sessionsOn={sessionsOn} onOpen={(id) => navigate(`/sessions/${id}`)} onAdd={openAdd} />
             ))}
           </div>
         ) : (
@@ -210,10 +254,13 @@ function Sessions() {
                 const daySessions = wknd ? [] : sessionsOn(dayStr);
                 const byLane = {};
                 for (const s of daySessions) byLane[laneOf[s.id] ?? 0] = s;
+                const addable = inMonth && !wknd;
                 return (
                   <div
                     key={dayStr}
-                    className={`cal-cell${inMonth ? "" : " out"}${wknd ? " wknd" : ""}${isToday(day) ? " today" : ""}`}
+                    className={`cal-cell${inMonth ? "" : " out"}${wknd ? " wknd" : ""}${isToday(day) ? " today" : ""}${addable ? " addable" : ""}`}
+                    onClick={addable ? () => openAdd(dayStr) : undefined}
+                    title={addable ? "Ajouter une formation ce jour" : undefined}
                   >
                     <div className="cal-daynum">{day.getDate()}</div>
                     {Array.from({ length: weekLaneCount }, (_, i) => {
@@ -225,7 +272,7 @@ function Sessions() {
                           className="cal-evt"
                           style={{ background: colorOf(s.program_code) }}
                           title={`${s.program_title} — ${s.stagiaires} stagiaire(s)`}
-                          onClick={() => navigate(`/sessions/${s.id}`)}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/sessions/${s.id}`); }}
                         >
                           {s.program_code}
                           <span className="n">{s.stagiaires}</span>
@@ -243,11 +290,52 @@ function Sessions() {
 
         {legend.length > 0 && (
           <div className="cal-legend">
-            {legend.map(([code, title]) => (
+            {legend.map(([code, { title, n }]) => (
               <span key={code} className="cal-legitem">
-                <i style={{ background: colorOf(code) }} /> {code} — {title}
+                <i style={{ background: colorOf(code) }} /> <b>{code}</b> {title} <span className="cal-legn">{n}</span>
               </span>
             ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Prochaines sessions" style={{ marginTop: 16 }} more={<span className="hint">{upcoming.length} à venir</span>}>
+        {upcoming.length === 0 ? (
+          <EmptyState icon="calendar">Aucune session à venir.</EmptyState>
+        ) : (
+          <div className="sess-list">
+            {upcoming.map((s) => {
+              const studs = studentsBySession[s.id] || [];
+              const count = studs.length || s.stagiaires || 0;
+              const col = colorOf(s.program_code);
+              const open = () => navigate(`/sessions/${s.id}`);
+              return (
+                <div
+                  key={s.id}
+                  className="sess-item"
+                  role="button"
+                  tabIndex={0}
+                  onClick={open}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}
+                >
+                  <span className="sess-bar" style={{ background: col }} />
+                  <div className="sess-main">
+                    <div className="sess-top">
+                      <span className="sess-code" style={{ color: col, background: `color-mix(in srgb, ${col} 14%, transparent)` }}>{s.program_code}</span>
+                      <span className="sess-title">{s.program_title}</span>
+                    </div>
+                    <div className="sess-meta">
+                      <span className="sess-metaitem"><Icon name="calendar" size={13} /> {frDate(s.start_date)} → {frDate(s.end_date)}</span>
+                      <span className="sess-metaitem">S{s.week} · {s.year}</span>
+                    </div>
+                  </div>
+                  <div className="sess-people">
+                    <Avatars students={studs} />
+                    <span className="sess-count" style={{ color: col }}><Icon name="users" size={13} /> {count}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>
@@ -255,8 +343,36 @@ function Sessions() {
   );
 }
 
+// Palette d'avatars (initiales des stagiaires) — teintes de la charte.
+const AV_COLORS = ["#2c3371", "#dc3e37", "#ff6900", "#2f9e6f", "#7b3f9e", "#0072b2", "#b8860b", "#c0392b"];
+const avColor = (name) => AV_COLORS[[...(name || "?")].reduce((a, c) => a + c.charCodeAt(0), 0) % AV_COLORS.length];
+
+// Pile d'avatars (initiales) des stagiaires inscrits, avec « +N » au-delà de 6.
+function Avatars({ students }) {
+  if (students.length === 0) return <span className="sess-empty">Aucun inscrit</span>;
+  const shown = students.slice(0, 6);
+  const extra = students.length - shown.length;
+  return (
+    <div className="avatars">
+      {shown.map((st) => (
+        <span
+          key={st.id}
+          className="avatar-chip"
+          title={`${st.first_name} ${st.last_name}`}
+          style={{ background: avColor(`${st.first_name}${st.last_name}`) }}
+        >
+          {initials(st.first_name, st.last_name)}
+        </span>
+      ))}
+      {extra > 0 && <span className="avatar-chip more" title={`${extra} autre(s)`}>+{extra}</span>}
+    </div>
+  );
+}
+
 // Mini-calendrier compact d'un mois (vues trimestre / semestre / année).
-function MiniMonth({ y, m, sessionsOn, onOpen }) {
+// Case occupée → clic n'importe où ouvre la session (le point précis reste
+// cliquable si plusieurs) ; case libre → clic ajoute une formation ce jour.
+function MiniMonth({ y, m, sessionsOn, onOpen, onAdd }) {
   const days = monthMatrix(y, m).flat();
   return (
     <div className="cal-mini">
@@ -266,16 +382,26 @@ function MiniMonth({ y, m, sessionsOn, onOpen }) {
         {days.map((day) => {
           const dayStr = ymd(day);
           const inMonth = day.getMonth() === m;
-          const evts = isWeekend(day) ? [] : sessionsOn(dayStr);
+          const weekend = isWeekend(day);
+          const evts = weekend ? [] : sessionsOn(dayStr);
+          const has = evts.length > 0;
+          const addable = inMonth && !weekend && !has;
           return (
-            <div key={dayStr} className={`cal-mini-cell${inMonth ? "" : " out"}${isToday(day) ? " today" : ""}`}>
+            <div
+              key={dayStr}
+              className={`cal-mini-cell${inMonth ? "" : " out"}${isToday(day) ? " today" : ""}${has ? " openable" : ""}${addable ? " addable" : ""}`}
+              onClick={has ? () => onOpen(evts[0].id) : (addable ? () => onAdd(dayStr) : undefined)}
+              title={has
+                ? (evts.length > 1 ? `${evts.length} sessions — cliquez pour ouvrir (ou un point précis)` : "Cliquez pour ouvrir la session")
+                : (addable ? "Ajouter une formation ce jour" : undefined)}
+            >
               <span className="d">{day.getDate()}</span>
-              {evts.length > 0 && (
+              {has && (
                 <span className="dots">
                   {evts.slice(0, 4).map((s) => (
                     <i key={s.id} style={{ background: colorOf(s.program_code) }}
                       title={`${s.program_code} — ${s.program_title} · ${s.stagiaires} stag.`}
-                      onClick={() => onOpen(s.id)} />
+                      onClick={(e) => { e.stopPropagation(); onOpen(s.id); }} />
                   ))}
                 </span>
               )}

@@ -10,7 +10,7 @@ import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
 import QuizModal from "../components/QuizModal.jsx";
 
-const STATUS = { SIGNE: ["Signé ✓", "g"], ENVOYE: ["Reçu", "a"], CONSULTE: ["Consulté", "a"], A_FAIRE: ["—", "n"] };
+const STATUS = { SIGNE: ["Signé", "g"], ENVOYE: ["Reçu", "a"], CONSULTE: ["Consulté", "a"], A_FAIRE: ["—", "n"] };
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
 
@@ -55,7 +55,7 @@ function StudentFormationDetail() {
       {data && (
         <Card title="Documents de la formation">
           {(!data.documents || data.documents.length === 0) ? (
-            <EmptyState icon="📄">Aucun document disponible.</EmptyState>
+            <EmptyState icon="file-text">Aucun document disponible.</EmptyState>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {data.documents.map((d) => {
@@ -68,7 +68,7 @@ function StudentFormationDetail() {
                     </span>
                     {d.quiz_id ? (
                       <>
-                        <Badge tone={d.status === "SIGNE" ? "g" : "b"}>{d.status === "SIGNE" ? "Répondu ✓" : "QCM à faire"}</Badge>
+                        <Badge tone={d.status === "SIGNE" ? "g" : "b"}>{d.status === "SIGNE" ? "Répondu" : "QCM à faire"}</Badge>
                         <button className="btn sm primary" onClick={() => setQuizDoc(d.id)}>
                           {d.status === "SIGNE" ? "Voir mon QCM" : "Répondre au QCM"}
                         </button>
@@ -92,7 +92,7 @@ function StudentFormationDetail() {
       {data && (
         <Card title="Émargement — ma présence">
           {(!data.emargement || data.emargement.length === 0) ? (
-            <EmptyState icon="✍️">Aucune demi-journée à émarger pour cette session.</EmptyState>
+            <EmptyState icon="pencil">Aucune demi-journée à émarger pour cette session.</EmptyState>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {data.emargement.map((r) => {

@@ -1,3 +1,5 @@
+import { Icon } from "./Icon.jsx";
+
 // Feuille de route documentaire : une étape par document, colorée par état
 // (gris = à faire, orange = en cours, vert = terminé).
 
@@ -22,7 +24,7 @@ function Roadmap({ steps }) {
         return (
           <div className="rm-step" key={doc.type + doc.num}>
             <div className="rm-rail">
-              <span className={`rm-dot ${state}`}>{state === "done" ? "✓" : doc.num}</span>
+              <span className={`rm-dot ${state}`}>{state === "done" ? <Icon name="check" size={14} /> : doc.num}</span>
               {!last && <span className={`rm-conn ${state === "done" ? "done" : ""}`} />}
             </div>
             <div className="rm-body">
