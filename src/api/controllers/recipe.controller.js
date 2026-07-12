@@ -178,9 +178,11 @@ const listShared = async (req, res) => {
             try {
                 const [likes] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_like WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
                 const [coms] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_comment WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
+                const [mineLikes] = await conn.query('SELECT recipe_id FROM recipe_like WHERE user_id = ? AND recipe_id IN (?)', [req.user.id, ids]);
                 const lm = Object.fromEntries(likes.map((x) => [x.recipe_id, x.n]));
                 const cm = Object.fromEntries(coms.map((x) => [x.recipe_id, x.n]));
-                rows.forEach((r) => { r.like_count = lm[r.id] || 0; r.comment_count = cm[r.id] || 0; });
+                const liked = new Set(mineLikes.map((x) => x.recipe_id));
+                rows.forEach((r) => { r.like_count = lm[r.id] || 0; r.comment_count = cm[r.id] || 0; r.liked = liked.has(r.id); });
             } catch (e) { if (!noTable(e)) throw e; }
         }
         res.json({ data: rows });
@@ -352,6 +354,23 @@ const addComment = async (req, res) => {
     }
 };
 
+/** PUT /api/recipes/:id/comments/:cid — modifie son propre commentaire. */
+const updateComment = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const body = String((req.body || {}).body || '').trim().slice(0, 2000);
+        if (!body) return res.status(422).json({ message: 'Commentaire vide.' });
+        const [[c]] = await conn.query('SELECT user_id, author_name FROM recipe_comment WHERE id = ? AND recipe_id = ?', [req.params.cid, req.params.id]);
+        if (!c) return res.status(404).json({ message: 'Commentaire introuvable.' });
+        if (c.user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut modifier.' });
+        await conn.query('UPDATE recipe_comment SET body = ? WHERE id = ?', [body, req.params.cid]);
+        res.json({ data: { id: req.params.cid, user_id: req.user.id, author_name: c.author_name, body, mine: true } });
+    } catch (err) {
+        console.error('Erreur modification commentaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** DELETE /api/recipes/:id/comments/:cid — supprime son propre commentaire. */
 const deleteComment = async (req, res) => {
     try {
@@ -367,4 +386,4 @@ const deleteComment = async (req, res) => {
     }
 };
 
-module.exports = { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, toggleLike, addComment, deleteComment };
+module.exports = { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, toggleLike, addComment, updateComment, deleteComment };

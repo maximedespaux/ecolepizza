@@ -5,11 +5,12 @@ import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
-import { getSharedRecipes, getRecipe, createRecipe, likeRecipe, addRecipeComment, deleteRecipeComment } from "../api/apiClient.js";
+import { getSharedRecipes, getRecipe, createRecipe, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment } from "../api/apiClient.js";
 
 /**
  * Communauté — les fiches techniques partagées par les stagiaires de l'organisme.
- * Consultation en lecture seule ; on peut copier une recette dans ses propres recettes.
+ * Chaque carte porte son bouton « j'aime » (❤️) et sa section commentaires en ligne
+ * (ajouter / modifier / supprimer les siens). Le détail (ingrédients + coût) s'ouvre à droite.
  */
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 // Hashtags (#tag) de la description → badges.
@@ -31,45 +32,69 @@ function costs(d) {
 
 export default function Communaute() {
   const [list, setList] = useState([]);
-  const [openId, setOpenId] = useState(null);
+  const [openId, setOpenId] = useState(null);       // fiche dont le détail est ouvert (droite)
   const [detail, setDetail] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [cbody, setCbody] = useState("");
+  const [likeState, setLikeState] = useState({});   // id -> { liked, count }
+  const [comments, setComments] = useState({});     // id -> [commentaire] (chargé à la demande)
+  const [threadOpen, setThreadOpen] = useState(null); // id dont le fil est déplié en ligne
+  const [draft, setDraft] = useState({});           // id -> texte du nouveau commentaire
+  const [editing, setEditing] = useState({});       // cid -> texte en cours d'édition
   const navigate = useNavigate();
 
-  useEffect(() => { getSharedRecipes().then((r) => setList(r.data || [])).catch(() => {}); }, []);
   useEffect(() => {
-    setCbody("");
+    getSharedRecipes().then((r) => {
+      const data = r.data || [];
+      setList(data);
+      const ls = {}; data.forEach((s) => { ls[s.id] = { liked: !!s.liked, count: s.like_count || 0 }; });
+      setLikeState(ls);
+    }).catch(() => {});
+  }, []);
+  useEffect(() => {
     if (!openId) { setDetail(null); return; }
-    getRecipe(openId).then((r) => setDetail(r.data)).catch(() => setDetail(null));
+    getRecipe(openId).then((r) => { setDetail(r.data); ingest(r.data); }).catch(() => setDetail(null));
   }, [openId]);
 
+  // Mémorise les infos sociales (likes + commentaires) renvoyées par getRecipe.
+  const ingest = (d) => {
+    setLikeState((m) => ({ ...m, [d.id]: { liked: !!d.liked, count: d.like_count || 0 } }));
+    setComments((m) => ({ ...m, [d.id]: d.comments || [] }));
+  };
+  const loadComments = (id) => { if (comments[id]) return; getRecipe(id).then((r) => ingest(r.data)).catch(() => {}); };
   const bumpList = (id, patch) => setList((ls) => ls.map((x) => (x.id === id ? { ...x, ...patch(x) } : x)));
+  const commentCount = (s) => (comments[s.id] ? comments[s.id].length : (s.comment_count || 0));
 
-  async function toggleLike() {
-    if (!detail) return;
+  async function toggleLike(id) {
     try {
-      const r = await likeRecipe(detail.id);
-      setDetail((d) => ({ ...d, liked: r.data.liked, like_count: r.data.like_count }));
-      bumpList(detail.id, () => ({ like_count: r.data.like_count }));
+      const r = await likeRecipe(id);
+      setLikeState((m) => ({ ...m, [id]: { liked: r.data.liked, count: r.data.like_count } }));
+      bumpList(id, () => ({ like_count: r.data.like_count, liked: r.data.liked }));
     } catch { /* ignore */ }
   }
-  async function submitComment() {
-    const body = cbody.trim();
-    if (!body || !detail) return;
+  async function submitComment(id) {
+    const body = (draft[id] || "").trim();
+    if (!body) return;
     try {
-      const r = await addRecipeComment(detail.id, body);
-      setDetail((d) => ({ ...d, comments: [...(d.comments || []), r.data] }));
-      bumpList(detail.id, (x) => ({ comment_count: (x.comment_count || 0) + 1 }));
-      setCbody("");
+      const r = await addRecipeComment(id, body);
+      setComments((m) => ({ ...m, [id]: [...(m[id] || []), r.data] }));
+      bumpList(id, (x) => ({ comment_count: (x.comment_count || 0) + 1 }));
+      setDraft((m) => ({ ...m, [id]: "" }));
     } catch { /* ignore */ }
   }
-  async function delComment(cid) {
-    if (!detail) return;
+  async function saveEdit(id, cid) {
+    const body = (editing[cid] || "").trim();
+    if (!body) return;
     try {
-      await deleteRecipeComment(detail.id, cid);
-      setDetail((d) => ({ ...d, comments: (d.comments || []).filter((c) => c.id !== cid) }));
-      bumpList(detail.id, (x) => ({ comment_count: Math.max(0, (x.comment_count || 0) - 1) }));
+      const r = await updateRecipeComment(id, cid, body);
+      setComments((m) => ({ ...m, [id]: (m[id] || []).map((c) => (c.id === cid ? { ...c, body: r.data.body } : c)) }));
+      setEditing((m) => { const n = { ...m }; delete n[cid]; return n; });
+    } catch { /* ignore */ }
+  }
+  async function delComment(id, cid) {
+    try {
+      await deleteRecipeComment(id, cid);
+      setComments((m) => ({ ...m, [id]: (m[id] || []).filter((c) => c.id !== cid) }));
+      bumpList(id, (x) => ({ comment_count: Math.max(0, (x.comment_count || 0) - 1) }));
     } catch { /* ignore */ }
   }
 
@@ -82,41 +107,91 @@ export default function Communaute() {
     finally { setBusy(false); }
   }
 
+  // Fil de commentaires réutilisé (carte en ligne + détail).
+  const Thread = ({ id }) => {
+    const cs = comments[id];
+    return (
+      <div className="comm-thread">
+        {!cs ? <p className="hint" style={{ margin: 0 }}>Chargement…</p> : cs.length === 0 ? (
+          <p className="hint" style={{ margin: 0 }}>Sois le premier à commenter cette fiche.</p>
+        ) : cs.map((c) => (
+          <div key={c.id} className="comm-c">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 12 }}><b>{c.author_name || "Stagiaire"}</b> <span className="hint">· {c.created_at || "à l'instant"}</span></span>
+              {editing[c.id] != null ? (
+                <div style={{ marginTop: 4 }}>
+                  <textarea className="inp" rows={2} value={editing[c.id]} onChange={(e) => setEditing((m) => ({ ...m, [c.id]: e.target.value }))} style={{ width: "100%" }} />
+                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                    <button className="btn sm primary" disabled={!editing[c.id].trim()} onClick={() => saveEdit(id, c.id)}><Icon name="check" size={12} /> Enregistrer</button>
+                    <button className="btn sm ghost" onClick={() => setEditing((m) => { const n = { ...m }; delete n[c.id]; return n; })}>Annuler</button>
+                  </div>
+                </div>
+              ) : (
+                <span style={{ display: "block", fontSize: 13.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</span>
+              )}
+            </div>
+            {c.mine && editing[c.id] == null && (
+              <span style={{ display: "flex", gap: 2 }}>
+                <button className="iconbtn" title="Modifier" onClick={() => setEditing((m) => ({ ...m, [c.id]: c.body }))}><Icon name="pencil" size={13} /></button>
+                <button className="iconbtn del" title="Supprimer" onClick={() => delComment(id, c.id)}><Icon name="trash" size={13} /></button>
+              </span>
+            )}
+          </div>
+        ))}
+        <textarea className="inp" rows={2} value={draft[id] || ""} onChange={(e) => setDraft((m) => ({ ...m, [id]: e.target.value }))} placeholder="Ajoute un commentaire…" style={{ marginTop: 10, width: "100%" }} />
+        <button className="btn sm primary" disabled={!(draft[id] || "").trim()} onClick={() => submitComment(id)} style={{ marginTop: 6 }}><Icon name="send" size={13} /> Commenter</button>
+      </div>
+    );
+  };
+
   return (
     <>
       <PageHead eyebrow="Outils · communauté" title="Communauté"
-        lead="Les fiches techniques partagées par les autres stagiaires. Inspire-toi, ou copie-en une dans tes recettes pour l'adapter." />
+        lead="Les fiches techniques partagées par les autres stagiaires. Aime, commente, ou copie-en une dans tes recettes pour l'adapter." />
 
       {list.length === 0 ? (
         <EmptyState icon="users">Aucune recette partagée pour l'instant. Sois le premier : partage une fiche technique depuis « Fiche technique ».</EmptyState>
       ) : (
         <div className="grid cols-2" style={{ alignItems: "start" }}>
           <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Recettes partagées ({list.length})</span>}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {list.map((s) => (
-                <button key={s.id} className={"comm-row" + (openId === s.id ? " on" : "")} onClick={() => setOpenId((cur) => (cur === s.id ? null : s.id))}>
-                  <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                    <b>{s.name}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      {s.type} · par {s.author_name || "Stagiaire"}
-                      {(s.like_count > 0 || s.comment_count > 0) && <span> · ❤️ {s.like_count || 0} · 💬 {s.comment_count || 0}</span>}
-                    </span>
-                    <Tags text={s.description} />
-                  </span>
-                  <Icon name="chevron-right" size={16} />
-                </button>
-              ))}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {list.map((s) => {
+                const lk = likeState[s.id] || { liked: false, count: s.like_count || 0 };
+                const tOpen = threadOpen === s.id;
+                return (
+                  <div key={s.id} className={"comm-card" + (openId === s.id ? " on" : "")}>
+                    <div className="comm-main" onClick={() => setOpenId((cur) => (cur === s.id ? null : s.id))}>
+                      <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                        <b>{s.name}</b>
+                        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.type} · par {s.author_name || "Stagiaire"} · {s.updated_at}</span>
+                        <Tags text={s.description} />
+                      </span>
+                      <Icon name={openId === s.id ? "chevron-down" : "chevron-right"} size={16} />
+                    </div>
+                    <div className="comm-bar">
+                      <button className={"btn sm " + (lk.liked ? "primary" : "ghost")} onClick={() => toggleLike(s.id)} title={lk.liked ? "Je n'aime plus" : "J'aime"}>
+                        <span aria-hidden>{lk.liked ? "❤️" : "🤍"}</span> {lk.count}
+                      </button>
+                      <button className={"btn sm " + (tOpen ? "primary" : "ghost")} onClick={() => { setThreadOpen(tOpen ? null : s.id); if (!tOpen) loadComments(s.id); }}>
+                        <span aria-hidden>💬</span> {commentCount(s)}
+                      </button>
+                      <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Copier dans mes recettes"><Icon name="plus" size={13} /> Copier</button>
+                    </div>
+                    {tOpen && <Thread id={s.id} />}
+                  </div>
+                );
+              })}
             </div>
           </Card>
 
           <div>
             {!detail ? (
-              <Card><p className="hint" style={{ margin: 0 }}>Sélectionne une recette pour voir le détail.</p></Card>
+              <Card><p className="hint" style={{ margin: 0 }}>Sélectionne une recette pour voir le détail (ingrédients &amp; coût).</p></Card>
             ) : (
               <Card title={<span className="card-ttl"><Icon name="pizza" size={16} /> {detail.name}</span>}
                 more={<span style={{ display: "flex", gap: 8 }}>
-                  <button className={"btn sm " + (detail.liked ? "primary" : "ghost")} onClick={toggleLike} title={detail.liked ? "Je n'aime plus" : "J'aime"}>
-                    <span aria-hidden>{detail.liked ? "❤️" : "🤍"}</span> {detail.like_count || 0}
+                  <button className={"btn sm " + ((likeState[detail.id]?.liked) ? "primary" : "ghost")} onClick={() => toggleLike(detail.id)} title={(likeState[detail.id]?.liked) ? "Je n'aime plus" : "J'aime"}>
+                    <span aria-hidden>{(likeState[detail.id]?.liked) ? "❤️" : "🤍"}</span> {likeState[detail.id]?.count || 0}
                   </button>
                   <button className="btn sm primary" disabled={busy} onClick={() => copyToMine(detail)}><Icon name="plus" size={13} /> Copier</button>
                 </span>}>
@@ -139,24 +214,9 @@ export default function Communaute() {
                     </div>
                   </>
                 ); })()}
-
-                {/* Commentaires */}
                 <div style={{ marginTop: 18, borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
-                  <div className="card-ttl" style={{ fontSize: 14, marginBottom: 10 }}>💬 Commentaires ({(detail.comments || []).length})</div>
-                  {(detail.comments || []).length === 0 && <p className="hint" style={{ margin: "0 0 10px" }}>Sois le premier à commenter cette fiche.</p>}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {(detail.comments || []).map((c) => (
-                      <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ fontSize: 12 }}><b>{c.author_name || "Stagiaire"}</b> <span className="hint">· {c.created_at}</span></span>
-                          <span style={{ display: "block", fontSize: 13.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</span>
-                        </span>
-                        {c.mine && <button className="iconbtn del" title="Supprimer" onClick={() => delComment(c.id)}><Icon name="trash" size={13} /></button>}
-                      </div>
-                    ))}
-                  </div>
-                  <textarea className="inp" rows={2} value={cbody} onChange={(e) => setCbody(e.target.value)} placeholder="Ajoute un commentaire…" style={{ marginTop: 12, width: "100%" }} />
-                  <button className="btn sm primary" disabled={!cbody.trim()} onClick={submitComment} style={{ marginTop: 6 }}><Icon name="send" size={13} /> Commenter</button>
+                  <div className="card-ttl" style={{ fontSize: 14, marginBottom: 10 }}>💬 Commentaires ({(comments[detail.id] || []).length})</div>
+                  <Thread id={detail.id} />
                 </div>
               </Card>
             )}

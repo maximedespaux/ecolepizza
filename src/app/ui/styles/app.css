@@ -881,6 +881,15 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Communauté — liste des recettes partagées */
 .comm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border:none;background:none;border-bottom:1px solid var(--border-soft);cursor:pointer;color:var(--text)}
 .comm-row:hover,.comm-row.on{background:var(--surface2)}
+/* Carte communauté : en-tête cliquable + barre d'actions (like/commentaires/copier) + fil */
+.comm-card{border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s}
+.comm-card.on{border-color:color-mix(in srgb,var(--ember1) 40%,var(--border))}
+.comm-main{display:flex;align-items:center;gap:10px;padding:11px 12px;cursor:pointer}
+.comm-main:hover{background:var(--surface2)}
+.comm-bar{display:flex;gap:8px;padding:0 12px 11px;flex-wrap:wrap}
+.comm-thread{padding:12px;border-top:1px solid var(--border-soft);background:var(--surface2)}
+.comm-c{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border-soft)}
+.comm-c:first-child{padding-top:0}
 
 /* Fiche technique — tableau de garniture aligné et espacé */
 .ing-table{display:flex;flex-direction:column;gap:9px}
