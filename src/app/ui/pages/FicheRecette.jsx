@@ -114,76 +114,79 @@ function FicheRecette() {
       <PageHead eyebrow="Outils · fiches techniques" title="Fiche technique"
         lead="Compose ta pizza avec les ingrédients du catalogue, calcule le coût matière et fixe ton prix. Garde-la pour toi ou partage-la à la communauté." />
 
-      <div className="grid cols-2">
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        {/* Ligne 1 — identité de la pizza + empâtement */}
+        <div className="grid cols-2" style={{ gap: 22, alignItems: "start" }}>
           <Card title={<span className="card-ttl"><Icon name="pizza" size={16} /> La pizza</span>}>
-            <div className="row2">
-              <div className="field"><label>Nom de la recette</label>
-                <input className="inp" value={r.name} onChange={set("name")} placeholder="Ex. Margherita du chef" /></div>
-              <div className="field"><label>Type</label>
-                <select className="inp" value={r.type} onChange={set("type")}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
-            </div>
-            <div className="field"><label>Description</label>
-              <textarea className="inp" rows={3} value={r.description} onChange={set("description")} placeholder="Style, histoire, cuisson, dressage…" /></div>
+            <div className="field"><label>Nom de la recette</label>
+              <input className="inp" value={r.name} onChange={set("name")} placeholder="Ex. Margherita du chef" /></div>
+            <div className="field"><label>Type</label>
+              <select className="inp" value={r.type} onChange={set("type")}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
+            <div className="field" style={{ marginBottom: 0 }}><label>Description</label>
+              <textarea className="inp" rows={4} value={r.description} onChange={set("description")} placeholder="Style, histoire, cuisson, dressage…" /></div>
           </Card>
 
           <Card title={<span className="card-ttl"><Icon name="settings" size={16} /> Empâtement</span>}>
-            <div className="row3">
-              <div className="field"><label>Nb de pizzas</label><input className="inp" type="number" min="1" value={r.servings} onChange={set("servings")} /></div>
-              <div className="field"><label>Poids pâton (g)</label><input className="inp" type="number" min="100" value={r.paton_g} onChange={set("paton_g")} /></div>
-              <div className="field"><label>Prix farine (€/kg)</label><input className="inp" type="number" step="0.01" value={r.flour_price} onChange={set("flour_price")} /></div>
-            </div>
-            <p className="hint" style={{ margin: 0 }}>≈ {flourBatchKg.toFixed(2)} kg de farine ({nb} pizzas) · coût pâte <b>{euro(doughPerPizza)}</b> / pizza</p>
-          </Card>
-
-          <Card title={<span className="card-ttl"><Icon name="list-checks" size={16} /> Garniture</span>}
-            more={<button className="btn sm ghost" onClick={addIng}><Icon name="plus" size={13} /> Ingrédient</button>}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {r.ingredients.map((t, i) => (
-                <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <IngredientPicker value={t.label} onPick={(p) => pickProduct(i, p)} onText={(v) => setIng(i, { label: v, product_id: null })} />
-                  <input className="inp" style={{ width: 60, flex: "0 0 auto" }} type="number" title="Quantité" value={t.qty} onChange={(e) => setIng(i, { qty: e.target.value })} />
-                  <select className="inp" style={{ width: 72, flex: "0 0 auto" }} value={t.unit} onChange={(e) => setIng(i, { unit: e.target.value })}><option value="g">g</option><option value="piece">pièce</option></select>
-                  <input className="inp" style={{ width: 72, flex: "0 0 auto" }} type="number" step="0.01" title={t.unit === "g" ? "€/kg" : "€/pièce"} value={t.unit_price} onChange={(e) => setIng(i, { unit_price: e.target.value })} />
-                  <span className="mono" style={{ width: 56, textAlign: "right", fontSize: 12 }}>{euro(lineCost(t))}</span>
-                  <button className="iconbtn del" title="Retirer" onClick={() => delIng(i)}><Icon name="trash" size={14} /></button>
-                </div>
-              ))}
-            </div>
-            <p className="hint" style={{ marginBottom: 0 }}>Tape un ingrédient pour le choisir dans le catalogue (prix pré-rempli). Coût garniture : <b>{euro(toppingPerPizza)}</b> / pizza</p>
+            <div className="field"><label>Nombre de pizzas</label><input className="inp" type="number" min="1" value={r.servings} onChange={set("servings")} /></div>
+            <div className="field"><label>Poids d'un pâton (g)</label><input className="inp" type="number" min="100" value={r.paton_g} onChange={set("paton_g")} /></div>
+            <div className="field" style={{ marginBottom: 12 }}><label>Prix de la farine (€/kg)</label><input className="inp" type="number" step="0.01" value={r.flour_price} onChange={set("flour_price")} /></div>
+            <p className="hint" style={{ margin: 0 }}>≈ {flourBatchKg.toFixed(2)} kg de farine pour {nb} pizzas · coût pâte <b>{euro(doughPerPizza)}</b> / pizza</p>
           </Card>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Ligne 2 — garniture, pleine largeur avec en-têtes de colonnes */}
+        <Card title={<span className="card-ttl"><Icon name="list-checks" size={16} /> Garniture <span className="hint" style={{ fontWeight: 400 }}>(par pizza)</span></span>}
+          more={<button className="btn sm ghost" onClick={addIng}><Icon name="plus" size={13} /> Ajouter un ingrédient</button>}>
+          <div className="ing-table">
+            <div className="ing-row ing-head">
+              <span>Ingrédient</span><span>Quantité</span><span>Unité</span><span>Prix</span><span>Coût / pizza</span><span />
+            </div>
+            {r.ingredients.map((t, i) => (
+              <div className="ing-row" key={i}>
+                <IngredientPicker value={t.label} onPick={(p) => pickProduct(i, p)} onText={(v) => setIng(i, { label: v, product_id: null })} />
+                <input className="inp" type="number" title="Quantité" value={t.qty} onChange={(e) => setIng(i, { qty: e.target.value })} />
+                <select className="inp" value={t.unit} onChange={(e) => setIng(i, { unit: e.target.value })}><option value="g">g</option><option value="piece">pièce</option></select>
+                <input className="inp" type="number" step="0.01" title={t.unit === "g" ? "€/kg" : "€/pièce"} placeholder={t.unit === "g" ? "€/kg" : "€/pc"} value={t.unit_price} onChange={(e) => setIng(i, { unit_price: e.target.value })} />
+                <span className="mono" style={{ textAlign: "right", fontWeight: 600 }}>{euro(lineCost(t))}</span>
+                <button className="iconbtn del" title="Retirer" onClick={() => delIng(i)}><Icon name="trash" size={14} /></button>
+              </div>
+            ))}
+            {r.ingredients.length === 0 && <p className="hint" style={{ margin: "6px 2px" }}>Aucun ingrédient. Clique « Ajouter un ingrédient ».</p>}
+          </div>
+          <p className="hint" style={{ margin: "14px 0 0" }}>Tape un nom pour choisir un produit du catalogue Metro (le prix se remplit tout seul). Coût garniture : <b>{euro(toppingPerPizza)}</b> / pizza</p>
+        </Card>
+
+        {/* Ligne 3 — prix conseillé + mes recettes */}
+        <div className="grid cols-2" style={{ gap: 22, alignItems: "start" }}>
           <div className="card dough-result">
             <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{r.name || "Nouvelle recette"} · {r.type}</div>
-            <div style={{ font: "800 26px/1.1 var(--font-d)", margin: "6px 0 2px" }}>{euro(pricePerPizza)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pizza conseillé</span></div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
+            <div style={{ font: "800 30px/1.1 var(--font-d)", margin: "8px 0 2px" }}>{euro(pricePerPizza)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pizza conseillé</span></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
               <Row label="Coût matière total" value={euro(totalCost)} />
               <Row label="Coût par pizza" value={euro(perPizza)} />
               <Row label={`Marge (${r.margin_pct} %)`} value={euro(marginEur)} accent />
             </div>
-            <div style={{ marginTop: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "rgba(255,255,255,.7)", marginBottom: 4 }}><span>Marge sur coût</span><b>{r.margin_pct} %</b></div>
+            <div style={{ marginTop: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "rgba(255,255,255,.7)", marginBottom: 6 }}><span>Marge sur coût</span><b>{r.margin_pct} %</b></div>
               <input type="range" min="0" max="300" step="5" value={r.margin_pct} onChange={set("margin_pct")} style={{ width: "100%", accentColor: "var(--gold)" }} />
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
               <button className="btn primary" onClick={() => persist()} disabled={busy} style={{ flex: 1, justifyContent: "center" }}><Icon name="check" size={15} /> {r.id ? "Enregistrer" : "Créer"}</button>
               <button className={"btn " + (shared ? "primary" : "ghost")} onClick={() => persist({ visibility: shared ? "PRIVATE" : "SHARED" })} disabled={busy}
                 title={shared ? "Rendre privée" : "Partager à la communauté"} style={shared ? null : { color: "rgba(255,255,255,.85)", borderColor: "rgba(255,255,255,.35)" }}>
                 <Icon name={shared ? "users" : "send"} size={15} /> {shared ? "Partagée" : "Partager"}
               </button>
             </div>
-            {r.id && <button className="btn sm ghost" onClick={() => setR(NEW())} style={{ marginTop: 10, color: "rgba(255,255,255,.8)", borderColor: "rgba(255,255,255,.3)" }}><Icon name="plus" size={13} /> Nouvelle recette</button>}
+            {r.id && <button className="btn sm ghost" onClick={() => setR(NEW())} style={{ marginTop: 12, color: "rgba(255,255,255,.8)", borderColor: "rgba(255,255,255,.3)" }}><Icon name="plus" size={13} /> Nouvelle recette</button>}
           </div>
 
           <Card title={<span className="card-ttl"><Icon name="history" size={16} /> Mes recettes</span>}>
             {saved.length === 0 ? (
               <p className="hint" style={{ margin: 0 }}>Aucune recette enregistrée pour l'instant.</p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", flexDirection: "column" }}>
                 {saved.map((s) => (
-                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border-soft)" }}>
                     <span style={{ flex: 1, minWidth: 0 }}><b>{s.name}</b>
                       <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.type}{s.visibility === "SHARED" ? " · 🌍 partagée" : ""}</span></span>
                     <button className="btn sm ghost" onClick={() => openRecipe(s.id)}>Ouvrir</button>

@@ -881,3 +881,11 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Communauté — liste des recettes partagées */
 .comm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border:none;background:none;border-bottom:1px solid var(--border-soft);cursor:pointer;color:var(--text)}
 .comm-row:hover,.comm-row.on{background:var(--surface2)}
+
+/* Fiche technique — tableau de garniture aligné et espacé */
+.ing-table{display:flex;flex-direction:column;gap:9px}
+.ing-row{display:grid;grid-template-columns:minmax(0,1fr) 92px 96px 108px 96px 34px;gap:12px;align-items:center}
+.ing-row > .inp{width:100%}
+.ing-head{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);font-weight:700;padding:0 2px 4px;border-bottom:1px solid var(--border-soft);margin-bottom:2px}
+.ing-head span:nth-child(5){text-align:right}
+@media(max-width:720px){.ing-row{grid-template-columns:minmax(0,1fr) 70px 80px 88px 76px 30px;gap:8px}}
