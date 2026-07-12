@@ -420,8 +420,10 @@ function FicheRecette() {
           <Card title={<span className="card-ttl"><Icon name={isRecette ? "pizza" : "list-checks"} size={16} /> {isRecette ? "La pizza" : "La préparation"}</span>}>
             <div className="field"><label>Nom de la fiche</label>
               <input className="inp" value={r.name} onChange={set("name")} placeholder={isPrep ? "Ex. Sauce tomate San Marzano" : "Ex. Margherita du chef"} /></div>
-            <div className="field"><label>Type</label>
-              <select className="inp" value={r.type} onChange={set("type")}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
+            {isRecette && (
+              <div className="field"><label>Type</label>
+                <select className="inp" value={r.type} onChange={set("type")}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
+            )}
             <div className="field" style={{ marginBottom: 0 }}><label>Description <span className="hint" style={{ fontWeight: 400 }}>· #tags pour catégoriser</span></label>
               <textarea className="inp" rows={4} value={r.description} onChange={set("description")} placeholder="Style, histoire, cuisson… #signature #24h" />
               <Tags text={r.description} /></div>
@@ -571,7 +573,7 @@ function FicheRecette() {
         ) : isPate ? null : (
           <div className="card dough-result fr-result">
             <div>
-              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{r.name || "Nouvelle préparation"} · {r.type}</div>
+              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{r.name || "Nouvelle préparation"}</div>
               <div style={{ font: "800 32px/1.1 var(--font-d)", margin: "8px 0 2px" }}>
                 {euro(prep.per)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ {prep.unit}</span>
               </div>
@@ -636,7 +638,7 @@ function FicheRecette() {
                 <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border-soft)" }}>
                   <span className="fiche-tag">{s.kind === "PATE" ? "Pâte" : s.kind === "PREPARATION" ? "Prépa" : "Recette"}</span>
                   <span style={{ flex: 1, minWidth: 0 }}><b>{s.name}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.type}{s.visibility === "SHARED" ? " · 🌍 partagée" : ""}</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.kind === "PREPARATION" ? "Préparation" : s.type}{s.visibility === "SHARED" ? " · 🌍 partagée" : ""}</span>
                     <Tags text={s.description} /></span>
                   <button className="btn sm ghost" onClick={() => openRecipe(s.id)}>Ouvrir</button>
                   <button className="iconbtn del" title="Supprimer" onClick={() => removeRecipe(s.id)}><Icon name="trash" size={14} /></button>
