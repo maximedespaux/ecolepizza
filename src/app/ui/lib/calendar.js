@@ -24,7 +24,9 @@ export function monthMatrix(year, month) {
       dt.setDate(start.getDate() + w * 7 + d);
       days.push(dt);
     }
-    weeks.push(days);
+    // Ne garde la semaine que si elle contient au moins un jour du mois
+    // (sinon une semaine entièrement hors mois s'affiche en trop en fin de grille).
+    if (days.some((dt) => dt.getMonth() === month)) weeks.push(days);
   }
   return weeks;
 }

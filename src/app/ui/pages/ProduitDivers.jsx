@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
+import MoneyToggle from "../components/MoneyToggle.jsx";
 import { useNavigate } from "react-router-dom";
 import { getRevenues, deleteRevenue } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
@@ -49,7 +51,8 @@ function ProduitDivers() {
         title="Produit divers"
         lead="Historique des commissions, subventions et autres produits. Pour enregistrer une commission, rendez-vous sur la page Partenaires."
         actions={
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <MoneyToggle />
             <button className="btn ghost" onClick={() => navigate("/partenaires")}>＋ Enregistrer (Partenaires)</button>
             <select className="inp" value={annee} onChange={(e) => setAnnee(Number(e.target.value))} aria-label="Année">
               {YEARS.map((a) => <option key={a} value={a}>{a}</option>)}
@@ -59,7 +62,7 @@ function ProduitDivers() {
       />
       <StatusMessage status={status} />
 
-      <Card title={`Produits divers ${annee}`} more={<b className="tnum" style={{ color: "var(--navy)" }}>{euro(total)}</b>}>
+      <Card title={`Produits divers ${annee}`} more={<b className="tnum" style={{ color: "var(--blue)" }}>{euro(total)}</b>}>
         {loading ? <p className="lead" style={{ margin: 0 }}>Chargement…</p>
           : rows.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucun produit divers saisi.</p> : (
             <div>{rows.map((v) => (
@@ -71,8 +74,8 @@ function ProduitDivers() {
                     {v.partner_name ? ` · ${v.partner_name}` : ""} · {new Date(v.date).toLocaleDateString("fr-FR")}
                   </div>
                 </div>
-                <b className="tnum" style={{ color: "var(--navy)" }}>{euro(v.amount)}</b>
-                <button className="iconbtn del" title="Supprimer" onClick={() => del(v)}>🗑</button>
+                <b className="tnum" style={{ color: "var(--blue)" }}>{euro(v.amount)}</b>
+                <button className="iconbtn del" title="Supprimer" onClick={() => del(v)}><Icon name="trash" size={15} /></button>
               </div>
             ))}</div>
           )}

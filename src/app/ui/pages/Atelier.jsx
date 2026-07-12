@@ -15,7 +15,7 @@ function Slider({ label, val, unit, min, max, step, set, suffix }) {
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
         <b style={{ fontSize: 13 }}>{label}</b>
-        <span className="tnum" style={{ fontWeight: 700, color: "var(--navy)" }}>{val}{suffix ?? unit}</span>
+        <span className="tnum" style={{ fontWeight: 700, color: "var(--blue)" }}>{val}{suffix ?? unit}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={val}
         onChange={(e) => set(Number(e.target.value))} style={{ width: "100%", accentColor: "var(--ember1)" }} />

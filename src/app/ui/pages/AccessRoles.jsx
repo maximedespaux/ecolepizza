@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { getAccessProfiles, createAccessProfile, updateAccessProfile, deleteAccessProfile, upsertSystemRole } from "../api/apiClient.js";
-import { GRANTABLE_NAV, BUILTIN_ROLES, builtinRoleAccess, ROLE_COLORS } from "../lib/nav.js";
+import { GRANTABLE_NAV, EXTRA_ACCESS, BUILTIN_ROLES, builtinRoleAccess, ROLE_COLORS } from "../lib/nav.js";
 
 const Dot = ({ color }) => <span style={{ width: 12, height: 12, borderRadius: 3, background: color || "#999", display: "inline-block", marginRight: 8, verticalAlign: "middle" }} />;
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import { Icon } from "../components/Icon.jsx";
 import Badge from "../components/Badge.jsx";
 import { Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -28,7 +29,7 @@ function AccessRoles() {
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
-  const pageCount = (nav) => Object.keys(nav || {}).length;
+  const pageCount = (nav) => Object.keys(nav || {}).filter((k) => k.startsWith("/")).length;
 
   return (
     <>
@@ -68,7 +69,7 @@ function AccessRoles() {
 
       <Card title={`Rôles personnalisés (${roles.length})`}>
         {roles.length === 0 ? (
-          <EmptyState icon="👥">Aucun rôle personnalisé. Créez-en un ou dupliquez un rôle système.</EmptyState>
+          <EmptyState icon="team">Aucun rôle personnalisé. Créez-en un ou dupliquez un rôle système.</EmptyState>
         ) : (
           <div className="tablewrap" style={{ border: "none" }}>
             <table>
@@ -157,7 +158,7 @@ function RoleModal({ role, onClose, onSaved, onError }) {
                     <div key={it.to} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
                       <label style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: "pointer" }}>
                         <input type="checkbox" checked={on} onChange={() => toggle(it.to)} />
-                        <span style={{ width: 20, textAlign: "center" }}>{it.ic}</span> {it.label}
+                        <span style={{ width: 20, display: "inline-grid", placeItems: "center" }}><Icon name={it.ic} size={16} /></span> {it.label}
                       </label>
                       {on && (
                         <div style={{ display: "flex", gap: 4 }}>
@@ -171,6 +172,25 @@ function RoleModal({ role, onClose, onSaved, onError }) {
               </div>
             </div>
           ))}
+
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "var(--dim)", marginBottom: 4 }}>Accès supplémentaires</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {EXTRA_ACCESS.map((it) => {
+                const byDefault = !!it.defaultRoles?.includes(role._system);
+                const on = byDefault || granted(it.to);
+                return (
+                  <label key={it.to} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 14, cursor: byDefault ? "default" : "pointer" }}>
+                    <input type="checkbox" checked={on} disabled={byDefault} onChange={() => toggle(it.to)} style={{ marginTop: 3 }} />
+                    <span style={{ width: 20, display: "inline-grid", placeItems: "center", marginTop: 1 }}><Icon name={it.ic} size={16} /></span>
+                    <span>{it.label}
+                      <span className="hint" style={{ display: "block", fontWeight: 400, marginTop: 1 }}>{byDefault ? "Accordé d'office à ce rôle. " : ""}{it.hint}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>

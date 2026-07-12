@@ -201,7 +201,9 @@ const updateMember = async (req, res) => {
                 let n = 0;
                 for (const [p, mode] of Object.entries(nav)) {
                     if (n >= 50) break;
-                    if (typeof p === 'string' && p.startsWith('/')) { map[p] = mode === 'read' ? 'read' : 'write'; n++; }
+                    if (typeof p !== 'string') continue;
+                    if (p.startsWith('/')) { map[p] = mode === 'read' ? 'read' : 'write'; n++; }
+                    else if (p.startsWith('cap:')) { map[p] = 'write'; n++; } // accès supplémentaire (capacité)
                 }
                 updates.push('nav_access = ?'); values.push(JSON.stringify(map));
             } else {
@@ -219,9 +221,8 @@ const updateMember = async (req, res) => {
 
         if (updates.length === 0) return res.status(400).json({ error: 'Aucun champ à mettre à jour.' });
 
-        values.push(target.id, orgId);
         try {
-            await conn.query(`UPDATE user SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`, values);
+            await conn.query(`UPDATE user SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`, [...values, target.id, orgId]);
             res.json({ message: 'Membre mis à jour.' });
         } catch (e) {
             if (e.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Cette adresse e-mail est déjà utilisée.' });

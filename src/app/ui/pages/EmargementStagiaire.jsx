@@ -42,7 +42,7 @@ function EmargementStagiaire() {
       <StatusMessage status={status} />
 
       {recs.length === 0 ? (
-        <Card><EmptyState icon="✍️">Aucune demi-journée à émarger pour le moment.</EmptyState></Card>
+        <Card><EmptyState icon="pencil">Aucune demi-journée à émarger pour le moment.</EmptyState></Card>
       ) : (
         <Card title={pending ? `${pending} demi-journée(s) à signer` : "Présences"}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

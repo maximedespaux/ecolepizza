@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
   getConditionCatalog, getConditions, createCondition, deleteCondition, getFieldValues,
@@ -203,11 +204,11 @@ function Modeles() {
                     <div className="tpl-actions">
                       <button className="btn sm primary" title={isEmarg ? "Éditer la mise en page" : "Ouvrir l'éditeur de document"}
                         onClick={() => navigate(isEmarg ? `/modeles/emargement/${t.id}` : `/modeles/${t.slug}/editeur`)}>Éditer</button>
-                      <button className="btn sm ghost" title="Réglages" onClick={() => setEditing({ ...t })}>⚙</button>
+                      <button className="btn sm ghost" title="Réglages" onClick={() => setEditing({ ...t })}><Icon name="settings" size={15} /></button>
                       <button className="btn sm ghost danger"
                         title="Supprimer définitivement"
                         disabled={busy === (isEmarg ? t.id : t.slug)}
-                        onClick={() => isEmarg ? onDeleteEmarg(t) : onDelete(t)}>🗑</button>
+                        onClick={() => isEmarg ? onDeleteEmarg(t) : onDelete(t)}><Icon name="trash" size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -308,7 +309,7 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
                   <td><b>{c.label}</b></td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{fieldLabel(c.field)}</td>
                   <td style={{ fontSize: 12 }} className="mono">{condValueLabel(c)}</td>
-                  <td><button className="btn sm ghost danger" title="Supprimer" onClick={() => remove(c)}>🗑</button></td>
+                  <td><button className="btn sm ghost danger" title="Supprimer" onClick={() => remove(c)}><Icon name="trash" size={15} /></button></td>
                 </tr>
               ))}
             </tbody>
@@ -548,7 +549,7 @@ function EquivalencesPanel({ onStatus }) {
                 <tr key={e.key}>
                   <td><b>{e.label}</b>{e.is_default && <span className="hint" style={{ marginLeft: 6 }}>défaut</span>}</td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{(e.memberLabels || e.members).join(" / ")}</td>
-                  <td>{!e.is_default && <button type="button" className="btn sm ghost danger" onClick={() => remove(e)}>🗑</button>}</td>
+                  <td>{!e.is_default && <button type="button" className="btn sm ghost danger" onClick={() => remove(e)}><Icon name="trash" size={15} /></button>}</td>
                 </tr>
               ))}
             </tbody>

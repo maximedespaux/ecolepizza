@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import { getOpcos, createOpco, updateOpco, deleteOpco } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -52,7 +53,7 @@ function Opcos() {
                     <td>{o.triggers_assiduite ? <Badge tone="a">Attestation</Badge> : <span className="hint">—</span>}</td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       <button className="btn sm ghost" onClick={() => setEditing({ ...o })}>Éditer</button>{" "}
-                      <button className="iconbtn del" title="Supprimer" onClick={() => onDelete(o)}>🗑</button>
+                      <button className="iconbtn del" title="Supprimer" onClick={() => onDelete(o)}><Icon name="trash" size={15} /></button>
                     </td>
                   </tr>
                 ))}

@@ -9,9 +9,9 @@ export function initials(first = "", last = "") {
   return `${(first[0] || "")}${(last[0] || "")}`.toUpperCase() || "?";
 }
 
-/** Prix en euros formaté FR. */
+/** Prix en euros formaté FR (2 décimales max — évite les TTC à rallonge type 10,692). */
 export function euro(value) {
-  return `${Number(value || 0).toLocaleString("fr-FR")} €`;
+  return `${Number(value || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} €`;
 }
 
 /** Classe de badge pour un score de conformité Qualiopi. */

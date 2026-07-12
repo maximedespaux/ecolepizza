@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import { Link } from "react-router-dom";
 import {
   getComptabilite, getComptaPerformance, createExpense, deleteExpense, saveComptaTargets, deleteRevenue,
@@ -6,6 +7,7 @@ import {
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
+import MoneyToggle from "../components/MoneyToggle.jsx";
 
 const REV_LABEL = { COMMISSION: "Commission partenaire", SUBVENTION: "Subvention", AUTRE: "Autre produit" };
 const CATS = [
@@ -27,6 +29,9 @@ const STATUT_COLOR = { vert: "var(--green)", orange: "#d98a24", rouge: "var(--em
 
 const euro = (n) => Math.round(n).toLocaleString("fr-FR") + " €";
 const today = () => new Date().toISOString().slice(0, 10);
+
+// Titre de carte avec icône de tête.
+const T = (icon, text) => <span className="card-ttl"><Icon name={icon} size={16} /> {text}</span>;
 
 function Comptabilite() {
   const [annee, setAnnee] = useState(new Date().getFullYear());
@@ -104,9 +109,12 @@ function Comptabilite() {
         title="Comptabilité"
         lead="Tableau de gestion (pas de comptabilité légale). Le chiffre d'affaires se calcule automatiquement depuis les inscriptions, les ventes de matériel et les produits divers. Chaque poste de dépense est comparé à sa cible."
         actions={
-          <select className="inp" value={annee} onChange={(e) => setAnnee(Number(e.target.value))} aria-label="Année">
-            {(data?.annees ?? [annee]).map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <MoneyToggle />
+            <select className="inp" value={annee} onChange={(e) => setAnnee(Number(e.target.value))} aria-label="Année">
+              {(data?.annees ?? [annee]).map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
         }
       />
       <StatusMessage status={status} />
@@ -124,14 +132,14 @@ function Comptabilite() {
         <div className="grid" style={{ gap: 16 }}>
           {/* KPIs */}
           <div className="grid cols-4">
-            <div className="kpi"><div className="lbl">Chiffre d'affaires</div><div className="val tnum">{euro(data.ca.total)}</div></div>
-            <div className="kpi"><div className="lbl">Total des dépenses</div><div className="val tnum">{euro(data.totalDepenses)}</div></div>
-            <div className="kpi"><div className="lbl">Marge ({data.margePct}%)</div><div className="val tnum" style={{ color: data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.marge)}</div></div>
-            <div className="kpi"><div className="lbl">Dividendes réalistes ({data.partRealistePct}%)</div><div className="val tnum" style={{ color: data.dividendeRealiste > 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.dividendeRealiste)}</div></div>
+            <div className="kpi"><div className="kpi-top"><div className="lbl">Chiffre d'affaires</div><span className="kpi-ic tone-blue"><Icon name="euro" size={18} /></span></div><div className="val tnum">{euro(data.ca.total)}</div></div>
+            <div className="kpi"><div className="kpi-top"><div className="lbl">Total des dépenses</div><span className="kpi-ic tone-ember"><Icon name="receipt" size={18} /></span></div><div className="val tnum">{euro(data.totalDepenses)}</div></div>
+            <div className="kpi"><div className="kpi-top"><div className="lbl">Marge ({data.margePct}%)</div><span className="kpi-ic tone-green"><Icon name="target" size={18} /></span></div><div className="val tnum" style={{ color: data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.marge)}</div></div>
+            <div className="kpi"><div className="kpi-top"><div className="lbl">Dividendes réalistes ({data.partRealistePct}%)</div><span className="kpi-ic tone-orange"><Icon name="coins" size={18} /></span></div><div className="val tnum" style={{ color: data.dividendeRealiste > 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.dividendeRealiste)}</div></div>
           </div>
 
           {/* Composition du CA (3 cartes %) */}
-          <Card title="Composition du chiffre d'affaires">
+          <Card title={T("calculator", "Composition du chiffre d'affaires")}>
             <div className="grid cols-3">
               <CaPart label="Inscriptions" value={data.ca.inscriptions} total={data.ca.total} color={CA_COLORS.insc} />
               <CaPart label="Ventes de matériel" value={data.ca.materiel} total={data.ca.total} color={CA_COLORS.mat} />
@@ -141,7 +149,7 @@ function Comptabilite() {
 
           {/* Camemberts */}
           <div className="grid cols-2">
-            <Card title="Répartition du chiffre d'affaires">
+            <Card title={T("target", "Répartition du chiffre d'affaires")}>
               <DonutBlock
                 centerLabel="CA total" centerValue={euro(data.ca.total)}
                 segments={[
@@ -151,7 +159,7 @@ function Comptabilite() {
                 ]}
               />
             </Card>
-            <Card title="Dépenses par poste">
+            <Card title={T("receipt", "Dépenses par poste")}>
               <DonutBlock
                 centerLabel="Dépenses" centerValue={euro(data.totalDepenses)}
                 segments={data.postes.map((p) => ({ label: p.label, value: p.total, color: POSTE_COLOR[p.categorie] }))}
@@ -160,7 +168,7 @@ function Comptabilite() {
           </div>
 
           {/* Comment se calcule le CA */}
-          <Card title="Comment se calcule le chiffre d'affaires ?">
+          <Card title={T("help", "Comment se calcule le chiffre d'affaires ?")}>
             <p className="lead" style={{ marginTop: 0 }}>Le CA ne se saisit pas à la main : il s'additionne automatiquement à partir de trois sources.</p>
             <div className="grid cols-3">
               <SourceCA n={1} color={CA_COLORS.insc} titre="Inscriptions" montant={euro(data.ca.inscriptions)}
@@ -229,7 +237,7 @@ function Comptabilite() {
 
           {/* Saisies */}
           <div className="grid cols-2">
-            <Card title="Enregistrer une dépense">
+            <Card title={T("receipt", "Enregistrer une dépense")}>
               <div className="field"><label>Libellé</label>
                 <input className="inp" value={dep.label} onChange={(e) => setDep({ ...dep, label: e.target.value })} placeholder="Facture farine, loyer avril…" /></div>
               <div className="row2">
@@ -250,14 +258,14 @@ function Comptabilite() {
 
           {/* Listes dépenses + produits divers */}
           <div className="grid cols-2">
-            <Card title={`Dépenses ${annee}`}>
+            <Card title={T("receipt", `Dépenses ${annee}`)}>
               {data.depenses.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucune dépense saisie.</p> : (
                 <div>{data.depenses.map((d) => (
                   <ListRow key={d.id} titre={d.label} sous={`${CATS.find((c) => c.v === d.category)?.label ?? d.category} · ${new Date(d.date).toLocaleDateString("fr-FR")}`} montant={euro(d.amount_ht)} onDel={() => delDep(d)} />
                 ))}</div>
               )}
             </Card>
-            <Card title={`Produits divers ${annee} · ${euro(data.ca.extra)}`}>
+            <Card title={T("coins", `Produits divers ${annee} · ${euro(data.ca.extra)}`)}>
               {(!data.revenus || data.revenus.length === 0) ? <p className="lead" style={{ margin: 0 }}>Aucun produit divers. Se saisit sur la page Partenaires.</p> : (
                 <div>{data.revenus.map((r) => (
                   <ListRow key={r.id} titre={r.label} sous={`${REV_LABEL[r.category] ?? r.category} · ${new Date(r.date).toLocaleDateString("fr-FR")}`} montant={euro(r.amount)} onDel={() => delRev(r)} />
@@ -283,7 +291,7 @@ function CaPart({ label, value, total, color }) {
         </span>
         <span style={{ color: "var(--dim)" }}>{pct}%</span>
       </div>
-      <div className="tnum" style={{ fontWeight: 700, fontSize: 18, color: "var(--navy)", marginTop: 4 }}>{euro(value)}</div>
+      <div className="tnum" style={{ fontWeight: 700, fontSize: 18, color: "var(--blue)", marginTop: 4 }}>{euro(value)}</div>
     </div>
   );
 }
@@ -294,7 +302,7 @@ function SourceCA({ n, color, titre, montant, desc, href, lien }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <span className="src-n" style={{ background: color }}>{n}</span>
         <b style={{ flex: 1 }}>{titre}</b>
-        <b className="tnum" style={{ color: "var(--navy)" }}>{montant}</b>
+        <b className="tnum" style={{ color: "var(--blue)" }}>{montant}</b>
       </div>
       <p className="sub" style={{ margin: "0 0 8px" }}>{desc}</p>
       {href ? <Link to={href} className="src-link">{lien}</Link> : <span className="sub">{lien}</span>}
@@ -309,8 +317,8 @@ function ListRow({ titre, sous, montant, onDel }) {
         <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{titre}</div>
         <div className="sub" style={{ color: "var(--dim)" }}>{sous}</div>
       </div>
-      <b className="tnum" style={{ color: "var(--navy)" }}>{montant}</b>
-      <button type="button" className="iconbtn del" title="Supprimer" onClick={onDel}>🗑</button>
+      <b className="tnum" style={{ color: "var(--blue)" }}>{montant}</b>
+      <button type="button" className="iconbtn del" title="Supprimer" onClick={onDel}><Icon name="trash" size={15} /></button>
     </div>
   );
 }
@@ -367,7 +375,7 @@ function DonutBlock({ segments, centerLabel, centerValue }) {
           ) : (
             <>
               <div style={{ fontSize: 10.5, color: "var(--dim)" }}>{centerLabel}</div>
-              <div className="tnum" style={{ fontWeight: 800, fontSize: 15, lineHeight: 1.15, color: "var(--navy)" }}>{centerValue}</div>
+              <div className="tnum" style={{ fontWeight: 800, fontSize: 15, lineHeight: 1.15, color: "var(--blue)" }}>{centerValue}</div>
             </>
           )}
         </div>
@@ -382,7 +390,7 @@ function DonutBlock({ segments, centerLabel, centerValue }) {
               style={{ background: on ? "var(--surface2)" : "transparent", opacity: active !== null && !on ? 0.5 : 1 }}>
               <span style={{ width: 12, height: 12, borderRadius: 4, background: s.color, flexShrink: 0 }} />
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
-              <b className="tnum" style={{ color: "var(--navy)" }}>{euro(s.value)}</b>
+              <b className="tnum" style={{ color: "var(--blue)" }}>{euro(s.value)}</b>
               <span className="sub tnum" style={{ width: 36, textAlign: "right", color: "var(--dim)" }}>{pct}%</span>
             </div>
           );
@@ -404,11 +412,11 @@ function Dividendes({ data }) {
     ...(data.marge > 0 ? [{ label: "Marge (→ dividendes)", value: data.marge, color: "var(--green)" }] : []),
   ];
   return (
-    <Card title={`Dividendes — objectif ${data.dividendeCible}% du CA`}>
+    <Card title={T("coins", `Dividendes — objectif ${data.dividendeCible}% du CA`)}>
       <p className="sub" style={{ marginTop: -4 }}>La part distribuable ne peut jamais dépasser la marge.</p>
       <div className="grid cols-3" style={{ marginBottom: 18 }}>
         <Mini label="Marge distribuable" value={euro(data.dividendePossible)} tone={data.dividendePossible > 0 ? "var(--green)" : "var(--ember1)"} />
-        <Mini label={`Objectif (${data.dividendeCible}% du CA)`} value={euro(data.dividendeVise)} tone="var(--navy)" />
+        <Mini label={`Objectif (${data.dividendeCible}% du CA)`} value={euro(data.dividendeVise)} tone="var(--blue)" />
         <Mini label={`Dividende réaliste (${data.partRealistePct}%)`} value={euro(data.dividendeRealiste)} tone={data.dividendeRealiste > 0 ? "var(--green)" : "var(--ember1)"} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between" }} className="sub">
@@ -466,16 +474,16 @@ function Performance({ annee }) {
     <div className="grid" style={{ gap: 16 }}>
       <p className="lead" style={{ margin: 0 }}>Récapitulatif <b>{d.annee}</b> comparé à <b>{d.anneePrec}</b>. Un écart en vert est favorable.</p>
       <div className="grid cols-4">
-        <PerfCard label="Chiffre d'affaires" cur={euro(c.caTotal)} prev={euro(p.caTotal)} rc={c.caTotal} rp={p.caTotal} an={d.anneePrec} />
-        <PerfCard label="Stagiaires (distincts)" cur={nb(c.nbStagiaires)} prev={nb(p.nbStagiaires)} rc={c.nbStagiaires} rp={p.nbStagiaires} an={d.anneePrec} />
-        <PerfCard label="Inscriptions" cur={nb(c.nbInscriptions)} prev={nb(p.nbInscriptions)} rc={c.nbInscriptions} rp={p.nbInscriptions} an={d.anneePrec} />
-        <PerfCard label="Ticket moyen" cur={euro(c.ticketMoyen)} prev={euro(p.ticketMoyen)} rc={c.ticketMoyen} rp={p.ticketMoyen} an={d.anneePrec} />
-        <PerfCard label="Stagiaires moyens / session" cur={String(c.stagiairesMoyens)} prev={String(p.stagiairesMoyens)} rc={c.stagiairesMoyens} rp={p.stagiairesMoyens} an={d.anneePrec} />
-        <PerfCard label="Sessions" cur={nb(c.nbSessions)} prev={nb(p.nbSessions)} rc={c.nbSessions} rp={p.nbSessions} an={d.anneePrec} />
-        <PerfCard label="Dépenses" cur={euro(c.depensesTotal)} prev={euro(p.depensesTotal)} rc={c.depensesTotal} rp={p.depensesTotal} an={d.anneePrec} invert />
-        <PerfCard label="Marge" cur={euro(c.marge)} prev={euro(p.marge)} rc={c.marge} rp={p.marge} an={d.anneePrec} />
+        <PerfCard label="Chiffre d'affaires" icon="euro" tone="blue" cur={euro(c.caTotal)} prev={euro(p.caTotal)} rc={c.caTotal} rp={p.caTotal} an={d.anneePrec} />
+        <PerfCard label="Stagiaires (distincts)" icon="users" tone="green" cur={nb(c.nbStagiaires)} prev={nb(p.nbStagiaires)} rc={c.nbStagiaires} rp={p.nbStagiaires} an={d.anneePrec} />
+        <PerfCard label="Inscriptions" icon="user-plus" tone="orange" cur={nb(c.nbInscriptions)} prev={nb(p.nbInscriptions)} rc={c.nbInscriptions} rp={p.nbInscriptions} an={d.anneePrec} />
+        <PerfCard label="Ticket moyen" icon="coins" tone="ember" cur={euro(c.ticketMoyen)} prev={euro(p.ticketMoyen)} rc={c.ticketMoyen} rp={p.ticketMoyen} an={d.anneePrec} />
+        <PerfCard label="Stagiaires moyens / session" icon="users" tone="blue" cur={String(c.stagiairesMoyens)} prev={String(p.stagiairesMoyens)} rc={c.stagiairesMoyens} rp={p.stagiairesMoyens} an={d.anneePrec} />
+        <PerfCard label="Sessions" icon="calendar" tone="orange" cur={nb(c.nbSessions)} prev={nb(p.nbSessions)} rc={c.nbSessions} rp={p.nbSessions} an={d.anneePrec} />
+        <PerfCard label="Dépenses" icon="receipt" tone="ember" cur={euro(c.depensesTotal)} prev={euro(p.depensesTotal)} rc={c.depensesTotal} rp={p.depensesTotal} an={d.anneePrec} invert />
+        <PerfCard label="Marge" icon="target" tone="green" cur={euro(c.marge)} prev={euro(p.marge)} rc={c.marge} rp={p.marge} an={d.anneePrec} />
       </div>
-      <Card title={`Dépenses par poste — ${d.annee} vs ${d.anneePrec}`}>
+      <Card title={T("receipt", `Dépenses par poste — ${d.annee} vs ${d.anneePrec}`)}>
         <div className="tablewrap">
           <table>
             <thead><tr><th>Poste</th><th className="ta-r">{d.annee}</th><th className="ta-r">{d.anneePrec}</th><th className="ta-r">Écart</th></tr></thead>
@@ -505,10 +513,13 @@ function Performance({ annee }) {
   );
 }
 
-function PerfCard({ label, cur, prev, rc, rp, an, invert }) {
+function PerfCard({ label, cur, prev, rc, rp, an, invert, icon, tone = "blue" }) {
   return (
     <div className="kpi">
-      <div className="lbl">{label}</div>
+      <div className="kpi-top">
+        <div className="lbl">{label}</div>
+        {icon && <span className={`kpi-ic tone-${tone}`}><Icon name={icon} size={18} /></span>}
+      </div>
       <div className="val tnum">{cur}</div>
       <div className="sub" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
         <Delta cur={rc} prev={rp} invert={invert} />
@@ -524,7 +535,7 @@ function Delta({ cur, prev, invert }) {
   const pct = Math.round((diff / Math.abs(prev)) * 1000) / 10;
   const good = diff === 0 ? null : invert ? diff < 0 : diff > 0;
   const color = good === null ? "var(--muted)" : good ? "var(--green)" : "var(--ember1)";
-  return <span style={{ color, fontWeight: 700 }}>{diff >= 0 ? "▲" : "▼"} {Math.abs(pct)}%</span>;
+  return <span style={{ color, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 3 }}><Icon name={diff >= 0 ? "arrow-up" : "arrow-down"} size={12} /> {Math.abs(pct)}%</span>;
 }
 
 function Ecart({ diff, invert }) {

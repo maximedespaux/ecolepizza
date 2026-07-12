@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import MoneyToggle from "../components/MoneyToggle.jsx";
+import { Icon } from "../components/Icon.jsx";
 import { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getEnrollments, getCompanies, downloadFacturX, downloadInvoiceXml, facturXUrl } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -11,7 +13,7 @@ import { euro } from "../lib/format.js";
 import { bumpBadges } from "../lib/events.js";
 
 const TYPES = [["DEVIS", "Devis"], ["ACOMPTE", "Acompte"], ["FACTURE", "Facture"], ["AVOIR", "Avoir"]];
-const STATUS = { BROUILLON: ["Brouillon", "n"], EMISE: ["Émise", "b"], PAYEE: ["Payée ✓", "g"], IMPAYEE: ["Impayée", "r"], ANNULEE: ["Annulée", "n"] };
+const STATUS = { BROUILLON: ["Brouillon", "n"], EMISE: ["Émise", "b"], PAYEE: ["Payée", "g"], IMPAYEE: ["Impayée", "r"], ANNULEE: ["Annulée", "n"] };
 const emptyLine = () => ({ enrollment_id: "", description: "", amount_net: "" });
 const makeEmpty = () => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, due_date: "", lines: [emptyLine()] });
 
@@ -100,7 +102,7 @@ function Factures() {
         eyebrow="Facturation"
         title="Devis & factures"
         lead="Devis, acomptes, factures et avoirs. TVA non applicable (art. 261-4-4° du CGI)."
-        actions={<button className="btn primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ Fermer" : "＋ Nouveau document"}</button>}
+        actions={<div style={{ display: "flex", alignItems: "center", gap: 10 }}><MoneyToggle /><button className="btn primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ Fermer" : "＋ Nouveau document"}</button></div>}
       />
       <StatusMessage status={status} />
 
@@ -156,7 +158,7 @@ function Factures() {
 
       <Card title={`Documents (${invoices.length})`}>
         {invoices.length === 0 ? (
-          <EmptyState icon="🧾">Aucun document de facturation.</EmptyState>
+          <EmptyState icon="receipt">Aucun document de facturation.</EmptyState>
         ) : (
           <div className="tablewrap" style={{ border: "none" }}>
             <table>
@@ -170,15 +172,15 @@ function Factures() {
                       <td className="mono">{i.number}</td>
                       <td>{i.type}</td>
                       <td>{who}{Number(i.n_lines) > 1 ? ` · ${i.n_lines} dossiers` : i.program_code ? ` · ${i.program_code}` : ""}</td>
-                      <td className="mono" style={{ textAlign: "right" }}>{euro(i.amount_net)}{Number(i.paid) > 0 && <span style={{ display: "block", fontSize: 11, color: "var(--green)" }}>payé {euro(i.paid)}</span>}</td>
+                      <td className="mono tnum" style={{ textAlign: "right" }}>{euro(i.amount_net)}{Number(i.paid) > 0 && <span style={{ display: "block", fontSize: 11, color: "var(--green)" }}>payé {euro(i.paid)}</span>}</td>
                       <td><Badge tone={tone}>{label}</Badge></td>
                       <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                         {i.status === "BROUILLON" && <button className="btn sm" title="Émettre" onClick={() => setStatusOf(i.id, "EMISE")}>Émettre</button>}{" "}
                         {i.status !== "PAYEE" && i.status !== "ANNULEE" && (i.type === "FACTURE" || i.type === "ACOMPTE") && <button className="btn sm" title="Encaisser le solde et marquer payée" onClick={() => pay(i)}>Payer</button>}{" "}
                         <button className="btn sm" title="Aperçu de la facture" onClick={() => preview(i)}>Aperçu</button>{" "}
                         <button className="btn sm" title="Télécharger la facture Factur-X (PDF)" onClick={() => dl(downloadFacturX, i)}>Factur-X</button>{" "}
-                        <button className="iconbtn" title="Télécharger le XML" onClick={() => dl(downloadInvoiceXml, i)}>⭳</button>{" "}
-                        <button className="iconbtn del" title="Supprimer" onClick={() => remove(i.id)}>🗑</button>
+                        <button className="iconbtn" title="Télécharger le XML" onClick={() => dl(downloadInvoiceXml, i)}><Icon name="download" size={16} /></button>{" "}
+                        <button className="iconbtn del" title="Supprimer" onClick={() => remove(i.id)}><Icon name="trash" size={15} /></button>
                       </td>
                     </tr>
                   );

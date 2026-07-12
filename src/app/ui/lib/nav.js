@@ -16,50 +16,50 @@ export const NAV = [
   {
     grp: "Pilotage",
     items: [
-      { to: "/dashboard", ic: "◧", label: "Tableau de bord", roles: STAFF },
+      { to: "/dashboard", ic: "dashboard", label: "Tableau de bord", roles: STAFF },
     ],
   },
   {
     grp: "Formation",            // cœur pédagogique : qui, quand, quoi
     items: [
-      { to: "/stagiaires", ic: "☺", label: "Stagiaires", roles: STAFF },
-      { to: "/sessions", ic: "▦", label: "Sessions", roles: STAFF },
-      { to: "/formations", ic: "◍", label: "Formations", roles: STAFF },
+      { to: "/stagiaires", ic: "users", label: "Stagiaires", roles: STAFF },
+      { to: "/sessions", ic: "calendar", label: "Sessions", roles: STAFF },
+      { to: "/formations", ic: "graduation", label: "Formations", roles: STAFF },
     ],
   },
   {
     grp: "Commercial",           // acquisition & relations
     items: [
-      { to: "/pipeline", ic: "▚", label: "Pipeline CRM", roles: ADMIN },
-      { to: "/partenaires", ic: "🤝", label: "Partenaires", roles: STAFF },
-      { to: "/carte", ic: "🗺", label: "Carte des stagiaires", roles: ADMIN },
+      { to: "/pipeline", ic: "columns", label: "Pipeline CRM", roles: ADMIN },
+      { to: "/partenaires", ic: "handshake", label: "Partenaires", roles: STAFF },
+      { to: "/carte", ic: "map", label: "Carte des stagiaires", roles: ADMIN },
     ],
   },
   {
     grp: "Ventes & Finance",     // encaissement, stock, compta
     items: [
-      { to: "/ventes", ic: "🛒", label: "Ventes & Inventaire", roles: ADMIN },
-      { to: "/produit-divers", ic: "💶", label: "Produit divers", roles: ["FORMATEUR"] },
-      { to: "/factures", ic: "🧾", label: "Facturation", roles: ADMIN },
-      { to: "/comptabilite", ic: "€", label: "Comptabilité", roles: ADMIN },
+      { to: "/ventes", ic: "cart", label: "Ventes & Inventaire", roles: ADMIN },
+      { to: "/produit-divers", ic: "coins", label: "Produit divers", roles: ["FORMATEUR"] },
+      { to: "/factures", ic: "receipt", label: "Facturation", roles: ADMIN },
+      { to: "/comptabilite", ic: "calculator", label: "Comptabilité", roles: ADMIN },
     ],
   },
   {
     grp: "Qualité & conformité", // Qualiopi + traçabilité
     items: [
-      { to: "/suivi", ic: "▤", label: "Suivi Qualiopi", roles: AUDIT },
-      { to: "/audit", ic: "🔒", label: "Journal d'audit", roles: AUDIT },
+      { to: "/suivi", ic: "clipboard-check", label: "Suivi Qualiopi", roles: AUDIT },
+      { to: "/audit", ic: "history", label: "Journal d'audit", roles: AUDIT },
     ],
   },
   {
     grp: "Configuration",        // paramétrage de l'organisme & modèles
     items: [
-      { to: "/reglages", ic: "⚙", label: "Organisme", roles: ADMIN },
-      { to: "/equipe", ic: "👥", label: "Équipe & accès", roles: OWNER },
-      { to: "/roles", ic: "🎫", label: "Rôles d'accès", roles: OWNER },
-      { to: "/modeles", ic: "⎙", label: "Modèles de documents", roles: ADMIN },
-      { to: "/qcm", ic: "❓", label: "Modèles de QCM", roles: ADMIN },
-      { to: "/opcos", ic: "€", label: "OPCO / financeurs", roles: ADMIN },
+      { to: "/reglages", ic: "building", label: "Organisme", roles: ADMIN },
+      { to: "/equipe", ic: "team", label: "Équipe & accès", roles: OWNER },
+      { to: "/roles", ic: "shield", label: "Rôles d'accès", roles: OWNER },
+      { to: "/modeles", ic: "file-text", label: "Modèles de documents", roles: ADMIN },
+      { to: "/qcm", ic: "list-checks", label: "Modèles de QCM", roles: ADMIN },
+      { to: "/opcos", ic: "landmark", label: "OPCO / financeurs", roles: ADMIN },
     ],
   },
 ];
@@ -172,6 +172,20 @@ export function landingPath(user) {
 export const GRANTABLE_NAV = NAV
   .map((g) => ({ grp: g.grp, items: g.items.filter((it) => it.to !== "/equipe") }))
   .filter((g) => g.items.length > 0);
+
+// Accès « supplémentaires » : des capacités transverses (pas des pages) qu'on
+// accorde par rôle ou par membre, stockées dans nav_access comme une page. La
+// présence de la clé = capacité accordée (le mode read/write ne s'applique pas).
+// `defaultRoles` = rôles qui l'ont d'office (case cochée et verrouillée).
+export const EXTRA_ACCESS = [
+  {
+    to: "cap:reveal-money",
+    label: "Révéler les montants",
+    hint: "Pages Ventes & Finance — lève le masque des montants (• • • • •).",
+    ic: "eye",
+    defaultRoles: ["SUPER_ADMIN"],
+  },
+];
 
 // Rôles « système » (intégrés) : servent de modèles d'accès réutilisables.
 export const BUILTIN_ROLES = [

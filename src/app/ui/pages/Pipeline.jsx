@@ -31,7 +31,7 @@ function Pipeline() {
   // Colonnes du parcours + une colonne finale « Terminé ».
   const columns = useMemo(() => {
     if (!board) return [];
-    return [...board.columns, { index: board.columns.length, key: "__done", label: "Terminé ✓", final: true }];
+    return [...board.columns, { index: board.columns.length, key: "__done", label: "Terminé", final: true }];
   }, [board]);
   const cardsByCol = useMemo(() => {
     const m = {};

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import { getEmargementTemplates, updateEmargementTemplate, getOrganisation, updateOrganisation } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
@@ -150,7 +151,7 @@ export default function EmargementEditor() {
                     <option value="before">Avant</option>
                     <option value="after">Après</option>
                   </select>
-                  <button className="btn sm ghost danger" title="Supprimer" onClick={() => delCol(i)}>🗑</button>
+                  <button className="btn sm ghost danger" title="Supprimer" onClick={() => delCol(i)}><Icon name="trash" size={15} /></button>
                 </div>
               ))}
               <div><button className="btn sm ghost" onClick={addCol} disabled={(cfg.extra_columns || []).length >= 6}>＋ Ajouter une colonne</button></div>

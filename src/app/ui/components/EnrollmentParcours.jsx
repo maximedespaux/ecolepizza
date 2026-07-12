@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
 import { getEnrollmentParcours } from "../api/apiClient.js";
+import { Icon } from "./Icon.jsx";
+
+// Icône SVG d'une étape selon son état / type de document.
+function stepIcon(s) {
+  if (s.status === "done") return "check";
+  if (s.quiz) return "help";
+  if (s.signable) return "pencil";
+  return "file-text";
+}
 
 // Ligne d'état de l'étape sélectionnée (selon son statut et le document lié).
 function lineFor(s) {
@@ -94,8 +103,9 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
                 <span style={{
                   width: 34, height: 34, borderRadius: 9, display: "grid", placeItems: "center", flex: "0 0 34px",
                   background: s.status === "todo" ? "var(--border-soft)" : "linear-gradient(135deg,#c0392b,#e0932e)",
-                  filter: s.status === "todo" ? "grayscale(1) opacity(.6)" : "none", fontSize: 16,
-                }}>{s.status === "done" ? "✓" : s.ic}</span>
+                  filter: s.status === "todo" ? "grayscale(1) opacity(.6)" : "none",
+                  color: s.status === "todo" ? "var(--muted)" : "#fff",
+                }}><Icon name={stepIcon(s)} size={17} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <b style={{ display: "block" }}>{s.label}</b>
                   <span style={{ fontSize: 12, color: "var(--muted)" }}>{s.sub}</span>
@@ -114,8 +124,8 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <span style={{
             width: 44, height: 44, borderRadius: 11, display: "grid", placeItems: "center",
-            background: "linear-gradient(135deg,#c0392b,#e0932e)", fontSize: 20,
-          }}>{step.ic}</span>
+            background: "linear-gradient(135deg,#c0392b,#e0932e)", color: "#fff",
+          }}><Icon name={stepIcon(step)} size={20} /></span>
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: "var(--dim)" }}>ÉTAPE</div>
             <h3 style={{ margin: 0, fontSize: 20 }}>{step.label}</h3>

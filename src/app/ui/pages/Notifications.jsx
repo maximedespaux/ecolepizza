@@ -42,7 +42,7 @@ function Notifications() {
 
       <Card>
         {rows.length === 0 ? (
-          <EmptyState icon="🔔">Aucune notification.</EmptyState>
+          <EmptyState icon="bell">Aucune notification.</EmptyState>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {rows.map((n) => (

@@ -34,7 +34,7 @@ function MesFormations() {
       {!sorted ? (
         !status && <Card><p className="hint" style={{ margin: 0 }}>Chargement…</p></Card>
       ) : sorted.length === 0 ? (
-        <Card><EmptyState icon="🍕">Aucune formation au catalogue.</EmptyState></Card>
+        <Card><EmptyState icon="pizza">Aucune formation au catalogue.</EmptyState></Card>
       ) : (
         <div className="grid cols-3">
           {sorted.map((f) => {
