@@ -35,13 +35,22 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
         values = { ...values, ...resolveCustomTokens(ctx.customTokens, values) };
     }
     const slotSigs = (ctx && ctx.slotSignatures) || {}; // { slotKey: { data, name, date, label } }
+    const mainSig = (ctx && ctx.signature) || {};       // signature « stagiaire » du document
     let out = String(bodyHtml || '');
 
     const render = (key) => (RAW_TOKENS.has(key) ? values[key] : escapeHtml(values[key]));
+    // Un emplacement nommé désigne-t-il le stagiaire ? (Stagiaire 1…, élève, apprenant…)
+    const STAG_SLOT = /(stagiaire|eleve|élève|apprenant|participant|candidat|beneficiaire|bénéficiaire)/i;
     // Jeton de signature multiple « sig:<slot> » : cadre de signature (rempli si signé, sinon vide).
+    // Repli : un emplacement « stagiaire » non signé séparément reprend la signature
+    // du stagiaire du document (bouton « Signer » unique) — sinon il resterait vide.
     const renderSlot = (key, label) => {
-        const s = slotSigs[key.slice(4)];
-        return signatureBox(s && s.data, label || (s && s.label) || 'Signature');
+        const slot = key.slice(4);
+        const s = slotSigs[slot];
+        let data = s && s.data;
+        if (!data && mainSig.data && STAG_SLOT.test(slot + ' ' + (label || (s && s.label) || '')))
+            data = mainSig.data;
+        return signatureBox(data, label || (s && s.label) || 'Signature');
     };
     // Taille du cadre de signature portée par le jeton (data-w / data-h) : on
     // remplace les dimensions par défaut du cadre rendu par celles choisies.
