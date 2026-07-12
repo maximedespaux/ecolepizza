@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
@@ -22,11 +23,12 @@ const NEW = () => ({
 });
 
 const unitLabel = (tu) => (tu === "Piece" ? "pc" : tu === "L" ? "L" : "kg");
+const PAGE_SIZE = 12;
 
-// Barre de recherche du catalogue : texte + marque + catégorie + tri par prix.
-// Chaque résultat a un bouton « Ajouter » qui l'insère dans la garniture. Max 12.
-function GarnitureSearch({ onAdd }) {
-  const [open, setOpen] = useState(true);
+// Modale « Catalogue d'ingrédients » : filtres (nom, marque, catégorie, prix min/max,
+// tri) + résultats paginés. Chaque ligne a un bouton « Ajouter » (la modale reste
+// ouverte pour en ajouter plusieurs).
+function IngredientSearchModal({ onClose, onAdd, added }) {
   const [q, setQ] = useState("");
   const [brand, setBrand] = useState("");
   const [family, setFamily] = useState("");
@@ -35,64 +37,80 @@ function GarnitureSearch({ onAdd }) {
   const [pmax, setPmax] = useState("");
   const [families, setFamilies] = useState([]);
   const [res, setRes] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+
   useEffect(() => { getCatalogFamilies().then((r) => setFamilies(r.data || [])).catch(() => {}); }, []);
+  useEffect(() => { setPage(1); }, [q, brand, family, sort, pmin, pmax]);
   useEffect(() => {
-    if (!open) return;
     const t = setTimeout(() => {
-      if (!q && !brand && !family && !sort && pmin === "" && pmax === "") { setRes([]); return; }
-      searchCatalog({ q, brand, family, sort, price_min: pmin, price_max: pmax, limit: 12 })
-        .then((r) => setRes(r.data || [])).catch(() => setRes([]));
+      searchCatalog({ q, brand, family, sort, price_min: pmin, price_max: pmax, page, limit: PAGE_SIZE })
+        .then((r) => { setRes(r.data || []); setTotal(r.total || 0); })
+        .catch(() => { setRes([]); setTotal(0); });
     }, 250);
     return () => clearTimeout(t);
-  }, [q, brand, family, sort, pmin, pmax, open]);
+  }, [q, brand, family, sort, pmin, pmax, page]);
 
-  if (!open) {
-    return (
-      <button className="btn sm ghost" onClick={() => setOpen(true)}>
-        <span aria-hidden>🔍</span> Rechercher un ingrédient dans le catalogue
-      </button>
-    );
-  }
-  return (
-    <div className="gs">
-      <div className="gs-bar">
-        <span className="gs-search">
-          <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
-          <input placeholder="Rechercher un ingrédient…" value={q} onChange={(e) => setQ(e.target.value)} />
-        </span>
-        <input className="inp" placeholder="Marque" value={brand} onChange={(e) => setBrand(e.target.value)} />
-        <select className="inp" value={family} onChange={(e) => setFamily(e.target.value)}>
-          <option value="">Toutes catégories</option>
-          {families.map((f) => <option key={f} value={f}>{f}</option>)}
-        </select>
-        <span className="gs-price">
-          <input className="inp" type="number" step="0.1" min="0" placeholder="€ min" title="Prix minimum (par unité)" value={pmin} onChange={(e) => setPmin(e.target.value)} />
-          <span className="hint">–</span>
-          <input className="inp" type="number" step="0.1" min="0" placeholder="€ max" title="Prix maximum (par unité)" value={pmax} onChange={(e) => setPmax(e.target.value)} />
-        </span>
-        <select className="inp" value={sort} onChange={(e) => setSort(e.target.value)}>
-          <option value="">Tri : nom</option>
-          <option value="price_asc">Prix croissant</option>
-          <option value="price_desc">Prix décroissant</option>
-        </select>
-        <button className="iconbtn" title="Fermer la recherche" onClick={() => setOpen(false)}><Icon name="x" size={15} /></button>
-      </div>
-      {res.length > 0 && (
-        <div className="gs-res">
-          {res.map((p) => (
-            <div key={p.id} className="gs-item">
-              {p.image_url ? <img src={p.image_url} alt="" className="cat-thumb" /> : <span className="cat-thumb" />}
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <b style={{ display: "block", fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</b>
-                <span style={{ fontSize: 11, color: "var(--muted)" }}>{[p.brand, p.family].filter(Boolean).join(" · ")}</span>
-              </span>
-              <span className="mono" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{p.unit_ht != null ? `${euro(p.unit_ht)}/${unitLabel(p.type_unity)}` : "—"}</span>
-              <button className="btn sm primary" onClick={() => onAdd(p)}><Icon name="plus" size={13} /> Ajouter</button>
-            </div>
-          ))}
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  return createPortal(
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 760 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <h3 style={{ fontSize: 16 }}>Catalogue d'ingrédients</h3>
+          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
-      )}
-    </div>
+        <div className="mbody" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="gs-bar">
+            <span className="gs-search">
+              <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
+              <input placeholder="Rechercher un ingrédient…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+            </span>
+            <input className="inp" placeholder="Marque" value={brand} onChange={(e) => setBrand(e.target.value)} />
+            <select className="inp" value={family} onChange={(e) => setFamily(e.target.value)}>
+              <option value="">Toutes catégories</option>
+              {families.map((f) => <option key={f} value={f}>{f}</option>)}
+            </select>
+            <span className="gs-price">
+              <input className="inp" type="number" step="0.1" min="0" placeholder="€ min" title="Prix min (par unité)" value={pmin} onChange={(e) => setPmin(e.target.value)} />
+              <span className="hint">–</span>
+              <input className="inp" type="number" step="0.1" min="0" placeholder="€ max" title="Prix max (par unité)" value={pmax} onChange={(e) => setPmax(e.target.value)} />
+            </span>
+            <select className="inp" value={sort} onChange={(e) => setSort(e.target.value)}>
+              <option value="">Tri : nom</option>
+              <option value="price_asc">Prix croissant</option>
+              <option value="price_desc">Prix décroissant</option>
+            </select>
+          </div>
+
+          <div className="gs-res" style={{ maxHeight: "48vh", minHeight: 200 }}>
+            {res.length === 0 ? (
+              <p className="hint" style={{ margin: "auto", padding: 24 }}>Aucun ingrédient trouvé.</p>
+            ) : res.map((p) => (
+              <div key={p.id} className="gs-item">
+                {p.image_url ? <img src={p.image_url} alt="" className="cat-thumb" /> : <span className="cat-thumb" />}
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <b style={{ display: "block", fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</b>
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>{[p.brand, p.family].filter(Boolean).join(" · ")}</span>
+                </span>
+                <span className="mono" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{p.unit_ht != null ? `${euro(p.unit_ht)}/${unitLabel(p.type_unity)}` : "—"}</span>
+                <button className={"btn sm " + (added.has(p.id) ? "ghost" : "primary")} onClick={() => onAdd(p)}>
+                  <Icon name={added.has(p.id) ? "check" : "plus"} size={13} /> {added.has(p.id) ? "Ajouté" : "Ajouter"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="mfoot" style={{ justifyContent: "space-between" }}>
+          <span className="hint">{total} ingrédient{total > 1 ? "s" : ""}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button className="btn sm ghost" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}><Icon name="chevron-left" size={15} /></button>
+            <span className="hint">Page {page} / {pages}</span>
+            <button className="btn sm ghost" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))}><Icon name="chevron-right" size={15} /></button>
+          </span>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -100,6 +118,8 @@ function FicheRecette() {
   const [r, setR] = useState(NEW);
   const [saved, setSaved] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const added = useMemo(() => new Set(r.ingredients.map((i) => i.product_id).filter(Boolean)), [r.ingredients]);
 
   const reload = () => getMyRecipes().then((res) => setSaved(res.data || [])).catch(() => {});
   useEffect(() => { reload(); }, []);
@@ -198,9 +218,11 @@ function FicheRecette() {
 
         {/* Ligne 3 — garniture, pleine largeur, agrandie */}
         <Card className="fr-garniture" title={<span className="card-ttl" style={{ fontSize: 17 }}><Icon name="list-checks" size={18} /> Garniture <span className="hint" style={{ fontWeight: 400 }}>(par pizza)</span></span>}
-          more={<button className="btn sm ghost" onClick={addIng}><Icon name="plus" size={14} /> Ligne manuelle</button>}>
-          <GarnitureSearch onAdd={addProduct} />
-          <div className="ing-table big" style={{ marginTop: 14 }}>
+          more={<span style={{ display: "flex", gap: 8 }}>
+            <button className="btn sm primary" onClick={() => setSearchOpen(true)}><span aria-hidden>🔍</span> Rechercher des ingrédients</button>
+            <button className="btn sm ghost" onClick={addIng}><Icon name="plus" size={14} /> Ligne manuelle</button>
+          </span>}>
+          <div className="ing-table big">
             <div className="ing-row ing-head">
               <span>Ingrédient</span><span>Quantité</span><span>Unité</span><span>Prix</span><span>Coût / pizza</span><span />
             </div>
@@ -237,6 +259,8 @@ function FicheRecette() {
           )}
         </Card>
       </div>
+
+      {searchOpen && <IngredientSearchModal onClose={() => setSearchOpen(false)} onAdd={addProduct} added={added} />}
     </>
   );
 }

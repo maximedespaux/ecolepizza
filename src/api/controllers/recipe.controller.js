@@ -15,7 +15,9 @@ const searchCatalog = async (req, res) => {
         const brand = String(req.query.brand || '').trim();
         const family = String(req.query.family || '').trim();
         const sort = String(req.query.sort || '');
-        const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 12));
+        const limit = Math.min(30, Math.max(1, parseInt(req.query.limit, 10) || 12));
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const offset = (page - 1) * limit;
         const pmin = req.query.price_min !== undefined && req.query.price_min !== '' ? Number(req.query.price_min) : null;
         const pmax = req.query.price_max !== undefined && req.query.price_max !== '' ? Number(req.query.price_max) : null;
         const where = ['organization_id = ?']; const params = [req.user.organization_id];
@@ -26,12 +28,14 @@ const searchCatalog = async (req, res) => {
         if (Number.isFinite(pmax)) { where.push('unit_ht <= ?'); params.push(pmax); }
         const order = sort === 'price_asc' ? '(unit_ht IS NULL), unit_ht ASC'
             : sort === 'price_desc' ? 'unit_ht DESC' : 'name ASC';
+        const whereSql = where.join(' AND ');
+        const [[cnt]] = await conn.query(`SELECT COUNT(*) AS n FROM catalog_product WHERE ${whereSql}`, params);
         const [rows] = await conn.query(
             `SELECT id, name, brand, family, type_unity, unit_ht, unit_ttc, price_ht, image_url
-             FROM catalog_product WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ${limit}`,
+             FROM catalog_product WHERE ${whereSql} ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}`,
             params
         );
-        res.json({ data: rows });
+        res.json({ data: rows, total: cnt.n, page, limit });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] }); // migration 071 non jouée
         console.error('Erreur recherche catalogue :', err);
