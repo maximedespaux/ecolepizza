@@ -4,6 +4,7 @@ import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
+import { Icon } from "../components/Icon.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -165,7 +166,7 @@ function OrgModal({ onClose, onError, onCreated }) {
           <div className="field"><label>Mot de passe (affiché une seule fois)</label>
             <div style={{ display: "flex", gap: 8 }}>
               <input className="inp mono" value={form.password} onChange={set("password")} />
-              <button type="button" className="btn sm ghost" onClick={() => setForm((p) => ({ ...p, password: generatePassword() }))}>↻ Générer</button>
+              <button type="button" className="btn sm ghost" onClick={() => setForm((p) => ({ ...p, password: generatePassword() }))}><Icon name="refresh" size={13} /> Générer</button>
             </div>
           </div>
         </div>

@@ -28,6 +28,7 @@ import Factures from "./pages/Factures.jsx";
 import Comptabilite from "./pages/Comptabilite.jsx";
 import ProduitDivers from "./pages/ProduitDivers.jsx";
 import Carte from "./pages/Carte.jsx";
+import Mercuriale from "./pages/Mercuriale.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import Parametres from "./pages/Parametres.jsx";
 import Modeles from "./pages/Modeles.jsx";
@@ -44,6 +45,8 @@ import EmargementStagiaire from "./pages/EmargementStagiaire.jsx";
 import MesFormations from "./pages/MesFormations.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
 import Atelier from "./pages/Atelier.jsx";
+import PizzaQuest from "./pages/PizzaQuest.jsx";
+import FicheRecette from "./pages/FicheRecette.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -138,6 +141,8 @@ function AppRoutes() {
           <Route path="formations" element={<MesFormations />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
           <Route path="atelier" element={<Atelier />} />
+          <Route path="fiche-recette" element={<FicheRecette />} />
+          <Route path="pizza-quest" element={<PizzaQuest />} />
           {isIntervenant && <Route path="intervention" element={<IntervenantEspace />} />}
           <Route path="*" element={<Navigate to="/formations" replace />} />
         </Route>
@@ -162,6 +167,7 @@ function AppRoutes() {
           <Route path="comptabilite" element={<Guard nav="/comptabilite" roles={ADMIN}><Comptabilite /></Guard>} />
           <Route path="produit-divers" element={<Guard nav="/produit-divers" roles={STAFF}><ProduitDivers /></Guard>} />
           <Route path="carte" element={<Guard nav="/carte" roles={ADMIN}><Carte /></Guard>} />
+          <Route path="mercuriale" element={<Guard nav="/mercuriale" roles={ADMIN}><Mercuriale /></Guard>} />
           <Route path="reglages" element={<Guard nav="/reglages" roles={ADMIN}><Reglages /></Guard>} />
           <Route path="modeles" element={<Guard nav="/modeles" roles={ADMIN}><Modeles /></Guard>} />
           <Route path="modeles/:slug/editeur" element={<Guard nav="/modeles" roles={ADMIN}><TemplateEditor /></Guard>} />

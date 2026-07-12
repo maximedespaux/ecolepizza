@@ -327,6 +327,7 @@ tbody tr:last-child td{border-bottom:none}
 /* 404 ---------------------------------------------------------------- */
 .nf-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 20px;background:radial-gradient(70% 60% at 50% 0%,rgba(220,62,55,.14),transparent 60%),var(--bg)}
 .nf-visual{font-size:92px;line-height:1}
+.nf-pizza{color:var(--ember1)}
 .nf-code{font-family:var(--font-d);font-weight:700;font-size:74px;background:var(--grad-ember);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-top:4px}
 .nf-title{font-size:26px;margin:4px 0 0}
 .nf-text{color:var(--muted);max-width:440px;margin:12px 0 22px;font-size:15px;line-height:1.55}
@@ -514,7 +515,18 @@ tbody tr:last-child td{border-bottom:none}
 
 /* ===== Atelier pâte (espace stagiaire) ================================== */
 .dough-result{color:#fff;background:linear-gradient(135deg,var(--navy),var(--navy-dark))}
-.dough-line{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.10);border-radius:12px;padding:10px 12px;margin-bottom:9px}
+.dough-line{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.10);border-radius:12px;padding:10px 12px;margin-bottom:9px}
+.dough-bar{display:flex;height:12px;border-radius:99px;overflow:hidden;margin-bottom:16px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
+.dough-bar span{display:block;height:100%;transition:width .25s var(--ease)}
+.ate-lbl{font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.ate-step{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.15);display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
+
+/* Espace stagiaire — menu déroulant « Outils & Communauté » */
+.stu-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:60;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:6px;min-width:210px;display:flex;flex-direction:column;gap:2px}
+.stu-menu-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font-size:14px;font-weight:600;color:var(--text);text-decoration:none;white-space:nowrap}
+.stu-menu-item:hover:not(.disabled){background:var(--surface2)}
+.stu-menu-item.disabled{color:var(--dim);cursor:default;font-weight:500}
+.stu-menu-item .soon{margin-left:auto;font-size:10px;color:var(--dim);background:var(--surface2);border-radius:99px;padding:1px 7px}
 
 /* Indice « ce montant s'ajoute au CA » (produit divers) */
 .ca-add{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--green);
@@ -726,6 +738,108 @@ tbody tr:last-child td{border-bottom:none}
 .inv-cat{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.03em;color:var(--blue);margin:0 2px 8px;padding-bottom:6px;border-bottom:1px solid var(--border-soft)}
 .inv-cat .inv-cat-n{margin-left:auto;font-size:11px;font-weight:700;color:var(--dim);background:var(--surface2);border-radius:99px;padding:1px 8px}
 .inv-thumb{flex:0 0 40px;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,currentColor 12%,var(--surface2));border:1px solid var(--border-soft)}
+
+/* Mercuriale — tableau multi-magasins (une colonne de prix par magasin) */
+.merc-table{min-width:760px}
+.merc-table th.merc-store{white-space:nowrap}
+.merc-table th.merc-store .merc-x{margin-left:6px;border:none;background:none;color:var(--dim);cursor:pointer;padding:0;vertical-align:middle;opacity:.55}
+.merc-table th.merc-store .merc-x:hover{opacity:1;color:var(--ember1)}
+.merc-price{padding:2px 4px!important}
+.merc-price input{width:84px;text-align:right;padding:4px 6px;font-size:13px}
+.merc-price.best input{background:color-mix(in srgb,var(--green) 14%,var(--surface));border-color:color-mix(in srgb,var(--green) 45%,var(--border));font-weight:700;color:var(--green)}
+
+/* Pizza Quest — jeu d'entraînement QCM (carte de mondes façon Duolingo) */
+.pq-stat{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 12px;font-size:13px;color:var(--muted)}
+.pq-stat b{font-size:16px;color:var(--text)}
+.pq-world{display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:12px;padding:6px 12px 6px 6px;font-size:13px;font-weight:600;color:var(--text);transition:.12s var(--ease)}
+.pq-world-dot{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:11px;flex:none}
+.pq-world-t{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pq-map{background:var(--surface2);border:1px solid var(--border-soft);border-radius:16px;padding:24px 16px}
+.pq-path{display:flex;flex-direction:column;align-items:center;gap:20px}
+.pq-node-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;transition:transform .2s var(--ease)}
+.pq-node{width:62px;height:62px;border-radius:50%;border:none;background:var(--c,var(--navy));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 5px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000);transition:transform .1s var(--ease),box-shadow .1s var(--ease)}
+.pq-node:hover:not(:disabled){transform:translateY(-2px)}
+.pq-node:active:not(:disabled){transform:translateY(3px);box-shadow:0 2px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000)}
+.pq-node.done{background:var(--green);box-shadow:0 5px 0 0 #1f7a44}
+.pq-node.locked{background:var(--surface);color:var(--dim);border:2px solid var(--border);box-shadow:none;cursor:not-allowed}
+.pq-node-label{text-align:center;font-size:12.5px}
+.pq-node-label b{display:block}
+.pq-stars{font-size:11px;letter-spacing:1px}
+.pq-progress{flex:1;height:10px;background:var(--surface2);border-radius:99px;overflow:hidden}
+.pq-progress span{display:block;height:100%;border-radius:99px;transition:width .2s var(--ease)}
+.pq-choice{text-align:left;padding:12px 14px;border:2px solid var(--border);border-radius:12px;background:var(--surface);font-size:14px;font-weight:600;color:var(--text);cursor:pointer;transition:.1s var(--ease)}
+.pq-choice:hover:not(:disabled){border-color:var(--navy);background:var(--surface2)}
+.pq-choice.ok{border-color:var(--green);background:color-mix(in srgb,var(--green) 14%,var(--surface));color:var(--green)}
+.pq-choice.ko{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 12%,var(--surface));color:var(--ember1)}
+/* Étiquette de format de question */
+.pq-tag{display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:99px;border:1px solid transparent}
+.pq-tag-qcm{background:color-mix(in srgb,var(--blue) 14%,var(--surface));color:var(--blue)}
+.pq-tag-vf{background:color-mix(in srgb,var(--gold) 20%,var(--surface));color:var(--navy)}
+.pq-tag-assoc{background:color-mix(in srgb,var(--orange) 15%,var(--surface));color:var(--orange)}
+/* Vrai / Faux : deux gros boutons côte à côte */
+.pq-choice.pq-vf{flex:1;justify-content:center;align-items:center;display:inline-flex;gap:8px;text-align:center;padding:16px 12px;font-size:15px}
+/* Associations : deux colonnes à relier */
+.pq-assoc{display:flex;gap:12px}
+.pq-assoc-col{flex:1;display:flex;flex-direction:column;gap:8px}
+.pq-assoc-item{padding:11px 12px;border:2px solid var(--border);border-radius:12px;background:var(--surface);font-size:13.5px;font-weight:600;color:var(--text);cursor:pointer;transition:.12s var(--ease)}
+.pq-assoc-item:hover:not(:disabled){border-color:var(--navy);background:var(--surface2)}
+.pq-assoc-item.sel{border-color:var(--orange);background:color-mix(in srgb,var(--orange) 12%,var(--surface));color:var(--orange)}
+.pq-assoc-item.ok{border-color:var(--green);background:color-mix(in srgb,var(--green) 14%,var(--surface));color:var(--green);cursor:default}
+.pq-assoc-item.ko{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 12%,var(--surface));color:var(--ember1);animation:pqShake .35s}
+@keyframes pqShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+/* Pizza Quest — accueil : le schéma des formations en carte de jeu */
+.pq-board{background:var(--surface2);border:1px solid var(--border-soft);border-radius:16px;padding:22px 18px 26px}
+.pq-ingredients{display:flex;gap:12px;justify-content:center;font-size:22px;margin-bottom:16px;user-select:none}
+.pq-tier-label{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:center;margin:6px 0 12px}
+.pq-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.pq-fcard{position:relative;flex:1 1 230px;max-width:300px;min-height:88px;border:none;border-radius:14px;padding:14px 16px;color:#fff;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;box-shadow:0 4px 0 0 rgba(0,0,0,.18);transition:transform .1s var(--ease)}
+.pq-fcard:hover:not(:disabled){transform:translateY(-2px)}
+.pq-fcard:active:not(:disabled){transform:translateY(2px);box-shadow:0 2px 0 0 rgba(0,0,0,.18)}
+.pq-fcard.locked{background:var(--surface);color:var(--muted);box-shadow:none;cursor:not-allowed;border:1px solid var(--border)}
+.pq-fcard-top{display:flex;align-items:center;justify-content:space-between}
+.pq-fcard-code{font-size:11px;font-weight:800;letter-spacing:.06em;opacity:.92}
+.pq-fcard-ing{font-size:20px;line-height:1}
+.pq-fcard-title{font-size:15px;font-weight:800;line-height:1.15}
+.pq-fcard-meta{font-size:11px;opacity:.92;margin-top:4px}
+.pq-prereq{position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2c00;display:grid;place-items:center;font-weight:900;font-size:15px;border:2px solid var(--surface2)}
+.pq-connect{display:flex;justify-content:center;gap:70px;color:var(--dim);margin:4px 0}
+.pq-legend{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;border-radius:10px;padding:6px 12px 6px 8px;font-weight:700;font-size:12px}
+.pq-divider{height:2px;background:var(--border);border-radius:2px;margin:22px auto;max-width:520px}
+
+/* Profil stagiaire — avatar picker + grade */
+.pf-avatar{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;color:#fff;font-size:30px;font-weight:800;flex:none}
+.pf-grade{background:var(--surface2);border:1px solid var(--border-soft);border-radius:12px;padding:14px}
+.pf-chip{display:inline-flex;align-items:center;gap:5px;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:4px 10px;font-size:12px;font-weight:600}
+.pf-ladder{display:flex;justify-content:space-between;gap:4px;margin-top:12px}
+.pf-rank{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;padding:6px 2px;border-radius:8px;text-align:center}
+.pf-rank.on{background:color-mix(in srgb,var(--gold) 18%,var(--surface));outline:1px solid color-mix(in srgb,var(--gold) 45%,transparent)}
+.pf-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:8px}
+.pf-opt{position:relative;aspect-ratio:1;border:none;border-radius:14px;font-size:24px;cursor:pointer;display:grid;place-items:center;transition:transform .1s var(--ease);box-shadow:0 2px 0 0 rgba(0,0,0,.15)}
+.pf-opt:hover{transform:translateY(-2px)}
+.pf-opt.sel{outline:3px solid var(--text);outline-offset:2px}
+.pf-check{position:absolute;bottom:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;border:2px solid var(--surface)}
+
+/* Pizza Quest — mini-jeux + Le Constructeur (ordonnancement) */
+.pq-minis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.pq-mini{display:flex;align-items:center;gap:10px;flex:1 1 180px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;transition:transform .1s var(--ease),border-color .1s var(--ease)}
+.pq-mini:hover:not(.soon){transform:translateY(-2px);border-color:var(--ember1)}
+.pq-mini.soon{opacity:.55;cursor:default}
+.pq-mini-e{font-size:26px;line-height:1}
+.pq-mini-txt{display:flex;flex-direction:column}
+.pq-mini-txt b{font-size:14px}
+.pq-mini-sub{font-size:11.5px;color:var(--muted)}
+.cg-seq{display:flex;flex-direction:column;gap:6px}
+.cg-slot{display:flex;align-items:center;gap:8px;border:1.5px dashed var(--border);border-radius:10px;padding:8px 10px;font-size:13.5px;font-weight:600;min-height:40px;background:var(--surface);color:var(--text);cursor:pointer}
+.cg-slot.empty{color:var(--dim);font-weight:400;cursor:default}
+.cg-slot.ok{border-style:solid;border-color:var(--green);background:color-mix(in srgb,var(--green) 10%,var(--surface))}
+.cg-slot.ko{border-style:solid;border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,var(--surface))}
+.cg-num{width:22px;height:22px;border-radius:50%;background:var(--surface2);display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
+.cg-e{font-size:16px}
+.cg-ph{color:var(--dim)}
+.cg-pool{display:flex;flex-wrap:wrap;gap:8px}
+.cg-chip{border:1.5px solid var(--border);border-radius:99px;padding:7px 12px;background:var(--surface);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;transition:transform .1s var(--ease),border-color .1s var(--ease)}
+.cg-chip:hover{border-color:var(--navy);background:var(--surface2);transform:translateY(-1px)}
 
 .tpl-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
 .tpl-actions>.btn.sm.ghost,.tpl-actions>.slot{width:32px;padding:0;justify-content:center;flex:0 0 auto}

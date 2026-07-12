@@ -453,6 +453,51 @@ const PATHS = {
       <rect width="4" height="4" x="15" y="5" /><path d="m19 9 2 2v10c0 .6-.4 1-1 1h-6c-.6 0-1-.4-1-1V11l2-2" /><path d="M13 14h8" />
     </>
   ),
+  "lock": (
+    <>
+      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </>
+  ),
+  "clock": (
+    <>
+      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+    </>
+  ),
+  "shuffle": (
+    <>
+      <path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.8-1.1 2-1.7 3.3-1.7H22" />
+      <path d="m18 2 4 4-4 4" /><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2" /><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8" /><path d="m18 14 4 4-4 4" />
+    </>
+  ),
+  "flask": (
+    <>
+      <path d="M10 2v7.5a2 2 0 0 1-.3 1L5 18a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-4.7-7.5a2 2 0 0 1-.3-1V2" />
+      <path d="M8.5 2h7" /><path d="M7 16h10" />
+    </>
+  ),
+  "wheat": (
+    <>
+      <path d="M2 22 16 8" /><path d="M3.5 12.5 5 11l1.5 1.5a2.1 2.1 0 0 1 0 3L5 17l-1.5-1.5a2.1 2.1 0 0 1 0-3Z" />
+      <path d="M7.5 8.5 9 7l1.5 1.5a2.1 2.1 0 0 1 0 3L9 13l-1.5-1.5a2.1 2.1 0 0 1 0-3Z" />
+      <path d="M11.5 4.5 13 3l1.5 1.5a2.1 2.1 0 0 1 0 3L13 9l-1.5-1.5a2.1 2.1 0 0 1 0-3Z" />
+    </>
+  ),
+  "salt": (
+    <>
+      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><rect x="6.5" y="7" width="11" height="14" rx="2" />
+      <path d="M10 5V3" /><path d="M14 5V3" /><path d="M10.5 12h.01" /><path d="M13.5 12h.01" /><path d="M12 15h.01" />
+    </>
+  ),
+  "oil": (
+    <>
+      <path d="M9.5 8 8 9.7V19a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.7L14.5 8" /><path d="M10 8V4h4v4" /><path d="M10 4h4" />
+    </>
+  ),
+  "yeast": (
+    <>
+      <circle cx="8.5" cy="11" r="3" /><circle cx="15" cy="9.5" r="2.5" /><circle cx="14" cy="16" r="2.5" />
+    </>
+  ),
 };
 
 /** Icône SVG décorative. `name` = clé du dico (sinon la chaîne est rendue telle quelle). */

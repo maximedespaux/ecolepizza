@@ -4,6 +4,7 @@ import { getMyFormations } from "../api/apiClient.js";
 import Card from "../components/Card.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import { Icon } from "../components/Icon.jsx";
 import { colorOf, euro } from "../lib/format.js";
 
 function MesFormations() {
@@ -25,8 +26,8 @@ function MesFormations() {
     <>
       <div className="hero">
         <div className="eyebrow">Espace stagiaire</div>
-        <h1>Mes formations</h1>
-        <p>Chaque formation se déverrouille dès votre inscription à une session. Vous y accédez à tous vos documents et à votre émargement.</p>
+        <h1>Mes documents</h1>
+        <p>Toutes vos démarches administratives — avant, pendant et après la formation : convocation, règlement, émargements, attestation, facture… Choisissez une formation pour accéder à ses documents.</p>
       </div>
 
       <StatusMessage status={status} />
@@ -40,17 +41,18 @@ function MesFormations() {
           {sorted.map((f) => {
             const color = f.color || colorOf(f.program_code);
             const locked = !f.enrolled; // déverrouillée dès l'inscription à une session
+            const shown = locked ? "#9aa0b5" : color; // gris tant que verrouillé, couleur une fois débloqué
             return (
               <div
                 key={f.program_id}
                 className={`card hover`}
-                style={{ cursor: "pointer", opacity: locked ? 0.72 : 1, borderTop: `3px solid ${color}` }}
+                style={{ cursor: "pointer", opacity: locked ? 0.72 : 1, borderTop: `3px solid ${shown}`, background: locked ? undefined : `color-mix(in srgb, ${color} 6%, var(--surface))` }}
                 onClick={locked ? () => setInfo(f) : () => navigate(`/formations/${f.enrollment_id}`)}
                 title={locked ? "Voir les informations (formation non suivie)" : "Voir mes documents et mon émargement"}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span className="badge n mono" style={{ background: color, color: "#fff", borderColor: "transparent" }}>{f.program_code}</span>
-                  <span style={{ fontSize: 18 }}>{locked ? "🔒" : f.complete ? "✅" : "📂"}</span>
+                  <span className="badge n mono" style={{ background: shown, color: "#fff", borderColor: "transparent" }}>{f.program_code}</span>
+                  <span style={{ color: locked ? "#9aa0b5" : f.complete ? "var(--green)" : color, display: "inline-flex" }}><Icon name={locked ? "lock" : f.complete ? "check-circle" : "folder-check"} size={17} /></span>
                 </div>
                 <h3 style={{ fontSize: 15, margin: "10px 0 4px" }}>{f.program_title}</h3>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>
@@ -62,8 +64,8 @@ function MesFormations() {
                 </p>
 
                 {f.enrolled && (
-                  <div className="progress" style={{ margin: "12px 0 6px" }}>
-                    <span style={{ width: `${f.total ? (f.signed / f.total) * 100 : 0}%` }} />
+                  <div className="progress" style={{ margin: "12px 0 6px", height: 8 }}>
+                    <span style={{ width: `${f.total ? (f.signed / f.total) * 100 : 0}%`, background: color }} />
                   </div>
                 )}
                 <p style={{ fontSize: 12, color: f.complete ? "var(--green)" : "var(--muted)", margin: f.enrolled ? 0 : "12px 0 0", fontWeight: 600 }}>

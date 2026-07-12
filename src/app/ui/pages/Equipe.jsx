@@ -426,7 +426,7 @@ function MemberModal({ member, actorRole, onClose, onError, onCreated, onSaved }
               <label>Mot de passe (généré, affiché une seule fois)</label>
               <div style={{ display: "flex", gap: 8 }}>
                 <input className="inp mono" value={password} onChange={(e) => setPassword(e.target.value)} />
-                <button type="button" className="btn sm ghost" onClick={() => setPassword(generatePassword())}>↻ Générer</button>
+                <button type="button" className="btn sm ghost" onClick={() => setPassword(generatePassword())}><Icon name="refresh" size={13} /> Générer</button>
               </div>
             </div>
           ) : (
@@ -438,7 +438,7 @@ function MemberModal({ member, actorRole, onClose, onError, onCreated, onSaved }
               {resetPw && (
                 <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                   <input className="inp mono" value={password} onChange={(e) => setPassword(e.target.value)} />
-                  <button type="button" className="btn sm ghost" onClick={() => setPassword(generatePassword())}>↻</button>
+                  <button type="button" className="btn sm ghost" onClick={() => setPassword(generatePassword())}><Icon name="refresh" size={14} /></button>
                 </div>
               )}
             </div>

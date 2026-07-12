@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getCarte, geocodeCarte, getFormations } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
+import { Icon } from "../components/Icon.jsx";
 import { LEVELS, colorForLevel, LEVEL_LABEL, setBadgeColors } from "../lib/levels.js";
 
 // Centroïdes (préfecture) par département — suffisant pour une carte à bulles.
@@ -260,14 +261,14 @@ function Carte() {
               </button>
             );
           })}
-          {forms.length > 0 && <button className="btn sm ghost" onClick={() => setForms([])}>✕ Toutes</button>}
+          {forms.length > 0 && <button className="btn sm ghost" onClick={() => setForms([])}><Icon name="x" size={13} /> Toutes</button>}
         </div>
       )}
 
       {dept && (
         <div className="dept-banner">
           <b>{deptName(dept)} ({dept})</b> — {deptPoints.length} stagiaire(s) géolocalisé(s)
-          <button className="btn sm ghost" onClick={() => setDept(null)}>← Tous les départements</button>
+          <button className="btn sm ghost" onClick={() => setDept(null)}><Icon name="chevron-left" size={14} /> Tous les départements</button>
         </div>
       )}
 

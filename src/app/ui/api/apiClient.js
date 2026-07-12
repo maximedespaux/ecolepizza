@@ -740,3 +740,26 @@ export function createContribution(payload) {
 export function deleteContribution(id) {
   return request(`/partenaires/contributions/${id}`, { method: "DELETE" });
 }
+
+// --- Mercuriale (liste de prix de référence, comparaison multi-magasins) ---
+export function getMercuriale() {
+  return request("/mercuriale");
+}
+export function createMercStore(name) {
+  return request("/mercuriale/stores", { method: "POST", body: JSON.stringify({ name }) });
+}
+export function deleteMercStore(id) {
+  return request(`/mercuriale/stores/${id}`, { method: "DELETE" });
+}
+export function createMercItem(payload) {
+  return request("/mercuriale/items", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateMercItem(id, payload) {
+  return request(`/mercuriale/items/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deleteMercItem(id) {
+  return request(`/mercuriale/items/${id}`, { method: "DELETE" });
+}
+export function setMercPrice(itemId, storeId, payload) {
+  return request(`/mercuriale/items/${itemId}/prices/${storeId}`, { method: "PUT", body: JSON.stringify(payload) });
+}
