@@ -1,5 +1,5 @@
 const express = require('express');
-const { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe } = require('../controllers/recipe.controller.js');
+const { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, toggleLike, addComment, deleteComment } = require('../controllers/recipe.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -14,5 +14,8 @@ router.get('/:id', authenticateToken, getRecipe);
 router.post('/', authenticateToken, createRecipe);
 router.put('/:id', authenticateToken, updateRecipe);
 router.delete('/:id', authenticateToken, deleteRecipe);
+router.post('/:id/like', authenticateToken, toggleLike);
+router.post('/:id/comments', authenticateToken, addComment);
+router.delete('/:id/comments/:cid', authenticateToken, deleteComment);
 
 module.exports = router;

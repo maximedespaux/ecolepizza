@@ -7,6 +7,14 @@ const db = require('../config/database.js');
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const authorName = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
 
+// Récupère une fiche accessible à l'utilisateur (auteur, ou partagée dans le même organisme).
+async function accessibleRecipe(conn, id, user) {
+    const [[r]] = await conn.query('SELECT id, author_user_id, organization_id, visibility FROM recipe WHERE id = ?', [id]);
+    if (!r) return null;
+    const ok = r.author_user_id === user.id || (r.visibility === 'SHARED' && r.organization_id === user.organization_id);
+    return ok ? r : false;
+}
+
 /** GET /api/recipes/catalog?q=&brand=&family=&sort=&limit= — recherche filtrée d'ingrédients. */
 const searchCatalog = async (req, res) => {
     try {
@@ -164,6 +172,17 @@ const listShared = async (req, res) => {
              ORDER BY updated_at DESC LIMIT 200`,
             [req.user.organization_id]
         );
+        // Compteurs cœurs / commentaires (dégradent si migration 074 non lancée).
+        const ids = rows.map((r) => r.id);
+        if (ids.length) {
+            try {
+                const [likes] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_like WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
+                const [coms] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_comment WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
+                const lm = Object.fromEntries(likes.map((x) => [x.recipe_id, x.n]));
+                const cm = Object.fromEntries(coms.map((x) => [x.recipe_id, x.n]));
+                rows.forEach((r) => { r.like_count = lm[r.id] || 0; r.comment_count = cm[r.id] || 0; });
+            } catch (e) { if (!noTable(e)) throw e; }
+        }
         res.json({ data: rows });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] });
@@ -186,7 +205,19 @@ const getRecipe = async (req, res) => {
             `SELECT id, product_id, component_recipe_id, label, qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ? ORDER BY sort_order, id`,
             [req.params.id]);
         delete r.organization_id;
-        res.json({ data: { ...r, mine, ingredients: ings } });
+        // Interactions communauté (cœur + commentaires) — dégradent en douceur si migration 074 non lancée.
+        let likeCount = 0, liked = false, comments = [];
+        try {
+            const [[lc]] = await conn.query('SELECT COUNT(*) AS n FROM recipe_like WHERE recipe_id = ?', [req.params.id]);
+            likeCount = lc.n;
+            const [[lm]] = await conn.query('SELECT 1 AS l FROM recipe_like WHERE recipe_id = ? AND user_id = ?', [req.params.id, req.user.id]);
+            liked = !!lm;
+            const [cs] = await conn.query(
+                `SELECT id, user_id, author_name, body, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at
+                 FROM recipe_comment WHERE recipe_id = ? ORDER BY created_at`, [req.params.id]);
+            comments = cs.map((c) => ({ ...c, mine: c.user_id === req.user.id }));
+        } catch (e) { if (!noTable(e)) throw e; }
+        res.json({ data: { ...r, mine, ingredients: ings, like_count: likeCount, liked, comments } });
     } catch (err) {
         if (noTable(err)) return res.status(404).json({ message: 'Espace recettes non initialisé (migration 071).' });
         console.error('Erreur lecture recette :', err);
@@ -281,4 +312,59 @@ const deleteRecipe = async (req, res) => {
     }
 };
 
-module.exports = { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe };
+/** POST /api/recipes/:id/like — bascule le « j'aime » de l'utilisateur ; renvoie l'état + compteur. */
+const toggleLike = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const r = await accessibleRecipe(conn, req.params.id, req.user);
+        if (r === null) return res.status(404).json({ message: 'Recette introuvable.' });
+        if (r === false) return res.status(403).json({ message: 'Accès refusé.' });
+        const [[had]] = await conn.query('SELECT 1 AS l FROM recipe_like WHERE recipe_id = ? AND user_id = ?', [req.params.id, req.user.id]);
+        if (had) await conn.query('DELETE FROM recipe_like WHERE recipe_id = ? AND user_id = ?', [req.params.id, req.user.id]);
+        else await conn.query('INSERT IGNORE INTO recipe_like (recipe_id, user_id) VALUES (?, ?)', [req.params.id, req.user.id]);
+        const [[lc]] = await conn.query('SELECT COUNT(*) AS n FROM recipe_like WHERE recipe_id = ?', [req.params.id]);
+        res.json({ data: { liked: !had, like_count: lc.n } });
+    } catch (err) {
+        if (noTable(err)) return res.status(422).json({ message: 'Interactions non initialisées (migration 074).' });
+        console.error('Erreur like recette :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** POST /api/recipes/:id/comments — ajoute un commentaire ; renvoie le commentaire créé. */
+const addComment = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const body = String((req.body || {}).body || '').trim().slice(0, 2000);
+        if (!body) return res.status(422).json({ message: 'Commentaire vide.' });
+        const r = await accessibleRecipe(conn, req.params.id, req.user);
+        if (r === null) return res.status(404).json({ message: 'Recette introuvable.' });
+        if (r === false) return res.status(403).json({ message: 'Accès refusé.' });
+        const id = crypto.randomUUID();
+        const name = authorName(req.user);
+        await conn.query('INSERT INTO recipe_comment (id, recipe_id, user_id, author_name, body) VALUES (?, ?, ?, ?, ?)',
+            [id, req.params.id, req.user.id, name, body]);
+        res.status(201).json({ data: { id, user_id: req.user.id, author_name: name, body, mine: true } });
+    } catch (err) {
+        if (noTable(err)) return res.status(422).json({ message: 'Interactions non initialisées (migration 074).' });
+        console.error('Erreur commentaire recette :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** DELETE /api/recipes/:id/comments/:cid — supprime son propre commentaire. */
+const deleteComment = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[c]] = await conn.query('SELECT user_id FROM recipe_comment WHERE id = ? AND recipe_id = ?', [req.params.cid, req.params.id]);
+        if (!c) return res.status(404).json({ message: 'Commentaire introuvable.' });
+        if (c.user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut supprimer.' });
+        await conn.query('DELETE FROM recipe_comment WHERE id = ?', [req.params.cid]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur suppression commentaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, toggleLike, addComment, deleteComment };
