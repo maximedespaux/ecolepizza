@@ -536,9 +536,13 @@ export function saveMyQuest(progress) {
 }
 
 // --- Fiches techniques (recettes) + catalogue d'ingrédients ---
-export function searchCatalog(q) {
-  return request(`/recipes/catalog?q=${encodeURIComponent(q || "")}`, { silent: true });
+export function searchCatalog(arg) {
+  const p = typeof arg === "string" ? { q: arg } : (arg || {});
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(p)) if (v != null && v !== "") qs.set(k, v);
+  return request(`/recipes/catalog?${qs.toString()}`, { silent: true });
 }
+export function getCatalogFamilies() { return request("/recipes/catalog/families", { silent: true }); }
 export function getMyRecipes() { return request("/recipes/mine"); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getRecipe(id) { return request(`/recipes/${id}`); }

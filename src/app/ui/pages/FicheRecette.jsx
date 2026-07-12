@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
-import { searchCatalog, getMyRecipes, getRecipe, createRecipe, updateRecipe, deleteRecipe } from "../api/apiClient.js";
+import { searchCatalog, getCatalogFamilies, getMyRecipes, getRecipe, createRecipe, updateRecipe, deleteRecipe } from "../api/apiClient.js";
 
 /**
  * Fiche technique — compose une pizza (empâtement + garnitures), calcule le coût
@@ -21,43 +21,59 @@ const NEW = () => ({
   ],
 });
 
-// Autocomplétion catalogue : tape → propositions ; sélection remplit libellé + prix + unité.
-function IngredientPicker({ value, onPick, onText }) {
-  const [q, setQ] = useState(value || "");
-  const [list, setList] = useState([]);
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => { setQ(value || ""); }, [value]);
+const unitLabel = (tu) => (tu === "Piece" ? "pc" : tu === "L" ? "L" : "kg");
+
+// Barre de recherche du catalogue : texte + marque + catégorie + tri par prix.
+// Chaque résultat a un bouton « Ajouter » qui l'insère dans la garniture. Max 12.
+function GarnitureSearch({ onAdd }) {
+  const [q, setQ] = useState("");
+  const [brand, setBrand] = useState("");
+  const [family, setFamily] = useState("");
+  const [sort, setSort] = useState("");
+  const [families, setFamilies] = useState([]);
+  const [res, setRes] = useState([]);
+  useEffect(() => { getCatalogFamilies().then((r) => setFamilies(r.data || [])).catch(() => {}); }, []);
   useEffect(() => {
-    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, []);
-  useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(() => { searchCatalog(q).then((r) => setList(r.data || [])).catch(() => setList([])); }, 220);
+    const t = setTimeout(() => {
+      if (!q && !brand && !family && !sort) { setRes([]); return; }
+      searchCatalog({ q, brand, family, sort, limit: 12 }).then((r) => setRes(r.data || [])).catch(() => setRes([]));
+    }, 250);
     return () => clearTimeout(t);
-  }, [q, open]);
+  }, [q, brand, family, sort]);
   return (
-    <span ref={ref} style={{ flex: 1, position: "relative", minWidth: 0 }}>
-      <input className="inp" style={{ width: "100%" }} placeholder="Ingrédient (catalogue Metro)" value={q}
-        onChange={(e) => { setQ(e.target.value); onText(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)} />
-      {open && list.length > 0 && (
-        <div className="cat-pop">
-          {list.map((p) => (
-            <button key={p.id} type="button" className="cat-opt" onMouseDown={(e) => { e.preventDefault(); onPick(p); setOpen(false); }}>
+    <div className="gs">
+      <div className="gs-bar">
+        <span className="gs-search">
+          <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
+          <input placeholder="Rechercher un ingrédient…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </span>
+        <input className="inp" placeholder="Marque" value={brand} onChange={(e) => setBrand(e.target.value)} />
+        <select className="inp" value={family} onChange={(e) => setFamily(e.target.value)}>
+          <option value="">Toutes catégories</option>
+          {families.map((f) => <option key={f} value={f}>{f}</option>)}
+        </select>
+        <select className="inp" value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="">Tri : nom</option>
+          <option value="price_asc">Prix croissant</option>
+          <option value="price_desc">Prix décroissant</option>
+        </select>
+      </div>
+      {res.length > 0 && (
+        <div className="gs-res">
+          {res.map((p) => (
+            <div key={p.id} className="gs-item">
               {p.image_url ? <img src={p.image_url} alt="" className="cat-thumb" /> : <span className="cat-thumb" />}
               <span style={{ flex: 1, minWidth: 0 }}>
-                <b style={{ display: "block", fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</b>
-                <span style={{ fontSize: 11, color: "var(--muted)" }}>{p.brand || p.family}</span>
+                <b style={{ display: "block", fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</b>
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>{[p.brand, p.family].filter(Boolean).join(" · ")}</span>
               </span>
-              <span className="mono" style={{ fontSize: 11 }}>{p.unit_ht != null ? `${euro(p.unit_ht)}/${p.type_unity === "Piece" ? "pc" : p.type_unity === "L" ? "L" : "kg"}` : ""}</span>
-            </button>
+              <span className="mono" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{p.unit_ht != null ? `${euro(p.unit_ht)}/${unitLabel(p.type_unity)}` : "—"}</span>
+              <button className="btn sm primary" onClick={() => onAdd(p)}><Icon name="plus" size={13} /> Ajouter</button>
+            </div>
           ))}
         </div>
       )}
-    </span>
+    </div>
   );
 }
 
@@ -73,11 +89,13 @@ function FicheRecette() {
   const setIng = (i, patch) => setR((p) => ({ ...p, ingredients: p.ingredients.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
   const addIng = () => setR((p) => ({ ...p, ingredients: [...p.ingredients, { label: "", qty: 0, unit: "g", unit_price: 0, product_id: null }] }));
   const delIng = (i) => setR((p) => ({ ...p, ingredients: p.ingredients.filter((_, j) => j !== i) }));
-  const pickProduct = (i, prod) => setIng(i, {
+  // Ajoute un ingrédient depuis le catalogue : on stocke le NOM du produit (jamais la marque).
+  const addProduct = (prod) => setR((p) => ({ ...p, ingredients: [...p.ingredients, {
     label: prod.name, product_id: prod.id,
     unit: prod.type_unity === "Piece" ? "piece" : "g",
     unit_price: prod.unit_ht != null ? Number(prod.unit_ht) : 0,
-  });
+    qty: prod.type_unity === "Piece" ? 1 : 50,
+  }] }));
 
   const nb = Math.max(1, num(r.servings));
   const flourBatchKg = (nb * num(r.paton_g)) / 1000 / 1.68;
@@ -134,69 +152,71 @@ function FicheRecette() {
           </Card>
         </div>
 
-        {/* Ligne 2 — garniture, pleine largeur avec en-têtes de colonnes */}
-        <Card title={<span className="card-ttl"><Icon name="list-checks" size={16} /> Garniture <span className="hint" style={{ fontWeight: 400 }}>(par pizza)</span></span>}
-          more={<button className="btn sm ghost" onClick={addIng}><Icon name="plus" size={13} /> Ajouter un ingrédient</button>}>
-          <div className="ing-table">
-            <div className="ing-row ing-head">
-              <span>Ingrédient</span><span>Quantité</span><span>Unité</span><span>Prix</span><span>Coût / pizza</span><span />
-            </div>
-            {r.ingredients.map((t, i) => (
-              <div className="ing-row" key={i}>
-                <IngredientPicker value={t.label} onPick={(p) => pickProduct(i, p)} onText={(v) => setIng(i, { label: v, product_id: null })} />
-                <input className="inp" type="number" title="Quantité" value={t.qty} onChange={(e) => setIng(i, { qty: e.target.value })} />
-                <select className="inp" value={t.unit} onChange={(e) => setIng(i, { unit: e.target.value })}><option value="g">g</option><option value="piece">pièce</option></select>
-                <input className="inp" type="number" step="0.01" title={t.unit === "g" ? "€/kg" : "€/pièce"} placeholder={t.unit === "g" ? "€/kg" : "€/pc"} value={t.unit_price} onChange={(e) => setIng(i, { unit_price: e.target.value })} />
-                <span className="mono" style={{ textAlign: "right", fontWeight: 600 }}>{euro(lineCost(t))}</span>
-                <button className="iconbtn del" title="Retirer" onClick={() => delIng(i)}><Icon name="trash" size={14} /></button>
-              </div>
-            ))}
-            {r.ingredients.length === 0 && <p className="hint" style={{ margin: "6px 2px" }}>Aucun ingrédient. Clique « Ajouter un ingrédient ».</p>}
-          </div>
-          <p className="hint" style={{ margin: "14px 0 0" }}>Tape un nom pour choisir un produit du catalogue Metro (le prix se remplit tout seul). Coût garniture : <b>{euro(toppingPerPizza)}</b> / pizza</p>
-        </Card>
-
-        {/* Ligne 3 — prix conseillé + mes recettes */}
-        <div className="grid cols-2" style={{ gap: 22, alignItems: "start" }}>
-          <div className="card dough-result">
+        {/* Ligne 2 — prix conseillé / coût total + actions (au-dessus de la garniture) */}
+        <div className="card dough-result fr-result">
+          <div>
             <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{r.name || "Nouvelle recette"} · {r.type}</div>
-            <div style={{ font: "800 30px/1.1 var(--font-d)", margin: "8px 0 2px" }}>{euro(pricePerPizza)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pizza conseillé</span></div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
+            <div style={{ font: "800 32px/1.1 var(--font-d)", margin: "8px 0 2px" }}>{euro(pricePerPizza)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pizza conseillé</span></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
               <Row label="Coût matière total" value={euro(totalCost)} />
               <Row label="Coût par pizza" value={euro(perPizza)} />
               <Row label={`Marge (${r.margin_pct} %)`} value={euro(marginEur)} accent />
             </div>
-            <div style={{ marginTop: 20 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "rgba(255,255,255,.7)", marginBottom: 6 }}><span>Marge sur coût</span><b>{r.margin_pct} %</b></div>
-              <input type="range" min="0" max="300" step="5" value={r.margin_pct} onChange={set("margin_pct")} style={{ width: "100%", accentColor: "var(--gold)" }} />
-            </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+          </div>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "rgba(255,255,255,.7)", marginBottom: 6 }}><span>Marge sur coût</span><b>{r.margin_pct} %</b></div>
+            <input type="range" min="0" max="300" step="5" value={r.margin_pct} onChange={set("margin_pct")} style={{ width: "100%", accentColor: "var(--gold)" }} />
+            <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
               <button className="btn primary" onClick={() => persist()} disabled={busy} style={{ flex: 1, justifyContent: "center" }}><Icon name="check" size={15} /> {r.id ? "Enregistrer" : "Créer"}</button>
               <button className={"btn " + (shared ? "primary" : "ghost")} onClick={() => persist({ visibility: shared ? "PRIVATE" : "SHARED" })} disabled={busy}
                 title={shared ? "Rendre privée" : "Partager à la communauté"} style={shared ? null : { color: "rgba(255,255,255,.85)", borderColor: "rgba(255,255,255,.35)" }}>
                 <Icon name={shared ? "users" : "send"} size={15} /> {shared ? "Partagée" : "Partager"}
               </button>
             </div>
-            {r.id && <button className="btn sm ghost" onClick={() => setR(NEW())} style={{ marginTop: 12, color: "rgba(255,255,255,.8)", borderColor: "rgba(255,255,255,.3)" }}><Icon name="plus" size={13} /> Nouvelle recette</button>}
+            <button className="btn ghost" onClick={() => setR(NEW())} style={{ marginTop: 10, width: "100%", justifyContent: "center", color: "rgba(255,255,255,.85)", borderColor: "rgba(255,255,255,.3)" }}><Icon name="plus" size={14} /> Nouvelle recette</button>
           </div>
-
-          <Card title={<span className="card-ttl"><Icon name="history" size={16} /> Mes recettes</span>}>
-            {saved.length === 0 ? (
-              <p className="hint" style={{ margin: 0 }}>Aucune recette enregistrée pour l'instant.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                {saved.map((s) => (
-                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                    <span style={{ flex: 1, minWidth: 0 }}><b>{s.name}</b>
-                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.type}{s.visibility === "SHARED" ? " · 🌍 partagée" : ""}</span></span>
-                    <button className="btn sm ghost" onClick={() => openRecipe(s.id)}>Ouvrir</button>
-                    <button className="iconbtn del" title="Supprimer" onClick={() => removeRecipe(s.id)}><Icon name="trash" size={14} /></button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
         </div>
+
+        {/* Ligne 3 — garniture, pleine largeur, agrandie */}
+        <Card className="fr-garniture" title={<span className="card-ttl" style={{ fontSize: 17 }}><Icon name="list-checks" size={18} /> Garniture <span className="hint" style={{ fontWeight: 400 }}>(par pizza)</span></span>}
+          more={<button className="btn sm ghost" onClick={addIng}><Icon name="plus" size={14} /> Ligne manuelle</button>}>
+          <GarnitureSearch onAdd={addProduct} />
+          <div className="ing-table big" style={{ marginTop: 14 }}>
+            <div className="ing-row ing-head">
+              <span>Ingrédient</span><span>Quantité</span><span>Unité</span><span>Prix</span><span>Coût / pizza</span><span />
+            </div>
+            {r.ingredients.map((t, i) => (
+              <div className="ing-row" key={i}>
+                <input className="inp" placeholder="Ingrédient" value={t.label} onChange={(e) => setIng(i, { label: e.target.value, product_id: null })} />
+                <input className="inp" type="number" title="Quantité" value={t.qty} onChange={(e) => setIng(i, { qty: e.target.value })} />
+                <select className="inp" value={t.unit} onChange={(e) => setIng(i, { unit: e.target.value })}><option value="g">g</option><option value="piece">pièce</option></select>
+                <input className="inp" type="number" step="0.01" title={t.unit === "g" ? "€/kg" : "€/pièce"} placeholder={t.unit === "g" ? "€/kg" : "€/pc"} value={t.unit_price} onChange={(e) => setIng(i, { unit_price: e.target.value })} />
+                <span className="mono ing-cost">{euro(lineCost(t))}</span>
+                <button className="iconbtn del" title="Retirer" onClick={() => delIng(i)}><Icon name="trash" size={15} /></button>
+              </div>
+            ))}
+            {r.ingredients.length === 0 && <p className="hint" style={{ margin: "6px 2px" }}>Aucun ingrédient. Recherche ci-dessus, ou « Ligne manuelle ».</p>}
+          </div>
+          <p className="hint" style={{ margin: "16px 0 0", fontSize: 13 }}>Recherche un produit du catalogue Metro et clique « Ajouter » (prix pré-rempli). Coût garniture : <b>{euro(toppingPerPizza)}</b> / pizza</p>
+        </Card>
+
+        {/* Ligne 4 — mes recettes */}
+        <Card title={<span className="card-ttl"><Icon name="history" size={16} /> Mes recettes</span>}>
+          {saved.length === 0 ? (
+            <p className="hint" style={{ margin: 0 }}>Aucune recette enregistrée pour l'instant.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {saved.map((s) => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                  <span style={{ flex: 1, minWidth: 0 }}><b>{s.name}</b>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.type}{s.visibility === "SHARED" ? " · 🌍 partagée" : ""}</span></span>
+                  <button className="btn sm ghost" onClick={() => openRecipe(s.id)}>Ouvrir</button>
+                  <button className="iconbtn del" title="Supprimer" onClick={() => removeRecipe(s.id)}><Icon name="trash" size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
     </>
   );

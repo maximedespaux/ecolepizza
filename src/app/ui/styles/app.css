@@ -889,3 +889,20 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .ing-head{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);font-weight:700;padding:0 2px 4px;border-bottom:1px solid var(--border-soft);margin-bottom:2px}
 .ing-head span:nth-child(5){text-align:right}
 @media(max-width:720px){.ing-row{grid-template-columns:minmax(0,1fr) 70px 80px 88px 76px 30px;gap:8px}}
+
+/* Fiche technique — panneau prix conseillé au-dessus de la garniture */
+.fr-result{display:grid;grid-template-columns:1.05fr 1fr;gap:26px;align-items:center}
+@media(max-width:760px){.fr-result{grid-template-columns:1fr;gap:18px}}
+/* Garniture agrandie */
+.ing-table.big .ing-row{grid-template-columns:minmax(0,1fr) 96px 104px 116px 100px 36px;gap:14px}
+.ing-table.big .inp,.ing-table.big select{padding:9px 11px;font-size:14.5px}
+.ing-cost{text-align:right;font-weight:700;font-size:14px}
+/* Barre de recherche du catalogue d'ingrédients */
+.gs{display:flex;flex-direction:column;gap:10px}
+.gs-bar{display:flex;gap:10px;flex-wrap:wrap}
+.gs-bar > .inp{flex:0 1 auto;min-width:120px;max-width:200px}
+.gs-search{display:flex;align-items:center;gap:8px;flex:1 1 220px;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--muted)}
+.gs-search input{flex:1;border:none;background:none;outline:none;padding:10px 0;font:inherit;color:var(--text)}
+.gs-res{display:flex;flex-direction:column;gap:2px;max-height:340px;overflow:auto;border:1px solid var(--border-soft);border-radius:12px;padding:6px}
+.gs-item{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:9px}
+.gs-item:hover{background:var(--surface2)}

@@ -7,23 +7,46 @@ const db = require('../config/database.js');
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const authorName = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
 
-/** GET /api/recipes/catalog?q=… — recherche d'ingrédients (autocomplétion). */
+/** GET /api/recipes/catalog?q=&brand=&family=&sort=&limit= — recherche filtrée d'ingrédients. */
 const searchCatalog = async (req, res) => {
     try {
         const conn = db.promise();
         const q = String(req.query.q || '').trim();
-        const like = `%${q}%`;
+        const brand = String(req.query.brand || '').trim();
+        const family = String(req.query.family || '').trim();
+        const sort = String(req.query.sort || '');
+        const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 12));
+        const where = ['organization_id = ?']; const params = [req.user.organization_id];
+        if (q) { where.push('(name LIKE ? OR brand LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
+        if (brand) { where.push('brand LIKE ?'); params.push(`%${brand}%`); }
+        if (family) { where.push('family = ?'); params.push(family); }
+        const order = sort === 'price_asc' ? '(unit_ht IS NULL), unit_ht ASC'
+            : sort === 'price_desc' ? 'unit_ht DESC' : 'name ASC';
         const [rows] = await conn.query(
             `SELECT id, name, brand, family, type_unity, unit_ht, unit_ttc, price_ht, image_url
-             FROM catalog_product
-             WHERE organization_id = ? ${q ? 'AND (name LIKE ? OR brand LIKE ?)' : ''}
-             ORDER BY name LIMIT 30`,
-            q ? [req.user.organization_id, like, like] : [req.user.organization_id]
+             FROM catalog_product WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ${limit}`,
+            params
         );
         res.json({ data: rows });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] }); // migration 071 non jouée
         console.error('Erreur recherche catalogue :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** GET /api/recipes/catalog/families — catégories (rayons) disponibles pour le filtre. */
+const catalogFamilies = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [rows] = await conn.query(
+            `SELECT DISTINCT family FROM catalog_product WHERE organization_id = ? AND family IS NOT NULL AND family <> '' ORDER BY family`,
+            [req.user.organization_id]
+        );
+        res.json({ data: rows.map((r) => r.family) });
+    } catch (err) {
+        if (noTable(err)) return res.json({ data: [] });
+        console.error('Erreur familles catalogue :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -171,4 +194,4 @@ const deleteRecipe = async (req, res) => {
     }
 };
 
-module.exports = { searchCatalog, listMine, listShared, getRecipe, createRecipe, updateRecipe, deleteRecipe };
+module.exports = { searchCatalog, catalogFamilies, listMine, listShared, getRecipe, createRecipe, updateRecipe, deleteRecipe };
