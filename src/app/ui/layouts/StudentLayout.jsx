@@ -6,7 +6,7 @@ import ChangePasswordModal from "../components/ChangePasswordModal.jsx";
 import ProfileModal from "../components/ProfileModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
-import { getAvatar, AVATAR_EVENT } from "../lib/gamification.js";
+import { getAvatar, AVATAR_EVENT, hydrateProfile } from "../lib/gamification.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 
@@ -53,6 +53,8 @@ function StudentLayout() {
     window.addEventListener(AVATAR_EVENT, sync);
     return () => window.removeEventListener(AVATAR_EVENT, sync);
   }, [user?.id]);
+  // Charge le profil (avatar + progression) depuis la base et le fusionne au local.
+  useEffect(() => { if (user?.id) hydrateProfile(user.id); }, [user?.id]);
 
   if (isLoading) {
     return (

@@ -524,6 +524,17 @@ export function getMyFormation(id) {
   return request(`/mon-espace/formations/${id}`);
 }
 
+// Profil ludique du stagiaire (avatar + progression Pizza Quest), persisté en base.
+export function getMyProfile() {
+  return request("/mon-espace/profile", { silent: true });
+}
+export function saveMyAvatar(avatar) {
+  return request("/mon-espace/avatar", { method: "PUT", body: JSON.stringify({ avatar }), silent: true });
+}
+export function saveMyQuest(progress) {
+  return request("/mon-espace/quest", { method: "PUT", body: JSON.stringify({ progress }), silent: true });
+}
+
 // --- Documents ---
 export function getLearnerDocuments(learnerId) {
   return request(`/documents?learner_id=${learnerId}`);

@@ -4,6 +4,7 @@ import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import { colorOf } from "../lib/format.js";
 import { NIV1_CHAPTERS } from "../lib/niv1Questions.js";
+import { saveQuestProgress } from "../lib/gamification.js";
 
 /**
  * Pizza Quest — entraînement QCM ludique (façon Duolingo × Mario/Royal Match).
@@ -43,7 +44,8 @@ const chaptersFor = (w) => (roleOf(w) === "niv1" ? NIV1_CHAPTERS : DEMO_CHAPTERS
 
 const KEY = "pizzaquest.v1";
 const loadProg = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
-const saveProg = (p) => { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* ignore */ } };
+// Enregistre en local ET en base (miroir) via gamification.saveQuestProgress.
+const saveProg = (p) => saveQuestProgress(p);
 const pickQuestions = (n) => {
   const pool = [...DEMO_QUESTIONS], out = [];
   for (let i = 0; i < n && pool.length; i++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);

@@ -361,4 +361,79 @@ const signMyEmargement = async (req, res) => {
     }
 };
 
-module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement };
+// --- Profil ludique du stagiaire (avatar + progression Pizza Quest) ---
+// Persistance en base de ce qui vivait en localStorage. Tolérant à l'absence de la
+// migration 070 (renvoie un profil vide / no-op au lieu d'échouer).
+
+const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
+const AVATAR_IDS = new Set(['pizza','chef','flame','wheat','tomato','cheese','olive','chili','mushroom','bread','chef2','chef3','basil','oven']);
+
+/** GET /api/mon-espace/profile — avatar + progression { world: { step: stars } } + XP. */
+const getMyProfile = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: "Aucune fiche stagiaire liée à ce compte." });
+        let avatar = null, progress = {}, xp = 0, stars = 0;
+        try {
+            const [[l]] = await conn.query('SELECT avatar FROM learner WHERE id = ?', [learner.id]);
+            avatar = (l && l.avatar) || null;
+            const [rows] = await conn.query('SELECT world, step, stars FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
+            for (const r of rows) {
+                (progress[r.world] ||= {})[r.step] = r.stars;
+                stars += r.stars; xp += r.stars * 10;
+            }
+        } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : profil vide
+        res.json({ data: { avatar, progress, xp, stars } });
+    } catch (err) {
+        console.error('Erreur profil stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mon-espace/avatar — { avatar }. */
+const saveMyAvatar = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        const avatar = req.body && req.body.avatar;
+        if (avatar != null && avatar !== '' && !AVATAR_IDS.has(avatar)) return res.status(422).json({ message: 'Avatar inconnu.' });
+        try { await conn.query('UPDATE learner SET avatar = ? WHERE id = ?', [avatar || null, learner.id]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur avatar stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mon-espace/quest — { progress: { world: { step: stars } } } (upsert, meilleur score). */
+const saveMyQuest = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        const progress = (req.body && req.body.progress) || {};
+        try {
+            for (const [world, steps] of Object.entries(progress)) {
+                if (!steps || typeof steps !== 'object') continue;
+                for (const [step, starsRaw] of Object.entries(steps)) {
+                    const stars = Math.max(0, Math.min(3, parseInt(starsRaw, 10) || 0));
+                    await conn.query(
+                        `INSERT INTO learner_quest_progress (id, organization_id, learner_id, world, step, stars)
+                         VALUES (?, ?, ?, ?, ?, ?)
+                         ON DUPLICATE KEY UPDATE stars = GREATEST(stars, VALUES(stars))`,
+                        [crypto.randomUUID(), learner.organization_id, learner.id, String(world).slice(0, 60), String(step).slice(0, 60), stars]
+                    );
+                }
+            }
+        } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : no-op
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur progression Pizza Quest :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest };

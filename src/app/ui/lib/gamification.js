@@ -1,6 +1,11 @@
 // Gamification de l'espace stagiaire : avatars (pizza), grades, XP.
-// L'avatar et l'XP sont en localStorage pour l'instant (démo) ; ils passeront en base
-// avec l'espace communauté (partage entre stagiaires).
+// L'avatar et la progression sont MIROIR : localStorage (lecture synchrone instantanée)
+// + base de données (source de vérité, partagée entre appareils / communauté).
+// hydrateProfile() (appelé à l'entrée de l'espace) fusionne serveur ↔ local ; les
+// écritures (setAvatar / progression) sont poussées vers l'API.
+import { getMyProfile, saveMyAvatar, saveMyQuest } from "../api/apiClient.js";
+
+const QUEST_KEY = "pizzaquest.v1";
 
 // Avatars pizza-thémés : un emoji sur un fond de la charte.
 export const AVATARS = [
@@ -28,8 +33,41 @@ export function getAvatar(uid) {
 }
 export function setAvatar(uid, id) {
   try { localStorage.setItem(AVATAR_KEY(uid), id); window.dispatchEvent(new CustomEvent(AVATAR_EVT)); } catch { /* ignore */ }
+  saveMyAvatar(id).catch(() => {}); // persistance serveur (best-effort)
 }
 export const AVATAR_EVENT = AVATAR_EVT;
+
+// Fusionne deux cartes de progression { world: { step: stars } } en gardant le meilleur score.
+function mergeProgress(a = {}, b = {}) {
+  const out = {};
+  for (const src of [a, b]) for (const [w, steps] of Object.entries(src || {})) {
+    out[w] = out[w] || {};
+    for (const [s, stars] of Object.entries(steps || {})) out[w][s] = Math.max(out[w][s] || 0, Number(stars) || 0);
+  }
+  return out;
+}
+
+// Enregistre la progression Pizza Quest en local ET en base (best-effort).
+export function saveQuestProgress(progress) {
+  try { localStorage.setItem(QUEST_KEY, JSON.stringify(progress)); } catch { /* ignore */ }
+  saveMyQuest(progress).catch(() => {});
+}
+
+// À l'entrée de l'espace stagiaire : charge le profil serveur, fusionne avec le local,
+// réécrit le local (pour les lectures synchrones) et repousse le tout en base.
+export async function hydrateProfile(uid) {
+  let data;
+  try { ({ data } = await getMyProfile()); } catch { return; } // hors-ligne / non stagiaire : on garde le local
+  if (!data) return;
+  if (data.avatar) { try { localStorage.setItem(AVATAR_KEY(uid), data.avatar); } catch { /* ignore */ } }
+  let local = {};
+  try { local = JSON.parse(localStorage.getItem(QUEST_KEY)) || {}; } catch { /* ignore */ }
+  const merged = mergeProgress(local, data.progress || {});
+  try { localStorage.setItem(QUEST_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent(AVATAR_EVT));
+  // Repousse la progression locale non encore en base (progression faite avant connexion).
+  if (JSON.stringify(merged) !== JSON.stringify(data.progress || {})) saveMyQuest(merged).catch(() => {});
+}
 
 // Grades pizza : débloqués selon un score = XP du jeu + formations terminées.
 export const GRADES = [
@@ -49,7 +87,7 @@ export function gradeFor(score) {
 // XP + étoiles accumulés dans Pizza Quest (localStorage).
 export function readGameStats() {
   try {
-    const p = JSON.parse(localStorage.getItem("pizzaquest.v1")) || {};
+    const p = JSON.parse(localStorage.getItem(QUEST_KEY)) || {};
     let xp = 0, stars = 0;
     for (const w of Object.values(p)) for (const s of Object.values(w)) { xp += s * 10; stars += s; }
     return { xp, stars };
