@@ -34,7 +34,7 @@ const PRESETS = [
   { nom: "Pala", ic: "package", methods: ["Direct", "Biga", "Poolish"], hydra: 78, sel: 2.5, huile: 1.5, levure: 0.3, paton: 300, spe: true, desc: "Rectangulaire, cuite sur pierre, servie sur pelle." },
 ];
 const INDIRECT = ["Biga", "Poolish"]; // empâtements indirects → prérequis Niveau II
-const DP_DEFAULT = { preset: "Classique", method: "Direct", autolyse: false, hydra: 60, sel: 2.5, huile: 0, levure: 0.5 };
+const DP_DEFAULT = { preset: "Classique", method: "Direct", autolyse: false, hydra: 60, sel: 2.5, huile: 0, levure: 0.5, mode: "patons", flourKg: 10 };
 const gfmt = (n) => (n >= 1000 ? (n / 1000).toFixed(2) + " kg" : Math.round(n) + " g");
 const addPctOf = (dp) => 1 + (num(dp.hydra) + num(dp.sel) + num(dp.huile) + num(dp.levure)) / 100;
 
@@ -315,13 +315,18 @@ function FicheRecette() {
   const nb = Math.max(1, num(r.servings));
   // Ratio pâte/farine : pourcentage boulanger pour la pâte, forfait 1.68 sinon.
   const addPct = isPate ? addPctOf(dp) : 1.68;
-  const flourBatchKg = (nb * num(r.paton_g)) / 1000 / addPct;
-  const doughPerUnit = ((num(r.paton_g) / 1000) / addPct) * num(r.flour_price);
+  const patonG = Math.max(1, num(r.paton_g));
+  // Deux modes de calcul (pâte) : « par pâtons » (nb × poids) ou « par farine » (farine dispo → pâtons).
+  const dpMode = isPate ? (dp.mode === "farine" ? "farine" : "patons") : "patons";
+  const flourKg = num(dp.flourKg);
+  const totalDough = dpMode === "farine" ? Math.max(0, flourKg) * 1000 * addPct : nb * patonG;
+  const effNb = dpMode === "farine" ? Math.floor(totalDough / patonG) : nb; // pâtons obtenus
+  const reste = dpMode === "farine" ? totalDough - effNb * patonG : 0;
+  const doughPerUnit = ((patonG / 1000) / addPct) * num(r.flour_price);
   const lineCost = (t) => (t.unit === "g" ? (num(t.qty) / 1000) * num(t.unit_price) : num(t.qty) * num(t.unit_price));
   const ingSum = useMemo(() => r.ingredients.reduce((s, t) => s + lineCost(t), 0), [r.ingredients]);
 
   // Décomposition de la pâte (grammes) pour le résultat du calculateur.
-  const totalDough = nb * num(r.paton_g);
   const farineG = totalDough / addPct;
   const dough = [
     { k: "Farine", ic: "wheat", v: farineG, pct: "100 %", color: "#fcb900" },
@@ -333,7 +338,7 @@ function FicheRecette() {
 
   // Coûts selon le type de fiche.
   const perUnit = (isPate || isRecette) ? doughPerUnit + ingSum : ingSum; // par pâton / pizza / lot
-  const totalCost = isPrep ? ingSum : perUnit * nb;
+  const totalCost = isPrep ? ingSum : perUnit * (isPate ? effNb : nb);
   const pricePerPizza = perUnit * (1 + num(r.margin_pct) / 100);
   const marginEur = pricePerPizza - perUnit;
   const prep = prepUnitCost(totalCost, r.yield_qty, r.yield_unit);
@@ -342,6 +347,8 @@ function FicheRecette() {
     setBusy(true);
     const merged = { ...r, ...overrides };
     const payload = { ...merged, name: (overrides.name ?? r.name).trim() || `${r.type} maison`,
+      // En mode « par farine », le rendement enregistré = nb de pâtons obtenus.
+      servings: (merged.kind === "PATE" && dpMode === "farine") ? Math.max(1, effNb) : merged.servings,
       dough_params: merged.kind === "PATE" ? (merged.dough_params || DP_DEFAULT) : null };
     try {
       const res = r.id ? await updateRecipe(r.id, payload) : await createRecipe(payload);
@@ -462,11 +469,22 @@ function FicheRecette() {
                 </button>
               </div>
               <p className="hint" style={{ margin: "0 0 16px" }}>Direct &amp; Autolyse → Niveau I · Biga &amp; Poolish (indirects) → Niveau II</p>
+              {/* Mode de calcul : par pâtons, ou à partir de la farine disponible */}
+              <div className="ate-lbl">Calculer</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                <button className={`btn sm ${dpMode === "patons" ? "primary" : "ghost"}`} onClick={() => setDP("mode", "patons")}>Par pâtons</button>
+                <button className={`btn sm ${dpMode === "farine" ? "primary" : "ghost"}`} onClick={() => setDP("mode", "farine")}>Par farine</button>
+              </div>
               {/* Rendement + prix */}
               <div className="grid cols-2" style={{ gap: 12, marginBottom: 4 }}>
-                <div className="field" style={{ marginBottom: 8 }}><label>Nombre de pâtons</label><input className="inp" type="number" min="1" value={r.servings} onChange={set("servings")} /></div>
+                {dpMode === "farine" ? (
+                  <div className="field" style={{ marginBottom: 8 }}><label>Farine disponible (kg)</label><input className="inp" type="number" min="0" step="0.5" value={dp.flourKg ?? 10} onChange={(e) => setDP("flourKg", Number(e.target.value))} /></div>
+                ) : (
+                  <div className="field" style={{ marginBottom: 8 }}><label>Nombre de pâtons</label><input className="inp" type="number" min="1" value={r.servings} onChange={set("servings")} /></div>
+                )}
                 <div className="field" style={{ marginBottom: 8 }}><label>Poids d'un pâton (g)</label><input className="inp" type="number" min="100" value={r.paton_g} onChange={set("paton_g")} /></div>
               </div>
+              {dpMode === "farine" && <p className="hint" style={{ margin: "0 0 8px" }}>→ {effNb} pâtons de {patonG} g{reste > 5 ? ` · reste ${gfmt(reste)}` : ""}</p>}
               <div className="field" style={{ marginBottom: 14 }}><label>Prix de la farine (€/kg)</label><input className="inp" type="number" step="0.01" value={r.flour_price} onChange={set("flour_price")} /></div>
               {/* Pourcentage boulanger */}
               <Slider label="Hydratation" val={num(dp.hydra)} min={50} max={90} step={1} set={(v) => setDP("hydra", v)} suffix=" %" />
@@ -482,7 +500,7 @@ function FicheRecette() {
               <div className="field"><label>Nombre de pizzas</label><input className="inp" type="number" min="1" value={r.servings} onChange={set("servings")} /></div>
               <div className="field"><label>Poids d'un pâton (g)</label><input className="inp" type="number" min="100" value={r.paton_g} onChange={set("paton_g")} /></div>
               <div className="field" style={{ marginBottom: 12 }}><label>Prix de la farine (€/kg)</label><input className="inp" type="number" step="0.01" value={r.flour_price} onChange={set("flour_price")} /></div>
-              <p className="hint" style={{ margin: 0 }}>≈ {flourBatchKg.toFixed(2)} kg de farine pour {nb} {doughUnit}s · coût pâte <b>{euro(doughPerUnit)}</b> / {doughUnit}</p>
+              <p className="hint" style={{ margin: 0 }}>≈ {((nb * patonG) / 1000 / addPct).toFixed(2)} kg de farine pour {nb} {doughUnit}s · coût pâte <b>{euro(doughPerUnit)}</b> / {doughUnit}</p>
             </Card>
           )}
 
@@ -491,7 +509,7 @@ function FicheRecette() {
             <div className="card dough-result">
               <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{curPreset.nom} · empâtement {String(dp.method).toLowerCase()}{dp.autolyse ? " + autolyse" : ""}</div>
               <div style={{ font: "800 24px/1.1 var(--font-d)", margin: "4px 0 2px" }}>{gfmt(totalDough)} de pâte</div>
-              <div style={{ color: "rgba(255,255,255,.7)", fontSize: 12, marginBottom: 12 }}>{nb} pâtons de {num(r.paton_g)} g</div>
+              <div style={{ color: "rgba(255,255,255,.7)", fontSize: 12, marginBottom: 12 }}>{effNb} pâtons de {patonG} g{dpMode === "farine" && reste > 5 ? ` · reste ${gfmt(reste)}` : ""}</div>
               <div className="dough-bar" title="Proportions de l'empâtement">
                 {dough.map((i) => <span key={i.k} style={{ width: `${totalDough ? (i.v / totalDough) * 100 : 0}%`, background: i.color }} />)}
               </div>
