@@ -12,6 +12,14 @@ import { getSharedRecipes, getRecipe, createRecipe } from "../api/apiClient.js";
  * Consultation en lecture seule ; on peut copier une recette dans ses propres recettes.
  */
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+// Hashtags (#tag) de la description → badges.
+const TAG_RE = /#[\p{L}\p{N}_-]+/gu;
+const parseTags = (s) => Array.from(new Set((String(s || "").match(TAG_RE) || []).map((t) => t.slice(1))));
+function Tags({ text }) {
+  const tags = parseTags(text);
+  if (!tags.length) return null;
+  return <div className="tag-row">{tags.map((t) => <span key={t} className="badge-tag">#{t}</span>)}</div>;
+}
 function costs(d) {
   const nb = Math.max(1, num(d.servings));
   const dough = ((num(d.paton_g) / 1000) / 1.68) * num(d.flour_price);
@@ -55,10 +63,11 @@ export default function Communaute() {
           <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Recettes partagées ({list.length})</span>}>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {list.map((s) => (
-                <button key={s.id} className={"comm-row" + (openId === s.id ? " on" : "")} onClick={() => setOpenId(s.id)}>
+                <button key={s.id} className={"comm-row" + (openId === s.id ? " on" : "")} onClick={() => setOpenId((cur) => (cur === s.id ? null : s.id))}>
                   <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
                     <b>{s.name}</b>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.type} · par {s.author_name || "Stagiaire"} · {s.updated_at}</span>
+                    <Tags text={s.description} />
                   </span>
                   <Icon name="chevron-right" size={16} />
                 </button>
@@ -74,6 +83,7 @@ export default function Communaute() {
                 more={<button className="btn sm primary" disabled={busy} onClick={() => copyToMine(detail)}><Icon name="plus" size={13} /> Copier</button>}>
                 <div className="hint" style={{ marginTop: -4 }}>{detail.type} · par {detail.author_name || "Stagiaire"}</div>
                 {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0" }}>{detail.description}</p>}
+                <Tags text={detail.description} />
                 {(() => { const c = costs(detail); return (
                   <>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "10px 0" }}>
