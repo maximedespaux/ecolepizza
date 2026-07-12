@@ -1,4 +1,11 @@
 import { Node, mergeAttributes } from "@tiptap/core";
+import { ReactNodeViewRenderer } from "@tiptap/react";
+import TokenView from "./TokenView.jsx";
+
+const toNum = (v) => {
+  const n = parseInt(String(v == null ? "" : v), 10);
+  return Number.isFinite(n) ? n : null;
+};
 
 /**
  * Nœud « jeton » : puce en ligne, non éditable, insérée depuis la palette.
@@ -26,7 +33,23 @@ export const TokenNode = Node.create({
         parseHTML: (el) => el.getAttribute("data-label") || el.textContent,
         renderHTML: (attrs) => (attrs.label ? { "data-label": attrs.label } : {}),
       },
+      // Taille du cadre de signature (uniquement pertinente pour les blocs de
+      // signature) — sérialisée en data-w / data-h, reprise au rendu PDF.
+      w: {
+        default: null,
+        parseHTML: (el) => toNum(el.getAttribute("data-w")),
+        renderHTML: (attrs) => (attrs.w ? { "data-w": attrs.w } : {}),
+      },
+      h: {
+        default: null,
+        parseHTML: (el) => toNum(el.getAttribute("data-h")),
+        renderHTML: (attrs) => (attrs.h ? { "data-h": attrs.h } : {}),
+      },
     };
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(TokenView);
   },
 
   parseHTML() {

@@ -43,15 +43,32 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
         const s = slotSigs[key.slice(4)];
         return signatureBox(s && s.data, label || (s && s.label) || 'Signature');
     };
+    // Taille du cadre de signature portée par le jeton (data-w / data-h) : on
+    // remplace les dimensions par défaut du cadre rendu par celles choisies.
+    const sigSizeOf = (spanHtml) => {
+        const wm = /\sdata-w="(\d+)"/.exec(spanHtml);
+        const hm = /\sdata-h="(\d+)"/.exec(spanHtml);
+        if (!wm && !hm) return null;
+        return { w: wm ? parseInt(wm[1], 10) : SIG_W, h: hm ? parseInt(hm[1], 10) : SIG_H };
+    };
+    // Le cadre de signature est une <img> avec attributs width/height (défaut
+    // SIG_W × SIG_H) ; on remplace ces attributs par la taille choisie sur le jeton.
+    const resizeSig = (html, size) => String(html)
+        .replace(/\bwidth="\d+"/, `width="${size.w}"`)
+        .replace(/\bheight="\d+"/, `height="${size.h}"`);
 
     // 1) Puces de l'éditeur : <span … data-token="Clé" …>label</span>
     out = out.replace(/<span[^>]*\sdata-token="([^"]+)"[^>]*>[\s\S]*?<\/span>/g, (m, rawKey) => {
         const key = decodeEnt(rawKey);
+        const size = sigSizeOf(m);
         if (key.startsWith('sig:')) {
             const lm = m.match(/\sdata-label="([^"]*)"/);
-            return renderSlot(key, lm ? decodeEnt(lm[1]) : '');
+            const box = renderSlot(key, lm ? decodeEnt(lm[1]) : '');
+            return size ? resizeSig(box, size) : box;
         }
-        return key in values ? render(key) : '';
+        if (!(key in values)) return '';
+        const v = render(key);
+        return size && RAW_TOKENS.has(key) ? resizeSig(v, size) : v;
     });
 
     // 2) Jetons en texte brut {Clé} (modèles hérités). On ne remplace que les clés connues.
