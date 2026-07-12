@@ -173,6 +173,20 @@ export const GRANTABLE_NAV = NAV
   .map((g) => ({ grp: g.grp, items: g.items.filter((it) => it.to !== "/equipe") }))
   .filter((g) => g.items.length > 0);
 
+// Accès « supplémentaires » : des capacités transverses (pas des pages) qu'on
+// accorde par rôle ou par membre, stockées dans nav_access comme une page. La
+// présence de la clé = capacité accordée (le mode read/write ne s'applique pas).
+// `defaultRoles` = rôles qui l'ont d'office (case cochée et verrouillée).
+export const EXTRA_ACCESS = [
+  {
+    to: "cap:reveal-money",
+    label: "Révéler les montants",
+    hint: "Pages Ventes & Finance — lève le masque des montants (• • • • •).",
+    ic: "eye",
+    defaultRoles: ["SUPER_ADMIN"],
+  },
+];
+
 // Rôles « système » (intégrés) : servent de modèles d'accès réutilisables.
 export const BUILTIN_ROLES = [
   { role: "SUPER_ADMIN", name: "Super administrateur", color: "#c0392b" },

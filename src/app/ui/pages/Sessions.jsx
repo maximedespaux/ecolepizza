@@ -108,6 +108,13 @@ function Sessions() {
     return sessions.filter((s) => inRange(dayStr, s.start_date, s.end_date));
   }
 
+  // Ouvre le modal d'ajout avec le jour cliqué pré-rempli (modifiable).
+  function openAdd(dateStr) {
+    setStatus(null);
+    setAddForm({ program_id: "", start_date: dateStr || ymd(now) });
+    setShowAdd(true);
+  }
+
   async function handleAdd(e) {
     e.preventDefault();
     setStatus(null);
@@ -141,41 +148,54 @@ function Sessions() {
       <PageHead
         eyebrow="Planning"
         title="Sessions"
-        lead="Calendrier des formations. Ajoutez une formation en choisissant son premier jour ; la durée colore les jours suivants."
+        lead="Calendrier des formations. Cliquez un jour libre pour ajouter une formation, ou une case occupée pour ouvrir la session. La durée colore les jours suivants."
         actions={
-          <button className="btn primary" onClick={() => setShowAdd((v) => !v)}>
-            {showAdd ? <><Icon name="x" size={14} /> Fermer</> : <><Icon name="plus" size={14} /> Ajouter une formation</>}
+          <button className="btn primary" onClick={() => openAdd(ymd(now))}>
+            <Icon name="plus" size={14} /> Ajouter une formation
           </button>
         }
       />
       <StatusMessage status={status} />
 
       {showAdd && (
-        <Card title="Ajouter une formation" className="fade" more={<button className="btn sm ghost" onClick={() => setShowAdd(false)} aria-label="Fermer"><Icon name="x" size={14} /></button>}>
-          <form onSubmit={handleAdd}>
-            <div className="row2">
-              <SelectField
-                label="Formation"
-                value={addForm.program_id}
-                onChange={(e) => setAddForm((f) => ({ ...f, program_id: e.target.value }))}
-                required
-              >
-                <option value="">— Choisir —</option>
-                {programs.map((p) => (
-                  <option key={p.id} value={p.id}>{p.code} — {p.title} ({p.days} j)</option>
-                ))}
-              </SelectField>
-              <Field
-                label="Premier jour"
-                type="date"
-                value={addForm.start_date}
-                onChange={(e) => setAddForm((f) => ({ ...f, start_date: e.target.value }))}
-                required
-              />
+        <div className="overlay" onClick={() => setShowAdd(false)}>
+          <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="mhead">
+              <h3>Ajouter une formation</h3>
+              <button className="x" onClick={() => setShowAdd(false)} aria-label="Fermer"><Icon name="x" size={16} /></button>
             </div>
-            <button type="submit" className="btn primary">Ajouter au calendrier</button>
-          </form>
-        </Card>
+            <form onSubmit={handleAdd}>
+              <div className="mbody">
+                <p className="sub" style={{ marginTop: 0 }}>
+                  Choisissez la formation — le premier jour est pré-rempli (modifiable). La durée colore les jours suivants.
+                </p>
+                <StatusMessage status={status} />
+                <SelectField
+                  label="Formation"
+                  value={addForm.program_id}
+                  onChange={(e) => setAddForm((f) => ({ ...f, program_id: e.target.value }))}
+                  required
+                >
+                  <option value="">— Choisir —</option>
+                  {programs.map((p) => (
+                    <option key={p.id} value={p.id}>{p.code} — {p.title} ({p.days} j)</option>
+                  ))}
+                </SelectField>
+                <Field
+                  label="Premier jour"
+                  type="date"
+                  value={addForm.start_date}
+                  onChange={(e) => setAddForm((f) => ({ ...f, start_date: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="mfoot">
+                <button type="button" className="btn ghost" onClick={() => setShowAdd(false)}>Annuler</button>
+                <button type="submit" className="btn primary"><Icon name="plus" size={14} /> Ajouter au calendrier</button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       <Card>
@@ -197,7 +217,7 @@ function Sessions() {
         {view !== "mois" ? (
           <div className="cal-multi">
             {monthsToShow.map(({ y, m }) => (
-              <MiniMonth key={`${y}-${m}`} y={y} m={m} sessionsOn={sessionsOn} onOpen={(id) => navigate(`/sessions/${id}`)} />
+              <MiniMonth key={`${y}-${m}`} y={y} m={m} sessionsOn={sessionsOn} onOpen={(id) => navigate(`/sessions/${id}`)} onAdd={openAdd} />
             ))}
           </div>
         ) : (
@@ -220,10 +240,13 @@ function Sessions() {
                 const daySessions = wknd ? [] : sessionsOn(dayStr);
                 const byLane = {};
                 for (const s of daySessions) byLane[laneOf[s.id] ?? 0] = s;
+                const addable = inMonth && !wknd;
                 return (
                   <div
                     key={dayStr}
-                    className={`cal-cell${inMonth ? "" : " out"}${wknd ? " wknd" : ""}${isToday(day) ? " today" : ""}`}
+                    className={`cal-cell${inMonth ? "" : " out"}${wknd ? " wknd" : ""}${isToday(day) ? " today" : ""}${addable ? " addable" : ""}`}
+                    onClick={addable ? () => openAdd(dayStr) : undefined}
+                    title={addable ? "Ajouter une formation ce jour" : undefined}
                   >
                     <div className="cal-daynum">{day.getDate()}</div>
                     {Array.from({ length: weekLaneCount }, (_, i) => {
@@ -235,7 +258,7 @@ function Sessions() {
                           className="cal-evt"
                           style={{ background: colorOf(s.program_code) }}
                           title={`${s.program_title} — ${s.stagiaires} stagiaire(s)`}
-                          onClick={() => navigate(`/sessions/${s.id}`)}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/sessions/${s.id}`); }}
                         >
                           {s.program_code}
                           <span className="n">{s.stagiaires}</span>
@@ -333,7 +356,9 @@ function Avatars({ students }) {
 }
 
 // Mini-calendrier compact d'un mois (vues trimestre / semestre / année).
-function MiniMonth({ y, m, sessionsOn, onOpen }) {
+// Case occupée → clic n'importe où ouvre la session (le point précis reste
+// cliquable si plusieurs) ; case libre → clic ajoute une formation ce jour.
+function MiniMonth({ y, m, sessionsOn, onOpen, onAdd }) {
   const days = monthMatrix(y, m).flat();
   return (
     <div className="cal-mini">
@@ -343,16 +368,26 @@ function MiniMonth({ y, m, sessionsOn, onOpen }) {
         {days.map((day) => {
           const dayStr = ymd(day);
           const inMonth = day.getMonth() === m;
-          const evts = isWeekend(day) ? [] : sessionsOn(dayStr);
+          const weekend = isWeekend(day);
+          const evts = weekend ? [] : sessionsOn(dayStr);
+          const has = evts.length > 0;
+          const addable = inMonth && !weekend && !has;
           return (
-            <div key={dayStr} className={`cal-mini-cell${inMonth ? "" : " out"}${isToday(day) ? " today" : ""}`}>
+            <div
+              key={dayStr}
+              className={`cal-mini-cell${inMonth ? "" : " out"}${isToday(day) ? " today" : ""}${has ? " openable" : ""}${addable ? " addable" : ""}`}
+              onClick={has ? () => onOpen(evts[0].id) : (addable ? () => onAdd(dayStr) : undefined)}
+              title={has
+                ? (evts.length > 1 ? `${evts.length} sessions — cliquez pour ouvrir (ou un point précis)` : "Cliquez pour ouvrir la session")
+                : (addable ? "Ajouter une formation ce jour" : undefined)}
+            >
               <span className="d">{day.getDate()}</span>
-              {evts.length > 0 && (
+              {has && (
                 <span className="dots">
                   {evts.slice(0, 4).map((s) => (
                     <i key={s.id} style={{ background: colorOf(s.program_code) }}
                       title={`${s.program_code} — ${s.program_title} · ${s.stagiaires} stag.`}
-                      onClick={() => onOpen(s.id)} />
+                      onClick={(e) => { e.stopPropagation(); onOpen(s.id); }} />
                   ))}
                 </span>
               )}

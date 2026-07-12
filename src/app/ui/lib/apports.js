@@ -1,5 +1,5 @@
-// Types d'apports partenaire (commission cash → CA, ou contribution en nature → suivi).
-// MAQUETTE : stockage local le temps de valider l'ergonomie, à brancher en base ensuite.
+// Types d'apports partenaire : commission cash (→ chiffre d'affaires, table revenue_extra)
+// ou contribution en nature (matériel/équipement → suivi seul, table partner_contribution).
 
 export const APPORT_TYPES = [
   { v: "COMMISSION", label: "Commission", tone: "g", cash: true },
@@ -12,27 +12,20 @@ export const APPORT_TYPES = [
 
 export const apportType = (v) => APPORT_TYPES.find((t) => t.v === v) || APPORT_TYPES[0];
 
-const LS_KEY = "impasto.partnerContribMock";
-
-export function loadApports() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); } catch { return []; }
-}
-export function saveApports(list) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch { /* ignore */ }
-}
-
 /**
- * Apports d'un partenaire, fusionnés et triés (récents d'abord) :
- *  · commissions réelles (données API `p.commissions`) marquées `real`,
- *  · apports de la maquette (localStorage) filtrés par partenaire.
+ * Apports d'un partenaire, fusionnés et triés (récents d'abord) depuis les données API :
+ *  · commissions cash (`p.commissions`, revenue_extra → CA) — `src: "revenue"`,
+ *  · contributions en nature (`p.contributions`, partner_contribution) — `src: "contribution"`.
+ * `src` + `srcId` permettent d'aiguiller la suppression vers la bonne table.
  */
-export function apportsOfPartner(p, mockItems) {
-  const real = (p?.commissions || []).map((c) => ({
-    id: `r:${c.id}`, srcId: c.id, real: true,
+export function apportsOfPartner(p) {
+  const commissions = (p?.commissions || []).map((c) => ({
+    id: `re:${c.id}`, srcId: c.id, src: "revenue", real: true,
     type: "COMMISSION", label: c.label, value: Number(c.amount) || 0, date: c.date,
   }));
-  const mock = (mockItems || [])
-    .filter((a) => String(a.partner_id) === String(p?.id))
-    .map((a) => ({ ...a, real: false }));
-  return [...real, ...mock].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const contributions = (p?.contributions || []).map((c) => ({
+    id: `pc:${c.id}`, srcId: c.id, src: "contribution", real: true,
+    type: c.type || "MATERIEL", label: c.label, value: Number(c.value) || 0, date: c.date,
+  }));
+  return [...commissions, ...contributions].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }

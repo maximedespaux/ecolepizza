@@ -39,6 +39,22 @@ const getPartners = async (req, res) => {
         for (const l of lines) (byPartner[l.partner_id] = byPartner[l.partner_id] || []).push(l);
         for (const p of results) p.commissions = byPartner[p.id] || [];
 
+        // Contributions en nature (matériel/équipement) — table optionnelle (migration 065).
+        // Si la table n'existe pas encore, on renvoie des contributions vides (pas d'erreur).
+        try {
+            const [contribs] = await conn.query(
+                `SELECT c.id, c.partner_id, c.type, c.label, c.value, DATE_FORMAT(c.date, '%Y-%m-%d') AS date
+                 FROM partner_contribution c JOIN partner p ON p.id = c.partner_id
+                 WHERE p.organization_id = ? ORDER BY c.date DESC, c.created_at DESC`,
+                [req.user.organization_id]
+            );
+            const cByPartner = {};
+            for (const c of contribs) (cByPartner[c.partner_id] = cByPartner[c.partner_id] || []).push(c);
+            for (const p of results) p.contributions = cByPartner[p.id] || [];
+        } catch {
+            for (const p of results) p.contributions = [];
+        }
+
         res.json({ data: results });
     } catch (err) {
         console.error('Erreur récupération partenaires :', err);
@@ -115,4 +131,42 @@ const deletePartner = (req, res) => {
     );
 };
 
-module.exports = { getPartners, createPartner, updatePartner, deletePartner };
+/** POST /api/partenaires/contributions — apport EN NATURE (matériel/équipement). */
+const createContribution = (req, res) => {
+    const b = req.body || {};
+    if (!b.partner_id) return res.status(422).json({ error: 'Partenaire requis' });
+    if (!b.label) return res.status(422).json({ error: 'Libellé requis' });
+    const id = crypto.randomUUID();
+    db.query(
+        `INSERT INTO partner_contribution (id, organization_id, partner_id, date, type, label, value, note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, req.user.organization_id, b.partner_id, b.date || new Date().toISOString().slice(0, 10),
+         b.type || 'MATERIEL', b.label, b.value === '' || b.value == null ? 0 : Number(b.value), b.note || null],
+        (err) => {
+            if (err) {
+                console.error('Erreur création contribution :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            logAudit(req, 'partner.contribution.create', 'PartnerContribution', id);
+            res.status(201).json({ message: 'Contribution enregistrée', id });
+        }
+    );
+};
+
+/** DELETE /api/partenaires/contributions/:id */
+const deleteContribution = (req, res) => {
+    db.query(
+        'DELETE FROM partner_contribution WHERE id = ? AND organization_id = ?',
+        [req.params.id, req.user.organization_id],
+        (err) => {
+            if (err) {
+                console.error('Erreur suppression contribution :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            logAudit(req, 'partner.contribution.delete', 'PartnerContribution', req.params.id);
+            res.json({ success: true, message: 'Contribution supprimée' });
+        }
+    );
+};
+
+module.exports = { getPartners, createPartner, updatePartner, deletePartner, createContribution, deleteContribution };

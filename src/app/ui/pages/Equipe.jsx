@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { getTeam, createMember, updateMember, deleteMember, getAccessProfiles, createAccessProfile } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
-import { GRANTABLE_NAV, canAccess, OWNER_ROLES, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
+import { GRANTABLE_NAV, EXTRA_ACCESS, canAccess, OWNER_ROLES, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
@@ -153,8 +153,8 @@ function Equipe() {
                       {canManageRow(m) && (
                         <>
                           <button className="btn sm ghost" title="Modifier" onClick={() => setEditing({ ...m })}><Icon name="pencil" size={15} /></button>{" "}
-                          {isSuperAdmin && !m.is_self && !OWNER_ROLES.includes(m.role) && (
-                            <button className="btn sm ghost" title="Configurer l'accès au menu"
+                          {isSuperAdmin && !m.is_self && m.role !== "SUPER_ADMIN" && (
+                            <button className="btn sm ghost" title="Configurer l'accès et les capacités"
                               onClick={() => setNavEditing(m)}><Icon name="compass" size={15} /></button>
                           )}{" "}
                           {!m.is_self && (
@@ -210,12 +210,18 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
     for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(member.role, it.roles)) o[it.to] = "write";
     return o;
   };
+  // Propriétaire (super admin / admin) : les pages sont toujours pleines (bypass du
+  // nav_access) → on ne configure que les capacités (ex. Révéler les montants).
+  const isOwner = OWNER_ROLES.includes(member.role);
   // Amorce : accès déjà enregistré (objet { chemin: mode }), sinon défauts du rôle.
   const seed = () => {
     const na = member.nav_access;
-    if (na && !Array.isArray(na) && typeof na === "object") return { ...na };
-    if (Array.isArray(na)) { const o = {}; na.forEach((p) => { o[p] = "write"; }); return o; }
-    return roleDefaults();
+    let base;
+    if (na && !Array.isArray(na) && typeof na === "object") base = { ...na };
+    else if (Array.isArray(na)) { base = {}; na.forEach((p) => { base[p] = "write"; }); }
+    else base = roleDefaults();
+    if (isOwner) { const caps = {}; for (const k of Object.keys(base)) if (k.startsWith("cap:")) caps[k] = base[k]; return caps; }
+    return base;
   };
   const [modes, setModes] = useState(seed);
   const [saving, setSaving] = useState(false);
@@ -251,7 +257,10 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
 
   async function save() {
     setSaving(true);
-    try { await updateMember(member.id, { nav_access: modes }); onSaved(); }
+    try {
+      await updateMember(member.id, { nav_access: modes });
+      onSaved();
+    }
     catch (e) { onError(e.message); }
     finally { setSaving(false); }
   }
@@ -267,9 +276,14 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
         </div>
         <div className="mbody">
           <p className="sub" style={{ marginTop: 0 }}>
-            Cochez les rubriques accessibles, puis choisissez <b>Modifier</b> (peut créer / éditer / supprimer)
-            ou <b>Lecture</b> (consultation seule). Les administrateurs conservent toujours l'accès complet.
+            {isOwner ? (
+              <>Ce membre est <b>administrateur</b> : il garde l'accès complet à toutes les pages. Réglez seulement les <b>capacités</b> ci-dessous (ex. révéler les montants).</>
+            ) : (
+              <>Cochez les rubriques accessibles, puis choisissez <b>Modifier</b> (peut créer / éditer / supprimer)
+              ou <b>Lecture</b> (consultation seule). Les administrateurs conservent toujours l'accès complet.</>
+            )}
           </p>
+          {!isOwner && (<>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
             <label style={{ fontSize: 13, fontWeight: 600 }}>Appliquer un rôle :</label>
             <select className="inp" style={{ maxWidth: 240 }} value="" onChange={(e) => { if (e.target.value) applyRole(e.target.value); }}>
@@ -317,6 +331,26 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
               </div>
             </div>
           ))}
+          </>)}
+
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "var(--dim)", marginBottom: 4 }}>Accès supplémentaires</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {EXTRA_ACCESS.map((it) => {
+                const byDefault = !!it.defaultRoles?.includes(member.role);
+                const on = byDefault || granted(it.to);
+                return (
+                  <label key={it.to} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 14, cursor: byDefault ? "default" : "pointer" }}>
+                    <input type="checkbox" checked={on} disabled={byDefault} onChange={() => toggle(it.to)} style={{ marginTop: 3 }} />
+                    <span style={{ width: 20, display: "inline-grid", placeItems: "center", marginTop: 1 }}><Icon name={it.ic} size={16} /></span>
+                    <span>{it.label}
+                      <span className="hint" style={{ display: "block", fontWeight: 400, marginTop: 1 }}>{byDefault ? "Accordé d'office à ce rôle. " : ""}{it.hint}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>

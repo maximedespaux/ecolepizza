@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
-import { getInventory, createItem, adjustItem, sellItem, deleteItem, updateItem } from "../api/apiClient.js";
+import { getInventory, createItem, adjustItem, deleteItem, updateItem } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -12,9 +12,25 @@ import EmptyState from "../components/EmptyState.jsx";
 import { euro } from "../lib/format.js";
 import { bumpBadges } from "../lib/events.js";
 
-const CATEGORIES = ["Four", "Pétrin", "Matière première", "Accessoire", "Livre", "Autre"];
+const CATEGORIES = [
+  "Four", "Pétrin", "Matière première", "Accessoire", "Livre", "Autre",
+  // Sous-catégories matériel Gi.Metal
+  "Pelle à enfourner", "Pelle à défourner", "Pelle napolitaine", "Nettoyage",
+  "Spatule", "Coupe-pâte / Roulette", "Cuisson / Plaque", "Support pelle",
+  "Thermomètre", "Louche", "Biberon", "Textile",
+];
 const TVA_RATES = ["20", "10", "5.5", "2.1", "0"];
 const EMPTY = { name: "", category: "", sku: "", quantity: 0, unit_price: "", tax_rate: "20", threshold: 0 };
+
+// Icône par (sous-)catégorie — vignette visuelle à défaut de photo produit.
+const CAT_ICON = {
+  "Pelle à enfourner": "pizza", "Pelle à défourner": "pizza", "Pelle napolitaine": "pizza",
+  "Cuisson / Plaque": "flame", "Nettoyage": "spray-can", "Spatule": "utensils", "Louche": "utensils",
+  "Coupe-pâte / Roulette": "scissors", "Thermomètre": "thermometer", "Biberon": "droplet",
+  "Textile": "shirt", "Support pelle": "package", "Four": "flame", "Pétrin": "settings",
+  "Matière première": "package", "Accessoire": "package", "Livre": "file-text", "Autre": "package",
+};
+const catIcon = (c) => CAT_ICON[c] || "package";
 
 const ttc = (ht, rate) => Number(ht || 0) * (1 + Number(rate || 0) / 100);
 
@@ -42,6 +58,19 @@ function Inventaire({ embedded = false }) {
   }
   useEffect(() => { load(); }, []);
 
+  // Regroupe l'inventaire par (sous-)catégorie ; sections triées alpha.
+  const grouped = useMemo(() => {
+    const g = {};
+    for (const it of items) { const c = it.category || "Autre"; (g[c] ||= []).push(it); }
+    return Object.entries(g).sort((a, b) => a[0].localeCompare(b[0], "fr"));
+  }, [items]);
+  // Catégories connues (par défaut + présentes) pour l'autocomplétion.
+  const allCats = useMemo(() => {
+    const s = new Set(CATEGORIES);
+    for (const it of items) if (it.category) s.add(it.category);
+    return [...s].sort((a, b) => a.localeCompare(b, "fr"));
+  }, [items]);
+
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
 
   async function add(e) {
@@ -59,14 +88,6 @@ function Inventaire({ embedded = false }) {
   async function adjust(item, delta) {
     setItems((list) => list.map((i) => (i.id === item.id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i)));
     try { await adjustItem(item.id, delta); load(); } catch (err) { setStatus({ type: "error", message: err.message }); load(); }
-  }
-
-  async function sell(item) {
-    const q = window.prompt(`Vendre combien d'unités de « ${item.name} » ? (stock : ${item.quantity})`, "1");
-    if (q === null) return;
-    setStatus(null);
-    try { await sellItem(item.id, q); setStatus({ type: "success", message: "Vente enregistrée." }); load(); }
-    catch (err) { setStatus({ type: "error", message: err.message }); }
   }
 
   async function remove(item) {
@@ -103,7 +124,7 @@ function Inventaire({ embedded = false }) {
         <PageHead
           eyebrow="Développement"
           title="Inventaire"
-          lead="Stock de matériel à vendre. Ajustez les quantités, vendez, suivez les ruptures."
+          lead="Stock de matériel, groupé par catégorie. Ajustez les quantités et suivez les ruptures ; les ventes se font à la caisse."
           actions={<div style={{ display: "flex", alignItems: "center", gap: 10 }}><MoneyToggle /><button className="btn primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ Fermer" : "＋ Ajouter un article"}</button></div>}
         />
       )}
@@ -121,10 +142,10 @@ function Inventaire({ embedded = false }) {
           <form onSubmit={add}>
             <div className="row3">
               <Field label="Nom" value={form.name} onChange={set("name")} required />
-              <SelectField label="Catégorie" value={form.category} onChange={set("category")}>
-                <option value="">—</option>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </SelectField>
+              <div className="field">
+                <label>Catégorie</label>
+                <input className="inp" list="inv-cats" value={form.category} onChange={set("category")} placeholder="Pelle à enfourner, Spatule…" />
+              </div>
               <Field label="Référence (SKU)" value={form.sku} onChange={set("sku")} />
             </div>
             <div className="row3">
@@ -148,50 +169,58 @@ function Inventaire({ embedded = false }) {
       {items.length === 0 ? (
         <Card><EmptyState icon="package">Aucun article en stock. Ajoutez votre premier article.</EmptyState></Card>
       ) : (
-        <div className="grid cols-3">
-          {items.map((it) => {
-            const st = stockState(it);
-            const max = Math.max(it.threshold * 2, it.quantity, 10);
-            return (
-              <div key={it.id} className="card" style={{ borderTop: `3px solid ${st.color}` }}>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <b style={{ fontSize: 15 }}>{it.name}</b>
-                    <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                      {it.category || "—"}{it.sku ? ` · ${it.sku}` : ""}
-                    </div>
-                    {it.unit_price != null && (
-                      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-                        <span className="tnum">{euro(it.unit_price)}</span> HT · TVA {Number(it.tax_rate)}% · <b style={{ color: "var(--text)" }}><span className="tnum">{euro(ttc(it.unit_price, it.tax_rate))}</span> TTC</b>
+        grouped.map(([cat, catItems]) => (
+          <div key={cat} className="inv-group">
+            <div className="inv-cat"><Icon name={catIcon(cat)} size={17} /><span>{cat}</span><span className="inv-cat-n">{catItems.length}</span></div>
+            <div className="grid cols-3">
+              {catItems.map((it) => {
+                const st = stockState(it);
+                const max = Math.max(it.threshold * 2, it.quantity, 10);
+                return (
+                  <div key={it.id} className="card" style={{ borderTop: `3px solid ${st.color}` }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 10, minWidth: 0 }}>
+                        <span className="inv-thumb" style={{ color: st.color }}><Icon name={catIcon(it.category)} size={20} /></span>
+                        <div style={{ minWidth: 0 }}>
+                          <b style={{ fontSize: 15 }}>{it.name}</b>
+                          <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                            {it.category || "—"}{it.sku ? ` · ${it.sku}` : ""}
+                          </div>
+                          {it.unit_price != null && (
+                            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                              <span className="tnum">{euro(it.unit_price)}</span> HT · TVA {Number(it.tax_rate)}% · <b style={{ color: "var(--text)" }}><span className="tnum">{euro(ttc(it.unit_price, it.tax_rate))}</span> TTC</b>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
+                      <Badge tone={st.tone}>{st.label}</Badge>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "12px 0 6px" }}>
+                      <span style={{ fontFamily: "var(--font-d)", fontSize: 34, fontWeight: 700, color: st.color }}>{it.quantity}</span>
+                      <span style={{ fontSize: 12, color: "var(--muted)" }}>en stock{it.threshold ? ` · seuil ${it.threshold}` : ""}</span>
+                    </div>
+                    <div className="progress" style={{ marginBottom: 12 }}>
+                      <span style={{ width: `${Math.min(100, (it.quantity / max) * 100)}%`, background: st.color }} />
+                    </div>
+
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <button className="btn sm" onClick={() => adjust(it, -10)} disabled={it.quantity <= 0}>−10</button>
+                      <button className="btn sm" onClick={() => adjust(it, -1)} disabled={it.quantity <= 0}>−1</button>
+                      <button className="btn sm" onClick={() => adjust(it, 1)}>+1</button>
+                      <button className="btn sm" onClick={() => adjust(it, 10)}>+10</button>
+                      <div className="spacer" />
+                      <button className="iconbtn" title="Modifier l'article" onClick={() => openEdit(it)}><Icon name="pencil" size={15} /></button>
+                      <button className="iconbtn del" title="Supprimer" onClick={() => remove(it)}><Icon name="trash" size={15} /></button>
+                    </div>
                   </div>
-                  <Badge tone={st.tone}>{st.label}</Badge>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "12px 0 6px" }}>
-                  <span style={{ fontFamily: "var(--font-d)", fontSize: 34, fontWeight: 700, color: st.color }}>{it.quantity}</span>
-                  <span style={{ fontSize: 12, color: "var(--muted)" }}>en stock{it.threshold ? ` · seuil ${it.threshold}` : ""}</span>
-                </div>
-                <div className="progress" style={{ marginBottom: 12 }}>
-                  <span style={{ width: `${Math.min(100, (it.quantity / max) * 100)}%`, background: st.color }} />
-                </div>
-
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                  <button className="btn sm" onClick={() => adjust(it, -10)} disabled={it.quantity <= 0}>−10</button>
-                  <button className="btn sm" onClick={() => adjust(it, -1)} disabled={it.quantity <= 0}>−1</button>
-                  <button className="btn sm" onClick={() => adjust(it, 1)}>+1</button>
-                  <button className="btn sm" onClick={() => adjust(it, 10)}>+10</button>
-                  <div className="spacer" />
-                  <button className="btn sm primary" onClick={() => sell(it)} disabled={it.quantity <= 0} title="Vendre (enregistre une vente)">Vendre</button>
-                  <button className="iconbtn" title="Modifier l'article" onClick={() => openEdit(it)}><Icon name="pencil" size={15} /></button>
-                  <button className="iconbtn del" title="Supprimer" onClick={() => remove(it)}><Icon name="trash" size={15} /></button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </div>
+        ))
       )}
+      <datalist id="inv-cats">{allCats.map((c) => <option key={c} value={c} />)}</datalist>
 
       {editing && (
         <div className="overlay" onClick={() => setEditing(null)}>
@@ -204,10 +233,10 @@ function Inventaire({ embedded = false }) {
               <div className="mbody">
                 <div className="row3">
                   <Field label="Nom" value={editing.name} onChange={setEdit("name")} required />
-                  <SelectField label="Catégorie" value={editing.category} onChange={setEdit("category")}>
-                    <option value="">—</option>
-                    {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </SelectField>
+                  <div className="field">
+                    <label>Catégorie</label>
+                    <input className="inp" list="inv-cats" value={editing.category} onChange={setEdit("category")} placeholder="Pelle à enfourner, Spatule…" />
+                  </div>
                   <Field label="Référence (SKU)" value={editing.sku} onChange={setEdit("sku")} />
                 </div>
                 <div className="row3">

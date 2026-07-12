@@ -1,5 +1,6 @@
 import { createContext, useEffect, useState } from "react";
 import { getCurrentUser, logout as apiLogout } from "../api/apiClient.js";
+import { clearRevealConfirmSkip } from "../lib/moneyPrivacy.js";
 
 export const UserContext = createContext();
 
@@ -48,6 +49,7 @@ export function UserProvider({ children }) {
     } catch {
       /* on ignore : on déconnecte côté client de toute façon */
     }
+    clearRevealConfirmSkip(); // oublie le « ne plus demander » à la déconnexion
     setUser(null);
   };
 

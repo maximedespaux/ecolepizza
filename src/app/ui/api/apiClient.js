@@ -705,3 +705,10 @@ export function updatePartenaire(id, payload) {
 export function deletePartenaire(id) {
   return request(`/partenaires/${id}`, { method: "DELETE" });
 }
+// Apports en nature (matériel/équipement) — distincts des commissions cash.
+export function createContribution(payload) {
+  return request("/partenaires/contributions", { method: "POST", body: JSON.stringify(payload) });
+}
+export function deleteContribution(id) {
+  return request(`/partenaires/contributions/${id}`, { method: "DELETE" });
+}

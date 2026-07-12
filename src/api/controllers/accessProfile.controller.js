@@ -9,7 +9,9 @@ function cleanNav(nav) {
     let n = 0;
     for (const [p, mode] of Object.entries(nav)) {
         if (n >= 60) break;
-        if (typeof p === 'string' && p.startsWith('/')) { out[p] = mode === 'read' ? 'read' : 'write'; n++; }
+        if (typeof p !== 'string') continue;
+        if (p.startsWith('/')) { out[p] = mode === 'read' ? 'read' : 'write'; n++; }
+        else if (p.startsWith('cap:')) { out[p] = 'write'; n++; } // accès supplémentaire (capacité)
     }
     return out;
 }

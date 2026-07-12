@@ -3,7 +3,7 @@ import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
-  getShopSettings, saveShopSettings,
+  getShopSettings, saveShopSettings, downloadFacturX,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -18,7 +18,7 @@ import { bumpBadges } from "../lib/events.js";
 const ttc = (ht, rate) => Number(ht || 0) * (1 + Number(rate || 0) / 100);
 const TABS = [
   { v: "caisse", label: "Caisse" },
-  { v: "historique", label: "Historique" },
+  { v: "historique", label: "Historique des ventes" },
   { v: "inventaire", label: "Inventaire" },
   { v: "reglages", label: "Réglages" },
 ];
@@ -26,7 +26,6 @@ const TABS = [
 function Ventes() {
   const [tab, setTab] = useState("caisse");
   const [sales, setSales] = useState([]);
-  const [total, setTotal] = useState(0);
   const [inventory, setInventory] = useState([]);
   const [learners, setLearners] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -41,9 +40,10 @@ function Ventes() {
   const [discount, setDiscount] = useState(""); // % remise globale
   const [payment, setPayment] = useState("");
   const [paid, setPaid] = useState(true);
+  const [lastInvoice, setLastInvoice] = useState(null); // facture créée (pour télécharger le PDF)
 
   async function loadSales() {
-    try { const r = await getSales(); setSales(r.data); setTotal(r.total); }
+    try { const r = await getSales(); setSales(r.data); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   function loadInventory() { getInventory().then((r) => setInventory(r.data)).catch(() => {}); }
@@ -110,6 +110,7 @@ function Ventes() {
         lines: cart.map((l) => ({ item_id: l.item_id, quantity: l.quantity, discount_pct: Number(l.disc) || 0 })),
       });
       setCart([]); setClient(null); setClientQuery(""); setDiscount("");
+      setLastInvoice({ id: r.invoice_id, number: r.invoice_number });
       setStatus({ type: "success", message: `Vente validée — facture ${r.invoice_number} (${euro(r.total_ttc)} TTC) pour ${r.buyer}.` });
       loadSales(); loadInventory(); bumpBadges();
     } catch (err) { setStatus({ type: "error", message: err.message }); }
@@ -134,12 +135,14 @@ function Ventes() {
 
       {tab === "caisse" && (
         <>
-          <div className="grid cols-3" style={{ marginBottom: 16 }}>
-            <Kpi label="Ventes" value={sales.length} />
-            <Kpi label="Chiffre d'affaires (HT)" value={euro(total)} />
-            <Kpi label="Panier moyen" value={euro(sales.length ? total / sales.length : 0)} />
-          </div>
-
+          {lastInvoice && (
+            <div className="card" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, borderLeft: "3px solid var(--green)" }}>
+              <Icon name="receipt" size={18} />
+              <span style={{ flex: 1 }}>Facture <b>{lastInvoice.number}</b> créée avec les articles sélectionnés.</span>
+              <button className="btn sm" onClick={() => downloadFacturX(lastInvoice.id, lastInvoice.number)}><Icon name="download" size={14} /> Télécharger le PDF</button>
+              <button className="iconbtn" onClick={() => setLastInvoice(null)} aria-label="Fermer"><Icon name="x" size={14} /></button>
+            </div>
+          )}
           <div className="grid cols-2">
             <Card title="Point de vente">
               <div className="row3" style={{ alignItems: "end" }}>
@@ -241,37 +244,74 @@ function Ventes() {
         </>
       )}
 
-      {tab === "historique" && (
-        <Card title={`Historique (${sales.length})`}>
-          {sales.length === 0 ? (
-            <EmptyState icon="cart">Aucune vente enregistrée.</EmptyState>
-          ) : (
-            <div className="tablewrap" style={{ border: "none" }}>
-              <table>
-                <thead><tr><th>Date</th><th>Produit</th><th>Client</th><th>Qté</th><th className="ta-r">Montant</th><th></th></tr></thead>
-                <tbody>
-                  {sales.map((s) => (
-                    <tr key={s.id}>
-                      <td className="mono">{s.date}</td>
-                      <td><b>{s.product}</b>{s.category ? <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.category}</span> : null}</td>
-                      <td>{s.last_name ? `${s.last_name} ${s.first_name}` : "—"}</td>
-                      <td>{s.quantity}</td>
-                      <td className="mono tnum" style={{ textAlign: "right" }}>{euro(Number(s.amount) * (s.quantity || 1))}</td>
-                      <td style={{ textAlign: "right" }}><button className="iconbtn del" title="Supprimer" onClick={() => remove(s.id)}><Icon name="trash" size={15} /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      )}
+      {tab === "historique" && <SalesHistory sales={sales} onRemove={remove} />}
 
       {tab === "inventaire" && <Inventaire embedded />}
 
       {tab === "reglages" && (
         <ShopSettings settings={settings} onSaved={(s) => { setSettings(s); setStatus({ type: "success", message: "Réglages enregistrés." }); }} onError={(m) => setStatus({ type: "error", message: m })} />
       )}
+    </>
+  );
+}
+
+// Historique des ventes : chiffre d'affaires + sélection de période (dates / raccourcis).
+function SalesHistory({ sales, onRemove }) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const filtered = useMemo(
+    () => sales.filter((s) => (!from || s.date >= from) && (!to || s.date <= to)),
+    [sales, from, to]
+  );
+  const ca = useMemo(() => filtered.reduce((sum, s) => sum + Number(s.amount) * (s.quantity || 1), 0), [filtered]);
+  const units = useMemo(() => filtered.reduce((sum, s) => sum + (Number(s.quantity) || 1), 0), [filtered]);
+
+  const ymd = (d) => d.toISOString().slice(0, 10);
+  const thisMonth = () => { const d = new Date(); setFrom(ymd(new Date(d.getFullYear(), d.getMonth(), 1))); setTo(ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0))); };
+  const last30 = () => { const t = new Date(), f = new Date(); f.setDate(f.getDate() - 29); setFrom(ymd(f)); setTo(ymd(t)); };
+  const thisYear = () => { const y = new Date().getFullYear(); setFrom(`${y}-01-01`); setTo(`${y}-12-31`); };
+  const clear = () => { setFrom(""); setTo(""); };
+  const allTime = !from && !to;
+
+  return (
+    <>
+      <div className="grid cols-3" style={{ marginBottom: 16 }}>
+        <Kpi label={`Chiffre d'affaires HT${allTime ? "" : " (période)"}`} value={euro(ca)} />
+        <Kpi label="Articles vendus" value={units} />
+        <Kpi label="Lignes de vente" value={filtered.length} />
+      </div>
+      <Card title="Historique des ventes">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end", marginBottom: 14 }}>
+          <div className="field" style={{ margin: 0 }}><label>Du</label><input className="inp" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+          <div className="field" style={{ margin: 0 }}><label>Au</label><input className="inp" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+          <button className="btn sm ghost" onClick={thisMonth}>Ce mois</button>
+          <button className="btn sm ghost" onClick={last30}>30 jours</button>
+          <button className="btn sm ghost" onClick={thisYear}>Cette année</button>
+          {!allTime && <button className="btn sm ghost" onClick={clear}>Tout</button>}
+        </div>
+        {filtered.length === 0 ? (
+          <EmptyState icon="cart">{allTime ? "Aucune vente enregistrée." : "Aucune vente sur cette période."}</EmptyState>
+        ) : (
+          <div className="tablewrap" style={{ border: "none" }}>
+            <table>
+              <thead><tr><th>Date</th><th>Produit</th><th>Client</th><th>Qté</th><th className="ta-r">Montant HT</th><th></th></tr></thead>
+              <tbody>
+                {filtered.map((s) => (
+                  <tr key={s.id}>
+                    <td className="mono">{s.date}</td>
+                    <td><b>{s.product}</b>{s.category ? <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.category}</span> : null}</td>
+                    <td>{s.last_name ? `${s.last_name} ${s.first_name}` : "—"}</td>
+                    <td>{s.quantity}</td>
+                    <td className="mono tnum" style={{ textAlign: "right" }}>{euro(Number(s.amount) * (s.quantity || 1))}</td>
+                    <td style={{ textAlign: "right" }}><button className="iconbtn del" title="Supprimer" onClick={() => onRemove(s.id)}><Icon name="trash" size={15} /></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </>
   );
 }

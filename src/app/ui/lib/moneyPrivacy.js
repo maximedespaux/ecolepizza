@@ -12,19 +12,44 @@ export function isMoneyMasked() {
   try { return localStorage.getItem(KEY) === "1"; } catch { return false; }
 }
 
-// Rôles autorisés par défaut à révéler les montants (bureau). Le formateur ne peut
-// pas révéler → les montants restent masqués pour lui.
-const REVEAL_ROLES = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
+// Seul le super administrateur peut révéler les montants d'office. L'administrateur,
+// le secrétariat, le formateur, etc. ne le peuvent pas par défaut : il faut leur
+// accorder la capacité « Révéler les montants » (Accès & rôles → cap:reveal-money).
+const REVEAL_ROLES = ["SUPER_ADMIN"];
+
+// Capacité « accès supplémentaire » stockée dans nav_access (comme une page).
+// Cochée dans Accès & rôles (par rôle ou par membre) pour accorder la levée du
+// masque à quelqu'un qui ne l'a pas par défaut (ex. un formateur précis).
+export const CAP_REVEAL_MONEY = "cap:reveal-money";
 
 /**
  * L'utilisateur peut-il révéler les montants ?
- * Prend en compte un futur réglage par utilisateur (`can_reveal_money`, défini via
- * Accès & rôles) ; à défaut, retombe sur les rôles bureau.
+ * Bureau : oui par défaut. Sinon : seulement si la capacité « Révéler les montants »
+ * lui a été accordée dans nav_access (via Accès & rôles).
  */
 export function canRevealMoney(user) {
-  if (user && user.can_reveal_money != null) return !!user.can_reveal_money;
-  return REVEAL_ROLES.includes(user?.role);
+  if (!user) return false;
+  if (REVEAL_ROLES.includes(user.role)) return true;
+  const na = user.nav_access;
+  if (na && typeof na === "object" && !Array.isArray(na)) {
+    return Object.prototype.hasOwnProperty.call(na, CAP_REVEAL_MONEY);
+  }
+  if (Array.isArray(na)) return na.includes(CAP_REVEAL_MONEY);
+  return false;
 }
+
+// « Ne plus demander » la confirmation pour révéler, le temps de la session
+// (jusqu'à déconnexion / fermeture de l'onglet). Stocké en sessionStorage — donc
+// remis à zéro à chaque nouvelle session ; `clearRevealConfirmSkip()` est aussi
+// appelé à la déconnexion.
+const SKIP_KEY = "impasto.revealConfirmSkip";
+export function isRevealConfirmSkipped() {
+  try { return sessionStorage.getItem(SKIP_KEY) === "1"; } catch { return false; }
+}
+export function setRevealConfirmSkip(on) {
+  try { on ? sessionStorage.setItem(SKIP_KEY, "1") : sessionStorage.removeItem(SKIP_KEY); } catch { /* ignore */ }
+}
+export function clearRevealConfirmSkip() { setRevealConfirmSkip(false); }
 
 function write(masked) {
   try { localStorage.setItem(KEY, masked ? "1" : "0"); } catch { /* ignore */ }

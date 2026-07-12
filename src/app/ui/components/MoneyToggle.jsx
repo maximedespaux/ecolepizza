@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { useMoneyMask, canRevealMoney } from "../lib/moneyPrivacy.js";
+import { useMoneyMask, canRevealMoney, isRevealConfirmSkipped, setRevealConfirmSkip } from "../lib/moneyPrivacy.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { Icon } from "./Icon.jsx";
 
@@ -13,6 +13,12 @@ export default function MoneyToggle() {
   const { user } = useContext(UserContext);
   const { masked, hide, reveal } = useMoneyMask();
   const [confirm, setConfirm] = useState(false);
+  const [dontAsk, setDontAsk] = useState(false);
+
+  // Révéler : si l'utilisateur a coché « ne plus demander » dans cette session,
+  // on affiche directement sans repasser par la confirmation.
+  const askOrReveal = () => (isRevealConfirmSkipped() ? reveal() : setConfirm(true));
+  const doReveal = () => { if (dontAsk) setRevealConfirmSkip(true); reveal(); setConfirm(false); };
 
   if (!canRevealMoney(user)) {
     return (
@@ -26,7 +32,7 @@ export default function MoneyToggle() {
     <>
       <button
         className="btn ghost"
-        onClick={() => (masked ? setConfirm(true) : hide())}
+        onClick={() => (masked ? askOrReveal() : hide())}
         title={masked ? "Afficher les montants (confidentiel)" : "Masquer les montants"}
       >
         <Icon name={masked ? "eye" : "eye-off"} size={16} /> {masked ? "Afficher" : "Masquer"}
@@ -44,10 +50,14 @@ export default function MoneyToggle() {
                 Ces données financières sont <b>confidentielles</b>. Confirmez pour afficher les montants
                 sur <b>toutes</b> les pages Ventes &amp; Finance.
               </p>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, fontSize: 14, cursor: "pointer" }}>
+                <input type="checkbox" checked={dontAsk} onChange={(e) => setDontAsk(e.target.checked)} />
+                Ne plus demander durant cette session <span className="hint">(jusqu'à la déconnexion)</span>
+              </label>
             </div>
             <div className="mfoot">
               <button className="btn ghost" onClick={() => setConfirm(false)}>Annuler</button>
-              <button className="btn primary" onClick={() => { reveal(); setConfirm(false); }}>
+              <button className="btn primary" onClick={doReveal}>
                 <Icon name="eye" size={15} /> Afficher
               </button>
             </div>

@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
-import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, deleteRevenue } from "../api/apiClient.js";
+import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, deleteRevenue, deleteContribution } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -10,7 +10,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import ApportForm from "../components/PartnerContributions.jsx";
-import { apportType, loadApports, saveApports, apportsOfPartner } from "../lib/apports.js";
+import { apportType, apportsOfPartner } from "../lib/apports.js";
 import { euro } from "../lib/format.js";
 
 const CATEGORIES = ["FARINE", "MATERIEL", "FOUR", "CHARCUTERIE", "FROMAGE", "CONSERVE", "DISTRIBUTION", "AUTRE"];
@@ -31,9 +31,6 @@ function Partenaires() {
   const [editing, setEditing] = useState(null);   // partenaire édité ou { _new: true }
   const [cat, setCat] = useState("");
   const [tab, setTab] = useState("partenaires");   // partenaires | historique
-  const [apports, setApports] = useState(loadApports); // maquette locale
-
-  useEffect(() => { saveApports(apports); }, [apports]);
 
   async function load() {
     try { const { data } = await getPartenaires(); setPartners(data); }
@@ -41,21 +38,19 @@ function Partenaires() {
   }
   useEffect(() => { load(); }, []);
 
-  const addApport = (a) => setApports((l) => [...l, a]);
   async function removeApport(ap) {
-    if (ap.real) {
-      if (!window.confirm(`Supprimer « ${ap.label} » ?`)) return;
-      try { await deleteRevenue(ap.srcId); load(); }
-      catch (e) { setStatus({ type: "error", message: e.message }); }
-    } else {
-      setApports((l) => l.filter((x) => x.id !== ap.id));
-    }
+    if (!window.confirm(`Supprimer « ${ap.label} » ?`)) return;
+    try {
+      if (ap.src === "contribution") await deleteContribution(ap.srcId);
+      else await deleteRevenue(ap.srcId);
+      load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   const filtered = useMemo(() => (cat ? partners.filter((p) => p.category === cat) : partners), [partners, cat]);
   const withApports = useMemo(
-    () => partners.map((p) => ({ p, ap: apportsOfPartner(p, apports) })).filter((x) => x.ap.length > 0),
-    [partners, apports]
+    () => partners.map((p) => ({ p, ap: apportsOfPartner(p) })).filter((x) => x.ap.length > 0),
+    [partners]
   );
 
   async function onDelete(p) {
@@ -74,7 +69,7 @@ function Partenaires() {
       />
       <StatusMessage status={status} />
 
-      <ApportForm partners={partners} onAdd={addApport} />
+      <ApportForm partners={partners} onSaved={load} />
 
       <div className="tabs" style={{ marginBottom: 14 }}>
         <button className={"tab" + (tab === "partenaires" ? " on" : "")} onClick={() => setTab("partenaires")}>Partenaires</button>
@@ -95,7 +90,7 @@ function Partenaires() {
           ) : (
             <div className="partner-grid">
               {filtered.map((p) => {
-                const ap = apportsOfPartner(p, apports);
+                const ap = apportsOfPartner(p);
                 return (
                   <Card key={p.id} title={p.name} more={<Badge tone="n">{p.category}</Badge>}>
                     {p.offer && <p style={{ marginTop: 0, fontSize: 13.5 }}>{p.offer}</p>}
