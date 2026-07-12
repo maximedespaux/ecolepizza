@@ -4,27 +4,22 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { buildExtensions } from "../lib/editorConfig.js";
 import RichToolbar from "../components/RichToolbar.jsx";
-import { getTokenCatalog, getTemplateBody, saveTemplateBody } from "../api/apiClient.js";
+import { getTokenCatalog, getTemplateBody, saveTemplateBody, templatePreviewPdfUrl, templatePageMetrics } from "../api/apiClient.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
+import CustomTokenManager from "../components/CustomTokenManager.jsx";
 
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
-
-// Remplace les jetons par des valeurs d'exemple pour l'aperçu (côté client).
-const SIG_BOX = (label) => `<span style="display:inline-block;width:200px;height:64px;box-sizing:border-box;border:1px dashed #b0b0b0;color:#999;text-align:center;line-height:64px;border-radius:6px;font-size:9pt;vertical-align:middle;overflow:hidden">${label || "Signature"}</span>`;
-
-function previewFill(html, sampleMap) {
-  let out = String(html || "");
-  out = out.replace(/<span[^>]*\sdata-token="([^"]+)"[^>]*>[\s\S]*?<\/span>/g, (m, key) => {
-    if (key.startsWith("sig:")) { const lm = m.match(/data-label="([^"]*)"/); return SIG_BOX(lm ? lm[1] : "Signature"); }
-    return `<span class="prev-val">${sampleMap[key] ?? ""}</span>`;
-  });
-  for (const [k, v] of Object.entries(sampleMap)) {
-    if (out.includes("{" + k + "}")) out = out.split("{" + k + "}").join(v);
-  }
-  return out;
-}
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
+
+// Bascule « bord à bord » (sans marge) d'une zone.
+function BleedToggle({ on, onChange }) {
+  return (
+    <label className="bleed-tog" title="Sans marge : le contenu occupe toute la largeur / le bord de la page">
+      <input type="checkbox" checked={on} onChange={onChange} /> bord à bord
+    </label>
+  );
+}
 
 function TemplateEditor() {
   const { slug } = useParams();
@@ -33,10 +28,16 @@ function TemplateEditor() {
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfErr, setPdfErr] = useState(null);
+  const [bleed, setBleed] = useState({ header: false, body: false, footer: false }); // « bord à bord » par zone
+  const toggleBleed = (k) => setBleed((p) => ({ ...p, [k]: !p[k] }));
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
   const [showFields, setShowFields] = useState(false); // modale « Champs documents »
+  const [showCustom, setShowCustom] = useState(false); // modale « Jetons personnalisés »
   const fieldsRef = useRef(null);
   const [, force] = useState(0);
 
@@ -46,6 +47,7 @@ function TemplateEditor() {
     editorProps: { attributes: { class: cls } },
     onFocus: ({ editor }) => setActive(editor),
     onSelectionUpdate: () => force((n) => n + 1), // rafraîchit l'état actif de la barre
+    onUpdate: () => force((n) => n + 1),          // recalcule le repère de fin de page
   });
   const header = useEditor(opts("doc-canvas hf"));
   const body = useEditor(opts("doc-canvas"));
@@ -63,18 +65,115 @@ function TemplateEditor() {
         if (body) body.commands.setContent(d.body_html || "<p></p>");
         if (header) header.commands.setContent(d.header_html || "");
         if (footer) footer.commands.setContent(d.footer_html || "");
+        const bl = (d.layout && d.layout.bleed) || {};
+        setBleed({ header: !!bl.header, body: !!bl.body, footer: !!bl.footer });
       } catch (e) { if (alive) setStatus({ type: "error", message: e.message }); }
     })();
     return () => { alive = false; };
   }, [slug, body, header, footer]);
 
-  const sampleMap = useMemo(() => {
-    const m = {};
-    for (const g of catalog) for (const t of g.tokens) m[t.key] = t.sample || "";
-    return m;
-  }, [catalog]);
+  // Aperçu PDF fidèle : on rend le modèle en cours d'édition côté serveur (mêmes
+  // en-tête/pied répétés sur chaque page que le document final) et on l'affiche en iframe.
+  useEffect(() => {
+    if (!showPreview) return undefined;
+    let alive = true; let created = null;
+    setPdfLoading(true); setPdfErr(null);
+    templatePreviewPdfUrl(slug, {
+      body_html: body?.getHTML() || "<p></p>",
+      header_html: clean(header?.getHTML()),
+      footer_html: clean(footer?.getHTML()),
+      layout: { bleed },
+    })
+      .then((url) => { if (!alive) { URL.revokeObjectURL(url); return; } created = url; setPdfUrl(url); })
+      .catch((e) => { if (alive) setPdfErr(e.message); })
+      .finally(() => { if (alive) setPdfLoading(false); });
+    return () => { alive = false; if (created) URL.revokeObjectURL(created); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPreview, bleed]);
 
   const target = active || body;
+
+  // Repère de fin de page : la zone utile du corps (mm) est calculée par le SERVEUR,
+  // exactement comme le rendu PDF (hauteur des bandeaux, bord à bord…). On la (re)demande
+  // — débouncée — à chaque changement d'en-tête/pied/bord à bord.
+  const PX_PER_MM = 660 / 174;   // colonne page ≈ 174 mm sur ~660 px
+  const BODY_RATIO = 0.94;       // ligne éditeur légèrement plus serrée que le PDF
+  const [pageMm, setPageMm] = useState(237); // zone utile par défaut (mm)
+  const hHTML = clean(header?.getHTML());
+  const fHTML = clean(footer?.getHTML());
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(() => {
+      templatePageMetrics(slug, { header_html: hHTML, footer_html: fHTML, layout: { bleed } })
+        .then((r) => { if (alive && r?.data?.contentMm) setPageMm(r.data.contentMm); })
+        .catch(() => {});
+    }, 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [slug, hHTML, fHTML, bleed]);
+  const pageContentPx = Math.round(pageMm * PX_PER_MM * BODY_RATIO);
+
+  // Repères de fin de page superposés au corps : une ligne à chaque hauteur de page, mais
+  // RÉINITIALISÉE à chaque saut de page manuel (qui démarre une nouvelle page).
+  const bodyZoneRef = useRef(null);
+  const pbInnerRef = useRef(null);
+  const [pbView, setPbView] = useState({ top: 0, left: 0, width: 0, height: 0, lines: [] });
+  useEffect(() => {
+    if (showPreview || !body) return undefined;
+    const syncScroll = () => {
+      const el = body.view?.dom;
+      if (el && pbInnerRef.current) pbInnerRef.current.style.transform = `translateY(${-el.scrollTop}px)`;
+    };
+    const compute = () => {
+      const el = body.view?.dom;
+      const bz = bodyZoneRef.current;
+      if (!el || !bz) return;
+      const bzRect = bz.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const lines = [];
+      if (pageContentPx >= 40) {
+        // Un saut de page manuel occupe lui-même une ligne : la nouvelle page reprend
+        // APRÈS le saut (bord bas), pas à son sommet.
+        const breaks = Array.from(el.querySelectorAll(".doc-pagebreak"))
+          .map((n) => {
+            const r = n.getBoundingClientRect();
+            return { top: r.top - elRect.top + el.scrollTop, bottom: r.bottom - elRect.top + el.scrollTop };
+          })
+          .sort((a, b) => a.top - b.top);
+        const H = el.scrollHeight;
+        let start = 0, bi = 0, guard = 0;
+        while (start < H && guard++ < 100) {
+          while (bi < breaks.length && breaks[bi].top <= start + 1) bi++;
+          const nb = bi < breaks.length ? breaks[bi] : null;
+          const autoEnd = start + pageContentPx;
+          if (nb && nb.top < autoEnd) { start = nb.bottom; bi++; } // saut manuel : nouvelle page après le saut
+          else { lines.push(Math.round(autoEnd)); start = autoEnd; } // fin de page automatique
+        }
+      }
+      setPbView({ top: elRect.top - bzRect.top, left: elRect.left - bzRect.left, width: el.clientWidth, height: el.clientHeight, lines });
+      syncScroll();
+    };
+    let ro = null; let scrollEl = null;
+    const setup = () => {
+      compute();
+      const el = body.view?.dom;
+      if (el && !scrollEl) { // vue montée : on attache l'observateur et le défilement
+        scrollEl = el;
+        ro = new ResizeObserver(compute);
+        ro.observe(el);
+        el.addEventListener("scroll", syncScroll, { passive: true });
+      }
+    };
+    setup();
+    const t1 = setTimeout(setup, 350);   // la vue peut ne pas être montée au 1er passage
+    const t2 = setTimeout(setup, 1000);
+    const onUp = () => compute();
+    body.on("update", onUp);
+    return () => {
+      clearTimeout(t1); clearTimeout(t2); body.off("update", onUp);
+      if (ro) ro.disconnect();
+      if (scrollEl) scrollEl.removeEventListener("scroll", syncScroll);
+    };
+  }, [showPreview, body, pageContentPx]);
 
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
@@ -99,6 +198,9 @@ function TemplateEditor() {
     };
   }
 
+  // Recharge la palette (les champs proposés = ceux activés dans Champs documents).
+  const reloadCatalog = () => getTokenCatalog().then((cat) => setCatalog(cat.data || [])).catch(() => {});
+
   async function save() {
     if (!body) return;
     setSaving(true); setStatus(null);
@@ -107,51 +209,64 @@ function TemplateEditor() {
         body_html: body.getHTML(),
         header_html: clean(header?.getHTML()),
         footer_html: clean(footer?.getHTML()),
+        layout: { bleed },
       });
       setStatus({ type: "success", message: "Modèle enregistré." });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSaving(false); }
   }
 
-  const previewHtml = () => {
-    const h = clean(header?.getHTML()); const f = clean(footer?.getHTML());
-    return (h ? `<div class="pv-hf">${previewFill(h, sampleMap)}</div>` : "")
-      + previewFill(body?.getHTML() || "", sampleMap)
-      + (f ? `<div class="pv-hf pv-foot">${previewFill(f, sampleMap)}</div>` : "");
-  };
-
   return (
     <div className="tpl-editor">
-      <div className="tpl-editor-head">
-        <button className="btn ghost sm" onClick={() => navigate("/modeles")}>← Modèles</button>
-        <h2 style={{ margin: 0, fontSize: 17 }}>Éditeur — <span className="mono">{slug}</span></h2>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button className="btn sm ghost" onClick={() => setShowFields(true)} title="Gérer les champs disponibles du dossier">Champs documents</button>
-          <button className={"btn sm ghost" + (showPreview ? " on" : "")} onClick={() => setShowPreview((v) => !v)}>
-            {showPreview ? "Édition" : "Aperçu"}
-          </button>
-          <button className="btn sm primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
+      <div className="tpl-editor-sticky">
+        <div className="tpl-editor-head">
+          <button className="btn ghost sm" onClick={() => navigate("/modeles")}>← Modèles</button>
+          <h2 style={{ margin: 0, fontSize: 17 }}>Éditeur — <span className="mono">{slug}</span></h2>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            <button className="btn sm ghost" onClick={() => setShowFields(true)} title="Gérer les champs disponibles du dossier">Champs documents</button>
+            <button className="btn sm ghost" onClick={() => setShowCustom(true)} title="Créer des jetons calculés (dates, combinaisons…)">Jetons perso</button>
+            <button className={"btn sm ghost" + (showPreview ? " on" : "")} onClick={() => setShowPreview((v) => !v)}>
+              {showPreview ? "Édition" : "Aperçu"}
+            </button>
+            <button className="btn sm primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
+          </div>
         </div>
+
+        <StatusMessage status={status} />
+
+        {!showPreview && <RichToolbar editor={target} />}
       </div>
-
-      <StatusMessage status={status} />
-
-      {!showPreview && <RichToolbar editor={target} />}
 
       <div className="tpl-editor-body">
         {showPreview ? (
-          <div className="tpl-doc"><div className="doc-canvas preview" dangerouslySetInnerHTML={{ __html: previewHtml() }} /></div>
+          <div className="tpl-doc pdf-preview">
+            {pdfLoading && <p className="hint" style={{ padding: 24 }}>Génération de l'aperçu PDF…</p>}
+            {pdfErr && <p className="hint" style={{ padding: 24, color: "var(--amber, #b8860b)" }}>{pdfErr}</p>}
+            {pdfUrl && !pdfErr && (
+              <iframe title="Aperçu PDF" src={pdfUrl}
+                style={{ width: "100%", height: "80vh", border: "none", borderRadius: 8, background: "#525659" }} />
+            )}
+          </div>
         ) : (
           <div className="tpl-doc">
             <div className="hf-zone">
-              <div className="hf-label">En-tête <span>· laissé vide = papier à en-tête automatique</span></div>
+              <div className="hf-label">En-tête <span>· laissé vide = papier à en-tête automatique</span>
+                <BleedToggle on={bleed.header} onChange={() => toggleBleed("header")} />
+              </div>
               <div onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
             </div>
-            <div className="body-zone" onDrop={onDrop(body)} onDragOver={(e) => e.preventDefault()}>
+            <div className="body-zone" ref={bodyZoneRef} onDrop={onDrop(body)} onDragOver={(e) => e.preventDefault()}>
+              <div className="hf-label">Contenu <span>· le trait indique la fin de page</span>
+                <BleedToggle on={bleed.body} onChange={() => toggleBleed("body")} /></div>
+              <div className="pb-guides" style={{ top: pbView.top, left: pbView.left, width: pbView.width, height: pbView.height }}>
+                <div className="pb-guides-inner" ref={pbInnerRef}>
+                  {pbView.lines.map((y, i) => <div key={i} className="pb-line" style={{ top: y }} />)}
+                </div>
+              </div>
               <EditorContent editor={body} />
             </div>
             <div className="hf-zone">
-              <div className="hf-label">Pied de page</div>
+              <div className="hf-label">Pied de page<BleedToggle on={bleed.footer} onChange={() => toggleBleed("footer")} /></div>
               <div onDrop={onDrop(footer)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={footer} /></div>
             </div>
           </div>
@@ -161,7 +276,13 @@ function TemplateEditor() {
           <div className="tpl-palette-hd">Champs disponibles</div>
           <p className="sub" style={{ margin: "0 10px 8px", fontSize: 11 }}>
             Cliquez ou glissez un champ dans l'en-tête, le corps ou le pied de page. Il sera remplacé par la donnée réelle.
+            Les champs proposés sont ceux activés dans <b>Champs documents</b>.
           </p>
+          {catalog.length === 0 && (
+            <p className="sub" style={{ margin: "0 10px 10px", fontSize: 11 }}>
+              Aucun champ activé. Ouvrez <button className="btn sm ghost" style={{ padding: "1px 6px", fontSize: 11 }} onClick={() => setShowFields(true)}>Champs documents</button> pour en activer.
+            </p>
+          )}
 
           <div className="tok-group">
             <div className="tok-group-hd" style={{ cursor: "default" }}><span><Icon name="pencil" size={13} /> Signatures</span></div>
@@ -209,22 +330,26 @@ function TemplateEditor() {
         </aside>
       </div>
 
+      {showCustom && (
+        <CustomTokenManager catalog={catalog} onClose={() => setShowCustom(false)} onSaved={reloadCatalog} />
+      )}
+
       {showFields && (
-        <div className="overlay" onClick={() => setShowFields(false)}>
+        <div className="overlay" onClick={() => { setShowFields(false); reloadCatalog(); }}>
           <div className="modal" style={{ maxWidth: 720, width: "92%" }} onClick={(e) => e.stopPropagation()}>
             <div className="mhead">
               <h3>Champs documents</h3>
-              <button className="x" onClick={() => setShowFields(false)} aria-label="Fermer">×</button>
+              <button className="x" onClick={() => { setShowFields(false); reloadCatalog(); }} aria-label="Fermer">×</button>
             </div>
             <div className="mbody" style={{ maxHeight: "70vh", overflow: "auto" }}>
               <p className="sub" style={{ margin: "0 0 10px" }}>
-                Activez les champs du dossier utilisables dans les documents (conditions, valeurs). Vous pouvez renommer leur intitulé.
+                Activez les champs du dossier utilisables dans les documents. Les champs activés deviennent insérables dans le modèle (palette de droite) et sont remplis à la génération.
               </p>
               <FieldSettingsPanel ref={fieldsRef} onStatus={setStatus} />
             </div>
             <div className="mfoot">
-              <button className="btn ghost" onClick={() => setShowFields(false)}>Fermer</button>
-              <button className="btn primary" onClick={() => fieldsRef.current?.save()}>Enregistrer les champs</button>
+              <button className="btn ghost" onClick={() => { setShowFields(false); reloadCatalog(); }}>Fermer</button>
+              <button className="btn primary" onClick={async () => { await fieldsRef.current?.save(); reloadCatalog(); }}>Enregistrer les champs</button>
             </div>
           </div>
         </div>

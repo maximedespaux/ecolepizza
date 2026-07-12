@@ -14,10 +14,12 @@ export const PageBreak = Node.create({
   atom: true,
   selectable: true,
   draggable: true,
-  priority: 1100, // gagne sur le paragraphe pour parser <p class="doc-pagebreak">
+  // NB : pas de priorité d'extension élevée — sinon ce nœud deviendrait le bloc par DÉFAUT
+  // du schéma et serait inséré à la place d'un paragraphe (ex. après suppression d'une image).
+  // La priorité de PARSE (ci-dessous) suffit à gagner sur le paragraphe pour <p.doc-pagebreak>.
 
   parseHTML() {
-    return [{ tag: "p.doc-pagebreak" }, { tag: "div.doc-pagebreak" }];
+    return [{ tag: "p.doc-pagebreak", priority: 100 }, { tag: "div.doc-pagebreak", priority: 100 }];
   },
   renderHTML() {
     return ["p", { class: "doc-pagebreak", contenteditable: "false" }, " "];

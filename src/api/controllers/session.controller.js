@@ -132,7 +132,15 @@ const getSession = async (req, res) => {
              WHERE st.session_id = ? ORDER BY u.last_name, u.first_name`,
             [req.params.id]
         );
-        res.json({ data: { ...rows[0], enrollments, trainers } });
+        // Lieu de formation (colonne/table récentes : résilient si migration 067 absente).
+        let location_id = null; let location_name = null;
+        try {
+            const [[loc]] = await conn.query(
+                'SELECT s.location_id, tl.name FROM training_session s LEFT JOIN training_location tl ON tl.id = s.location_id WHERE s.id = ?',
+                [req.params.id]);
+            if (loc) { location_id = loc.location_id || null; location_name = loc.name || null; }
+        } catch { /* migration des lieux non appliquée */ }
+        res.json({ data: { ...rows[0], location_id, location_name, enrollments, trainers } });
     } catch (err) {
         console.error('Erreur récupération session :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -144,7 +152,7 @@ const getSession = async (req, res) => {
  * jour. La date de fin est calculée automatiquement (jours ouvrés selon la durée).
  */
 const createSession = async (req, res) => {
-    const { program_id, start_date, trainer = null, status = 'PLANIFIEE' } = req.body;
+    const { program_id, start_date, trainer = null, status = 'PLANIFIEE', location_id = null } = req.body;
     if (!program_id || !start_date) {
         return res.status(422).json({ error: 'Formation et premier jour requis' });
     }
@@ -161,15 +169,37 @@ const createSession = async (req, res) => {
         const end_date = addBusinessDays(start_date, days);
         const { year, week } = isoWeek(start_date);
 
-        await conn.query(
+        // Colonne location_id récente (migration 067) : on réessaie sans si absente.
+        const insert = (withLoc) => conn.query(
             `INSERT INTO training_session
-                (id, organization_id, program_id, year, week, start_date, end_date, trainer, status)
-             VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.user.organization_id, program_id, year, week, start_date, end_date, trainer, status]
+                (id, organization_id, program_id, year, week, start_date, end_date, trainer, status${withLoc ? ', location_id' : ''})
+             VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?${withLoc ? ', ?' : ''})`,
+            withLoc
+                ? [req.user.organization_id, program_id, year, week, start_date, end_date, trainer, status, location_id || null]
+                : [req.user.organization_id, program_id, year, week, start_date, end_date, trainer, status]
         );
+        try { await insert(true); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') await insert(false); else throw e; }
         res.status(201).json({ message: 'Session créée' });
     } catch (err) {
         console.error('Erreur création session :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PATCH /api/sessions/:id — met à jour le lieu de la session. */
+const updateSession = async (req, res) => {
+    try {
+        const { location_id } = req.body || {};
+        const [r] = await db.promise().query(
+            'UPDATE training_session SET location_id = ? WHERE id = ? AND organization_id = ?',
+            [location_id || null, req.params.id, req.user.organization_id]
+        );
+        if (!r.affectedRows) return res.status(404).json({ message: 'Session introuvable' });
+        res.json({ success: true, message: 'Lieu mis à jour.' });
+    } catch (e) {
+        if (e && e.code === 'ER_BAD_FIELD_ERROR') return res.status(501).json({ message: 'Migration des lieux (067) non appliquée.' });
+        console.error('Erreur mise à jour session :', e);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -353,4 +383,4 @@ const setSessionTrainers = async (req, res) => {
     }
 };
 
-module.exports = { getSessions, getSession, createSession, deleteSession, getSessionBoard, listTrainers, setSessionTrainers };
+module.exports = { getSessions, getSession, createSession, updateSession, deleteSession, getSessionBoard, listTrainers, setSessionTrainers };

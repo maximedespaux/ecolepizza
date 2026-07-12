@@ -1,5 +1,5 @@
 const express = require('express');
-const { getSessions, getSession, createSession, deleteSession, getSessionBoard, listTrainers, setSessionTrainers } = require('../controllers/session.controller.js');
+const { getSessions, getSession, createSession, updateSession, deleteSession, getSessionBoard, listTrainers, setSessionTrainers } = require('../controllers/session.controller.js');
 const { listSessionIntervenants, addSessionIntervenant, setIntervenantSlots, removeSessionIntervenant } = require('../controllers/intervenant.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -14,6 +14,7 @@ router.get('/:id/board', authorizeRoles(...STAFF_ROLES), getSessionBoard);
 router.get('/:id/intervenants', authorizeRoles(...STAFF_ROLES), listSessionIntervenants);
 // Écriture : bureau uniquement (pas le formateur).
 router.post('/', authorizeRoles(...ADMIN_ROLES), createSession);
+router.patch('/:id', authorizeRoles(...ADMIN_ROLES), updateSession);
 router.put('/:id/trainers', authorizeRoles(...ADMIN_ROLES), setSessionTrainers);
 router.post('/:id/intervenants', authorizeRoles(...ADMIN_ROLES), addSessionIntervenant);
 router.put('/:id/intervenants/:siId/slots', authorizeRoles(...ADMIN_ROLES), setIntervenantSlots);

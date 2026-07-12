@@ -2,14 +2,16 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { renderDocumentHTML } = require('../lib/render.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
-const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
+const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
 const { stagiaireSignsDoc, orgSignsDoc } = require('../lib/documents.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
+const { composeDocumentPdf } = require('../lib/pdfcompose.js');
 const { findMissingTokens } = require('../lib/tokens.js');
 const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
 const { buildEmargementDocHtml } = require('../lib/emargement.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
+const { getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
 const { notify } = require('./notification.controller.js');
 
 // IP « client » (best-effort, derrière proxy éventuel).
@@ -116,7 +118,32 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             for (const s of sigs) slotSignatures[s.slot] = { data: decrypt(s.signature_data), name: s.signer_name, date: s.signed_at, label: s.label };
         } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
     }
-    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures };
+    // Champs « documents » (colonnes du dossier activées) : valeurs pour les jetons
+    // field:<table.column>. Chargées pour le dossier lié au document.
+    const fields = {};
+    if (documentId) {
+        try {
+            const [[df]] = await conn.query('SELECT enrollment_id FROM document_formation WHERE document_id = ? LIMIT 1', [documentId]);
+            if (df && df.enrollment_id) {
+                const catalog = await getEnabledFields(conn, organizationId);
+                const facts = (await loadDossierFactsMap(conn, organizationId, [df.enrollment_id], catalog)).get(df.enrollment_id) || {};
+                for (const [k, v] of Object.entries(facts)) fields[k] = (typeof v === 'string') ? decrypt(v) : v;
+                // Lieu de formation de la session (jetons field:location.<colonne>).
+                try {
+                    const [[loc]] = await conn.query(
+                        `SELECT tl.name, tl.address, tl.zip_code, tl.town
+                         FROM enrollment e JOIN training_session s ON s.id = e.session_id
+                         LEFT JOIN training_location tl ON tl.id = s.location_id
+                         WHERE e.id = ?`, [df.enrollment_id]);
+                    if (loc) for (const k of ['name', 'address', 'zip_code', 'town']) fields['location.' + k] = loc[k] || '';
+                } catch { /* migration des lieux (067) non appliquée */ }
+            }
+        } catch (e) { /* champs indisponibles (migration non jouée) : on ignore */ }
+    }
+    // Jetons personnalisés de l'organisme (calculés à partir des autres au rendu).
+    let customTokens = [];
+    try { customTokens = await loadCustomTokens(organizationId); } catch { /* migration absente */ }
+    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens };
 }
 
 // Un document d'émargement (type EMARGEMENT) : rendu via le moteur d'émargement
@@ -357,40 +384,165 @@ const downloadDocx = async (req, res) => {
     }
 };
 
+// Construit les octets PDF (NON signés) d'un document à partir de son contenu résolu
+// (émargement / éditeur intégré / .docx). Lève EMARG_NOT_READY / NO_SOFFICE au besoin.
+async function composeDocPdf(conn, r) {
+    if (r.content.kind === 'emargement') {
+        const html = await renderEmargDoc(conn, r.doc.organization_id, r.doc, r.ctx);
+        if (!html) { const e = new Error('EMARG_NOT_READY'); e.code = 'EMARG_NOT_READY'; throw e; }
+        return htmlToPdf(html);
+    }
+    if (r.content.kind === 'builder') {
+        // En-tête + pied de page répétés sur CHAQUE page (superposition pdf-lib).
+        return await composeDocumentPdf({
+            bodyHtml: r.content.html, ctx: r.ctx,
+            headerHtml: r.content.header, footerHtml: r.content.footer,
+            bleed: (r.content.layout && r.content.layout.bleed) || {},
+        });
+    }
+    const out = renderTemplate(r.content.buffer, r.ctx, r.slug);
+    return docxToPdf(out.buffer);
+}
+
+// Certificat de signature du STAGIAIRE (auto-signé, généré + stocké chiffré au 1er usage,
+// comme celui de l'organisme). Repli : certificat éphémère si migration 068 non jouée.
+async function getLearnerSigner(conn, learnerId, name) {
+    const { generateSelfSignedP12 } = require('../lib/pdfseal.js');
+    try {
+        const [[l]] = await conn.query('SELECT sign_cert FROM learner WHERE id = ?', [learnerId]);
+        if (l && l.sign_cert) {
+            const b64 = decrypt(l.sign_cert);
+            if (b64) return Buffer.from(b64, 'base64');
+        }
+        const p12 = generateSelfSignedP12(name || 'Stagiaire');
+        await conn.query('UPDATE learner SET sign_cert = ? WHERE id = ?', [encrypt(p12.toString('base64')), learnerId]);
+        return p12;
+    } catch (e) {
+        if (e && e.code === 'ER_BAD_FIELD_ERROR') return generateSelfSignedP12(name || 'Stagiaire');
+        throw e;
+    }
+}
+
+// PDF signé « figé » : stockage (chiffré) et lecture. Renvoie null si absent / table non créée.
+async function storeSignedPdf(conn, orgId, docId, buffer, count) {
+    const enc = encrypt(buffer.toString('base64'));
+    await conn.query(
+        `INSERT INTO document_signed_pdf (document_id, organization_id, pdf, signer_count)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE pdf = VALUES(pdf), signer_count = VALUES(signer_count), organization_id = VALUES(organization_id)`,
+        [docId, orgId, enc, count]
+    );
+}
+async function loadSignedPdf(conn, docId) {
+    try {
+        const [[row]] = await conn.query('SELECT pdf FROM document_signed_pdf WHERE document_id = ?', [docId]);
+        if (!row || !row.pdf) return null;
+        const b64 = decrypt(row.pdf);
+        return b64 ? Buffer.from(b64, 'base64') : null;
+    } catch (e) {
+        if (e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR')) return null;
+        throw e;
+    }
+}
+
+// Assemble contexte + contenu d'un document pour le SIGNER (sans req/res, sans blocage
+// « informations manquantes » : le document a déjà été généré et signé côté stagiaire).
+async function assembleDocForSign(conn, orgId, doc) {
+    const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
+    ctx.signature = { data: decrypt(doc.signature_data), name: doc.signer_name, date: doc.signed_at };
+    const who = [ctx.learner?.first_name, ctx.learner?.last_name].filter(Boolean).join(' ').trim();
+    if (isEmargDoc(doc)) {
+        const baseName = (who ? `Émargement - ${who}` : 'Émargement').replace(/[\\/:*?"<>|]/g, '');
+        return { doc, ctx, slug: doc.template_slug || 'emargement', content: { kind: 'emargement' }, baseName };
+    }
+    const f = (ctx.formations && ctx.formations[0]) || {};
+    const slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
+    if (!slug) return null;
+    const content = await getTemplateContent(orgId, slug);
+    if (!content) return null;
+    const label = TYPE_LABELS[doc.type] || doc.type || 'document';
+    const baseName = (who ? `${doc.title || label} - ${who}` : (doc.title || label)).replace(/[\\/:*?"<>|]/g, '');
+    return { doc, ctx, slug, content, baseName };
+}
+
+/**
+ * Appose les signatures cryptographiques du document (stagiaire PUIS organisme, en
+ * incrémental pour ne pas invalider la 1re) et stocke le PDF signé figé. Renvoie le
+ * nombre de signatures apposées, ou null si le PDF n'a pas pu être construit.
+ */
+async function signAndStoreDocument(conn, orgId, doc, signerName) {
+    const r = await assembleDocForSign(conn, orgId, doc);
+    if (!r) return null;
+    const { signPdf } = require('../lib/pdfseal.js');
+    const org = r.ctx.org || {};
+    let pdf = await composeDocPdf(conn, r);
+    // 1) Signature du STAGIAIRE (certificat à son nom).
+    const learnerP12 = await getLearnerSigner(conn, doc.learner_id, signerName);
+    pdf = await signPdf(pdf, learnerP12, { name: signerName || 'Stagiaire', reason: 'Signature du stagiaire', incremental: false });
+    let count = 1;
+    // 2) Contre-signature AUTOMATIQUE de l'organisme (si le modèle prévoit « À signer »),
+    //    en mise à jour incrémentale : la signature du stagiaire reste valide.
+    try {
+        const orgSteps = await loadOrgSteps(orgId);
+        if (orgSignsDoc(orgSteps, doc)) {
+            const orgName = org.legal_name || org.short_name || 'Organisme';
+            const orgP12 = await getOrgSigner(conn, orgId, orgName);
+            pdf = await signPdf(pdf, orgP12, { name: orgName, reason: "Signature de l'organisme", contact: org.email || '', location: org.town || '', incremental: true });
+            count = 2;
+        }
+    } catch (e) { console.error('Contre-signature organisme ignorée :', e.message); }
+    await storeSignedPdf(conn, orgId, doc.id, pdf, count);
+    return count;
+}
+
 /**
  * GET /api/documents/:id/pdf — document final NON MODIFIABLE (PDF) envoyé au client.
  * Rendu fidèle au modèle Word via LibreOffice. Servi « inline » (aperçu + téléchargement).
  */
 const downloadPdf = async (req, res) => {
     try {
+        const conn = db.promise();
+        // Document déjà signé électroniquement : servir le PDF SIGNÉ FIGÉ tel quel.
+        // Le régénérer invaliderait les signatures : on ne repasse donc PAS par le rendu
+        // ni par le contrôle « informations manquantes ».
+        try {
+            const [[sdoc]] = await conn.query(
+                'SELECT id, organization_id, learner_id, title, type FROM generated_document WHERE id = ? AND organization_id = ?',
+                [req.params.id, req.user.organization_id]
+            );
+            if (sdoc) {
+                const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
+                let allowed = STAFF.includes(req.user.role);
+                if (!allowed) {
+                    const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [sdoc.learner_id, req.user.id]);
+                    allowed = own.length > 0;
+                }
+                if (allowed) {
+                    const stored = await loadSignedPdf(conn, sdoc.id);
+                    if (stored) {
+                        logAudit(req, 'document.pdf', 'GeneratedDocument', sdoc.id);
+                        const base = (sdoc.title || TYPE_LABELS[sdoc.type] || 'document').replace(/[\\/:*?"<>|]/g, '');
+                        res.set('Content-Type', 'application/pdf');
+                        res.set('Content-Disposition', `inline; filename="${encodeURIComponent(base + '.pdf')}"`);
+                        return res.send(stored);
+                    }
+                }
+            }
+        } catch (e) { console.error('Lecture du PDF signé ignorée :', e.message); }
+
         const r = await fillForRequest(req, res);
         if (!r) return;
         let pdf;
         try {
-            if (r.content.kind === 'emargement') {
-                const html = await renderEmargDoc(db.promise(), r.doc.organization_id, r.doc, r.ctx);
-                if (!html) return res.status(422).json({ message: "Émargement pas encore disponible : générez d'abord les feuilles de présence de la session." });
-                pdf = htmlToPdf(html);
-            } else if (r.content.kind === 'builder') {
-                const html = renderTemplateHtml(r.content.html, r.ctx, {
-                    title: r.doc.title || r.baseName,
-                    headerHtml: r.content.header, footerHtml: r.content.footer,
-                });
-                pdf = htmlToPdf(html);
-            } else {
-                const out = renderTemplate(r.content.buffer, r.ctx, r.slug);
-                pdf = docxToPdf(out.buffer);
-            }
+            pdf = await composeDocPdf(conn, r);
         } catch (e) {
-            if (e.code === 'NO_SOFFICE') {
-                return res.status(501).json({ error: 'PDF indisponible', message: 'LibreOffice n\'est pas installé sur le serveur (nécessaire pour convertir en PDF).' });
-            }
+            if (e.code === 'EMARG_NOT_READY') return res.status(422).json({ message: "Émargement pas encore disponible : générez d'abord les feuilles de présence de la session." });
+            if (e.code === 'NO_SOFFICE') return res.status(501).json({ error: 'PDF indisponible', message: 'LibreOffice n\'est pas installé sur le serveur (nécessaire pour convertir en PDF).' });
             throw e;
         }
-        // Cachet PAdES de l'organisme : rend le PDF infalsifiable + vérifiable (intégrité).
+        // Document NON encore signé : cachet PAdES de l'organisme à la volée (intégrité).
         try {
             const { sealPdf } = require('../lib/pdfseal.js');
-            const conn = db.promise();
             const org = r.ctx.org || {};
             const p12 = await getOrgSigner(conn, r.doc.organization_id, org.legal_name || org.short_name);
             pdf = await sealPdf(pdf, p12, {
@@ -538,6 +690,13 @@ const signDocument = async (req, res) => {
              WHERE id = ?`,
             [signer_name, encrypt(signature_data || null), encrypt(clientIp(req)), encrypt((req.headers['user-agent'] || '').slice(0, 400)), signedHash, req.params.id]
         );
+        // Signatures cryptographiques (stagiaire + organisme) sur le PDF figé, stockées.
+        // En repli (échec de rendu/signature), le document reste « signé » côté image +
+        // journal ; le téléchargement retombe sur le cachet organisme à la volée.
+        try {
+            const [[full]] = await conn.query('SELECT * FROM generated_document WHERE id = ?', [req.params.id]);
+            if (full) await signAndStoreDocument(conn, req.user.organization_id, full, signer_name);
+        } catch (e) { console.error('Signature cryptographique différée :', e.message); }
         // Pipeline : devis signé -> « Devis signé » ; contrat/convention signé -> « Inscrit ».
         if (rows[0].type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_SIGNE');
         else if (rows[0].type === 'CONTRAT' || rows[0].type === 'CONVENTION') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'INSCRIT');
@@ -569,6 +728,8 @@ const deleteDocument = async (req, res) => {
             if (!enr) { const [[df]] = await conn.query('SELECT enrollment_id FROM document_formation WHERE document_id = ? LIMIT 1', [doc.id]); enr = df && df.enrollment_id; }
             if (enr) await conn.query('DELETE FROM archive_document WHERE organization_id = ? AND (ref = ? OR ref LIKE ?)', [orgId, `emarg:${enr}`, `emarg:${enr}:%`]);
         }
+        try { await conn.query('DELETE FROM document_signed_pdf WHERE document_id = ?', [doc.id]); }
+        catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
         await conn.query('DELETE FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         logAudit(req, 'document.delete', 'GeneratedDocument', req.params.id);
         res.status(200).json({ success: true, message: 'Document supprimé' });

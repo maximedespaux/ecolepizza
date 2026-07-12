@@ -5,7 +5,11 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS } = require('../lib/documents.js');
-const { TOKEN_CATALOG } = require('../lib/tokens.js');
+const { TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
+const { decrypt } = require('../lib/crypto.js');
+const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
+const { getEnabledFields } = require('../lib/conditions.js');
+const { resolveCustomTokens } = require('../lib/customtokens.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
@@ -27,16 +31,28 @@ async function loadRows(organizationId) {
  * { kind:'docx', buffer } (ancien mode fichier), ou null si aucune source.
  */
 async function getTemplateContent(organizationId, slug) {
-    const [rows] = await db.promise().query(
-        'SELECT kind, body_html, header_html, footer_html, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
-        [organizationId, slug]
-    );
+    let rows;
+    try {
+        [rows] = await db.promise().query(
+            'SELECT kind, body_html, header_html, footer_html, layout, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+            [organizationId, slug]
+        );
+    } catch (e) {
+        if (e && e.code === 'ER_BAD_FIELD_ERROR') { // colonne layout absente (migration 065)
+            [rows] = await db.promise().query(
+                'SELECT kind, body_html, header_html, footer_html, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+                [organizationId, slug]
+            );
+        } else { throw e; }
+    }
     const row = rows[0];
     if (row) {
+        let layout = null;
+        if (row.layout) { try { layout = typeof row.layout === 'string' ? JSON.parse(row.layout) : row.layout; } catch { layout = null; } }
         if (row.kind === 'docx') {
             if (row.file) return { kind: 'docx', buffer: row.file };
         } else if (row.body_html) {
-            return { kind: 'builder', html: row.body_html, header: row.header_html || '', footer: row.footer_html || '' };
+            return { kind: 'builder', html: row.body_html, header: row.header_html || '', footer: row.footer_html || '', layout };
         }
     }
     // Aucun modèle par défaut : le modèle doit être créé dans l'éditeur.
@@ -89,20 +105,35 @@ const listTemplates = async (req, res) => {
 // Upsert d'une ligne (métadonnées et/ou fichier). Renvoie l'id.
 async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
-    const keys = Object.keys(fields);
-    if (ex.length) {
-        if (keys.length) {
-            await conn.query(`UPDATE document_template SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`,
-                [...keys.map((k) => fields[k]), ex[0].id]);
+    // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
+    // sans elles plutôt que d'échouer.
+    const OPTIONAL = ['layout'];
+    const run = async (f) => {
+        const keys = Object.keys(f);
+        if (ex.length) {
+            if (keys.length) {
+                await conn.query(`UPDATE document_template SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`,
+                    [...keys.map((k) => f[k]), ex[0].id]);
+            }
+            return ex[0].id;
         }
-        return ex[0].id;
+        const id = crypto.randomUUID();
+        await conn.query(
+            `INSERT INTO document_template (id, organization_id, slug, ${keys.join(', ')}) VALUES (?, ?, ?, ${keys.map(() => '?').join(', ')})`,
+            [id, orgId, slug, ...keys.map((k) => f[k])]
+        );
+        return id;
+    };
+    try {
+        return await run(fields);
+    } catch (e) {
+        if (e && e.code === 'ER_BAD_FIELD_ERROR' && OPTIONAL.some((k) => k in fields)) {
+            const f = { ...fields };
+            for (const k of OPTIONAL) delete f[k];
+            return run(f);
+        }
+        throw e;
     }
-    const id = crypto.randomUUID();
-    await conn.query(
-        `INSERT INTO document_template (id, organization_id, slug, ${keys.join(', ')}) VALUES (?, ?, ?, ${keys.map(() => '?').join(', ')})`,
-        [id, orgId, slug, ...keys.map((k) => fields[k])]
-    );
-    return id;
 }
 
 /**
@@ -126,6 +157,8 @@ const saveTemplate = async (req, res) => {
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }
     if (b.footer_html !== undefined) { fields.footer_html = b.footer_html || null; fields.kind = 'builder'; }
     if (b.kind !== undefined && (b.kind === 'builder' || b.kind === 'docx')) fields.kind = b.kind;
+    // Réglages de mise en page (bord à bord par zone…). Passe aussi en mode builder.
+    if (b.layout !== undefined) { fields.layout = b.layout ? JSON.stringify(b.layout) : null; fields.kind = fields.kind || 'builder'; }
     try {
         await upsertTemplate(db.promise(), req.user.organization_id, slug, fields);
         logAudit(req, 'template.save', 'DocumentTemplate', slug);
@@ -136,21 +169,232 @@ const saveTemplate = async (req, res) => {
     }
 };
 
-/** GET /api/templates/tokens — catalogue des jetons (regroupé par table) pour la palette. */
-const getTokens = (req, res) => {
-    res.json({ data: TOKEN_CATALOG });
+// Échantillon d'aperçu RÉALISTE selon le type et le NOM de colonne (pas le libellé, qui
+// afficherait « Intitulé de la formation » au lieu d'une vraie valeur d'exemple).
+function sampleForField(f) {
+    if (f.type === 'bool') return 'Oui';
+    if (f.type === 'enum') return (f.options && f.options[0] && f.options[0].value) || 'Valeur';
+    const c = String(f.column || '').toLowerCase();
+    if (f.type === 'number') {
+        if (/price|amount|montant|prix|acompte|cpf|reste|total/.test(c)) return '1 500';
+        if (/day|jour/.test(c)) return '5';
+        if (/hour|heure/.test(c)) return '35';
+        if (/week|semaine/.test(c)) return '23';
+        if (/year|annee|an\b/.test(c)) return '2025';
+        if (/age/.test(c)) return '30';
+        return '123';
+    }
+    if (/first_?name|prenom/.test(c)) return 'Jean';
+    if (/(company|entreprise|societe|raison)/.test(c)) return 'Pizza Napoli SARL';
+    if (/last_?name|nom/.test(c)) return 'Dupont';
+    if (/civilit|gender|sexe/.test(c)) return 'M.';
+    if (/(intitul|titre|title|program|formation|libell)/.test(c)) return 'Fabriquer des pizzas artisanales';
+    if (/(email|mail|courriel)/.test(c)) return 'jean.dupont@email.fr';
+    if (/(phone|tel|mobile|portable|gsm)/.test(c)) return '06 12 34 56 78';
+    if (/(address|adresse|rue|voie)/.test(c)) return '12 rue des Fours';
+    if (/(city|ville|town|commune)/.test(c)) return 'Bordeaux';
+    if (/(zip|postal|cp\b)/.test(c)) return '33000';
+    if (/siret/.test(c)) return '123 456 789 00012';
+    if (/(naf|ape)/.test(c)) return '5610C';
+    if (/opco/.test(c)) return 'AKTO';
+    if (/(code|rs_)/.test(c)) return 'RS7404';
+    if (/(date|birth|naissance|debut|fin|jour1)/.test(c)) return '02/06/2025';
+    if (/(status|statut)/.test(c)) return "Demandeur d'emploi";
+    if (/(financ)/.test(c)) return 'CPF';
+    if (/(objectif|programme|deroul|contenu)/.test(c)) return 'Maîtriser la pâte, la cuisson…';
+    if (/(audience|public)/.test(c)) return 'Tout public';
+    if (/level|niveau/.test(c)) return 'Débutant';
+    return 'Exemple';
+}
+
+async function loadOrgRow(orgId) {
+    const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [orgId]);
+    return org || {};
+}
+
+// Champs du LIEU de formation (jetons field:location.<colonne>), remplis au rendu depuis
+// le lieu de la session du dossier. Échantillons génériques pour l'aperçu.
+const LOCATION_FIELDS = [
+    ['name', 'Nom du lieu', 'Centre de formation Bordeaux'],
+    ['address', 'Adresse du lieu', '12 rue des Fours'],
+    ['zip_code', 'Code postal du lieu', '33000'],
+    ['town', 'Ville du lieu', 'Bordeaux'],
+];
+
+// Jetons de la palette = CHAMPS DOCUMENTS activés (colonnes du dossier), regroupés par table.
+// Clé « field:<table.column> », remplie au rendu depuis le dossier réel.
+async function fieldTokenGroups(orgId) {
+    const fields = await getEnabledFields(db.promise(), orgId);
+    const by = {};
+    for (const f of fields) {
+        // La signature de l'organisme (type image) utilise le jeton intégré « Signature
+        // organisme » (image insérée au rendu), pas un simple jeton texte field:….
+        const isSig = f.type === 'image' && f.column === 'signature_image';
+        const key = isSig ? 'Signature organisme' : `field:${f.key}`;
+        const sample = isSig ? '✍ (image enregistrée)' : sampleForField(f);
+        (by[f.tableLabel] || (by[f.tableLabel] = [])).push({ key, label: f.label, sample });
+    }
+    return Object.entries(by).map(([group, tokens]) => ({ group, tokens }));
+}
+
+// Groupe « Calculé / dates » : jetons INTÉGRÉS dérivés du dossier (dates de session,
+// semaine, durées…). Ils sont calculés au rendu par resolveTokens.
+const COMPUTED_KEYS = ['Jour1', 'endDate', 'Semaine', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Formateur', 'Heures', 'Jours', 'DuréeDétail', 'Prix', 'Acompte', 'Financement'];
+function computedGroup() {
+    const byKey = {};
+    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
+    const tokens = COMPUTED_KEYS.map((k) => byKey[k]).filter(Boolean).map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
+    return { group: 'Calculé / dates', tokens };
+}
+
+// Jetons personnalisés de l'organisme (table custom_token). Résilient si migration absente.
+async function loadCustomTokens(orgId) {
+    try {
+        const [rows] = await db.promise().query(
+            'SELECT token_key, label, template, sort_order FROM custom_token WHERE organization_id = ? ORDER BY sort_order, label', [orgId]);
+        return rows;
+    } catch (e) { if (e && e.code === 'ER_NO_SUCH_TABLE') return []; throw e; }
+}
+
+/** GET /api/templates/tokens — jetons de la palette (champs documents + calculés + personnalisés). */
+const getTokens = async (req, res) => {
+    try {
+        const orgId = req.user.organization_id;
+        const groups = await fieldTokenGroups(orgId);
+        // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
+        groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
+        groups.push(computedGroup());
+        const defs = await loadCustomTokens(orgId);
+        if (defs.length) groups.push({ group: 'Personnalisés', tokens: defs.map((d) => ({ key: `custom:${d.token_key}`, label: d.label, sample: '' })) });
+        res.json({ data: groups });
+    } catch (e) {
+        console.error('Erreur jetons palette :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+// Valeurs d'exemple { clé: échantillon } pour l'aperçu (intégrés + champs documents + personnalisés).
+async function sampleTokenValues(orgId) {
+    const m = {};
+    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || '';
+    try { for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || ''; }
+    catch { /* champs indisponibles : on garde les jetons intégrés */ }
+    // Aperçu des champs Organisme : valeurs RÉELLES de la fiche organisme (plutôt qu'un exemple générique).
+    try {
+        const org = await loadOrgRow(orgId);
+        for (const k of Object.keys(m)) {
+            if (!k.startsWith('field:organization.')) continue;
+            const col = k.slice('field:organization.'.length);
+            if (org[col] != null && org[col] !== '') m[k] = String(org[col]);
+        }
+        // Signature de l'organisme : vraie image si enregistrée, sinon emplacement.
+        if (org.signature_image) m['Signature organisme'] = signatureBox(decrypt(org.signature_image), "Signature de l'organisme");
+    } catch { /* organisme indisponible */ }
+    for (const [col, , sample] of LOCATION_FIELDS) m[`field:location.${col}`] = sample;
+    try { Object.assign(m, resolveCustomTokens(await loadCustomTokens(orgId), m)); }
+    catch { /* jetons personnalisés indisponibles */ }
+    return m;
+}
+
+/** GET /api/templates/custom-tokens — liste des jetons personnalisés. */
+const getCustomTokens = async (req, res) => {
+    try { res.json({ data: await loadCustomTokens(req.user.organization_id) }); }
+    catch (e) { console.error('Erreur lecture jetons personnalisés :', e); res.status(500).json({ error: 'Internal Server Error' }); }
+};
+
+/** PUT /api/templates/custom-tokens — remplace la liste { tokens: [{ token_key, label, template }] }. */
+const saveCustomTokens = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const list = Array.isArray(req.body && req.body.tokens) ? req.body.tokens : [];
+        const clean = [];
+        const seen = new Set();
+        for (let i = 0; i < list.length; i++) {
+            const t = list[i] || {};
+            const key = String(t.token_key || '').trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            clean.push({ token_key: key, label: String(t.label || key).slice(0, 120), template: String(t.template || '').slice(0, 2000), sort_order: i * 10 });
+        }
+        try {
+            await conn.query('DELETE FROM custom_token WHERE organization_id = ?', [orgId]);
+            for (const t of clean) {
+                await conn.query('INSERT INTO custom_token (id, organization_id, token_key, label, template, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+                    [crypto.randomUUID(), orgId, t.token_key, t.label, t.template, t.sort_order]);
+            }
+        } catch (e) {
+            if (e && e.code === 'ER_NO_SUCH_TABLE') return res.status(501).json({ message: "La table des jetons personnalisés n'existe pas (migration 066 non appliquée)." });
+            throw e;
+        }
+        logAudit(req, 'template.customTokens', 'Organization', orgId);
+        res.json({ success: true, message: 'Jetons personnalisés enregistrés.' });
+    } catch (e) {
+        console.error('Erreur enregistrement jetons personnalisés :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/templates/:slug/preview-pdf — aperçu PDF FIDÈLE du modèle en cours d'édition.
+ * Reçoit le HTML vivant (corps/en-tête/pied), remplit les jetons avec des valeurs
+ * d'exemple, et rend le PDF avec en-tête + pied répétés sur chaque page. Renvoie le PDF.
+ */
+const previewPdf = async (req, res) => {
+    try {
+        const { body_html, header_html, footer_html, layout } = req.body || {};
+        const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [req.user.organization_id]);
+        const pdf = await composeDocumentPdf({
+            bodyHtml: body_html || '<p></p>',
+            headerHtml: header_html, footerHtml: footer_html,
+            ctx: { org: org || {} },
+            sampleValues: await sampleTokenValues(req.user.organization_id),
+            bleed: (layout && layout.bleed) || {},
+        });
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', 'inline; filename="apercu.pdf"');
+        res.send(pdf);
+    } catch (e) {
+        if (e.code === 'NO_SOFFICE') {
+            return res.status(501).json({ message: "LibreOffice n'est pas installé sur le serveur (nécessaire pour l'aperçu PDF)." });
+        }
+        console.error('Erreur aperçu PDF modèle :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/templates/:slug/page-metrics — marges réservées (en-tête/pied) du modèle en
+ * cours d'édition, calculées EXACTEMENT comme le rendu PDF. Sert à placer le repère de fin
+ * de page dans l'éditeur. Calcul pur (pas de LibreOffice) → rapide.
+ */
+const pageMetrics = async (req, res) => {
+    try {
+        const { body_html, header_html, footer_html, layout } = req.body || {};
+        const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [req.user.organization_id]);
+        const m = computeReserves({
+            headerHtml: header_html, footerHtml: footer_html,
+            ctx: { org: org || {} },
+            sampleValues: await sampleTokenValues(req.user.organization_id),
+            bleed: (layout && layout.bleed) || {},
+        });
+        res.json({ data: m });
+    } catch (e) {
+        console.error('Erreur métriques page :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /** GET /api/templates/:slug/body — corps HTML du modèle (propre à l'organisme ou défaut). */
 const getTemplateBody = async (req, res) => {
     try {
         const content = await getTemplateContent(req.user.organization_id, req.params.slug);
-        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: '', header_html: '', footer_html: '' } });
+        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: '', header_html: '', footer_html: '', layout: null } });
         if (content.kind === 'docx') {
             // Ancien modèle .docx sans corps éditable : on renvoie un corps vide à composer.
-            return res.json({ data: { slug: req.params.slug, kind: 'docx', body_html: '', header_html: '', footer_html: '' } });
+            return res.json({ data: { slug: req.params.slug, kind: 'docx', body_html: '', header_html: '', footer_html: '', layout: null } });
         }
-        res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: content.html, header_html: content.header || '', footer_html: content.footer || '' } });
+        res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: content.html, header_html: content.header || '', footer_html: content.footer || '', layout: content.layout || null } });
     } catch (err) {
         console.error('Erreur lecture corps modèle :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -275,5 +519,6 @@ const reorderTemplates = async (req, res) => {
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
-    getTokens, getTemplateBody, reorderTemplates,
+    getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
+    loadCustomTokens, getCustomTokens, saveCustomTokens,
 };

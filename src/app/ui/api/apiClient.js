@@ -34,6 +34,9 @@ export function getOrganisation() {
 export function updateOrganisation(payload) {
   return request("/organisation", { method: "PATCH", body: JSON.stringify(payload) });
 }
+// Lieux de formation de l'organisme.
+export function getLocations() { return request("/organisation/locations"); }
+export function saveLocations(locations) { return request("/organisation/locations", { method: "PUT", body: JSON.stringify({ locations }) }); }
 
 // --- Modèles de feuille d'émargement ---
 export function getEmargementTemplates() {
@@ -444,6 +447,9 @@ export function getSession(id) {
   return request(`/sessions/${id}`);
 }
 
+export function updateSession(id, payload) {
+  return request(`/sessions/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
 export function createSession(payload) {
   return request("/sessions", { method: "POST", body: JSON.stringify(payload) });
 }
@@ -660,6 +666,28 @@ export function getTemplateBody(slug) {
 // Enregistre le contenu construit dans l'éditeur (corps + en-tête + pied de page).
 export function saveTemplateBody(slug, payload) {
   return request(`/templates/${slug}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+// Jetons personnalisés de l'organisme (calculés à partir d'autres jetons).
+export function getCustomTokens() { return request("/templates/custom-tokens"); }
+export function saveCustomTokens(tokens) { return request("/templates/custom-tokens", { method: "PUT", body: JSON.stringify({ tokens }) }); }
+// Marges réservées (en-tête/pied) du modèle en cours d'édition — pour le repère de fin
+// de page. Calcul serveur identique au rendu PDF. { topMm, bottomMm, contentMm }.
+export function templatePageMetrics(slug, payload) {
+  return request(`/templates/${slug}/page-metrics`, { method: "POST", body: JSON.stringify(payload), silent: true });
+}
+// Aperçu PDF fidèle du modèle en cours d'édition. Renvoie une URL blob (à révoquer).
+export async function templatePreviewPdfUrl(slug, payload) {
+  const res = await fetch(`${API_BASE_URL}/templates/${slug}/preview-pdf`, {
+    method: "POST", credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    let m = "Aperçu PDF impossible";
+    try { m = (await res.json()).message || m; } catch { /* ignore */ }
+    throw new Error(m);
+  }
+  return URL.createObjectURL(await res.blob());
 }
 export async function uploadTemplate(slug, file) {
   const fd = new FormData();

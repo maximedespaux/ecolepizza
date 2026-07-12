@@ -4,6 +4,7 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
+import LocationsManager from "../components/LocationsManager.jsx";
 
 const FIELDS = [
   ["legal_name", "Raison sociale"], ["short_name", "Sigle"], ["manager", "Responsable"],
@@ -113,6 +114,7 @@ function Reglages() {
           </form>
         </Card>
       )}
+      {form && <div style={{ marginTop: 16 }}><LocationsManager /></div>}
     </>
   );
 }

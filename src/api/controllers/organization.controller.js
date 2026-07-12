@@ -76,4 +76,67 @@ const updateOrganization = (req, res) => {
     );
 };
 
-module.exports = { getOrganization, updateOrganization };
+const crypto = require('crypto');
+
+/** GET /api/organisation/locations — lieux de formation de l'organisme. */
+const getLocations = async (req, res) => {
+    try {
+        const [rows] = await db.promise().query(
+            'SELECT id, name, address, zip_code, town, sort_order FROM training_location WHERE organization_id = ? ORDER BY sort_order, name',
+            [req.user.organization_id]
+        );
+        res.json({ data: rows });
+    } catch (e) {
+        if (e && e.code === 'ER_NO_SUCH_TABLE') return res.json({ data: [] });
+        console.error('Erreur lecture lieux :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/organisation/locations — remplace la liste { locations: [{ id?, name, address, zip_code, town }] }. */
+const saveLocations = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const list = Array.isArray(req.body && req.body.locations) ? req.body.locations : [];
+        const clean = list
+            .map((l, i) => ({
+                id: l && l.id ? String(l.id) : null,
+                name: String((l && l.name) || '').trim().slice(0, 160),
+                address: String((l && l.address) || '').trim().slice(0, 255) || null,
+                zip_code: String((l && l.zip_code) || '').trim().slice(0, 10) || null,
+                town: String((l && l.town) || '').trim().slice(0, 120) || null,
+                sort_order: i * 10,
+            }))
+            .filter((l) => l.name);
+        try {
+            // Upsert par id : on GARDE les identifiants existants (sessions liées via location_id).
+            const [existing] = await conn.query('SELECT id FROM training_location WHERE organization_id = ?', [orgId]);
+            const existingIds = new Set(existing.map((r) => r.id));
+            const keep = new Set();
+            for (const l of clean) {
+                if (l.id && existingIds.has(l.id)) {
+                    await conn.query('UPDATE training_location SET name=?, address=?, zip_code=?, town=?, sort_order=? WHERE id=? AND organization_id=?',
+                        [l.name, l.address, l.zip_code, l.town, l.sort_order, l.id, orgId]);
+                    keep.add(l.id);
+                } else {
+                    const id = crypto.randomUUID();
+                    await conn.query('INSERT INTO training_location (id, organization_id, name, address, zip_code, town, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        [id, orgId, l.name, l.address, l.zip_code, l.town, l.sort_order]);
+                    keep.add(id);
+                }
+            }
+            for (const id of existingIds) if (!keep.has(id)) await conn.query('DELETE FROM training_location WHERE id=? AND organization_id=?', [id, orgId]);
+        } catch (e) {
+            if (e && e.code === 'ER_NO_SUCH_TABLE') return res.status(501).json({ message: 'Migration des lieux (067) non appliquée.' });
+            throw e;
+        }
+        logAudit(req, 'organization.locations', 'Organization', orgId);
+        res.json({ success: true, message: 'Lieux enregistrés.' });
+    } catch (e) {
+        console.error('Erreur enregistrement lieux :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getOrganization, updateOrganization, getLocations, saveLocations };

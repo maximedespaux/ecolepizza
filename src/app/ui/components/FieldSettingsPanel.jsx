@@ -4,7 +4,7 @@ import { getFieldSettings, saveFieldSettings } from "../api/apiClient.js";
 import Card from "./Card.jsx";
 import StatusMessage from "./StatusMessage.jsx";
 
-const TYPE_LABEL = { text: "Texte", number: "Nombre", bool: "Oui / Non", enum: "Liste" };
+const TYPE_LABEL = { text: "Texte", number: "Nombre", bool: "Oui / Non", enum: "Liste", image: "Image / signature" };
 
 // Gestion des champs du dossier (découverts en base) : activer/renommer.
 // Réutilisé par la page dédiée et par l'éditeur de document (« Champs documents »).

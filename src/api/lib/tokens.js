@@ -148,17 +148,23 @@ const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme']);
 // l'organisme) est contenue dans une boîte de dimensions constantes, quelle que soit
 // sa taille d'origine — la mise en page ne bouge pas. Le cadre vide (non signé) a la
 // même taille pour un rendu identique.
-const SIG_W = 200; // largeur du cadre de signature (px)
-const SIG_H = 64;  // hauteur du cadre de signature (px)
-function signatureBox(dataUrl, label) {
+const SIG_W = 200; // largeur par défaut du cadre de signature (px)
+const SIG_H = 64;  // hauteur par défaut du cadre de signature (px)
+// GIF 1×1 transparent : sert de « gabarit » dimensionné (width/height HTML) pour le
+// cadre vide. LibreOffice IGNORE la largeur CSS d'un <span>/<td> mais RESPECTE les
+// attributs width/height d'une <img> — d'où un cadre porté par une image.
+const SPACER_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+// Cadre de signature dimensionné par les attributs width/height d'une <img> (seule
+// forme respectée au rendu PDF). `w`/`h` (px) facultatifs — défaut SIG_W × SIG_H.
+// Empreinte identique que le cadre soit signé ou vide (la mise en page ne bouge pas).
+function signatureBox(dataUrl, label, w, h) {
+    const bw = w || SIG_W, bh = h || SIG_H;
     if (dataUrl && /^data:image\//.test(dataUrl)) {
-        return `<span style="display:inline-block;width:${SIG_W}px;height:${SIG_H}px;vertical-align:middle;overflow:hidden;text-align:center">`
-            + `<img src="${dataUrl}" alt="${label}" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain" />`
-            + `</span>`;
+        return `<img src="${dataUrl}" alt="${label}" width="${bw}" height="${bh}" `
+            + `style="max-width:100%;object-fit:contain;vertical-align:middle" />`;
     }
-    return `<span style="display:inline-block;width:${SIG_W}px;height:${SIG_H}px;box-sizing:border-box;`
-        + `border:1px dashed #b0b0b0;color:#999;text-align:center;line-height:${SIG_H}px;`
-        + `border-radius:6px;font-size:9pt;vertical-align:middle;overflow:hidden">${label}</span>`;
+    return `<img src="${SPACER_GIF}" alt="${label}" width="${bw}" height="${bh}" `
+        + `style="max-width:100%;border:1px dashed #b0b0b0;border-radius:6px;vertical-align:middle" />`;
 }
 
 // Alias historiques : clés supplémentaires produites par le moteur pour que les
@@ -310,4 +316,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, frDate, euro, businessDay };

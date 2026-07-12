@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSessions, getFormations, createSession, getEnrollments } from "../api/apiClient.js";
+import { getSessions, getFormations, createSession, getLocations, getEnrollments } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -19,6 +19,7 @@ function Sessions() {
   const [sessions, setSessions] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
   const [programs, setPrograms] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [status, setStatus] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState({ program_id: "", start_date: ymd(now) });
@@ -35,6 +36,7 @@ function Sessions() {
   useEffect(() => {
     loadSessions();
     getFormations().then((r) => setPrograms(r.data)).catch(() => {});
+    getLocations().then((r) => setLocations(r.data || [])).catch(() => {});
     getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
   }, []);
 
@@ -188,6 +190,18 @@ function Sessions() {
                   onChange={(e) => setAddForm((f) => ({ ...f, start_date: e.target.value }))}
                   required
                 />
+                {locations.length > 0 && (
+                  <SelectField
+                    label="Lieu de formation"
+                    value={addForm.location_id || ""}
+                    onChange={(e) => setAddForm((f) => ({ ...f, location_id: e.target.value }))}
+                  >
+                    <option value="">— Aucun / à définir —</option>
+                    {locations.map((l) => (
+                      <option key={l.id} value={l.id}>{l.name}{l.town ? ` — ${l.town}` : ""}</option>
+                    ))}
+                  </SelectField>
+                )}
               </div>
               <div className="mfoot">
                 <button type="button" className="btn ghost" onClick={() => setShowAdd(false)}>Annuler</button>
