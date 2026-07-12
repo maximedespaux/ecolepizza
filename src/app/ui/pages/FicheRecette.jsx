@@ -26,20 +26,33 @@ const unitLabel = (tu) => (tu === "Piece" ? "pc" : tu === "L" ? "L" : "kg");
 // Barre de recherche du catalogue : texte + marque + catégorie + tri par prix.
 // Chaque résultat a un bouton « Ajouter » qui l'insère dans la garniture. Max 12.
 function GarnitureSearch({ onAdd }) {
+  const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [brand, setBrand] = useState("");
   const [family, setFamily] = useState("");
   const [sort, setSort] = useState("");
+  const [pmin, setPmin] = useState("");
+  const [pmax, setPmax] = useState("");
   const [families, setFamilies] = useState([]);
   const [res, setRes] = useState([]);
   useEffect(() => { getCatalogFamilies().then((r) => setFamilies(r.data || [])).catch(() => {}); }, []);
   useEffect(() => {
+    if (!open) return;
     const t = setTimeout(() => {
-      if (!q && !brand && !family && !sort) { setRes([]); return; }
-      searchCatalog({ q, brand, family, sort, limit: 12 }).then((r) => setRes(r.data || [])).catch(() => setRes([]));
+      if (!q && !brand && !family && !sort && pmin === "" && pmax === "") { setRes([]); return; }
+      searchCatalog({ q, brand, family, sort, price_min: pmin, price_max: pmax, limit: 12 })
+        .then((r) => setRes(r.data || [])).catch(() => setRes([]));
     }, 250);
     return () => clearTimeout(t);
-  }, [q, brand, family, sort]);
+  }, [q, brand, family, sort, pmin, pmax, open]);
+
+  if (!open) {
+    return (
+      <button className="btn sm ghost" onClick={() => setOpen(true)}>
+        <span aria-hidden>🔍</span> Rechercher un ingrédient dans le catalogue
+      </button>
+    );
+  }
   return (
     <div className="gs">
       <div className="gs-bar">
@@ -52,11 +65,17 @@ function GarnitureSearch({ onAdd }) {
           <option value="">Toutes catégories</option>
           {families.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
+        <span className="gs-price">
+          <input className="inp" type="number" step="0.1" min="0" placeholder="€ min" title="Prix minimum (par unité)" value={pmin} onChange={(e) => setPmin(e.target.value)} />
+          <span className="hint">–</span>
+          <input className="inp" type="number" step="0.1" min="0" placeholder="€ max" title="Prix maximum (par unité)" value={pmax} onChange={(e) => setPmax(e.target.value)} />
+        </span>
         <select className="inp" value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="">Tri : nom</option>
           <option value="price_asc">Prix croissant</option>
           <option value="price_desc">Prix décroissant</option>
         </select>
+        <button className="iconbtn" title="Fermer la recherche" onClick={() => setOpen(false)}><Icon name="x" size={15} /></button>
       </div>
       {res.length > 0 && (
         <div className="gs-res">

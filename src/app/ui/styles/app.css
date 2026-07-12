@@ -906,3 +906,5 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .gs-res{display:flex;flex-direction:column;gap:2px;max-height:340px;overflow:auto;border:1px solid var(--border-soft);border-radius:12px;padding:6px}
 .gs-item{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:9px}
 .gs-item:hover{background:var(--surface2)}
+.gs-price{display:flex;align-items:center;gap:6px}
+.gs-price .inp{width:78px;flex:0 0 auto}

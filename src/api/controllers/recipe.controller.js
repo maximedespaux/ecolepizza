@@ -16,10 +16,14 @@ const searchCatalog = async (req, res) => {
         const family = String(req.query.family || '').trim();
         const sort = String(req.query.sort || '');
         const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 12));
+        const pmin = req.query.price_min !== undefined && req.query.price_min !== '' ? Number(req.query.price_min) : null;
+        const pmax = req.query.price_max !== undefined && req.query.price_max !== '' ? Number(req.query.price_max) : null;
         const where = ['organization_id = ?']; const params = [req.user.organization_id];
         if (q) { where.push('(name LIKE ? OR brand LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
         if (brand) { where.push('brand LIKE ?'); params.push(`%${brand}%`); }
         if (family) { where.push('family = ?'); params.push(family); }
+        if (Number.isFinite(pmin)) { where.push('unit_ht >= ?'); params.push(pmin); }
+        if (Number.isFinite(pmax)) { where.push('unit_ht <= ?'); params.push(pmax); }
         const order = sort === 'price_asc' ? '(unit_ht IS NULL), unit_ht ASC'
             : sort === 'price_desc' ? 'unit_ht DESC' : 'name ASC';
         const [rows] = await conn.query(
