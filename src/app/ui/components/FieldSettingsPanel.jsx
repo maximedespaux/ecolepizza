@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { Icon } from "./Icon.jsx";
 import { getFieldSettings, saveFieldSettings } from "../api/apiClient.js";
 import Card from "./Card.jsx";
 import StatusMessage from "./StatusMessage.jsx";
@@ -65,7 +66,7 @@ const FieldSettingsPanel = forwardRef(function FieldSettingsPanel({ onStatus }, 
             <button type="button" onClick={() => setOpen((p) => ({ ...p, [tableLabel]: !isOpen }))}
               style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "10px 14px", background: "none", border: "none", cursor: "pointer", font: "inherit", textAlign: "left" }}>
               <span style={{ fontWeight: 700 }}>{tableLabel} <span className="hint" style={{ fontWeight: 400 }}>· {en}/{list.length} activé(s)</span></span>
-              <span className="chev">{isOpen ? "▾" : "▸"}</span>
+              <span className="chev"><Icon name="chevron-down" size={14} style={{ transform: isOpen ? "none" : "rotate(-90deg)", transition: "transform .15s var(--ease)" }} /></span>
             </button>
             {isOpen && (
               <div className="tablewrap" style={{ border: "none" }}>

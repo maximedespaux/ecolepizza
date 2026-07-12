@@ -96,7 +96,7 @@ function IntervenantEspace() {
       </Card>
 
       {!data ? null : data.length === 0 ? (
-        <Card><EmptyState icon="🗓">Aucune session ne vous est affectée pour le moment.</EmptyState></Card>
+        <Card><EmptyState icon="calendar">Aucune session ne vous est affectée pour le moment.</EmptyState></Card>
       ) : (
         data.map((s) => (
           <Card key={s.session_id} title={`${s.program_title || ""} ${s.program_code ? `(${s.program_code})` : ""}`}>
@@ -110,7 +110,7 @@ function IntervenantEspace() {
                     <b>{frDay(sl.date)}</b> · {sl.slot_label}
                   </span>
                   {sl.signed ? (
-                    <Badge tone="g">Signé ✓</Badge>
+                    <Badge tone="g">Signé</Badge>
                   ) : (
                     <>
                       {savedSig && <button className="btn sm primary" onClick={() => oneClick(s, sl)}>Signer</button>}

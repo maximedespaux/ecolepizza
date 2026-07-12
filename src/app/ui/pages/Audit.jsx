@@ -42,7 +42,7 @@ function Audit() {
 
       <Card title={`Événements (${rows.length})`}>
         {rows.length === 0 ? (
-          <EmptyState icon="🔒">Aucun événement.</EmptyState>
+          <EmptyState icon="history">Aucun événement.</EmptyState>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {rows.map((r) => {

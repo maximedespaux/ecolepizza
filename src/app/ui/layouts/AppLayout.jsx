@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from "react";
 import { Outlet, Navigate, useLocation } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import { modeForPath } from "../lib/nav.js";
+import { useMoneyMask, canRevealMoney } from "../lib/moneyPrivacy.js";
 import { getFormations } from "../api/apiClient.js";
 import { setBadgeColors } from "../lib/levels.js";
 import Sidebar from "../components/Sidebar.jsx";
@@ -26,6 +27,12 @@ function AppLayout() {
   const [, bumpColors] = useState(0);
   const location = useLocation();
   const readOnly = user ? modeForPath(user, location.pathname) === "read" : false;
+
+  // Mode confidentiel partagé : masque les montants sur les pages Ventes & Finance
+  // (+ Partenaires). Toujours masqué pour les profils sans droit de révélation (formateur).
+  const { masked: moneyMasked } = useMoneyMask();
+  const FINANCE = ["/ventes", "/inventaire", "/factures", "/comptabilite", "/produit-divers", "/partenaires"];
+  const moneyMask = FINANCE.some((p) => location.pathname.startsWith(p)) && (!canRevealMoney(user) || moneyMasked);
 
   // Charge une fois les couleurs personnalisées des formations pour que les
   // badges (formation / stagiaire / session) soient cohérents partout.
@@ -59,7 +66,7 @@ function AppLayout() {
       <div className={"scrim" + (open ? " show" : "")} onClick={() => setOpen(false)} />
       <div className="main">
         <Topbar onMenu={() => setOpen(true)} />
-        <main className="content">
+        <main className={"content" + (moneyMask ? " money-mask" : "")}>
           {readOnly && (
             <div style={{
               margin: "0 0 14px", padding: "8px 12px", borderRadius: 8,

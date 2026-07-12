@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
@@ -164,7 +165,7 @@ function SessionDetail() {
 
         <Card title={`Stagiaires inscrits (${enrollments.length})`}>
           {enrollments.length === 0 ? (
-            <EmptyState icon="👤">Aucun stagiaire inscrit.</EmptyState>
+            <EmptyState icon="users">Aucun stagiaire inscrit.</EmptyState>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {enrollments.map((e) => (
@@ -180,8 +181,8 @@ function SessionDetail() {
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{e.email || "—"}</span>
                   </button>
                   <Badge tone={scoreBadge(e.conformite_score)}>{e.conformite_score}</Badge>
-                  <button className="iconbtn" title="Notes de suivi" onClick={() => setNotesFor({ id: e.id, name: `${e.last_name} ${e.first_name}` })}>📝</button>
-                  <button className="iconbtn del" title="Retirer de la session" onClick={() => removeStagiaire(e.id)}>🗑</button>
+                  <button className="iconbtn" title="Notes de suivi" onClick={() => setNotesFor({ id: e.id, name: `${e.last_name} ${e.first_name}` })}><Icon name="pencil" size={15} /></button>
+                  <button className="iconbtn del" title="Retirer de la session" onClick={() => removeStagiaire(e.id)}><Icon name="trash" size={15} /></button>
                 </div>
               ))}
             </div>

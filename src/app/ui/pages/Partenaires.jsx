@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, createRevenue, updateRevenue, deleteRevenue } from "../api/apiClient.js";
+import { Icon } from "../components/Icon.jsx";
+import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, deleteRevenue } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -7,46 +8,32 @@ import Badge from "../components/Badge.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import MoneyToggle from "../components/MoneyToggle.jsx";
+import ApportForm from "../components/PartnerContributions.jsx";
+import { apportType, loadApports, saveApports, apportsOfPartner } from "../lib/apports.js";
 import { euro } from "../lib/format.js";
 
 const CATEGORIES = ["FARINE", "MATERIEL", "FOUR", "CHARCUTERIE", "FROMAGE", "CONSERVE", "DISTRIBUTION", "AUTRE"];
 const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
-const REVENU_CATS = [
-  { v: "COMMISSION", label: "Commission partenaire" },
-  { v: "SUBVENTION", label: "Subvention" },
-  { v: "AUTRE", label: "Autre produit" },
-];
-const today = () => new Date().toISOString().slice(0, 10);
 const EMPTY = {
   name: "", category: "AUTRE", contact_name: "", contact_email: "", contact_phone: "",
   website: "", town: "", discount_pct: "", offer: "", notes: "",
 };
+const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR") : "—");
+const sumCash = (ap) => ap.filter((a) => apportType(a.type).cash).reduce((s, a) => s + (Number(a.value) || 0), 0);
+const sumKind = (ap) => ap.filter((a) => !apportType(a.type).cash).reduce((s, a) => s + (Number(a.value) || 0), 0);
 
 function Partenaires() {
   const { user } = useContext(UserContext);
   const canEdit = ADMIN.includes(user?.role);
   const [partners, setPartners] = useState([]);
   const [status, setStatus] = useState(null);
-  const [editing, setEditing] = useState(null); // partenaire édité ou { _new: true }
+  const [editing, setEditing] = useState(null);   // partenaire édité ou { _new: true }
   const [cat, setCat] = useState("");
-  // Saisie d'un produit divers (commission…) — déplacée depuis « Produit divers ».
-  const [rec, setRec] = useState({ label: "", categorie: "COMMISSION", montant: "", date: today(), partner_id: "" });
-  const [saving, setSaving] = useState(false);
-  const [openDetails, setOpenDetails] = useState({}); // détail des commissions déplié par partenaire
-  const [editLine, setEditLine] = useState(null); // ligne de commission en édition
+  const [tab, setTab] = useState("partenaires");   // partenaires | historique
+  const [apports, setApports] = useState(loadApports); // maquette locale
 
-  async function delLine(c) {
-    if (!window.confirm(`Supprimer « ${c.label} » ?`)) return;
-    try { await deleteRevenue(c.id); load(); }
-    catch (e) { setStatus({ type: "error", message: e.message }); }
-  }
-  async function saveLine() {
-    if (!editLine.label.trim() || editLine.amount === "") { setStatus({ type: "error", message: "Libellé et montant requis." }); return; }
-    try {
-      await updateRevenue(editLine.id, { label: editLine.label, montant: editLine.amount, date: editLine.date });
-      setEditLine(null); load();
-    } catch (e) { setStatus({ type: "error", message: e.message }); }
-  }
+  useEffect(() => { saveApports(apports); }, [apports]);
 
   async function load() {
     try { const { data } = await getPartenaires(); setPartners(data); }
@@ -54,26 +41,21 @@ function Partenaires() {
   }
   useEffect(() => { load(); }, []);
 
-  async function recordRevenue() {
-    if (!rec.label.trim() || !rec.montant) { setStatus({ type: "error", message: "Libellé et montant requis." }); return; }
-    if (rec.categorie === "COMMISSION" && !rec.partner_id) { setStatus({ type: "error", message: "Sélectionnez le partenaire concerné pour une commission." }); return; }
-    setSaving(true); setStatus(null);
-    try {
-      await createRevenue(rec);
-      setRec({ label: "", categorie: rec.categorie, montant: "", date: today(), partner_id: "" });
-      setStatus({ type: "success", message: "Produit enregistré (ajouté au chiffre d'affaires)." });
-      load(); // rafraîchit les commissions cumulées par partenaire
-    } catch (e) { setStatus({ type: "error", message: e.message }); }
-    finally { setSaving(false); }
+  const addApport = (a) => setApports((l) => [...l, a]);
+  async function removeApport(ap) {
+    if (ap.real) {
+      if (!window.confirm(`Supprimer « ${ap.label} » ?`)) return;
+      try { await deleteRevenue(ap.srcId); load(); }
+      catch (e) { setStatus({ type: "error", message: e.message }); }
+    } else {
+      setApports((l) => l.filter((x) => x.id !== ap.id));
+    }
   }
 
-  const filtered = useMemo(
-    () => (cat ? partners.filter((p) => p.category === cat) : partners),
-    [partners, cat]
-  );
-  const totalCommissions = useMemo(
-    () => partners.reduce((s, p) => s + Number(p.commissions_total || 0), 0),
-    [partners]
+  const filtered = useMemo(() => (cat ? partners.filter((p) => p.category === cat) : partners), [partners, cat]);
+  const withApports = useMemo(
+    () => partners.map((p) => ({ p, ap: apportsOfPartner(p, apports) })).filter((x) => x.ap.length > 0),
+    [partners, apports]
   );
 
   async function onDelete(p) {
@@ -87,111 +69,115 @@ function Partenaires() {
       <PageHead
         eyebrow="Réseau · Suivi"
         title="Partenaires"
-        lead="Suivi des partenaires : contacts, ce qu'ils proposent, et les commissions générées. Le formateur peut consulter ; les commissions se saisissent via « Produit divers »."
-        actions={canEdit && <button className="btn primary" onClick={() => setEditing({ _new: true, ...EMPTY })}>＋ Ajouter un partenaire</button>}
+        lead="Contacts, ce qu'ils proposent, et ce qu'ils vous apportent — commissions (cash) et contributions en nature (matériel, équipement). Le formateur peut consulter et saisir ; les montants lui restent masqués."
+        actions={<div style={{ display: "flex", alignItems: "center", gap: 10 }}><MoneyToggle />{canEdit && <button className="btn primary" onClick={() => setEditing({ _new: true, ...EMPTY })}>＋ Ajouter un partenaire</button>}</div>}
       />
       <StatusMessage status={status} />
 
-      <div className="grid cols-3" style={{ marginBottom: 16 }}>
-        <div className="kpi"><div className="lbl">Partenaires</div><div className="val tnum">{partners.length}</div></div>
-        <div className="kpi"><div className="lbl">Commissions cumulées</div><div className="val tnum" style={{ color: "var(--green)" }}>{euro(totalCommissions)}</div></div>
-        <div className="kpi"><div className="lbl">Catégories</div><div className="val tnum">{new Set(partners.map((p) => p.category)).size}</div></div>
+      <ApportForm partners={partners} onAdd={addApport} />
+
+      <div className="tabs" style={{ marginBottom: 14 }}>
+        <button className={"tab" + (tab === "partenaires" ? " on" : "")} onClick={() => setTab("partenaires")}>Partenaires</button>
+        <button className={"tab" + (tab === "historique" ? " on" : "")} onClick={() => setTab("historique")}>Historique des apports</button>
       </div>
 
-      <Card title="Enregistrer un produit divers" style={{ marginBottom: 16 }}>
-        <p className="ca-add" style={{ marginTop: -4, marginBottom: 12 }}>+ Ajouté au chiffre d'affaires</p>
-        <div className="row3" style={{ alignItems: "end" }}>
-          <div className="field"><label>Libellé</label>
-            <input className="inp" value={rec.label} onChange={(e) => setRec({ ...rec, label: e.target.value })} placeholder="Commission Le 5 Stagioni…" /></div>
-          <div className="field"><label>Type</label>
-            <select value={rec.categorie} onChange={(e) => setRec({ ...rec, categorie: e.target.value })}>
-              {REVENU_CATS.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
-            </select></div>
-          <div className="field"><label>Montant (€)</label>
-            <input className="inp" inputMode="decimal" value={rec.montant} onChange={(e) => setRec({ ...rec, montant: e.target.value })} placeholder="0" /></div>
-        </div>
-        <div className="row3" style={{ alignItems: "end" }}>
-          {rec.categorie === "COMMISSION" && (
-            <div className="field"><label>Partenaire concerné <span style={{ color: "var(--ember1)" }}>*</span></label>
-              <select value={rec.partner_id} onChange={(e) => setRec({ ...rec, partner_id: e.target.value })} required>
-                <option value="">— Sélectionner un partenaire —</option>
-                {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select></div>
-          )}
-          <div className="field"><label>Date</label>
-            <input className="inp" type="date" value={rec.date} onChange={(e) => setRec({ ...rec, date: e.target.value })} /></div>
-          <button className="btn primary" disabled={saving} onClick={recordRevenue}>{saving ? "Enregistrement…" : "+ Ajouter le produit"}</button>
-        </div>
-      </Card>
+      {tab === "partenaires" ? (
+        <>
+          <div className="searchbar" style={{ marginBottom: 12 }}>
+            <select className="inp" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 240 }}>
+              <option value="">Toutes les catégories</option>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
 
-      <div className="searchbar" style={{ marginBottom: 12 }}>
-        <select className="inp" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 240 }}>
-          <option value="">Toutes les catégories</option>
-          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
-
-      {filtered.length === 0 ? (
-        <Card title="Partenaires"><EmptyState icon="🤝">Aucun partenaire.</EmptyState></Card>
-      ) : (
-        <div className="partner-grid">
-          {filtered.map((p) => (
-            <Card key={p.id} title={p.name} more={<Badge tone="n">{p.category}</Badge>}>
-              {p.offer && <p style={{ marginTop: 0, fontSize: 13.5 }}>{p.offer}</p>}
-              <div className="partner-meta">
-                {p.contact_name && <div>{p.contact_name}</div>}
-                {p.contact_phone && <div><a href={`tel:${p.contact_phone}`}>{p.contact_phone}</a></div>}
-                {p.contact_email && <div><a href={`mailto:${p.contact_email}`}>{p.contact_email}</a></div>}
-                {p.website && <div><a href={p.website.startsWith("http") ? p.website : `https://${p.website}`} target="_blank" rel="noreferrer">{p.website}</a></div>}
-                {p.town && <div>{p.town}</div>}
-                {p.discount_pct != null && <div>Remise {p.discount_pct}%</div>}
-              </div>
-              <div className="partner-commission">
-                <span>Commissions</span>
-                <b>{euro(Number(p.commissions_total || 0))}</b>
-                <span className="sub">{p.commissions_count || 0} · {p.last_commission ? `dernière ${p.last_commission}` : "aucune"}</span>
-              </div>
-              {p.commissions && p.commissions.length > 0 && (
-                <>
-                  <button type="button" className="btn sm ghost" style={{ marginTop: 6 }}
-                    onClick={() => setOpenDetails((o) => ({ ...o, [p.id]: !o[p.id] }))}>
-                    {openDetails[p.id] ? "Masquer le détail" : `Voir le détail (${p.commissions.length})`}
-                  </button>
-                  {openDetails[p.id] && (
-                    <div style={{ marginTop: 6, display: "flex", flexDirection: "column" }}>
-                      {p.commissions.map((c) => (editLine && editLine.id === c.id ? (
-                        <div key={c.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "4px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                          <input className="inp" style={{ flex: 1, minWidth: 0 }} value={editLine.label} onChange={(e) => setEditLine({ ...editLine, label: e.target.value })} />
-                          <input className="inp" style={{ width: 70 }} inputMode="decimal" value={editLine.amount} onChange={(e) => setEditLine({ ...editLine, amount: e.target.value })} />
-                          <input className="inp" type="date" style={{ width: 132 }} value={editLine.date} onChange={(e) => setEditLine({ ...editLine, date: e.target.value })} />
-                          <button type="button" className="btn sm primary" onClick={saveLine}>OK</button>
-                          <button type="button" className="btn sm ghost" onClick={() => setEditLine(null)}>×</button>
-                        </div>
-                      ) : (
-                        <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 12.5, padding: "4px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {c.label}<span style={{ color: "var(--dim)" }}> · {new Date(c.date).toLocaleDateString("fr-FR")}</span>
-                          </span>
-                          <b className="tnum">{euro(Number(c.amount))}</b>
-                          {canEdit && (
-                            <>
-                              <button type="button" className="iconbtn" title="Modifier" onClick={() => setEditLine({ id: c.id, label: c.label, amount: String(c.amount), date: c.date })}>✎</button>
-                              <button type="button" className="iconbtn del" title="Supprimer" onClick={() => delLine(c)}>🗑</button>
-                            </>
-                          )}
-                        </div>
-                      )))}
+          {filtered.length === 0 ? (
+            <Card title="Partenaires"><EmptyState icon="handshake">Aucun partenaire.</EmptyState></Card>
+          ) : (
+            <div className="partner-grid">
+              {filtered.map((p) => {
+                const ap = apportsOfPartner(p, apports);
+                return (
+                  <Card key={p.id} title={p.name} more={<Badge tone="n">{p.category}</Badge>}>
+                    {p.offer && <p style={{ marginTop: 0, fontSize: 13.5 }}>{p.offer}</p>}
+                    <div className="partner-meta">
+                      {p.contact_name && <div>{p.contact_name}</div>}
+                      {p.contact_phone && <div><a href={`tel:${p.contact_phone}`}>{p.contact_phone}</a></div>}
+                      {p.contact_email && <div><a href={`mailto:${p.contact_email}`}>{p.contact_email}</a></div>}
+                      {p.website && <div><a href={p.website.startsWith("http") ? p.website : `https://${p.website}`} target="_blank" rel="noreferrer">{p.website}</a></div>}
+                      {p.town && <div>{p.town}</div>}
+                      {p.discount_pct != null && <div>Remise {p.discount_pct}%</div>}
                     </div>
-                  )}
-                </>
-              )}
-              {p.notes && <p className="sub" style={{ marginBottom: 0 }}>{p.notes}</p>}
-              {canEdit && (
-                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <button className="btn sm ghost" onClick={() => setEditing({ ...p })}>Modifier</button>
-                  <button className="btn sm ghost danger" onClick={() => onDelete(p)}>🗑</button>
-                </div>
-              )}
+
+                    <div className="partner-totals">
+                      <div><span className="sub">Commissions</span><b className="tnum" style={{ color: "var(--green)" }}>{euro(sumCash(ap))}</b></div>
+                      <div><span className="sub">En nature</span><b className="tnum" style={{ color: "var(--orange)" }}>{euro(sumKind(ap))}</b></div>
+                    </div>
+
+                    {ap.length === 0 ? (
+                      <p className="sub" style={{ margin: "8px 0 0" }}>Aucun apport pour l'instant.</p>
+                    ) : (
+                      <div className="apport-list">
+                        {ap.slice(0, 4).map((a) => {
+                          const t = apportType(a.type);
+                          return (
+                            <div key={a.id} className="apport-row">
+                              <span className={`dot tone-${t.tone}`} />
+                              <span className="apport-label" title={a.label}>{a.label}</span>
+                              <span className="apport-date">{frDate(a.date)}</span>
+                              <b className="tnum">{euro(a.value)}</b>
+                            </div>
+                          );
+                        })}
+                        {ap.length > 4 && (
+                          <button type="button" className="btn sm ghost" style={{ marginTop: 4 }} onClick={() => setTab("historique")}>
+                            Voir les {ap.length} apports →
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {p.notes && <p className="sub" style={{ marginBottom: 0 }}>{p.notes}</p>}
+                    {canEdit && (
+                      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        <button className="btn sm ghost" onClick={() => setEditing({ ...p })}>Modifier</button>
+                        <button className="btn sm ghost danger" onClick={() => onDelete(p)}><Icon name="trash" size={15} /></button>
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </>
+      ) : withApports.length === 0 ? (
+        <Card><EmptyState icon="handshake">Aucun apport enregistré. Ajoutez une commission ou une contribution ci-dessus.</EmptyState></Card>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {withApports.map(({ p, ap }) => (
+            <Card key={p.id}
+              title={<span className="card-ttl"><Icon name="handshake" size={15} /> {p.name}</span>}
+              more={<span className="sub">Commissions {euro(sumCash(ap))} · Nature {euro(sumKind(ap))}</span>}>
+              <div className="tablewrap" style={{ border: "none" }}>
+                <table>
+                  <thead><tr><th>Date</th><th>Type</th><th>Libellé</th><th className="ta-r">Valeur</th><th></th></tr></thead>
+                  <tbody>
+                    {ap.map((a) => {
+                      const t = apportType(a.type);
+                      return (
+                        <tr key={a.id}>
+                          <td className="tnum" style={{ whiteSpace: "nowrap" }}>{frDate(a.date)}</td>
+                          <td style={{ whiteSpace: "nowrap" }}><Badge tone={t.tone}>{t.label}</Badge>{t.cash && <span className="hint" style={{ marginLeft: 6 }}>→ CA</span>}</td>
+                          <td>{a.label}</td>
+                          <td className="ta-r tnum">{euro(a.value)}</td>
+                          <td style={{ textAlign: "right" }}>
+                            {canEdit && <button className="iconbtn del" title="Supprimer" onClick={() => removeApport(a)}><Icon name="trash" size={15} /></button>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           ))}
         </div>
@@ -232,7 +218,7 @@ function PartnerModal({ partner, onClose, onSaved, onError }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="mhead"><h3>{isNew ? "Nouveau partenaire" : "Modifier le partenaire"}</h3>
-          <button className="x" onClick={onClose} aria-label="Fermer">×</button></div>
+          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button></div>
         <div className="mbody">
           <div className="row2">
             <Field label="Nom" value={form.name} onChange={set("name")} required />

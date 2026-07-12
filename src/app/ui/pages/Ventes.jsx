@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
+import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
   getShopSettings, saveShopSettings,
@@ -120,7 +122,8 @@ function Ventes() {
   return (
     <>
       <PageHead eyebrow="Boutique" title="Ventes de Matériels et Inventaire"
-        lead="Point de vente du matériel : composez un panier, appliquez des remises, encaissez — la facture est créée automatiquement. Gérez le stock et les réglages de facturation dans les onglets." />
+        lead="Point de vente du matériel : composez un panier, appliquez des remises, encaissez — la facture est créée automatiquement. Gérez le stock et les réglages de facturation dans les onglets."
+        actions={<MoneyToggle />} />
       <StatusMessage status={status} />
 
       <div className="tabs">
@@ -198,7 +201,7 @@ function Ventes() {
 
             <Card title={`Panier (${cart.length})`}>
               {cart.length === 0 ? (
-                <EmptyState icon="🧺">Panier vide. Ajoutez des produits.</EmptyState>
+                <EmptyState icon="package">Panier vide. Ajoutez des produits.</EmptyState>
               ) : (
                 <>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -215,7 +218,7 @@ function Ventes() {
                           onChange={(e) => setLine(l.item_id, { disc: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
                           className="inp" style={{ width: 54 }} placeholder="%" />
                         <span className="mono" style={{ width: 74, textAlign: "right" }}>{euro(ttc(l.unit_price * l.quantity * (1 - (l.disc || 0) / 100), tvaApplies ? l.tax_rate : 0))}</span>
-                        <button className="iconbtn del" title="Retirer" onClick={() => removeLine(l.item_id)}>🗑</button>
+                        <button className="iconbtn del" title="Retirer" onClick={() => removeLine(l.item_id)}><Icon name="trash" size={15} /></button>
                       </div>
                     ))}
                   </div>
@@ -241,7 +244,7 @@ function Ventes() {
       {tab === "historique" && (
         <Card title={`Historique (${sales.length})`}>
           {sales.length === 0 ? (
-            <EmptyState icon="🛒">Aucune vente enregistrée.</EmptyState>
+            <EmptyState icon="cart">Aucune vente enregistrée.</EmptyState>
           ) : (
             <div className="tablewrap" style={{ border: "none" }}>
               <table>
@@ -253,8 +256,8 @@ function Ventes() {
                       <td><b>{s.product}</b>{s.category ? <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.category}</span> : null}</td>
                       <td>{s.last_name ? `${s.last_name} ${s.first_name}` : "—"}</td>
                       <td>{s.quantity}</td>
-                      <td className="mono" style={{ textAlign: "right" }}>{euro(Number(s.amount) * (s.quantity || 1))}</td>
-                      <td style={{ textAlign: "right" }}><button className="iconbtn del" title="Supprimer" onClick={() => remove(s.id)}>🗑</button></td>
+                      <td className="mono tnum" style={{ textAlign: "right" }}>{euro(Number(s.amount) * (s.quantity || 1))}</td>
+                      <td style={{ textAlign: "right" }}><button className="iconbtn del" title="Supprimer" onClick={() => remove(s.id)}><Icon name="trash" size={15} /></button></td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
@@ -99,7 +100,7 @@ function Formations() {
                 <td>{p.rs_code ? <Badge tone="b">Certifiante</Badge> : p.hygiene ? <Badge tone="a">Hygiène</Badge> : null}</td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   <button className="btn sm ghost" onClick={() => setEditing(p)}>Modifier</button>{" "}
-                  <button className="btn sm ghost danger" title="Supprimer la formation" onClick={() => onDelete(p)}>🗑</button>
+                  <button className="btn sm ghost danger" title="Supprimer la formation" onClick={() => onDelete(p)}><Icon name="trash" size={15} /></button>
                 </td>
               </tr>
             ))}

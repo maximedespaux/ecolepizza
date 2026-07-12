@@ -4,6 +4,7 @@ import { UserContext } from "../context/UserContext.jsx";
 import { GRANTABLE_NAV, canAccess, OWNER_ROLES, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import { Icon } from "../components/Icon.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
@@ -143,25 +144,26 @@ function Equipe() {
                     </td>
                     <td><Badge tone={meta.tone}>{meta.label}</Badge></td>
                     <td style={{ fontSize: 13 }}>
-                      {m.active ? <span style={{ color: "var(--ok, #2e9e5b)" }}>● Actif</span>
-                        : <span style={{ color: "var(--dim)" }}>○ Désactivé</span>}
+                      {m.active
+                        ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--green)" }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: "currentColor", flex: "0 0 8px" }} /> Actif</span>
+                        : <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--dim)" }}><span style={{ width: 8, height: 8, borderRadius: "50%", border: "1.5px solid currentColor", flex: "0 0 8px" }} /> Désactivé</span>}
                     </td>
                     <td style={{ fontSize: 13, color: "var(--muted)" }}>{fmtDate(m.last_login_at)}</td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       {canManageRow(m) && (
                         <>
-                          <button className="btn sm ghost" title="Modifier" onClick={() => setEditing({ ...m })}>✎</button>{" "}
+                          <button className="btn sm ghost" title="Modifier" onClick={() => setEditing({ ...m })}><Icon name="pencil" size={15} /></button>{" "}
                           {isSuperAdmin && !m.is_self && !OWNER_ROLES.includes(m.role) && (
                             <button className="btn sm ghost" title="Configurer l'accès au menu"
-                              onClick={() => setNavEditing(m)}>🧭</button>
+                              onClick={() => setNavEditing(m)}><Icon name="compass" size={15} /></button>
                           )}{" "}
                           {!m.is_self && (
                             <button className="btn sm ghost" title={m.active ? "Désactiver l'accès" : "Réactiver l'accès"}
-                              disabled={busy === m.id} onClick={() => toggleActive(m)}>{m.active ? "⏸" : "▶"}</button>
+                              disabled={busy === m.id} onClick={() => toggleActive(m)}>{m.active ? <Icon name="pause" size={14} /> : <Icon name="play" size={14} />}</button>
                           )}{" "}
                           {!m.is_self && (
                             <button className="btn sm ghost danger" title="Supprimer"
-                              disabled={busy === m.id} onClick={() => onDelete(m)}>🗑</button>
+                              disabled={busy === m.id} onClick={() => onDelete(m)}><Icon name="trash" size={15} /></button>
                           )}
                         </>
                       )}
@@ -299,7 +301,7 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
                     <div key={it.to} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
                       <label style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: "pointer" }}>
                         <input type="checkbox" checked={on} onChange={() => toggle(it.to)} />
-                        <span style={{ width: 20, textAlign: "center" }}>{it.ic}</span> {it.label}
+                        <span style={{ width: 20, display: "inline-grid", placeItems: "center" }}><Icon name={it.ic} size={16} /></span> {it.label}
                       </label>
                       {on && (
                         <div style={{ display: "flex", gap: 4 }}>

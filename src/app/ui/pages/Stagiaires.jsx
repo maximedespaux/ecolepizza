@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import { Link } from "react-router-dom";
 import { getStagiaires, resetStagiairePassword, deleteStagiaire, deleteStagiaireAccount, getOpcos, getFormations } from "../api/apiClient.js";
 import { OPCOS } from "../lib/opco.js";
@@ -222,9 +223,9 @@ function Stagiaires() {
                 {l.professional_status && <Badge tone="n">{l.professional_status}</Badge>}
                 {l.has_account ? (
                   <>
-                    <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" onClick={() => resetPassword(l)}>🔑</button>
+                    <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" onClick={() => resetPassword(l)}><Icon name="key" size={15} /></button>
                     <button type="button" className="iconbtn" title="Supprimer le compte de connexion (fiche conservée)"
-                      aria-label={`Supprimer le compte de ${l.first_name} ${l.last_name}`} onClick={() => removeAccount(l)}>🚫</button>
+                      aria-label={`Supprimer le compte de ${l.first_name} ${l.last_name}`} onClick={() => removeAccount(l)}><Icon name="ban" size={16} /></button>
                   </>
                 ) : (
                   <button type="button" className="btn sm ghost" title="Créer un compte de connexion pour ce stagiaire" onClick={() => resetPassword(l)}>＋ Compte</button>
@@ -236,7 +237,7 @@ function Stagiaires() {
                   aria-label={`Modifier ${l.first_name} ${l.last_name}`}
                   onClick={() => openEdit(l.id)}
                 >
-                  ✎
+                  <Icon name="pencil" size={15} />
                 </button>
                 <button
                   type="button"
@@ -245,7 +246,7 @@ function Stagiaires() {
                   aria-label={`Supprimer ${l.first_name} ${l.last_name}`}
                   onClick={() => removeLearner(l)}
                 >
-                  🗑
+                  <Icon name="trash" size={15} />
                 </button>
               </div>
             ))}

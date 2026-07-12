@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment,
@@ -14,7 +15,7 @@ import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro } from "../lib/format.js";
 
-const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé ✓", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
+const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
 
 function Row({ label, value }) {
   if (value === null || value === undefined || value === "" || value === "0.00") return null;
@@ -27,6 +28,11 @@ function Row({ label, value }) {
 }
 
 const d10 = (v) => (v ? String(v).slice(0, 10) : "");
+
+// Titre de carte avec icône de tête.
+const T = (icon, text) => (
+  <span className="card-ttl"><Icon name={icon} size={16} /> {text}</span>
+);
 
 function StagiaireDetail() {
   const { id } = useParams();
@@ -200,7 +206,7 @@ function StagiaireDetail() {
   return (
     <>
       <PageHead
-        eyebrow={<button className="card-more" style={{ background: "none", border: "none", cursor: "pointer", padding: 0, WebkitTextFillColor: "var(--ember1)" }} onClick={() => navigate(-1)}>← Retour</button>}
+        eyebrow={<button className="card-more" style={{ background: "none", border: "none", cursor: "pointer", padding: 0, WebkitTextFillColor: "var(--ember1)", display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => navigate(-1)}><Icon name="chevron-left" size={14} /> Retour</button>}
         title={`${l.civility ? l.civility + " " : ""}${l.last_name} ${l.first_name}`}
         lead={l.professional_status || ""}
         actions={
@@ -213,7 +219,7 @@ function StagiaireDetail() {
       <StatusMessage status={status} />
 
       <div className="grid cols-2">
-        <Card title="Contact & identité">
+        <Card title={T("user", "Contact & identité")}>
           <Row label="Civilité" value={l.civility} />
           <Row label="Nom" value={l.last_name} />
           <Row label="Prénom" value={l.first_name} />
@@ -226,15 +232,21 @@ function StagiaireDetail() {
           <Row label="Contacté par" value={l.contacted_by} />
         </Card>
 
-        <Card title="Parcours scolaire">
-          <Row label="Niveau du diplôme" value={l.diploma_level} />
-          <Row label="Nom du diplôme" value={l.diploma_name} />
-          <Row label="Année d'obtention" value={l.diploma_year} />
-          <Row label="Dernière expérience" value={l.last_experience} />
-          <Row label="Durée" value={[l.experience_value, l.experience_unit].filter(Boolean).join(" ")} />
+        <Card title={T("graduation", "Parcours scolaire")}>
+          {(l.diploma_level || l.diploma_name || l.diploma_year || l.last_experience || l.experience_value) ? (
+            <>
+              <Row label="Niveau du diplôme" value={l.diploma_level} />
+              <Row label="Nom du diplôme" value={l.diploma_name} />
+              <Row label="Année d'obtention" value={l.diploma_year} />
+              <Row label="Dernière expérience" value={l.last_experience} />
+              <Row label="Durée" value={[l.experience_value, l.experience_unit].filter(Boolean).join(" ")} />
+            </>
+          ) : (
+            <p className="hint" style={{ margin: 0 }}>Aucun parcours scolaire renseigné.</p>
+          )}
         </Card>
 
-        <Card title="Statut & financement">
+        <Card title={T("euro", "Statut & financement")}>
           <Row label="Statut" value={l.professional_status} />
           <Row label="Type de devis" value={l.financing === "PROFESSIONNEL" ? "Professionnel" : "Particulier"} />
           <Row label="OPCO / financeur" value={l.opco} />
@@ -244,12 +256,12 @@ function StagiaireDetail() {
           <Row label="N° de sécurité sociale" value={l.social_security} />
         </Card>
 
-        <Card title="Projet">
+        <Card title={T("target", "Projet")}>
           {projects ? <p style={{ margin: 0 }}>{projects}</p> : <p className="hint" style={{ margin: 0 }}>Aucun projet renseigné.</p>}
         </Card>
 
         {c && (
-          <Card title="Entreprise" className="cols-2" >
+          <Card title={T("building", "Entreprise")} className="cols-2" >
             <Row label="Nom" value={c.name} />
             <Row label="Statut juridique" value={c.legal_status} />
             <Row label="SIRET" value={c.siret} />
@@ -263,7 +275,7 @@ function StagiaireDetail() {
         )}
       </div>
 
-      <Card title="Parcours & documents" className="fade">
+      <Card title={T("file-text", "Parcours & documents")} className="fade">
         {enrollments.length > 0 && (
           <>
             {enrollments.length > 1 && (
@@ -360,9 +372,9 @@ function StagiaireDetail() {
                     </span>
                   </span>
                   <Badge tone={tone}>{label}</Badge>
-                  <button className="iconbtn" title="Aperçu / vérifier" onClick={() => setViewId(d.id)}>👁</button>
-                  {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer au stagiaire" onClick={() => handleSend(d.id)}>📤</button>}
-                  <button className="iconbtn del" title="Supprimer" onClick={() => handleDelete(d.id)}>🗑</button>
+                  <button className="iconbtn" title="Aperçu / vérifier" onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
+                  {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer au stagiaire" onClick={() => handleSend(d.id)}><Icon name="send" size={16} /></button>}
+                  <button className="iconbtn del" title="Supprimer" onClick={() => handleDelete(d.id)}><Icon name="trash" size={15} /></button>
                 </div>
               );
             })}

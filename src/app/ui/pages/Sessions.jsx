@@ -1,11 +1,13 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSessions, getFormations, createSession } from "../api/apiClient.js";
+import { getSessions, getFormations, createSession, getEnrollments } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import EmptyState from "../components/EmptyState.jsx";
+import { Icon } from "../components/Icon.jsx";
 import { SelectField, Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
-import { colorOf } from "../lib/format.js";
+import { colorOf, initials } from "../lib/format.js";
 import { MONTHS, DOW, monthMatrix, ymd, isWeekend, inRange, isToday, isoWeek } from "../lib/calendar.js";
 
 function Sessions() {
@@ -15,6 +17,7 @@ function Sessions() {
   const [month, setMonth] = useState(now.getMonth());
   const [view, setView] = useState("mois"); // mois | trimestre | semestre | annee
   const [sessions, setSessions] = useState([]);
+  const [enrollments, setEnrollments] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [status, setStatus] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -32,7 +35,25 @@ function Sessions() {
   useEffect(() => {
     loadSessions();
     getFormations().then((r) => setPrograms(r.data)).catch(() => {});
+    getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
   }, []);
+
+  const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "—");
+
+  // Stagiaires inscrits regroupés par session (pour l'agenda).
+  const studentsBySession = useMemo(() => {
+    const map = {};
+    for (const e of enrollments) (map[e.session_id] ||= []).push(e);
+    return map;
+  }, [enrollments]);
+
+  // Prochaines sessions (à venir / en cours), triées par date de début.
+  const upcoming = useMemo(() => {
+    const today = ymd(new Date());
+    return sessions
+      .filter((s) => s.start_date && (s.end_date || s.start_date) >= today)
+      .sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)));
+  }, [sessions]);
 
   const weeks = useMemo(() => monthMatrix(year, month), [year, month]);
 
@@ -107,9 +128,12 @@ function Sessions() {
 
   // Programmes réellement planifiés ce mois (pour la légende).
   const legend = useMemo(() => {
-    const seen = new Map();
-    for (const s of sessions) seen.set(s.program_code, s.program_title);
-    return [...seen.entries()];
+    const m = new Map();
+    for (const s of sessions) {
+      const cur = m.get(s.program_code) || { title: s.program_title, n: 0 };
+      cur.n += 1; m.set(s.program_code, cur);
+    }
+    return [...m.entries()];
   }, [sessions]);
 
   return (
@@ -120,14 +144,14 @@ function Sessions() {
         lead="Calendrier des formations. Ajoutez une formation en choisissant son premier jour ; la durée colore les jours suivants."
         actions={
           <button className="btn primary" onClick={() => setShowAdd((v) => !v)}>
-            {showAdd ? "✕ Fermer" : "＋ Ajouter une formation"}
+            {showAdd ? <><Icon name="x" size={14} /> Fermer</> : <><Icon name="plus" size={14} /> Ajouter une formation</>}
           </button>
         }
       />
       <StatusMessage status={status} />
 
       {showAdd && (
-        <Card title="Ajouter une formation" className="fade" more={<button className="btn sm ghost" onClick={() => setShowAdd(false)}>✕</button>}>
+        <Card title="Ajouter une formation" className="fade" more={<button className="btn sm ghost" onClick={() => setShowAdd(false)} aria-label="Fermer"><Icon name="x" size={14} /></button>}>
           <form onSubmit={handleAdd}>
             <div className="row2">
               <SelectField
@@ -156,9 +180,9 @@ function Sessions() {
 
       <Card>
         <div className="cal-toolbar">
-          <button className="btn sm" onClick={() => shift(-1)}>←</button>
+          <button className="btn sm" onClick={() => shift(-1)} aria-label="Période précédente"><Icon name="chevron-left" size={16} /></button>
           <h2 className="cal-title" style={{ textTransform: "capitalize" }}>{periodTitle}</h2>
-          <button className="btn sm" onClick={() => shift(1)}>→</button>
+          <button className="btn sm" onClick={() => shift(1)} aria-label="Période suivante"><Icon name="chevron-right" size={16} /></button>
           <div style={{ display: "flex", gap: 4, marginLeft: 12 }}>
             {[["mois", "Mois"], ["trimestre", "Trimestre"], ["semestre", "Semestre"], ["annee", "Année"]].map(([v, l]) => (
               <button key={v} className={"btn sm " + (view === v ? "primary" : "ghost")} onClick={() => setView(v)}>{l}</button>
@@ -229,15 +253,82 @@ function Sessions() {
 
         {legend.length > 0 && (
           <div className="cal-legend">
-            {legend.map(([code, title]) => (
+            {legend.map(([code, { title, n }]) => (
               <span key={code} className="cal-legitem">
-                <i style={{ background: colorOf(code) }} /> {code} — {title}
+                <i style={{ background: colorOf(code) }} /> <b>{code}</b> {title} <span className="cal-legn">{n}</span>
               </span>
             ))}
           </div>
         )}
       </Card>
+
+      <Card title="Prochaines sessions" style={{ marginTop: 16 }} more={<span className="hint">{upcoming.length} à venir</span>}>
+        {upcoming.length === 0 ? (
+          <EmptyState icon="calendar">Aucune session à venir.</EmptyState>
+        ) : (
+          <div className="sess-list">
+            {upcoming.map((s) => {
+              const studs = studentsBySession[s.id] || [];
+              const count = studs.length || s.stagiaires || 0;
+              const col = colorOf(s.program_code);
+              const open = () => navigate(`/sessions/${s.id}`);
+              return (
+                <div
+                  key={s.id}
+                  className="sess-item"
+                  role="button"
+                  tabIndex={0}
+                  onClick={open}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}
+                >
+                  <span className="sess-bar" style={{ background: col }} />
+                  <div className="sess-main">
+                    <div className="sess-top">
+                      <span className="sess-code" style={{ color: col, background: `color-mix(in srgb, ${col} 14%, transparent)` }}>{s.program_code}</span>
+                      <span className="sess-title">{s.program_title}</span>
+                    </div>
+                    <div className="sess-meta">
+                      <span className="sess-metaitem"><Icon name="calendar" size={13} /> {frDate(s.start_date)} → {frDate(s.end_date)}</span>
+                      <span className="sess-metaitem">S{s.week} · {s.year}</span>
+                    </div>
+                  </div>
+                  <div className="sess-people">
+                    <Avatars students={studs} />
+                    <span className="sess-count" style={{ color: col }}><Icon name="users" size={13} /> {count}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
     </>
+  );
+}
+
+// Palette d'avatars (initiales des stagiaires) — teintes de la charte.
+const AV_COLORS = ["#2c3371", "#dc3e37", "#ff6900", "#2f9e6f", "#7b3f9e", "#0072b2", "#b8860b", "#c0392b"];
+const avColor = (name) => AV_COLORS[[...(name || "?")].reduce((a, c) => a + c.charCodeAt(0), 0) % AV_COLORS.length];
+
+// Pile d'avatars (initiales) des stagiaires inscrits, avec « +N » au-delà de 6.
+function Avatars({ students }) {
+  if (students.length === 0) return <span className="sess-empty">Aucun inscrit</span>;
+  const shown = students.slice(0, 6);
+  const extra = students.length - shown.length;
+  return (
+    <div className="avatars">
+      {shown.map((st) => (
+        <span
+          key={st.id}
+          className="avatar-chip"
+          title={`${st.first_name} ${st.last_name}`}
+          style={{ background: avColor(`${st.first_name}${st.last_name}`) }}
+        >
+          {initials(st.first_name, st.last_name)}
+        </span>
+      ))}
+      {extra > 0 && <span className="avatar-chip more" title={`${extra} autre(s)`}>+{extra}</span>}
+    </div>
   );
 }
 

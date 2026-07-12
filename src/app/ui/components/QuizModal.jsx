@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { takeQuiz, submitQuiz } from "../api/apiClient.js";
+import { Icon } from "./Icon.jsx";
 
 // Correction d'un QCM : bonnes réponses (vert) + réponses données (croix si fausse).
 function ReviewList({ review }) {
@@ -9,8 +10,8 @@ function ReviewList({ review }) {
         <div key={q.id}>
           <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>
             {i + 1}. {q.text}{" "}
-            {q.correct === true && <span style={{ color: "#16a34a" }}>✓</span>}
-            {q.correct === false && <span style={{ color: "#c0392b" }}>✗</span>}
+            {q.correct === true && <span style={{ color: "#16a34a", display: "inline-flex", verticalAlign: "text-bottom" }}><Icon name="check" size={15} /></span>}
+            {q.correct === false && <span style={{ color: "#c0392b", display: "inline-flex", verticalAlign: "text-bottom" }}><Icon name="x" size={15} /></span>}
           </div>
           {q.image ? <img src={q.image} alt="" style={{ maxWidth: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 6, margin: "0 0 8px", display: "block" }} /> : null}
           {q.type === "SCALE" ? (
@@ -22,8 +23,8 @@ function ReviewList({ review }) {
                 const bd = o.correct ? "rgba(22,163,74,.55)" : o.selected ? "rgba(192,57,43,.45)" : "var(--border-soft)";
                 return (
                   <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, border: `1px solid ${bd}`, background: bg, fontSize: 13 }}>
-                    <span style={{ width: 16, textAlign: "center", color: o.correct ? "#16a34a" : o.selected ? "#c0392b" : "var(--dim)" }}>
-                      {o.correct ? "✓" : o.selected ? "✗" : "•"}
+                    <span style={{ width: 16, display: "inline-flex", justifyContent: "center", color: o.correct ? "#16a34a" : o.selected ? "#c0392b" : "var(--dim)" }}>
+                      {o.correct ? <Icon name="check" size={14} /> : o.selected ? <Icon name="x" size={14} /> : "•"}
                     </span>
                     <span style={{ flex: 1 }}>{o.text}</span>
                     {o.selected && <span className="hint" style={{ fontSize: 11 }}>votre réponse</span>}
@@ -106,7 +107,7 @@ function QuizModal({ documentId, onClose, onDone }) {
             : error ? <div className="status err">{error}</div>
             : result ? (
               <div style={{ textAlign: "center", padding: "12px 0" }}>
-                <div style={{ fontSize: 40 }}>{result.pass === false ? "📝" : "✅"}</div>
+                <div style={{ marginBottom: 4 }}>{result.pass === false ? <Icon name="pencil" size={44} style={{ color: "var(--amber, #b8860b)" }} /> : <Icon name="check-circle" size={44} style={{ color: "#16a34a" }} />}</div>
                 <h3 style={{ marginBottom: 6 }}>Réponses enregistrées</h3>
                 {result.kind === "GRADED" ? (
                   <p className="lead" style={{ margin: 0 }}>
@@ -126,7 +127,7 @@ function QuizModal({ documentId, onClose, onDone }) {
             ) : alreadyDone ? (
               <div style={{ padding: "12px 0" }}>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 36 }}>✅</div>
+                  <div style={{ marginBottom: 4 }}><Icon name="check-circle" size={40} style={{ color: "#16a34a" }} /></div>
                   <p className="lead">Vous avez déjà répondu à ce QCM{alreadyDone.completed_at ? ` le ${alreadyDone.completed_at}` : ""}.
                     {alreadyDone.max_score ? <> Score : <b>{alreadyDone.score}/{alreadyDone.max_score}</b>.</> : null}</p>
                 </div>

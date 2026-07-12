@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
+import MoneyToggle from "../components/MoneyToggle.jsx";
 import { getInventory, createItem, adjustItem, sellItem, deleteItem, updateItem } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -102,7 +104,7 @@ function Inventaire({ embedded = false }) {
           eyebrow="Développement"
           title="Inventaire"
           lead="Stock de matériel à vendre. Ajustez les quantités, vendez, suivez les ruptures."
-          actions={<button className="btn primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ Fermer" : "＋ Ajouter un article"}</button>}
+          actions={<div style={{ display: "flex", alignItems: "center", gap: 10 }}><MoneyToggle /><button className="btn primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ Fermer" : "＋ Ajouter un article"}</button></div>}
         />
       )}
       <StatusMessage status={status} />
@@ -144,7 +146,7 @@ function Inventaire({ embedded = false }) {
       )}
 
       {items.length === 0 ? (
-        <Card><EmptyState icon="📦">Aucun article en stock. Ajoutez votre premier article.</EmptyState></Card>
+        <Card><EmptyState icon="package">Aucun article en stock. Ajoutez votre premier article.</EmptyState></Card>
       ) : (
         <div className="grid cols-3">
           {items.map((it) => {
@@ -160,7 +162,7 @@ function Inventaire({ embedded = false }) {
                     </div>
                     {it.unit_price != null && (
                       <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-                        {euro(it.unit_price)} HT · TVA {Number(it.tax_rate)}% · <b style={{ color: "var(--text)" }}>{euro(ttc(it.unit_price, it.tax_rate))} TTC</b>
+                        <span className="tnum">{euro(it.unit_price)}</span> HT · TVA {Number(it.tax_rate)}% · <b style={{ color: "var(--text)" }}><span className="tnum">{euro(ttc(it.unit_price, it.tax_rate))}</span> TTC</b>
                       </div>
                     )}
                   </div>
@@ -182,8 +184,8 @@ function Inventaire({ embedded = false }) {
                   <button className="btn sm" onClick={() => adjust(it, 10)}>+10</button>
                   <div className="spacer" />
                   <button className="btn sm primary" onClick={() => sell(it)} disabled={it.quantity <= 0} title="Vendre (enregistre une vente)">Vendre</button>
-                  <button className="iconbtn" title="Modifier l'article" onClick={() => openEdit(it)}>✎</button>
-                  <button className="iconbtn del" title="Supprimer" onClick={() => remove(it)}>🗑</button>
+                  <button className="iconbtn" title="Modifier l'article" onClick={() => openEdit(it)}><Icon name="pencil" size={15} /></button>
+                  <button className="iconbtn del" title="Supprimer" onClick={() => remove(it)}><Icon name="trash" size={15} /></button>
                 </div>
               </div>
             );

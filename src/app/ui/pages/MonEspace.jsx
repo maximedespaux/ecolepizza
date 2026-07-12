@@ -12,7 +12,7 @@ import QuizModal from "../components/QuizModal.jsx";
 // Libellé d'état : « À signer » seulement si le document est réellement à signer
 // par le stagiaire (piloté par le modèle) ; sinon « À consulter ».
 function statusFor(d) {
-  if (d.status === "SIGNE") return ["Signé ✓", "g"];
+  if (d.status === "SIGNE") return ["Signé", "g"];
   if (d.signable) return ["À signer", "a"];
   return ["À consulter", "n"];
 }
@@ -50,7 +50,7 @@ function MonEspace() {
       <StatusMessage status={status} />
 
       {!data ? null : data.documents.length === 0 ? (
-        <Card><EmptyState icon="🍕">Aucun document pour le moment. Le secrétariat vous enverra vos documents avant la formation.</EmptyState></Card>
+        <Card><EmptyState icon="pizza">Aucun document pour le moment. Le secrétariat vous enverra vos documents avant la formation.</EmptyState></Card>
       ) : (
         <Card title="Mes documents">
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -64,7 +64,7 @@ function MonEspace() {
                       {d.formations || ""}{d.signed_at ? ` · signé le ${d.signed_at}` : d.sent_at ? ` · reçu le ${d.sent_at}` : ""}
                     </span>
                   </span>
-                  <Badge tone={d.quiz_id && d.status !== "SIGNE" ? "b" : tone}>{d.quiz_id ? (d.status === "SIGNE" ? "Répondu ✓" : "QCM à faire") : label}</Badge>
+                  <Badge tone={d.quiz_id && d.status !== "SIGNE" ? "b" : tone}>{d.quiz_id ? (d.status === "SIGNE" ? "Répondu" : "QCM à faire") : label}</Badge>
                   {d.quiz_id ? (
                     <button className="btn sm primary" onClick={() => setQuizDoc(d.id)}>
                       {d.status === "SIGNE" ? "Voir mon QCM" : "Répondre au QCM"}

@@ -5,6 +5,7 @@ import { GRANTABLE_NAV, BUILTIN_ROLES, builtinRoleAccess, ROLE_COLORS } from "..
 const Dot = ({ color }) => <span style={{ width: 12, height: 12, borderRadius: 3, background: color || "#999", display: "inline-block", marginRight: 8, verticalAlign: "middle" }} />;
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import { Icon } from "../components/Icon.jsx";
 import Badge from "../components/Badge.jsx";
 import { Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -68,7 +69,7 @@ function AccessRoles() {
 
       <Card title={`Rôles personnalisés (${roles.length})`}>
         {roles.length === 0 ? (
-          <EmptyState icon="👥">Aucun rôle personnalisé. Créez-en un ou dupliquez un rôle système.</EmptyState>
+          <EmptyState icon="team">Aucun rôle personnalisé. Créez-en un ou dupliquez un rôle système.</EmptyState>
         ) : (
           <div className="tablewrap" style={{ border: "none" }}>
             <table>
@@ -157,7 +158,7 @@ function RoleModal({ role, onClose, onSaved, onError }) {
                     <div key={it.to} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
                       <label style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: "pointer" }}>
                         <input type="checkbox" checked={on} onChange={() => toggle(it.to)} />
-                        <span style={{ width: 20, textAlign: "center" }}>{it.ic}</span> {it.label}
+                        <span style={{ width: 20, display: "inline-grid", placeItems: "center" }}><Icon name={it.ic} size={16} /></span> {it.label}
                       </label>
                       {on && (
                         <div style={{ display: "flex", gap: 4 }}>

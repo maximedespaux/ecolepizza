@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "../components/Icon.jsx";
 import {
   getQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz, duplicateQuiz, sendQuiz,
   getFormations,
@@ -113,7 +114,7 @@ function Quiz() {
       <StatusMessage status={status} />
 
       {quizzes.length === 0 ? (
-        <Card title="QCM (0)"><EmptyState icon="❓">Aucun QCM.</EmptyState></Card>
+        <Card title="QCM (0)"><EmptyState icon="help">Aucun QCM.</EmptyState></Card>
       ) : (
         groupByFormation(quizzes).map((g) => (
           <Card key={g.key} title={g.program_code ? `${g.program_code} — ${g.program_title}` : "Non rattachés à une formation"}
@@ -136,7 +137,7 @@ function Quiz() {
                           onClick={() => onSend(q)}>Envoyer</button>{" "}
                         <button className="btn sm ghost" onClick={() => onEdit(q)}>Éditer</button>{" "}
                         <button className="btn sm ghost" title="Dupliquer ce QCM" onClick={() => onDuplicate(q)}>Dupliquer</button>{" "}
-                        <button className="btn sm ghost danger" onClick={() => onDelete(q)}>🗑</button>
+                        <button className="btn sm ghost danger" onClick={() => onDelete(q)}><Icon name="trash" size={15} /></button>
                       </td>
                     </tr>
                   ))}
@@ -288,7 +289,7 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
                   {q.options.map((o, oi) => (
                     <div key={oi} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <input className="inp" style={{ flex: 1 }} value={o.text} onChange={(e) => setOpt(i, oi, { text: e.target.value })} placeholder={`Colonne ${oi + 1}`} />
-                      <button className="btn sm ghost" onClick={() => delOpt(i, oi)} disabled={q.options.length <= 1}>✕</button>
+                      <button className="btn sm ghost" onClick={() => delOpt(i, oi)} disabled={q.options.length <= 1}><Icon name="x" size={13} /></button>
                     </div>
                   ))}
                 </div>
@@ -310,7 +311,7 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
                               </td>
                             ))}
                             <td><input className="inp" type="number" min="0" style={{ width: 56 }} value={rw.points ?? ""} onChange={(e) => setRow(i, ri, { points: e.target.value })} title="Points de cette ligne" /></td>
-                            <td><button className="btn sm ghost" onClick={() => delRow(i, ri)} disabled={(q.rows || []).length <= 1}>✕</button></td>
+                            <td><button className="btn sm ghost" onClick={() => delRow(i, ri)} disabled={(q.rows || []).length <= 1}><Icon name="x" size={13} /></button></td>
                           </tr>
                         ))}
                       </tbody>
@@ -321,7 +322,7 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
                     {(q.rows || []).map((rw, ri) => (
                       <div key={ri} style={{ display: "flex", gap: 8 }}>
                         <input className="inp" style={{ flex: 1 }} value={rw.text} onChange={(e) => setRow(i, ri, { text: e.target.value })} placeholder={`Ligne ${ri + 1}`} />
-                        <button className="btn sm ghost" onClick={() => delRow(i, ri)} disabled={(q.rows || []).length <= 1}>✕</button>
+                        <button className="btn sm ghost" onClick={() => delRow(i, ri)} disabled={(q.rows || []).length <= 1}><Icon name="x" size={13} /></button>
                       </div>
                     ))}
                   </div>
@@ -342,7 +343,7 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
                         name={`q${i}`} onChange={() => setCorrect(i, oi, q.type)} title="Bonne réponse" />
                     )}
                     <input className="inp" style={{ flex: 1 }} value={o.text} onChange={(e) => setOpt(i, oi, { text: e.target.value })} placeholder={`Réponse ${oi + 1}`} />
-                    <button className="btn sm ghost" onClick={() => delOpt(i, oi)} disabled={q.options.length <= 1}>✕</button>
+                    <button className="btn sm ghost" onClick={() => delOpt(i, oi)} disabled={q.options.length <= 1}><Icon name="x" size={13} /></button>
                   </div>
                 ))}
               </div>
