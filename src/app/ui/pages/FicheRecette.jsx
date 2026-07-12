@@ -465,9 +465,8 @@ function FicheRecette() {
               <Slider label="Sel" val={num(dp.sel)} min={0} max={4} step={0.1} set={(v) => setDP("sel", v)} suffix=" %" />
               <Slider label="Huile (facultatif)" val={num(dp.huile)} min={0} max={6} step={0.5} set={(v) => setDP("huile", v)} suffix=" %" />
               <Slider label="Levure" val={num(dp.levure)} min={0} max={2} step={0.05} set={(v) => setDP("levure", v)} suffix=" %" />
-              <p className="hint" style={{ margin: "0 0 14px" }}>≈ {flourBatchKg.toFixed(2)} kg de farine pour {nb} pâtons · coût pâte <b>{euro(doughPerUnit)}</b> / pâton</p>
               {/* Description — en bas du calculateur */}
-              <div className="field" style={{ marginBottom: 0 }}><label>Description</label>
+              <div className="field" style={{ marginBottom: 0, marginTop: 14 }}><label>Description</label>
                 <textarea className="inp" rows={3} value={r.description} onChange={set("description")} placeholder="Hydratation, pointage/apprêt, cuisson…" /></div>
             </Card>
           ) : (
@@ -506,8 +505,7 @@ function FicheRecette() {
               <div style={{ font: "800 30px/1.1 var(--font-d)", margin: "14px 0 0" }}>{euro(perUnit)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pâton</span></div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
                 <Row label="Coût matière total" value={euro(totalCost)} />
-                <Row label="Coût pâte / pâton" value={euro(doughPerUnit)} />
-                <Row label="Coût ingrédients / pâton" value={euro(ingSum)} accent />
+                <Row label="Coût pâte / pâton" value={euro(doughPerUnit)} accent />
               </div>
               <p className="hint" style={{ color: "rgba(255,255,255,.75)", margin: "12px 0 0" }}>Importable dans une recette comme ingrédient, à son coût / pâton.</p>
               {actions}
