@@ -16,7 +16,7 @@ import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getC
  */
 const TYPES = ["Classique", "Contemporaine", "Napolitaine", "Teglia", "Pala"];
 const KINDS = [
-  { k: "PATE", label: "Pâte", icon: "settings", hint: "Un empâtement — rendement en pâtons" },
+  { k: "PATE", label: "Atelier pâte", icon: "settings", hint: "Un empâtement — rendement en pâtons" },
   { k: "PREPARATION", label: "Préparation", icon: "list-checks", hint: "Sauce, base… avec un rendement" },
   { k: "RECETTE", label: "Recette", icon: "pizza", hint: "Pizza complète : pâte + préparations + garnitures" },
 ];
