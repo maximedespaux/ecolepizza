@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@signpdf/placeholder-pdf-lib": "^3.2.4",
+    "@signpdf/placeholder-plain": "^3.3.0",
     "@signpdf/signer-p12": "^3.2.4",
     "@signpdf/signpdf": "^3.2.4",
     "bcrypt": "^6.0.0",
