@@ -920,3 +920,6 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .rs-in::-moz-range-track{background:none;height:5px;border:none}
 .rs-in::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:16px;height:16px;margin-top:-6px;border-radius:50%;background:#fff;border:2px solid var(--ember1,#c0392b);box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer}
 .rs-in::-moz-range-thumb{pointer-events:auto;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--ember1,#c0392b);cursor:pointer}
+.gs-field{display:inline-flex;align-items:center;gap:2px}
+.gs-clear{border:none;background:none;color:var(--muted);cursor:pointer;padding:3px;border-radius:6px;display:inline-flex;align-items:center}
+.gs-clear:hover{color:var(--text);background:var(--surface2)}

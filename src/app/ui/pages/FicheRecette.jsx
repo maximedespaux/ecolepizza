@@ -59,6 +59,9 @@ function IngredientSearchModal({ onClose, onAdd, added }) {
   const [page, setPage] = useState(1);
   const priceMin = range[0] > 0 ? range[0] : "";
   const priceMax = range[1] < PRICE_MAX ? range[1] : "";
+  const priceActive = range[0] > 0 || range[1] < PRICE_MAX;
+  const anyFilter = q || brand || family || sort || priceActive;
+  const resetAll = () => { setQ(""); setBrand(""); setFamily(""); setSort(""); setRange([0, PRICE_MAX]); };
 
   useEffect(() => {
     getCatalogFamilies().then((r) => setFamilies(r.data || [])).catch(() => {});
@@ -87,25 +90,37 @@ function IngredientSearchModal({ onClose, onAdd, added }) {
             <span className="gs-search">
               <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
               <input placeholder="Rechercher un ingrédient…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+              {q && <button className="gs-clear" title="Effacer" onClick={() => setQ("")}><Icon name="x" size={13} /></button>}
             </span>
-            <select className="inp" value={brand} onChange={(e) => setBrand(e.target.value)}>
-              <option value="">Toutes marques</option>
-              {brands.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
-            <select className="inp" value={family} onChange={(e) => setFamily(e.target.value)}>
-              <option value="">Toutes catégories</option>
-              {families.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
-            <select className="inp" value={sort} onChange={(e) => setSort(e.target.value)}>
-              <option value="">Tri : nom</option>
-              <option value="price_asc">Prix croissant</option>
-              <option value="price_desc">Prix décroissant</option>
-            </select>
+            <span className="gs-field">
+              <select className="inp" value={brand} onChange={(e) => setBrand(e.target.value)}>
+                <option value="">Toutes marques</option>
+                {brands.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+              {brand && <button className="gs-clear" title="Effacer la marque" onClick={() => setBrand("")}><Icon name="x" size={12} /></button>}
+            </span>
+            <span className="gs-field">
+              <select className="inp" value={family} onChange={(e) => setFamily(e.target.value)}>
+                <option value="">Toutes catégories</option>
+                {families.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+              {family && <button className="gs-clear" title="Effacer la catégorie" onClick={() => setFamily("")}><Icon name="x" size={12} /></button>}
+            </span>
+            <span className="gs-field">
+              <select className="inp" value={sort} onChange={(e) => setSort(e.target.value)}>
+                <option value="">Tri : nom</option>
+                <option value="price_asc">Prix croissant</option>
+                <option value="price_desc">Prix décroissant</option>
+              </select>
+              {sort && <button className="gs-clear" title="Réinitialiser le tri" onClick={() => setSort("")}><Icon name="x" size={12} /></button>}
+            </span>
+            <button className="btn sm ghost" onClick={resetAll} disabled={!anyFilter} title="Tout réinitialiser"><Icon name="x" size={14} /> Réinitialiser</button>
           </div>
           <div className="gs-range-row">
             <span className="hint" style={{ whiteSpace: "nowrap" }}>Prix / unité</span>
             <DualRange min={0} max={PRICE_MAX} step={0.5} value={range} onChange={setRange} />
             <span className="gs-range-lbl">{range[0]} € – {range[1] >= PRICE_MAX ? `${PRICE_MAX} €+` : `${range[1]} €`}</span>
+            {priceActive && <button className="gs-clear" title="Réinitialiser le prix" onClick={() => setRange([0, PRICE_MAX])}><Icon name="x" size={13} /></button>}
           </div>
 
           <div className="gs-res" style={{ maxHeight: "48vh", minHeight: 200 }}>
