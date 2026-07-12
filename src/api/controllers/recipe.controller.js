@@ -75,22 +75,70 @@ const catalogBrands = async (req, res) => {
     }
 };
 
-// Résumé d'une recette (sans ingrédients).
-const RECIPE_COLS = `id, author_user_id, author_name, name, type, description, servings, paton_g,
-    flour_price, margin_pct, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d') AS updated_at`;
+// Résumé d'une fiche (sans ingrédients).
+const RECIPE_COLS = `id, kind, author_user_id, author_name, name, type, description, servings, paton_g,
+    flour_price, margin_pct, yield_qty, yield_unit, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d') AS updated_at`;
 
-/** GET /api/recipes/mine — mes fiches techniques. */
+const lineCost = (t) => (t.unit === 'piece' ? Number(t.qty || 0) * Number(t.unit_price || 0)
+    : (Number(t.qty || 0) / 1000) * Number(t.unit_price || 0)); // 'g' → prix €/kg
+const MASS_VOL = { g: 1000, kg: 1, mg: 1e6, l: 1, ml: 1000, cl: 100 }; // diviseur → kg (L≈kg)
+
+// Coût unitaire d'une fiche (pour l'importer dans une recette) : { unit:'g'|'piece', unitPrice, total }.
+// PÂTE = coût par pâton (farine + ingrédients) ; PRÉPARATION = coût total ÷ rendement.
+async function ficheUnitCost(conn, r) {
+    const [ings] = await conn.query('SELECT qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ?', [r.id]);
+    const ingCost = ings.reduce((s, t) => s + lineCost(t), 0);
+    if (r.kind === 'PATE') {
+        const perPaton = ((Number(r.paton_g) / 1000) / 1.68) * Number(r.flour_price || 0) + ingCost;
+        return { unit: 'piece', unitPrice: perPaton, total: perPaton * Math.max(1, Number(r.servings) || 1) };
+    }
+    const total = ingCost;
+    const y = Number(r.yield_qty) || 0;
+    const yu = String(r.yield_unit || '').toLowerCase();
+    if (y > 0 && MASS_VOL[yu]) { const kg = y / MASS_VOL[yu]; return { unit: 'g', unitPrice: kg > 0 ? total / kg : 0, total }; }
+    if (y > 0) return { unit: 'piece', unitPrice: total / y, total };
+    return { unit: 'piece', unitPrice: total, total };
+}
+
+/** GET /api/recipes/mine?kind= — mes fiches techniques (filtrées par type si fourni). */
 const listMine = async (req, res) => {
     try {
         const conn = db.promise();
+        const kind = String(req.query.kind || '').toUpperCase();
+        const kf = ['PATE', 'PREPARATION', 'RECETTE'].includes(kind);
         const [rows] = await conn.query(
-            `SELECT ${RECIPE_COLS} FROM recipe WHERE author_user_id = ? ORDER BY updated_at DESC, name`,
-            [req.user.id]
+            `SELECT ${RECIPE_COLS} FROM recipe WHERE author_user_id = ? ${kf ? 'AND kind = ?' : ''} ORDER BY updated_at DESC, name`,
+            kf ? [req.user.id, kind] : [req.user.id]
         );
         res.json({ data: rows });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] });
         console.error('Erreur liste recettes :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** GET /api/recipes/components?q= — pâtes/préparations importables (avec coût unitaire). */
+const listComponents = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const q = String(req.query.q || '').trim();
+        const [rows] = await conn.query(
+            `SELECT ${RECIPE_COLS} FROM recipe
+             WHERE organization_id = ? AND kind IN ('PATE','PREPARATION')
+               AND (author_user_id = ? OR visibility = 'SHARED') ${q ? 'AND name LIKE ?' : ''}
+             ORDER BY kind, name LIMIT 80`,
+            q ? [req.user.organization_id, req.user.id, `%${q}%`] : [req.user.organization_id, req.user.id]
+        );
+        const out = [];
+        for (const r of rows) {
+            const c = await ficheUnitCost(conn, r);
+            out.push({ id: r.id, name: r.name, kind: r.kind, unit: c.unit, unit_price: Number(c.unitPrice.toFixed(4)), yield_qty: r.yield_qty, yield_unit: r.yield_unit });
+        }
+        res.json({ data: out });
+    } catch (err) {
+        if (noTable(err)) return res.json({ data: [] });
+        console.error('Erreur composants recettes :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -124,7 +172,7 @@ const getRecipe = async (req, res) => {
         const sharedSameOrg = r.visibility === 'SHARED' && r.organization_id === req.user.organization_id;
         if (!mine && !sharedSameOrg) return res.status(403).json({ message: 'Accès refusé.' });
         const [ings] = await conn.query(
-            `SELECT id, product_id, label, qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ? ORDER BY sort_order, id`,
+            `SELECT id, product_id, component_recipe_id, label, qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ? ORDER BY sort_order, id`,
             [req.params.id]);
         delete r.organization_id;
         res.json({ data: { ...r, mine, ingredients: ings } });
@@ -137,13 +185,16 @@ const getRecipe = async (req, res) => {
 
 function normRecipe(b) {
     return {
-        name: String(b.name || '').trim().slice(0, 160) || 'Nouvelle recette',
+        kind: ['PATE', 'PREPARATION', 'RECETTE'].includes(b.kind) ? b.kind : 'RECETTE',
+        name: String(b.name || '').trim().slice(0, 160) || 'Nouvelle fiche',
         type: b.type ? String(b.type).slice(0, 40) : null,
         description: b.description ? String(b.description).slice(0, 5000) : null,
         servings: Math.max(1, parseInt(b.servings, 10) || 6),
         paton_g: Math.max(1, parseInt(b.paton_g, 10) || 250),
         flour_price: Math.max(0, Number(b.flour_price) || 0),
         margin_pct: Math.max(0, Math.min(1000, parseInt(b.margin_pct, 10) || 0)),
+        yield_qty: (b.yield_qty != null && b.yield_qty !== '') ? Math.max(0, Number(b.yield_qty) || 0) : null,
+        yield_unit: b.yield_unit ? String(b.yield_unit).slice(0, 20) : null,
         visibility: b.visibility === 'SHARED' ? 'SHARED' : 'PRIVATE',
     };
 }
@@ -155,9 +206,9 @@ async function saveIngredients(conn, recipeId, ingredients) {
         const label = String(g.label || '').trim();
         if (!label) continue;
         await conn.query(
-            `INSERT INTO recipe_ingredient (id, recipe_id, product_id, label, qty, unit, unit_price, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [crypto.randomUUID(), recipeId, g.product_id || null, label.slice(0, 255),
+            `INSERT INTO recipe_ingredient (id, recipe_id, product_id, component_recipe_id, label, qty, unit, unit_price, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [crypto.randomUUID(), recipeId, g.product_id || null, g.component_recipe_id || null, label.slice(0, 255),
              Number(g.qty) || 0, g.unit === 'piece' ? 'piece' : 'g', Number(g.unit_price) || 0, i]
         );
     }
@@ -170,9 +221,9 @@ const createRecipe = async (req, res) => {
         const r = normRecipe(req.body || {});
         const id = crypto.randomUUID();
         await conn.query(
-            `INSERT INTO recipe (id, organization_id, author_user_id, author_name, name, type, description, servings, paton_g, flour_price, margin_pct, visibility)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, req.user.organization_id, req.user.id, authorName(req.user), r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.visibility]
+            `INSERT INTO recipe (id, organization_id, author_user_id, author_name, kind, name, type, description, servings, paton_g, flour_price, margin_pct, yield_qty, yield_unit, visibility)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, req.user.organization_id, req.user.id, authorName(req.user), r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.visibility]
         );
         await saveIngredients(conn, id, (req.body || {}).ingredients);
         res.status(201).json({ data: { id } });
@@ -192,8 +243,8 @@ const updateRecipe = async (req, res) => {
         if (cur.author_user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut modifier.' });
         const r = normRecipe(req.body || {});
         await conn.query(
-            `UPDATE recipe SET name=?, type=?, description=?, servings=?, paton_g=?, flour_price=?, margin_pct=?, visibility=? WHERE id=?`,
-            [r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.visibility, req.params.id]
+            `UPDATE recipe SET kind=?, name=?, type=?, description=?, servings=?, paton_g=?, flour_price=?, margin_pct=?, yield_qty=?, yield_unit=?, visibility=? WHERE id=?`,
+            [r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.visibility, req.params.id]
         );
         await saveIngredients(conn, req.params.id, (req.body || {}).ingredients);
         res.json({ data: { id: req.params.id } });
@@ -218,4 +269,4 @@ const deleteRecipe = async (req, res) => {
     }
 };
 
-module.exports = { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, getRecipe, createRecipe, updateRecipe, deleteRecipe };
+module.exports = { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe };

@@ -544,8 +544,9 @@ export function searchCatalog(arg) {
 }
 export function getCatalogFamilies() { return request("/recipes/catalog/families", { silent: true }); }
 export function getCatalogBrands() { return request("/recipes/catalog/brands", { silent: true }); }
-export function getMyRecipes() { return request("/recipes/mine"); }
+export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
+export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }
 export function getRecipe(id) { return request(`/recipes/${id}`); }
 export function createRecipe(payload) { return request("/recipes", { method: "POST", body: JSON.stringify(payload) }); }
 export function updateRecipe(id, payload) { return request(`/recipes/${id}`, { method: "PUT", body: JSON.stringify(payload) }); }
