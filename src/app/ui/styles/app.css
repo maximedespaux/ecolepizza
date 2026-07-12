@@ -881,6 +881,8 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Communauté — liste des recettes partagées */
 .comm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border:none;background:none;border-bottom:1px solid var(--border-soft);cursor:pointer;color:var(--text)}
 .comm-row:hover,.comm-row.on{background:var(--surface2)}
+/* Barre de filtres communauté (recherche + type de fiche) */
+.comm-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
 /* Contrôle segmenté (tri Récentes / Populaires) */
 .seg{display:inline-flex;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:2px}
 .seg-btn{border:none;background:none;padding:5px 12px;border-radius:999px;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:4px}

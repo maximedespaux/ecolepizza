@@ -13,6 +13,12 @@ import { getSharedRecipes, getRecipe, createRecipe, likeRecipe, addRecipeComment
  * (ajouter / modifier / supprimer les siens). Le détail (ingrédients + coût) s'ouvre à droite.
  */
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const KIND_TABS = [
+  { k: "ALL", label: "Toutes" },
+  { k: "PATE", label: "Pâtes" },
+  { k: "PREPARATION", label: "Préparations" },
+  { k: "RECETTE", label: "Recettes" },
+];
 // Hashtags (#tag) de la description → badges.
 const TAG_RE = /#[\p{L}\p{N}_-]+/gu;
 const parseTags = (s) => Array.from(new Set((String(s || "").match(TAG_RE) || []).map((t) => t.slice(1))));
@@ -41,6 +47,8 @@ export default function Communaute() {
   const [draft, setDraft] = useState({});           // id -> texte du nouveau commentaire
   const [editing, setEditing] = useState({});       // cid -> texte en cours d'édition
   const [sort, setSort] = useState("recent");       // "recent" | "liked"
+  const [query, setQuery] = useState("");           // recherche plein texte
+  const [kindFilter, setKindFilter] = useState("ALL"); // ALL | PATE | PREPARATION | RECETTE
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -159,13 +167,35 @@ export default function Communaute() {
               <button className={"seg-btn" + (sort === "recent" ? " on" : "")} onClick={() => setSort("recent")}>Récentes</button>
               <button className={"seg-btn" + (sort === "liked" ? " on" : "")} onClick={() => setSort("liked")}><span aria-hidden>❤️</span> Populaires</button>
             </span>}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {[...list].sort((a, b) => {
+            {/* Filtres : recherche plein texte + type de fiche */}
+            <div className="comm-filters">
+              <span className="gs-search" style={{ flex: 1 }}>
+                <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
+                <input placeholder="Rechercher (nom, description, #tag, auteur)…" value={query} onChange={(e) => setQuery(e.target.value)} />
+                {query && <button className="gs-clear" title="Effacer" onClick={() => setQuery("")}><Icon name="x" size={13} /></button>}
+              </span>
+              <span className="seg" style={{ flexWrap: "wrap" }}>
+                {KIND_TABS.map((t) => (
+                  <button key={t.k} className={"seg-btn" + (kindFilter === t.k ? " on" : "")} onClick={() => setKindFilter(t.k)}>{t.label}</button>
+                ))}
+              </span>
+            </div>
+            {(() => {
+              const q = query.trim().toLowerCase();
+              const shown = list.filter((s) => {
+                if (kindFilter !== "ALL" && s.kind !== kindFilter) return false;
+                if (!q) return true;
+                return [s.name, s.description, s.type, s.author_name].some((f) => String(f || "").toLowerCase().includes(q));
+              }).sort((a, b) => {
                 if (sort !== "liked") return 0; // ordre serveur = plus récentes d'abord
                 const la = likeState[a.id]?.count ?? a.like_count ?? 0;
                 const lb = likeState[b.id]?.count ?? b.like_count ?? 0;
                 return lb - la || (b.comment_count || 0) - (a.comment_count || 0);
-              }).map((s) => {
+              });
+              if (shown.length === 0) return <p className="hint" style={{ margin: "6px 2px" }}>Aucune fiche ne correspond à ta recherche.</p>;
+              return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {shown.map((s) => {
                 const lk = likeState[s.id] || { liked: false, count: s.like_count || 0 };
                 const tOpen = threadOpen === s.id;
                 return (
@@ -185,13 +215,15 @@ export default function Communaute() {
                       <button className={"btn sm " + (tOpen ? "primary" : "ghost")} onClick={() => { setThreadOpen(tOpen ? null : s.id); if (!tOpen) loadComments(s.id); }}>
                         <span aria-hidden>💬</span> {commentCount(s)}
                       </button>
-                      <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Copier dans mes recettes"><Icon name="plus" size={13} /> Copier</button>
+                      <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Enregistrer dans mes recettes"><Icon name="folder-check" size={13} /> Enregistrer</button>
                     </div>
                     {tOpen && <Thread id={s.id} />}
                   </div>
                 );
               })}
             </div>
+              );
+            })()}
           </Card>
 
           <div>
@@ -203,7 +235,7 @@ export default function Communaute() {
                   <button className={"btn sm " + ((likeState[detail.id]?.liked) ? "primary" : "ghost")} onClick={() => toggleLike(detail.id)} title={(likeState[detail.id]?.liked) ? "Je n'aime plus" : "J'aime"}>
                     <span aria-hidden>{(likeState[detail.id]?.liked) ? "❤️" : "🤍"}</span> {likeState[detail.id]?.count || 0}
                   </button>
-                  <button className="btn sm primary" disabled={busy} onClick={() => copyToMine(detail)}><Icon name="plus" size={13} /> Copier</button>
+                  <button className="btn sm primary" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes recettes"><Icon name="folder-check" size={13} /> Enregistrer</button>
                 </span>}>
                 <div className="hint" style={{ marginTop: -4 }}>{detail.type} · par {detail.author_name || "Stagiaire"}</div>
                 {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0" }}>{detail.description}</p>}
