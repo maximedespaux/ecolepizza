@@ -894,7 +894,7 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .kind-seg{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 18px}
 .kind-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:14px;cursor:pointer;transition:all .15s}
 .kind-btn:hover{border-color:var(--gold);color:var(--ink)}
-.kind-btn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.kind-btn.on{background:var(--grad-ember);color:#fff;border:none;box-shadow:var(--shadow-glow)}
 .kind-hint{margin-left:6px;flex:1;min-width:180px}
 @media(max-width:600px){.kind-hint{flex-basis:100%;margin-left:0}}
 /* Étiquette « type de fiche » + ligne d'ingrédient importée */
