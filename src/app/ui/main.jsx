@@ -43,7 +43,6 @@ import MonEspace from "./pages/MonEspace.jsx";
 import EmargementStagiaire from "./pages/EmargementStagiaire.jsx";
 import MesFormations from "./pages/MesFormations.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
-import Atelier from "./pages/Atelier.jsx";
 import PizzaQuest from "./pages/PizzaQuest.jsx";
 import FicheRecette from "./pages/FicheRecette.jsx";
 import Communaute from "./pages/Communaute.jsx";
@@ -140,7 +139,6 @@ function AppRoutes() {
           <Route path="emargement" element={<EmargementStagiaire />} />
           <Route path="formations" element={<MesFormations />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
-          <Route path="atelier" element={<Atelier />} />
           <Route path="fiche-recette" element={<FicheRecette />} />
           <Route path="communaute" element={<Communaute />} />
           <Route path="pizza-quest" element={<PizzaQuest />} />

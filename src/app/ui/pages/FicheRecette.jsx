@@ -4,11 +4,12 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
-import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe } from "../api/apiClient.js";
+import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMyFormations } from "../api/apiClient.js";
 
 /**
  * Fiche technique — trois types composables :
- *  • PÂTE       : un empâtement (farine + éventuels sel/huile/levure). Rendement = nb pâtons.
+ *  • PÂTE       : un empâtement calculé en pourcentage boulanger (calculateur intégré :
+ *                 typologie, empâtement direct/indirect, hydratation, sel, huile, levure).
  *  • PRÉPARATION: une base (ex. sauce tomate = tomate + sel + huile). Rendement = quantité produite.
  *  • RECETTE    : une pizza complète = pâte + préparations importées + garnitures du catalogue.
  * Le coût matière et le prix conseillé sont calculés à partir du catalogue Metro. Une pâte ou
@@ -23,18 +24,43 @@ const KINDS = [
 const YIELD_UNITS = ["g", "kg", "ml", "l", "piece"];
 const MASS_VOL = { g: 1000, kg: 1, mg: 1e6, l: 1, ml: 1000, cl: 100 };
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+// Calculateur de pâte (ex-« Atelier pâte ») — typologies & pourcentages par défaut.
+const PRESETS = [
+  { nom: "Classique", ic: "pizza", methods: ["Direct", "Biga", "Poolish"], hydra: 60, sel: 2.5, huile: 0, levure: 0.5, paton: 250, desc: "Cornicione léger ; direct, ou indirect (biga/poolish) au Niveau II." },
+  { nom: "Contemporaine", ic: "pizza", methods: ["Biga", "Poolish"], hydra: 75, sel: 2.8, huile: 0, levure: 0.3, paton: 270, desc: "Cornicione plus haut & dense — souvent en empâtement indirect (biga/poolish)." },
+  { nom: "Napolitaine", ic: "flame", methods: ["Direct"], hydra: 62, sel: 2.8, huile: 0, levure: 0.2, paton: 250, desc: "Empâtement direct uniquement, cuisson à très haute température." },
+  { nom: "Teglia", ic: "package", methods: ["Direct", "Biga", "Poolish"], hydra: 80, sel: 2.5, huile: 2, levure: 0.3, paton: 300, spe: true, desc: "En plaque rectangulaire (al taglio), souvent avec un filet d'huile." },
+  { nom: "Pala", ic: "package", methods: ["Direct", "Biga", "Poolish"], hydra: 78, sel: 2.5, huile: 1.5, levure: 0.3, paton: 300, spe: true, desc: "Rectangulaire, cuite sur pierre, servie sur pelle." },
+];
+const INDIRECT = ["Biga", "Poolish"]; // empâtements indirects → prérequis Niveau II
+const DP_DEFAULT = { preset: "Classique", method: "Direct", autolyse: false, hydra: 60, sel: 2.5, huile: 0, levure: 0.5 };
+const gfmt = (n) => (n >= 1000 ? (n / 1000).toFixed(2) + " kg" : Math.round(n) + " g");
+const addPctOf = (dp) => 1 + (num(dp.hydra) + num(dp.sel) + num(dp.huile) + num(dp.levure)) / 100;
+
 const NEW = () => ({
   id: null, kind: "RECETTE", name: "", type: "Classique", description: "", servings: 6, paton_g: 250, flour_price: 1.2,
-  visibility: "PRIVATE", margin_pct: 70, yield_qty: 1000, yield_unit: "g",
-  ingredients: [
-    { label: "Sauce tomate", qty: 80, unit: "g", unit_price: 2.5, product_id: null, component_recipe_id: null },
-    { label: "Mozzarella fiordilatte", qty: 100, unit: "g", unit_price: 8, product_id: null, component_recipe_id: null },
-  ],
+  visibility: "PRIVATE", margin_pct: 70, yield_qty: 1000, yield_unit: "g", dough_params: { ...DP_DEFAULT },
+  ingredients: [],
 });
 
 const unitLabel = (tu) => (tu === "Piece" ? "pc" : tu === "L" ? "L" : "kg");
 const PAGE_SIZE = 12;
 const PRICE_MAX = 50; // borne haute du curseur (€/unité) ; au max = « sans limite »
+
+// Curseur simple (empâtement en pourcentage boulanger).
+function Slider({ label, val, min, max, step, set, suffix }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+        <b style={{ fontSize: 13 }}>{label}</b>
+        <span className="tnum" style={{ fontWeight: 700, color: "var(--blue)" }}>{val}{suffix}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={val}
+        onChange={(e) => set(Number(e.target.value))} style={{ width: "100%", accentColor: "var(--ember1)" }} />
+    </div>
+  );
+}
 
 // Coût par unité produite d'une préparation (coût total ÷ rendement).
 function prepUnitCost(total, yq, yu) {
@@ -225,11 +251,20 @@ function FicheRecette() {
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [niv2, setNiv2] = useState(false); // empâtements indirects (biga/poolish) débloqués au Niveau II
+  const [spe, setSpe] = useState(false);   // typologies teglia/pala débloquées avec la spécialisation
   const added = useMemo(() => new Set(r.ingredients.map((i) => i.product_id).filter(Boolean)), [r.ingredients]);
   const importedIds = useMemo(() => new Set(r.ingredients.map((i) => i.component_recipe_id).filter(Boolean)), [r.ingredients]);
 
   const reload = () => getMyRecipes().then((res) => setSaved(res.data || [])).catch(() => {});
   useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    getMyFormations().then((r) => {
+      const fs = (r.data || []).filter((f) => f.enrolled).map((f) => `${f.program_title} ${f.program_code}`);
+      setNiv2(fs.some((t) => /niveau ii|emp[aâ]tement/i.test(t)));
+      setSpe(fs.some((t) => /teglia|pala|sp[ée]cialis/i.test(t)));
+    }).catch(() => {});
+  }, []);
 
   const set = (k) => (e) => setR((p) => ({ ...p, [k]: e.target.value }));
   const setKind = (kind) => setR((p) => ({ ...p, kind }));
@@ -256,11 +291,37 @@ function FicheRecette() {
   const isPrep = kind === "PREPARATION";
   const doughUnit = isPate ? "pâton" : "pizza";
 
+  // Calculateur de pâte : réglages en pourcentage boulanger + presets verrouillables.
+  const dp = r.dough_params || DP_DEFAULT;
+  const setDP = (k, v) => setR((p) => ({ ...p, dough_params: { ...(p.dough_params || DP_DEFAULT), [k]: v } }));
+  const methodLocked = (m) => INDIRECT.includes(m) && !niv2;
+  const applyPreset = (pr) => {
+    if (pr.spe && !spe) return;
+    setR((p) => ({ ...p, type: pr.nom, paton_g: pr.paton, dough_params: {
+      ...(p.dough_params || DP_DEFAULT), preset: pr.nom, hydra: pr.hydra, sel: pr.sel, huile: pr.huile, levure: pr.levure,
+      method: pr.methods.find((m) => !methodLocked(m)) || pr.methods[0],
+    } }));
+  };
+  const curPreset = PRESETS.find((p) => p.nom === dp.preset) || PRESETS[0];
+
   const nb = Math.max(1, num(r.servings));
-  const flourBatchKg = (nb * num(r.paton_g)) / 1000 / 1.68;
-  const doughPerUnit = ((num(r.paton_g) / 1000) / 1.68) * num(r.flour_price);
+  // Ratio pâte/farine : pourcentage boulanger pour la pâte, forfait 1.68 sinon.
+  const addPct = isPate ? addPctOf(dp) : 1.68;
+  const flourBatchKg = (nb * num(r.paton_g)) / 1000 / addPct;
+  const doughPerUnit = ((num(r.paton_g) / 1000) / addPct) * num(r.flour_price);
   const lineCost = (t) => (t.unit === "g" ? (num(t.qty) / 1000) * num(t.unit_price) : num(t.qty) * num(t.unit_price));
   const ingSum = useMemo(() => r.ingredients.reduce((s, t) => s + lineCost(t), 0), [r.ingredients]);
+
+  // Décomposition de la pâte (grammes) pour le résultat du calculateur.
+  const totalDough = nb * num(r.paton_g);
+  const farineG = totalDough / addPct;
+  const dough = [
+    { k: "Farine", ic: "wheat", v: farineG, pct: "100 %", color: "#fcb900" },
+    { k: "Eau", ic: "droplet", v: farineG * num(dp.hydra) / 100, pct: `${dp.hydra} %`, color: "#3aa0e0" },
+    { k: "Sel", ic: "salt", v: farineG * num(dp.sel) / 100, pct: `${dp.sel} %`, color: "#c9cede" },
+    ...(num(dp.huile) > 0 ? [{ k: "Huile", ic: "oil", v: farineG * num(dp.huile) / 100, pct: `${dp.huile} %`, color: "#7bb661" }] : []),
+    { k: "Levure", ic: "yeast", v: farineG * num(dp.levure) / 100, pct: `${dp.levure} %`, color: "#ff6900" },
+  ];
 
   // Coûts selon le type de fiche.
   const perUnit = (isPate || isRecette) ? doughPerUnit + ingSum : ingSum; // par pâton / pizza / lot
@@ -271,7 +332,9 @@ function FicheRecette() {
 
   async function persist(overrides = {}) {
     setBusy(true);
-    const payload = { ...r, ...overrides, name: (overrides.name ?? r.name).trim() || `${r.type} maison` };
+    const merged = { ...r, ...overrides };
+    const payload = { ...merged, name: (overrides.name ?? r.name).trim() || `${r.type} maison`,
+      dough_params: merged.kind === "PATE" ? (merged.dough_params || DP_DEFAULT) : null };
     try {
       const res = r.id ? await updateRecipe(r.id, payload) : await createRecipe(payload);
       const id = r.id || (res.data && res.data.id);
@@ -281,7 +344,12 @@ function FicheRecette() {
     finally { setBusy(false); }
   }
   async function openRecipe(id) {
-    try { const res = await getRecipe(id); const d = res.data; setR({ ...NEW(), ...d, ingredients: d.ingredients?.length ? d.ingredients : [] }); } catch { /* ignore */ }
+    try {
+      const res = await getRecipe(id); const d = res.data;
+      let dpv = d.dough_params;
+      if (typeof dpv === "string") { try { dpv = JSON.parse(dpv); } catch { dpv = null; } }
+      setR({ ...NEW(), ...d, dough_params: { ...DP_DEFAULT, ...(dpv || {}) }, ingredients: d.ingredients?.length ? d.ingredients : [] });
+    } catch { /* ignore */ }
   }
   async function removeRecipe(id) {
     if (!window.confirm("Supprimer cette fiche ?")) return;
@@ -324,7 +392,7 @@ function FicheRecette() {
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {/* Ligne 1 — identité + empâtement (pâte/recette) ou rendement (préparation) */}
         <div className="grid cols-2" style={{ gap: 22, alignItems: "start" }}>
-          <Card title={<span className="card-ttl"><Icon name={isRecette ? "pizza" : isPate ? "settings" : "list-checks"} size={16} /> {isRecette ? "La pizza" : isPate ? "Atelier pâte" : "La préparation"}</span>}>
+          <Card title={<span className="card-ttl"><Icon name={isRecette ? "pizza" : isPate ? "settings" : "list-checks"} size={16} /> {isRecette ? "La pizza" : isPate ? "La pâte" : "La préparation"}</span>}>
             <div className="field"><label>Nom de la fiche</label>
               <input className="inp" value={r.name} onChange={set("name")} placeholder={isPate ? "Ex. Pâte napolitaine 24 h" : isPrep ? "Ex. Sauce tomate San Marzano" : "Ex. Margherita du chef"} /></div>
             <div className="field"><label>Type</label>
@@ -343,9 +411,60 @@ function FicheRecette() {
               </div>
               <p className="hint" style={{ margin: "12px 0 0" }}>Coût total du lot <b>{euro(totalCost)}</b> → <b>{euro(prep.per)}</b> / {prep.unit}</p>
             </Card>
+          ) : isPate ? (
+            <Card title={<span className="card-ttl"><Icon name="settings" size={16} /> Calculateur de pâte</span>}>
+              {/* Typologies */}
+              <div className="ate-lbl">Typologie de pizza</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                {PRESETS.map((p) => {
+                  const locked = p.spe && !spe;
+                  return (
+                    <button key={p.nom} onClick={() => applyPreset(p)} disabled={locked}
+                      className={`btn sm ${dp.preset === p.nom ? "primary" : "ghost"}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, opacity: locked ? 0.5 : 1 }}
+                      title={locked ? "Déverrouillé avec la spécialisation « In Teglia & Pala »" : p.desc}>
+                      <Icon name={locked ? "lock" : p.ic} size={14} /> {p.nom}{p.spe ? " · Spé" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Empâtement (+ Autolyse) */}
+              <div className="ate-lbl">Empâtement</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+                {curPreset.methods.map((m) => {
+                  const locked = methodLocked(m);
+                  return (
+                    <button key={m} onClick={() => !locked && setDP("method", m)} disabled={locked}
+                      className={`btn sm ${dp.method === m ? "primary" : "ghost"}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: locked ? 0.5 : 1 }}
+                      title={locked ? "Débloqué au Niveau II (empâtements indirects)" : m}>
+                      {locked && <Icon name="lock" size={12} />}{m}
+                    </button>
+                  );
+                })}
+                <span style={{ width: 1, height: 20, background: "var(--border)", margin: "0 3px" }} />
+                <button onClick={() => setDP("autolyse", !dp.autolyse)} className={`btn sm ${dp.autolyse ? "primary" : "ghost"}`}
+                  title="Repos farine + eau avant pétrissage (facultatif)">
+                  <Icon name={dp.autolyse ? "check" : "plus"} size={13} /> Autolyse
+                </button>
+              </div>
+              <p className="hint" style={{ margin: "0 0 16px" }}>Direct &amp; Autolyse → Niveau I · Biga &amp; Poolish (indirects) → Niveau II</p>
+              {/* Rendement + prix */}
+              <div className="grid cols-2" style={{ gap: 12, marginBottom: 4 }}>
+                <div className="field" style={{ marginBottom: 8 }}><label>Nombre de pâtons</label><input className="inp" type="number" min="1" value={r.servings} onChange={set("servings")} /></div>
+                <div className="field" style={{ marginBottom: 8 }}><label>Poids d'un pâton (g)</label><input className="inp" type="number" min="100" value={r.paton_g} onChange={set("paton_g")} /></div>
+              </div>
+              <div className="field" style={{ marginBottom: 14 }}><label>Prix de la farine (€/kg)</label><input className="inp" type="number" step="0.01" value={r.flour_price} onChange={set("flour_price")} /></div>
+              {/* Pourcentage boulanger */}
+              <Slider label="Hydratation" val={num(dp.hydra)} min={50} max={90} step={1} set={(v) => setDP("hydra", v)} suffix=" %" />
+              <Slider label="Sel" val={num(dp.sel)} min={0} max={4} step={0.1} set={(v) => setDP("sel", v)} suffix=" %" />
+              <Slider label="Huile (facultatif)" val={num(dp.huile)} min={0} max={6} step={0.5} set={(v) => setDP("huile", v)} suffix=" %" />
+              <Slider label="Levure" val={num(dp.levure)} min={0} max={2} step={0.05} set={(v) => setDP("levure", v)} suffix=" %" />
+              <p className="hint" style={{ margin: 0 }}>≈ {flourBatchKg.toFixed(2)} kg de farine pour {nb} pâtons · coût pâte <b>{euro(doughPerUnit)}</b> / pâton</p>
+            </Card>
           ) : (
             <Card title={<span className="card-ttl"><Icon name="settings" size={16} /> Empâtement</span>}>
-              <div className="field"><label>{isPate ? "Nombre de pâtons" : "Nombre de pizzas"}</label><input className="inp" type="number" min="1" value={r.servings} onChange={set("servings")} /></div>
+              <div className="field"><label>Nombre de pizzas</label><input className="inp" type="number" min="1" value={r.servings} onChange={set("servings")} /></div>
               <div className="field"><label>Poids d'un pâton (g)</label><input className="inp" type="number" min="100" value={r.paton_g} onChange={set("paton_g")} /></div>
               <div className="field" style={{ marginBottom: 12 }}><label>Prix de la farine (€/kg)</label><input className="inp" type="number" step="0.01" value={r.flour_price} onChange={set("flour_price")} /></div>
               <p className="hint" style={{ margin: 0 }}>≈ {flourBatchKg.toFixed(2)} kg de farine pour {nb} {doughUnit}s · coût pâte <b>{euro(doughPerUnit)}</b> / {doughUnit}</p>
@@ -371,16 +490,51 @@ function FicheRecette() {
               {actions}
             </div>
           </div>
+        ) : isPate ? (
+          <div className="card dough-result fr-result">
+            <div>
+              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{curPreset.nom} · empâtement {String(dp.method).toLowerCase()}{dp.autolyse ? " + autolyse" : ""}</div>
+              <div style={{ font: "800 24px/1.1 var(--font-d)", margin: "4px 0 2px" }}>{gfmt(totalDough)} de pâte</div>
+              <div style={{ color: "rgba(255,255,255,.7)", fontSize: 12, marginBottom: 12 }}>{nb} pâtons de {num(r.paton_g)} g</div>
+              <div className="dough-bar" title="Proportions de l'empâtement">
+                {dough.map((i) => <span key={i.k} style={{ width: `${totalDough ? (i.v / totalDough) * 100 : 0}%`, background: i.color }} />)}
+              </div>
+              {dp.autolyse && (
+                <p style={{ fontSize: 11.5, color: "rgba(255,255,255,.75)", background: "rgba(255,255,255,.08)", borderRadius: 8, padding: "8px 10px", margin: "0 0 10px" }}>
+                  <b>Autolyse</b> — mélange la farine et l'eau, laisse reposer 30–60 min, puis ajoute sel &amp; levure.
+                </p>
+              )}
+              {dough.map((i, idx) => (
+                <div key={i.k} className="dough-line">
+                  <span className="ate-step">{idx + 1}</span>
+                  <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={17} /></span>
+                  <b style={{ flex: 1, fontSize: 13 }}>{i.k}</b>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,.6)" }}>{i.pct}</span>
+                  <b className="tnum" style={{ width: 90, textAlign: "right" }}>{gfmt(i.v)}</b>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{ font: "800 30px/1.1 var(--font-d)", margin: "2px 0 0" }}>{euro(perUnit)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pâton</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
+                <Row label="Coût matière total" value={euro(totalCost)} />
+                <Row label="Coût pâte / pâton" value={euro(doughPerUnit)} />
+                <Row label="Coût ingrédients / pâton" value={euro(ingSum)} accent />
+              </div>
+              <p className="hint" style={{ color: "rgba(255,255,255,.75)", margin: "12px 0 0" }}>Importable dans une recette comme ingrédient, à son coût / pâton.</p>
+              {actions}
+            </div>
+          </div>
         ) : (
           <div className="card dough-result fr-result">
             <div>
-              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{r.name || (isPate ? "Nouvelle pâte" : "Nouvelle préparation")} · {r.type}</div>
+              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{r.name || "Nouvelle préparation"} · {r.type}</div>
               <div style={{ font: "800 32px/1.1 var(--font-d)", margin: "8px 0 2px" }}>
-                {isPate ? euro(perUnit) : euro(prep.per)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ {isPate ? "pâton" : prep.unit}</span>
+                {euro(prep.per)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ {prep.unit}</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
                 <Row label="Coût matière total" value={euro(totalCost)} />
-                {isPate ? <Row label="Coût pâte / pâton" value={euro(doughPerUnit)} /> : <Row label="Rendement" value={`${num(r.yield_qty)} ${r.yield_unit || ""}`} />}
+                <Row label="Rendement" value={`${num(r.yield_qty)} ${r.yield_unit || ""}`} />
                 <Row label="Coût ingrédients" value={euro(ingSum)} accent />
               </div>
             </div>

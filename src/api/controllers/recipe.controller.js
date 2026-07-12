@@ -77,7 +77,18 @@ const catalogBrands = async (req, res) => {
 
 // Résumé d'une fiche (sans ingrédients).
 const RECIPE_COLS = `id, kind, author_user_id, author_name, name, type, description, servings, paton_g,
-    flour_price, margin_pct, yield_qty, yield_unit, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d') AS updated_at`;
+    flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d') AS updated_at`;
+
+// Ratio pâte/farine (pourcentage boulanger). Depuis les réglages du calculateur si présents,
+// sinon 1.68 par défaut (≈ 60 % hydratation).
+function doughRatio(r) {
+    let dp = r.dough_params;
+    if (typeof dp === 'string') { try { dp = JSON.parse(dp); } catch { dp = null; } }
+    if (dp && (dp.hydra != null || dp.sel != null || dp.huile != null || dp.levure != null)) {
+        return 1 + ((Number(dp.hydra) || 0) + (Number(dp.sel) || 0) + (Number(dp.huile) || 0) + (Number(dp.levure) || 0)) / 100;
+    }
+    return 1.68;
+}
 
 const lineCost = (t) => (t.unit === 'piece' ? Number(t.qty || 0) * Number(t.unit_price || 0)
     : (Number(t.qty || 0) / 1000) * Number(t.unit_price || 0)); // 'g' → prix €/kg
@@ -89,7 +100,7 @@ async function ficheUnitCost(conn, r) {
     const [ings] = await conn.query('SELECT qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ?', [r.id]);
     const ingCost = ings.reduce((s, t) => s + lineCost(t), 0);
     if (r.kind === 'PATE') {
-        const perPaton = ((Number(r.paton_g) / 1000) / 1.68) * Number(r.flour_price || 0) + ingCost;
+        const perPaton = ((Number(r.paton_g) / 1000) / doughRatio(r)) * Number(r.flour_price || 0) + ingCost;
         return { unit: 'piece', unitPrice: perPaton, total: perPaton * Math.max(1, Number(r.servings) || 1) };
     }
     const total = ingCost;
@@ -195,6 +206,7 @@ function normRecipe(b) {
         margin_pct: Math.max(0, Math.min(1000, parseInt(b.margin_pct, 10) || 0)),
         yield_qty: (b.yield_qty != null && b.yield_qty !== '') ? Math.max(0, Number(b.yield_qty) || 0) : null,
         yield_unit: b.yield_unit ? String(b.yield_unit).slice(0, 20) : null,
+        dough_params: (b.dough_params && typeof b.dough_params === 'object') ? JSON.stringify(b.dough_params).slice(0, 2000) : null,
         visibility: b.visibility === 'SHARED' ? 'SHARED' : 'PRIVATE',
     };
 }
@@ -221,9 +233,9 @@ const createRecipe = async (req, res) => {
         const r = normRecipe(req.body || {});
         const id = crypto.randomUUID();
         await conn.query(
-            `INSERT INTO recipe (id, organization_id, author_user_id, author_name, kind, name, type, description, servings, paton_g, flour_price, margin_pct, yield_qty, yield_unit, visibility)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, req.user.organization_id, req.user.id, authorName(req.user), r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.visibility]
+            `INSERT INTO recipe (id, organization_id, author_user_id, author_name, kind, name, type, description, servings, paton_g, flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, req.user.organization_id, req.user.id, authorName(req.user), r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params, r.visibility]
         );
         await saveIngredients(conn, id, (req.body || {}).ingredients);
         res.status(201).json({ data: { id } });
@@ -243,8 +255,8 @@ const updateRecipe = async (req, res) => {
         if (cur.author_user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut modifier.' });
         const r = normRecipe(req.body || {});
         await conn.query(
-            `UPDATE recipe SET kind=?, name=?, type=?, description=?, servings=?, paton_g=?, flour_price=?, margin_pct=?, yield_qty=?, yield_unit=?, visibility=? WHERE id=?`,
-            [r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.visibility, req.params.id]
+            `UPDATE recipe SET kind=?, name=?, type=?, description=?, servings=?, paton_g=?, flour_price=?, margin_pct=?, yield_qty=?, yield_unit=?, dough_params=?, visibility=? WHERE id=?`,
+            [r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params, r.visibility, req.params.id]
         );
         await saveIngredients(conn, req.params.id, (req.body || {}).ingredients);
         res.json({ data: { id: req.params.id } });

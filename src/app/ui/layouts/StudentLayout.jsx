@@ -17,7 +17,7 @@ function OutilsMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const loc = useLocation();
-  const active = ["/atelier", "/fiche-recette", "/communaute"].some((p) => loc.pathname.startsWith(p));
+  const active = ["/fiche-recette", "/communaute"].some((p) => loc.pathname.startsWith(p));
   useEffect(() => {
     const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", onDoc);
@@ -31,7 +31,6 @@ function OutilsMenu() {
       </button>
       {open && (
         <div className="stu-menu">
-          <NavLink to="/atelier" className="stu-menu-item"><Icon name="settings" size={15} /> Atelier pâte</NavLink>
           <NavLink to="/fiche-recette" className="stu-menu-item"><Icon name="list-checks" size={15} /> Fiche technique</NavLink>
           <NavLink to="/communaute" className="stu-menu-item"><Icon name="users" size={15} /> Communauté</NavLink>
         </div>
