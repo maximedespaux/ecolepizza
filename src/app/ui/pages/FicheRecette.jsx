@@ -16,7 +16,7 @@ import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getC
  */
 const TYPES = ["Classique", "Contemporaine", "Napolitaine", "Teglia", "Pala"];
 const KINDS = [
-  { k: "PATE", label: "Atelier pâte", icon: "settings", hint: "Un empâtement — rendement en pâtons" },
+  { k: "PATE", label: "Pâte", icon: "settings", hint: "Un empâtement — rendement en pâtons" },
   { k: "PREPARATION", label: "Préparation", icon: "list-checks", hint: "Sauce, base… avec un rendement" },
   { k: "RECETTE", label: "Recette", icon: "pizza", hint: "Pizza complète : pâte + préparations + garnitures" },
 ];
@@ -324,7 +324,7 @@ function FicheRecette() {
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {/* Ligne 1 — identité + empâtement (pâte/recette) ou rendement (préparation) */}
         <div className="grid cols-2" style={{ gap: 22, alignItems: "start" }}>
-          <Card title={<span className="card-ttl"><Icon name={isRecette ? "pizza" : isPate ? "settings" : "list-checks"} size={16} /> {isRecette ? "La pizza" : isPate ? "La pâte" : "La préparation"}</span>}>
+          <Card title={<span className="card-ttl"><Icon name={isRecette ? "pizza" : isPate ? "settings" : "list-checks"} size={16} /> {isRecette ? "La pizza" : isPate ? "Atelier pâte" : "La préparation"}</span>}>
             <div className="field"><label>Nom de la fiche</label>
               <input className="inp" value={r.name} onChange={set("name")} placeholder={isPate ? "Ex. Pâte napolitaine 24 h" : isPrep ? "Ex. Sauce tomate San Marzano" : "Ex. Margherita du chef"} /></div>
             <div className="field"><label>Type</label>
