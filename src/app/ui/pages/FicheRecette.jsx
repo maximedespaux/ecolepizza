@@ -44,6 +44,14 @@ const NEW = () => ({
   ingredients: [],
 });
 
+// Mémorise le dernier onglet (type de fiche) choisi, pour le rouvrir au rechargement.
+const KIND_KEY = "fiche.kind";
+const readKind = () => {
+  try { const k = localStorage.getItem(KIND_KEY); return KINDS.some((it) => it.k === k) ? k : "RECETTE"; }
+  catch { return "RECETTE"; }
+};
+const INIT = () => ({ ...NEW(), kind: readKind() });
+
 const unitLabel = (tu) => (tu === "Piece" ? "pc" : tu === "L" ? "L" : "kg");
 const PAGE_SIZE = 12;
 const PRICE_MAX = 50; // borne haute du curseur (€/unité) ; au max = « sans limite »
@@ -246,7 +254,7 @@ function ComponentPickerModal({ onClose, onAdd, added, excludeId }) {
 }
 
 function FicheRecette() {
-  const [r, setR] = useState(NEW);
+  const [r, setR] = useState(INIT);
   const [saved, setSaved] = useState([]);
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -267,7 +275,7 @@ function FicheRecette() {
   }, []);
 
   const set = (k) => (e) => setR((p) => ({ ...p, [k]: e.target.value }));
-  const setKind = (kind) => setR((p) => ({ ...p, kind }));
+  const setKind = (kind) => { try { localStorage.setItem(KIND_KEY, kind); } catch { /* ignore */ } setR((p) => ({ ...p, kind })); };
   const setIng = (i, patch) => setR((p) => ({ ...p, ingredients: p.ingredients.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
   const addIng = () => setR((p) => ({ ...p, ingredients: [...p.ingredients, { label: "", qty: 0, unit: "g", unit_price: 0, product_id: null, component_recipe_id: null }] }));
   const delIng = (i) => setR((p) => ({ ...p, ingredients: p.ingredients.filter((_, j) => j !== i) }));
@@ -353,7 +361,7 @@ function FicheRecette() {
   }
   async function removeRecipe(id) {
     if (!window.confirm("Supprimer cette fiche ?")) return;
-    try { await deleteRecipe(id); if (r.id === id) setR(NEW()); reload(); } catch { /* ignore */ }
+    try { await deleteRecipe(id); if (r.id === id) setR({ ...NEW(), kind: r.kind }); reload(); } catch { /* ignore */ }
   }
   const shared = r.visibility === "SHARED";
 
@@ -367,7 +375,7 @@ function FicheRecette() {
           <Icon name={shared ? "users" : "send"} size={15} /> {shared ? "Partagée" : "Partager"}
         </button>
       </div>
-      <button className="btn ghost" onClick={() => setR(NEW())} style={{ marginTop: 10, width: "100%", justifyContent: "center", color: "rgba(255,255,255,.85)", borderColor: "rgba(255,255,255,.3)" }}><Icon name="plus" size={14} /> Nouvelle fiche</button>
+      <button className="btn ghost" onClick={() => setR({ ...NEW(), kind: r.kind })} style={{ marginTop: 10, width: "100%", justifyContent: "center", color: "rgba(255,255,255,.85)", borderColor: "rgba(255,255,255,.3)" }}><Icon name="plus" size={14} /> Nouvelle fiche</button>
     </>
   );
 
