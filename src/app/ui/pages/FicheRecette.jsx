@@ -392,14 +392,16 @@ function FicheRecette() {
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {/* Ligne 1 — identité + empâtement (pâte/recette) ou rendement (préparation) */}
         <div className="grid cols-2" style={{ gap: 22, alignItems: "start" }}>
-          <Card title={<span className="card-ttl"><Icon name={isRecette ? "pizza" : isPate ? "settings" : "list-checks"} size={16} /> {isRecette ? "La pizza" : isPate ? "La pâte" : "La préparation"}</span>}>
+          {!isPate && (
+          <Card title={<span className="card-ttl"><Icon name={isRecette ? "pizza" : "list-checks"} size={16} /> {isRecette ? "La pizza" : "La préparation"}</span>}>
             <div className="field"><label>Nom de la fiche</label>
-              <input className="inp" value={r.name} onChange={set("name")} placeholder={isPate ? "Ex. Pâte napolitaine 24 h" : isPrep ? "Ex. Sauce tomate San Marzano" : "Ex. Margherita du chef"} /></div>
+              <input className="inp" value={r.name} onChange={set("name")} placeholder={isPrep ? "Ex. Sauce tomate San Marzano" : "Ex. Margherita du chef"} /></div>
             <div className="field"><label>Type</label>
               <select className="inp" value={r.type} onChange={set("type")}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
             <div className="field" style={{ marginBottom: 0 }}><label>Description</label>
               <textarea className="inp" rows={4} value={r.description} onChange={set("description")} placeholder="Style, histoire, cuisson, dressage…" /></div>
           </Card>
+          )}
 
           {isPrep ? (
             <Card title={<span className="card-ttl"><Icon name="settings" size={16} /> Rendement</span>}>
@@ -413,6 +415,13 @@ function FicheRecette() {
             </Card>
           ) : isPate ? (
             <Card title={<span className="card-ttl"><Icon name="settings" size={16} /> Calculateur de pâte</span>}>
+              {/* Identité — en haut du calculateur */}
+              <div className="grid cols-2" style={{ gap: 12 }}>
+                <div className="field"><label>Nom de la fiche</label>
+                  <input className="inp" value={r.name} onChange={set("name")} placeholder="Ex. Pâte napolitaine 24 h" /></div>
+                <div className="field"><label>Type</label>
+                  <select className="inp" value={r.type} onChange={set("type")}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
+              </div>
               {/* Typologies */}
               <div className="ate-lbl">Typologie de pizza</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
@@ -460,7 +469,10 @@ function FicheRecette() {
               <Slider label="Sel" val={num(dp.sel)} min={0} max={4} step={0.1} set={(v) => setDP("sel", v)} suffix=" %" />
               <Slider label="Huile (facultatif)" val={num(dp.huile)} min={0} max={6} step={0.5} set={(v) => setDP("huile", v)} suffix=" %" />
               <Slider label="Levure" val={num(dp.levure)} min={0} max={2} step={0.05} set={(v) => setDP("levure", v)} suffix=" %" />
-              <p className="hint" style={{ margin: 0 }}>≈ {flourBatchKg.toFixed(2)} kg de farine pour {nb} pâtons · coût pâte <b>{euro(doughPerUnit)}</b> / pâton</p>
+              <p className="hint" style={{ margin: "0 0 14px" }}>≈ {flourBatchKg.toFixed(2)} kg de farine pour {nb} pâtons · coût pâte <b>{euro(doughPerUnit)}</b> / pâton</p>
+              {/* Description — en bas du calculateur */}
+              <div className="field" style={{ marginBottom: 0 }}><label>Description</label>
+                <textarea className="inp" rows={3} value={r.description} onChange={set("description")} placeholder="Hydratation, pointage/apprêt, cuisson…" /></div>
             </Card>
           ) : (
             <Card title={<span className="card-ttl"><Icon name="settings" size={16} /> Empâtement</span>}>
@@ -469,6 +481,41 @@ function FicheRecette() {
               <div className="field" style={{ marginBottom: 12 }}><label>Prix de la farine (€/kg)</label><input className="inp" type="number" step="0.01" value={r.flour_price} onChange={set("flour_price")} /></div>
               <p className="hint" style={{ margin: 0 }}>≈ {flourBatchKg.toFixed(2)} kg de farine pour {nb} {doughUnit}s · coût pâte <b>{euro(doughPerUnit)}</b> / {doughUnit}</p>
             </Card>
+          )}
+
+          {/* Pâte — panneau bleu (résultat) à côté du calculateur */}
+          {isPate && (
+            <div className="card dough-result">
+              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{curPreset.nom} · empâtement {String(dp.method).toLowerCase()}{dp.autolyse ? " + autolyse" : ""}</div>
+              <div style={{ font: "800 24px/1.1 var(--font-d)", margin: "4px 0 2px" }}>{gfmt(totalDough)} de pâte</div>
+              <div style={{ color: "rgba(255,255,255,.7)", fontSize: 12, marginBottom: 12 }}>{nb} pâtons de {num(r.paton_g)} g</div>
+              <div className="dough-bar" title="Proportions de l'empâtement">
+                {dough.map((i) => <span key={i.k} style={{ width: `${totalDough ? (i.v / totalDough) * 100 : 0}%`, background: i.color }} />)}
+              </div>
+              {dp.autolyse && (
+                <p style={{ fontSize: 11.5, color: "rgba(255,255,255,.75)", background: "rgba(255,255,255,.08)", borderRadius: 8, padding: "8px 10px", margin: "0 0 10px" }}>
+                  <b>Autolyse</b> — mélange la farine et l'eau, laisse reposer 30–60 min, puis ajoute sel &amp; levure.
+                </p>
+              )}
+              {dough.map((i, idx) => (
+                <div key={i.k} className="dough-line">
+                  <span className="ate-step">{idx + 1}</span>
+                  <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={17} /></span>
+                  <b style={{ flex: 1, fontSize: 13 }}>{i.k}</b>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,.6)" }}>{i.pct}</span>
+                  <b className="tnum" style={{ width: 90, textAlign: "right" }}>{gfmt(i.v)}</b>
+                </div>
+              ))}
+              <div style={{ borderTop: "1px solid rgba(255,255,255,.15)", margin: "16px 0 0" }} />
+              <div style={{ font: "800 30px/1.1 var(--font-d)", margin: "14px 0 0" }}>{euro(perUnit)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pâton</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+                <Row label="Coût matière total" value={euro(totalCost)} />
+                <Row label="Coût pâte / pâton" value={euro(doughPerUnit)} />
+                <Row label="Coût ingrédients / pâton" value={euro(ingSum)} accent />
+              </div>
+              <p className="hint" style={{ color: "rgba(255,255,255,.75)", margin: "12px 0 0" }}>Importable dans une recette comme ingrédient, à son coût / pâton.</p>
+              {actions}
+            </div>
           )}
         </div>
 
@@ -490,42 +537,7 @@ function FicheRecette() {
               {actions}
             </div>
           </div>
-        ) : isPate ? (
-          <div className="card dough-result fr-result">
-            <div>
-              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{curPreset.nom} · empâtement {String(dp.method).toLowerCase()}{dp.autolyse ? " + autolyse" : ""}</div>
-              <div style={{ font: "800 24px/1.1 var(--font-d)", margin: "4px 0 2px" }}>{gfmt(totalDough)} de pâte</div>
-              <div style={{ color: "rgba(255,255,255,.7)", fontSize: 12, marginBottom: 12 }}>{nb} pâtons de {num(r.paton_g)} g</div>
-              <div className="dough-bar" title="Proportions de l'empâtement">
-                {dough.map((i) => <span key={i.k} style={{ width: `${totalDough ? (i.v / totalDough) * 100 : 0}%`, background: i.color }} />)}
-              </div>
-              {dp.autolyse && (
-                <p style={{ fontSize: 11.5, color: "rgba(255,255,255,.75)", background: "rgba(255,255,255,.08)", borderRadius: 8, padding: "8px 10px", margin: "0 0 10px" }}>
-                  <b>Autolyse</b> — mélange la farine et l'eau, laisse reposer 30–60 min, puis ajoute sel &amp; levure.
-                </p>
-              )}
-              {dough.map((i, idx) => (
-                <div key={i.k} className="dough-line">
-                  <span className="ate-step">{idx + 1}</span>
-                  <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={17} /></span>
-                  <b style={{ flex: 1, fontSize: 13 }}>{i.k}</b>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,.6)" }}>{i.pct}</span>
-                  <b className="tnum" style={{ width: 90, textAlign: "right" }}>{gfmt(i.v)}</b>
-                </div>
-              ))}
-            </div>
-            <div>
-              <div style={{ font: "800 30px/1.1 var(--font-d)", margin: "2px 0 0" }}>{euro(perUnit)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pâton</span></div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
-                <Row label="Coût matière total" value={euro(totalCost)} />
-                <Row label="Coût pâte / pâton" value={euro(doughPerUnit)} />
-                <Row label="Coût ingrédients / pâton" value={euro(ingSum)} accent />
-              </div>
-              <p className="hint" style={{ color: "rgba(255,255,255,.75)", margin: "12px 0 0" }}>Importable dans une recette comme ingrédient, à son coût / pâton.</p>
-              {actions}
-            </div>
-          </div>
-        ) : (
+        ) : isPate ? null : (
           <div className="card dough-result fr-result">
             <div>
               <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{r.name || "Nouvelle préparation"} · {r.type}</div>
