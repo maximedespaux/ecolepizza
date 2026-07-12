@@ -272,7 +272,9 @@ function FicheRecette() {
                 <input className="inp" placeholder="Ingrédient" value={t.label} onChange={(e) => setIng(i, { label: e.target.value, product_id: null })} />
                 <input className="inp" type="number" title="Quantité" value={t.qty} onChange={(e) => setIng(i, { qty: e.target.value })} />
                 <select className="inp" value={t.unit} onChange={(e) => setIng(i, { unit: e.target.value })}><option value="g">g</option><option value="piece">pièce</option></select>
-                <input className="inp" type="number" step="0.01" title={t.unit === "g" ? "€/kg" : "€/pièce"} placeholder={t.unit === "g" ? "€/kg" : "€/pc"} value={t.unit_price} onChange={(e) => setIng(i, { unit_price: e.target.value })} />
+                <input className="inp" type="number" step="0.01" disabled={!!t.product_id}
+                  title={t.product_id ? "Prix issu du catalogue Metro (verrouillé). Modifie le nom pour saisir un prix manuel." : (t.unit === "g" ? "€/kg" : "€/pièce")}
+                  placeholder={t.unit === "g" ? "€/kg" : "€/pc"} value={t.unit_price} onChange={(e) => setIng(i, { unit_price: e.target.value })} />
                 <span className="mono ing-cost">{euro(lineCost(t))}</span>
                 <button className="iconbtn del" title="Retirer" onClick={() => delIng(i)}><Icon name="trash" size={15} /></button>
               </div>
