@@ -415,13 +415,9 @@ function FicheRecette() {
             </Card>
           ) : isPate ? (
             <Card title={<span className="card-ttl"><Icon name="settings" size={16} /> Calculateur de pâte</span>}>
-              {/* Identité — en haut du calculateur */}
-              <div className="grid cols-2" style={{ gap: 12 }}>
-                <div className="field"><label>Nom de la fiche</label>
-                  <input className="inp" value={r.name} onChange={set("name")} placeholder="Ex. Pâte napolitaine 24 h" /></div>
-                <div className="field"><label>Type</label>
-                  <select className="inp" value={r.type} onChange={set("type")}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
-              </div>
+              {/* Identité — en haut du calculateur (le type découle de la typologie ci-dessous) */}
+              <div className="field"><label>Nom de la fiche</label>
+                <input className="inp" value={r.name} onChange={set("name")} placeholder="Ex. Pâte napolitaine 24 h" /></div>
               {/* Typologies */}
               <div className="ate-lbl">Typologie de pizza</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
