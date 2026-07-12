@@ -208,6 +208,13 @@ function Ventes() {
               ) : (
                 <>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 600, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--dim)" }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>Article</span>
+                      <span style={{ width: 76, textAlign: "center" }}>Qté</span>
+                      <span style={{ width: 76, textAlign: "center" }}>Remise %</span>
+                      <span style={{ width: 74, textAlign: "right" }}>Total TTC</span>
+                      <span style={{ width: 32, flex: "0 0 32px" }} />
+                    </div>
                     {cart.map((l) => (
                       <div key={l.item_id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}>
                         <span style={{ flex: 1, minWidth: 0 }}>
