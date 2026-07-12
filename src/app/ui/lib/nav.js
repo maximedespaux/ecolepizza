@@ -32,6 +32,7 @@ export const NAV = [
     items: [
       { to: "/pipeline", ic: "columns", label: "Pipeline CRM", roles: ADMIN },
       { to: "/partenaires", ic: "handshake", label: "Partenaires", roles: STAFF },
+      { to: "/mercuriale", ic: "table", label: "Mercuriale", roles: ADMIN },
       { to: "/carte", ic: "map", label: "Carte des stagiaires", roles: ADMIN },
     ],
   },
@@ -76,6 +77,7 @@ export const PAGE_TITLES = {
   "/produit-divers": "Produit divers",
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
+  "/mercuriale": "Mercuriale",
   "/inventaire": "Inventaire",
   "/ventes": "Ventes de Matériels et Inventaire",
   "/factures": "Facturation",
@@ -137,6 +139,7 @@ const SECTION_OF = {
   "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",
+  "/mercuriale": "/mercuriale",
   "/reglages": "/reglages", "/modeles": "/modeles", "/equipe": "/equipe",
   "/audit": "/audit", "/suivi": "/suivi", "/dashboard": "/dashboard",
 };

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCustomTokens, saveCustomTokens } from "../api/apiClient.js";
+import { Icon } from "./Icon.jsx";
 
 // Aperçu client d'un modèle de jeton personnalisé (mêmes règles que le serveur).
 const pad = (n) => String(n).padStart(2, "0");
@@ -97,7 +98,7 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
                         onChange={(e) => setRow(i, { template: e.target.value })} placeholder="du {Jour1} au {endDate}" />
                     </td>
                     <td className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>{applyTemplate(t.template, sampleMap) || "—"}</td>
-                    <td><button className="btn sm ghost danger" onClick={() => remove(i)} title="Supprimer">✕</button></td>
+                    <td><button className="btn sm ghost danger" onClick={() => remove(i)} title="Supprimer"><Icon name="x" size={13} /></button></td>
                   </tr>
                 ))}
                 {list.length === 0 && <tr><td colSpan={5} className="hint" style={{ padding: 12 }}>Aucun jeton personnalisé. Ajoutez-en un.</td></tr>}

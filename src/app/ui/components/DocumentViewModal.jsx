@@ -124,7 +124,7 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Fermer</button>
           {!missing && (
-            <button className="btn ghost sm" onClick={openPdf}>↗ Ouvrir le PDF</button>
+            <button className="btn ghost sm" onClick={openPdf}><Icon name="link" size={14} /> Ouvrir le PDF</button>
           )}
           {doc && !missing && (
             <button className="btn" onClick={() => dl(downloadDocumentPdf(id, `${doc.title || "document"}.pdf`))}>PDF</button>

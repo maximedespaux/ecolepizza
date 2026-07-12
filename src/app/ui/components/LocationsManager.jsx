@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getLocations, saveLocations } from "../api/apiClient.js";
 import Card from "./Card.jsx";
+import { Icon } from "./Icon.jsx";
 
 // Gestion des lieux de formation de l'organisme (plusieurs adresses possibles).
 export default function LocationsManager() {
@@ -40,7 +41,7 @@ export default function LocationsManager() {
                 <td><input className="inp" value={l.address || ""} onChange={(e) => setRow(i, { address: e.target.value })} placeholder="12 rue des Fours" /></td>
                 <td><input className="inp" value={l.zip_code || ""} onChange={(e) => setRow(i, { zip_code: e.target.value })} placeholder="33000" /></td>
                 <td><input className="inp" value={l.town || ""} onChange={(e) => setRow(i, { town: e.target.value })} placeholder="Bordeaux" /></td>
-                <td><button className="btn sm ghost danger" onClick={() => remove(i)} title="Supprimer">✕</button></td>
+                <td><button className="btn sm ghost danger" onClick={() => remove(i)} title="Supprimer"><Icon name="x" size={13} /></button></td>
               </tr>
             ))}
             {list.length === 0 && <tr><td colSpan={5} className="hint" style={{ padding: 12 }}>Aucun lieu. Ajoutez-en un.</td></tr>}

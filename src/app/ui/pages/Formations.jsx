@@ -393,7 +393,7 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder }) {
                   <div className="pf-opt">
                     <span className="pf-label">{s.label}</span>
                     {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
-                    <button type="button" className="pf-x" title="Retirer cette étape" onClick={() => onToggle(s.slug)}>✕</button>
+                    <button type="button" className="pf-x" title="Retirer cette étape" onClick={() => onToggle(s.slug)}><Icon name="x" size={13} /></button>
                   </div>
                 </div>
               ))}
