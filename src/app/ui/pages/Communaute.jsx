@@ -40,6 +40,7 @@ export default function Communaute() {
   const [threadOpen, setThreadOpen] = useState(null); // id dont le fil est déplié en ligne
   const [draft, setDraft] = useState({});           // id -> texte du nouveau commentaire
   const [editing, setEditing] = useState({});       // cid -> texte en cours d'édition
+  const [sort, setSort] = useState("recent");       // "recent" | "liked"
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -153,9 +154,18 @@ export default function Communaute() {
         <EmptyState icon="users">Aucune recette partagée pour l'instant. Sois le premier : partage une fiche technique depuis « Fiche technique ».</EmptyState>
       ) : (
         <div className="grid cols-2" style={{ alignItems: "start" }}>
-          <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Recettes partagées ({list.length})</span>}>
+          <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Recettes partagées ({list.length})</span>}
+            more={<span className="seg">
+              <button className={"seg-btn" + (sort === "recent" ? " on" : "")} onClick={() => setSort("recent")}>Récentes</button>
+              <button className={"seg-btn" + (sort === "liked" ? " on" : "")} onClick={() => setSort("liked")}><span aria-hidden>❤️</span> Populaires</button>
+            </span>}>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {list.map((s) => {
+              {[...list].sort((a, b) => {
+                if (sort !== "liked") return 0; // ordre serveur = plus récentes d'abord
+                const la = likeState[a.id]?.count ?? a.like_count ?? 0;
+                const lb = likeState[b.id]?.count ?? b.like_count ?? 0;
+                return lb - la || (b.comment_count || 0) - (a.comment_count || 0);
+              }).map((s) => {
                 const lk = likeState[s.id] || { liked: false, count: s.like_count || 0 };
                 const tOpen = threadOpen === s.id;
                 return (
