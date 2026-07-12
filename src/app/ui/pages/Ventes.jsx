@@ -78,7 +78,7 @@ function Ventes() {
     setCart((c) => {
       const ex = c.find((l) => l.item_id === it.id);
       if (ex) return c.map((l) => (l.item_id === it.id ? { ...l, quantity: l.quantity + n } : l));
-      return [...c, { item_id: it.id, name: it.name, quantity: n, unit_price: Number(it.unit_price || 0), tax_rate: Number(it.tax_rate || 0), disc: 0, stock: it.quantity }];
+      return [...c, { item_id: it.id, name: it.name, quantity: n, unit_price: Number(it.unit_price || 0), tax_rate: Number(it.tax_rate || 0), disc: "", stock: it.quantity }];
     });
     setPick(""); setQty(1);
   }
@@ -225,7 +225,7 @@ function Ventes() {
                           onChange={(e) => setLine(l.item_id, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                           className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} />
                         <input type="number" min="0" max="100" value={l.disc} title="Remise %"
-                          onChange={(e) => setLine(l.item_id, { disc: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+                          onChange={(e) => { const v = e.target.value; setLine(l.item_id, { disc: v === "" ? "" : Math.min(100, Math.max(0, Number(v) || 0)) }); }}
                           className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} placeholder="%" />
                         <span className="mono" style={{ width: 74, textAlign: "right" }}>{euro(ttc(l.unit_price * l.quantity * (1 - (l.disc || 0) / 100), tvaApplies ? l.tax_rate : 0))}</span>
                         <button className="iconbtn del" title="Retirer" onClick={() => removeLine(l.item_id)}><Icon name="trash" size={15} /></button>
