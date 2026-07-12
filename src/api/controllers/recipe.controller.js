@@ -59,6 +59,22 @@ const catalogFamilies = async (req, res) => {
     }
 };
 
+/** GET /api/recipes/catalog/brands — marques disponibles (triées) pour le filtre. */
+const catalogBrands = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [rows] = await conn.query(
+            `SELECT DISTINCT brand FROM catalog_product WHERE organization_id = ? AND brand IS NOT NULL AND brand <> '' ORDER BY brand`,
+            [req.user.organization_id]
+        );
+        res.json({ data: rows.map((r) => r.brand) });
+    } catch (err) {
+        if (noTable(err)) return res.json({ data: [] });
+        console.error('Erreur marques catalogue :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 // Résumé d'une recette (sans ingrédients).
 const RECIPE_COLS = `id, author_user_id, author_name, name, type, description, servings, paton_g,
     flour_price, margin_pct, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d') AS updated_at`;
@@ -202,4 +218,4 @@ const deleteRecipe = async (req, res) => {
     }
 };
 
-module.exports = { searchCatalog, catalogFamilies, listMine, listShared, getRecipe, createRecipe, updateRecipe, deleteRecipe };
+module.exports = { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, getRecipe, createRecipe, updateRecipe, deleteRecipe };

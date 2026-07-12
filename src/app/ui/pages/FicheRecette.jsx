@@ -4,7 +4,7 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
-import { searchCatalog, getCatalogFamilies, getMyRecipes, getRecipe, createRecipe, updateRecipe, deleteRecipe } from "../api/apiClient.js";
+import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getRecipe, createRecipe, updateRecipe, deleteRecipe } from "../api/apiClient.js";
 
 /**
  * Fiche technique — compose une pizza (empâtement + garnitures), calcule le coût
@@ -24,6 +24,24 @@ const NEW = () => ({
 
 const unitLabel = (tu) => (tu === "Piece" ? "pc" : tu === "L" ? "L" : "kg");
 const PAGE_SIZE = 12;
+const PRICE_MAX = 50; // borne haute du curseur (€/unité) ; au max = « sans limite »
+
+// Curseur de prix à double poignée (min / max). Les deux <input range> se superposent ;
+// seules les poignées captent le clic (pointer-events), pour pouvoir attraper les deux.
+function DualRange({ min, max, step, value, onChange }) {
+  const [lo, hi] = value;
+  const pct = (v) => ((v - min) / (max - min)) * 100;
+  return (
+    <div className="range-slider">
+      <div className="rs-rail" />
+      <div className="rs-fill" style={{ left: `${pct(lo)}%`, right: `${100 - pct(hi)}%` }} />
+      <input type="range" className="rs-in" min={min} max={max} step={step} value={lo}
+        onChange={(e) => onChange([Math.min(Number(e.target.value), hi), hi])} />
+      <input type="range" className="rs-in" min={min} max={max} step={step} value={hi}
+        onChange={(e) => onChange([lo, Math.max(Number(e.target.value), lo)])} />
+    </div>
+  );
+}
 
 // Modale « Catalogue d'ingrédients » : filtres (nom, marque, catégorie, prix min/max,
 // tri) + résultats paginés. Chaque ligne a un bouton « Ajouter » (la modale reste
@@ -33,23 +51,28 @@ function IngredientSearchModal({ onClose, onAdd, added }) {
   const [brand, setBrand] = useState("");
   const [family, setFamily] = useState("");
   const [sort, setSort] = useState("");
-  const [pmin, setPmin] = useState("");
-  const [pmax, setPmax] = useState("");
+  const [range, setRange] = useState([0, PRICE_MAX]);
   const [families, setFamilies] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [res, setRes] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const priceMin = range[0] > 0 ? range[0] : "";
+  const priceMax = range[1] < PRICE_MAX ? range[1] : "";
 
-  useEffect(() => { getCatalogFamilies().then((r) => setFamilies(r.data || [])).catch(() => {}); }, []);
-  useEffect(() => { setPage(1); }, [q, brand, family, sort, pmin, pmax]);
+  useEffect(() => {
+    getCatalogFamilies().then((r) => setFamilies(r.data || [])).catch(() => {});
+    getCatalogBrands().then((r) => setBrands(r.data || [])).catch(() => {});
+  }, []);
+  useEffect(() => { setPage(1); }, [q, brand, family, sort, priceMin, priceMax]);
   useEffect(() => {
     const t = setTimeout(() => {
-      searchCatalog({ q, brand, family, sort, price_min: pmin, price_max: pmax, page, limit: PAGE_SIZE })
+      searchCatalog({ q, brand, family, sort, price_min: priceMin, price_max: priceMax, page, limit: PAGE_SIZE })
         .then((r) => { setRes(r.data || []); setTotal(r.total || 0); })
         .catch(() => { setRes([]); setTotal(0); });
     }, 250);
     return () => clearTimeout(t);
-  }, [q, brand, family, sort, pmin, pmax, page]);
+  }, [q, brand, family, sort, priceMin, priceMax, page]);
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   return createPortal(
@@ -65,21 +88,24 @@ function IngredientSearchModal({ onClose, onAdd, added }) {
               <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
               <input placeholder="Rechercher un ingrédient…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
             </span>
-            <input className="inp" placeholder="Marque" value={brand} onChange={(e) => setBrand(e.target.value)} />
+            <select className="inp" value={brand} onChange={(e) => setBrand(e.target.value)}>
+              <option value="">Toutes marques</option>
+              {brands.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
             <select className="inp" value={family} onChange={(e) => setFamily(e.target.value)}>
               <option value="">Toutes catégories</option>
               {families.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
-            <span className="gs-price">
-              <input className="inp" type="number" step="0.1" min="0" placeholder="€ min" title="Prix min (par unité)" value={pmin} onChange={(e) => setPmin(e.target.value)} />
-              <span className="hint">–</span>
-              <input className="inp" type="number" step="0.1" min="0" placeholder="€ max" title="Prix max (par unité)" value={pmax} onChange={(e) => setPmax(e.target.value)} />
-            </span>
             <select className="inp" value={sort} onChange={(e) => setSort(e.target.value)}>
               <option value="">Tri : nom</option>
               <option value="price_asc">Prix croissant</option>
               <option value="price_desc">Prix décroissant</option>
             </select>
+          </div>
+          <div className="gs-range-row">
+            <span className="hint" style={{ whiteSpace: "nowrap" }}>Prix / unité</span>
+            <DualRange min={0} max={PRICE_MAX} step={0.5} value={range} onChange={setRange} />
+            <span className="gs-range-lbl">{range[0]} € – {range[1] >= PRICE_MAX ? `${PRICE_MAX} €+` : `${range[1]} €`}</span>
           </div>
 
           <div className="gs-res" style={{ maxHeight: "48vh", minHeight: 200 }}>

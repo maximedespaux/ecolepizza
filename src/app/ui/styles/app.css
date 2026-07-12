@@ -908,3 +908,15 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .gs-item:hover{background:var(--surface2)}
 .gs-price{display:flex;align-items:center;gap:6px}
 .gs-price .inp{width:78px;flex:0 0 auto}
+
+/* Fiche technique — curseur de prix double poignée */
+.gs-range-row{display:flex;align-items:center;gap:14px}
+.gs-range-lbl{font-size:12.5px;font-weight:600;white-space:nowrap;color:var(--text)}
+.range-slider{position:relative;height:26px;flex:1;min-width:160px;display:flex;align-items:center}
+.rs-rail{position:absolute;left:0;right:0;height:5px;border-radius:99px;background:var(--border)}
+.rs-fill{position:absolute;height:5px;border-radius:99px;background:var(--ember1,#c0392b)}
+.rs-in{position:absolute;left:0;right:0;width:100%;margin:0;height:26px;background:none;pointer-events:none;-webkit-appearance:none;appearance:none}
+.rs-in::-webkit-slider-runnable-track{background:none;height:5px;border:none}
+.rs-in::-moz-range-track{background:none;height:5px;border:none}
+.rs-in::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:16px;height:16px;margin-top:-6px;border-radius:50%;background:#fff;border:2px solid var(--ember1,#c0392b);box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer}
+.rs-in::-moz-range-thumb{pointer-events:auto;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--ember1,#c0392b);cursor:pointer}

@@ -543,6 +543,7 @@ export function searchCatalog(arg) {
   return request(`/recipes/catalog?${qs.toString()}`, { silent: true });
 }
 export function getCatalogFamilies() { return request("/recipes/catalog/families", { silent: true }); }
+export function getCatalogBrands() { return request("/recipes/catalog/brands", { silent: true }); }
 export function getMyRecipes() { return request("/recipes/mine"); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getRecipe(id) { return request(`/recipes/${id}`); }

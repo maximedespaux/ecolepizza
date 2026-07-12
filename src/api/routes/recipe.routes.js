@@ -1,10 +1,11 @@
 const express = require('express');
-const { searchCatalog, catalogFamilies, listMine, listShared, getRecipe, createRecipe, updateRecipe, deleteRecipe } = require('../controllers/recipe.controller.js');
+const { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, getRecipe, createRecipe, updateRecipe, deleteRecipe } = require('../controllers/recipe.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
 
 router.get('/catalog/families', authenticateToken, catalogFamilies);
+router.get('/catalog/brands', authenticateToken, catalogBrands);
 router.get('/catalog', authenticateToken, searchCatalog);
 router.get('/mine', authenticateToken, listMine);
 router.get('/shared', authenticateToken, listShared);
