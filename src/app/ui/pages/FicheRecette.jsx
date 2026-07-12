@@ -551,7 +551,8 @@ function FicheRecette() {
           </div>
         )}
 
-        {/* Ligne 3 — ingrédients / garniture */}
+        {/* Ligne 3 — ingrédients / garniture (pas pour la pâte, gérée par le calculateur) */}
+        {!isPate && (
         <Card className="fr-garniture" title={<span className="card-ttl" style={{ fontSize: 17 }}><Icon name="list-checks" size={18} /> {ingTitle} <span className="hint" style={{ fontWeight: 400 }}>{ingScope}</span></span>}
           more={<span style={{ display: "flex", gap: 8 }}>
             <button className="btn sm primary" onClick={() => setSearchOpen(true)}><span aria-hidden>🔍</span> Rechercher des ingrédients</button>
@@ -584,8 +585,9 @@ function FicheRecette() {
             })}
             {r.ingredients.length === 0 && <p className="hint" style={{ margin: "6px 2px" }}>Aucun ingrédient. Recherche ci-dessus{isRecette ? ", importe une fiche" : ""}, ou « Ligne manuelle ».</p>}
           </div>
-          <p className="hint" style={{ margin: "16px 0 0", fontSize: 13 }}>Coût {isPate ? "ingrédients / pâton" : isPrep ? "total des ingrédients" : "garniture / pizza"} : <b>{euro(ingSum)}</b></p>
+          <p className="hint" style={{ margin: "16px 0 0", fontSize: 13 }}>Coût {isPrep ? "total des ingrédients" : "garniture / pizza"} : <b>{euro(ingSum)}</b></p>
         </Card>
+        )}
 
         {/* Ligne 4 — mes fiches */}
         <Card title={<span className="card-ttl"><Icon name="history" size={16} /> Mes fiches</span>}>
