@@ -40,6 +40,7 @@ const emargementTemplateRoutes = require('./routes/emargementTemplate.routes.js'
 const equipeRoutes = require('./routes/equipe.routes.js');
 const platformRoutes = require('./routes/platform.routes.js');
 const opcoRoutes = require('./routes/opco.routes.js');
+const mercurialeRoutes = require('./routes/mercuriale.routes.js');
 const accessProfileRoutes = require('./routes/accessProfile.routes.js');
 const eventsRoutes = require('./routes/events.routes.js');
 
@@ -119,6 +120,7 @@ app.use('/api/emargement-templates', emargementTemplateRoutes);
 app.use('/api/equipe', equipeRoutes);
 app.use('/api/platform', platformRoutes);
 app.use('/api/opcos', opcoRoutes);
+app.use('/api/mercuriale', mercurialeRoutes);
 app.use('/api/access-profiles', accessProfileRoutes);
 app.use('/api/events', eventsRoutes);
 

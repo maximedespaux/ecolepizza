@@ -9,6 +9,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
 import QuizModal from "../components/QuizModal.jsx";
+import { Icon } from "../components/Icon.jsx";
 
 const STATUS = { SIGNE: ["Signé", "g"], ENVOYE: ["Reçu", "a"], CONSULTE: ["Consulté", "a"], A_FAIRE: ["—", "n"] };
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
@@ -41,8 +42,8 @@ function StudentFormationDetail() {
   return (
     <>
       <div className="hero" style={{ background: "var(--grad-navy)" }}>
-        <button className="eyebrow" style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "rgba(255,255,255,.8)" }} onClick={() => navigate("/formations")}>
-          ← Mes formations
+        <button className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", padding: 0, color: "rgba(255,255,255,.8)" }} onClick={() => navigate("/formations")}>
+          <Icon name="chevron-left" size={14} /> Mes documents
         </button>
         <h1>{data ? data.program_title : "Formation"}</h1>
         {data && (
@@ -62,6 +63,7 @@ function StudentFormationDetail() {
                 const [label, tone] = STATUS[d.status] || [d.status, "n"];
                 return (
                   <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                    <span style={{ color: "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name={d.quiz_id ? "list-checks" : "file-text"} size={17} /></span>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <b>{d.title}</b>
                       {d.signed_at && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>Signé le {d.signed_at}</span>}
@@ -99,6 +101,7 @@ function StudentFormationDetail() {
                 const future = r.date > (data.today || "");
                 return (
                   <div key={r.record_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                    <span style={{ color: r.signed ? "var(--green)" : "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name="calendar" size={16} /></span>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <b style={{ textTransform: "capitalize" }}>{frDate(r.date)} — {SLOT[r.slot] || r.slot}</b>
                     </span>

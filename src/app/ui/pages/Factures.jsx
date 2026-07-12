@@ -138,7 +138,7 @@ function Factures() {
                   </select>
                   <input className="inp" placeholder="Libellé (par défaut : la formation)" value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} />
                   <input className="inp" type="number" step="0.01" placeholder="Montant HT" value={l.amount_net} onChange={(e) => setLine(i, "amount_net", e.target.value)} />
-                  <button type="button" className="iconbtn del" title="Retirer la ligne" onClick={() => delLine(i)} disabled={form.lines.length <= 1}>✕</button>
+                  <button type="button" className="iconbtn del" title="Retirer la ligne" onClick={() => delLine(i)} disabled={form.lines.length <= 1}><Icon name="x" size={14} /></button>
                 </div>
               ))}
             </div>

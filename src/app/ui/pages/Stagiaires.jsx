@@ -154,7 +154,7 @@ function Stagiaires() {
         <span ref={badgeRef} style={{ position: "relative" }}>
           <button type="button" className="inp" style={{ cursor: "pointer", textAlign: "left", minWidth: 160, maxWidth: 220 }}
             onClick={() => setBadgeOpen((o) => !o)}>
-            {filters.level.length ? `Badges (${filters.level.length})` : "Tous les badges"} ▾
+            {filters.level.length ? `Badges (${filters.level.length})` : "Tous les badges"} <Icon name="chevron-down" size={13} style={{ verticalAlign: "-2px" }} />
           </button>
           {badgeOpen && (
             <div style={{
@@ -195,7 +195,7 @@ function Stagiaires() {
           <option value="no">Sans compte</option>
         </select>
         {activeFilters > 0 && (
-          <button type="button" className="btn sm ghost" onClick={clearFilters}>✕ Effacer les filtres ({activeFilters})</button>
+          <button type="button" className="btn sm ghost" onClick={clearFilters}><Icon name="x" size={13} /> Effacer les filtres ({activeFilters})</button>
         )}
       </div>
 

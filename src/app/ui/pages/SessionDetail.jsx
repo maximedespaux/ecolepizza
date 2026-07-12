@@ -139,7 +139,7 @@ function SessionDetail() {
 
       {locations.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 14px", flexWrap: "wrap" }}>
-          <span className="hint">📍 Lieu de formation :</span>
+          <span className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="map" size={13} /> Lieu de formation :</span>
           <select className="inp" style={{ maxWidth: 320 }} value={session.location_id || ""} onChange={(e) => changeLocation(e.target.value)}>
             <option value="">— Aucun / à définir —</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}{l.town ? ` — ${l.town}` : ""}</option>)}

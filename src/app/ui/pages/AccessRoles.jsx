@@ -81,7 +81,7 @@ function AccessRoles() {
                     <td><Badge tone="n">{pageCount(r.nav_access)} page(s)</Badge></td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       <button className="btn sm ghost" onClick={() => setEditing({ ...r })}>Éditer</button>{" "}
-                      <button className="iconbtn del" title="Supprimer" onClick={() => onDelete(r)}>🗑</button>
+                      <button className="iconbtn del" title="Supprimer" onClick={() => onDelete(r)}><Icon name="trash" size={15} /></button>
                     </td>
                   </tr>
                 ))}

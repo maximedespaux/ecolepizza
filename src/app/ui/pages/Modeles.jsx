@@ -191,8 +191,8 @@ function Modeles() {
                   <td>{isEmarg ? <Badge tone="a">Émargement</Badge> : <span className="mono" style={{ fontSize: 12 }}>{t.doc_type || "—"}</span>}</td>
                   <td style={{ fontSize: 12 }}>
                     {isEmarg
-                      ? <span title="Stagiaire, et formateur/intervenant si activés">👤{t.config?.show_formateurs ? " 🧑‍🏫" : ""}{t.config?.show_intervenants ? " 👥" : ""}</span>
-                      : <>{t.signable ? <Badge tone="b">Signé</Badge> : <span style={{ color: "var(--dim)" }}>—</span>}{t.stagiaire_sign ? " 👤" : ""}</>}
+                      ? <span title="Stagiaire, et formateur/intervenant si activés" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="user" size={14} />{t.config?.show_formateurs ? <Icon name="graduation" size={14} /> : null}{t.config?.show_intervenants ? <Icon name="users" size={14} /> : null}</span>
+                      : <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{t.signable ? <Badge tone="b">Signé</Badge> : <span style={{ color: "var(--dim)" }}>—</span>}{t.stagiaire_sign ? <Icon name="user" size={13} /> : null}</span>}
                   </td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when, condBySlug)}</td>
                   <td>
