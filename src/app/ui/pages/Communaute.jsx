@@ -27,6 +27,8 @@ function Tags({ text }) {
   if (!tags.length) return null;
   return <div className="tag-row">{tags.map((t) => <span key={t} className="badge-tag">#{t}</span>)}</div>;
 }
+// Libellé affiché : la préparation n'a pas de « type », on montre son genre.
+const typeLabel = (s) => (s.kind === "PREPARATION" ? "Préparation" : s.type || (s.kind === "PATE" ? "Pâte" : ""));
 function costs(d) {
   const nb = Math.max(1, num(d.servings));
   const dough = ((num(d.paton_g) / 1000) / 1.68) * num(d.flour_price);
@@ -203,7 +205,7 @@ export default function Communaute() {
                     <div className="comm-main" onClick={() => setOpenId((cur) => (cur === s.id ? null : s.id))}>
                       <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
                         <b>{s.name}</b>
-                        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.type} · par {s.author_name || "Stagiaire"} · {s.updated_at}</span>
+                        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{typeLabel(s)} · par {s.author_name || "Stagiaire"} · {s.updated_at}</span>
                         <Tags text={s.description} />
                       </span>
                       <Icon name={openId === s.id ? "chevron-down" : "chevron-right"} size={16} />
@@ -237,7 +239,7 @@ export default function Communaute() {
                   </button>
                   <button className="btn sm primary" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes recettes"><Icon name="folder-check" size={13} /> Enregistrer</button>
                 </span>}>
-                <div className="hint" style={{ marginTop: -4 }}>{detail.type} · par {detail.author_name || "Stagiaire"}</div>
+                <div className="hint" style={{ marginTop: -4 }}>{typeLabel(detail)} · par {detail.author_name || "Stagiaire"}</div>
                 {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0" }}>{detail.description}</p>}
                 <Tags text={detail.description} />
                 {(() => { const c = costs(detail); return (
