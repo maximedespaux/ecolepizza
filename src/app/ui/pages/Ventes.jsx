@@ -216,10 +216,10 @@ function Ventes() {
                         </span>
                         <input type="number" min="1" max={l.stock} value={l.quantity} title="Quantité"
                           onChange={(e) => setLine(l.item_id, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-                          className="inp" style={{ width: 56 }} />
+                          className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} />
                         <input type="number" min="0" max="100" value={l.disc} title="Remise %"
                           onChange={(e) => setLine(l.item_id, { disc: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
-                          className="inp" style={{ width: 54 }} placeholder="%" />
+                          className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} placeholder="%" />
                         <span className="mono" style={{ width: 74, textAlign: "right" }}>{euro(ttc(l.unit_price * l.quantity * (1 - (l.disc || 0) / 100), tvaApplies ? l.tax_rate : 0))}</span>
                         <button className="iconbtn del" title="Retirer" onClick={() => removeLine(l.item_id)}><Icon name="trash" size={15} /></button>
                       </div>

@@ -1,4 +1,5 @@
 import { useContext, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMoneyMask, canRevealMoney, isRevealConfirmSkipped, setRevealConfirmSkip } from "../lib/moneyPrivacy.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { Icon } from "./Icon.jsx";
@@ -38,7 +39,7 @@ export default function MoneyToggle() {
         <Icon name={masked ? "eye" : "eye-off"} size={16} /> {masked ? "Afficher" : "Masquer"}
       </button>
 
-      {confirm && (
+      {confirm && createPortal(
         <div className="overlay" onClick={() => setConfirm(false)}>
           <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="mhead">
@@ -62,7 +63,8 @@ export default function MoneyToggle() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
