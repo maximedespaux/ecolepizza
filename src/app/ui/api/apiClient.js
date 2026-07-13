@@ -327,6 +327,7 @@ export function changeMyEmail(payload) {
 // Infos personnelles du stagiaire (modifiables, visibles de l'organisme).
 export function getMyInfos() { return request("/mon-espace/infos", { silent: true }); }
 export function updateMyInfos(payload) { return request("/mon-espace/infos", { method: "PUT", body: JSON.stringify(payload) }); }
+export function updateMyVisibility(visibility) { return request("/mon-espace/visibility", { method: "PUT", body: JSON.stringify({ visibility }) }); }
 
 // --- Stagiaires ---
 export function getStagiaires(q = "") {

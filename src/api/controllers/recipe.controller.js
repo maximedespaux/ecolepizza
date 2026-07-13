@@ -332,7 +332,7 @@ const authorProfile = async (req, res) => {
         const [[sc]] = await conn.query(
             "SELECT COUNT(*) AS n FROM recipe WHERE author_user_id = ? AND visibility = 'SHARED' AND organization_id = ?",
             [uid, req.user.organization_id]);
-        let avatar = null, likes = 0;
+        let avatar = null, likes = 0, company = null, phone = null, email = null;
         try { const [[lr]] = await conn.query('SELECT avatar FROM learner WHERE user_id = ? LIMIT 1', [uid]); if (lr) avatar = lr.avatar; } catch (e) { if (!noTable(e)) throw e; }
         try {
             const [[lk]] = await conn.query(
@@ -340,8 +340,19 @@ const authorProfile = async (req, res) => {
                 [uid, req.user.organization_id]);
             likes = lk.n;
         } catch (e) { if (!noTable(e)) throw e; }
+        // Champs optionnels selon la visibilité choisie par l'auteur (entreprise / téléphone / e-mail).
+        try {
+            const [[lv]] = await conn.query('SELECT id, company_id, phone, email, profile_visibility FROM learner WHERE user_id = ? LIMIT 1', [uid]);
+            if (lv) {
+                let v = lv.profile_visibility; if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
+                v = v || {};
+                if (v.company !== false && lv.company_id) { const [[c]] = await conn.query('SELECT name FROM company WHERE id = ?', [lv.company_id]); company = (c && c.name) || null; }
+                if (v.phone === true) phone = lv.phone || null;
+                if (v.email === true) email = lv.email || null;
+            }
+        } catch (e) { if (!noTable(e)) throw e; }
         const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Stagiaire';
-        res.json({ data: { id: uid, name, avatar, shared_count: sc.n, likes_received: likes } });
+        res.json({ data: { id: uid, name, avatar, shared_count: sc.n, likes_received: likes, company, phone, email } });
     } catch (err) {
         console.error('Erreur profil auteur :', err);
         res.status(500).json({ error: 'Internal Server Error' });

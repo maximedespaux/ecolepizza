@@ -57,10 +57,17 @@ function ProfileModal({ profile, loading, onClose }) {
             <>
               <span className="prof-ava" style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
               <div style={{ fontWeight: 800, fontSize: 18, marginTop: 10 }}>{profile.name}</div>
+              {profile.company && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>🏢 {profile.company}</div>}
               <div style={{ display: "flex", justifyContent: "center", gap: 22, marginTop: 16 }}>
                 <span><b style={{ fontSize: 18 }}>{profile.shared_count}</b><br /><span className="hint">fiche{profile.shared_count > 1 ? "s" : ""} partagée{profile.shared_count > 1 ? "s" : ""}</span></span>
                 <span><b style={{ fontSize: 18 }}>❤️ {profile.likes_received}</b><br /><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>
               </div>
+              {(profile.phone || profile.email) && (
+                <div style={{ marginTop: 16, textAlign: "left", display: "flex", flexDirection: "column", gap: 4 }}>
+                  {profile.phone && <span style={{ fontSize: 13 }}>📞 {profile.phone}</span>}
+                  {profile.email && <span style={{ fontSize: 13 }}>✉️ {profile.email}</span>}
+                </div>
+              )}
             </>
           )}
         </div>

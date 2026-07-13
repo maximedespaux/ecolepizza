@@ -438,10 +438,18 @@ const saveMyQuest = async (req, res) => {
 
 // --- Infos personnelles du stagiaire (modifiables par lui, visibles de l'organisme) ---
 // Champs que le stagiaire peut mettre à jour lui-même (l'e-mail et le mot de passe passent par /auth).
-const INFO_FIELDS = ['civility', 'first_name', 'last_name', 'phone', 'address', 'zip_code', 'town', 'birth_place'];
+const INFO_FIELDS = ['civility', 'first_name', 'last_name', 'phone', 'birth_place'];
 const clean = (v) => (v == null ? null : String(v).trim().slice(0, 255) || null);
 
-/** GET /api/mon-espace/infos — infos personnelles du stagiaire pour préremplir le formulaire. */
+// Visibilité du profil communauté : ce que les autres stagiaires peuvent voir.
+// Par défaut : entreprise visible, téléphone et e-mail masqués.
+const parseVisibility = (raw) => {
+    let v = raw; if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
+    v = v || {};
+    return { company: v.company !== false, phone: v.phone === true, email: v.email === true };
+};
+
+/** GET /api/mon-espace/infos — infos personnelles + entreprise + réglages de visibilité. */
 const getMyInfos = async (req, res) => {
     try {
         const conn = db.promise();
@@ -449,11 +457,34 @@ const getMyInfos = async (req, res) => {
         const [[u]] = await conn.query('SELECT email FROM user WHERE id = ?', [req.user.id]);
         const base = { email: (u && u.email) || '' };
         INFO_FIELDS.forEach((f) => { base[f] = (learner && learner[f]) || ''; });
-        // birthday au format YYYY-MM-DD pour <input type=date>.
         base.birthday = learner && learner.birthday ? new Date(learner.birthday).toISOString().slice(0, 10) : '';
+        // Entreprise (lecture seule) + visibilité (tolère l'absence de la colonne = migration 075).
+        base.company = '';
+        base.visibility = parseVisibility(null);
+        if (learner && learner.company_id) {
+            try { const [[c]] = await conn.query('SELECT name FROM company WHERE id = ?', [learner.company_id]); base.company = (c && c.name) || ''; } catch { /* ignore */ }
+        }
+        try { const [[lv]] = await conn.query('SELECT profile_visibility FROM learner WHERE id = ?', [learner ? learner.id : null]); if (lv) base.visibility = parseVisibility(lv.profile_visibility); } catch { /* migration 075 non jouée */ }
         res.json({ data: base });
     } catch (err) {
         console.error('Erreur lecture infos stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mon-espace/visibility — enregistre ce que les autres stagiaires voient. */
+const updateMyVisibility = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.json({ success: true });
+        const vis = parseVisibility(req.body && req.body.visibility);
+        try {
+            await conn.query('UPDATE learner SET profile_visibility = ? WHERE id = ?', [JSON.stringify(vis), learner.id]);
+        } catch (e) { return res.status(422).json({ message: 'Réglage de visibilité non initialisé (migration 075).' }); }
+        res.json({ success: true, visibility: vis });
+    } catch (err) {
+        console.error('Erreur visibilité profil :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -486,4 +517,4 @@ const updateMyInfos = async (req, res) => {
     }
 };
 
-module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest, getMyInfos, updateMyInfos };
+module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility };

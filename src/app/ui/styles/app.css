@@ -881,6 +881,11 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Communauté — liste des recettes partagées */
 .comm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border:none;background:none;border-bottom:1px solid var(--border-soft);cursor:pointer;color:var(--text)}
 .comm-row:hover,.comm-row.on{background:var(--surface2)}
+/* Réglages de visibilité du profil (cases à cocher) */
+.vis-list{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.vis-row{display:flex;align-items:center;gap:12px;padding:11px 12px;border-bottom:1px solid var(--border-soft);cursor:pointer}
+.vis-row:last-child{border-bottom:none}
+.vis-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--ember1);cursor:pointer}
 /* Pastille auteur cliquable + avatar de profil */
 .author-chip{display:inline-flex;align-items:center;gap:5px;border:none;background:none;padding:0;color:var(--ember1);font-size:12px;font-weight:600;cursor:pointer}
 .author-chip:hover{text-decoration:underline}

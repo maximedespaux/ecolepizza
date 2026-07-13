@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { getMyFormations, getMyInfos, updateMyInfos, changeMyEmail, changeMyPassword, getCurrentUser } from "../api/apiClient.js";
+import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import { initials } from "../lib/format.js";
 import { AVATARS, getAvatar, setAvatar, GRADES, gradeFor, readGameStats, scoreOf } from "../lib/gamification.js";
@@ -54,9 +54,10 @@ export default function ProfileModal({ onClose }) {
           </div>
 
           {/* Onglets */}
-          <span className="seg" style={{ marginBottom: 16 }}>
+          <span className="seg" style={{ marginBottom: 16, flexWrap: "wrap" }}>
             <button className={"seg-btn" + (tab === "profil" ? " on" : "")} onClick={() => setTab("profil")}>Profil</button>
             <button className={"seg-btn" + (tab === "infos" ? " on" : "")} onClick={() => setTab("infos")}>Mes infos</button>
+            <button className={"seg-btn" + (tab === "visibilite" ? " on" : "")} onClick={() => setTab("visibilite")}>Visibilité</button>
             <button className={"seg-btn" + (tab === "compte" ? " on" : "")} onClick={() => setTab("compte")}>Compte</button>
           </span>
 
@@ -64,6 +65,7 @@ export default function ProfileModal({ onClose }) {
             <ProfilTab avatar={avatar} choose={choose} grade={grade} next={next} score={score} pct={pct} xp={xp} stars={stars} done={done} enrolled={enrolled} />
           )}
           {tab === "infos" && <InfosTab onSaved={refreshUser} />}
+          {tab === "visibilite" && <VisibiliteTab who={who} />}
           {tab === "compte" && <CompteTab currentEmail={user?.email} onEmailChanged={refreshUser} />}
         </div>
         <div className="mfoot">
@@ -136,7 +138,7 @@ function InfosTab({ onSaved }) {
     try {
       await updateMyInfos({
         civility: f.civility, first_name: f.first_name, last_name: f.last_name, phone: f.phone,
-        birthday: f.birthday, birth_place: f.birth_place, address: f.address, zip_code: f.zip_code, town: f.town,
+        birthday: f.birthday, birth_place: f.birth_place,
       });
       setMsg({ ok: true, text: "Infos enregistrées. Elles sont aussi mises à jour côté organisme." });
       onSaved && onSaved();
@@ -157,13 +159,50 @@ function InfosTab({ onSaved }) {
         <div className="field"><label>Date de naissance</label><input className="inp" type="date" value={f.birthday || ""} onChange={set("birthday")} /></div>
         <div className="field"><label>Lieu de naissance</label><input className="inp" value={f.birth_place || ""} onChange={set("birth_place")} /></div>
       </div>
-      <div className="field"><label>Adresse</label><input className="inp" value={f.address || ""} onChange={set("address")} /></div>
-      <div className="grid cols-2" style={{ gap: 12 }}>
-        <div className="field"><label>Code postal</label><input className="inp" value={f.zip_code || ""} onChange={set("zip_code")} /></div>
-        <div className="field"><label>Ville</label><input className="inp" value={f.town || ""} onChange={set("town")} /></div>
-      </div>
+      {f.company ? <p className="hint" style={{ margin: "2px 0 10px" }}>Entreprise : <b>{f.company}</b> <span style={{ opacity: 0.7 }}>(gérée par ton organisme)</span></p> : null}
       {msg && <p className="hint" style={{ color: msg.ok ? "var(--green, #2f9e6f)" : "var(--ember1)", margin: "2px 0 10px" }}>{msg.text}</p>}
       <button className="btn primary" disabled={busy} onClick={save} style={{ width: "100%", justifyContent: "center" }}><Icon name="check" size={14} /> Enregistrer mes infos</button>
+    </div>
+  );
+}
+
+function VisibiliteTab({ who }) {
+  const [f, setF] = useState(null); // { company, phone, email, visibility, ... }
+  const [vis, setVis] = useState({ company: true, phone: false, email: false });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => { getMyInfos().then((r) => { setF(r.data || {}); setVis((r.data && r.data.visibility) || { company: true, phone: false, email: false }); }).catch(() => setF({})); }, []);
+  const toggle = (k) => setVis((v) => ({ ...v, [k]: !v[k] }));
+
+  async function save() {
+    setBusy(true); setMsg(null);
+    try { await updateMyVisibility(vis); setMsg({ ok: true, text: "Visibilité enregistrée." }); }
+    catch (e) { setMsg({ ok: false, text: e.message || "Échec." }); }
+    finally { setBusy(false); }
+  }
+
+  if (!f) return <p className="hint">Chargement…</p>;
+  const Row = ({ k, label, value }) => (
+    <label className="vis-row">
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <b style={{ fontSize: 13.5 }}>{label}</b>
+        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{value || "—"}</span>
+      </span>
+      <input type="checkbox" checked={!!vis[k]} onChange={() => toggle(k)} />
+    </label>
+  );
+
+  return (
+    <div>
+      <p className="hint" style={{ margin: "0 0 12px" }}>Choisis ce que les autres stagiaires voient sur ton profil dans la communauté. Ton nom, ton avatar, ton grade et tes fiches partagées restent toujours visibles.</p>
+      <div className="vis-list">
+        <Row k="company" label="Entreprise" value={f.company} />
+        <Row k="phone" label="Téléphone" value={f.phone} />
+        <Row k="email" label="Adresse e-mail" value={f.email} />
+      </div>
+      {msg && <p className="hint" style={{ color: msg.ok ? "var(--green, #2f9e6f)" : "var(--ember1)", margin: "8px 0 10px" }}>{msg.text}</p>}
+      <button className="btn primary" disabled={busy} onClick={save} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}><Icon name="check" size={14} /> Enregistrer la visibilité</button>
     </div>
   );
 }
