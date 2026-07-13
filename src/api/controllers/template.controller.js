@@ -254,6 +254,16 @@ function computedGroup() {
     return { group: 'Calculé / dates', tokens };
 }
 
+// Jetons « groupe entreprise » intégrés (non issus d'une colonne du dossier) : la liste
+// des stagiaires du groupe {Stagiaires}, insérable dans un modèle « Document entreprise ».
+function groupTokensGroup() {
+    const byKey = {};
+    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
+    const tokens = ['Stagiaires'].map((k) => byKey[k]).filter(Boolean)
+        .map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
+    return { group: 'Groupe entreprise', tokens };
+}
+
 // Jetons personnalisés de l'organisme (table custom_token). Résilient si migration absente.
 async function loadCustomTokens(orgId) {
     try {
@@ -271,6 +281,7 @@ const getTokens = async (req, res) => {
         // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
+        groups.push(groupTokensGroup());
         const defs = await loadCustomTokens(orgId);
         if (defs.length) groups.push({ group: 'Personnalisés', tokens: defs.map((d) => ({ key: `custom:${d.token_key}`, label: d.label, sample: '' })) });
         res.json({ data: groups });
