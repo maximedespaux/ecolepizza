@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
@@ -341,7 +342,7 @@ function ConditionsPanel({ conditions, catalog, onChanged, onCatalogChanged, onS
         Un champ doit être activé en <b>Condition</b> dans <b>Champs documents</b> pour apparaître ici.
       </p>
 
-      {showFields && (
+      {showFields && createPortal(
         <div className="overlay" onClick={closeFields}>
           <div className="modal" style={{ maxWidth: 760, width: "92%" }} onClick={(e) => e.stopPropagation()}>
             <div className="mhead">
@@ -359,7 +360,8 @@ function ConditionsPanel({ conditions, catalog, onChanged, onCatalogChanged, onS
               <button className="btn primary" onClick={async () => { await fieldsRef.current?.save(); onCatalogChanged?.(); }}>Enregistrer les champs</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {conditions.length > 0 && (
