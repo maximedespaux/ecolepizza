@@ -276,7 +276,7 @@ const getSessionBoard = async (req, res) => {
             [req.params.id, req.user.organization_id]
         );
         const condById = await loadConditionMap(conn, req.user.organization_id);
-        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id);
+        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id, 'condition');
         const factsMap = await loadDossierFactsMap(
             conn, req.user.organization_id, enr.map((e) => e.enrollment_id), fieldCatalog);
 

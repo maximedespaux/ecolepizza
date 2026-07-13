@@ -138,15 +138,23 @@ async function introspectFields(conn) {
     return out;
 }
 
-// État d'activation + libellés personnalisés (table condition_field). Tolère l'absence de table.
+// État d'activation (par usage : jeton / condition) + libellés (table condition_field).
+// Tolère l'absence de la table (migration conditions) et de la colonne enabled_condition (080).
 async function loadFieldSettings(conn, orgId) {
     const m = new Map();
+    const read = async (withCond) => {
+        const cols = withCond ? 'source_table, column_name, enabled, enabled_condition, label' : 'source_table, column_name, enabled, label';
+        const [rows] = await conn.query(`SELECT ${cols} FROM condition_field WHERE organization_id = ?`, [orgId]);
+        for (const r of rows) m.set(`${r.source_table}.${r.column_name}`, {
+            enabledToken: !!r.enabled,
+            // Repli : sans la colonne 080, l'usage condition suit l'ancien interrupteur unique.
+            enabledCondition: (r.enabled_condition == null) ? !!r.enabled : !!r.enabled_condition,
+            label: r.label || null,
+        });
+    };
     try {
-        const [rows] = await conn.query(
-            'SELECT source_table, column_name, enabled, label FROM condition_field WHERE organization_id = ?',
-            [orgId]
-        );
-        for (const r of rows) m.set(`${r.source_table}.${r.column_name}`, { enabled: !!r.enabled, label: r.label || null });
+        try { await read(true); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') { m.clear(); await read(false); } else throw e; }
     } catch (e) {
         if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e;
     }
@@ -160,18 +168,23 @@ async function getAllFields(conn, orgId) {
     return cols.map((f) => {
         const key = `${f.table}.${f.column}`;
         const s = settings.get(key);
+        const dflt = DEFAULT_ENABLED.has(key);
+        const enabledToken = s ? s.enabledToken : dflt;
+        const enabledCondition = s ? s.enabledCondition : dflt;
         return {
             key, table: f.table, tableLabel: TABLE_LABEL[f.table] || (f.table === 'virtual' ? 'Calculé' : f.table),
             column: f.column, type: f.type, options: f.options,
             label: (s && s.label) || f.label,
-            enabled: s ? s.enabled : DEFAULT_ENABLED.has(key),
+            enabled_token: enabledToken, enabled_condition: enabledCondition,
+            enabled: enabledToken, // rétro-compat (ancien drapeau unique = usage jeton)
         };
     });
 }
 
-// Catalogue ACTIVÉ (pour le sélecteur de conditions et l'évaluation).
-async function getEnabledFields(conn, orgId) {
-    return (await getAllFields(conn, orgId)).filter((f) => f.enabled);
+// Catalogue ACTIVÉ pour un USAGE : 'token' (jeton imprimable) ou 'condition' (test de parcours).
+async function getEnabledFields(conn, orgId, purpose = 'token') {
+    const flag = purpose === 'condition' ? 'enabled_condition' : 'enabled_token';
+    return (await getAllFields(conn, orgId)).filter((f) => f[flag]);
 }
 
 const norm = (v) => String(v == null ? '' : v).trim().toLowerCase();

@@ -100,7 +100,7 @@ const getParcours = async (req, res) => {
         if (e.program_id) {
             const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
             const [fieldCatalog, condById] = await Promise.all([
-                getEnabledFields(conn, req.user.organization_id),
+                getEnabledFields(conn, req.user.organization_id, 'condition'),
                 loadConditionMap(conn, req.user.organization_id),
             ]);
             const factsMap = await loadDossierFactsMap(conn, req.user.organization_id, [e.id], fieldCatalog);

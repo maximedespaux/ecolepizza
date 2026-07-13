@@ -31,7 +31,7 @@ const getSuivi = async (req, res) => {
         // Conditions + faits des dossiers chargés une seule fois pour toute la boucle.
         const condById = await loadConditionMap(conn, req.user.organization_id);
         const eqMap = equivalenceMap(await loadEquivalences(conn, req.user.organization_id));
-        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id);
+        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id, 'condition');
         const factsMap = await loadDossierFactsMap(
             conn, req.user.organization_id, enrollments.map((e) => e.enrollment_id), fieldCatalog);
 
