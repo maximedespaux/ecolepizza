@@ -38,6 +38,9 @@ export default function EntrepriseDetail() {
   // Rattacher un stagiaire existant à l'entreprise
   const [attachQ, setAttachQ] = useState("");
   const [attachRes, setAttachRes] = useState([]);
+  // Sélection de stagiaires rattachés à inscrire à une session
+  const [selected, setSelected] = useState(() => new Set());
+  const toggleSel = (lid) => setSelected((prev) => { const n = new Set(prev); n.has(lid) ? n.delete(lid) : n.add(lid); return n; });
 
   function load() {
     getCompany(id).then((r) => { setData(r.data); setForm(r.data || {}); }).catch((e) => setStatus({ type: "error", message: e.message }));
@@ -97,19 +100,10 @@ export default function EntrepriseDetail() {
     try { await registerCompanyStagiaires(id, { learner_ids: [s.id] }); setAttachQ(""); setAttachRes([]); load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
-  async function enrollOne(learnerId) {
-    if (!sessionId) { setStatus({ type: "error", message: "Choisis d'abord une session." }); return; }
-    try {
-      const r = await registerCompanyStagiaires(id, { session_id: sessionId, learner_ids: [learnerId] });
-      const c = (r.data?.created || [])[0];
-      setStatus({ type: "success", message: c && !c.enrolled ? "Déjà inscrit à cette session." : "Stagiaire ajouté à la session." });
-      load();
-    } catch (e) { setStatus({ type: "error", message: e.message }); }
-  }
   async function enrollSession() {
     if (!sessionId) { setStatus({ type: "error", message: "Choisis une session." }); return; }
-    const ids = (data?.learners || []).map((l) => l.id);
-    if (!ids.length) { setStatus({ type: "error", message: "Rattache d'abord des stagiaires à l'entreprise." }); return; }
+    const ids = (data?.learners || []).map((l) => l.id).filter((lid) => selected.has(lid));
+    if (!ids.length) { setStatus({ type: "error", message: "Sélectionne au moins un stagiaire." }); return; }
     setRegistering(true); setStatus(null); setResult(null);
     try {
       const r = await registerCompanyStagiaires(id, { session_id: sessionId, learner_ids: ids });
@@ -182,23 +176,23 @@ export default function EntrepriseDetail() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", marginBottom: 12 }}>
               {data.learners.map((l) => (
-                <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                <label key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border-soft)", cursor: "pointer" }}>
+                  <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleSel(l.id)} title="Sélectionner pour la session" />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{[l.civility, l.first_name, l.last_name].filter(Boolean).join(" ")}</b>
                     {l.email && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email}</span>}
                   </span>
                   <Badge tone={l.enrollment_count > 0 ? "b" : "n"}>{l.enrollment_count || 0} dossier{l.enrollment_count > 1 ? "s" : ""}</Badge>
-                  <button className="btn sm ghost" title="Ajouter à la session choisie" disabled={!sessionId} onClick={() => enrollOne(l.id)}><Icon name="plus" size={14} /> Session</button>
                   <Link className="btn sm ghost" to={`/stagiaires/${l.id}`}>Ouvrir</Link>
-                  <button className="btn sm ghost" title="Détacher de l'entreprise" onClick={() => detach(l.id)}><Icon name="x" size={14} /></button>
-                </div>
+                  <button className="btn sm ghost" title="Détacher de l'entreprise" onClick={(e) => { e.preventDefault(); detach(l.id); }}><Icon name="x" size={14} /></button>
+                </label>
               ))}
             </div>
           )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-            <button className="btn primary" onClick={enrollSession} disabled={registering || !sessionId || !(data.learners || []).length}>
-              <Icon name="check" size={15} /> Tout ajouter à la session
+            <button className="btn primary" onClick={enrollSession} disabled={registering || !sessionId || selected.size === 0}>
+              <Icon name="check" size={15} /> Ajouter la sélection à la session
             </button>
           </div>
 
