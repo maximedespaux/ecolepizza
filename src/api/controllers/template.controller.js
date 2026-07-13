@@ -516,37 +516,9 @@ const reorderTemplates = async (req, res) => {
     }
 };
 
-/** GET /api/templates/emargement-break — position du point d'accès émargement (seuil sort_order). */
-const getEmargementBreak = async (req, res) => {
-    try {
-        const [[o]] = await db.promise().query('SELECT emargement_break_order AS bo FROM organization WHERE id = ?', [req.user.organization_id]);
-        res.json({ data: { break_order: o && o.bo != null ? Number(o.bo) : null } });
-    } catch (err) {
-        if (err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE')) return res.json({ data: { break_order: null } });
-        console.error('Erreur lecture point émargement :', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
-
-/** PUT /api/templates/emargement-break — { break_order:number|null }. Définit/retire le point d'accès. */
-const setEmargementBreak = async (req, res) => {
-    try {
-        const raw = (req.body || {}).break_order;
-        const val = (raw === null || raw === undefined || raw === '') ? null : (Number.isFinite(Number(raw)) ? Number(raw) : null);
-        await db.promise().query('UPDATE organization SET emargement_break_order = ? WHERE id = ?', [val, req.user.organization_id]);
-        logAudit(req, 'template.emargement_break', 'Organization', String(val));
-        res.json({ success: true, break_order: val });
-    } catch (err) {
-        if (err && err.code === 'ER_BAD_FIELD_ERROR') return res.status(422).json({ message: "Point d'accès émargement non initialisé (migration 076)." });
-        console.error('Erreur enregistrement point émargement :', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
-
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
     getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
     loadCustomTokens, getCustomTokens, saveCustomTokens,
-    getEmargementBreak, setEmargementBreak,
 };

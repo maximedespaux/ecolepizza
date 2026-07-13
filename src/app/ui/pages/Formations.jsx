@@ -136,6 +136,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   });
   const [saving, setSaving] = useState(false);
   const [steps, setSteps] = useState([]);
+  const [breakSlug, setBreakSlug] = useState(null); // point d'accès émargement (slug avant la flèche)
   const [archiveTree, setArchiveTree] = useState({ folders: [] });
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
   const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives"
@@ -157,6 +158,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       if (r.data && r.data.needs_emargement != null) setForm((p) => ({ ...p, needs_emargement: r.data.needs_emargement ? 1 : 0 }));
       // horaires n'est pas renvoyé par la liste (getFormations) : on le charge ici.
       if (r.data && "horaires" in r.data) setForm((p) => ({ ...p, horaires: r.data.horaires || "" }));
+      setBreakSlug(r.data?.emargement_break_slug || null);
     }).catch(() => {});
   }, [program.id]);
   // Équivalences « OU » (org) : map slug -> groupe. Le regroupement est automatique.
@@ -186,7 +188,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
         onSaved("Formation créée.");
       } else {
         await updateFormation(program.id, form);
-        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })));
+        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null);
         await saveArchiveTree(program.id, archiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved("Formation mise à jour.");
       }
@@ -286,11 +288,13 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           <div style={{ display: tab === "parcours" ? "block" : "none" }}>
           <p className="hint" style={{ marginTop: 0 }}>
             Composez l'enchaînement des documents : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Glissez un bloc pour réordonner. Les QCM rattachés sont proposés à l'ajout.
+            <br />Clique sur une <b style={{ color: "var(--ember1)" }}>flèche 🚧</b> entre deux jalons pour placer le <b>point d'accès à l'émargement</b> : le stagiaire ne pourra émarger qu'après avoir signé tous ses documents situés avant ce point.
           </p>
           {steps.length === 0 ? (
             <p className="hint">Aucun document candidat.</p>
           ) : (
-            <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps} />
+            <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
+              breakSlug={breakSlug} onSetBreak={setBreakSlug} />
           )}
           </div>
 
@@ -354,7 +358,7 @@ function stepBadge(s) {
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
-function ParcoursFlow({ steps, eqMap, onToggle, onReorder }) {
+function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak }) {
   const included = steps.filter((s) => s.active);
   const available = steps.filter((s) => !s.active);
   const groups = groupMilestones(included, eqMap);
@@ -381,7 +385,12 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder }) {
   return (
     <div className="parcours" ref={addRef}>
       <div className="parcours-flow">
-        {groups.map((g, i) => (
+        {groups.map((g, i) => {
+          // Slug de rupture porté par ce jalon = dernière étape du groupe.
+          const gBreakSlug = g.steps[g.steps.length - 1].slug;
+          const brkHere = !!breakSlug && breakSlug === gBreakSlug;
+          const canBreak = typeof onSetBreak === "function";
+          return (
           <div className="pf-wrap" key={g.steps[0].slug}>
             <div className={"pf-node" + (gdrag === i ? " drag" : "")}
               draggable onDragStart={() => setGdrag(i)} onDragOver={(e) => e.preventDefault()}
@@ -398,9 +407,19 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder }) {
                 </div>
               ))}
             </div>
-            <span className="pf-arrow" aria-hidden="true">→</span>
+            {canBreak ? (
+              <button type="button" className={"pf-brk" + (brkHere ? " on" : "")}
+                title={brkHere ? "Retirer le point d'accès émargement" : "Placer ici le point d'accès à l'émargement (documents à gauche requis)"}
+                onClick={() => onSetBreak(brkHere ? null : gBreakSlug)}>
+                <span className="pf-brk-arrow" aria-hidden="true">→</span>
+                <span className="pf-brk-flag">🚧</span>
+              </button>
+            ) : (
+              <span className="pf-arrow" aria-hidden="true">→</span>
+            )}
           </div>
-        ))}
+          );
+        })}
         <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
           ＋ Ajouter une étape
         </button>

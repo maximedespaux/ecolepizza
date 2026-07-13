@@ -1,11 +1,11 @@
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
   getConditionCatalog, getConditions, createCondition, deleteCondition, getFieldValues,
   getEquivalences, createEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
-  reorderEmargementTemplates, getEmargementBreak, setEmargementBreak } from "../api/apiClient.js";
+  reorderEmargementTemplates } from "../api/apiClient.js";
 import { EMARG_DEFAULTS } from "./EmargementEditor.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -52,18 +52,7 @@ function Modeles() {
   const [catalog, setCatalog] = useState({ fields: [], operators: {} });
   const [emargItems, setEmargItems] = useState([]); // modèles de feuille d'émargement
   const [view, setView] = useState("documents");      // onglet : "documents" | "conditions"
-  const [breakOrder, setBreakOrder] = useState(null);  // point d'accès émargement (seuil sort_order)
   const condBySlug = Object.fromEntries(conditions.map((c) => [c.slug, c]));
-
-  // Place / retire le point d'accès à l'émargement entre deux étapes (clic sur la barre).
-  async function toggleBreak(order) {
-    const next = breakOrder === order ? null : order;
-    setBreakOrder(next);
-    try {
-      await setEmargementBreak(next);
-      setStatus({ type: "success", message: next == null ? "Point d'accès émargement retiré." : "Point d'accès émargement défini." });
-    } catch (e) { setStatus({ type: "error", message: e.message }); getEmargementBreak().then((r) => setBreakOrder(r.data?.break_order ?? null)).catch(() => {}); }
-  }
 
   async function load() {
     try { const { data } = await getTemplates(); setItems([...data].sort((a, b) => a.sort_order - b.sort_order)); }
@@ -81,7 +70,7 @@ function Modeles() {
   async function loadConditions() {
     try { const { data } = await getConditions(); setConditions(data || []); } catch { /* silencieux */ }
   }
-  useEffect(() => { load(); loadEmarg(); loadConditions(); getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {}); getEmargementBreak().then((r) => setBreakOrder(r.data?.break_order ?? null)).catch(() => {}); }, []);
+  useEffect(() => { load(); loadEmarg(); loadConditions(); getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {}); }, []);
 
   // Liste affichée : documents classiques + modèles d'émargement, triés par ordre.
   const allItems = [...items.map((t) => ({ ...t, kind: t.kind || "document" })), ...emargItems]
@@ -168,9 +157,6 @@ function Modeles() {
 
       {view === "documents" && (
       <Card title={`Étapes (${allItems.length})`}>
-        <p className="hint" style={{ margin: "0 0 10px" }}>
-          <b style={{ color: "var(--ember1)" }}>🚧 Accès émargement</b> — clique sur la <b>ligne pointillée entre deux étapes</b> pour placer le point à partir duquel le stagiaire peut émarger : il devra avoir signé tous ses documents situés au-dessus. {breakOrder != null ? "Un point est actuellement défini." : "Aucun point défini (émargement toujours accessible)."}
-        </p>
         <div className="tablewrap" style={{ border: "none" }}>
           <table>
             <thead>
@@ -187,10 +173,8 @@ function Modeles() {
             <tbody>
               {allItems.map((t) => {
                 const isEmarg = t.kind === "emargement";
-                const brkActive = breakOrder != null && Number(breakOrder) === Number(t.sort_order);
                 return (
-                <Fragment key={keyOf(t)}>
-                <tr
+                <tr key={keyOf(t)}
                   className={"drag-row" + (drag === keyOf(t) ? " dragging" : "")}
                   style={{ opacity: t.active ? 1 : 0.5 }}
                   draggable
@@ -228,18 +212,6 @@ function Modeles() {
                     </div>
                   </td>
                 </tr>
-                {/* Barre inter-étapes : point d'accès à l'émargement */}
-                <tr className="brk-gap">
-                  <td colSpan={7} style={{ padding: 0 }}>
-                    <button className={"brk-line" + (brkActive ? " on" : "")} onClick={() => toggleBreak(t.sort_order)}
-                      title={brkActive ? "Retirer le point d'accès émargement" : "Placer ici le point d'accès à l'émargement (le stagiaire devra avoir signé les documents au-dessus)"}>
-                      {brkActive
-                        ? <span className="brk-txt">🚧 Accès émargement — documents ci-dessus requis <span className="brk-x">✕ retirer</span></span>
-                        : <span className="brk-add">＋ point d'accès émargement ici</span>}
-                    </button>
-                  </td>
-                </tr>
-                </Fragment>
                 );
               })}
             </tbody>

@@ -415,6 +415,14 @@ const saveFormationSteps = async (req, res) => {
                     [req.params.id, quizId, req.user.organization_id]).catch(() => {});
             }
         }
+        // Point d'accès à l'émargement : slug de l'étape juste avant le point de rupture (ou null).
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'break_slug')) {
+            const bs = req.body.break_slug ? String(req.body.break_slug).trim().toLowerCase().slice(0, 191) : null;
+            try {
+                await conn.query('UPDATE training_program SET emargement_break_slug = ? WHERE id = ? AND organization_id = ?',
+                    [bs, req.params.id, req.user.organization_id]);
+            } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 076 non jouée
+        }
         res.json({ success: true, message: 'Parcours enregistré.' });
     } catch (err) {
         console.error('Erreur enregistrement parcours :', err);

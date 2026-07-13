@@ -1,7 +1,8 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { stepsToDocSet, stagiaireSignsDoc } = require('../lib/documents.js');
+const { stepsToDocSet, stagiaireSignsDoc, matchStep } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
+const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { encrypt } = require('../lib/crypto.js');
 
@@ -104,33 +105,42 @@ async function completionOf(conn, e, steps, agefice = false) {
     return { complete, dayPassed, signed, total };
 }
 
-// Accès à l'émargement : point de rupture positionné ENTRE deux étapes du parcours
-// (organization.emargement_break_order = seuil sort_order). Le stagiaire doit avoir signé
-// tous les documents qu'il doit signer dont sort_order <= seuil. Aucun seuil → aucun blocage.
+// Accès à l'émargement : point de rupture positionné ENTRE deux jalons du parcours DE LA
+// FORMATION (training_program.emargement_break_slug = slug de l'étape juste avant le point).
+// Le stagiaire doit avoir signé tous les documents qu'il doit signer situés à/avant ce point
+// (par sort_order du parcours de la formation). Aucun point → aucun blocage.
 // Renvoie { locked, need, done, break_label }.
-async function emargementGate(conn, e, orgId, steps, agefice = false) {
-    let threshold = null;
+async function emargementGate(conn, e, orgId, agefice = false) {
+    if (!e.program_id) return { locked: false, need: 0, done: 0, break_label: null };
+    let breakSlug = null;
     try {
-        const [[o]] = await conn.query('SELECT emargement_break_order AS bo FROM organization WHERE id = ?', [orgId]);
-        if (o && o.bo != null) threshold = Number(o.bo);
-    } catch { threshold = null; } // colonne absente (migration 076 non jouée)
-    if (threshold == null) return { locked: false, need: 0, done: 0, break_label: null };
+        const [[p]] = await conn.query('SELECT emargement_break_slug AS bs FROM training_program WHERE id = ?', [e.program_id]);
+        breakSlug = p && p.bs ? p.bs : null;
+    } catch { breakSlug = null; } // colonne absente (migration 076 non jouée)
+    if (!breakSlug) return { locked: false, need: 0, done: 0, break_label: null };
+
+    const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
+    const pSteps = await formationSteps(conn, orgId, program);
+    const brk = pSteps.find((s) => s.slug === breakSlug);
+    if (!brk) return { locked: false, need: 0, done: 0, break_label: null };
+    const threshold = Number(brk.sort_order);
 
     const ctx = { hygiene: !!e.program_hygiene, rsCode: e.program_rs, jours: e.program_days || 1, financing: e.financing, agefice };
-    const applicable = stepsToDocSet(steps, ctx);
-    const required = applicable.filter((d) => d.stagiaireSign && (d.sort_order == null || Number(d.sort_order) <= threshold));
-    // Étiquette : le dernier document requis avant le point de rupture.
-    const break_label = required.length ? required[required.length - 1].label : null;
+    const required = pSteps.filter((s) => s.active && s.stagiaire_sign
+        && s.doc_type !== 'QCM' && s.doc_type !== 'EMARGEMENT'
+        && matchStep(s.applies_when || {}, ctx)
+        && Number(s.sort_order) <= threshold);
+    const break_label = brk.label;
     if (!required.length) return { locked: false, need: 0, done: 0, break_label };
 
     const [rows] = await conn.query(
-        `SELECT gd.type, gd.status FROM generated_document gd
+        `SELECT gd.type, gd.template_slug, gd.status FROM generated_document gd
          JOIN document_formation df ON df.document_id = gd.id WHERE df.enrollment_id = ?`,
         [e.enrollment_id]
     );
-    const statusByType = {};
-    for (const r of rows) statusByType[r.type] = r.status;
-    const done = required.filter((d) => statusByType[d.type] === 'SIGNE').length;
+    const statusBySlug = {}, statusByType = {};
+    for (const r of rows) { if (r.template_slug) statusBySlug[r.template_slug] = r.status; statusByType[r.type] = r.status; }
+    const done = required.filter((s) => statusBySlug[s.slug] === 'SIGNE' || statusByType[s.doc_type] === 'SIGNE').length;
     return { locked: done < required.length, need: required.length, done, break_label };
 }
 
@@ -273,7 +283,7 @@ const getMyFormation = async (req, res) => {
         if (!learner) return res.status(404).json({ message: 'Fiche stagiaire introuvable.' });
 
         const [rows] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.financing, e.session_id,
+            `SELECT e.id AS enrollment_id, e.financing, e.session_id, s.program_id,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                     s.year, s.week,
@@ -292,7 +302,7 @@ const getMyFormation = async (req, res) => {
         const steps = await loadOrgSteps(learner.organization_id);
         const agefice = (learner.opco || "").toUpperCase() === "AGEFICE";
         const c = await completionOf(conn, e, steps, agefice);
-        const gate = await emargementGate(conn, e, learner.organization_id, steps, agefice);
+        const gate = await emargementGate(conn, e, learner.organization_id, agefice);
 
         // Sessions du MÊME programme suivies par ce stagiaire (onglets W23 / W25…).
         const [sessions] = e.session_id ? await conn.query(
