@@ -18,6 +18,7 @@
   --shadow-gold:0 8px 30px -10px rgba(252,185,0,.45);
 }
 [data-theme="light"]{
+  color-scheme:light; /* contrôles natifs (cases à cocher, radios…) rendus en clair, jamais le widget sombre de l'OS */
   --bg:#f5f6fb; --bg2:#eef0f8; --surface:#ffffff; --surface2:#f5f6fb; --surface3:#eaecf5;
   --glass:rgba(255,255,255,.82); --border:#e3e6f1; --border-soft:#eef0f7;
   --text:#1e2140; --muted:#5b6079; --dim:#9aa0bb;
@@ -30,6 +31,7 @@
   --cat-mkt:#009e73; --cat-ene:#56b4e9; --cat-div:#cc79a7;
 }
 [data-theme="dark"]{
+  color-scheme:dark; /* contrôles natifs rendus en sombre, cohérents avec le thème */
   --bg:#12142a; --bg2:#171a34; --surface:#1d2040; --surface2:#242848; --surface3:#2d3159;
   --glass:rgba(18,20,42,.72); --border:#343a63; --border-soft:#2a2f52;
   --text:#eef0fb; --muted:#a7add0; --dim:#727aa3;
@@ -49,6 +51,8 @@ h1,h2,h3,h4{font-family:var(--font-d);font-weight:600;letter-spacing:-.01em;marg
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer}
 input,select,textarea{font-family:inherit;font-size:14px;color:var(--text)}
+/* Cases à cocher / radios : teinte de la charte (coché), rendu propre au thème (décoché). */
+input[type=checkbox],input[type=radio]{accent-color:var(--ember1);cursor:pointer}
 .mono{font-family:var(--font-m)} .tnum{font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
