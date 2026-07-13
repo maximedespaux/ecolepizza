@@ -436,4 +436,54 @@ const saveMyQuest = async (req, res) => {
     }
 };
 
-module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest };
+// --- Infos personnelles du stagiaire (modifiables par lui, visibles de l'organisme) ---
+// Champs que le stagiaire peut mettre à jour lui-même (l'e-mail et le mot de passe passent par /auth).
+const INFO_FIELDS = ['civility', 'first_name', 'last_name', 'phone', 'address', 'zip_code', 'town', 'birth_place'];
+const clean = (v) => (v == null ? null : String(v).trim().slice(0, 255) || null);
+
+/** GET /api/mon-espace/infos — infos personnelles du stagiaire pour préremplir le formulaire. */
+const getMyInfos = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        const [[u]] = await conn.query('SELECT email FROM user WHERE id = ?', [req.user.id]);
+        const base = { email: (u && u.email) || '' };
+        INFO_FIELDS.forEach((f) => { base[f] = (learner && learner[f]) || ''; });
+        // birthday au format YYYY-MM-DD pour <input type=date>.
+        base.birthday = learner && learner.birthday ? new Date(learner.birthday).toISOString().slice(0, 10) : '';
+        res.json({ data: base });
+    } catch (err) {
+        console.error('Erreur lecture infos stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mon-espace/infos — met à jour les infos perso (learner + user, donc visibles de l'organisme). */
+const updateMyInfos = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        const b = req.body || {};
+        const vals = {};
+        INFO_FIELDS.forEach((f) => { if (b[f] !== undefined) vals[f] = clean(b[f]); });
+        const birthday = b.birthday !== undefined ? (b.birthday ? String(b.birthday).slice(0, 10) : null) : undefined;
+        if (learner) {
+            const sets = Object.keys(vals).map((f) => `${f} = ?`);
+            const params = Object.values(vals);
+            if (birthday !== undefined) { sets.push('birthday = ?'); params.push(birthday); }
+            if (sets.length) await conn.query(`UPDATE learner SET ${sets.join(', ')} WHERE id = ?`, [...params, learner.id]);
+        }
+        // Miroir sur le compte utilisateur (certaines vues organisme s'appuient dessus).
+        const uSets = []; const uParams = [];
+        if (vals.first_name !== undefined) { uSets.push('first_name = ?'); uParams.push(vals.first_name); }
+        if (vals.last_name !== undefined) { uSets.push('last_name = ?'); uParams.push(vals.last_name); }
+        if (vals.phone !== undefined) { uSets.push('phone = ?'); uParams.push(vals.phone); }
+        if (uSets.length) await conn.query(`UPDATE user SET ${uSets.join(', ')} WHERE id = ?`, [...uParams, req.user.id]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur mise à jour infos stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest, getMyInfos, updateMyInfos };

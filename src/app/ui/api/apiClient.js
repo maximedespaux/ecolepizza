@@ -320,6 +320,13 @@ export function logout() {
 export function changeMyPassword(payload) {
   return request("/auth/password", { method: "PATCH", body: JSON.stringify(payload) });
 }
+// L'utilisateur connecté change sa propre adresse e-mail (mot de passe actuel requis).
+export function changeMyEmail(payload) {
+  return request("/auth/email", { method: "PATCH", body: JSON.stringify(payload) });
+}
+// Infos personnelles du stagiaire (modifiables, visibles de l'organisme).
+export function getMyInfos() { return request("/mon-espace/infos", { silent: true }); }
+export function updateMyInfos(payload) { return request("/mon-espace/infos", { method: "PUT", body: JSON.stringify(payload) }); }
 
 // --- Stagiaires ---
 export function getStagiaires(q = "") {

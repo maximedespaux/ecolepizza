@@ -158,6 +158,34 @@ const changePassword = (req, res) => {
 };
 
 /**
+ * PATCH /api/auth/email — l'utilisateur change sa propre adresse e-mail
+ * (mot de passe actuel requis ; unicité vérifiée). Synchronise le stagiaire lié.
+ */
+const changeEmail = (req, res) => {
+    const { newEmail, currentPassword } = req.body || {};
+    const email = String(newEmail || '').trim().toLowerCase();
+    if (!email || !currentPassword) return res.status(400).json({ message: 'Nouvel e-mail et mot de passe actuel requis.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ message: 'Adresse e-mail invalide.' });
+
+    db.query('SELECT password FROM user WHERE id = ?', [req.user.id], async (err, results) => {
+        if (err) { console.error('Erreur changement e-mail :', err); return res.status(500).json({ error: 'Internal Server Error' }); }
+        if (results.length === 0) return res.status(404).json({ message: 'Utilisateur introuvable' });
+        const isMatch = await bcrypt.compare(currentPassword, results[0].password);
+        if (!isMatch) return res.status(401).json({ message: 'Mot de passe actuel incorrect.' });
+        db.query('SELECT id FROM user WHERE email = ? AND id <> ?', [email, req.user.id], (dErr, dup) => {
+            if (dErr) { console.error('Erreur unicité e-mail :', dErr); return res.status(500).json({ error: 'Internal Server Error' }); }
+            if (dup.length) return res.status(409).json({ message: 'Cette adresse e-mail est déjà utilisée.' });
+            db.query('UPDATE user SET email = ? WHERE id = ?', [email, req.user.id], (uErr) => {
+                if (uErr) { console.error('Erreur mise à jour e-mail :', uErr); return res.status(500).json({ error: 'Internal Server Error' }); }
+                db.query('UPDATE learner SET email = ? WHERE user_id = ?', [email, req.user.id], () => {
+                    res.json({ success: true, email });
+                });
+            });
+        });
+    });
+};
+
+/**
  * POST /api/auth/logout — supprime le cookie.
  */
 const logout = (req, res) => {
@@ -165,4 +193,4 @@ const logout = (req, res) => {
     return res.status(200).json({ success: true, message: 'Déconnexion réussie' });
 };
 
-module.exports = { userAuthentification, getCurrentUser, changePassword, logout };
+module.exports = { userAuthentification, getCurrentUser, changePassword, changeEmail, logout };

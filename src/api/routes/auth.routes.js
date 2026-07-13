@@ -1,5 +1,5 @@
 const express = require('express');
-const { userAuthentification, getCurrentUser, changePassword, logout } = require('../controllers/auth.controller.js');
+const { userAuthentification, getCurrentUser, changePassword, changeEmail, logout } = require('../controllers/auth.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 const { rateLimit } = require('../middlewares/rateLimit.js');
 
@@ -13,6 +13,7 @@ const passwordLimiter = rateLimit({ windowMs: 60000, max: 10, key: 'pwd' });
 router.post('/', loginLimiter, userAuthentification);
 router.get('/me', authenticateToken, getCurrentUser);
 router.patch('/password', authenticateToken, passwordLimiter, changePassword);
+router.patch('/email', authenticateToken, passwordLimiter, changeEmail);
 router.post('/logout', authenticateToken, logout);
 
 module.exports = router;
