@@ -223,8 +223,11 @@ const getRecipe = async (req, res) => {
             const [[lm]] = await conn.query('SELECT 1 AS l FROM recipe_like WHERE recipe_id = ? AND user_id = ?', [req.params.id, req.user.id]);
             liked = !!lm;
             const [cs] = await conn.query(
-                `SELECT id, user_id, author_name, body, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at
-                 FROM recipe_comment WHERE recipe_id = ? ORDER BY created_at`, [req.params.id]);
+                `SELECT c.id, c.user_id,
+                        COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), ''), c.author_name) AS author_name,
+                        c.body, DATE_FORMAT(c.created_at, '%Y-%m-%d %H:%i') AS created_at
+                 FROM recipe_comment c LEFT JOIN user u ON u.id = c.user_id
+                 WHERE c.recipe_id = ? ORDER BY c.created_at`, [req.params.id]);
             comments = cs.map((c) => ({ ...c, mine: c.user_id === req.user.id }));
         } catch (e) { if (!noTable(e)) throw e; }
         res.json({ data: { ...r, mine, ingredients: ings, like_count: likeCount, liked, comments } });
@@ -389,7 +392,9 @@ const addComment = async (req, res) => {
         if (r === null) return res.status(404).json({ message: 'Recette introuvable.' });
         if (r === false) return res.status(403).json({ message: 'Accès refusé.' });
         const id = crypto.randomUUID();
-        const name = authorName(req.user);
+        // Nom réel (Nom Prénom) depuis le compte, plutôt que le repli e-mail de req.user.
+        const [[au]] = await conn.query('SELECT first_name AS f, last_name AS l FROM user WHERE id = ?', [req.user.id]);
+        const name = (au ? [au.f, au.l].filter(Boolean).join(' ').trim() : '') || authorName(req.user);
         await conn.query('INSERT INTO recipe_comment (id, recipe_id, user_id, author_name, body) VALUES (?, ?, ?, ?, ?)',
             [id, req.params.id, req.user.id, name, body]);
         res.status(201).json({ data: { id, user_id: req.user.id, author_name: name, body, mine: true } });
