@@ -327,7 +327,7 @@ const authorProfile = async (req, res) => {
     try {
         const conn = db.promise();
         const uid = req.params.userId;
-        const [[u]] = await conn.query('SELECT first_name, last_name FROM user WHERE id = ?', [uid]);
+        const [[u]] = await conn.query('SELECT first_name, last_name, email, phone FROM user WHERE id = ?', [uid]);
         if (!u) return res.status(404).json({ message: 'Auteur introuvable.' });
         const [[sc]] = await conn.query(
             "SELECT COUNT(*) AS n FROM recipe WHERE author_user_id = ? AND visibility = 'SHARED' AND organization_id = ?",
@@ -347,8 +347,9 @@ const authorProfile = async (req, res) => {
                 let v = lv.profile_visibility; if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
                 v = v || {};
                 if (v.company !== false && lv.company_id) { const [[c]] = await conn.query('SELECT name FROM company WHERE id = ?', [lv.company_id]); company = (c && c.name) || null; }
-                if (v.phone === true) phone = lv.phone || null;
-                if (v.email === true) email = lv.email || null;
+                // Mêmes sources que l'onglet « Mes infos » : e-mail = compte utilisateur, téléphone = stagiaire (repli utilisateur).
+                if (v.phone === true) phone = lv.phone || u.phone || null;
+                if (v.email === true) email = u.email || lv.email || null;
             }
         } catch (e) { if (!noTable(e)) throw e; }
         const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Stagiaire';
