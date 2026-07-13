@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getStagiaire, createStagiaire, updateStagiaire, getOpcos, getFormations } from "../api/apiClient.js";
+import { getStagiaire, createStagiaire, updateStagiaire, getOpcos, getFormations, getCompanies, createCompany } from "../api/apiClient.js";
 import { Field, SelectField } from "./Field.jsx";
 import { OPCOS } from "../lib/opco.js";
 import { colorForLevel, setBadgeColors } from "../lib/levels.js";
@@ -16,12 +16,8 @@ const EMPTY = {
   diploma_level: "", diploma_name: "", diploma_year: "", last_experience: "",
   experience_value: "", experience_unit: "", professional_status: "", cpf_amount: "",
   france_travail_id: "", current_contract: "", social_security: "",
-  financing: "PARTICULIER", levels: "",
+  financing: "PARTICULIER", levels: "", company_id: "",
   project_creation: false, project_takeover: false, project_oven: false, project_truck: false, project_job: false,
-  company: {
-    name: "", legal_status: "", siret: "", naf_ape: "", address: "", zip_code: "", town: "",
-    email: "", phone: "", opco: "", representative_civ: "", representative_name: "", representative_role: "",
-  },
 };
 
 const BOOL_FIELDS = ["project_creation", "project_takeover", "project_oven", "project_truck", "project_job"];
@@ -29,16 +25,12 @@ const dateOnly = (v) => (v ? String(v).slice(0, 10) : "");
 
 function toForm(d) {
   const form = { ...EMPTY };
-  for (const k of Object.keys(EMPTY)) {
-    if (k === "company") continue;
-    form[k] = d[k] ?? "";
-  }
+  for (const k of Object.keys(EMPTY)) form[k] = d[k] ?? "";
   for (const b of BOOL_FIELDS) form[b] = !!d[b];
   form.contacted_at = dateOnly(d.contacted_at);
   form.birthday = dateOnly(d.birthday);
   form.financing = d.financing || "PARTICULIER";
-  form.company = { ...EMPTY.company };
-  if (d.company) for (const k of Object.keys(EMPTY.company)) form.company[k] = d.company[k] ?? "";
+  form.company_id = d.company_id || (d.company && d.company.id) || "";
   return form;
 }
 
@@ -53,8 +45,11 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   const [loading, setLoading] = useState(!!id);
   const [opcos, setOpcos] = useState([]);
   const [formations, setFormations] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [newCo, setNewCo] = useState(null); // formulaire compact « nouvelle entreprise » (ou null)
 
   useEffect(() => { getOpcos().then((r) => setOpcos(r.data || [])).catch(() => {}); }, []);
+  useEffect(() => { getCompanies().then((r) => setCompanies(r.data || [])).catch(() => {}); }, []);
   useEffect(() => {
     getFormations().then((r) => {
       const list = r.data || [];
@@ -80,7 +75,16 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
     s.has(code) ? s.delete(code) : s.add(code);
     return { ...p, levels: [...s].join(",") };
   });
-  const setCompany = (k) => (e) => setForm((p) => ({ ...p, company: { ...p.company, [k]: e.target.value } }));
+  async function saveNewCompany() {
+    if (!newCo.name.trim()) { onError?.("Nom de l'entreprise requis."); return; }
+    try {
+      const r = await createCompany(newCo);
+      const list = (await getCompanies()).data || [];
+      setCompanies(list);
+      setForm((p) => ({ ...p, company_id: r.data?.id || p.company_id }));
+      setNewCo(null);
+    } catch (e) { onError?.(e.message); }
+  }
   const codeColor = (code) => {
     const f = formations.find((x) => x.code === code);
     return (f && f.color) || colorForLevel(code);
@@ -95,9 +99,8 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
     if (!String(form.first_name).trim() || !String(form.last_name).trim()) { onError?.("Prénom et nom requis."); return; }
     setSaving(true);
     try {
-      const { company, ...learner } = form;
-      const payload = { ...learner };
-      if (isPro && company.name) payload.company = company;
+      // On lie l'entreprise via sa FK (company_id) : plus de saisie dupliquée par stagiaire.
+      const payload = { ...form, company_id: isPro ? (form.company_id || null) : null };
       if (id) {
         await updateStagiaire(id, payload);
         onSaved?.("Stagiaire mis à jour.");
@@ -233,39 +236,33 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
               {isPro && (
                 <>
                   <div className="divider" />
-                  <h3 style={{ fontSize: 15, marginBottom: 10 }}>Informations entreprise</h3>
-                  <div className="row3">
-                    <Field label="Nom de l'entreprise" value={form.company.name} onChange={setCompany("name")} />
-                    <SelectField label="Statut d'entreprise" value={form.company.legal_status} onChange={setCompany("legal_status")}>
-                      <option value="">—</option>
-                      {STATUTS_ENTREPRISE.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </SelectField>
-                    <Field label="SIRET" value={form.company.siret} onChange={setCompany("siret")} />
-                  </div>
-                  <div className="row3">
-                    <Field label="Adresse" value={form.company.address} onChange={setCompany("address")} />
-                    <Field label="Code postal" value={form.company.zip_code} onChange={setCompany("zip_code")} />
-                    <Field label="Ville" value={form.company.town} onChange={setCompany("town")} />
-                  </div>
-                  <div className="row3">
-                    <Field label="Téléphone" value={form.company.phone} onChange={setCompany("phone")} />
-                    <Field label="Email" type="email" value={form.company.email} onChange={setCompany("email")} />
-                    <Field label="Code NAF/APE" value={form.company.naf_ape} onChange={setCompany("naf_ape")} />
-                  </div>
-                  <div className="row3">
-                    <SelectField label="Représentant (civilité)" value={form.company.representative_civ} onChange={setCompany("representative_civ")}>
-                      <option value="">—</option>
-                      {CIVILITES.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </SelectField>
-                    <Field label="Représentant (nom & prénom)" value={form.company.representative_name} onChange={setCompany("representative_name")} />
-                    <Field label="Fonction" value={form.company.representative_role} onChange={setCompany("representative_role")} />
-                  </div>
+                  <h3 style={{ fontSize: 15, marginBottom: 4 }}>Entreprise</h3>
+                  <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>Rattache le stagiaire à une entreprise. Ses coordonnées (SIRET, adresse, représentant, OPCO…) se gèrent dans la section <b>Entreprises</b> et servent aux documents.</p>
                   <div className="row2">
-                    <SelectField label="OPCO / financeur" value={form.company.opco} onChange={setCompany("opco")}>
-                      <option value="">— Sélectionner —</option>
-                      {[...new Set([...(form.company.opco ? [form.company.opco] : []), ...opcoNames])].map((o) => <option key={o} value={o}>{o}</option>)}
+                    <SelectField label="Entreprise rattachée" value={form.company_id} onChange={set("company_id")}>
+                      <option value="">— Aucune —</option>
+                      {companies.map((c) => <option key={c.id} value={c.id}>{c.name}{c.town ? ` · ${c.town}` : ""}</option>)}
                     </SelectField>
+                    <div style={{ display: "flex", alignItems: "flex-end" }}>
+                      {!newCo && <button type="button" className="btn ghost" onClick={() => setNewCo({ name: "", siret: "", town: "", representative_name: "" })}>＋ Nouvelle entreprise</button>}
+                    </div>
                   </div>
+                  {newCo && (
+                    <div className="card" style={{ padding: 12, marginTop: 4 }}>
+                      <div className="row3">
+                        <Field label="Nom *" value={newCo.name} onChange={(e) => setNewCo((n) => ({ ...n, name: e.target.value }))} />
+                        <Field label="SIRET" value={newCo.siret} onChange={(e) => setNewCo((n) => ({ ...n, siret: e.target.value }))} />
+                        <Field label="Ville" value={newCo.town} onChange={(e) => setNewCo((n) => ({ ...n, town: e.target.value }))} />
+                      </div>
+                      <div className="row2">
+                        <Field label="Représentant (nom & prénom)" value={newCo.representative_name} onChange={(e) => setNewCo((n) => ({ ...n, representative_name: e.target.value }))} />
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                        <button type="button" className="btn sm ghost" onClick={() => setNewCo(null)}>Annuler</button>
+                        <button type="button" className="btn sm primary" onClick={saveNewCompany}>Créer &amp; rattacher</button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </form>
