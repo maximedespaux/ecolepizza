@@ -154,9 +154,12 @@ export default function EntrepriseDetail() {
             {attachRes.length > 0 && (
               <div className="cat-pop" style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 5, marginTop: 4 }}>
                 {attachRes.map((s) => (
-                  <button key={s.id} type="button" className="cat-opt" onClick={() => attachExisting(s)}>
-                    <b>{[s.first_name, s.last_name].filter(Boolean).join(" ")}</b>{s.email && <span className="hint"> · {s.email}</span>}
-                  </button>
+                  <div key={s.id} className="cat-opt" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <b>{[s.first_name, s.last_name].filter(Boolean).join(" ")}</b>{s.email && <span className="hint"> · {s.email}</span>}
+                    </span>
+                    <button type="button" className="btn sm primary" title="Rattacher à l'entreprise" onClick={() => attachExisting(s)}><Icon name="plus" size={14} /></button>
+                  </div>
                 ))}
               </div>
             )}
