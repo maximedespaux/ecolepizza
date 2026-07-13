@@ -211,9 +211,6 @@ function Login() {
             </button>
           </form>
 
-          <p className="login-hint">
-            Compte de démonstration : <b>admin@ecole-pizza.com</b> / <b>impasto123</b>
-          </p>
         </div>
       </section>
     </div>
