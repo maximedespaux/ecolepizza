@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
@@ -272,6 +272,7 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
   const [editingId, setEditingId] = useState(null); // condition en cours de modification (ou null)
   const [saving, setSaving] = useState(false);
   const [suggestions, setSuggestions] = useState([]); // valeurs existantes pour ce champ
+  const formRef = useRef(null);
 
   const curField = fields.find((f) => f.key === field);
   const ops = curField ? (operators[curField.type] || []) : [];
@@ -299,6 +300,8 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
     setValue(Array.isArray(c.value) ? c.value.join(", ") : (c.value ?? ""));
     setSuggestions([]);
     if (c.field && f && f.type === "text") getFieldValues(c.field).then((r) => setSuggestions(r.data || [])).catch(() => {});
+    // Le formulaire est sous le tableau : on l'amène à l'écran pour montrer le remplissage.
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
   }
 
   async function save() {
@@ -351,12 +354,15 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
         </div>
       )}
 
+      <div ref={formRef} style={editingId ? { border: "1px solid var(--ember1)", borderRadius: 12, padding: 12, background: "var(--surface2)" } : null}>
+      {editingId && <p className="hint" style={{ margin: "0 0 8px", color: "var(--ember1)", fontWeight: 700 }}>✎ Modification de « {conditions.find((c) => c.id === editingId)?.label || label} »</p>}
       <div className="row2" style={{ alignItems: "end" }}>
         <div className="field"><label>Intitulé</label>
           <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ex. Stagiaire mineur" /></div>
         <div className="field"><label>Champ du dossier</label>
           <select value={field} onChange={(e) => pickField(e.target.value)}>
             <option value="">Choisir…</option>
+            {field && !fields.some((f) => f.key === field) && <option value={field}>{field} (champ désactivé)</option>}
             {fieldGroups.map((g) => (
               <optgroup key={g.label} label={g.label}>
                 {g.items.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
@@ -391,6 +397,7 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
       <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
         <button className="btn primary" disabled={saving} onClick={save}>{editingId ? "Enregistrer la condition" : "＋ Ajouter la condition"}</button>
         {editingId && <button className="btn ghost" disabled={saving} onClick={resetForm}>Annuler</button>}
+      </div>
       </div>
     </Card>
   );
