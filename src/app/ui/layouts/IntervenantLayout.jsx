@@ -1,10 +1,12 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Outlet, Navigate, NavLink } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 import ChangePasswordModal from "../components/ChangePasswordModal.jsx";
+import ProfileModal from "../components/ProfileModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
+import { getAvatar, AVATAR_EVENT, hydrateProfile } from "../lib/gamification.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -13,6 +15,15 @@ const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 function IntervenantLayout() {
   const { user, isConnected, isLoading, logout } = useContext(UserContext);
   const [pwOpen, setPwOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [avatar, setAvatar] = useState(() => getAvatar(user?.id));
+  useEffect(() => {
+    const sync = () => setAvatar(getAvatar(user?.id));
+    sync();
+    window.addEventListener(AVATAR_EVENT, sync);
+    return () => window.removeEventListener(AVATAR_EVENT, sync);
+  }, [user?.id]);
+  useEffect(() => { if (user?.id) hydrateProfile(user.id); }, [user?.id]);
 
   if (isLoading) {
     return (
@@ -39,13 +50,17 @@ function IntervenantLayout() {
         <div className="spacer" />
         <ThemeToggle />
         <button className="btn sm ghost" onClick={() => setPwOpen(true)} title="Changer mon mot de passe"><Icon name="key" size={15} /> Mot de passe</button>
-        <div className="avatar" title={`${user?.first_name} ${user?.last_name}`}>{initials(user?.first_name, user?.last_name)}</div>
+        <button className="avatar" title="Mon profil" onClick={() => setProfileOpen(true)}
+          style={{ border: "none", cursor: "pointer", ...(avatar ? { background: avatar.color, fontSize: 18 } : null) }}>
+          {avatar ? avatar.emoji : initials(user?.first_name, user?.last_name)}
+        </button>
         <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion"><Icon name="power" size={18} /></button>
       </header>
       <main className="content" style={{ maxWidth: 900 }}>
         <Outlet />
       </main>
       {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
+      {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </div>
   );
 }

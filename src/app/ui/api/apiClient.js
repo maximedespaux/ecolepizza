@@ -320,6 +320,14 @@ export function logout() {
 export function changeMyPassword(payload) {
   return request("/auth/password", { method: "PATCH", body: JSON.stringify(payload) });
 }
+// L'utilisateur connecté change sa propre adresse e-mail (mot de passe actuel requis).
+export function changeMyEmail(payload) {
+  return request("/auth/email", { method: "PATCH", body: JSON.stringify(payload) });
+}
+// Infos personnelles du stagiaire (modifiables, visibles de l'organisme).
+export function getMyInfos() { return request("/mon-espace/infos", { silent: true }); }
+export function updateMyInfos(payload) { return request("/mon-espace/infos", { method: "PUT", body: JSON.stringify(payload) }); }
+export function updateMyVisibility(visibility) { return request("/mon-espace/visibility", { method: "PUT", body: JSON.stringify({ visibility }) }); }
 
 // --- Stagiaires ---
 export function getStagiaires(q = "") {
@@ -523,6 +531,39 @@ export function getMyFormations() {
 export function getMyFormation(id) {
   return request(`/mon-espace/formations/${id}`);
 }
+
+// Profil ludique du stagiaire (avatar + progression Pizza Quest), persisté en base.
+export function getMyProfile() {
+  return request("/mon-espace/profile", { silent: true });
+}
+export function saveMyAvatar(avatar) {
+  return request("/mon-espace/avatar", { method: "PUT", body: JSON.stringify({ avatar }), silent: true });
+}
+export function saveMyQuest(progress) {
+  return request("/mon-espace/quest", { method: "PUT", body: JSON.stringify({ progress }), silent: true });
+}
+
+// --- Fiches techniques (recettes) + catalogue d'ingrédients ---
+export function searchCatalog(arg) {
+  const p = typeof arg === "string" ? { q: arg } : (arg || {});
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(p)) if (v != null && v !== "") qs.set(k, v);
+  return request(`/recipes/catalog?${qs.toString()}`, { silent: true });
+}
+export function getCatalogFamilies() { return request("/recipes/catalog/families", { silent: true }); }
+export function getCatalogBrands() { return request("/recipes/catalog/brands", { silent: true }); }
+export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
+export function getSharedRecipes() { return request("/recipes/shared"); }
+export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }
+export function getAuthorProfile(userId) { return request(`/recipes/author/${userId}`, { silent: true }); }
+export function likeRecipe(id) { return request(`/recipes/${id}/like`, { method: "POST" }); }
+export function addRecipeComment(id, body) { return request(`/recipes/${id}/comments`, { method: "POST", body: JSON.stringify({ body }) }); }
+export function updateRecipeComment(id, cid, body) { return request(`/recipes/${id}/comments/${cid}`, { method: "PUT", body: JSON.stringify({ body }) }); }
+export function deleteRecipeComment(id, cid) { return request(`/recipes/${id}/comments/${cid}`, { method: "DELETE" }); }
+export function getRecipe(id) { return request(`/recipes/${id}`); }
+export function createRecipe(payload) { return request("/recipes", { method: "POST", body: JSON.stringify(payload) }); }
+export function updateRecipe(id, payload) { return request(`/recipes/${id}`, { method: "PUT", body: JSON.stringify(payload) }); }
+export function deleteRecipe(id) { return request(`/recipes/${id}`, { method: "DELETE" }); }
 
 // --- Documents ---
 export function getLearnerDocuments(learnerId) {
@@ -741,25 +782,3 @@ export function deleteContribution(id) {
   return request(`/partenaires/contributions/${id}`, { method: "DELETE" });
 }
 
-// --- Mercuriale (liste de prix de référence, comparaison multi-magasins) ---
-export function getMercuriale() {
-  return request("/mercuriale");
-}
-export function createMercStore(name) {
-  return request("/mercuriale/stores", { method: "POST", body: JSON.stringify({ name }) });
-}
-export function deleteMercStore(id) {
-  return request(`/mercuriale/stores/${id}`, { method: "DELETE" });
-}
-export function createMercItem(payload) {
-  return request("/mercuriale/items", { method: "POST", body: JSON.stringify(payload) });
-}
-export function updateMercItem(id, payload) {
-  return request(`/mercuriale/items/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
-}
-export function deleteMercItem(id) {
-  return request(`/mercuriale/items/${id}`, { method: "DELETE" });
-}
-export function setMercPrice(itemId, storeId, payload) {
-  return request(`/mercuriale/items/${itemId}/prices/${storeId}`, { method: "PUT", body: JSON.stringify(payload) });
-}

@@ -6,7 +6,7 @@ import ChangePasswordModal from "../components/ChangePasswordModal.jsx";
 import ProfileModal from "../components/ProfileModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
-import { getAvatar, AVATAR_EVENT } from "../lib/gamification.js";
+import { getAvatar, AVATAR_EVENT, hydrateProfile } from "../lib/gamification.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 
@@ -17,7 +17,7 @@ function OutilsMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const loc = useLocation();
-  const active = ["/atelier", "/fiche-recette"].some((p) => loc.pathname.startsWith(p));
+  const active = ["/fiche-recette", "/communaute"].some((p) => loc.pathname.startsWith(p));
   useEffect(() => {
     const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", onDoc);
@@ -31,10 +31,8 @@ function OutilsMenu() {
       </button>
       {open && (
         <div className="stu-menu">
-          <NavLink to="/atelier" className="stu-menu-item"><Icon name="settings" size={15} /> Atelier pâte</NavLink>
-          <NavLink to="/fiche-recette" className="stu-menu-item"><Icon name="list-checks" size={15} /> Fiche recette</NavLink>
-          <span className="stu-menu-item disabled"><Icon name="table" size={15} /> Mercuriale <span className="soon">bientôt</span></span>
-          <span className="stu-menu-item disabled"><Icon name="users" size={15} /> Communauté <span className="soon">bientôt</span></span>
+          <NavLink to="/fiche-recette" className="stu-menu-item"><Icon name="list-checks" size={15} /> Fiche technique</NavLink>
+          <NavLink to="/communaute" className="stu-menu-item"><Icon name="users" size={15} /> Communauté</NavLink>
         </div>
       )}
     </span>
@@ -53,6 +51,8 @@ function StudentLayout() {
     window.addEventListener(AVATAR_EVENT, sync);
     return () => window.removeEventListener(AVATAR_EVENT, sync);
   }, [user?.id]);
+  // Charge le profil (avatar + progression) depuis la base et le fusionne au local.
+  useEffect(() => { if (user?.id) hydrateProfile(user.id); }, [user?.id]);
 
   if (isLoading) {
     return (

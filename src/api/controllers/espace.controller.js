@@ -361,4 +361,189 @@ const signMyEmargement = async (req, res) => {
     }
 };
 
-module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement };
+// --- Profil ludique du stagiaire (avatar + progression Pizza Quest) ---
+// Persistance en base de ce qui vivait en localStorage. Tolérant à l'absence de la
+// migration 070 (renvoie un profil vide / no-op au lieu d'échouer).
+
+const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
+const AVATAR_IDS = new Set(['pizza','chef','flame','wheat','tomato','cheese','olive','chili','mushroom','bread','chef2','chef3','basil','oven',
+    'burger','fries','pasta','salad','egg','bacon','shrimp','sushi','taco','hotdog','sandwich','croissant','pretzel','avocado','pepper','corn','grapes','lemon','icecream','coffee']);
+
+/** GET /api/mon-espace/profile — avatar + progression { world: { step: stars } } + XP. */
+const getMyProfile = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: "Aucune fiche stagiaire liée à ce compte." });
+        let avatar = null, progress = {}, xp = 0, stars = 0;
+        try {
+            const [[l]] = await conn.query('SELECT avatar FROM learner WHERE id = ?', [learner.id]);
+            avatar = (l && l.avatar) || null;
+            const [rows] = await conn.query('SELECT world, step, stars FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
+            for (const r of rows) {
+                (progress[r.world] ||= {})[r.step] = r.stars;
+                stars += r.stars; xp += r.stars * 10;
+            }
+        } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : profil vide
+        res.json({ data: { avatar, progress, xp, stars } });
+    } catch (err) {
+        console.error('Erreur profil stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mon-espace/avatar — { avatar }. */
+const saveMyAvatar = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        const avatar = req.body && req.body.avatar;
+        if (avatar != null && avatar !== '') {
+            const [id, color] = String(avatar).split('|'); // "id" ou "id|#rrggbb"
+            if (!AVATAR_IDS.has(id)) return res.status(422).json({ message: 'Avatar inconnu.' });
+            if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) return res.status(422).json({ message: 'Couleur invalide.' });
+        }
+        try { await conn.query('UPDATE learner SET avatar = ? WHERE id = ?', [avatar || null, learner.id]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur avatar stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mon-espace/quest — { progress: { world: { step: stars } } } (upsert, meilleur score). */
+const saveMyQuest = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        const progress = (req.body && req.body.progress) || {};
+        try {
+            for (const [world, steps] of Object.entries(progress)) {
+                if (!steps || typeof steps !== 'object') continue;
+                for (const [step, starsRaw] of Object.entries(steps)) {
+                    const stars = Math.max(0, Math.min(3, parseInt(starsRaw, 10) || 0));
+                    await conn.query(
+                        `INSERT INTO learner_quest_progress (id, organization_id, learner_id, world, step, stars)
+                         VALUES (?, ?, ?, ?, ?, ?)
+                         ON DUPLICATE KEY UPDATE stars = GREATEST(stars, VALUES(stars))`,
+                        [crypto.randomUUID(), learner.organization_id, learner.id, String(world).slice(0, 60), String(step).slice(0, 60), stars]
+                    );
+                }
+            }
+        } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : no-op
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur progression Pizza Quest :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+// --- Infos personnelles du stagiaire (modifiables par lui, visibles de l'organisme) ---
+// Champs que le stagiaire peut mettre à jour lui-même (l'e-mail et le mot de passe passent par /auth).
+const INFO_FIELDS = ['civility', 'first_name', 'last_name', 'phone', 'birth_place'];
+const clean = (v) => (v == null ? null : String(v).trim().slice(0, 255) || null);
+
+// Visibilité du profil communauté : ce que les autres stagiaires peuvent voir.
+// Par défaut : entreprise visible, téléphone et e-mail masqués.
+const parseVisibility = (raw) => {
+    let v = raw; if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
+    v = v || {};
+    return { company: v.company !== false, phone: v.phone === true, email: v.email === true };
+};
+
+/** GET /api/mon-espace/infos — infos personnelles + entreprise + réglages de visibilité. */
+const getMyInfos = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        const [[u]] = await conn.query('SELECT email FROM user WHERE id = ?', [req.user.id]);
+        const base = { email: (u && u.email) || '' };
+        INFO_FIELDS.forEach((f) => { base[f] = (learner && learner[f]) || ''; });
+        base.birthday = learner && learner.birthday ? new Date(learner.birthday).toISOString().slice(0, 10) : '';
+        // Entreprise (modifiable par le stagiaire) + visibilité.
+        base.company = ''; base.company_address = ''; base.company_zip = ''; base.company_town = '';
+        base.visibility = parseVisibility(null);
+        if (learner && learner.company_id) {
+            try {
+                const [[c]] = await conn.query('SELECT name, address, zip_code, town FROM company WHERE id = ?', [learner.company_id]);
+                if (c) { base.company = c.name || ''; base.company_address = c.address || ''; base.company_zip = c.zip_code || ''; base.company_town = c.town || ''; }
+            } catch { /* ignore */ }
+        }
+        try { const [[lv]] = await conn.query('SELECT profile_visibility FROM learner WHERE id = ?', [learner ? learner.id : null]); if (lv) base.visibility = parseVisibility(lv.profile_visibility); } catch { /* migration 075 non jouée */ }
+        res.json({ data: base });
+    } catch (err) {
+        console.error('Erreur lecture infos stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mon-espace/visibility — enregistre ce que les autres stagiaires voient. */
+const updateMyVisibility = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.json({ success: true });
+        const vis = parseVisibility(req.body && req.body.visibility);
+        try {
+            await conn.query('UPDATE learner SET profile_visibility = ? WHERE id = ?', [JSON.stringify(vis), learner.id]);
+        } catch (e) { return res.status(422).json({ message: 'Réglage de visibilité non initialisé (migration 075).' }); }
+        res.json({ success: true, visibility: vis });
+    } catch (err) {
+        console.error('Erreur visibilité profil :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mon-espace/infos — met à jour les infos perso (learner + user, donc visibles de l'organisme). */
+const updateMyInfos = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        const b = req.body || {};
+        const vals = {};
+        INFO_FIELDS.forEach((f) => { if (b[f] !== undefined) vals[f] = clean(b[f]); });
+        const birthday = b.birthday !== undefined ? (b.birthday ? String(b.birthday).slice(0, 10) : null) : undefined;
+        if (learner) {
+            const sets = Object.keys(vals).map((f) => `${f} = ?`);
+            const params = Object.values(vals);
+            if (birthday !== undefined) { sets.push('birthday = ?'); params.push(birthday); }
+            if (sets.length) await conn.query(`UPDATE learner SET ${sets.join(', ')} WHERE id = ?`, [...params, learner.id]);
+        }
+        // Miroir sur le compte utilisateur (certaines vues organisme s'appuient dessus).
+        const uSets = []; const uParams = [];
+        if (vals.first_name !== undefined) { uSets.push('first_name = ?'); uParams.push(vals.first_name); }
+        if (vals.last_name !== undefined) { uSets.push('last_name = ?'); uParams.push(vals.last_name); }
+        if (vals.phone !== undefined) { uSets.push('phone = ?'); uParams.push(vals.phone); }
+        if (uSets.length) await conn.query(`UPDATE user SET ${uSets.join(', ')} WHERE id = ?`, [...uParams, req.user.id]);
+        // Entreprise du stagiaire : mise à jour, ou création si aucune n'est encore liée.
+        if (learner) {
+            const cvals = {};
+            if (b.company_name !== undefined) cvals.name = clean(b.company_name);
+            if (b.company_address !== undefined) cvals.address = clean(b.company_address);
+            if (b.company_zip !== undefined) cvals.zip_code = clean(b.company_zip);
+            if (b.company_town !== undefined) cvals.town = clean(b.company_town);
+            if (Object.keys(cvals).length) {
+                if (learner.company_id) {
+                    const cs = Object.keys(cvals).map((k) => `${k} = ?`);
+                    await conn.query(`UPDATE company SET ${cs.join(', ')} WHERE id = ?`, [...Object.values(cvals), learner.company_id]);
+                } else if (cvals.name) {
+                    const cid = crypto.randomUUID();
+                    const cols = Object.keys(cvals);
+                    await conn.query(
+                        `INSERT INTO company (id, organization_id, ${cols.join(', ')}) VALUES (?, ?, ${cols.map(() => '?').join(', ')})`,
+                        [cid, learner.organization_id, ...Object.values(cvals)]);
+                    await conn.query('UPDATE learner SET company_id = ? WHERE id = ?', [cid, learner.id]);
+                }
+            }
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur mise à jour infos stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility };
