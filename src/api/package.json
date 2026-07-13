@@ -31,5 +31,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
+  },
+  "overrides": {
+    "crypto-js": "^4.2.0"
   }
 }
