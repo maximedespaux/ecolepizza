@@ -760,4 +760,84 @@ const deleteDocument = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument };
+// ---- Signature d'un « créneau » (multi-signataires) + lien de signature partageable ----
+
+// Rend le corps HTML d'un document (pour l'aperçu public d'un signataire externe). null si .docx.
+async function renderDocumentHtml(conn, orgId, doc) {
+    const slug = doc.template_slug;
+    const content = slug ? await getTemplateContent(orgId, slug) : null;
+    if (!content || content.kind === 'docx' || content.kind === 'emargement') return null;
+    const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
+    return renderTemplateHtml(content.html, ctx, { title: doc.title, headerHtml: content.header, footerHtml: content.footer });
+}
+
+/**
+ * Enregistre la signature d'un créneau (document_signature) puis re-scelle le PDF
+ * (signataire du créneau PUIS organisme, en incrémental) et passe le document à SIGNÉ.
+ * Utilisé pour la signature du représentant d'une entreprise via un lien partageable.
+ */
+async function applySlotSignature(conn, orgId, doc, { slot, label, signerName, signatureData, ip, userAgent }) {
+    const hash = crypto.createHash('sha256').update(String(signatureData || '') + doc.id + slot).digest('hex');
+    const encSig = encrypt(signatureData || null);
+    const [ex] = await conn.query('SELECT id FROM document_signature WHERE document_id = ? AND slot = ?', [doc.id, slot]);
+    if (ex.length) {
+        await conn.query(
+            'UPDATE document_signature SET label = ?, signer_name = ?, signature_data = ?, signer_ip = ?, signer_user_agent = ?, signed_hash = ?, signed_at = NOW() WHERE id = ?',
+            [label, signerName, encSig, encrypt(ip || ''), encrypt((userAgent || '').slice(0, 400)), hash, ex[0].id]);
+    } else {
+        await conn.query(
+            `INSERT INTO document_signature (id, organization_id, document_id, slot, label, signer_name, signature_data, signer_ip, signer_user_agent, signed_hash, signed_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [crypto.randomUUID(), orgId, doc.id, slot, label, signerName, encSig, encrypt(ip || ''), encrypt((userAgent || '').slice(0, 400)), hash]);
+    }
+    // Re-scelle le PDF (signataire du créneau + contre-signature organisme).
+    const slug = doc.template_slug;
+    const content = slug ? await getTemplateContent(orgId, slug) : null;
+    if (content && content.kind !== 'emargement') {
+        const { signPdf, generateSelfSignedP12 } = require('../lib/pdfseal.js');
+        const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
+        let pdf = await composeDocPdf(conn, { doc, ctx, slug, content });
+        const repP12 = generateSelfSignedP12(signerName || 'Signataire');
+        pdf = await signPdf(pdf, repP12, { name: signerName || 'Signataire', reason: label || 'Signature', incremental: false });
+        let count = 1;
+        try {
+            const orgSteps = await loadOrgSteps(orgId);
+            if (orgSignsDoc(orgSteps, doc)) {
+                const org = ctx.org || {};
+                const orgName = org.legal_name || org.short_name || 'Organisme';
+                const orgP12 = await getOrgSigner(conn, orgId, orgName);
+                pdf = await signPdf(pdf, orgP12, { name: orgName, reason: "Signature de l'organisme", contact: org.email || '', location: org.town || '', incremental: true });
+                count = 2;
+            }
+        } catch (e) { console.error('Contre-signature organisme ignorée :', e.message); }
+        await storeSignedPdf(conn, orgId, doc.id, pdf, count);
+    }
+    await conn.query("UPDATE generated_document SET status = 'SIGNE', signed_at = NOW(), signer_name = ? WHERE id = ?", [signerName, doc.id]);
+}
+
+/** POST /api/documents/:id/sign-link — crée un lien de signature partageable (créneau). */
+const createSignLink = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[doc]] = await conn.query('SELECT id FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        if (!doc) return res.status(404).json({ message: 'Document introuvable.' });
+        const slot = String((req.body || {}).slot || 'representant').slice(0, 60);
+        const label = String((req.body || {}).label || 'Signature du représentant').slice(0, 120);
+        const token = crypto.randomBytes(32).toString('base64url');
+        try {
+            await conn.query(
+                'INSERT INTO document_sign_link (token, organization_id, document_id, slot, label, expires_at) VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 DAY))',
+                [token, req.user.organization_id, doc.id, slot, label]);
+        } catch (e) {
+            if (e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR')) return res.status(422).json({ message: 'Liens de signature non initialisés (migration 078).' });
+            throw e;
+        }
+        logAudit(req, 'document.sign_link', 'GeneratedDocument', doc.id);
+        res.status(201).json({ data: { token } });
+    } catch (err) {
+        console.error('Erreur création lien de signature :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, clientIp };

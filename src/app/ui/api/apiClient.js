@@ -385,6 +385,12 @@ export function getCompanyDocuments(id, sessionId) {
 export function createCompanyDocument(id, payload) {
   return request(`/companies/${id}/documents`, { method: "POST", body: JSON.stringify(payload) });
 }
+// Lien de signature partageable (représentant entreprise). createSignLink → { token }.
+export function createSignLink(documentId, payload = {}) {
+  return request(`/documents/${documentId}/sign-link`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function getPublicSignDoc(token) { return request(`/public/sign/${token}`, { silent: true }); }
+export function submitPublicSign(token, payload) { return request(`/public/sign/${token}`, { method: "POST", body: JSON.stringify(payload) }); }
 
 // --- Formations ---
 export function getFormations() {

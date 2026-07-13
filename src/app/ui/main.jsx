@@ -17,6 +17,7 @@ import Stagiaires from "./pages/Stagiaires.jsx";
 import StagiaireDetail from "./pages/StagiaireDetail.jsx";
 import Entreprises from "./pages/Entreprises.jsx";
 import EntrepriseDetail from "./pages/EntrepriseDetail.jsx";
+import SignerPublic from "./pages/SignerPublic.jsx";
 import Formations from "./pages/Formations.jsx";
 import Quiz from "./pages/Quiz.jsx";
 import Sessions from "./pages/Sessions.jsx";
@@ -118,6 +119,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/signer/:token" element={<SignerPublic />} />
 
       {isPlatform ? (
         // --- Console plateforme (revente : gestion des organismes) ---

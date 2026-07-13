@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  getCompanyDocTemplates, getCompanyDocuments, createCompanyDocument, sendDocument, documentPdfUrl } from "../api/apiClient.js";
+  getCompanyDocTemplates, getCompanyDocuments, createCompanyDocument, sendDocument, documentPdfUrl, createSignLink } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -87,6 +87,14 @@ export default function EntrepriseDetail() {
   async function previewDoc(docId) {
     try { const url = await documentPdfUrl(docId); window.open(url, "_blank"); }
     catch (e) { setStatus({ type: "error", message: e.message || "Aperçu indisponible." }); }
+  }
+  async function makeSignLink(docId) {
+    try {
+      const r = await createSignLink(docId, {});
+      const url = `${window.location.origin}/signer/${r.data.token}`;
+      try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
+      setStatus({ type: "success", message: `Lien de signature du représentant copié : ${url}` });
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   const DOC_STATUS = { A_FAIRE: ["À envoyer", "n"], ENVOYE: ["Envoyé", "a"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"] };
 
@@ -233,6 +241,7 @@ export default function EntrepriseDetail() {
                       <span style={{ flex: 1, minWidth: 0 }}><b>{d.title}</b></span>
                       <Badge tone={tone}>{lbl}</Badge>
                       <button className="btn sm ghost" onClick={() => previewDoc(d.id)}>Aperçu</button>
+                      {d.status !== "SIGNE" && <button className="btn sm ghost" title="Copier un lien pour que le représentant signe" onClick={() => makeSignLink(d.id)}>🔗 Lien signature</button>}
                       {d.status === "A_FAIRE" && <button className="btn sm primary" onClick={() => sendDoc(d.id)}>Envoyer</button>}
                     </div>
                   );

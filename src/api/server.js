@@ -21,6 +21,7 @@ const partnerRoutes = require('./routes/partner.routes.js');
 const espaceRoutes = require('./routes/espace.routes.js');
 const recipeRoutes = require('./routes/recipe.routes.js');
 const documentRoutes = require('./routes/document.routes.js');
+const publicRoutes = require('./routes/public.routes.js');
 const suiviRoutes = require('./routes/suivi.routes.js');
 const organizationRoutes = require('./routes/organization.routes.js');
 const saleRoutes = require('./routes/sale.routes.js');
@@ -123,6 +124,9 @@ app.use('/api/platform', platformRoutes);
 app.use('/api/opcos', opcoRoutes);
 app.use('/api/access-profiles', accessProfileRoutes);
 app.use('/api/events', eventsRoutes);
+
+// PUBLIC (sans authentification) : lien de signature partageable.
+app.use('/api/public', publicRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impasto-api' }));
 
