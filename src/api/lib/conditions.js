@@ -31,6 +31,7 @@ function isExcludedColumn(name) {
 const VIRTUALS = [
     { key: 'virtual.age', table: 'virtual', column: 'age', label: 'Âge du stagiaire', type: 'number' },
     { key: 'virtual.has_company', table: 'virtual', column: 'has_company', label: 'Rattaché à une entreprise', type: 'bool' },
+    { key: 'virtual.certifiante', table: 'virtual', column: 'certifiante', label: 'Formation certifiante (RS/RNCP)', type: 'bool' },
 ];
 
 // Champs SPÉCIAUX (non introspectés). La signature de l'organisme est une image (jeton),
@@ -51,7 +52,7 @@ const DEFAULT_ENABLED = new Set([
     'organization.siret', 'organization.vat_number', 'organization.nda', 'organization.naf_ape',
     'organization.address', 'organization.zip_code', 'organization.town',
     'organization.phone', 'organization.email', 'organization.signature_image',
-    'virtual.age', 'virtual.has_company',
+    'virtual.age', 'virtual.has_company', 'virtual.certifiante',
 ]);
 
 // Opérateurs disponibles selon le type de champ.
@@ -210,10 +211,12 @@ async function loadDossierFactsMap(conn, orgId, enrollmentIds, catalog) {
     const real = catalog.filter((f) => f.table !== 'virtual' && f.type !== 'image' && /^[a-z0-9_]+$/.test(f.column) && TABLE_ALIAS[f.table]);
     const needAge = catalog.some((f) => f.key === 'virtual.age');
     const needCompany = catalog.some((f) => f.key === 'virtual.has_company');
+    const needCertif = catalog.some((f) => f.key === 'virtual.certifiante');
 
     const selects = real.map((f, i) => `${TABLE_ALIAS[f.table]}.\`${f.column}\` AS c${i}`);
     if (needAge) selects.push('l.birthday AS __birthday');
     if (needCompany) selects.push('e.company_id AS __company_id');
+    if (needCertif) selects.push('p.rs_code AS __rs_code');
 
     const [rows] = await conn.query(
         `SELECT e.id AS __eid${selects.length ? ', ' + selects.join(', ') : ''}
@@ -236,6 +239,7 @@ async function loadDossierFactsMap(conn, orgId, enrollmentIds, catalog) {
         });
         if (needAge) facts['virtual.age'] = computeAge(r.__birthday);
         if (needCompany) facts['virtual.has_company'] = !!r.__company_id;
+        if (needCertif) facts['virtual.certifiante'] = !!String(r.__rs_code == null ? '' : r.__rs_code).trim();
         map.set(r.__eid, facts);
     }
     return map;
