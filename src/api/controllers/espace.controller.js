@@ -458,11 +458,14 @@ const getMyInfos = async (req, res) => {
         const base = { email: (u && u.email) || '' };
         INFO_FIELDS.forEach((f) => { base[f] = (learner && learner[f]) || ''; });
         base.birthday = learner && learner.birthday ? new Date(learner.birthday).toISOString().slice(0, 10) : '';
-        // Entreprise (lecture seule) + visibilité (tolère l'absence de la colonne = migration 075).
-        base.company = '';
+        // Entreprise (modifiable par le stagiaire) + visibilité.
+        base.company = ''; base.company_address = ''; base.company_zip = ''; base.company_town = '';
         base.visibility = parseVisibility(null);
         if (learner && learner.company_id) {
-            try { const [[c]] = await conn.query('SELECT name FROM company WHERE id = ?', [learner.company_id]); base.company = (c && c.name) || ''; } catch { /* ignore */ }
+            try {
+                const [[c]] = await conn.query('SELECT name, address, zip_code, town FROM company WHERE id = ?', [learner.company_id]);
+                if (c) { base.company = c.name || ''; base.company_address = c.address || ''; base.company_zip = c.zip_code || ''; base.company_town = c.town || ''; }
+            } catch { /* ignore */ }
         }
         try { const [[lv]] = await conn.query('SELECT profile_visibility FROM learner WHERE id = ?', [learner ? learner.id : null]); if (lv) base.visibility = parseVisibility(lv.profile_visibility); } catch { /* migration 075 non jouée */ }
         res.json({ data: base });
@@ -510,6 +513,27 @@ const updateMyInfos = async (req, res) => {
         if (vals.last_name !== undefined) { uSets.push('last_name = ?'); uParams.push(vals.last_name); }
         if (vals.phone !== undefined) { uSets.push('phone = ?'); uParams.push(vals.phone); }
         if (uSets.length) await conn.query(`UPDATE user SET ${uSets.join(', ')} WHERE id = ?`, [...uParams, req.user.id]);
+        // Entreprise du stagiaire : mise à jour, ou création si aucune n'est encore liée.
+        if (learner) {
+            const cvals = {};
+            if (b.company_name !== undefined) cvals.name = clean(b.company_name);
+            if (b.company_address !== undefined) cvals.address = clean(b.company_address);
+            if (b.company_zip !== undefined) cvals.zip_code = clean(b.company_zip);
+            if (b.company_town !== undefined) cvals.town = clean(b.company_town);
+            if (Object.keys(cvals).length) {
+                if (learner.company_id) {
+                    const cs = Object.keys(cvals).map((k) => `${k} = ?`);
+                    await conn.query(`UPDATE company SET ${cs.join(', ')} WHERE id = ?`, [...Object.values(cvals), learner.company_id]);
+                } else if (cvals.name) {
+                    const cid = crypto.randomUUID();
+                    const cols = Object.keys(cvals);
+                    await conn.query(
+                        `INSERT INTO company (id, organization_id, ${cols.join(', ')}) VALUES (?, ?, ${cols.map(() => '?').join(', ')})`,
+                        [cid, learner.organization_id, ...Object.values(cvals)]);
+                    await conn.query('UPDATE learner SET company_id = ? WHERE id = ?', [cid, learner.id]);
+                }
+            }
+        }
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur mise à jour infos stagiaire :', err);

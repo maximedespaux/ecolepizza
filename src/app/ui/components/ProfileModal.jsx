@@ -139,6 +139,7 @@ function InfosTab({ onSaved }) {
       await updateMyInfos({
         civility: f.civility, first_name: f.first_name, last_name: f.last_name, phone: f.phone,
         birthday: f.birthday, birth_place: f.birth_place,
+        company_name: f.company, company_address: f.company_address, company_zip: f.company_zip, company_town: f.company_town,
       });
       setMsg({ ok: true, text: "Infos enregistrées. Elles sont aussi mises à jour côté organisme." });
       onSaved && onSaved();
@@ -159,7 +160,14 @@ function InfosTab({ onSaved }) {
         <div className="field"><label>Date de naissance</label><input className="inp" type="date" value={f.birthday || ""} onChange={set("birthday")} /></div>
         <div className="field"><label>Lieu de naissance</label><input className="inp" value={f.birth_place || ""} onChange={set("birth_place")} /></div>
       </div>
-      {f.company ? <p className="hint" style={{ margin: "2px 0 10px" }}>Entreprise : <b>{f.company}</b> <span style={{ opacity: 0.7 }}>(gérée par ton organisme)</span></p> : null}
+
+      <div style={{ fontSize: 13, fontWeight: 700, margin: "6px 0 8px" }}>Entreprise</div>
+      <div className="field"><label>Nom de l'entreprise</label><input className="inp" value={f.company || ""} onChange={set("company")} placeholder="Ex. Pizzeria Bella" /></div>
+      <div className="field"><label>Adresse de l'entreprise</label><input className="inp" value={f.company_address || ""} onChange={set("company_address")} /></div>
+      <div className="grid cols-2" style={{ gap: 12 }}>
+        <div className="field"><label>Code postal</label><input className="inp" value={f.company_zip || ""} onChange={set("company_zip")} /></div>
+        <div className="field"><label>Ville</label><input className="inp" value={f.company_town || ""} onChange={set("company_town")} /></div>
+      </div>
       {msg && <p className="hint" style={{ color: msg.ok ? "var(--green, #2f9e6f)" : "var(--ember1)", margin: "2px 0 10px" }}>{msg.text}</p>}
       <button className="btn primary" disabled={busy} onClick={save} style={{ width: "100%", justifyContent: "center" }}><Icon name="check" size={14} /> Enregistrer mes infos</button>
     </div>
