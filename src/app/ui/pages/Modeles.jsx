@@ -39,6 +39,8 @@ function condLabel(a = {}, condBySlug = {}) {
 function condValueLabel(c) {
   if (c.op === "is_true") return "= Oui";
   if (c.op === "is_false") return "= Non";
+  if (c.op === "is_not_empty") return "est renseigné";
+  if (c.op === "is_empty") return "est vide";
   const v = Array.isArray(c.value) ? c.value.join(", ") : c.value;
   return `${c.op} ${v ?? ""}`.trim();
 }
@@ -283,7 +285,7 @@ function ConditionsPanel({ conditions, catalog, onChanged, onCatalogChanged, onS
 
   const curField = fields.find((f) => f.key === field);
   const ops = curField ? (operators[curField.type] || []) : [];
-  const needsValue = op && op !== "is_true" && op !== "is_false";
+  const needsValue = op && !["is_true", "is_false", "is_empty", "is_not_empty"].includes(op);
 
   function pickField(k) {
     setField(k);

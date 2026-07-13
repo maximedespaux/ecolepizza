@@ -60,12 +60,17 @@ const OPERATORS = {
     text: [
         { value: 'eq', label: 'est' }, { value: 'ne', label: "n'est pas" },
         { value: 'in', label: 'parmi' }, { value: 'contains', label: 'contient' },
+        { value: 'is_not_empty', label: 'est renseigné' }, { value: 'is_empty', label: 'est vide' },
     ],
-    enum: [{ value: 'eq', label: 'est' }, { value: 'ne', label: "n'est pas" }, { value: 'in', label: 'parmi' }],
+    enum: [
+        { value: 'eq', label: 'est' }, { value: 'ne', label: "n'est pas" }, { value: 'in', label: 'parmi' },
+        { value: 'is_not_empty', label: 'est renseigné' }, { value: 'is_empty', label: 'est vide' },
+    ],
     number: [
         { value: 'eq', label: '=' }, { value: 'ne', label: '≠' },
         { value: 'lt', label: '<' }, { value: 'le', label: '≤' },
         { value: 'gt', label: '>' }, { value: 'ge', label: '≥' }, { value: 'in', label: 'parmi' },
+        { value: 'is_not_empty', label: 'est renseigné' }, { value: 'is_empty', label: 'est vide' },
     ],
     bool: [{ value: 'is_true', label: 'Oui' }, { value: 'is_false', label: 'Non' }],
     image: [], // image (signature) : jeton uniquement, non conditionnable
@@ -261,6 +266,8 @@ function evalCondition(cond, facts = {}) {
         case 'ge': return Number(v) >= Number(val);
         case 'is_true': return truthy(v);
         case 'is_false': return !truthy(v);
+        case 'is_empty': return norm(v) === '';
+        case 'is_not_empty': return norm(v) !== '';
         default: return true;
     }
 }
@@ -284,7 +291,7 @@ function validateCondition(catalog, { field, op, value }) {
     if (!OPS_ALL.has(op)) return { ok: false, error: 'Opérateur invalide.' };
     const allowed = new Set((OPERATORS[f.type] || []).map((o) => o.value));
     if (!allowed.has(op)) return { ok: false, error: `Opérateur incompatible avec « ${f.label} ».` };
-    if (op === 'is_true' || op === 'is_false') return { ok: true, value: null };
+    if (['is_true', 'is_false', 'is_empty', 'is_not_empty'].includes(op)) return { ok: true, value: null };
     if (op === 'in') {
         const arr = Array.isArray(value) ? value
             : String(value || '').split(',').map((s) => s.trim()).filter(Boolean);
