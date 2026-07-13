@@ -42,7 +42,6 @@ export default function EntrepriseDetail() {
   const [registering, setRegistering] = useState(false);
   const [result, setResult] = useState(null); // { created: [...] }
   // Documents « entreprise »
-  const [docSession, setDocSession] = useState("");
   const [docTemplates, setDocTemplates] = useState([]);
   const [companyDocs, setCompanyDocs] = useState([]);
   const [pickTpl, setPickTpl] = useState("");
@@ -64,19 +63,19 @@ export default function EntrepriseDetail() {
   useEffect(() => { getOpcos().then((r) => setOpcoNames((r.data || []).map((o) => o.name).filter(Boolean))).catch(() => {}); }, []);
 
   // Documents entreprise : modèles applicables + docs déjà générés pour la session choisie.
-  const reloadDocs = () => { if (docSession) getCompanyDocuments(id, docSession).then((r) => setCompanyDocs(r.data || [])).catch(() => {}); };
+  const reloadDocs = () => { if (sessionId) getCompanyDocuments(id, sessionId).then((r) => setCompanyDocs(r.data || [])).catch(() => {}); };
   useEffect(() => {
     setCompanyDocs([]); setDocTemplates([]); setPickTpl("");
-    if (!docSession) return;
-    getCompanyDocTemplates(id, docSession).then((r) => { setDocTemplates(r.data || []); setDocBreakSlug(r.break_slug || null); }).catch(() => {});
-    getCompanyDocuments(id, docSession).then((r) => setCompanyDocs(r.data || [])).catch(() => {});
-  }, [id, docSession]);
+    if (!sessionId) return;
+    getCompanyDocTemplates(id, sessionId).then((r) => { setDocTemplates(r.data || []); setDocBreakSlug(r.break_slug || null); }).catch(() => {});
+    getCompanyDocuments(id, sessionId).then((r) => setCompanyDocs(r.data || [])).catch(() => {});
+  }, [id, sessionId]);
 
   async function generateDoc(slug) {
     const s = slug || pickTpl;
     if (!s) return;
     setGenBusy(s); setStatus(null);
-    try { await createCompanyDocument(id, { session_id: docSession, template_slug: s }); setStatus({ type: "success", message: "Document entreprise préparé." }); setPickTpl(""); reloadDocs(); }
+    try { await createCompanyDocument(id, { session_id: sessionId, template_slug: s }); setStatus({ type: "success", message: "Document entreprise préparé." }); setPickTpl(""); reloadDocs(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setGenBusy(false); }
   }
@@ -230,14 +229,10 @@ export default function EntrepriseDetail() {
 
         {/* Documents entreprise (groupe) */}
         <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Documents entreprise</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Parcours documentaire <b>entreprise</b> : documents produits <b>une fois pour le groupe</b> (ils listent tous les stagiaires via le jeton « Stagiaires »), dans l'ordre défini au <b>Parcours entreprise</b> de la formation.</p>
-          <div className="field"><label>Session</label>
-            <select className="inp" value={docSession} onChange={(e) => setDocSession(e.target.value)}>
-              <option value="">— Choisir une session —</option>
-              {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
-            </select>
-          </div>
-          {docSession && (
+          <p className="hint" style={{ margin: "0 0 12px" }}>Parcours documentaire <b>entreprise</b> pour la session choisie ci-dessus : documents produits <b>une fois pour le groupe</b> (ils listent tous les stagiaires via le jeton « Stagiaires »), dans l'ordre défini au <b>Parcours entreprise</b> de la formation.</p>
+          {!sessionId ? (
+            <p className="hint" style={{ margin: "8px 0 0" }}>Choisis une <b>session</b> dans « Inscrire un groupe de stagiaires » pour afficher le parcours entreprise.</p>
+          ) : (
             docTemplates.length === 0 ? (
               <p className="hint" style={{ margin: "8px 0 0" }}>Aucune étape « entreprise » dans le parcours de cette formation. Ajoute des modèles « Document entreprise » au <b>Parcours entreprise</b> (Formations → Modifier).</p>
             ) : (
