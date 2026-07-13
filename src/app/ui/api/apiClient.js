@@ -679,6 +679,9 @@ export function getConditions() {
 export function createCondition(payload) {
   return request("/conditions", { method: "POST", body: JSON.stringify(payload) });
 }
+export function updateCondition(id, payload) {
+  return request(`/conditions/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
 export function deleteCondition(id) {
   return request(`/conditions/${id}`, { method: "DELETE" });
 }

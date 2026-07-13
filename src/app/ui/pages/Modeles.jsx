@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
-  getConditionCatalog, getConditions, createCondition, deleteCondition, getFieldValues,
+  getConditionCatalog, getConditions, createCondition, updateCondition, deleteCondition, getFieldValues,
   getEquivalences, createEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
   reorderEmargementTemplates } from "../api/apiClient.js";
@@ -246,13 +246,30 @@ function Modeles() {
 
 // Espace de gestion des conditions personnalisées : liste + création (champ réel du
 // dossier + opérateur + valeur) + suppression.
+// Regroupe les champs du dossier par ORIGINE (table), avec un libellé lisible.
+const FIELD_GROUPS = [
+  ["learner", "Stagiaire"], ["enrollment", "Dossier"], ["training_program", "Formation"],
+  ["training_session", "Session"], ["company", "Entreprise"], ["organization", "Organisme"],
+  ["virtual", "Calculé"],
+];
+function groupFields(fields) {
+  const byTable = {};
+  for (const f of fields) { const t = f.table || "autre"; (byTable[t] = byTable[t] || []).push(f); }
+  const out = FIELD_GROUPS.filter(([t]) => byTable[t]).map(([t, label]) => ({ label, items: byTable[t] }));
+  // Tables non prévues (au cas où) : ajoutées à la fin sous leur clé.
+  for (const t of Object.keys(byTable)) if (!FIELD_GROUPS.some(([k]) => k === t)) out.push({ label: t, items: byTable[t] });
+  return out;
+}
+
 function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
   const fields = catalog.fields || [];
   const operators = catalog.operators || {};
+  const fieldGroups = groupFields(fields);
   const [field, setField] = useState("");
   const [op, setOp] = useState("");
   const [value, setValue] = useState("");
   const [label, setLabel] = useState("");
+  const [editingId, setEditingId] = useState(null); // condition en cours de modification (ou null)
   const [saving, setSaving] = useState(false);
   const [suggestions, setSuggestions] = useState([]); // valeurs existantes pour ce champ
 
@@ -271,14 +288,28 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
     if (k && f && f.type === "text") getFieldValues(k).then((r) => setSuggestions(r.data || [])).catch(() => {});
   }
 
-  async function add() {
+  function resetForm() { setEditingId(null); setLabel(""); setField(""); setOp(""); setValue(""); setSuggestions([]); }
+
+  function startEdit(c) {
+    setEditingId(c.id);
+    setLabel(c.label || "");
+    setField(c.field || "");
+    const f = fields.find((x) => x.key === c.field);
+    setOp(c.op || "");
+    setValue(Array.isArray(c.value) ? c.value.join(", ") : (c.value ?? ""));
+    setSuggestions([]);
+    if (c.field && f && f.type === "text") getFieldValues(c.field).then((r) => setSuggestions(r.data || [])).catch(() => {});
+  }
+
+  async function save() {
     if (!label.trim()) { onStatus({ type: "error", message: "Donnez un intitulé à la condition." }); return; }
     if (!field || !op) { onStatus({ type: "error", message: "Choisissez un champ et un opérateur." }); return; }
     setSaving(true);
     try {
-      await createCondition({ label: label.trim(), field, op, value: needsValue ? value : null });
-      setLabel(""); setField(""); setOp(""); setValue("");
-      onStatus({ type: "success", message: "Condition créée." });
+      const payload = { label: label.trim(), field, op, value: needsValue ? value : null };
+      if (editingId) { await updateCondition(editingId, payload); onStatus({ type: "success", message: "Condition modifiée." }); }
+      else { await createCondition(payload); onStatus({ type: "success", message: "Condition créée." }); }
+      resetForm();
       onChanged();
     } catch (e) { onStatus({ type: "error", message: e.message }); }
     finally { setSaving(false); }
@@ -309,7 +340,10 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
                   <td><b>{c.label}</b></td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{fieldLabel(c.field)}</td>
                   <td style={{ fontSize: 12 }} className="mono">{condValueLabel(c)}</td>
-                  <td><button className="btn sm ghost danger" title="Supprimer" onClick={() => remove(c)}><Icon name="trash" size={15} /></button></td>
+                  <td style={{ display: "flex", gap: 4 }}>
+                    <button className={"btn sm ghost" + (editingId === c.id ? " primary" : "")} title="Modifier" onClick={() => startEdit(c)}><Icon name="pencil" size={15} /></button>
+                    <button className="btn sm ghost danger" title="Supprimer" onClick={() => remove(c)}><Icon name="trash" size={15} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -323,7 +357,11 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
         <div className="field"><label>Champ du dossier</label>
           <select value={field} onChange={(e) => pickField(e.target.value)}>
             <option value="">Choisir…</option>
-            {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+            {fieldGroups.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.items.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+              </optgroup>
+            ))}
           </select></div>
       </div>
       <div className="row2" style={{ alignItems: "end" }}>
@@ -350,8 +388,9 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
               placeholder={op === "in" ? "valeurs séparées par des virgules" : ""} />
           )}</div>
       </div>
-      <div style={{ marginTop: 8 }}>
-        <button className="btn primary" disabled={saving} onClick={add}>＋ Ajouter la condition</button>
+      <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+        <button className="btn primary" disabled={saving} onClick={save}>{editingId ? "Enregistrer la condition" : "＋ Ajouter la condition"}</button>
+        {editingId && <button className="btn ghost" disabled={saving} onClick={resetForm}>Annuler</button>}
       </div>
     </Card>
   );

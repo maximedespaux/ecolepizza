@@ -142,6 +142,29 @@ const createCondition = async (req, res) => {
     }
 };
 
+/** PUT /api/conditions/:id — modifie une condition (le slug reste stable → les documents qui l'utilisent gardent le lien). */
+const updateCondition = async (req, res) => {
+    try {
+        const { label, field, op } = req.body || {};
+        if (!label || !String(label).trim()) return res.status(422).json({ error: 'Intitulé requis.' });
+        const conn = db.promise();
+        const [[cur]] = await conn.query('SELECT id FROM document_condition WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        if (!cur) return res.status(404).json({ message: 'Condition introuvable.' });
+        const catalog = await getEnabledFields(conn, req.user.organization_id);
+        const check = validateCondition(catalog, { field, op, value: req.body?.value });
+        if (!check.ok) return res.status(422).json({ error: check.error });
+        await conn.query(
+            'UPDATE document_condition SET label = ?, field = ?, op = ?, value = ? WHERE id = ? AND organization_id = ?',
+            [String(label).trim().slice(0, 160), field, op, check.value == null ? null : JSON.stringify(check.value), req.params.id, req.user.organization_id]
+        );
+        logAudit(req, 'condition.update', 'DocumentCondition', req.params.id);
+        res.json({ data: { id: req.params.id, label: String(label).trim(), field, op, value: check.value } });
+    } catch (err) {
+        console.error('Erreur mise à jour condition :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** DELETE /api/conditions/:id — supprime une condition (cloisonné à l'organisme). */
 const deleteCondition = (req, res) => {
     db.query(
@@ -159,4 +182,4 @@ const deleteCondition = (req, res) => {
     );
 };
 
-module.exports = { getCatalog, getFieldValues, getFields, saveFields, listConditions, createCondition, deleteCondition };
+module.exports = { getCatalog, getFieldValues, getFields, saveFields, listConditions, createCondition, updateCondition, deleteCondition };
