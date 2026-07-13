@@ -375,6 +375,9 @@ export function updateCompany(id, payload) {
 export function registerCompanyStagiaires(id, payload) {
   return request(`/companies/${id}/register`, { method: "POST", body: JSON.stringify(payload) });
 }
+export function detachCompanyLearner(id, learnerId) {
+  return request(`/companies/${id}/learners/${learnerId}`, { method: "DELETE" });
+}
 // Documents « entreprise » (un doc par groupe listant tous les stagiaires).
 export function getCompanyDocTemplates(id, sessionId) {
   return request(`/companies/${id}/doc-templates${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });

@@ -287,4 +287,20 @@ const createCompanyDocument = async (req, res) => {
     }
 };
 
-module.exports = { getCompanies, getCompany, createCompany, updateCompany, registerCompanyStagiaires, companyDocTemplates, listCompanyDocuments, createCompanyDocument };
+/** DELETE /api/companies/:id/learners/:learnerId — détache un stagiaire de l'entreprise. */
+const detachLearner = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [r] = await conn.query(
+            'UPDATE learner SET company_id = NULL WHERE id = ? AND company_id = ? AND organization_id = ?',
+            [req.params.learnerId, req.params.id, req.user.organization_id]
+        );
+        if (!r.affectedRows) return res.status(404).json({ message: 'Stagiaire non rattaché à cette entreprise.' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur détachement stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getCompanies, getCompany, createCompany, updateCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument };

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  getCompanyDocTemplates, getCompanyDocuments, createCompanyDocument, sendDocument, documentPdfUrl, createSignLink } from "../api/apiClient.js";
+  getCompanyDocTemplates, getCompanyDocuments, createCompanyDocument, sendDocument, documentPdfUrl, createSignLink, detachCompanyLearner } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -41,6 +41,10 @@ export default function EntrepriseDetail() {
   const [companyDocs, setCompanyDocs] = useState([]);
   const [pickTpl, setPickTpl] = useState("");
   const [genBusy, setGenBusy] = useState(false);
+  // Rattacher un stagiaire existant à l'entreprise (carte Stagiaires)
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [attachQ, setAttachQ] = useState("");
+  const [attachRes, setAttachRes] = useState([]);
 
   function load() {
     getCompany(id).then((r) => { setData(r.data); setForm(r.data || {}); }).catch((e) => setStatus({ type: "error", message: e.message }));
@@ -97,6 +101,30 @@ export default function EntrepriseDetail() {
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   const DOC_STATUS = { A_FAIRE: ["À envoyer", "n"], ENVOYE: ["Envoyé", "a"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"] };
+
+  // Rattacher / détacher des stagiaires existants (carte Stagiaires).
+  useEffect(() => {
+    const term = attachQ.trim();
+    if (!attachOpen || !term) { setAttachRes([]); return; }
+    const t = setTimeout(() => {
+      getStagiaires(term).then((r) => {
+        const attached = new Set((data?.learners || []).map((l) => l.id));
+        setAttachRes((r.data || []).filter((s) => !attached.has(s.id)).slice(0, 8));
+      }).catch(() => setAttachRes([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [attachQ, attachOpen, data]);
+
+  async function attachExisting(s) {
+    setStatus(null);
+    try { await registerCompanyStagiaires(id, { learner_ids: [s.id] }); setAttachQ(""); setAttachRes([]); load(); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+  async function detach(learnerId) {
+    if (!window.confirm("Détacher ce stagiaire de l'entreprise ?")) return;
+    try { await detachCompanyLearner(id, learnerId); load(); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
 
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   async function saveInfo() {
@@ -254,7 +282,22 @@ export default function EntrepriseDetail() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
           {/* Stagiaires rattachés */}
-          <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Stagiaires ({data.learners?.length || 0})</span>}>
+          <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Stagiaires ({data.learners?.length || 0})</span>}
+            more={<button className="btn sm ghost" onClick={() => setAttachOpen((v) => !v)}><Icon name="plus" size={14} /> Rattacher</button>}>
+            {attachOpen && (
+              <div className="field" style={{ position: "relative", marginBottom: 12 }}>
+                <input className="inp" placeholder="Rechercher un stagiaire existant…" value={attachQ} onChange={(e) => setAttachQ(e.target.value)} autoFocus />
+                {attachRes.length > 0 && (
+                  <div className="cat-pop" style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 5, marginTop: 4 }}>
+                    {attachRes.map((s) => (
+                      <button key={s.id} type="button" className="cat-opt" onClick={() => attachExisting(s)}>
+                        <b>{[s.first_name, s.last_name].filter(Boolean).join(" ") || s.email}</b>{s.email && <span className="hint"> · {s.email}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {(!data.learners || data.learners.length === 0) ? (
               <EmptyState icon="users">Aucun stagiaire rattaché pour l'instant.</EmptyState>
             ) : (
@@ -267,6 +310,7 @@ export default function EntrepriseDetail() {
                     </span>
                     <Badge tone={l.enrollment_count > 0 ? "b" : "n"}>{l.enrollment_count || 0} dossier{l.enrollment_count > 1 ? "s" : ""}</Badge>
                     <Link className="btn sm ghost" to={`/stagiaires/${l.id}`}>Ouvrir</Link>
+                    <button className="btn sm ghost" title="Détacher de l'entreprise" onClick={() => detach(l.id)}><Icon name="x" size={14} /></button>
                   </div>
                 ))}
               </div>
