@@ -117,6 +117,16 @@ const TOKEN_CATALOG = [
         ],
     },
     {
+        group: 'Financeur (OPCO)',
+        tokens: [
+            { key: 'Nom financeur', label: 'Nom du financeur', sample: 'AKTO' },
+            { key: 'SIRET financeur', label: 'SIRET du financeur', sample: '180 020 016 00019' },
+            { key: 'Adresse financeur', label: 'Adresse du financeur', sample: "1 rue de l'OPCO, 75001 Paris" },
+            { key: 'Email financeur', label: 'E-mail du financeur', sample: 'contact@akto.fr' },
+            { key: 'Téléphone financeur', label: 'Téléphone du financeur', sample: '01 44 00 00 00' },
+        ],
+    },
+    {
         group: 'Organisme',
         tokens: [
             { key: 'Organisme', label: 'Nom de l’organisme', sample: 'École Pizzaïolo Despaux' },
@@ -219,6 +229,7 @@ for (const g of TOKEN_CATALOG) for (const t of g.tokens) TOKEN_LABELS[t.key] = {
 const OPTIONAL_TOKENS = new Set([
     'Signature stagiaire', 'Signature organisme', 'Nom signataire', 'Date signature',
     'Today', 'Date', 'Stagiaires',
+    'Nom financeur', 'SIRET financeur', 'Adresse financeur', 'Email financeur', 'Téléphone financeur',
 ]);
 
 /** Extrait les clés de jetons utilisées dans un corps HTML (puces + {Clé}). */
@@ -264,6 +275,8 @@ function resolveTokens(ctx = {}) {
     const o = ctx.org || {};
     const l = ctx.learner || {};
     const c = ctx.company || {};
+    const fin = ctx.financeur || {};
+    const finAddress = [fin.address, [fin.zip_code, fin.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const f = (ctx.formations && ctx.formations[0]) || {};
     const forms = ctx.formations || [];
 
@@ -335,6 +348,10 @@ function resolveTokens(ctx = {}) {
         'Adresse entreprise': cAddress,
         'Email entreprise': c.email || '', 'Téléphone entreprise': c.phone || '',
         'NAF entreprise': c.naf_ape || '', 'Forme juridique': c.legal_status || '',
+        // Financeur (OPCO)
+        'Nom financeur': fin.name || c.opco || l.opco || '',
+        'SIRET financeur': fin.siret || '', 'Adresse financeur': finAddress,
+        'Email financeur': fin.email || '', 'Téléphone financeur': fin.phone || '',
         // Groupe (document entreprise) : tableau HTML de tous les stagiaires du groupe.
         Stagiaires: stagiairesTable(ctx.groupStagiaires),
         // Organisme

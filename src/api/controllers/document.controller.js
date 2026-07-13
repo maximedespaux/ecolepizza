@@ -161,10 +161,20 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             }
         } catch (e) { /* champs indisponibles (migration non jouée) : on ignore */ }
     }
+    // Financeur (OPCO / France Travail…) : coordonnées propres, dont un SIRET distinct de
+    // l'organisme. Résolu par le nom stocké (company.opco ou learner.opco) → référentiel opco.
+    let financeur = null;
+    const opcoName = (company && company.opco) || (learner && learner.opco) || '';
+    if (opcoName) {
+        try {
+            const [[fo]] = await conn.query('SELECT * FROM opco WHERE organization_id = ? AND (name = ? OR code = ?) LIMIT 1', [organizationId, opcoName, opcoName]);
+            financeur = fo || null;
+        } catch (e) { /* référentiel opco absent (migration) : jetons financeur vides */ }
+    }
     // Jetons personnalisés de l'organisme (calculés à partir des autres au rendu).
     let customTokens = [];
     try { customTokens = await loadCustomTokens(organizationId); } catch { /* migration absente */ }
-    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires };
+    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur };
 }
 
 // Un document d'émargement (type EMARGEMENT) : rendu via le moteur d'émargement
