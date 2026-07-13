@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  getCompanyDocTemplates, getCompanyDocuments, createCompanyDocument, sendDocument, documentPdfUrl, createSignLink, detachCompanyLearner } from "../api/apiClient.js";
+  getCompanyDocTemplates, getCompanyDocuments, createCompanyDocument, sendDocument, documentPdfUrl, createSignLink, detachCompanyLearner, getOpcos } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -16,7 +16,7 @@ const CFIELDS = [
   { k: "siret", label: "SIRET" },
   { k: "naf_ape", label: "Code NAF / APE" },
   { k: "legal_status", label: "Forme juridique", type: "select", options: LEGAL_STATUSES },
-  { k: "opco", label: "OPCO / financeur" },
+  { k: "opco", label: "OPCO / financeur", type: "select", dyn: "opco" },
   { k: "address", label: "Adresse", full: true },
   { k: "zip_code", label: "Code postal" },
   { k: "town", label: "Ville" },
@@ -50,6 +50,7 @@ export default function EntrepriseDetail() {
   // Rattacher un stagiaire existant à l'entreprise
   const [attachQ, setAttachQ] = useState("");
   const [attachRes, setAttachRes] = useState([]);
+  const [opcoNames, setOpcoNames] = useState([]);
   // Sélection de stagiaires rattachés à inscrire à une session
   const [selected, setSelected] = useState(() => new Set());
   const toggleSel = (lid) => setSelected((prev) => { const n = new Set(prev); n.has(lid) ? n.delete(lid) : n.add(lid); return n; });
@@ -59,6 +60,7 @@ export default function EntrepriseDetail() {
   }
   useEffect(() => { load(); }, [id]);
   useEffect(() => { getSessions().then((r) => setSessions(r.data || [])).catch(() => {}); }, []);
+  useEffect(() => { getOpcos().then((r) => setOpcoNames((r.data || []).map((o) => o.name).filter(Boolean))).catch(() => {}); }, []);
 
   // Documents entreprise : modèles applicables + docs déjà générés pour la session choisie.
   const reloadDocs = () => { if (docSession) getCompanyDocuments(id, docSession).then((r) => setCompanyDocs(r.data || [])).catch(() => {}); };
@@ -269,17 +271,22 @@ export default function EntrepriseDetail() {
           {/* Coordonnées de l'entreprise */}
           <Card title={<span className="card-ttl"><Icon name="building" size={16} /> Coordonnées</span>}>
             <div className="grid cols-2" style={{ gap: 12 }}>
-              {CFIELDS.map(({ k, label, full, type, options }) => (
+              {CFIELDS.map(({ k, label, full, type, options, dyn }) => {
+                const opts = dyn === "opco" ? opcoNames : (options || []);
+                const cur = form[k];
+                const allOpts = cur && !opts.includes(cur) ? [cur, ...opts] : opts;
+                return (
                 <div className="field" key={k} style={{ marginBottom: 0, gridColumn: full ? "1 / -1" : "auto" }}>
                   <label>{label}</label>
                   {type === "select"
-                    ? <select className="inp" value={form[k] || ""} onChange={set(k)}>
+                    ? <select className="inp" value={cur || ""} onChange={set(k)}>
                         <option value="">—</option>
-                        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+                        {allOpts.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
-                    : <input className="inp" value={form[k] || ""} onChange={set(k)} />}
+                    : <input className="inp" value={cur || ""} onChange={set(k)} />}
                 </div>
-              ))}
+                );
+              })}
             </div>
             <button className="btn primary" onClick={saveInfo} disabled={savingInfo} style={{ marginTop: 14 }}><Icon name="check" size={15} /> Enregistrer</button>
           </Card>
