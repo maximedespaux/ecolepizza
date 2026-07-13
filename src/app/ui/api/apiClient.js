@@ -87,9 +87,6 @@ export function deleteOpco(id) {
 export function getSales() {
   return request("/ventes");
 }
-export function createSale(payload) {
-  return request("/ventes", { method: "POST", body: JSON.stringify(payload) });
-}
 export function deleteSale(id) {
   return request(`/ventes/${id}`, { method: "DELETE" });
 }
@@ -113,9 +110,6 @@ export function generateAttendance(sessionId) {
 // Régénère les feuilles d'émargement de tous les dossiers de la session.
 export function regenerateEmargement(sessionId) {
   return request(`/attendance/${sessionId}/regenerate`, { method: "POST" });
-}
-export function setPresence(recordId, present) {
-  return request(`/attendance/record/${recordId}`, { method: "PATCH", body: JSON.stringify({ present }) });
 }
 // Formateurs d'une session (affectation depuis l'équipe).
 export function getAssignableTrainers() {
@@ -170,9 +164,6 @@ export function adjustItem(id, delta) {
 }
 export function updateItem(id, payload) {
   return request(`/inventaire/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
-}
-export function sellItem(id, quantity) {
-  return request(`/inventaire/${id}/sell`, { method: "POST", body: JSON.stringify({ quantity }) });
 }
 export function deleteItem(id) {
   return request(`/inventaire/${id}`, { method: "DELETE" });
@@ -270,9 +261,6 @@ export function getRevenues(annee) {
 }
 export function createRevenue(payload) {
   return request("/comptabilite/revenus", { method: "POST", body: JSON.stringify(payload) });
-}
-export function updateRevenue(id, payload) {
-  return request(`/comptabilite/revenus/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 export function deleteRevenue(id) {
   return request(`/comptabilite/revenus/${id}`, { method: "DELETE" });
@@ -378,20 +366,7 @@ export function registerCompanyStagiaires(id, payload) {
 export function detachCompanyLearner(id, learnerId) {
   return request(`/companies/${id}/learners/${learnerId}`, { method: "DELETE" });
 }
-// Documents « entreprise » (un doc par groupe listant tous les stagiaires).
-export function getCompanyDocTemplates(id, sessionId) {
-  return request(`/companies/${id}/doc-templates${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
-}
-export function getCompanyDocuments(id, sessionId) {
-  return request(`/companies/${id}/documents${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
-}
-export function createCompanyDocument(id, payload) {
-  return request(`/companies/${id}/documents`, { method: "POST", body: JSON.stringify(payload) });
-}
-// Lien de signature partageable (représentant entreprise). createSignLink → { token }.
-export function createSignLink(documentId, payload = {}) {
-  return request(`/documents/${documentId}/sign-link`, { method: "POST", body: JSON.stringify(payload) });
-}
+// Signature publique par le représentant de l'entreprise (page /signer/:token).
 export function getPublicSignDoc(token) { return request(`/public/sign/${token}`, { silent: true }); }
 export function submitPublicSign(token, payload) { return request(`/public/sign/${token}`, { method: "POST", body: JSON.stringify(payload) }); }
 
@@ -532,9 +507,6 @@ export function archiveFileUrl(id) {
 export function downloadArchiveFile(id, filename) {
   return download(`/suivi/archives/${id}/file`, filename);
 }
-export function deleteArchive(id) {
-  return request(`/suivi/archives/${id}`, { method: "DELETE" });
-}
 // Suppression groupée (semaine / formation / stagiaire / fichiers) — supprime en base.
 export function bulkDeleteArchives(archive_ids, document_ids) {
   return request("/suivi/archives/delete", { method: "POST", body: JSON.stringify({ archive_ids, document_ids }) });
@@ -546,10 +518,6 @@ export function createEnrollment(payload) {
 
 export function deleteEnrollment(id) {
   return request(`/enrollments/${id}`, { method: "DELETE" });
-}
-
-export function updateEnrollment(id, payload) {
-  return request(`/enrollments/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 
 // --- Espace stagiaire ---
@@ -611,10 +579,6 @@ export function getDocument(id) {
   return request(`/documents/${id}`);
 }
 
-// Télécharge le vrai document Word (.docx) rempli (source, secours).
-export function downloadDocumentDocx(id, filename = "document.docx") {
-  return download(`/documents/${id}/docx`, filename);
-}
 // Document final PDF (non modifiable) — téléchargement.
 export function downloadDocumentPdf(id, filename = "document.pdf") {
   return download(`/documents/${id}/pdf`, filename);
@@ -728,9 +692,6 @@ export function reorderTemplates(orders) {
 }
 export function reorderEmargementTemplates(orders) {
   return request("/emargement-templates/reorder", { method: "PUT", body: JSON.stringify({ orders }) });
-}
-export function downloadTemplateFile(slug) {
-  return download(`/templates/${slug}/file`, `${slug}.docx`);
 }
 // Catalogue des jetons (regroupé par table) pour la palette de l'éditeur.
 export function getTokenCatalog(slug) {

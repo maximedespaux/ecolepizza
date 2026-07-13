@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Icon } from "./Icon.jsx";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
