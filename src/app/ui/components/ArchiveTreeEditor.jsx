@@ -36,6 +36,7 @@ export function ArchiveTreePreview({ tree, code = "NIV1", title = "Formation" })
   const sample = {
     "{Année}": "2026", "{Semaine}": "S29", "{Code}": code || "NIV1",
     "{Formation}": title || "Formation", "{Dates}": "13/07→17/07", "{Stagiaire}": "DUPONT Jean",
+    "{Entreprise}": "Pizza Napoli SARL",
   };
   const folders = tree?.folders || [];
   return (
@@ -68,6 +69,7 @@ const TOKENS = [
   { t: "{Formation}", label: "Nom de la formation" },
   { t: "{Dates}", label: "Dates de la session" },
   { t: "{Stagiaire}", label: "Nom du stagiaire" },
+  { t: "{Entreprise}", label: "Nom de l'entreprise" },
 ];
 
 // Construit la liste des documents attribuables : les variantes « OU » (même
