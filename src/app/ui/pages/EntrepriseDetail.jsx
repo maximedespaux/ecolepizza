@@ -10,6 +10,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 
 const LEGAL_STATUSES = ["SARL", "SAS", "SASU", "EURL", "EI", "Micro / Auto", "SA", "SCI", "Association", "Autre"];
+const REP_ROLES = ["Gérant(e)", "Président(e)", "Directeur / Directrice", "Directeur général / Directrice générale", "Chef(fe) d'entreprise", "Responsable formation", "Responsable RH / DRH", "Responsable administratif", "Associé(e)", "Autre"];
 const CFIELDS = [
   { k: "name", label: "Nom de l'entreprise", full: true },
   { k: "siret", label: "SIRET" },
@@ -23,7 +24,7 @@ const CFIELDS = [
   { k: "phone", label: "Téléphone" },
   { k: "representative_civ", label: "Civilité du référent", type: "select", options: ["M.", "Mme"] },
   { k: "representative_name", label: "Nom du référent" },
-  { k: "representative_role", label: "Fonction du référent", full: true },
+  { k: "representative_role", label: "Fonction du référent", full: true, type: "select", options: REP_ROLES },
 ];
 const sessLabel = (s) => `${s.program_code || s.program_title} · S${s.week} ${s.year}`;
 
