@@ -14,7 +14,6 @@ const CFIELDS = [
   ["zip_code", "Code postal"], ["town", "Ville"], ["email", "E-mail"], ["phone", "Téléphone"],
   ["representative_name", "Nom du référent"], ["representative_role", "Fonction du référent"],
 ];
-const blankRow = () => ({ civility: "", first_name: "", last_name: "", email: "", phone: "" });
 const sessLabel = (s) => `${s.program_code || s.program_title} · S${s.week} ${s.year}`;
 
 export default function EntrepriseDetail() {
@@ -28,21 +27,15 @@ export default function EntrepriseDetail() {
   // Inscription de groupe
   const [sessions, setSessions] = useState([]);
   const [sessionId, setSessionId] = useState("");
-  const [rows, setRows] = useState([blankRow()]);
   const [registering, setRegistering] = useState(false);
   const [result, setResult] = useState(null); // { created: [...] }
-  // Sélection de stagiaires EXISTANTS
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState([]);
-  const [picked, setPicked] = useState([]); // [{ id, name, email }]
   // Documents « entreprise »
   const [docSession, setDocSession] = useState("");
   const [docTemplates, setDocTemplates] = useState([]);
   const [companyDocs, setCompanyDocs] = useState([]);
   const [pickTpl, setPickTpl] = useState("");
   const [genBusy, setGenBusy] = useState(false);
-  // Rattacher un stagiaire existant à l'entreprise (carte Stagiaires)
-  const [attachOpen, setAttachOpen] = useState(false);
+  // Rattacher un stagiaire existant à l'entreprise
   const [attachQ, setAttachQ] = useState("");
   const [attachRes, setAttachRes] = useState([]);
 
@@ -51,22 +44,6 @@ export default function EntrepriseDetail() {
   }
   useEffect(() => { load(); }, [id]);
   useEffect(() => { getSessions().then((r) => setSessions(r.data || [])).catch(() => {}); }, []);
-  // Recherche de stagiaires existants (débattue), en excluant les déjà rattachés / déjà choisis.
-  useEffect(() => {
-    const term = q.trim();
-    if (!term) { setResults([]); return; }
-    const t = setTimeout(() => {
-      getStagiaires(term).then((r) => {
-        const attached = new Set((data?.learners || []).map((l) => l.id));
-        const chosen = new Set(picked.map((p) => p.id));
-        setResults((r.data || []).filter((s) => !attached.has(s.id) && !chosen.has(s.id)).slice(0, 8));
-      }).catch(() => setResults([]));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [q, data, picked]);
-
-  const addPicked = (s) => { setPicked((p) => [...p, { id: s.id, name: [s.first_name, s.last_name].filter(Boolean).join(" ") || s.email, email: s.email }]); setQ(""); setResults([]); };
-  const removePicked = (id) => setPicked((p) => p.filter((x) => x.id !== id));
 
   // Documents entreprise : modèles applicables + docs déjà générés pour la session choisie.
   const reloadDocs = () => { if (docSession) getCompanyDocuments(id, docSession).then((r) => setCompanyDocs(r.data || [])).catch(() => {}); };
@@ -102,10 +79,10 @@ export default function EntrepriseDetail() {
   }
   const DOC_STATUS = { A_FAIRE: ["À envoyer", "n"], ENVOYE: ["Envoyé", "a"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"] };
 
-  // Rattacher / détacher des stagiaires existants (carte Stagiaires).
+  // Rattacher des stagiaires existants à l'entreprise (recherche débattue).
   useEffect(() => {
     const term = attachQ.trim();
-    if (!attachOpen || !term) { setAttachRes([]); return; }
+    if (!term) { setAttachRes([]); return; }
     const t = setTimeout(() => {
       getStagiaires(term).then((r) => {
         const attached = new Set((data?.learners || []).map((l) => l.id));
@@ -113,12 +90,26 @@ export default function EntrepriseDetail() {
       }).catch(() => setAttachRes([]));
     }, 250);
     return () => clearTimeout(t);
-  }, [attachQ, attachOpen, data]);
+  }, [attachQ, data]);
 
   async function attachExisting(s) {
     setStatus(null);
     try { await registerCompanyStagiaires(id, { learner_ids: [s.id] }); setAttachQ(""); setAttachRes([]); load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+  async function enrollSession() {
+    if (!sessionId) { setStatus({ type: "error", message: "Choisis une session." }); return; }
+    const ids = (data?.learners || []).map((l) => l.id);
+    if (!ids.length) { setStatus({ type: "error", message: "Rattache d'abord des stagiaires à l'entreprise." }); return; }
+    setRegistering(true); setStatus(null); setResult(null);
+    try {
+      const r = await registerCompanyStagiaires(id, { session_id: sessionId, learner_ids: ids });
+      setResult(r.data);
+      const n = (r.data?.created || []).filter((c) => c.enrolled).length;
+      setStatus({ type: "success", message: n ? `${n} stagiaire(s) ajouté(s) à la session.` : "Aucun nouveau stagiaire à ajouter (déjà inscrits)." });
+      load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setRegistering(false); }
   }
   async function detach(learnerId) {
     if (!window.confirm("Détacher ce stagiaire de l'entreprise ?")) return;
@@ -132,25 +123,6 @@ export default function EntrepriseDetail() {
     try { await updateCompany(id, form); setStatus({ type: "success", message: "Entreprise enregistrée." }); load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSavingInfo(false); }
-  }
-
-  const setRow = (i, k) => (e) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, [k]: e.target.value } : r)));
-  const addRow = () => setRows((rs) => [...rs, blankRow()]);
-  const delRow = (i) => setRows((rs) => (rs.length > 1 ? rs.filter((_, j) => j !== i) : rs));
-  const filled = rows.filter((r) => r.first_name.trim() || r.last_name.trim());
-  const totalToAdd = filled.length + picked.length;
-
-  async function register() {
-    if (!totalToAdd) { setStatus({ type: "error", message: "Choisis des stagiaires existants ou saisis-en de nouveaux." }); return; }
-    setRegistering(true); setStatus(null); setResult(null);
-    try {
-      const r = await registerCompanyStagiaires(id, { session_id: sessionId || null, stagiaires: filled, learner_ids: picked.map((p) => p.id) });
-      setResult(r.data);
-      setRows([blankRow()]); setPicked([]);
-      setStatus({ type: "success", message: r.message || "Groupe inscrit." });
-      load();
-    } catch (e) { setStatus({ type: "error", message: e.message }); }
-    finally { setRegistering(false); }
   }
 
   if (!data) return <StatusMessage status={status || { type: "info", message: "Chargement…" }} />;
@@ -167,72 +139,46 @@ export default function EntrepriseDetail() {
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {/* Inscription de groupe */}
         <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Inscrire un groupe de stagiaires</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Rattache des stagiaires <b>existants</b>, ou saisis-en de <b>nouveaux</b>. Tous passent en <b>financement professionnel</b>, rattachés à <b>{data.name}</b> (compte de connexion créé si e-mail), et inscrits à la session choisie.</p>
+          <p className="hint" style={{ margin: "0 0 12px" }}>Rattache des stagiaires <b>existants</b> à <b>{data.name}</b>, puis inscris tout le groupe à une session en un clic.</p>
 
-          {/* Stagiaires existants */}
-          <div className="field" style={{ position: "relative" }}><label>Stagiaires existants</label>
+          {/* Rattacher un stagiaire existant à l'entreprise */}
+          <div className="field" style={{ position: "relative" }}><label>Rattacher un stagiaire</label>
             <span className="gs-search">
               <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
-              <input placeholder="Rechercher un stagiaire déjà enregistré…" value={q} onChange={(e) => setQ(e.target.value)} />
-              {q && <button className="gs-clear" onClick={() => { setQ(""); setResults([]); }}><Icon name="x" size={13} /></button>}
+              <input placeholder="Rechercher un stagiaire déjà enregistré…" value={attachQ} onChange={(e) => setAttachQ(e.target.value)} />
+              {attachQ && <button className="gs-clear" onClick={() => { setAttachQ(""); setAttachRes([]); }}><Icon name="x" size={13} /></button>}
             </span>
-            {results.length > 0 && (
+            {attachRes.length > 0 && (
               <div className="cat-pop" style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 5, marginTop: 4 }}>
-                {results.map((s) => (
-                  <button key={s.id} type="button" className="cat-opt" onClick={() => addPicked(s)}>
+                {attachRes.map((s) => (
+                  <button key={s.id} type="button" className="cat-opt" onClick={() => attachExisting(s)}>
                     <b>{[s.first_name, s.last_name].filter(Boolean).join(" ")}</b>{s.email && <span className="hint"> · {s.email}</span>}
                   </button>
                 ))}
               </div>
             )}
           </div>
-          {picked.length > 0 && (
-            <div className="tag-row" style={{ margin: "0 0 12px" }}>
-              {picked.map((p) => (
-                <span key={p.id} className="picked-chip">{p.name}<button type="button" onClick={() => removePicked(p.id)} title="Retirer"><Icon name="x" size={11} /></button></span>
-              ))}
-            </div>
-          )}
 
-          <div className="field"><label>Session (facultatif)</label>
+          <div className="field"><label>Session</label>
             <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
-              <option value="">— Ne pas inscrire à une session pour l'instant —</option>
+              <option value="">— Choisir une session —</option>
               {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
             </select>
           </div>
 
-          <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--muted)", display: "block", margin: "4px 0 6px" }}>Nouveaux stagiaires</label>
-          <div className="ent-rows">
-            <div className="ent-row ent-head">
-              <span>Civ.</span><span>Prénom</span><span>Nom</span><span>E-mail</span><span>Tél.</span><span />
-            </div>
-            {rows.map((r, i) => (
-              <div className="ent-row" key={i}>
-                <select className="inp" value={r.civility} onChange={setRow(i, "civility")}><option value="">—</option><option>M.</option><option>Mme</option></select>
-                <input className="inp" placeholder="Prénom" value={r.first_name} onChange={setRow(i, "first_name")} />
-                <input className="inp" placeholder="Nom" value={r.last_name} onChange={setRow(i, "last_name")} />
-                <input className="inp" type="email" placeholder="email@…" value={r.email} onChange={setRow(i, "email")} />
-                <input className="inp" placeholder="Tél." value={r.phone} onChange={setRow(i, "phone")} />
-                <button className="iconbtn del" title="Retirer" onClick={() => delRow(i)}><Icon name="trash" size={15} /></button>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
-            <button className="btn sm ghost" onClick={addRow}><Icon name="plus" size={14} /> Ajouter une ligne</button>
-            <button className="btn primary" onClick={register} disabled={registering || !totalToAdd}>
-              <Icon name="check" size={15} /> Inscrire {totalToAdd || ""} stagiaire{totalToAdd > 1 ? "s" : ""}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+            <button className="btn primary" onClick={enrollSession} disabled={registering || !sessionId || !(data.learners || []).length}>
+              <Icon name="check" size={15} /> Ajouter à la session
             </button>
           </div>
 
           {result && result.created && result.created.length > 0 && (
             <div className="ent-result">
-              <b style={{ fontSize: 13 }}>✅ {result.created.length} stagiaire(s) inscrit(s)</b>
-              <p className="hint" style={{ margin: "4px 0 8px" }}>Note les mots de passe : ils ne seront plus affichés ensuite.</p>
+              <b style={{ fontSize: 13 }}>✅ {result.created.filter((c) => c.enrolled).length} stagiaire(s) ajouté(s) à la session</b>
               {result.created.map((c) => (
                 <div key={c.learner_id} className="ent-cred">
                   <span style={{ flex: 1, minWidth: 0 }}><b>{c.name}</b> {c.email && <span className="hint">· {c.email}</span>}</span>
-                  {c.password ? <span className="mono ent-pw">{c.password}</span>
-                    : <span className="hint">{c.email ? "compte déjà existant" : "pas d'e-mail"}</span>}
+                  <span className="hint">{c.enrolled ? "inscrit" : "déjà inscrit"}</span>
                 </div>
               ))}
             </div>
@@ -282,22 +228,7 @@ export default function EntrepriseDetail() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
           {/* Stagiaires rattachés */}
-          <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Stagiaires ({data.learners?.length || 0})</span>}
-            more={<button className="btn sm ghost" onClick={() => setAttachOpen((v) => !v)}><Icon name="plus" size={14} /> Rattacher</button>}>
-            {attachOpen && (
-              <div className="field" style={{ position: "relative", marginBottom: 12 }}>
-                <input className="inp" placeholder="Rechercher un stagiaire existant…" value={attachQ} onChange={(e) => setAttachQ(e.target.value)} autoFocus />
-                {attachRes.length > 0 && (
-                  <div className="cat-pop" style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 5, marginTop: 4 }}>
-                    {attachRes.map((s) => (
-                      <button key={s.id} type="button" className="cat-opt" onClick={() => attachExisting(s)}>
-                        <b>{[s.first_name, s.last_name].filter(Boolean).join(" ") || s.email}</b>{s.email && <span className="hint"> · {s.email}</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+          <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Stagiaires ({data.learners?.length || 0})</span>}>
             {(!data.learners || data.learners.length === 0) ? (
               <EmptyState icon="users">Aucun stagiaire rattaché pour l'instant.</EmptyState>
             ) : (
