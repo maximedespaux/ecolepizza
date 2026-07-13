@@ -518,8 +518,28 @@ tbody tr:last-child td{border-bottom:none}
 .dough-line{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.10);border-radius:12px;padding:10px 12px;margin-bottom:9px}
 .dough-bar{display:flex;height:12px;border-radius:99px;overflow:hidden;margin-bottom:16px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
 .dough-bar span{display:block;height:100%;transition:width .25s var(--ease)}
-.ate-lbl{font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.ate-lbl{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.ate-num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--ember1) 14%,var(--surface));color:var(--ember1);font-size:11px;font-weight:800;flex:none}
 .ate-step{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.15);display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
+/* Curseur d'hydratation — repère du minimum recommandé (manuel) */
+.hydra-track{position:relative;height:6px;border-radius:99px;background:var(--surface2);margin:0 0 7px}
+.hydra-zone{position:absolute;top:0;bottom:0;right:0;border-radius:99px;background:color-mix(in srgb,var(--green) 35%,transparent)}
+.hydra-mark{position:absolute;top:-3px;width:2px;height:12px;border-radius:2px;background:var(--green);transform:translateX(-1px)}
+.hydra-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:99px}
+.hydra-badge.ok{background:color-mix(in srgb,var(--green) 16%,var(--surface));color:var(--green)}
+.hydra-badge.low{background:color-mix(in srgb,var(--gold) 22%,var(--surface));color:var(--orange)}
+.hydra-badge.high{background:color-mix(in srgb,var(--ember1) 16%,var(--surface));color:var(--ember1)}
+.hydra-mark.hi{background:var(--ember1)}
+/* Conditions de fermentation (stockage) — durée + température, ambiante et/ou contrôlée */
+.stock-cond{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;align-items:end;border:1px solid var(--border-soft);border-radius:12px;padding:11px 13px;margin-bottom:10px}
+.stock-lbl{grid-column:1 / -1;display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--text)}
+/* Section repliable (réglages avancés du calculateur) */
+.ate-fold{border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden}
+.ate-fold-head{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:var(--surface2);border:none;cursor:pointer;color:var(--dim)}
+.ate-fold-head:hover{background:color-mix(in srgb,var(--ember1) 6%,var(--surface2))}
+.ate-fold.open .ate-fold-head{color:var(--text);border-bottom:1px solid var(--border-soft)}
+.ate-fold-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:inline-flex;align-items:center;gap:7px}
+.ate-fold-body{padding:14px}
 
 /* Espace stagiaire — menu déroulant « Outils & Communauté » */
 .stu-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:60;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:6px;min-width:210px;display:flex;flex-direction:column;gap:2px}
@@ -908,9 +928,21 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .comm-main{display:flex;align-items:center;gap:10px;padding:11px 12px;cursor:pointer}
 .comm-main:hover{background:var(--surface2)}
 .comm-bar{display:flex;gap:8px;padding:0 12px 11px;flex-wrap:wrap}
-.comm-thread{padding:12px;border-top:1px solid var(--border-soft);background:var(--surface2)}
+.comm-thread{padding:12px;border-top:1px solid var(--border-soft);background:var(--surface2);border-radius:12px}
 .comm-c{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border-soft)}
 .comm-c:first-child{padding-top:0}
+/* Communauté — galerie de cartes (v2) */
+.comm-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.comm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px}
+.comm-card2{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden;transition:transform .14s var(--ease),box-shadow .14s var(--ease),border-color .14s var(--ease)}
+.comm-card2:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 12px 28px -16px rgba(0,0,0,.4)}
+.comm-card2-body{flex:1;display:flex;flex-direction:column;gap:8px;padding:15px 16px 13px;cursor:pointer}
+.comm-kind{align-self:flex-start;display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.comm-title{font-size:16px;font-weight:800;line-height:1.22;color:var(--text)}
+.comm-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.comm-foot{display:flex;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--border-soft);background:var(--surface2)}
+.comm-foot .btn{padding:5px 10px}
+.comm-save{margin-left:auto}
 
 /* Fiche technique — tableau de garniture aligné et espacé */
 .ing-table{display:flex;flex-direction:column;gap:9px}
@@ -927,6 +959,17 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .kind-btn.on{background:var(--grad-ember);color:#fff;border:none;box-shadow:var(--shadow-glow)}
 .kind-hint{margin-left:6px;flex:1;min-width:180px}
 @media(max-width:600px){.kind-hint{flex-basis:100%;margin-left:0}}
+/* Choix du type de fiche (préparation / recette) — cartes explicites */
+.kind-choose{display:flex;gap:12px;margin:0 0 20px;flex-wrap:wrap}
+.kind-opt{flex:1;min-width:220px;display:flex;align-items:center;gap:12px;text-align:left;padding:13px 15px;border:1.5px solid var(--border);border-radius:14px;background:var(--surface);color:var(--text);cursor:pointer;transition:.15s var(--ease)}
+.kind-opt:hover{border-color:var(--gold);background:var(--surface2)}
+.kind-opt.on{border-color:transparent;background:var(--grad-ember);color:#fff;box-shadow:var(--shadow-glow)}
+.kind-opt-ic{display:inline-grid;place-items:center;width:38px;height:38px;flex:none;border-radius:11px;background:color-mix(in srgb,var(--ember1) 12%,var(--surface));color:var(--ember1)}
+.kind-opt.on .kind-opt-ic{background:rgba(255,255,255,.18);color:#fff}
+.kind-opt-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.kind-opt-txt b{font-size:15px;font-weight:800}
+.kind-opt-txt span{font-size:12px;color:var(--muted);line-height:1.35}
+.kind-opt.on .kind-opt-txt span{color:rgba(255,255,255,.85)}
 /* Étiquette « type de fiche » + ligne d'ingrédient importée */
 .fiche-tag{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;background:var(--gold-soft,rgba(198,160,74,.16));color:var(--gold,#9a7b2e);font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0}
 .comp-label{display:flex;align-items:center;gap:8px;background:var(--surface-2,rgba(0,0,0,.03));cursor:default;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}

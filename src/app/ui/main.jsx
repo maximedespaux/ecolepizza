@@ -139,7 +139,9 @@ function AppRoutes() {
           <Route path="emargement" element={<EmargementStagiaire />} />
           <Route path="formations" element={<MesFormations />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
-          <Route path="fiche-recette" element={<FicheRecette />} />
+          <Route path="empatements" element={<FicheRecette key="emp" mode="empatement" />} />
+          <Route path="garnitures" element={<FicheRecette key="garn" mode="garniture" />} />
+          <Route path="realisations" element={<FicheRecette key="real" mode="realisation" />} />
           <Route path="communaute" element={<Communaute />} />
           <Route path="pizza-quest" element={<PizzaQuest />} />
           {isIntervenant && <Route path="intervention" element={<IntervenantEspace />} />}
