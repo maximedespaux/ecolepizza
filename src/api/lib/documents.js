@@ -67,7 +67,7 @@ function mergeSteps(rows = []) {
         bySlug.set(d.slug, {
             slug: d.slug, label: d.label, doc_type: d.doc_type, sort_order: d.sort_order,
             signable: d.signable, stagiaire_sign: d.stagiaire_sign, applies_when: d.applies_when,
-            or_group: d.or_group || null,
+            or_group: d.or_group || null, company_level: d.company_level ? 1 : 0,
             active: 1, has_file: false, is_default: true, customized: false,
         });
     }
@@ -76,7 +76,7 @@ function mergeSteps(rows = []) {
         if (r.deleted) { bySlug.delete(r.slug); continue; }
         const base = bySlug.get(r.slug) || {
             slug: r.slug, label: r.slug, doc_type: r.doc_type || null, sort_order: 100,
-            signable: 0, stagiaire_sign: 0, applies_when: {}, or_group: null, active: 1, has_file: false,
+            signable: 0, stagiaire_sign: 0, applies_when: {}, or_group: null, company_level: 0, active: 1, has_file: false,
             is_default: false, customized: false,
         };
         const m = { ...base, customized: true };
@@ -86,6 +86,7 @@ function mergeSteps(rows = []) {
         if (r.signable != null) m.signable = r.signable;
         if (r.stagiaire_sign != null) m.stagiaire_sign = r.stagiaire_sign;
         if (r.applies_when != null) m.applies_when = parseApplies(r.applies_when);
+        if (r.company_level != null) m.company_level = r.company_level ? 1 : 0;
         if (r.active != null) m.active = r.active;
         m.has_file = !!r.has_file;
         bySlug.set(r.slug, m);

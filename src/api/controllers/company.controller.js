@@ -1,8 +1,11 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
+const { loadOrgSteps } = require('./template.controller.js');
+const { matchFormation } = require('../lib/documents.js');
 
 const clean = (v) => (v === undefined || v === '' ? null : v);
+const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
 
 /** GET /api/companies — entreprises de l'organisme (avec nb de stagiaires rattachés). */
 const getCompanies = (req, res) => {
@@ -188,4 +191,100 @@ const registerCompanyStagiaires = async (req, res) => {
     }
 };
 
-module.exports = { getCompanies, getCompany, createCompany, updateCompany, registerCompanyStagiaires };
+/** GET /api/companies/:id/doc-templates?session_id= — modèles « entreprise » applicables. */
+const companyDocTemplates = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        let program = null;
+        if (req.query.session_id) {
+            const [[s]] = await conn.query(
+                `SELECT p.days, p.hygiene, p.rs_code FROM training_session s JOIN training_program p ON p.id = s.program_id
+                 WHERE s.id = ? AND s.organization_id = ?`, [req.query.session_id, orgId]);
+            program = s || null;
+        }
+        const steps = await loadOrgSteps(orgId);
+        const out = steps
+            .filter((s) => s.active && s.company_level)
+            .filter((s) => !program || matchFormation(s.applies_when, { rs_code: program.rs_code, hygiene: program.hygiene, days: program.days }))
+            .map((s) => ({ slug: s.slug, label: s.label, doc_type: s.doc_type }));
+        res.json({ data: out });
+    } catch (err) {
+        console.error('Erreur modèles entreprise :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** GET /api/companies/:id/documents?session_id= — documents « entreprise » générés. */
+const listCompanyDocuments = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const params = [orgId, req.params.id];
+        let where = "organization_id = ? AND company_id = ? AND scope = 'COMPANY'";
+        if (req.query.session_id) { where += ' AND session_id = ?'; params.push(req.query.session_id); }
+        const [rows] = await conn.query(
+            `SELECT id, type, template_slug, title, status, session_id,
+                    DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at,
+                    DATE_FORMAT(sent_at, '%Y-%m-%d %H:%i') AS sent_at
+             FROM generated_document WHERE ${where} ORDER BY created_at DESC`, params);
+        res.json({ data: rows });
+    } catch (err) {
+        if (isMissingSchema(err)) return res.json({ data: [] }); // migration 077 non jouée
+        console.error('Erreur documents entreprise :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** POST /api/companies/:id/documents — génère un document « entreprise » (liste le groupe). */
+const createCompanyDocument = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const { session_id, template_slug } = req.body || {};
+    if (!session_id || !template_slug) return res.status(422).json({ error: 'Session et modèle requis.' });
+    try {
+        const conn = db.promise();
+        const [[company]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
+        const [[sess]] = await conn.query('SELECT id FROM training_session WHERE id = ? AND organization_id = ?', [session_id, orgId]);
+        if (!sess) return res.status(404).json({ message: 'Session introuvable.' });
+
+        const steps = await loadOrgSteps(orgId);
+        const step = steps.find((s) => s.slug === template_slug && s.active && s.company_level);
+        if (!step) return res.status(422).json({ error: 'Modèle « entreprise » introuvable.' });
+
+        const [enr] = await conn.query(
+            'SELECT id FROM enrollment WHERE session_id = ? AND company_id = ? AND organization_id = ?',
+            [session_id, company.id, orgId]
+        );
+        if (!enr.length) return res.status(422).json({ error: 'Aucun stagiaire de cette entreprise dans cette session.' });
+
+        // Remplace la version en attente (non signée) du même modèle pour ce groupe.
+        try {
+            await conn.query(
+                "DELETE FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND status <> 'SIGNE'",
+                [orgId, company.id, session_id, template_slug]
+            );
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+
+        const id = crypto.randomUUID();
+        try {
+            await conn.query(
+                `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status, scope, company_id, session_id)
+                 VALUES (?, ?, NULL, ?, ?, ?, 'A_FAIRE', 'COMPANY', ?, ?)`,
+                [id, orgId, step.doc_type, template_slug, step.label, company.id, session_id]
+            );
+        } catch (e) {
+            if (isMissingSchema(e)) return res.status(422).json({ message: 'Documents entreprise non initialisés (migration 077).' });
+            throw e;
+        }
+        for (const e of enr) {
+            await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [id, e.id]);
+        }
+        res.status(201).json({ message: 'Document entreprise préparé.', data: { id } });
+    } catch (err) {
+        console.error('Erreur création document entreprise :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getCompanies, getCompany, createCompany, updateCompany, registerCompanyStagiaires, companyDocTemplates, listCompanyDocuments, createCompanyDocument };

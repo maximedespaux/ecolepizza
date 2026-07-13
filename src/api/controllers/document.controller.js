@@ -110,6 +110,27 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
         const [cRows] = await conn.query('SELECT * FROM company WHERE id = ?', [learner.company_id]);
         company = cRows[0] || null;
     }
+    // Document « entreprise » (migration 077) : entreprise portée par le document, et
+    // groupe de tous les stagiaires liés (jeton {Stagiaires}).
+    let groupStagiaires = [];
+    if (documentId) {
+        if (!company) {
+            try {
+                const [[gd2]] = await conn.query('SELECT company_id FROM generated_document WHERE id = ?', [documentId]);
+                if (gd2 && gd2.company_id) { const [cr] = await conn.query('SELECT * FROM company WHERE id = ?', [gd2.company_id]); company = cr[0] || company; }
+            } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+        }
+        const [gs] = await conn.query(
+            `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email,
+                    DATE_FORMAT(l.birthday, '%Y-%m-%d') AS birthday
+             FROM document_formation df
+             JOIN enrollment e ON e.id = df.enrollment_id
+             JOIN learner l ON l.id = e.learner_id
+             WHERE df.document_id = ? ORDER BY l.last_name, l.first_name`,
+            [documentId]
+        );
+        groupStagiaires = gs;
+    }
     // Signatures multiples (jetons sig:<slot>) — chargées si la table existe (migration 061).
     const slotSignatures = {};
     if (documentId) {
@@ -143,7 +164,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     // Jetons personnalisés de l'organisme (calculés à partir des autres au rendu).
     let customTokens = [];
     try { customTokens = await loadCustomTokens(organizationId); } catch { /* migration absente */ }
-    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens };
+    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires };
 }
 
 // Un document d'émargement (type EMARGEMENT) : rendu via le moteur d'émargement

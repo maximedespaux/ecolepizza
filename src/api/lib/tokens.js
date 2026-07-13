@@ -103,6 +103,7 @@ const TOKEN_CATALOG = [
             { key: 'Nom représentant', label: 'Nom du représentant', sample: 'Sophie Martin' },
             { key: 'Fonction représentant', label: 'Fonction du représentant', sample: 'Gérante' },
             { key: 'Adresse entreprise', label: 'Adresse de l’entreprise', sample: '5 av. de la Gare, 33000 Bordeaux' },
+            { key: 'Stagiaires', label: 'Tableau des stagiaires (groupe)', sample: '(liste des stagiaires du groupe)' },
         ],
     },
     {
@@ -140,8 +141,28 @@ const TOKEN_CATALOG = [
     },
 ];
 
-// Jetons dont la valeur est du HTML (image de signature) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme']);
+// Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires']);
+
+// Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
+const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Tableau HTML des stagiaires d'un groupe (document « entreprise »). Largeurs en attributs
+// HTML (LibreOffice ignore les largeurs CSS) ; `data-border` pose les bordures au rendu.
+function stagiairesTable(list) {
+    const rows = Array.isArray(list) ? list : [];
+    if (!rows.length) return '<p><i>Aucun stagiaire dans le groupe.</i></p>';
+    const body = rows.map((s, i) => {
+        const name = [s.civility, s.first_name, s.last_name].filter(Boolean).join(' ');
+        return `<tr><td width="34" style="text-align:center">${i + 1}</td>`
+            + `<td>${escCell(name)}</td>`
+            + `<td width="150">${escCell(s.birthday ? frDate(s.birthday) : '')}</td>`
+            + `<td width="200">${escCell(s.email || '')}</td></tr>`;
+    }).join('');
+    return `<table data-border="solid" width="100%"><thead><tr>`
+        + `<th width="34">N°</th><th>Stagiaire</th><th width="150">Né(e) le</th><th width="200">E-mail</th>`
+        + `</tr></thead><tbody>${body}</tbody></table>`;
+}
 
 // Rend une image de signature (ou un emplacement en pointillés si absente).
 // Cadre de signature à TAILLE FIXE : l'image (dessin du stagiaire ou signature de
@@ -187,7 +208,7 @@ for (const g of TOKEN_CATALOG) for (const t of g.tokens) TOKEN_LABELS[t.key] = {
 // on ne les compte pas comme « information manquante » à la génération.
 const OPTIONAL_TOKENS = new Set([
     'Signature stagiaire', 'Signature organisme', 'Nom signataire', 'Date signature',
-    'Today', 'Date',
+    'Today', 'Date', 'Stagiaires',
 ]);
 
 /** Extrait les clés de jetons utilisées dans un corps HTML (puces + {Clé}). */
@@ -293,6 +314,8 @@ function resolveTokens(ctx = {}) {
         'Civ représentant': c.representative_civ || '', 'Nom représentant': c.representative_name || '',
         'Responsable entreprise': c.representative_name || '', 'Fonction représentant': c.representative_role || '',
         'Adresse entreprise': cAddress,
+        // Groupe (document entreprise) : tableau HTML de tous les stagiaires du groupe.
+        Stagiaires: stagiairesTable(ctx.groupStagiaires),
         // Organisme
         Organisme: o.legal_name || '', 'Organisme court': o.short_name || '', Responsable: o.manager || '',
         'Siret organisme': o.siret || '', 'TVA organisme': o.vat_number || '', NDA: o.nda || '',

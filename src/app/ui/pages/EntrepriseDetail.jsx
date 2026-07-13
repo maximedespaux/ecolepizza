@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { getCompany, updateCompany, registerCompanyStagiaires, getSessions, getStagiaires } from "../api/apiClient.js";
+import { getCompany, updateCompany, registerCompanyStagiaires, getSessions, getStagiaires,
+  getCompanyDocTemplates, getCompanyDocuments, createCompanyDocument, sendDocument, documentPdfUrl } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -34,6 +35,12 @@ export default function EntrepriseDetail() {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [picked, setPicked] = useState([]); // [{ id, name, email }]
+  // Documents « entreprise »
+  const [docSession, setDocSession] = useState("");
+  const [docTemplates, setDocTemplates] = useState([]);
+  const [companyDocs, setCompanyDocs] = useState([]);
+  const [pickTpl, setPickTpl] = useState("");
+  const [genBusy, setGenBusy] = useState(false);
 
   function load() {
     getCompany(id).then((r) => { setData(r.data); setForm(r.data || {}); }).catch((e) => setStatus({ type: "error", message: e.message }));
@@ -56,6 +63,32 @@ export default function EntrepriseDetail() {
 
   const addPicked = (s) => { setPicked((p) => [...p, { id: s.id, name: [s.first_name, s.last_name].filter(Boolean).join(" ") || s.email, email: s.email }]); setQ(""); setResults([]); };
   const removePicked = (id) => setPicked((p) => p.filter((x) => x.id !== id));
+
+  // Documents entreprise : modèles applicables + docs déjà générés pour la session choisie.
+  const reloadDocs = () => { if (docSession) getCompanyDocuments(id, docSession).then((r) => setCompanyDocs(r.data || [])).catch(() => {}); };
+  useEffect(() => {
+    setCompanyDocs([]); setDocTemplates([]); setPickTpl("");
+    if (!docSession) return;
+    getCompanyDocTemplates(id, docSession).then((r) => setDocTemplates(r.data || [])).catch(() => {});
+    getCompanyDocuments(id, docSession).then((r) => setCompanyDocs(r.data || [])).catch(() => {});
+  }, [id, docSession]);
+
+  async function generateDoc() {
+    if (!pickTpl) return;
+    setGenBusy(true); setStatus(null);
+    try { await createCompanyDocument(id, { session_id: docSession, template_slug: pickTpl }); setStatus({ type: "success", message: "Document entreprise préparé." }); setPickTpl(""); reloadDocs(); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setGenBusy(false); }
+  }
+  async function sendDoc(docId) {
+    try { await sendDocument(docId); setStatus({ type: "success", message: "Document envoyé." }); reloadDocs(); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+  async function previewDoc(docId) {
+    try { const url = await documentPdfUrl(docId); window.open(url, "_blank"); }
+    catch (e) { setStatus({ type: "error", message: e.message || "Aperçu indisponible." }); }
+  }
+  const DOC_STATUS = { A_FAIRE: ["À envoyer", "n"], ENVOYE: ["Envoyé", "a"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"] };
 
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   async function saveInfo() {
@@ -95,6 +128,7 @@ export default function EntrepriseDetail() {
       <StatusMessage status={status} />
 
       <div className="grid cols-2" style={{ gap: 22, alignItems: "start" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {/* Inscription de groupe */}
         <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Inscrire un groupe de stagiaires</span>}>
           <p className="hint" style={{ margin: "0 0 12px" }}>Rattache des stagiaires <b>existants</b>, ou saisis-en de <b>nouveaux</b>. Tous passent en <b>financement professionnel</b>, rattachés à <b>{data.name}</b> (compte de connexion créé si e-mail), et inscrits à la session choisie.</p>
@@ -168,6 +202,46 @@ export default function EntrepriseDetail() {
             </div>
           )}
         </Card>
+
+        {/* Documents entreprise (groupe) */}
+        <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Documents entreprise</span>}>
+          <p className="hint" style={{ margin: "0 0 12px" }}>Documents produits <b>une fois pour le groupe</b> (ils listent tous les stagiaires via le jeton « Stagiaires »). Marque un modèle « Document entreprise » dans <b>Modèles</b> pour qu'il apparaisse ici.</p>
+          <div className="field"><label>Session</label>
+            <select className="inp" value={docSession} onChange={(e) => setDocSession(e.target.value)}>
+              <option value="">— Choisir une session —</option>
+              {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
+            </select>
+          </div>
+          {docSession && (
+            <>
+              <div style={{ display: "flex", gap: 8 }}>
+                <select className="inp" value={pickTpl} onChange={(e) => setPickTpl(e.target.value)} style={{ flex: 1 }}>
+                  <option value="">— Modèle entreprise —</option>
+                  {docTemplates.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
+                </select>
+                <button className="btn primary" disabled={!pickTpl || genBusy} onClick={generateDoc}><Icon name="plus" size={14} /> Générer</button>
+              </div>
+              {docTemplates.length === 0 && <p className="hint" style={{ margin: "8px 0 0" }}>Aucun modèle « entreprise » applicable à cette session.</p>}
+
+              <div style={{ display: "flex", flexDirection: "column", marginTop: 12 }}>
+                {companyDocs.length === 0 ? (
+                  <p className="hint" style={{ margin: 0 }}>Aucun document entreprise pour cette session.</p>
+                ) : companyDocs.map((d) => {
+                  const [lbl, tone] = DOC_STATUS[d.status] || [d.status, "n"];
+                  return (
+                    <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                      <span style={{ flex: 1, minWidth: 0 }}><b>{d.title}</b></span>
+                      <Badge tone={tone}>{lbl}</Badge>
+                      <button className="btn sm ghost" onClick={() => previewDoc(d.id)}>Aperçu</button>
+                      {d.status === "A_FAIRE" && <button className="btn sm primary" onClick={() => sendDoc(d.id)}>Envoyer</button>}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </Card>
+        </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
           {/* Stagiaires rattachés */}

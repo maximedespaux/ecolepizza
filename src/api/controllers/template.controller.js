@@ -15,14 +15,20 @@ const { resolveCustomTokens } = require('../lib/customtokens.js');
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
 
 // Lit les lignes document_template d'un organisme (métadonnées + présence de contenu).
+// `company_level` (migration 077) est optionnel : on réessaie sans si la colonne manque.
 async function loadRows(organizationId) {
-    const [rows] = await db.promise().query(
-        `SELECT ${META_COLS}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
+    const sel = (extra) =>
+        `SELECT ${META_COLS}${extra}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
-         FROM document_template WHERE organization_id = ?`,
-        [organizationId]
-    );
-    return rows;
+         FROM document_template WHERE organization_id = ?`;
+    try {
+        const [rows] = await db.promise().query(sel(', company_level'), [organizationId]);
+        return rows;
+    } catch (e) {
+        if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e;
+        const [rows] = await db.promise().query(sel(''), [organizationId]);
+        return rows;
+    }
 }
 
 /**
@@ -107,7 +113,7 @@ async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
     // sans elles plutôt que d'échouer.
-    const OPTIONAL = ['layout'];
+    const OPTIONAL = ['layout', 'company_level'];
     const run = async (f) => {
         const keys = Object.keys(f);
         if (ex.length) {
@@ -152,6 +158,7 @@ const saveTemplate = async (req, res) => {
     if (b.stagiaire_sign !== undefined) fields.stagiaire_sign = b.stagiaire_sign ? 1 : 0;
     if (b.applies_when !== undefined) fields.applies_when = b.applies_when ? JSON.stringify(b.applies_when) : null;
     if (b.active !== undefined) fields.active = b.active ? 1 : 0;
+    if (b.company_level !== undefined) fields.company_level = b.company_level ? 1 : 0;
     // Corps construit dans l'éditeur : passe l'étape en mode « builder ».
     if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }

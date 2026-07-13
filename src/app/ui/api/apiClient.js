@@ -375,6 +375,16 @@ export function updateCompany(id, payload) {
 export function registerCompanyStagiaires(id, payload) {
   return request(`/companies/${id}/register`, { method: "POST", body: JSON.stringify(payload) });
 }
+// Documents « entreprise » (un doc par groupe listant tous les stagiaires).
+export function getCompanyDocTemplates(id, sessionId) {
+  return request(`/companies/${id}/doc-templates${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
+}
+export function getCompanyDocuments(id, sessionId) {
+  return request(`/companies/${id}/documents${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
+}
+export function createCompanyDocument(id, payload) {
+  return request(`/companies/${id}/documents`, { method: "POST", body: JSON.stringify(payload) });
+}
 
 // --- Formations ---
 export function getFormations() {
