@@ -438,8 +438,10 @@ export function saveFormationSteps(id, steps, break_slug, company_break_slug) {
 export function getFormation(id) {
   return request(`/formations/${id}`);
 }
-export function saveArchiveTree(id, tree) {
-  return request(`/formations/${id}/archive-tree`, { method: "PUT", body: JSON.stringify({ tree }) });
+export function saveArchiveTree(id, tree, company_tree) {
+  const body = { tree };
+  if (company_tree !== undefined) body.company_tree = company_tree;
+  return request(`/formations/${id}/archive-tree`, { method: "PUT", body: JSON.stringify(body) });
 }
 
 // --- Sessions ---

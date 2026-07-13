@@ -359,16 +359,26 @@ const saveArchiveTree = async (req, res) => {
             'SELECT id FROM training_program WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
         if (!program) return res.status(404).json({ message: 'Formation introuvable' });
-        const tree = req.body && req.body.tree;
-        const json = tree == null ? null : JSON.stringify(tree);
-        try {
-            await conn.query('UPDATE training_program SET archive_tree = ? WHERE id = ? AND organization_id = ?',
-                [json, req.params.id, req.user.organization_id]);
-        } catch (e) {
-            if (e && e.code === 'ER_BAD_FIELD_ERROR') {
-                return res.status(422).json({ error: "Migration requise (archive_tree) : appliquez 053_program_archive_tree.sql." });
+        const b = req.body || {};
+        if (Object.prototype.hasOwnProperty.call(b, 'tree')) {
+            const json = b.tree == null ? null : JSON.stringify(b.tree);
+            try {
+                await conn.query('UPDATE training_program SET archive_tree = ? WHERE id = ? AND organization_id = ?',
+                    [json, req.params.id, req.user.organization_id]);
+            } catch (e) {
+                if (e && e.code === 'ER_BAD_FIELD_ERROR') {
+                    return res.status(422).json({ error: "Migration requise (archive_tree) : appliquez 053_program_archive_tree.sql." });
+                }
+                throw e;
             }
-            throw e;
+        }
+        // Arborescence ENTREPRISE (migration 083) — tolère l'absence de colonne.
+        if (Object.prototype.hasOwnProperty.call(b, 'company_tree')) {
+            const cjson = b.company_tree == null ? null : JSON.stringify(b.company_tree);
+            try {
+                await conn.query('UPDATE training_program SET company_archive_tree = ? WHERE id = ? AND organization_id = ?',
+                    [cjson, req.params.id, req.user.organization_id]);
+            } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; }
         }
         res.json({ success: true, message: 'Arborescence enregistrée.' });
     } catch (err) {

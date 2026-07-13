@@ -139,9 +139,11 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [breakSlug, setBreakSlug] = useState(null); // point d'accès émargement (slug avant la flèche)
   const [companyBreakSlug, setCompanyBreakSlug] = useState(null); // point de rupture parcours entreprise
   const [archiveTree, setArchiveTree] = useState({ folders: [] });
+  const [companyArchiveTree, setCompanyArchiveTree] = useState({ folders: [] });
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
   const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives"
   const [parcoursKind, setParcoursKind] = useState("stagiaire"); // "stagiaire" | "entreprise"
+  const [archKind, setArchKind] = useState("stagiaire"); // arborescence : "stagiaire" | "entreprise"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
   // Couleur effective du badge + valeur hexadécimale pour le sélecteur natif.
@@ -153,10 +155,13 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   useEffect(() => {
     if (!program.id) return;
     getFormation(program.id).then((r) => {
-      const raw = r.data?.archive_tree;
-      let t = { folders: [] };
-      if (raw) { try { t = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { t = { folders: [] }; } }
-      setArchiveTree(t && t.folders ? t : { folders: [] });
+      const parseTree = (raw) => {
+        let t = { folders: [] };
+        if (raw) { try { t = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { t = { folders: [] }; } }
+        return t && t.folders ? t : { folders: [] };
+      };
+      setArchiveTree(parseTree(r.data?.archive_tree));
+      setCompanyArchiveTree(parseTree(r.data?.company_archive_tree));
       if (r.data && r.data.needs_emargement != null) setForm((p) => ({ ...p, needs_emargement: r.data.needs_emargement ? 1 : 0 }));
       // horaires n'est pas renvoyé par la liste (getFormations) : on le charge ici.
       if (r.data && "horaires" in r.data) setForm((p) => ({ ...p, horaires: r.data.horaires || "" }));
@@ -180,8 +185,13 @@ function FormationModal({ program, onClose, onSaved, onError }) {
     if (!String(form.code).trim()) { onError("Le code est requis."); return; }
     if (!String(form.title).trim()) { onError("L'intitulé est requis."); return; }
     if (!isNew && treeHasEmptyName(archiveTree)) {
-      setTab("archives");
-      onError("Nommez tous les dossiers de l'arborescence d'archivage avant d'enregistrer.");
+      setTab("archives"); setArchKind("stagiaire");
+      onError("Nommez tous les dossiers de l'arborescence d'archivage stagiaire avant d'enregistrer.");
+      return;
+    }
+    if (!isNew && treeHasEmptyName(companyArchiveTree)) {
+      setTab("archives"); setArchKind("entreprise");
+      onError("Nommez tous les dossiers de l'arborescence d'archivage entreprise avant d'enregistrer.");
       return;
     }
     setSaving(true);
@@ -192,7 +202,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       } else {
         await updateFormation(program.id, form);
         await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null, companyBreakSlug || null);
-        await saveArchiveTree(program.id, archiveTree).catch(() => {}); // tolère l'absence de migration
+        await saveArchiveTree(program.id, archiveTree, companyArchiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved("Formation mise à jour.");
       }
     } catch (e) {
@@ -330,18 +340,33 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           </div>
 
           <div style={{ display: tab === "archives" ? "block" : "none" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
-              <ArchiveTreeEditor tree={archiveTree} onChange={setArchiveTree} eqMap={eqMap}
-                docs={[
-                  ...steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id })),
-                  // Documents « système » assemblés à partir des signatures (si la formation utilise l'émargement).
-                  ...(form.needs_emargement ? [{ slug: "sys:emargement", label: "Feuille d'émargement (stagiaire + formateur(s) + intervenant(s))", system: true }] : []),
-                ]} />
-              <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
-                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu</div>
-                <ArchiveTreePreview tree={archiveTree} code={form.code} title={form.title} />
-              </div>
-            </div>
+            {(() => {
+              const isEntArch = archKind === "entreprise";
+              const curTree = isEntArch ? companyArchiveTree : archiveTree;
+              const setCurTree = isEntArch ? setCompanyArchiveTree : setArchiveTree;
+              const docs = isEntArch
+                ? steps.filter((s) => s.active && s.company_level).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id }))
+                : [
+                    ...steps.filter((s) => s.active && !s.company_level).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id })),
+                    // Documents « système » assemblés à partir des signatures (si la formation utilise l'émargement).
+                    ...(form.needs_emargement ? [{ slug: "sys:emargement", label: "Feuille d'émargement (stagiaire + formateur(s) + intervenant(s))", system: true }] : []),
+                  ];
+              return (
+                <>
+                  <div className="seg" style={{ marginBottom: 12 }}>
+                    <button type="button" className={"seg-btn" + (!isEntArch ? " on" : "")} onClick={() => setArchKind("stagiaire")}>Archivage stagiaire</button>
+                    <button type="button" className={"seg-btn" + (isEntArch ? " on" : "")} onClick={() => setArchKind("entreprise")}>Archivage entreprise</button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
+                    <ArchiveTreeEditor tree={curTree} onChange={setCurTree} eqMap={eqMap} docs={docs} />
+                    <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu — {isEntArch ? "entreprise" : "stagiaire"}</div>
+                      <ArchiveTreePreview tree={curTree} code={form.code} title={form.title} />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
         <div className="mfoot">
