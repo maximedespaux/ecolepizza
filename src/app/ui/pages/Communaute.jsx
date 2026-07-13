@@ -6,7 +6,7 @@ import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
-import { avatarById } from "../lib/gamification.js";
+import { parseAvatar } from "../lib/gamification.js";
 import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment } from "../api/apiClient.js";
 
 /**
@@ -44,7 +44,7 @@ function AuthorChip({ id, name, onOpen }) {
 
 // Fenêtre profil de l'auteur : avatar, nom, nombre de fiches partagées, cœurs reçus.
 function ProfileModal({ profile, loading, onClose }) {
-  const av = profile && profile.avatar ? avatarById(profile.avatar) : null;
+  const av = profile && profile.avatar ? parseAvatar(profile.avatar) : null;
   return createPortal(
     <div className="overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>

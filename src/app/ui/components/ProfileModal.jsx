@@ -12,6 +12,8 @@ import { AVATARS, getAvatar, setAvatar, GRADES, gradeFor, readGameStats, scoreOf
  *  • Compte  : changement d'e-mail et de mot de passe.
  */
 const CIVILITIES = ["", "M.", "Mme"];
+// Fonds proposés (charte pizza) — plus le sélecteur libre pour une couleur personnalisée.
+const PALETTE = ["#dc3e37", "#ff6900", "#fcb900", "#2f9e6f", "#3aa0e0", "#2c3371", "#7b3f9e", "#8a5a2b", "#e0533e", "#111827"];
 
 export default function ProfileModal({ onClose }) {
   const { user, setUser } = useContext(UserContext);
@@ -29,7 +31,8 @@ export default function ProfileModal({ onClose }) {
   const { grade, next } = gradeFor(score);
   const pct = next ? Math.min(100, Math.round(((score - grade.min) / (next.min - grade.min)) * 100)) : 100;
 
-  function choose(a) { setAvatar(uid, a.id); setAv(a); }
+  function choose(a) { const c = avatar?.color; setAvatar(uid, a.id, c); setAv({ ...a, color: c || a.color }); }
+  function chooseColor(c) { const base = avatar || AVATARS[0]; setAvatar(uid, base.id, c); setAv({ ...base, color: c }); }
   const who = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email || "Stagiaire";
   const refreshUser = () => getCurrentUser().then((r) => setUser(r.data)).catch(() => {});
 
@@ -62,7 +65,7 @@ export default function ProfileModal({ onClose }) {
           </span>
 
           {tab === "profil" && (
-            <ProfilTab avatar={avatar} choose={choose} grade={grade} next={next} score={score} pct={pct} xp={xp} stars={stars} done={done} enrolled={enrolled} />
+            <ProfilTab avatar={avatar} choose={choose} chooseColor={chooseColor} grade={grade} next={next} score={score} pct={pct} xp={xp} stars={stars} done={done} enrolled={enrolled} />
           )}
           {tab === "infos" && <InfosTab onSaved={refreshUser} />}
           {tab === "visibilite" && <VisibiliteTab who={who} />}
@@ -76,7 +79,7 @@ export default function ProfileModal({ onClose }) {
   );
 }
 
-function ProfilTab({ avatar, choose, grade, next, score, pct, xp, stars, done, enrolled }) {
+function ProfilTab({ avatar, choose, chooseColor, grade, next, score, pct, xp, stars, done, enrolled }) {
   return (
     <>
       <div className="pf-grade">
@@ -113,13 +116,30 @@ function ProfilTab({ avatar, choose, grade, next, score, pct, xp, stars, done, e
         <div className="pf-picker">
           {AVATARS.map((a) => (
             <button key={a.id} className={"pf-opt" + (avatar?.id === a.id ? " sel" : "")}
-              style={{ background: a.color }} onClick={() => choose(a)} title={a.id} aria-label={`Avatar ${a.id}`}>
+              style={{ background: avatar?.id === a.id ? (avatar.color || a.color) : a.color }} onClick={() => choose(a)} title={a.id} aria-label={`Avatar ${a.id}`}>
               {a.emoji}
               {avatar?.id === a.id && <span className="pf-check"><Icon name="check" size={12} /></span>}
             </button>
           ))}
         </div>
-        <p className="hint" style={{ marginTop: 8 }}>Ton avatar et ton grade sont visibles par les autres stagiaires dans la communauté.</p>
+
+        {/* Couleur du fond */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "14px 0 8px" }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>Couleur du fond</span>
+          <label className="btn sm ghost" style={{ cursor: "pointer" }} title="Couleur personnalisée">
+            🎨 Personnalisée
+            <input type="color" value={avatar?.color || "#dc3e37"} onChange={(e) => chooseColor(e.target.value)} style={{ width: 0, height: 0, opacity: 0, position: "absolute" }} />
+          </label>
+        </div>
+        <div className="pf-colors">
+          {PALETTE.map((c) => (
+            <button key={c} className={"pf-color" + (avatar?.color?.toLowerCase() === c.toLowerCase() ? " sel" : "")}
+              style={{ background: c }} onClick={() => chooseColor(c)} title={c} aria-label={`Fond ${c}`}>
+              {avatar?.color?.toLowerCase() === c.toLowerCase() && <Icon name="check" size={12} />}
+            </button>
+          ))}
+        </div>
+        <p className="hint" style={{ marginTop: 8 }}>Ton avatar, sa couleur et ton grade sont visibles par les autres stagiaires dans la communauté.</p>
       </div>
     </>
   );

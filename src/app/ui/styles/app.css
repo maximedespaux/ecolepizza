@@ -881,6 +881,11 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Communauté — liste des recettes partagées */
 .comm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border:none;background:none;border-bottom:1px solid var(--border-soft);cursor:pointer;color:var(--text)}
 .comm-row:hover,.comm-row.on{background:var(--surface2)}
+/* Sélecteur de couleur de fond d'avatar */
+.pf-colors{display:flex;flex-wrap:wrap;gap:8px}
+.pf-color{width:32px;height:32px;border-radius:999px;border:2px solid var(--border);cursor:pointer;display:grid;place-items:center;color:#fff;transition:transform .1s}
+.pf-color:hover{transform:scale(1.08)}
+.pf-color.sel{border-color:var(--text);box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--text)}
 /* Réglages de visibilité du profil (cases à cocher) */
 .vis-list{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .vis-row{display:flex;align-items:center;gap:12px;padding:11px 12px;border-bottom:1px solid var(--border-soft);cursor:pointer}

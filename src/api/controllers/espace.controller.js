@@ -398,7 +398,11 @@ const saveMyAvatar = async (req, res) => {
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
         const avatar = req.body && req.body.avatar;
-        if (avatar != null && avatar !== '' && !AVATAR_IDS.has(avatar)) return res.status(422).json({ message: 'Avatar inconnu.' });
+        if (avatar != null && avatar !== '') {
+            const [id, color] = String(avatar).split('|'); // "id" ou "id|#rrggbb"
+            if (!AVATAR_IDS.has(id)) return res.status(422).json({ message: 'Avatar inconnu.' });
+            if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) return res.status(422).json({ message: 'Couleur invalide.' });
+        }
         try { await conn.query('UPDATE learner SET avatar = ? WHERE id = ?', [avatar || null, learner.id]); }
         catch (e) { if (!isMissingSchema(e)) throw e; }
         res.json({ success: true });

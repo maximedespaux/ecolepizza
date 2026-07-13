@@ -25,15 +25,27 @@ export const AVATARS = [
   { id: "oven", emoji: "🍞", color: "#a0522d" },
 ];
 export const avatarById = (id) => AVATARS.find((a) => a.id === id) || null;
+export const isHexColor = (c) => /^#[0-9a-fA-F]{6}$/.test(c || "");
+
+// L'avatar est stocké sous la forme "id" ou "id|#rrggbb" (couleur de fond personnalisée).
+// parseAvatar renvoie { id, emoji, color } — la couleur choisie, ou celle par défaut de l'emoji.
+export function parseAvatar(value) {
+  if (!value) return null;
+  const [id, color] = String(value).split("|");
+  const base = avatarById(id);
+  if (!base) return null;
+  return { ...base, color: isHexColor(color) ? color : base.color };
+}
 
 const AVATAR_KEY = (uid) => `impasto.avatar.${uid || "me"}`;
 const AVATAR_EVT = "impasto:avatar";
 export function getAvatar(uid) {
-  try { const id = localStorage.getItem(AVATAR_KEY(uid)); return id ? avatarById(id) : null; } catch { return null; }
+  try { const v = localStorage.getItem(AVATAR_KEY(uid)); return v ? parseAvatar(v) : null; } catch { return null; }
 }
-export function setAvatar(uid, id) {
-  try { localStorage.setItem(AVATAR_KEY(uid), id); window.dispatchEvent(new CustomEvent(AVATAR_EVT)); } catch { /* ignore */ }
-  saveMyAvatar(id).catch(() => {}); // persistance serveur (best-effort)
+export function setAvatar(uid, id, color) {
+  const value = isHexColor(color) ? `${id}|${color}` : id;
+  try { localStorage.setItem(AVATAR_KEY(uid), value); window.dispatchEvent(new CustomEvent(AVATAR_EVT)); } catch { /* ignore */ }
+  saveMyAvatar(value).catch(() => {}); // persistance serveur (best-effort)
 }
 export const AVATAR_EVENT = AVATAR_EVT;
 
