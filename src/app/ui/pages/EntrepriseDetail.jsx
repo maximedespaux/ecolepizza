@@ -9,10 +9,21 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 
+const LEGAL_STATUSES = ["SARL", "SAS", "SASU", "EURL", "EI", "Micro / Auto", "SA", "SCI", "Association", "Autre"];
 const CFIELDS = [
-  ["name", "Nom de l'entreprise"], ["siret", "SIRET"], ["address", "Adresse"],
-  ["zip_code", "Code postal"], ["town", "Ville"], ["email", "E-mail"], ["phone", "Téléphone"],
-  ["representative_name", "Nom du référent"], ["representative_role", "Fonction du référent"],
+  { k: "name", label: "Nom de l'entreprise", full: true },
+  { k: "siret", label: "SIRET" },
+  { k: "naf_ape", label: "Code NAF / APE" },
+  { k: "legal_status", label: "Forme juridique", type: "select", options: LEGAL_STATUSES },
+  { k: "opco", label: "OPCO / financeur" },
+  { k: "address", label: "Adresse", full: true },
+  { k: "zip_code", label: "Code postal" },
+  { k: "town", label: "Ville" },
+  { k: "email", label: "E-mail" },
+  { k: "phone", label: "Téléphone" },
+  { k: "representative_civ", label: "Civilité du référent", type: "select", options: ["M.", "Mme"] },
+  { k: "representative_name", label: "Nom du référent" },
+  { k: "representative_role", label: "Fonction du référent", full: true },
 ];
 const sessLabel = (s) => `${s.program_code || s.program_title} · S${s.week} ${s.year}`;
 
@@ -257,11 +268,14 @@ export default function EntrepriseDetail() {
           {/* Coordonnées de l'entreprise */}
           <Card title={<span className="card-ttl"><Icon name="building" size={16} /> Coordonnées</span>}>
             <div className="grid cols-2" style={{ gap: 12 }}>
-              {CFIELDS.map(([k, label]) => (
-                <div className="field" key={k} style={{ marginBottom: 0, gridColumn: k === "address" || k === "name" ? "1 / -1" : "auto" }}>
+              {CFIELDS.map(({ k, label, full, type, options }) => (
+                <div className="field" key={k} style={{ marginBottom: 0, gridColumn: full ? "1 / -1" : "auto" }}>
                   <label>{label}</label>
-                  {k === "representative_role"
-                    ? <input className="inp" value={form[k] || ""} onChange={set(k)} />
+                  {type === "select"
+                    ? <select className="inp" value={form[k] || ""} onChange={set(k)}>
+                        <option value="">—</option>
+                        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
                     : <input className="inp" value={form[k] || ""} onChange={set(k)} />}
                 </div>
               ))}
