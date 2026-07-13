@@ -15,20 +15,14 @@ const { resolveCustomTokens } = require('../lib/customtokens.js');
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
 
 // Lit les lignes document_template d'un organisme (métadonnées + présence de contenu).
-// `emargement_break` (migration 076) est optionnel : on réessaie sans si la colonne manque.
 async function loadRows(organizationId) {
-    const sel = (extra) =>
-        `SELECT ${META_COLS}${extra}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
+    const [rows] = await db.promise().query(
+        `SELECT ${META_COLS}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
-         FROM document_template WHERE organization_id = ?`;
-    try {
-        const [rows] = await db.promise().query(sel(', emargement_break'), [organizationId]);
-        return rows;
-    } catch (e) {
-        if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e;
-        const [rows] = await db.promise().query(sel(''), [organizationId]);
-        return rows;
-    }
+         FROM document_template WHERE organization_id = ?`,
+        [organizationId]
+    );
+    return rows;
 }
 
 /**
@@ -113,7 +107,7 @@ async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
     // sans elles plutôt que d'échouer.
-    const OPTIONAL = ['layout', 'emargement_break'];
+    const OPTIONAL = ['layout'];
     const run = async (f) => {
         const keys = Object.keys(f);
         if (ex.length) {
@@ -158,7 +152,6 @@ const saveTemplate = async (req, res) => {
     if (b.stagiaire_sign !== undefined) fields.stagiaire_sign = b.stagiaire_sign ? 1 : 0;
     if (b.applies_when !== undefined) fields.applies_when = b.applies_when ? JSON.stringify(b.applies_when) : null;
     if (b.active !== undefined) fields.active = b.active ? 1 : 0;
-    if (b.emargement_break !== undefined) fields.emargement_break = b.emargement_break ? 1 : 0;
     // Corps construit dans l'éditeur : passe l'étape en mode « builder ».
     if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }
@@ -523,9 +516,37 @@ const reorderTemplates = async (req, res) => {
     }
 };
 
+/** GET /api/templates/emargement-break — position du point d'accès émargement (seuil sort_order). */
+const getEmargementBreak = async (req, res) => {
+    try {
+        const [[o]] = await db.promise().query('SELECT emargement_break_order AS bo FROM organization WHERE id = ?', [req.user.organization_id]);
+        res.json({ data: { break_order: o && o.bo != null ? Number(o.bo) : null } });
+    } catch (err) {
+        if (err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE')) return res.json({ data: { break_order: null } });
+        console.error('Erreur lecture point émargement :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/templates/emargement-break — { break_order:number|null }. Définit/retire le point d'accès. */
+const setEmargementBreak = async (req, res) => {
+    try {
+        const raw = (req.body || {}).break_order;
+        const val = (raw === null || raw === undefined || raw === '') ? null : (Number.isFinite(Number(raw)) ? Number(raw) : null);
+        await db.promise().query('UPDATE organization SET emargement_break_order = ? WHERE id = ?', [val, req.user.organization_id]);
+        logAudit(req, 'template.emargement_break', 'Organization', String(val));
+        res.json({ success: true, break_order: val });
+    } catch (err) {
+        if (err && err.code === 'ER_BAD_FIELD_ERROR') return res.status(422).json({ message: "Point d'accès émargement non initialisé (migration 076)." });
+        console.error('Erreur enregistrement point émargement :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
     getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
     loadCustomTokens, getCustomTokens, saveCustomTokens,
+    getEmargementBreak, setEmargementBreak,
 };

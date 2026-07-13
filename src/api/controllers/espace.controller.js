@@ -104,17 +104,23 @@ async function completionOf(conn, e, steps, agefice = false) {
     return { complete, dayPassed, signed, total };
 }
 
-// Accès à l'émargement : bloqué tant que le stagiaire n'a pas signé tous les documents
-// qu'il doit signer JUSQU'À l'étape marquée « point d'accès émargement » (breakpoint).
-// Aucune étape marquée → aucun blocage. Renvoie { locked, need, done, break_label }.
-async function emargementGate(conn, e, steps, agefice = false) {
-    const breaks = steps.filter((s) => s.active && s.emargement_break);
-    if (!breaks.length) return { locked: false, need: 0, done: 0, break_label: null };
-    const threshold = Math.max(...breaks.map((s) => Number(s.sort_order) || 0));
-    const break_label = breaks.slice().sort((a, b) => (b.sort_order - a.sort_order))[0].label;
+// Accès à l'émargement : point de rupture positionné ENTRE deux étapes du parcours
+// (organization.emargement_break_order = seuil sort_order). Le stagiaire doit avoir signé
+// tous les documents qu'il doit signer dont sort_order <= seuil. Aucun seuil → aucun blocage.
+// Renvoie { locked, need, done, break_label }.
+async function emargementGate(conn, e, orgId, steps, agefice = false) {
+    let threshold = null;
+    try {
+        const [[o]] = await conn.query('SELECT emargement_break_order AS bo FROM organization WHERE id = ?', [orgId]);
+        if (o && o.bo != null) threshold = Number(o.bo);
+    } catch { threshold = null; } // colonne absente (migration 076 non jouée)
+    if (threshold == null) return { locked: false, need: 0, done: 0, break_label: null };
 
     const ctx = { hygiene: !!e.program_hygiene, rsCode: e.program_rs, jours: e.program_days || 1, financing: e.financing, agefice };
-    const required = stepsToDocSet(steps, ctx).filter((d) => d.stagiaireSign && (d.sort_order == null || Number(d.sort_order) <= threshold));
+    const applicable = stepsToDocSet(steps, ctx);
+    const required = applicable.filter((d) => d.stagiaireSign && (d.sort_order == null || Number(d.sort_order) <= threshold));
+    // Étiquette : le dernier document requis avant le point de rupture.
+    const break_label = required.length ? required[required.length - 1].label : null;
     if (!required.length) return { locked: false, need: 0, done: 0, break_label };
 
     const [rows] = await conn.query(
@@ -286,7 +292,7 @@ const getMyFormation = async (req, res) => {
         const steps = await loadOrgSteps(learner.organization_id);
         const agefice = (learner.opco || "").toUpperCase() === "AGEFICE";
         const c = await completionOf(conn, e, steps, agefice);
-        const gate = await emargementGate(conn, e, steps, agefice);
+        const gate = await emargementGate(conn, e, learner.organization_id, steps, agefice);
 
         // Sessions du MÊME programme suivies par ce stagiaire (onglets W23 / W25…).
         const [sessions] = e.session_id ? await conn.query(

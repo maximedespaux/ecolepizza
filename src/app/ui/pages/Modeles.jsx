@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
   getConditionCatalog, getConditions, createCondition, deleteCondition, getFieldValues,
   getEquivalences, createEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
-  reorderEmargementTemplates } from "../api/apiClient.js";
+  reorderEmargementTemplates, getEmargementBreak, setEmargementBreak } from "../api/apiClient.js";
 import { EMARG_DEFAULTS } from "./EmargementEditor.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -52,7 +52,18 @@ function Modeles() {
   const [catalog, setCatalog] = useState({ fields: [], operators: {} });
   const [emargItems, setEmargItems] = useState([]); // modèles de feuille d'émargement
   const [view, setView] = useState("documents");      // onglet : "documents" | "conditions"
+  const [breakOrder, setBreakOrder] = useState(null);  // point d'accès émargement (seuil sort_order)
   const condBySlug = Object.fromEntries(conditions.map((c) => [c.slug, c]));
+
+  // Place / retire le point d'accès à l'émargement entre deux étapes (clic sur la barre).
+  async function toggleBreak(order) {
+    const next = breakOrder === order ? null : order;
+    setBreakOrder(next);
+    try {
+      await setEmargementBreak(next);
+      setStatus({ type: "success", message: next == null ? "Point d'accès émargement retiré." : "Point d'accès émargement défini." });
+    } catch (e) { setStatus({ type: "error", message: e.message }); getEmargementBreak().then((r) => setBreakOrder(r.data?.break_order ?? null)).catch(() => {}); }
+  }
 
   async function load() {
     try { const { data } = await getTemplates(); setItems([...data].sort((a, b) => a.sort_order - b.sort_order)); }
@@ -70,7 +81,7 @@ function Modeles() {
   async function loadConditions() {
     try { const { data } = await getConditions(); setConditions(data || []); } catch { /* silencieux */ }
   }
-  useEffect(() => { load(); loadEmarg(); loadConditions(); getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {}); }, []);
+  useEffect(() => { load(); loadEmarg(); loadConditions(); getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {}); getEmargementBreak().then((r) => setBreakOrder(r.data?.break_order ?? null)).catch(() => {}); }, []);
 
   // Liste affichée : documents classiques + modèles d'émargement, triés par ordre.
   const allItems = [...items.map((t) => ({ ...t, kind: t.kind || "document" })), ...emargItems]
@@ -173,8 +184,10 @@ function Modeles() {
             <tbody>
               {allItems.map((t) => {
                 const isEmarg = t.kind === "emargement";
+                const brkActive = breakOrder != null && Number(breakOrder) === Number(t.sort_order);
                 return (
-                <tr key={keyOf(t)}
+                <Fragment key={keyOf(t)}>
+                <tr
                   className={"drag-row" + (drag === keyOf(t) ? " dragging" : "")}
                   style={{ opacity: t.active ? 1 : 0.5 }}
                   draggable
@@ -186,7 +199,6 @@ function Modeles() {
                   <td className="drag-handle" title="Glisser pour réordonner">⠿</td>
                   <td>
                     <b>{t.label}</b>
-                    {t.emargement_break ? <span title="Le stagiaire doit avoir signé jusqu'ici pour émarger" style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: "var(--ember1)" }}>🚧 accès émargement</span> : null}
                     <span style={{ display: "block", fontSize: 11, color: "var(--dim)" }} className="mono">{t.slug}{!t.active && " · inactif"}</span>
                   </td>
                   <td>{isEmarg ? <Badge tone="a">Émargement</Badge> : <span className="mono" style={{ fontSize: 12 }}>{t.doc_type || "—"}</span>}</td>
@@ -213,6 +225,18 @@ function Modeles() {
                     </div>
                   </td>
                 </tr>
+                {/* Barre inter-étapes : point d'accès à l'émargement */}
+                <tr className="brk-gap">
+                  <td colSpan={7} style={{ padding: 0 }}>
+                    <button className={"brk-line" + (brkActive ? " on" : "")} onClick={() => toggleBreak(t.sort_order)}
+                      title={brkActive ? "Retirer le point d'accès émargement" : "Placer ici le point d'accès à l'émargement (le stagiaire devra avoir signé les documents au-dessus)"}>
+                      {brkActive
+                        ? <span className="brk-txt">🚧 Accès émargement — documents ci-dessus requis <span className="brk-x">✕ retirer</span></span>
+                        : <span className="brk-add">＋ point d'accès émargement ici</span>}
+                    </button>
+                  </td>
+                </tr>
+                </Fragment>
                 );
               })}
             </tbody>
@@ -370,7 +394,6 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     sort_order: step.sort_order ?? 100,
     signable: !!step.signable,
     stagiaire_sign: !!step.stagiaire_sign,
-    emargement_break: !!step.emargement_break,
     sign_formateur: !!(step.config && step.config.show_formateurs),
     sign_intervenant: !!(step.config && step.config.show_intervenants),
     sign_organization: !!(step.config && step.config.show_organization),
@@ -402,8 +425,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         if (!slug) { onError("Identifiant (slug) requis."); setSaving(false); return; }
         await saveTemplate(slug, {
           label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
-          signable: form.signable, stagiaire_sign: form.stagiaire_sign, emargement_break: form.emargement_break,
-          active: form.active, applies_when,
+          signable: form.signable, stagiaire_sign: form.stagiaire_sign, active: form.active, applies_when,
         });
       }
       onSaved();
@@ -486,14 +508,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
                 <input type="checkbox" checked={form.stagiaire_sign} onChange={chk("stagiaire_sign")} /> Signé par le stagiaire</label>
               <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
                 <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Le stagiaire doit avoir signé tous ses documents jusqu'à cette étape (incluse) avant de pouvoir émarger.">
-                <input type="checkbox" checked={form.emargement_break} onChange={chk("emargement_break")} /> 🚧 Point d'accès émargement</label>
             </div>
-          )}
-          {!isEmarg && form.emargement_break && (
-            <p className="hint" style={{ margin: "8px 0 0", color: "var(--ember1)" }}>
-              L'émargement de la session ne sera accessible au stagiaire qu'une fois tous ses documents à signer <b>jusqu'à cette étape</b> signés.
-            </p>
           )}
           <p className="sub" style={{ marginTop: 10 }}>
             {isEmarg

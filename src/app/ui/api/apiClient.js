@@ -690,6 +690,9 @@ export function reorderTemplates(orders) {
     ? { slugs: orders } : { orders };
   return request("/templates/reorder", { method: "PUT", body: JSON.stringify(body) });
 }
+// Point d'accès émargement : seuil (sort_order) dans le parcours, ou null.
+export function getEmargementBreak() { return request("/templates/emargement-break", { silent: true }); }
+export function setEmargementBreak(break_order) { return request("/templates/emargement-break", { method: "PUT", body: JSON.stringify({ break_order }) }); }
 export function reorderEmargementTemplates(orders) {
   return request("/emargement-templates/reorder", { method: "PUT", body: JSON.stringify({ orders }) });
 }
