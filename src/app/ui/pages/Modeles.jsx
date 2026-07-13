@@ -9,6 +9,7 @@ import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTempl
 import { EMARG_DEFAULTS } from "./EmargementEditor.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
@@ -70,7 +71,8 @@ function Modeles() {
   async function loadConditions() {
     try { const { data } = await getConditions(); setConditions(data || []); } catch { /* silencieux */ }
   }
-  useEffect(() => { load(); loadEmarg(); loadConditions(); getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {}); }, []);
+  const reloadCatalog = () => getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {});
+  useEffect(() => { load(); loadEmarg(); loadConditions(); reloadCatalog(); }, []);
 
   // Liste affichée : documents classiques + modèles d'émargement, triés par ordre.
   const allItems = [...items.map((t) => ({ ...t, kind: t.kind || "document" })), ...emargItems]
@@ -225,6 +227,7 @@ function Modeles() {
           conditions={conditions}
           catalog={catalog}
           onChanged={loadConditions}
+          onCatalogChanged={reloadCatalog}
           onStatus={setStatus}
         />
       )}
@@ -261,7 +264,7 @@ function groupFields(fields) {
   return out;
 }
 
-function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
+function ConditionsPanel({ conditions, catalog, onChanged, onCatalogChanged, onStatus }) {
   const fields = catalog.fields || [];
   const operators = catalog.operators || {};
   const fieldGroups = groupFields(fields);
@@ -273,6 +276,9 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
   const [saving, setSaving] = useState(false);
   const [suggestions, setSuggestions] = useState([]); // valeurs existantes pour ce champ
   const formRef = useRef(null);
+  const [showFields, setShowFields] = useState(false); // modale « Champs documents »
+  const fieldsRef = useRef(null);
+  const closeFields = () => { setShowFields(false); onCatalogChanged?.(); };
 
   const curField = fields.find((f) => f.key === field);
   const ops = curField ? (operators[curField.type] || []) : [];
@@ -327,11 +333,34 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
   const fieldLabel = (k) => fields.find((f) => f.key === k)?.label || k;
 
   return (
-    <Card title={`Conditions personnalisées (${conditions.length})`}>
+    <Card title={`Conditions personnalisées (${conditions.length})`}
+      more={<button className="btn sm ghost" title="Gérer les champs du dossier (jeton / condition)" onClick={() => setShowFields(true)}><Icon name="settings" size={14} /> Champs documents</button>}>
       <p className="hint" style={{ marginTop: 0 }}>
         Créez des conditions basées sur les infos réelles du dossier (stagiaire, formation, financement).
         Elles deviennent cochables sur chaque document (bouton ✎) : un document ne s'applique alors qu'aux dossiers qui les remplissent toutes.
+        Un champ doit être activé en <b>Condition</b> dans <b>Champs documents</b> pour apparaître ici.
       </p>
+
+      {showFields && (
+        <div className="overlay" onClick={closeFields}>
+          <div className="modal" style={{ maxWidth: 760, width: "92%" }} onClick={(e) => e.stopPropagation()}>
+            <div className="mhead">
+              <h3>Champs documents</h3>
+              <button className="x" onClick={closeFields} aria-label="Fermer">×</button>
+            </div>
+            <div className="mbody" style={{ maxHeight: "70vh", overflow: "auto" }}>
+              <p className="sub" style={{ margin: "0 0 10px" }}>
+                Activez chaque champ du dossier pour son usage : <b>🏷️ Jeton</b> (imprimé dans un document) et/ou <b>🔀 Condition</b> (test « ce document ne s'applique que si… »).
+              </p>
+              <FieldSettingsPanel ref={fieldsRef} onStatus={onStatus} />
+            </div>
+            <div className="mfoot">
+              <button className="btn ghost" onClick={closeFields}>Fermer</button>
+              <button className="btn primary" onClick={async () => { await fieldsRef.current?.save(); onCatalogChanged?.(); }}>Enregistrer les champs</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {conditions.length > 0 && (
         <div className="tablewrap" style={{ border: "none", marginBottom: 12 }}>
