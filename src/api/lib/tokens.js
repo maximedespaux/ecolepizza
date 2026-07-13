@@ -54,6 +54,7 @@ const TOKEN_CATALOG = [
             { key: 'D_Naissance', label: 'Date de naissance', sample: '15/04/1990' },
             { key: 'Lieu naissance', label: 'Lieu de naissance', sample: 'Toulouse' },
             { key: 'Statut', label: 'Statut professionnel', sample: "Demandeur d'emploi" },
+            { key: 'France Travail', label: 'Identifiant France Travail', sample: '1234567A' },
         ],
     },
     {
@@ -91,6 +92,11 @@ const TOKEN_CATALOG = [
             { key: 'Financement', label: 'Financement', sample: 'CPF' },
             { key: 'Prix', label: 'Prix du dossier', sample: '1 500 €' },
             { key: 'Acompte', label: 'Acompte', sample: '450 €' },
+            { key: 'Reste à payer', label: 'Reste à payer (prix − acompte)', sample: '1 050 €' },
+            { key: 'Prix HT', label: 'Prix HT', sample: '1 500 €' },
+            { key: 'TVA', label: 'Montant de la TVA', sample: '0 €' },
+            { key: 'Taux TVA', label: 'Taux de TVA', sample: 'Exonérée' },
+            { key: 'Prix TTC', label: 'Prix TTC', sample: '1 500 €' },
         ],
     },
     {
@@ -103,6 +109,10 @@ const TOKEN_CATALOG = [
             { key: 'Nom représentant', label: 'Nom du représentant', sample: 'Sophie Martin' },
             { key: 'Fonction représentant', label: 'Fonction du représentant', sample: 'Gérante' },
             { key: 'Adresse entreprise', label: 'Adresse de l’entreprise', sample: '5 av. de la Gare, 33000 Bordeaux' },
+            { key: 'Email entreprise', label: 'E-mail de l’entreprise', sample: 'contact@pizzanapoli.fr' },
+            { key: 'Téléphone entreprise', label: 'Téléphone de l’entreprise', sample: '05 56 11 22 33' },
+            { key: 'NAF entreprise', label: 'Code NAF/APE', sample: '5610C' },
+            { key: 'Forme juridique', label: 'Forme juridique', sample: 'SARL' },
             { key: 'Stagiaires', label: 'Tableau des stagiaires (groupe)', sample: '(liste des stagiaires du groupe)' },
         ],
     },
@@ -263,6 +273,11 @@ function resolveTokens(ctx = {}) {
     const orgAddress = [o.address, [o.zip_code, o.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const totalPrice = forms.reduce((s, x) => s + Number(x.enroll_price || x.price || 0), 0) || Number(f.price || 0);
     const totalAcompte = forms.reduce((s, x) => s + Number(x.acompte || 0), 0);
+    // TVA : le prix stocké est le montant HT (base). Taux depuis l'organisme (0 = exonérée).
+    const vatRate = Math.max(0, Number(o.vat_rate) || 0);
+    const priceHT = totalPrice;
+    const vatAmount = priceHT * vatRate / 100;
+    const priceTTC = priceHT + vatAmount;
 
     // Agrégations multi-formations (un document peut couvrir plusieurs formations).
     const multi = forms.length > 1;
@@ -290,6 +305,7 @@ function resolveTokens(ctx = {}) {
         Adresse: address, CP: l.zip_code || '', Ville: l.town || '',
         Email: l.email || '', 'Téléphone': l.phone || '',
         D_Naissance: frDate(l.birthday), 'Lieu naissance': l.birth_place || '', Statut: l.professional_status || '',
+        'France Travail': l.france_travail_id || '',
         // Formation (agrégées si plusieurs)
         Formation: joinTitles, 'Niveau suggérer': joinTitles,
         Code: uniq(forms.map((x) => x.code || x.rs_code)).join(', ') || (f.code || f.rs_code || ''),
@@ -308,12 +324,17 @@ function resolveTokens(ctx = {}) {
         Jeudi: businessDay(start, 3), Vendredi: businessDay(start, 4),
         // Dossier
         Financement: f.financing || '', Prix: euro(totalPrice), Offre: euro(totalPrice), Acompte: euro(totalAcompte),
+        'Reste à payer': euro(totalPrice - totalAcompte),
+        'Prix HT': euro(priceHT), TVA: euro(vatAmount),
+        'Taux TVA': vatRate > 0 ? `${vatRate} %` : 'Exonérée', 'Prix TTC': euro(priceTTC),
         // Entreprise
         'Nom entreprise': c.name || '', 'Nom de l’entreprise': c.name || '',
-        Siret: c.siret || '', OPCO: c.opco || '',
+        Siret: c.siret || '', OPCO: c.opco || l.opco || '', // repli sur l'OPCO du stagiaire (particulier financé)
         'Civ représentant': c.representative_civ || '', 'Nom représentant': c.representative_name || '',
         'Responsable entreprise': c.representative_name || '', 'Fonction représentant': c.representative_role || '',
         'Adresse entreprise': cAddress,
+        'Email entreprise': c.email || '', 'Téléphone entreprise': c.phone || '',
+        'NAF entreprise': c.naf_ape || '', 'Forme juridique': c.legal_status || '',
         // Groupe (document entreprise) : tableau HTML de tous les stagiaires du groupe.
         Stagiaires: stagiairesTable(ctx.groupStagiaires),
         // Organisme

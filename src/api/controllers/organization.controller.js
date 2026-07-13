@@ -31,49 +31,46 @@ const getOrganization = (req, res) => {
 /**
  * PATCH /api/organisation — met à jour l'organisme (admin / secrétariat).
  */
-const updateOrganization = (req, res) => {
+const updateOrganization = async (req, res) => {
     const allowed = ['legal_name', 'short_name', 'code', 'manager', 'siret', 'vat_number', 'nda', 'naf_ape',
         'address', 'zip_code', 'town', 'phone', 'email', 'iban', 'bic', 'bank_name', 'signature_image',
-        'logo_image', 'emargement_config', 'qualiopi'];
+        'logo_image', 'emargement_config', 'qualiopi', 'vat_rate'];
+    // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie sans elles.
+    const OPTIONAL = new Set(['vat_rate']);
 
-    const updates = [];
-    const values = [];
+    const cols = [];
+    const valOf = {};
     for (const f of allowed) {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];
         if (f === 'qualiopi') v = v ? 1 : 0;
-        else if (f === 'code') {
-            // Code court unique : majuscules, alphanumérique + tiret, ou NULL si vidé.
-            v = String(v).trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 24) || null;
-        }
-        else if (f === 'signature_image') v = encrypt(v || null); // chiffrée au repos
-        else if (f === 'emargement_config') v = JSON.stringify(mergeEmargConfig(v)); // normalisée puis stockée en JSON
-        updates.push(`${f} = ?`);
-        values.push(v);
+        else if (f === 'vat_rate') v = Math.max(0, Math.min(100, Number(v) || 0));
+        else if (f === 'code') v = String(v).trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 24) || null;
+        else if (f === 'signature_image') v = encrypt(v || null);
+        else if (f === 'emargement_config') v = JSON.stringify(mergeEmargConfig(v));
+        cols.push(f); valOf[f] = v;
     }
-    if (updates.length === 0) {
-        return res.status(400).json({ message: 'Aucun champ à mettre à jour' });
-    }
-    values.push(req.user.organization_id);
+    if (cols.length === 0) return res.status(400).json({ message: 'Aucun champ à mettre à jour' });
 
-    db.query(
-        `UPDATE organization SET ${updates.join(', ')} WHERE id = ?`,
-        values,
-        (err) => {
-            if (err) {
-                if (err.code === 'ER_DUP_ENTRY') {
-                    return res.status(409).json({ error: 'Ce code organisme est déjà utilisé.' });
-                }
-                if (err.code === 'ER_BAD_FIELD_ERROR') {
-                    return res.status(400).json({ message: "Migration 057 requise pour enregistrer la mise en page de l'émargement." });
-                }
-                console.error('Erreur mise à jour organisme :', err);
-                return res.status(400).json({ message: 'Erreur mise à jour' });
-            }
-            logAudit(req, 'organization.update', 'Organization', req.user.organization_id);
-            res.status(200).json({ success: true, message: 'Organisme mis à jour' });
+    const run = async (fields) => {
+        const values = fields.map((f) => valOf[f]);
+        values.push(req.user.organization_id);
+        await db.promise().query(`UPDATE organization SET ${fields.map((f) => `${f} = ?`).join(', ')} WHERE id = ?`, values);
+    };
+    try {
+        try { await run(cols); }
+        catch (e) {
+            if (e && e.code === 'ER_BAD_FIELD_ERROR' && cols.some((f) => OPTIONAL.has(f))) {
+                await run(cols.filter((f) => !OPTIONAL.has(f))); // réessaie sans les colonnes optionnelles
+            } else { throw e; }
         }
-    );
+        logAudit(req, 'organization.update', 'Organization', req.user.organization_id);
+        res.status(200).json({ success: true, message: 'Organisme mis à jour' });
+    } catch (err) {
+        if (err && err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Ce code organisme est déjà utilisé.' });
+        console.error('Erreur mise à jour organisme :', err);
+        res.status(400).json({ message: 'Erreur mise à jour' });
+    }
 };
 
 const crypto = require('crypto');
