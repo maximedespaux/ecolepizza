@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  getCompanyDocTemplates, getCompanyDocuments, createCompanyDocument, sendDocument, documentPdfUrl, createSignLink, detachCompanyLearner, getOpcos } from "../api/apiClient.js";
+  detachCompanyLearner, getOpcos } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -41,12 +41,6 @@ export default function EntrepriseDetail() {
   const [sessionId, setSessionId] = useState("");
   const [registering, setRegistering] = useState(false);
   const [result, setResult] = useState(null); // { created: [...] }
-  // Documents « entreprise »
-  const [docTemplates, setDocTemplates] = useState([]);
-  const [companyDocs, setCompanyDocs] = useState([]);
-  const [pickTpl, setPickTpl] = useState("");
-  const [genBusy, setGenBusy] = useState(false);
-  const [docBreakSlug, setDocBreakSlug] = useState(null);
   // Rattacher un stagiaire existant à l'entreprise
   const [attachQ, setAttachQ] = useState("");
   const [attachRes, setAttachRes] = useState([]);
@@ -65,41 +59,6 @@ export default function EntrepriseDetail() {
   useEffect(() => { load(); }, [id]);
   useEffect(() => { getSessions().then((r) => setSessions(r.data || [])).catch(() => {}); }, []);
   useEffect(() => { getOpcos().then((r) => setOpcoNames((r.data || []).map((o) => o.name).filter(Boolean))).catch(() => {}); }, []);
-
-  // Documents entreprise : modèles applicables + docs déjà générés pour la session choisie.
-  const reloadDocs = () => { if (sessionId) getCompanyDocuments(id, sessionId).then((r) => setCompanyDocs(r.data || [])).catch(() => {}); };
-  useEffect(() => {
-    setCompanyDocs([]); setDocTemplates([]); setPickTpl("");
-    if (!sessionId) return;
-    getCompanyDocTemplates(id, sessionId).then((r) => { setDocTemplates(r.data || []); setDocBreakSlug(r.break_slug || null); }).catch(() => {});
-    getCompanyDocuments(id, sessionId).then((r) => setCompanyDocs(r.data || [])).catch(() => {});
-  }, [id, sessionId]);
-
-  async function generateDoc(slug) {
-    const s = slug || pickTpl;
-    if (!s) return;
-    setGenBusy(s); setStatus(null);
-    try { await createCompanyDocument(id, { session_id: sessionId, template_slug: s }); setStatus({ type: "success", message: "Document entreprise préparé." }); setPickTpl(""); reloadDocs(); }
-    catch (e) { setStatus({ type: "error", message: e.message }); }
-    finally { setGenBusy(false); }
-  }
-  async function sendDoc(docId) {
-    try { await sendDocument(docId); setStatus({ type: "success", message: "Document envoyé." }); reloadDocs(); }
-    catch (e) { setStatus({ type: "error", message: e.message }); }
-  }
-  async function previewDoc(docId) {
-    try { const url = await documentPdfUrl(docId); window.open(url, "_blank"); }
-    catch (e) { setStatus({ type: "error", message: e.message || "Aperçu indisponible." }); }
-  }
-  async function makeSignLink(docId) {
-    try {
-      const r = await createSignLink(docId, {});
-      const url = `${window.location.origin}/signer/${r.data.token}`;
-      try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
-      setStatus({ type: "success", message: `Lien de signature du représentant copié : ${url}` });
-    } catch (e) { setStatus({ type: "error", message: e.message }); }
-  }
-  const DOC_STATUS = { A_FAIRE: ["À envoyer", "n"], ENVOYE: ["Envoyé", "a"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"] };
 
   // Rattacher des stagiaires existants à l'entreprise (recherche débattue).
   useEffect(() => {
@@ -228,56 +187,6 @@ export default function EntrepriseDetail() {
                 </div>
               ))}
             </div>
-          )}
-        </Card>
-
-        {/* Documents entreprise (groupe) */}
-        <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Documents entreprise</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Parcours documentaire <b>entreprise</b> : documents produits <b>une fois pour le groupe</b> (ils listent tous les stagiaires via le jeton « Stagiaires »), dans l'ordre défini au <b>Parcours entreprise</b> de la formation.</p>
-          {(data.sessions || []).length > 1 && (
-            <div className="field"><label>Session</label>
-              <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
-                {data.sessions.map((s) => <option key={s.id} value={s.id}>{`${s.program_code || s.program_title} · S${s.week} ${s.year}`}</option>)}
-              </select>
-            </div>
-          )}
-          {!sessionId ? (
-            <EmptyState icon="file-text">Aucune session pour cette entreprise. Inscris un groupe à une session ci-dessus.</EmptyState>
-          ) : (
-            docTemplates.length === 0 ? (
-              <p className="hint" style={{ margin: "8px 0 0" }}>Aucune étape « entreprise » dans le parcours de cette formation. Ajoute des modèles « Document entreprise » au <b>Parcours entreprise</b> (Formations → Modifier).</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", marginTop: 4 }}>
-                {docTemplates.map((t) => {
-                  const doc = companyDocs.find((d) => d.template_slug === t.slug);
-                  const [lbl, tone] = doc ? (DOC_STATUS[doc.status] || [doc.status, "n"]) : ["Non généré", "n"];
-                  const isBreak = docBreakSlug && t.slug === docBreakSlug;
-                  return (
-                    <div key={t.slug}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                        <span style={{ flex: 1, minWidth: 0 }}><b>{t.label}</b></span>
-                        <Badge tone={tone}>{lbl}</Badge>
-                        {!doc ? (
-                          <button className="btn sm primary" disabled={genBusy === t.slug} onClick={() => generateDoc(t.slug)}><Icon name="plus" size={14} /> Générer</button>
-                        ) : (
-                          <>
-                            <button className="btn sm ghost" onClick={() => previewDoc(doc.id)}>Aperçu</button>
-                            {doc.status !== "SIGNE" && <button className="btn sm ghost" title="Copier un lien pour que le représentant signe" onClick={() => makeSignLink(doc.id)}>🔗 Lien</button>}
-                            {doc.status === "A_FAIRE" && <button className="btn sm primary" onClick={() => sendDoc(doc.id)}>Envoyer</button>}
-                            <button className="btn sm ghost" title="Regénérer" disabled={genBusy === t.slug} onClick={() => generateDoc(t.slug)}><Icon name="refresh" size={13} /></button>
-                          </>
-                        )}
-                      </div>
-                      {isBreak && (
-                        <div className="ent-brk" title="Point de rupture entreprise : les documents ci-dessus doivent être signés avant la suite.">
-                          <span className="ent-brk-flag">🚧</span> Point de rupture entreprise
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )
           )}
         </Card>
         </div>
