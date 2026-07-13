@@ -218,7 +218,7 @@ function SessionDetail() {
                 {team.map((t) => {
                   const on = (session.trainers || []).some((x) => x.id === t.id);
                   return (
-                    <label key={t.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, border: "1px solid var(--border-soft)", borderRadius: 8, padding: "6px 10px", cursor: "pointer", background: on ? "var(--surface-2,#fff)" : "transparent" }}>
+                    <label key={t.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, border: "1px solid var(--border-soft)", borderRadius: 8, padding: "6px 10px", cursor: "pointer", background: on ? "var(--surface2)" : "transparent" }}>
                       <input type="checkbox" checked={on} onChange={() => toggleTrainer(t.id)} />
                       {t.first_name} {t.last_name}
                     </label>

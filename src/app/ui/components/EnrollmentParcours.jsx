@@ -97,7 +97,8 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
                 style={{
                   display: "flex", gap: 12, alignItems: "center", width: "100%", textAlign: "left",
                   padding: "10px 12px", marginBottom: 8, borderRadius: 12, cursor: "pointer",
-                  background: on ? "var(--surface-2, #fff)" : "transparent",
+                  color: "var(--text)",
+                  background: on ? "var(--surface2)" : "transparent",
                   border: on ? "1px solid var(--ember1, #c0392b)" : "1px solid var(--border-soft)",
                 }}>
                 <span style={{
@@ -107,7 +108,7 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
                   color: s.status === "todo" ? "var(--muted)" : "#fff",
                 }}><Icon name={stepIcon(s)} size={17} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <b style={{ display: "block" }}>{s.label}</b>
+                  <b style={{ display: "block", color: s.status === "todo" ? "var(--dim)" : "var(--text)" }}>{s.label}</b>
                   <span style={{ fontSize: 12, color: "var(--muted)" }}>{s.sub}</span>
                 </span>
                 {s.status === "current" && (

@@ -961,7 +961,7 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 @media(max-width:600px){.kind-hint{flex-basis:100%;margin-left:0}}
 /* Étiquette « type de fiche » + ligne d'ingrédient importée */
 .fiche-tag{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;background:var(--gold-soft,rgba(198,160,74,.16));color:var(--gold,#9a7b2e);font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0}
-.comp-label{display:flex;align-items:center;gap:8px;background:var(--surface-2,rgba(0,0,0,.03));cursor:default;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.comp-label{display:flex;align-items:center;gap:8px;background:var(--surface2);cursor:default;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 /* Badges de hashtags (#tag) issus de la description */
 .tag-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .badge-tag{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;background:var(--orange-bg);color:var(--orange);font-size:11.5px;font-weight:700;line-height:1.6}
