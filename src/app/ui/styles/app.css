@@ -883,13 +883,13 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .comm-row:hover,.comm-row.on{background:var(--surface2)}
 /* Point d'accès émargement — barre cliquable entre deux étapes du parcours */
 .brk-gap td{border:none}
-.brk-line{width:100%;border:none;background:none;cursor:pointer;padding:2px 0;display:flex;align-items:center;justify-content:center;height:14px;position:relative}
-.brk-line::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;background:transparent;border-radius:2px;transition:background .12s}
-.brk-line:hover::before{background:color-mix(in srgb,var(--ember1) 40%,transparent)}
-.brk-add{opacity:0;font-size:11px;font-weight:700;color:var(--ember1);background:var(--surface);padding:0 8px;position:relative;transition:opacity .12s}
+.brk-line{width:100%;border:none;background:none;cursor:pointer;padding:3px 0;display:flex;align-items:center;justify-content:center;height:22px;position:relative}
+.brk-line::before{content:"";position:absolute;left:0;right:0;top:50%;height:0;border-top:2px dashed color-mix(in srgb,var(--ember1) 45%,transparent);transition:border-color .12s}
+.brk-line:hover::before{border-top-color:var(--ember1)}
+.brk-add{opacity:.75;font-size:11px;font-weight:700;color:var(--ember1);background:var(--surface);padding:1px 9px;border-radius:999px;position:relative;transition:opacity .12s}
 .brk-line:hover .brk-add{opacity:1}
-.brk-line.on{height:24px}
-.brk-line.on::before{background:var(--ember1)}
+.brk-line.on{height:26px}
+.brk-line.on::before{border-top:2px solid var(--ember1)}
 .brk-txt{font-size:11px;font-weight:800;color:#fff;background:var(--ember1);padding:3px 10px;border-radius:999px;position:relative;display:inline-flex;align-items:center;gap:8px}
 .brk-x{opacity:.85;font-weight:600}
 /* Onglets de session (détail formation stagiaire) */

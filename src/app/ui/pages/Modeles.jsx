@@ -168,6 +168,9 @@ function Modeles() {
 
       {view === "documents" && (
       <Card title={`Étapes (${allItems.length})`}>
+        <p className="hint" style={{ margin: "0 0 10px" }}>
+          <b style={{ color: "var(--ember1)" }}>🚧 Accès émargement</b> — clique sur la <b>ligne pointillée entre deux étapes</b> pour placer le point à partir duquel le stagiaire peut émarger : il devra avoir signé tous ses documents situés au-dessus. {breakOrder != null ? "Un point est actuellement défini." : "Aucun point défini (émargement toujours accessible)."}
+        </p>
         <div className="tablewrap" style={{ border: "none" }}>
           <table>
             <thead>
