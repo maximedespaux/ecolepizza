@@ -366,7 +366,8 @@ const signMyEmargement = async (req, res) => {
 // migration 070 (renvoie un profil vide / no-op au lieu d'échouer).
 
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
-const AVATAR_IDS = new Set(['pizza','chef','flame','wheat','tomato','cheese','olive','chili','mushroom','bread','chef2','chef3','basil','oven']);
+const AVATAR_IDS = new Set(['pizza','chef','flame','wheat','tomato','cheese','olive','chili','mushroom','bread','chef2','chef3','basil','oven',
+    'burger','fries','pasta','salad','egg','bacon','shrimp','sushi','taco','hotdog','sandwich','croissant','pretzel','avocado','pepper','corn','grapes','lemon','icecream','coffee']);
 
 /** GET /api/mon-espace/profile — avatar + progression { world: { step: stars } } + XP. */
 const getMyProfile = async (req, res) => {

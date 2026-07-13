@@ -23,6 +23,27 @@ export const AVATARS = [
   { id: "chef3", emoji: "👩‍🍳", color: "#7b3f9e" },
   { id: "basil", emoji: "🌿", color: "#2f9e6f" },
   { id: "oven", emoji: "🍞", color: "#a0522d" },
+  // Emojis food supplémentaires.
+  { id: "burger", emoji: "🍔", color: "#b5651d" },
+  { id: "fries", emoji: "🍟", color: "#f0b429" },
+  { id: "pasta", emoji: "🍝", color: "#e0533e" },
+  { id: "salad", emoji: "🥗", color: "#2f9e6f" },
+  { id: "egg", emoji: "🍳", color: "#f5a623" },
+  { id: "bacon", emoji: "🥓", color: "#c0392b" },
+  { id: "shrimp", emoji: "🍤", color: "#e67e22" },
+  { id: "sushi", emoji: "🍣", color: "#e0533e" },
+  { id: "taco", emoji: "🌮", color: "#d98c3f" },
+  { id: "hotdog", emoji: "🌭", color: "#c0392b" },
+  { id: "sandwich", emoji: "🥪", color: "#c9a227" },
+  { id: "croissant", emoji: "🥐", color: "#c98a2b" },
+  { id: "pretzel", emoji: "🥨", color: "#8a5a2b" },
+  { id: "avocado", emoji: "🥑", color: "#6b8e23" },
+  { id: "pepper", emoji: "🫑", color: "#2f9e6f" },
+  { id: "corn", emoji: "🌽", color: "#fcb900" },
+  { id: "grapes", emoji: "🍇", color: "#7b3f9e" },
+  { id: "lemon", emoji: "🍋", color: "#f4d03f" },
+  { id: "icecream", emoji: "🍦", color: "#e8a5c0" },
+  { id: "coffee", emoji: "☕", color: "#6f4e37" },
 ];
 export const avatarById = (id) => AVATARS.find((a) => a.id === id) || null;
 export const isHexColor = (c) => /^#[0-9a-fA-F]{6}$/.test(c || "");
