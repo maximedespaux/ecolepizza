@@ -178,7 +178,7 @@ const listShared = async (req, res) => {
             // Nom réel de l'auteur (Nom Prénom) plutôt que le libellé stocké (parfois l'e-mail).
             try {
                 const [anames] = await conn.query(
-                    'SELECT r.id AS rid, u.first_name AS f, u.last_name AS l FROM recipe r JOIN users u ON u.id = r.author_user_id WHERE r.id IN (?)', [ids]);
+                    'SELECT r.id AS rid, u.first_name AS f, u.last_name AS l FROM recipe r JOIN user u ON u.id = r.author_user_id WHERE r.id IN (?)', [ids]);
                 const nm = Object.fromEntries(anames.map((x) => [x.rid, [x.f, x.l].filter(Boolean).join(' ').trim()]));
                 rows.forEach((r) => { if (nm[r.id]) r.author_name = nm[r.id]; });
             } catch (e) { /* users toujours présent, mais on ne bloque pas la liste */ }
@@ -210,7 +210,7 @@ const getRecipe = async (req, res) => {
         const mine = r.author_user_id === req.user.id;
         const sharedSameOrg = r.visibility === 'SHARED' && r.organization_id === req.user.organization_id;
         if (!mine && !sharedSameOrg) return res.status(403).json({ message: 'Accès refusé.' });
-        try { const [[au]] = await conn.query('SELECT first_name AS f, last_name AS l FROM users WHERE id = ?', [r.author_user_id]); const nm = au ? [au.f, au.l].filter(Boolean).join(' ').trim() : ''; if (nm) r.author_name = nm; } catch { /* garde le libellé stocké */ }
+        try { const [[au]] = await conn.query('SELECT first_name AS f, last_name AS l FROM user WHERE id = ?', [r.author_user_id]); const nm = au ? [au.f, au.l].filter(Boolean).join(' ').trim() : ''; if (nm) r.author_name = nm; } catch { /* garde le libellé stocké */ }
         const [ings] = await conn.query(
             `SELECT id, product_id, component_recipe_id, label, qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ? ORDER BY sort_order, id`,
             [req.params.id]);
@@ -327,7 +327,7 @@ const authorProfile = async (req, res) => {
     try {
         const conn = db.promise();
         const uid = req.params.userId;
-        const [[u]] = await conn.query('SELECT first_name, last_name FROM users WHERE id = ?', [uid]);
+        const [[u]] = await conn.query('SELECT first_name, last_name FROM user WHERE id = ?', [uid]);
         if (!u) return res.status(404).json({ message: 'Auteur introuvable.' });
         const [[sc]] = await conn.query(
             "SELECT COUNT(*) AS n FROM recipe WHERE author_user_id = ? AND visibility = 'SHARED' AND organization_id = ?",
