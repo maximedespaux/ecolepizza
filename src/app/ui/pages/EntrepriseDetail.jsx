@@ -97,6 +97,15 @@ export default function EntrepriseDetail() {
     try { await registerCompanyStagiaires(id, { learner_ids: [s.id] }); setAttachQ(""); setAttachRes([]); load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
+  async function enrollOne(learnerId) {
+    if (!sessionId) { setStatus({ type: "error", message: "Choisis d'abord une session." }); return; }
+    try {
+      const r = await registerCompanyStagiaires(id, { session_id: sessionId, learner_ids: [learnerId] });
+      const c = (r.data?.created || [])[0];
+      setStatus({ type: "success", message: c && !c.enrolled ? "Déjà inscrit à cette session." : "Stagiaire ajouté à la session." });
+      load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
   async function enrollSession() {
     if (!sessionId) { setStatus({ type: "error", message: "Choisis une session." }); return; }
     const ids = (data?.learners || []).map((l) => l.id);
@@ -159,6 +168,13 @@ export default function EntrepriseDetail() {
             )}
           </div>
 
+          <div className="field"><label>Session</label>
+            <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+              <option value="">— Choisir une session —</option>
+              {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
+            </select>
+          </div>
+
           {/* Stagiaires rattachés */}
           <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--muted)", display: "block", margin: "4px 0 6px" }}>Stagiaires rattachés ({data.learners?.length || 0})</label>
           {(!data.learners || data.learners.length === 0) ? (
@@ -172,6 +188,7 @@ export default function EntrepriseDetail() {
                     {l.email && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email}</span>}
                   </span>
                   <Badge tone={l.enrollment_count > 0 ? "b" : "n"}>{l.enrollment_count || 0} dossier{l.enrollment_count > 1 ? "s" : ""}</Badge>
+                  <button className="btn sm ghost" title="Ajouter à la session choisie" disabled={!sessionId} onClick={() => enrollOne(l.id)}><Icon name="plus" size={14} /> Session</button>
                   <Link className="btn sm ghost" to={`/stagiaires/${l.id}`}>Ouvrir</Link>
                   <button className="btn sm ghost" title="Détacher de l'entreprise" onClick={() => detach(l.id)}><Icon name="x" size={14} /></button>
                 </div>
@@ -179,16 +196,9 @@ export default function EntrepriseDetail() {
             </div>
           )}
 
-          <div className="field"><label>Session</label>
-            <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
-              <option value="">— Choisir une session —</option>
-              {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
-            </select>
-          </div>
-
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
             <button className="btn primary" onClick={enrollSession} disabled={registering || !sessionId || !(data.learners || []).length}>
-              <Icon name="check" size={15} /> Ajouter à la session
+              <Icon name="check" size={15} /> Tout ajouter à la session
             </button>
           </div>
 
