@@ -175,6 +175,13 @@ const listShared = async (req, res) => {
         // Compteurs cœurs / commentaires (dégradent si migration 074 non lancée).
         const ids = rows.map((r) => r.id);
         if (ids.length) {
+            // Nom réel de l'auteur (Nom Prénom) plutôt que le libellé stocké (parfois l'e-mail).
+            try {
+                const [anames] = await conn.query(
+                    'SELECT r.id AS rid, u.first_name AS f, u.last_name AS l FROM recipe r JOIN users u ON u.id = r.author_user_id WHERE r.id IN (?)', [ids]);
+                const nm = Object.fromEntries(anames.map((x) => [x.rid, [x.f, x.l].filter(Boolean).join(' ').trim()]));
+                rows.forEach((r) => { if (nm[r.id]) r.author_name = nm[r.id]; });
+            } catch (e) { /* users toujours présent, mais on ne bloque pas la liste */ }
             try {
                 const [likes] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_like WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
                 const [coms] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_comment WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
@@ -203,6 +210,7 @@ const getRecipe = async (req, res) => {
         const mine = r.author_user_id === req.user.id;
         const sharedSameOrg = r.visibility === 'SHARED' && r.organization_id === req.user.organization_id;
         if (!mine && !sharedSameOrg) return res.status(403).json({ message: 'Accès refusé.' });
+        try { const [[au]] = await conn.query('SELECT first_name AS f, last_name AS l FROM users WHERE id = ?', [r.author_user_id]); const nm = au ? [au.f, au.l].filter(Boolean).join(' ').trim() : ''; if (nm) r.author_name = nm; } catch { /* garde le libellé stocké */ }
         const [ings] = await conn.query(
             `SELECT id, product_id, component_recipe_id, label, qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ? ORDER BY sort_order, id`,
             [req.params.id]);
@@ -314,6 +322,32 @@ const deleteRecipe = async (req, res) => {
     }
 };
 
+/** GET /api/recipes/author/:userId — profil public d'un auteur (même organisme, ayant partagé). */
+const authorProfile = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const uid = req.params.userId;
+        const [[u]] = await conn.query('SELECT first_name, last_name FROM users WHERE id = ?', [uid]);
+        if (!u) return res.status(404).json({ message: 'Auteur introuvable.' });
+        const [[sc]] = await conn.query(
+            "SELECT COUNT(*) AS n FROM recipe WHERE author_user_id = ? AND visibility = 'SHARED' AND organization_id = ?",
+            [uid, req.user.organization_id]);
+        let avatar = null, likes = 0;
+        try { const [[lr]] = await conn.query('SELECT avatar FROM learner WHERE user_id = ? LIMIT 1', [uid]); if (lr) avatar = lr.avatar; } catch (e) { if (!noTable(e)) throw e; }
+        try {
+            const [[lk]] = await conn.query(
+                'SELECT COUNT(*) AS n FROM recipe_like rl JOIN recipe r ON r.id = rl.recipe_id WHERE r.author_user_id = ? AND r.organization_id = ?',
+                [uid, req.user.organization_id]);
+            likes = lk.n;
+        } catch (e) { if (!noTable(e)) throw e; }
+        const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Stagiaire';
+        res.json({ data: { id: uid, name, avatar, shared_count: sc.n, likes_received: likes } });
+    } catch (err) {
+        console.error('Erreur profil auteur :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** POST /api/recipes/:id/like — bascule le « j'aime » de l'utilisateur ; renvoie l'état + compteur. */
 const toggleLike = async (req, res) => {
     try {
@@ -386,4 +420,4 @@ const deleteComment = async (req, res) => {
     }
 };
 
-module.exports = { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, toggleLike, addComment, updateComment, deleteComment };
+module.exports = { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment };

@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
-import { getSharedRecipes, getRecipe, createRecipe, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment } from "../api/apiClient.js";
+import { avatarById } from "../lib/gamification.js";
+import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment } from "../api/apiClient.js";
 
 /**
  * Communauté — les fiches techniques partagées par les stagiaires de l'organisme.
@@ -29,6 +31,44 @@ function Tags({ text }) {
 }
 // Libellé affiché : la préparation n'a pas de « type », on montre son genre.
 const typeLabel = (s) => (s.kind === "PREPARATION" ? "Préparation" : s.type || (s.kind === "PATE" ? "Pâte" : ""));
+
+// Petite pastille cliquable « auteur » (icône + nom) → ouvre son profil.
+function AuthorChip({ id, name, onOpen }) {
+  return (
+    <button className="author-chip" title="Voir le profil"
+      onClick={(e) => { e.stopPropagation(); if (id) onOpen(id); }}>
+      <span className="author-ava"><Icon name="user" size={11} /></span>{name || "Stagiaire"}
+    </button>
+  );
+}
+
+// Fenêtre profil de l'auteur : avatar, nom, nombre de fiches partagées, cœurs reçus.
+function ProfileModal({ profile, loading, onClose }) {
+  const av = profile && profile.avatar ? avatarById(profile.avatar) : null;
+  return createPortal(
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <h3 style={{ fontSize: 16 }}>Profil</h3>
+          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
+        </div>
+        <div className="mbody" style={{ textAlign: "center", padding: "22px 20px" }}>
+          {loading || !profile ? <p className="hint">Chargement…</p> : (
+            <>
+              <span className="prof-ava" style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
+              <div style={{ fontWeight: 800, fontSize: 18, marginTop: 10 }}>{profile.name}</div>
+              <div style={{ display: "flex", justifyContent: "center", gap: 22, marginTop: 16 }}>
+                <span><b style={{ fontSize: 18 }}>{profile.shared_count}</b><br /><span className="hint">fiche{profile.shared_count > 1 ? "s" : ""} partagée{profile.shared_count > 1 ? "s" : ""}</span></span>
+                <span><b style={{ fontSize: 18 }}>❤️ {profile.likes_received}</b><br /><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 function costs(d) {
   const nb = Math.max(1, num(d.servings));
   const dough = ((num(d.paton_g) / 1000) / 1.68) * num(d.flour_price);
@@ -51,7 +91,14 @@ export default function Communaute() {
   const [sort, setSort] = useState("recent");       // "recent" | "liked"
   const [query, setQuery] = useState("");           // recherche plein texte
   const [kindFilter, setKindFilter] = useState("ALL"); // ALL | PATE | PREPARATION | RECETTE
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profile, setProfile] = useState(null);
   const navigate = useNavigate();
+
+  function openProfile(userId) {
+    setProfile(null); setProfileOpen(true);
+    getAuthorProfile(userId).then((r) => setProfile(r.data)).catch(() => setProfileOpen(false));
+  }
 
   useEffect(() => {
     getSharedRecipes().then((r) => {
@@ -205,7 +252,7 @@ export default function Communaute() {
                     <div className="comm-main" onClick={() => setOpenId((cur) => (cur === s.id ? null : s.id))}>
                       <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
                         <b>{s.name}</b>
-                        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{typeLabel(s)} · par {s.author_name || "Stagiaire"} · {s.updated_at}</span>
+                        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>{typeLabel(s)} · <AuthorChip id={s.author_user_id} name={s.author_name} onOpen={openProfile} /> · {s.updated_at}</span>
                         <Tags text={s.description} />
                       </span>
                       <Icon name={openId === s.id ? "chevron-down" : "chevron-right"} size={16} />
@@ -239,7 +286,7 @@ export default function Communaute() {
                   </button>
                   <button className="btn sm primary" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes recettes"><Icon name="folder-check" size={13} /> Enregistrer</button>
                 </span>}>
-                <div className="hint" style={{ marginTop: -4 }}>{typeLabel(detail)} · par {detail.author_name || "Stagiaire"}</div>
+                <div className="hint" style={{ marginTop: -4, display: "flex", alignItems: "center", gap: 5 }}>{typeLabel(detail)} · <AuthorChip id={detail.author_user_id} name={detail.author_name} onOpen={openProfile} /></div>
                 {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0" }}>{detail.description}</p>}
                 <Tags text={detail.description} />
                 {(() => { const c = costs(detail); return (
@@ -267,6 +314,8 @@ export default function Communaute() {
           </div>
         </div>
       )}
+
+      {profileOpen && <ProfileModal profile={profile} loading={!profile} onClose={() => setProfileOpen(false)} />}
     </>
   );
 }

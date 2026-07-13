@@ -547,6 +547,7 @@ export function getCatalogBrands() { return request("/recipes/catalog/brands", {
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }
+export function getAuthorProfile(userId) { return request(`/recipes/author/${userId}`, { silent: true }); }
 export function likeRecipe(id) { return request(`/recipes/${id}/like`, { method: "POST" }); }
 export function addRecipeComment(id, body) { return request(`/recipes/${id}/comments`, { method: "POST", body: JSON.stringify({ body }) }); }
 export function updateRecipeComment(id, cid, body) { return request(`/recipes/${id}/comments/${cid}`, { method: "PUT", body: JSON.stringify({ body }) }); }

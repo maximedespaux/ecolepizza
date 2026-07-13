@@ -881,6 +881,11 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Communauté — liste des recettes partagées */
 .comm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border:none;background:none;border-bottom:1px solid var(--border-soft);cursor:pointer;color:var(--text)}
 .comm-row:hover,.comm-row.on{background:var(--surface2)}
+/* Pastille auteur cliquable + avatar de profil */
+.author-chip{display:inline-flex;align-items:center;gap:5px;border:none;background:none;padding:0;color:var(--ember1);font-size:12px;font-weight:600;cursor:pointer}
+.author-chip:hover{text-decoration:underline}
+.author-ava{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:999px;background:var(--surface2);color:var(--muted)}
+.prof-ava{display:inline-grid;place-items:center;width:72px;height:72px;border-radius:999px;font-size:34px;color:#fff;box-shadow:0 6px 18px -8px rgba(0,0,0,.4)}
 /* Barre de filtres communauté (recherche + type de fiche) */
 .comm-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
 /* Contrôle segmenté (tri Récentes / Populaires) */
