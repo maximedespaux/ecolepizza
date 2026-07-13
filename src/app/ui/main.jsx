@@ -15,6 +15,8 @@ import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Stagiaires from "./pages/Stagiaires.jsx";
 import StagiaireDetail from "./pages/StagiaireDetail.jsx";
+import Entreprises from "./pages/Entreprises.jsx";
+import EntrepriseDetail from "./pages/EntrepriseDetail.jsx";
 import Formations from "./pages/Formations.jsx";
 import Quiz from "./pages/Quiz.jsx";
 import Sessions from "./pages/Sessions.jsx";
@@ -153,6 +155,8 @@ function AppRoutes() {
           <Route path="dashboard" element={<Guard nav="/dashboard" roles={STAFF}><Dashboard /></Guard>} />
           <Route path="stagiaires" element={<Guard nav="/stagiaires" roles={STAFF}><Stagiaires /></Guard>} />
           <Route path="stagiaires/:id" element={<Guard nav="/stagiaires" roles={STAFF}><StagiaireDetail /></Guard>} />
+          <Route path="entreprises" element={<Guard nav="/entreprises" roles={ADMIN}><Entreprises /></Guard>} />
+          <Route path="entreprises/:id" element={<Guard nav="/entreprises" roles={ADMIN}><EntrepriseDetail /></Guard>} />
           <Route path="pipeline" element={<Guard nav="/pipeline" roles={ADMIN}><Pipeline /></Guard>} />
           <Route path="sessions" element={<Guard nav="/sessions" roles={STAFF}><Sessions /></Guard>} />
           <Route path="sessions/:id" element={<Guard nav="/sessions" roles={STAFF}><SessionDetail /></Guard>} />

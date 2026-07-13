@@ -366,6 +366,15 @@ export function getCompanies() {
 export function createCompany(payload) {
   return request("/companies", { method: "POST", body: JSON.stringify(payload) });
 }
+export function getCompany(id) {
+  return request(`/companies/${id}`);
+}
+export function updateCompany(id, payload) {
+  return request(`/companies/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function registerCompanyStagiaires(id, payload) {
+  return request(`/companies/${id}/register`, { method: "POST", body: JSON.stringify(payload) });
+}
 
 // --- Formations ---
 export function getFormations() {

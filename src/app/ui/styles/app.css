@@ -891,6 +891,15 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Communauté — liste des recettes partagées */
 .comm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border:none;background:none;border-bottom:1px solid var(--border-soft);cursor:pointer;color:var(--text)}
 .comm-row:hover,.comm-row.on{background:var(--surface2)}
+/* Inscription de groupe entreprise */
+.ent-rows{display:flex;flex-direction:column;gap:6px}
+.ent-row{display:grid;grid-template-columns:64px 1fr 1fr 1.4fr 100px 32px;gap:8px;align-items:center}
+.ent-head{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.ent-head span{padding:0 2px}
+@media(max-width:720px){.ent-row{grid-template-columns:56px 1fr 1fr 30px}.ent-row input[type=email],.ent-head span:nth-child(4),.ent-head span:nth-child(5){display:none}}
+.ent-result{margin-top:16px;padding:12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border-soft)}
+.ent-cred{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border-soft)}
+.ent-pw{font-size:13px;font-weight:700;background:var(--gold-bg,#fff7db);color:var(--ink);padding:2px 8px;border-radius:6px;user-select:all}
 /* Onglets de session (détail formation stagiaire) */
 .sess-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px}
 .sess-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:13px;cursor:pointer;transition:all .15s}
