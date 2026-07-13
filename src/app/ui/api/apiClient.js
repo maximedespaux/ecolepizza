@@ -733,8 +733,8 @@ export function downloadTemplateFile(slug) {
   return download(`/templates/${slug}/file`, `${slug}.docx`);
 }
 // Catalogue des jetons (regroupé par table) pour la palette de l'éditeur.
-export function getTokenCatalog() {
-  return request("/templates/tokens");
+export function getTokenCatalog(slug) {
+  return request(slug ? `/templates/tokens?slug=${encodeURIComponent(slug)}` : "/templates/tokens");
 }
 // Corps HTML d'un modèle (propre à l'organisme ou modèle par défaut).
 export function getTemplateBody(slug) {

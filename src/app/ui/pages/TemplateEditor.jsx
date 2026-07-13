@@ -57,7 +57,7 @@ function TemplateEditor() {
     let alive = true;
     (async () => {
       try {
-        const [cat, res] = await Promise.all([getTokenCatalog(), getTemplateBody(slug)]);
+        const [cat, res] = await Promise.all([getTokenCatalog(slug), getTemplateBody(slug)]);
         if (!alive) return;
         setCatalog(cat.data || []);
         setOpenGroups(Object.fromEntries((cat.data || []).map((g, i) => [g.group, i === 0])));
@@ -199,7 +199,7 @@ function TemplateEditor() {
   }
 
   // Recharge la palette (les champs proposés = ceux activés dans Champs documents).
-  const reloadCatalog = () => getTokenCatalog().then((cat) => setCatalog(cat.data || [])).catch(() => {});
+  const reloadCatalog = () => getTokenCatalog(slug).then((cat) => setCatalog(cat.data || [])).catch(() => {});
 
   async function save() {
     if (!body) return;

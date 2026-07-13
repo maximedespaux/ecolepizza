@@ -283,10 +283,28 @@ const GROUP_ORDER = [
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
 const CURATED_GROUPS = new Set(['Calculé / dates', 'Groupe entreprise']);
 
-/** GET /api/templates/tokens — jetons de la palette (champs documents + calculés + personnalisés). */
+// Groupes de jetons cachés selon le TYPE de document :
+//  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
+//    jetons propres à UN stagiaire / une inscription (on garde {Stagiaires} du groupe).
+//  - Document STAGIAIRE (company_level=0) : la liste {Stagiaires} n'a pas de sens → on
+//    masque le groupe « Groupe entreprise ».
+const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Inscription']);
+const HIDDEN_FOR_LEARNER = new Set(['Groupe entreprise']);
+
+/** GET /api/templates/tokens?slug= — jetons de la palette, filtrés selon le type de document. */
 const getTokens = async (req, res) => {
     try {
         const orgId = req.user.organization_id;
+        // Type du modèle en cours d'édition (résilient si la colonne/table manque).
+        let companyLevel = null; // null = type inconnu → tout afficher
+        if (req.query.slug) {
+            try {
+                const [[t]] = await db.promise().query(
+                    'SELECT company_level FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+                    [orgId, String(req.query.slug)]);
+                if (t) companyLevel = t.company_level ? 1 : 0;
+            } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+        }
         const groups = await fieldTokenGroups(orgId);
         // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
@@ -304,7 +322,10 @@ const getTokens = async (req, res) => {
                 g.tokens.sort((x, y) => String(x.label || '').localeCompare(String(y.label || ''), 'fr'));
             }
         }
-        res.json({ data: groups.filter((g) => g.tokens && g.tokens.length) });
+        // Filtrage selon le type de document (si connu).
+        const hidden = companyLevel === 1 ? HIDDEN_FOR_COMPANY : companyLevel === 0 ? HIDDEN_FOR_LEARNER : null;
+        const visible = hidden ? groups.filter((g) => !hidden.has(g.group)) : groups;
+        res.json({ data: visible.filter((g) => g.tokens && g.tokens.length) });
     } catch (e) {
         console.error('Erreur jetons palette :', e);
         res.status(500).json({ error: 'Internal Server Error' });
