@@ -910,6 +910,8 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .ent-result{margin-top:16px;padding:12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border-soft)}
 .ent-cred{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border-soft)}
 .ent-pw{font-size:13px;font-weight:700;background:var(--gold-bg,#fff7db);color:var(--ink);padding:2px 8px;border-radius:6px;user-select:all}
+.ent-brk{display:flex;align-items:center;gap:6px;margin:6px 0;padding:6px 10px;font-size:12px;font-weight:600;color:var(--ember1);background:var(--surface2);border:1px dashed var(--ember1);border-radius:8px}
+.ent-brk-flag{font-size:13px}
 /* Onglets de session (détail formation stagiaire) */
 .sess-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px}
 .sess-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:13px;cursor:pointer;transition:all .15s}

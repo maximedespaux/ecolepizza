@@ -429,8 +429,10 @@ export function submitQuiz(documentId, answers) { return request(`/quizzes/take/
 export function getFormationSteps(id) {
   return request(`/formations/${id}/steps`);
 }
-export function saveFormationSteps(id, steps, break_slug) {
-  const body = break_slug === undefined ? { steps } : { steps, break_slug };
+export function saveFormationSteps(id, steps, break_slug, company_break_slug) {
+  const body = { steps };
+  if (break_slug !== undefined) body.break_slug = break_slug;
+  if (company_break_slug !== undefined) body.company_break_slug = company_break_slug;
   return request(`/formations/${id}/steps`, { method: "PUT", body: JSON.stringify(body) });
 }
 export function getFormation(id) {

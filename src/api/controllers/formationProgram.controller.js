@@ -31,6 +31,7 @@ async function formationSteps(conn, orgId, program) {
             slug: s.slug, label: s.label, doc_type: s.doc_type, quiz_id: null, day: null,
             applies_when: s.applies_when || {},
             signable: !!s.signable, stagiaire_sign: !!s.stagiaire_sign,
+            company_level: !!s.company_level,
             or_group: o ? (o.or_group || null) : (s.or_group || null),
             sort_order: o ? o.sort_order : s.sort_order,
             active: o ? !!o.active : true,
@@ -51,7 +52,7 @@ async function formationSteps(conn, orgId, program) {
         const dflt = q.day != null ? Number(q.day) * 10 + 5 : 555;
         return {
             slug, label: q.title, doc_type: 'QCM', quiz_id: q.id, day: q.day,
-            signable: true, stagiaire_sign: true,
+            signable: true, stagiaire_sign: true, company_level: false,
             sort_order: o ? o.sort_order : dflt,
             active: o ? !!o.active : true,
         };
@@ -82,7 +83,7 @@ async function formationSteps(conn, orgId, program) {
             const o = overlay.get(t.slug);
             return {
                 slug: t.slug, label: t.name, doc_type: 'EMARGEMENT', quiz_id: null, day: null,
-                applies_when: t.applies_when || {}, signable: true, stagiaire_sign: true,
+                applies_when: t.applies_when || {}, signable: true, stagiaire_sign: true, company_level: false,
                 or_group: o ? (o.or_group || null) : null, emargement: true,
                 sort_order: o ? o.sort_order : (t.sort_order || 75),
                 active: o ? !!o.active : false,
@@ -422,6 +423,14 @@ const saveFormationSteps = async (req, res) => {
                 await conn.query('UPDATE training_program SET emargement_break_slug = ? WHERE id = ? AND organization_id = ?',
                     [bs, req.params.id, req.user.organization_id]);
             } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 076 non jouée
+        }
+        // Point de rupture du PARCOURS ENTREPRISE (migration 082).
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'company_break_slug')) {
+            const cbs = req.body.company_break_slug ? String(req.body.company_break_slug).trim().toLowerCase().slice(0, 191) : null;
+            try {
+                await conn.query('UPDATE training_program SET company_break_slug = ? WHERE id = ? AND organization_id = ?',
+                    [cbs, req.params.id, req.user.organization_id]);
+            } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 082 non jouée
         }
         res.json({ success: true, message: 'Parcours enregistré.' });
     } catch (err) {

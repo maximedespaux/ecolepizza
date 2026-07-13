@@ -112,9 +112,10 @@ const getSuivi = async (req, res) => {
 const getArchive = async (req, res) => {
     try {
         const conn = db.promise();
-        // Documents générés par l'application (partagés / signés).
+        // Documents générés par l'application (partagés / signés) — niveau STAGIAIRE.
         const [gen] = await conn.query(
-            `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id,
+            `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'LEARNER' AS scope,
+                    NULL AS company_id, NULL AS company_name,
                     DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
                     s.year, s.week,
@@ -129,13 +130,34 @@ const getArchive = async (req, res) => {
              WHERE gd.organization_id = ? AND gd.status IN (?)`,
             [req.user.organization_id, SHARED]
         );
+        // Documents générés au niveau ENTREPRISE (un par groupe/session). learner_id NULL,
+        // rangés par entreprise. Ignoré si la migration 077 (scope) n'est pas jouée.
+        let comp = [];
+        try {
+            [comp] = await conn.query(
+                `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'COMPANY' AS scope,
+                        gd.company_id, c.name AS company_name,
+                        DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
+                        DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                        s.year, s.week,
+                        p.code AS program_code, p.title AS program_title,
+                        NULL AS learner_id, '' AS first_name, c.name AS last_name, 'gen' AS source
+                 FROM generated_document gd
+                 JOIN company c ON c.id = gd.company_id
+                 LEFT JOIN training_session s ON s.id = gd.session_id
+                 LEFT JOIN training_program p ON p.id = s.program_id
+                 WHERE gd.organization_id = ? AND gd.scope = 'COMPANY' AND gd.status IN (?)`,
+                [req.user.organization_id, SHARED]
+            );
+        } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
         // Documents archivés (PDF importés + feuilles d'émargement générées).
         // Pour l'émargement (ref « emarg:<enrollment>[:<slug>] »), on résout le vrai
         // stagiaire via le dossier, afin qu'il se range dans le MÊME dossier que ses
         // autres documents (regroupement par learner_id côté client) et non dans un
         // dossier « Nom Prénom » séparé.
         const [arch] = await conn.query(
-            `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id,
+            `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id, 'LEARNER' AS scope,
+                    NULL AS company_id, NULL AS company_name,
                     NULL AS sent_at, DATE_FORMAT(ad.created_at, '%Y-%m-%d %H:%i') AS signed_at,
                     ad.year, ad.week,
                     COALESCE(p.code, ad.formation_label) AS program_code,
@@ -153,7 +175,7 @@ const getArchive = async (req, res) => {
              WHERE ad.organization_id = ?`,
             [req.user.organization_id]
         );
-        res.json({ data: [...gen, ...arch] });
+        res.json({ data: [...gen, ...comp, ...arch] });
     } catch (err) {
         console.error('Erreur archives documents :', err);
         res.status(500).json({ error: 'Internal Server Error' });

@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
-const { matchFormation } = require('../lib/documents.js');
+const { formationSteps } = require('./formationProgram.controller.js');
 
 const clean = (v) => (v === undefined || v === '' ? null : v);
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
@@ -191,7 +191,11 @@ const registerCompanyStagiaires = async (req, res) => {
     }
 };
 
-/** GET /api/companies/:id/doc-templates?session_id= — modèles « entreprise » applicables. */
+/**
+ * GET /api/companies/:id/doc-templates?session_id= — PARCOURS ENTREPRISE de la
+ * formation de la session : étapes company_level actives, dans l'ordre défini
+ * (program_step), + le point de rupture entreprise (company_break_slug).
+ */
 const companyDocTemplates = async (req, res) => {
     try {
         const conn = db.promise();
@@ -199,16 +203,25 @@ const companyDocTemplates = async (req, res) => {
         let program = null;
         if (req.query.session_id) {
             const [[s]] = await conn.query(
-                `SELECT p.days, p.hygiene, p.rs_code FROM training_session s JOIN training_program p ON p.id = s.program_id
+                `SELECT p.id, p.code, p.days, p.hygiene, p.rs_code, p.company_break_slug
+                 FROM training_session s JOIN training_program p ON p.id = s.program_id
                  WHERE s.id = ? AND s.organization_id = ?`, [req.query.session_id, orgId]);
             program = s || null;
         }
-        const steps = await loadOrgSteps(orgId);
-        const out = steps
-            .filter((s) => s.active && s.company_level)
-            .filter((s) => !program || matchFormation(s.applies_when, { rs_code: program.rs_code, hygiene: program.hygiene, days: program.days }))
-            .map((s) => ({ slug: s.slug, label: s.label, doc_type: s.doc_type }));
-        res.json({ data: out });
+        let out, breakSlug = null;
+        if (program) {
+            // Respecte l'ordre + l'inclusion du parcours entreprise défini sur la formation.
+            const steps = await formationSteps(conn, orgId, program);
+            out = steps
+                .filter((s) => s.active && s.company_level)
+                .map((s) => ({ slug: s.slug, label: s.label, doc_type: s.doc_type }));
+            breakSlug = program.company_break_slug || null;
+        } else {
+            // Sans session : tous les modèles entreprise de l'organisme.
+            const steps = await loadOrgSteps(orgId);
+            out = steps.filter((s) => s.active && s.company_level).map((s) => ({ slug: s.slug, label: s.label, doc_type: s.doc_type }));
+        }
+        res.json({ data: out, break_slug: breakSlug });
     } catch (err) {
         console.error('Erreur modèles entreprise :', err);
         res.status(500).json({ error: 'Internal Server Error' });

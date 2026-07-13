@@ -140,7 +140,9 @@ function ArchivesView({ onError, onInfo }) {
   const [q, setQ] = useState("");
   const [viewId, setViewId] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [archScope, setArchScope] = useState("stagiaire"); // "stagiaire" | "entreprise"
   const fileRef = useRef(null);
+  const isEnt = archScope === "entreprise";
 
   function load() {
     getArchives().then((r) => setRows(r.data)).catch((e) => { setRows([]); onError?.(e.message); });
@@ -187,23 +189,35 @@ function ArchivesView({ onError, onInfo }) {
       style={{ marginLeft: 8 }}><Icon name="trash" size={15} /></button>
   );
 
+  const counts = useMemo(() => {
+    const c = { stagiaire: 0, entreprise: 0 };
+    (rows || []).forEach((r) => { r.scope === "COMPANY" ? c.entreprise++ : c.stagiaire++; });
+    return c;
+  }, [rows]);
+
   const tree = useMemo(() => {
     if (!rows) return [];
+    const wantCompany = isEnt;
+    const scoped = rows.filter((r) => (r.scope === "COMPANY") === wantCompany);
     const needle = q.trim().toLowerCase();
     const filtered = needle
-      ? rows.filter((r) => `${r.last_name} ${r.first_name} ${r.program_code} ${r.program_title} ${r.title}`.toLowerCase().includes(needle))
-      : rows;
+      ? scoped.filter((r) => `${r.last_name} ${r.first_name} ${r.company_name || ""} ${r.program_code} ${r.program_title} ${r.title}`.toLowerCase().includes(needle))
+      : scoped;
     return buildTree(filtered);
-  }, [rows, q]);
+  }, [rows, q, isEnt]);
 
   if (rows === null) return <Card title="Archives"><p className="hint">Chargement…</p></Card>;
 
   return (
     <Card title={`Archives documentaires (${rows.length})`}>
+      <div className="seg" style={{ marginBottom: 12 }}>
+        <button type="button" className={"seg-btn" + (!isEnt ? " on" : "")} onClick={() => setArchScope("stagiaire")}>Archive stagiaire ({counts.stagiaire})</button>
+        <button type="button" className={"seg-btn" + (isEnt ? " on" : "")} onClick={() => setArchScope("entreprise")}>Archive entreprise ({counts.entreprise})</button>
+      </div>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-        <input className="inp" placeholder="Rechercher un stagiaire, une formation, un document…" value={q}
+        <input className="inp" placeholder={isEnt ? "Rechercher une entreprise, une formation, un document…" : "Rechercher un stagiaire, une formation, un document…"} value={q}
           onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 460, flex: 1, minWidth: 220 }} />
-        {isAdmin && (
+        {isAdmin && !isEnt && (
           <>
             <input ref={fileRef} type="file" webkitdirectory="" directory="" multiple accept="application/pdf,.pdf"
               style={{ display: "none" }} onChange={onPick} />
@@ -213,14 +227,14 @@ function ArchivesView({ onError, onInfo }) {
           </>
         )}
       </div>
-      {isAdmin && (
+      {isAdmin && !isEnt && (
         <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
           Choisissez un dossier organisé en <b>année / semaine / (formation) / stagiaire</b>. Seuls les PDF sont importés ; pour de gros volumes, importez année par année ou semaine par semaine.
         </p>
       )}
 
       {tree.length === 0 ? (
-        <EmptyState icon="folder">Aucun document partagé pour l'instant.</EmptyState>
+        <EmptyState icon="folder">{isEnt ? "Aucun document entreprise partagé pour l'instant." : "Aucun document partagé pour l'instant."}</EmptyState>
       ) : (
         <div className="arch">
           {tree.map((Y) => (
@@ -244,7 +258,7 @@ function ArchivesView({ onError, onInfo }) {
                             {F.learnersArr.map((L) => (
                               <details key={L.learner_id || L.name}>
                                 <summary className="arch-sum">{L.name} <span className="arch-count">{L.docs.length}</span>
-                                  {isAdmin && <DelBtn title="Supprimer ce stagiaire" onClick={() => deleteDocs(L.docs, L.name)} />}
+                                  {isAdmin && <DelBtn title={isEnt ? "Supprimer cette entreprise" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
                                 </summary>
                                 <div className="arch-docs">
                                   {L.docs.map((d) => {

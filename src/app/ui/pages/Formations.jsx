@@ -137,9 +137,11 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [saving, setSaving] = useState(false);
   const [steps, setSteps] = useState([]);
   const [breakSlug, setBreakSlug] = useState(null); // point d'accès émargement (slug avant la flèche)
+  const [companyBreakSlug, setCompanyBreakSlug] = useState(null); // point de rupture parcours entreprise
   const [archiveTree, setArchiveTree] = useState({ folders: [] });
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
   const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives"
+  const [parcoursKind, setParcoursKind] = useState("stagiaire"); // "stagiaire" | "entreprise"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
   // Couleur effective du badge + valeur hexadécimale pour le sélecteur natif.
@@ -159,6 +161,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       // horaires n'est pas renvoyé par la liste (getFormations) : on le charge ici.
       if (r.data && "horaires" in r.data) setForm((p) => ({ ...p, horaires: r.data.horaires || "" }));
       setBreakSlug(r.data?.emargement_break_slug || null);
+      setCompanyBreakSlug(r.data?.company_break_slug || null);
     }).catch(() => {});
   }, [program.id]);
   // Équivalences « OU » (org) : map slug -> groupe. Le regroupement est automatique.
@@ -188,7 +191,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
         onSaved("Formation créée.");
       } else {
         await updateFormation(program.id, form);
-        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null);
+        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null, companyBreakSlug || null);
         await saveArchiveTree(program.id, archiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved("Formation mise à jour.");
       }
@@ -286,16 +289,44 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           </div>
 
           <div style={{ display: tab === "parcours" ? "block" : "none" }}>
-          <p className="hint" style={{ marginTop: 0 }}>
-            Composez l'enchaînement des documents : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Glissez un bloc pour réordonner. Les QCM rattachés sont proposés à l'ajout.
-            <br />Clique sur une <b style={{ color: "var(--ember1)" }}>flèche 🚧</b> entre deux jalons pour placer le <b>point d'accès à l'émargement</b> : le stagiaire ne pourra émarger qu'après avoir signé tous ses documents situés avant ce point.
-          </p>
-          {steps.length === 0 ? (
-            <p className="hint">Aucun document candidat.</p>
-          ) : (
-            <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
-              breakSlug={breakSlug} onSetBreak={setBreakSlug} />
-          )}
+          {(() => {
+            const stagiaireSteps = steps.filter((s) => !s.company_level);
+            const companySteps = steps.filter((s) => s.company_level);
+            const isEnt = parcoursKind === "entreprise";
+            const cur = isEnt ? companySteps : stagiaireSteps;
+            return (
+              <>
+                <div className="seg" style={{ marginBottom: 12 }}>
+                  <button type="button" className={"seg-btn" + (!isEnt ? " on" : "")} onClick={() => setParcoursKind("stagiaire")}>
+                    Parcours stagiaire{stagiaireSteps.length ? ` (${stagiaireSteps.filter((s) => s.active).length}/${stagiaireSteps.length})` : ""}
+                  </button>
+                  <button type="button" className={"seg-btn" + (isEnt ? " on" : "")} onClick={() => setParcoursKind("entreprise")}>
+                    Parcours entreprise{companySteps.length ? ` (${companySteps.filter((s) => s.active).length}/${companySteps.length})` : ""}
+                  </button>
+                </div>
+                <p className="hint" style={{ marginTop: 0 }}>
+                  {isEnt ? (
+                    <>Enchaînement des documents <b>de niveau entreprise</b> (générés une fois pour le groupe). Marquez un modèle « Document entreprise » dans <b>Modèles</b> pour qu'il apparaisse ici. Glissez pour réordonner ; <b>✕</b> pour retirer.
+                    <br />Clique sur une <b style={{ color: "var(--ember1)" }}>flèche 🚧</b> pour placer le <b>point de rupture entreprise</b> : les documents entreprise avant ce point doivent être signés avant la suite.</>
+                  ) : (
+                    <>Composez l'enchaînement des documents : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Glissez un bloc pour réordonner. Les QCM rattachés sont proposés à l'ajout.
+                    <br />Clique sur une <b style={{ color: "var(--ember1)" }}>flèche 🚧</b> entre deux jalons pour placer le <b>point d'accès à l'émargement</b> : le stagiaire ne pourra émarger qu'après avoir signé tous ses documents situés avant ce point.</>
+                  )}
+                </p>
+                {cur.length === 0 ? (
+                  <p className="hint">{isEnt ? "Aucun modèle « Document entreprise » candidat pour cette formation." : "Aucun document candidat."}</p>
+                ) : isEnt ? (
+                  <ParcoursFlow steps={companySteps} eqMap={eqMap} onToggle={toggleStep}
+                    onReorder={(ns) => setSteps([...stagiaireSteps, ...ns])}
+                    breakSlug={companyBreakSlug} onSetBreak={setCompanyBreakSlug} />
+                ) : (
+                  <ParcoursFlow steps={stagiaireSteps} eqMap={eqMap} onToggle={toggleStep}
+                    onReorder={(ns) => setSteps([...ns, ...companySteps])}
+                    breakSlug={breakSlug} onSetBreak={setBreakSlug} />
+                )}
+              </>
+            );
+          })()}
           </div>
 
           <div style={{ display: tab === "archives" ? "block" : "none" }}>

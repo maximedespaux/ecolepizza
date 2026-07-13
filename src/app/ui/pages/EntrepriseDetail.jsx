@@ -47,6 +47,7 @@ export default function EntrepriseDetail() {
   const [companyDocs, setCompanyDocs] = useState([]);
   const [pickTpl, setPickTpl] = useState("");
   const [genBusy, setGenBusy] = useState(false);
+  const [docBreakSlug, setDocBreakSlug] = useState(null);
   // Rattacher un stagiaire existant à l'entreprise
   const [attachQ, setAttachQ] = useState("");
   const [attachRes, setAttachRes] = useState([]);
@@ -67,14 +68,15 @@ export default function EntrepriseDetail() {
   useEffect(() => {
     setCompanyDocs([]); setDocTemplates([]); setPickTpl("");
     if (!docSession) return;
-    getCompanyDocTemplates(id, docSession).then((r) => setDocTemplates(r.data || [])).catch(() => {});
+    getCompanyDocTemplates(id, docSession).then((r) => { setDocTemplates(r.data || []); setDocBreakSlug(r.break_slug || null); }).catch(() => {});
     getCompanyDocuments(id, docSession).then((r) => setCompanyDocs(r.data || [])).catch(() => {});
   }, [id, docSession]);
 
-  async function generateDoc() {
-    if (!pickTpl) return;
-    setGenBusy(true); setStatus(null);
-    try { await createCompanyDocument(id, { session_id: docSession, template_slug: pickTpl }); setStatus({ type: "success", message: "Document entreprise préparé." }); setPickTpl(""); reloadDocs(); }
+  async function generateDoc(slug) {
+    const s = slug || pickTpl;
+    if (!s) return;
+    setGenBusy(s); setStatus(null);
+    try { await createCompanyDocument(id, { session_id: docSession, template_slug: s }); setStatus({ type: "success", message: "Document entreprise préparé." }); setPickTpl(""); reloadDocs(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setGenBusy(false); }
   }
@@ -228,7 +230,7 @@ export default function EntrepriseDetail() {
 
         {/* Documents entreprise (groupe) */}
         <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Documents entreprise</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Documents produits <b>une fois pour le groupe</b> (ils listent tous les stagiaires via le jeton « Stagiaires »). Marque un modèle « Document entreprise » dans <b>Modèles</b> pour qu'il apparaisse ici.</p>
+          <p className="hint" style={{ margin: "0 0 12px" }}>Parcours documentaire <b>entreprise</b> : documents produits <b>une fois pour le groupe</b> (ils listent tous les stagiaires via le jeton « Stagiaires »), dans l'ordre défini au <b>Parcours entreprise</b> de la formation.</p>
           <div className="field"><label>Session</label>
             <select className="inp" value={docSession} onChange={(e) => setDocSession(e.target.value)}>
               <option value="">— Choisir une session —</option>
@@ -236,33 +238,40 @@ export default function EntrepriseDetail() {
             </select>
           </div>
           {docSession && (
-            <>
-              <div style={{ display: "flex", gap: 8 }}>
-                <select className="inp" value={pickTpl} onChange={(e) => setPickTpl(e.target.value)} style={{ flex: 1 }}>
-                  <option value="">— Modèle entreprise —</option>
-                  {docTemplates.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
-                </select>
-                <button className="btn primary" disabled={!pickTpl || genBusy} onClick={generateDoc}><Icon name="plus" size={14} /> Générer</button>
-              </div>
-              {docTemplates.length === 0 && <p className="hint" style={{ margin: "8px 0 0" }}>Aucun modèle « entreprise » applicable à cette session.</p>}
-
-              <div style={{ display: "flex", flexDirection: "column", marginTop: 12 }}>
-                {companyDocs.length === 0 ? (
-                  <p className="hint" style={{ margin: 0 }}>Aucun document entreprise pour cette session.</p>
-                ) : companyDocs.map((d) => {
-                  const [lbl, tone] = DOC_STATUS[d.status] || [d.status, "n"];
+            docTemplates.length === 0 ? (
+              <p className="hint" style={{ margin: "8px 0 0" }}>Aucune étape « entreprise » dans le parcours de cette formation. Ajoute des modèles « Document entreprise » au <b>Parcours entreprise</b> (Formations → Modifier).</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", marginTop: 4 }}>
+                {docTemplates.map((t) => {
+                  const doc = companyDocs.find((d) => d.template_slug === t.slug);
+                  const [lbl, tone] = doc ? (DOC_STATUS[doc.status] || [doc.status, "n"]) : ["Non généré", "n"];
+                  const isBreak = docBreakSlug && t.slug === docBreakSlug;
                   return (
-                    <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                      <span style={{ flex: 1, minWidth: 0 }}><b>{d.title}</b></span>
-                      <Badge tone={tone}>{lbl}</Badge>
-                      <button className="btn sm ghost" onClick={() => previewDoc(d.id)}>Aperçu</button>
-                      {d.status !== "SIGNE" && <button className="btn sm ghost" title="Copier un lien pour que le représentant signe" onClick={() => makeSignLink(d.id)}>🔗 Lien signature</button>}
-                      {d.status === "A_FAIRE" && <button className="btn sm primary" onClick={() => sendDoc(d.id)}>Envoyer</button>}
+                    <div key={t.slug}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                        <span style={{ flex: 1, minWidth: 0 }}><b>{t.label}</b></span>
+                        <Badge tone={tone}>{lbl}</Badge>
+                        {!doc ? (
+                          <button className="btn sm primary" disabled={genBusy === t.slug} onClick={() => generateDoc(t.slug)}><Icon name="plus" size={14} /> Générer</button>
+                        ) : (
+                          <>
+                            <button className="btn sm ghost" onClick={() => previewDoc(doc.id)}>Aperçu</button>
+                            {doc.status !== "SIGNE" && <button className="btn sm ghost" title="Copier un lien pour que le représentant signe" onClick={() => makeSignLink(doc.id)}>🔗 Lien</button>}
+                            {doc.status === "A_FAIRE" && <button className="btn sm primary" onClick={() => sendDoc(doc.id)}>Envoyer</button>}
+                            <button className="btn sm ghost" title="Regénérer" disabled={genBusy === t.slug} onClick={() => generateDoc(t.slug)}><Icon name="refresh" size={13} /></button>
+                          </>
+                        )}
+                      </div>
+                      {isBreak && (
+                        <div className="ent-brk" title="Point de rupture entreprise : les documents ci-dessus doivent être signés avant la suite.">
+                          <span className="ent-brk-flag">🚧</span> Point de rupture entreprise
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
-            </>
+            )
           )}
         </Card>
         </div>
