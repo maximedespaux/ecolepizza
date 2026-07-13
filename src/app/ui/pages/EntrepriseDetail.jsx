@@ -159,6 +159,26 @@ export default function EntrepriseDetail() {
             )}
           </div>
 
+          {/* Stagiaires rattachés */}
+          <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--muted)", display: "block", margin: "4px 0 6px" }}>Stagiaires rattachés ({data.learners?.length || 0})</label>
+          {(!data.learners || data.learners.length === 0) ? (
+            <EmptyState icon="users">Aucun stagiaire rattaché pour l'instant.</EmptyState>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", marginBottom: 12 }}>
+              {data.learners.map((l) => (
+                <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b>{[l.civility, l.first_name, l.last_name].filter(Boolean).join(" ")}</b>
+                    {l.email && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email}</span>}
+                  </span>
+                  <Badge tone={l.enrollment_count > 0 ? "b" : "n"}>{l.enrollment_count || 0} dossier{l.enrollment_count > 1 ? "s" : ""}</Badge>
+                  <Link className="btn sm ghost" to={`/stagiaires/${l.id}`}>Ouvrir</Link>
+                  <button className="btn sm ghost" title="Détacher de l'entreprise" onClick={() => detach(l.id)}><Icon name="x" size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="field"><label>Session</label>
             <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
               <option value="">— Choisir une session —</option>
@@ -227,27 +247,6 @@ export default function EntrepriseDetail() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-          {/* Stagiaires rattachés */}
-          <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Stagiaires ({data.learners?.length || 0})</span>}>
-            {(!data.learners || data.learners.length === 0) ? (
-              <EmptyState icon="users">Aucun stagiaire rattaché pour l'instant.</EmptyState>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                {data.learners.map((l) => (
-                  <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <b>{[l.civility, l.first_name, l.last_name].filter(Boolean).join(" ")}</b>
-                      {l.email && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email}</span>}
-                    </span>
-                    <Badge tone={l.enrollment_count > 0 ? "b" : "n"}>{l.enrollment_count || 0} dossier{l.enrollment_count > 1 ? "s" : ""}</Badge>
-                    <Link className="btn sm ghost" to={`/stagiaires/${l.id}`}>Ouvrir</Link>
-                    <button className="btn sm ghost" title="Détacher de l'entreprise" onClick={() => detach(l.id)}><Icon name="x" size={14} /></button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
           {/* Coordonnées de l'entreprise */}
           <Card title={<span className="card-ttl"><Icon name="building" size={16} /> Coordonnées</span>}>
             <div className="grid cols-2" style={{ gap: 12 }}>
