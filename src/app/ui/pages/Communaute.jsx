@@ -16,6 +16,11 @@ import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe
  * ou enregistrer une fiche dans ses propres fiches pour l'adapter.
  */
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+// Wishlist (« mettre de côté ») — distincte de « Enregistrer » (qui copie la fiche). Stockée en
+// localStorage en attendant un endpoint serveur (comme les likes) → à synchroniser plus tard.
+const WISH_KEY = "impasto.wishlist";
+const readWish = () => { try { return new Set(JSON.parse(localStorage.getItem(WISH_KEY)) || []); } catch { return new Set(); } };
+const writeWish = (s) => { try { localStorage.setItem(WISH_KEY, JSON.stringify([...s])); } catch { /* ignore */ } };
 const KIND_TABS = [
   { k: "ALL", label: "Toutes" },
   { k: "PATE", label: "Empâtements" },
@@ -146,8 +151,11 @@ export default function Communaute() {
   const [sort, setSort] = useState("recent");       // "recent" | "liked"
   const [query, setQuery] = useState("");           // recherche plein texte
   const [kindFilter, setKindFilter] = useState("ALL"); // ALL | PATE | PREPARATION | RECETTE
+  const [wish, setWish] = useState(readWish);           // fiches mises de côté (localStorage)
+  const [onlyWish, setOnlyWish] = useState(false);      // filtre « ma wishlist »
   const [profileOpen, setProfileOpen] = useState(false);
   const [profile, setProfile] = useState(null);
+  const toggleWish = (id) => setWish((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); writeWish(n); return n; });
   const navigate = useNavigate();
 
   function openProfile(userId) {
@@ -223,6 +231,7 @@ export default function Communaute() {
   // Liste filtrée + triée.
   const q = query.trim().toLowerCase();
   const shown = list.filter((s) => {
+    if (onlyWish && !wish.has(s.id)) return false;
     if (kindFilter !== "ALL" && s.kind !== kindFilter) return false;
     if (!q) return true;
     return [s.name, s.description, s.type, s.author_name].some((f) => String(f || "").toLowerCase().includes(q));
@@ -236,7 +245,7 @@ export default function Communaute() {
   return (
     <>
       <PageHead eyebrow="Outils · communauté" title="Communauté"
-        lead="Les fiches partagées par les autres stagiaires : pâtes, préparations et recettes. Aime, commente, ou enregistre-en une dans tes fiches pour l'adapter." />
+        lead="Les fiches partagées par les autres stagiaires : empâtements, garnitures et réalisations. Aime, commente, mets de côté (wishlist), ou enregistre-en une dans tes fiches pour l'adapter." />
 
       {list.length === 0 ? (
         <EmptyState icon="users">Aucune fiche partagée pour l'instant. Sois le premier : partage une pâte, une préparation ou une recette depuis « Fiche technique » ou le « Calculateur de pâte ».</EmptyState>
@@ -258,10 +267,13 @@ export default function Communaute() {
               <button className={"seg-btn" + (sort === "recent" ? " on" : "")} onClick={() => setSort("recent")}>Récentes</button>
               <button className={"seg-btn" + (sort === "liked" ? " on" : "")} onClick={() => setSort("liked")}><Icon name="heart" size={12} /> Populaires</button>
             </span>
+            <button className={"btn sm " + (onlyWish ? "primary" : "ghost")} onClick={() => setOnlyWish((w) => !w)} title="N'afficher que ma wishlist">
+              <Icon name="bookmark" size={13} fill={onlyWish ? "currentColor" : "none"} /> Ma wishlist{wish.size ? ` (${wish.size})` : ""}
+            </button>
           </div>
 
           {shown.length === 0 ? (
-            <EmptyState icon="search">Aucune fiche ne correspond à ta recherche.</EmptyState>
+            <EmptyState icon={onlyWish ? "bookmark" : "search"}>{onlyWish ? "Ta wishlist est vide — mets des fiches de côté avec le marque-page." : "Aucune fiche ne correspond à ta recherche."}</EmptyState>
           ) : (
             <div className="comm-grid">
               {shown.map((s) => {
@@ -288,7 +300,11 @@ export default function Communaute() {
                       <button className="btn sm ghost" onClick={() => setOpenId(s.id)} title="Voir &amp; commenter">
                         <Icon name="message-circle" size={13} /> {commentCount(s)}
                       </button>
-                      <button className="btn sm ghost comm-save" disabled={busy} onClick={() => copyToMine(s)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /></button>
+                      <button className={"btn sm " + (wish.has(s.id) ? "primary" : "ghost") + " comm-save"} onClick={() => toggleWish(s.id)}
+                        title={wish.has(s.id) ? "Retirer de ma wishlist" : "Mettre de côté (wishlist)"}>
+                        <Icon name="bookmark" size={13} fill={wish.has(s.id) ? "currentColor" : "none"} />
+                      </button>
+                      <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /></button>
                     </div>
                   </div>
                 );
@@ -347,9 +363,12 @@ export default function Communaute() {
                     ) : null}
 
                     {/* Actions */}
-                    <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                    <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
                       <button className={"btn sm " + (lk.liked ? "primary" : "ghost")} onClick={() => toggleLike(detail.id)} title={lk.liked ? "Je n'aime plus" : "J'aime"}>
                         <Icon name="heart" size={14} fill={lk.liked ? "currentColor" : "none"} /> {lk.count} j'aime
+                      </button>
+                      <button className={"btn sm " + (wish.has(detail.id) ? "primary" : "ghost")} onClick={() => toggleWish(detail.id)} title={wish.has(detail.id) ? "Retirer de ma wishlist" : "Mettre de côté"}>
+                        <Icon name="bookmark" size={14} fill={wish.has(detail.id) ? "currentColor" : "none"} /> {wish.has(detail.id) ? "Mise de côté" : "Wishlist"}
                       </button>
                       <button className="btn sm primary comm-save" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /> Enregistrer</button>
                     </div>
