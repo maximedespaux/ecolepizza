@@ -104,6 +104,30 @@ async function completionOf(conn, e, steps, agefice = false) {
     return { complete, dayPassed, signed, total };
 }
 
+// Accès à l'émargement : bloqué tant que le stagiaire n'a pas signé tous les documents
+// qu'il doit signer JUSQU'À l'étape marquée « point d'accès émargement » (breakpoint).
+// Aucune étape marquée → aucun blocage. Renvoie { locked, need, done, break_label }.
+async function emargementGate(conn, e, steps, agefice = false) {
+    const breaks = steps.filter((s) => s.active && s.emargement_break);
+    if (!breaks.length) return { locked: false, need: 0, done: 0, break_label: null };
+    const threshold = Math.max(...breaks.map((s) => Number(s.sort_order) || 0));
+    const break_label = breaks.slice().sort((a, b) => (b.sort_order - a.sort_order))[0].label;
+
+    const ctx = { hygiene: !!e.program_hygiene, rsCode: e.program_rs, jours: e.program_days || 1, financing: e.financing, agefice };
+    const required = stepsToDocSet(steps, ctx).filter((d) => d.stagiaireSign && (d.sort_order == null || Number(d.sort_order) <= threshold));
+    if (!required.length) return { locked: false, need: 0, done: 0, break_label };
+
+    const [rows] = await conn.query(
+        `SELECT gd.type, gd.status FROM generated_document gd
+         JOIN document_formation df ON df.document_id = gd.id WHERE df.enrollment_id = ?`,
+        [e.enrollment_id]
+    );
+    const statusByType = {};
+    for (const r of rows) statusByType[r.type] = r.status;
+    const done = required.filter((d) => statusByType[d.type] === 'SIGNE').length;
+    return { locked: done < required.length, need: required.length, done, break_label };
+}
+
 /**
  * GET /api/mon-espace — documents ENVOYÉS au stagiaire (à consulter / signer).
  */
@@ -183,7 +207,8 @@ const getMyFormations = async (req, res) => {
             [learner.id]
         );
 
-        // Meilleure inscription par formation (on privilégie une formation complète).
+        // Une carte par formation ; on ouvre par défaut la session la plus RÉCENTE.
+        // On compte aussi le nombre de sessions suivies (onglets dans le détail).
         const steps = await loadOrgSteps(learner.organization_id);
         const byProgram = {};
         for (const e of enrollments) {
@@ -194,7 +219,11 @@ const getMyFormations = async (req, res) => {
                 year: e.year, week: e.week,
             };
             const cur = byProgram[e.program_id];
-            if (!cur || (info.complete && !cur.complete)) byProgram[e.program_id] = info;
+            if (!cur) byProgram[e.program_id] = { ...info, session_count: 1 };
+            else {
+                cur.session_count += 1;
+                if ((e.start_date || '') > (cur.start_date || '')) byProgram[e.program_id] = { ...info, session_count: cur.session_count };
+            }
         }
 
         const formations = programs.map((p) => {
@@ -216,6 +245,7 @@ const getMyFormations = async (req, res) => {
                 end_date: e ? e.end_date : null,
                 year: e ? e.year : null,
                 week: e ? e.week : null,
+                session_count: e ? e.session_count : 0,
             };
         });
 
@@ -254,7 +284,21 @@ const getMyFormation = async (req, res) => {
 
         // Accès dès l'inscription à une session (plus besoin que la formation soit terminée).
         const steps = await loadOrgSteps(learner.organization_id);
-        const c = await completionOf(conn, e, steps, (learner.opco || "").toUpperCase() === "AGEFICE");
+        const agefice = (learner.opco || "").toUpperCase() === "AGEFICE";
+        const c = await completionOf(conn, e, steps, agefice);
+        const gate = await emargementGate(conn, e, steps, agefice);
+
+        // Sessions du MÊME programme suivies par ce stagiaire (onglets W23 / W25…).
+        const [sessions] = e.session_id ? await conn.query(
+            `SELECT e2.id AS enrollment_id, s2.year, s2.week,
+                    DATE_FORMAT(s2.start_date, '%Y-%m-%d') AS start_date,
+                    DATE_FORMAT(s2.end_date,   '%Y-%m-%d') AS end_date
+             FROM enrollment e2
+             JOIN training_session s2 ON s2.id = e2.session_id
+             WHERE e2.learner_id = ? AND s2.program_id = (SELECT program_id FROM training_session WHERE id = ?)
+             ORDER BY s2.start_date DESC, s2.year DESC, s2.week DESC`,
+            [learner.id, e.session_id]
+        ) : [[]];
 
         // Tous les documents partagés du dossier (envoyés / consultés / signés).
         const [documents] = await conn.query(
@@ -286,6 +330,9 @@ const getMyFormation = async (req, res) => {
                 program_hours: e.program_hours,
                 complete: c.complete, signed: c.signed, total: c.total,
                 today: todayISO(),
+                enrollment_id: e.enrollment_id,
+                sessions,
+                emargement_gate: gate, // { locked, need, done, break_label }
                 documents, emargement,
             },
         });

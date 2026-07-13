@@ -51,6 +51,20 @@ function StudentFormationDetail() {
         )}
       </div>
 
+      {/* Onglets : autres sessions du même programme (W23 / W25…) */}
+      {data && data.sessions && data.sessions.length > 1 && (
+        <div className="sess-tabs">
+          {data.sessions.map((s) => (
+            <button key={s.enrollment_id}
+              className={"sess-tab" + (s.enrollment_id === data.enrollment_id ? " on" : "")}
+              onClick={() => { if (s.enrollment_id !== data.enrollment_id) navigate(`/formations/${s.enrollment_id}`); }}
+              title={s.start_date && s.end_date ? `Du ${s.start_date} au ${s.end_date}` : ""}>
+              <Icon name="calendar" size={13} /> Semaine {s.week} · {s.year}
+            </button>
+          ))}
+        </div>
+      )}
+
       <StatusMessage status={status} />
 
       {data && (
@@ -91,8 +105,17 @@ function StudentFormationDetail() {
         </Card>
       )}
 
-      {data && (
+      {data && (() => {
+        const gate = data.emargement_gate || {};
+        const locked = !!gate.locked;
+        return (
         <Card title="Émargement — ma présence">
+          {locked && (
+            <div className="emarg-lock">
+              <Icon name="lock" size={15} />
+              <span>Émargement verrouillé — signe d'abord tes documents{gate.break_label ? <> jusqu'à « <b>{gate.break_label}</b> »</> : null}. <b>{gate.done}/{gate.need}</b> document{gate.need > 1 ? "s" : ""} signé{gate.done > 1 ? "s" : ""}.</span>
+            </div>
+          )}
           {(!data.emargement || data.emargement.length === 0) ? (
             <EmptyState icon="pencil">Aucune demi-journée à émarger pour cette session.</EmptyState>
           ) : (
@@ -107,6 +130,8 @@ function StudentFormationDetail() {
                     </span>
                     {r.signed ? (
                       <Badge tone="g">Signé{r.signed_at ? ` · ${r.signed_at}` : ""}</Badge>
+                    ) : locked ? (
+                      <span className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="lock" size={13} /> Documents requis</span>
                     ) : future ? (
                       <span className="hint">À venir</span>
                     ) : (
@@ -118,7 +143,8 @@ function StudentFormationDetail() {
             </div>
           )}
         </Card>
-      )}
+        );
+      })()}
 
       {viewId && (
         <DocumentViewModal id={viewId} canSign defaultName={`${user?.first_name || ""} ${user?.last_name || ""}`.trim()}

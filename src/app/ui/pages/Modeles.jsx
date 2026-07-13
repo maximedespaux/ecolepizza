@@ -186,6 +186,7 @@ function Modeles() {
                   <td className="drag-handle" title="Glisser pour réordonner">⠿</td>
                   <td>
                     <b>{t.label}</b>
+                    {t.emargement_break ? <span title="Le stagiaire doit avoir signé jusqu'ici pour émarger" style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: "var(--ember1)" }}>🚧 accès émargement</span> : null}
                     <span style={{ display: "block", fontSize: 11, color: "var(--dim)" }} className="mono">{t.slug}{!t.active && " · inactif"}</span>
                   </td>
                   <td>{isEmarg ? <Badge tone="a">Émargement</Badge> : <span className="mono" style={{ fontSize: 12 }}>{t.doc_type || "—"}</span>}</td>
@@ -369,6 +370,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     sort_order: step.sort_order ?? 100,
     signable: !!step.signable,
     stagiaire_sign: !!step.stagiaire_sign,
+    emargement_break: !!step.emargement_break,
     sign_formateur: !!(step.config && step.config.show_formateurs),
     sign_intervenant: !!(step.config && step.config.show_intervenants),
     sign_organization: !!(step.config && step.config.show_organization),
@@ -400,7 +402,8 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         if (!slug) { onError("Identifiant (slug) requis."); setSaving(false); return; }
         await saveTemplate(slug, {
           label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
-          signable: form.signable, stagiaire_sign: form.stagiaire_sign, active: form.active, applies_when,
+          signable: form.signable, stagiaire_sign: form.stagiaire_sign, emargement_break: form.emargement_break,
+          active: form.active, applies_when,
         });
       }
       onSaved();
@@ -483,7 +486,14 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
                 <input type="checkbox" checked={form.stagiaire_sign} onChange={chk("stagiaire_sign")} /> Signé par le stagiaire</label>
               <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
                 <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Le stagiaire doit avoir signé tous ses documents jusqu'à cette étape (incluse) avant de pouvoir émarger.">
+                <input type="checkbox" checked={form.emargement_break} onChange={chk("emargement_break")} /> 🚧 Point d'accès émargement</label>
             </div>
+          )}
+          {!isEmarg && form.emargement_break && (
+            <p className="hint" style={{ margin: "8px 0 0", color: "var(--ember1)" }}>
+              L'émargement de la session ne sera accessible au stagiaire qu'une fois tous ses documents à signer <b>jusqu'à cette étape</b> signés.
+            </p>
           )}
           <p className="sub" style={{ marginTop: 10 }}>
             {isEmarg

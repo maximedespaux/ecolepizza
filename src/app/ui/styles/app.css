@@ -881,6 +881,13 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Communauté — liste des recettes partagées */
 .comm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border:none;background:none;border-bottom:1px solid var(--border-soft);cursor:pointer;color:var(--text)}
 .comm-row:hover,.comm-row.on{background:var(--surface2)}
+/* Onglets de session (détail formation stagiaire) */
+.sess-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px}
+.sess-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:13px;cursor:pointer;transition:all .15s}
+.sess-tab:hover{border-color:var(--blue);color:var(--text)}
+.sess-tab.on{background:var(--grad-navy);color:#fff;border:none}
+/* Bandeau émargement verrouillé */
+.emarg-lock{display:flex;align-items:center;gap:10px;padding:11px 14px;margin-bottom:12px;border-radius:10px;background:var(--orange-bg);color:var(--orange);font-size:13.5px;font-weight:600}
 /* Sélecteur de couleur de fond d'avatar */
 .pf-colors{display:flex;flex-wrap:wrap;gap:8px}
 .pf-color{width:32px;height:32px;border-radius:999px;border:2px solid var(--border);cursor:pointer;display:grid;place-items:center;color:#fff;transition:transform .1s}

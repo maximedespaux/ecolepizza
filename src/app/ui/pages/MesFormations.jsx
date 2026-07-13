@@ -61,6 +61,7 @@ function MesFormations() {
                     : f.start_date && f.end_date
                       ? `Du ${f.start_date} au ${f.end_date}`
                       : `Semaine ${f.week} · ${f.year}`}
+                  {f.session_count > 1 && <span style={{ marginLeft: 6, color: "var(--blue)", fontWeight: 700 }}>· {f.session_count} sessions</span>}
                 </p>
 
                 {f.enrolled && (
