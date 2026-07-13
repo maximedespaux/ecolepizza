@@ -32,12 +32,15 @@ function Tags({ text }) {
 // Libellé affiché : la préparation n'a pas de « type », on montre son genre.
 const typeLabel = (s) => (s.kind === "PREPARATION" ? "Préparation" : s.type || (s.kind === "PATE" ? "Pâte" : ""));
 
-// Petite pastille cliquable « auteur » (icône + nom) → ouvre son profil.
-function AuthorChip({ id, name, onOpen }) {
+// Petite pastille cliquable « auteur » (avatar + nom) → ouvre son profil.
+function AuthorChip({ id, name, avatar, onOpen }) {
+  const av = avatar ? parseAvatar(avatar) : null;
   return (
     <button className="author-chip" title="Voir le profil"
       onClick={(e) => { e.stopPropagation(); if (id) onOpen(id); }}>
-      <span className="author-ava"><Icon name="user" size={11} /></span>{name || "Stagiaire"}
+      <span className="author-ava" style={av ? { background: av.color, color: "#fff", fontSize: 11 } : null}>
+        {av ? av.emoji : <Icon name="user" size={11} />}
+      </span>{name || "Stagiaire"}
     </button>
   );
 }
@@ -259,7 +262,7 @@ export default function Communaute() {
                     <div className="comm-main" onClick={() => setOpenId((cur) => (cur === s.id ? null : s.id))}>
                       <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
                         <b>{s.name}</b>
-                        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>{typeLabel(s)} · <AuthorChip id={s.author_user_id} name={s.author_name} onOpen={openProfile} /> · {s.updated_at}</span>
+                        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>{typeLabel(s)} · <AuthorChip id={s.author_user_id} name={s.author_name} avatar={s.author_avatar} onOpen={openProfile} /> · {s.updated_at}</span>
                         <Tags text={s.description} />
                       </span>
                       <Icon name={openId === s.id ? "chevron-down" : "chevron-right"} size={16} />
@@ -293,7 +296,7 @@ export default function Communaute() {
                   </button>
                   <button className="btn sm primary" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes recettes"><Icon name="folder-check" size={13} /> Enregistrer</button>
                 </span>}>
-                <div className="hint" style={{ marginTop: -4, display: "flex", alignItems: "center", gap: 5 }}>{typeLabel(detail)} · <AuthorChip id={detail.author_user_id} name={detail.author_name} onOpen={openProfile} /></div>
+                <div className="hint" style={{ marginTop: -4, display: "flex", alignItems: "center", gap: 5 }}>{typeLabel(detail)} · <AuthorChip id={detail.author_user_id} name={detail.author_name} avatar={detail.author_avatar} onOpen={openProfile} /></div>
                 {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0" }}>{detail.description}</p>}
                 <Tags text={detail.description} />
                 {(() => { const c = costs(detail); return (

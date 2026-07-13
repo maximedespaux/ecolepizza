@@ -182,6 +182,12 @@ const listShared = async (req, res) => {
                 const nm = Object.fromEntries(anames.map((x) => [x.rid, [x.f, x.l].filter(Boolean).join(' ').trim()]));
                 rows.forEach((r) => { if (nm[r.id]) r.author_name = nm[r.id]; });
             } catch (e) { /* users toujours présent, mais on ne bloque pas la liste */ }
+            // Avatar de l'auteur (séparé : la colonne learner.avatar peut manquer si migration 070 non jouée).
+            try {
+                const [avs] = await conn.query('SELECT r.id AS rid, l.avatar AS av FROM recipe r JOIN learner l ON l.user_id = r.author_user_id WHERE r.id IN (?)', [ids]);
+                const am = Object.fromEntries(avs.map((x) => [x.rid, x.av]));
+                rows.forEach((r) => { r.author_avatar = am[r.id] || null; });
+            } catch (e) { /* migration 070 non jouée : pas d'avatar */ }
             try {
                 const [likes] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_like WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
                 const [coms] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_comment WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
@@ -211,6 +217,8 @@ const getRecipe = async (req, res) => {
         const sharedSameOrg = r.visibility === 'SHARED' && r.organization_id === req.user.organization_id;
         if (!mine && !sharedSameOrg) return res.status(403).json({ message: 'Accès refusé.' });
         try { const [[au]] = await conn.query('SELECT first_name AS f, last_name AS l FROM user WHERE id = ?', [r.author_user_id]); const nm = au ? [au.f, au.l].filter(Boolean).join(' ').trim() : ''; if (nm) r.author_name = nm; } catch { /* garde le libellé stocké */ }
+        r.author_avatar = null;
+        try { const [[la]] = await conn.query('SELECT avatar FROM learner WHERE user_id = ? LIMIT 1', [r.author_user_id]); if (la) r.author_avatar = la.avatar || null; } catch { /* migration 070 non jouée */ }
         const [ings] = await conn.query(
             `SELECT id, product_id, component_recipe_id, label, qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ? ORDER BY sort_order, id`,
             [req.params.id]);
