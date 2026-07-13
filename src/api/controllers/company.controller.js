@@ -37,7 +37,20 @@ const getCompany = async (req, res) => {
              ORDER BY l.last_name, l.first_name`,
             [req.params.id, req.user.organization_id]
         );
-        res.json({ data: { ...company, learners } });
+        // Sessions où l'entreprise a des stagiaires inscrits (pour le parcours entreprise).
+        let sessions = [];
+        try {
+            [sessions] = await conn.query(
+                `SELECT DISTINCT s.id, s.week, s.year, p.code AS program_code, p.title AS program_title
+                 FROM enrollment e
+                 JOIN training_session s ON s.id = e.session_id
+                 JOIN training_program p ON p.id = s.program_id
+                 WHERE e.company_id = ? AND e.organization_id = ?
+                 ORDER BY s.year DESC, s.week DESC`,
+                [req.params.id, req.user.organization_id]
+            );
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        res.json({ data: { ...company, learners, sessions } });
     } catch (err) {
         console.error('Erreur lecture entreprise :', err);
         res.status(500).json({ error: 'Internal Server Error' });

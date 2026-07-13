@@ -56,7 +56,11 @@ export default function EntrepriseDetail() {
   const toggleSel = (lid) => setSelected((prev) => { const n = new Set(prev); n.has(lid) ? n.delete(lid) : n.add(lid); return n; });
 
   function load() {
-    getCompany(id).then((r) => { setData(r.data); setForm(r.data || {}); }).catch((e) => setStatus({ type: "error", message: e.message }));
+    getCompany(id).then((r) => {
+      setData(r.data); setForm(r.data || {});
+      // Session par défaut = session la plus récente de l'entreprise (pas de sélection manuelle).
+      setSessionId((cur) => cur || (r.data?.sessions?.[0]?.id || ""));
+    }).catch((e) => setStatus({ type: "error", message: e.message }));
   }
   useEffect(() => { load(); }, [id]);
   useEffect(() => { getSessions().then((r) => setSessions(r.data || [])).catch(() => {}); }, []);
@@ -229,9 +233,16 @@ export default function EntrepriseDetail() {
 
         {/* Documents entreprise (groupe) */}
         <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Documents entreprise</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Parcours documentaire <b>entreprise</b> pour la session choisie ci-dessus : documents produits <b>une fois pour le groupe</b> (ils listent tous les stagiaires via le jeton « Stagiaires »), dans l'ordre défini au <b>Parcours entreprise</b> de la formation.</p>
+          <p className="hint" style={{ margin: "0 0 12px" }}>Parcours documentaire <b>entreprise</b> : documents produits <b>une fois pour le groupe</b> (ils listent tous les stagiaires via le jeton « Stagiaires »), dans l'ordre défini au <b>Parcours entreprise</b> de la formation.</p>
+          {(data.sessions || []).length > 1 && (
+            <div className="field"><label>Session</label>
+              <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+                {data.sessions.map((s) => <option key={s.id} value={s.id}>{`${s.program_code || s.program_title} · S${s.week} ${s.year}`}</option>)}
+              </select>
+            </div>
+          )}
           {!sessionId ? (
-            <p className="hint" style={{ margin: "8px 0 0" }}>Choisis une <b>session</b> dans « Inscrire un groupe de stagiaires » pour afficher le parcours entreprise.</p>
+            <EmptyState icon="file-text">Aucune session pour cette entreprise. Inscris un groupe à une session ci-dessus.</EmptyState>
           ) : (
             docTemplates.length === 0 ? (
               <p className="hint" style={{ margin: "8px 0 0" }}>Aucune étape « entreprise » dans le parcours de cette formation. Ajoute des modèles « Document entreprise » au <b>Parcours entreprise</b> (Formations → Modifier).</p>
