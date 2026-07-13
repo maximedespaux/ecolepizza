@@ -113,7 +113,7 @@ const TOKEN_CATALOG = [
             { key: 'Téléphone entreprise', label: 'Téléphone de l’entreprise', sample: '05 56 11 22 33' },
             { key: 'NAF entreprise', label: 'Code NAF/APE', sample: '5610C' },
             { key: 'Forme juridique', label: 'Forme juridique', sample: 'SARL' },
-            { key: 'Stagiaires', label: 'Tableau des stagiaires (groupe)', sample: '(liste des stagiaires du groupe)' },
+            { key: 'Stagiaires', label: 'Liste des stagiaires (groupe, un par ligne)', sample: 'M. Jean DUPONT\nMme Marie MARTIN' },
         ],
     },
     {
@@ -167,21 +167,17 @@ const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagi
 // Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
 const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-// Tableau HTML des stagiaires d'un groupe (document « entreprise »). Largeurs en attributs
-// HTML (LibreOffice ignore les largeurs CSS) ; `data-border` pose les bordures au rendu.
+// Liste des stagiaires d'un groupe (document « entreprise »), un par ligne :
+//   M. Jean DUPONT
+//   Mme Marie MARTIN
+// Le jeton {Stagiaires} est RAW (HTML injecté) : les lignes sont séparées par <br>
+// pour un rendu identique en aperçu HTML et en .docx (LibreOffice).
 function stagiairesTable(list) {
     const rows = Array.isArray(list) ? list : [];
-    if (!rows.length) return '<p><i>Aucun stagiaire dans le groupe.</i></p>';
-    const body = rows.map((s, i) => {
-        const name = [s.civility, s.first_name, s.last_name].filter(Boolean).join(' ');
-        return `<tr><td width="34" style="text-align:center">${i + 1}</td>`
-            + `<td>${escCell(name)}</td>`
-            + `<td width="150">${escCell(s.birthday ? frDate(s.birthday) : '')}</td>`
-            + `<td width="200">${escCell(s.email || '')}</td></tr>`;
-    }).join('');
-    return `<table data-border="solid" width="100%"><thead><tr>`
-        + `<th width="34">N°</th><th>Stagiaire</th><th width="150">Né(e) le</th><th width="200">E-mail</th>`
-        + `</tr></thead><tbody>${body}</tbody></table>`;
+    if (!rows.length) return '<i>Aucun stagiaire dans le groupe.</i>';
+    return rows
+        .map((s) => escCell([s.civility, s.first_name, s.last_name].filter(Boolean).join(' ')))
+        .join('<br>');
 }
 
 // Rend une image de signature (ou un emplacement en pointillés si absente).
