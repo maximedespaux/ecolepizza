@@ -273,6 +273,16 @@ async function loadCustomTokens(orgId) {
     } catch (e) { if (e && e.code === 'ER_NO_SUCH_TABLE') return []; throw e; }
 }
 
+// Ordre d'affichage canonique des groupes de la palette (du plus utile au plus rare).
+// Les groupes non listés tombent à la fin, triés alphabétiquement.
+const GROUP_ORDER = [
+    'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
+    'Inscription', 'Formation', 'Session', 'Lieu de formation',
+    'Organisme', 'Calculé / dates', 'Personnalisés',
+];
+// Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
+const CURATED_GROUPS = new Set(['Calculé / dates', 'Groupe entreprise']);
+
 /** GET /api/templates/tokens — jetons de la palette (champs documents + calculés + personnalisés). */
 const getTokens = async (req, res) => {
     try {
@@ -284,7 +294,17 @@ const getTokens = async (req, res) => {
         groups.push(groupTokensGroup());
         const defs = await loadCustomTokens(orgId);
         if (defs.length) groups.push({ group: 'Personnalisés', tokens: defs.map((d) => ({ key: `custom:${d.token_key}`, label: d.label, sample: '' })) });
-        res.json({ data: groups });
+
+        // Réorganisation : ordre de groupes canonique + tri alphabétique des jetons
+        // (hors groupes curatés) + suppression des groupes vides.
+        const rank = (g) => { const i = GROUP_ORDER.indexOf(g); return i < 0 ? GROUP_ORDER.length : i; };
+        groups.sort((a, b) => rank(a.group) - rank(b.group) || a.group.localeCompare(b.group, 'fr'));
+        for (const g of groups) {
+            if (!CURATED_GROUPS.has(g.group) && Array.isArray(g.tokens)) {
+                g.tokens.sort((x, y) => String(x.label || '').localeCompare(String(y.label || ''), 'fr'));
+            }
+        }
+        res.json({ data: groups.filter((g) => g.tokens && g.tokens.length) });
     } catch (e) {
         console.error('Erreur jetons palette :', e);
         res.status(500).json({ error: 'Internal Server Error' });
