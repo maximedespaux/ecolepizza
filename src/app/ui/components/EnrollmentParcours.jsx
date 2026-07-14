@@ -36,18 +36,20 @@ function actionFor(s) {
  * la formation, dans l'ordre), détail de l'étape sélectionnée à droite.
  * `onOpenDoc(docId)` ouvre l'aperçu/signature ; `onGoto('documents')` remonte à la section Documents.
  */
-function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSendQuiz }) {
+function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
+  // Clé de réinitialisation : dossier stagiaire (enrollmentId) ou clé fournie (ex. session entreprise).
+  const key = resetKey ?? enrollmentId;
 
-  // Au changement de dossier seulement : on remet l'affichage en état de chargement.
+  // Au changement de contexte seulement : on remet l'affichage en état de chargement.
   // (Un simple rafraîchissement ne vide PAS l'affichage : évite le clignotement.)
-  useEffect(() => { setData(null); setSel(null); setError(null); }, [enrollmentId]);
+  useEffect(() => { setData(null); setSel(null); setError(null); }, [key]);
 
   useEffect(() => {
     let active = true;
-    getEnrollmentParcours(enrollmentId)
+    (fetcher ? fetcher() : getEnrollmentParcours(enrollmentId))
       .then((r) => {
         if (!active) return;
         setData(r.data);
@@ -58,7 +60,7 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
       })
       .catch((e) => { if (active) setError(e.message); });
     return () => { active = false; };
-  }, [enrollmentId, refresh]);
+  }, [key, refresh]);
 
   if (error) return <p className="hint" style={{ color: "var(--amber, #b8860b)" }}>{error}</p>;
   if (!data) return <p className="hint">Chargement du parcours…</p>;
@@ -134,9 +136,14 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
         </div>
         {step.sub && <p style={{ color: "var(--muted)", marginTop: 8 }}>{step.sub}</p>}
         <p style={{ fontWeight: 600, marginTop: 14, color: step.status === "done" ? "#2e9e5b" : "inherit" }}>{lineFor(step)}</p>
-        {action && (
-          <button className="btn primary" onClick={runAction} style={{ marginTop: 4 }}>{action.label}</button>
-        )}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+          {action && (
+            <button className="btn primary" onClick={runAction}>{action.label}</button>
+          )}
+          {onSignLink && step.docId && (
+            <button className="btn ghost" onClick={() => onSignLink(step.docId)} title="Copier un lien pour que le représentant signe">🔗 Lien de signature</button>
+          )}
+        </div>
       </div>
     </div>
   );

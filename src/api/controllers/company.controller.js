@@ -3,6 +3,7 @@ const db = require('../config/database.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
+const { computeDocParcours } = require('../lib/parcours.js');
 
 const clean = (v) => (v === undefined || v === '' ? null : v);
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
@@ -329,4 +330,60 @@ const detachLearner = async (req, res) => {
     }
 };
 
-module.exports = { getCompanies, getCompany, createCompany, updateCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument };
+/**
+ * GET /api/companies/:id/parcours?session_id= — parcours documentaire ENTREPRISE
+ * (même forme que le parcours d'un dossier stagiaire, cf. enrollment.getParcours) :
+ * étapes company_level de la formation + statut déduit des documents entreprise générés.
+ */
+const getCompanyParcours = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[company]] = await conn.query('SELECT id, name FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
+        const empty = { header: {}, steps: [], percent: 0, currentIndex: 0, currentKey: null };
+        const sessionId = req.query.session_id;
+        if (!sessionId) return res.json({ data: empty });
+
+        const [[sess]] = await conn.query(
+            `SELECT s.id, s.year, s.week,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                    DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
+                    p.id AS program_id, p.title AS program_title, p.code AS program_code,
+                    p.days, p.hygiene, p.rs_code
+             FROM training_session s JOIN training_program p ON p.id = s.program_id
+             WHERE s.id = ? AND s.organization_id = ?`, [sessionId, orgId]);
+        if (!sess) return res.status(404).json({ message: 'Session introuvable.' });
+
+        const program = { id: sess.program_id, code: sess.program_code, days: sess.days, hygiene: sess.hygiene, rs_code: sess.rs_code };
+        const allSteps = await formationSteps(conn, orgId, program);
+        const steps = allSteps.filter((s) => s.active && s.company_level);
+
+        let docs = [];
+        try {
+            [docs] = await conn.query(
+                `SELECT id, type, status, template_slug, quiz_id FROM generated_document
+                 WHERE organization_id = ? AND company_id = ? AND session_id = ? AND scope = 'COMPANY'
+                 ORDER BY created_at DESC`,
+                [orgId, company.id, sessionId]);
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+
+        const parc = computeDocParcours({ steps, docs });
+        res.json({
+            data: {
+                header: {
+                    title: sess.program_title || '—', code: sess.program_code || '',
+                    session: sess.week ? `SEM ${sess.week}/${sess.year || ''}` : '',
+                    dates: sess.start_date ? `${sess.start_date}${sess.end_date ? ` → ${sess.end_date}` : ''}` : '',
+                    financing: 'Entreprise', opco: null,
+                },
+                ...parc,
+            },
+        });
+    } catch (err) {
+        console.error('Erreur parcours entreprise :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getCompanies, getCompany, createCompany, updateCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours };

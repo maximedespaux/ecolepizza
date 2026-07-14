@@ -366,6 +366,18 @@ export function registerCompanyStagiaires(id, payload) {
 export function detachCompanyLearner(id, learnerId) {
   return request(`/companies/${id}/learners/${learnerId}`, { method: "DELETE" });
 }
+// Parcours documentaire ENTREPRISE (même forme que le parcours d'un dossier stagiaire).
+export function getCompanyParcours(id, sessionId) {
+  return request(`/companies/${id}/parcours${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
+}
+// Génère un document « entreprise » (un doc par groupe, listant tous les stagiaires).
+export function createCompanyDocument(id, payload) {
+  return request(`/companies/${id}/documents`, { method: "POST", body: JSON.stringify(payload) });
+}
+// Lien de signature partageable (représentant entreprise). createSignLink → { token }.
+export function createSignLink(documentId, payload = {}) {
+  return request(`/documents/${documentId}/sign-link`, { method: "POST", body: JSON.stringify(payload) });
+}
 // Signature publique par le représentant de l'entreprise (page /signer/:token).
 export function getPublicSignDoc(token) { return request(`/public/sign/${token}`, { silent: true }); }
 export function submitPublicSign(token, payload) { return request(`/public/sign/${token}`, { method: "POST", body: JSON.stringify(payload) }); }

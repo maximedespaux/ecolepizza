@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  detachCompanyLearner, getOpcos } from "../api/apiClient.js";
+  detachCompanyLearner, getOpcos, getCompanyParcours, createCompanyDocument, createSignLink, documentPdfUrl } from "../api/apiClient.js";
+import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -41,6 +42,7 @@ export default function EntrepriseDetail() {
   const [sessionId, setSessionId] = useState("");
   const [registering, setRegistering] = useState(false);
   const [result, setResult] = useState(null); // { created: [...] }
+  const [parcoursRefresh, setParcoursRefresh] = useState(0); // recharge le parcours entreprise
   // Rattacher un stagiaire existant à l'entreprise
   const [attachQ, setAttachQ] = useState("");
   const [attachRes, setAttachRes] = useState([]);
@@ -96,6 +98,26 @@ export default function EntrepriseDetail() {
     if (!window.confirm("Détacher ce stagiaire de l'entreprise ?")) return;
     try { await detachCompanyLearner(id, learnerId); load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+
+  // Parcours documentaire entreprise (mêmes actions que la fiche stagiaire).
+  async function prepareCompanyDoc(templateSlug) {
+    if (!sessionId) return;
+    setStatus(null);
+    try { await createCompanyDocument(id, { session_id: sessionId, template_slug: templateSlug }); setParcoursRefresh((n) => n + 1); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+  async function openCompanyDoc(docId) {
+    try { const url = await documentPdfUrl(docId); window.open(url, "_blank"); }
+    catch (e) { setStatus({ type: "error", message: e.message || "Aperçu indisponible." }); }
+  }
+  async function companySignLink(docId) {
+    try {
+      const r = await createSignLink(docId, {});
+      const url = `${window.location.origin}/signer/${r.data.token}`;
+      try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
+      setStatus({ type: "success", message: `Lien de signature du représentant copié : ${url}` });
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -215,6 +237,32 @@ export default function EntrepriseDetail() {
             <button className="btn primary" onClick={saveInfo} disabled={savingInfo} style={{ marginTop: 14 }}><Icon name="check" size={15} /> Enregistrer</button>
           </Card>
         </div>
+      </div>
+
+      {/* Parcours documentaire entreprise (même vue que la fiche stagiaire). */}
+      <div style={{ marginTop: 22 }}>
+        <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Parcours documentaire entreprise</span>}>
+          <p className="hint" style={{ margin: "0 0 12px" }}>Documents produits <b>une fois pour le groupe</b> (jeton « Stagiaires »), dans l'ordre du <b>Parcours entreprise</b> de la formation. « Préparer » génère le document, « Lien de signature » permet au représentant de signer.</p>
+          {(data.sessions || []).length > 1 && (
+            <div className="field" style={{ maxWidth: 360 }}><label>Session</label>
+              <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+                {data.sessions.map((s) => <option key={s.id} value={s.id}>{`${s.program_code || s.program_title} · S${s.week} ${s.year}`}</option>)}
+              </select>
+            </div>
+          )}
+          {!sessionId ? (
+            <EmptyState icon="file-text">Aucune session pour cette entreprise. Inscris un groupe à une session ci-dessus.</EmptyState>
+          ) : (
+            <EnrollmentParcours
+              fetcher={() => getCompanyParcours(id, sessionId)}
+              resetKey={`${id}:${sessionId}`}
+              refresh={parcoursRefresh}
+              onPrepare={prepareCompanyDoc}
+              onOpenDoc={openCompanyDoc}
+              onSignLink={companySignLink}
+            />
+          )}
+        </Card>
       </div>
     </>
   );
