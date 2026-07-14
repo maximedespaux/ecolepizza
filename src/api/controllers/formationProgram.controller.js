@@ -111,10 +111,21 @@ async function enrollmentSteps(conn, orgId, program, ctx, condById, eqMap) {
     // Une étape « passe » si c'est un QCM ou si ses conditions correspondent au dossier.
     const passes = (s) => s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds));
     const groupOf = (s) => (eq && eq.get(s.slug) ? eq.get(s.slug).group : null);
+    // Spécificité d'une variante = nombre de contraintes (built-in + conditions perso).
+    // Sert à départager plusieurs variantes qui s'appliquent au même dossier : on garde
+    // la PLUS SPÉCIFIQUE (ex. « Devis entreprise » [pro + OPCO] l'emporte sur « Devis pro »
+    // [pro] quand le dossier est pro AVEC un OPCO), indépendamment de l'ordre.
+    const specificity = (s) => {
+        const a = s.applies_when || {};
+        let n = 0;
+        for (const k of ['financing', 'rs', 'hygiene', 'jours', 'agefice']) if (a[k] != null) n++;
+        if (Array.isArray(a.conditions)) n += a.conditions.length;
+        return n;
+    };
 
-    // Pour un groupe « OU » : on garde UNE seule variante — celle qui s'applique au
-    // dossier, sinon la première (défaut) pour ne JAMAIS faire disparaître le jalon.
-    // Pour une étape isolée : filtrée par ses propres conditions.
+    // Pour un groupe « OU » : on garde UNE seule variante — la plus spécifique qui
+    // s'applique au dossier, sinon la première (défaut) pour ne JAMAIS faire disparaître
+    // le jalon. Pour une étape isolée : filtrée par ses propres conditions.
     const out = [];
     const seen = new Set();
     for (const s of active) {
@@ -123,7 +134,11 @@ async function enrollmentSteps(conn, orgId, program, ctx, condById, eqMap) {
         if (seen.has(g)) continue;
         seen.add(g);
         const members = active.filter((m) => groupOf(m) === g);
-        out.push(members.find(passes) || members[0]);
+        const passing = members.filter(passes);
+        const chosen = passing.length
+            ? passing.reduce((best, m) => (specificity(m) > specificity(best) ? m : best), passing[0])
+            : members[0];
+        out.push(chosen);
     }
     return out;
 }
