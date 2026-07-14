@@ -9,10 +9,13 @@ const SENT = ['ENVOYE', 'CONSULTE', 'SIGNE'];
 // son modèle le prévoit (Modeles de document : stagiaire_sign). Le parcours n'avance
 // alors qu'une fois CE document reçu signé (jamais au simple envoi).
 const mustSign = (s) => !!s.stagiaire_sign;
-const iconFor = (s) => (s.quiz_id ? '❓' : (mustSign(s) ? '✍️' : '📄'));
+// Une signature (stagiaire OU entreprise) est requise pour valider l'étape.
+const needsSignature = (s) => !!s.stagiaire_sign || !!s.company_sign;
+const iconFor = (s) => (s.quiz_id ? '❓' : (needsSignature(s) ? '✍️' : '📄'));
 const keyFor = (s) => (s.quiz_id ? `quiz:${s.quiz_id}` : s.slug);
 function subFor(s) {
     if (s.quiz_id) return 'QCM' + (s.day != null && s.day !== '' ? ` · jour ${s.day}` : '');
+    if (s.company_sign) return "À signer par l'entreprise";
     if (mustSign(s)) return 'À signer par le stagiaire';
     return s.doc_type || '';
 }
@@ -29,7 +32,7 @@ function matchDoc(step, docs) {
 // (l'étape n'avance qu'à réception de CE document signé) ; autre document => envoyé.
 function stepDone(step, doc) {
     if (!doc) return false;
-    if (step.quiz_id || step.stagiaire_sign) {
+    if (step.quiz_id || needsSignature(step)) {
         return doc.status === 'SIGNE';
     }
     return SENT.includes(doc.status);

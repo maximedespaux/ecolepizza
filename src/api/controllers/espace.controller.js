@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { stepsToDocSet, stagiaireSignsDoc, matchStep } = require('../lib/documents.js');
+const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
@@ -172,8 +172,15 @@ const getMonEspace = async (req, res) => {
         );
 
         // Le stagiaire doit-il signer chaque document ? Piloté par le modèle (Modeles).
+        // Exception : les documents « signés par l'entreprise » quand le stagiaire est
+        // rattaché à une entreprise → c'est le représentant qui signe (pas le stagiaire).
         const orgSteps = await loadOrgSteps(req.user.organization_id);
-        for (const d of documents) d.signable = d.quiz_id ? false : (d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d));
+        const hasCompany = !!learner.company_id;
+        for (const d of documents) {
+            const byCompany = hasCompany && companySignsDoc(orgSteps, d);
+            d.company_sign = byCompany;
+            d.signable = d.quiz_id ? false : (!byCompany && (d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d)));
+        }
 
         res.json({
             data: {

@@ -21,8 +21,8 @@ async function loadRows(organizationId) {
         `SELECT ${META_COLS}${extra}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
          FROM document_template WHERE organization_id = ?`;
-    // Colonnes optionnelles (migrations 077 / 086) : on retombe en cascade si absentes.
-    for (const extra of [', company_level, copy_to_learners', ', company_level', '']) {
+    // Colonnes optionnelles (migrations 077 / 086 / 087) : on retombe en cascade si absentes.
+    for (const extra of [', company_level, copy_to_learners, company_sign', ', company_level, copy_to_learners', ', company_level', '']) {
         try { const [rows] = await db.promise().query(sel(extra), [organizationId]); return rows; }
         catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; }
     }
@@ -99,6 +99,7 @@ const listTemplates = async (req, res) => {
             file_name: raw[s.slug]?.name || null,
             updated_at: raw[s.slug]?.updated_at || null,
             copy_to_learners: raw[s.slug]?.copy_to_learners ? 1 : 0,
+            company_sign: raw[s.slug]?.company_sign ? 1 : 0,
         }));
         res.json({ data: steps });
     } catch (err) {
@@ -112,7 +113,7 @@ async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
     // sans elles plutôt que d'échouer.
-    const OPTIONAL = ['layout', 'company_level', 'copy_to_learners'];
+    const OPTIONAL = ['layout', 'company_level', 'copy_to_learners', 'company_sign'];
     const run = async (f) => {
         const keys = Object.keys(f);
         if (ex.length) {
@@ -159,6 +160,7 @@ const saveTemplate = async (req, res) => {
     if (b.active !== undefined) fields.active = b.active ? 1 : 0;
     if (b.company_level !== undefined) fields.company_level = b.company_level ? 1 : 0;
     if (b.copy_to_learners !== undefined) fields.copy_to_learners = b.copy_to_learners ? 1 : 0;
+    if (b.company_sign !== undefined) fields.company_sign = b.company_sign ? 1 : 0;
     // Corps construit dans l'éditeur : passe l'étape en mode « builder ».
     if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }
@@ -580,6 +582,7 @@ const duplicateTemplate = async (req, res) => {
             signable: meta.signable ? 1 : 0,
             stagiaire_sign: meta.stagiaire_sign ? 1 : 0,
             company_level: meta.company_level ? 1 : 0,
+            company_sign: meta.company_sign ? 1 : 0,
             copy_to_learners: (src && src.copy_to_learners) ? 1 : 0,
             applies_when: meta.applies_when && Object.keys(meta.applies_when).length ? JSON.stringify(meta.applies_when) : null,
             active: 1,

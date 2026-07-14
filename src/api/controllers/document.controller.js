@@ -3,7 +3,15 @@ const db = require('../config/database.js');
 const { renderDocumentHTML } = require('../lib/render.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
-const { stagiaireSignsDoc, orgSignsDoc } = require('../lib/documents.js');
+const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc } = require('../lib/documents.js');
+
+// Signature d'un document de dossier INCOMBE à l'entreprise ? (modèle company_sign +
+// dossier rattaché à une entreprise). Dans ce cas le stagiaire ne signe pas lui-même.
+async function docSignedByCompany(conn, orgSteps, doc) {
+    if (!companySignsDoc(orgSteps, doc) || !doc.learner_id) return false;
+    try { const [[l]] = await conn.query('SELECT company_id FROM learner WHERE id = ?', [doc.learner_id]); return !!(l && l.company_id); }
+    catch { return false; }
+}
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { composeDocumentPdf } = require('../lib/pdfcompose.js');
 const { findMissingTokens } = require('../lib/tokens.js');
@@ -348,12 +356,15 @@ const getDocument = async (req, res) => {
         const html = renderDocumentHTML(doc.type, ctx, doc.title);
         // Signature stagiaire pilotée par le modèle (Modeles de document : stagiaire_sign).
         const orgSteps = await loadOrgSteps(doc.organization_id);
+        // Document dont la signature incombe à l'entreprise : pas signable par le stagiaire.
+        const byCompany = await docSignedByCompany(conn, orgSteps, doc);
         res.json({
             data: {
                 id: doc.id, type: doc.type, title: doc.title, status: doc.status,
                 sent_at: doc.sent_at, signed_at: doc.signed_at, signer_name: doc.signer_name,
                 signature_data: decrypt(doc.signature_data),
-                signable: isEmargDoc(doc) || stagiaireSignsDoc(orgSteps, doc),
+                signable: !byCompany && (isEmargDoc(doc) || stagiaireSignsDoc(orgSteps, doc)),
+                company_sign: byCompany,
                 org_signable: orgSignsDoc(orgSteps, doc), // émargement : l'organisme ne signe pas à l'envoi (envoyé non signé)
                 org_signed: !!doc.org_signed_at,
                 org_signer_name: doc.org_signer_name || null,
@@ -735,8 +746,14 @@ const signDocument = async (req, res) => {
         // Le document doit être prévu pour signature stagiaire (Modeles : stagiaire_sign).
         // L'émargement est toujours signable électroniquement par le stagiaire.
         const orgSteps = await loadOrgSteps(req.user.organization_id);
-        if (!isEmargDoc(rows[0]) && !stagiaireSignsDoc(orgSteps, rows[0])) {
+        if (!isEmargDoc(rows[0]) && !stagiaireSignsDoc(orgSteps, rows[0]) && !companySignsDoc(orgSteps, rows[0])) {
             return res.status(422).json({ message: "Ce document n'est pas prévu pour être signé par le stagiaire." });
+        }
+        // Document dont la signature incombe à l'ENTREPRISE : le stagiaire ne le signe pas
+        // lui-même (le représentant signe à sa place). Le personnel peut toujours signer.
+        const isStaff = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'].includes(req.user.role);
+        if (!isStaff && await docSignedByCompany(conn, orgSteps, rows[0])) {
+            return res.status(422).json({ message: "Ce document doit être signé par l'entreprise (représentant)." });
         }
 
         await applyLearnerSignature(conn, req.user.organization_id, rows[0], {

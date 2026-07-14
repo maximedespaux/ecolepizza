@@ -466,6 +466,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     signable: !!step.signable,
     stagiaire_sign: !!step.stagiaire_sign,
     company_level: !!step.company_level,
+    company_sign: !!step.company_sign,
     copy_to_learners: !!step.copy_to_learners,
     sign_formateur: !!(step.config && step.config.show_formateurs),
     sign_intervenant: !!(step.config && step.config.show_intervenants),
@@ -498,7 +499,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         if (!slug) { onError("Identifiant (slug) requis."); setSaving(false); return; }
         await saveTemplate(slug, {
           label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
-          signable: form.signable, stagiaire_sign: form.stagiaire_sign, company_level: form.company_level, copy_to_learners: form.copy_to_learners,
+          signable: form.signable, stagiaire_sign: form.stagiaire_sign, company_sign: form.company_sign, company_level: form.company_level, copy_to_learners: form.copy_to_learners,
           active: form.active, applies_when,
         });
       }
@@ -580,6 +581,8 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
                 <input type="checkbox" checked={form.signable} onChange={chk("signable")} /> À signer</label>
               <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
                 <input type="checkbox" checked={form.stagiaire_sign} onChange={chk("stagiaire_sign")} /> Signé par le stagiaire</label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Devis / convention… : si le dossier est financé par une entreprise, c'est le représentant qui signe (à la place du stagiaire). Sinon le stagiaire signe lui-même.">
+                <input type="checkbox" checked={form.company_sign} onChange={chk("company_sign")} /> 🏢 Signé par l'entreprise (si financement entreprise)</label>
               <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
                 <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
               <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Document produit une seule fois par entreprise + session, qui liste tous les stagiaires du groupe (jeton « Stagiaires »).">

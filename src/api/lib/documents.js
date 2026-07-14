@@ -67,7 +67,7 @@ function mergeSteps(rows = []) {
         bySlug.set(d.slug, {
             slug: d.slug, label: d.label, doc_type: d.doc_type, sort_order: d.sort_order,
             signable: d.signable, stagiaire_sign: d.stagiaire_sign, applies_when: d.applies_when,
-            or_group: d.or_group || null, company_level: d.company_level ? 1 : 0,
+            or_group: d.or_group || null, company_level: d.company_level ? 1 : 0, company_sign: d.company_sign ? 1 : 0,
             active: 1, has_file: false, is_default: true, customized: false,
         });
     }
@@ -76,7 +76,7 @@ function mergeSteps(rows = []) {
         if (r.deleted) { bySlug.delete(r.slug); continue; }
         const base = bySlug.get(r.slug) || {
             slug: r.slug, label: r.slug, doc_type: r.doc_type || null, sort_order: 100,
-            signable: 0, stagiaire_sign: 0, applies_when: {}, or_group: null, company_level: 0, active: 1, has_file: false,
+            signable: 0, stagiaire_sign: 0, applies_when: {}, or_group: null, company_level: 0, company_sign: 0, active: 1, has_file: false,
             is_default: false, customized: false,
         };
         const m = { ...base, customized: true };
@@ -87,6 +87,7 @@ function mergeSteps(rows = []) {
         if (r.stagiaire_sign != null) m.stagiaire_sign = r.stagiaire_sign;
         if (r.applies_when != null) m.applies_when = parseApplies(r.applies_when);
         if (r.company_level != null) m.company_level = r.company_level ? 1 : 0;
+        if (r.company_sign != null) m.company_sign = r.company_sign ? 1 : 0;
         if (r.active != null) m.active = r.active;
         m.has_file = !!r.has_file;
         bySlug.set(r.slug, m);
@@ -132,6 +133,24 @@ function stagiaireSignsDoc(steps, doc) {
 }
 
 /**
+ * Ce document doit-il être signé par L'ENTREPRISE (représentant) plutôt que par le
+ * stagiaire, lorsque le dossier est financé par une entreprise ? Flag `company_sign`
+ * du modèle (ex. devis / convention entreprise). Résolu par slug puis par type.
+ */
+function companySignsDoc(steps, doc) {
+    if (!doc) return false;
+    if (doc.template_slug) {
+        const s = steps.find((x) => x.slug === doc.template_slug);
+        if (s) return !!s.company_sign;
+    }
+    if (doc.type) {
+        const byType = steps.filter((x) => x.doc_type === doc.type);
+        if (byType.length) return byType.some((x) => !!x.company_sign);
+    }
+    return false;
+}
+
+/**
  * L'ORGANISME doit-il signer ce document ? Piloté par le flag `signable` du modèle
  * (« À signer »). La signature organisme est appliquée automatiquement à l'envoi.
  */
@@ -159,4 +178,4 @@ function matchFormation(applies, program) {
     return true;
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, orgSignsDoc };
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc };

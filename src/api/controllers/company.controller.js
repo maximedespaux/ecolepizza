@@ -6,7 +6,7 @@ const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { computeDocParcours } = require('../lib/parcours.js');
-const { stagiaireSignsDoc } = require('../lib/documents.js');
+const { companySignsDoc } = require('../lib/documents.js');
 
 const clean = (v) => (v === undefined || v === '' ? null : v);
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
@@ -429,8 +429,9 @@ const getCompanyLearnerDocuments = async (req, res) => {
              ORDER BY l.last_name, l.first_name, gd.created_at`,
             [company.id, sessionId, orgId]
         );
-        // Ne garde que les documents que le STAGIAIRE devrait signer.
-        const out = rows.filter((d) => stagiaireSignsDoc(orgSteps, d));
+        // Ne garde que les documents « signés par l'entreprise » (devis, convention…) :
+        // ce sont ceux dont la signature incombe au représentant.
+        const out = rows.filter((d) => companySignsDoc(orgSteps, d));
         res.json({ data: out });
     } catch (err) {
         console.error('Erreur documents stagiaires (entreprise) :', err);
