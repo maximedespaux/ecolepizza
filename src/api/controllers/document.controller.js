@@ -3,7 +3,7 @@ const db = require('../config/database.js');
 const { renderDocumentHTML } = require('../lib/render.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
-const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc } = require('../lib/documents.js');
+const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc } = require('../lib/documents.js');
 
 // Signature d'un document de dossier INCOMBE à l'entreprise ? (modèle company_sign +
 // dossier rattaché à une entreprise). Dans ce cas le stagiaire ne signe pas lui-même.
@@ -355,6 +355,7 @@ const getDocument = async (req, res) => {
                 signature_data: decrypt(doc.signature_data),
                 signable: !byCompany && (isEmargDoc(doc) || stagiaireSignsDoc(orgSteps, doc)),
                 company_sign: byCompany,
+                external_sign: externalSignsDoc(orgSteps, doc), // signataire externe requis (lien partageable)
                 org_signable: orgSignsDoc(orgSteps, doc), // émargement : l'organisme ne signe pas à l'envoi (envoyé non signé)
                 org_signed: !!doc.org_signed_at,
                 org_signer_name: doc.org_signer_name || null,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon.jsx";
-import { getDocument, signDocument, downloadDocumentPdf, documentPdfUrl, documentPreviewHtml } from "../api/apiClient.js";
+import { getDocument, signDocument, downloadDocumentPdf, documentPdfUrl, documentPreviewHtml, createSignLink } from "../api/apiClient.js";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
 
@@ -54,6 +54,17 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
   }
 
   const showSign = canSign && doc && doc.signable && doc.status !== "SIGNE";
+
+  // Lien de signature pour un signataire EXTERNE (tuteur, financeur…) — action du personnel.
+  async function externalLink() {
+    setStatus(null);
+    try {
+      const r = await createSignLink(id, { slot: "external", label: "Signature externe" });
+      const url = `${window.location.origin}/signer/${r.data.token}`;
+      try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
+      setStatus({ type: "success", message: `Lien de signature externe copié : ${url}` });
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
   const dl = (fn) => fn.catch((e) => { setStatus({ type: "error", message: e.message }); if (e.missing) setMissing(e.missing); });
 
   // Panneau des informations manquantes (regroupées par table d'origine).
@@ -93,7 +104,7 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
             <div style={{ padding: "6px 14px", fontSize: 12, background: doc.org_signed ? "rgba(22,163,74,.08)" : "rgba(184,134,11,.10)", borderBottom: "1px solid var(--border-soft)" }}>
               {doc.org_signed
                 ? <><b style={{ color: "#16a34a" }}><Icon name="check" size={13} style={{ verticalAlign: "text-bottom" }} /> Signé par l'organisme</b>{doc.org_signer_name ? ` (${doc.org_signer_name})` : ""}{doc.org_signed_at ? ` le ${new Date(doc.org_signed_at).toLocaleDateString("fr-FR")}` : ""}</>
-                : <span style={{ color: "var(--amber, #b8860b)" }}><Icon name="pencil" size={13} style={{ verticalAlign: "text-bottom" }} /> L'organisme signera automatiquement à l'envoi (signature enregistrée requise).</span>}
+                : <span style={{ color: "var(--amber, #b8860b)" }}><Icon name="pencil" size={13} style={{ verticalAlign: "text-bottom" }} /> L'organisme contresigne automatiquement <b>en dernier</b>, après les autres signataires (signature enregistrée requise).</span>}
             </div>
           )}
           {doc && doc.status === "SIGNE" && (
@@ -128,6 +139,9 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
           )}
           {doc && !missing && (
             <button className="btn" onClick={() => dl(downloadDocumentPdf(id, `${doc.title || "document"}.pdf`))}>PDF</button>
+          )}
+          {canSign && doc && doc.external_sign && doc.status !== "SIGNE" && !missing && (
+            <button className="btn ghost sm" title="Copier un lien pour qu'un signataire externe signe" onClick={externalLink}>🔗 Lien externe</button>
           )}
           {showSign && !missing && <button className="btn primary" onClick={() => setSigning(true)}>Signer</button>}
         </div>
