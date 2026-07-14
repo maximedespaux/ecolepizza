@@ -440,7 +440,7 @@ const getCompanyLearnerDocuments = async (req, res) => {
 
 /**
  * POST /api/companies/:id/representative-account — crée (ou réinitialise) le compte
- * de connexion du REPRÉSENTANT de l'entreprise (rôle REPRESENTANT), pour qu'il signe
+ * de connexion du REPRÉSENTANT de l'entreprise (rôle ENTREPRISE), pour qu'il signe
  * lui-même les documents de niveau entreprise. Renvoie l'e-mail + le mot de passe
  * (affiché une seule fois).
  */
@@ -480,7 +480,7 @@ const createRepresentativeAccount = async (req, res) => {
             }
             // Compte représentant dédié déjà en place : on réinitialise juste le mot de passe.
             const password = generatePassword();
-            await conn.query("UPDATE user SET role = 'REPRESENTANT', password = ?, first_name = ?, last_name = ? WHERE id = ? AND organization_id = ?",
+            await conn.query("UPDATE user SET role = 'ENTREPRISE', password = ?, first_name = ?, last_name = ? WHERE id = ? AND organization_id = ?",
                 [await bcrypt.hash(password, 10), first || 'Représentant', last, existing.id, orgId]);
             await linkCompany(existing.id);
             return res.status(200).json({ data: { email, password } });
@@ -491,7 +491,7 @@ const createRepresentativeAccount = async (req, res) => {
         const userId = crypto.randomUUID();
         await conn.query(
             `INSERT INTO user (id, organization_id, role, first_name, last_name, email, phone, password)
-             VALUES (?, ?, 'REPRESENTANT', ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, 'ENTREPRISE', ?, ?, ?, ?, ?)`,
             [userId, orgId, first || 'Représentant', last, email, company.phone || null, await bcrypt.hash(password, 10)]);
         await linkCompany(userId);
         res.status(201).json({ data: { email, password } });

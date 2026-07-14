@@ -117,7 +117,7 @@ function AppRoutes() {
   const isStudent = user?.role === "STAGIAIRE";
   const isIntervenant = user?.role === "INTERVENANT";
   const isPlatform = user?.role === "PLATFORM_OWNER";
-  const isRepresentant = user?.role === "REPRESENTANT";
+  const isRepresentant = user?.role === "ENTREPRISE";
 
   return (
     <Routes>
