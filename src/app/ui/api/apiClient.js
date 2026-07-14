@@ -386,6 +386,7 @@ export function createRepresentativeAccount(id) {
 export function getRepDocuments() { return request("/rep/documents"); }
 export function previewRepDocument(id) { return request(`/rep/documents/${id}/preview`, { silent: true }); }
 export function signRepDocument(id, payload) { return request(`/rep/documents/${id}/sign`, { method: "POST", body: JSON.stringify(payload) }); }
+export function setRepStamp(stamp) { return request("/rep/stamp", { method: "PUT", body: JSON.stringify({ stamp }) }); }
 // Génère un document « entreprise » (un doc par groupe, listant tous les stagiaires).
 export function createCompanyDocument(id, payload) {
   return request(`/companies/${id}/documents`, { method: "POST", body: JSON.stringify(payload) });
