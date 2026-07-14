@@ -13,6 +13,11 @@
   --font-d:"Mulish",system-ui,sans-serif; --font-b:"Mulish",system-ui,sans-serif; --font-m:"Space Mono",ui-monospace,monospace;
   --r:16px; --r-sm:11px; --ease:cubic-bezier(.22,.61,.36,1);
   --shadow-glow:0 8px 30px -8px rgba(220,62,55,.4);
+  /* Échelle d'élévation cohérente (cartes → panneaux → modales) */
+  --shadow-1:0 1px 2px rgba(31,33,64,.05), 0 1px 3px rgba(31,33,64,.05);
+  --shadow-2:0 4px 12px -4px rgba(31,33,64,.12), 0 2px 6px -2px rgba(31,33,64,.06);
+  --shadow-3:0 18px 44px -16px rgba(31,33,64,.28), 0 6px 16px -8px rgba(31,33,64,.14);
+  --shadow-navy:0 20px 48px -18px rgba(30,30,80,.55);
   --orange:#ff6900; --gold:#fcb900;                   /* accents pizza : flamme (four) + or (fromage) */
   --grad-warm:linear-gradient(135deg,#ff6900,#fcb900);
   --shadow-gold:0 8px 30px -10px rgba(252,185,0,.45);
@@ -148,7 +153,7 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 
 /* Cards / grid ------------------------------------------------------- */
 .grid{display:grid;gap:16px}.cols-2{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:repeat(3,1fr)}.cols-4{grid-template-columns:repeat(4,1fr)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;transition:.2s var(--ease);animation:rise .45s var(--ease) both}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-1);transition:box-shadow .2s var(--ease),transform .2s var(--ease),border-color .2s var(--ease);animation:rise .45s var(--ease) both}
 .card.hover{cursor:pointer}
 .card.hover:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
 .card h3{font-size:17px}
@@ -514,10 +519,21 @@ tbody tr:last-child td{border-bottom:none}
 .iconbtn:disabled{opacity:.35;cursor:not-allowed}
 
 /* ===== Atelier pâte (espace stagiaire) ================================== */
-.dough-result{color:#fff;background:linear-gradient(135deg,var(--navy),var(--navy-dark))}
-.dough-line{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.10);border-radius:12px;padding:10px 12px;margin-bottom:9px}
+.dough-result{position:relative;color:#fff;border:none;padding:24px;border-radius:20px;background:radial-gradient(120% 120% at 100% 0%,var(--navy-2) 0%,var(--navy) 45%,var(--navy-dark) 100%);box-shadow:var(--shadow-navy)}
+.dough-result::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(160deg,rgba(255,255,255,.22),rgba(255,255,255,0) 40%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.dough-line{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:10px 12px;margin-bottom:8px;transition:background .16s var(--ease),transform .16s var(--ease)}
+.dough-line:hover{background:rgba(255,255,255,.15)}
 .dough-bar{display:flex;height:12px;border-radius:99px;overflow:hidden;margin-bottom:16px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
-.dough-bar span{display:block;height:100%;transition:width .25s var(--ease)}
+.dough-bar span{display:block;height:100%;transition:width .3s var(--ease)}
+/* Barre de composition interactive (tooltip au survol) */
+.dough-bar2{display:flex;border-radius:99px;position:relative;margin-bottom:16px;box-shadow:inset 0 0 0 1px rgba(128,128,150,.18)}
+.dough-seg{display:block;height:100%;position:relative;transition:width .3s var(--ease);cursor:default;outline:none}
+.dough-seg:first-child{border-radius:99px 0 0 99px}
+.dough-seg:last-child{border-radius:0 99px 99px 0}
+.dough-seg:hover{filter:brightness(1.08)}
+.dough-seg-tip{position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%) translateY(4px) scale(.96);background:#fff;color:var(--navy);padding:5px 10px;border-radius:9px;font:600 11.5px/1.2 var(--font-d);white-space:nowrap;opacity:0;pointer-events:none;transition:.15s var(--ease);z-index:20;box-shadow:0 8px 22px -6px rgba(15,17,40,.4);border:1px solid rgba(15,17,40,.06)}
+.dough-seg-tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#fff}
+.dough-seg:hover .dough-seg-tip,.dough-seg:focus-visible .dough-seg-tip{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
 .ate-lbl{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
 .ate-num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--ember1) 14%,var(--surface));color:var(--ember1);font-size:11px;font-weight:800;flex:none}
 .ate-step{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.15);display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
@@ -1011,3 +1027,67 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .gs-clear{border:none;background:none;color:var(--muted);cursor:pointer;padding:3px;border-radius:6px;display:inline-flex;align-items:center}
 .gs-clear:hover{color:var(--text);background:var(--surface2)}
 .inp:disabled{background:var(--surface2);color:var(--muted);cursor:not-allowed;opacity:.85}
+
+/* Assistant pas-à-pas — empâtement (PateWizard) */
+.wiz-steps{display:flex;align-items:flex-start;gap:2px;margin:0 0 20px;overflow-x:auto;padding-bottom:2px}
+.wiz-dot{position:relative;flex:1 1 0;min-width:54px;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:2px 0;color:var(--muted)}
+.wiz-dot::before{content:"";position:absolute;top:15px;left:calc(-50% + 16px);width:calc(100% - 32px);height:2px;background:var(--border);z-index:0}
+.wiz-dot:first-child::before{display:none}
+.wiz-dot-n{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);font:800 13px/1 var(--font-d);color:var(--muted);transition:all .18s}
+.wiz-dot-l{font-size:11px;font-weight:600;text-align:center;line-height:1.15;white-space:nowrap}
+.wiz-dot:hover .wiz-dot-n{border-color:var(--gold);color:var(--text)}
+.wiz-dot.done .wiz-dot-n{background:color-mix(in srgb,var(--green) 18%,var(--surface));border-color:var(--green);color:var(--green)}
+.wiz-dot.done::before{background:var(--green)}
+.wiz-dot.on{color:var(--text)}
+.wiz-dot.on .wiz-dot-n{background:var(--grad-ember);border:none;color:#fff;box-shadow:var(--shadow-glow)}
+.wiz-q{display:flex;align-items:center;gap:9px;font-size:15px;margin:2px 0 15px;color:var(--text)}
+.wiz-q svg{color:var(--ember1);flex-shrink:0}
+.uc-hero{border-top:3px solid var(--gold)}
+/* Accueil d'outil (BuilderHub) */
+.hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,340px));gap:16px;justify-content:start}
+.hub-card{display:flex;flex-direction:column;align-items:flex-start;gap:9px;text-align:left;padding:24px 22px;border:1px solid var(--border);border-top:3px solid var(--gold);border-radius:16px;background:var(--surface);color:var(--text);cursor:pointer;box-shadow:var(--shadow-1);transition:transform .18s var(--ease),box-shadow .18s var(--ease)}
+.hub-card:hover{transform:translateY(-4px);box-shadow:var(--shadow-3)}
+.hub-card:active{transform:translateY(-1px) scale(.99)}
+.hub-top{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:2px}
+.hub-ic{display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:13px;transition:transform .18s var(--ease)}
+.hub-card:hover .hub-ic{transform:scale(1.08) rotate(-4deg)}
+.hub-badge{min-width:24px;height:24px;padding:0 8px;border-radius:99px;background:var(--surface2);color:var(--muted);font-size:12.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.hub-arrow{margin-left:auto;color:var(--dim);opacity:0;transform:translateX(-5px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
+.hub-card:hover .hub-arrow{opacity:1;transform:translateX(0)}
+.hub-t{font-size:15.5px;color:var(--text)}
+/* Retour tactile cohérent sur les puces/lignes interactives (ui-ux-pro-max : scale-feedback) */
+.gp-chip:active,.pick-row:active,.kind-btn:active,.wiz-dot:active{transform:scale(.97)}
+.gp-chip,.pick-row,.kind-btn{transition:transform .14s var(--ease),background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
+.gp-chip.sug:hover{background:color-mix(in srgb,var(--green) 12%,var(--surface))}
+/* Sélecteur de produit (garniture) */
+.gp-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-weight:600;font-size:13px;cursor:pointer;transition:all .12s}
+.gp-chip:hover{border-color:var(--gold)}
+.gp-chip.on{background:var(--grad-ember);color:#fff;border-color:transparent}
+.gp-chip.sug{border-style:dashed;border-color:var(--green);color:var(--green)}
+.gp-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border-soft)}
+/* Panneau food-pairing (garniture) */
+.pair-panel{border:1px solid color-mix(in srgb,var(--green) 30%,var(--border));background:color-mix(in srgb,var(--green) 6%,var(--surface));border-radius:12px;padding:12px 13px;margin-bottom:14px}
+.pair-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:8px}
+.pair-badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:#5f9e3f;text-transform:uppercase;letter-spacing:.04em}
+.pair-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.pair-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--border-soft);border-radius:10px;background:var(--surface);cursor:pointer;color:var(--text);transition:transform .12s var(--ease),border-color .12s var(--ease)}
+.pair-item:hover{border-color:var(--green);transform:translateY(-1px)}
+.pair-item:active{transform:scale(.98)}
+/* Sélecteur empâtement/garniture (réalisation) */
+.pick-row{display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--muted);cursor:pointer;transition:all .12s;width:100%}
+.pick-row:hover{border-color:var(--gold);color:var(--text)}
+.pick-row.on{border-color:var(--ember1);color:var(--ember1);background:color-mix(in srgb,var(--ember1) 7%,var(--surface))}
+/* Ligne « mélange de farines / adjonction » (nom + curseur % + retirer) */
+.mix-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+/* Impression de la fiche de progression : ne garder que .print-area */
+@media print{
+  body *{visibility:hidden !important}
+  .print-area,.print-area *{visibility:visible !important}
+  .print-area{position:absolute;left:0;top:0;width:100%;padding:0}
+  .no-print{display:none !important}
+  .card{box-shadow:none !important;border:none !important}
+}
+/* Colonnes : l'assistant à gauche, le résultat en direct à droite (empilé sur tablette/mobile). */
+.wiz-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,400px);gap:22px;align-items:start}
+@media(max-width:820px){.wiz-layout{grid-template-columns:1fr}}
+@media(max-width:560px){.wiz-dot-l{display:none}.wiz-dot{min-width:40px}}

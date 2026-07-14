@@ -4,7 +4,10 @@ import { useNavigate } from "react-router-dom";
 import PageHead from "../components/PageHead.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
+import DoughBar from "../components/DoughBar.jsx";
 import { euro } from "../lib/format.js";
+import { computeBuild, gfmt } from "../lib/dough.js";
+import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
 import { parseAvatar } from "../lib/gamification.js";
 import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment } from "../api/apiClient.js";
 
@@ -342,6 +345,74 @@ export default function Communaute() {
                     {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0 6px" }}>{detail.description}</p>}
                     <Tags text={detail.description} />
 
+                    {detail.kind === "PATE" && (() => {
+                      const dpv = typeof detail.dough_params === "string" ? (() => { try { return JSON.parse(detail.dough_params); } catch { return {}; } })() : (detail.dough_params || {});
+                      const B = computeBuild({ ...detail, dough_params: dpv });
+                      return (
+                        <div style={{ margin: "14px 0 0" }}>
+                          <div className="hint" style={{ marginBottom: 8 }}>{B.preset.nom}{B.napoSpec ? ` · ${B.napoSpec.label}` : ""} · {String(B.dp.method || "direct").toLowerCase()}{B.dp.autolyse ? " · autolyse" : ""} · W {B.w} · {B.hydraTotal} % hydratation · {B.effNb} pâtons de {B.patonG} g</div>
+                          <DoughBar items={B.dough} total={B.totalDough} />
+                          {B.dough.map((i) => (
+                            <div key={i.k} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, borderBottom: "1px solid var(--border-soft)", padding: "5px 0" }}>
+                              <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={15} /></span>
+                              <b style={{ flex: 1 }}>{i.k}</b><span className="hint">{i.pct}</span><span className="mono">{gfmt(i.v)}</span>
+                            </div>
+                          ))}
+                          {B.dp.shareCost !== false && <p className="hint" style={{ marginTop: 10 }}>Coût matière : <b>{euro(B.costPerPaton)}</b> / pâton · <b>{euro(B.costPerKg)}</b> / kg</p>}
+                          <details style={{ marginTop: 8 }}>
+                            <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Déroulé des étapes ({B.steps.length})</summary>
+                            <ol style={{ margin: "8px 0 0", paddingLeft: 20, fontSize: 12.5, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 6 }}>
+                              {B.steps.map((s, i) => <li key={i}><b style={{ color: "var(--text)" }}>{s.t}.</b> {s.d}</li>)}
+                            </ol>
+                          </details>
+                        </div>
+                      );
+                    })()}
+
+                    {detail.kind === "PREPARATION" && (() => {
+                      const dpv = typeof detail.dough_params === "string" ? (() => { try { return JSON.parse(detail.dough_params); } catch { return {}; } })() : (detail.dough_params || {});
+                      if (!dpv.garn) return null;
+                      const gc = garnitureCost(dpv.garn);
+                      return (
+                        <div style={{ margin: "14px 0 0" }}>
+                          {gc.items.map((i) => (
+                            <div key={i.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, borderBottom: "1px solid var(--border-soft)", padding: "5px 0" }}>
+                              <span>{i.emoji}</span><b style={{ flex: 1 }}>{i.label}{i.fragile ? " ❄️" : ""}</b><span className="hint">{num(i.qty)} g</span><span className="mono">{euro((num(i.qty) / 1000) * num(i.price))}</span>
+                            </div>
+                          ))}
+                          {dpv.shareCost !== false && <p className="hint" style={{ marginTop: 10 }}>Coût matière : <b>{euro(gc.total)}</b> / pizza</p>}
+                        </div>
+                      );
+                    })()}
+
+                    {detail.kind === "RECETTE" && (() => {
+                      const dpv = typeof detail.dough_params === "string" ? (() => { try { return JSON.parse(detail.dough_params); } catch { return {}; } })() : (detail.dough_params || {});
+                      const rl = dpv.real; if (!rl) return null;
+                      const cm = (rl.emp ? computeBuild(rl.emp).costPerPaton : 0) + garnitureCost((rl.garn?.dough_params || {}).garn).total;
+                      const price = cm * (1 + num(detail.margin_pct) / 100);
+                      const axes = realisationAxes({ service: rl.service, doughType: rl.emp?.type, garn: (rl.garn?.dough_params || {}).garn });
+                      const tone = { ok: "#7bb661", warn: "var(--orange)", bad: "var(--ember1)" };
+                      return (
+                        <div style={{ margin: "14px 0 0" }}>
+                          <div className="hint" style={{ marginBottom: 8 }}>{[svcLabel(rl.service), fourLabel(rl.four)].filter(Boolean).join(" · ")}</div>
+                          {rl.emp && <div style={{ display: "flex", gap: 8, fontSize: 13, padding: "4px 0" }}><Icon name="wheat" size={15} /><b style={{ flex: 1 }}>{rl.emp.name}</b></div>}
+                          {rl.garn && <div style={{ display: "flex", gap: 8, fontSize: 13, padding: "4px 0" }}><Icon name="pizza" size={15} /><b style={{ flex: 1 }}>{rl.garn.name}</b></div>}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 8 }}>
+                            <span className="hint">Coût {euro(cm)} · marge {detail.margin_pct} %</span>
+                            <b style={{ fontSize: 19, color: "var(--ember1)" }}>{euro(price)} <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>/ pizza</span></b>
+                          </div>
+                          <div style={{ marginTop: 10 }}>
+                            {axes.map((a, i) => (
+                              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                                <span style={{ width: 8, height: 8, borderRadius: "50%", background: tone[a.tone], marginTop: 5, flexShrink: 0 }} />
+                                <div><b style={{ fontSize: 12.5 }}>{a.t}</b><div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.4 }}>{a.d}</div></div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {(detail.ingredients || []).length > 0 && (
                       <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "14px 0 0" }}>
                         {detail.ingredients.map((t, i) => (
@@ -353,7 +424,7 @@ export default function Communaute() {
                       </div>
                     )}
 
-                    {detail.kind === "RECETTE" ? (
+                    {detail.kind === "RECETTE" && (detail.ingredients || []).length > 0 ? (
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 12 }}>
                         <span className="hint">Coût {euro(c.per)} / pizza · marge {detail.margin_pct} %</span>
                         <b style={{ fontSize: 20, color: "var(--ember1)" }}>{euro(c.price)} <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>/ pizza</span></b>

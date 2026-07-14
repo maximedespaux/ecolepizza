@@ -44,8 +44,11 @@ import EmargementStagiaire from "./pages/EmargementStagiaire.jsx";
 import MesFormations from "./pages/MesFormations.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
 import PizzaQuest from "./pages/PizzaQuest.jsx";
-import FicheRecette from "./pages/FicheRecette.jsx";
+import PateWizard from "./pages/PateWizard.jsx";
+import GarnitureWizard from "./pages/GarnitureWizard.jsx";
+import RealisationWizard from "./pages/RealisationWizard.jsx";
 import Communaute from "./pages/Communaute.jsx";
+import Notions from "./pages/Notions.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -139,10 +142,11 @@ function AppRoutes() {
           <Route path="emargement" element={<EmargementStagiaire />} />
           <Route path="formations" element={<MesFormations />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
-          <Route path="empatements" element={<FicheRecette key="emp" mode="empatement" />} />
-          <Route path="garnitures" element={<FicheRecette key="garn" mode="garniture" />} />
-          <Route path="realisations" element={<FicheRecette key="real" mode="realisation" />} />
+          <Route path="empatements" element={<PateWizard />} />
+          <Route path="garnitures" element={<GarnitureWizard />} />
+          <Route path="realisations" element={<RealisationWizard />} />
           <Route path="communaute" element={<Communaute />} />
+          <Route path="notions" element={<Notions />} />
           <Route path="pizza-quest" element={<PizzaQuest />} />
           {isIntervenant && <Route path="intervention" element={<IntervenantEspace />} />}
           <Route path="*" element={<Navigate to="/formations" replace />} />

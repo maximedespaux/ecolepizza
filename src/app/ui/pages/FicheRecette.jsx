@@ -5,6 +5,7 @@ import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
 import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMyFormations } from "../api/apiClient.js";
+import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, NAPO_SPECS, napoSpecOf, DP_DEFAULT, gfmt, addPctOf, LEVURE_TYPES, LEVURE_TABLE, recoLevure, yeastLabel } from "../lib/dough.js";
 
 /**
  * Fiche technique — trois types composables :
@@ -23,77 +24,8 @@ const KINDS = [
 ];
 const YIELD_UNITS = ["g", "kg", "ml", "l", "piece"];
 const MASS_VOL = { g: 1000, kg: 1, mg: 1e6, l: 1, ml: 1000, cl: 100 };
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-
-// Indice de force de la farine (W) — Manuel École Pizza p.17 (usages) & p.32 (hydratation
-// minimale + eau/kg). `hydra` = taux minimal recommandé pour cette force.
-// `hydra` = hydratation min. de coulage (manuel p.32). `maxTotal` = hydratation TOTALE max
-// (coulage + bassinage) atteignable pour cette force — progressif : un W faible ne bassine
-// presque pas, un W fort monte jusqu'à 68 % (règle Jean-Jacques Despaux).
-const W_BRACKETS = [
-  { w: 225, label: "W 200–250", use: "Empâtement direct, levage court", hydra: 54, maxTotal: 60 },
-  { w: 280, label: "W 250–310", use: "Pizza napolitaine", hydra: 55, maxTotal: 62 },
-  { w: 360, label: "W 330–390", use: "Directs longs & indirects", hydra: 57, maxTotal: 65 },
-  { w: 415, label: "W 400–430", use: "Manitoba — renfort de farine", hydra: 60, maxTotal: 68 },
-];
-const wBracket = (w) => W_BRACKETS.find((b) => b.w === w) || W_BRACKETS[0];
-// Plafond d'hydratation TOTALE (coulage + bassinage) : dépend du W (progressif) ; les
-// spécialités Teglia/Pala montent plus haut (jusqu'à 80 %) quelle que soit la force.
-const maxTotalFor = (preset, wObj) => (preset.spe ? (preset.hydraMax || 80) : (wObj.maxTotal || 68));
-
-// Calculateur de pâte — typologies. `hydraMax` = plafond d'hydratation recommandé (au-delà :
-// réalisable mais plus difficile à travailler & plus instable) ; `wMin`/`wMax` = plage de force
-// W recommandée (Manuel École Pizza + règles Jean-Jacques Despaux).
-const PRESETS = [
-  { nom: "Classique", ic: "pizza", methods: ["Direct", "Biga", "Poolish"], w: 225, wMin: 200, hydra: 55, hydraMax: 68, sel: 2.5, huile: 2.5, levure: 0.5, paton: 250, desc: "Cornicione léger ; direct, ou indirect (biga/poolish) au Niveau II. W ≥ 200. Huile ≈ 2,5 % (manuel École Pizza)." },
-  { nom: "Contemporaine", ic: "pizza", methods: ["Biga", "Poolish"], w: 360, wMin: 320, hydra: 60, hydraMax: 68, sel: 2.8, huile: 0, levure: 0.3, paton: 270, desc: "Cornicione haut & dense — empâtement indirect, farine forte recommandée (≥ W320)." },
-  { nom: "Napolitaine", ic: "flame", methods: ["Direct"], w: 280, wMin: 280, wMax: 310, hydra: 57, hydraMax: 68, sel: 2.8, huile: 0, levure: 0.2, paton: 250, desc: "Empâtement direct uniquement, W 280–310, cuisson à très haute température." },
-  { nom: "Teglia", ic: "package", methods: ["Direct", "Biga", "Poolish"], w: 360, wMin: 280, hydra: 75, hydraMax: 80, sel: 2.5, huile: 2, levure: 0.3, paton: 300, spe: true, desc: "En plaque rectangulaire (al taglio), haute hydratation (jusqu'à 80 %), filet d'huile." },
-  { nom: "Pala", ic: "package", methods: ["Direct", "Biga", "Poolish"], w: 360, wMin: 280, hydra: 75, hydraMax: 80, sel: 2.5, huile: 1.5, levure: 0.3, paton: 300, spe: true, desc: "Rectangulaire, cuite sur pierre, haute hydratation (jusqu'à 80 %), servie sur pelle." },
-];
-const INDIRECT = ["Biga", "Poolish"]; // empâtements indirects → prérequis Niveau II + farine ≥ W320
-const INDIRECT_WMIN = 320;
-
-// Cahiers des charges de la pizza napolitaine — sous-sélecteur de la typologie « Napolitaine ».
-// STG = Règlement UE 97/2010 ; AVPN = disciplinare 2024 ; École = règles Jean-Jacques Despaux.
-// Chaque cahier surcharge W (plage), hydratation, sel, levure (basse, longue fermentation), pâton.
-const NAPO_SPECS = [
-  { key: "stg", label: "STG", w: 280, wMin: 220, wMax: 380, hydra: 56, hydraMin: 55, hydraMax: 62, sel: 2.9, huile: false,
-    levure: 0.17, levureMin: 0.17, levureMax: 0.17, levureNote: "Fraîche 3 g / L d'eau · sèche = ⅓ de la fraîche.",
-    paton: 220, patonMin: 180, patonMax: 250,
-    ambT: 25, ambH: 7, doughTemp: 25, ferment: "Pointage 2 h + apprêt 4-6 h, à température ambiante (~25 °C)", cuisson: "Four à bois — sole 485 °C, voûte 430 °C · 60-90 s", src: "Règlement UE 97/2010" },
-  { key: "avpn", label: "AVPN", w: 280, wMin: 250, wMax: 320, hydra: 58, hydraMin: 55, hydraMax: 62, sel: 2.9, huile: false,
-    levure: 0.1, levureMin: 0.01, levureMax: 0.18, levureNote: "Fraîche 0,1-3 g / L d'eau (selon T°, humidité, temps) · sèche = ⅓ de la fraîche · levain < 10 % de la farine.",
-    paton: 250, patonMin: 200, patonMax: 280,
-    ctrlT: 19, ctrlH: 8, doughTemp: 22, ferment: "2 étapes en chambre contrôlée 18-20 °C, 60-70 % HR", cuisson: "Four à bois — sole 380-430 °C, voûte 485 °C · 60-90 s", src: "Disciplinare AVPN 2024" },
-  { key: "ecole", label: "École (libre)", w: 280, wMin: 280, wMax: 310, hydra: 60, hydraMin: 55, hydraMax: 68, sel: 2.8, levure: null, paton: 250,
-    ferment: "", cuisson: "", src: "Règles École Pizza" },
-];
-const napoSpecOf = (k) => NAPO_SPECS.find((s) => s.key === k) || NAPO_SPECS[0];
-const DP_DEFAULT = { preset: "Classique", method: "Direct", autolyse: false, w: 225, hydra: 55, bassinage: 0, sel: 2.5, huile: 2.5, levure: 0.35, yeastType: "fraiche", flourTemp: 17, mode: "patons", flourKg: 10, prefermentH: "", fermentH: "", ambH: "", ambT: "", ctrlH: "", ctrlT: "", napoSpec: "" };
-const gfmt = (n) => (n >= 1000 ? (n / 1000).toFixed(2) + " kg" : Math.round(n) + " g");
-// Ratio pâte/farine — inclut l'eau d'hydratation ET l'eau de bassinage.
-const addPctOf = (dp) => 1 + (num(dp.hydra) + num(dp.bassinage) + num(dp.sel) + num(dp.huile) + num(dp.levure)) / 100;
-
-// Dosage de la levure selon la température de la farine (Manuel École Pizza p.21) — g par kg de
-// farine, convertis en % boulanger. Fraîche = sèche active ; sèche instantanée = moitié.
-const LEVURE_TYPES = [
-  { k: "fraiche", label: "Fraîche" },
-  { k: "seche_active", label: "Sèche active" },
-  { k: "seche_instant", label: "Sèche instantanée" },
-];
-const LEVURE_TABLE = [
-  { tmax: 16, fraiche: 0.4, seche_active: 0.4, seche_instant: 0.2 },
-  { tmax: 21, fraiche: 0.35, seche_active: 0.35, seche_instant: 0.175 },
-  { tmax: 26, fraiche: 0.3, seche_active: 0.3, seche_instant: 0.15 },
-  { tmax: 31, fraiche: 0.25, seche_active: 0.25, seche_instant: 0.125 },
-  { tmax: 999, fraiche: 0.2, seche_active: 0.2, seche_instant: 0.1 },
-];
-const recoLevure = (t, type) => {
-  const row = LEVURE_TABLE.find((r) => t <= r.tmax) || LEVURE_TABLE[LEVURE_TABLE.length - 1];
-  return row[type] ?? row.fraiche;
-};
-const yeastLabel = (k) => (LEVURE_TYPES.find((y) => y.k === k) || LEVURE_TYPES[0]).label;
+// Constantes & helpers de calcul d'empâtement (W, presets, cahiers napolitains, levure, TB50…)
+// → source unique dans lib/dough.js, importée ci-dessus. Partagée avec l'assistant pas-à-pas.
 
 const NEW = () => ({
   id: null, kind: "RECETTE", name: "", type: "Classique", description: "", servings: 6, paton_g: 250, flour_price: 1.2,
@@ -448,8 +380,9 @@ function FicheRecette({ mode = "realisation" }) {
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [niv2, setNiv2] = useState(false); // empâtements indirects (biga/poolish) débloqués au Niveau II
-  const [spe, setSpe] = useState(false);   // typologies teglia/pala débloquées avec la spécialisation
+  const [niv2, setNiv2] = useState(false); // empâtements indirects (biga/poolish) → Niveau II ou Expert
+  const [napo, setNapo] = useState(false); // typologie Napolitaine → spécialisation Napolitaine
+  const [spe, setSpe] = useState(false);   // typologies Teglia/Pala → spécialisation In Teglia & Pala (ou Expert)
   const added = useMemo(() => new Set(r.ingredients.map((i) => i.product_id).filter(Boolean)), [r.ingredients]);
   const importedIds = useMemo(() => new Set(r.ingredients.map((i) => i.component_recipe_id).filter(Boolean)), [r.ingredients]);
 
@@ -457,9 +390,11 @@ function FicheRecette({ mode = "realisation" }) {
   useEffect(() => { reload(); }, []);
   useEffect(() => {
     getMyFormations().then((r) => {
-      const fs = (r.data || []).filter((f) => f.enrolled).map((f) => `${f.program_title} ${f.program_code}`);
-      setNiv2(fs.some((t) => /niveau ii|emp[aâ]tement/i.test(t)));
-      setSpe(fs.some((t) => /teglia|pala|sp[ée]cialis/i.test(t)));
+      const fs = (r.data || []).filter((f) => f.enrolled).map((f) => `${f.program_title} ${f.program_code}`.toLowerCase());
+      const has = (re) => fs.some((t) => re.test(t));
+      setNiv2(has(/niveau\s+ii|expert/));  // indirects : Niveau II ou Expert
+      setNapo(has(/napolit/));             // spécialisation Napolitaine
+      setSpe(has(/teglia|pala/));          // spécialisation In Teglia & Pala (Expert inclus)
     }).catch(() => {});
   }, []);
 
@@ -499,6 +434,9 @@ function FicheRecette({ mode = "realisation" }) {
   const dp = r.dough_params || DP_DEFAULT;
   const setDP = (k, v) => setR((p) => ({ ...p, dough_params: { ...(p.dough_params || DP_DEFAULT), [k]: v } }));
   const methodLocked = (m) => INDIRECT.includes(m) && !niv2;
+  // Une typologie est verrouillée si son prérequis (`needs`) n'est pas accordé par les formations.
+  const access = { niv2, napo, spe };
+  const presetLocked = (p) => !!(p.needs && !access[p.needs]);
   // Applique un cahier des charges napolitain (surcharge W, hydratation, sel, levure basse, pâton
   // + pré-remplit le stockage). La levure fixée par le cahier ne suit PAS la table T° farine.
   const applyNapoSpec = (spec) => setR((p) => {
@@ -511,7 +449,7 @@ function FicheRecette({ mode = "realisation" }) {
     } };
   });
   const applyPreset = (pr) => {
-    if (pr.spe && !spe) return;
+    if (presetLocked(pr)) return;
     if (pr.nom === "Napolitaine") { applyNapoSpec(napoSpecOf("ecole")); return; } // défaut = recettes du manuel (École)
     setR((p) => { const d = p.dough_params || DP_DEFAULT;
       const mt = maxTotalFor(pr, wBracket(pr.w));
@@ -701,13 +639,14 @@ function FicheRecette({ mode = "realisation" }) {
               <div className="ate-lbl"><span className="ate-num">1</span> Typologie de pizza</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
                 {PRESETS.map((p) => {
-                  const locked = p.spe && !spe;
+                  const locked = presetLocked(p);
+                  const tag = p.needs === "niv2" ? " · Niv II" : p.needs ? " · Spé" : "";
                   return (
                     <button key={p.nom} onClick={() => applyPreset(p)} disabled={locked}
                       className={`btn sm ${dp.preset === p.nom ? "primary" : "ghost"}`}
                       style={{ display: "inline-flex", alignItems: "center", gap: 6, opacity: locked ? 0.5 : 1 }}
-                      title={locked ? "Déverrouillé avec la spécialisation « In Teglia & Pala »" : p.desc}>
-                      <Icon name={locked ? "lock" : p.ic} size={14} /> {p.nom}{p.spe ? " · Spé" : ""}
+                      title={locked ? `Débloqué avec ${NEEDS_LABEL[p.needs]}` : p.desc}>
+                      <Icon name={locked ? "lock" : p.ic} size={14} /> {p.nom}{tag}
                     </button>
                   );
                 })}

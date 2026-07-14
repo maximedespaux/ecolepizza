@@ -2,7 +2,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
-import { initials } from "../lib/format.js";
+import { initials, colorOf } from "../lib/format.js";
 import { AVATARS, getAvatar, setAvatar, GRADES, gradeFor, readGameStats, scoreOf } from "../lib/gamification.js";
 
 /**
@@ -27,6 +27,9 @@ export default function ProfileModal({ onClose }) {
   const { xp, stars } = useMemo(() => readGameStats(), []);
   const done = formations.filter((f) => f.enrolled && f.complete).length;
   const enrolled = formations.filter((f) => f.enrolled).length;
+  // Accès attribués = les formations suivies (elles débloquent les niveaux/outils).
+  const access = formations.filter((f) => f.enrolled);
+  const roleLabel = user?.role === "INTERVENANT" ? "Intervenant" : "Stagiaire";
   const score = scoreOf({ xp, formationsDone: done });
   const { grade, next } = gradeFor(score);
   const pct = next ? Math.min(100, Math.round(((score - grade.min) / (next.min - grade.min)) * 100)) : 100;
@@ -44,15 +47,29 @@ export default function ProfileModal({ onClose }) {
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
         <div className="mbody">
-          {/* Identité */}
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
-            <span className="pf-avatar" style={{ background: avatar ? avatar.color : "var(--navy)" }}>
+          {/* Identité (gauche) + accès / niveaux attribués (droite) */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
+            <span className="pf-avatar" style={{ background: avatar ? avatar.color : "var(--navy)", flex: "none" }}>
               {avatar ? avatar.emoji : initials(user?.first_name, user?.last_name)}
             </span>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 17, fontWeight: 800 }}>{who}</div>
-              <div style={{ fontSize: 13, color: "var(--muted)" }}>{user?.email}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 17, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{who}</div>
+              <div style={{ fontSize: 13, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.email}</div>
               <div style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginTop: 2 }}>{grade.emoji} {grade.name}</div>
+            </div>
+            <div style={{ flex: "none", width: 150, textAlign: "right" }}>
+              <div className="hint" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 800, marginBottom: 3 }}>Mes accès</div>
+              <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>{roleLabel}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
+                {access.length === 0 ? (
+                  <span className="hint" style={{ fontSize: 11 }}>Aucun niveau</span>
+                ) : access.map((f) => (
+                  <span key={f.program_id} className="badge n mono" title={f.program_title}
+                    style={{ background: f.color || colorOf(f.program_code), color: "#fff", borderColor: "transparent", fontSize: 10, padding: "2px 7px" }}>
+                    {f.program_code}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 
