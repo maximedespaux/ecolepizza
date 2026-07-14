@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
-import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences } from "../api/apiClient.js";
+import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences, createEquivalence, updateEquivalence } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
 import Badge from "../components/Badge.jsx";
@@ -140,6 +140,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [archiveTree, setArchiveTree] = useState({ folders: [] });
   const [companyArchiveTree, setCompanyArchiveTree] = useState({ folders: [] });
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
+  const [equivs, setEquivs] = useState([]); // liste des équivalences (pour l'ajout de variantes OU)
   const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives"
   const [archKind, setArchKind] = useState("stagiaire"); // arborescence : "stagiaire" | "entreprise"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -166,14 +167,31 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       setBreakSlug(r.data?.emargement_break_slug || null);
     }).catch(() => {});
   }, [program.id]);
-  // Équivalences « OU » (org) : map slug -> groupe. Le regroupement est automatique.
-  useEffect(() => {
-    getEquivalences().then((r) => {
-      const m = new Map();
-      for (const e of r.data?.equivalences || []) for (const s of e.members) m.set(s, { group: e.key });
-      setEqMap(m);
-    }).catch(() => {});
-  }, []);
+  // Équivalences « OU » (org) : map slug -> groupe + liste des équivalences.
+  const reloadEq = () => getEquivalences().then((r) => {
+    const list = r.data?.equivalences || [];
+    const m = new Map();
+    for (const e of list) for (const s of e.members) m.set(s, { group: e.key });
+    setEqMap(m); setEquivs(list);
+  }).catch(() => {});
+  useEffect(() => { reloadEq(); }, []);
+
+  // Ajoute un document comme variante « OU » à un jalon (crée/étend l'équivalence).
+  async function addOuVariant(jalonSlugs, addSlug) {
+    if (!addSlug || jalonSlugs.includes(addSlug)) return;
+    try {
+      const g = eqMap.get(jalonSlugs[0]);
+      const eq = g ? equivs.find((e) => e.key === g.group) : null;
+      if (eq && !eq.is_default && String(eq.id)) {
+        const members = [...new Set([...(eq.members || jalonSlugs), addSlug])];
+        await updateEquivalence(eq.id, { members });
+      } else {
+        await createEquivalence({ members: [...new Set([...jalonSlugs, addSlug])] });
+      }
+      setSteps((ss) => ss.map((s) => (s.slug === addSlug ? { ...s, active: true } : s))); // activer la variante ajoutée
+      await reloadEq();
+    } catch (e) { onError(e.message); }
+  }
 
   // Activer / retirer une étape (le « OU » est déterminé par les équivalences).
   const toggleStep = (slug) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, active: !s.active } : s)));
@@ -304,7 +322,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
             <p className="hint">Aucun document candidat.</p>
           ) : (
             <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
-              breakSlug={breakSlug} onSetBreak={setBreakSlug} />
+              breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant} />
           )}
           </div>
 
@@ -389,12 +407,13 @@ function stepBadge(s) {
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
-function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak }) {
+function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu }) {
   const included = steps.filter((s) => s.active);
   const available = steps.filter((s) => !s.active);
   const groups = groupMilestones(included, eqMap);
   const [gdrag, setGdrag] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [ouFor, setOuFor] = useState(null); // slug de tête du jalon dont le menu « ＋ OU » est ouvert
   const addRef = useRef(null);
 
   useEffect(() => {
@@ -437,6 +456,26 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                   </div>
                 </div>
               ))}
+              {/* Ajouter une variante « OU » à ce jalon (regroupe via équivalence). */}
+              {typeof onAddOu === "function" && !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT" && (() => {
+                const head = g.steps[0].slug;
+                const cand = steps.filter((s) => !s.quiz_id && s.doc_type !== "EMARGEMENT" && !g.steps.some((x) => x.slug === s.slug));
+                return (
+                  <div style={{ position: "relative", marginTop: 6 }}>
+                    <button type="button" className="pf-or-add" onClick={() => setOuFor(ouFor === head ? null : head)} title="Ajouter une variante « OU » (choisie par condition)">＋ OU</button>
+                    {ouFor === head && (
+                      <div className="cat-pop" style={{ position: "absolute", left: 0, top: "100%", zIndex: 6, marginTop: 4, minWidth: 200, maxHeight: 220, overflowY: "auto" }}>
+                        {cand.length === 0 ? <div className="pf-add-empty" style={{ padding: 8 }}>Aucun autre document.</div>
+                          : cand.map((s) => (
+                            <button key={s.slug} type="button" className="cat-opt" onClick={() => { onAddOu(g.steps.map((x) => x.slug), s.slug); setOuFor(null); }}>
+                              <b>{s.label}</b>{s.doc_type && <span className="hint"> · {s.doc_type}</span>}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             {canBreak ? (
               <button type="button" className={"pf-brk" + (brkHere ? " on" : "")}
