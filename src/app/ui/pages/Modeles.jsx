@@ -477,7 +477,6 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
       ...(step.company_sign ? ["ENTREPRISE"] : []),
     ],
     company_level: !!step.company_level,
-    copy_to_learners: !!step.copy_to_learners,
     sign_formateur: !!(step.config && step.config.show_formateurs),
     sign_intervenant: !!(step.config && step.config.show_intervenants),
     sign_organization: !!(step.config && step.config.show_organization),
@@ -511,7 +510,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         if (!slug) { onError("Identifiant (slug) requis."); setSaving(false); return; }
         await saveTemplate(slug, {
           label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
-          signers: form.signers, company_level: form.company_level, copy_to_learners: form.copy_to_learners,
+          signers: form.signers, company_level: form.company_level,
           active: form.active, applies_when,
         });
       }
@@ -610,11 +609,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
             </>
           )}
           {!isEmarg && form.company_level && (
-            <>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14, marginTop: 8 }} title="Une fois le document signé, chaque stagiaire du groupe en reçoit une copie (consultable / téléchargeable dans son espace).">
-                <input type="checkbox" checked={form.copy_to_learners} onChange={chk("copy_to_learners")} /> 📄 Donner une copie aux stagiaires</label>
-              <p className="hint" style={{ margin: "8px 0 0" }}>Généré une fois par <b>entreprise + session</b> et listant tous les stagiaires du groupe. Utilise le jeton <b>« Stagiaires »</b> (groupe Entreprise) dans le corps pour insérer le tableau.</p>
-            </>
+            <p className="hint" style={{ margin: "8px 0 0" }}>Généré une fois par <b>entreprise + OPCO + session</b>, listant les stagiaires du groupe. Utilise le jeton <b>« Stagiaires »</b> (groupe Entreprise) dans le corps pour insérer le tableau.</p>
           )}
           <p className="sub" style={{ marginTop: 10 }}>
             {isEmarg

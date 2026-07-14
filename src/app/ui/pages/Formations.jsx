@@ -137,7 +137,6 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [saving, setSaving] = useState(false);
   const [steps, setSteps] = useState([]);
   const [breakSlug, setBreakSlug] = useState(null); // point d'accès émargement (slug avant la flèche)
-  const [companyBreakSlug, setCompanyBreakSlug] = useState(null); // point de rupture parcours entreprise
   const [archiveTree, setArchiveTree] = useState({ folders: [] });
   const [companyArchiveTree, setCompanyArchiveTree] = useState({ folders: [] });
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
@@ -165,7 +164,6 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       // horaires n'est pas renvoyé par la liste (getFormations) : on le charge ici.
       if (r.data && "horaires" in r.data) setForm((p) => ({ ...p, horaires: r.data.horaires || "" }));
       setBreakSlug(r.data?.emargement_break_slug || null);
-      setCompanyBreakSlug(r.data?.company_break_slug || null);
     }).catch(() => {});
   }, [program.id]);
   // Équivalences « OU » (org) : map slug -> groupe. Le regroupement est automatique.
@@ -200,7 +198,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
         onSaved("Formation créée.");
       } else {
         await updateFormation(program.id, form);
-        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null, companyBreakSlug || null);
+        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null);
         await saveArchiveTree(program.id, archiveTree, companyArchiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved("Formation mise à jour.");
       }

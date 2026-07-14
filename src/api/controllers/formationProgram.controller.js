@@ -434,14 +434,6 @@ const saveFormationSteps = async (req, res) => {
                     [bs, req.params.id, req.user.organization_id]);
             } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 076 non jouée
         }
-        // Point de rupture du PARCOURS ENTREPRISE (migration 082).
-        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'company_break_slug')) {
-            const cbs = req.body.company_break_slug ? String(req.body.company_break_slug).trim().toLowerCase().slice(0, 191) : null;
-            try {
-                await conn.query('UPDATE training_program SET company_break_slug = ? WHERE id = ? AND organization_id = ?',
-                    [cbs, req.params.id, req.user.organization_id]);
-            } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 082 non jouée
-        }
         res.json({ success: true, message: 'Parcours enregistré.' });
     } catch (err) {
         console.error('Erreur enregistrement parcours :', err);

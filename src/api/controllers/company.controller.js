@@ -209,9 +209,8 @@ const registerCompanyStagiaires = async (req, res) => {
 };
 
 /**
- * GET /api/companies/:id/doc-templates?session_id= — PARCOURS ENTREPRISE de la
- * formation de la session : étapes company_level actives, dans l'ordre défini
- * (program_step), + le point de rupture entreprise (company_break_slug).
+ * GET /api/companies/:id/doc-templates?session_id= — documents de GROUPE (company_level)
+ * de la formation de la session : étapes actives, dans l'ordre du parcours (program_step).
  */
 const companyDocTemplates = async (req, res) => {
     try {
@@ -220,19 +219,18 @@ const companyDocTemplates = async (req, res) => {
         let program = null;
         if (req.query.session_id) {
             const [[s]] = await conn.query(
-                `SELECT p.id, p.code, p.days, p.hygiene, p.rs_code, p.company_break_slug
+                `SELECT p.id, p.code, p.days, p.hygiene, p.rs_code
                  FROM training_session s JOIN training_program p ON p.id = s.program_id
                  WHERE s.id = ? AND s.organization_id = ?`, [req.query.session_id, orgId]);
             program = s || null;
         }
         let out, breakSlug = null;
         if (program) {
-            // Respecte l'ordre + l'inclusion du parcours entreprise défini sur la formation.
+            // Respecte l'ordre + l'inclusion du parcours (documents de groupe) de la formation.
             const steps = await formationSteps(conn, orgId, program);
             out = steps
                 .filter((s) => s.active && s.company_level)
                 .map((s) => ({ slug: s.slug, label: s.label, doc_type: s.doc_type }));
-            breakSlug = program.company_break_slug || null;
         } else {
             // Sans session : tous les modèles entreprise de l'organisme.
             const steps = await loadOrgSteps(orgId);

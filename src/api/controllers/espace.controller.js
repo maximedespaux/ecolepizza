@@ -334,23 +334,6 @@ const getMyFormation = async (req, res) => {
             [e.enrollment_id]
         );
 
-        // Copies des documents ENTREPRISE partagées au stagiaire (modèle « Donner une copie
-        // aux stagiaires » + document entreprise SIGNÉ pour son entreprise et sa session).
-        if (learner.company_id && e.session_id) {
-            try {
-                const [copies] = await conn.query(
-                    `SELECT gd.id, gd.type, gd.title, gd.status, NULL AS quiz_id,
-                            DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at, 1 AS company_copy
-                     FROM generated_document gd
-                     JOIN document_template dt ON dt.organization_id = gd.organization_id AND dt.slug = gd.template_slug
-                     WHERE gd.scope = 'COMPANY' AND gd.company_id = ? AND gd.session_id = ?
-                       AND gd.status = 'SIGNE' AND dt.copy_to_learners = 1
-                     ORDER BY gd.created_at`,
-                    [learner.company_id, e.session_id]);
-                for (const c of copies) documents.push(c);
-            } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
-        }
-
         // Émargement de la session (demi-journées à signer par le stagiaire).
         const [emargement] = e.session_id ? await conn.query(
             `SELECT ar.id AS record_id, (ar.signature_data IS NOT NULL) AS signed,
