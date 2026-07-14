@@ -272,10 +272,19 @@ export default function EntrepriseDetail() {
               <button className="btn sm ghost" onClick={makeRepAccount} disabled={!form.email}><Icon name="key" size={14} /> {data.user_id ? "Réinitialiser le compte représentant" : "Créer le compte représentant"}</button>
               {repCreds && (
                 <div className="ent-result" style={{ marginTop: 10 }}>
-                  <b style={{ fontSize: 13 }}>✅ Compte représentant prêt</b>
-                  <p className="hint" style={{ margin: "4px 0 8px" }}>Note ces identifiants : le mot de passe ne sera plus affiché.</p>
-                  <div className="ent-cred"><span style={{ flex: 1 }}><b>E-mail</b></span><span className="mono ent-pw">{repCreds.email}</span></div>
-                  <div className="ent-cred"><span style={{ flex: 1 }}><b>Mot de passe</b></span><span className="mono ent-pw">{repCreds.password}</span></div>
+                  {repCreds.linked ? (
+                    <>
+                      <b style={{ fontSize: 13 }}>✅ Accès entreprise rattaché</b>
+                      <p className="hint" style={{ margin: "4px 0 0" }}>Cet e-mail correspond déjà à un compte existant ({repCreds.existing_role === "STAGIAIRE" || !repCreds.existing_role ? "stagiaire" : "membre de l'équipe"}). Il conserve sa connexion habituelle et gagne l'onglet <b>Entreprise</b> pour signer les documents.</p>
+                    </>
+                  ) : (
+                    <>
+                      <b style={{ fontSize: 13 }}>✅ Compte représentant prêt</b>
+                      <p className="hint" style={{ margin: "4px 0 8px" }}>Note ces identifiants : le mot de passe ne sera plus affiché.</p>
+                      <div className="ent-cred"><span style={{ flex: 1 }}><b>E-mail</b></span><span className="mono ent-pw">{repCreds.email}</span></div>
+                      <div className="ent-cred"><span style={{ flex: 1 }}><b>Mot de passe</b></span><span className="mono ent-pw">{repCreds.password}</span></div>
+                    </>
+                  )}
                 </div>
               )}
             </div>

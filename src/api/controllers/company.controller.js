@@ -455,27 +455,45 @@ const createRepresentativeAccount = async (req, res) => {
 
         const [first, ...rest] = String(company.representative_name || company.name || 'Représentant').trim().split(/\s+/);
         const last = rest.join(' ') || '';
-        const password = generatePassword();
-        const hash = await bcrypt.hash(password, 10);
 
-        // Compte existant (lié ou même e-mail dans l'organisme) : on réinitialise le mot de passe.
-        let userId = company.user_id || null;
-        if (!userId) {
-            const [[u]] = await conn.query('SELECT id FROM user WHERE email = ? AND organization_id = ?', [email, orgId]);
-            userId = u ? u.id : null;
-        }
-        if (userId) {
+        // Compte existant pour cet e-mail dans l'organisme ? (le référent peut DÉJÀ être un
+        // stagiaire / membre du bureau — cas fréquent d'une société au nom du propriétaire).
+        const linkedId = company.user_id || null;
+        const [[u]] = await conn.query('SELECT id, role FROM user WHERE email = ? AND organization_id = ?', [email, orgId]);
+        const existing = u || (linkedId ? { id: linkedId, role: null } : null);
+
+        const linkCompany = async (uid) => {
+            try { await conn.query('UPDATE company SET user_id = ? WHERE id = ? AND organization_id = ?', [uid, company.id, orgId]); }
+            catch (e) { if (!isMissingSchema(e)) throw e; } // migration 084 non jouée
+        };
+
+        if (existing) {
+            // Ce compte appartient-il à une vraie personne à NE PAS écraser (stagiaire lié,
+            // ou membre du bureau) ? Si oui, on ne touche NI son rôle NI son mot de passe :
+            // on rattache juste l'entreprise à son compte -> il gagne l'accès « Entreprise »
+            // en plus, via sa connexion habituelle.
+            const [[lc]] = await conn.query('SELECT COUNT(*) AS n FROM learner WHERE user_id = ?', [existing.id]);
+            const isRealPerson = lc.n > 0 || ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'].includes(existing.role);
+            if (isRealPerson) {
+                await linkCompany(existing.id);
+                return res.status(200).json({ data: { email, linked: true, existing_role: existing.role } });
+            }
+            // Compte représentant dédié déjà en place : on réinitialise juste le mot de passe.
+            const password = generatePassword();
             await conn.query("UPDATE user SET role = 'REPRESENTANT', password = ?, first_name = ?, last_name = ? WHERE id = ? AND organization_id = ?",
-                [hash, first || 'Représentant', last, userId, orgId]);
-        } else {
-            userId = crypto.randomUUID();
-            await conn.query(
-                `INSERT INTO user (id, organization_id, role, first_name, last_name, email, phone, password)
-                 VALUES (?, ?, 'REPRESENTANT', ?, ?, ?, ?, ?)`,
-                [userId, orgId, first || 'Représentant', last, email, company.phone || null, hash]);
+                [await bcrypt.hash(password, 10), first || 'Représentant', last, existing.id, orgId]);
+            await linkCompany(existing.id);
+            return res.status(200).json({ data: { email, password } });
         }
-        try { await conn.query('UPDATE company SET user_id = ? WHERE id = ? AND organization_id = ?', [userId, company.id, orgId]); }
-        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 084 non jouée
+
+        // Aucun compte pour cet e-mail : on crée un compte représentant dédié.
+        const password = generatePassword();
+        const userId = crypto.randomUUID();
+        await conn.query(
+            `INSERT INTO user (id, organization_id, role, first_name, last_name, email, phone, password)
+             VALUES (?, ?, 'REPRESENTANT', ?, ?, ?, ?, ?)`,
+            [userId, orgId, first || 'Représentant', last, email, company.phone || null, await bcrypt.hash(password, 10)]);
+        await linkCompany(userId);
         res.status(201).json({ data: { email, password } });
     } catch (err) {
         console.error('Erreur compte représentant :', err);

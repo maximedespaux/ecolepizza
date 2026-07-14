@@ -157,6 +157,7 @@ function AppRoutes() {
           <Route path="communaute" element={<Communaute />} />
           <Route path="pizza-quest" element={<PizzaQuest />} />
           {isIntervenant && <Route path="intervention" element={<IntervenantEspace />} />}
+          {user?.has_company && <Route path="entreprise-documents" element={<RepresentantEspace />} />}
           <Route path="*" element={<Navigate to="/formations" replace />} />
         </Route>
       ) : (
