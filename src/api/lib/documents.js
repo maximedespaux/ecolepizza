@@ -88,6 +88,7 @@ function mergeSteps(rows = []) {
         if (r.applies_when != null) m.applies_when = parseApplies(r.applies_when);
         if (r.company_level != null) m.company_level = r.company_level ? 1 : 0;
         if (r.company_sign != null) m.company_sign = r.company_sign ? 1 : 0;
+        if (r.signers != null) m.signers = r.signers; // nouveau modèle : liste de signataires
         if (r.active != null) m.active = r.active;
         m.has_file = !!r.has_file;
         bySlug.set(r.slug, m);
@@ -130,6 +131,38 @@ function stagiaireSignsDoc(steps, doc) {
         if (byType.length) return byType.some((x) => !!x.stagiaire_sign);
     }
     return false;
+}
+
+// Rôles de signature possibles (nouveau modèle, migration 088).
+const SIGNER_ROLES = ['ORG', 'STAGIAIRE', 'ENTREPRISE', 'EXTERNAL'];
+
+// Liste des signataires requis d'une étape/modèle. Source : le champ `signers` (JSON)
+// s'il est renseigné (nouveau modèle) ; sinon dérivée des anciens drapeaux (rétro-compat).
+function stepSigners(step) {
+    if (!step) return [];
+    let list = step.signers;
+    if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = null; } }
+    if (Array.isArray(list)) return list.filter((r) => SIGNER_ROLES.includes(r));
+    const out = [];
+    if (step.signable) out.push('ORG');
+    if (step.stagiaire_sign) out.push('STAGIAIRE');
+    if (step.company_sign) out.push('ENTREPRISE');
+    return out;
+}
+
+// Signataires requis pour un DOCUMENT (résolus par slug, sinon union par type).
+function docSignerRoles(steps, doc) {
+    if (!doc) return [];
+    if (doc.template_slug) {
+        const s = steps.find((x) => x.slug === doc.template_slug);
+        if (s) return stepSigners(s);
+    }
+    if (doc.type) {
+        const set = new Set();
+        for (const x of steps.filter((s) => s.doc_type === doc.type)) for (const r of stepSigners(x)) set.add(r);
+        if (set.size) return [...set];
+    }
+    return [];
 }
 
 /**
@@ -178,4 +211,4 @@ function matchFormation(applies, program) {
     return true;
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc };
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, stepSigners, docSignerRoles };

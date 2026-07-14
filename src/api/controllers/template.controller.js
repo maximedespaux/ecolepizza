@@ -21,8 +21,8 @@ async function loadRows(organizationId) {
         `SELECT ${META_COLS}${extra}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
          FROM document_template WHERE organization_id = ?`;
-    // Colonnes optionnelles (migrations 077 / 086 / 087) : on retombe en cascade si absentes.
-    for (const extra of [', company_level, copy_to_learners, company_sign', ', company_level, copy_to_learners', ', company_level', '']) {
+    // Colonnes optionnelles (migrations 077 / 086 / 087 / 088) : on retombe en cascade si absentes.
+    for (const extra of [', company_level, copy_to_learners, company_sign, signers', ', company_level, copy_to_learners, company_sign', ', company_level, copy_to_learners', ', company_level', '']) {
         try { const [rows] = await db.promise().query(sel(extra), [organizationId]); return rows; }
         catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; }
     }

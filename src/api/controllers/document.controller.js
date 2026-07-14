@@ -522,6 +522,24 @@ async function loadSignedPdf(conn, docId) {
     }
 }
 
+// Appose la signature VISIBLE de l'organisme ({Signature organisme}) sur le document,
+// depuis la signature enregistrée dans Organisme. Idempotent. Renvoie true si (déjà)
+// apposée. L'organisme signe en DERNIER : on l'appelle au moment où une partie signe,
+// et non plus à l'envoi.
+async function applyOrgVisibleSignature(conn, orgId, docId) {
+    try {
+        const [[cur]] = await conn.query('SELECT org_signed_at FROM generated_document WHERE id = ?', [docId]);
+        if (cur && cur.org_signed_at) return true;
+        const [[org]] = await conn.query('SELECT legal_name, short_name, manager, signature_image FROM organization WHERE id = ?', [orgId]);
+        const img = decrypt(org && org.signature_image);
+        if (!img) return false; // pas de signature d'organisme configurée : sceau seul, sans image
+        await conn.query(
+            'UPDATE generated_document SET org_signed_at = NOW(), org_signer_name = ?, org_signature_data = ? WHERE id = ?',
+            [(org.legal_name || org.short_name || org.manager || 'Organisme'), encrypt(img), docId]);
+        return true;
+    } catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') return false; throw e; }
+}
+
 // Assemble contexte + contenu d'un document pour le SIGNER (sans req/res, sans blocage
 // « informations manquantes » : le document a déjà été généré et signé côté stagiaire).
 async function assembleDocForSign(conn, orgId, doc) {
@@ -548,6 +566,10 @@ async function assembleDocForSign(conn, orgId, doc) {
  * nombre de signatures apposées, ou null si le PDF n'a pas pu être construit.
  */
 async function signAndStoreDocument(conn, orgId, doc, signerName) {
+    // L'organisme signe APRÈS le stagiaire : on appose sa signature visible juste avant
+    // le rendu (elle apparaîtra donc sur un document déjà signé par le stagiaire).
+    const orgSteps = await loadOrgSteps(orgId);
+    if (orgSignsDoc(orgSteps, doc)) await applyOrgVisibleSignature(conn, orgId, doc.id);
     const r = await assembleDocForSign(conn, orgId, doc);
     if (!r) return null;
     const { signPdf } = require('../lib/pdfseal.js');
@@ -560,7 +582,6 @@ async function signAndStoreDocument(conn, orgId, doc, signerName) {
     // 2) Contre-signature AUTOMATIQUE de l'organisme (si le modèle prévoit « À signer »),
     //    en mise à jour incrémentale : la signature du stagiaire reste valide.
     try {
-        const orgSteps = await loadOrgSteps(orgId);
         if (orgSignsDoc(orgSteps, doc)) {
             const orgName = org.legal_name || org.short_name || 'Organisme';
             const orgP12 = await getOrgSigner(conn, orgId, orgName);
@@ -683,13 +704,16 @@ const sendDocument = async (req, res) => {
             return res.status(400).json({ message: 'Document déjà envoyé ou introuvable.' });
         }
 
-        // Signature de l'organisme AVANT envoi : appliquée automatiquement avec la
-        // signature enregistrée, uniquement si le modèle prévoit « À signer ».
+        // L'ORGANISME signe en DERNIER : à l'envoi, on n'appose sa signature QUE si aucune
+        // partie (stagiaire / entreprise) ne doit signer — ex. Invitation, Certificat de
+        // réalisation. Sinon l'organisme contresignera automatiquement après la/les partie(s)
+        // (cf. applyOrgVisibleSignature au moment de la signature de la partie).
         let orgSet = '';
         const orgVals = [];
         try {
             const orgSteps = await loadOrgSteps(orgId);
-            if (orgSignsDoc(orgSteps, doc)) {
+            const hasParty = stagiaireSignsDoc(orgSteps, doc) || companySignsDoc(orgSteps, doc);
+            if (!hasParty && orgSignsDoc(orgSteps, doc)) {
                 const [[cur]] = await conn.query('SELECT org_signed_at FROM generated_document WHERE id = ?', [req.params.id]);
                 if (!cur || !cur.org_signed_at) {
                     const [[org]] = await conn.query(
@@ -834,13 +858,15 @@ async function applySlotSignature(conn, orgId, doc, { slot, label, signerName, s
     const content = slug ? await getTemplateContent(orgId, slug) : null;
     if (content && content.kind !== 'emargement') {
         const { signPdf, generateSelfSignedP12 } = require('../lib/pdfseal.js');
+        // L'organisme signe en dernier : signature visible apposée avant le rendu.
+        const orgSteps = await loadOrgSteps(orgId);
+        if (orgSignsDoc(orgSteps, doc)) await applyOrgVisibleSignature(conn, orgId, doc.id);
         const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
         let pdf = await composeDocPdf(conn, { doc, ctx, slug, content });
         const repP12 = generateSelfSignedP12(signerName || 'Signataire');
         pdf = await signPdf(pdf, repP12, { name: signerName || 'Signataire', reason: label || 'Signature', incremental: false });
         let count = 1;
         try {
-            const orgSteps = await loadOrgSteps(orgId);
             if (orgSignsDoc(orgSteps, doc)) {
                 const org = ctx.org || {};
                 const orgName = org.legal_name || org.short_name || 'Organisme';
