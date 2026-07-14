@@ -209,7 +209,14 @@ function Modeles() {
                   <td style={{ fontSize: 12 }}>
                     {isEmarg
                       ? <span title="Stagiaire, et formateur/intervenant si activés" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="user" size={14} />{t.config?.show_formateurs ? <Icon name="graduation" size={14} /> : null}{t.config?.show_intervenants ? <Icon name="users" size={14} /> : null}</span>
-                      : <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{t.signable ? <Badge tone="b">Signé</Badge> : <span style={{ color: "var(--dim)" }}>—</span>}{t.stagiaire_sign ? <Icon name="user" size={13} /> : null}</span>}
+                      : (() => {
+                          const roles = Array.isArray(t.signers) ? t.signers
+                            : [...(t.signable ? ["ORG"] : []), ...(t.stagiaire_sign ? ["STAGIAIRE"] : []), ...(t.company_sign ? ["ENTREPRISE"] : [])];
+                          const LBL = { ORG: "Org", STAGIAIRE: "Stagiaire", ENTREPRISE: "Entreprise", EXTERNAL: "Externe" };
+                          return roles.length
+                            ? <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>{roles.map((r) => <Badge key={r} tone={r === "ORG" ? "a" : "b"}>{LBL[r] || r}</Badge>)}</span>
+                            : <span style={{ color: "var(--dim)" }}>—</span>;
+                        })()}
                   </td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when, condBySlug)}</td>
                   <td>
@@ -463,10 +470,13 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     label: step.label || step.name || "",
     doc_type: step.doc_type || "",
     sort_order: step.sort_order ?? 100,
-    signable: !!step.signable,
-    stagiaire_sign: !!step.stagiaire_sign,
+    // Nouveau modèle : liste de signataires (repli sur les anciens drapeaux).
+    signers: Array.isArray(step.signers) ? step.signers : [
+      ...(step.signable ? ["ORG"] : []),
+      ...(step.stagiaire_sign ? ["STAGIAIRE"] : []),
+      ...(step.company_sign ? ["ENTREPRISE"] : []),
+    ],
     company_level: !!step.company_level,
-    company_sign: !!step.company_sign,
     copy_to_learners: !!step.copy_to_learners,
     sign_formateur: !!(step.config && step.config.show_formateurs),
     sign_intervenant: !!(step.config && step.config.show_intervenants),
@@ -481,6 +491,8 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const chk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked }));
+  const hasSigner = (r) => (form.signers || []).includes(r);
+  const toggleSigner = (r) => setForm((p) => ({ ...p, signers: hasSigner(r) ? p.signers.filter((x) => x !== r) : [...(p.signers || []), r] }));
 
   async function save() {
     if (!form.label.trim()) { onError("Intitulé requis."); return; }
@@ -499,7 +511,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         if (!slug) { onError("Identifiant (slug) requis."); setSaving(false); return; }
         await saveTemplate(slug, {
           label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
-          signable: form.signable, stagiaire_sign: form.stagiaire_sign, company_sign: form.company_sign, company_level: form.company_level, copy_to_learners: form.copy_to_learners,
+          signers: form.signers, company_level: form.company_level, copy_to_learners: form.copy_to_learners,
           active: form.active, applies_when,
         });
       }
@@ -576,18 +588,26 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
                 <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 6 }}>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-                <input type="checkbox" checked={form.signable} onChange={chk("signable")} /> À signer</label>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-                <input type="checkbox" checked={form.stagiaire_sign} onChange={chk("stagiaire_sign")} /> Signé par le stagiaire</label>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Devis / convention… : si le dossier est financé par une entreprise, c'est le représentant qui signe (à la place du stagiaire). Sinon le stagiaire signe lui-même.">
-                <input type="checkbox" checked={form.company_sign} onChange={chk("company_sign")} /> 🏢 Signé par l'entreprise (si financement entreprise)</label>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-                <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Document produit une seule fois par entreprise + session, qui liste tous les stagiaires du groupe (jeton « Stagiaires »).">
-                <input type="checkbox" checked={form.company_level} onChange={chk("company_level")} /> 🏢 Document entreprise (groupe)</label>
-            </div>
+            <>
+              <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--muted)", display: "block", margin: "10px 0 4px" }}>Signataires requis</label>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 4 }}>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="L'organisme de formation contresigne automatiquement (en dernier).">
+                  <input type="checkbox" checked={hasSigner("ORG")} onChange={() => toggleSigner("ORG")} /> Organisme</label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                  <input type="checkbox" checked={hasSigner("STAGIAIRE")} onChange={() => toggleSigner("STAGIAIRE")} /> Stagiaire</label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Le représentant de l'entreprise signe (dossiers financés par une entreprise).">
+                  <input type="checkbox" checked={hasSigner("ENTREPRISE")} onChange={() => toggleSigner("ENTREPRISE")} /> 🏢 Entreprise</label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Un signataire externe signe via un lien partageable (tuteur, financeur…).">
+                  <input type="checkbox" checked={hasSigner("EXTERNAL")} onChange={() => toggleSigner("EXTERNAL")} /> Externe</label>
+              </div>
+              <p className="hint" style={{ margin: "0 0 8px" }}>L'<b>organisme signe en dernier</b> (contreseing automatique après les autres parties). Un document est « signé » quand tous ses signataires ont signé.</p>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 4 }}>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                  <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Document produit une seule fois par entreprise + session, qui liste tous les stagiaires du groupe (jeton « Stagiaires »).">
+                  <input type="checkbox" checked={form.company_level} onChange={chk("company_level")} /> 🏢 Document entreprise (groupe)</label>
+              </div>
+            </>
           )}
           {!isEmarg && form.company_level && (
             <>

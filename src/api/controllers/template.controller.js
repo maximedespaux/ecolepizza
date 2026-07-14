@@ -4,7 +4,7 @@ const Docxtemplater = require('docxtemplater');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
-const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS } = require('../lib/documents.js');
+const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS, SIGNER_ROLES, stepSigners } = require('../lib/documents.js');
 const { TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
 const { decrypt } = require('../lib/crypto.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
@@ -100,6 +100,7 @@ const listTemplates = async (req, res) => {
             updated_at: raw[s.slug]?.updated_at || null,
             copy_to_learners: raw[s.slug]?.copy_to_learners ? 1 : 0,
             company_sign: raw[s.slug]?.company_sign ? 1 : 0,
+            signers: stepSigners(s), // liste résolue (JSON `signers` ou dérivée des drapeaux)
         }));
         res.json({ data: steps });
     } catch (err) {
@@ -113,7 +114,7 @@ async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
     // sans elles plutôt que d'échouer.
-    const OPTIONAL = ['layout', 'company_level', 'copy_to_learners', 'company_sign'];
+    const OPTIONAL = ['layout', 'company_level', 'copy_to_learners', 'company_sign', 'signers'];
     const run = async (f) => {
         const keys = Object.keys(f);
         if (ex.length) {
@@ -154,6 +155,15 @@ const saveTemplate = async (req, res) => {
     if (b.label !== undefined) fields.label = b.label ? String(b.label).slice(0, 255) : null;
     if (b.doc_type !== undefined) fields.doc_type = b.doc_type ? String(b.doc_type).toUpperCase().slice(0, 40) : null;
     if (b.sort_order !== undefined) fields.sort_order = Number(b.sort_order) || 100;
+    // Nouveau modèle : liste de signataires. On l'enregistre ET on synchronise les
+    // anciens drapeaux (rétro-compat pour tout code qui les lit encore directement).
+    if (Array.isArray(b.signers)) {
+        const list = b.signers.filter((r) => SIGNER_ROLES.includes(r));
+        fields.signers = JSON.stringify(list);
+        fields.signable = list.includes('ORG') ? 1 : 0;
+        fields.stagiaire_sign = list.includes('STAGIAIRE') ? 1 : 0;
+        fields.company_sign = list.includes('ENTREPRISE') ? 1 : 0;
+    }
     if (b.signable !== undefined) fields.signable = b.signable ? 1 : 0;
     if (b.stagiaire_sign !== undefined) fields.stagiaire_sign = b.stagiaire_sign ? 1 : 0;
     if (b.applies_when !== undefined) fields.applies_when = b.applies_when ? JSON.stringify(b.applies_when) : null;
@@ -583,6 +593,7 @@ const duplicateTemplate = async (req, res) => {
             stagiaire_sign: meta.stagiaire_sign ? 1 : 0,
             company_level: meta.company_level ? 1 : 0,
             company_sign: meta.company_sign ? 1 : 0,
+            signers: JSON.stringify(stepSigners(meta)),
             copy_to_learners: (src && src.copy_to_learners) ? 1 : 0,
             applies_when: meta.applies_when && Object.keys(meta.applies_when).length ? JSON.stringify(meta.applies_when) : null,
             active: 1,

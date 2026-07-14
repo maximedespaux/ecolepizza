@@ -115,23 +115,9 @@ function documentSetFor(ctx) {
     return stepsToDocSet(mergeSteps([]), ctx);
 }
 
-/**
- * Le stagiaire doit-il signer CE document ? Unique source de vérité : le flag
- * `stagiaire_sign` du modèle (Modeles de document), résolu par slug de modèle en
- * priorité, sinon par type. `steps` = étapes fusionnées (mergeSteps / loadOrgSteps).
- */
-function stagiaireSignsDoc(steps, doc) {
-    if (!doc) return false;
-    if (doc.template_slug) {
-        const s = steps.find((x) => x.slug === doc.template_slug);
-        if (s) return !!s.stagiaire_sign;
-    }
-    if (doc.type) {
-        const byType = steps.filter((x) => x.doc_type === doc.type);
-        if (byType.length) return byType.some((x) => !!x.stagiaire_sign);
-    }
-    return false;
-}
+// Prédicats de signature — désormais dérivés de la LISTE des signataires (`signers`),
+// avec repli automatique sur les anciens drapeaux (cf. stepSigners/docSignerRoles).
+function stagiaireSignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('STAGIAIRE'); }
 
 // Rôles de signature possibles (nouveau modèle, migration 088).
 const SIGNER_ROLES = ['ORG', 'STAGIAIRE', 'ENTREPRISE', 'EXTERNAL'];
@@ -165,40 +151,9 @@ function docSignerRoles(steps, doc) {
     return [];
 }
 
-/**
- * Ce document doit-il être signé par L'ENTREPRISE (représentant) plutôt que par le
- * stagiaire, lorsque le dossier est financé par une entreprise ? Flag `company_sign`
- * du modèle (ex. devis / convention entreprise). Résolu par slug puis par type.
- */
-function companySignsDoc(steps, doc) {
-    if (!doc) return false;
-    if (doc.template_slug) {
-        const s = steps.find((x) => x.slug === doc.template_slug);
-        if (s) return !!s.company_sign;
-    }
-    if (doc.type) {
-        const byType = steps.filter((x) => x.doc_type === doc.type);
-        if (byType.length) return byType.some((x) => !!x.company_sign);
-    }
-    return false;
-}
-
-/**
- * L'ORGANISME doit-il signer ce document ? Piloté par le flag `signable` du modèle
- * (« À signer »). La signature organisme est appliquée automatiquement à l'envoi.
- */
-function orgSignsDoc(steps, doc) {
-    if (!doc) return false;
-    if (doc.template_slug) {
-        const s = steps.find((x) => x.slug === doc.template_slug);
-        if (s) return !!s.signable;
-    }
-    if (doc.type) {
-        const byType = steps.filter((x) => x.doc_type === doc.type);
-        if (byType.length) return byType.some((x) => !!x.signable);
-    }
-    return false;
-}
+function companySignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('ENTREPRISE'); }
+function orgSignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('ORG'); }
+function externalSignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('EXTERNAL'); }
 
 // Conditions AU NIVEAU FORMATION uniquement (rs / hygiène / jours). On ignore
 // financing/agefice (propres au dossier) : c'est la liste des documents candidats
@@ -211,4 +166,4 @@ function matchFormation(applies, program) {
     return true;
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, stepSigners, docSignerRoles };
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, stepSigners, docSignerRoles };
