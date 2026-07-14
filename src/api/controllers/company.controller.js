@@ -314,6 +314,19 @@ const createCompanyDocument = async (req, res) => {
     }
 };
 
+/** DELETE /api/companies/:id — supprime une entreprise (les stagiaires sont détachés, pas supprimés : FK ON DELETE SET NULL). */
+const deleteCompany = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [r] = await conn.query('DELETE FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Entreprise introuvable.' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur suppression entreprise :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** DELETE /api/companies/:id/learners/:learnerId — détache un stagiaire de l'entreprise. */
 const detachLearner = async (req, res) => {
     try {
@@ -386,4 +399,4 @@ const getCompanyParcours = async (req, res) => {
     }
 };
 
-module.exports = { getCompanies, getCompany, createCompany, updateCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours };
+module.exports = { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours };

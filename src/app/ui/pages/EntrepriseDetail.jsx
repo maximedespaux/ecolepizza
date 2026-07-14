@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { getCompany, updateCompany, registerCompanyStagiaires, getSessions, getStagiaires,
+import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
   detachCompanyLearner, getOpcos, getCompanyParcours, createCompanyDocument, createSignLink, documentPdfUrl } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PageHead from "../components/PageHead.jsx";
@@ -127,6 +127,12 @@ export default function EntrepriseDetail() {
     catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSavingInfo(false); }
   }
+  async function removeCompany() {
+    const n = data?.learners?.length || 0;
+    if (!window.confirm(`Supprimer l'entreprise « ${data?.name} » ?\n${n ? `Les ${n} stagiaire(s) rattaché(s) seront détaché(s) (non supprimés).\n` : ""}Cette action est irréversible.`)) return;
+    try { await deleteCompany(id); navigate("/entreprises"); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
 
   if (!data) return <StatusMessage status={status || { type: "info", message: "Chargement…" }} />;
 
@@ -234,7 +240,10 @@ export default function EntrepriseDetail() {
                 );
               })}
             </div>
-            <button className="btn primary" onClick={saveInfo} disabled={savingInfo} style={{ marginTop: 14 }}><Icon name="check" size={15} /> Enregistrer</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, gap: 10 }}>
+              <button className="btn primary" onClick={saveInfo} disabled={savingInfo}><Icon name="check" size={15} /> Enregistrer</button>
+              <button className="btn ghost danger" onClick={removeCompany}><Icon name="trash" size={15} /> Supprimer l'entreprise</button>
+            </div>
           </Card>
         </div>
       </div>

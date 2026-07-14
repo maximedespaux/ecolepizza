@@ -360,6 +360,9 @@ export function getCompany(id) {
 export function updateCompany(id, payload) {
   return request(`/companies/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 }
+export function deleteCompany(id) {
+  return request(`/companies/${id}`, { method: "DELETE" });
+}
 export function registerCompanyStagiaires(id, payload) {
   return request(`/companies/${id}/register`, { method: "POST", body: JSON.stringify(payload) });
 }
