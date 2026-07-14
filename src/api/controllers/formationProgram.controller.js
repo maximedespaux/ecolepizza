@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { matchFormation, matchStep } = require('../lib/documents.js');
+const { matchFormation, matchStep, stepSigners } = require('../lib/documents.js');
 const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { loadOrgSteps } = require('./template.controller.js');
@@ -30,7 +30,8 @@ async function formationSteps(conn, orgId, program) {
         return {
             slug: s.slug, label: s.label, doc_type: s.doc_type, quiz_id: null, day: null,
             applies_when: s.applies_when || {},
-            signable: !!s.signable, stagiaire_sign: !!s.stagiaire_sign,
+            signable: !!s.signable, stagiaire_sign: !!s.stagiaire_sign, company_sign: !!s.company_sign,
+            signers: stepSigners(s), // liste des signataires requis (pour le badge « à signer »)
             company_level: !!s.company_level,
             or_group: o ? (o.or_group || null) : (s.or_group || null),
             sort_order: o ? o.sort_order : s.sort_order,
