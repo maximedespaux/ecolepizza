@@ -377,6 +377,15 @@ export function getCompanyParcours(id, sessionId) {
 export function getCompanyLearnerDocuments(id, sessionId) {
   return request(`/companies/${id}/learner-documents${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
 }
+// Crée / réinitialise le compte de connexion du représentant de l'entreprise → { email, password }.
+export function createRepresentativeAccount(id) {
+  return request(`/companies/${id}/representative-account`, { method: "POST" });
+}
+
+// --- Espace représentant d'entreprise ---
+export function getRepDocuments() { return request("/rep/documents"); }
+export function previewRepDocument(id) { return request(`/rep/documents/${id}/preview`, { silent: true }); }
+export function signRepDocument(id, payload) { return request(`/rep/documents/${id}/sign`, { method: "POST", body: JSON.stringify(payload) }); }
 // Génère un document « entreprise » (un doc par groupe, listant tous les stagiaires).
 export function createCompanyDocument(id, payload) {
   return request(`/companies/${id}/documents`, { method: "POST", body: JSON.stringify(payload) });

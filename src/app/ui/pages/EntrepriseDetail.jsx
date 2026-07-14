@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, createSignLink, documentPdfUrl } from "../api/apiClient.js";
+  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -44,6 +44,7 @@ export default function EntrepriseDetail() {
   const [result, setResult] = useState(null); // { created: [...] }
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // recharge le parcours entreprise
   const [learnerDocs, setLearnerDocs] = useState([]); // docs stagiaires à signer par le représentant
+  const [repCreds, setRepCreds] = useState(null); // { email, password } du compte représentant
   // Rattacher un stagiaire existant à l'entreprise
   const [attachQ, setAttachQ] = useState("");
   const [attachRes, setAttachRes] = useState([]);
@@ -141,6 +142,12 @@ export default function EntrepriseDetail() {
     try { await updateCompany(id, form); setStatus({ type: "success", message: "Entreprise enregistrée." }); load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSavingInfo(false); }
+  }
+  async function makeRepAccount() {
+    if (!window.confirm(`Créer / réinitialiser le compte de connexion du représentant de « ${data?.name} » ?\nUn mot de passe sera généré (affiché une seule fois).`)) return;
+    setStatus(null);
+    try { const r = await createRepresentativeAccount(id); setRepCreds(r.data); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function removeCompany() {
     const n = data?.learners?.length || 0;
@@ -255,9 +262,22 @@ export default function EntrepriseDetail() {
                 );
               })}
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, gap: 10, flexWrap: "wrap" }}>
               <button className="btn primary" onClick={saveInfo} disabled={savingInfo}><Icon name="check" size={15} /> Enregistrer</button>
               <button className="btn ghost danger" onClick={removeCompany}><Icon name="trash" size={15} /> Supprimer l'entreprise</button>
+            </div>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-soft)" }}>
+              <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 6 }}>Compte représentant (signature en ligne)</label>
+              <p className="hint" style={{ margin: "0 0 8px" }}>Donne au référent un accès pour <b>signer lui-même</b> les documents entreprise. Nécessite l'e-mail de l'entreprise.</p>
+              <button className="btn sm ghost" onClick={makeRepAccount} disabled={!form.email}><Icon name="key" size={14} /> {data.user_id ? "Réinitialiser le compte représentant" : "Créer le compte représentant"}</button>
+              {repCreds && (
+                <div className="ent-result" style={{ marginTop: 10 }}>
+                  <b style={{ fontSize: 13 }}>✅ Compte représentant prêt</b>
+                  <p className="hint" style={{ margin: "4px 0 8px" }}>Note ces identifiants : le mot de passe ne sera plus affiché.</p>
+                  <div className="ent-cred"><span style={{ flex: 1 }}><b>E-mail</b></span><span className="mono ent-pw">{repCreds.email}</span></div>
+                  <div className="ent-cred"><span style={{ flex: 1 }}><b>Mot de passe</b></span><span className="mono ent-pw">{repCreds.password}</span></div>
+                </div>
+              )}
             </div>
           </Card>
         </div>

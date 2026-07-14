@@ -10,6 +10,8 @@ import AppLayout from "./layouts/AppLayout.jsx";
 import StudentLayout from "./layouts/StudentLayout.jsx";
 import IntervenantLayout from "./layouts/IntervenantLayout.jsx";
 import IntervenantEspace from "./pages/IntervenantEspace.jsx";
+import RepresentantLayout from "./layouts/RepresentantLayout.jsx";
+import RepresentantEspace from "./pages/RepresentantEspace.jsx";
 import LoadingBar from "./components/LoadingBar.jsx";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -115,6 +117,7 @@ function AppRoutes() {
   const isStudent = user?.role === "STAGIAIRE";
   const isIntervenant = user?.role === "INTERVENANT";
   const isPlatform = user?.role === "PLATFORM_OWNER";
+  const isRepresentant = user?.role === "REPRESENTANT";
 
   return (
     <Routes>
@@ -127,6 +130,13 @@ function AppRoutes() {
           <Route index element={<Navigate to="/organisations" replace />} />
           <Route path="organisations" element={<Platform />} />
           <Route path="*" element={<Navigate to="/organisations" replace />} />
+        </Route>
+      ) : isRepresentant ? (
+        // --- Espace représentant d'entreprise (signature des documents entreprise) ---
+        <Route path="/" element={<RepresentantLayout />}>
+          <Route index element={<Navigate to="/entreprise-documents" replace />} />
+          <Route path="entreprise-documents" element={<RepresentantEspace />} />
+          <Route path="*" element={<Navigate to="/entreprise-documents" replace />} />
         </Route>
       ) : (isIntervenant && !user?.has_learner) ? (
         // --- Espace intervenant externe seul (signature d'émargement) ---

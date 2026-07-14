@@ -1,5 +1,7 @@
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
+const { generatePassword } = require('../lib/crypto.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
@@ -436,4 +438,49 @@ const getCompanyLearnerDocuments = async (req, res) => {
     }
 };
 
-module.exports = { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, getCompanyLearnerDocuments };
+/**
+ * POST /api/companies/:id/representative-account — crée (ou réinitialise) le compte
+ * de connexion du REPRÉSENTANT de l'entreprise (rôle REPRESENTANT), pour qu'il signe
+ * lui-même les documents de niveau entreprise. Renvoie l'e-mail + le mot de passe
+ * (affiché une seule fois).
+ */
+const createRepresentativeAccount = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[company]] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
+        const email = (company.email || '').trim();
+        if (!email) return res.status(422).json({ message: "Renseigne d'abord l'e-mail de l'entreprise." });
+
+        const [first, ...rest] = String(company.representative_name || company.name || 'Représentant').trim().split(/\s+/);
+        const last = rest.join(' ') || '';
+        const password = generatePassword();
+        const hash = await bcrypt.hash(password, 10);
+
+        // Compte existant (lié ou même e-mail dans l'organisme) : on réinitialise le mot de passe.
+        let userId = company.user_id || null;
+        if (!userId) {
+            const [[u]] = await conn.query('SELECT id FROM user WHERE email = ? AND organization_id = ?', [email, orgId]);
+            userId = u ? u.id : null;
+        }
+        if (userId) {
+            await conn.query("UPDATE user SET role = 'REPRESENTANT', password = ?, first_name = ?, last_name = ? WHERE id = ? AND organization_id = ?",
+                [hash, first || 'Représentant', last, userId, orgId]);
+        } else {
+            userId = crypto.randomUUID();
+            await conn.query(
+                `INSERT INTO user (id, organization_id, role, first_name, last_name, email, phone, password)
+                 VALUES (?, ?, 'REPRESENTANT', ?, ?, ?, ?, ?)`,
+                [userId, orgId, first || 'Représentant', last, email, company.phone || null, hash]);
+        }
+        try { await conn.query('UPDATE company SET user_id = ? WHERE id = ? AND organization_id = ?', [userId, company.id, orgId]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 084 non jouée
+        res.status(201).json({ data: { email, password } });
+    } catch (err) {
+        console.error('Erreur compte représentant :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, getCompanyLearnerDocuments, createRepresentativeAccount };
