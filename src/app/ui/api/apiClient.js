@@ -712,6 +712,9 @@ export function resetTemplate(slug) {
 export function deleteTemplate(slug) {
   return request(`/templates/${slug}?permanent=1`, { method: "DELETE" });
 }
+export function duplicateTemplate(slug) {
+  return request(`/templates/${slug}/duplicate`, { method: "POST" });
+}
 // Réordonne les modèles (glisser-déposer).
 export function reorderTemplates(orders) {
   // orders : [{ slug, sort_order }] (position globale) ; rétro-compat : tableau de slugs.

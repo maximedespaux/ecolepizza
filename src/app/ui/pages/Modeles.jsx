@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
-import { getTemplates, saveTemplate, deleteTemplate, reorderTemplates,
+import { getTemplates, saveTemplate, deleteTemplate, duplicateTemplate, reorderTemplates,
   getConditionCatalog, getConditions, createCondition, updateCondition, deleteCondition, getFieldValues,
   getEquivalences, createEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
@@ -124,6 +124,18 @@ function Modeles() {
     finally { setBusy(null); }
   }
 
+  // Duplication d'un modèle de document (nouveau slug, copie du contenu + réglages).
+  async function onDuplicate(t) {
+    setBusy(t.slug);
+    try {
+      const r = await duplicateTemplate(t.slug);
+      setStatus({ type: "success", message: "Modèle dupliqué." });
+      await load();
+      if (r?.data?.slug) navigate(`/modeles/${r.data.slug}/editeur`);
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setBusy(null); }
+  }
+
   // Suppression d'un modèle de feuille d'émargement.
   async function onDeleteEmarg(t) {
     if (!window.confirm(`Supprimer le modèle de feuille d'émargement « ${t.name} » ?\nIl sera retiré des parcours qui l'utilisent.`)) return;
@@ -210,6 +222,11 @@ function Modeles() {
                       <button className="btn sm primary" title={isEmarg ? "Éditer la mise en page" : "Ouvrir l'éditeur de document"}
                         onClick={() => navigate(isEmarg ? `/modeles/emargement/${t.id}` : `/modeles/${t.slug}/editeur`)}>Éditer</button>
                       <button className="btn sm ghost" title="Réglages" onClick={() => setEditing({ ...t })}><Icon name="settings" size={15} /></button>
+                      {!isEmarg && (
+                        <button className="btn sm ghost" title="Dupliquer ce modèle"
+                          disabled={busy === t.slug}
+                          onClick={() => onDuplicate(t)}><Icon name="copy" size={15} /></button>
+                      )}
                       <button className="btn sm ghost danger"
                         title="Supprimer définitivement"
                         disabled={busy === (isEmarg ? t.id : t.slug)}

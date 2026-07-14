@@ -552,6 +552,59 @@ const resetTemplate = async (req, res) => {
     }
 };
 
+/** POST /api/templates/:slug/duplicate — crée une copie d'un modèle (nouveau slug). */
+const duplicateTemplate = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const srcSlug = req.params.slug;
+    try {
+        const conn = db.promise();
+        // Métadonnées fusionnées (socle + personnalisation) + ligne perso éventuelle.
+        const meta = mergeSteps(await loadRows(orgId)).find((s) => s.slug === srcSlug);
+        if (!meta) return res.status(404).json({ message: 'Modèle introuvable.' });
+        const [[src]] = await conn.query('SELECT * FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1', [orgId, srcSlug]);
+        const content = await getTemplateContent(orgId, srcSlug); // { kind, html/header/footer/layout } | { kind:'docx', buffer } | null
+
+        // Slug unique (base-copie, base-copie-2, …), jamais un slug du socle.
+        const base = String(srcSlug).toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+$/,'');
+        const taken = async (sl) => {
+            if (DEFAULT_SLUGS.has(sl)) return true;
+            const [[r]] = await conn.query('SELECT 1 AS ok FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, sl]);
+            return !!r;
+        };
+        let slug = `${base}-copie`; let i = 2;
+        while (await taken(slug)) slug = `${base}-copie-${i++}`;
+
+        const fields = {
+            label: `${(meta.label || srcSlug)} (copie)`,
+            doc_type: meta.doc_type || null,
+            signable: meta.signable ? 1 : 0,
+            stagiaire_sign: meta.stagiaire_sign ? 1 : 0,
+            company_level: meta.company_level ? 1 : 0,
+            copy_to_learners: (src && src.copy_to_learners) ? 1 : 0,
+            applies_when: meta.applies_when && Object.keys(meta.applies_when).length ? JSON.stringify(meta.applies_when) : null,
+            active: 1,
+            sort_order: Number(meta.sort_order || 100) + 1,
+        };
+        if (content && content.kind === 'docx' && content.buffer) {
+            fields.kind = 'docx';
+            fields.file = content.buffer;
+            fields.name = (src && src.name) || `${slug}.docx`;
+        } else if (content) {
+            fields.kind = 'builder';
+            fields.body_html = content.html || null;
+            fields.header_html = content.header || null;
+            fields.footer_html = content.footer || null;
+            if (content.layout) fields.layout = typeof content.layout === 'string' ? content.layout : JSON.stringify(content.layout);
+        }
+        await upsertTemplate(conn, orgId, slug, fields);
+        logAudit(req, 'template.duplicate', 'DocumentTemplate', slug);
+        res.status(201).json({ success: true, data: { slug }, message: 'Modèle dupliqué.' });
+    } catch (err) {
+        console.error('Erreur duplication modèle :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** PUT /api/templates/reorder — définit l'ordre des modèles (slugs ordonnés). */
 const reorderTemplates = async (req, res) => {
     // `orders` = [{slug, sort_order}] (position globale explicite) ou `slugs` (position simple, legacy).
@@ -577,7 +630,7 @@ const reorderTemplates = async (req, res) => {
 
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
-    listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
+    listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate, duplicateTemplate,
     getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
     loadCustomTokens, getCustomTokens, saveCustomTokens,
 };
