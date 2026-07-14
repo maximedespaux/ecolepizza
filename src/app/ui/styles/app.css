@@ -913,6 +913,9 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .ent-brk{display:flex;align-items:center;gap:6px;margin:6px 0;padding:6px 10px;font-size:12px;font-weight:600;color:var(--ember1);background:var(--surface2);border:1px dashed var(--ember1);border-radius:8px}
 .ent-brk-flag{font-size:13px}
 /* Onglets de session (détail formation stagiaire) */
+.sess-comp{display:flex;flex-direction:column}
+.sess-comp-hd{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--text);background:var(--surface2);border:1px solid var(--border-soft);border-radius:8px;padding:6px 10px;margin-top:4px}
+.sess-comp .sess-comp-hd{margin-bottom:2px}
 .sess-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px}
 .sess-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:13px;cursor:pointer;transition:all .15s}
 .sess-tab:hover{border-color:var(--blue);color:var(--text)}

@@ -184,27 +184,49 @@ function SessionDetail() {
         <Card title={`Stagiaires inscrits (${enrollments.length})`}>
           {enrollments.length === 0 ? (
             <EmptyState icon="users">Aucun stagiaire inscrit.</EmptyState>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {enrollments.map((e) => (
-                <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                  <span className="avatar">{initials(e.first_name, e.last_name)}</span>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/stagiaires/${e.learner_id}`)}
-                    style={{ flex: 1, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer" }}
-                    title="Voir la fiche du stagiaire"
-                  >
-                    <b style={{ color: "var(--text)" }}>{e.last_name} {e.first_name}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{e.email || "—"}</span>
-                  </button>
-                  <Badge tone={scoreBadge(e.conformite_score)}>{e.conformite_score}</Badge>
-                  <button className="iconbtn" title="Notes de suivi" onClick={() => setNotesFor({ id: e.id, name: `${e.last_name} ${e.first_name}` })}><Icon name="pencil" size={15} /></button>
-                  <button className="iconbtn del" title="Retirer de la session" onClick={() => removeStagiaire(e.id)}><Icon name="trash" size={15} /></button>
-                </div>
-              ))}
-            </div>
-          )}
+          ) : (() => {
+            // Regroupe les stagiaires envoyés par une entreprise sous le nom de l'entreprise ;
+            // les stagiaires individuels (sans entreprise) restent listés à plat en dessous.
+            const enrollRow = (e) => (
+              <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                <span className="avatar">{initials(e.first_name, e.last_name)}</span>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/stagiaires/${e.learner_id}`)}
+                  style={{ flex: 1, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                  title="Voir la fiche du stagiaire"
+                >
+                  <b style={{ color: "var(--text)" }}>{e.last_name} {e.first_name}</b>
+                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{e.email || "—"}</span>
+                </button>
+                <Badge tone={scoreBadge(e.conformite_score)}>{e.conformite_score}</Badge>
+                <button className="iconbtn" title="Notes de suivi" onClick={() => setNotesFor({ id: e.id, name: `${e.last_name} ${e.first_name}` })}><Icon name="pencil" size={15} /></button>
+                <button className="iconbtn del" title="Retirer de la session" onClick={() => removeStagiaire(e.id)}><Icon name="trash" size={15} /></button>
+              </div>
+            );
+            const companies = new Map();
+            const solo = [];
+            for (const e of enrollments) {
+              if (e.company_id) {
+                if (!companies.has(e.company_id)) companies.set(e.company_id, { name: e.company_name, list: [] });
+                companies.get(e.company_id).list.push(e);
+              } else solo.push(e);
+            }
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {[...companies.entries()].map(([cid, g]) => (
+                  <div key={cid} className="sess-comp">
+                    <div className="sess-comp-hd"><Icon name="building" size={14} /> {g.name || "Entreprise"} <span className="arch-count">{g.list.length}</span></div>
+                    {g.list.map(enrollRow)}
+                  </div>
+                ))}
+                {solo.length > 0 && companies.size > 0 && (
+                  <div className="sess-comp-hd" style={{ marginTop: 4 }}><Icon name="user" size={14} /> Individuels <span className="arch-count">{solo.length}</span></div>
+                )}
+                {solo.map(enrollRow)}
+              </div>
+            );
+          })()}
         </Card>
       </div>
 
