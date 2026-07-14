@@ -691,6 +691,9 @@ export function getEquivalences() {
 export function createEquivalence(payload) {
   return request("/equivalences", { method: "POST", body: JSON.stringify(payload) });
 }
+export function updateEquivalence(id, payload) {
+  return request(`/equivalences/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
 export function deleteEquivalence(id) {
   return request(`/equivalences/${id}`, { method: "DELETE" });
 }

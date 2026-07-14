@@ -4,7 +4,7 @@ import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import { getTemplates, saveTemplate, deleteTemplate, duplicateTemplate, reorderTemplates,
   getConditionCatalog, getConditions, createCondition, updateCondition, deleteCondition, getFieldValues,
-  getEquivalences, createEquivalence, deleteEquivalence,
+  getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
   reorderEmargementTemplates } from "../api/apiClient.js";
 import { EMARG_DEFAULTS } from "./EmargementEditor.jsx";
@@ -633,6 +633,7 @@ function EquivalencesPanel({ onStatus }) {
   const [picked, setPicked] = useState([]);
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState(null); // équivalence en cours de modification
 
   async function load() {
     try { const { data } = await getEquivalences(); setEquivalences(data.equivalences || []); setDocs(data.docs || []); }
@@ -641,14 +642,17 @@ function EquivalencesPanel({ onStatus }) {
   useEffect(() => { load(); }, []);
 
   const toggle = (slug) => setPicked((p) => (p.includes(slug) ? p.filter((x) => x !== slug) : [...p, slug]));
+  const startEdit = (e) => { setEditId(e.id); setPicked(e.members || []); setLabel(e.label || ""); };
+  const cancelEdit = () => { setEditId(null); setPicked([]); setLabel(""); };
 
   async function create() {
     if (picked.length < 2) { onStatus({ type: "error", message: "Sélectionnez au moins deux documents." }); return; }
     setSaving(true);
     try {
-      await createEquivalence({ label: label.trim() || null, members: picked });
-      setPicked([]); setLabel("");
-      onStatus({ type: "success", message: "Équivalence créée." });
+      if (editId) await updateEquivalence(editId, { label: label.trim() || null, members: picked });
+      else await createEquivalence({ label: label.trim() || null, members: picked });
+      setPicked([]); setLabel(""); setEditId(null);
+      onStatus({ type: "success", message: editId ? "Équivalence modifiée." : "Équivalence créée." });
       load();
     } catch (e) { onStatus({ type: "error", message: e.message }); }
     finally { setSaving(false); }
@@ -675,7 +679,12 @@ function EquivalencesPanel({ onStatus }) {
                 <tr key={e.key}>
                   <td><b>{e.label}</b>{e.is_default && <span className="hint" style={{ marginLeft: 6 }}>défaut</span>}</td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{(e.memberLabels || e.members).join(" / ")}</td>
-                  <td>{!e.is_default && <button type="button" className="btn sm ghost danger" onClick={() => remove(e)}><Icon name="trash" size={15} /></button>}</td>
+                  <td>{!e.is_default && (
+                    <span style={{ display: "inline-flex", gap: 4 }}>
+                      <button type="button" className="btn sm ghost" title="Modifier (ajouter / retirer des variantes)" onClick={() => startEdit(e)}><Icon name="settings" size={15} /></button>
+                      <button type="button" className="btn sm ghost danger" onClick={() => remove(e)}><Icon name="trash" size={15} /></button>
+                    </span>
+                  )}</td>
                 </tr>
               ))}
             </tbody>
@@ -683,7 +692,7 @@ function EquivalencesPanel({ onStatus }) {
         </div>
       )}
 
-      <div className="field"><label>Nouvelle équivalence — cochez les documents alternatifs</label>
+      <div className="field"><label>{editId ? "Modifier l'équivalence" : "Nouvelle équivalence"} — cochez les documents alternatifs (« OU », autant que vous voulez)</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
           {docs.length === 0 ? <span className="hint">Aucun document.</span> : docs.map((d) => (
             <label key={d.slug} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", cursor: "pointer" }}>
@@ -695,7 +704,10 @@ function EquivalencesPanel({ onStatus }) {
       <div className="row2" style={{ alignItems: "end" }}>
         <div className="field"><label>Intitulé (optionnel)</label>
           <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ex. Contrat / Convention" /></div>
-        <div><button type="button" className="btn primary" disabled={saving || picked.length < 2} onClick={create}>＋ Créer l'équivalence</button></div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" className="btn primary" disabled={saving || picked.length < 2} onClick={create}>{editId ? "Enregistrer" : "＋ Créer l'équivalence"}</button>
+          {editId && <button type="button" className="btn ghost" disabled={saving} onClick={cancelEdit}>Annuler</button>}
+        </div>
       </div>
     </Card>
   );
