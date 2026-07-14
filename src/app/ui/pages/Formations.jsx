@@ -380,7 +380,9 @@ function stepBadge(s) {
   if (a.rs === true) return "Certifiante";
   if (a.hygiene === true) return "Hygiène";
   if (a.jours != null) return `${a.jours} j`;
-  if (s.stagiaire_sign) return "à signer";
+  // « à signer » dès qu'une PARTIE doit signer (stagiaire, entreprise ou externe).
+  const sg = Array.isArray(s.signers) ? s.signers : [];
+  if (s.stagiaire_sign || s.company_sign || sg.includes("STAGIAIRE") || sg.includes("ENTREPRISE") || sg.includes("EXTERNAL")) return "à signer";
   return null;
 }
 
