@@ -4,6 +4,7 @@ const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { computeDocParcours } = require('../lib/parcours.js');
+const { stagiaireSignsDoc } = require('../lib/documents.js');
 
 const clean = (v) => (v === undefined || v === '' ? null : v);
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
@@ -399,4 +400,40 @@ const getCompanyParcours = async (req, res) => {
     }
 };
 
-module.exports = { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours };
+/**
+ * GET /api/companies/:id/learner-documents?session_id= — documents des STAGIAIRES du
+ * groupe (dans la session) que le stagiaire devrait signer : le représentant de
+ * l'entreprise les signe à leur place (lien de signature, slot « stagiaire »). Le
+ * stagiaire en récupère la copie signée dans son espace (c'est son document).
+ */
+const getCompanyLearnerDocuments = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[company]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
+        const sessionId = req.query.session_id;
+        if (!sessionId) return res.json({ data: [] });
+
+        const orgSteps = await loadOrgSteps(orgId);
+        const [rows] = await conn.query(
+            `SELECT DISTINCT gd.id, gd.title, gd.type, gd.status, gd.template_slug,
+                    l.id AS learner_id, l.civility, l.first_name, l.last_name
+             FROM enrollment e
+             JOIN learner l ON l.id = e.learner_id
+             JOIN document_formation df ON df.enrollment_id = e.id
+             JOIN generated_document gd ON gd.id = df.document_id AND gd.learner_id = l.id
+             WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?
+             ORDER BY l.last_name, l.first_name, gd.created_at`,
+            [company.id, sessionId, orgId]
+        );
+        // Ne garde que les documents que le STAGIAIRE devrait signer.
+        const out = rows.filter((d) => stagiaireSignsDoc(orgSteps, d));
+        res.json({ data: out });
+    } catch (err) {
+        console.error('Erreur documents stagiaires (entreprise) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, getCompanyLearnerDocuments };

@@ -373,6 +373,10 @@ export function detachCompanyLearner(id, learnerId) {
 export function getCompanyParcours(id, sessionId) {
   return request(`/companies/${id}/parcours${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
 }
+// Documents des stagiaires du groupe à signer par le représentant (à leur place).
+export function getCompanyLearnerDocuments(id, sessionId) {
+  return request(`/companies/${id}/learner-documents${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
+}
 // Génère un document « entreprise » (un doc par groupe, listant tous les stagiaires).
 export function createCompanyDocument(id, payload) {
   return request(`/companies/${id}/documents`, { method: "POST", body: JSON.stringify(payload) });

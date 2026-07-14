@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  detachCompanyLearner, getOpcos, getCompanyParcours, createCompanyDocument, createSignLink, documentPdfUrl } from "../api/apiClient.js";
+  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, createSignLink, documentPdfUrl } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -43,6 +43,7 @@ export default function EntrepriseDetail() {
   const [registering, setRegistering] = useState(false);
   const [result, setResult] = useState(null); // { created: [...] }
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // recharge le parcours entreprise
+  const [learnerDocs, setLearnerDocs] = useState([]); // docs stagiaires à signer par le représentant
   // Rattacher un stagiaire existant à l'entreprise
   const [attachQ, setAttachQ] = useState("");
   const [attachRes, setAttachRes] = useState([]);
@@ -61,6 +62,11 @@ export default function EntrepriseDetail() {
   useEffect(() => { load(); }, [id]);
   useEffect(() => { getSessions().then((r) => setSessions(r.data || [])).catch(() => {}); }, []);
   useEffect(() => { getOpcos().then((r) => setOpcoNames((r.data || []).map((o) => o.name).filter(Boolean))).catch(() => {}); }, []);
+  useEffect(() => {
+    setLearnerDocs([]);
+    if (!sessionId) return;
+    getCompanyLearnerDocuments(id, sessionId).then((r) => setLearnerDocs(r.data || [])).catch(() => {});
+  }, [id, sessionId, parcoursRefresh]);
 
   // Rattacher des stagiaires existants à l'entreprise (recherche débattue).
   useEffect(() => {
@@ -117,6 +123,15 @@ export default function EntrepriseDetail() {
       const url = `${window.location.origin}/signer/${r.data.token}`;
       try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
       setStatus({ type: "success", message: `Lien de signature du représentant copié : ${url}` });
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+  // Lien de signature d'un document STAGIAIRE : le représentant signe à la place du stagiaire.
+  async function learnerSignLink(docId) {
+    try {
+      const r = await createSignLink(docId, { slot: "stagiaire", label: "Signature du représentant (au nom du stagiaire)" });
+      const url = `${window.location.origin}/signer/${r.data.token}`;
+      try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
+      setStatus({ type: "success", message: `Lien de signature copié : ${url}` });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
@@ -273,6 +288,45 @@ export default function EntrepriseDetail() {
           )}
         </Card>
       </div>
+
+      {/* Documents des stagiaires à signer par le représentant (à leur place). */}
+      {sessionId && (
+        <div style={{ marginTop: 22 }}>
+          <Card title={<span className="card-ttl"><Icon name="pencil" size={16} /> Signatures stagiaires par le représentant</span>}>
+            <p className="hint" style={{ margin: "0 0 12px" }}>Documents des stagiaires du groupe <b>à signer par le représentant</b> de l'entreprise (à leur place). Une fois signé, le stagiaire retrouve <b>sa copie signée</b> dans son espace.</p>
+            {learnerDocs.length === 0 ? (
+              <EmptyState icon="file-text">Aucun document de stagiaire à signer pour cette session. (Les documents doivent d'abord être générés depuis la fiche stagiaire.)</EmptyState>
+            ) : (() => {
+              const DS = { A_FAIRE: ["À envoyer", "n"], ENVOYE: ["Envoyé", "a"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"] };
+              const byLearner = new Map();
+              for (const d of learnerDocs) {
+                if (!byLearner.has(d.learner_id)) byLearner.set(d.learner_id, { name: [d.civility, d.first_name, d.last_name].filter(Boolean).join(" "), list: [] });
+                byLearner.get(d.learner_id).list.push(d);
+              }
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[...byLearner.entries()].map(([lid, g]) => (
+                    <div key={lid} className="sess-comp">
+                      <div className="sess-comp-hd"><Icon name="user" size={14} /> {g.name} <span className="arch-count">{g.list.length}</span></div>
+                      {g.list.map((d) => {
+                        const [lbl, tone] = DS[d.status] || [d.status, "n"];
+                        return (
+                          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                            <span style={{ flex: 1, minWidth: 0 }}><b>{d.title}</b></span>
+                            <Badge tone={tone}>{lbl}</Badge>
+                            <button className="btn sm ghost" onClick={() => openCompanyDoc(d.id)}>Aperçu</button>
+                            {d.status !== "SIGNE" && <button className="btn sm primary" title="Copier un lien pour que le représentant signe à la place du stagiaire" onClick={() => learnerSignLink(d.id)}>🔗 Lien de signature</button>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </Card>
+        </div>
+      )}
     </>
   );
 }

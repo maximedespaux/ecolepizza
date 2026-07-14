@@ -1,7 +1,7 @@
 // Endpoints PUBLICS (sans authentification) : signature d'un document via un lien
 // partageable (le représentant d'une entreprise signe sans compte).
 const db = require('../config/database.js');
-const { renderDocumentHtml, applySlotSignature, clientIp } = require('./document.controller.js');
+const { renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp } = require('./document.controller.js');
 
 async function loadLink(conn, token) {
     const [[link]] = await conn.query('SELECT * FROM document_sign_link WHERE token = ?', [token]);
@@ -43,10 +43,20 @@ const submitSign = async (req, res) => {
         const [[doc]] = await conn.query('SELECT * FROM generated_document WHERE id = ?', [link.document_id]);
         if (!doc) return res.status(404).json({ message: 'Document introuvable.' });
         if (doc.status === 'SIGNE') return res.status(409).json({ message: 'Ce document a déjà été signé.' });
-        await applySlotSignature(conn, doc.organization_id, doc, {
-            slot: link.slot, label: link.label, signerName: signer_name, signatureData: signature_data,
-            ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
-        });
+        // Lien « stagiaire » sur un document de stagiaire : le représentant de l'entreprise
+        // signe À LA PLACE du stagiaire → la signature remplit la case {Signature stagiaire}
+        // et le document devient le document signé du stagiaire (visible dans son espace).
+        if (link.slot === 'stagiaire' && doc.learner_id) {
+            await applyLearnerSignature(conn, doc.organization_id, doc, {
+                signerName: signer_name, signatureData: signature_data,
+                ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
+            });
+        } else {
+            await applySlotSignature(conn, doc.organization_id, doc, {
+                slot: link.slot, label: link.label, signerName: signer_name, signatureData: signature_data,
+                ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
+            });
+        }
         await conn.query('UPDATE document_sign_link SET used_at = NOW() WHERE token = ?', [req.params.token]);
         res.json({ success: true, message: 'Document signé. Merci !' });
     } catch (err) {

@@ -722,33 +722,10 @@ const signDocument = async (req, res) => {
             return res.status(422).json({ message: "Ce document n'est pas prévu pour être signé par le stagiaire." });
         }
 
-        // Empreinte du contenu signé (SHA-256 du HTML rempli, signature incluse) : preuve
-        // que CE contenu précis a été signé (le document ne peut plus être modifié après coup).
-        let signedHash = null;
-        try {
-            const html = await buildDocHtml(conn, req.user.organization_id, {
-                ...rows[0], signature_data: signature_data || null, signer_name, signed_at: new Date(),
-            });
-            if (html) signedHash = crypto.createHash('sha256').update(html, 'utf8').digest('hex');
-        } catch (e) { console.error('Empreinte signature ignorée :', e.message); }
-
-        await conn.query(
-            `UPDATE generated_document
-             SET status = 'SIGNE', signed_at = NOW(), signer_name = ?, signature_data = ?,
-                 signer_ip = ?, signer_user_agent = ?, signed_hash = ?
-             WHERE id = ?`,
-            [signer_name, encrypt(signature_data || null), encrypt(clientIp(req)), encrypt((req.headers['user-agent'] || '').slice(0, 400)), signedHash, req.params.id]
-        );
-        // Signatures cryptographiques (stagiaire + organisme) sur le PDF figé, stockées.
-        // En repli (échec de rendu/signature), le document reste « signé » côté image +
-        // journal ; le téléchargement retombe sur le cachet organisme à la volée.
-        try {
-            const [[full]] = await conn.query('SELECT * FROM generated_document WHERE id = ?', [req.params.id]);
-            if (full) await signAndStoreDocument(conn, req.user.organization_id, full, signer_name);
-        } catch (e) { console.error('Signature cryptographique différée :', e.message); }
-        // Pipeline : devis signé -> « Devis signé » ; contrat/convention signé -> « Inscrit ».
-        if (rows[0].type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_SIGNE');
-        else if (rows[0].type === 'CONTRAT' || rows[0].type === 'CONVENTION') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'INSCRIT');
+        await applyLearnerSignature(conn, req.user.organization_id, rows[0], {
+            signerName: signer_name, signatureData: signature_data,
+            ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
+        });
         logAudit(req, 'document.sign', 'GeneratedDocument', req.params.id);
         notify(req.user.organization_id, {
             type: 'SIGNATURE', title: 'Document signé', body: `Signé par ${signer_name}`,
@@ -843,6 +820,36 @@ async function applySlotSignature(conn, orgId, doc, { slot, label, signerName, s
     await conn.query("UPDATE generated_document SET status = 'SIGNE', signed_at = NOW(), signer_name = ? WHERE id = ?", [signerName, doc.id]);
 }
 
+/**
+ * Applique une signature « stagiaire » sur un document : remplit la case {Signature
+ * stagiaire}, passe le document en SIGNÉ, scelle le PDF (cert stagiaire + contreseing
+ * organisme) et fait avancer le pipeline. Utilisé par le stagiaire lui-même ET par le
+ * représentant de l'entreprise qui signe À LA PLACE du stagiaire (lien de signature).
+ */
+async function applyLearnerSignature(conn, orgId, doc, { signerName, signatureData, ip, userAgent }) {
+    // Empreinte du contenu signé (SHA-256 du HTML rempli) : preuve d'intégrité.
+    let signedHash = null;
+    try {
+        const html = await buildDocHtml(conn, orgId, { ...doc, signature_data: signatureData || null, signer_name: signerName, signed_at: new Date() });
+        if (html) signedHash = crypto.createHash('sha256').update(html, 'utf8').digest('hex');
+    } catch (e) { console.error('Empreinte signature ignorée :', e.message); }
+    await conn.query(
+        `UPDATE generated_document
+         SET status = 'SIGNE', signed_at = NOW(), signer_name = ?, signature_data = ?,
+             signer_ip = ?, signer_user_agent = ?, signed_hash = ?
+         WHERE id = ?`,
+        [signerName, encrypt(signatureData || null), encrypt(ip || ''), encrypt((userAgent || '').slice(0, 400)), signedHash, doc.id]
+    );
+    // Signatures cryptographiques (stagiaire + organisme) sur le PDF figé, stockées.
+    try {
+        const [[full]] = await conn.query('SELECT * FROM generated_document WHERE id = ?', [doc.id]);
+        if (full) await signAndStoreDocument(conn, orgId, full, signerName);
+    } catch (e) { console.error('Signature cryptographique différée :', e.message); }
+    // Pipeline : devis signé -> « Devis signé » ; contrat/convention signé -> « Inscrit ».
+    if (doc.type === 'DEVIS') await advanceEnrollments(conn, orgId, doc.id, 'DEVIS_SIGNE');
+    else if (doc.type === 'CONTRAT' || doc.type === 'CONVENTION') await advanceEnrollments(conn, orgId, doc.id, 'INSCRIT');
+}
+
 /** POST /api/documents/:id/sign-link — crée un lien de signature partageable (créneau). */
 const createSignLink = async (req, res) => {
     try {
@@ -868,4 +875,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, clientIp };
+module.exports = { listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp };
