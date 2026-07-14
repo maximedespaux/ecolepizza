@@ -349,16 +349,20 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   );
 }
 
-// Regroupe les étapes ORDONNÉES en jalons « OU » d'après les ÉQUIVALENCES (org) :
-// étapes consécutives appartenant à la même équivalence. `eqMap` = slug -> { group }.
+// Regroupe les étapes en jalons « OU » d'après les ÉQUIVALENCES (org) : TOUTES les
+// étapes d'une même équivalence forment UN SEUL jalon (nombre de variantes illimité),
+// même si elles ne se suivent pas — le jalon apparaît à la position de la 1re variante.
+// `eqMap` = slug -> { group }.
 function groupMilestones(steps, eqMap) {
   const groupOf = (s) => (eqMap && eqMap.get(s.slug) ? eqMap.get(s.slug).group : null);
   const groups = [];
+  const byGroup = new Map();
   for (const st of steps) {
-    const last = groups[groups.length - 1];
     const g = groupOf(st);
-    if (last && g && groupOf(last.steps[0]) === g) last.steps.push(st);
-    else groups.push({ steps: [st] });
+    if (g && byGroup.has(g)) { byGroup.get(g).steps.push(st); continue; }
+    const obj = { steps: [st] };
+    if (g) byGroup.set(g, obj);
+    groups.push(obj);
   }
   return groups;
 }
