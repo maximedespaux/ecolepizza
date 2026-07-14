@@ -283,34 +283,63 @@ const createCompanyDocument = async (req, res) => {
         if (!step) return res.status(422).json({ error: 'Modèle « entreprise » introuvable.' });
 
         const [enr] = await conn.query(
-            'SELECT id FROM enrollment WHERE session_id = ? AND company_id = ? AND organization_id = ?',
+            `SELECT e.id, l.opco FROM enrollment e JOIN learner l ON l.id = e.learner_id
+             WHERE e.session_id = ? AND e.company_id = ? AND e.organization_id = ?`,
             [session_id, company.id, orgId]
         );
         if (!enr.length) return res.status(422).json({ error: 'Aucun stagiaire de cette entreprise dans cette session.' });
 
-        // Remplace la version en attente (non signée) du même modèle pour ce groupe.
-        try {
-            await conn.query(
-                "DELETE FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND status <> 'SIGNE'",
-                [orgId, company.id, session_id, template_slug]
-            );
-        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        // La colonne `opco` (migration 089) est-elle présente ? Si oui, on produit UN
+        // document par OPCO (un dirigeant a souvent un OPCO ≠ de ses salariés) ; sinon
+        // un seul document pour tout le groupe (ancien comportement).
+        let opcoSupported = true;
+        try { await conn.query('SELECT opco FROM generated_document LIMIT 1'); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') opcoSupported = false; else if (!isMissingSchema(e)) throw e; }
 
-        const id = crypto.randomUUID();
-        try {
-            await conn.query(
-                `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status, scope, company_id, session_id)
-                 VALUES (?, ?, NULL, ?, ?, ?, 'A_FAIRE', 'COMPANY', ?, ?)`,
-                [id, orgId, step.doc_type, template_slug, step.label, company.id, session_id]
-            );
-        } catch (e) {
-            if (isMissingSchema(e)) return res.status(422).json({ message: 'Documents entreprise non initialisés (migration 077).' });
-            throw e;
+        const groups = new Map();
+        if (opcoSupported) {
+            for (const e of enr) { const key = (e.opco || '').trim(); const g = groups.get(key) || { opco: key || null, ids: [] }; g.ids.push(e.id); groups.set(key, g); }
+        } else {
+            groups.set('', { opco: null, ids: enr.map((e) => e.id) });
         }
-        for (const e of enr) {
-            await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [id, e.id]);
+
+        let created = 0;
+        for (const g of groups.values()) {
+            // Remplace la version en attente (non signée) du même (modèle, OPCO).
+            try {
+                if (opcoSupported) {
+                    await conn.query(
+                        "DELETE FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND (opco <=> ?) AND status <> 'SIGNE'",
+                        [orgId, company.id, session_id, template_slug, g.opco]);
+                } else {
+                    await conn.query(
+                        "DELETE FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND status <> 'SIGNE'",
+                        [orgId, company.id, session_id, template_slug]);
+                }
+            } catch (e) { if (!isMissingSchema(e)) throw e; }
+
+            const id = crypto.randomUUID();
+            const title = step.label + (g.opco ? ` — ${g.opco}` : '');
+            try {
+                if (opcoSupported) {
+                    await conn.query(
+                        `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status, scope, company_id, session_id, opco)
+                         VALUES (?, ?, NULL, ?, ?, ?, 'A_FAIRE', 'COMPANY', ?, ?, ?)`,
+                        [id, orgId, step.doc_type, template_slug, title, company.id, session_id, g.opco]);
+                } else {
+                    await conn.query(
+                        `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status, scope, company_id, session_id)
+                         VALUES (?, ?, NULL, ?, ?, ?, 'A_FAIRE', 'COMPANY', ?, ?)`,
+                        [id, orgId, step.doc_type, template_slug, title, company.id, session_id]);
+                }
+            } catch (e) {
+                if (isMissingSchema(e)) return res.status(422).json({ message: 'Documents entreprise non initialisés (migration 077).' });
+                throw e;
+            }
+            for (const eid of g.ids) await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [id, eid]);
+            created++;
         }
-        res.status(201).json({ message: 'Document entreprise préparé.', data: { id } });
+        res.status(201).json({ message: `${created} document(s) entreprise préparé(s).`, data: { created } });
     } catch (err) {
         console.error('Erreur création document entreprise :', err);
         res.status(500).json({ error: 'Internal Server Error' });

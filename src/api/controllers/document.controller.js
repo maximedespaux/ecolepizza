@@ -122,25 +122,30 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     // groupe de tous les stagiaires liés (jeton {Stagiaires}).
     let groupStagiaires = [];
     if (documentId) {
-        // Infos du document entreprise (entreprise + session) — colonnes présentes si migration 077.
+        // Infos du document entreprise (entreprise + session + OPCO) — colonnes présentes
+        // selon migrations 077 / 089 : on lit en cascade.
         let gdInfo = null;
-        try {
-            const [[gd2]] = await conn.query('SELECT company_id, session_id FROM generated_document WHERE id = ?', [documentId]);
-            gdInfo = gd2 || null;
-            if (!company && gd2 && gd2.company_id) { const [cr] = await conn.query('SELECT * FROM company WHERE id = ?', [gd2.company_id]); company = cr[0] || company; }
-        } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+        for (const cols of ['company_id, session_id, opco', 'company_id, session_id']) {
+            try { const [[gd2]] = await conn.query(`SELECT ${cols} FROM generated_document WHERE id = ?`, [documentId]); gdInfo = gd2 || null; break; }
+            catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+        }
+        if (!company && gdInfo && gdInfo.company_id) { const [cr] = await conn.query('SELECT * FROM company WHERE id = ?', [gdInfo.company_id]); company = cr[0] || company; }
 
         if (gdInfo && gdInfo.company_id && gdInfo.session_id) {
-            // Document entreprise : liste VIVANTE de TOUS les stagiaires de l'entreprise
-            // inscrits à cette session (et pas un instantané figé à la génération).
+            // Document entreprise : liste VIVANTE des stagiaires de l'entreprise inscrits à
+            // cette session (et pas un instantané figé). Si le document est groupé par OPCO
+            // (migration 089), on ne liste que les stagiaires de CET OPCO.
+            const params = [gdInfo.company_id, gdInfo.session_id, organizationId];
+            let opcoFilter = '';
+            if (gdInfo.opco !== undefined) { opcoFilter = " AND TRIM(COALESCE(l.opco, '')) = ?"; params.push((gdInfo.opco || '').trim()); }
             const [gs] = await conn.query(
                 `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email,
                         DATE_FORMAT(l.birthday, '%Y-%m-%d') AS birthday
                  FROM enrollment e
                  JOIN learner l ON l.id = e.learner_id
-                 WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?
+                 WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?${opcoFilter}
                  ORDER BY l.last_name, l.first_name`,
-                [gdInfo.company_id, gdInfo.session_id, organizationId]
+                params
             );
             groupStagiaires = gs;
         } else {
