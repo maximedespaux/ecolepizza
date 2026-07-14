@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { Outlet, Navigate } from "react-router-dom";
+import { Outlet, Navigate, NavLink } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 import ChangePasswordModal from "../components/ChangePasswordModal.jsx";
@@ -7,6 +7,7 @@ import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
+const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 
 /** Coquille de l'espace représentant d'entreprise : en-tête simple, signature des documents entreprise. */
 function RepresentantLayout() {
@@ -32,6 +33,9 @@ function RepresentantLayout() {
             <div className="sub" style={{ fontSize: 10, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em" }}>Espace entreprise</div>
           </div>
         </div>
+        <nav style={{ display: "flex", gap: 6, marginLeft: 8 }}>
+          <NavLink to="/entreprise-documents" className={navClass}>Documents entreprise</NavLink>
+        </nav>
         <div className="spacer" />
         <ThemeToggle />
         <button className="btn sm ghost" onClick={() => setPwOpen(true)} title="Changer mon mot de passe"><Icon name="key" size={15} /> Mot de passe</button>
