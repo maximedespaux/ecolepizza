@@ -309,6 +309,18 @@ const createDocument = async (req, res) => {
     }
 };
 
+// Un stagiaire peut-il voir CE document en tant que COPIE ENTREPRISE ? (document
+// entreprise SIGNÉ, modèle « Donner une copie aux stagiaires », stagiaire de l'entreprise).
+async function learnerCanSeeCompanyCopy(conn, userId, doc) {
+    if (!doc || !doc.company_id || doc.status !== 'SIGNE') return false;
+    try {
+        const [[m]] = await conn.query('SELECT 1 AS ok FROM learner WHERE user_id = ? AND company_id = ?', [userId, doc.company_id]);
+        if (!m) return false;
+        const [[t]] = await conn.query('SELECT copy_to_learners FROM document_template WHERE organization_id = ? AND slug = ?', [doc.organization_id, doc.template_slug]);
+        return !!(t && t.copy_to_learners);
+    } catch (e) { if (e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE')) return false; throw e; }
+}
+
 /**
  * GET /api/documents/:id — document + contenu HTML fusionné (aperçu).
  */
@@ -322,11 +334,14 @@ const getDocument = async (req, res) => {
         if (rows.length === 0) return res.status(404).json({ message: 'Document introuvable' });
         const doc = rows[0];
 
-        // Anti-IDOR : un non-membre du personnel ne peut lire que ses propres documents.
+        // Anti-IDOR : un non-membre du personnel ne peut lire que ses propres documents
+        // (ou une COPIE entreprise partagée à son entreprise, cf. copy_to_learners).
         const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
         if (!STAFF.includes(req.user.role)) {
             const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [doc.learner_id, req.user.id]);
-            if (own.length === 0) return res.status(403).json({ message: 'Accès refusé' });
+            if (own.length === 0 && !(await learnerCanSeeCompanyCopy(conn, req.user.id, doc))) {
+                return res.status(403).json({ message: 'Accès refusé' });
+            }
         }
 
         const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
@@ -370,7 +385,9 @@ async function fillForRequest(req, res) {
     const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
     if (!STAFF.includes(req.user.role)) {
         const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [doc.learner_id, req.user.id]);
-        if (own.length === 0) { res.status(403).json({ message: 'Accès refusé' }); return null; }
+        if (own.length === 0 && !(await learnerCanSeeCompanyCopy(conn, req.user.id, doc))) {
+            res.status(403).json({ message: 'Accès refusé' }); return null;
+        }
     }
 
     const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);

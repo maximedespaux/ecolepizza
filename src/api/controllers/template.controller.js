@@ -21,14 +21,12 @@ async function loadRows(organizationId) {
         `SELECT ${META_COLS}${extra}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
          FROM document_template WHERE organization_id = ?`;
-    try {
-        const [rows] = await db.promise().query(sel(', company_level'), [organizationId]);
-        return rows;
-    } catch (e) {
-        if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e;
-        const [rows] = await db.promise().query(sel(''), [organizationId]);
-        return rows;
+    // Colonnes optionnelles (migrations 077 / 086) : on retombe en cascade si absentes.
+    for (const extra of [', company_level, copy_to_learners', ', company_level', '']) {
+        try { const [rows] = await db.promise().query(sel(extra), [organizationId]); return rows; }
+        catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; }
     }
+    return [];
 }
 
 /**
@@ -100,6 +98,7 @@ const listTemplates = async (req, res) => {
             has_file: !!raw[s.slug]?.has_file,
             file_name: raw[s.slug]?.name || null,
             updated_at: raw[s.slug]?.updated_at || null,
+            copy_to_learners: raw[s.slug]?.copy_to_learners ? 1 : 0,
         }));
         res.json({ data: steps });
     } catch (err) {
@@ -113,7 +112,7 @@ async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
     // sans elles plutôt que d'échouer.
-    const OPTIONAL = ['layout', 'company_level'];
+    const OPTIONAL = ['layout', 'company_level', 'copy_to_learners'];
     const run = async (f) => {
         const keys = Object.keys(f);
         if (ex.length) {
@@ -159,6 +158,7 @@ const saveTemplate = async (req, res) => {
     if (b.applies_when !== undefined) fields.applies_when = b.applies_when ? JSON.stringify(b.applies_when) : null;
     if (b.active !== undefined) fields.active = b.active ? 1 : 0;
     if (b.company_level !== undefined) fields.company_level = b.company_level ? 1 : 0;
+    if (b.copy_to_learners !== undefined) fields.copy_to_learners = b.copy_to_learners ? 1 : 0;
     // Corps construit dans l'éditeur : passe l'étape en mode « builder ».
     if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }

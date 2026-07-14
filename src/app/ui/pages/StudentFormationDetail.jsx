@@ -79,7 +79,7 @@ function StudentFormationDetail() {
                   <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
                     <span style={{ color: "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name={d.quiz_id ? "list-checks" : "file-text"} size={17} /></span>
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <b>{d.title}</b>
+                      <b>{d.title}</b>{d.company_copy ? <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: 6 }}>· copie entreprise</span> : null}
                       {d.signed_at && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>Signé le {d.signed_at}</span>}
                     </span>
                     {d.quiz_id ? (
