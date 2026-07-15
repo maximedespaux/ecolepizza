@@ -450,7 +450,7 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
   }
 
   return (
-    <div className="parcours" ref={addRef}>
+    <div className="parcours compact" ref={addRef}>
       <div className="parcours-flow">
         {groups.map((g, i) => {
           // Slug de rupture porté par ce jalon = dernière étape du groupe.
