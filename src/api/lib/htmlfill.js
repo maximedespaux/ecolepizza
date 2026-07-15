@@ -38,7 +38,8 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     const mainSig = (ctx && ctx.signature) || {};       // signature « stagiaire » du document
     let out = String(bodyHtml || '');
     // Blocs répétés par stagiaire du groupe : {#Stagiaires}…{/Stagiaires} (documents entreprise).
-    out = expandGroupBlocks(out, ctx && ctx.groupStagiaires);
+    // Les jetons personnalisés ({custom:…}) y sont recalculés PAR stagiaire.
+    out = expandGroupBlocks(out, ctx && ctx.groupStagiaires, ctx && ctx.customTokens, values);
 
     const render = (key) => (RAW_TOKENS.has(key) ? values[key] : escapeHtml(values[key]));
     // Un emplacement nommé désigne-t-il le stagiaire ? (Stagiaire 1…, élève, apprenant…)

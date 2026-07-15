@@ -9,6 +9,8 @@
 // Les clés conservent l'orthographe historique des anciens modèles Word pour rester
 // rétro-compatibles ({Personne}, {Niveau suggérer}, {Nom entreprise}…).
 
+const { resolveCustomTokens, shiftDate } = require('./customtokens.js');
+
 // --- Formatage ---
 const pad = (n) => String(n).padStart(2, '0');
 function frDate(v) {
@@ -196,19 +198,29 @@ function stagiaireRowTokens(s, i) {
 // Développe les blocs répétés « par stagiaire du groupe » AVANT le remplacement normal :
 //   {#Stagiaires} M. {Prénom} {Nom} — {OPCO}<br> {/Stagiaires}
 // Le contenu entre les marqueurs est répété pour chaque stagiaire, en résolvant les
-// jetons PAR STAGIAIRE (cf. stagiaireRowTokens). Les autres jetons ({Formation}…)
+// jetons PAR STAGIAIRE (cf. stagiaireRowTokens) ET les jetons PERSONNALISÉS
+// ({custom:…}) recalculés par stagiaire. Les autres jetons ({Formation}, signatures…)
 // restent tels quels et sont résolus ensuite globalement.
-function expandGroupBlocks(html, list) {
+function expandGroupBlocks(html, list, customDefs, globalValues) {
     const rows = Array.isArray(list) ? list : [];
+    const defs = Array.isArray(customDefs) ? customDefs : [];
+    const gv = globalValues || {};
     return String(html || '').replace(/\{#\s*Stagiaires\s*\}([\s\S]*?)\{\/\s*Stagiaires\s*\}/g, (m, tpl) => {
         if (!rows.length) return '<i>Aucun stagiaire dans le groupe.</i>';
         return rows.map((s, i) => {
-            let row = tpl;
-            const toks = stagiaireRowTokens(s, i);
-            for (const [k, v] of Object.entries(toks)) {
-                if (row.includes('{' + k + '}')) row = row.split('{' + k + '}').join(escCell(v));
-            }
-            return row;
+            const row = stagiaireRowTokens(s, i);
+            // Jetons personnalisés recalculés pour CE stagiaire (peuvent référencer les
+            // jetons par stagiaire ET les jetons globaux).
+            const custom = resolveCustomTokens(defs, { ...gv, ...row });
+            const repl = { ...row, ...custom };
+            // On ne remplace QUE les jetons par stagiaire / personnalisés ; les jetons
+            // purement globaux sont laissés au remplacement global (fillHtml).
+            return String(tpl).replace(/\{\s*([^{}|]+?)\s*(?:\|\s*([+-]?\d+)\s*)?\}/g, (mm, ref, off) => {
+                if (!(ref in repl)) return mm;
+                let v = repl[ref] == null ? '' : String(repl[ref]);
+                if (off) v = shiftDate(v, parseInt(off, 10));
+                return escCell(v);
+            });
         }).join('');
     });
 }

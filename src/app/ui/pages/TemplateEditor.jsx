@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -15,16 +15,16 @@ const clean = (html) => (EMPTY.test(html || "") ? "" : html);
 // Jetons résolus PAR STAGIAIRE à l'intérieur d'un bloc {#Stagiaires}…{/Stagiaires}
 // (documents de groupe / entreprise). Insérés en TEXTE brut.
 const GROUP_ROW_TOKENS = [
-  { key: "N°", label: "N°" },
-  { key: "Personne", label: "Civilité + Nom complet" },
-  { key: "Civilité", label: "Civilité" },
-  { key: "Prénom", label: "Prénom" },
-  { key: "Nom", label: "Nom" },
-  { key: "Email", label: "E-mail" },
-  { key: "Téléphone", label: "Téléphone" },
-  { key: "OPCO", label: "OPCO" },
-  { key: "Ville", label: "Ville" },
-  { key: "D_Naissance", label: "Date de naissance" },
+  { key: "N°", label: "N°", sample: "1" },
+  { key: "Personne", label: "Civilité + Nom complet", sample: "M. Jean DUPONT" },
+  { key: "Civilité", label: "Civilité", sample: "M." },
+  { key: "Prénom", label: "Prénom", sample: "Jean" },
+  { key: "Nom", label: "Nom", sample: "DUPONT" },
+  { key: "Email", label: "E-mail", sample: "jean@exemple.fr" },
+  { key: "Téléphone", label: "Téléphone", sample: "06 12 34 56 78" },
+  { key: "OPCO", label: "OPCO", sample: "OCAPIAT" },
+  { key: "Ville", label: "Ville", sample: "Bordeaux" },
+  { key: "D_Naissance", label: "Date de naissance", sample: "12/05/1990" },
 ];
 
 // Bascule « bord à bord » (sans marge) d'une zone.
@@ -208,15 +208,26 @@ function TemplateEditor() {
   const SIG_PRESETS = ["Jury 1", "Jury 2", "Président du jury", "Formateur", "Intervenant", "Stagiaire 1", "Stagiaire 2", "Stagiaire 3", "Stagiaire 4"];
   function onDrop(ed) {
     return (e) => {
-      const raw = e.dataTransfer.getData("application/x-token");
-      if (!raw || !ed) return;
+      const rawText = e.dataTransfer.getData("application/x-rawtoken"); // jeton texte (bloc / par stagiaire)
+      const raw = e.dataTransfer.getData("application/x-token");        // jeton « puce »
+      if (!ed || (!raw && !rawText)) return;
       e.preventDefault();
-      const t = JSON.parse(raw);
       const pos = ed.view.posAtCoords({ left: e.clientX, top: e.clientY });
       const at = pos ? pos.pos : ed.state.selection.to;
+      if (rawText) { ed.chain().focus().insertContentAt(at, rawText).run(); return; }
+      const t = JSON.parse(raw);
       ed.chain().focus().insertTokenAt(at, { token: t.key, label: t.label }).run();
     };
   }
+  // Catalogue enrichi pour le gestionnaire de JETONS PERSO : on ajoute les jetons
+  // « par stagiaire » comme références insérables dans un modèle de jeton personnalisé
+  // (ils prennent leur sens dans un bloc {#Stagiaires}…{/Stagiaires}).
+  const customCatalog = useMemo(() => {
+    const rowToks = GROUP_ROW_TOKENS.map((t) => ({ key: t.key, label: t.label, sample: t.sample || "" }));
+    const cat = (catalog || []).map((g) => (g.group === "Groupe entreprise" ? { ...g, tokens: [...g.tokens, ...rowToks] } : g));
+    if (!cat.some((g) => g.group === "Groupe entreprise")) cat.push({ group: "Groupe entreprise", tokens: rowToks });
+    return cat;
+  }, [catalog]);
 
   // Recharge la palette (les champs proposés = ceux activés dans Champs documents).
   const reloadCatalog = () => getTokenCatalog(slug).then((cat) => setCatalog(cat.data || [])).catch(() => {});
@@ -350,12 +361,16 @@ function TemplateEditor() {
                         <b>Bloc par stagiaire</b> : répété pour chaque stagiaire du groupe. Placez les jetons ci-dessous <b>entre</b> les marqueurs.
                       </p>
                       <button className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple"
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", "{#Stagiaires}{N°}. {Personne} — {OPCO}<br>{/Stagiaires}")}
                         onClick={() => insertRaw("{#Stagiaires}{N°}. {Personne} — {OPCO}<br>{/Stagiaires}")}>
                         <Icon name="plus" size={13} /> Bloc « par stagiaire »
                       </button>
                       <div style={{ height: 6 }} />
                       {GROUP_ROW_TOKENS.map((t) => (
                         <button key={t.key} className="tok-chip" title={`{${t.key}} — à placer dans un bloc {#Stagiaires}…{/Stagiaires}`}
+                          draggable
+                          onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", "{" + t.key + "}")}
                           onClick={() => insertRaw("{" + t.key + "}")}>{t.label}</button>
                       ))}
                     </div>
@@ -368,7 +383,7 @@ function TemplateEditor() {
       </div>
 
       {showCustom && (
-        <CustomTokenManager catalog={catalog} onClose={() => setShowCustom(false)} onSaved={reloadCatalog} />
+        <CustomTokenManager catalog={customCatalog} onClose={() => setShowCustom(false)} onSaved={reloadCatalog} />
       )}
 
       {showFields && (
