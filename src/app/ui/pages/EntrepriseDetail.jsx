@@ -176,8 +176,11 @@ export default function EntrepriseDetail() {
     try { await sendDocument(docId); setStatus({ type: "success", message: "Document envoyé." }); setParcoursRefresh((n) => n + 1); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
-  async function deleteCompanyDoc(docId, title) {
-    if (!window.confirm(`Supprimer le document « ${title || "sans titre"} » ?`)) return;
+  async function deleteCompanyDoc(docId, title, signed) {
+    const msg = signed
+      ? `Supprimer DÉFINITIVEMENT le document SIGNÉ « ${title || "sans titre"} » ?\nCe document a une valeur légale — sa suppression est irréversible.`
+      : `Supprimer le document « ${title || "sans titre"} » ?`;
+    if (!window.confirm(msg)) return;
     setStatus(null);
     try { await deleteDocument(docId); setParcoursRefresh((n) => n + 1); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
@@ -444,7 +447,7 @@ export default function EntrepriseDetail() {
                       <Badge tone={tone}>{label}</Badge>
                       <button className="iconbtn" title="Aperçu / vérifier" onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
                       {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer (à l'entreprise)" onClick={() => sendCompanyDoc(d.id)}><Icon name="send" size={16} /></button>}
-                      {d.status !== "SIGNE" && <button className="iconbtn del" title="Supprimer" onClick={() => deleteCompanyDoc(d.id, d.title)}><Icon name="trash" size={15} /></button>}
+                      <button className="iconbtn del" title={d.status === "SIGNE" ? "Supprimer (document signé)" : "Supprimer"} onClick={() => deleteCompanyDoc(d.id, d.title, d.status === "SIGNE")}><Icon name="trash" size={15} /></button>
                     </div>
                   );
                 })}
