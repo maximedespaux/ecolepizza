@@ -328,7 +328,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           {parcoursKind === "stagiaire" ? (
             <>
               <p className="hint" style={{ marginTop: 0 }}>
-                Composez l'enchaînement des documents du dossier : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Les documents de groupe (🏢 « Document entreprise ») apparaissent dans la même liste. Glissez un bloc pour réordonner ; les QCM rattachés sont proposés à l'ajout.
+                Composez l'enchaînement des documents du dossier : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Les documents de groupe (🏢 « Document entreprise ») ne s'ajoutent pas ici : ils se gèrent dans l'onglet <b>À l'arrivée via une entreprise</b>. Glissez un bloc pour réordonner ; les QCM rattachés sont proposés à l'ajout.
                 <br />Clique sur une <b style={{ color: "var(--ember1)" }}>flèche 🚧</b> entre deux jalons pour placer le <b>point d'accès à l'émargement</b> : le stagiaire ne pourra émarger qu'après avoir signé tous ses documents situés avant ce point.
               </p>
               {steps.length === 0 ? (
@@ -339,7 +339,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               )}
             </>
           ) : (
-            <CompanySection steps={steps} value={companySteps} onChange={setCompanySteps} />
+            <CompanySection steps={steps} value={companySteps} onChange={setCompanySteps} onToggleActive={toggleStep} />
           )}
           </div>
 
@@ -425,8 +425,13 @@ function stepBadge(s) {
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
 function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu }) {
-  const included = steps.filter((s) => s.active);
-  const available = steps.filter((s) => !s.active);
+  // Les documents de GROUPE (🏢 company_level) ne font PAS partie du parcours du
+  // dossier : ils se gèrent uniquement dans « À l'arrivée via une entreprise ».
+  const included = steps.filter((s) => s.active && !s.company_level);
+  const available = steps.filter((s) => !s.active && !s.company_level);
+  // Tout ce qui n'est pas affiché ici (docs de groupe + étapes inactives) est
+  // préservé tel quel lors d'un réordonnancement.
+  const rest = steps.filter((s) => !(s.active && !s.company_level));
   const groups = groupMilestones(included, eqMap);
   const [gdrag, setGdrag] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -446,7 +451,7 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
     const [m] = ng.splice(gdrag, 1);
     ng.splice(to, 0, m);
     setGdrag(null);
-    onReorder([...ng.flatMap((g) => g.steps), ...available]); // ordre inclus + disponibles conservés
+    onReorder([...ng.flatMap((g) => g.steps), ...rest]); // ordre inclus + reste (groupe/inactifs) conservé
   }
 
   return (
@@ -476,7 +481,7 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
               {/* Ajouter une variante « OU » à ce jalon (regroupe via équivalence). */}
               {typeof onAddOu === "function" && !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT" && (() => {
                 const head = g.steps[0].slug;
-                const cand = steps.filter((s) => !s.quiz_id && s.doc_type !== "EMARGEMENT" && !g.steps.some((x) => x.slug === s.slug));
+                const cand = steps.filter((s) => !s.quiz_id && !s.company_level && s.doc_type !== "EMARGEMENT" && !g.steps.some((x) => x.slug === s.slug));
                 return (
                   <div style={{ position: "relative", marginTop: 6 }}>
                     <button type="button" className="pf-or-add" onClick={() => setOuFor(ouFor === head ? null : head)} title="Ajouter une variante « OU » (choisie par condition)">＋ OU</button>
@@ -555,13 +560,16 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
 // Liste ORDONNÉE (glisser pour réordonner) de documents de GROUPE (🏢) et/ou
 // STAGIAIRE choisis parmi les étapes actives du parcours. Repère visuel côté fiche
 // entreprise ; n'altère pas le parcours principal.
-function CompanySection({ steps, value, onChange }) {
+function CompanySection({ steps, value, onChange, onToggleActive }) {
   const [adding, setAdding] = useState(false);
   const [drag, setDrag] = useState(null);
   const ref = useRef(null);
   const bySlug = new Map(steps.map((s) => [s.slug, s]));
   const chosen = value.map((sl) => bySlug.get(sl)).filter((s) => s && s.active);
-  const eligible = steps.filter((s) => s.active && !s.quiz_id && s.doc_type !== "EMARGEMENT" && !value.includes(s.slug));
+  // Éligibles : documents de GROUPE (activables ici, qu'ils soient actifs ou non)
+  // ET documents STAGIAIRE déjà actifs dans le parcours du dossier (repère).
+  const eligible = steps.filter((s) => !s.quiz_id && s.doc_type !== "EMARGEMENT" && !value.includes(s.slug)
+    && (s.company_level ? true : s.active));
   const isGroup = (s) => !!s.company_level;
 
   useEffect(() => {
@@ -571,8 +579,17 @@ function CompanySection({ steps, value, onChange }) {
     return () => document.removeEventListener("mousedown", close);
   }, [adding]);
 
-  const add = (slug) => { onChange([...value.filter((x) => x !== slug), slug]); setAdding(false); };
-  const remove = (slug) => onChange(value.filter((x) => x !== slug));
+  const add = (slug) => {
+    const s = bySlug.get(slug);
+    onChange([...value.filter((x) => x !== slug), slug]);
+    if (s && s.company_level && !s.active) onToggleActive?.(slug); // doc de groupe : activer ici
+    setAdding(false);
+  };
+  const remove = (slug) => {
+    const s = bySlug.get(slug);
+    onChange(value.filter((x) => x !== slug));
+    if (s && s.company_level && s.active) onToggleActive?.(slug); // doc de groupe : n'existe qu'ici → désactiver
+  };
   function drop(to) {
     if (drag === null || drag === to) { setDrag(null); return; }
     const order = chosen.map((s) => s.slug);
