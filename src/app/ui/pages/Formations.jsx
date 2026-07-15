@@ -566,11 +566,12 @@ function CompanySection({ steps, value, onChange, onToggleActive }) {
   const ref = useRef(null);
   const bySlug = new Map(steps.map((s) => [s.slug, s]));
   const chosen = value.map((sl) => bySlug.get(sl)).filter((s) => s && s.active);
-  // Éligibles : documents de GROUPE (activables ici, qu'ils soient actifs ou non)
-  // ET documents STAGIAIRE déjà actifs dans le parcours du dossier (repère).
-  const eligible = steps.filter((s) => !s.quiz_id && s.doc_type !== "EMARGEMENT" && !value.includes(s.slug)
+  // Éligibles : documents de GROUPE (activables ici, qu'ils soient actifs ou non),
+  // documents STAGIAIRE et QCM déjà actifs dans le parcours du dossier (repère).
+  const eligible = steps.filter((s) => s.doc_type !== "EMARGEMENT" && !value.includes(s.slug)
     && (s.company_level ? true : s.active));
   const isGroup = (s) => !!s.company_level;
+  const isQuiz = (s) => !!s.quiz_id;
 
   useEffect(() => {
     if (!adding) return;
@@ -599,11 +600,15 @@ function CompanySection({ steps, value, onChange, onToggleActive }) {
     onChange([...order, ...extra]);
     setDrag(null);
   }
-  const badge = (s, short) => (
-    <span className="pf-badge" style={{ background: isGroup(s) ? "var(--ember1,#c0392b)" : "var(--surface2)", color: isGroup(s) ? "#fff" : "var(--text)" }}>
-      {isGroup(s) ? (short ? "🏢" : "🏢 Groupe") : (short ? "S" : "Stagiaire")}
-    </span>
-  );
+  const badge = (s, short) => {
+    const grp = isGroup(s), quiz = isQuiz(s);
+    const text = quiz ? (short ? "❓" : "❓ QCM") : grp ? (short ? "🏢" : "🏢 Groupe") : (short ? "S" : "Stagiaire");
+    return (
+      <span className="pf-badge" style={{ background: grp ? "var(--ember1,#c0392b)" : "var(--surface2)", color: grp ? "#fff" : "var(--text)" }}>
+        {text}
+      </span>
+    );
+  };
 
   return (
     <div className="parcours compact" ref={ref}>
