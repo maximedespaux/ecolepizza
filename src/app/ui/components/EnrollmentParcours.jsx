@@ -56,7 +56,7 @@ function actionFor(s) {
   if (isGroup(s)) {
     // Fiche entreprise : seuls les documents de groupe se génèrent ici ; les documents
     // stagiaire sont visibles mais générés depuis chaque fiche stagiaire.
-    if (s.company_level) return { label: s.gen ? "Regénérer pour le groupe" : "Générer pour le groupe", kind: "prepare" };
+    if (s.company_level) return { label: s.gen ? "Regénérer le document" : "Préparer le document", kind: "prepare" };
     return null;
   }
   // Fiche stagiaire : un document destiné à l'entreprise est en lecture seule

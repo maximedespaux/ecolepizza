@@ -337,6 +337,32 @@ export default function EntrepriseDetail() {
         </div>
       </div>
 
+      {/* Parcours documentaire COMPLET du groupe (même style que la fiche stagiaire). */}
+      <div style={{ marginTop: 22 }}>
+        <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Parcours documentaire du groupe</span>}>
+          <p className="hint" style={{ margin: "0 0 12px" }}>Le parcours <b>complet</b> du groupe (comme la fiche stagiaire). « Générer » produit le document pour <b>tous les stagiaires concernés</b> et l'envoie : le <b>stagiaire</b> signe dans son espace, l'<b>entreprise</b> dans l'espace entreprise, l'<b>organisme</b> contresigne automatiquement. Les documents de groupe (🏢) sont produits une fois par OPCO.</p>
+          {(data.sessions || []).length > 1 && (
+            <div className="field" style={{ maxWidth: 360 }}><label>Session</label>
+              <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+                {data.sessions.map((s) => <option key={s.id} value={s.id}>{`${s.program_code || s.program_title} · S${s.week} ${s.year}`}</option>)}
+              </select>
+            </div>
+          )}
+          {!sessionId ? (
+            <EmptyState icon="file-text">Aucune session pour cette entreprise. Inscris un groupe à une session ci-dessus.</EmptyState>
+          ) : (
+            <EnrollmentParcours
+              fetcher={() => getCompanyParcours(id, sessionId)}
+              resetKey={`${id}:${sessionId}`}
+              refresh={parcoursRefresh}
+              onPrepare={prepareCompanyDoc}
+              onOpenDoc={openCompanyDoc}
+              onSignLink={companySignLink}
+            />
+          )}
+        </Card>
+      </div>
+
       {/* Préparer un document de GROUPE (comme la fiche stagiaire). */}
       <div style={{ marginTop: 22 }}>
         <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Préparer un document</span>}>
@@ -378,32 +404,6 @@ export default function EntrepriseDetail() {
                 {prep.sessionIds.size === 0 && <span className="hint">Sélectionne au moins une formation.</span>}
               </div>
             </form>
-          )}
-        </Card>
-      </div>
-
-      {/* Parcours documentaire COMPLET du groupe (même style que la fiche stagiaire). */}
-      <div style={{ marginTop: 22 }}>
-        <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Parcours documentaire du groupe</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Le parcours <b>complet</b> du groupe (comme la fiche stagiaire). « Générer » produit le document pour <b>tous les stagiaires concernés</b> et l'envoie : le <b>stagiaire</b> signe dans son espace, l'<b>entreprise</b> dans l'espace entreprise, l'<b>organisme</b> contresigne automatiquement. Les documents de groupe (🏢) sont produits une fois par OPCO.</p>
-          {(data.sessions || []).length > 1 && (
-            <div className="field" style={{ maxWidth: 360 }}><label>Session</label>
-              <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
-                {data.sessions.map((s) => <option key={s.id} value={s.id}>{`${s.program_code || s.program_title} · S${s.week} ${s.year}`}</option>)}
-              </select>
-            </div>
-          )}
-          {!sessionId ? (
-            <EmptyState icon="file-text">Aucune session pour cette entreprise. Inscris un groupe à une session ci-dessus.</EmptyState>
-          ) : (
-            <EnrollmentParcours
-              fetcher={() => getCompanyParcours(id, sessionId)}
-              resetKey={`${id}:${sessionId}`}
-              refresh={parcoursRefresh}
-              onPrepare={prepareCompanyDoc}
-              onOpenDoc={openCompanyDoc}
-              onSignLink={companySignLink}
-            />
           )}
         </Card>
       </div>
