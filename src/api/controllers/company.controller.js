@@ -4,9 +4,40 @@ const db = require('../config/database.js');
 const { generatePassword } = require('../lib/crypto.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
-const { formationSteps } = require('./formationProgram.controller.js');
-const { computeDocParcours } = require('../lib/parcours.js');
-const { companySignsDoc } = require('../lib/documents.js');
+const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
+const { companySignsDoc, stepSigners } = require('../lib/documents.js');
+const { loadConditionMap, getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
+const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
+
+// Résout, pour chaque stagiaire de l'entreprise dans la session, les documents (slugs)
+// applicables à son dossier (conditions + variantes « OU »). Base du parcours de groupe.
+async function resolveGroupSteps(conn, orgId, companyId, sessionId) {
+    const [[sess]] = await conn.query(
+        `SELECT s.id, s.year, s.week,
+                DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
+                p.id AS program_id, p.title AS program_title, p.code AS program_code, p.days, p.hygiene, p.rs_code
+         FROM training_session s JOIN training_program p ON p.id = s.program_id
+         WHERE s.id = ? AND s.organization_id = ?`, [sessionId, orgId]);
+    if (!sess) return null;
+    const program = { id: sess.program_id, code: sess.program_code, days: sess.days, hygiene: sess.hygiene, rs_code: sess.rs_code };
+    const [enr] = await conn.query(
+        `SELECT e.id, e.learner_id, e.financing, l.opco FROM enrollment e JOIN learner l ON l.id = e.learner_id
+         WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?`, [companyId, sessionId, orgId]);
+    const condById = await loadConditionMap(conn, orgId);
+    const eqMap = equivalenceMap(await loadEquivalences(conn, orgId));
+    const catalog = await getEnabledFields(conn, orgId, 'condition');
+    const factsMap = await loadDossierFactsMap(conn, orgId, enr.map((e) => e.id), catalog);
+    const enrollments = [];
+    for (const e of enr) {
+        const ctx = {
+            financing: e.financing, rsCode: sess.rs_code, hygiene: !!sess.hygiene, jours: sess.days,
+            agefice: (e.opco || '').toUpperCase() === 'AGEFICE', ...(factsMap.get(e.id) || {}),
+        };
+        const resolved = await enrollmentSteps(conn, orgId, program, ctx, condById, eqMap);
+        enrollments.push({ id: e.id, learner_id: e.learner_id, slugs: new Set(resolved.filter((s) => !s.quiz_id).map((s) => s.slug)) });
+    }
+    return { sess, program, enrollments, allSteps: await formationSteps(conn, orgId, program) };
+}
 
 const clean = (v) => (v === undefined || v === '' ? null : v);
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
@@ -373,10 +404,22 @@ const detachLearner = async (req, res) => {
     }
 };
 
+// Libellé « qui signe » d'une étape (pour la timeline de groupe).
+function signerSub(signers, companyLevel) {
+    const parties = (signers || []).filter((r) => r !== 'ORG');
+    if (companyLevel) return 'Document de groupe · signé par l\'entreprise';
+    if (parties.includes('ENTREPRISE')) return 'À signer par l\'entreprise';
+    if (parties.includes('STAGIAIRE')) return 'À signer par le stagiaire';
+    if (parties.includes('EXTERNAL')) return 'À signer par un signataire externe';
+    return 'Sans signature (organisme)';
+}
+
 /**
- * GET /api/companies/:id/parcours?session_id= — parcours documentaire ENTREPRISE
- * (même forme que le parcours d'un dossier stagiaire, cf. enrollment.getParcours) :
- * étapes company_level de la formation + statut déduit des documents entreprise générés.
+ * GET /api/companies/:id/parcours?session_id= — parcours documentaire COMPLET du groupe
+ * (même style « timeline » que la fiche stagiaire) : TOUTES les étapes documentaires de
+ * la formation applicables aux stagiaires du groupe, avec, pour chacune, ses signataires
+ * et l'avancement (générés / signés) sur le groupe. Les documents signés par le stagiaire
+ * apparaissent aussi (unification), avec l'action « générer + envoyer » au groupe.
  */
 const getCompanyParcours = async (req, res) => {
     try {
@@ -384,47 +427,106 @@ const getCompanyParcours = async (req, res) => {
         const orgId = req.user.organization_id;
         const [[company]] = await conn.query('SELECT id, name FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
-        const empty = { header: {}, steps: [], percent: 0, currentIndex: 0, currentKey: null };
+        const empty = { header: {}, steps: [], percent: 0, currentIndex: 0, currentKey: null, total_stagiaires: 0 };
         const sessionId = req.query.session_id;
         if (!sessionId) return res.json({ data: empty });
 
-        const [[sess]] = await conn.query(
-            `SELECT s.id, s.year, s.week,
-                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
-                    DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
-                    p.id AS program_id, p.title AS program_title, p.code AS program_code,
-                    p.days, p.hygiene, p.rs_code
-             FROM training_session s JOIN training_program p ON p.id = s.program_id
-             WHERE s.id = ? AND s.organization_id = ?`, [sessionId, orgId]);
-        if (!sess) return res.status(404).json({ message: 'Session introuvable.' });
+        const grp = await resolveGroupSteps(conn, orgId, company.id, sessionId);
+        if (!grp) return res.status(404).json({ message: 'Session introuvable.' });
+        const docSteps = grp.allSteps.filter((s) => s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT');
 
-        const program = { id: sess.program_id, code: sess.program_code, days: sess.days, hygiene: sess.hygiene, rs_code: sess.rs_code };
-        const allSteps = await formationSteps(conn, orgId, program);
-        const steps = allSteps.filter((s) => s.active && s.company_level);
+        const steps = [];
+        for (const s of docSteps) {
+            const signers = stepSigners(s);
+            let gen = 0, total = 0, signed = 0, docId = null;
+            if (s.company_level) {
+                let docs = [];
+                try {
+                    [docs] = await conn.query(
+                        "SELECT id, status FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND scope = 'COMPANY' ORDER BY created_at DESC",
+                        [orgId, company.id, sessionId, s.slug]);
+                } catch (e) { if (!isMissingSchema(e)) throw e; }
+                gen = docs.length; signed = docs.filter((d) => d.status === 'SIGNE').length; docId = docs[0] ? docs[0].id : null;
+                total = gen; // au moins autant de docs que d'OPCO ; on affiche gen/signed
+            } else {
+                const applicable = grp.enrollments.filter((e) => e.slugs.has(s.slug));
+                total = applicable.length;
+                const ids = applicable.map((e) => e.id);
+                let rows = [];
+                if (ids.length) {
+                    [rows] = await conn.query(
+                        `SELECT DISTINCT df.enrollment_id, gd.status FROM generated_document gd
+                         JOIN document_formation df ON df.document_id = gd.id
+                         WHERE gd.organization_id = ? AND df.enrollment_id IN (?) AND gd.template_slug = ?`,
+                        [orgId, ids, s.slug]);
+                }
+                gen = new Set(rows.map((r) => r.enrollment_id)).size;
+                signed = new Set(rows.filter((r) => r.status === 'SIGNE').map((r) => r.enrollment_id)).size;
+            }
+            const done = total > 0 && signed >= total;
+            steps.push({
+                key: s.slug, label: s.label, sub: signerSub(signers, s.company_level),
+                signers, company_level: !!s.company_level, doc_type: s.doc_type,
+                signable: signers.some((r) => r !== 'ORG'), quiz: false,
+                gen, total, signed, docId,
+                _done: done,
+            });
+        }
+        let currentIndex = steps.findIndex((s) => !s._done);
+        if (currentIndex < 0) currentIndex = steps.length;
+        steps.forEach((s, i) => { s.status = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo'; delete s._done; });
 
-        let docs = [];
-        try {
-            [docs] = await conn.query(
-                `SELECT id, type, status, template_slug, quiz_id FROM generated_document
-                 WHERE organization_id = ? AND company_id = ? AND session_id = ? AND scope = 'COMPANY'
-                 ORDER BY created_at DESC`,
-                [orgId, company.id, sessionId]);
-        } catch (e) { if (!isMissingSchema(e)) throw e; }
-
-        const parc = computeDocParcours({ steps, docs });
         res.json({
             data: {
                 header: {
-                    title: sess.program_title || '—', code: sess.program_code || '',
-                    session: sess.week ? `SEM ${sess.week}/${sess.year || ''}` : '',
-                    dates: sess.start_date ? `${sess.start_date}${sess.end_date ? ` → ${sess.end_date}` : ''}` : '',
-                    financing: 'Entreprise', opco: null,
+                    title: grp.sess.program_title || '—', code: grp.sess.program_code || '',
+                    session: grp.sess.week ? `SEM ${grp.sess.week}/${grp.sess.year || ''}` : '',
+                    financing: 'Groupe entreprise', opco: null,
                 },
-                ...parc,
+                total_stagiaires: grp.enrollments.length,
+                percent: steps.length ? Math.round((currentIndex / steps.length) * 100) : 0,
+                currentIndex,
+                currentKey: currentIndex < steps.length ? steps[currentIndex].key : null,
+                steps,
             },
         });
     } catch (err) {
         console.error('Erreur parcours entreprise :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/companies/:id/group-documents — génère (et envoie) un document du parcours
+ * pour tout le groupe. Corps : { session_id, slug, send? }.
+ *  · document de groupe (company_level) → un doc par OPCO (délégué à createCompanyDocument) ;
+ *  · sinon → un doc par stagiaire dont le dossier appelle CE document, puis (send) envoi.
+ */
+const generateGroupDocuments = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const { session_id, slug, send } = req.body || {};
+        if (!session_id || !slug) return res.status(422).json({ error: 'Session et document requis.' });
+        const [[company]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
+        const grp = await resolveGroupSteps(conn, orgId, company.id, session_id);
+        if (!grp) return res.status(404).json({ message: 'Session introuvable.' });
+        const step = grp.allSteps.find((s) => s.slug === slug && s.active);
+        if (!step) return res.status(422).json({ error: 'Document introuvable dans le parcours.' });
+        if (step.company_level) return res.status(422).json({ error: 'Document de groupe : utilisez « Générer » (entreprise).' });
+
+        const { prepareLearnerDoc, sendPreparedDoc } = require('./document.controller.js');
+        const applicable = grp.enrollments.filter((e) => e.slugs.has(slug));
+        let created = 0, sent = 0;
+        for (const e of applicable) {
+            const docId = await prepareLearnerDoc(conn, orgId, { learnerId: e.learner_id, type: step.doc_type, templateSlug: slug, enrollmentIds: [e.id] });
+            created++;
+            if (send) { try { await sendPreparedDoc(conn, orgId, docId); sent++; } catch (err) { console.error('Envoi groupe ignoré :', err.message); } }
+        }
+        res.status(201).json({ message: `${created} document(s) préparé(s)${send ? `, ${sent} envoyé(s)` : ''}.`, data: { created, sent } });
+    } catch (err) {
+        console.error('Erreur génération de groupe :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -529,4 +631,4 @@ const createRepresentativeAccount = async (req, res) => {
     }
 };
 
-module.exports = { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, getCompanyLearnerDocuments, createRepresentativeAccount };
+module.exports = { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount };

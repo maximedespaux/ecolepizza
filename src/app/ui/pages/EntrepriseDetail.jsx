@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
+  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -107,12 +107,18 @@ export default function EntrepriseDetail() {
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
-  // Parcours documentaire entreprise (mêmes actions que la fiche stagiaire).
-  async function prepareCompanyDoc(templateSlug) {
+  // Parcours documentaire du groupe : génère un document pour tout le groupe.
+  //  · document de groupe (company_level) → un doc par OPCO ;
+  //  · sinon → un doc par stagiaire concerné, puis envoi (le stagiaire signe dans son espace).
+  async function prepareCompanyDoc(slug, step) {
     if (!sessionId) return;
     setStatus(null);
-    try { await createCompanyDocument(id, { session_id: sessionId, template_slug: templateSlug }); setParcoursRefresh((n) => n + 1); }
-    catch (e) { setStatus({ type: "error", message: e.message }); }
+    try {
+      if (step && step.company_level) await createCompanyDocument(id, { session_id: sessionId, template_slug: slug });
+      else await generateGroupDocuments(id, { session_id: sessionId, slug, send: true });
+      setStatus({ type: "success", message: "Documents préparés pour le groupe." });
+      setParcoursRefresh((n) => n + 1);
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function openCompanyDoc(docId) {
     try { const url = await documentPdfUrl(docId); window.open(url, "_blank"); }
@@ -292,10 +298,10 @@ export default function EntrepriseDetail() {
         </div>
       </div>
 
-      {/* Parcours documentaire entreprise (même vue que la fiche stagiaire). */}
+      {/* Parcours documentaire COMPLET du groupe (même style que la fiche stagiaire). */}
       <div style={{ marginTop: 22 }}>
-        <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Parcours documentaire entreprise</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Documents produits <b>une fois pour le groupe</b> (jeton « Stagiaires »), dans l'ordre du <b>Parcours entreprise</b> de la formation. « Préparer » génère le document, « Lien de signature » permet au représentant de signer.</p>
+        <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Parcours documentaire du groupe</span>}>
+          <p className="hint" style={{ margin: "0 0 12px" }}>Le parcours <b>complet</b> du groupe (comme la fiche stagiaire). « Générer » produit le document pour <b>tous les stagiaires concernés</b> et l'envoie : le <b>stagiaire</b> signe dans son espace, l'<b>entreprise</b> dans l'espace entreprise, l'<b>organisme</b> contresigne automatiquement. Les documents de groupe (🏢) sont produits une fois par OPCO.</p>
           {(data.sessions || []).length > 1 && (
             <div className="field" style={{ maxWidth: 360 }}><label>Session</label>
               <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>

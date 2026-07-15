@@ -369,9 +369,13 @@ export function registerCompanyStagiaires(id, payload) {
 export function detachCompanyLearner(id, learnerId) {
   return request(`/companies/${id}/learners/${learnerId}`, { method: "DELETE" });
 }
-// Parcours documentaire ENTREPRISE (même forme que le parcours d'un dossier stagiaire).
+// Parcours documentaire COMPLET du groupe (même style « timeline » que la fiche stagiaire).
 export function getCompanyParcours(id, sessionId) {
   return request(`/companies/${id}/parcours${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
+}
+// Génère (et envoie) un document du parcours pour tout le groupe.
+export function generateGroupDocuments(id, payload) {
+  return request(`/companies/${id}/group-documents`, { method: "POST", body: JSON.stringify(payload) });
 }
 // Documents des stagiaires du groupe à signer par le représentant (à leur place).
 export function getCompanyLearnerDocuments(id, sessionId) {

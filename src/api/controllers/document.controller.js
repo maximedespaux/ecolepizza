@@ -274,6 +274,31 @@ const listDocuments = async (req, res) => {
 };
 
 /**
+ * Prépare un document pour UN stagiaire (A_FAIRE) en remplaçant sa version en attente
+ * (non signée). Réutilisable (fiche stagiaire ET génération de groupe). Renvoie l'id.
+ */
+async function prepareLearnerDoc(conn, orgId, { learnerId, type, templateSlug, title, enrollmentIds }) {
+    const [dups] = await conn.query(
+        `SELECT DISTINCT gd.id FROM generated_document gd
+         JOIN document_formation df ON df.document_id = gd.id
+         WHERE gd.organization_id = ? AND df.enrollment_id IN (?)
+           AND gd.status <> 'SIGNE'
+           AND (${templateSlug ? 'gd.template_slug = ?' : 'gd.type = ?'})`,
+        [orgId, enrollmentIds, templateSlug || type]
+    );
+    for (const d of dups) await conn.query('DELETE FROM generated_document WHERE id = ? AND organization_id = ?', [d.id, orgId]);
+    const documentId = crypto.randomUUID();
+    await conn.query(
+        `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status)
+         VALUES (?, ?, ?, ?, ?, ?, 'A_FAIRE')`,
+        [documentId, orgId, learnerId, type, templateSlug || null, title || TYPE_LABELS[type] || type]
+    );
+    for (const eid of enrollmentIds) await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [documentId, eid]);
+    if (type === 'FICHE_SEMAINE') await advanceEnrollments(conn, orgId, documentId, 'CONTACTE');
+    return documentId;
+}
+
+/**
  * POST /api/documents — prépare un document (statut A_FAIRE, non envoyé).
  * Corps : { learner_id, type, title?, enrollment_ids: [] }.
  */
@@ -284,37 +309,7 @@ const createDocument = async (req, res) => {
     }
     try {
         const conn = db.promise();
-        const orgId = req.user.organization_id;
-
-        // Régénérer une étape REMPLACE sa version en attente (non signée) pour ces
-        // dossiers : évite les doublons qui faussent le parcours. Les documents déjà
-        // signés sont conservés.
-        const [dups] = await conn.query(
-            `SELECT DISTINCT gd.id FROM generated_document gd
-             JOIN document_formation df ON df.document_id = gd.id
-             WHERE gd.organization_id = ? AND df.enrollment_id IN (?)
-               AND gd.status <> 'SIGNE'
-               AND (${template_slug ? 'gd.template_slug = ?' : 'gd.type = ?'})`,
-            [orgId, enrollment_ids, template_slug || type]
-        );
-        for (const d of dups) {
-            await conn.query('DELETE FROM generated_document WHERE id = ? AND organization_id = ?', [d.id, orgId]);
-        }
-
-        const documentId = crypto.randomUUID();
-        await conn.query(
-            `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status)
-             VALUES (?, ?, ?, ?, ?, ?, 'A_FAIRE')`,
-            [documentId, orgId, learner_id, type, template_slug || null, title || TYPE_LABELS[type] || type]
-        );
-        for (const eid of enrollment_ids) {
-            await conn.query(
-                'INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)',
-                [documentId, eid]
-            );
-        }
-        // Pipeline : la fiche d'expression fait passer le dossier à « Contacté ».
-        if (type === 'FICHE_SEMAINE') await advanceEnrollments(conn, req.user.organization_id, documentId, 'CONTACTE');
+        const documentId = await prepareLearnerDoc(conn, req.user.organization_id, { learnerId: learner_id, type, templateSlug: template_slug, title, enrollmentIds: enrollment_ids });
         res.status(201).json({ message: 'Document préparé', id: documentId });
     } catch (err) {
         console.error('Erreur création document :', err);
@@ -679,6 +674,33 @@ const previewHtml = async (req, res) => {
 };
 
 /**
+ * Envoie un document préparé (A_FAIRE → ENVOYE). L'organisme n'est apposé à l'envoi que
+ * pour les documents SANS partie signataire (org-seul). Réutilisable (envoi de groupe).
+ * Renvoie true si envoyé.
+ */
+async function sendPreparedDoc(conn, orgId, docId) {
+    const [[doc]] = await conn.query('SELECT id, type, template_slug, status FROM generated_document WHERE id = ? AND organization_id = ?', [docId, orgId]);
+    if (!doc || doc.status !== 'A_FAIRE') return false;
+    let orgSet = ''; const orgVals = [];
+    try {
+        const orgSteps = await loadOrgSteps(orgId);
+        const hasParty = stagiaireSignsDoc(orgSteps, doc) || companySignsDoc(orgSteps, doc);
+        if (!hasParty && orgSignsDoc(orgSteps, doc)) {
+            const [[cur]] = await conn.query('SELECT org_signed_at FROM generated_document WHERE id = ?', [docId]);
+            if (!cur || !cur.org_signed_at) {
+                const [[org]] = await conn.query('SELECT legal_name, short_name, manager, signature_image FROM organization WHERE id = ?', [orgId]);
+                const img = decrypt(org && org.signature_image);
+                if (img) { orgSet = ', org_signed_at = NOW(), org_signer_name = ?, org_signature_data = ?'; orgVals.push(org.legal_name || org.short_name || org.manager || 'Organisme', encrypt(img)); }
+            }
+        }
+    } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+    await conn.query(`UPDATE generated_document SET status = 'ENVOYE', sent_at = NOW()${orgSet} WHERE id = ? AND organization_id = ? AND status = 'A_FAIRE'`, [...orgVals, docId, orgId]);
+    if (doc.type === 'DEVIS') await advanceEnrollments(conn, orgId, docId, 'DEVIS_ENVOYE');
+    else if (doc.type === 'EVALUATION_SATISFACTION') await advanceEnrollments(conn, orgId, docId, 'EVALUATION_ENVOYEE');
+    return true;
+}
+
+/**
  * POST /api/documents/:id/send — envoie le document au stagiaire (demande de signature).
  */
 const sendDocument = async (req, res) => {
@@ -924,4 +946,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp };
+module.exports = { listDocuments, createDocument, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp };

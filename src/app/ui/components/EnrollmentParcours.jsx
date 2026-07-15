@@ -10,8 +10,15 @@ function stepIcon(s) {
   return "file-text";
 }
 
+// Étape « de groupe » (parcours entreprise) : porte des compteurs gen/total/signed.
+const isGroup = (s) => s && s.total != null;
+
 // Ligne d'état de l'étape sélectionnée (selon son statut et le document lié).
 function lineFor(s) {
+  if (isGroup(s)) {
+    if (s.company_level) return `Document de groupe · ${s.gen} généré(s)${s.signed ? ` · ${s.signed} signé(s)` : ""}.`;
+    return `${s.gen}/${s.total} généré(s)${s.signed ? ` · ${s.signed} signé(s)` : ""} pour le groupe.`;
+  }
   if (s.status === "done") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
   if (s.status === "todo") return "À venir.";
   if (s.quiz) return s.docId ? "En attente de réponse du stagiaire au QCM." : "QCM à envoyer au stagiaire.";
@@ -25,6 +32,11 @@ function lineFor(s) {
   return "En cours.";
 }
 function actionFor(s) {
+  if (isGroup(s)) {
+    if (s.company_level) return { label: s.gen ? "Regénérer pour le groupe" : "Générer pour le groupe", kind: "prepare" };
+    if (s.total === 0) return null; // aucun stagiaire concerné
+    return { label: s.gen >= s.total ? "Regénérer + envoyer" : "Générer + envoyer au groupe", kind: "prepare" };
+  }
   if (s.status !== "current" && s.status !== "todo") return null;
   if (s.docId) return { label: s.signable ? "Ouvrir la signature" : s.quiz ? "Voir le QCM" : "Voir le document", kind: "open" };
   if (s.quiz) return { label: "Envoyer le QCM", kind: "send-quiz" }; // envoi manuel au stagiaire
@@ -72,7 +84,7 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
   function runAction() {
     if (!action) return;
     if (action.kind === "open" && step.docId) onOpenDoc?.(step.docId);
-    else if (action.kind === "prepare") onPrepare?.(step.key);
+    else if (action.kind === "prepare") onPrepare?.(step.key, step); // step transmis (mode groupe)
     else if (action.kind === "send-quiz" && step.key?.startsWith("quiz:")) onSendQuiz?.(step.key.slice(5));
   }
 

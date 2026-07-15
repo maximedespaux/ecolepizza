@@ -1,5 +1,5 @@
 const express = require('express');
-const { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, getCompanyLearnerDocuments, createRepresentativeAccount } = require('../controllers/company.controller.js');
+const { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount } = require('../controllers/company.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -18,5 +18,6 @@ router.post('/:id/register', authorizeRoles(...ADMIN_ROLES), registerCompanyStag
 router.post('/:id/representative-account', authorizeRoles(...ADMIN_ROLES), createRepresentativeAccount);
 router.delete('/:id/learners/:learnerId', authorizeRoles(...ADMIN_ROLES), detachLearner);
 router.post('/:id/documents', authorizeRoles(...ADMIN_ROLES), createCompanyDocument);
+router.post('/:id/group-documents', authorizeRoles(...ADMIN_ROLES), generateGroupDocuments);
 
 module.exports = router;
