@@ -33,7 +33,8 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [refFilter, setRefFilter] = useState(""); // filtre des références par table d'origine
-  const focusRef = useRef({ idx: null, pos: 0 });
+  const focusRef = useRef({ idx: null });
+  const taRef = useRef(null); // textarea « Modèle » actuellement focalisé
 
   useEffect(() => {
     getCustomTokens().then((r) => setList((r.data || []).map((t) => ({ ...t })))).catch((e) => setStatus({ type: "error", message: e.message }));
@@ -58,11 +59,22 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
     return set;
   }, [catalog]);
 
-  function insertRef(key) {
+  // Insertion AU CURSEUR dans le champ « Modèle » focalisé. `caretMid` = position du
+  // curseur (relative au texte inséré) — pour laisser le curseur ENTRE deux marqueurs.
+  function insertAtCursor(str, caretMid) {
     const { idx } = focusRef.current;
     if (idx == null) { setStatus({ type: "error", message: "Cliquez d'abord dans un champ « Modèle »." }); return; }
-    setList((l) => l.map((t, j) => (j === idx ? { ...t, template: (t.template || "") + `{${key}}` } : t)));
+    const ta = taRef.current;
+    const cur = list[idx]?.template || "";
+    const start = ta && ta.selectionStart != null ? ta.selectionStart : cur.length;
+    const end = ta && ta.selectionEnd != null ? ta.selectionEnd : start;
+    setRow(idx, { template: cur.slice(0, start) + str + cur.slice(end) });
+    const caret = start + (caretMid != null ? caretMid : str.length);
+    requestAnimationFrame(() => { if (ta) { ta.focus(); try { ta.setSelectionRange(caret, caret); } catch { /* ignore */ } } });
   }
+  const insertRef = (key) => insertAtCursor(`{${key}}`);
+  // Bloc « par stagiaire » : insère les marqueurs, curseur placé ENTRE eux.
+  const insertBlock = () => insertAtCursor("{#Stagiaires}{/Stagiaires}", "{#Stagiaires}".length);
 
   async function save() {
     setSaving(true); setStatus(null);
@@ -106,7 +118,7 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
                     </td>
                     <td>
                       <textarea className="inp" rows={2} value={t.template} style={{ resize: "vertical", width: "100%" }}
-                        onFocus={() => { focusRef.current = { idx: i }; }}
+                        onFocus={(e) => { focusRef.current = { idx: i }; taRef.current = e.target; }}
                         onChange={(e) => setRow(i, { template: e.target.value })} placeholder="du {Jour1} au {endDate}" />
                     </td>
                     <td className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>{applyTemplate(t.template, sampleMap) || "—"}</td>
@@ -120,6 +132,13 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
           <button className="btn sm ghost" style={{ marginTop: 8 }} onClick={add}>＋ Ajouter un jeton</button>
 
           <div style={{ marginTop: 14 }}>
+            <div style={{ marginBottom: 8 }}>
+              <button type="button" className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} (répété par stagiaire) — placez ensuite les jetons « par stagiaire » entre les marqueurs"
+                onClick={insertBlock}>
+                <Icon name="plus" size={13} /> Bloc « par stagiaire »
+              </button>
+              <span className="sub" style={{ fontSize: 11, marginLeft: 8 }}>puis cliquez un jeton « par stagiaire » (groupe Entreprise) pour l'insérer entre les marqueurs.</span>
+            </div>
             <div className="hf-label" style={{ padding: "0 0 6px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span>Insérer une référence <span style={{ textTransform: "none", fontWeight: 400 }}>· cliquez dans un « Modèle » puis sur un champ</span></span>
               <select className="inp" style={{ marginLeft: "auto", maxWidth: 220, fontSize: 12 }} value={refFilter} onChange={(e) => setRefFilter(e.target.value)}>

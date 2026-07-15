@@ -37,6 +37,18 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     const slotSigs = (ctx && ctx.slotSignatures) || {}; // { slotKey: { data, name, date, label } }
     const mainSig = (ctx && ctx.signature) || {};       // signature « stagiaire » du document
     let out = String(bodyHtml || '');
+    // Jeton PERSO « par stagiaire » : son modèle CONTIENT un bloc {#Stagiaires}…{/Stagiaires}.
+    // On l'inline (puce ou {custom:clé}) par son modèle AVANT le développement du bloc,
+    // pour qu'il soit répété par stagiaire.
+    if (ctx && Array.isArray(ctx.customTokens)) {
+        const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        for (const d of ctx.customTokens) {
+            if (!d || !d.token_key || !/\{#\s*Stagiaires\s*\}/.test(d.template || '')) continue;
+            const key = 'custom:' + d.token_key;
+            out = out.replace(new RegExp('<span[^>]*\\sdata-token="' + esc(key) + '"[^>]*>[\\s\\S]*?<\\/span>', 'g'), d.template);
+            out = out.split('{' + key + '}').join(d.template);
+        }
+    }
     // Blocs répétés par stagiaire du groupe : {#Stagiaires}…{/Stagiaires} (documents entreprise).
     // Les jetons personnalisés ({custom:…}) y sont recalculés PAR stagiaire.
     out = expandGroupBlocks(out, ctx && ctx.groupStagiaires, ctx && ctx.customTokens, values);
