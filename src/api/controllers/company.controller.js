@@ -433,10 +433,11 @@ const getCompanyParcours = async (req, res) => {
 
         const grp = await resolveGroupSteps(conn, orgId, company.id, sessionId);
         if (!grp) return res.status(404).json({ message: 'Session introuvable.' });
-        const docSteps = grp.allSteps.filter((s) => s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT');
 
-        // Section « à l'arrivée via une entreprise » (migration 092) : sous-parcours
-        // ordonné servant de repère visuel (ses documents remontent en tête).
+        // Section « à l'arrivée via une entreprise » (migration 092) : c'est ELLE qui
+        // définit le parcours de l'entreprise. On n'inclut donc QUE ses documents
+        // (dans l'ordre défini) — les étapes stagiaire propres à une inscription
+        // « seule » (hors section entreprise) sont ignorées ici.
         let intakeOrder = [];
         try {
             const [[pr]] = await conn.query('SELECT company_steps FROM training_program WHERE id = ? AND organization_id = ?', [grp.program.id, orgId]);
@@ -445,6 +446,14 @@ const getCompanyParcours = async (req, res) => {
             intakeOrder = Array.isArray(cs) ? cs : [];
         } catch (e) { if (!isMissingSchema(e)) throw e; }
         const intakeSet = new Set(intakeOrder);
+
+        const docStepsAll = grp.allSteps.filter((s) => s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT');
+        // Filtré à la section entreprise (ordre = celui de la section). Repli : si aucune
+        // section définie, on retombe sur tous les documents actifs (comportement legacy).
+        const docSteps = intakeSet.size
+            ? docStepsAll.filter((s) => intakeSet.has(s.slug))
+                .sort((a, b) => intakeOrder.indexOf(a.slug) - intakeOrder.indexOf(b.slug))
+            : docStepsAll;
 
         let steps = [];
         for (const s of docSteps) {
@@ -483,16 +492,6 @@ const getCompanyParcours = async (req, res) => {
                 _done: done,
             });
         }
-        // Repère visuel : les documents de la section entreprise remontent en tête
-        // (dans l'ordre défini) ; le reste suit dans l'ordre du parcours.
-        if (intakeSet.size) {
-            const rank = new Map(intakeOrder.map((sl, i) => [sl, i]));
-            const intake = steps.filter((s) => intakeSet.has(s.key)).sort((a, b) => rank.get(a.key) - rank.get(b.key));
-            const rest = steps.filter((s) => !intakeSet.has(s.key));
-            steps = [...intake, ...rest];
-        }
-        steps.forEach((s) => { s.section = intakeSet.has(s.key) ? 'company' : 'learner'; });
-
         let currentIndex = steps.findIndex((s) => !s._done);
         if (currentIndex < 0) currentIndex = steps.length;
         steps.forEach((s, i) => { s.status = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo'; delete s._done; });
