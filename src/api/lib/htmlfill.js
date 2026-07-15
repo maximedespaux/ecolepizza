@@ -3,7 +3,7 @@
 // (<span data-token="Clé">…</span>) produite par l'éditeur, soit en texte brut
 // {Clé} (modèles convertis depuis les anciens fichiers Word). Les deux formes
 // sont remplacées par la valeur réelle issue du catalogue partagé.
-const { resolveTokens, RAW_TOKENS, signatureBox } = require('./tokens.js');
+const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks } = require('./tokens.js');
 const { resolveCustomTokens } = require('./customtokens.js');
 
 function escapeHtml(s) {
@@ -37,6 +37,8 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     const slotSigs = (ctx && ctx.slotSignatures) || {}; // { slotKey: { data, name, date, label } }
     const mainSig = (ctx && ctx.signature) || {};       // signature « stagiaire » du document
     let out = String(bodyHtml || '');
+    // Blocs répétés par stagiaire du groupe : {#Stagiaires}…{/Stagiaires} (documents entreprise).
+    out = expandGroupBlocks(out, ctx && ctx.groupStagiaires);
 
     const render = (key) => (RAW_TOKENS.has(key) ? values[key] : escapeHtml(values[key]));
     // Un emplacement nommé désigne-t-il le stagiaire ? (Stagiaire 1…, élève, apprenant…)

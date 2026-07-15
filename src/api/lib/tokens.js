@@ -180,6 +180,42 @@ function stagiairesTable(list) {
         .join('<br>');
 }
 
+// Jetons disponibles POUR CHAQUE stagiaire à l'intérieur d'un bloc {#Stagiaires}…{/Stagiaires}.
+// (Mêmes noms que les jetons stagiaire globaux, mais résolus par stagiaire du groupe.)
+function stagiaireRowTokens(s, i) {
+    const full = [s.civility, s.first_name, s.last_name].filter(Boolean).join(' ').trim();
+    return {
+        'N°': String(i + 1),
+        Personne: full, 'Civilité': s.civility || '', Nom: s.last_name || '', 'Prénom': s.first_name || '',
+        Email: s.email || '', 'Téléphone': s.phone || '', OPCO: s.opco || '',
+        Ville: s.town || '', Adresse: s.address || '', CP: s.zip_code || '',
+        'Lieu naissance': s.birth_place || '', D_Naissance: frDate(s.birthday), Naissance: frDate(s.birthday),
+    };
+}
+
+// Développe les blocs répétés « par stagiaire du groupe » AVANT le remplacement normal :
+//   {#Stagiaires} M. {Prénom} {Nom} — {OPCO}<br> {/Stagiaires}
+// Le contenu entre les marqueurs est répété pour chaque stagiaire, en résolvant les
+// jetons PAR STAGIAIRE (cf. stagiaireRowTokens). Les autres jetons ({Formation}…)
+// restent tels quels et sont résolus ensuite globalement.
+function expandGroupBlocks(html, list) {
+    const rows = Array.isArray(list) ? list : [];
+    return String(html || '').replace(/\{#\s*Stagiaires\s*\}([\s\S]*?)\{\/\s*Stagiaires\s*\}/g, (m, tpl) => {
+        if (!rows.length) return '<i>Aucun stagiaire dans le groupe.</i>';
+        return rows.map((s, i) => {
+            let row = tpl;
+            const toks = stagiaireRowTokens(s, i);
+            for (const [k, v] of Object.entries(toks)) {
+                if (row.includes('{' + k + '}')) row = row.split('{' + k + '}').join(escCell(v));
+            }
+            return row;
+        }).join('');
+    });
+}
+// Retire les blocs {#Stagiaires}…{/Stagiaires} (pour l'analyse « jetons manquants » :
+// leur contenu est résolu par stagiaire, pas globalement).
+const stripGroupBlocks = (s) => String(s || '').replace(/\{#\s*Stagiaires\s*\}[\s\S]*?\{\/\s*Stagiaires\s*\}/g, '');
+
 // Rend une image de signature (ou un emplacement en pointillés si absente).
 // Cadre de signature à TAILLE FIXE : l'image (dessin du stagiaire ou signature de
 // l'organisme) est contenue dans une boîte de dimensions constantes, quelle que soit
@@ -249,7 +285,9 @@ function usedTokenKeys(html) {
 function findMissingTokens(htmlParts, ctx) {
     const parts = Array.isArray(htmlParts) ? htmlParts : [htmlParts];
     const used = new Set();
-    for (const p of parts) for (const k of usedTokenKeys(p)) used.add(k);
+    // Les jetons DANS un bloc {#Stagiaires}… sont résolus par stagiaire → on les
+    // retire de l'analyse « manquants » (sinon {Prénom} serait signalé vide).
+    for (const p of parts) for (const k of usedTokenKeys(stripGroupBlocks(p))) used.add(k);
     const values = resolveTokens(ctx);
     const missing = [];
     for (const key of used) {
@@ -373,4 +411,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };

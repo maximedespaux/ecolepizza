@@ -140,6 +140,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             if (gdInfo.opco !== undefined) { opcoFilter = " AND TRIM(COALESCE(l.opco, '')) = ?"; params.push((gdInfo.opco || '').trim()); }
             const [gs] = await conn.query(
                 `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email,
+                        l.phone, l.opco, l.town, l.address, l.zip_code, l.birth_place,
                         DATE_FORMAT(l.birthday, '%Y-%m-%d') AS birthday
                  FROM enrollment e
                  JOIN learner l ON l.id = e.learner_id
@@ -152,6 +153,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             // Fallback (document classique lié à des formations) : via document_formation.
             const [gs] = await conn.query(
                 `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email,
+                        l.phone, l.opco, l.town, l.address, l.zip_code, l.birth_place,
                         DATE_FORMAT(l.birthday, '%Y-%m-%d') AS birthday
                  FROM document_formation df
                  JOIN enrollment e ON e.id = df.enrollment_id
