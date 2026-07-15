@@ -119,11 +119,13 @@ const getSession = async (req, res) => {
         }
         const [enrollments] = await conn.query(
             `SELECT e.id, e.learner_id, e.crm_stage, e.conformite_score,
-                    l.first_name, l.last_name, l.email, l.phone
+                    l.first_name, l.last_name, l.email, l.phone,
+                    e.company_id, c.name AS company_name
              FROM enrollment e
              LEFT JOIN learner l ON l.id = e.learner_id
+             LEFT JOIN company c ON c.id = e.company_id
              WHERE e.session_id = ? AND e.organization_id = ?
-             ORDER BY l.last_name, l.first_name`,
+             ORDER BY (e.company_id IS NULL), c.name, l.last_name, l.first_name`,
             [req.params.id, req.user.organization_id]
         );
         const [trainers] = await conn.query(
@@ -276,7 +278,7 @@ const getSessionBoard = async (req, res) => {
             [req.params.id, req.user.organization_id]
         );
         const condById = await loadConditionMap(conn, req.user.organization_id);
-        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id);
+        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id, 'condition');
         const factsMap = await loadDossierFactsMap(
             conn, req.user.organization_id, enr.map((e) => e.enrollment_id), fieldCatalog);
 

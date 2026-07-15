@@ -31,6 +31,7 @@ function isExcludedColumn(name) {
 const VIRTUALS = [
     { key: 'virtual.age', table: 'virtual', column: 'age', label: 'Âge du stagiaire', type: 'number' },
     { key: 'virtual.has_company', table: 'virtual', column: 'has_company', label: 'Rattaché à une entreprise', type: 'bool' },
+    { key: 'virtual.certifiante', table: 'virtual', column: 'certifiante', label: 'Formation certifiante (RS/RNCP)', type: 'bool' },
 ];
 
 // Champs SPÉCIAUX (non introspectés). La signature de l'organisme est une image (jeton),
@@ -51,7 +52,7 @@ const DEFAULT_ENABLED = new Set([
     'organization.siret', 'organization.vat_number', 'organization.nda', 'organization.naf_ape',
     'organization.address', 'organization.zip_code', 'organization.town',
     'organization.phone', 'organization.email', 'organization.signature_image',
-    'virtual.age', 'virtual.has_company',
+    'virtual.age', 'virtual.has_company', 'virtual.certifiante',
 ]);
 
 // Opérateurs disponibles selon le type de champ.
@@ -59,12 +60,17 @@ const OPERATORS = {
     text: [
         { value: 'eq', label: 'est' }, { value: 'ne', label: "n'est pas" },
         { value: 'in', label: 'parmi' }, { value: 'contains', label: 'contient' },
+        { value: 'is_not_empty', label: 'est renseigné' }, { value: 'is_empty', label: 'est vide' },
     ],
-    enum: [{ value: 'eq', label: 'est' }, { value: 'ne', label: "n'est pas" }, { value: 'in', label: 'parmi' }],
+    enum: [
+        { value: 'eq', label: 'est' }, { value: 'ne', label: "n'est pas" }, { value: 'in', label: 'parmi' },
+        { value: 'is_not_empty', label: 'est renseigné' }, { value: 'is_empty', label: 'est vide' },
+    ],
     number: [
         { value: 'eq', label: '=' }, { value: 'ne', label: '≠' },
         { value: 'lt', label: '<' }, { value: 'le', label: '≤' },
         { value: 'gt', label: '>' }, { value: 'ge', label: '≥' }, { value: 'in', label: 'parmi' },
+        { value: 'is_not_empty', label: 'est renseigné' }, { value: 'is_empty', label: 'est vide' },
     ],
     bool: [{ value: 'is_true', label: 'Oui' }, { value: 'is_false', label: 'Non' }],
     image: [], // image (signature) : jeton uniquement, non conditionnable
@@ -138,15 +144,23 @@ async function introspectFields(conn) {
     return out;
 }
 
-// État d'activation + libellés personnalisés (table condition_field). Tolère l'absence de table.
+// État d'activation (par usage : jeton / condition) + libellés (table condition_field).
+// Tolère l'absence de la table (migration conditions) et de la colonne enabled_condition (080).
 async function loadFieldSettings(conn, orgId) {
     const m = new Map();
+    const read = async (withCond) => {
+        const cols = withCond ? 'source_table, column_name, enabled, enabled_condition, label' : 'source_table, column_name, enabled, label';
+        const [rows] = await conn.query(`SELECT ${cols} FROM condition_field WHERE organization_id = ?`, [orgId]);
+        for (const r of rows) m.set(`${r.source_table}.${r.column_name}`, {
+            enabledToken: !!r.enabled,
+            // Repli : sans la colonne 080, l'usage condition suit l'ancien interrupteur unique.
+            enabledCondition: (r.enabled_condition == null) ? !!r.enabled : !!r.enabled_condition,
+            label: r.label || null,
+        });
+    };
     try {
-        const [rows] = await conn.query(
-            'SELECT source_table, column_name, enabled, label FROM condition_field WHERE organization_id = ?',
-            [orgId]
-        );
-        for (const r of rows) m.set(`${r.source_table}.${r.column_name}`, { enabled: !!r.enabled, label: r.label || null });
+        try { await read(true); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') { m.clear(); await read(false); } else throw e; }
     } catch (e) {
         if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e;
     }
@@ -160,18 +174,23 @@ async function getAllFields(conn, orgId) {
     return cols.map((f) => {
         const key = `${f.table}.${f.column}`;
         const s = settings.get(key);
+        const dflt = DEFAULT_ENABLED.has(key);
+        const enabledToken = s ? s.enabledToken : dflt;
+        const enabledCondition = s ? s.enabledCondition : dflt;
         return {
             key, table: f.table, tableLabel: TABLE_LABEL[f.table] || (f.table === 'virtual' ? 'Calculé' : f.table),
             column: f.column, type: f.type, options: f.options,
             label: (s && s.label) || f.label,
-            enabled: s ? s.enabled : DEFAULT_ENABLED.has(key),
+            enabled_token: enabledToken, enabled_condition: enabledCondition,
+            enabled: enabledToken, // rétro-compat (ancien drapeau unique = usage jeton)
         };
     });
 }
 
-// Catalogue ACTIVÉ (pour le sélecteur de conditions et l'évaluation).
-async function getEnabledFields(conn, orgId) {
-    return (await getAllFields(conn, orgId)).filter((f) => f.enabled);
+// Catalogue ACTIVÉ pour un USAGE : 'token' (jeton imprimable) ou 'condition' (test de parcours).
+async function getEnabledFields(conn, orgId, purpose = 'token') {
+    const flag = purpose === 'condition' ? 'enabled_condition' : 'enabled_token';
+    return (await getAllFields(conn, orgId)).filter((f) => f[flag]);
 }
 
 const norm = (v) => String(v == null ? '' : v).trim().toLowerCase();
@@ -197,10 +216,12 @@ async function loadDossierFactsMap(conn, orgId, enrollmentIds, catalog) {
     const real = catalog.filter((f) => f.table !== 'virtual' && f.type !== 'image' && /^[a-z0-9_]+$/.test(f.column) && TABLE_ALIAS[f.table]);
     const needAge = catalog.some((f) => f.key === 'virtual.age');
     const needCompany = catalog.some((f) => f.key === 'virtual.has_company');
+    const needCertif = catalog.some((f) => f.key === 'virtual.certifiante');
 
     const selects = real.map((f, i) => `${TABLE_ALIAS[f.table]}.\`${f.column}\` AS c${i}`);
     if (needAge) selects.push('l.birthday AS __birthday');
     if (needCompany) selects.push('e.company_id AS __company_id');
+    if (needCertif) selects.push('p.rs_code AS __rs_code');
 
     const [rows] = await conn.query(
         `SELECT e.id AS __eid${selects.length ? ', ' + selects.join(', ') : ''}
@@ -223,6 +244,7 @@ async function loadDossierFactsMap(conn, orgId, enrollmentIds, catalog) {
         });
         if (needAge) facts['virtual.age'] = computeAge(r.__birthday);
         if (needCompany) facts['virtual.has_company'] = !!r.__company_id;
+        if (needCertif) facts['virtual.certifiante'] = !!String(r.__rs_code == null ? '' : r.__rs_code).trim();
         map.set(r.__eid, facts);
     }
     return map;
@@ -244,6 +266,8 @@ function evalCondition(cond, facts = {}) {
         case 'ge': return Number(v) >= Number(val);
         case 'is_true': return truthy(v);
         case 'is_false': return !truthy(v);
+        case 'is_empty': return norm(v) === '';
+        case 'is_not_empty': return norm(v) !== '';
         default: return true;
     }
 }
@@ -267,7 +291,7 @@ function validateCondition(catalog, { field, op, value }) {
     if (!OPS_ALL.has(op)) return { ok: false, error: 'Opérateur invalide.' };
     const allowed = new Set((OPERATORS[f.type] || []).map((o) => o.value));
     if (!allowed.has(op)) return { ok: false, error: `Opérateur incompatible avec « ${f.label} ».` };
-    if (op === 'is_true' || op === 'is_false') return { ok: true, value: null };
+    if (['is_true', 'is_false', 'is_empty', 'is_not_empty'].includes(op)) return { ok: true, value: null };
     if (op === 'in') {
         const arr = Array.isArray(value) ? value
             : String(value || '').split(',').map((s) => s.trim()).filter(Boolean);

@@ -16,7 +16,7 @@ function parseValue(raw) {
 /** GET /api/conditions/catalog — champs ACTIVÉS + opérateurs (sélecteur de conditions). */
 const getCatalog = async (req, res) => {
     try {
-        const fields = await getEnabledFields(db.promise(), req.user.organization_id);
+        const fields = await getEnabledFields(db.promise(), req.user.organization_id, 'condition');
         res.json({ data: { fields, operators: OPERATORS } });
     } catch (err) {
         console.error('Erreur catalogue conditions :', err);
@@ -28,7 +28,7 @@ const getCatalog = async (req, res) => {
 const getFieldValues = async (req, res) => {
     try {
         const conn = db.promise();
-        const catalog = await getEnabledFields(conn, req.user.organization_id);
+        const catalog = await getEnabledFields(conn, req.user.organization_id, 'condition');
         const f = catalog.find((x) => x.key === req.query.field);
         if (!f) return res.json({ data: [] });
         // enum : valeurs connues du schéma ; bool/number/virtual : pas de suggestion.
@@ -78,12 +78,25 @@ const saveFields = async (req, res) => {
                 'DELETE FROM condition_field WHERE organization_id = ? AND source_table = ? AND column_name = ?',
                 [orgId, table, column]
             );
-            await conn.query(
-                `INSERT INTO condition_field (id, organization_id, source_table, column_name, enabled, label)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [crypto.randomUUID(), orgId, table, column, f.enabled ? 1 : 0,
-                    f.label ? String(f.label).slice(0, 160) : null]
-            );
+            // Deux usages : jeton (enabled) et condition (enabled_condition). Rétro-compat :
+            // si seul `enabled` est fourni (ancien client), il pilote les deux.
+            const enToken = (f.enabled_token !== undefined ? f.enabled_token : f.enabled) ? 1 : 0;
+            const enCond = (f.enabled_condition !== undefined ? f.enabled_condition : f.enabled) ? 1 : 0;
+            const label = f.label ? String(f.label).slice(0, 160) : null;
+            try {
+                await conn.query(
+                    `INSERT INTO condition_field (id, organization_id, source_table, column_name, enabled, enabled_condition, label)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [crypto.randomUUID(), orgId, table, column, enToken, enCond, label]
+                );
+            } catch (e) {
+                if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; // migration 080 non jouée : sans la colonne
+                await conn.query(
+                    `INSERT INTO condition_field (id, organization_id, source_table, column_name, enabled, label)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [crypto.randomUUID(), orgId, table, column, enToken, label]
+                );
+            }
         }
         logAudit(req, 'condition_field.save', 'ConditionField', req.user.organization_id);
         res.json({ success: true, message: 'Champs du dossier enregistrés.' });
@@ -114,7 +127,7 @@ const createCondition = async (req, res) => {
         const { label, field, op } = req.body || {};
         if (!label || !String(label).trim()) return res.status(422).json({ error: 'Intitulé requis.' });
         const conn = db.promise();
-        const catalog = await getEnabledFields(conn, req.user.organization_id);
+        const catalog = await getEnabledFields(conn, req.user.organization_id, 'condition');
         const check = validateCondition(catalog, { field, op, value: req.body?.value });
         if (!check.ok) return res.status(422).json({ error: check.error });
 
@@ -142,6 +155,29 @@ const createCondition = async (req, res) => {
     }
 };
 
+/** PUT /api/conditions/:id — modifie une condition (le slug reste stable → les documents qui l'utilisent gardent le lien). */
+const updateCondition = async (req, res) => {
+    try {
+        const { label, field, op } = req.body || {};
+        if (!label || !String(label).trim()) return res.status(422).json({ error: 'Intitulé requis.' });
+        const conn = db.promise();
+        const [[cur]] = await conn.query('SELECT id FROM document_condition WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        if (!cur) return res.status(404).json({ message: 'Condition introuvable.' });
+        const catalog = await getEnabledFields(conn, req.user.organization_id, 'condition');
+        const check = validateCondition(catalog, { field, op, value: req.body?.value });
+        if (!check.ok) return res.status(422).json({ error: check.error });
+        await conn.query(
+            'UPDATE document_condition SET label = ?, field = ?, op = ?, value = ? WHERE id = ? AND organization_id = ?',
+            [String(label).trim().slice(0, 160), field, op, check.value == null ? null : JSON.stringify(check.value), req.params.id, req.user.organization_id]
+        );
+        logAudit(req, 'condition.update', 'DocumentCondition', req.params.id);
+        res.json({ data: { id: req.params.id, label: String(label).trim(), field, op, value: check.value } });
+    } catch (err) {
+        console.error('Erreur mise à jour condition :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** DELETE /api/conditions/:id — supprime une condition (cloisonné à l'organisme). */
 const deleteCondition = (req, res) => {
     db.query(
@@ -159,4 +195,4 @@ const deleteCondition = (req, res) => {
     );
 };
 
-module.exports = { getCatalog, getFieldValues, getFields, saveFields, listConditions, createCondition, deleteCondition };
+module.exports = { getCatalog, getFieldValues, getFields, saveFields, listConditions, createCondition, updateCondition, deleteCondition };

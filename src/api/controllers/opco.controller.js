@@ -58,7 +58,8 @@ const getOpcos = async (req, res) => {
     }
 };
 
-const FIELDS = ['code', 'name', 'address', 'zip_code', 'town', 'email', 'phone', 'website', 'triggers_assiduite', 'active', 'sort_order'];
+const FIELDS = ['code', 'name', 'siret', 'address', 'zip_code', 'town', 'email', 'phone', 'website', 'triggers_assiduite', 'active', 'sort_order'];
+const OPTIONAL_OPCO = new Set(['siret']); // colonnes récentes (migration 081) : réessai sans si absente
 
 /** POST /api/opcos — ajoute un OPCO. */
 const createOpco = async (req, res) => {
@@ -66,12 +67,14 @@ const createOpco = async (req, res) => {
     if (!b.name || !String(b.name).trim()) return res.status(422).json({ error: 'Nom requis.' });
     try {
         const id = crypto.randomUUID();
-        await db.promise().query(
-            `INSERT INTO opco (id, organization_id, code, name, address, zip_code, town, email, phone, website, triggers_assiduite, active, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-            [id, req.user.organization_id, b.code || null, String(b.name).slice(0, 160), b.address || null, b.zip_code || null,
-             b.town || null, b.email || null, b.phone || null, b.website || null, b.triggers_assiduite ? 1 : 0, Number(b.sort_order) || 999]
-        );
+        const insert = async (withSiret) => {
+            const cols = ['id', 'organization_id', 'code', 'name', 'address', 'zip_code', 'town', 'email', 'phone', 'website', 'triggers_assiduite', 'active', 'sort_order'];
+            const vals = [id, req.user.organization_id, b.code || null, String(b.name).slice(0, 160), b.address || null, b.zip_code || null,
+                b.town || null, b.email || null, b.phone || null, b.website || null, b.triggers_assiduite ? 1 : 0, 1, Number(b.sort_order) || 999];
+            if (withSiret) { cols.splice(4, 0, 'siret'); vals.splice(4, 0, b.siret || null); }
+            await db.promise().query(`INSERT INTO opco (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
+        };
+        try { await insert(true); } catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') await insert(false); else throw e; }
         logAudit(req, 'opco.create', 'Opco', id);
         res.status(201).json({ id, message: 'OPCO créé' });
     } catch (err) {
@@ -89,12 +92,19 @@ const updateOpco = async (req, res) => {
         if (f === 'triggers_assiduite' || f === 'active') v = v ? 1 : 0;
         else if (f === 'sort_order') v = Number(v) || 100;
         else if (v === '') v = null;
-        sets.push(`${f} = ?`); vals.push(v);
+        sets.push({ f, sql: `${f} = ?`, v });
     }
     if (!sets.length) return res.status(400).json({ message: 'Aucun champ à mettre à jour' });
-    vals.push(req.params.id, req.user.organization_id);
+    const run = async (list) => {
+        const vv = list.map((s) => s.v); vv.push(req.params.id, req.user.organization_id);
+        await db.promise().query(`UPDATE opco SET ${list.map((s) => s.sql).join(', ')} WHERE id = ? AND organization_id = ?`, vv);
+    };
     try {
-        await db.promise().query(`UPDATE opco SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
+        try { await run(sets); }
+        catch (e) {
+            if (e && e.code === 'ER_BAD_FIELD_ERROR' && sets.some((s) => OPTIONAL_OPCO.has(s.f))) await run(sets.filter((s) => !OPTIONAL_OPCO.has(s.f)));
+            else throw e;
+        }
         res.json({ success: true, message: 'OPCO mis à jour' });
     } catch (err) {
         console.error('Erreur maj OPCO :', err);

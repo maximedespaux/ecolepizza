@@ -14,6 +14,7 @@ const authRoutes = require('./routes/auth.routes.js');
 const userRoutes = require('./routes/user.routes.js');
 const learnerRoutes = require('./routes/learner.routes.js');
 const companyRoutes = require('./routes/company.routes.js');
+const repRoutes = require('./routes/rep.routes.js');
 const formationProgramRoutes = require('./routes/formationProgram.routes.js');
 const sessionRoutes = require('./routes/session.routes.js');
 const enrollmentRoutes = require('./routes/enrollment.routes.js');
@@ -21,6 +22,7 @@ const partnerRoutes = require('./routes/partner.routes.js');
 const espaceRoutes = require('./routes/espace.routes.js');
 const recipeRoutes = require('./routes/recipe.routes.js');
 const documentRoutes = require('./routes/document.routes.js');
+const publicRoutes = require('./routes/public.routes.js');
 const suiviRoutes = require('./routes/suivi.routes.js');
 const organizationRoutes = require('./routes/organization.routes.js');
 const saleRoutes = require('./routes/sale.routes.js');
@@ -94,6 +96,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/stagiaires', learnerRoutes);
 app.use('/api/companies', companyRoutes);
+app.use('/api/rep', repRoutes);
 app.use('/api/formations', formationProgramRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/enrollments', enrollmentRoutes);
@@ -123,6 +126,9 @@ app.use('/api/platform', platformRoutes);
 app.use('/api/opcos', opcoRoutes);
 app.use('/api/access-profiles', accessProfileRoutes);
 app.use('/api/events', eventsRoutes);
+
+// PUBLIC (sans authentification) : lien de signature partageable.
+app.use('/api/public', publicRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impasto-api' }));
 

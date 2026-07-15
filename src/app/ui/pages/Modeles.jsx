@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
-import { getTemplates, saveTemplate, resetTemplate, deleteTemplate, reorderTemplates,
-  getConditionCatalog, getConditions, createCondition, deleteCondition, getFieldValues,
-  getEquivalences, createEquivalence, deleteEquivalence,
+import { getTemplates, saveTemplate, deleteTemplate, duplicateTemplate, reorderTemplates,
+  getConditionCatalog, getConditions, createCondition, updateCondition, deleteCondition, getFieldValues,
+  getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
   reorderEmargementTemplates } from "../api/apiClient.js";
 import { EMARG_DEFAULTS } from "./EmargementEditor.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
@@ -37,6 +39,8 @@ function condLabel(a = {}, condBySlug = {}) {
 function condValueLabel(c) {
   if (c.op === "is_true") return "= Oui";
   if (c.op === "is_false") return "= Non";
+  if (c.op === "is_not_empty") return "est renseigné";
+  if (c.op === "is_empty") return "est vide";
   const v = Array.isArray(c.value) ? c.value.join(", ") : c.value;
   return `${c.op} ${v ?? ""}`.trim();
 }
@@ -70,7 +74,8 @@ function Modeles() {
   async function loadConditions() {
     try { const { data } = await getConditions(); setConditions(data || []); } catch { /* silencieux */ }
   }
-  useEffect(() => { load(); loadEmarg(); loadConditions(); getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {}); }, []);
+  const reloadCatalog = () => getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {});
+  useEffect(() => { load(); loadEmarg(); loadConditions(); reloadCatalog(); }, []);
 
   // Liste affichée : documents classiques + modèles d'émargement, triés par ordre.
   const allItems = [...items.map((t) => ({ ...t, kind: t.kind || "document" })), ...emargItems]
@@ -115,6 +120,18 @@ function Modeles() {
       await deleteTemplate(t.slug);
       setStatus({ type: "success", message: "Document supprimé définitivement." });
       await load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setBusy(null); }
+  }
+
+  // Duplication d'un modèle de document (nouveau slug, copie du contenu + réglages).
+  async function onDuplicate(t) {
+    setBusy(t.slug);
+    try {
+      const r = await duplicateTemplate(t.slug);
+      setStatus({ type: "success", message: "Modèle dupliqué." });
+      await load();
+      if (r?.data?.slug) navigate(`/modeles/${r.data.slug}/editeur`);
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setBusy(null); }
   }
@@ -192,7 +209,14 @@ function Modeles() {
                   <td style={{ fontSize: 12 }}>
                     {isEmarg
                       ? <span title="Stagiaire, et formateur/intervenant si activés" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="user" size={14} />{t.config?.show_formateurs ? <Icon name="graduation" size={14} /> : null}{t.config?.show_intervenants ? <Icon name="users" size={14} /> : null}</span>
-                      : <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{t.signable ? <Badge tone="b">Signé</Badge> : <span style={{ color: "var(--dim)" }}>—</span>}{t.stagiaire_sign ? <Icon name="user" size={13} /> : null}</span>}
+                      : (() => {
+                          const roles = Array.isArray(t.signers) ? t.signers
+                            : [...(t.signable ? ["ORG"] : []), ...(t.stagiaire_sign ? ["STAGIAIRE"] : []), ...(t.company_sign ? ["ENTREPRISE"] : [])];
+                          const LBL = { ORG: "Org", STAGIAIRE: "Stagiaire", ENTREPRISE: "Entreprise", EXTERNAL: "Externe" };
+                          return roles.length
+                            ? <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>{roles.map((r) => <Badge key={r} tone={r === "ORG" ? "a" : "b"}>{LBL[r] || r}</Badge>)}</span>
+                            : <span style={{ color: "var(--dim)" }}>—</span>;
+                        })()}
                   </td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when, condBySlug)}</td>
                   <td>
@@ -205,6 +229,11 @@ function Modeles() {
                       <button className="btn sm primary" title={isEmarg ? "Éditer la mise en page" : "Ouvrir l'éditeur de document"}
                         onClick={() => navigate(isEmarg ? `/modeles/emargement/${t.id}` : `/modeles/${t.slug}/editeur`)}>Éditer</button>
                       <button className="btn sm ghost" title="Réglages" onClick={() => setEditing({ ...t })}><Icon name="settings" size={15} /></button>
+                      {!isEmarg && (
+                        <button className="btn sm ghost" title="Dupliquer ce modèle"
+                          disabled={busy === t.slug}
+                          onClick={() => onDuplicate(t)}><Icon name="copy" size={15} /></button>
+                      )}
                       <button className="btn sm ghost danger"
                         title="Supprimer définitivement"
                         disabled={busy === (isEmarg ? t.id : t.slug)}
@@ -225,6 +254,7 @@ function Modeles() {
           conditions={conditions}
           catalog={catalog}
           onChanged={loadConditions}
+          onCatalogChanged={reloadCatalog}
           onStatus={setStatus}
         />
       )}
@@ -246,19 +276,40 @@ function Modeles() {
 
 // Espace de gestion des conditions personnalisées : liste + création (champ réel du
 // dossier + opérateur + valeur) + suppression.
-function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
+// Regroupe les champs du dossier par ORIGINE (table), avec un libellé lisible.
+const FIELD_GROUPS = [
+  ["learner", "Stagiaire"], ["enrollment", "Dossier"], ["training_program", "Formation"],
+  ["training_session", "Session"], ["company", "Entreprise"], ["organization", "Organisme"],
+  ["virtual", "Calculé"],
+];
+function groupFields(fields) {
+  const byTable = {};
+  for (const f of fields) { const t = f.table || "autre"; (byTable[t] = byTable[t] || []).push(f); }
+  const out = FIELD_GROUPS.filter(([t]) => byTable[t]).map(([t, label]) => ({ label, items: byTable[t] }));
+  // Tables non prévues (au cas où) : ajoutées à la fin sous leur clé.
+  for (const t of Object.keys(byTable)) if (!FIELD_GROUPS.some(([k]) => k === t)) out.push({ label: t, items: byTable[t] });
+  return out;
+}
+
+function ConditionsPanel({ conditions, catalog, onChanged, onCatalogChanged, onStatus }) {
   const fields = catalog.fields || [];
   const operators = catalog.operators || {};
+  const fieldGroups = groupFields(fields);
   const [field, setField] = useState("");
   const [op, setOp] = useState("");
   const [value, setValue] = useState("");
   const [label, setLabel] = useState("");
+  const [editingId, setEditingId] = useState(null); // condition en cours de modification (ou null)
   const [saving, setSaving] = useState(false);
   const [suggestions, setSuggestions] = useState([]); // valeurs existantes pour ce champ
+  const formRef = useRef(null);
+  const [showFields, setShowFields] = useState(false); // modale « Champs documents »
+  const fieldsRef = useRef(null);
+  const closeFields = () => { setShowFields(false); onCatalogChanged?.(); };
 
   const curField = fields.find((f) => f.key === field);
   const ops = curField ? (operators[curField.type] || []) : [];
-  const needsValue = op && op !== "is_true" && op !== "is_false";
+  const needsValue = op && !["is_true", "is_false", "is_empty", "is_not_empty"].includes(op);
 
   function pickField(k) {
     setField(k);
@@ -271,14 +322,30 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
     if (k && f && f.type === "text") getFieldValues(k).then((r) => setSuggestions(r.data || [])).catch(() => {});
   }
 
-  async function add() {
+  function resetForm() { setEditingId(null); setLabel(""); setField(""); setOp(""); setValue(""); setSuggestions([]); }
+
+  function startEdit(c) {
+    setEditingId(c.id);
+    setLabel(c.label || "");
+    setField(c.field || "");
+    const f = fields.find((x) => x.key === c.field);
+    setOp(c.op || "");
+    setValue(Array.isArray(c.value) ? c.value.join(", ") : (c.value ?? ""));
+    setSuggestions([]);
+    if (c.field && f && f.type === "text") getFieldValues(c.field).then((r) => setSuggestions(r.data || [])).catch(() => {});
+    // Le formulaire est sous le tableau : on l'amène à l'écran pour montrer le remplissage.
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+  }
+
+  async function save() {
     if (!label.trim()) { onStatus({ type: "error", message: "Donnez un intitulé à la condition." }); return; }
     if (!field || !op) { onStatus({ type: "error", message: "Choisissez un champ et un opérateur." }); return; }
     setSaving(true);
     try {
-      await createCondition({ label: label.trim(), field, op, value: needsValue ? value : null });
-      setLabel(""); setField(""); setOp(""); setValue("");
-      onStatus({ type: "success", message: "Condition créée." });
+      const payload = { label: label.trim(), field, op, value: needsValue ? value : null };
+      if (editingId) { await updateCondition(editingId, payload); onStatus({ type: "success", message: "Condition modifiée." }); }
+      else { await createCondition(payload); onStatus({ type: "success", message: "Condition créée." }); }
+      resetForm();
       onChanged();
     } catch (e) { onStatus({ type: "error", message: e.message }); }
     finally { setSaving(false); }
@@ -293,11 +360,35 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
   const fieldLabel = (k) => fields.find((f) => f.key === k)?.label || k;
 
   return (
-    <Card title={`Conditions personnalisées (${conditions.length})`}>
+    <Card title={`Conditions personnalisées (${conditions.length})`}
+      more={<button className="btn sm ghost" title="Gérer les champs du dossier (jeton / condition)" onClick={() => setShowFields(true)}><Icon name="settings" size={14} /> Champs documents</button>}>
       <p className="hint" style={{ marginTop: 0 }}>
         Créez des conditions basées sur les infos réelles du dossier (stagiaire, formation, financement).
         Elles deviennent cochables sur chaque document (bouton ✎) : un document ne s'applique alors qu'aux dossiers qui les remplissent toutes.
+        Un champ doit être activé en <b>Condition</b> dans <b>Champs documents</b> pour apparaître ici.
       </p>
+
+      {showFields && createPortal(
+        <div className="overlay" onClick={closeFields}>
+          <div className="modal" style={{ maxWidth: 760, width: "92%" }} onClick={(e) => e.stopPropagation()}>
+            <div className="mhead">
+              <h3>Champs documents</h3>
+              <button className="x" onClick={closeFields} aria-label="Fermer">×</button>
+            </div>
+            <div className="mbody" style={{ maxHeight: "70vh", overflow: "auto" }}>
+              <p className="sub" style={{ margin: "0 0 10px" }}>
+                Activez chaque champ du dossier pour son usage : <b>🏷️ Jeton</b> (imprimé dans un document) et/ou <b>🔀 Condition</b> (test « ce document ne s'applique que si… »).
+              </p>
+              <FieldSettingsPanel ref={fieldsRef} onStatus={onStatus} />
+            </div>
+            <div className="mfoot">
+              <button className="btn ghost" onClick={closeFields}>Fermer</button>
+              <button className="btn primary" onClick={async () => { await fieldsRef.current?.save(); onCatalogChanged?.(); }}>Enregistrer les champs</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {conditions.length > 0 && (
         <div className="tablewrap" style={{ border: "none", marginBottom: 12 }}>
@@ -309,7 +400,10 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
                   <td><b>{c.label}</b></td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{fieldLabel(c.field)}</td>
                   <td style={{ fontSize: 12 }} className="mono">{condValueLabel(c)}</td>
-                  <td><button className="btn sm ghost danger" title="Supprimer" onClick={() => remove(c)}><Icon name="trash" size={15} /></button></td>
+                  <td style={{ display: "flex", gap: 4 }}>
+                    <button className={"btn sm ghost" + (editingId === c.id ? " primary" : "")} title="Modifier" onClick={() => startEdit(c)}><Icon name="pencil" size={15} /></button>
+                    <button className="btn sm ghost danger" title="Supprimer" onClick={() => remove(c)}><Icon name="trash" size={15} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -317,13 +411,20 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
         </div>
       )}
 
+      <div ref={formRef} style={editingId ? { border: "1px solid var(--ember1)", borderRadius: 12, padding: 12, background: "var(--surface2)" } : null}>
+      {editingId && <p className="hint" style={{ margin: "0 0 8px", color: "var(--ember1)", fontWeight: 700 }}>✎ Modification de « {conditions.find((c) => c.id === editingId)?.label || label} »</p>}
       <div className="row2" style={{ alignItems: "end" }}>
         <div className="field"><label>Intitulé</label>
           <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ex. Stagiaire mineur" /></div>
         <div className="field"><label>Champ du dossier</label>
           <select value={field} onChange={(e) => pickField(e.target.value)}>
             <option value="">Choisir…</option>
-            {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+            {field && !fields.some((f) => f.key === field) && <option value={field}>{field} (champ désactivé)</option>}
+            {fieldGroups.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.items.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+              </optgroup>
+            ))}
           </select></div>
       </div>
       <div className="row2" style={{ alignItems: "end" }}>
@@ -350,8 +451,10 @@ function ConditionsPanel({ conditions, catalog, onChanged, onStatus }) {
               placeholder={op === "in" ? "valeurs séparées par des virgules" : ""} />
           )}</div>
       </div>
-      <div style={{ marginTop: 8 }}>
-        <button className="btn primary" disabled={saving} onClick={add}>＋ Ajouter la condition</button>
+      <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+        <button className="btn primary" disabled={saving} onClick={save}>{editingId ? "Enregistrer la condition" : "＋ Ajouter la condition"}</button>
+        {editingId && <button className="btn ghost" disabled={saving} onClick={resetForm}>Annuler</button>}
+      </div>
       </div>
     </Card>
   );
@@ -367,8 +470,13 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     label: step.label || step.name || "",
     doc_type: step.doc_type || "",
     sort_order: step.sort_order ?? 100,
-    signable: !!step.signable,
-    stagiaire_sign: !!step.stagiaire_sign,
+    // Nouveau modèle : liste de signataires (repli sur les anciens drapeaux).
+    signers: Array.isArray(step.signers) ? step.signers : [
+      ...(step.signable ? ["ORG"] : []),
+      ...(step.stagiaire_sign ? ["STAGIAIRE"] : []),
+      ...(step.company_sign ? ["ENTREPRISE"] : []),
+    ],
+    company_level: !!step.company_level,
     sign_formateur: !!(step.config && step.config.show_formateurs),
     sign_intervenant: !!(step.config && step.config.show_intervenants),
     sign_organization: !!(step.config && step.config.show_organization),
@@ -382,6 +490,8 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const chk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked }));
+  const hasSigner = (r) => (form.signers || []).includes(r);
+  const toggleSigner = (r) => setForm((p) => ({ ...p, signers: hasSigner(r) ? p.signers.filter((x) => x !== r) : [...(p.signers || []), r] }));
 
   async function save() {
     if (!form.label.trim()) { onError("Intitulé requis."); return; }
@@ -400,7 +510,8 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         if (!slug) { onError("Identifiant (slug) requis."); setSaving(false); return; }
         await saveTemplate(slug, {
           label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
-          signable: form.signable, stagiaire_sign: form.stagiaire_sign, active: form.active, applies_when,
+          signers: form.signers, company_level: form.company_level,
+          active: form.active, applies_when,
         });
       }
       onSaved();
@@ -476,14 +587,33 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
                 <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 6 }}>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-                <input type="checkbox" checked={form.signable} onChange={chk("signable")} /> À signer</label>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-                <input type="checkbox" checked={form.stagiaire_sign} onChange={chk("stagiaire_sign")} /> Signé par le stagiaire</label>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-                <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
-            </div>
+            <>
+              <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--muted)", display: "block", margin: "10px 0 4px" }}>Signataires requis</label>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 4 }}>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="L'organisme de formation contresigne automatiquement (en dernier).">
+                  <input type="checkbox" checked={hasSigner("ORG")} onChange={() => toggleSigner("ORG")} /> Organisme</label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                  <input type="checkbox" checked={hasSigner("STAGIAIRE")} onChange={() => toggleSigner("STAGIAIRE")} /> Stagiaire</label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Le représentant de l'entreprise signe (dossiers financés par une entreprise).">
+                  <input type="checkbox" checked={hasSigner("ENTREPRISE")} onChange={() => toggleSigner("ENTREPRISE")} /> 🏢 Entreprise</label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Un signataire externe signe via un lien partageable (tuteur, financeur…).">
+                  <input type="checkbox" checked={hasSigner("EXTERNAL")} onChange={() => toggleSigner("EXTERNAL")} /> Externe</label>
+              </div>
+              <p className="hint" style={{ margin: "0 0 8px" }}>L'<b>organisme signe en dernier</b> (contreseing automatique après les autres parties). Un document est « signé » quand tous ses signataires ont signé.</p>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 4 }}>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                  <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Document produit une seule fois par entreprise + session, qui liste tous les stagiaires du groupe (jeton « Stagiaires »).">
+                  <input type="checkbox" checked={form.company_level} onChange={chk("company_level")} /> 🏢 Document entreprise (groupe)</label>
+              </div>
+            </>
+          )}
+          {!isEmarg && form.company_level && (
+            <p className="hint" style={{ margin: "8px 0 0" }}>
+              Généré une fois par <b>entreprise + OPCO + session</b>, listant les stagiaires du groupe. Utilise le jeton <b>« Stagiaires »</b> (groupe Entreprise) pour la liste simple.
+              <br />Pour une <b>ligne personnalisée par stagiaire</b>, tape un bloc en texte brut : <code>{"{#Stagiaires}"}</code> … <code>{"{/Stagiaires}"}</code>. À l'intérieur, utilise les jetons <b>par stagiaire</b> : <code>{"{Personne}"}</code>, <code>{"{Civilité}"}</code>, <code>{"{Nom}"}</code>, <code>{"{Prénom}"}</code>, <code>{"{Email}"}</code>, <code>{"{Téléphone}"}</code>, <code>{"{OPCO}"}</code>, <code>{"{Ville}"}</code>, <code>{"{D_Naissance}"}</code>, <code>{"{N°}"}</code>.
+              <br />Ex. : <code>{"{#Stagiaires}"}{"{N°}"}. {"{Personne}"} — {"{OPCO}"}{"{/Stagiaires}"}</code>
+            </p>
           )}
           <p className="sub" style={{ marginTop: 10 }}>
             {isEmarg
@@ -507,6 +637,7 @@ function EquivalencesPanel({ onStatus }) {
   const [picked, setPicked] = useState([]);
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState(null); // équivalence en cours de modification
 
   async function load() {
     try { const { data } = await getEquivalences(); setEquivalences(data.equivalences || []); setDocs(data.docs || []); }
@@ -515,14 +646,17 @@ function EquivalencesPanel({ onStatus }) {
   useEffect(() => { load(); }, []);
 
   const toggle = (slug) => setPicked((p) => (p.includes(slug) ? p.filter((x) => x !== slug) : [...p, slug]));
+  const startEdit = (e) => { setEditId(e.id); setPicked(e.members || []); setLabel(e.label || ""); };
+  const cancelEdit = () => { setEditId(null); setPicked([]); setLabel(""); };
 
   async function create() {
     if (picked.length < 2) { onStatus({ type: "error", message: "Sélectionnez au moins deux documents." }); return; }
     setSaving(true);
     try {
-      await createEquivalence({ label: label.trim() || null, members: picked });
-      setPicked([]); setLabel("");
-      onStatus({ type: "success", message: "Équivalence créée." });
+      if (editId) await updateEquivalence(editId, { label: label.trim() || null, members: picked });
+      else await createEquivalence({ label: label.trim() || null, members: picked });
+      setPicked([]); setLabel(""); setEditId(null);
+      onStatus({ type: "success", message: editId ? "Équivalence modifiée." : "Équivalence créée." });
       load();
     } catch (e) { onStatus({ type: "error", message: e.message }); }
     finally { setSaving(false); }
@@ -549,7 +683,12 @@ function EquivalencesPanel({ onStatus }) {
                 <tr key={e.key}>
                   <td><b>{e.label}</b>{e.is_default && <span className="hint" style={{ marginLeft: 6 }}>défaut</span>}</td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>{(e.memberLabels || e.members).join(" / ")}</td>
-                  <td>{!e.is_default && <button type="button" className="btn sm ghost danger" onClick={() => remove(e)}><Icon name="trash" size={15} /></button>}</td>
+                  <td>{!e.is_default && (
+                    <span style={{ display: "inline-flex", gap: 4 }}>
+                      <button type="button" className="btn sm ghost" title="Modifier (ajouter / retirer des variantes)" onClick={() => startEdit(e)}><Icon name="settings" size={15} /></button>
+                      <button type="button" className="btn sm ghost danger" onClick={() => remove(e)}><Icon name="trash" size={15} /></button>
+                    </span>
+                  )}</td>
                 </tr>
               ))}
             </tbody>
@@ -557,7 +696,7 @@ function EquivalencesPanel({ onStatus }) {
         </div>
       )}
 
-      <div className="field"><label>Nouvelle équivalence — cochez les documents alternatifs</label>
+      <div className="field"><label>{editId ? "Modifier l'équivalence" : "Nouvelle équivalence"} — cochez les documents alternatifs (« OU », autant que vous voulez)</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
           {docs.length === 0 ? <span className="hint">Aucun document.</span> : docs.map((d) => (
             <label key={d.slug} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", cursor: "pointer" }}>
@@ -569,7 +708,10 @@ function EquivalencesPanel({ onStatus }) {
       <div className="row2" style={{ alignItems: "end" }}>
         <div className="field"><label>Intitulé (optionnel)</label>
           <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ex. Contrat / Convention" /></div>
-        <div><button type="button" className="btn primary" disabled={saving || picked.length < 2} onClick={create}>＋ Créer l'équivalence</button></div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" className="btn primary" disabled={saving || picked.length < 2} onClick={create}>{editId ? "Enregistrer" : "＋ Créer l'équivalence"}</button>
+          {editId && <button type="button" className="btn ghost" disabled={saving} onClick={cancelEdit}>Annuler</button>}
+        </div>
       </div>
     </Card>
   );

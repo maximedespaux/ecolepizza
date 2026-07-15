@@ -87,9 +87,6 @@ export function deleteOpco(id) {
 export function getSales() {
   return request("/ventes");
 }
-export function createSale(payload) {
-  return request("/ventes", { method: "POST", body: JSON.stringify(payload) });
-}
 export function deleteSale(id) {
   return request(`/ventes/${id}`, { method: "DELETE" });
 }
@@ -113,9 +110,6 @@ export function generateAttendance(sessionId) {
 // Régénère les feuilles d'émargement de tous les dossiers de la session.
 export function regenerateEmargement(sessionId) {
   return request(`/attendance/${sessionId}/regenerate`, { method: "POST" });
-}
-export function setPresence(recordId, present) {
-  return request(`/attendance/record/${recordId}`, { method: "PATCH", body: JSON.stringify({ present }) });
 }
 // Formateurs d'une session (affectation depuis l'équipe).
 export function getAssignableTrainers() {
@@ -170,9 +164,6 @@ export function adjustItem(id, delta) {
 }
 export function updateItem(id, payload) {
   return request(`/inventaire/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
-}
-export function sellItem(id, quantity) {
-  return request(`/inventaire/${id}/sell`, { method: "POST", body: JSON.stringify({ quantity }) });
 }
 export function deleteItem(id) {
   return request(`/inventaire/${id}`, { method: "DELETE" });
@@ -271,9 +262,6 @@ export function getRevenues(annee) {
 export function createRevenue(payload) {
   return request("/comptabilite/revenus", { method: "POST", body: JSON.stringify(payload) });
 }
-export function updateRevenue(id, payload) {
-  return request(`/comptabilite/revenus/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
-}
 export function deleteRevenue(id) {
   return request(`/comptabilite/revenus/${id}`, { method: "DELETE" });
 }
@@ -366,6 +354,64 @@ export function getCompanies() {
 export function createCompany(payload) {
   return request("/companies", { method: "POST", body: JSON.stringify(payload) });
 }
+export function getCompany(id) {
+  return request(`/companies/${id}`);
+}
+export function updateCompany(id, payload) {
+  return request(`/companies/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function deleteCompany(id) {
+  return request(`/companies/${id}`, { method: "DELETE" });
+}
+export function registerCompanyStagiaires(id, payload) {
+  return request(`/companies/${id}/register`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function detachCompanyLearner(id, learnerId) {
+  return request(`/companies/${id}/learners/${learnerId}`, { method: "DELETE" });
+}
+// Parcours documentaire COMPLET du groupe (même style « timeline » que la fiche stagiaire).
+export function getCompanyParcours(id, sessionId) {
+  return request(`/companies/${id}/parcours${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
+}
+// Génère (et envoie) un document du parcours pour tout le groupe.
+export function generateGroupDocuments(id, payload) {
+  return request(`/companies/${id}/group-documents`, { method: "POST", body: JSON.stringify(payload) });
+}
+// Documents des stagiaires du groupe à signer par le représentant (à leur place).
+export function getCompanyLearnerDocuments(id, sessionId) {
+  return request(`/companies/${id}/learner-documents${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
+}
+// Crée / réinitialise le compte de connexion du représentant de l'entreprise → { email, password }.
+export function createRepresentativeAccount(id) {
+  return request(`/companies/${id}/representative-account`, { method: "POST" });
+}
+
+// --- Espace représentant d'entreprise ---
+export function getRepDocuments() { return request("/rep/documents"); }
+export function previewRepDocument(id) { return request(`/rep/documents/${id}/preview`, { silent: true }); }
+export function signRepDocument(id, payload) { return request(`/rep/documents/${id}/sign`, { method: "POST", body: JSON.stringify(payload) }); }
+export function setRepStamp(stamp) { return request("/rep/stamp", { method: "PUT", body: JSON.stringify({ stamp }) }); }
+// Génère un document « entreprise » (un doc par groupe, listant tous les stagiaires).
+export function createCompanyDocument(id, payload) {
+  return request(`/companies/${id}/documents`, { method: "POST", body: JSON.stringify(payload) });
+}
+// Modèles de documents de GROUPE (company_level) disponibles pour une session.
+export function getCompanyDocTemplates(id, sessionId) {
+  const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
+  return request(`/companies/${id}/doc-templates${qs}`);
+}
+// Documents « entreprise » déjà générés (optionnellement filtrés par session).
+export function listCompanyDocuments(id, sessionId) {
+  const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
+  return request(`/companies/${id}/documents${qs}`);
+}
+// Lien de signature partageable (représentant entreprise). createSignLink → { token }.
+export function createSignLink(documentId, payload = {}) {
+  return request(`/documents/${documentId}/sign-link`, { method: "POST", body: JSON.stringify(payload) });
+}
+// Signature publique par le représentant de l'entreprise (page /signer/:token).
+export function getPublicSignDoc(token) { return request(`/public/sign/${token}`, { silent: true }); }
+export function submitPublicSign(token, payload) { return request(`/public/sign/${token}`, { method: "POST", body: JSON.stringify(payload) }); }
 
 // --- Formations ---
 export function getFormations() {
@@ -401,14 +447,19 @@ export function submitQuiz(documentId, answers) { return request(`/quizzes/take/
 export function getFormationSteps(id) {
   return request(`/formations/${id}/steps`);
 }
-export function saveFormationSteps(id, steps) {
-  return request(`/formations/${id}/steps`, { method: "PUT", body: JSON.stringify({ steps }) });
+export function saveFormationSteps(id, steps, break_slug, company_steps) {
+  const body = { steps };
+  if (break_slug !== undefined) body.break_slug = break_slug;
+  if (company_steps !== undefined) body.company_steps = company_steps;
+  return request(`/formations/${id}/steps`, { method: "PUT", body: JSON.stringify(body) });
 }
 export function getFormation(id) {
   return request(`/formations/${id}`);
 }
-export function saveArchiveTree(id, tree) {
-  return request(`/formations/${id}/archive-tree`, { method: "PUT", body: JSON.stringify({ tree }) });
+export function saveArchiveTree(id, tree, company_tree) {
+  const body = { tree };
+  if (company_tree !== undefined) body.company_tree = company_tree;
+  return request(`/formations/${id}/archive-tree`, { method: "PUT", body: JSON.stringify(body) });
 }
 
 // --- Sessions ---
@@ -499,9 +550,6 @@ export function archiveFileUrl(id) {
 export function downloadArchiveFile(id, filename) {
   return download(`/suivi/archives/${id}/file`, filename);
 }
-export function deleteArchive(id) {
-  return request(`/suivi/archives/${id}`, { method: "DELETE" });
-}
 // Suppression groupée (semaine / formation / stagiaire / fichiers) — supprime en base.
 export function bulkDeleteArchives(archive_ids, document_ids) {
   return request("/suivi/archives/delete", { method: "POST", body: JSON.stringify({ archive_ids, document_ids }) });
@@ -513,10 +561,6 @@ export function createEnrollment(payload) {
 
 export function deleteEnrollment(id) {
   return request(`/enrollments/${id}`, { method: "DELETE" });
-}
-
-export function updateEnrollment(id, payload) {
-  return request(`/enrollments/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 
 // --- Espace stagiaire ---
@@ -578,10 +622,6 @@ export function getDocument(id) {
   return request(`/documents/${id}`);
 }
 
-// Télécharge le vrai document Word (.docx) rempli (source, secours).
-export function downloadDocumentDocx(id, filename = "document.docx") {
-  return download(`/documents/${id}/docx`, filename);
-}
 // Document final PDF (non modifiable) — téléchargement.
 export function downloadDocumentPdf(id, filename = "document.pdf") {
   return download(`/documents/${id}/pdf`, filename);
@@ -653,6 +693,9 @@ export function getConditions() {
 export function createCondition(payload) {
   return request("/conditions", { method: "POST", body: JSON.stringify(payload) });
 }
+export function updateCondition(id, payload) {
+  return request(`/conditions/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
 export function deleteCondition(id) {
   return request(`/conditions/${id}`, { method: "DELETE" });
 }
@@ -662,6 +705,9 @@ export function getEquivalences() {
 }
 export function createEquivalence(payload) {
   return request("/equivalences", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateEquivalence(id, payload) {
+  return request(`/equivalences/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 }
 export function deleteEquivalence(id) {
   return request(`/equivalences/${id}`, { method: "DELETE" });
@@ -683,6 +729,9 @@ export function resetTemplate(slug) {
 export function deleteTemplate(slug) {
   return request(`/templates/${slug}?permanent=1`, { method: "DELETE" });
 }
+export function duplicateTemplate(slug) {
+  return request(`/templates/${slug}/duplicate`, { method: "POST" });
+}
 // Réordonne les modèles (glisser-déposer).
 export function reorderTemplates(orders) {
   // orders : [{ slug, sort_order }] (position globale) ; rétro-compat : tableau de slugs.
@@ -693,12 +742,9 @@ export function reorderTemplates(orders) {
 export function reorderEmargementTemplates(orders) {
   return request("/emargement-templates/reorder", { method: "PUT", body: JSON.stringify({ orders }) });
 }
-export function downloadTemplateFile(slug) {
-  return download(`/templates/${slug}/file`, `${slug}.docx`);
-}
 // Catalogue des jetons (regroupé par table) pour la palette de l'éditeur.
-export function getTokenCatalog() {
-  return request("/templates/tokens");
+export function getTokenCatalog(slug) {
+  return request(slug ? `/templates/tokens?slug=${encodeURIComponent(slug)}` : "/templates/tokens");
 }
 // Corps HTML d'un modèle (propre à l'organisme ou modèle par défaut).
 export function getTemplateBody(slug) {

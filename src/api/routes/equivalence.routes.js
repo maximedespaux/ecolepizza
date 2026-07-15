@@ -1,5 +1,5 @@
 const express = require('express');
-const { listEquivalences, createEquivalence, deleteEquivalence } = require('../controllers/equivalence.controller.js');
+const { listEquivalences, createEquivalence, updateEquivalence, deleteEquivalence } = require('../controllers/equivalence.controller.js');
 const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -8,6 +8,7 @@ router.use(authenticateToken, authorizeRoles(...ADMIN_ROLES));
 
 router.get('/', listEquivalences);
 router.post('/', createEquivalence);
+router.put('/:id', updateEquivalence);
 router.delete('/:id', deleteEquivalence);
 
 module.exports = router;

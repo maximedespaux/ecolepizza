@@ -78,6 +78,7 @@ function StudentLayout() {
           <NavLink to="/pizza-quest" className={navClass}>Pizza Quest</NavLink>
           <OutilsMenu />
           {user?.role === "INTERVENANT" && <NavLink to="/intervention" className={navClass}>Intervention</NavLink>}
+          {user?.has_company && <NavLink to="/entreprise-documents" className={navClass}>Entreprise</NavLink>}
         </nav>
         <div className="spacer" />
         <ThemeToggle />

@@ -520,7 +520,7 @@ function FicheRecette() {
           {/* Pâte — panneau bleu (résultat) à côté du calculateur */}
           {isPate && (
             <div className="card dough-result">
-              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{curPreset.nom} · empâtement {String(dp.method).toLowerCase()}{dp.autolyse ? " + autolyse" : ""}</div>
+              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)", WebkitTextFillColor: "rgba(255,255,255,.7)" }}>{curPreset.nom} · empâtement {String(dp.method).toLowerCase()}{dp.autolyse ? " + autolyse" : ""}</div>
               <div style={{ font: "800 24px/1.1 var(--font-d)", margin: "4px 0 2px" }}>{gfmt(totalDough)} de pâte</div>
               <div style={{ color: "rgba(255,255,255,.7)", fontSize: 12, marginBottom: 12 }}>{effNb} pâtons de {patonG} g{dpMode === "farine" && reste > 5 ? ` · reste ${gfmt(reste)}` : ""}</div>
               <div className="dough-bar" title="Proportions de l'empâtement">
@@ -556,7 +556,7 @@ function FicheRecette() {
         {isRecette ? (
           <div className="card dough-result fr-result">
             <div>
-              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{r.name || "Nouvelle recette"} · {r.type}</div>
+              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)", WebkitTextFillColor: "rgba(255,255,255,.7)" }}>{r.name || "Nouvelle recette"} · {r.type}</div>
               <div style={{ font: "800 32px/1.1 var(--font-d)", margin: "8px 0 2px" }}>{euro(pricePerPizza)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pizza conseillé</span></div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
                 <Row label="Coût matière total" value={euro(totalCost)} />
@@ -573,7 +573,7 @@ function FicheRecette() {
         ) : isPate ? null : (
           <div className="card dough-result fr-result">
             <div>
-              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{r.name || "Nouvelle préparation"}</div>
+              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)", WebkitTextFillColor: "rgba(255,255,255,.7)" }}>{r.name || "Nouvelle préparation"}</div>
               <div style={{ font: "800 32px/1.1 var(--font-d)", margin: "8px 0 2px" }}>
                 {euro(prep.per)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ {prep.unit}</span>
               </div>

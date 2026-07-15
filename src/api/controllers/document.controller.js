@@ -3,7 +3,15 @@ const db = require('../config/database.js');
 const { renderDocumentHTML } = require('../lib/render.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
-const { stagiaireSignsDoc, orgSignsDoc } = require('../lib/documents.js');
+const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc } = require('../lib/documents.js');
+
+// Signature d'un document de dossier INCOMBE à l'entreprise ? (modèle company_sign +
+// dossier rattaché à une entreprise). Dans ce cas le stagiaire ne signe pas lui-même.
+async function docSignedByCompany(conn, orgSteps, doc) {
+    if (!companySignsDoc(orgSteps, doc) || !doc.learner_id) return false;
+    try { const [[l]] = await conn.query('SELECT company_id FROM learner WHERE id = ?', [doc.learner_id]); return !!(l && l.company_id); }
+    catch { return false; }
+}
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { composeDocumentPdf } = require('../lib/pdfcompose.js');
 const { findMissingTokens } = require('../lib/tokens.js');
@@ -110,6 +118,52 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
         const [cRows] = await conn.query('SELECT * FROM company WHERE id = ?', [learner.company_id]);
         company = cRows[0] || null;
     }
+    // Document « entreprise » (migration 077) : entreprise portée par le document, et
+    // groupe de tous les stagiaires liés (jeton {Stagiaires}).
+    let groupStagiaires = [];
+    if (documentId) {
+        // Infos du document entreprise (entreprise + session + OPCO) — colonnes présentes
+        // selon migrations 077 / 089 : on lit en cascade.
+        let gdInfo = null;
+        for (const cols of ['company_id, session_id, opco', 'company_id, session_id']) {
+            try { const [[gd2]] = await conn.query(`SELECT ${cols} FROM generated_document WHERE id = ?`, [documentId]); gdInfo = gd2 || null; break; }
+            catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+        }
+        if (!company && gdInfo && gdInfo.company_id) { const [cr] = await conn.query('SELECT * FROM company WHERE id = ?', [gdInfo.company_id]); company = cr[0] || company; }
+
+        if (gdInfo && gdInfo.company_id && gdInfo.session_id) {
+            // Document entreprise : liste VIVANTE des stagiaires de l'entreprise inscrits à
+            // cette session (et pas un instantané figé). Si le document est groupé par OPCO
+            // (migration 089), on ne liste que les stagiaires de CET OPCO.
+            const params = [gdInfo.company_id, gdInfo.session_id, organizationId];
+            let opcoFilter = '';
+            if (gdInfo.opco !== undefined) { opcoFilter = " AND TRIM(COALESCE(l.opco, '')) = ?"; params.push((gdInfo.opco || '').trim()); }
+            const [gs] = await conn.query(
+                `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email,
+                        l.phone, l.opco, l.town, l.address, l.zip_code, l.birth_place,
+                        DATE_FORMAT(l.birthday, '%Y-%m-%d') AS birthday
+                 FROM enrollment e
+                 JOIN learner l ON l.id = e.learner_id
+                 WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?${opcoFilter}
+                 ORDER BY l.last_name, l.first_name`,
+                params
+            );
+            groupStagiaires = gs;
+        } else {
+            // Fallback (document classique lié à des formations) : via document_formation.
+            const [gs] = await conn.query(
+                `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email,
+                        l.phone, l.opco, l.town, l.address, l.zip_code, l.birth_place,
+                        DATE_FORMAT(l.birthday, '%Y-%m-%d') AS birthday
+                 FROM document_formation df
+                 JOIN enrollment e ON e.id = df.enrollment_id
+                 JOIN learner l ON l.id = e.learner_id
+                 WHERE df.document_id = ? ORDER BY l.last_name, l.first_name`,
+                [documentId]
+            );
+            groupStagiaires = gs;
+        }
+    }
     // Signatures multiples (jetons sig:<slot>) — chargées si la table existe (migration 061).
     const slotSignatures = {};
     if (documentId) {
@@ -140,10 +194,20 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             }
         } catch (e) { /* champs indisponibles (migration non jouée) : on ignore */ }
     }
+    // Financeur (OPCO / France Travail…) : coordonnées propres, dont un SIRET distinct de
+    // l'organisme. Résolu par le nom stocké (company.opco ou learner.opco) → référentiel opco.
+    let financeur = null;
+    const opcoName = (company && company.opco) || (learner && learner.opco) || '';
+    if (opcoName) {
+        try {
+            const [[fo]] = await conn.query('SELECT * FROM opco WHERE organization_id = ? AND (name = ? OR code = ?) LIMIT 1', [organizationId, opcoName, opcoName]);
+            financeur = fo || null;
+        } catch (e) { /* référentiel opco absent (migration) : jetons financeur vides */ }
+    }
     // Jetons personnalisés de l'organisme (calculés à partir des autres au rendu).
     let customTokens = [];
     try { customTokens = await loadCustomTokens(organizationId); } catch { /* migration absente */ }
-    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens };
+    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur };
 }
 
 // Un document d'émargement (type EMARGEMENT) : rendu via le moteur d'émargement
@@ -212,6 +276,31 @@ const listDocuments = async (req, res) => {
 };
 
 /**
+ * Prépare un document pour UN stagiaire (A_FAIRE) en remplaçant sa version en attente
+ * (non signée). Réutilisable (fiche stagiaire ET génération de groupe). Renvoie l'id.
+ */
+async function prepareLearnerDoc(conn, orgId, { learnerId, type, templateSlug, title, enrollmentIds }) {
+    const [dups] = await conn.query(
+        `SELECT DISTINCT gd.id FROM generated_document gd
+         JOIN document_formation df ON df.document_id = gd.id
+         WHERE gd.organization_id = ? AND df.enrollment_id IN (?)
+           AND gd.status <> 'SIGNE'
+           AND (${templateSlug ? 'gd.template_slug = ?' : 'gd.type = ?'})`,
+        [orgId, enrollmentIds, templateSlug || type]
+    );
+    for (const d of dups) await conn.query('DELETE FROM generated_document WHERE id = ? AND organization_id = ?', [d.id, orgId]);
+    const documentId = crypto.randomUUID();
+    await conn.query(
+        `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status)
+         VALUES (?, ?, ?, ?, ?, ?, 'A_FAIRE')`,
+        [documentId, orgId, learnerId, type, templateSlug || null, title || TYPE_LABELS[type] || type]
+    );
+    for (const eid of enrollmentIds) await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [documentId, eid]);
+    if (type === 'FICHE_SEMAINE') await advanceEnrollments(conn, orgId, documentId, 'CONTACTE');
+    return documentId;
+}
+
+/**
  * POST /api/documents — prépare un document (statut A_FAIRE, non envoyé).
  * Corps : { learner_id, type, title?, enrollment_ids: [] }.
  */
@@ -222,37 +311,7 @@ const createDocument = async (req, res) => {
     }
     try {
         const conn = db.promise();
-        const orgId = req.user.organization_id;
-
-        // Régénérer une étape REMPLACE sa version en attente (non signée) pour ces
-        // dossiers : évite les doublons qui faussent le parcours. Les documents déjà
-        // signés sont conservés.
-        const [dups] = await conn.query(
-            `SELECT DISTINCT gd.id FROM generated_document gd
-             JOIN document_formation df ON df.document_id = gd.id
-             WHERE gd.organization_id = ? AND df.enrollment_id IN (?)
-               AND gd.status <> 'SIGNE'
-               AND (${template_slug ? 'gd.template_slug = ?' : 'gd.type = ?'})`,
-            [orgId, enrollment_ids, template_slug || type]
-        );
-        for (const d of dups) {
-            await conn.query('DELETE FROM generated_document WHERE id = ? AND organization_id = ?', [d.id, orgId]);
-        }
-
-        const documentId = crypto.randomUUID();
-        await conn.query(
-            `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status)
-             VALUES (?, ?, ?, ?, ?, ?, 'A_FAIRE')`,
-            [documentId, orgId, learner_id, type, template_slug || null, title || TYPE_LABELS[type] || type]
-        );
-        for (const eid of enrollment_ids) {
-            await conn.query(
-                'INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)',
-                [documentId, eid]
-            );
-        }
-        // Pipeline : la fiche d'expression fait passer le dossier à « Contacté ».
-        if (type === 'FICHE_SEMAINE') await advanceEnrollments(conn, req.user.organization_id, documentId, 'CONTACTE');
+        const documentId = await prepareLearnerDoc(conn, req.user.organization_id, { learnerId: learner_id, type, templateSlug: template_slug, title, enrollmentIds: enrollment_ids });
         res.status(201).json({ message: 'Document préparé', id: documentId });
     } catch (err) {
         console.error('Erreur création document :', err);
@@ -284,12 +343,16 @@ const getDocument = async (req, res) => {
         const html = renderDocumentHTML(doc.type, ctx, doc.title);
         // Signature stagiaire pilotée par le modèle (Modeles de document : stagiaire_sign).
         const orgSteps = await loadOrgSteps(doc.organization_id);
+        // Document dont la signature incombe à l'entreprise : pas signable par le stagiaire.
+        const byCompany = await docSignedByCompany(conn, orgSteps, doc);
         res.json({
             data: {
                 id: doc.id, type: doc.type, title: doc.title, status: doc.status,
                 sent_at: doc.sent_at, signed_at: doc.signed_at, signer_name: doc.signer_name,
                 signature_data: decrypt(doc.signature_data),
-                signable: isEmargDoc(doc) || stagiaireSignsDoc(orgSteps, doc),
+                signable: !byCompany && (isEmargDoc(doc) || stagiaireSignsDoc(orgSteps, doc)),
+                company_sign: byCompany,
+                external_sign: externalSignsDoc(orgSteps, doc), // signataire externe requis (lien partageable)
                 org_signable: orgSignsDoc(orgSteps, doc), // émargement : l'organisme ne signe pas à l'envoi (envoyé non signé)
                 org_signed: !!doc.org_signed_at,
                 org_signer_name: doc.org_signer_name || null,
@@ -445,6 +508,24 @@ async function loadSignedPdf(conn, docId) {
     }
 }
 
+// Appose la signature VISIBLE de l'organisme ({Signature organisme}) sur le document,
+// depuis la signature enregistrée dans Organisme. Idempotent. Renvoie true si (déjà)
+// apposée. L'organisme signe en DERNIER : on l'appelle au moment où une partie signe,
+// et non plus à l'envoi.
+async function applyOrgVisibleSignature(conn, orgId, docId) {
+    try {
+        const [[cur]] = await conn.query('SELECT org_signed_at FROM generated_document WHERE id = ?', [docId]);
+        if (cur && cur.org_signed_at) return true;
+        const [[org]] = await conn.query('SELECT legal_name, short_name, manager, signature_image FROM organization WHERE id = ?', [orgId]);
+        const img = decrypt(org && org.signature_image);
+        if (!img) return false; // pas de signature d'organisme configurée : sceau seul, sans image
+        await conn.query(
+            'UPDATE generated_document SET org_signed_at = NOW(), org_signer_name = ?, org_signature_data = ? WHERE id = ?',
+            [(org.legal_name || org.short_name || org.manager || 'Organisme'), encrypt(img), docId]);
+        return true;
+    } catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') return false; throw e; }
+}
+
 // Assemble contexte + contenu d'un document pour le SIGNER (sans req/res, sans blocage
 // « informations manquantes » : le document a déjà été généré et signé côté stagiaire).
 async function assembleDocForSign(conn, orgId, doc) {
@@ -471,6 +552,10 @@ async function assembleDocForSign(conn, orgId, doc) {
  * nombre de signatures apposées, ou null si le PDF n'a pas pu être construit.
  */
 async function signAndStoreDocument(conn, orgId, doc, signerName) {
+    // L'organisme signe APRÈS le stagiaire : on appose sa signature visible juste avant
+    // le rendu (elle apparaîtra donc sur un document déjà signé par le stagiaire).
+    const orgSteps = await loadOrgSteps(orgId);
+    if (orgSignsDoc(orgSteps, doc)) await applyOrgVisibleSignature(conn, orgId, doc.id);
     const r = await assembleDocForSign(conn, orgId, doc);
     if (!r) return null;
     const { signPdf } = require('../lib/pdfseal.js');
@@ -483,7 +568,6 @@ async function signAndStoreDocument(conn, orgId, doc, signerName) {
     // 2) Contre-signature AUTOMATIQUE de l'organisme (si le modèle prévoit « À signer »),
     //    en mise à jour incrémentale : la signature du stagiaire reste valide.
     try {
-        const orgSteps = await loadOrgSteps(orgId);
         if (orgSignsDoc(orgSteps, doc)) {
             const orgName = org.legal_name || org.short_name || 'Organisme';
             const orgP12 = await getOrgSigner(conn, orgId, orgName);
@@ -592,6 +676,33 @@ const previewHtml = async (req, res) => {
 };
 
 /**
+ * Envoie un document préparé (A_FAIRE → ENVOYE). L'organisme n'est apposé à l'envoi que
+ * pour les documents SANS partie signataire (org-seul). Réutilisable (envoi de groupe).
+ * Renvoie true si envoyé.
+ */
+async function sendPreparedDoc(conn, orgId, docId) {
+    const [[doc]] = await conn.query('SELECT id, type, template_slug, status FROM generated_document WHERE id = ? AND organization_id = ?', [docId, orgId]);
+    if (!doc || doc.status !== 'A_FAIRE') return false;
+    let orgSet = ''; const orgVals = [];
+    try {
+        const orgSteps = await loadOrgSteps(orgId);
+        const hasParty = stagiaireSignsDoc(orgSteps, doc) || companySignsDoc(orgSteps, doc);
+        if (!hasParty && orgSignsDoc(orgSteps, doc)) {
+            const [[cur]] = await conn.query('SELECT org_signed_at FROM generated_document WHERE id = ?', [docId]);
+            if (!cur || !cur.org_signed_at) {
+                const [[org]] = await conn.query('SELECT legal_name, short_name, manager, signature_image FROM organization WHERE id = ?', [orgId]);
+                const img = decrypt(org && org.signature_image);
+                if (img) { orgSet = ', org_signed_at = NOW(), org_signer_name = ?, org_signature_data = ?'; orgVals.push(org.legal_name || org.short_name || org.manager || 'Organisme', encrypt(img)); }
+            }
+        }
+    } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+    await conn.query(`UPDATE generated_document SET status = 'ENVOYE', sent_at = NOW()${orgSet} WHERE id = ? AND organization_id = ? AND status = 'A_FAIRE'`, [...orgVals, docId, orgId]);
+    if (doc.type === 'DEVIS') await advanceEnrollments(conn, orgId, docId, 'DEVIS_ENVOYE');
+    else if (doc.type === 'EVALUATION_SATISFACTION') await advanceEnrollments(conn, orgId, docId, 'EVALUATION_ENVOYEE');
+    return true;
+}
+
+/**
  * POST /api/documents/:id/send — envoie le document au stagiaire (demande de signature).
  */
 const sendDocument = async (req, res) => {
@@ -606,13 +717,16 @@ const sendDocument = async (req, res) => {
             return res.status(400).json({ message: 'Document déjà envoyé ou introuvable.' });
         }
 
-        // Signature de l'organisme AVANT envoi : appliquée automatiquement avec la
-        // signature enregistrée, uniquement si le modèle prévoit « À signer ».
+        // L'ORGANISME signe en DERNIER : à l'envoi, on n'appose sa signature QUE si aucune
+        // partie (stagiaire / entreprise) ne doit signer — ex. Invitation, Certificat de
+        // réalisation. Sinon l'organisme contresignera automatiquement après la/les partie(s)
+        // (cf. applyOrgVisibleSignature au moment de la signature de la partie).
         let orgSet = '';
         const orgVals = [];
         try {
             const orgSteps = await loadOrgSteps(orgId);
-            if (orgSignsDoc(orgSteps, doc)) {
+            const hasParty = stagiaireSignsDoc(orgSteps, doc) || companySignsDoc(orgSteps, doc);
+            if (!hasParty && orgSignsDoc(orgSteps, doc)) {
                 const [[cur]] = await conn.query('SELECT org_signed_at FROM generated_document WHERE id = ?', [req.params.id]);
                 if (!cur || !cur.org_signed_at) {
                     const [[org]] = await conn.query(
@@ -669,37 +783,20 @@ const signDocument = async (req, res) => {
         // Le document doit être prévu pour signature stagiaire (Modeles : stagiaire_sign).
         // L'émargement est toujours signable électroniquement par le stagiaire.
         const orgSteps = await loadOrgSteps(req.user.organization_id);
-        if (!isEmargDoc(rows[0]) && !stagiaireSignsDoc(orgSteps, rows[0])) {
+        if (!isEmargDoc(rows[0]) && !stagiaireSignsDoc(orgSteps, rows[0]) && !companySignsDoc(orgSteps, rows[0])) {
             return res.status(422).json({ message: "Ce document n'est pas prévu pour être signé par le stagiaire." });
         }
+        // Document dont la signature incombe à l'ENTREPRISE : le stagiaire ne le signe pas
+        // lui-même (le représentant signe à sa place). Le personnel peut toujours signer.
+        const isStaff = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'].includes(req.user.role);
+        if (!isStaff && await docSignedByCompany(conn, orgSteps, rows[0])) {
+            return res.status(422).json({ message: "Ce document doit être signé par l'entreprise (représentant)." });
+        }
 
-        // Empreinte du contenu signé (SHA-256 du HTML rempli, signature incluse) : preuve
-        // que CE contenu précis a été signé (le document ne peut plus être modifié après coup).
-        let signedHash = null;
-        try {
-            const html = await buildDocHtml(conn, req.user.organization_id, {
-                ...rows[0], signature_data: signature_data || null, signer_name, signed_at: new Date(),
-            });
-            if (html) signedHash = crypto.createHash('sha256').update(html, 'utf8').digest('hex');
-        } catch (e) { console.error('Empreinte signature ignorée :', e.message); }
-
-        await conn.query(
-            `UPDATE generated_document
-             SET status = 'SIGNE', signed_at = NOW(), signer_name = ?, signature_data = ?,
-                 signer_ip = ?, signer_user_agent = ?, signed_hash = ?
-             WHERE id = ?`,
-            [signer_name, encrypt(signature_data || null), encrypt(clientIp(req)), encrypt((req.headers['user-agent'] || '').slice(0, 400)), signedHash, req.params.id]
-        );
-        // Signatures cryptographiques (stagiaire + organisme) sur le PDF figé, stockées.
-        // En repli (échec de rendu/signature), le document reste « signé » côté image +
-        // journal ; le téléchargement retombe sur le cachet organisme à la volée.
-        try {
-            const [[full]] = await conn.query('SELECT * FROM generated_document WHERE id = ?', [req.params.id]);
-            if (full) await signAndStoreDocument(conn, req.user.organization_id, full, signer_name);
-        } catch (e) { console.error('Signature cryptographique différée :', e.message); }
-        // Pipeline : devis signé -> « Devis signé » ; contrat/convention signé -> « Inscrit ».
-        if (rows[0].type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_SIGNE');
-        else if (rows[0].type === 'CONTRAT' || rows[0].type === 'CONVENTION') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'INSCRIT');
+        await applyLearnerSignature(conn, req.user.organization_id, rows[0], {
+            signerName: signer_name, signatureData: signature_data,
+            ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
+        });
         logAudit(req, 'document.sign', 'GeneratedDocument', req.params.id);
         notify(req.user.organization_id, {
             type: 'SIGNATURE', title: 'Document signé', body: `Signé par ${signer_name}`,
@@ -739,4 +836,116 @@ const deleteDocument = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument };
+// ---- Signature d'un « créneau » (multi-signataires) + lien de signature partageable ----
+
+// Rend le corps HTML d'un document (pour l'aperçu public d'un signataire externe). null si .docx.
+async function renderDocumentHtml(conn, orgId, doc) {
+    const slug = doc.template_slug;
+    const content = slug ? await getTemplateContent(orgId, slug) : null;
+    if (!content || content.kind === 'docx' || content.kind === 'emargement') return null;
+    const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
+    return renderTemplateHtml(content.html, ctx, { title: doc.title, headerHtml: content.header, footerHtml: content.footer });
+}
+
+/**
+ * Enregistre la signature d'un créneau (document_signature) puis re-scelle le PDF
+ * (signataire du créneau PUIS organisme, en incrémental) et passe le document à SIGNÉ.
+ * Utilisé pour la signature du représentant d'une entreprise via un lien partageable.
+ */
+async function applySlotSignature(conn, orgId, doc, { slot, label, signerName, signatureData, ip, userAgent }) {
+    const hash = crypto.createHash('sha256').update(String(signatureData || '') + doc.id + slot).digest('hex');
+    const encSig = encrypt(signatureData || null);
+    const [ex] = await conn.query('SELECT id FROM document_signature WHERE document_id = ? AND slot = ?', [doc.id, slot]);
+    if (ex.length) {
+        await conn.query(
+            'UPDATE document_signature SET label = ?, signer_name = ?, signature_data = ?, signer_ip = ?, signer_user_agent = ?, signed_hash = ?, signed_at = NOW() WHERE id = ?',
+            [label, signerName, encSig, encrypt(ip || ''), encrypt((userAgent || '').slice(0, 400)), hash, ex[0].id]);
+    } else {
+        await conn.query(
+            `INSERT INTO document_signature (id, organization_id, document_id, slot, label, signer_name, signature_data, signer_ip, signer_user_agent, signed_hash, signed_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [crypto.randomUUID(), orgId, doc.id, slot, label, signerName, encSig, encrypt(ip || ''), encrypt((userAgent || '').slice(0, 400)), hash]);
+    }
+    // Re-scelle le PDF (signataire du créneau + contre-signature organisme).
+    const slug = doc.template_slug;
+    const content = slug ? await getTemplateContent(orgId, slug) : null;
+    if (content && content.kind !== 'emargement') {
+        const { signPdf, generateSelfSignedP12 } = require('../lib/pdfseal.js');
+        // L'organisme signe en dernier : signature visible apposée avant le rendu.
+        const orgSteps = await loadOrgSteps(orgId);
+        if (orgSignsDoc(orgSteps, doc)) await applyOrgVisibleSignature(conn, orgId, doc.id);
+        const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
+        let pdf = await composeDocPdf(conn, { doc, ctx, slug, content });
+        const repP12 = generateSelfSignedP12(signerName || 'Signataire');
+        pdf = await signPdf(pdf, repP12, { name: signerName || 'Signataire', reason: label || 'Signature', incremental: false });
+        let count = 1;
+        try {
+            if (orgSignsDoc(orgSteps, doc)) {
+                const org = ctx.org || {};
+                const orgName = org.legal_name || org.short_name || 'Organisme';
+                const orgP12 = await getOrgSigner(conn, orgId, orgName);
+                pdf = await signPdf(pdf, orgP12, { name: orgName, reason: "Signature de l'organisme", contact: org.email || '', location: org.town || '', incremental: true });
+                count = 2;
+            }
+        } catch (e) { console.error('Contre-signature organisme ignorée :', e.message); }
+        await storeSignedPdf(conn, orgId, doc.id, pdf, count);
+    }
+    await conn.query("UPDATE generated_document SET status = 'SIGNE', signed_at = NOW(), signer_name = ? WHERE id = ?", [signerName, doc.id]);
+}
+
+/**
+ * Applique une signature « stagiaire » sur un document : remplit la case {Signature
+ * stagiaire}, passe le document en SIGNÉ, scelle le PDF (cert stagiaire + contreseing
+ * organisme) et fait avancer le pipeline. Utilisé par le stagiaire lui-même ET par le
+ * représentant de l'entreprise qui signe À LA PLACE du stagiaire (lien de signature).
+ */
+async function applyLearnerSignature(conn, orgId, doc, { signerName, signatureData, ip, userAgent }) {
+    // Empreinte du contenu signé (SHA-256 du HTML rempli) : preuve d'intégrité.
+    let signedHash = null;
+    try {
+        const html = await buildDocHtml(conn, orgId, { ...doc, signature_data: signatureData || null, signer_name: signerName, signed_at: new Date() });
+        if (html) signedHash = crypto.createHash('sha256').update(html, 'utf8').digest('hex');
+    } catch (e) { console.error('Empreinte signature ignorée :', e.message); }
+    await conn.query(
+        `UPDATE generated_document
+         SET status = 'SIGNE', signed_at = NOW(), signer_name = ?, signature_data = ?,
+             signer_ip = ?, signer_user_agent = ?, signed_hash = ?
+         WHERE id = ?`,
+        [signerName, encrypt(signatureData || null), encrypt(ip || ''), encrypt((userAgent || '').slice(0, 400)), signedHash, doc.id]
+    );
+    // Signatures cryptographiques (stagiaire + organisme) sur le PDF figé, stockées.
+    try {
+        const [[full]] = await conn.query('SELECT * FROM generated_document WHERE id = ?', [doc.id]);
+        if (full) await signAndStoreDocument(conn, orgId, full, signerName);
+    } catch (e) { console.error('Signature cryptographique différée :', e.message); }
+    // Pipeline : devis signé -> « Devis signé » ; contrat/convention signé -> « Inscrit ».
+    if (doc.type === 'DEVIS') await advanceEnrollments(conn, orgId, doc.id, 'DEVIS_SIGNE');
+    else if (doc.type === 'CONTRAT' || doc.type === 'CONVENTION') await advanceEnrollments(conn, orgId, doc.id, 'INSCRIT');
+}
+
+/** POST /api/documents/:id/sign-link — crée un lien de signature partageable (créneau). */
+const createSignLink = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[doc]] = await conn.query('SELECT id FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        if (!doc) return res.status(404).json({ message: 'Document introuvable.' });
+        const slot = String((req.body || {}).slot || 'representant').slice(0, 60);
+        const label = String((req.body || {}).label || 'Signature du représentant').slice(0, 120);
+        const token = crypto.randomBytes(32).toString('base64url');
+        try {
+            await conn.query(
+                'INSERT INTO document_sign_link (token, organization_id, document_id, slot, label, expires_at) VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 DAY))',
+                [token, req.user.organization_id, doc.id, slot, label]);
+        } catch (e) {
+            if (e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR')) return res.status(422).json({ message: 'Liens de signature non initialisés (migration 078).' });
+            throw e;
+        }
+        logAudit(req, 'document.sign_link', 'GeneratedDocument', doc.id);
+        res.status(201).json({ data: { token } });
+    } catch (err) {
+        console.error('Erreur création lien de signature :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { listDocuments, createDocument, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp };

@@ -10,11 +10,16 @@ import AppLayout from "./layouts/AppLayout.jsx";
 import StudentLayout from "./layouts/StudentLayout.jsx";
 import IntervenantLayout from "./layouts/IntervenantLayout.jsx";
 import IntervenantEspace from "./pages/IntervenantEspace.jsx";
+import RepresentantLayout from "./layouts/RepresentantLayout.jsx";
+import RepresentantEspace from "./pages/RepresentantEspace.jsx";
 import LoadingBar from "./components/LoadingBar.jsx";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Stagiaires from "./pages/Stagiaires.jsx";
 import StagiaireDetail from "./pages/StagiaireDetail.jsx";
+import Entreprises from "./pages/Entreprises.jsx";
+import EntrepriseDetail from "./pages/EntrepriseDetail.jsx";
+import SignerPublic from "./pages/SignerPublic.jsx";
 import Formations from "./pages/Formations.jsx";
 import Quiz from "./pages/Quiz.jsx";
 import Sessions from "./pages/Sessions.jsx";
@@ -112,10 +117,12 @@ function AppRoutes() {
   const isStudent = user?.role === "STAGIAIRE";
   const isIntervenant = user?.role === "INTERVENANT";
   const isPlatform = user?.role === "PLATFORM_OWNER";
+  const isRepresentant = user?.role === "ENTREPRISE";
 
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/signer/:token" element={<SignerPublic />} />
 
       {isPlatform ? (
         // --- Console plateforme (revente : gestion des organismes) ---
@@ -123,6 +130,13 @@ function AppRoutes() {
           <Route index element={<Navigate to="/organisations" replace />} />
           <Route path="organisations" element={<Platform />} />
           <Route path="*" element={<Navigate to="/organisations" replace />} />
+        </Route>
+      ) : isRepresentant ? (
+        // --- Espace représentant d'entreprise (signature des documents entreprise) ---
+        <Route path="/" element={<RepresentantLayout />}>
+          <Route index element={<Navigate to="/entreprise-documents" replace />} />
+          <Route path="entreprise-documents" element={<RepresentantEspace />} />
+          <Route path="*" element={<Navigate to="/entreprise-documents" replace />} />
         </Route>
       ) : (isIntervenant && !user?.has_learner) ? (
         // --- Espace intervenant externe seul (signature d'émargement) ---
@@ -143,6 +157,7 @@ function AppRoutes() {
           <Route path="communaute" element={<Communaute />} />
           <Route path="pizza-quest" element={<PizzaQuest />} />
           {isIntervenant && <Route path="intervention" element={<IntervenantEspace />} />}
+          {user?.has_company && <Route path="entreprise-documents" element={<RepresentantEspace />} />}
           <Route path="*" element={<Navigate to="/formations" replace />} />
         </Route>
       ) : (
@@ -153,6 +168,8 @@ function AppRoutes() {
           <Route path="dashboard" element={<Guard nav="/dashboard" roles={STAFF}><Dashboard /></Guard>} />
           <Route path="stagiaires" element={<Guard nav="/stagiaires" roles={STAFF}><Stagiaires /></Guard>} />
           <Route path="stagiaires/:id" element={<Guard nav="/stagiaires" roles={STAFF}><StagiaireDetail /></Guard>} />
+          <Route path="entreprises" element={<Guard nav="/entreprises" roles={ADMIN}><Entreprises /></Guard>} />
+          <Route path="entreprises/:id" element={<Guard nav="/entreprises" roles={ADMIN}><EntrepriseDetail /></Guard>} />
           <Route path="pipeline" element={<Guard nav="/pipeline" roles={ADMIN}><Pipeline /></Guard>} />
           <Route path="sessions" element={<Guard nav="/sessions" roles={STAFF}><Sessions /></Guard>} />
           <Route path="sessions/:id" element={<Guard nav="/sessions" roles={STAFF}><SessionDetail /></Guard>} />

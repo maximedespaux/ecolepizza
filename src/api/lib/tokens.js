@@ -9,6 +9,8 @@
 // Les clés conservent l'orthographe historique des anciens modèles Word pour rester
 // rétro-compatibles ({Personne}, {Niveau suggérer}, {Nom entreprise}…).
 
+const { resolveCustomTokens, shiftDate } = require('./customtokens.js');
+
 // --- Formatage ---
 const pad = (n) => String(n).padStart(2, '0');
 function frDate(v) {
@@ -54,6 +56,7 @@ const TOKEN_CATALOG = [
             { key: 'D_Naissance', label: 'Date de naissance', sample: '15/04/1990' },
             { key: 'Lieu naissance', label: 'Lieu de naissance', sample: 'Toulouse' },
             { key: 'Statut', label: 'Statut professionnel', sample: "Demandeur d'emploi" },
+            { key: 'France Travail', label: 'Identifiant France Travail', sample: '1234567A' },
         ],
     },
     {
@@ -91,6 +94,11 @@ const TOKEN_CATALOG = [
             { key: 'Financement', label: 'Financement', sample: 'CPF' },
             { key: 'Prix', label: 'Prix du dossier', sample: '1 500 €' },
             { key: 'Acompte', label: 'Acompte', sample: '450 €' },
+            { key: 'Reste à payer', label: 'Reste à payer (prix − acompte)', sample: '1 050 €' },
+            { key: 'Prix HT', label: 'Prix HT', sample: '1 500 €' },
+            { key: 'TVA', label: 'Montant de la TVA', sample: '0 €' },
+            { key: 'Taux TVA', label: 'Taux de TVA', sample: 'Exonérée' },
+            { key: 'Prix TTC', label: 'Prix TTC', sample: '1 500 €' },
         ],
     },
     {
@@ -103,6 +111,21 @@ const TOKEN_CATALOG = [
             { key: 'Nom représentant', label: 'Nom du représentant', sample: 'Sophie Martin' },
             { key: 'Fonction représentant', label: 'Fonction du représentant', sample: 'Gérante' },
             { key: 'Adresse entreprise', label: 'Adresse de l’entreprise', sample: '5 av. de la Gare, 33000 Bordeaux' },
+            { key: 'Email entreprise', label: 'E-mail de l’entreprise', sample: 'contact@pizzanapoli.fr' },
+            { key: 'Téléphone entreprise', label: 'Téléphone de l’entreprise', sample: '05 56 11 22 33' },
+            { key: 'NAF entreprise', label: 'Code NAF/APE', sample: '5610C' },
+            { key: 'Forme juridique', label: 'Forme juridique', sample: 'SARL' },
+            { key: 'Stagiaires', label: 'Liste des stagiaires (groupe, un par ligne)', sample: 'M. Jean DUPONT\nMme Marie MARTIN' },
+        ],
+    },
+    {
+        group: 'Financeur (OPCO)',
+        tokens: [
+            { key: 'Nom financeur', label: 'Nom du financeur', sample: 'AKTO' },
+            { key: 'SIRET financeur', label: 'SIRET du financeur', sample: '180 020 016 00019' },
+            { key: 'Adresse financeur', label: 'Adresse du financeur', sample: "1 rue de l'OPCO, 75001 Paris" },
+            { key: 'Email financeur', label: 'E-mail du financeur', sample: 'contact@akto.fr' },
+            { key: 'Téléphone financeur', label: 'Téléphone du financeur', sample: '01 44 00 00 00' },
         ],
     },
     {
@@ -140,8 +163,70 @@ const TOKEN_CATALOG = [
     },
 ];
 
-// Jetons dont la valeur est du HTML (image de signature) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme']);
+// Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires']);
+
+// Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
+const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Liste des stagiaires d'un groupe (document « entreprise »), un par ligne :
+//   M. Jean DUPONT
+//   Mme Marie MARTIN
+// Le jeton {Stagiaires} est RAW (HTML injecté) : les lignes sont séparées par <br>
+// pour un rendu identique en aperçu HTML et en .docx (LibreOffice).
+function stagiairesTable(list) {
+    const rows = Array.isArray(list) ? list : [];
+    if (!rows.length) return '<i>Aucun stagiaire dans le groupe.</i>';
+    return rows
+        .map((s) => escCell([s.civility, s.first_name, s.last_name].filter(Boolean).join(' ')))
+        .join('<br>');
+}
+
+// Jetons disponibles POUR CHAQUE stagiaire à l'intérieur d'un bloc {#Stagiaires}…{/Stagiaires}.
+// (Mêmes noms que les jetons stagiaire globaux, mais résolus par stagiaire du groupe.)
+function stagiaireRowTokens(s, i) {
+    const full = [s.civility, s.first_name, s.last_name].filter(Boolean).join(' ').trim();
+    return {
+        'N°': String(i + 1),
+        Personne: full, 'Civilité': s.civility || '', Nom: s.last_name || '', 'Prénom': s.first_name || '',
+        Email: s.email || '', 'Téléphone': s.phone || '', OPCO: s.opco || '',
+        Ville: s.town || '', Adresse: s.address || '', CP: s.zip_code || '',
+        'Lieu naissance': s.birth_place || '', D_Naissance: frDate(s.birthday), Naissance: frDate(s.birthday),
+    };
+}
+
+// Développe les blocs répétés « par stagiaire du groupe » AVANT le remplacement normal :
+//   {#Stagiaires} M. {Prénom} {Nom} — {OPCO}<br> {/Stagiaires}
+// Le contenu entre les marqueurs est répété pour chaque stagiaire, en résolvant les
+// jetons PAR STAGIAIRE (cf. stagiaireRowTokens) ET les jetons PERSONNALISÉS
+// ({custom:…}) recalculés par stagiaire. Les autres jetons ({Formation}, signatures…)
+// restent tels quels et sont résolus ensuite globalement.
+function expandGroupBlocks(html, list, customDefs, globalValues) {
+    const rows = Array.isArray(list) ? list : [];
+    const defs = Array.isArray(customDefs) ? customDefs : [];
+    const gv = globalValues || {};
+    return String(html || '').replace(/\{#\s*Stagiaires\s*\}([\s\S]*?)\{\/\s*Stagiaires\s*\}/g, (m, tpl) => {
+        if (!rows.length) return '<i>Aucun stagiaire dans le groupe.</i>';
+        return rows.map((s, i) => {
+            const row = stagiaireRowTokens(s, i);
+            // Jetons personnalisés recalculés pour CE stagiaire (peuvent référencer les
+            // jetons par stagiaire ET les jetons globaux).
+            const custom = resolveCustomTokens(defs, { ...gv, ...row });
+            const repl = { ...row, ...custom };
+            // On ne remplace QUE les jetons par stagiaire / personnalisés ; les jetons
+            // purement globaux sont laissés au remplacement global (fillHtml).
+            return String(tpl).replace(/\{\s*([^{}|]+?)\s*(?:\|\s*([+-]?\d+)\s*)?\}/g, (mm, ref, off) => {
+                if (!(ref in repl)) return mm;
+                let v = repl[ref] == null ? '' : String(repl[ref]);
+                if (off) v = shiftDate(v, parseInt(off, 10));
+                return escCell(v);
+            });
+        }).join('');
+    });
+}
+// Retire les blocs {#Stagiaires}…{/Stagiaires} (pour l'analyse « jetons manquants » :
+// leur contenu est résolu par stagiaire, pas globalement).
+const stripGroupBlocks = (s) => String(s || '').replace(/\{#\s*Stagiaires\s*\}[\s\S]*?\{\/\s*Stagiaires\s*\}/g, '');
 
 // Rend une image de signature (ou un emplacement en pointillés si absente).
 // Cadre de signature à TAILLE FIXE : l'image (dessin du stagiaire ou signature de
@@ -187,7 +272,8 @@ for (const g of TOKEN_CATALOG) for (const t of g.tokens) TOKEN_LABELS[t.key] = {
 // on ne les compte pas comme « information manquante » à la génération.
 const OPTIONAL_TOKENS = new Set([
     'Signature stagiaire', 'Signature organisme', 'Nom signataire', 'Date signature',
-    'Today', 'Date',
+    'Today', 'Date', 'Stagiaires',
+    'Nom financeur', 'SIRET financeur', 'Adresse financeur', 'Email financeur', 'Téléphone financeur',
 ]);
 
 /** Extrait les clés de jetons utilisées dans un corps HTML (puces + {Clé}). */
@@ -211,7 +297,9 @@ function usedTokenKeys(html) {
 function findMissingTokens(htmlParts, ctx) {
     const parts = Array.isArray(htmlParts) ? htmlParts : [htmlParts];
     const used = new Set();
-    for (const p of parts) for (const k of usedTokenKeys(p)) used.add(k);
+    // Les jetons DANS un bloc {#Stagiaires}… sont résolus par stagiaire → on les
+    // retire de l'analyse « manquants » (sinon {Prénom} serait signalé vide).
+    for (const p of parts) for (const k of usedTokenKeys(stripGroupBlocks(p))) used.add(k);
     const values = resolveTokens(ctx);
     const missing = [];
     for (const key of used) {
@@ -233,6 +321,8 @@ function resolveTokens(ctx = {}) {
     const o = ctx.org || {};
     const l = ctx.learner || {};
     const c = ctx.company || {};
+    const fin = ctx.financeur || {};
+    const finAddress = [fin.address, [fin.zip_code, fin.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const f = (ctx.formations && ctx.formations[0]) || {};
     const forms = ctx.formations || [];
 
@@ -242,6 +332,11 @@ function resolveTokens(ctx = {}) {
     const orgAddress = [o.address, [o.zip_code, o.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const totalPrice = forms.reduce((s, x) => s + Number(x.enroll_price || x.price || 0), 0) || Number(f.price || 0);
     const totalAcompte = forms.reduce((s, x) => s + Number(x.acompte || 0), 0);
+    // TVA : le prix stocké est le montant HT (base). Taux depuis l'organisme (0 = exonérée).
+    const vatRate = Math.max(0, Number(o.vat_rate) || 0);
+    const priceHT = totalPrice;
+    const vatAmount = priceHT * vatRate / 100;
+    const priceTTC = priceHT + vatAmount;
 
     // Agrégations multi-formations (un document peut couvrir plusieurs formations).
     const multi = forms.length > 1;
@@ -269,6 +364,7 @@ function resolveTokens(ctx = {}) {
         Adresse: address, CP: l.zip_code || '', Ville: l.town || '',
         Email: l.email || '', 'Téléphone': l.phone || '',
         D_Naissance: frDate(l.birthday), 'Lieu naissance': l.birth_place || '', Statut: l.professional_status || '',
+        'France Travail': l.france_travail_id || '',
         // Formation (agrégées si plusieurs)
         Formation: joinTitles, 'Niveau suggérer': joinTitles,
         Code: uniq(forms.map((x) => x.code || x.rs_code)).join(', ') || (f.code || f.rs_code || ''),
@@ -287,12 +383,23 @@ function resolveTokens(ctx = {}) {
         Jeudi: businessDay(start, 3), Vendredi: businessDay(start, 4),
         // Dossier
         Financement: f.financing || '', Prix: euro(totalPrice), Offre: euro(totalPrice), Acompte: euro(totalAcompte),
+        'Reste à payer': euro(totalPrice - totalAcompte),
+        'Prix HT': euro(priceHT), TVA: euro(vatAmount),
+        'Taux TVA': vatRate > 0 ? `${vatRate} %` : 'Exonérée', 'Prix TTC': euro(priceTTC),
         // Entreprise
         'Nom entreprise': c.name || '', 'Nom de l’entreprise': c.name || '',
-        Siret: c.siret || '', OPCO: c.opco || '',
+        Siret: c.siret || '', OPCO: c.opco || l.opco || '', // repli sur l'OPCO du stagiaire (particulier financé)
         'Civ représentant': c.representative_civ || '', 'Nom représentant': c.representative_name || '',
         'Responsable entreprise': c.representative_name || '', 'Fonction représentant': c.representative_role || '',
         'Adresse entreprise': cAddress,
+        'Email entreprise': c.email || '', 'Téléphone entreprise': c.phone || '',
+        'NAF entreprise': c.naf_ape || '', 'Forme juridique': c.legal_status || '',
+        // Financeur (OPCO)
+        'Nom financeur': fin.name || c.opco || l.opco || '',
+        'SIRET financeur': fin.siret || '', 'Adresse financeur': finAddress,
+        'Email financeur': fin.email || '', 'Téléphone financeur': fin.phone || '',
+        // Groupe (document entreprise) : tableau HTML de tous les stagiaires du groupe.
+        Stagiaires: stagiairesTable(ctx.groupStagiaires),
         // Organisme
         Organisme: o.legal_name || '', 'Organisme court': o.short_name || '', Responsable: o.manager || '',
         'Siret organisme': o.siret || '', 'TVA organisme': o.vat_number || '', NDA: o.nda || '',
@@ -316,4 +423,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };

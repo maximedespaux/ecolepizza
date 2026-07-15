@@ -61,6 +61,27 @@ const createEquivalence = async (req, res) => {
     }
 };
 
+/** PUT /api/equivalences/:id — modifie une équivalence (membres + intitulé). */
+const updateEquivalence = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const bySlug = await stepIndex(req.user.organization_id);
+        const check = validateMembers(req.body?.members, bySlug);
+        if (!check.ok) return res.status(422).json({ error: check.error });
+        const label = (req.body?.label && String(req.body.label).trim())
+            || check.value.map((m) => bySlug.get(m)?.label || m).join(' / ');
+        const [r] = await conn.query(
+            'UPDATE document_equivalence SET label = ?, members = ? WHERE id = ? AND organization_id = ?',
+            [label.slice(0, 160), JSON.stringify(check.value), req.params.id, req.user.organization_id]);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Équivalence introuvable.' });
+        logAudit(req, 'equivalence.update', 'DocumentEquivalence', req.params.id);
+        res.json({ data: { id: req.params.id, label, members: check.value } });
+    } catch (err) {
+        console.error('Erreur mise à jour équivalence :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** DELETE /api/equivalences/:id — supprime une équivalence personnalisée. */
 const deleteEquivalence = (req, res) => {
     db.query(
@@ -78,4 +99,4 @@ const deleteEquivalence = (req, res) => {
     );
 };
 
-module.exports = { listEquivalences, createEquivalence, deleteEquivalence };
+module.exports = { listEquivalences, createEquivalence, updateEquivalence, deleteEquivalence };
