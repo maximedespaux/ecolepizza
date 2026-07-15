@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
+  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -52,6 +52,11 @@ export default function EntrepriseDetail() {
   // Sélection de stagiaires rattachés à inscrire à une session
   const [selected, setSelected] = useState(() => new Set());
   const toggleSel = (lid) => setSelected((prev) => { const n = new Set(prev); n.has(lid) ? n.delete(lid) : n.add(lid); return n; });
+  // Préparer un document de GROUPE (comme la fiche stagiaire) : modèle entreprise +
+  // sessions/formations couvertes. Documents de groupe uniquement (pas les stagiaire).
+  const [groupTplsBySession, setGroupTplsBySession] = useState({}); // sessionId -> [{slug,label}]
+  const [prep, setPrep] = useState({ slug: "", sessionIds: new Set() });
+  const [preparing, setPreparing] = useState(false);
 
   function load() {
     getCompany(id).then((r) => {
@@ -68,6 +73,16 @@ export default function EntrepriseDetail() {
     if (!sessionId) return;
     getCompanyLearnerDocuments(id, sessionId).then((r) => setLearnerDocs(r.data || [])).catch(() => {});
   }, [id, sessionId, parcoursRefresh]);
+  // Modèles de documents de GROUPE par session de l'entreprise (pour le formulaire).
+  const sessionKey = (data?.sessions || []).map((s) => s.id).join(",");
+  useEffect(() => {
+    const sess = data?.sessions || [];
+    if (!sess.length) { setGroupTplsBySession({}); return; }
+    Promise.all(sess.map((s) => getCompanyDocTemplates(id, s.id).then((r) => [s.id, r.data || []]).catch(() => [s.id, []])))
+      .then((pairs) => setGroupTplsBySession(Object.fromEntries(pairs)));
+    // Par défaut : la session courante est cochée.
+    setPrep((p) => (p.sessionIds.size ? p : { ...p, sessionIds: new Set(sessionId ? [sessionId] : []) }));
+  }, [id, sessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Rattacher des stagiaires existants à l'entreprise (recherche débattue).
   useEffect(() => {
@@ -119,6 +134,30 @@ export default function EntrepriseDetail() {
       setStatus({ type: "success", message: "Documents préparés pour le groupe." });
       setParcoursRefresh((n) => n + 1);
     } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+  // Modèles couverts par les sessions cochées (union, dédupliqué par slug).
+  const coveredTpls = (() => {
+    const map = new Map();
+    for (const sid of prep.sessionIds) for (const t of (groupTplsBySession[sid] || [])) if (!map.has(t.slug)) map.set(t.slug, t);
+    return [...map.values()];
+  })();
+  const togglePrepSession = (sid) => setPrep((p) => { const n = new Set(p.sessionIds); n.has(sid) ? n.delete(sid) : n.add(sid); return { ...p, sessionIds: n }; });
+  // Génère le document de groupe pour chaque session cochée qui le propose.
+  async function prepareGroupDoc(ev) {
+    ev.preventDefault();
+    if (!prep.slug || prep.sessionIds.size === 0) return;
+    setPreparing(true); setStatus(null);
+    try {
+      let n = 0;
+      for (const sid of prep.sessionIds) {
+        if (!(groupTplsBySession[sid] || []).some((t) => t.slug === prep.slug)) continue; // pas dans cette formation
+        await createCompanyDocument(id, { session_id: sid, template_slug: prep.slug });
+        n++;
+      }
+      setStatus({ type: n ? "success" : "error", message: n ? `Document de groupe préparé (${n} formation(s)).` : "Ce document n'existe pas dans les formations sélectionnées." });
+      if (n) { setPrep((p) => ({ ...p, slug: "" })); setParcoursRefresh((k) => k + 1); }
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setPreparing(false); }
   }
   async function openCompanyDoc(docId) {
     try { const url = await documentPdfUrl(docId); window.open(url, "_blank"); }
@@ -296,6 +335,51 @@ export default function EntrepriseDetail() {
             </div>
           </Card>
         </div>
+      </div>
+
+      {/* Préparer un document de GROUPE (comme la fiche stagiaire). */}
+      <div style={{ marginTop: 22 }}>
+        <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Préparer un document</span>}>
+          <p className="hint" style={{ margin: "0 0 12px" }}>Génère un <b>document de groupe</b> (🏢) pour l'entreprise. Les documents propres au <b>stagiaire</b> se génèrent depuis sa fiche.</p>
+          {(data.sessions || []).length === 0 ? (
+            <EmptyState icon="file-text">Aucune session pour cette entreprise. Inscris un groupe à une session ci-dessus.</EmptyState>
+          ) : (
+            <form onSubmit={prepareGroupDoc}>
+              <div className="field">
+                <label>Modèle de document (groupe)</label>
+                <select className="inp" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
+                  <option value="">{coveredTpls.length ? "— Choisir un document —" : "— Aucun document de groupe disponible —"}</option>
+                  {coveredTpls.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label>Formations couvertes (une génération par formation cochée)</label>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {(data.sessions || []).map((s) => {
+                    const checked = prep.sessionIds.has(s.id);
+                    const tplCount = (groupTplsBySession[s.id] || []).length;
+                    return (
+                      <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border-soft)", cursor: "pointer" }}>
+                        <input type="checkbox" checked={checked} onChange={() => togglePrepSession(s.id)} />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <b>{s.program_code || s.program_title}</b>
+                          <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.program_title} · S{s.week} {s.year}</span>
+                        </span>
+                        <Badge tone={tplCount ? "b" : "n"}>{tplCount} doc{tplCount > 1 ? "s" : ""} groupe</Badge>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <button type="submit" className="btn primary" disabled={preparing || !prep.slug || prep.sessionIds.size === 0}>
+                  <Icon name="file-text" size={15} /> Générer le document
+                </button>
+                {prep.sessionIds.size === 0 && <span className="hint">Sélectionne au moins une formation.</span>}
+              </div>
+            </form>
+          )}
+        </Card>
       </div>
 
       {/* Parcours documentaire COMPLET du groupe (même style que la fiche stagiaire). */}

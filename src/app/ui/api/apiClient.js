@@ -395,6 +395,11 @@ export function setRepStamp(stamp) { return request("/rep/stamp", { method: "PUT
 export function createCompanyDocument(id, payload) {
   return request(`/companies/${id}/documents`, { method: "POST", body: JSON.stringify(payload) });
 }
+// Modèles de documents de GROUPE (company_level) disponibles pour une session.
+export function getCompanyDocTemplates(id, sessionId) {
+  const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
+  return request(`/companies/${id}/doc-templates${qs}`);
+}
 // Lien de signature partageable (représentant entreprise). createSignLink → { token }.
 export function createSignLink(documentId, payload = {}) {
   return request(`/documents/${documentId}/sign-link`, { method: "POST", body: JSON.stringify(payload) });
