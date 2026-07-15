@@ -302,7 +302,7 @@ const createCompanyDocument = async (req, res) => {
     if (!session_id || !template_slug) return res.status(422).json({ error: 'Session et modèle requis.' });
     try {
         const conn = db.promise();
-        const [[company]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        const [[company]] = await conn.query('SELECT id, opco FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
         const [[sess]] = await conn.query('SELECT id FROM training_session WHERE id = ? AND organization_id = ?', [session_id, orgId]);
         if (!sess) return res.status(404).json({ message: 'Session introuvable.' });
@@ -325,9 +325,17 @@ const createCompanyDocument = async (req, res) => {
         try { await conn.query('SELECT opco FROM generated_document LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') opcoSupported = false; else if (!isMissingSchema(e)) throw e; }
 
+        // Regroupement par OPCO : un stagiaire sans OPCO hérite de celui de l'entreprise
+        // (évite un 2e document « sans OPCO »). Clé normalisée (casse/espaces) pour ne
+        // pas scinder « OCAPIAT » et « Ocapiat ».
         const groups = new Map();
         if (opcoSupported) {
-            for (const e of enr) { const key = (e.opco || '').trim(); const g = groups.get(key) || { opco: key || null, ids: [] }; g.ids.push(e.id); groups.set(key, g); }
+            for (const e of enr) {
+                const raw = (e.opco || company.opco || '').trim();
+                const key = raw.toUpperCase();
+                const g = groups.get(key) || { opco: raw || null, ids: [] };
+                g.ids.push(e.id); groups.set(key, g);
+            }
         } else {
             groups.set('', { opco: null, ids: enr.map((e) => e.id) });
         }

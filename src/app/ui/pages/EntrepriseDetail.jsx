@@ -133,15 +133,16 @@ export default function EntrepriseDetail() {
   // Parcours documentaire du groupe : génère un document pour tout le groupe.
   //  · document de groupe (company_level) → un doc par OPCO ;
   //  · sinon → un doc par stagiaire concerné, puis envoi (le stagiaire signe dans son espace).
-  async function prepareCompanyDoc(slug, step) {
-    if (!sessionId) return;
-    setStatus(null);
-    try {
-      if (step && step.company_level) await createCompanyDocument(id, { session_id: sessionId, template_slug: slug });
-      else await generateGroupDocuments(id, { session_id: sessionId, slug, send: true });
-      setStatus({ type: "success", message: "Documents préparés pour le groupe." });
-      setParcoursRefresh((n) => n + 1);
-    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  // Depuis une étape du parcours (document de groupe) : pré-sélectionne le bon
+  // document dans le formulaire « Préparer un document » et descend au formulaire
+  // (comme la fiche stagiaire). La génération se fait ensuite via le formulaire.
+  function prepareCompanyDoc(slug) {
+    setPrep((p) => {
+      const ids = new Set(p.sessionIds);
+      if (sessionId) ids.add(sessionId);
+      return { ...p, slug, sessionIds: ids };
+    });
+    setTimeout(() => document.getElementById("ent-prepare")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
   }
   // Modèles couverts par les sessions cochées (union, dédupliqué par slug).
   const coveredTpls = (() => {
@@ -386,7 +387,7 @@ export default function EntrepriseDetail() {
       </div>
 
       {/* Préparer un document de GROUPE (comme la fiche stagiaire). */}
-      <div style={{ marginTop: 22 }}>
+      <div id="ent-prepare" style={{ marginTop: 22, scrollMarginTop: 80 }}>
         <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Préparer un document</span>}>
           <p className="hint" style={{ margin: "0 0 12px" }}>Génère un <b>document de groupe</b> (🏢) pour l'entreprise. Les documents propres au <b>stagiaire</b> se génèrent depuis sa fiche.</p>
           {(data.sessions || []).length === 0 ? (
