@@ -460,19 +460,20 @@ const getCompanyParcours = async (req, res) => {
             const signers = stepSigners(s);
             let gen = 0, total = 0, signed = 0, docId = null;
             if (s.company_level) {
-                // Document de GROUPE : UNE signature entreprise (+ contreseing organisme),
-                // pas une par stagiaire. Un document COLLECTIF par OPCO → le total attendu
-                // est le nombre d'OPCO distincts du groupe (au moins 1).
-                const opcos = new Set(grp.enrollments.map((e) => (e.opco || '').trim().toUpperCase()));
-                const expected = Math.max(1, opcos.size);
+                // Document de GROUPE : UNE signature collective (organisme + entreprise),
+                // pas une par stagiaire. On le représente comme une seule étape signée /
+                // à signer (peu importe le nombre de stagiaires ou d'OPCO).
                 let docs = [];
                 try {
                     [docs] = await conn.query(
                         "SELECT id, status FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND scope = 'COMPANY' ORDER BY created_at DESC",
                         [orgId, company.id, sessionId, s.slug]);
                 } catch (e) { if (!isMissingSchema(e)) throw e; }
-                gen = docs.length; signed = docs.filter((d) => d.status === 'SIGNE').length; docId = docs[0] ? docs[0].id : null;
-                total = expected; // 1 signature (org + entreprise) par document collectif (OPCO)
+                const allSigned = docs.length > 0 && docs.every((d) => d.status === 'SIGNE');
+                gen = docs.length ? 1 : 0;
+                signed = allSigned ? 1 : 0;
+                total = 1; // une signature collective
+                docId = docs[0] ? docs[0].id : null;
             } else if (s.quiz_id) {
                 // QCM : concerne tous les stagiaires du groupe ; l'envoi se fait depuis
                 // chaque fiche stagiaire (lecture seule ici). Comptage par quiz_id.
