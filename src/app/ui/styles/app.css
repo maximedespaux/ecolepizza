@@ -497,7 +497,7 @@ tbody tr:last-child td{border-bottom:none}
 .pf-add-item:hover{border-color:var(--ember1,#c0392b);background:var(--ember-soft,#fdeae6)}
 .pf-add-empty{font-size:13px;color:var(--muted,#666)}
 /* Variante compacte (section « à l'arrivée via une entreprise ») : cartes plus petites */
-.parcours.compact .parcours-flow{flex-wrap:wrap;min-height:180px;align-content:flex-start}
+.parcours.compact .parcours-flow{flex-wrap:nowrap;overflow-x:auto}
 .parcours.compact .pf-node{min-width:118px;max-width:172px;padding:8px 9px 8px}
 .parcours.compact .pf-opt{font-size:12px;gap:5px}
 .parcours.compact .pf-grip{font-size:11px;top:4px;right:6px}
