@@ -447,13 +447,13 @@ const getCompanyParcours = async (req, res) => {
         } catch (e) { if (!isMissingSchema(e)) throw e; }
         const intakeSet = new Set(intakeOrder);
 
-        const docStepsAll = grp.allSteps.filter((s) => s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT');
-        // Filtré à la section entreprise (ordre = celui de la section). Repli : si aucune
-        // section définie, on retombe sur tous les documents actifs (comportement legacy).
+        // Le parcours entreprise = TOUTES les étapes de la section (documents de groupe,
+        // documents stagiaire ET QCM), dans l'ordre défini. Repli : si aucune section
+        // définie, on retombe sur tous les documents actifs (comportement legacy).
+        const bySlug = new Map(grp.allSteps.map((s) => [s.slug, s]));
         const docSteps = intakeSet.size
-            ? docStepsAll.filter((s) => intakeSet.has(s.slug))
-                .sort((a, b) => intakeOrder.indexOf(a.slug) - intakeOrder.indexOf(b.slug))
-            : docStepsAll;
+            ? intakeOrder.map((sl) => bySlug.get(sl)).filter((s) => s && s.doc_type !== 'EMARGEMENT')
+            : grp.allSteps.filter((s) => s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT');
 
         let steps = [];
         for (const s of docSteps) {
@@ -468,6 +468,21 @@ const getCompanyParcours = async (req, res) => {
                 } catch (e) { if (!isMissingSchema(e)) throw e; }
                 gen = docs.length; signed = docs.filter((d) => d.status === 'SIGNE').length; docId = docs[0] ? docs[0].id : null;
                 total = gen; // au moins autant de docs que d'OPCO ; on affiche gen/signed
+            } else if (s.quiz_id) {
+                // QCM : concerne tous les stagiaires du groupe ; l'envoi se fait depuis
+                // chaque fiche stagiaire (lecture seule ici). Comptage par quiz_id.
+                const ids = grp.enrollments.map((e) => e.id);
+                total = ids.length;
+                let rows = [];
+                if (ids.length) {
+                    [rows] = await conn.query(
+                        `SELECT DISTINCT df.enrollment_id, gd.status FROM generated_document gd
+                         JOIN document_formation df ON df.document_id = gd.id
+                         WHERE gd.organization_id = ? AND df.enrollment_id IN (?) AND gd.quiz_id = ?`,
+                        [orgId, ids, s.quiz_id]);
+                }
+                gen = new Set(rows.map((r) => r.enrollment_id)).size;
+                signed = new Set(rows.filter((r) => r.status === 'SIGNE').map((r) => r.enrollment_id)).size;
             } else {
                 const applicable = grp.enrollments.filter((e) => e.slugs.has(s.slug));
                 total = applicable.length;
@@ -485,9 +500,10 @@ const getCompanyParcours = async (req, res) => {
             }
             const done = total > 0 && signed >= total;
             steps.push({
-                key: s.slug, label: s.label, sub: signerSub(signers, s.company_level),
+                key: s.slug, label: s.label,
+                sub: s.quiz_id ? 'QCM' : signerSub(signers, s.company_level),
                 signers, company_level: !!s.company_level, doc_type: s.doc_type,
-                signable: signers.some((r) => r !== 'ORG'), quiz: false,
+                signable: s.quiz_id ? false : signers.some((r) => r !== 'ORG'), quiz: !!s.quiz_id,
                 gen, total, signed, docId,
                 _done: done,
             });

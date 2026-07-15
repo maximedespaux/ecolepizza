@@ -1,7 +1,7 @@
 const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
-const { enrollmentSteps } = require('./formationProgram.controller.js');
+const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 
 const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
@@ -121,10 +121,12 @@ const getParcours = async (req, res) => {
                 jours: e.program_days, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
                 ...(factsMap.get(e.id) || {}),
             };
-            let steps = await enrollmentSteps(conn, orgId, program, ctx, condById);
             // Inscription via une ENTREPRISE : le stagiaire suit le MÊME parcours que
-            // l'entreprise (section « à l'arrivée via une entreprise »), pas le parcours
-            // « seul ». On filtre donc aux documents de cette section (dans son ordre).
+            // l'entreprise (section « à l'arrivée via une entreprise »), y compris les
+            // documents de GROUPE (visibles mais générés côté entreprise). On construit
+            // donc les étapes directement depuis la section (toutes présentes), sinon on
+            // retombe sur le parcours du dossier « seul ».
+            let steps = null;
             if (e.company_id) {
                 let intakeOrder = [];
                 try {
@@ -134,10 +136,12 @@ const getParcours = async (req, res) => {
                     intakeOrder = Array.isArray(cs) ? cs : [];
                 } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
                 if (intakeOrder.length) {
-                    const set = new Set(intakeOrder);
-                    steps = steps.filter((s) => set.has(s.slug)).sort((a, b) => intakeOrder.indexOf(a.slug) - intakeOrder.indexOf(b.slug));
+                    const allSteps = await formationSteps(conn, orgId, program);
+                    const bySlug = new Map(allSteps.map((s) => [s.slug, s]));
+                    steps = intakeOrder.map((sl) => bySlug.get(sl)).filter(Boolean);
                 }
             }
+            if (!steps) steps = await enrollmentSteps(conn, orgId, program, ctx, condById);
             parc = computeDocParcours({ steps, docs });
         }
 

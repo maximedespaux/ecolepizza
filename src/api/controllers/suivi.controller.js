@@ -2,7 +2,7 @@ const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
-const { enrollmentSteps } = require('./formationProgram.controller.js');
+const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
 const { logAudit } = require('../lib/audit.js');
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
@@ -55,6 +55,14 @@ const getSuivi = async (req, res) => {
             intakeCache.set(programId, order);
             return order;
         }
+        // formationSteps par formation (toutes les étapes candidates), en cache.
+        const allStepsCache = new Map(); // program_id -> allSteps
+        async function allStepsFor(program) {
+            if (allStepsCache.has(program.id)) return allStepsCache.get(program.id);
+            const all = await formationSteps(conn, orgId, program);
+            allStepsCache.set(program.id, all);
+            return all;
+        }
 
         const dossiers = [];
         for (const e of enrollments) {
@@ -77,12 +85,14 @@ const getSuivi = async (req, res) => {
                     [e.enrollment_id]
                 );
                 // Dossier envoyé par une entreprise : même parcours que l'entreprise
-                // (section company_steps) + statut des documents de GROUPE rattaché.
+                // (section company_steps, TOUTES les étapes) + statut des documents de
+                // GROUPE rattaché.
                 if (e.enr_company_id) {
                     const intakeOrder = await companyStepsFor(program.id);
                     if (intakeOrder.length) {
-                        const set = new Set(intakeOrder);
-                        steps = steps.filter((s) => set.has(s.slug)).sort((a, b) => intakeOrder.indexOf(a.slug) - intakeOrder.indexOf(b.slug));
+                        const all = await allStepsFor(program);
+                        const bySlug = new Map(all.map((s) => [s.slug, s]));
+                        steps = intakeOrder.map((sl) => bySlug.get(sl)).filter(Boolean);
                     }
                     try {
                         const [cdocs] = await conn.query(
