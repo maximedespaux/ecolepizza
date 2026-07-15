@@ -16,7 +16,7 @@ const EMPTY = {
   diploma_level: "", diploma_name: "", diploma_year: "", last_experience: "",
   experience_value: "", experience_unit: "", professional_status: "", cpf_amount: "",
   france_travail_id: "", current_contract: "", social_security: "",
-  financing: "PARTICULIER", levels: "", company_id: "",
+  financing: "PARTICULIER", opco: "", levels: "", company_id: "",
   project_creation: false, project_takeover: false, project_oven: false, project_truck: false, project_job: false,
 };
 
