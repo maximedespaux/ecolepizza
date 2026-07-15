@@ -34,7 +34,7 @@ async function resolveGroupSteps(conn, orgId, companyId, sessionId) {
             agefice: (e.opco || '').toUpperCase() === 'AGEFICE', ...(factsMap.get(e.id) || {}),
         };
         const resolved = await enrollmentSteps(conn, orgId, program, ctx, condById, eqMap);
-        enrollments.push({ id: e.id, learner_id: e.learner_id, slugs: new Set(resolved.filter((s) => !s.quiz_id).map((s) => s.slug)) });
+        enrollments.push({ id: e.id, learner_id: e.learner_id, opco: e.opco || null, slugs: new Set(resolved.filter((s) => !s.quiz_id).map((s) => s.slug)) });
     }
     return { sess, program, enrollments, allSteps: await formationSteps(conn, orgId, program) };
 }
@@ -460,6 +460,11 @@ const getCompanyParcours = async (req, res) => {
             const signers = stepSigners(s);
             let gen = 0, total = 0, signed = 0, docId = null;
             if (s.company_level) {
+                // Document de GROUPE : UNE signature entreprise (+ contreseing organisme),
+                // pas une par stagiaire. Un document COLLECTIF par OPCO → le total attendu
+                // est le nombre d'OPCO distincts du groupe (au moins 1).
+                const opcos = new Set(grp.enrollments.map((e) => (e.opco || '').trim().toUpperCase()));
+                const expected = Math.max(1, opcos.size);
                 let docs = [];
                 try {
                     [docs] = await conn.query(
@@ -467,7 +472,7 @@ const getCompanyParcours = async (req, res) => {
                         [orgId, company.id, sessionId, s.slug]);
                 } catch (e) { if (!isMissingSchema(e)) throw e; }
                 gen = docs.length; signed = docs.filter((d) => d.status === 'SIGNE').length; docId = docs[0] ? docs[0].id : null;
-                total = gen; // au moins autant de docs que d'OPCO ; on affiche gen/signed
+                total = expected; // 1 signature (org + entreprise) par document collectif (OPCO)
             } else if (s.quiz_id) {
                 // QCM : concerne tous les stagiaires du groupe ; l'envoi se fait depuis
                 // chaque fiche stagiaire (lecture seule ici). Comptage par quiz_id.
