@@ -276,11 +276,19 @@ function groupTokensGroup() {
 
 // Jetons personnalisés de l'organisme (table custom_token). Résilient si migration absente.
 async function loadCustomTokens(orgId) {
-    try {
-        const [rows] = await db.promise().query(
-            'SELECT token_key, label, template, sort_order FROM custom_token WHERE organization_id = ? ORDER BY sort_order, label', [orgId]);
-        return rows;
-    } catch (e) { if (e && e.code === 'ER_NO_SUCH_TABLE') return []; throw e; }
+    // `category` (migration 093) est optionnel : on réessaie sans si la colonne manque.
+    for (const cols of ['token_key, label, category, template, sort_order', 'token_key, label, template, sort_order']) {
+        try {
+            const [rows] = await db.promise().query(
+                `SELECT ${cols} FROM custom_token WHERE organization_id = ? ORDER BY sort_order, label`, [orgId]);
+            return rows;
+        } catch (e) {
+            if (e && e.code === 'ER_NO_SUCH_TABLE') return [];
+            if (e && e.code === 'ER_BAD_FIELD_ERROR') continue; // colonne category absente
+            throw e;
+        }
+    }
+    return [];
 }
 
 // Ordre d'affichage canonique des groupes de la palette (du plus utile au plus rare).
@@ -320,8 +328,16 @@ const getTokens = async (req, res) => {
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
         groups.push(groupTokensGroup());
+        // Jetons personnalisés : rangés dans le groupe de leur CATÉGORIE (migration 093).
+        // Sans catégorie → groupe « Personnalisés ». On fusionne dans un groupe existant
+        // du même nom (ex. « Groupe entreprise »), sinon on le crée.
         const defs = await loadCustomTokens(orgId);
-        if (defs.length) groups.push({ group: 'Personnalisés', tokens: defs.map((d) => ({ key: `custom:${d.token_key}`, label: d.label, sample: '' })) });
+        for (const d of defs) {
+            const cat = (d.category && String(d.category).trim()) || 'Personnalisés';
+            let g = groups.find((x) => x.group === cat);
+            if (!g) { g = { group: cat, tokens: [] }; groups.push(g); }
+            g.tokens.push({ key: `custom:${d.token_key}`, label: d.label, sample: '' });
+        }
 
         // Réorganisation : ordre de groupes canonique + tri alphabétique des jetons
         // (hors groupes curatés) + suppression des groupes vides.
@@ -384,13 +400,21 @@ const saveCustomTokens = async (req, res) => {
             const key = String(t.token_key || '').trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
             if (!key || seen.has(key)) continue;
             seen.add(key);
-            clean.push({ token_key: key, label: String(t.label || key).slice(0, 120), template: String(t.template || '').slice(0, 2000), sort_order: i * 10 });
+            const category = String(t.category || '').trim().slice(0, 80) || null;
+            clean.push({ token_key: key, label: String(t.label || key).slice(0, 120), category, template: String(t.template || '').slice(0, 2000), sort_order: i * 10 });
         }
         try {
             await conn.query('DELETE FROM custom_token WHERE organization_id = ?', [orgId]);
             for (const t of clean) {
-                await conn.query('INSERT INTO custom_token (id, organization_id, token_key, label, template, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
-                    [crypto.randomUUID(), orgId, t.token_key, t.label, t.template, t.sort_order]);
+                try {
+                    await conn.query('INSERT INTO custom_token (id, organization_id, token_key, label, category, template, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        [crypto.randomUUID(), orgId, t.token_key, t.label, t.category, t.template, t.sort_order]);
+                } catch (e2) {
+                    if (e2 && e2.code === 'ER_BAD_FIELD_ERROR') { // colonne category absente (migration 093 non jouée)
+                        await conn.query('INSERT INTO custom_token (id, organization_id, token_key, label, template, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+                            [crypto.randomUUID(), orgId, t.token_key, t.label, t.template, t.sort_order]);
+                    } else throw e2;
+                }
             }
         } catch (e) {
             if (e && e.code === 'ER_NO_SUCH_TABLE') return res.status(501).json({ message: "La table des jetons personnalisés n'existe pas (migration 066 non appliquée)." });

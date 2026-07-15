@@ -49,8 +49,14 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
   }, [catalog, list]);
 
   const setRow = (i, patch) => setList((l) => l.map((t, j) => (j === i ? { ...t, ...patch } : t)));
-  const add = () => setList((l) => [...l, { token_key: "", label: "", template: "" }]);
+  const add = () => setList((l) => [...l, { token_key: "", label: "", category: "", template: "" }]);
   const remove = (i) => setList((l) => l.filter((_, j) => j !== i));
+  // Catégories proposées = groupes de la palette (le jeton se rangera dans ce groupe).
+  const categoryOptions = useMemo(() => {
+    const set = [];
+    for (const g of catalog || []) if (g.group && g.group !== "Personnalisés" && !set.includes(g.group)) set.push(g.group);
+    return set;
+  }, [catalog]);
 
   function insertRef(key) {
     const { idx } = focusRef.current;
@@ -61,7 +67,7 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
   async function save() {
     setSaving(true); setStatus(null);
     try {
-      const tokens = list.filter((t) => slug(t.token_key)).map((t) => ({ token_key: slug(t.token_key), label: t.label || slug(t.token_key), template: t.template || "" }));
+      const tokens = list.filter((t) => slug(t.token_key)).map((t) => ({ token_key: slug(t.token_key), label: t.label || slug(t.token_key), category: t.category || "", template: t.template || "" }));
       await saveCustomTokens(tokens);
       setStatus({ type: "success", message: "Jetons personnalisés enregistrés." });
       onSaved?.();
@@ -86,12 +92,18 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
 
           <div className="tablewrap">
             <table>
-              <thead><tr><th style={{ width: 150 }}>Nom (clé)</th><th style={{ width: 180 }}>Libellé</th><th>Modèle</th><th style={{ width: 150 }}>Aperçu</th><th style={{ width: 40 }}></th></tr></thead>
+              <thead><tr><th style={{ width: 140 }}>Nom (clé)</th><th style={{ width: 160 }}>Libellé</th><th style={{ width: 150 }}>Catégorie</th><th>Modèle</th><th style={{ width: 130 }}>Aperçu</th><th style={{ width: 40 }}></th></tr></thead>
               <tbody>
                 {list.map((t, i) => (
                   <tr key={i}>
                     <td><input className="inp" value={t.token_key} onChange={(e) => setRow(i, { token_key: e.target.value })} placeholder="Periode" /></td>
                     <td><input className="inp" value={t.label} onChange={(e) => setRow(i, { label: e.target.value })} placeholder="Période de formation" /></td>
+                    <td>
+                      <select className="inp" value={t.category || ""} onChange={(e) => setRow(i, { category: e.target.value })} title="Groupe où ranger ce jeton (défaut : Personnalisé)">
+                        <option value="">Personnalisé</option>
+                        {categoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </td>
                     <td>
                       <textarea className="inp" rows={2} value={t.template} style={{ resize: "vertical", width: "100%" }}
                         onFocus={() => { focusRef.current = { idx: i }; }}
@@ -101,7 +113,7 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
                     <td><button className="btn sm ghost danger" onClick={() => remove(i)} title="Supprimer"><Icon name="x" size={13} /></button></td>
                   </tr>
                 ))}
-                {list.length === 0 && <tr><td colSpan={5} className="hint" style={{ padding: 12 }}>Aucun jeton personnalisé. Ajoutez-en un.</td></tr>}
+                {list.length === 0 && <tr><td colSpan={6} className="hint" style={{ padding: 12 }}>Aucun jeton personnalisé. Ajoutez-en un.</td></tr>}
               </tbody>
             </table>
           </div>
