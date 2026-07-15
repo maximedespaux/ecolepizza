@@ -17,7 +17,8 @@ const getSuivi = async (req, res) => {
     try {
         const conn = db.promise();
         const [enrollments] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.crm_stage,
+            `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.crm_stage, e.session_id,
+                    e.company_id AS enr_company_id,
                     l.first_name, l.last_name, l.opco,
                     COALESCE(e.company_id, l.company_id) AS company_id, c.name AS company_name,
                     p.id AS program_id, p.code AS program_code, p.title AS program_title,
@@ -37,6 +38,24 @@ const getSuivi = async (req, res) => {
         const factsMap = await loadDossierFactsMap(
             conn, req.user.organization_id, enrollments.map((e) => e.enrollment_id), fieldCatalog);
 
+        // Section « à l'arrivée via une entreprise » (company_steps) par formation,
+        // chargée à la demande et mise en cache (un dossier envoyé par une entreprise
+        // suit CE parcours, comme la fiche entreprise et la fiche stagiaire).
+        const orgId = req.user.organization_id;
+        const intakeCache = new Map(); // program_id -> [slugs]
+        async function companyStepsFor(programId) {
+            if (intakeCache.has(programId)) return intakeCache.get(programId);
+            let order = [];
+            try {
+                const [[pr]] = await conn.query('SELECT company_steps FROM training_program WHERE id = ? AND organization_id = ?', [programId, orgId]);
+                let cs = pr && pr.company_steps;
+                if (typeof cs === 'string') { try { cs = JSON.parse(cs); } catch { cs = []; } }
+                order = Array.isArray(cs) ? cs : [];
+            } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
+            intakeCache.set(programId, order);
+            return order;
+        }
+
         const dossiers = [];
         for (const e of enrollments) {
             // Parcours = celui de la formation (Parcours documentaire), filtré aux
@@ -49,7 +68,7 @@ const getSuivi = async (req, res) => {
                     jours: e.program_days || 1, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
                     ...(factsMap.get(e.enrollment_id) || {}),
                 };
-                const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
+                let steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
                 const [docs] = await conn.query(
                     `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id
                      FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
@@ -57,6 +76,21 @@ const getSuivi = async (req, res) => {
                      ORDER BY gd.created_at DESC`,
                     [e.enrollment_id]
                 );
+                // Dossier envoyé par une entreprise : même parcours que l'entreprise
+                // (section company_steps) + statut des documents de GROUPE rattaché.
+                if (e.enr_company_id) {
+                    const intakeOrder = await companyStepsFor(program.id);
+                    if (intakeOrder.length) {
+                        const set = new Set(intakeOrder);
+                        steps = steps.filter((s) => set.has(s.slug)).sort((a, b) => intakeOrder.indexOf(a.slug) - intakeOrder.indexOf(b.slug));
+                    }
+                    try {
+                        const [cdocs] = await conn.query(
+                            "SELECT id, type, status, template_slug, quiz_id FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND scope = 'COMPANY' ORDER BY created_at DESC",
+                            [orgId, e.enr_company_id, e.session_id]);
+                        docs.push(...cdocs);
+                    } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
+                }
                 const parc = computeDocParcours({ steps, docs });
                 total = parc.steps.length;
                 done = parc.currentIndex;
