@@ -104,10 +104,22 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
           <div style={{ height: "100%", width: `${data.percent}%`, background: "linear-gradient(90deg,#c0392b,#e0932e)", borderRadius: 6 }} />
         </div>
         <div>
-          {data.steps.map((s) => {
+          {data.steps.map((s, idx, arr) => {
             const on = s.key === sel;
+            // Séparateur de section (parcours entreprise) : uniquement si l'API
+            // renvoie deux sections distinctes (company / learner).
+            const hasSections = arr.some((x) => x.section === "company") && arr.some((x) => x.section === "learner");
+            const showDivider = hasSections && s.section && (idx === 0 || arr[idx - 1].section !== s.section);
+            const divider = showDivider ? (
+              <div key={`sec-${s.section}`} style={{ display: "flex", alignItems: "center", gap: 8, margin: idx === 0 ? "2px 2px 8px" : "14px 2px 8px", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", color: "var(--dim)" }}>
+                <span>{s.section === "company" ? "🏢 À L'ARRIVÉE VIA L'ENTREPRISE" : "SUITE DU PARCOURS · STAGIAIRE"}</span>
+                <span style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
+              </div>
+            ) : null;
             return (
-              <button key={s.key} type="button" onClick={() => setSel(s.key)}
+              <div key={s.key}>
+              {divider}
+              <button type="button" onClick={() => setSel(s.key)}
                 style={{
                   display: "flex", gap: 12, alignItems: "center", width: "100%", textAlign: "left",
                   padding: "10px 12px", marginBottom: 8, borderRadius: 12, cursor: "pointer",
@@ -129,6 +141,7 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
                   <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ember1,#c0392b)", whiteSpace: "nowrap" }}>En cours</span>
                 )}
               </button>
+              </div>
             );
           })}
         </div>

@@ -137,6 +137,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [saving, setSaving] = useState(false);
   const [steps, setSteps] = useState([]);
   const [breakSlug, setBreakSlug] = useState(null); // point d'accès émargement (slug avant la flèche)
+  const [companySteps, setCompanySteps] = useState([]); // sous-parcours « arrivée via entreprise » (slugs ordonnés)
   const [archiveTree, setArchiveTree] = useState({ folders: [] });
   const [companyArchiveTree, setCompanyArchiveTree] = useState({ folders: [] });
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
@@ -165,6 +166,10 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       // horaires n'est pas renvoyé par la liste (getFormations) : on le charge ici.
       if (r.data && "horaires" in r.data) setForm((p) => ({ ...p, horaires: r.data.horaires || "" }));
       setBreakSlug(r.data?.emargement_break_slug || null);
+      // Sous-parcours entreprise (JSON tableau de slugs, ou déjà tableau).
+      let cs = r.data?.company_steps;
+      if (typeof cs === "string") { try { cs = JSON.parse(cs); } catch { cs = []; } }
+      setCompanySteps(Array.isArray(cs) ? cs : []);
     }).catch(() => {});
   }, [program.id]);
   // Équivalences « OU » (org) : map slug -> groupe + liste des équivalences.
@@ -216,7 +221,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
         onSaved("Formation créée.");
       } else {
         await updateFormation(program.id, form);
-        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null);
+        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null, companySteps);
         await saveArchiveTree(program.id, archiveTree, companyArchiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved("Formation mise à jour.");
       }
@@ -324,6 +329,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
             <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
               breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant} />
           )}
+          <CompanySection steps={steps} value={companySteps} onChange={setCompanySteps} />
           </div>
 
           <div style={{ display: tab === "archives" ? "block" : "none" }}>
@@ -530,6 +536,82 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Section « À l'arrivée via une entreprise » : sous-parcours d'intake entreprise.
+// Liste ORDONNÉE (glisser pour réordonner) de documents de GROUPE (🏢) et/ou
+// STAGIAIRE choisis parmi les étapes actives du parcours. Repère visuel côté fiche
+// entreprise ; n'altère pas le parcours principal.
+function CompanySection({ steps, value, onChange }) {
+  const [adding, setAdding] = useState(false);
+  const [drag, setDrag] = useState(null);
+  const ref = useRef(null);
+  const bySlug = new Map(steps.map((s) => [s.slug, s]));
+  const chosen = value.map((sl) => bySlug.get(sl)).filter((s) => s && s.active);
+  const eligible = steps.filter((s) => s.active && !s.quiz_id && s.doc_type !== "EMARGEMENT" && !value.includes(s.slug));
+  const isGroup = (s) => !!s.company_level;
+
+  useEffect(() => {
+    if (!adding) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setAdding(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [adding]);
+
+  const add = (slug) => { onChange([...value.filter((x) => x !== slug), slug]); setAdding(false); };
+  const remove = (slug) => onChange(value.filter((x) => x !== slug));
+  function drop(to) {
+    if (drag === null || drag === to) { setDrag(null); return; }
+    const order = chosen.map((s) => s.slug);
+    const [m] = order.splice(drag, 1);
+    order.splice(to, 0, m);
+    const extra = value.filter((sl) => !order.includes(sl)); // slugs non résolus conservés
+    onChange([...order, ...extra]);
+    setDrag(null);
+  }
+  const badge = (s, short) => (
+    <span className="pf-badge" style={{ background: isGroup(s) ? "var(--ember1,#c0392b)" : "var(--surface2)", color: isGroup(s) ? "#fff" : "var(--text)" }}>
+      {isGroup(s) ? (short ? "🏢" : "🏢 Groupe") : (short ? "S" : "Stagiaire")}
+    </span>
+  );
+
+  return (
+    <div ref={ref} style={{ marginTop: 22, borderTop: "1px dashed var(--border-soft)", paddingTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Icon name="building" size={16} />
+        <b style={{ fontSize: 15 }}>À l'arrivée via une entreprise</b>
+      </div>
+      <p className="hint" style={{ marginTop: 4 }}>
+        Documents traités quand une <b>entreprise</b> inscrit ses stagiaires : ajoutez ici les documents de <b>groupe</b> (🏢) <b>et</b> les documents <b>stagiaire</b> concernés. Cette section sert de repère sur la fiche entreprise ; elle n'enlève rien au parcours ci-dessus.
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        {chosen.length === 0 && <span className="hint">Aucun document dans la section entreprise.</span>}
+        {chosen.map((s, i) => (
+          <div key={s.slug} className="pf-opt" draggable
+            onDragStart={() => setDrag(i)} onDragOver={(e) => e.preventDefault()}
+            onDrop={() => drop(i)} onDragEnd={() => setDrag(null)}
+            style={{ opacity: drag === i ? 0.5 : 1, cursor: "grab" }}>
+            {badge(s)}
+            <span className="pf-label">{s.label}</span>
+            <button type="button" className="pf-x" title="Retirer de la section entreprise" onClick={() => remove(s.slug)}><Icon name="x" size={13} /></button>
+          </div>
+        ))}
+        <div style={{ position: "relative" }}>
+          <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>＋ Ajouter</button>
+          {adding && (
+            <div className="cat-pop" style={{ position: "absolute", left: 0, top: "100%", zIndex: 6, marginTop: 4, minWidth: 240, maxHeight: 260, overflowY: "auto" }}>
+              {eligible.length === 0 ? <div className="pf-add-empty" style={{ padding: 8 }}>Aucun document disponible (activez-le d'abord dans le parcours).</div>
+                : eligible.map((s) => (
+                  <button key={s.slug} type="button" className="cat-opt" onClick={() => add(s.slug)} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {badge(s, true)}<b>{s.label}</b>
+                  </button>
+                ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

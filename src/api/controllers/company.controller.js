@@ -435,7 +435,18 @@ const getCompanyParcours = async (req, res) => {
         if (!grp) return res.status(404).json({ message: 'Session introuvable.' });
         const docSteps = grp.allSteps.filter((s) => s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT');
 
-        const steps = [];
+        // Section « à l'arrivée via une entreprise » (migration 092) : sous-parcours
+        // ordonné servant de repère visuel (ses documents remontent en tête).
+        let intakeOrder = [];
+        try {
+            const [[pr]] = await conn.query('SELECT company_steps FROM training_program WHERE id = ? AND organization_id = ?', [grp.program.id, orgId]);
+            let cs = pr && pr.company_steps;
+            if (typeof cs === 'string') { try { cs = JSON.parse(cs); } catch { cs = []; } }
+            intakeOrder = Array.isArray(cs) ? cs : [];
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        const intakeSet = new Set(intakeOrder);
+
+        let steps = [];
         for (const s of docSteps) {
             const signers = stepSigners(s);
             let gen = 0, total = 0, signed = 0, docId = null;
@@ -472,6 +483,16 @@ const getCompanyParcours = async (req, res) => {
                 _done: done,
             });
         }
+        // Repère visuel : les documents de la section entreprise remontent en tête
+        // (dans l'ordre défini) ; le reste suit dans l'ordre du parcours.
+        if (intakeSet.size) {
+            const rank = new Map(intakeOrder.map((sl, i) => [sl, i]));
+            const intake = steps.filter((s) => intakeSet.has(s.key)).sort((a, b) => rank.get(a.key) - rank.get(b.key));
+            const rest = steps.filter((s) => !intakeSet.has(s.key));
+            steps = [...intake, ...rest];
+        }
+        steps.forEach((s) => { s.section = intakeSet.has(s.key) ? 'company' : 'learner'; });
+
         let currentIndex = steps.findIndex((s) => !s._done);
         if (currentIndex < 0) currentIndex = steps.length;
         steps.forEach((s, i) => { s.status = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo'; delete s._done; });

@@ -450,6 +450,19 @@ const saveFormationSteps = async (req, res) => {
                     [bs, req.params.id, req.user.organization_id]);
             } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 076 non jouée
         }
+        // Section « à l'arrivée via une entreprise » (migration 092) : liste ordonnée
+        // de slugs (documents de groupe ET stagiaire) formant le sous-parcours entreprise.
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'company_steps')) {
+            const raw = Array.isArray(req.body.company_steps) ? req.body.company_steps : [];
+            const slugs = [...new Set(raw
+                .map((s) => String(s || '').trim().toLowerCase())
+                .filter(Boolean))].slice(0, 100);
+            const json = slugs.length ? JSON.stringify(slugs) : null;
+            try {
+                await conn.query('UPDATE training_program SET company_steps = ? WHERE id = ? AND organization_id = ?',
+                    [json, req.params.id, req.user.organization_id]);
+            } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 092 non jouée
+        }
         res.json({ success: true, message: 'Parcours enregistré.' });
     } catch (err) {
         console.error('Erreur enregistrement parcours :', err);
