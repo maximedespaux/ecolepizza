@@ -718,7 +718,7 @@ tbody tr:last-child td{border-bottom:none}
 .body-zone .doc-canvas{min-height:52vh}
 /* Éditeur « façon page » : carte de largeur A4 (contenu ≈ 174 mm), pour que les
    repères de fin de page correspondent au rendu PDF. */
-.tpl-editor-body .tpl-doc{max-width:720px}
+.tpl-editor-body .tpl-doc{max-width:960px}
 /* Repères de FIN DE PAGE : traits calculés (réinitialisés à chaque saut de page manuel),
    superposés au corps et synchronisés au défilement. */
 .body-zone{position:relative}
