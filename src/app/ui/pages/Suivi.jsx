@@ -56,7 +56,9 @@ function CompanyRoadmap({ steps }) {
             <div className="rm-body">
               <b>{s.label}</b>
               <span className={`rm-tag ${s.state}`}>
-                {RM_TAG[s.state]} · {s.done}/{s.total} stagiaire(s){s.signable ? " · à signer" : ""}
+                {s.company_level
+                  ? `${RM_TAG[s.state]} · document de groupe (organisme + entreprise)`
+                  : `${RM_TAG[s.state]} · ${s.done}/${s.total} stagiaire(s)${s.signable ? " · à signer" : ""}`}
               </span>
             </div>
           </div>
@@ -143,7 +145,7 @@ function Suivi() {
         (b.documents?.length || 0) > (a.documents?.length || 0) ? b : a, g.members[0]);
       const stepMap = new Map();
       (template.documents || []).forEach((s) =>
-        stepMap.set(s.type, { type: s.type, label: s.label, signable: !!s.stagiaireSign, done: 0, prog: 0, total: 0 }));
+        stepMap.set(s.type, { type: s.type, label: s.label, signable: !!s.stagiaireSign, company_level: !!s.company_level, done: 0, prog: 0, total: 0 }));
       for (const m of g.members) {
         for (const doc of (m.documents || [])) {
           const st = stepMap.get(doc.type);
@@ -155,6 +157,8 @@ function Suivi() {
       }
       g.documents = [...stepMap.values()].map((st) => ({
         ...st,
+        // Document de groupe : UNE signature partagée (organisme + entreprise), pas par
+        // stagiaire → l'état est simplement signé / en cours / à faire.
         state: st.total && st.done === st.total ? "done" : (st.done || st.prog) ? "progress" : "todo",
       }));
     }

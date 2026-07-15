@@ -109,6 +109,7 @@ const getSuivi = async (req, res) => {
                 documents = parc.steps.map((s, i) => ({
                     num: i + 1, type: s.key, label: s.label,
                     stagiaireSign: !!s.signable, quiz: !!s.quiz,
+                    company_level: !!s.company_level,
                     status: s.docStatus || 'A_FAIRE',
                 }));
                 const signable = parc.steps.filter((s) => s.signable || s.quiz);
