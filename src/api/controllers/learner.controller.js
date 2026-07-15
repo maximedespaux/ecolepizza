@@ -213,18 +213,18 @@ const updateLearner = async (req, res) => {
             }
         }
 
-        // Champs de la fiche stagiaire.
-        // `levels` (badges) doit pouvoir être VIDÉ : on autorise la chaîne vide
-        // (sinon décocher tous les badges ne serait jamais enregistré).
-        const CLEARABLE = new Set(['levels']);
+        // Champs de la fiche stagiaire. Le formulaire envoie TOUS les champs : une
+        // chaîne vide signifie « vider le champ » (→ NULL), ce qui permet de remettre
+        // une liste sur « — ». Seuls les champs REQUIS ne peuvent pas être vidés.
+        const REQUIRED = new Set(['first_name', 'last_name', 'financing']);
         const updates = [];
         const values = [];
         for (const field of LEARNER_FIELDS) {
             if (body[field] === undefined) continue;
-            if (body[field] === '' && !CLEARABLE.has(field)) continue;
+            if (body[field] === '' && REQUIRED.has(field)) continue; // ne pas vider un champ requis
             updates.push(`${field} = ?`);
             const raw = body[field];
-            values.push(field === 'social_security' ? encrypt(raw) : (raw === '' ? null : raw));
+            values.push(raw === '' ? null : (field === 'social_security' ? encrypt(raw) : raw));
         }
         if (companyId !== rows[0].company_id) {
             updates.push('company_id = ?');
