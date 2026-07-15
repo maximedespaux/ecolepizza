@@ -130,10 +130,9 @@ export const subsOf = (dp) => {
   return arr.filter((s) => s && s.key && num(s.pct) > 0);
 };
 
-// Ratio pâte/farine — inclut l'eau (coulage + bassinage) ET les adjonctions. L'absorption des farines
-// (compWaterPct) N'est PAS ajoutée ici : elle relève la fourchette d'hydratation conseillée (liée au W),
-// pour que l'eau reste cohérente avec le W.
-export const addPctOf = (dp) => 1 + (num(dp.hydra) + num(dp.bassinage) + num(dp.sel) + num(dp.huile) + num(dp.levure) + adjonctionsPct(dp)) / 100;
+// Ratio pâte/farine. Le COULAGE (dp.hydra) reste calé sur le W ; l'absorption des farines/produits
+// (compWaterPct) est ajoutée en EAU DE BASSINAGE (manuel p.32 : « +30 g d'eau de bassinage par unité »).
+export const addPctOf = (dp) => 1 + (num(dp.hydra) + num(dp.bassinage) + compWaterPct(dp) + num(dp.sel) + num(dp.huile) + num(dp.levure) + adjonctionsPct(dp)) / 100;
 
 // Dosage de la levure selon la température de la farine (Manuel p.21) — g/kg → % boulanger.
 // Fraîche = sèche active ; sèche instantanée = moitié.
@@ -194,6 +193,8 @@ export function computeBuild(r) {
   const subs = subsOf(dp);
   const subTotal = Math.min(60, subs.reduce((s, x) => s + num(x.pct), 0));
   const subBassReco = Math.round(substWaterG(dp));
+  const compW = compWaterPct(dp); // absorption des farines/produits → part du bassinage
+  const totalBass = +(num(dp.bassinage) + compW).toFixed(1);
   const tLabel = tipoLabel(dp.tipo);
   const farineLines = subTotal > 0
     ? [{ k: `Farine de blé${tLabel ? ` · ${tLabel}` : ""}`, pk: "farine", ic: "wheat", v: farineG * (100 - subTotal) / 100, pct: `${+(100 - subTotal).toFixed(1)} %`, color: "#fcb900" },
@@ -208,7 +209,7 @@ export function computeBuild(r) {
     { k: "Sel", pk: "sel", ic: "salt", v: gOf.sel, pct: `${dp.sel} %`, color: "#c9cede" },
     ...(num(dp.huile) > 0 ? [{ k: "Huile", pk: "huile", ic: "oil", v: gOf.huile, pct: `${dp.huile} %`, color: "#7bb661" }] : []),
     ...adjLines,
-    ...(num(dp.bassinage) > 0 ? [{ k: "Eau de bassinage", ic: "droplet", v: farineG * num(dp.bassinage) / 100, pct: `${dp.bassinage} %`, color: "#7fc7ef" }] : []),
+    ...(totalBass > 0 ? [{ k: "Eau de bassinage", ic: "droplet", v: farineG * totalBass / 100, pct: `${totalBass} %`, color: "#7fc7ef" }] : []),
   ];
   const prices = { ...PRICE_DEFAULT, ...(dp.prices || {}), farine: num(r.flour_price) };
   const costLines = dough.filter((l) => l.pk && l.v > 0).map((l) => ({ k: l.pk, label: l.k, g: l.v, eur: (l.v / 1000) * num(prices[l.pk]) }));
@@ -235,9 +236,9 @@ export function computeBuild(r) {
   if (adjTxt("beforeSalt")) steps.push({ t: "Adjonction", d: `Avant le sel (≈ 10 mn), ajouter ${adjTxt("beforeSalt")}.` });
   steps.push({ t: "Assaisonnement", d: `Ajouter le sel (${dp.sel} %) petit à petit, puis ${num(dp.huile) > 0 ? `l'huile d'olive (${dp.huile} %)` : "— sans huile"} après 1 mn. Pétrir 2-3 mn.` });
   if (adjTxt("afterOil")) steps.push({ t: "Adjonction", d: `Après l'huile (≈ 12 mn), ajouter ${adjTxt("afterOil")}.` });
-  if (num(dp.bassinage) > 0) steps.push({ t: "Bassinage", d: `Corriger la texture avec l'eau de bassinage (${dp.bassinage} %) par petits filets.` });
+  if (totalBass > 0) steps.push({ t: "Bassinage", d: `Ajouter l'eau de bassinage (${totalBass} %) par petits filets${compW > 0 ? ` — dont ${compW} % pour les farines / produits qui absorbent l'eau` : ""}, jusqu'à une texture souple et homogène.` });
   steps.push({ t: "Pointage", d: "Repos en masse après pétrissage (10-40 mn selon la saison). Température de pâte 23-25 °C." });
   steps.push({ t: "Division & boulage", d: `Diviser en ${effNb} pâtons de ${patonG} g, bouler bien serré.` });
   if (ferment.length) steps.push({ t: "Maturation / stockage", d: `${ferment.join(" + ")}.` });
-  return { dp, preset, napoSpec, w, dpMode, patonG, totalDough, effNb, reste, farineG, gOf, subs, subTotal, subBassReco, tLabel, dough, prices, costLines, totalCost, costPerPaton, costPerKg, ferment, steps, hydraTotal: +(num(dp.hydra) + num(dp.bassinage)).toFixed(1), flourTemp, eauCoulage: Math.round(50 - 2 * flourTemp) };
+  return { dp, preset, napoSpec, w, dpMode, patonG, totalDough, effNb, reste, farineG, gOf, subs, subTotal, subBassReco, tLabel, dough, prices, costLines, totalCost, costPerPaton, costPerKg, ferment, steps, hydraTotal: +(num(dp.hydra) + totalBass).toFixed(1), flourTemp, eauCoulage: Math.round(50 - 2 * flourTemp) };
 }

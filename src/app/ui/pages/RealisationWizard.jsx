@@ -33,6 +33,7 @@ export default function RealisationWizard() {
   const [r, setR] = useState(NEW);
   const [view, setView] = useState("hub"); // hub | create | mine
   const [detail, setDetail] = useState(null);
+  const [expanded, setExpanded] = useState(null); // id de la réalisation dépliée dans la liste
   const [step, setStep] = useState(0);
   const [saved, setSaved] = useState([]);
   const [empats, setEmpats] = useState([]);
@@ -70,7 +71,9 @@ export default function RealisationWizard() {
       reload();
     } catch { /* ignore */ } finally { setBusy(false); }
   }
-  const showDetail = (s) => setDetail({ ...NEW(), ...s, dough_params: parseDP(s.dough_params) });
+  const recipeOf = (s) => ({ ...NEW(), ...s, dough_params: parseDP(s.dough_params) });
+  const showDetail = (s) => setDetail(recipeOf(s));
+  const editBuild = (s) => { setR(recipeOf(s)); setDetail(null); setView("create"); setStep(0); };
   function editFromDetail() { if (!detail) return; setR(detail); setDetail(null); setView("create"); setStep(0); }
   async function persistDetail(patch = {}, asNew = false) {
     if (!detail) return; setBusy(true);
@@ -137,16 +140,18 @@ export default function RealisationWizard() {
           <Card title={<span className="card-ttl"><Icon name="history" size={16} /> Mes réalisations enregistrées</span>}>
             {saved.length === 0 ? <p className="hint" style={{ margin: 0 }}>Aucune réalisation. <button className="btn sm ghost" onClick={startCreate}>Créer une réalisation</button></p> : (
               <div style={{ display: "flex", flexDirection: "column" }}>
-                {saved.map((s) => { const rl = parseDP(s.dough_params).real || {};
+                {saved.map((s) => { const isOpen = expanded === s.id;
                   return (
-                    <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                      <span className="fiche-tag" style={{ background: "color-mix(in srgb, #dc3e37 14%, var(--surface))", color: "#dc3e37" }}>Réalisation</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <b>{s.name}</b>
-                        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{[svcLabel(rl.service), fourLabel(rl.four), rl.emp?.name, rl.garn?.name].filter(Boolean).join(" · ")}{s.visibility === "SHARED" ? " · partagé" : ""}</span>
+                    <div key={s.id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0", flexWrap: "wrap" }}>
+                        <span className="fiche-tag" style={{ background: "color-mix(in srgb, #dc3e37 14%, var(--surface))", color: "#dc3e37" }}>Réalisation</span>
+                        <b style={{ flex: 1, minWidth: 120, fontSize: 15 }}>{s.name}{s.visibility === "SHARED" && <span className="badge" style={{ marginLeft: 8, fontSize: 10.5, verticalAlign: "middle" }}>Partagé</span>}</b>
+                        <button className={"btn sm " + (isOpen ? "primary" : "ghost")} onClick={() => setExpanded(isOpen ? null : s.id)}><Icon name={isOpen ? "chevron-up" : "chevron-down"} size={13} /> Détails</button>
+                        <button className="btn sm ghost" onClick={() => showDetail(s)}><Icon name="book-open" size={13} /> Ouvrir</button>
+                        <button className="btn sm ghost" onClick={() => editBuild(s)}><Icon name="pencil" size={13} /> Modifier</button>
+                        <button className="iconbtn del" title="Supprimer" onClick={() => remove(s.id)}><Icon name="trash" size={14} /></button>
                       </div>
-                      <button className="btn sm ghost" onClick={() => showDetail(s)}><Icon name="book-open" size={13} /> Ouvrir</button>
-                      <button className="iconbtn del" title="Supprimer" onClick={() => remove(s.id)}><Icon name="trash" size={14} /></button>
+                      {isOpen && <RealisationDetails recipe={recipeOf(s)} />}
                     </div>
                   );
                 })}
@@ -197,11 +202,9 @@ export default function RealisationWizard() {
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     <button className="btn ghost" onClick={() => setStep((s) => Math.max(0, s - 1))}><Icon name="chevron-left" size={15} /> Retour</button>
                     <span style={{ flex: 1 }} />
-                    {r.id && <button className="btn ghost" onClick={() => saveBuild({ asNew: true, name: `${(r.name || "Réalisation").trim()} (copie)`, visibility: "PRIVATE" })} disabled={busy || !emp}><Icon name="plus" size={14} /> Dupliquer</button>}
                     <button className={"btn " + (shared ? "primary" : "ghost")} onClick={() => saveBuild({ visibility: shared ? "PRIVATE" : "SHARED" })} disabled={busy || !emp}><Icon name={shared ? "users" : "send"} size={15} /> {shared ? "Partagé" : "Partager"}</button>
                     <button className="btn primary" onClick={() => saveBuild()} disabled={busy || !emp}><Icon name="check" size={15} /> Enregistrer</button>
                   </div>
-                  {r.id && <button className="btn ghost sm" onClick={startCreate} style={{ marginTop: 10 }}><Icon name="plus" size={13} /> Nouvelle réalisation</button>}
                 </div>
               )}
             </Card>
@@ -250,6 +253,46 @@ export default function RealisationWizard() {
         </>
       )}
     </>
+  );
+}
+
+// Détails dépliables d'une réalisation dans la liste (« Mes réalisations ») : composants + coût
+// matière + prix conseillé + axes d'amélioration, en lecture seule et compact.
+function RealisationDetails({ recipe }) {
+  const real = parseDP(recipe.dough_params).real || {};
+  const emp = real.emp, garn = real.garn;
+  const cm = empCost(emp) + garnCost(garn);
+  const price = cm * (1 + num(recipe.margin_pct) / 100);
+  const items = garnitureItems((garn?.dough_params || {}).garn);
+  const axes = realisationAxes({ service: real.service, doughType: emp?.type, garn: (garn?.dough_params || {}).garn });
+  const toneColor = { ok: "#7bb661", warn: "var(--orange)", bad: "var(--ember1)" };
+  return (
+    <div className="acc-body" style={{ padding: "2px 0 18px" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+        <span className="chip">{svcLabel(real.service)}</span>
+        <span className="chip">{fourLabel(real.four)}</span>
+        {(real.cookExtra || []).map((c) => <span key={c} className="chip">{c}</span>)}
+      </div>
+      <div className="grid cols-2" style={{ gap: 24, alignItems: "start" }}>
+        <div>
+          <div className="ate-lbl" style={{ marginBottom: 8 }}>Composants</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}><Icon name="wheat" size={15} style={{ color: "#fcb900" }} /><b style={{ flex: 1, fontSize: 12.5 }}>{emp ? emp.name : "—"}</b><span className="tnum" style={{ fontSize: 12.5 }}>{euro(empCost(emp))}</span></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}><Icon name="pizza" size={15} style={{ color: "#7bb661" }} /><b style={{ flex: 1, fontSize: 12.5 }}>{garn ? garn.name : "—"}</b><span className="tnum" style={{ fontSize: 12.5 }}>{euro(garnCost(garn))}</span></div>
+          {items.map((i) => <div key={i.key} style={{ display: "flex", gap: 8, fontSize: 11.5, color: "var(--muted)", padding: "3px 0 3px 22px" }}><span>{i.emoji}</span><span style={{ flex: 1 }}>{i.label}</span><span>{num(i.qty)} g</span></div>)}
+          <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 9, fontWeight: 800, fontSize: 13 }}><span>Coût matière / pizza</span><span className="tnum" style={{ color: "var(--gold)" }}>{euro(cm)}</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 6 }}><span className="hint">Prix conseillé (marge {recipe.margin_pct} %)</span><b className="tnum" style={{ color: "var(--ember1)", fontSize: 16 }}>{euro(price)}</b></div>
+        </div>
+        <div>
+          <div className="ate-lbl" style={{ marginBottom: 8 }}>Axes d'amélioration</div>
+          {axes.map((a, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 9 }}>
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: toneColor[a.tone], marginTop: 5, flexShrink: 0 }} />
+              <div><b style={{ fontSize: 12.5 }}>{a.t}</b><div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>{a.d}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

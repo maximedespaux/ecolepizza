@@ -66,6 +66,52 @@ export const GARN_DAIRY = [
 const ALL = [...GARN_BASES, ...GARN_PRODUITS, ...GARN_DAIRY];
 export const prodOf = (k) => ALL.find((p) => p.key === k) || { key: k, label: k, emoji: "•", qty: 40, price: 6 };
 
+// Rayons du catalogue réel (fragments de taxonomie « category » validés en base).
+// Centre de formation : on ne garde que des PRODUITS BRUTS (le pizzaïolo apprend à cuisiner
+// les préparations). D'où l'absence des rayons « sauces préparées » et « antipasti » (bruschetta…).
+export const RAYONS = [
+  { key: "fromage", label: "Fromages", emoji: "🧀", cat: "Fromage" },
+  { key: "charcuterie", label: "Charcuterie", emoji: "🥓", cat: "Charcuterie" },
+  { key: "viande", label: "Viandes", emoji: "🍗", family: "Boucherie" },
+  { key: "tomate", label: "Tomate pelati", emoji: "🍅", cat: "Conserve de tomate" },
+  { key: "creme", label: "Crème", emoji: "🥛", cat: "Crème et aide culinaire" },
+  { key: "legumes", label: "Légumes", emoji: "🥬", cat: "Conserve de légume" },
+  { key: "mer", label: "Mer & poisson", emoji: "🐟", cat: "Conserve de poisson" },
+  { key: "huile", label: "Huiles & vinaigres", emoji: "🫙", cat: "Huile et vinaigre" },
+  { key: "epices", label: "Épices & herbes", emoji: "🌿", cat: "Epice et herbe" },
+];
+export const rayonOf = (k) => RAYONS.find((r) => r.key === k);
+
+// Produits déjà préparés à exclure d'un catalogue « produits bruts » (on apprend à les faire).
+const PREPARED_RE = /bruschetta|tartinable|caviar d|tapenade|pesto|\bsauce\b|ketchup|mayonnaise|moutarde|prêt[ea]? |prete? |cuisin[ée]|plat cuisin|appareil|soupe|pur[ée]e|mousse |rillette|terrine|antipasti|bocal cuisin|marin[ée] |toute prête/i;
+// true si le produit est un ingrédient brut (nom sans marqueur de préparation).
+export const isRawProduct = (p) => !PREPARED_RE.test(`${p.name || p.produit || p.label || ""}`);
+
+// Mode de préparation d'une base (surtout tomate & crème) : produit prêt, préparé, ou cuisiné maison.
+export const BASE_MODES = {
+  tomate: [
+    { key: "prete", label: "Prête à l'emploi", desc: "Sauce du commerce", hint: "Sauce tomate prête, versée telle quelle — coût = produit catalogue." },
+    { key: "preparee", label: "Préparée", desc: "Pelati assaisonnés", hint: "Tomates concassées + huile, sel, origan — assaisonnées, non cuites." },
+    { key: "cuisinee", label: "Cuisinée maison", desc: "Recette mijotée", hint: "Ta sauce cuisinée à partir de produits bruts (atelier produits cuisinés)." },
+  ],
+  creme: [
+    { key: "prete", label: "Crème (produit)", desc: "Crème du commerce", hint: "Crème fraîche épaisse prête — coût = produit catalogue." },
+    { key: "perso", label: "Crème personnalisée", desc: "Base crème maison", hint: "Ta base crème (ail, herbes, réduction…) — atelier produits cuisinés." },
+  ],
+};
+export const baseModesOf = (baseKey) => BASE_MODES[baseKey] || null;
+
+// Unités au poids/volume (quantité en g/ml → prix par kg/L de 1000). Gère le catalogue Metro
+// (Kg/L/Piece) ET la mercuriale (kg/litre/pièce/botte/plateau). Défaut = au poids.
+const PER_WEIGHT_U = new Set(["kg", "Kg", "l", "L", "litre"]);
+const perWeight = (u) => PER_WEIGHT_U.has(String(u == null ? "kg" : u));
+export const lineCost = (i) => (perWeight(i.unit) ? (num(i.qty) / 1000) * num(i.price) : num(i.qty) * num(i.price));
+// Libellés d'unité pour l'affichage (prix / quantité).
+export const unitShort = (u) => { const s = String(u || "kg"); return (s === "Piece" || s === "pièce") ? "pièce" : (s === "L" || s === "litre" || s === "l") ? "L" : (s === "botte" || s === "plateau") ? s : "kg"; };
+export const qtyUnit = (u) => { const s = String(u || "kg"); return perWeight(s) ? ((s === "L" || s === "litre" || s === "l") ? "ml" : "g") : (s === "Piece" ? "pce" : s); };
+export const qtyStep = (u) => (perWeight(u) ? 5 : 1);
+export const perWeightUnit = perWeight;
+
 // Astuces produit (idées d'amélioration / bonnes pratiques).
 export const GARN_TIPS = {
   chorizo: "Un filet de miel adoucit le piquant du chorizo.",
@@ -99,17 +145,28 @@ export function pairSuggestions(selectedKeys, baseKey) {
 // Coût matière d'une garniture (base + produits + laitier), €/pizza.
 export function garnitureCost(garn) {
   const items = garnitureItems(garn);
-  const total = items.reduce((s, i) => s + (num(i.qty) / 1000) * num(i.price), 0);
+  const total = items.reduce((s, i) => s + lineCost(i), 0);
   return { items, total };
 }
 export function garnitureItems(garn) {
   if (!garn) return [];
   const out = [];
   const base = GARN_BASES.find((b) => b.key === garn.base);
-  if (base && base.key !== "autre") out.push({ ...base, qty: num(garn.baseQty ?? base.qty) });
-  // Produits : curés (prodOf) OU issus de la base de données (l'entrée porte alors label/emoji/price).
-  (garn.products || []).forEach((p) => { const m = prodOf(p.key); out.push({ ...m, ...p, qty: num(p.qty ?? m.qty), price: num(p.price ?? m.price) }); });
-  (garn.dairy || []).forEach((d) => { const m = GARN_DAIRY.find((x) => x.key === d.key) || { key: d.key, label: d.label || d.key, emoji: d.emoji || "🧀" }; out.push({ ...m, ...d, qty: num(d.qty ?? m.qty), price: num(d.price ?? m.price) }); });
+  if (base && base.key !== "autre") {
+    const bp = garn.baseProduct;
+    const usingProduct = garn.baseMode === "prete" && bp && (bp.productId || bp.mercId);
+    out.push({
+      ...base,
+      qty: num(garn.baseQty ?? base.qty),
+      price: usingProduct ? num(bp.price) : num(garn.basePrice ?? base.price),
+      label: usingProduct ? bp.name : (garn.baseLabel || base.label),
+      unit: usingProduct ? (bp.unit || "Kg") : "Kg",
+      brand: usingProduct ? bp.brand : undefined,
+    });
+  }
+  // Produits : curés (prodOf) OU issus du catalogue réel (l'entrée porte alors label/prix/unité).
+  (garn.products || []).forEach((p) => { const m = prodOf(p.key); out.push({ ...m, ...p, qty: num(p.qty ?? m.qty), price: num(p.price ?? m.price), unit: p.unit || "Kg" }); });
+  (garn.dairy || []).forEach((d) => { const m = GARN_DAIRY.find((x) => x.key === d.key) || { key: d.key, label: d.label || d.key, emoji: d.emoji || "🧀" }; out.push({ ...m, ...d, qty: num(d.qty ?? m.qty), price: num(d.price ?? m.price), unit: d.unit || "Kg" }); });
   return out;
 }
 

@@ -552,6 +552,12 @@ export function searchCatalog(arg) {
 }
 export function getCatalogFamilies() { return request("/recipes/catalog/families", { silent: true }); }
 export function getCatalogBrands() { return request("/recipes/catalog/brands", { silent: true }); }
+
+// --- Mercuriale (liste de prix curée par utilisateur) ---
+export function getMercuriale() { return request("/mercuriale", { silent: true }); }
+export function addMercurialeItem(item) { return request("/mercuriale", { method: "POST", body: JSON.stringify(item) }); }
+export function updateMercurialeItem(id, patch) { return request(`/mercuriale/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export function deleteMercurialeItem(id) { return request(`/mercuriale/${id}`, { method: "DELETE" }); }
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }

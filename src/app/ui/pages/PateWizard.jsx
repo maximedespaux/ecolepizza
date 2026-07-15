@@ -39,6 +39,7 @@ export default function PateWizard() {
   const [step, setStep] = useState(0);
   const [tab, setTab] = useState("hub"); // hub | create | mine
   const [detail, setDetail] = useState(null); // fiche récap d'un build sauvé (lecture seule)
+  const [expanded, setExpanded] = useState(null); // id de l'empâtement déplié dans la liste
   const [resultTab, setResultTab] = useState("compo"); // compo | cout
   const [saved, setSaved] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -72,12 +73,12 @@ export default function PateWizard() {
   const indirectSel = INDIRECT.includes(dp.method);
   const wLo = napoSpec ? napoSpec.wMin : Math.max(W_MIN, curPreset.wMin || W_MIN, indirectSel ? INDIRECT_WMIN : 0);
   const wHi = napoSpec ? napoSpec.wMax : Math.min(W_MAX, curPreset.wMax || W_MAX);
-  // Les farines qui boivent l'eau (type/mélanges) relèvent la fourchette d'hydratation liée au W,
-  // au lieu d'ajouter une eau « à part » — l'eau reste ainsi cohérente avec le W.
-  const flourBonus = napoSpec ? 0 : Math.round(compWaterPct(dp));
-  const recoMin = (napoSpec ? napoSpec.hydraMin : (isSpe ? 62 : hydraMinForW(wv))) + flourBonus;
-  const maxTotal = (napoSpec ? napoSpec.hydraMax : (isSpe ? (curPreset.hydraMax || 80) : maxTotalForW(wv))) + flourBonus;
-  const totalHydra = +(num(dp.hydra) + num(dp.bassinage)).toFixed(1);
+  // Le COULAGE reste calé sur le W ; l'absorption des farines/produits est complétée en EAU DE BASSINAGE
+  // (compW), au-delà du plafond de coulage (les produits — pas le gluten — boivent cette eau).
+  const compW = napoSpec ? 0 : compWaterPct(dp);
+  const recoMin = napoSpec ? napoSpec.hydraMin : (isSpe ? 62 : hydraMinForW(wv));
+  const maxTotal = napoSpec ? napoSpec.hydraMax : (isSpe ? (curPreset.hydraMax || 80) : maxTotalForW(wv));
+  const totalHydra = +(num(dp.hydra) + num(dp.bassinage) + compW).toFixed(1);
   const bassMax = Math.max(0, +(maxTotal - num(dp.hydra)).toFixed(1));
   const flourTemp = num(dp.flourTemp) || 17;
   const eauCoulage = Math.round(50 - 2 * flourTemp);
@@ -96,8 +97,8 @@ export default function PateWizard() {
     setR((p) => { const d = p.dough_params; const sp = pr.needs === "spe"; const mt = (sp ? (pr.hydraMax || 80) : maxTotalForW(pr.w)) + Math.round(compWaterPct(d)); const hydra = Math.min(pr.hydra, mt);
       return { ...p, paton_g: pr.paton, dough_params: { ...d, preset: pr.nom, napoSpec: "", w: pr.w, hydra, bassinage: Math.min(num(d.bassinage), Math.max(0, mt - hydra)), sel: pr.sel, huile: pr.huile, levure: recoLevureFull(num(d.flourTemp) || 17, d.yeastType || "fraiche", d.levStorage || "ambiante"), method: pr.methods.find((m) => !(INDIRECT.includes(m) && !niv2)) || pr.methods[0] } }; });
   }
-  const setW = (w) => setR((p) => { const d = p.dough_params; const pr = PRESETS.find((x) => x.nom === d.preset) || PRESETS[0]; const sp = d.preset === "Napolitaine" ? napoSpecOf(d.napoSpec) : null; const isSp = pr.needs === "spe"; const bonus = sp ? 0 : Math.round(compWaterPct(d));
-    const mt = (sp ? sp.hydraMax : (isSp ? (pr.hydraMax || 80) : maxTotalForW(w))) + bonus; const rm = (sp ? sp.hydraMin : (isSp ? 62 : hydraMinForW(w))) + bonus; const hydra = Math.min(Math.max(num(d.hydra), rm), mt);
+  const setW = (w) => setR((p) => { const d = p.dough_params; const pr = PRESETS.find((x) => x.nom === d.preset) || PRESETS[0]; const sp = d.preset === "Napolitaine" ? napoSpecOf(d.napoSpec) : null; const isSp = pr.needs === "spe";
+    const mt = sp ? sp.hydraMax : (isSp ? (pr.hydraMax || 80) : maxTotalForW(w)); const rm = sp ? sp.hydraMin : (isSp ? 62 : hydraMinForW(w)); const hydra = Math.min(Math.max(num(d.hydra), rm), mt);
     return { ...p, dough_params: { ...d, w, hydra, bassinage: Math.min(num(d.bassinage), Math.max(0, mt - hydra)) } }; });
   const setHydra = (v) => setR((p) => ({ ...p, dough_params: { ...p.dough_params, hydra: v, bassinage: Math.min(num(p.dough_params.bassinage), Math.max(0, maxTotal - v)) } }));
   const dpNapoFixed = (d) => d.preset === "Napolitaine" && d.napoSpec && d.napoSpec !== "ecole";
@@ -111,14 +112,8 @@ export default function PateWizard() {
   const toggleAutolyse = () => setDP("autolyse", !dp.autolyse);
 
   // Substitutions (multiples) — normalisées en tableau, l'ancien format {substitution} est migré.
-  // Recale l'hydratation dans le plafond ajusté aux farines (le mélange fait varier l'absorption).
-  const clampHydra = (d) => {
-    const pr = PRESETS.find((x) => x.nom === d.preset) || PRESETS[0]; const sp = d.preset === "Napolitaine" ? napoSpecOf(d.napoSpec) : null; const isSp = pr.needs === "spe";
-    const mt = (sp ? sp.hydraMax : (isSp ? (pr.hydraMax || 80) : maxTotalForW(num(d.w) || 225))) + (sp ? 0 : Math.round(compWaterPct(d)));
-    return Math.min(num(d.hydra), mt);
-  };
-  const setSubs = (fn) => setR((p) => { const d = { ...p.dough_params, substitution: undefined, substitutions: fn(subsArr(p.dough_params)) }; return { ...p, dough_params: { ...d, hydra: clampHydra(d) } }; });
-  const setTipo = (k) => setR((p) => { const d = { ...p.dough_params, tipo: k }; return { ...p, dough_params: { ...d, hydra: clampHydra(d) } }; });
+  const setSubs = (fn) => setR((p) => { const d = p.dough_params; return { ...p, dough_params: { ...d, substitution: undefined, substitutions: fn(subsArr(d)) } }; });
+  const setTipo = (k) => setDP("tipo", k);
   const addSub = (key) => setSubs((cur) => (cur.some((x) => x.key === key) ? cur : [...cur, { key, pct: Math.min(10, subOf(key).max) }]));
   const setSubPct = (key, v) => setSubs((cur) => cur.map((x) => (x.key === key ? { ...x, pct: v } : x)));
   const removeSub = (key) => setSubs((cur) => cur.filter((x) => x.key !== key));
@@ -148,8 +143,12 @@ export default function PateWizard() {
     } catch { /* barre d'erreur globale */ }
     finally { setBusy(false); }
   }
+  // Reconstitue un « recipe » complet à partir d'un enregistrement (params désérialisés).
+  const recipeOf = (s) => ({ ...NEW(), ...s, dough_params: { ...DP_DEFAULT, ...parseDP(s.dough_params) } });
   // « Ouvrir » = fiche récap en lecture seule (PAS le quiz).
-  const showDetail = (s) => setDetail({ ...NEW(), ...s, dough_params: { ...DP_DEFAULT, ...parseDP(s.dough_params) } });
+  const showDetail = (s) => setDetail(recipeOf(s));
+  // « Modifier » = rouvre directement l'empâtement dans l'assistant pas-à-pas.
+  const editBuild = (s) => { setR(recipeOf(s)); setDetail(null); setTab("create"); setStep(0); setResultTab("compo"); };
   function editFromDetail() { if (!detail) return; setR(detail); setDetail(null); setTab("create"); setStep(0); setResultTab("compo"); }
   async function persistDetail(patch = {}, asNew = false) {
     if (!detail) return; setBusy(true);
@@ -274,14 +273,14 @@ export default function PateWizard() {
                     <b style={{ font: "800 19px/1 var(--font-d)", color: "var(--text)" }}>{tipoOf(dp.tipo) ? `${tipoOf(dp.tipo).fr} · Tipo ${tipoOf(dp.tipo).it}` : "Type de farine"}</b>
                     <span className="hint" style={{ textAlign: "right" }}>{tipoOf(dp.tipo) ? tipoOf(dp.tipo).name : "France ↔ Italie"}</span>
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    <button onClick={() => setTipo("")} className={`btn sm ${!dp.tipo ? "primary" : "ghost"}`}>—</button>
-                    {TIPOS.map((t) => <button key={t.key} onClick={() => setTipo(t.key)} className={`btn sm ${dp.tipo === t.key ? "primary" : "ghost"}`} title={t.name}>{t.fr} · {t.it}</button>)}
-                  </div>
+                  <select className="inp" value={dp.tipo || ""} onChange={(e) => setTipo(e.target.value)}>
+                    <option value="">Type de farine (France ↔ Italie)…</option>
+                    {TIPOS.map((t) => <option key={t.key} value={t.key}>{t.fr} · Tipo {t.it} — {t.name}{t.water ? ` (+${t.water} % bassinage)` : ""}</option>)}
+                  </select>
                 </div>
 
                 <div>
-                  <div className="ate-lbl" style={{ marginBottom: 6 }}>Mélanges de farines <span className="hint" style={{ fontWeight: 400 }}>(blé ou céréales, plusieurs possibles)</span></div>
+                  <div className="ate-lbl" style={{ marginBottom: 6 }}>Substitution <span className="hint" style={{ fontWeight: 400 }}>(farines de blé ou céréales, plusieurs possibles)</span></div>
                   {curSubs.map((x) => { const m = subOf(x.key); return (
                     <div key={x.key} className="mix-row">
                       <b style={{ width: 120, fontSize: 12.5, flexShrink: 0 }}>{m.label}</b>
@@ -299,7 +298,7 @@ export default function PateWizard() {
                       {SUBSTITUTIONS.filter((s) => !s.wheat && !curSubs.some((x) => x.key === s.key)).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                     </optgroup>
                   </select>
-                  {flourBonus > 0 && <p className="hint" style={{ margin: "6px 0 0", fontSize: 11.5, color: "var(--orange)" }}>Ces farines boivent plus d'eau → hydratation conseillée relevée de <b>+{flourBonus} %</b> (elle reste calée sur le W).</p>}
+                  {compW > 0 && <p className="hint" style={{ margin: "6px 0 0", fontSize: 11.5, color: "var(--orange)" }}>Ces farines boivent plus d'eau → <b>+{compW} %</b> d'eau de bassinage ajoutés automatiquement (le coulage reste calé sur le W).</p>}
                 </div>
 
                 <div>
@@ -333,7 +332,7 @@ export default function PateWizard() {
                 {!napoLevFixed && bassMax > 0 && (
                   <Slider label={`Eau de bassinage (facultatif · max ${bassMax} %)`} val={Math.min(num(dp.bassinage), bassMax)} min={0} max={bassMax} step={0.5} set={(v) => setDP("bassinage", v)} />
                 )}
-                <p className="hint" style={{ margin: "6px 0 0" }}>Hydratation totale <b style={{ color: "var(--green)" }}>{totalHydra} %</b> · plafond {maxTotal} %{napoLevFixed ? " (cahier)" : flourBonus > 0 ? ` (W ${wv} + ${flourBonus} % farines)` : ` pour W ${wv}`}.</p>
+                <p className="hint" style={{ margin: "6px 0 0" }}>Hydratation totale <b style={{ color: "var(--green)" }}>{totalHydra} %</b> = coulage {num(dp.hydra)} %{(num(dp.bassinage) + compW) > 0 ? ` + bassinage ${+(num(dp.bassinage) + compW).toFixed(1)} %` : ""}{napoLevFixed ? " · cahier" : ` · coulage calé sur W ${wv} (plafond ${maxTotal} %)`}.</p>
                 {!isNapo && (
                   <div style={{ marginTop: 12, padding: "10px 12px", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
@@ -408,11 +407,9 @@ export default function PateWizard() {
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <button className="btn ghost" onClick={() => setStep((s) => Math.max(0, s - 1))}><Icon name="chevron-left" size={15} /> Retour</button>
                   <span style={{ flex: 1 }} />
-                  {r.id && <button className="btn ghost" onClick={() => saveBuild({ asNew: true, name: `${(r.name || dp.preset).trim()} (copie)`, visibility: "PRIVATE" })} disabled={busy}><Icon name="plus" size={14} /> Dupliquer</button>}
                   <button className={"btn " + (shared ? "primary" : "ghost")} onClick={() => saveBuild({ visibility: shared ? "PRIVATE" : "SHARED" })} disabled={busy}><Icon name={shared ? "users" : "send"} size={15} /> {shared ? "Partagé" : "Partager"}</button>
                   <button className="btn primary" onClick={() => saveBuild()} disabled={busy}><Icon name="check" size={15} /> Enregistrer</button>
                 </div>
-                {r.id && <button className="btn ghost sm" onClick={reset} style={{ marginTop: 10 }} title="Repartir de zéro"><Icon name="plus" size={13} /> Nouveau build</button>}
               </div>
             )}
           </Card>
@@ -483,19 +480,18 @@ export default function PateWizard() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column" }}>
               {saved.map((s) => {
-                const sdp = parseDP(s.dough_params);
-                const tot = num(sdp.hydra) + num(sdp.bassinage);
-                const meta = [sdp.preset || s.type, sdp.w ? `W ${sdp.w}` : null, tot ? `${tot} %` : null, sdp.method ? String(sdp.method).toLowerCase() : null].filter(Boolean).join(" · ");
+                const isOpen = expanded === s.id;
                 return (
-                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                    <span className="fiche-tag">Empâtement</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <b>{s.name}</b>
-                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{meta}{s.visibility === "SHARED" ? " · partagé" : ""}</span>
-                      <span style={{ display: "block", fontSize: 11.5, color: "var(--dim)" }}>{s.servings} pâtons de {s.paton_g} g{s.updated_at ? ` · maj ${s.updated_at}` : ""}</span>
+                  <div key={s.id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0", flexWrap: "wrap" }}>
+                      <span className="fiche-tag">Empâtement</span>
+                      <b style={{ flex: 1, minWidth: 120, fontSize: 15 }}>{s.name}{s.visibility === "SHARED" && <span className="badge" style={{ marginLeft: 8, fontSize: 10.5, verticalAlign: "middle" }}>Partagé</span>}</b>
+                      <button className={"btn sm " + (isOpen ? "primary" : "ghost")} onClick={() => setExpanded(isOpen ? null : s.id)}><Icon name={isOpen ? "chevron-up" : "chevron-down"} size={13} /> Détails</button>
+                      <button className="btn sm ghost" onClick={() => showDetail(s)}><Icon name="book-open" size={13} /> Ouvrir</button>
+                      <button className="btn sm ghost" onClick={() => editBuild(s)}><Icon name="pencil" size={13} /> Modifier</button>
+                      <button className="iconbtn del" title="Supprimer" onClick={() => remove(s.id)}><Icon name="trash" size={14} /></button>
                     </div>
-                    <button className="btn sm ghost" onClick={() => showDetail(s)}><Icon name="book-open" size={13} /> Ouvrir</button>
-                    <button className="iconbtn del" title="Supprimer" onClick={() => remove(s.id)}><Icon name="trash" size={14} /></button>
+                    {isOpen && <BuildDetails recipe={recipeOf(s)} />}
                   </div>
                 );
               })}
@@ -572,6 +568,47 @@ function RecapFiche({ recipe, onBack, onEdit, onDuplicate, onShare, onDelete, bu
           </ol>
         </div>
       </Card>
+    </div>
+  );
+}
+
+// Détails dépliables d'un empâtement dans la liste (« Mes empâtements ») : méta + composition
+// + déroulé, en lecture seule et compact. Le coût détaillé reste sur la fiche (« Ouvrir »).
+function BuildDetails({ recipe }) {
+  const B = computeBuild(recipe);
+  const dp = B.dp;
+  const chips = [`W ${B.w}`, `${B.hydraTotal} % hydratation`, String(dp.method || "direct").toLowerCase() + (dp.autolyse ? " · autolyse" : ""), `${B.effNb} pâtons de ${B.patonG} g`];
+  return (
+    <div className="acc-body" style={{ padding: "2px 0 18px" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+        {B.preset && <span className="chip">{B.preset.nom}{B.napoSpec ? ` · ${B.napoSpec.label}` : ""}</span>}
+        {chips.map((c) => <span key={c} className="chip">{c}</span>)}
+      </div>
+      <div className="grid cols-2" style={{ gap: 24, alignItems: "start" }}>
+        <div>
+          <div className="ate-lbl" style={{ marginBottom: 8 }}>Composition <span className="hint" style={{ fontWeight: 400 }}>({gfmt(B.totalDough)})</span></div>
+          <DoughBar items={B.dough} total={B.totalDough} />
+          {B.dough.map((i) => (
+            <div key={i.k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--border-soft)" }}>
+              <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={15} /></span>
+              <b style={{ flex: 1, fontSize: 12.5 }}>{i.k}</b>
+              <span style={{ fontSize: 11, color: "var(--muted)" }}>{i.pct}</span>
+              <b className="tnum" style={{ width: 72, textAlign: "right", fontSize: 12.5 }}>{gfmt(i.v)}</b>
+            </div>
+          ))}
+        </div>
+        <div>
+          <div className="ate-lbl" style={{ marginBottom: 8 }}>Déroulé des étapes</div>
+          <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 10 }}>
+            {B.steps.map((s, idx) => (
+              <li key={idx} style={{ display: "flex", gap: 10 }}>
+                <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--grad-ember)", color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{idx + 1}</span>
+                <div><b style={{ fontSize: 12.5 }}>{s.t}</b><div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>{s.d}</div></div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
     </div>
   );
 }

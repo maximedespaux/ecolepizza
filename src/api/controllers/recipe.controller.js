@@ -22,6 +22,7 @@ const searchCatalog = async (req, res) => {
         const q = String(req.query.q || '').trim();
         const brand = String(req.query.brand || '').trim();
         const family = String(req.query.family || '').trim();
+        const cat = String(req.query.cat || '').trim(); // préfixe de taxonomie (rayon), ex. "Frais / Crèmerie / Fromage"
         const sort = String(req.query.sort || '');
         const limit = Math.min(30, Math.max(1, parseInt(req.query.limit, 10) || 12));
         const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -32,10 +33,12 @@ const searchCatalog = async (req, res) => {
         if (q) { where.push('(name LIKE ? OR brand LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
         if (brand) { where.push('brand LIKE ?'); params.push(`%${brand}%`); }
         if (family) { where.push('family = ?'); params.push(family); }
+        if (cat) { where.push('category LIKE ?'); params.push(`%${cat}%`); }
         if (Number.isFinite(pmin)) { where.push('unit_ht >= ?'); params.push(pmin); }
         if (Number.isFinite(pmax)) { where.push('unit_ht <= ?'); params.push(pmax); }
         const order = sort === 'price_asc' ? '(unit_ht IS NULL), unit_ht ASC'
-            : sort === 'price_desc' ? 'unit_ht DESC' : 'name ASC';
+            : sort === 'price_desc' ? 'unit_ht DESC'
+            : sort === 'name_desc' ? 'name DESC' : 'name ASC';
         const whereSql = where.join(' AND ');
         const [[cnt]] = await conn.query(`SELECT COUNT(*) AS n FROM catalog_product WHERE ${whereSql}`, params);
         const [rows] = await conn.query(
