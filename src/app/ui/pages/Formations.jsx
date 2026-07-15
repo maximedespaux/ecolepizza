@@ -144,6 +144,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [equivs, setEquivs] = useState([]); // liste des équivalences (pour l'ajout de variantes OU)
   const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives"
   const [archKind, setArchKind] = useState("stagiaire"); // arborescence : "stagiaire" | "entreprise"
+  const [parcoursKind, setParcoursKind] = useState("stagiaire"); // parcours : "stagiaire" | "entreprise"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
   // Couleur effective du badge + valeur hexadécimale pour le sélecteur natif.
@@ -319,17 +320,27 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           </div>
 
           <div style={{ display: tab === "parcours" ? "block" : "none" }}>
-          <p className="hint" style={{ marginTop: 0 }}>
-            Composez l'enchaînement des documents du dossier : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Les documents de groupe (🏢 « Document entreprise ») apparaissent dans la même liste. Glissez un bloc pour réordonner ; les QCM rattachés sont proposés à l'ajout.
-            <br />Clique sur une <b style={{ color: "var(--ember1)" }}>flèche 🚧</b> entre deux jalons pour placer le <b>point d'accès à l'émargement</b> : le stagiaire ne pourra émarger qu'après avoir signé tous ses documents situés avant ce point.
-          </p>
-          {steps.length === 0 ? (
-            <p className="hint">Aucun document candidat.</p>
+          <div className="seg" style={{ marginBottom: 12 }}>
+            <button type="button" className={"seg-btn" + (parcoursKind === "stagiaire" ? " on" : "")} onClick={() => setParcoursKind("stagiaire")}>Parcours du dossier</button>
+            <button type="button" className={"seg-btn" + (parcoursKind === "entreprise" ? " on" : "")} onClick={() => setParcoursKind("entreprise")}>À l'arrivée via une entreprise{companySteps.length ? ` (${companySteps.length})` : ""}</button>
+          </div>
+
+          {parcoursKind === "stagiaire" ? (
+            <>
+              <p className="hint" style={{ marginTop: 0 }}>
+                Composez l'enchaînement des documents du dossier : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Les documents de groupe (🏢 « Document entreprise ») apparaissent dans la même liste. Glissez un bloc pour réordonner ; les QCM rattachés sont proposés à l'ajout.
+                <br />Clique sur une <b style={{ color: "var(--ember1)" }}>flèche 🚧</b> entre deux jalons pour placer le <b>point d'accès à l'émargement</b> : le stagiaire ne pourra émarger qu'après avoir signé tous ses documents situés avant ce point.
+              </p>
+              {steps.length === 0 ? (
+                <p className="hint">Aucun document candidat.</p>
+              ) : (
+                <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
+                  breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant} />
+              )}
+            </>
           ) : (
-            <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
-              breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant} />
+            <CompanySection steps={steps} value={companySteps} onChange={setCompanySteps} />
           )}
-          <CompanySection steps={steps} value={companySteps} onChange={setCompanySteps} />
           </div>
 
           <div style={{ display: tab === "archives" ? "block" : "none" }}>
@@ -578,12 +589,8 @@ function CompanySection({ steps, value, onChange }) {
   );
 
   return (
-    <div ref={ref} style={{ marginTop: 22, borderTop: "1px dashed var(--border-soft)", paddingTop: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Icon name="building" size={16} />
-        <b style={{ fontSize: 15 }}>À l'arrivée via une entreprise</b>
-      </div>
-      <p className="hint" style={{ marginTop: 4 }}>
+    <div ref={ref}>
+      <p className="hint" style={{ marginTop: 0 }}>
         Documents traités quand une <b>entreprise</b> inscrit ses stagiaires : ajoutez ici les documents de <b>groupe</b> (🏢) <b>et</b> les documents <b>stagiaire</b> concernés. Cette section sert de repère sur la fiche entreprise ; elle n'enlève rien au parcours ci-dessus.
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
