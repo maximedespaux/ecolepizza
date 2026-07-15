@@ -16,15 +16,23 @@ const isGroup = (s) => s && s.total != null;
 // Sous-titre affiché sous chaque étape de la chronologie. En mode groupe (fiche
 // entreprise) on montre le compteur de signatures d'un coup d'œil (0/2, 1/2…).
 function listSub(s) {
+  if (isGroup(s) && s.company_level) {
+    // Document de groupe = UNE signature (organisme + entreprise), pas par stagiaire.
+    if (s.total > 1) return `${s.signed}/${s.total} document(s) signé(s)`; // plusieurs OPCO
+    return s.signed >= 1 ? "Signé (organisme + entreprise)" : "À signer (organisme + entreprise)";
+  }
   if (isGroup(s) && s.total > 0) return `${s.signed}/${s.total} signé(s)`;
-  if (isGroup(s)) return s.company_level ? "Document de groupe" : "Aucun stagiaire concerné";
+  if (isGroup(s)) return "Aucun stagiaire concerné";
   return s.sub;
 }
 
 // Ligne d'état de l'étape sélectionnée (selon son statut et le document lié).
 function lineFor(s) {
   if (isGroup(s)) {
-    if (s.company_level) return `Document de groupe (entreprise) · ${s.signed}/${s.total || s.gen || 0} signé(s).`;
+    if (s.company_level) {
+      if (s.total > 1) return `Document de groupe (entreprise) · ${s.signed}/${s.total} document(s) signé(s).`;
+      return s.signed >= 1 ? "Document de groupe — signé (organisme + entreprise)." : "Document de groupe — à faire signer (organisme + entreprise).";
+    }
     return `${s.signed}/${s.total} stagiaire(s) ont signé · ${s.gen}/${s.total} généré(s) · à générer depuis chaque fiche stagiaire.`;
   }
   // Doc destiné à l'entreprise, vu depuis la fiche stagiaire : lecture seule.
