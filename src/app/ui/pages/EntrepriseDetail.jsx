@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
+  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
+import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -28,6 +29,7 @@ const CFIELDS = [
   { k: "representative_role", label: "Fonction du référent", full: true, type: "select", options: REP_ROLES },
 ];
 const sessLabel = (s) => `${s.program_code || s.program_title} · S${s.week} ${s.year}`;
+const DOC_STATUS = { A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"] };
 
 export default function EntrepriseDetail() {
   const { id } = useParams();
@@ -57,6 +59,8 @@ export default function EntrepriseDetail() {
   const [groupTplsBySession, setGroupTplsBySession] = useState({}); // sessionId -> [{slug,label}]
   const [prep, setPrep] = useState({ slug: "", sessionIds: new Set() });
   const [preparing, setPreparing] = useState(false);
+  const [companyDocs, setCompanyDocs] = useState([]); // documents entreprise déjà générés
+  const [viewId, setViewId] = useState(null); // aperçu d'un document
 
   function load() {
     getCompany(id).then((r) => {
@@ -83,6 +87,10 @@ export default function EntrepriseDetail() {
     // Par défaut : la session courante est cochée.
     setPrep((p) => (p.sessionIds.size ? p : { ...p, sessionIds: new Set(sessionId ? [sessionId] : []) }));
   }, [id, sessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Documents « entreprise » déjà générés (rafraîchis après génération/envoi/suppression).
+  useEffect(() => {
+    listCompanyDocuments(id).then((r) => setCompanyDocs(r.data || [])).catch(() => setCompanyDocs([]));
+  }, [id, parcoursRefresh]);
 
   // Rattacher des stagiaires existants à l'entreprise (recherche débattue).
   useEffect(() => {
@@ -162,6 +170,17 @@ export default function EntrepriseDetail() {
   async function openCompanyDoc(docId) {
     try { const url = await documentPdfUrl(docId); window.open(url, "_blank"); }
     catch (e) { setStatus({ type: "error", message: e.message || "Aperçu indisponible." }); }
+  }
+  async function sendCompanyDoc(docId) {
+    setStatus(null);
+    try { await sendDocument(docId); setStatus({ type: "success", message: "Document envoyé." }); setParcoursRefresh((n) => n + 1); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+  async function deleteCompanyDoc(docId, title) {
+    if (!window.confirm(`Supprimer le document « ${title || "sans titre"} » ?`)) return;
+    setStatus(null);
+    try { await deleteDocument(docId); setParcoursRefresh((n) => n + 1); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function companySignLink(docId) {
     try {
@@ -405,6 +424,33 @@ export default function EntrepriseDetail() {
               </div>
             </form>
           )}
+
+          {/* Documents entreprise déjà générés : aperçu / envoi / suppression. */}
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+            {companyDocs.length === 0 ? (
+              <p className="hint" style={{ margin: 0 }}>Aucun document entreprise préparé.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {companyDocs.map((d) => {
+                  const [label, tone] = DOC_STATUS[d.status] || [d.status, "n"];
+                  return (
+                    <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <b>{d.title}</b>
+                        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                          {d.created_at ? `préparé le ${d.created_at}` : ""}{d.sent_at ? ` · envoyé le ${d.sent_at}` : ""}
+                        </span>
+                      </span>
+                      <Badge tone={tone}>{label}</Badge>
+                      <button className="iconbtn" title="Aperçu / vérifier" onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
+                      {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer (à l'entreprise)" onClick={() => sendCompanyDoc(d.id)}><Icon name="send" size={16} /></button>}
+                      {d.status !== "SIGNE" && <button className="iconbtn del" title="Supprimer" onClick={() => deleteCompanyDoc(d.id, d.title)}><Icon name="trash" size={15} /></button>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </Card>
       </div>
 
@@ -446,6 +492,8 @@ export default function EntrepriseDetail() {
           </Card>
         </div>
       )}
+
+      {viewId && <DocumentViewModal id={viewId} onClose={() => setViewId(null)} />}
     </>
   );
 }

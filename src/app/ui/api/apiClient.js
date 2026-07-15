@@ -400,6 +400,11 @@ export function getCompanyDocTemplates(id, sessionId) {
   const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
   return request(`/companies/${id}/doc-templates${qs}`);
 }
+// Documents « entreprise » déjà générés (optionnellement filtrés par session).
+export function listCompanyDocuments(id, sessionId) {
+  const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
+  return request(`/companies/${id}/documents${qs}`);
+}
 // Lien de signature partageable (représentant entreprise). createSignLink → { token }.
 export function createSignLink(documentId, payload = {}) {
   return request(`/documents/${documentId}/sign-link`, { method: "POST", body: JSON.stringify(payload) });
