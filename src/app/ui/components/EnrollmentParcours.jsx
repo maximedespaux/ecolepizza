@@ -17,7 +17,12 @@ const isGroup = (s) => s && s.total != null;
 function lineFor(s) {
   if (isGroup(s)) {
     if (s.company_level) return `Document de groupe · ${s.gen} généré(s)${s.signed ? ` · ${s.signed} signé(s)` : ""}.`;
-    return `${s.gen}/${s.total} généré(s)${s.signed ? ` · ${s.signed} signé(s)` : ""} pour le groupe.`;
+    return `${s.gen}/${s.total} généré(s)${s.signed ? ` · ${s.signed} signé(s)` : ""} pour le groupe · à générer depuis chaque fiche stagiaire.`;
+  }
+  // Doc destiné à l'entreprise, vu depuis la fiche stagiaire : lecture seule.
+  if (s.company_level) {
+    if (s.status === "done") return "Document entreprise signé.";
+    return "Document destiné à l'entreprise — généré depuis la fiche entreprise.";
   }
   if (s.status === "done") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
   if (s.status === "todo") return "À venir.";
@@ -33,10 +38,14 @@ function lineFor(s) {
 }
 function actionFor(s) {
   if (isGroup(s)) {
+    // Fiche entreprise : seuls les documents de groupe se génèrent ici ; les documents
+    // stagiaire sont visibles mais générés depuis chaque fiche stagiaire.
     if (s.company_level) return { label: s.gen ? "Regénérer pour le groupe" : "Générer pour le groupe", kind: "prepare" };
-    if (s.total === 0) return null; // aucun stagiaire concerné
-    return { label: s.gen >= s.total ? "Regénérer + envoyer" : "Générer + envoyer au groupe", kind: "prepare" };
+    return null;
   }
+  // Fiche stagiaire : un document destiné à l'entreprise est en lecture seule
+  // (consultable s'il existe, mais jamais généré ici).
+  if (s.company_level) return s.docId ? { label: s.signable ? "Ouvrir la signature" : "Voir le document", kind: "open" } : null;
   if (s.status !== "current" && s.status !== "todo") return null;
   if (s.docId) return { label: s.signable ? "Ouvrir la signature" : s.quiz ? "Voir le QCM" : "Voir le document", kind: "open" };
   if (s.quiz) return { label: "Envoyer le QCM", kind: "send-quiz" }; // envoi manuel au stagiaire

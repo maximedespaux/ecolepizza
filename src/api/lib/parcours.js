@@ -57,6 +57,9 @@ function computeDocParcours({ steps = [], docs = [] } = {}) {
     const outSteps = rows.map((r, i) => ({
         key: keyFor(r.s), ic: iconFor(r.s), label: r.s.label, sub: subFor(r.s),
         signable: mustSign(r.s), quiz: !!r.s.quiz_id,
+        // Document destiné à l'ENTREPRISE : visible dans le parcours du stagiaire mais
+        // généré depuis la fiche entreprise (jamais depuis la fiche stagiaire).
+        company_level: !!r.s.company_level,
         docId: r.doc ? r.doc.id : null,
         docStatus: r.doc ? r.doc.status : null,
         status: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo',

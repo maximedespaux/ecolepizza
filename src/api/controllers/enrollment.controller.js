@@ -72,7 +72,7 @@ const getParcours = async (req, res) => {
     try {
         const conn = db.promise();
         const [[e]] = await conn.query(
-            `SELECT e.id, e.crm_stage, e.financing, e.session_id,
+            `SELECT e.id, e.crm_stage, e.financing, e.session_id, e.company_id,
                     p.id AS program_id, p.title AS program_title, p.code AS program_code,
                     p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs,
                     s.year, s.week,
@@ -88,6 +88,7 @@ const getParcours = async (req, res) => {
         );
         if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
 
+        const orgId = req.user.organization_id;
         const [docs] = await conn.query(
             `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id FROM generated_document gd
              JOIN document_formation df ON df.document_id = gd.id
@@ -95,21 +96,48 @@ const getParcours = async (req, res) => {
              ORDER BY gd.created_at DESC`,
             [req.params.id]
         );
+        // Stagiaire envoyé par une entreprise : on rattache les documents de GROUPE
+        // (scope entreprise) pour que leur statut (signé…) se reflète dans son parcours,
+        // même s'ils ne sont pas liés à son inscription.
+        if (e.company_id) {
+            try {
+                const [cdocs] = await conn.query(
+                    "SELECT id, type, status, template_slug, quiz_id FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND scope = 'COMPANY' ORDER BY created_at DESC",
+                    [orgId, e.company_id, e.session_id]);
+                docs.push(...cdocs);
+            } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
+        }
 
         let parc = { steps: [], percent: 0, currentIndex: 0, currentKey: null };
         if (e.program_id) {
             const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
             const [fieldCatalog, condById] = await Promise.all([
-                getEnabledFields(conn, req.user.organization_id, 'condition'),
-                loadConditionMap(conn, req.user.organization_id),
+                getEnabledFields(conn, orgId, 'condition'),
+                loadConditionMap(conn, orgId),
             ]);
-            const factsMap = await loadDossierFactsMap(conn, req.user.organization_id, [e.id], fieldCatalog);
+            const factsMap = await loadDossierFactsMap(conn, orgId, [e.id], fieldCatalog);
             const ctx = {
                 financing: e.financing, rsCode: e.program_rs, hygiene: !!e.program_hygiene,
                 jours: e.program_days, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
                 ...(factsMap.get(e.id) || {}),
             };
-            const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById);
+            let steps = await enrollmentSteps(conn, orgId, program, ctx, condById);
+            // Inscription via une ENTREPRISE : le stagiaire suit le MÊME parcours que
+            // l'entreprise (section « à l'arrivée via une entreprise »), pas le parcours
+            // « seul ». On filtre donc aux documents de cette section (dans son ordre).
+            if (e.company_id) {
+                let intakeOrder = [];
+                try {
+                    const [[pr]] = await conn.query('SELECT company_steps FROM training_program WHERE id = ? AND organization_id = ?', [program.id, orgId]);
+                    let cs = pr && pr.company_steps;
+                    if (typeof cs === 'string') { try { cs = JSON.parse(cs); } catch { cs = []; } }
+                    intakeOrder = Array.isArray(cs) ? cs : [];
+                } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
+                if (intakeOrder.length) {
+                    const set = new Set(intakeOrder);
+                    steps = steps.filter((s) => set.has(s.slug)).sort((a, b) => intakeOrder.indexOf(a.slug) - intakeOrder.indexOf(b.slug));
+                }
+            }
             parc = computeDocParcours({ steps, docs });
         }
 
