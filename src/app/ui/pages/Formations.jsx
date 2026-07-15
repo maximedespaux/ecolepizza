@@ -593,7 +593,7 @@ function CompanySection({ steps, value, onChange }) {
       <p className="hint" style={{ marginTop: 0 }}>
         Documents traités quand une <b>entreprise</b> inscrit ses stagiaires : ajoutez ici les documents de <b>groupe</b> (🏢) <b>et</b> les documents <b>stagiaire</b> concernés. Cette section sert de repère sur la fiche entreprise ; elle n'enlève rien au parcours ci-dessus.
       </p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start", alignContent: "flex-start", minHeight: 340, border: "1px solid var(--border-soft)", borderRadius: 12, padding: 14, background: "var(--surface3, #faf9f7)" }}>
         {chosen.length === 0 && <span className="hint">Aucun document dans la section entreprise.</span>}
         {chosen.map((s, i) => (
           <div key={s.slug} className="pf-opt" draggable
