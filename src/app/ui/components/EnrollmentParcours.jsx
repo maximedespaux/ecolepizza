@@ -10,8 +10,36 @@ function stepIcon(s) {
   return "file-text";
 }
 
+// Étape « de groupe » (parcours entreprise) : porte des compteurs gen/total/signed.
+const isGroup = (s) => s && s.total != null;
+
+// Sous-titre affiché sous chaque étape de la chronologie. En mode groupe (fiche
+// entreprise) on montre le compteur de signatures d'un coup d'œil (0/2, 1/2…).
+function listSub(s) {
+  if (isGroup(s) && s.company_level) {
+    // Document de groupe = UNE signature (organisme + entreprise), pas par stagiaire.
+    if (s.total > 1) return `${s.signed}/${s.total} document(s) signé(s)`; // plusieurs OPCO
+    return s.signed >= 1 ? "Signé (organisme + entreprise)" : "À signer (organisme + entreprise)";
+  }
+  if (isGroup(s) && s.total > 0) return `${s.signed}/${s.total} signé(s)`;
+  if (isGroup(s)) return "Aucun stagiaire concerné";
+  return s.sub;
+}
+
 // Ligne d'état de l'étape sélectionnée (selon son statut et le document lié).
 function lineFor(s) {
+  if (isGroup(s)) {
+    if (s.company_level) {
+      if (s.total > 1) return `Document de groupe (entreprise) · ${s.signed}/${s.total} document(s) signé(s).`;
+      return s.signed >= 1 ? "Document de groupe — signé (organisme + entreprise)." : "Document de groupe — à faire signer (organisme + entreprise).";
+    }
+    return `${s.signed}/${s.total} stagiaire(s) ont signé · ${s.gen}/${s.total} généré(s) · à générer depuis chaque fiche stagiaire.`;
+  }
+  // Doc destiné à l'entreprise, vu depuis la fiche stagiaire : lecture seule.
+  if (s.company_level) {
+    if (s.status === "done") return "Document entreprise signé.";
+    return "Document destiné à l'entreprise — généré depuis la fiche entreprise.";
+  }
   if (s.status === "done") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
   if (s.status === "todo") return "À venir.";
   if (s.quiz) return s.docId ? "En attente de réponse du stagiaire au QCM." : "QCM à envoyer au stagiaire.";
@@ -25,6 +53,15 @@ function lineFor(s) {
   return "En cours.";
 }
 function actionFor(s) {
+  if (isGroup(s)) {
+    // Fiche entreprise : seuls les documents de groupe se génèrent ici ; les documents
+    // stagiaire sont visibles mais générés depuis chaque fiche stagiaire.
+    if (s.company_level) return { label: "Préparer le document", kind: "prepare" };
+    return null;
+  }
+  // Fiche stagiaire : un document destiné à l'entreprise est en lecture seule
+  // (consultable s'il existe, mais jamais généré ici).
+  if (s.company_level) return s.docId ? { label: s.signable ? "Ouvrir la signature" : "Voir le document", kind: "open" } : null;
   if (s.status !== "current" && s.status !== "todo") return null;
   if (s.docId) return { label: s.signable ? "Ouvrir la signature" : s.quiz ? "Voir le QCM" : "Voir le document", kind: "open" };
   if (s.quiz) return { label: "Envoyer le QCM", kind: "send-quiz" }; // envoi manuel au stagiaire
@@ -36,18 +73,20 @@ function actionFor(s) {
  * la formation, dans l'ordre), détail de l'étape sélectionnée à droite.
  * `onOpenDoc(docId)` ouvre l'aperçu/signature ; `onGoto('documents')` remonte à la section Documents.
  */
-function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSendQuiz }) {
+function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
+  // Clé de réinitialisation : dossier stagiaire (enrollmentId) ou clé fournie (ex. session entreprise).
+  const key = resetKey ?? enrollmentId;
 
-  // Au changement de dossier seulement : on remet l'affichage en état de chargement.
+  // Au changement de contexte seulement : on remet l'affichage en état de chargement.
   // (Un simple rafraîchissement ne vide PAS l'affichage : évite le clignotement.)
-  useEffect(() => { setData(null); setSel(null); setError(null); }, [enrollmentId]);
+  useEffect(() => { setData(null); setSel(null); setError(null); }, [key]);
 
   useEffect(() => {
     let active = true;
-    getEnrollmentParcours(enrollmentId)
+    (fetcher ? fetcher() : getEnrollmentParcours(enrollmentId))
       .then((r) => {
         if (!active) return;
         setData(r.data);
@@ -58,7 +97,7 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
       })
       .catch((e) => { if (active) setError(e.message); });
     return () => { active = false; };
-  }, [enrollmentId, refresh]);
+  }, [key, refresh]);
 
   if (error) return <p className="hint" style={{ color: "var(--amber, #b8860b)" }}>{error}</p>;
   if (!data) return <p className="hint">Chargement du parcours…</p>;
@@ -70,7 +109,7 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
   function runAction() {
     if (!action) return;
     if (action.kind === "open" && step.docId) onOpenDoc?.(step.docId);
-    else if (action.kind === "prepare") onPrepare?.(step.key);
+    else if (action.kind === "prepare") onPrepare?.(step.key, step); // step transmis (mode groupe)
     else if (action.kind === "send-quiz" && step.key?.startsWith("quiz:")) onSendQuiz?.(step.key.slice(5));
   }
 
@@ -90,14 +129,27 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
           <div style={{ height: "100%", width: `${data.percent}%`, background: "linear-gradient(90deg,#c0392b,#e0932e)", borderRadius: 6 }} />
         </div>
         <div>
-          {data.steps.map((s) => {
+          {data.steps.map((s, idx, arr) => {
             const on = s.key === sel;
+            // Séparateur de section (parcours entreprise) : uniquement si l'API
+            // renvoie deux sections distinctes (company / learner).
+            const hasSections = arr.some((x) => x.section === "company") && arr.some((x) => x.section === "learner");
+            const showDivider = hasSections && s.section && (idx === 0 || arr[idx - 1].section !== s.section);
+            const divider = showDivider ? (
+              <div key={`sec-${s.section}`} style={{ display: "flex", alignItems: "center", gap: 8, margin: idx === 0 ? "2px 2px 8px" : "14px 2px 8px", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", color: "var(--dim)" }}>
+                <span>{s.section === "company" ? "🏢 À L'ARRIVÉE VIA L'ENTREPRISE" : "SUITE DU PARCOURS · STAGIAIRE"}</span>
+                <span style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
+              </div>
+            ) : null;
             return (
-              <button key={s.key} type="button" onClick={() => setSel(s.key)}
+              <div key={s.key}>
+              {divider}
+              <button type="button" onClick={() => setSel(s.key)}
                 style={{
                   display: "flex", gap: 12, alignItems: "center", width: "100%", textAlign: "left",
                   padding: "10px 12px", marginBottom: 8, borderRadius: 12, cursor: "pointer",
-                  background: on ? "var(--surface-2, #fff)" : "transparent",
+                  color: "var(--text)",
+                  background: on ? "var(--surface2)" : "transparent",
                   border: on ? "1px solid var(--ember1, #c0392b)" : "1px solid var(--border-soft)",
                 }}>
                 <span style={{
@@ -107,13 +159,14 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
                   color: s.status === "todo" ? "var(--muted)" : "#fff",
                 }}><Icon name={stepIcon(s)} size={17} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <b style={{ display: "block" }}>{s.label}</b>
-                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{s.sub}</span>
+                  <b style={{ display: "block", color: s.status === "todo" ? "var(--dim)" : "var(--text)" }}>{s.label}</b>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{listSub(s)}</span>
                 </span>
                 {s.status === "current" && (
                   <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ember1,#c0392b)", whiteSpace: "nowrap" }}>En cours</span>
                 )}
               </button>
+              </div>
             );
           })}
         </div>
@@ -133,9 +186,14 @@ function EnrollmentParcours({ enrollmentId, refresh, onOpenDoc, onPrepare, onSen
         </div>
         {step.sub && <p style={{ color: "var(--muted)", marginTop: 8 }}>{step.sub}</p>}
         <p style={{ fontWeight: 600, marginTop: 14, color: step.status === "done" ? "#2e9e5b" : "inherit" }}>{lineFor(step)}</p>
-        {action && (
-          <button className="btn primary" onClick={runAction} style={{ marginTop: 4 }}>{action.label}</button>
-        )}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+          {action && (
+            <button className="btn primary" onClick={runAction}>{action.label}</button>
+          )}
+          {onSignLink && step.docId && (
+            <button className="btn ghost" onClick={() => onSignLink(step.docId)} title="Copier un lien pour que le représentant signe">🔗 Lien de signature</button>
+          )}
+        </div>
       </div>
     </div>
   );

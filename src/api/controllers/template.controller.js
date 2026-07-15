@@ -4,7 +4,7 @@ const Docxtemplater = require('docxtemplater');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
-const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS } = require('../lib/documents.js');
+const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS, SIGNER_ROLES, stepSigners } = require('../lib/documents.js');
 const { TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
 const { decrypt } = require('../lib/crypto.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
@@ -15,14 +15,18 @@ const { resolveCustomTokens } = require('../lib/customtokens.js');
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
 
 // Lit les lignes document_template d'un organisme (métadonnées + présence de contenu).
+// `company_level` (migration 077) est optionnel : on réessaie sans si la colonne manque.
 async function loadRows(organizationId) {
-    const [rows] = await db.promise().query(
-        `SELECT ${META_COLS}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
+    const sel = (extra) =>
+        `SELECT ${META_COLS}${extra}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
-         FROM document_template WHERE organization_id = ?`,
-        [organizationId]
-    );
-    return rows;
+         FROM document_template WHERE organization_id = ?`;
+    // Colonnes optionnelles (migrations 077 / 086 / 087 / 088) : on retombe en cascade si absentes.
+    for (const extra of [', company_level, company_sign, signers', ', company_level, company_sign', ', company_level', '']) {
+        try { const [rows] = await db.promise().query(sel(extra), [organizationId]); return rows; }
+        catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; }
+    }
+    return [];
 }
 
 /**
@@ -94,6 +98,8 @@ const listTemplates = async (req, res) => {
             has_file: !!raw[s.slug]?.has_file,
             file_name: raw[s.slug]?.name || null,
             updated_at: raw[s.slug]?.updated_at || null,
+            company_sign: raw[s.slug]?.company_sign ? 1 : 0,
+            signers: stepSigners(s), // liste résolue (JSON `signers` ou dérivée des drapeaux)
         }));
         res.json({ data: steps });
     } catch (err) {
@@ -107,7 +113,7 @@ async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
     // sans elles plutôt que d'échouer.
-    const OPTIONAL = ['layout'];
+    const OPTIONAL = ['layout', 'company_level', 'company_sign', 'signers'];
     const run = async (f) => {
         const keys = Object.keys(f);
         if (ex.length) {
@@ -148,10 +154,21 @@ const saveTemplate = async (req, res) => {
     if (b.label !== undefined) fields.label = b.label ? String(b.label).slice(0, 255) : null;
     if (b.doc_type !== undefined) fields.doc_type = b.doc_type ? String(b.doc_type).toUpperCase().slice(0, 40) : null;
     if (b.sort_order !== undefined) fields.sort_order = Number(b.sort_order) || 100;
+    // Nouveau modèle : liste de signataires. On l'enregistre ET on synchronise les
+    // anciens drapeaux (rétro-compat pour tout code qui les lit encore directement).
+    if (Array.isArray(b.signers)) {
+        const list = b.signers.filter((r) => SIGNER_ROLES.includes(r));
+        fields.signers = JSON.stringify(list);
+        fields.signable = list.includes('ORG') ? 1 : 0;
+        fields.stagiaire_sign = list.includes('STAGIAIRE') ? 1 : 0;
+        fields.company_sign = list.includes('ENTREPRISE') ? 1 : 0;
+    }
     if (b.signable !== undefined) fields.signable = b.signable ? 1 : 0;
     if (b.stagiaire_sign !== undefined) fields.stagiaire_sign = b.stagiaire_sign ? 1 : 0;
     if (b.applies_when !== undefined) fields.applies_when = b.applies_when ? JSON.stringify(b.applies_when) : null;
     if (b.active !== undefined) fields.active = b.active ? 1 : 0;
+    if (b.company_level !== undefined) fields.company_level = b.company_level ? 1 : 0;
+    if (b.company_sign !== undefined) fields.company_sign = b.company_sign ? 1 : 0;
     // Corps construit dans l'éditeur : passe l'étape en mode « builder ».
     if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }
@@ -247,26 +264,94 @@ function computedGroup() {
     return { group: 'Calculé / dates', tokens };
 }
 
-// Jetons personnalisés de l'organisme (table custom_token). Résilient si migration absente.
-async function loadCustomTokens(orgId) {
-    try {
-        const [rows] = await db.promise().query(
-            'SELECT token_key, label, template, sort_order FROM custom_token WHERE organization_id = ? ORDER BY sort_order, label', [orgId]);
-        return rows;
-    } catch (e) { if (e && e.code === 'ER_NO_SUCH_TABLE') return []; throw e; }
+// Jetons « groupe entreprise » intégrés (non issus d'une colonne du dossier) : la liste
+// des stagiaires du groupe {Stagiaires}, insérable dans un modèle « Document entreprise ».
+function groupTokensGroup() {
+    const byKey = {};
+    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
+    const tokens = ['Stagiaires'].map((k) => byKey[k]).filter(Boolean)
+        .map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
+    return { group: 'Groupe entreprise', tokens };
 }
 
-/** GET /api/templates/tokens — jetons de la palette (champs documents + calculés + personnalisés). */
+// Jetons personnalisés de l'organisme (table custom_token). Résilient si migration absente.
+async function loadCustomTokens(orgId) {
+    // `category` (migration 093) est optionnel : on réessaie sans si la colonne manque.
+    for (const cols of ['token_key, label, category, template, sort_order', 'token_key, label, template, sort_order']) {
+        try {
+            const [rows] = await db.promise().query(
+                `SELECT ${cols} FROM custom_token WHERE organization_id = ? ORDER BY sort_order, label`, [orgId]);
+            return rows;
+        } catch (e) {
+            if (e && e.code === 'ER_NO_SUCH_TABLE') return [];
+            if (e && e.code === 'ER_BAD_FIELD_ERROR') continue; // colonne category absente
+            throw e;
+        }
+    }
+    return [];
+}
+
+// Ordre d'affichage canonique des groupes de la palette (du plus utile au plus rare).
+// Les groupes non listés tombent à la fin, triés alphabétiquement.
+const GROUP_ORDER = [
+    'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
+    'Inscription', 'Formation', 'Session', 'Lieu de formation',
+    'Organisme', 'Calculé / dates', 'Personnalisés',
+];
+// Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
+const CURATED_GROUPS = new Set(['Calculé / dates', 'Groupe entreprise']);
+
+// Groupes de jetons cachés selon le TYPE de document :
+//  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
+//    jetons propres à UN stagiaire / une inscription (on garde {Stagiaires} du groupe).
+//  - Document STAGIAIRE (company_level=0) : la liste {Stagiaires} n'a pas de sens → on
+//    masque le groupe « Groupe entreprise ».
+const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Inscription']);
+const HIDDEN_FOR_LEARNER = new Set(['Groupe entreprise']);
+
+/** GET /api/templates/tokens?slug= — jetons de la palette, filtrés selon le type de document. */
 const getTokens = async (req, res) => {
     try {
         const orgId = req.user.organization_id;
+        // Type du modèle en cours d'édition (résilient si la colonne/table manque).
+        let companyLevel = null; // null = type inconnu → tout afficher
+        if (req.query.slug) {
+            try {
+                const [[t]] = await db.promise().query(
+                    'SELECT company_level FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+                    [orgId, String(req.query.slug)]);
+                if (t) companyLevel = t.company_level ? 1 : 0;
+            } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+        }
         const groups = await fieldTokenGroups(orgId);
         // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
+        groups.push(groupTokensGroup());
+        // Jetons personnalisés : rangés dans le groupe de leur CATÉGORIE (migration 093).
+        // Sans catégorie → groupe « Personnalisés ». On fusionne dans un groupe existant
+        // du même nom (ex. « Groupe entreprise »), sinon on le crée.
         const defs = await loadCustomTokens(orgId);
-        if (defs.length) groups.push({ group: 'Personnalisés', tokens: defs.map((d) => ({ key: `custom:${d.token_key}`, label: d.label, sample: '' })) });
-        res.json({ data: groups });
+        for (const d of defs) {
+            const cat = (d.category && String(d.category).trim()) || 'Personnalisés';
+            let g = groups.find((x) => x.group === cat);
+            if (!g) { g = { group: cat, tokens: [] }; groups.push(g); }
+            g.tokens.push({ key: `custom:${d.token_key}`, label: d.label, sample: '' });
+        }
+
+        // Réorganisation : ordre de groupes canonique + tri alphabétique des jetons
+        // (hors groupes curatés) + suppression des groupes vides.
+        const rank = (g) => { const i = GROUP_ORDER.indexOf(g); return i < 0 ? GROUP_ORDER.length : i; };
+        groups.sort((a, b) => rank(a.group) - rank(b.group) || a.group.localeCompare(b.group, 'fr'));
+        for (const g of groups) {
+            if (!CURATED_GROUPS.has(g.group) && Array.isArray(g.tokens)) {
+                g.tokens.sort((x, y) => String(x.label || '').localeCompare(String(y.label || ''), 'fr'));
+            }
+        }
+        // Filtrage selon le type de document (si connu).
+        const hidden = companyLevel === 1 ? HIDDEN_FOR_COMPANY : companyLevel === 0 ? HIDDEN_FOR_LEARNER : null;
+        const visible = hidden ? groups.filter((g) => !hidden.has(g.group)) : groups;
+        res.json({ data: visible.filter((g) => g.tokens && g.tokens.length) });
     } catch (e) {
         console.error('Erreur jetons palette :', e);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -315,13 +400,21 @@ const saveCustomTokens = async (req, res) => {
             const key = String(t.token_key || '').trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
             if (!key || seen.has(key)) continue;
             seen.add(key);
-            clean.push({ token_key: key, label: String(t.label || key).slice(0, 120), template: String(t.template || '').slice(0, 2000), sort_order: i * 10 });
+            const category = String(t.category || '').trim().slice(0, 80) || null;
+            clean.push({ token_key: key, label: String(t.label || key).slice(0, 120), category, template: String(t.template || '').slice(0, 2000), sort_order: i * 10 });
         }
         try {
             await conn.query('DELETE FROM custom_token WHERE organization_id = ?', [orgId]);
             for (const t of clean) {
-                await conn.query('INSERT INTO custom_token (id, organization_id, token_key, label, template, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
-                    [crypto.randomUUID(), orgId, t.token_key, t.label, t.template, t.sort_order]);
+                try {
+                    await conn.query('INSERT INTO custom_token (id, organization_id, token_key, label, category, template, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        [crypto.randomUUID(), orgId, t.token_key, t.label, t.category, t.template, t.sort_order]);
+                } catch (e2) {
+                    if (e2 && e2.code === 'ER_BAD_FIELD_ERROR') { // colonne category absente (migration 093 non jouée)
+                        await conn.query('INSERT INTO custom_token (id, organization_id, token_key, label, template, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+                            [crypto.randomUUID(), orgId, t.token_key, t.label, t.template, t.sort_order]);
+                    } else throw e2;
+                }
             }
         } catch (e) {
             if (e && e.code === 'ER_NO_SUCH_TABLE') return res.status(501).json({ message: "La table des jetons personnalisés n'existe pas (migration 066 non appliquée)." });
@@ -493,6 +586,60 @@ const resetTemplate = async (req, res) => {
     }
 };
 
+/** POST /api/templates/:slug/duplicate — crée une copie d'un modèle (nouveau slug). */
+const duplicateTemplate = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const srcSlug = req.params.slug;
+    try {
+        const conn = db.promise();
+        // Métadonnées fusionnées (socle + personnalisation) + ligne perso éventuelle.
+        const meta = mergeSteps(await loadRows(orgId)).find((s) => s.slug === srcSlug);
+        if (!meta) return res.status(404).json({ message: 'Modèle introuvable.' });
+        const [[src]] = await conn.query('SELECT * FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1', [orgId, srcSlug]);
+        const content = await getTemplateContent(orgId, srcSlug); // { kind, html/header/footer/layout } | { kind:'docx', buffer } | null
+
+        // Slug unique (base-copie, base-copie-2, …), jamais un slug du socle.
+        const base = String(srcSlug).toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+$/,'');
+        const taken = async (sl) => {
+            if (DEFAULT_SLUGS.has(sl)) return true;
+            const [[r]] = await conn.query('SELECT 1 AS ok FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, sl]);
+            return !!r;
+        };
+        let slug = `${base}-copie`; let i = 2;
+        while (await taken(slug)) slug = `${base}-copie-${i++}`;
+
+        const fields = {
+            label: `${(meta.label || srcSlug)} (copie)`,
+            doc_type: meta.doc_type || null,
+            signable: meta.signable ? 1 : 0,
+            stagiaire_sign: meta.stagiaire_sign ? 1 : 0,
+            company_level: meta.company_level ? 1 : 0,
+            company_sign: meta.company_sign ? 1 : 0,
+            signers: JSON.stringify(stepSigners(meta)),
+            applies_when: meta.applies_when && Object.keys(meta.applies_when).length ? JSON.stringify(meta.applies_when) : null,
+            active: 1,
+            sort_order: Number(meta.sort_order || 100) + 1,
+        };
+        if (content && content.kind === 'docx' && content.buffer) {
+            fields.kind = 'docx';
+            fields.file = content.buffer;
+            fields.name = (src && src.name) || `${slug}.docx`;
+        } else if (content) {
+            fields.kind = 'builder';
+            fields.body_html = content.html || null;
+            fields.header_html = content.header || null;
+            fields.footer_html = content.footer || null;
+            if (content.layout) fields.layout = typeof content.layout === 'string' ? content.layout : JSON.stringify(content.layout);
+        }
+        await upsertTemplate(conn, orgId, slug, fields);
+        logAudit(req, 'template.duplicate', 'DocumentTemplate', slug);
+        res.status(201).json({ success: true, data: { slug }, message: 'Modèle dupliqué.' });
+    } catch (err) {
+        console.error('Erreur duplication modèle :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** PUT /api/templates/reorder — définit l'ordre des modèles (slugs ordonnés). */
 const reorderTemplates = async (req, res) => {
     // `orders` = [{slug, sort_order}] (position globale explicite) ou `slugs` (position simple, legacy).
@@ -518,7 +665,7 @@ const reorderTemplates = async (req, res) => {
 
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
-    listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
+    listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate, duplicateTemplate,
     getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
     loadCustomTokens, getCustomTokens, saveCustomTokens,
 };

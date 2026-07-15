@@ -67,7 +67,7 @@ function mergeSteps(rows = []) {
         bySlug.set(d.slug, {
             slug: d.slug, label: d.label, doc_type: d.doc_type, sort_order: d.sort_order,
             signable: d.signable, stagiaire_sign: d.stagiaire_sign, applies_when: d.applies_when,
-            or_group: d.or_group || null,
+            or_group: d.or_group || null, company_level: d.company_level ? 1 : 0, company_sign: d.company_sign ? 1 : 0,
             active: 1, has_file: false, is_default: true, customized: false,
         });
     }
@@ -76,7 +76,7 @@ function mergeSteps(rows = []) {
         if (r.deleted) { bySlug.delete(r.slug); continue; }
         const base = bySlug.get(r.slug) || {
             slug: r.slug, label: r.slug, doc_type: r.doc_type || null, sort_order: 100,
-            signable: 0, stagiaire_sign: 0, applies_when: {}, or_group: null, active: 1, has_file: false,
+            signable: 0, stagiaire_sign: 0, applies_when: {}, or_group: null, company_level: 0, company_sign: 0, active: 1, has_file: false,
             is_default: false, customized: false,
         };
         const m = { ...base, customized: true };
@@ -86,6 +86,9 @@ function mergeSteps(rows = []) {
         if (r.signable != null) m.signable = r.signable;
         if (r.stagiaire_sign != null) m.stagiaire_sign = r.stagiaire_sign;
         if (r.applies_when != null) m.applies_when = parseApplies(r.applies_when);
+        if (r.company_level != null) m.company_level = r.company_level ? 1 : 0;
+        if (r.company_sign != null) m.company_sign = r.company_sign ? 1 : 0;
+        if (r.signers != null) m.signers = r.signers; // nouveau modèle : liste de signataires
         if (r.active != null) m.active = r.active;
         m.has_file = !!r.has_file;
         bySlug.set(r.slug, m);
@@ -102,7 +105,7 @@ function stepsToDocSet(steps, ctx) {
         .filter((s) => s.active && matchStep(s.applies_when, ctx))
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((s, i) => ({
-            num: i + 1, slug: s.slug, type: s.doc_type, label: s.label,
+            num: i + 1, slug: s.slug, type: s.doc_type, label: s.label, sort_order: s.sort_order,
             signable: !!s.signable, stagiaireSign: !!s.stagiaire_sign,
         }));
 }
@@ -112,40 +115,45 @@ function documentSetFor(ctx) {
     return stepsToDocSet(mergeSteps([]), ctx);
 }
 
-/**
- * Le stagiaire doit-il signer CE document ? Unique source de vérité : le flag
- * `stagiaire_sign` du modèle (Modeles de document), résolu par slug de modèle en
- * priorité, sinon par type. `steps` = étapes fusionnées (mergeSteps / loadOrgSteps).
- */
-function stagiaireSignsDoc(steps, doc) {
-    if (!doc) return false;
-    if (doc.template_slug) {
-        const s = steps.find((x) => x.slug === doc.template_slug);
-        if (s) return !!s.stagiaire_sign;
-    }
-    if (doc.type) {
-        const byType = steps.filter((x) => x.doc_type === doc.type);
-        if (byType.length) return byType.some((x) => !!x.stagiaire_sign);
-    }
-    return false;
+// Prédicats de signature — désormais dérivés de la LISTE des signataires (`signers`),
+// avec repli automatique sur les anciens drapeaux (cf. stepSigners/docSignerRoles).
+function stagiaireSignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('STAGIAIRE'); }
+
+// Rôles de signature possibles (nouveau modèle, migration 088).
+const SIGNER_ROLES = ['ORG', 'STAGIAIRE', 'ENTREPRISE', 'EXTERNAL'];
+
+// Liste des signataires requis d'une étape/modèle. Source : le champ `signers` (JSON)
+// s'il est renseigné (nouveau modèle) ; sinon dérivée des anciens drapeaux (rétro-compat).
+function stepSigners(step) {
+    if (!step) return [];
+    let list = step.signers;
+    if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = null; } }
+    if (Array.isArray(list)) return list.filter((r) => SIGNER_ROLES.includes(r));
+    const out = [];
+    if (step.signable) out.push('ORG');
+    if (step.stagiaire_sign) out.push('STAGIAIRE');
+    if (step.company_sign) out.push('ENTREPRISE');
+    return out;
 }
 
-/**
- * L'ORGANISME doit-il signer ce document ? Piloté par le flag `signable` du modèle
- * (« À signer »). La signature organisme est appliquée automatiquement à l'envoi.
- */
-function orgSignsDoc(steps, doc) {
-    if (!doc) return false;
+// Signataires requis pour un DOCUMENT (résolus par slug, sinon union par type).
+function docSignerRoles(steps, doc) {
+    if (!doc) return [];
     if (doc.template_slug) {
         const s = steps.find((x) => x.slug === doc.template_slug);
-        if (s) return !!s.signable;
+        if (s) return stepSigners(s);
     }
     if (doc.type) {
-        const byType = steps.filter((x) => x.doc_type === doc.type);
-        if (byType.length) return byType.some((x) => !!x.signable);
+        const set = new Set();
+        for (const x of steps.filter((s) => s.doc_type === doc.type)) for (const r of stepSigners(x)) set.add(r);
+        if (set.size) return [...set];
     }
-    return false;
+    return [];
 }
+
+function companySignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('ENTREPRISE'); }
+function orgSignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('ORG'); }
+function externalSignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('EXTERNAL'); }
 
 // Conditions AU NIVEAU FORMATION uniquement (rs / hygiène / jours). On ignore
 // financing/agefice (propres au dossier) : c'est la liste des documents candidats
@@ -158,4 +166,4 @@ function matchFormation(applies, program) {
     return true;
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, orgSignsDoc };
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, stepSigners, docSignerRoles };

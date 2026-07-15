@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { matchFormation, matchStep } = require('../lib/documents.js');
+const { matchFormation, matchStep, stepSigners } = require('../lib/documents.js');
 const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { loadOrgSteps } = require('./template.controller.js');
@@ -30,7 +30,9 @@ async function formationSteps(conn, orgId, program) {
         return {
             slug: s.slug, label: s.label, doc_type: s.doc_type, quiz_id: null, day: null,
             applies_when: s.applies_when || {},
-            signable: !!s.signable, stagiaire_sign: !!s.stagiaire_sign,
+            signable: !!s.signable, stagiaire_sign: !!s.stagiaire_sign, company_sign: !!s.company_sign,
+            signers: stepSigners(s), // liste des signataires requis (pour le badge « à signer »)
+            company_level: !!s.company_level,
             or_group: o ? (o.or_group || null) : (s.or_group || null),
             sort_order: o ? o.sort_order : s.sort_order,
             active: o ? !!o.active : true,
@@ -51,7 +53,7 @@ async function formationSteps(conn, orgId, program) {
         const dflt = q.day != null ? Number(q.day) * 10 + 5 : 555;
         return {
             slug, label: q.title, doc_type: 'QCM', quiz_id: q.id, day: q.day,
-            signable: true, stagiaire_sign: true,
+            signable: true, stagiaire_sign: true, company_level: false,
             sort_order: o ? o.sort_order : dflt,
             active: o ? !!o.active : true,
         };
@@ -82,7 +84,7 @@ async function formationSteps(conn, orgId, program) {
             const o = overlay.get(t.slug);
             return {
                 slug: t.slug, label: t.name, doc_type: 'EMARGEMENT', quiz_id: null, day: null,
-                applies_when: t.applies_when || {}, signable: true, stagiaire_sign: true,
+                applies_when: t.applies_when || {}, signable: true, stagiaire_sign: true, company_level: false,
                 or_group: o ? (o.or_group || null) : null, emargement: true,
                 sort_order: o ? o.sort_order : (t.sort_order || 75),
                 active: o ? !!o.active : false,
@@ -110,10 +112,21 @@ async function enrollmentSteps(conn, orgId, program, ctx, condById, eqMap) {
     // Une étape « passe » si c'est un QCM ou si ses conditions correspondent au dossier.
     const passes = (s) => s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds));
     const groupOf = (s) => (eq && eq.get(s.slug) ? eq.get(s.slug).group : null);
+    // Spécificité d'une variante = nombre de contraintes (built-in + conditions perso).
+    // Sert à départager plusieurs variantes qui s'appliquent au même dossier : on garde
+    // la PLUS SPÉCIFIQUE (ex. « Devis entreprise » [pro + OPCO] l'emporte sur « Devis pro »
+    // [pro] quand le dossier est pro AVEC un OPCO), indépendamment de l'ordre.
+    const specificity = (s) => {
+        const a = s.applies_when || {};
+        let n = 0;
+        for (const k of ['financing', 'rs', 'hygiene', 'jours', 'agefice']) if (a[k] != null) n++;
+        if (Array.isArray(a.conditions)) n += a.conditions.length;
+        return n;
+    };
 
-    // Pour un groupe « OU » : on garde UNE seule variante — celle qui s'applique au
-    // dossier, sinon la première (défaut) pour ne JAMAIS faire disparaître le jalon.
-    // Pour une étape isolée : filtrée par ses propres conditions.
+    // Pour un groupe « OU » : on garde UNE seule variante — la plus spécifique qui
+    // s'applique au dossier, sinon la première (défaut) pour ne JAMAIS faire disparaître
+    // le jalon. Pour une étape isolée : filtrée par ses propres conditions.
     const out = [];
     const seen = new Set();
     for (const s of active) {
@@ -122,7 +135,11 @@ async function enrollmentSteps(conn, orgId, program, ctx, condById, eqMap) {
         if (seen.has(g)) continue;
         seen.add(g);
         const members = active.filter((m) => groupOf(m) === g);
-        out.push(members.find(passes) || members[0]);
+        const passing = members.filter(passes);
+        const chosen = passing.length
+            ? passing.reduce((best, m) => (specificity(m) > specificity(best) ? m : best), passing[0])
+            : members[0];
+        out.push(chosen);
     }
     return out;
 }
@@ -358,16 +375,26 @@ const saveArchiveTree = async (req, res) => {
             'SELECT id FROM training_program WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
         if (!program) return res.status(404).json({ message: 'Formation introuvable' });
-        const tree = req.body && req.body.tree;
-        const json = tree == null ? null : JSON.stringify(tree);
-        try {
-            await conn.query('UPDATE training_program SET archive_tree = ? WHERE id = ? AND organization_id = ?',
-                [json, req.params.id, req.user.organization_id]);
-        } catch (e) {
-            if (e && e.code === 'ER_BAD_FIELD_ERROR') {
-                return res.status(422).json({ error: "Migration requise (archive_tree) : appliquez 053_program_archive_tree.sql." });
+        const b = req.body || {};
+        if (Object.prototype.hasOwnProperty.call(b, 'tree')) {
+            const json = b.tree == null ? null : JSON.stringify(b.tree);
+            try {
+                await conn.query('UPDATE training_program SET archive_tree = ? WHERE id = ? AND organization_id = ?',
+                    [json, req.params.id, req.user.organization_id]);
+            } catch (e) {
+                if (e && e.code === 'ER_BAD_FIELD_ERROR') {
+                    return res.status(422).json({ error: "Migration requise (archive_tree) : appliquez 053_program_archive_tree.sql." });
+                }
+                throw e;
             }
-            throw e;
+        }
+        // Arborescence ENTREPRISE (migration 083) — tolère l'absence de colonne.
+        if (Object.prototype.hasOwnProperty.call(b, 'company_tree')) {
+            const cjson = b.company_tree == null ? null : JSON.stringify(b.company_tree);
+            try {
+                await conn.query('UPDATE training_program SET company_archive_tree = ? WHERE id = ? AND organization_id = ?',
+                    [cjson, req.params.id, req.user.organization_id]);
+            } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; }
         }
         res.json({ success: true, message: 'Arborescence enregistrée.' });
     } catch (err) {
@@ -414,6 +441,27 @@ const saveFormationSteps = async (req, res) => {
                 await conn.query('UPDATE quiz SET program_id = ? WHERE id = ? AND organization_id = ? AND program_id IS NULL',
                     [req.params.id, quizId, req.user.organization_id]).catch(() => {});
             }
+        }
+        // Point d'accès à l'émargement : slug de l'étape juste avant le point de rupture (ou null).
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'break_slug')) {
+            const bs = req.body.break_slug ? String(req.body.break_slug).trim().toLowerCase().slice(0, 191) : null;
+            try {
+                await conn.query('UPDATE training_program SET emargement_break_slug = ? WHERE id = ? AND organization_id = ?',
+                    [bs, req.params.id, req.user.organization_id]);
+            } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 076 non jouée
+        }
+        // Section « à l'arrivée via une entreprise » (migration 092) : liste ordonnée
+        // de slugs (documents de groupe ET stagiaire) formant le sous-parcours entreprise.
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'company_steps')) {
+            const raw = Array.isArray(req.body.company_steps) ? req.body.company_steps : [];
+            const slugs = [...new Set(raw
+                .map((s) => String(s || '').trim().toLowerCase())
+                .filter(Boolean))].slice(0, 100);
+            const json = slugs.length ? JSON.stringify(slugs) : null;
+            try {
+                await conn.query('UPDATE training_program SET company_steps = ? WHERE id = ? AND organization_id = ?',
+                    [json, req.params.id, req.user.organization_id]);
+            } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 092 non jouée
         }
         res.json({ success: true, message: 'Parcours enregistré.' });
     } catch (err) {

@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument,
+    listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument, createSignLink,
 } = require('../controllers/document.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -20,5 +20,7 @@ router.get('/:id/preview', authenticateToken, previewHtml);
 router.get('/:id/pdf', authenticateToken, downloadPdf);
 router.get('/:id/docx', authenticateToken, downloadDocx);
 router.post('/:id/sign', authenticateToken, signDocument);
+// Lien de signature partageable (représentant entreprise…) : bureau uniquement.
+router.post('/:id/sign-link', authenticateToken, authorizeRoles(...ADMIN_ROLES), createSignLink);
 
 module.exports = router;

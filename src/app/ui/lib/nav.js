@@ -23,6 +23,7 @@ export const NAV = [
     grp: "Formation",            // cœur pédagogique : qui, quand, quoi
     items: [
       { to: "/stagiaires", ic: "users", label: "Stagiaires", roles: STAFF },
+      { to: "/entreprises", ic: "building", label: "Entreprises", roles: ADMIN },
       { to: "/sessions", ic: "calendar", label: "Sessions", roles: STAFF },
       { to: "/formations", ic: "graduation", label: "Formations", roles: STAFF },
     ],
@@ -68,6 +69,7 @@ export const NAV = [
 export const PAGE_TITLES = {
   "/dashboard": "Tableau de bord",
   "/stagiaires": "Stagiaires",
+  "/entreprises": "Entreprises",
   "/pipeline": "Pipeline CRM",
   "/sessions": "Sessions",
   "/suivi": "Suivi Qualiopi",
@@ -133,7 +135,7 @@ export function navMode(user, path) {
 // Chemin de navigation (rubrique) correspondant à un chemin de route.
 // Les sous-pages (détails) partagent la rubrique parente.
 const SECTION_OF = {
-  "/stagiaires": "/stagiaires", "/sessions": "/sessions", "/formations": "/formations",
+  "/stagiaires": "/stagiaires", "/entreprises": "/entreprises", "/sessions": "/sessions", "/formations": "/formations",
   "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",

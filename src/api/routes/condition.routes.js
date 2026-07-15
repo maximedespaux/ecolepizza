@@ -1,5 +1,5 @@
 const express = require('express');
-const { getCatalog, getFieldValues, getFields, saveFields, listConditions, createCondition, deleteCondition } = require('../controllers/condition.controller.js');
+const { getCatalog, getFieldValues, getFields, saveFields, listConditions, createCondition, updateCondition, deleteCondition } = require('../controllers/condition.controller.js');
 const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -12,6 +12,7 @@ router.get('/fields', getFields);     // tous les champs éligibles (réglages)
 router.put('/fields', saveFields);    // activation + libellés
 router.get('/', listConditions);
 router.post('/', createCondition);
+router.put('/:id', updateCondition);
 router.delete('/:id', deleteCondition);
 
 module.exports = router;

@@ -838,7 +838,7 @@ function FicheRecette({ mode = "realisation" }) {
           {/* Pâte — panneau bleu (résultat) à côté du calculateur */}
           {isPate && (
             <div className="card dough-result">
-              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{curPreset.nom} · empâtement {String(dp.method).toLowerCase()}{dp.autolyse ? " + autolyse" : ""}</div>
+              <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)", WebkitTextFillColor: "rgba(255,255,255,.7)" }}>{curPreset.nom} · empâtement {String(dp.method).toLowerCase()}{dp.autolyse ? " + autolyse" : ""}</div>
               <div style={{ font: "800 24px/1.1 var(--font-d)", margin: "4px 0 2px" }}>{gfmt(totalDough)} de pâte</div>
               <div style={{ color: "rgba(255,255,255,.7)", fontSize: 12, marginBottom: 12 }}>{effNb} pâtons de {patonG} g{dpMode === "farine" && reste > 5 ? ` · reste ${gfmt(reste)}` : ""}</div>
               <div className="dough-bar" title="Proportions de l'empâtement">

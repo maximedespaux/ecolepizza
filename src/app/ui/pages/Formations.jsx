@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
-import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences } from "../api/apiClient.js";
+import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences, createEquivalence, updateEquivalence } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
 import Badge from "../components/Badge.jsx";
@@ -136,9 +136,15 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   });
   const [saving, setSaving] = useState(false);
   const [steps, setSteps] = useState([]);
+  const [breakSlug, setBreakSlug] = useState(null); // point d'accès émargement (slug avant la flèche)
+  const [companySteps, setCompanySteps] = useState([]); // sous-parcours « arrivée via entreprise » (slugs ordonnés)
   const [archiveTree, setArchiveTree] = useState({ folders: [] });
+  const [companyArchiveTree, setCompanyArchiveTree] = useState({ folders: [] });
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
+  const [equivs, setEquivs] = useState([]); // liste des équivalences (pour l'ajout de variantes OU)
   const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives"
+  const [archKind, setArchKind] = useState("stagiaire"); // arborescence : "stagiaire" | "entreprise"
+  const [parcoursKind, setParcoursKind] = useState("stagiaire"); // parcours : "stagiaire" | "entreprise"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
   // Couleur effective du badge + valeur hexadécimale pour le sélecteur natif.
@@ -150,23 +156,48 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   useEffect(() => {
     if (!program.id) return;
     getFormation(program.id).then((r) => {
-      const raw = r.data?.archive_tree;
-      let t = { folders: [] };
-      if (raw) { try { t = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { t = { folders: [] }; } }
-      setArchiveTree(t && t.folders ? t : { folders: [] });
+      const parseTree = (raw) => {
+        let t = { folders: [] };
+        if (raw) { try { t = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { t = { folders: [] }; } }
+        return t && t.folders ? t : { folders: [] };
+      };
+      setArchiveTree(parseTree(r.data?.archive_tree));
+      setCompanyArchiveTree(parseTree(r.data?.company_archive_tree));
       if (r.data && r.data.needs_emargement != null) setForm((p) => ({ ...p, needs_emargement: r.data.needs_emargement ? 1 : 0 }));
       // horaires n'est pas renvoyé par la liste (getFormations) : on le charge ici.
       if (r.data && "horaires" in r.data) setForm((p) => ({ ...p, horaires: r.data.horaires || "" }));
+      setBreakSlug(r.data?.emargement_break_slug || null);
+      // Sous-parcours entreprise (JSON tableau de slugs, ou déjà tableau).
+      let cs = r.data?.company_steps;
+      if (typeof cs === "string") { try { cs = JSON.parse(cs); } catch { cs = []; } }
+      setCompanySteps(Array.isArray(cs) ? cs : []);
     }).catch(() => {});
   }, [program.id]);
-  // Équivalences « OU » (org) : map slug -> groupe. Le regroupement est automatique.
-  useEffect(() => {
-    getEquivalences().then((r) => {
-      const m = new Map();
-      for (const e of r.data?.equivalences || []) for (const s of e.members) m.set(s, { group: e.key });
-      setEqMap(m);
-    }).catch(() => {});
-  }, []);
+  // Équivalences « OU » (org) : map slug -> groupe + liste des équivalences.
+  const reloadEq = () => getEquivalences().then((r) => {
+    const list = r.data?.equivalences || [];
+    const m = new Map();
+    for (const e of list) for (const s of e.members) m.set(s, { group: e.key });
+    setEqMap(m); setEquivs(list);
+  }).catch(() => {});
+  useEffect(() => { reloadEq(); }, []);
+
+  // Ajoute un document comme variante « OU » à un jalon (crée/étend l'équivalence).
+  async function addOuVariant(jalonSlugs, addSlug) {
+    if (!addSlug || jalonSlugs.includes(addSlug)) return;
+    try {
+      const g = eqMap.get(jalonSlugs[0]);
+      const eq = g ? equivs.find((e) => e.key === g.group) : null;
+      if (eq && !eq.is_default && String(eq.id)) {
+        const members = [...new Set([...(eq.members || jalonSlugs), addSlug])];
+        await updateEquivalence(eq.id, { members });
+      } else {
+        await createEquivalence({ members: [...new Set([...jalonSlugs, addSlug])] });
+      }
+      setSteps((ss) => ss.map((s) => (s.slug === addSlug ? { ...s, active: true } : s))); // activer la variante ajoutée
+      await reloadEq();
+    } catch (e) { onError(e.message); }
+  }
 
   // Activer / retirer une étape (le « OU » est déterminé par les équivalences).
   const toggleStep = (slug) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, active: !s.active } : s)));
@@ -175,8 +206,13 @@ function FormationModal({ program, onClose, onSaved, onError }) {
     if (!String(form.code).trim()) { onError("Le code est requis."); return; }
     if (!String(form.title).trim()) { onError("L'intitulé est requis."); return; }
     if (!isNew && treeHasEmptyName(archiveTree)) {
-      setTab("archives");
-      onError("Nommez tous les dossiers de l'arborescence d'archivage avant d'enregistrer.");
+      setTab("archives"); setArchKind("stagiaire");
+      onError("Nommez tous les dossiers de l'arborescence d'archivage stagiaire avant d'enregistrer.");
+      return;
+    }
+    if (!isNew && treeHasEmptyName(companyArchiveTree)) {
+      setTab("archives"); setArchKind("entreprise");
+      onError("Nommez tous les dossiers de l'arborescence d'archivage entreprise avant d'enregistrer.");
       return;
     }
     setSaving(true);
@@ -186,8 +222,8 @@ function FormationModal({ program, onClose, onSaved, onError }) {
         onSaved("Formation créée.");
       } else {
         await updateFormation(program.id, form);
-        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })));
-        await saveArchiveTree(program.id, archiveTree).catch(() => {}); // tolère l'absence de migration
+        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null, companySteps);
+        await saveArchiveTree(program.id, archiveTree, companyArchiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved("Formation mise à jour.");
       }
     } catch (e) {
@@ -284,29 +320,57 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           </div>
 
           <div style={{ display: tab === "parcours" ? "block" : "none" }}>
-          <p className="hint" style={{ marginTop: 0 }}>
-            Composez l'enchaînement des documents : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Glissez un bloc pour réordonner. Les QCM rattachés sont proposés à l'ajout.
-          </p>
-          {steps.length === 0 ? (
-            <p className="hint">Aucun document candidat.</p>
+          <div className="seg" style={{ marginBottom: 12 }}>
+            <button type="button" className={"seg-btn" + (parcoursKind === "stagiaire" ? " on" : "")} onClick={() => setParcoursKind("stagiaire")}>Parcours du dossier</button>
+            <button type="button" className={"seg-btn" + (parcoursKind === "entreprise" ? " on" : "")} onClick={() => setParcoursKind("entreprise")}>À l'arrivée via une entreprise{companySteps.length ? ` (${companySteps.length})` : ""}</button>
+          </div>
+
+          {parcoursKind === "stagiaire" ? (
+            <>
+              <p className="hint" style={{ marginTop: 0 }}>
+                Composez l'enchaînement des documents du dossier : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Les documents de groupe (🏢 « Document entreprise ») ne s'ajoutent pas ici : ils se gèrent dans l'onglet <b>À l'arrivée via une entreprise</b>. Glissez un bloc pour réordonner ; les QCM rattachés sont proposés à l'ajout.
+                <br />Clique sur une <b style={{ color: "var(--ember1)" }}>flèche 🚧</b> entre deux jalons pour placer le <b>point d'accès à l'émargement</b> : le stagiaire ne pourra émarger qu'après avoir signé tous ses documents situés avant ce point.
+              </p>
+              {steps.length === 0 ? (
+                <p className="hint">Aucun document candidat.</p>
+              ) : (
+                <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
+                  breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant} />
+              )}
+            </>
           ) : (
-            <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps} />
+            <CompanySection steps={steps} value={companySteps} onChange={setCompanySteps} onToggleActive={toggleStep} />
           )}
           </div>
 
           <div style={{ display: tab === "archives" ? "block" : "none" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
-              <ArchiveTreeEditor tree={archiveTree} onChange={setArchiveTree} eqMap={eqMap}
-                docs={[
-                  ...steps.filter((s) => s.active).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id })),
-                  // Documents « système » assemblés à partir des signatures (si la formation utilise l'émargement).
-                  ...(form.needs_emargement ? [{ slug: "sys:emargement", label: "Feuille d'émargement (stagiaire + formateur(s) + intervenant(s))", system: true }] : []),
-                ]} />
-              <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
-                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu</div>
-                <ArchiveTreePreview tree={archiveTree} code={form.code} title={form.title} />
-              </div>
-            </div>
+            {(() => {
+              const isEntArch = archKind === "entreprise";
+              const curTree = isEntArch ? companyArchiveTree : archiveTree;
+              const setCurTree = isEntArch ? setCompanyArchiveTree : setArchiveTree;
+              const docs = isEntArch
+                ? steps.filter((s) => s.active && s.company_level).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id }))
+                : [
+                    ...steps.filter((s) => s.active && !s.company_level).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id })),
+                    // Documents « système » assemblés à partir des signatures (si la formation utilise l'émargement).
+                    ...(form.needs_emargement ? [{ slug: "sys:emargement", label: "Feuille d'émargement (stagiaire + formateur(s) + intervenant(s))", system: true }] : []),
+                  ];
+              return (
+                <>
+                  <div className="seg" style={{ marginBottom: 12 }}>
+                    <button type="button" className={"seg-btn" + (!isEntArch ? " on" : "")} onClick={() => setArchKind("stagiaire")}>Archivage stagiaire</button>
+                    <button type="button" className={"seg-btn" + (isEntArch ? " on" : "")} onClick={() => setArchKind("entreprise")}>Archivage entreprise</button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
+                    <ArchiveTreeEditor tree={curTree} onChange={setCurTree} eqMap={eqMap} docs={docs} />
+                    <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu — {isEntArch ? "entreprise" : "stagiaire"}</div>
+                      <ArchiveTreePreview tree={curTree} code={form.code} title={form.title} />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
         <div className="mfoot">
@@ -320,16 +384,20 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   );
 }
 
-// Regroupe les étapes ORDONNÉES en jalons « OU » d'après les ÉQUIVALENCES (org) :
-// étapes consécutives appartenant à la même équivalence. `eqMap` = slug -> { group }.
+// Regroupe les étapes en jalons « OU » d'après les ÉQUIVALENCES (org) : TOUTES les
+// étapes d'une même équivalence forment UN SEUL jalon (nombre de variantes illimité),
+// même si elles ne se suivent pas — le jalon apparaît à la position de la 1re variante.
+// `eqMap` = slug -> { group }.
 function groupMilestones(steps, eqMap) {
   const groupOf = (s) => (eqMap && eqMap.get(s.slug) ? eqMap.get(s.slug).group : null);
   const groups = [];
+  const byGroup = new Map();
   for (const st of steps) {
-    const last = groups[groups.length - 1];
     const g = groupOf(st);
-    if (last && g && groupOf(last.steps[0]) === g) last.steps.push(st);
-    else groups.push({ steps: [st] });
+    if (g && byGroup.has(g)) { byGroup.get(g).steps.push(st); continue; }
+    const obj = { steps: [st] };
+    if (g) byGroup.set(g, obj);
+    groups.push(obj);
   }
   return groups;
 }
@@ -347,19 +415,27 @@ function stepBadge(s) {
   if (a.rs === true) return "Certifiante";
   if (a.hygiene === true) return "Hygiène";
   if (a.jours != null) return `${a.jours} j`;
-  if (s.stagiaire_sign) return "à signer";
+  // « à signer » dès qu'une PARTIE doit signer (stagiaire, entreprise ou externe).
+  const sg = Array.isArray(s.signers) ? s.signers : [];
+  if (s.stagiaire_sign || s.company_sign || sg.includes("STAGIAIRE") || sg.includes("ENTREPRISE") || sg.includes("EXTERNAL")) return "à signer";
   return null;
 }
 
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
-function ParcoursFlow({ steps, eqMap, onToggle, onReorder }) {
-  const included = steps.filter((s) => s.active);
-  const available = steps.filter((s) => !s.active);
+function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu }) {
+  // Les documents de GROUPE (🏢 company_level) ne font PAS partie du parcours du
+  // dossier : ils se gèrent uniquement dans « À l'arrivée via une entreprise ».
+  const included = steps.filter((s) => s.active && !s.company_level);
+  const available = steps.filter((s) => !s.active && !s.company_level);
+  // Tout ce qui n'est pas affiché ici (docs de groupe + étapes inactives) est
+  // préservé tel quel lors d'un réordonnancement.
+  const rest = steps.filter((s) => !(s.active && !s.company_level));
   const groups = groupMilestones(included, eqMap);
   const [gdrag, setGdrag] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [ouFor, setOuFor] = useState(null); // slug de tête du jalon dont le menu « ＋ OU » est ouvert
   const addRef = useRef(null);
 
   useEffect(() => {
@@ -375,13 +451,18 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder }) {
     const [m] = ng.splice(gdrag, 1);
     ng.splice(to, 0, m);
     setGdrag(null);
-    onReorder([...ng.flatMap((g) => g.steps), ...available]); // ordre inclus + disponibles conservés
+    onReorder([...ng.flatMap((g) => g.steps), ...rest]); // ordre inclus + reste (groupe/inactifs) conservé
   }
 
   return (
-    <div className="parcours" ref={addRef}>
+    <div className="parcours compact" ref={addRef}>
       <div className="parcours-flow">
-        {groups.map((g, i) => (
+        {groups.map((g, i) => {
+          // Slug de rupture porté par ce jalon = dernière étape du groupe.
+          const gBreakSlug = g.steps[g.steps.length - 1].slug;
+          const brkHere = !!breakSlug && breakSlug === gBreakSlug;
+          const canBreak = typeof onSetBreak === "function";
+          return (
           <div className="pf-wrap" key={g.steps[0].slug}>
             <div className={"pf-node" + (gdrag === i ? " drag" : "")}
               draggable onDragStart={() => setGdrag(i)} onDragOver={(e) => e.preventDefault()}
@@ -397,10 +478,40 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder }) {
                   </div>
                 </div>
               ))}
+              {/* Ajouter une variante « OU » à ce jalon (regroupe via équivalence). */}
+              {typeof onAddOu === "function" && !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT" && (() => {
+                const head = g.steps[0].slug;
+                const cand = steps.filter((s) => !s.quiz_id && !s.company_level && s.doc_type !== "EMARGEMENT" && !g.steps.some((x) => x.slug === s.slug));
+                return (
+                  <div style={{ position: "relative", marginTop: 6 }}>
+                    <button type="button" className="pf-or-add" onClick={() => setOuFor(ouFor === head ? null : head)} title="Ajouter une variante « OU » (choisie par condition)">＋ OU</button>
+                    {ouFor === head && (
+                      <div className="cat-pop" style={{ position: "absolute", left: 0, top: "100%", zIndex: 6, marginTop: 4, minWidth: 200, maxHeight: 220, overflowY: "auto" }}>
+                        {cand.length === 0 ? <div className="pf-add-empty" style={{ padding: 8 }}>Aucun autre document.</div>
+                          : cand.map((s) => (
+                            <button key={s.slug} type="button" className="cat-opt" onClick={() => { onAddOu(g.steps.map((x) => x.slug), s.slug); setOuFor(null); }}>
+                              <b>{s.label}</b>{s.doc_type && <span className="hint"> · {s.doc_type}</span>}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
-            <span className="pf-arrow" aria-hidden="true">→</span>
+            {canBreak ? (
+              <button type="button" className={"pf-brk" + (brkHere ? " on" : "")}
+                title={brkHere ? "Retirer le point d'accès émargement" : "Placer ici le point d'accès à l'émargement (documents à gauche requis)"}
+                onClick={() => onSetBreak(brkHere ? null : gBreakSlug)}>
+                <span className="pf-brk-arrow" aria-hidden="true">→</span>
+                <span className="pf-brk-flag">🚧</span>
+              </button>
+            ) : (
+              <span className="pf-arrow" aria-hidden="true">→</span>
+            )}
           </div>
-        ))}
+          );
+        })}
         <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
           ＋ Ajouter une étape
         </button>
@@ -438,6 +549,113 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder }) {
                 </>
               );
             })()
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Section « À l'arrivée via une entreprise » : sous-parcours d'intake entreprise.
+// Liste ORDONNÉE (glisser pour réordonner) de documents de GROUPE (🏢) et/ou
+// STAGIAIRE choisis parmi les étapes actives du parcours. Repère visuel côté fiche
+// entreprise ; n'altère pas le parcours principal.
+function CompanySection({ steps, value, onChange, onToggleActive }) {
+  const [adding, setAdding] = useState(false);
+  const [drag, setDrag] = useState(null);
+  const ref = useRef(null);
+  const bySlug = new Map(steps.map((s) => [s.slug, s]));
+  const chosen = value.map((sl) => bySlug.get(sl)).filter((s) => s && s.active);
+  // Éligibles : documents de GROUPE (activables ici, qu'ils soient actifs ou non),
+  // documents STAGIAIRE et QCM déjà actifs dans le parcours du dossier (repère).
+  const eligible = steps.filter((s) => s.doc_type !== "EMARGEMENT" && !value.includes(s.slug)
+    && (s.company_level ? true : s.active));
+  const isGroup = (s) => !!s.company_level;
+  const isQuiz = (s) => !!s.quiz_id;
+
+  useEffect(() => {
+    if (!adding) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setAdding(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [adding]);
+
+  const add = (slug) => {
+    const s = bySlug.get(slug);
+    onChange([...value.filter((x) => x !== slug), slug]);
+    if (s && s.company_level && !s.active) onToggleActive?.(slug); // doc de groupe : activer ici
+    setAdding(false);
+  };
+  const remove = (slug) => {
+    const s = bySlug.get(slug);
+    onChange(value.filter((x) => x !== slug));
+    if (s && s.company_level && s.active) onToggleActive?.(slug); // doc de groupe : n'existe qu'ici → désactiver
+  };
+  function drop(to) {
+    if (drag === null || drag === to) { setDrag(null); return; }
+    const order = chosen.map((s) => s.slug);
+    const [m] = order.splice(drag, 1);
+    order.splice(to, 0, m);
+    const extra = value.filter((sl) => !order.includes(sl)); // slugs non résolus conservés
+    onChange([...order, ...extra]);
+    setDrag(null);
+  }
+  const badge = (s, short) => {
+    const grp = isGroup(s), quiz = isQuiz(s);
+    const text = quiz ? (short ? "❓" : "❓ QCM") : grp ? (short ? "🏢" : "🏢 Groupe") : (short ? "S" : "Stagiaire");
+    return (
+      <span className="pf-badge" style={{ background: grp ? "var(--ember1,#c0392b)" : "var(--surface2)", color: grp ? "#fff" : "var(--text)" }}>
+        {text}
+      </span>
+    );
+  };
+
+  return (
+    <div className="parcours compact" ref={ref}>
+      <p className="hint" style={{ marginTop: 0 }}>
+        Documents traités quand une <b>entreprise</b> inscrit ses stagiaires : ajoutez ici les documents de <b>groupe</b> (🏢) <b>et</b> les documents <b>stagiaire</b> concernés. Glissez un bloc pour réordonner. Cette section sert de repère sur la fiche entreprise ; elle n'enlève rien au parcours du dossier.
+      </p>
+      <div className="parcours-flow">
+        {chosen.map((s, i) => (
+          <div className="pf-wrap" key={s.slug}>
+            <div className={"pf-node" + (drag === i ? " drag" : "")}
+              draggable onDragStart={() => setDrag(i)} onDragOver={(e) => e.preventDefault()}
+              onDrop={() => drop(i)} onDragEnd={() => setDrag(null)}>
+              <span className="pf-grip" title="Glisser pour réordonner">⠿</span>
+              <div className="pf-opt">
+                <span className="pf-label">{s.label}</span>
+                {badge(s)}
+                <button type="button" className="pf-x" title="Retirer de la section entreprise" onClick={() => remove(s.slug)}><Icon name="x" size={13} /></button>
+              </div>
+            </div>
+            <span className="pf-arrow" aria-hidden="true">→</span>
+          </div>
+        ))}
+        <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
+          ＋ Ajouter une étape
+        </button>
+      </div>
+
+      {chosen.length === 0 && <p className="hint" style={{ marginTop: -6 }}>Aucun document dans la section entreprise.</p>}
+
+      {adding && (
+        <div className="pf-add-panel">
+          {eligible.length === 0 ? (
+            <>
+              <div className="pf-add-title">Étapes disponibles</div>
+              <div className="pf-add-empty">Aucun document disponible — activez-le d'abord dans « Parcours du dossier ».</div>
+            </>
+          ) : (
+            <>
+              <div className="pf-add-title">Documents ({eligible.length})</div>
+              <div className="pf-add-grid">
+                {eligible.map((s) => (
+                  <button key={s.slug} type="button" className="pf-add-item" onClick={() => add(s.slug)}>
+                    {badge(s, true)}<span>{s.label}</span>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}

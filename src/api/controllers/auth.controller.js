@@ -36,6 +36,9 @@ const getCurrentUser = async (req, res) => {
         // ancien stagiaire) -> on lui redonne l'espace stagiaire en plus.
         const [[lc]] = await conn.query('SELECT COUNT(*) AS n FROM learner WHERE user_id = ?', [req.user.id]);
         user.has_learner = lc.n > 0;
+        // Ce compte est-il aussi le représentant d'une entreprise ? (accès signature entreprise)
+        try { const [[cc]] = await conn.query('SELECT COUNT(*) AS n FROM company WHERE user_id = ?', [req.user.id]); user.has_company = cc.n > 0; }
+        catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; user.has_company = false; }
         return res.status(200).json({ success: true, data: user });
     } catch (err) {
         console.error('Erreur récupération utilisateur :', err);
@@ -108,6 +111,8 @@ const userAuthentification = async (req, res) => {
         withParsedNav(userWithoutPassword);
         const [[lc]] = await conn.query('SELECT COUNT(*) AS n FROM learner WHERE user_id = ?', [user.id]);
         userWithoutPassword.has_learner = lc.n > 0;
+        try { const [[cc]] = await conn.query('SELECT COUNT(*) AS n FROM company WHERE user_id = ?', [user.id]); userWithoutPassword.has_company = cc.n > 0; }
+        catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; userWithoutPassword.has_company = false; }
         // Le jeton n'est PAS renvoyé dans le corps : il vit uniquement dans le
         // cookie httpOnly (non lisible par JavaScript). Réduit la surface d'exfiltration.
         return res.status(200).json({

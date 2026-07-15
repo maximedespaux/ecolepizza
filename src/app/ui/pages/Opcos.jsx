@@ -78,7 +78,7 @@ function Opcos() {
 function OpcoModal({ opco, onClose, onSaved, onError }) {
   const isNew = !!opco._new;
   const [f, setF] = useState({
-    code: opco.code || "", name: opco.name || "", address: opco.address || "",
+    code: opco.code || "", name: opco.name || "", siret: opco.siret || "", address: opco.address || "",
     zip_code: opco.zip_code || "", town: opco.town || "", email: opco.email || "",
     phone: opco.phone || "", website: opco.website || "",
     triggers_assiduite: !!opco.triggers_assiduite, active: opco.active == null ? true : !!opco.active,
@@ -105,6 +105,10 @@ function OpcoModal({ opco, onClose, onSaved, onError }) {
           <div className="row2">
             <Field label="Nom" value={f.name} onChange={set("name")} />
             <Field label="Code" value={f.code} onChange={set("code")} />
+          </div>
+          <div className="row2">
+            <Field label="SIRET" value={f.siret} onChange={set("siret")} placeholder="propre au financeur (≠ organisme)" />
+            <span />
           </div>
           <Field label="Adresse" value={f.address} onChange={set("address")} />
           <div className="row3">

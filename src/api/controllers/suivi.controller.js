@@ -2,7 +2,7 @@ const db = require('../config/database.js');
 const { computeDocParcours } = require('../lib/parcours.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
-const { enrollmentSteps } = require('./formationProgram.controller.js');
+const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
 const { logAudit } = require('../lib/audit.js');
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
@@ -17,12 +17,15 @@ const getSuivi = async (req, res) => {
     try {
         const conn = db.promise();
         const [enrollments] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.crm_stage,
+            `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.crm_stage, e.session_id,
+                    e.company_id AS enr_company_id,
                     l.first_name, l.last_name, l.opco,
+                    COALESCE(e.company_id, l.company_id) AS company_id, c.name AS company_name,
                     p.id AS program_id, p.code AS program_code, p.title AS program_title,
                     p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
              FROM enrollment e
              LEFT JOIN learner l ON l.id = e.learner_id
+             LEFT JOIN company c ON c.id = COALESCE(e.company_id, l.company_id)
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
              WHERE e.organization_id = ?`,
@@ -31,9 +34,35 @@ const getSuivi = async (req, res) => {
         // Conditions + faits des dossiers chargés une seule fois pour toute la boucle.
         const condById = await loadConditionMap(conn, req.user.organization_id);
         const eqMap = equivalenceMap(await loadEquivalences(conn, req.user.organization_id));
-        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id);
+        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id, 'condition');
         const factsMap = await loadDossierFactsMap(
             conn, req.user.organization_id, enrollments.map((e) => e.enrollment_id), fieldCatalog);
+
+        // Section « à l'arrivée via une entreprise » (company_steps) par formation,
+        // chargée à la demande et mise en cache (un dossier envoyé par une entreprise
+        // suit CE parcours, comme la fiche entreprise et la fiche stagiaire).
+        const orgId = req.user.organization_id;
+        const intakeCache = new Map(); // program_id -> [slugs]
+        async function companyStepsFor(programId) {
+            if (intakeCache.has(programId)) return intakeCache.get(programId);
+            let order = [];
+            try {
+                const [[pr]] = await conn.query('SELECT company_steps FROM training_program WHERE id = ? AND organization_id = ?', [programId, orgId]);
+                let cs = pr && pr.company_steps;
+                if (typeof cs === 'string') { try { cs = JSON.parse(cs); } catch { cs = []; } }
+                order = Array.isArray(cs) ? cs : [];
+            } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
+            intakeCache.set(programId, order);
+            return order;
+        }
+        // formationSteps par formation (toutes les étapes candidates), en cache.
+        const allStepsCache = new Map(); // program_id -> allSteps
+        async function allStepsFor(program) {
+            if (allStepsCache.has(program.id)) return allStepsCache.get(program.id);
+            const all = await formationSteps(conn, orgId, program);
+            allStepsCache.set(program.id, all);
+            return all;
+        }
 
         const dossiers = [];
         for (const e of enrollments) {
@@ -47,7 +76,7 @@ const getSuivi = async (req, res) => {
                     jours: e.program_days || 1, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
                     ...(factsMap.get(e.enrollment_id) || {}),
                 };
-                const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
+                let steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
                 const [docs] = await conn.query(
                     `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id
                      FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
@@ -55,6 +84,23 @@ const getSuivi = async (req, res) => {
                      ORDER BY gd.created_at DESC`,
                     [e.enrollment_id]
                 );
+                // Dossier envoyé par une entreprise : même parcours que l'entreprise
+                // (section company_steps, TOUTES les étapes) + statut des documents de
+                // GROUPE rattaché.
+                if (e.enr_company_id) {
+                    const intakeOrder = await companyStepsFor(program.id);
+                    if (intakeOrder.length) {
+                        const all = await allStepsFor(program);
+                        const bySlug = new Map(all.map((s) => [s.slug, s]));
+                        steps = intakeOrder.map((sl) => bySlug.get(sl)).filter(Boolean);
+                    }
+                    try {
+                        const [cdocs] = await conn.query(
+                            "SELECT id, type, status, template_slug, quiz_id FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND scope = 'COMPANY' ORDER BY created_at DESC",
+                            [orgId, e.enr_company_id, e.session_id]);
+                        docs.push(...cdocs);
+                    } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
+                }
                 const parc = computeDocParcours({ steps, docs });
                 total = parc.steps.length;
                 done = parc.currentIndex;
@@ -63,6 +109,7 @@ const getSuivi = async (req, res) => {
                 documents = parc.steps.map((s, i) => ({
                     num: i + 1, type: s.key, label: s.label,
                     stagiaireSign: !!s.signable, quiz: !!s.quiz,
+                    company_level: !!s.company_level,
                     status: s.docStatus || 'A_FAIRE',
                 }));
                 const signable = parc.steps.filter((s) => s.signable || s.quiz);
@@ -75,6 +122,8 @@ const getSuivi = async (req, res) => {
             dossiers.push({
                 enrollment_id: e.enrollment_id,
                 learner_id: e.learner_id,
+                company_id: e.company_id || null,
+                company_name: e.company_name || null,
                 first_name: e.first_name,
                 last_name: e.last_name,
                 program_code: e.program_code,
@@ -112,9 +161,10 @@ const getSuivi = async (req, res) => {
 const getArchive = async (req, res) => {
     try {
         const conn = db.promise();
-        // Documents générés par l'application (partagés / signés).
+        // Documents générés par l'application (partagés / signés) — niveau STAGIAIRE.
         const [gen] = await conn.query(
-            `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id,
+            `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'LEARNER' AS scope,
+                    NULL AS company_id, NULL AS company_name,
                     DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
                     s.year, s.week,
@@ -129,13 +179,34 @@ const getArchive = async (req, res) => {
              WHERE gd.organization_id = ? AND gd.status IN (?)`,
             [req.user.organization_id, SHARED]
         );
+        // Documents générés au niveau ENTREPRISE (un par groupe/session). learner_id NULL,
+        // rangés par entreprise. Ignoré si la migration 077 (scope) n'est pas jouée.
+        let comp = [];
+        try {
+            [comp] = await conn.query(
+                `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'COMPANY' AS scope,
+                        gd.company_id, c.name AS company_name,
+                        DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
+                        DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                        s.year, s.week,
+                        p.code AS program_code, p.title AS program_title,
+                        NULL AS learner_id, '' AS first_name, c.name AS last_name, 'gen' AS source
+                 FROM generated_document gd
+                 JOIN company c ON c.id = gd.company_id
+                 LEFT JOIN training_session s ON s.id = gd.session_id
+                 LEFT JOIN training_program p ON p.id = s.program_id
+                 WHERE gd.organization_id = ? AND gd.scope = 'COMPANY' AND gd.status IN (?)`,
+                [req.user.organization_id, SHARED]
+            );
+        } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
         // Documents archivés (PDF importés + feuilles d'émargement générées).
         // Pour l'émargement (ref « emarg:<enrollment>[:<slug>] »), on résout le vrai
         // stagiaire via le dossier, afin qu'il se range dans le MÊME dossier que ses
         // autres documents (regroupement par learner_id côté client) et non dans un
         // dossier « Nom Prénom » séparé.
         const [arch] = await conn.query(
-            `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id,
+            `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id, 'LEARNER' AS scope,
+                    NULL AS company_id, NULL AS company_name,
                     NULL AS sent_at, DATE_FORMAT(ad.created_at, '%Y-%m-%d %H:%i') AS signed_at,
                     ad.year, ad.week,
                     COALESCE(p.code, ad.formation_label) AS program_code,
@@ -153,7 +224,7 @@ const getArchive = async (req, res) => {
              WHERE ad.organization_id = ?`,
             [req.user.organization_id]
         );
-        res.json({ data: [...gen, ...arch] });
+        res.json({ data: [...gen, ...comp, ...arch] });
     } catch (err) {
         console.error('Erreur archives documents :', err);
         res.status(500).json({ error: 'Internal Server Error' });

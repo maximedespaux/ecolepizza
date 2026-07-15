@@ -122,8 +122,12 @@ const createLearner = async (req, res) => {
         const conn = db.promise();
         let companyId = null;
 
-        // Entreprise (devis professionnel) : on la crée puis on la rattache.
-        if (body.company && body.company.name) {
+        // Rattachement à une ENTREPRISE EXISTANTE (nouveau modèle) : simple lien via la FK.
+        if (body.company_id) {
+            const [[c]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [body.company_id, organizationId]);
+            companyId = c ? c.id : null;
+        } else if (body.company && body.company.name) {
+            // Rétro-compatibilité : ancienne saisie « inline » (crée une entreprise).
             companyId = crypto.randomUUID();
             const cols = COMPANY_FIELDS.filter((f) => body.company[f] !== undefined && body.company[f] !== '');
             const placeholders = cols.map(() => '?').join(', ');
@@ -182,8 +186,16 @@ const updateLearner = async (req, res) => {
         }
         let companyId = rows[0].company_id;
 
-        // Entreprise : on met à jour la fiche existante, ou on la crée si besoin.
-        if (body.company && body.company.name) {
+        // Rattachement direct à une entreprise (nouveau modèle) : lien FK, ou détachement.
+        if (body.company_id !== undefined) {
+            if (body.company_id) {
+                const [[c]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [body.company_id, organizationId]);
+                companyId = c ? c.id : null;
+            } else {
+                companyId = null;
+            }
+        // Rétro-compatibilité : ancienne saisie inline (met à jour ou crée l'entreprise).
+        } else if (body.company && body.company.name) {
             const cols = COMPANY_FIELDS.filter((f) => body.company[f] !== undefined && body.company[f] !== '');
             const vals = cols.map((f) => body.company[f]);
             if (companyId) {
@@ -201,22 +213,22 @@ const updateLearner = async (req, res) => {
             }
         }
 
-        // Champs de la fiche stagiaire.
-        // `levels` (badges) doit pouvoir être VIDÉ : on autorise la chaîne vide
-        // (sinon décocher tous les badges ne serait jamais enregistré).
-        const CLEARABLE = new Set(['levels']);
+        // Champs de la fiche stagiaire. Le formulaire envoie TOUS les champs : une
+        // chaîne vide signifie « vider le champ » (→ NULL), ce qui permet de remettre
+        // une liste sur « — ». Seuls les champs REQUIS ne peuvent pas être vidés.
+        const REQUIRED = new Set(['first_name', 'last_name', 'financing']);
         const updates = [];
         const values = [];
         for (const field of LEARNER_FIELDS) {
             if (body[field] === undefined) continue;
-            if (body[field] === '' && !CLEARABLE.has(field)) continue;
+            if (body[field] === '' && REQUIRED.has(field)) continue; // ne pas vider un champ requis
             updates.push(`${field} = ?`);
             const raw = body[field];
-            values.push(field === 'social_security' ? encrypt(raw) : (raw === '' ? null : raw));
+            values.push(raw === '' ? null : (field === 'social_security' ? encrypt(raw) : raw));
         }
-        if (companyId && companyId !== rows[0].company_id) {
+        if (companyId !== rows[0].company_id) {
             updates.push('company_id = ?');
-            values.push(companyId);
+            values.push(companyId); // peut être null (détachement)
         }
 
         if (updates.length > 0) {

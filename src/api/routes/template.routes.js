@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const {
-    listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate,
+    listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate, duplicateTemplate,
     getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
     getCustomTokens, saveCustomTokens,
 } = require('../controllers/template.controller.js');
@@ -24,6 +24,7 @@ router.post('/:slug/preview-pdf', previewPdf);            // aperçu PDF fidèle
 router.post('/:slug/page-metrics', pageMetrics);         // marges réservées (repère fin de page)
 router.get('/:slug/file', downloadTemplate);
 router.put('/:slug', saveTemplate);                       // métadonnées (étape) + corps builder
+router.post('/:slug/duplicate', duplicateTemplate);       // dupliquer un modèle
 router.post('/:slug', upload.single('file'), uploadTemplate); // fichier .docx
 router.delete('/:slug', resetTemplate);
 

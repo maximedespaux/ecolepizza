@@ -32,12 +32,17 @@ const FieldSettingsPanel = forwardRef(function FieldSettingsPanel({ onStatus }, 
     return Object.entries(by);
   }, [fields, q]);
 
-  const enabledCount = fields.filter((f) => f.enabled).length;
+  const tokenCount = fields.filter((f) => f.enabled_token).length;
+  const condCount = fields.filter((f) => f.enabled_condition).length;
 
   async function save() {
     setSaving(true);
     try {
-      await saveFieldSettings(fields.map((f) => ({ table: f.table, column: f.column, enabled: f.enabled, label: f.label || null })));
+      await saveFieldSettings(fields.map((f) => ({
+        table: f.table, column: f.column,
+        enabled_token: !!f.enabled_token, enabled_condition: !!f.enabled_condition,
+        label: f.label || null,
+      })));
       await load(); // relit depuis le serveur : l'affichage reflète toujours ce qui est réellement enregistré
       report({ type: "success", message: "Champs enregistrés." });
     } catch (e) { report({ type: "error", message: e.message }); }
@@ -50,7 +55,7 @@ const FieldSettingsPanel = forwardRef(function FieldSettingsPanel({ onStatus }, 
       {!onStatus && <StatusMessage status={status} />}
       <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "0 0 12px", flexWrap: "wrap" }}>
         <input className="inp" style={{ maxWidth: 280 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un champ…" />
-        <span className="hint">{enabledCount} champ(s) activé(s) sur {fields.length}</span>
+        <span className="hint">🏷️ {tokenCount} jeton(s) · 🔀 {condCount} condition(s) — sur {fields.length}</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button className="btn sm ghost" onClick={() => setOpen(Object.fromEntries(groups.map(([t]) => [t, true])))}>Tout déplier</button>
           <button className="btn sm ghost" onClick={() => setOpen({})}>Tout replier</button>
@@ -60,7 +65,7 @@ const FieldSettingsPanel = forwardRef(function FieldSettingsPanel({ onStatus }, 
 
       {groups.map(([tableLabel, list]) => {
         const isOpen = q.trim() ? true : !!open[tableLabel]; // recherche = tout ouvert ; sinon replié par défaut
-        const en = list.filter((f) => f.enabled).length;
+        const en = list.filter((f) => f.enabled_token || f.enabled_condition).length;
         return (
           <div key={tableLabel} className="card" style={{ marginBottom: 10, padding: 0, overflow: "hidden" }}>
             <button type="button" onClick={() => setOpen((p) => ({ ...p, [tableLabel]: !isOpen }))}
@@ -73,7 +78,8 @@ const FieldSettingsPanel = forwardRef(function FieldSettingsPanel({ onStatus }, 
                 <table>
                   <thead>
                     <tr>
-                      <th style={{ width: 90 }}>Activé</th>
+                      <th style={{ width: 70 }} title="Utilisable comme jeton imprimé dans un document">🏷️ Jeton</th>
+                      <th style={{ width: 90 }} title="Utilisable dans les conditions d'application">🔀 Condition</th>
                       <th>Intitulé affiché</th>
                       <th>Colonne</th>
                       <th style={{ width: 110 }}>Type</th>
@@ -81,8 +87,9 @@ const FieldSettingsPanel = forwardRef(function FieldSettingsPanel({ onStatus }, 
                   </thead>
                   <tbody>
                     {list.map((f) => (
-                      <tr key={f.key} style={{ opacity: f.enabled ? 1 : 0.6 }}>
-                        <td><input type="checkbox" checked={f.enabled} onChange={(e) => setField(f.key, { enabled: e.target.checked })} /></td>
+                      <tr key={f.key} style={{ opacity: (f.enabled_token || f.enabled_condition) ? 1 : 0.55 }}>
+                        <td><input type="checkbox" checked={!!f.enabled_token} onChange={(e) => setField(f.key, { enabled_token: e.target.checked })} /></td>
+                        <td><input type="checkbox" checked={!!f.enabled_condition} onChange={(e) => setField(f.key, { enabled_condition: e.target.checked })} /></td>
                         <td><input className="inp" value={f.label} onChange={(e) => setField(f.key, { label: e.target.value })} /></td>
                         <td className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>{f.column}</td>
                         <td style={{ fontSize: 12, color: "var(--muted)" }}>{TYPE_LABEL[f.type] || f.type}</td>

@@ -17,6 +17,85 @@ import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf } from "../lib/format.js";
 
 const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"] };
+const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
+
+// Barre de progression compacte + pourcentage (réutilisée pour dossier et groupe).
+function ProgressPct({ percent }) {
+  return (
+    <span style={{ width: 90, flexShrink: 0 }} title={`${percent || 0}% du parcours`}>
+      <span style={{ display: "block", height: 6, borderRadius: 4, background: "var(--border-soft, #e3e3e6)", overflow: "hidden" }}>
+        <span style={{ display: "block", height: "100%", width: `${percent || 0}%`, background: "var(--ember1, #c0392b)" }} />
+      </span>
+      <span style={{ display: "block", fontSize: 11, color: "var(--muted)", textAlign: "right", marginTop: 2 }}>{percent || 0}%</span>
+    </span>
+  );
+}
+
+// État d'une étape d'un dossier (identique à Roadmap.stepState) pour l'agrégat groupe.
+function docState(doc) {
+  if (doc.status === "SIGNE") return "done";
+  if (doc.stagiaireSign) return ["ENVOYE", "CONSULTE", "GENERE"].includes(doc.status) ? "progress" : "todo";
+  return ["GENERE", "ENVOYE", "CONSULTE"].includes(doc.status) ? "done" : "todo";
+}
+
+const RM_TAG = { todo: "À faire", progress: "En cours", done: "Terminé" };
+
+// Feuille de route agrégée d'une entreprise : une étape par document du parcours,
+// avec le nombre de stagiaires ayant terminé cette étape.
+function CompanyRoadmap({ steps }) {
+  return (
+    <div className="roadmap">
+      {steps.map((s, i) => {
+        const last = i === steps.length - 1;
+        return (
+          <div className="rm-step" key={s.type + i}>
+            <div className="rm-rail">
+              <span className={`rm-dot ${s.state}`}>{s.state === "done" ? <Icon name="check" size={14} /> : i + 1}</span>
+              {!last && <span className={`rm-conn ${s.state === "done" ? "done" : ""}`} />}
+            </div>
+            <div className="rm-body">
+              <b>{s.label}</b>
+              <span className={`rm-tag ${s.state}`}>
+                {s.company_level
+                  ? `${RM_TAG[s.state]} · document de groupe (organisme + entreprise)`
+                  : `${RM_TAG[s.state]} · ${s.done}/${s.total} stagiaire(s)${s.signable ? " · à signer" : ""}`}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Ligne d'un dossier stagiaire (repliable) : entête + feuille de route au clic.
+function DossierRow({ d, isOpen, onToggle, navigate, nested }) {
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden", background: nested ? "var(--surface2)" : undefined }}>
+      <button type="button" onClick={onToggle}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+        <span style={{ transition: ".15s", transform: isOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
+        <span className="badge n mono" style={{ background: colorOf(d.program_code), color: "#fff", borderColor: "transparent" }}>{d.program_code}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <b>{d.last_name} {d.first_name}</b>
+          <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+            {d.program_title} · {d.done}/{d.total} étape(s){d.to_sign ? ` · ${d.signed}/${d.to_sign} signé(s)` : ""}
+          </span>
+        </span>
+        <ProgressPct percent={d.percent} />
+        <Badge tone={scoreBadge(d.score)}>{d.score}</Badge>
+      </button>
+      {isOpen && (
+        <div style={{ padding: "12px 16px 14px 40px", borderTop: "1px solid var(--border-soft)" }}>
+          <Roadmap steps={d.documents} />
+          <button className="btn sm primary" style={{ marginTop: 6 }} onClick={() => navigate(`/stagiaires/${d.learner_id}`)}>
+            Gérer &amp; envoyer les documents →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Suivi() {
   const navigate = useNavigate();
@@ -31,6 +110,60 @@ function Suivi() {
 
   const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   const count = (score) => dossiers.filter((d) => d.score === score).length;
+
+  // Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise
+  // apparaît sous l'entreprise (complétion agrégée), les autres restent autonomes.
+  // On préserve l'ordre de tri du backend (incomplets d'abord).
+  const groups = useMemo(() => {
+    const byCompany = new Map();
+    const out = [];
+    for (const d of dossiers) {
+      if (d.company_id) {
+        let g = byCompany.get(d.company_id);
+        if (!g) {
+          g = { type: "company", company_id: d.company_id, company_name: d.company_name || "Entreprise", members: [] };
+          byCompany.set(d.company_id, g);
+          out.push(g);
+        }
+        g.members.push(d);
+      } else {
+        out.push({ type: "solo", d });
+      }
+    }
+    // Agrégats par entreprise : % = somme(étapes faites)/somme(étapes) ; score = pire membre.
+    for (const g of out) {
+      if (g.type !== "company") continue;
+      const done = g.members.reduce((s, m) => s + (m.done || 0), 0);
+      const total = g.members.reduce((s, m) => s + (m.total || 0), 0);
+      g.percent = total ? Math.round((done / total) * 100) : 0;
+      g.done = done; g.total = total;
+      g.score = g.members.reduce((worst, m) =>
+        SCORE_ORDER[m.score] < SCORE_ORDER[worst] ? m.score : worst, "VERT");
+      // Feuille de route agrégée : gabarit = dossier au parcours le plus complet,
+      // puis on compte, par étape, les stagiaires l'ayant terminée / en cours.
+      const template = g.members.reduce((a, b) =>
+        (b.documents?.length || 0) > (a.documents?.length || 0) ? b : a, g.members[0]);
+      const stepMap = new Map();
+      (template.documents || []).forEach((s) =>
+        stepMap.set(s.type, { type: s.type, label: s.label, signable: !!s.stagiaireSign, company_level: !!s.company_level, done: 0, prog: 0, total: 0 }));
+      for (const m of g.members) {
+        for (const doc of (m.documents || [])) {
+          const st = stepMap.get(doc.type);
+          if (!st) continue;
+          st.total++;
+          const s = docState(doc);
+          if (s === "done") st.done++; else if (s === "progress") st.prog++;
+        }
+      }
+      g.documents = [...stepMap.values()].map((st) => ({
+        ...st,
+        // Document de groupe : UNE signature partagée (organisme + entreprise), pas par
+        // stagiaire → l'état est simplement signé / en cours / à faire.
+        state: st.total && st.done === st.total ? "done" : (st.done || st.prog) ? "progress" : "todo",
+      }));
+    }
+    return out;
+  }, [dossiers]);
 
   return (
     <>
@@ -60,34 +193,44 @@ function Suivi() {
               <EmptyState icon="clipboard-check">Aucun dossier à suivre.</EmptyState>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {dossiers.map((d) => {
-                  const isOpen = !!open[d.enrollment_id];
+                {groups.map((g) => {
+                  if (g.type === "solo") {
+                    const d = g.d;
+                    return (
+                      <DossierRow key={d.enrollment_id} d={d} isOpen={!!open[d.enrollment_id]}
+                        onToggle={() => toggle(d.enrollment_id)} navigate={navigate} />
+                    );
+                  }
+                  // Groupe entreprise : entête agrégé + stagiaires imbriqués.
+                  const ckey = `c:${g.company_id}`;
+                  const cOpen = !!open[ckey];
                   return (
-                    <div key={d.enrollment_id} className="card" style={{ padding: 0, overflow: "hidden" }}>
-                      <button type="button" onClick={() => toggle(d.enrollment_id)}
+                    <div key={ckey} className="card" style={{ padding: 0, overflow: "hidden", borderColor: "var(--ember1, #c0392b)" }}>
+                      <button type="button" onClick={() => toggle(ckey)}
                         style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                        <span style={{ transition: ".15s", transform: isOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
-                        <span className="badge n mono" style={{ background: colorOf(d.program_code), color: "#fff", borderColor: "transparent" }}>{d.program_code}</span>
+                        <span style={{ transition: ".15s", transform: cOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
+                        <span style={{ width: 26, height: 26, borderRadius: 7, display: "grid", placeItems: "center", flexShrink: 0, background: "linear-gradient(135deg,#c0392b,#e0932e)", color: "#fff" }}><Icon name="building" size={15} /></span>
                         <span style={{ flex: 1, minWidth: 0 }}>
-                          <b>{d.last_name} {d.first_name}</b>
+                          <b>{g.company_name}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                            {d.program_title} · {d.done}/{d.total} étape(s){d.to_sign ? ` · ${d.signed}/${d.to_sign} signé(s)` : ""}
+                            {g.members.length} stagiaire(s) · {g.done}/{g.total} étape(s)
                           </span>
                         </span>
-                        <span style={{ width: 90, flexShrink: 0 }} title={`${d.percent}% du parcours`}>
-                          <span style={{ display: "block", height: 6, borderRadius: 4, background: "var(--border-soft, #e3e3e6)", overflow: "hidden" }}>
-                            <span style={{ display: "block", height: "100%", width: `${d.percent || 0}%`, background: "var(--ember1, #c0392b)" }} />
-                          </span>
-                          <span style={{ display: "block", fontSize: 11, color: "var(--muted)", textAlign: "right", marginTop: 2 }}>{d.percent || 0}%</span>
-                        </span>
-                        <Badge tone={scoreBadge(d.score)}>{d.score}</Badge>
+                        <ProgressPct percent={g.percent} />
+                        <Badge tone={scoreBadge(g.score)}>{g.score}</Badge>
                       </button>
-                      {isOpen && (
-                        <div style={{ padding: "12px 16px 14px 40px", borderTop: "1px solid var(--border-soft)" }}>
-                          <Roadmap steps={d.documents} />
-                          <button className="btn sm primary" style={{ marginTop: 6 }} onClick={() => navigate(`/stagiaires/${d.learner_id}`)}>
-                            Gérer &amp; envoyer les documents →
-                          </button>
+                      {cOpen && (
+                        <div style={{ padding: "10px 14px 14px 34px", borderTop: "1px solid var(--border-soft)", display: "flex", flexDirection: "column", gap: 8 }}>
+                          {g.documents?.length > 0 && (
+                            <div style={{ marginBottom: 4 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", color: "var(--dim)", marginBottom: 6 }}>PARCOURS DU GROUPE</div>
+                              <CompanyRoadmap steps={g.documents} />
+                            </div>
+                          )}
+                          {g.members.map((d) => (
+                            <DossierRow key={d.enrollment_id} d={d} isOpen={!!open[d.enrollment_id]}
+                              onToggle={() => toggle(d.enrollment_id)} navigate={navigate} nested />
+                          ))}
                         </div>
                       )}
                     </div>
@@ -140,7 +283,9 @@ function ArchivesView({ onError, onInfo }) {
   const [q, setQ] = useState("");
   const [viewId, setViewId] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [archScope, setArchScope] = useState("stagiaire"); // "stagiaire" | "entreprise"
   const fileRef = useRef(null);
+  const isEnt = archScope === "entreprise";
 
   function load() {
     getArchives().then((r) => setRows(r.data)).catch((e) => { setRows([]); onError?.(e.message); });
@@ -187,23 +332,35 @@ function ArchivesView({ onError, onInfo }) {
       style={{ marginLeft: 8 }}><Icon name="trash" size={15} /></button>
   );
 
+  const counts = useMemo(() => {
+    const c = { stagiaire: 0, entreprise: 0 };
+    (rows || []).forEach((r) => { r.scope === "COMPANY" ? c.entreprise++ : c.stagiaire++; });
+    return c;
+  }, [rows]);
+
   const tree = useMemo(() => {
     if (!rows) return [];
+    const wantCompany = isEnt;
+    const scoped = rows.filter((r) => (r.scope === "COMPANY") === wantCompany);
     const needle = q.trim().toLowerCase();
     const filtered = needle
-      ? rows.filter((r) => `${r.last_name} ${r.first_name} ${r.program_code} ${r.program_title} ${r.title}`.toLowerCase().includes(needle))
-      : rows;
+      ? scoped.filter((r) => `${r.last_name} ${r.first_name} ${r.company_name || ""} ${r.program_code} ${r.program_title} ${r.title}`.toLowerCase().includes(needle))
+      : scoped;
     return buildTree(filtered);
-  }, [rows, q]);
+  }, [rows, q, isEnt]);
 
   if (rows === null) return <Card title="Archives"><p className="hint">Chargement…</p></Card>;
 
   return (
     <Card title={`Archives documentaires (${rows.length})`}>
+      <div className="seg" style={{ marginBottom: 12 }}>
+        <button type="button" className={"seg-btn" + (!isEnt ? " on" : "")} onClick={() => setArchScope("stagiaire")}>Archive stagiaire ({counts.stagiaire})</button>
+        <button type="button" className={"seg-btn" + (isEnt ? " on" : "")} onClick={() => setArchScope("entreprise")}>Archive entreprise ({counts.entreprise})</button>
+      </div>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-        <input className="inp" placeholder="Rechercher un stagiaire, une formation, un document…" value={q}
+        <input className="inp" placeholder={isEnt ? "Rechercher une entreprise, une formation, un document…" : "Rechercher un stagiaire, une formation, un document…"} value={q}
           onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 460, flex: 1, minWidth: 220 }} />
-        {isAdmin && (
+        {isAdmin && !isEnt && (
           <>
             <input ref={fileRef} type="file" webkitdirectory="" directory="" multiple accept="application/pdf,.pdf"
               style={{ display: "none" }} onChange={onPick} />
@@ -213,14 +370,14 @@ function ArchivesView({ onError, onInfo }) {
           </>
         )}
       </div>
-      {isAdmin && (
+      {isAdmin && !isEnt && (
         <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
           Choisissez un dossier organisé en <b>année / semaine / (formation) / stagiaire</b>. Seuls les PDF sont importés ; pour de gros volumes, importez année par année ou semaine par semaine.
         </p>
       )}
 
       {tree.length === 0 ? (
-        <EmptyState icon="folder">Aucun document partagé pour l'instant.</EmptyState>
+        <EmptyState icon="folder">{isEnt ? "Aucun document entreprise partagé pour l'instant." : "Aucun document partagé pour l'instant."}</EmptyState>
       ) : (
         <div className="arch">
           {tree.map((Y) => (
@@ -244,7 +401,7 @@ function ArchivesView({ onError, onInfo }) {
                             {F.learnersArr.map((L) => (
                               <details key={L.learner_id || L.name}>
                                 <summary className="arch-sum">{L.name} <span className="arch-count">{L.docs.length}</span>
-                                  {isAdmin && <DelBtn title="Supprimer ce stagiaire" onClick={() => deleteDocs(L.docs, L.name)} />}
+                                  {isAdmin && <DelBtn title={isEnt ? "Supprimer cette entreprise" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
                                 </summary>
                                 <div className="arch-docs">
                                   {L.docs.map((d) => {
