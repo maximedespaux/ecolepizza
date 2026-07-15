@@ -31,6 +31,41 @@ function ProgressPct({ percent }) {
   );
 }
 
+// État d'une étape d'un dossier (identique à Roadmap.stepState) pour l'agrégat groupe.
+function docState(doc) {
+  if (doc.status === "SIGNE") return "done";
+  if (doc.stagiaireSign) return ["ENVOYE", "CONSULTE", "GENERE"].includes(doc.status) ? "progress" : "todo";
+  return ["GENERE", "ENVOYE", "CONSULTE"].includes(doc.status) ? "done" : "todo";
+}
+
+const RM_TAG = { todo: "À faire", progress: "En cours", done: "Terminé" };
+
+// Feuille de route agrégée d'une entreprise : une étape par document du parcours,
+// avec le nombre de stagiaires ayant terminé cette étape.
+function CompanyRoadmap({ steps }) {
+  return (
+    <div className="roadmap">
+      {steps.map((s, i) => {
+        const last = i === steps.length - 1;
+        return (
+          <div className="rm-step" key={s.type + i}>
+            <div className="rm-rail">
+              <span className={`rm-dot ${s.state}`}>{s.state === "done" ? <Icon name="check" size={14} /> : i + 1}</span>
+              {!last && <span className={`rm-conn ${s.state === "done" ? "done" : ""}`} />}
+            </div>
+            <div className="rm-body">
+              <b>{s.label}</b>
+              <span className={`rm-tag ${s.state}`}>
+                {RM_TAG[s.state]} · {s.done}/{s.total} stagiaire(s){s.signable ? " · à signer" : ""}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // Ligne d'un dossier stagiaire (repliable) : entête + feuille de route au clic.
 function DossierRow({ d, isOpen, onToggle, navigate, nested }) {
   return (
@@ -102,6 +137,26 @@ function Suivi() {
       g.done = done; g.total = total;
       g.score = g.members.reduce((worst, m) =>
         SCORE_ORDER[m.score] < SCORE_ORDER[worst] ? m.score : worst, "VERT");
+      // Feuille de route agrégée : gabarit = dossier au parcours le plus complet,
+      // puis on compte, par étape, les stagiaires l'ayant terminée / en cours.
+      const template = g.members.reduce((a, b) =>
+        (b.documents?.length || 0) > (a.documents?.length || 0) ? b : a, g.members[0]);
+      const stepMap = new Map();
+      (template.documents || []).forEach((s) =>
+        stepMap.set(s.type, { type: s.type, label: s.label, signable: !!s.stagiaireSign, done: 0, prog: 0, total: 0 }));
+      for (const m of g.members) {
+        for (const doc of (m.documents || [])) {
+          const st = stepMap.get(doc.type);
+          if (!st) continue;
+          st.total++;
+          const s = docState(doc);
+          if (s === "done") st.done++; else if (s === "progress") st.prog++;
+        }
+      }
+      g.documents = [...stepMap.values()].map((st) => ({
+        ...st,
+        state: st.total && st.done === st.total ? "done" : (st.done || st.prog) ? "progress" : "todo",
+      }));
     }
     return out;
   }, [dossiers]);
@@ -162,6 +217,12 @@ function Suivi() {
                       </button>
                       {cOpen && (
                         <div style={{ padding: "10px 14px 14px 34px", borderTop: "1px solid var(--border-soft)", display: "flex", flexDirection: "column", gap: 8 }}>
+                          {g.documents?.length > 0 && (
+                            <div style={{ marginBottom: 4 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", color: "var(--dim)", marginBottom: 6 }}>PARCOURS DU GROUPE</div>
+                              <CompanyRoadmap steps={g.documents} />
+                            </div>
+                          )}
                           {g.members.map((d) => (
                             <DossierRow key={d.enrollment_id} d={d} isOpen={!!open[d.enrollment_id]}
                               onToggle={() => toggle(d.enrollment_id)} navigate={navigate} nested />
