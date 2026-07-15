@@ -13,11 +13,19 @@ function stepIcon(s) {
 // Étape « de groupe » (parcours entreprise) : porte des compteurs gen/total/signed.
 const isGroup = (s) => s && s.total != null;
 
+// Sous-titre affiché sous chaque étape de la chronologie. En mode groupe (fiche
+// entreprise) on montre le compteur de signatures d'un coup d'œil (0/2, 1/2…).
+function listSub(s) {
+  if (isGroup(s) && s.total > 0) return `${s.signed}/${s.total} signé(s)`;
+  if (isGroup(s)) return s.company_level ? "Document de groupe" : "Aucun stagiaire concerné";
+  return s.sub;
+}
+
 // Ligne d'état de l'étape sélectionnée (selon son statut et le document lié).
 function lineFor(s) {
   if (isGroup(s)) {
-    if (s.company_level) return `Document de groupe · ${s.gen} généré(s)${s.signed ? ` · ${s.signed} signé(s)` : ""}.`;
-    return `${s.gen}/${s.total} généré(s)${s.signed ? ` · ${s.signed} signé(s)` : ""} pour le groupe · à générer depuis chaque fiche stagiaire.`;
+    if (s.company_level) return `Document de groupe (entreprise) · ${s.signed}/${s.total || s.gen || 0} signé(s).`;
+    return `${s.signed}/${s.total} stagiaire(s) ont signé · ${s.gen}/${s.total} généré(s) · à générer depuis chaque fiche stagiaire.`;
   }
   // Doc destiné à l'entreprise, vu depuis la fiche stagiaire : lecture seule.
   if (s.company_level) {
@@ -144,7 +152,7 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
                 }}><Icon name={stepIcon(s)} size={17} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <b style={{ display: "block", color: s.status === "todo" ? "var(--dim)" : "var(--text)" }}>{s.label}</b>
-                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{s.sub}</span>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{listSub(s)}</span>
                 </span>
                 {s.status === "current" && (
                   <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ember1,#c0392b)", whiteSpace: "nowrap" }}>En cours</span>
