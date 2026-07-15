@@ -17,6 +17,48 @@ import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf } from "../lib/format.js";
 
 const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"] };
+const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
+
+// Barre de progression compacte + pourcentage (réutilisée pour dossier et groupe).
+function ProgressPct({ percent }) {
+  return (
+    <span style={{ width: 90, flexShrink: 0 }} title={`${percent || 0}% du parcours`}>
+      <span style={{ display: "block", height: 6, borderRadius: 4, background: "var(--border-soft, #e3e3e6)", overflow: "hidden" }}>
+        <span style={{ display: "block", height: "100%", width: `${percent || 0}%`, background: "var(--ember1, #c0392b)" }} />
+      </span>
+      <span style={{ display: "block", fontSize: 11, color: "var(--muted)", textAlign: "right", marginTop: 2 }}>{percent || 0}%</span>
+    </span>
+  );
+}
+
+// Ligne d'un dossier stagiaire (repliable) : entête + feuille de route au clic.
+function DossierRow({ d, isOpen, onToggle, navigate, nested }) {
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden", background: nested ? "var(--surface2)" : undefined }}>
+      <button type="button" onClick={onToggle}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+        <span style={{ transition: ".15s", transform: isOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
+        <span className="badge n mono" style={{ background: colorOf(d.program_code), color: "#fff", borderColor: "transparent" }}>{d.program_code}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <b>{d.last_name} {d.first_name}</b>
+          <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+            {d.program_title} · {d.done}/{d.total} étape(s){d.to_sign ? ` · ${d.signed}/${d.to_sign} signé(s)` : ""}
+          </span>
+        </span>
+        <ProgressPct percent={d.percent} />
+        <Badge tone={scoreBadge(d.score)}>{d.score}</Badge>
+      </button>
+      {isOpen && (
+        <div style={{ padding: "12px 16px 14px 40px", borderTop: "1px solid var(--border-soft)" }}>
+          <Roadmap steps={d.documents} />
+          <button className="btn sm primary" style={{ marginTop: 6 }} onClick={() => navigate(`/stagiaires/${d.learner_id}`)}>
+            Gérer &amp; envoyer les documents →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Suivi() {
   const navigate = useNavigate();
@@ -31,6 +73,38 @@ function Suivi() {
 
   const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   const count = (score) => dossiers.filter((d) => d.score === score).length;
+
+  // Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise
+  // apparaît sous l'entreprise (complétion agrégée), les autres restent autonomes.
+  // On préserve l'ordre de tri du backend (incomplets d'abord).
+  const groups = useMemo(() => {
+    const byCompany = new Map();
+    const out = [];
+    for (const d of dossiers) {
+      if (d.company_id) {
+        let g = byCompany.get(d.company_id);
+        if (!g) {
+          g = { type: "company", company_id: d.company_id, company_name: d.company_name || "Entreprise", members: [] };
+          byCompany.set(d.company_id, g);
+          out.push(g);
+        }
+        g.members.push(d);
+      } else {
+        out.push({ type: "solo", d });
+      }
+    }
+    // Agrégats par entreprise : % = somme(étapes faites)/somme(étapes) ; score = pire membre.
+    for (const g of out) {
+      if (g.type !== "company") continue;
+      const done = g.members.reduce((s, m) => s + (m.done || 0), 0);
+      const total = g.members.reduce((s, m) => s + (m.total || 0), 0);
+      g.percent = total ? Math.round((done / total) * 100) : 0;
+      g.done = done; g.total = total;
+      g.score = g.members.reduce((worst, m) =>
+        SCORE_ORDER[m.score] < SCORE_ORDER[worst] ? m.score : worst, "VERT");
+    }
+    return out;
+  }, [dossiers]);
 
   return (
     <>
@@ -60,34 +134,38 @@ function Suivi() {
               <EmptyState icon="clipboard-check">Aucun dossier à suivre.</EmptyState>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {dossiers.map((d) => {
-                  const isOpen = !!open[d.enrollment_id];
+                {groups.map((g) => {
+                  if (g.type === "solo") {
+                    const d = g.d;
+                    return (
+                      <DossierRow key={d.enrollment_id} d={d} isOpen={!!open[d.enrollment_id]}
+                        onToggle={() => toggle(d.enrollment_id)} navigate={navigate} />
+                    );
+                  }
+                  // Groupe entreprise : entête agrégé + stagiaires imbriqués.
+                  const ckey = `c:${g.company_id}`;
+                  const cOpen = !!open[ckey];
                   return (
-                    <div key={d.enrollment_id} className="card" style={{ padding: 0, overflow: "hidden" }}>
-                      <button type="button" onClick={() => toggle(d.enrollment_id)}
+                    <div key={ckey} className="card" style={{ padding: 0, overflow: "hidden", borderColor: "var(--ember1, #c0392b)" }}>
+                      <button type="button" onClick={() => toggle(ckey)}
                         style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                        <span style={{ transition: ".15s", transform: isOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
-                        <span className="badge n mono" style={{ background: colorOf(d.program_code), color: "#fff", borderColor: "transparent" }}>{d.program_code}</span>
+                        <span style={{ transition: ".15s", transform: cOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
+                        <span style={{ width: 26, height: 26, borderRadius: 7, display: "grid", placeItems: "center", flexShrink: 0, background: "linear-gradient(135deg,#c0392b,#e0932e)", color: "#fff" }}><Icon name="building" size={15} /></span>
                         <span style={{ flex: 1, minWidth: 0 }}>
-                          <b>{d.last_name} {d.first_name}</b>
+                          <b>{g.company_name}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                            {d.program_title} · {d.done}/{d.total} étape(s){d.to_sign ? ` · ${d.signed}/${d.to_sign} signé(s)` : ""}
+                            {g.members.length} stagiaire(s) · {g.done}/{g.total} étape(s)
                           </span>
                         </span>
-                        <span style={{ width: 90, flexShrink: 0 }} title={`${d.percent}% du parcours`}>
-                          <span style={{ display: "block", height: 6, borderRadius: 4, background: "var(--border-soft, #e3e3e6)", overflow: "hidden" }}>
-                            <span style={{ display: "block", height: "100%", width: `${d.percent || 0}%`, background: "var(--ember1, #c0392b)" }} />
-                          </span>
-                          <span style={{ display: "block", fontSize: 11, color: "var(--muted)", textAlign: "right", marginTop: 2 }}>{d.percent || 0}%</span>
-                        </span>
-                        <Badge tone={scoreBadge(d.score)}>{d.score}</Badge>
+                        <ProgressPct percent={g.percent} />
+                        <Badge tone={scoreBadge(g.score)}>{g.score}</Badge>
                       </button>
-                      {isOpen && (
-                        <div style={{ padding: "12px 16px 14px 40px", borderTop: "1px solid var(--border-soft)" }}>
-                          <Roadmap steps={d.documents} />
-                          <button className="btn sm primary" style={{ marginTop: 6 }} onClick={() => navigate(`/stagiaires/${d.learner_id}`)}>
-                            Gérer &amp; envoyer les documents →
-                          </button>
+                      {cOpen && (
+                        <div style={{ padding: "10px 14px 14px 34px", borderTop: "1px solid var(--border-soft)", display: "flex", flexDirection: "column", gap: 8 }}>
+                          {g.members.map((d) => (
+                            <DossierRow key={d.enrollment_id} d={d} isOpen={!!open[d.enrollment_id]}
+                              onToggle={() => toggle(d.enrollment_id)} navigate={navigate} nested />
+                          ))}
                         </div>
                       )}
                     </div>

@@ -19,10 +19,12 @@ const getSuivi = async (req, res) => {
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.crm_stage,
                     l.first_name, l.last_name, l.opco,
+                    COALESCE(e.company_id, l.company_id) AS company_id, c.name AS company_name,
                     p.id AS program_id, p.code AS program_code, p.title AS program_title,
                     p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
              FROM enrollment e
              LEFT JOIN learner l ON l.id = e.learner_id
+             LEFT JOIN company c ON c.id = COALESCE(e.company_id, l.company_id)
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
              WHERE e.organization_id = ?`,
@@ -75,6 +77,8 @@ const getSuivi = async (req, res) => {
             dossiers.push({
                 enrollment_id: e.enrollment_id,
                 learner_id: e.learner_id,
+                company_id: e.company_id || null,
+                company_name: e.company_name || null,
                 first_name: e.first_name,
                 last_name: e.last_name,
                 program_code: e.program_code,
