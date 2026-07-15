@@ -340,20 +340,28 @@ const createCompanyDocument = async (req, res) => {
             groups.set('', { opco: null, ids: enr.map((e) => e.id) });
         }
 
+        // Nettoyage global : on retire TOUTES les versions non signées de ce document
+        // (toutes OPCO confondues) pour éviter les doublons issus d'un ancien regroupement
+        // (ex. une version « sans OPCO » restée d'une génération précédente).
+        try {
+            await conn.query(
+                "DELETE FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND status <> 'SIGNE'",
+                [orgId, company.id, session_id, template_slug]);
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        // OPCO déjà signés (on ne les régénère pas : on garde la version signée).
+        const signedOpcos = new Set();
+        if (opcoSupported) {
+            try {
+                const [srows] = await conn.query(
+                    "SELECT opco FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND status = 'SIGNE'",
+                    [orgId, company.id, session_id, template_slug]);
+                for (const r of srows) signedOpcos.add((r.opco || '').trim().toUpperCase());
+            } catch (e) { if (!isMissingSchema(e)) throw e; }
+        }
+
         let created = 0;
         for (const g of groups.values()) {
-            // Remplace la version en attente (non signée) du même (modèle, OPCO).
-            try {
-                if (opcoSupported) {
-                    await conn.query(
-                        "DELETE FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND (opco <=> ?) AND status <> 'SIGNE'",
-                        [orgId, company.id, session_id, template_slug, g.opco]);
-                } else {
-                    await conn.query(
-                        "DELETE FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND status <> 'SIGNE'",
-                        [orgId, company.id, session_id, template_slug]);
-                }
-            } catch (e) { if (!isMissingSchema(e)) throw e; }
+            if (signedOpcos.has((g.opco || '').trim().toUpperCase())) continue; // déjà signé → conservé
 
             const id = crypto.randomUUID();
             const title = step.label + (g.opco ? ` — ${g.opco}` : '');

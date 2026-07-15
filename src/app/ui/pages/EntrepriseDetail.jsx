@@ -380,7 +380,6 @@ export default function EntrepriseDetail() {
               refresh={parcoursRefresh}
               onPrepare={prepareCompanyDoc}
               onOpenDoc={openCompanyDoc}
-              onSignLink={companySignLink}
             />
           )}
         </Card>
