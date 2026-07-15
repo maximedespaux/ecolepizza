@@ -328,23 +328,6 @@ function TemplateEditor() {
             </div>
           </div>
 
-          <div className="tok-group">
-            <div className="tok-group-hd" style={{ cursor: "default" }}><span><Icon name="building" size={13} /> Groupe · par stagiaire</span></div>
-            <div className="tok-list" style={{ padding: "0 10px 8px" }}>
-              <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
-                Pour un <b>document entreprise</b> : insérez un <b>bloc</b> répété pour <b>chaque stagiaire</b> du groupe. Placez les jetons ci-dessous <b>entre</b> les marqueurs du bloc.
-              </p>
-              <button className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple" onClick={() => insertRaw("{#Stagiaires}{N°}. {Personne} — {OPCO}<br>{/Stagiaires}")}>
-                <Icon name="plus" size={13} /> Bloc « par stagiaire »
-              </button>
-              <div style={{ height: 6 }} />
-              {GROUP_ROW_TOKENS.map((t) => (
-                <button key={t.key} className="tok-chip" title={`{${t.key}} — dans un bloc {#Stagiaires}…{/Stagiaires}`}
-                  onClick={() => insertRaw("{" + t.key + "}")}>{t.label}</button>
-              ))}
-            </div>
-          </div>
-
           {catalog.map((g) => (
             <div key={g.group} className="tok-group">
               <button className="tok-group-hd" onClick={() => setOpenGroups((p) => ({ ...p, [g.group]: !p[g.group] }))}>
@@ -360,6 +343,24 @@ function TemplateEditor() {
                       {t.label}
                     </button>
                   ))}
+                  {/* Jetons « par stagiaire » (bloc répété) : insérés en texte brut, à placer
+                      entre les marqueurs du bloc. Uniquement dans le groupe Entreprise. */}
+                  {g.group === "Entreprise" && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border-soft)" }}>
+                      <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
+                        <b>Bloc par stagiaire</b> : répété pour chaque stagiaire du groupe. Placez les jetons ci-dessous <b>entre</b> les marqueurs.
+                      </p>
+                      <button className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple"
+                        onClick={() => insertRaw("{#Stagiaires}{N°}. {Personne} — {OPCO}<br>{/Stagiaires}")}>
+                        <Icon name="plus" size={13} /> Bloc « par stagiaire »
+                      </button>
+                      <div style={{ height: 6 }} />
+                      {GROUP_ROW_TOKENS.map((t) => (
+                        <button key={t.key} className="tok-chip" title={`{${t.key}} — à placer dans un bloc {#Stagiaires}…{/Stagiaires}`}
+                          onClick={() => insertRaw("{" + t.key + "}")}>{t.label}</button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
