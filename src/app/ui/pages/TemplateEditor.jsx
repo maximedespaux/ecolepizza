@@ -12,6 +12,21 @@ import CustomTokenManager from "../components/CustomTokenManager.jsx";
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
 
+// Jetons résolus PAR STAGIAIRE à l'intérieur d'un bloc {#Stagiaires}…{/Stagiaires}
+// (documents de groupe / entreprise). Insérés en TEXTE brut.
+const GROUP_ROW_TOKENS = [
+  { key: "N°", label: "N°" },
+  { key: "Personne", label: "Civilité + Nom complet" },
+  { key: "Civilité", label: "Civilité" },
+  { key: "Prénom", label: "Prénom" },
+  { key: "Nom", label: "Nom" },
+  { key: "Email", label: "E-mail" },
+  { key: "Téléphone", label: "Téléphone" },
+  { key: "OPCO", label: "OPCO" },
+  { key: "Ville", label: "Ville" },
+  { key: "D_Naissance", label: "Date de naissance" },
+];
+
 // Bascule « bord à bord » (sans marge) d'une zone.
 function BleedToggle({ on, onChange }) {
   return (
@@ -178,6 +193,11 @@ function TemplateEditor() {
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
   }
+  // Insertion de TEXTE brut (jetons de bloc « par stagiaire » : {#Stagiaires}…{/Stagiaires}
+  // et jetons internes {Personne}, {OPCO}… résolus par stagiaire à la génération).
+  function insertRaw(str) {
+    target?.chain().focus().insertContent(str).run();
+  }
   // Bloc de signature nommé : jeton « sig:<clé> » signé indépendamment par la personne attribuée.
   const sigKey = (label) => "sig:" + String(label || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "").slice(0, 40);
   function insertSignature(label) {
@@ -305,6 +325,23 @@ function TemplateEditor() {
                   onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: sigKey(sigLabel.trim()), label: sigLabel.trim() }))}
                   onClick={() => { insertSignature(sigLabel); setSigLabel(""); }} disabled={!sigLabel.trim()}>＋</button>
               </div>
+            </div>
+          </div>
+
+          <div className="tok-group">
+            <div className="tok-group-hd" style={{ cursor: "default" }}><span><Icon name="building" size={13} /> Groupe · par stagiaire</span></div>
+            <div className="tok-list" style={{ padding: "0 10px 8px" }}>
+              <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
+                Pour un <b>document entreprise</b> : insérez un <b>bloc</b> répété pour <b>chaque stagiaire</b> du groupe. Placez les jetons ci-dessous <b>entre</b> les marqueurs du bloc.
+              </p>
+              <button className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple" onClick={() => insertRaw("{#Stagiaires}{N°}. {Personne} — {OPCO}<br>{/Stagiaires}")}>
+                <Icon name="plus" size={13} /> Bloc « par stagiaire »
+              </button>
+              <div style={{ height: 6 }} />
+              {GROUP_ROW_TOKENS.map((t) => (
+                <button key={t.key} className="tok-chip" title={`{${t.key}} — dans un bloc {#Stagiaires}…{/Stagiaires}`}
+                  onClick={() => insertRaw("{" + t.key + "}")}>{t.label}</button>
+              ))}
             </div>
           </div>
 
