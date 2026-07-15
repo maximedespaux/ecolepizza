@@ -496,6 +496,14 @@ tbody tr:last-child td{border-bottom:none}
   background:var(--panel,#fff);cursor:pointer;padding:8px 12px;border-radius:20px;font-size:13px;color:inherit}
 .pf-add-item:hover{border-color:var(--ember1,#c0392b);background:var(--ember-soft,#fdeae6)}
 .pf-add-empty{font-size:13px;color:var(--muted,#666)}
+/* Variante compacte (section « à l'arrivée via une entreprise ») : cartes plus petites */
+.parcours.compact .parcours-flow{flex-wrap:wrap;min-height:180px;align-content:flex-start}
+.parcours.compact .pf-node{min-width:118px;max-width:172px;padding:8px 9px 8px}
+.parcours.compact .pf-opt{font-size:12px;gap:5px}
+.parcours.compact .pf-grip{font-size:11px;top:4px;right:6px}
+.parcours.compact .pf-badge{font-size:9px;padding:1px 6px}
+.parcours.compact .pf-arrow{font-size:16px}
+.parcours.compact .pf-add{padding:8px 10px;min-height:0;font-size:12px}
 
 .poste-bar{position:relative;height:10px;border-radius:999px;background:var(--surface3);overflow:visible}
 .poste-bar > span{display:block;height:100%;border-radius:999px}

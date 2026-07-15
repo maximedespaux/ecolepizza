@@ -589,36 +589,54 @@ function CompanySection({ steps, value, onChange }) {
   );
 
   return (
-    <div ref={ref}>
+    <div className="parcours compact" ref={ref}>
       <p className="hint" style={{ marginTop: 0 }}>
-        Documents traités quand une <b>entreprise</b> inscrit ses stagiaires : ajoutez ici les documents de <b>groupe</b> (🏢) <b>et</b> les documents <b>stagiaire</b> concernés. Cette section sert de repère sur la fiche entreprise ; elle n'enlève rien au parcours ci-dessus.
+        Documents traités quand une <b>entreprise</b> inscrit ses stagiaires : ajoutez ici les documents de <b>groupe</b> (🏢) <b>et</b> les documents <b>stagiaire</b> concernés. Glissez un bloc pour réordonner. Cette section sert de repère sur la fiche entreprise ; elle n'enlève rien au parcours du dossier.
       </p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start", alignContent: "flex-start", minHeight: 340, border: "1px solid var(--border-soft)", borderRadius: 12, padding: 14, background: "var(--surface3, #faf9f7)" }}>
-        {chosen.length === 0 && <span className="hint">Aucun document dans la section entreprise.</span>}
+      <div className="parcours-flow">
         {chosen.map((s, i) => (
-          <div key={s.slug} className="pf-opt" draggable
-            onDragStart={() => setDrag(i)} onDragOver={(e) => e.preventDefault()}
-            onDrop={() => drop(i)} onDragEnd={() => setDrag(null)}
-            style={{ opacity: drag === i ? 0.5 : 1, cursor: "grab" }}>
-            {badge(s)}
-            <span className="pf-label">{s.label}</span>
-            <button type="button" className="pf-x" title="Retirer de la section entreprise" onClick={() => remove(s.slug)}><Icon name="x" size={13} /></button>
+          <div className="pf-wrap" key={s.slug}>
+            <div className={"pf-node" + (drag === i ? " drag" : "")}
+              draggable onDragStart={() => setDrag(i)} onDragOver={(e) => e.preventDefault()}
+              onDrop={() => drop(i)} onDragEnd={() => setDrag(null)}>
+              <span className="pf-grip" title="Glisser pour réordonner">⠿</span>
+              <div className="pf-opt">
+                <span className="pf-label">{s.label}</span>
+                {badge(s)}
+                <button type="button" className="pf-x" title="Retirer de la section entreprise" onClick={() => remove(s.slug)}><Icon name="x" size={13} /></button>
+              </div>
+            </div>
+            <span className="pf-arrow" aria-hidden="true">→</span>
           </div>
         ))}
-        <div style={{ position: "relative" }}>
-          <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>＋ Ajouter</button>
-          {adding && (
-            <div className="cat-pop" style={{ position: "absolute", left: 0, top: "100%", zIndex: 6, marginTop: 4, minWidth: 240, maxHeight: 260, overflowY: "auto" }}>
-              {eligible.length === 0 ? <div className="pf-add-empty" style={{ padding: 8 }}>Aucun document disponible (activez-le d'abord dans le parcours).</div>
-                : eligible.map((s) => (
-                  <button key={s.slug} type="button" className="cat-opt" onClick={() => add(s.slug)} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    {badge(s, true)}<b>{s.label}</b>
+        <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
+          ＋ Ajouter une étape
+        </button>
+      </div>
+
+      {chosen.length === 0 && <p className="hint" style={{ marginTop: -6 }}>Aucun document dans la section entreprise.</p>}
+
+      {adding && (
+        <div className="pf-add-panel">
+          {eligible.length === 0 ? (
+            <>
+              <div className="pf-add-title">Étapes disponibles</div>
+              <div className="pf-add-empty">Aucun document disponible — activez-le d'abord dans « Parcours du dossier ».</div>
+            </>
+          ) : (
+            <>
+              <div className="pf-add-title">Documents ({eligible.length})</div>
+              <div className="pf-add-grid">
+                {eligible.map((s) => (
+                  <button key={s.slug} type="button" className="pf-add-item" onClick={() => add(s.slug)}>
+                    {badge(s, true)}<span>{s.label}</span>
                   </button>
                 ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
