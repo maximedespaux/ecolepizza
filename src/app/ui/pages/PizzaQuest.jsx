@@ -76,7 +76,7 @@ function PizzaQuest() {
     getMyFormations().then((r) => {
       setWorlds((r.data || []).map((f) => ({
         code: f.program_code, title: f.program_title,
-        color: f.color || colorOf(f.program_code), unlocked: !!f.has_badge || !!f.enrolled,
+        color: f.color || colorOf(f.program_code), unlocked: (!!f.has_badge || !!f.enrolled) && !f.revoked,
       })));
     }).catch(() => setWorlds([]));
   }, []);

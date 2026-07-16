@@ -274,7 +274,7 @@ const getMyFormations = async (req, res) => {
             `SELECT e.id AS enrollment_id, e.financing, s.program_id, s.year, s.week,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
-                    p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
+                    p.code AS program_code, p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
              FROM enrollment e
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
@@ -284,14 +284,16 @@ const getMyFormations = async (req, res) => {
 
         // Une carte par formation ; on ouvre par défaut la session la plus RÉCENTE.
         // On compte aussi le nombre de sessions suivies (onglets dans le détail).
+        const agefice = (learner.opco || "").toUpperCase() === "AGEFICE";
         const steps = await loadOrgSteps(learner.organization_id);
         const byProgram = {};
         for (const e of enrollments) {
-            const c = await completionOf(conn, e, steps, (learner.opco || "").toUpperCase() === "AGEFICE");
+            const c = await completionOf(conn, e, steps, agefice);
+            const g = await emargementGate(conn, e, learner.organization_id, agefice); // point d'accès (breakpoint)
             const info = {
                 enrollment_id: e.enrollment_id, complete: c.complete, dayPassed: c.dayPassed,
                 signed: c.signed, total: c.total, start_date: e.start_date, end_date: e.end_date,
-                year: e.year, week: e.week,
+                year: e.year, week: e.week, gate_need: g.need, gate_locked: g.locked,
             };
             const cur = byProgram[e.program_id];
             if (!cur) byProgram[e.program_id] = { ...info, session_count: 1 };
@@ -312,6 +314,10 @@ const getMyFormations = async (req, res) => {
             const hasBadge = badgeSet.has(badge) || badgeSet.has(p.code);
             // Terminée = marquée manuellement OU complétion auto des documents.
             const finished = doneSet.has(badge) || doneSet.has(p.code) || !!(e && e.complete);
+            // RÉVOQUÉE : session commencée + point d'accès (breakpoint) NON franchi + non terminée.
+            // → retire le badge (niveau) et l'accès à la formation dans « Mes documents ».
+            const sessionStarted = !!(e && e.start_date && e.start_date <= todayISO());
+            const revoked = !!e && sessionStarted && (e.gate_need || 0) > 0 && !!e.gate_locked && !finished;
             return {
                 program_id: p.id, program_code: p.code, program_title: p.title,
                 // Descriptif (aperçu lecture seule).
@@ -319,7 +325,7 @@ const getMyFormations = async (req, res) => {
                 hygiene: p.hygiene, rs_code: p.rs_code,
                 audience: p.audience, objectives: p.objectives, objective_general: p.objective_general,
                 duration_detail: p.duration_detail, program_detail: p.program_detail,
-                enrolled: !!e, has_badge: hasBadge, finished,
+                enrolled: !!e, has_badge: hasBadge, finished, revoked,
                 enrollment_id: e ? e.enrollment_id : null,
                 complete: e ? e.complete : false,
                 dayPassed: e ? e.dayPassed : false,

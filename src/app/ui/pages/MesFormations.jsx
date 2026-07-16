@@ -40,7 +40,9 @@ function MesFormations() {
         <div className="grid cols-3">
           {sorted.map((f) => {
             const color = f.color || colorOf(f.program_code);
-            const locked = !f.enrolled; // déverrouillée dès l'inscription à une session
+            // Verrouillée si non inscrite OU RÉVOQUÉE (session commencée sans avoir franchi
+            // le point d'accès) : plus d'accès aux documents ni au badge.
+            const locked = !f.enrolled || f.revoked;
             const shown = locked ? "#9aa0b5" : color; // gris tant que verrouillé, couleur une fois débloqué
             return (
               <div
@@ -48,7 +50,7 @@ function MesFormations() {
                 className={`card hover`}
                 style={{ cursor: "pointer", opacity: locked ? 0.72 : 1, borderTop: `3px solid ${shown}`, background: locked ? undefined : `color-mix(in srgb, ${color} 6%, var(--surface))` }}
                 onClick={locked ? () => setInfo(f) : () => navigate(`/formations/${f.enrollment_id}`)}
-                title={locked ? "Voir les informations (formation non suivie)" : "Voir mes documents et mon émargement"}
+                title={f.revoked ? "Accès suspendu — point d'accès non atteint au début de la session" : locked ? "Voir les informations (formation non suivie)" : "Voir mes documents et mon émargement"}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <span className="badge n mono" style={{ background: shown, color: "#fff", borderColor: "transparent" }}>{f.program_code}</span>
@@ -64,17 +66,19 @@ function MesFormations() {
                   {f.session_count > 1 && <span style={{ marginLeft: 6, color: "var(--blue)", fontWeight: 700 }}>· {f.session_count} sessions</span>}
                 </p>
 
-                {f.enrolled && (
+                {f.enrolled && !f.revoked && (
                   <div className="progress" style={{ margin: "12px 0 6px", height: 8 }}>
                     <span style={{ width: `${f.total ? (f.signed / f.total) * 100 : 0}%`, background: color }} />
                   </div>
                 )}
-                <p style={{ fontSize: 12, color: f.complete ? "var(--green)" : "var(--muted)", margin: f.enrolled ? 0 : "12px 0 0", fontWeight: 600 }}>
-                  {!f.enrolled
-                    ? "Non suivie"
-                    : f.complete
-                      ? "Terminée — documents & émargement →"
-                      : `Documents & émargement · ${f.signed}/${f.total} signé(s) →`}
+                <p style={{ fontSize: 12, color: f.revoked ? "var(--ember1, #c0392b)" : f.complete ? "var(--green)" : "var(--muted)", margin: f.enrolled && !f.revoked ? 0 : "12px 0 0", fontWeight: 600 }}>
+                  {f.revoked
+                    ? "🔒 Accès suspendu (point d'accès non atteint)"
+                    : !f.enrolled
+                      ? "Non suivie"
+                      : f.complete
+                        ? "Terminée — documents & émargement →"
+                        : `Documents & émargement · ${f.signed}/${f.total} signé(s) →`}
                 </p>
               </div>
             );

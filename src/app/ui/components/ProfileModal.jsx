@@ -27,7 +27,7 @@ export default function ProfileModal({ onClose }) {
   const { xp, stars } = useMemo(() => readGameStats(), []);
   // Niveaux attribués = les BADGES du stagiaire (mêmes que ceux qui débloquent Pizza Quest),
   // avec repli sur les formations suivies.
-  const access = formations.filter((f) => f.has_badge || f.enrolled);
+  const access = formations.filter((f) => (f.has_badge || f.enrolled) && !f.revoked);
   // Terminées = formations marquées finies (manuel) ou complétées (auto) parmi les attribuées.
   const done = access.filter((f) => f.finished).length;
   const enrolled = access.length; // dénominateur = formations attribuées
