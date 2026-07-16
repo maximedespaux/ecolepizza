@@ -238,7 +238,7 @@ export default function EntrepriseDetail() {
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {/* Inscription de groupe */}
         <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Inscrire un groupe de stagiaires</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Rattache des stagiaires <b>existants</b> à <b>{data.name}</b>, puis inscris tout le groupe à une session en un clic.</p>
+          <p className="hint" style={{ margin: "0 0 12px" }}>Rattache des stagiaires, puis inscris le groupe à une session.</p>
 
           {/* Rattacher un stagiaire existant à l'entreprise */}
           <div className="field" style={{ position: "relative" }}><label>Rattacher un stagiaire</label>
@@ -336,7 +336,7 @@ export default function EntrepriseDetail() {
             </div>
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-soft)" }}>
               <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 6 }}>Compte représentant (signature en ligne)</label>
-              <p className="hint" style={{ margin: "0 0 8px" }}>Donne au référent un accès pour <b>signer lui-même</b> les documents entreprise. Nécessite l'e-mail de l'entreprise.</p>
+              <p className="hint" style={{ margin: "0 0 8px" }}>Accès pour signer les documents entreprise (requiert l'e-mail).</p>
               <button className="btn sm ghost" onClick={makeRepAccount} disabled={!form.email}><Icon name="key" size={14} /> {data.user_id ? "Réinitialiser le compte représentant" : "Créer le compte représentant"}</button>
               {repCreds && (
                 <div className="ent-result" style={{ marginTop: 10 }}>
@@ -363,7 +363,7 @@ export default function EntrepriseDetail() {
       {/* Parcours documentaire COMPLET du groupe (même style que la fiche stagiaire). */}
       <div style={{ marginTop: 22 }}>
         <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Parcours documentaire du groupe</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Le parcours <b>complet</b> du groupe (comme la fiche stagiaire). « Générer » produit le document pour <b>tous les stagiaires concernés</b> et l'envoie : le <b>stagiaire</b> signe dans son espace, l'<b>entreprise</b> dans l'espace entreprise, l'<b>organisme</b> contresigne automatiquement. Les documents de groupe (🏢) sont produits une fois par OPCO.</p>
+          <p className="hint" style={{ margin: "0 0 12px" }}>🏢 document de groupe · les documents stagiaire se génèrent depuis leur fiche.</p>
           {(data.sessions || []).length > 1 && (
             <div className="field" style={{ maxWidth: 360 }}><label>Session</label>
               <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
@@ -388,7 +388,7 @@ export default function EntrepriseDetail() {
       {/* Préparer un document de GROUPE (comme la fiche stagiaire). */}
       <div id="ent-prepare" style={{ marginTop: 22, scrollMarginTop: 80 }}>
         <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Préparer un document</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Génère un <b>document de groupe</b> (🏢) pour l'entreprise. Les documents propres au <b>stagiaire</b> se génèrent depuis sa fiche.</p>
+          <p className="hint" style={{ margin: "0 0 12px" }}>Document de groupe (🏢), pour une ou plusieurs formations.</p>
           {(data.sessions || []).length === 0 ? (
             <EmptyState icon="file-text">Aucune session pour cette entreprise. Inscris un groupe à une session ci-dessus.</EmptyState>
           ) : (
@@ -401,7 +401,7 @@ export default function EntrepriseDetail() {
                 </select>
               </div>
               <div className="field">
-                <label>Formations couvertes (une génération par formation cochée)</label>
+                <label>Formations couvertes</label>
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {(data.sessions || []).map((s) => {
                     const checked = prep.sessionIds.has(s.id);
@@ -461,7 +461,7 @@ export default function EntrepriseDetail() {
       {sessionId && (
         <div style={{ marginTop: 22 }}>
           <Card title={<span className="card-ttl"><Icon name="pencil" size={16} /> Signatures stagiaires par le représentant</span>}>
-            <p className="hint" style={{ margin: "0 0 12px" }}>Documents des stagiaires du groupe <b>à signer par le représentant</b> de l'entreprise (à leur place). Une fois signé, le stagiaire retrouve <b>sa copie signée</b> dans son espace.</p>
+            <p className="hint" style={{ margin: "0 0 12px" }}>Le représentant signe à la place du stagiaire ; sa copie signée lui revient.</p>
             {learnerDocs.length === 0 ? (
               <EmptyState icon="file-text">Aucun document de stagiaire à signer pour cette session. (Les documents doivent d'abord être générés depuis la fiche stagiaire.)</EmptyState>
             ) : (() => {
