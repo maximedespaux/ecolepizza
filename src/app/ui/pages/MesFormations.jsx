@@ -41,20 +41,21 @@ function MesFormations() {
           {sorted.map((f) => {
             const color = f.color || colorOf(f.program_code);
             // Verrouillée si non inscrite OU RÉVOQUÉE (session commencée sans avoir franchi
-            // le point d'accès) : plus d'accès aux documents ni au badge.
-            const locked = !f.enrolled || f.revoked;
+            // le point d'accès). Une formation TERMINÉE reste toujours accessible.
+            const locked = !f.finished && (!f.enrolled || f.revoked);
             const shown = locked ? "#9aa0b5" : color; // gris tant que verrouillé, couleur une fois débloqué
+            const openable = !locked && f.enrollment_id; // page documents = nécessite une inscription
             return (
               <div
                 key={f.program_id}
                 className={`card hover`}
                 style={{ cursor: "pointer", opacity: locked ? 0.72 : 1, borderTop: `3px solid ${shown}`, background: locked ? undefined : `color-mix(in srgb, ${color} 6%, var(--surface))` }}
-                onClick={locked ? () => setInfo(f) : () => navigate(`/formations/${f.enrollment_id}`)}
-                title={f.revoked ? "Accès suspendu — point d'accès non atteint au début de la session" : locked ? "Voir les informations (formation non suivie)" : "Voir mes documents et mon émargement"}
+                onClick={openable ? () => navigate(`/formations/${f.enrollment_id}`) : () => setInfo(f)}
+                title={f.revoked && !f.finished ? "Accès suspendu — point d'accès non atteint au début de la session" : locked ? "Voir les informations (formation non suivie)" : "Voir mes documents et mon émargement"}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <span className="badge n mono" style={{ background: shown, color: "#fff", borderColor: "transparent" }}>{f.program_code}</span>
-                  <span style={{ color: locked ? "#9aa0b5" : f.complete ? "var(--green)" : color, display: "inline-flex" }}><Icon name={locked ? "lock" : f.complete ? "check-circle" : "folder-check"} size={17} /></span>
+                  <span style={{ color: locked ? "#9aa0b5" : (f.complete || f.finished) ? "var(--green)" : color, display: "inline-flex" }}><Icon name={locked ? "lock" : (f.complete || f.finished) ? "check-circle" : "folder-check"} size={17} /></span>
                 </div>
                 <h3 style={{ fontSize: 15, margin: "10px 0 4px" }}>{f.program_title}</h3>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>
@@ -71,13 +72,13 @@ function MesFormations() {
                     <span style={{ width: `${f.total ? (f.signed / f.total) * 100 : 0}%`, background: color }} />
                   </div>
                 )}
-                <p style={{ fontSize: 12, color: f.revoked ? "var(--ember1, #c0392b)" : f.complete ? "var(--green)" : "var(--muted)", margin: f.enrolled && !f.revoked ? 0 : "12px 0 0", fontWeight: 600 }}>
-                  {f.revoked
+                <p style={{ fontSize: 12, color: (f.revoked && !f.finished) ? "var(--ember1, #c0392b)" : (f.complete || f.finished) ? "var(--green)" : "var(--muted)", margin: f.enrolled && !locked ? 0 : "12px 0 0", fontWeight: 600 }}>
+                  {f.revoked && !f.finished
                     ? "🔒 Accès suspendu (point d'accès non atteint)"
-                    : !f.enrolled
-                      ? "Non suivie"
-                      : f.complete
-                        ? "Terminée — documents & émargement →"
+                    : f.finished
+                      ? (openable ? "Terminée — documents & émargement →" : "Terminée")
+                      : !f.enrolled
+                        ? "Non suivie"
                         : `Documents & émargement · ${f.signed}/${f.total} signé(s) →`}
                 </p>
               </div>
