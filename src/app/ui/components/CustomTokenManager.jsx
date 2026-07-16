@@ -96,9 +96,7 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
         </div>
         <div className="mbody" style={{ maxHeight: "72vh", overflow: "auto" }}>
           <p className="sub" style={{ margin: "0 0 8px" }}>
-            Un jeton personnalisé combine d'autres jetons et du texte. Exemples de modèle :
-            <code> du {"{Jour1}"} au {"{endDate}"}</code>, ou <code>{"{endDate|-1}"}</code> (veille du dernier jour).
-            Décalage de date : <code>{"{Jour1|+30}"}</code>, <code>{"{endDate|-1}"}</code>.
+            Combine jetons et texte. Décalage de date : <code>{"{Jour1|+30}"}</code>, <code>{"{endDate|-1}"}</code>.
           </p>
           {status && <div className={"status " + (status.type || "")} style={{ marginBottom: 8 }}>{status.message}</div>}
 
