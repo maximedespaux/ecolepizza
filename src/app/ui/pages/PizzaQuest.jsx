@@ -76,7 +76,7 @@ function PizzaQuest() {
     getMyFormations().then((r) => {
       setWorlds((r.data || []).map((f) => ({
         code: f.program_code, title: f.program_title,
-        color: f.color || colorOf(f.program_code), unlocked: !!f.enrolled,
+        color: f.color || colorOf(f.program_code), unlocked: !!f.has_badge || !!f.enrolled,
       })));
     }).catch(() => setWorlds([]));
   }, []);
@@ -222,7 +222,7 @@ function FCard({ w, prog, onPick, prereq }) {
       style={w.unlocked ? { background: w.color } : undefined}
       disabled={!w.unlocked}
       onClick={() => onPick(w.code)}
-      title={w.unlocked ? w.title : "Inscris-toi à une session pour débloquer ce niveau"}
+      title={w.unlocked ? w.title : "Obtiens le badge de ce niveau pour le débloquer"}
     >
       {prereq && <span className="pq-prereq" title="Prérequis">!</span>}
       <span className="pq-fcard-top">
