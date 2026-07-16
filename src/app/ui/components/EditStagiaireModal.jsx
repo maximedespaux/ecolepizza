@@ -16,7 +16,7 @@ const EMPTY = {
   diploma_level: "", diploma_name: "", diploma_year: "", last_experience: "",
   experience_value: "", experience_unit: "", professional_status: "", cpf_amount: "",
   france_travail_id: "", current_contract: "", social_security: "",
-  financing: "PARTICULIER", opco: "", levels: "", company_id: "",
+  financing: "PARTICULIER", opco: "", levels: "", completed_levels: "", company_id: "",
   project_creation: false, project_takeover: false, project_oven: false, project_truck: false, project_job: false,
 };
 
@@ -72,8 +72,15 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   const toggle = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked }));
   const toggleLevel = (code) => setForm((p) => {
     const s = new Set((p.levels || "").split(",").map((x) => x.trim()).filter(Boolean));
-    s.has(code) ? s.delete(code) : s.add(code);
-    return { ...p, levels: [...s].join(",") };
+    const cs = new Set((p.completed_levels || "").split(",").map((x) => x.trim()).filter(Boolean));
+    if (s.has(code)) { s.delete(code); cs.delete(code); } else s.add(code); // retirer un niveau retire aussi « terminé »
+    return { ...p, levels: [...s].join(","), completed_levels: [...cs].join(",") };
+  });
+  // Marque / démarque une formation comme TERMINÉE (indépendant de la complétion auto des docs).
+  const toggleFinished = (code) => setForm((p) => {
+    const cs = new Set((p.completed_levels || "").split(",").map((x) => x.trim()).filter(Boolean));
+    cs.has(code) ? cs.delete(code) : cs.add(code);
+    return { ...p, completed_levels: [...cs].join(",") };
   });
   async function saveNewCompany() {
     if (!newCo.name.trim()) { onError?.("Nom de l'entreprise requis."); return; }
@@ -115,6 +122,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   }
 
   const current = (form.levels || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const finished = (form.completed_levels || "").split(",").map((s) => s.trim()).filter(Boolean);
   const codes = [...new Set([...formations.map((f) => f.code).filter(Boolean), ...current])];
 
   return (
@@ -204,20 +212,26 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                 </SelectField>
               </div>
 
-              <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 6px" }}>Niveaux / accès — codes formation (plusieurs possibles)</label>
+              <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 6px" }}>Niveaux / accès — codes formation · cochez <b>terminé</b> quand la formation est finie</label>
               {codes.length === 0 ? (
                 <p className="hint">Aucune formation. Créez-en dans « Formations ».</p>
               ) : (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                   {codes.map((code) => {
                     const on = current.includes(code);
+                    const fin = finished.includes(code);
                     return (
-                      <label key={code} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
-                        <input type="checkbox" checked={on} onChange={() => toggleLevel(code)} />
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span key={code} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 8px", border: "1px solid var(--border-soft)", borderRadius: 8, background: on ? "var(--surface2)" : "transparent" }}>
+                        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 14, cursor: "pointer" }}>
+                          <input type="checkbox" checked={on} onChange={() => toggleLevel(code)} />
                           <i style={{ width: 11, height: 11, borderRadius: "50%", background: codeColor(code), display: "inline-block" }} /> {code}
-                        </span>
-                      </label>
+                        </label>
+                        {on && (
+                          <label style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 12, color: fin ? "#2e9e5b" : "var(--muted)", cursor: "pointer" }}>
+                            <input type="checkbox" checked={fin} onChange={() => toggleFinished(code)} /> terminé
+                          </label>
+                        )}
+                      </span>
                     );
                   })}
                 </div>

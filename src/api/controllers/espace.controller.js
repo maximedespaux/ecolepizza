@@ -252,10 +252,14 @@ const getMyFormations = async (req, res) => {
         // Badges du stagiaire (codes/niveaux de formation attachés à sa fiche) :
         // ils débloquent le niveau correspondant dans Pizza Quest.
         const badgeSet = new Set(String(learner.levels || '').split(',').map((s) => s.trim()).filter(Boolean));
+        // Formations marquées TERMINÉES manuellement (migration 094, colonne optionnelle).
+        const doneSet = new Set(String(learner.completed_levels || '').split(',').map((s) => s.trim()).filter(Boolean));
         const formations = programs.map((p) => {
             const e = byProgram[p.id] || null;
             const badge = (p.level && String(p.level).trim()) || p.code;
             const hasBadge = badgeSet.has(badge) || badgeSet.has(p.code);
+            // Terminée = marquée manuellement OU complétion auto des documents.
+            const finished = doneSet.has(badge) || doneSet.has(p.code) || !!(e && e.complete);
             return {
                 program_id: p.id, program_code: p.code, program_title: p.title,
                 // Descriptif (aperçu lecture seule).
@@ -263,7 +267,7 @@ const getMyFormations = async (req, res) => {
                 hygiene: p.hygiene, rs_code: p.rs_code,
                 audience: p.audience, objectives: p.objectives, objective_general: p.objective_general,
                 duration_detail: p.duration_detail, program_detail: p.program_detail,
-                enrolled: !!e, has_badge: hasBadge,
+                enrolled: !!e, has_badge: hasBadge, finished,
                 enrollment_id: e ? e.enrollment_id : null,
                 complete: e ? e.complete : false,
                 dayPassed: e ? e.dayPassed : false,
