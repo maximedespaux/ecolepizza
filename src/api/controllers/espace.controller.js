@@ -216,6 +216,7 @@ const getMyAccess = async (req, res) => {
         if (!learner) return res.json({ data: { quest_unlocked: true } });
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.financing, s.program_id,
+                    DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
                     p.code AS program_code, p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
              FROM enrollment e
              LEFT JOIN training_session s ON s.id = e.session_id
@@ -223,9 +224,22 @@ const getMyAccess = async (req, res) => {
              WHERE e.learner_id = ?`,
             [learner.id]
         );
+        const agefice = (learner.opco || '').toUpperCase() === 'AGEFICE';
+        // Au moins une formation TERMINÉE (marquée manuellement OU complétée auto) → débloqué,
+        // même sans point d'accès franchi (cas des personnes déjà venues / déjà formées).
+        const doneSet = new Set(String(learner.completed_levels || '').split(',').map((s) => s.trim()).filter(Boolean));
+        let finished = doneSet.size > 0;
+        if (!finished && enrollments.length) {
+            const steps = await loadOrgSteps(learner.organization_id);
+            for (const e of enrollments) {
+                const c = await completionOf(conn, e, steps, agefice);
+                if (c.complete) { finished = true; break; }
+            }
+        }
+        if (finished) return res.json({ data: { quest_unlocked: true } });
+
         // AUCUNE formation → verrouillé (rien à débloquer tant qu'il n'est pas inscrit).
         if (!enrollments.length) return res.json({ data: { quest_unlocked: false } });
-        const agefice = (learner.opco || '').toUpperCase() === 'AGEFICE';
         const gating = [];
         for (const e of enrollments) {
             const g = await emargementGate(conn, e, learner.organization_id, agefice);
