@@ -74,6 +74,16 @@ function ProfileModal({ profile, loading, onClose }) {
               <span className="prof-ava" style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
               <div style={{ fontWeight: 800, fontSize: 18, marginTop: 10 }}>{profile.name}</div>
               {profile.company && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}><Icon name="building" size={13} /> {profile.company}</div>}
+              {profile.badges && profile.badges.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center", marginTop: 10 }}>
+                  {profile.badges.map((b) => (
+                    <span key={b.code} className="badge n mono" title={b.title || b.code}
+                      style={{ background: b.color || "var(--navy)", color: "#fff", borderColor: "transparent", fontSize: 10, padding: "2px 8px" }}>
+                      {b.code}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "center", gap: 22, marginTop: 16 }}>
                 <span><b style={{ fontSize: 18 }}>{profile.shared_count}</b><br /><span className="hint">fiche{profile.shared_count > 1 ? "s" : ""} partagée{profile.shared_count > 1 ? "s" : ""}</span></span>
                 <span><b style={{ fontSize: 18 }}>♥ {profile.likes_received}</b><br /><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>

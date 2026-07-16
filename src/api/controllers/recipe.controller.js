@@ -346,8 +346,21 @@ const authorProfile = async (req, res) => {
         const [[sc]] = await conn.query(
             "SELECT COUNT(*) AS n FROM recipe WHERE author_user_id = ? AND visibility = 'SHARED' AND organization_id = ?",
             [uid, req.user.organization_id]);
-        let avatar = null, likes = 0, company = null, phone = null, email = null;
-        try { const [[lr]] = await conn.query('SELECT avatar FROM learner WHERE user_id = ? LIMIT 1', [uid]); if (lr) avatar = lr.avatar; } catch (e) { if (!noTable(e)) throw e; }
+        let avatar = null, likes = 0, company = null, phone = null, email = null, badges = [];
+        try {
+            const [[lr]] = await conn.query('SELECT avatar, levels FROM learner WHERE user_id = ? LIMIT 1', [uid]);
+            if (lr) {
+                avatar = lr.avatar;
+                // Badges (niveaux de formation) — TOUJOURS visibles (non désactivables).
+                const set = new Set(String(lr.levels || '').split(',').map((s) => s.trim()).filter(Boolean));
+                if (set.size) {
+                    const [progs] = await conn.query('SELECT code, level, title, color FROM training_program WHERE organization_id = ? AND active = 1', [req.user.organization_id]);
+                    const byBadge = new Map();
+                    for (const p of progs) { const b = (p.level && String(p.level).trim()) || p.code; if (b) byBadge.set(b, p); if (p.code) byBadge.set(p.code, p); }
+                    badges = [...set].map((code) => { const p = byBadge.get(code); return { code: p ? p.code : code, color: p ? p.color : null, title: p ? p.title : null }; });
+                }
+            }
+        } catch (e) { if (!noTable(e)) throw e; }
         try {
             const [[lk]] = await conn.query(
                 'SELECT COUNT(*) AS n FROM recipe_like rl JOIN recipe r ON r.id = rl.recipe_id WHERE r.author_user_id = ? AND r.organization_id = ?',
@@ -367,7 +380,7 @@ const authorProfile = async (req, res) => {
             }
         } catch (e) { if (!noTable(e)) throw e; }
         const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Stagiaire';
-        res.json({ data: { id: uid, name, avatar, shared_count: sc.n, likes_received: likes, company, phone, email } });
+        res.json({ data: { id: uid, name, avatar, shared_count: sc.n, likes_received: likes, company, phone, email, badges } });
     } catch (err) {
         console.error('Erreur profil auteur :', err);
         res.status(500).json({ error: 'Internal Server Error' });
