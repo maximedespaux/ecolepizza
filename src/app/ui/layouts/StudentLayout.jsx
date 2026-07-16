@@ -94,6 +94,7 @@ function StudentLayout() {
           </div>
         </div>
         <nav style={{ display: "flex", gap: 6, marginLeft: 8 }}>
+          <NavLink to="/mon-espace" className={navClass}>Mon espace</NavLink>
           <NavLink to="/formations" className={navClass}>Mes documents</NavLink>
           {unlocked
             ? <NavLink to="/pizza-quest" className={navClass}>Pizza Quest</NavLink>
