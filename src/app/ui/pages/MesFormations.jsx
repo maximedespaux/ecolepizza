@@ -60,7 +60,7 @@ function MesFormations() {
                 <h3 style={{ fontSize: 15, margin: "10px 0 4px" }}>{f.program_title}</h3>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>
                   {!f.enrolled
-                    ? "Non suivie"
+                    ? (f.finished ? "Terminée" : "Non suivie")
                     : f.start_date && f.end_date
                       ? `Du ${f.start_date} au ${f.end_date}`
                       : `Semaine ${f.week} · ${f.year}`}
