@@ -4,6 +4,8 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import BuilderHub from "../components/BuilderHub.jsx";
 import DoughBar from "../components/DoughBar.jsx";
+import { Paton, doughLook, flourColor } from "../components/LivePizza.jsx";
+import WizDock from "../components/WizDock.jsx";
 import IntroGuide, { GUIDE_KEY } from "../components/IntroGuide.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
@@ -89,18 +91,23 @@ export default function PateWizard() {
   // Handlers typologie / W / hydratation / levure.
   function applyNapoSpec(spec) {
     setR((p) => { const d = p.dough_params; const lev = spec.levure != null ? spec.levure : recoLevureFull(num(d.flourTemp) || 17, d.yeastType || "fraiche", d.levStorage || "ambiante");
-      return { ...p, paton_g: spec.paton, dough_params: { ...d, preset: "Napolitaine", napoSpec: spec.key, method: "Direct", w: spec.w, hydra: spec.hydra, bassinage: 0, sel: spec.sel, huile: 0, levure: lev, ambH: spec.ambH ?? "", ambT: spec.ambT ?? "", ctrlH: spec.ctrlH ?? "", ctrlT: spec.ctrlT ?? "" } }; });
+      return { ...p, paton_g: spec.paton, dough_params: { ...d, preset: "Napolitaine", napoSpec: spec.key, method: "Direct", w: spec.w, hydra: spec.hydra, hydraAuto: true, bassinage: 0, sel: spec.sel, huile: 0, levure: lev, ambH: spec.ambH ?? "", ambT: spec.ambT ?? "", ctrlH: spec.ctrlH ?? "", ctrlT: spec.ctrlT ?? "" } }; });
   }
   function applyPreset(pr) {
     if (presetLocked(pr)) return;
     if (pr.nom === "Napolitaine") { applyNapoSpec(napoSpecOf("ecole")); return; }
-    setR((p) => { const d = p.dough_params; const sp = pr.needs === "spe"; const mt = (sp ? (pr.hydraMax || 80) : maxTotalForW(pr.w)) + Math.round(compWaterPct(d)); const hydra = Math.min(pr.hydra, mt);
-      return { ...p, paton_g: pr.paton, dough_params: { ...d, preset: pr.nom, napoSpec: "", w: pr.w, hydra, bassinage: Math.min(num(d.bassinage), Math.max(0, mt - hydra)), sel: pr.sel, huile: pr.huile, levure: recoLevureFull(num(d.flourTemp) || 17, d.yeastType || "fraiche", d.levStorage || "ambiante"), method: pr.methods.find((m) => !(INDIRECT.includes(m) && !niv2)) || pr.methods[0] } }; });
+    // Le plafond de coulage dépend du W seul (l'eau des farines qui boivent part en bassinage, manuel p.32).
+    setR((p) => { const d = p.dough_params; const sp = pr.needs === "spe"; const mt = sp ? (pr.hydraMax || 80) : maxTotalForW(pr.w); const hydra = Math.min(pr.hydra, mt);
+      return { ...p, paton_g: pr.paton, dough_params: { ...d, preset: pr.nom, napoSpec: "", w: pr.w, hydra, hydraAuto: true, bassinage: Math.min(num(d.bassinage), Math.max(0, mt - hydra)), sel: pr.sel, huile: pr.huile, levure: recoLevureFull(num(d.flourTemp) || 17, d.yeastType || "fraiche", d.levStorage || "ambiante"), method: pr.methods.find((m) => !(INDIRECT.includes(m) && !niv2)) || pr.methods[0] } }; });
   }
   const setW = (w) => setR((p) => { const d = p.dough_params; const pr = PRESETS.find((x) => x.nom === d.preset) || PRESETS[0]; const sp = d.preset === "Napolitaine" ? napoSpecOf(d.napoSpec) : null; const isSp = pr.needs === "spe";
-    const mt = sp ? sp.hydraMax : (isSp ? (pr.hydraMax || 80) : maxTotalForW(w)); const rm = sp ? sp.hydraMin : (isSp ? 62 : hydraMinForW(w)); const hydra = Math.min(Math.max(num(d.hydra), rm), mt);
+    const mt = sp ? sp.hydraMax : (isSp ? (pr.hydraMax || 80) : maxTotalForW(w)); const rm = sp ? sp.hydraMin : (isSp ? 62 : hydraMinForW(w));
+    // L'hydratation SUIT le W tant que le stagiaire ne l'a pas réglée à la main (drapeau hydraAuto) :
+    // elle monte ET redescend avec le W. Réglée à la main, on la conserve, recadrée dans [min, plafond].
+    const hydra = d.hydraAuto !== false ? rm : Math.min(Math.max(num(d.hydra), rm), mt);
     return { ...p, dough_params: { ...d, w, hydra, bassinage: Math.min(num(d.bassinage), Math.max(0, mt - hydra)) } }; });
-  const setHydra = (v) => setR((p) => ({ ...p, dough_params: { ...p.dough_params, hydra: v, bassinage: Math.min(num(p.dough_params.bassinage), Math.max(0, maxTotal - v)) } }));
+  // Régler l'hydratation à la main la « détache » du W (hydraAuto=false) : elle ne suivra plus le curseur W.
+  const setHydra = (v) => setR((p) => ({ ...p, dough_params: { ...p.dough_params, hydra: v, hydraAuto: false, bassinage: Math.min(num(p.dough_params.bassinage), Math.max(0, maxTotal - v)) } }));
   const dpNapoFixed = (d) => d.preset === "Napolitaine" && d.napoSpec && d.napoSpec !== "ecole";
   // Levure = table du manuel selon la T° de la FARINE × facteur de stockage (recoLevureFull).
   const relev = (d, patch) => ({ ...d, ...patch, ...(dpNapoFixed(d) ? {} : { levure: recoLevureFull(num(patch.flourTemp ?? d.flourTemp) || 17, patch.yeastType ?? d.yeastType ?? "fraiche", patch.levStorage ?? d.levStorage ?? "ambiante") }) });
@@ -129,6 +136,8 @@ export default function PateWizard() {
   const setPrice = (k, v) => { if (k === "farine") setR((p) => ({ ...p, flour_price: v })); else setR((p) => ({ ...p, dough_params: { ...p.dough_params, prices: { ...(p.dough_params.prices || {}), [k]: v } } })); };
   const curSubs = subsArr(dp);
   const curAdj = dp.adjonctions || [];
+  // Aspect de la pâte : type + substitutions + adjonctions qui se voient (son, graines, charbon).
+  const look = doughLook(tipoOf(dp.tipo) && tipoOf(dp.tipo).water, curSubs, curAdj);
 
   async function persist({ asNew = false, overrides = {} } = {}) {
     setBusy(true);
@@ -273,10 +282,23 @@ export default function PateWizard() {
                     <b style={{ font: "800 19px/1 var(--font-d)", color: "var(--text)" }}>{tipoOf(dp.tipo) ? `${tipoOf(dp.tipo).fr} · Tipo ${tipoOf(dp.tipo).it}` : "Type de farine"}</b>
                     <span className="hint" style={{ textAlign: "right" }}>{tipoOf(dp.tipo) ? tipoOf(dp.tipo).name : "France ↔ Italie"}</span>
                   </div>
-                  <select className="inp" value={dp.tipo || ""} onChange={(e) => setTipo(e.target.value)}>
-                    <option value="">Type de farine (France ↔ Italie)…</option>
-                    {TIPOS.map((t) => <option key={t.key} value={t.key}>{t.fr} · Tipo {t.it} — {t.name}{t.water ? ` (+${t.water} % bassinage)` : ""}</option>)}
-                  </select>
+                  {/* Cartes plutôt qu'un <select> : la pastille montre la couleur réelle de la
+                      farine, donc le stagiaire VOIT que le type monte → ça fonce → plus de son
+                      → plus d'eau de bassinage. Le menu déroulant cachait toute la leçon. */}
+                  <div className="tipo-row">
+                    {TIPOS.map((t) => (
+                      <button key={t.key} type="button" aria-pressed={dp.tipo === t.key}
+                        className={"tipo-card" + (dp.tipo === t.key ? " on" : "")}
+                        onClick={() => setTipo(dp.tipo === t.key ? "" : t.key)}
+                        title={`${t.fr} · Tipo ${t.it} — ${t.name}${t.water ? ` (+${t.water} % de bassinage)` : ""}`}>
+                        <span className="tipo-dot" style={{ background: flourColor(t.water) }} />
+                        <span className="tipo-it">Tipo {t.it}</span>
+                        <span className="tipo-fr">{t.fr}</span>
+                        <span className="tipo-nm">{t.name}</span>
+                        {t.water > 0 && <span className="tipo-w">+{t.water} % eau</span>}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div>
@@ -412,10 +434,13 @@ export default function PateWizard() {
                 </div>
               </div>
             )}
+
+            <WizDock title={`${gfmt(totalDough)} de pâte`} sub={`${effNb} pâtons de ${patonG} g · ${totalHydra} % · W ${wv}`}
+              visual={<Paton hydra={totalHydra} w={wv} patonG={patonG} look={look} />} />
           </Card>
 
           {/* Colonne droite : le résultat en direct (Composition / Coût) */}
-          <div className="card dough-result">
+          <div className="card dough-result wiz-side" id="wiz-result">
             <div className="field" style={{ marginBottom: 8 }}>
               <label style={{ color: "rgba(255,255,255,.8)" }}>Nom de l'empâtement</label>
               <input className="inp" value={r.name} onChange={(e) => setR((p) => ({ ...p, name: e.target.value }))} placeholder={`${dp.preset} maison`} />
@@ -425,6 +450,12 @@ export default function PateWizard() {
             <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{curPreset.nom}{napoSpec ? ` · ${napoSpec.label}` : ""} · {String(dp.method).toLowerCase()}{dp.autolyse ? " · autolyse" : ""} · W {wv}</div>
             <div style={{ font: "800 24px/1.1 var(--font-d)", margin: "4px 0 2px" }}>{gfmt(totalDough)} de pâte</div>
             <div style={{ color: "rgba(255,255,255,.7)", fontSize: 12, marginBottom: 12 }}>{dpMode === "farine" ? "≈ " : ""}{effNb} pâtons de {patonG} g · hydratation {totalHydra} %</div>
+
+            {/* Le pâton en direct : il s'affaisse quand on hydrate, s'alvéole quand le W monte,
+                se pique de son avec les farines complètes. Les réglages deviennent visibles. */}
+            <div style={{ margin: "2px 0 14px" }}>
+              <Paton hydra={totalHydra} w={wv} patonG={patonG} nb={effNb} look={look} />
+            </div>
 
             <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
               {[["compo", "Composition"], ["cout", "Coût"]].map(([k, lb]) => (

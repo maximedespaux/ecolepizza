@@ -13,6 +13,12 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
+    // Anti « stale pool » : la base distante ferme les connexions inactives (wait_timeout) et
+    // mysql2 continue de les distribuer → 500 « Internal Server Error » sur les requêtes.
+    // On maintient les connexions vivantes et on recycle celles restées inactives.
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
+    idleTimeout: 60000,
 });
 
 // Test de connexion au démarrage.

@@ -5,6 +5,8 @@ import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import WizSteps from "../components/WizSteps.jsx";
 import BuilderHub from "../components/BuilderHub.jsx";
+import { PizzaDisc } from "../components/LivePizza.jsx";
+import WizDock from "../components/WizDock.jsx";
 import IntroGuide, { GUIDE_KEY } from "../components/IntroGuide.jsx";
 import { euro } from "../lib/format.js";
 import { getMyRecipes, getRecipe, createRecipe, updateRecipe, deleteRecipe } from "../api/apiClient.js";
@@ -55,6 +57,7 @@ export default function RealisationWizard() {
   const toggleExtra = (k) => setReal({ cookExtra: (real.cookExtra || []).includes(k) ? real.cookExtra.filter((x) => x !== k) : [...(real.cookExtra || []), k] });
 
   const emp = real.emp, garn = real.garn;
+  const garnData = garn ? (garn.dough_params || {}).garn : null; // la garniture elle-même, pour le visuel
   const costMat = empCost(emp) + garnCost(garn);
   const price = costMat * (1 + num(r.margin_pct) / 100);
   const axes = realisationAxes({ service: real.service, doughType: emp?.type, garn: (garn?.dough_params || {}).garn });
@@ -207,15 +210,25 @@ export default function RealisationWizard() {
                   </div>
                 </div>
               )}
+
+              <WizDock title={`${euro(costMat)} de matière · ${euro(price)}`}
+                sub={`${svcLabel(real.service)} · ${fourLabel(real.four)} · marge ${num(r.margin_pct)} %`}
+                visual={<PizzaDisc base={garnData && garnData.base} items={garnData ? garnitureItems(garnData) : []} cooked size={54} />} />
             </Card>
 
             {/* Résultat : fiche complète + axes */}
-            <div className="card dough-result">
+            <div className="card dough-result wiz-side" id="wiz-result">
               <div className="field" style={{ marginBottom: 10 }}>
                 <label style={{ color: "rgba(255,255,255,.8)" }}>Nom de la réalisation</label>
                 <input className="inp" value={r.name} onChange={(e) => setR((p) => ({ ...p, name: e.target.value }))} placeholder={garn ? garn.name : "Ma réalisation"} />
               </div>
               <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{svcLabel(real.service)} · {fourLabel(real.four)}{(real.cookExtra || []).length ? ` · ${real.cookExtra.join("/")}` : ""}</div>
+
+              {/* La réalisation, c'est la pizza FINIE : on la montre sortie du four (croûte dorée,
+                  taches de léopard) — c'est le résultat que le stagiaire vise. */}
+              <div style={{ margin: "10px 0 4px" }}>
+                <PizzaDisc base={garnData && garnData.base} items={garnData ? garnitureItems(garnData) : []} cooked size={200} />
+              </div>
 
               <div style={{ margin: "10px 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,.12)" }}>

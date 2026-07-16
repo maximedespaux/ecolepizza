@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getMyFormations } from "../api/apiClient.js";
+import { getMyFormations, getMyProfile } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import { colorOf } from "../lib/format.js";
@@ -15,8 +15,8 @@ import { saveQuestProgress } from "../lib/gamification.js";
  *
  * Le monde « Niveau I » utilise les vraies questions du manuel (banque niv1Questions,
  * formats variés : QCM / Vrai-Faux / Associations). Les autres niveaux restent en
- * démo (questions d'exemple) en attendant leurs manuels. Progression en localStorage
- * (à remplacer par une progression serveur).
+ * démo (questions d'exemple) en attendant leurs manuels. Progression miroir localStorage +
+ * serveur (learner_quest_progress) : réhydratée au montage, donc un cache vidé ne perd rien.
  */
 
 const DEMO_QUESTIONS = [
@@ -79,6 +79,24 @@ function PizzaQuest() {
         color: f.color || colorOf(f.program_code), unlocked: !!f.enrolled,
       })));
     }).catch(() => setWorlds([]));
+  }, []);
+
+  // Réhydrate la progression depuis le serveur (source de vérité) et fusionne avec le local
+  // (meilleur score conservé). Le localStorage peut être vidé sans perdre la progression.
+  useEffect(() => {
+    getMyProfile().then((r) => {
+      const server = (r && r.data && r.data.progress) || {};
+      if (!Object.keys(server).length) return;
+      setProg((local) => {
+        const merged = { ...local };
+        for (const [w, steps] of Object.entries(server)) {
+          merged[w] = { ...(merged[w] || {}) };
+          for (const [st, stars] of Object.entries(steps)) merged[w][st] = Math.max(Number(stars) || 0, merged[w][st] || 0);
+        }
+        try { localStorage.setItem(KEY, JSON.stringify(merged)); } catch { /* ignore */ }
+        return merged;
+      });
+    }).catch(() => {});
   }, []);
 
   const xp = useMemo(() => Object.values(prog).reduce((s, w) => s + Object.values(w).reduce((a, st) => a + st * 10, 0), 0), [prog]);

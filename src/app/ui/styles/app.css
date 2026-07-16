@@ -1120,6 +1120,22 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .acc-body{animation:accOpen .2s var(--ease)}
 @keyframes accOpen{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 /* Sélecteur de produits catalogue réel (garniture pro) : rayons + résultats */
+/* Choix du type de farine : des cartes plutôt qu'un menu déroulant natif. C'est LA leçon
+   France ↔ Italie, elle mérite mieux qu'une liste. La pastille porte la vraie couleur de la
+   farine (même calcul que le pâton, cf. flourColor) : on voit d'un coup d'œil que plus le
+   type monte, plus la farine fonce — plus de son, donc plus d'eau bue (manuel p.32). */
+.tipo-row{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:thin}
+/* 116px : « Tipo Intégrale » est le libellé le plus long — en dessous il passe à la ligne et
+   décale tout le contenu de la carte par rapport à ses voisines. */
+.tipo-card{flex:0 0 auto;width:116px;min-height:44px;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 8px;border:1px solid var(--border);border-radius:14px;background:var(--surface);cursor:pointer;transition:border-color .14s var(--ease),transform .14s var(--ease),box-shadow .14s var(--ease)}
+.tipo-card:hover{border-color:var(--gold);transform:translateY(-2px)}
+.tipo-card.on{border-color:var(--ember1);box-shadow:inset 0 0 0 1px var(--ember1),var(--shadow-2)}
+.tipo-dot{width:34px;height:34px;border-radius:50%;box-shadow:inset 0 -3px 7px rgba(0,0,0,.16),0 0 0 1px rgba(0,0,0,.08)}
+.tipo-it{font:800 13.5px/1 var(--font-d);color:var(--text);white-space:nowrap}
+.tipo-fr{font-size:11px;font-weight:600;color:var(--muted)}
+.tipo-nm{font-size:10.5px;color:var(--dim);text-align:center;line-height:1.2}
+.tipo-w{font-size:9.5px;font-weight:700;color:var(--orange)}
+
 .rayon-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
 .rayon-tab{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:background .12s var(--ease),border-color .12s var(--ease),color .12s var(--ease)}
 .rayon-tab:hover{border-color:var(--gold)}
@@ -1161,4 +1177,22 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Colonnes : l'assistant à gauche, le résultat en direct à droite (empilé sur tablette/mobile). */
 .wiz-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,400px);gap:22px;align-items:start}
 @media(max-width:820px){.wiz-layout{grid-template-columns:1fr}}
+/* La colonne résultat suit le scroll : on règle à gauche, on lit le résultat à droite sans
+   perdre le fil en descendant dans les étapes. 76px = les 63px de la topbar collante (mesurés)
+   + 13px de respiration, sinon le panneau viendrait se coller sous elle. */
+@media(min-width:821px){.wiz-side{position:sticky;top:76px}}
+/* Sous 820px la grille passe en 1 colonne : le résultat part SOUS le pli et on règlerait son
+   hydratation à l'aveugle. Ce dock garde le visuel + le chiffre clé sous les yeux pendant qu'on
+   règle, et renvoie au panneau complet d'un tap. Il vit dans la colonne de gauche : dès qu'on
+   descend jusqu'au vrai panneau, il sort de l'écran — on n'a plus besoin de lui. */
+.wiz-dock{display:none}
+@media(max-width:820px){
+  .wiz-dock{display:flex;align-items:center;gap:11px;position:sticky;bottom:10px;z-index:25;width:100%;margin:18px 0 0;padding:9px 12px 9px 9px;border:none;border-radius:16px;color:#fff;text-align:left;cursor:pointer;
+    background:radial-gradient(120% 120% at 100% 0%,var(--navy-2) 0%,var(--navy) 45%,var(--navy-dark) 100%);
+    box-shadow:0 12px 32px -8px rgba(15,17,40,.6),inset 0 0 0 1px rgba(255,255,255,.1);transition:transform .12s var(--ease)}
+  .wiz-dock:active{transform:scale(.99)}
+  .wiz-dock-v{width:54px;flex-shrink:0;display:block}
+  .wiz-dock-t{display:block;font:800 15px/1.15 var(--font-d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wiz-dock-s{display:block;font-size:11px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
 @media(max-width:560px){.wiz-dot-l{display:none}.wiz-dot{min-width:40px}}

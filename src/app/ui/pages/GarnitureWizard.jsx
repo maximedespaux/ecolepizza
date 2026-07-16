@@ -4,6 +4,8 @@ import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import WizSteps from "../components/WizSteps.jsx";
 import BuilderHub from "../components/BuilderHub.jsx";
+import { PizzaDisc } from "../components/LivePizza.jsx";
+import WizDock from "../components/WizDock.jsx";
 import IntroGuide, { GUIDE_KEY } from "../components/IntroGuide.jsx";
 import Mercuriale from "../components/Mercuriale.jsx";
 import { euro } from "../lib/format.js";
@@ -309,16 +311,24 @@ export default function GarnitureWizard() {
                   </div>
                 </div>
               )}
+
+              <WizDock title={`${items.length} élément${items.length > 1 ? "s" : ""} · ${euro(total)}`}
+                sub={baseObj ? `${baseObj.label} · coût matière / pizza` : "Choisis une base…"}
+                visual={<PizzaDisc base={garn.base} items={items} size={54} />} />
             </Card>
 
             {/* Résultat en direct */}
-            <div className="card dough-result">
+            <div className="card dough-result wiz-side" id="wiz-result">
               <div className="field" style={{ marginBottom: 10 }}>
                 <label style={{ color: "rgba(255,255,255,.8)" }}>Nom de la garniture</label>
                 <input className="inp" value={r.name} onChange={(e) => setR((p) => ({ ...p, name: e.target.value }))} placeholder={`Garniture ${baseObj ? baseObj.label.toLowerCase() : ""}`} />
               </div>
               <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{baseObj ? baseObj.label : "Garniture"} · par pizza</div>
               <div style={{ font: "800 22px/1.1 var(--font-d)", margin: "4px 0 12px" }}>{items.length} élément{items.length > 1 ? "s" : ""}</div>
+
+              {/* La pizza en direct : la base colore le disque, chaque produit s'y pose, et la
+                  quantité se voit (doubler les grammes double les morceaux). */}
+              <div style={{ margin: "0 0 14px" }}><PizzaDisc base={garn.base} items={items} size={210} /></div>
 
               {items.length === 0 ? <p className="hint" style={{ color: "rgba(255,255,255,.6)" }}>Ajoute une base et des produits…</p> : items.map((i) => (
                 <div key={i.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.12)" }}>

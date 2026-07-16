@@ -107,14 +107,16 @@ export const TIPOS = [
 ];
 export const tipoOf = (k) => TIPOS.find((t) => t.key === k);
 export const tipoLabel = (k) => { const t = tipoOf(k); return t ? `Tipo ${t.it} · ${t.fr}` : ""; };
-// Substitutions (manuel p.32) — remplacer une part du blé par une (ou plusieurs) autres farines
-// (les farines complètes/semi-complètes de blé sont couvertes par le Tipo, pas ici) ;
-// `bass10` = complément d'eau de bassinage indicatif (g/kg de farine pour 10 %) ; `max` = part conseillée.
+// Substitutions (manuel p.32) — remplacer une part du blé par une (ou plusieurs) autres farines.
+// Le manuel donne le complément d'EAU DE BASSINAGE (fin de pétrissage) pour 10 % de substitution :
+// « Soja, semi complète 10 % → +30 g » · « Farine complète 10 % → +40 g » (le son boit l'eau).
+// `bass10` = ce complément en g/kg de farine pour 10 % de substitution ; `max` = part conseillée.
 export const SUBSTITUTIONS = [
-  // Autres farines de blé (à mélanger avec la farine de base) — plus l'extraction est haute, plus elles boivent d'eau.
-  { key: "ble1", label: "Blé Tipo 1 · T80", bass10: 3, max: 100, wheat: true },
-  { key: "ble2", label: "Blé Tipo 2 · T110", bass10: 5, max: 100, wheat: true },
-  { key: "bleint", label: "Blé intégrale · T150", bass10: 8, max: 100, wheat: true },
+  // Autres farines de blé (à mélanger avec la farine de base) — plus l'extraction (le son) est haute,
+  // plus elles boivent. Valeurs du manuel p.32 : semi-complète 10 % → +30 g ; complète 10 % → +40 g.
+  { key: "ble1", label: "Blé Tipo 1 · T80 (semi-complète)", bass10: 30, max: 50, wheat: true },
+  { key: "ble2", label: "Blé Tipo 2 · T110 (complète)", bass10: 40, max: 50, wheat: true },
+  { key: "bleint", label: "Blé intégrale · T150", bass10: 50, max: 50, wheat: true }, // au-delà de la complète (extrapolé)
   // Autres farines (céréales / graines)
   { key: "soja", label: "Soja", bass10: 30, max: 20 },
   { key: "chataigne", label: "Châtaigne", bass10: 30, max: 20 },
