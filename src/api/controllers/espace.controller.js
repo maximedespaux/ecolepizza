@@ -212,6 +212,7 @@ const getMyAccess = async (req, res) => {
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
+        // Pas de fiche stagiaire (intervenant, staff…) : on ne bloque pas.
         if (!learner) return res.json({ data: { quest_unlocked: true } });
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.financing, s.program_id,
@@ -222,13 +223,15 @@ const getMyAccess = async (req, res) => {
              WHERE e.learner_id = ?`,
             [learner.id]
         );
+        // AUCUNE formation → verrouillé (rien à débloquer tant qu'il n'est pas inscrit).
+        if (!enrollments.length) return res.json({ data: { quest_unlocked: false } });
         const agefice = (learner.opco || '').toUpperCase() === 'AGEFICE';
         const gating = [];
         for (const e of enrollments) {
             const g = await emargementGate(conn, e, learner.organization_id, agefice);
             if (g.need > 0) gating.push(g);
         }
-        // Débloqué si aucun point d'accès n'est en jeu, ou si au moins un est franchi.
+        // Inscrit : débloqué si aucune formation n'a de point d'accès, ou si au moins un est franchi.
         const quest_unlocked = gating.length === 0 || gating.some((g) => !g.locked);
         res.json({ data: { quest_unlocked } });
     } catch (err) {
