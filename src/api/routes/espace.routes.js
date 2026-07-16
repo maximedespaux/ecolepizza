@@ -1,10 +1,11 @@
 const express = require('express');
-const { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility } = require('../controllers/espace.controller.js');
+const { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility } = require('../controllers/espace.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
 
 router.get('/', authenticateToken, getMonEspace);
+router.get('/access', authenticateToken, getMyAccess);
 router.get('/formations', authenticateToken, getMyFormations);
 router.get('/formations/:id', authenticateToken, getMyFormation);
 router.get('/emargement', authenticateToken, getMyEmargement);

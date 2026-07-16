@@ -202,6 +202,41 @@ const getMonEspace = async (req, res) => {
  * Toutes les cartes sont visibles ; une carte se déverrouille si le stagiaire a
  * suivi cette formation et qu'elle est complète (dernier jour passé + signée).
  */
+/**
+ * GET /api/mon-espace/access — le stagiaire a-t-il franchi le POINT D'ACCÈS (breakpoint
+ * émargement) d'au moins une de ses formations ? Sert à débloquer Pizza Quest + Outils &
+ * Communauté. Aucune formation avec point d'accès → débloqué (rien à bloquer). En erreur
+ * on débloque (fail-open : on ne bloque jamais par bug).
+ */
+const getMyAccess = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.json({ data: { quest_unlocked: true } });
+        const [enrollments] = await conn.query(
+            `SELECT e.id AS enrollment_id, e.financing, s.program_id,
+                    p.code AS program_code, p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
+             FROM enrollment e
+             LEFT JOIN training_session s ON s.id = e.session_id
+             LEFT JOIN training_program p ON p.id = s.program_id
+             WHERE e.learner_id = ?`,
+            [learner.id]
+        );
+        const agefice = (learner.opco || '').toUpperCase() === 'AGEFICE';
+        const gating = [];
+        for (const e of enrollments) {
+            const g = await emargementGate(conn, e, learner.organization_id, agefice);
+            if (g.need > 0) gating.push(g);
+        }
+        // Débloqué si aucun point d'accès n'est en jeu, ou si au moins un est franchi.
+        const quest_unlocked = gating.length === 0 || gating.some((g) => !g.locked);
+        res.json({ data: { quest_unlocked } });
+    } catch (err) {
+        console.error('Erreur accès stagiaire :', err);
+        res.json({ data: { quest_unlocked: true } });
+    }
+};
+
 const getMyFormations = async (req, res) => {
     try {
         const conn = db.promise();
@@ -625,4 +660,4 @@ const updateMyInfos = async (req, res) => {
     }
 };
 
-module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility };
+module.exports = { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility };

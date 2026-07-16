@@ -568,6 +568,9 @@ export function getMonEspace() {
   return request("/mon-espace");
 }
 
+export function getMyAccess() {
+  return request("/mon-espace/access", { silent: true });
+}
 export function getMyFormations() {
   return request("/mon-espace/formations");
 }

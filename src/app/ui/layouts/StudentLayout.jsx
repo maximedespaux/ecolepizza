@@ -4,16 +4,21 @@ import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 import ChangePasswordModal from "../components/ChangePasswordModal.jsx";
 import ProfileModal from "../components/ProfileModal.jsx";
+import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
+import { getMyAccess } from "../api/apiClient.js";
 import { getAvatar, AVATAR_EVENT, hydrateProfile } from "../lib/gamification.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 
+// Sections débloquées seulement après avoir franchi le point d'accès (breakpoint) d'une formation.
+const GATED_PATHS = ["/pizza-quest", "/empatements", "/garnitures", "/realisations", "/communaute", "/notions"];
+
 // Menu déroulant « Outils & Communauté » : outils stagiaire + communauté (à venir).
-function OutilsMenu() {
+function OutilsMenu({ locked }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const loc = useLocation();
@@ -24,6 +29,11 @@ function OutilsMenu() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
   useEffect(() => { setOpen(false); }, [loc.pathname]);
+  if (locked) return (
+    <button className="btn sm ghost" disabled title="Signez vos documents jusqu'au point d'accès pour débloquer" style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: 0.55 }}>
+      <Icon name="lock" size={13} /> Outils &amp; Communauté
+    </button>
+  );
   return (
     <span ref={ref} style={{ position: "relative" }}>
       <button className={`btn sm ${active ? "primary" : "ghost"}`} onClick={() => setOpen((o) => !o)} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -45,9 +55,16 @@ function OutilsMenu() {
 /** Coquille de l'espace stagiaire : en-tête simple, pas de barre latérale. */
 function StudentLayout() {
   const { user, isConnected, isLoading, logout } = useContext(UserContext);
+  const loc = useLocation();
   const [pwOpen, setPwOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [unlocked, setUnlocked] = useState(true); // fail-open : débloqué par défaut
   const [avatar, setAvatar] = useState(() => getAvatar(user?.id));
+  // A-t-il franchi le point d'accès (breakpoint) d'une formation ? Débloque Pizza Quest + Outils.
+  useEffect(() => {
+    if (!user?.id) return;
+    getMyAccess().then((r) => setUnlocked(r?.data?.quest_unlocked !== false)).catch(() => setUnlocked(true));
+  }, [user?.id, loc.pathname]);
   useEffect(() => {
     const sync = () => setAvatar(getAvatar(user?.id));
     sync();
@@ -78,8 +95,10 @@ function StudentLayout() {
         </div>
         <nav style={{ display: "flex", gap: 6, marginLeft: 8 }}>
           <NavLink to="/formations" className={navClass}>Mes documents</NavLink>
-          <NavLink to="/pizza-quest" className={navClass}>Pizza Quest</NavLink>
-          <OutilsMenu />
+          {unlocked
+            ? <NavLink to="/pizza-quest" className={navClass}>Pizza Quest</NavLink>
+            : <button className="btn sm ghost" disabled title="Signez vos documents jusqu'au point d'accès pour débloquer" style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: 0.55 }}><Icon name="lock" size={13} /> Pizza Quest</button>}
+          <OutilsMenu locked={!unlocked} />
           {user?.role === "INTERVENANT" && <NavLink to="/intervention" className={navClass}>Intervention</NavLink>}
           {user?.has_company && <NavLink to="/entreprise-documents" className={navClass}>Entreprise</NavLink>}
         </nav>
@@ -93,7 +112,13 @@ function StudentLayout() {
         <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion"><Icon name="power" size={18} /></button>
       </header>
       <main className="content" style={{ maxWidth: 900 }}>
-        <Outlet />
+        {!unlocked && GATED_PATHS.some((p) => loc.pathname.startsWith(p)) ? (
+          <EmptyState icon="lock">
+            <b>Section verrouillée.</b><br />Signez d'abord vos documents jusqu'au <b>point d'accès</b> de votre formation pour débloquer Pizza Quest et les outils.
+          </EmptyState>
+        ) : (
+          <Outlet />
+        )}
       </main>
 
       {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
