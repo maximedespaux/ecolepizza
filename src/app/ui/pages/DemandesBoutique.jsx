@@ -36,9 +36,10 @@ function Demande({ d, onChange }) {
   const next = idx >= 0 && idx < FLOW.length - 1 ? FLOW[idx + 1] : null;
   const facturable = d.lines.some((l) => l.source === "ECOLE" && l.unit_price_ht != null) && !hasInvoice;
   // On peut reculer, mais pas repasser AVANT « Facturé » quand une facture existe
-  // (cela reviendrait à annuler la facture).
+  // (cela reviendrait à annuler la facture). À la dernière étape (Remis, terminé) : plus de recul.
   const factIdx = FLOW.indexOf("FACTUREE");
-  const canPrev = !!prev && d.status !== "ANNULEE" && !(hasInvoice && FLOW.indexOf(prev) < factIdx);
+  const isLast = idx === FLOW.length - 1;
+  const canPrev = !!prev && d.status !== "ANNULEE" && !isLast && !(hasInvoice && FLOW.indexOf(prev) < factIdx);
   // « Suivant » gère TOUTES les transitions, facture comprise : à l'étape Payé, avancer
   // vers Facturé CRÉE la facture (si facturable) ; sinon simple changement de statut.
   const canNext = !!next && d.status !== "ANNULEE";
@@ -146,9 +147,9 @@ function Demande({ d, onChange }) {
         </button> : null}
         {d.invoice_id ? <span className="badge g"><Icon name="check" size={12} /> Facturée</span> : null}
         <span style={{ flex: 1 }} />
-        {d.status !== "ANNULEE"
-          ? <button className="btn sm ghost" onClick={() => setStatus("ANNULEE")} disabled={busy}>Annuler</button>
-          : <button className="btn sm ghost" onClick={() => setStatus("NOUVELLE")} disabled={busy}>Réactiver</button>}
+        {d.status === "ANNULEE"
+          ? <button className="btn sm ghost" onClick={() => setStatus("NOUVELLE")} disabled={busy}>Réactiver</button>
+          : !isLast ? <button className="btn sm ghost" onClick={() => setStatus("ANNULEE")} disabled={busy}>Annuler</button> : null}
         {!d.invoice_id ? <button className="btn sm ghost danger" onClick={supprimer} disabled={busy} title="Supprimer la demande"><Icon name="trash" size={14} /></button> : null}
       </div>
     </Card>
