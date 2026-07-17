@@ -136,10 +136,13 @@ function Demande({ d, onChange }) {
         {canPrev ? <button className="btn sm ghost" onClick={() => setStatus(prev)} disabled={busy}>
           <Icon name="chevron-left" size={14} /> Précédent
         </button> : null}
-        {canNext ? <button className="btn sm primary" onClick={goNext} disabled={busy}>
+        {canNext ? <button className="btn sm primary" onClick={goNext} disabled={busy}
+          style={next === "REMISE" ? { background: "var(--green)", borderColor: "transparent" } : undefined}>
           {nextIsFacture
             ? <><Icon name="file-text" size={14} /> Créer la facture</>
-            : <>Suivant : {LABEL[next]} <Icon name="chevron-right" size={14} /></>}
+            : next === "REMISE"
+              ? <><Icon name="check" size={14} /> Terminé (remis)</>
+              : <>Suivant : {LABEL[next]} <Icon name="chevron-right" size={14} /></>}
         </button> : null}
         {d.invoice_id ? <span className="badge g"><Icon name="check" size={12} /> Facturée</span> : null}
         <span style={{ flex: 1 }} />
