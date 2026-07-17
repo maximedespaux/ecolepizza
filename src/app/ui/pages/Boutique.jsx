@@ -35,7 +35,7 @@ const STATUS_LABEL = {
   PAYE: "Payé", FACTUREE: "Facturé", REMISE: "Remis", ANNULEE: "Annulée",
 };
 // Étapes visibles par le stagiaire (progression de sa demande).
-const DEMANDE_FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "PAYE", "FACTUREE", "REMISE"];
+const DEMANDE_FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "FACTUREE", "PAYE", "REMISE"];
 
 function DemandeSteps({ status }) {
   const idx = DEMANDE_FLOW.indexOf(status);

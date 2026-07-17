@@ -96,6 +96,20 @@ const updateShopRequest = async (req, res) => {
         vals.push(req.params.id, req.user.organization_id);
         const [r] = await conn.query(`UPDATE shop_request SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
         if (!r.affectedRows) return res.status(404).json({ message: 'Demande introuvable.' });
+
+        // La facture de la boutique SUIT le statut « Payé » de la demande : passer à PAYE
+        // marque la facture liée comme PAYÉE ; revenir à FACTURE la repasse à ÉMISE.
+        if (req.body.status === 'PAYE' || req.body.status === 'FACTUREE') {
+            const orgId = req.user.organization_id;
+            const [[row]] = await conn.query('SELECT invoice_id FROM shop_request WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+            if (row && row.invoice_id) {
+                if (req.body.status === 'PAYE') {
+                    await conn.query("UPDATE invoice SET status = 'PAYEE' WHERE id = ? AND organization_id = ?", [row.invoice_id, orgId]);
+                } else { // retour à FACTURE : on annule le marquage « payé » de ce flux
+                    await conn.query("UPDATE invoice SET status = 'EMISE' WHERE id = ? AND organization_id = ? AND status = 'PAYEE'", [row.invoice_id, orgId]);
+                }
+            }
+        }
         res.json({ success: true });
     } catch (err) {
         if (isMissingSchema(err)) return res.status(503).json({ message: 'Migration 096 non jouée.' });

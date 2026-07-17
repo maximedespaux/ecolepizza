@@ -18,7 +18,7 @@ import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopReque
  * pas, elle met en relation — la facturer reviendrait à encaisser la vente d'un autre.
  */
 
-const FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "PAYE", "FACTUREE", "REMISE"];
+const FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "FACTUREE", "PAYE", "REMISE"];
 const LABEL = {
   NOUVELLE: "Reçue", EN_PREPARATION: "En préparation", PRETE: "Prête à retirer",
   PAYE: "Payé", FACTUREE: "Facturé", REMISE: "Remis", ANNULEE: "Annulée",
@@ -35,8 +35,10 @@ function Demande({ d, onChange }) {
   const prev = idx > 0 ? FLOW[idx - 1] : null;
   const next = idx >= 0 && idx < FLOW.length - 1 ? FLOW[idx + 1] : null;
   const facturable = d.lines.some((l) => l.source === "ECOLE" && l.unit_price_ht != null) && !hasInvoice;
-  // On ne peut plus reculer une fois la facture émise.
-  const canPrev = !!prev && d.status !== "ANNULEE" && !hasInvoice;
+  // On peut reculer, mais pas repasser AVANT « Facturé » quand une facture existe
+  // (cela reviendrait à annuler la facture).
+  const factIdx = FLOW.indexOf("FACTUREE");
+  const canPrev = !!prev && d.status !== "ANNULEE" && !(hasInvoice && FLOW.indexOf(prev) < factIdx);
   // « Suivant » gère TOUTES les transitions, facture comprise : à l'étape Payé, avancer
   // vers Facturé CRÉE la facture (si facturable) ; sinon simple changement de statut.
   const canNext = !!next && d.status !== "ANNULEE";
