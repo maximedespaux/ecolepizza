@@ -29,8 +29,14 @@ const TONE = { NOUVELLE: "r", EN_PREPARATION: "a", PRETE: "g", REMISE: "b", FACT
 
 function Demande({ d, onChange }) {
   const [busy, setBusy] = useState(false);
-  const next = FLOW[FLOW.indexOf(d.status) + 1];
+  const idx = FLOW.indexOf(d.status);            // position dans le flux (−1 si ANNULEE)
+  const inFlow = idx >= 0;
+  const locked = d.status === "FACTUREE" || d.status === "ANNULEE"; // plus d'avance/recul
+  const prev = idx > 0 ? FLOW[idx - 1] : null;
+  const next = idx >= 0 && idx < FLOW.length - 1 ? FLOW[idx + 1] : null;
   const facturable = d.lines.some((l) => l.source === "ECOLE" && l.unit_price_ht != null) && !d.invoice_id;
+  // La facture n'apparaît qu'EN FIN de parcours (prête / remise), plus au début.
+  const showFacture = facturable && (d.status === "PRETE" || d.status === "REMISE");
 
   async function setStatus(status) {
     setBusy(true);
@@ -98,16 +104,35 @@ function Demande({ d, onChange }) {
         <Icon name="message-circle" size={13} style={{ verticalAlign: "-2px" }} /> « {d.note} »
       </p> : null}
 
+      {/* Étapes de la commande (progression). */}
+      {inFlow ? (
+        <div className="cmd-steps">
+          {FLOW.map((s, i) => (
+            <div key={s} className={"cmd-step" + (i < idx ? " done" : i === idx ? " on" : "")}>
+              <span className="cmd-dot">{i < idx ? <Icon name="check" size={12} /> : i + 1}</span>
+              <span className="cmd-step-lbl">{LABEL[s]}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="hint" style={{ margin: "14px 0 0", color: "var(--ember1)" }}><Icon name="x" size={13} style={{ verticalAlign: "-2px" }} /> Demande annulée.</p>
+      )}
+
       <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
-        {next ? <button className="btn sm primary" onClick={() => setStatus(next)} disabled={busy}>
-          <Icon name="chevron-right" size={14} /> {LABEL[next]}
+        {prev && !locked ? <button className="btn sm ghost" onClick={() => setStatus(prev)} disabled={busy}>
+          <Icon name="chevron-left" size={14} /> Précédent
         </button> : null}
-        {facturable ? <button className="btn sm" onClick={facturer} disabled={busy}>
+        {next && next !== "FACTUREE" && !locked ? <button className="btn sm primary" onClick={() => setStatus(next)} disabled={busy}>
+          Suivant : {LABEL[next]} <Icon name="chevron-right" size={14} />
+        </button> : null}
+        {showFacture ? <button className="btn sm" onClick={facturer} disabled={busy}>
           <Icon name="file-text" size={14} /> Créer la facture
         </button> : null}
         {d.invoice_id ? <span className="badge g"><Icon name="check" size={12} /> Facturée</span> : null}
         <span style={{ flex: 1 }} />
-        {d.status !== "ANNULEE" ? <button className="btn sm ghost" onClick={() => setStatus("ANNULEE")} disabled={busy}>Annuler</button> : null}
+        {d.status !== "ANNULEE"
+          ? <button className="btn sm ghost" onClick={() => setStatus("ANNULEE")} disabled={busy}>Annuler</button>
+          : <button className="btn sm ghost" onClick={() => setStatus("NOUVELLE")} disabled={busy}>Réactiver</button>}
         {!d.invoice_id ? <button className="btn sm ghost danger" onClick={supprimer} disabled={busy} title="Supprimer la demande"><Icon name="trash" size={14} /></button> : null}
       </div>
     </Card>

@@ -1214,6 +1214,18 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
   .shop-layout{grid-template-columns:1fr}
   .shop-aside{position:static;margin-top:18px}
 }
+/* Étapes d'une commande boutique (admin). */
+.cmd-steps{display:flex;align-items:flex-start;gap:0;margin-top:14px;overflow-x:auto}
+.cmd-step{flex:1;min-width:64px;display:flex;flex-direction:column;align-items:center;gap:5px;position:relative;text-align:center}
+.cmd-step::before{content:"";position:absolute;top:12px;left:-50%;width:100%;height:2px;background:var(--border)}
+.cmd-step:first-child::before{display:none}
+.cmd-step.done::before,.cmd-step.on::before{background:var(--grad-ember)}
+.cmd-dot{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;
+  background:var(--surface);border:2px solid var(--border);color:var(--muted);position:relative;z-index:1}
+.cmd-step.done .cmd-dot{background:var(--grad-ember);border-color:transparent;color:#fff}
+.cmd-step.on .cmd-dot{border-color:var(--ember1,#c0392b);color:var(--ember1,#c0392b)}
+.cmd-step-lbl{font-size:11px;color:var(--muted);line-height:1.2}
+.cmd-step.on .cmd-step-lbl{color:var(--text);font-weight:700}
 .shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
 .shop-card{display:flex;flex-direction:column;gap:5px;padding:14px 12px;border:1px solid var(--border);
   border-radius:14px;background:var(--surface);transition:border-color .14s var(--ease),transform .14s var(--ease)}
