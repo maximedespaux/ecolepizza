@@ -257,11 +257,16 @@ function buildTree(rows) {
     const y = r.year != null ? String(r.year) : "—";
     const wKey = r.week != null ? String(r.week) : "—";
     const fKey = r.program_code || "—";
-    const lKey = r.learner_id || `${r.last_name}${r.first_name}`;
+    // Feuille = stagiaire, ou ENTREPRISE pour un document de groupe (scope COMPANY).
+    const isCo = r.scope === "COMPANY";
+    const lKey = isCo ? `co:${r.company_id || r.company_name || "?"}` : (r.learner_id || `${r.last_name}${r.first_name}`);
     const Y = years[y] || (years[y] = { label: y, total: 0, weeks: {} });
     const W = Y.weeks[wKey] || (Y.weeks[wKey] = { week: r.week || 0, total: 0, formations: {} });
     const F = W.formations[fKey] || (W.formations[fKey] = { code: r.program_code || "—", title: r.program_title || "", total: 0, learners: {} });
-    const L = F.learners[lKey] || (F.learners[lKey] = { name: `${r.last_name || ""} ${r.first_name || ""}`.trim() || "—", learner_id: r.learner_id, docs: [] });
+    const L = F.learners[lKey] || (F.learners[lKey] = {
+      name: isCo ? (r.company_name || "Entreprise") : (`${r.last_name || ""} ${r.first_name || ""}`.trim() || "—"),
+      learner_id: r.learner_id, company: isCo, docs: [],
+    });
     L.docs.push(r);
     Y.total++; W.total++; F.total++;
   }
@@ -283,9 +288,7 @@ function ArchivesView({ onError, onInfo }) {
   const [q, setQ] = useState("");
   const [viewId, setViewId] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [archScope, setArchScope] = useState("stagiaire"); // "stagiaire" | "entreprise"
   const fileRef = useRef(null);
-  const isEnt = archScope === "entreprise";
 
   function load() {
     getArchives().then((r) => setRows(r.data)).catch((e) => { setRows([]); onError?.(e.message); });
@@ -332,35 +335,23 @@ function ArchivesView({ onError, onInfo }) {
       style={{ marginLeft: 8 }}><Icon name="trash" size={15} /></button>
   );
 
-  const counts = useMemo(() => {
-    const c = { stagiaire: 0, entreprise: 0 };
-    (rows || []).forEach((r) => { r.scope === "COMPANY" ? c.entreprise++ : c.stagiaire++; });
-    return c;
-  }, [rows]);
-
   const tree = useMemo(() => {
     if (!rows) return [];
-    const wantCompany = isEnt;
-    const scoped = rows.filter((r) => (r.scope === "COMPANY") === wantCompany);
     const needle = q.trim().toLowerCase();
     const filtered = needle
-      ? scoped.filter((r) => `${r.last_name} ${r.first_name} ${r.company_name || ""} ${r.program_code} ${r.program_title} ${r.title}`.toLowerCase().includes(needle))
-      : scoped;
+      ? rows.filter((r) => `${r.last_name} ${r.first_name} ${r.company_name || ""} ${r.program_code} ${r.program_title} ${r.title}`.toLowerCase().includes(needle))
+      : rows;
     return buildTree(filtered);
-  }, [rows, q, isEnt]);
+  }, [rows, q]);
 
   if (rows === null) return <Card title="Archives"><p className="hint">Chargement…</p></Card>;
 
   return (
     <Card title={`Archives documentaires (${rows.length})`}>
-      <div className="seg" style={{ marginBottom: 12 }}>
-        <button type="button" className={"seg-btn" + (!isEnt ? " on" : "")} onClick={() => setArchScope("stagiaire")}>Archive stagiaire ({counts.stagiaire})</button>
-        <button type="button" className={"seg-btn" + (isEnt ? " on" : "")} onClick={() => setArchScope("entreprise")}>Archive entreprise ({counts.entreprise})</button>
-      </div>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-        <input className="inp" placeholder={isEnt ? "Rechercher une entreprise, une formation, un document…" : "Rechercher un stagiaire, une formation, un document…"} value={q}
+        <input className="inp" placeholder="Rechercher un stagiaire, une entreprise, une formation, un document…" value={q}
           onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 460, flex: 1, minWidth: 220 }} />
-        {isAdmin && !isEnt && (
+        {isAdmin && (
           <>
             <input ref={fileRef} type="file" webkitdirectory="" directory="" multiple accept="application/pdf,.pdf"
               style={{ display: "none" }} onChange={onPick} />
@@ -370,14 +361,14 @@ function ArchivesView({ onError, onInfo }) {
           </>
         )}
       </div>
-      {isAdmin && !isEnt && (
+      {isAdmin && (
         <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
           Dossier <b>année / semaine / formation / stagiaire</b> · PDF uniquement.
         </p>
       )}
 
       {tree.length === 0 ? (
-        <EmptyState icon="folder">{isEnt ? "Aucun document entreprise partagé pour l'instant." : "Aucun document partagé pour l'instant."}</EmptyState>
+        <EmptyState icon="folder">Aucun document partagé pour l'instant.</EmptyState>
       ) : (
         <div className="arch">
           {tree.map((Y) => (
@@ -400,8 +391,10 @@ function ArchivesView({ onError, onInfo }) {
                           <div className="arch-in">
                             {F.learnersArr.map((L) => (
                               <details key={L.learner_id || L.name}>
-                                <summary className="arch-sum">{L.name} <span className="arch-count">{L.docs.length}</span>
-                                  {isAdmin && <DelBtn title={isEnt ? "Supprimer cette entreprise" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
+                                <summary className="arch-sum">
+                                  {L.company && <Icon name="building" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--ember1, #c0392b)" }} />}
+                                  {L.name} <span className="arch-count">{L.docs.length}</span>
+                                  {isAdmin && <DelBtn title={L.company ? "Supprimer cette entreprise" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
                                 </summary>
                                 <div className="arch-docs">
                                   {L.docs.map((d) => {
