@@ -158,8 +158,8 @@ function Ventes() {
               <button className="iconbtn" onClick={() => setLastInvoice(null)} aria-label="Fermer"><Icon name="x" size={14} /></button>
             </div>
           )}
-          {/* Boutique importée : grille d'articles cliquable pour composer le panier. */}
-          <div style={{ marginBottom: 16 }}>
+          {/* Caisse : boutique (catalogue) à gauche, panier avec client + paiement à droite. */}
+          <div className="grid cols-2" style={{ alignItems: "start" }}>
             <Card title={<span className="card-ttl"><Icon name="package" size={16} /> Boutique — cliquer pour ajouter</span>}>
               {posItems.length === 0 ? (
                 <EmptyState icon="package">Aucun article en boutique. Ajoute un prix aux articles dans l'onglet Inventaire.</EmptyState>
@@ -189,31 +189,9 @@ function Ventes() {
                 </>
               )}
             </Card>
-          </div>
 
-          <div className="grid cols-2">
-            <Card title="Point de vente">
-              <div className="row3" style={{ alignItems: "end" }}>
-                <div className="field" style={{ gridColumn: "span 2" }}>
-                  <label>Produit</label>
-                  <select className="inp" value={pick} onChange={(e) => setPick(e.target.value)}>
-                    <option value="">— Choisir un produit —</option>
-                    {grouped.map(([cat, items]) => (
-                      <optgroup key={cat} label={cat}>
-                        {items.map((it) => (
-                          <option key={it.id} value={it.id} disabled={it.quantity <= 0}>
-                            {it.name} — {euro(it.unit_price || 0)} HT ({it.quantity} en stock)
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </div>
-                <Field label="Qté" type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} />
-              </div>
-              <button className="btn" onClick={addToCart} disabled={!pick}>＋ Ajouter au panier</button>
-
-              <div className="divider" />
+            <Card title={<span className="card-ttl"><Icon name="shopping-cart" size={16} /> Panier ({cart.length})</span>}>
+              {/* Client + moyen de paiement, en tête du panier. */}
               <div className="field">
                 <label>Client</label>
                 {client ? (
@@ -248,9 +226,7 @@ function Ventes() {
                   <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} /> Payé à l'encaissement
                 </label>
               </div>
-            </Card>
-
-            <Card title={`Panier (${cart.length})`}>
+              <div className="divider" />
               {cart.length === 0 ? (
                 <EmptyState icon="package">Panier vide. Ajoutez des produits.</EmptyState>
               ) : (
