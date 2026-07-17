@@ -5,7 +5,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
 import { initials } from "../lib/format.js";
-import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest } from "../api/apiClient.js";
+import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, deleteAllShopRequests } from "../api/apiClient.js";
 
 /**
  * Zone « Demandes boutique » — le pendant école de la boutique stagiaire.
@@ -146,13 +146,31 @@ function Demande({ d, onChange }) {
 function DemandesBoutique() {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("");
+  const [purging, setPurging] = useState(false);
   const load = () => getShopRequests(filter || undefined).then((r) => setRows(r.data || [])).catch(() => setRows([]));
   useEffect(() => { setRows(null); load(); /* eslint-disable-next-line */ }, [filter]);
+
+  // PURGE TOTALE : supprime toutes les demandes, quel que soit leur statut. Double
+  // confirmation (dont une saisie) car l'action est irréversible.
+  async function purgerTout() {
+    if (!window.confirm("Supprimer DÉFINITIVEMENT TOUTES les demandes boutique (tous statuts confondus) ?\nCette action est irréversible.")) return;
+    const t = window.prompt('Pour confirmer, tape « SUPPRIMER » :');
+    if (String(t || "").trim().toUpperCase() !== "SUPPRIMER") return;
+    setPurging(true);
+    try { const { deleted } = await deleteAllShopRequests(); window.alert(`${deleted} demande(s) supprimée(s).`); load(); }
+    catch (e) { window.alert(e.message || "Suppression impossible."); }
+    finally { setPurging(false); }
+  }
 
   return (
     <>
       <PageHead eyebrow="Boutique" title="Demandes des stagiaires"
-        lead="Ce que tes stagiaires ont demandé depuis leur espace. Tu prépares, tu remets en main propre, tu factures." />
+        lead="Ce que tes stagiaires ont demandé depuis leur espace. Tu prépares, tu remets en main propre, tu factures."
+        actions={rows && rows.length ? (
+          <button className="btn sm ghost danger" onClick={purgerTout} disabled={purging} title="Supprimer toutes les demandes, quel que soit leur statut">
+            <Icon name="trash" size={14} /> {purging ? "Suppression…" : "Tout supprimer"}
+          </button>
+        ) : null} />
 
       <div className="rayon-tabs" style={{ marginBottom: 16 }}>
         <button className={"rayon-tab" + (filter === "" ? " on" : "")} onClick={() => setFilter("")}>Toutes</button>

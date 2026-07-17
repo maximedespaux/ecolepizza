@@ -186,6 +186,23 @@ const deleteShopRequest = async (req, res) => {
 };
 
 /**
+ * DELETE /api/boutique/demandes — PURGE : supprime TOUTES les demandes de l'organisme,
+ * quel que soit leur statut (facturées incluses ; la facture liée subsiste, invoice_id
+ * étant seulement détaché). Action destructive réservée à l'admin.
+ */
+const deleteAllShopRequests = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [r] = await conn.query('DELETE FROM shop_request WHERE organization_id = ?', [req.user.organization_id]);
+        res.json({ success: true, deleted: r.affectedRows || 0 });
+    } catch (err) {
+        if (isMissingSchema(err)) return res.json({ success: true, deleted: 0 });
+        console.error('Erreur purge demandes :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
  * GET /api/boutique/retraits?from=YYYY-MM-DD&to=YYYY-MM-DD
  * Les retraits prévus sur une plage — sert à afficher « Récupérer le matériel » sur la page
  * d'une session, aux dates de cette session.
@@ -235,4 +252,4 @@ const listPickups = async (req, res) => {
     }
 };
 
-module.exports = { listShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, listPickups };
+module.exports = { listShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, deleteAllShopRequests, listPickups };

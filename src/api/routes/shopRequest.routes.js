@@ -1,5 +1,5 @@
 const express = require('express');
-const { listShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, listPickups } = require('../controllers/shopRequest.controller.js');
+const { listShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, deleteAllShopRequests, listPickups } = require('../controllers/shopRequest.controller.js');
 const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -11,6 +11,7 @@ router.use(authenticateToken, authorizeRoles(...ADMIN_ROLES));
 router.get('/demandes', listShopRequests);
 router.get('/retraits', listPickups);
 router.put('/demandes/:id', updateShopRequest);
+router.delete('/demandes', deleteAllShopRequests); // purge totale (avant la route :id)
 router.delete('/demandes/:id', deleteShopRequest);
 router.post('/demandes/:id/facture', invoiceShopRequest);
 
