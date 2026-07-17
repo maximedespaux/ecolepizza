@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getMyFormations, getMyProfile } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
+import SimulateurPizza from "../components/SimulateurPizza.jsx";
 import { colorOf } from "../lib/format.js";
 import { NIV1_CHAPTERS } from "../lib/niv1Questions.js";
 import { NIV2_CHAPTERS } from "../lib/niv2Questions.js";
@@ -75,7 +76,7 @@ function PizzaQuest() {
   const [active, setActive] = useState(null); // null = carte ; sinon code du monde
   const [prog, setProg] = useState(loadProg);
   const [quiz, setQuiz] = useState(null);
-  const [mini, setMini] = useState(null); // mini-jeu ouvert (ex. "constructeur")
+  const [mini, setMini] = useState(null); // { key, obj? } du mini-jeu ouvert, ou null
 
   useEffect(() => {
     getMyFormations().then((r) => {
@@ -139,13 +140,15 @@ function PizzaQuest() {
 
       {world
         ? <WorldView world={world} prog={prog[world.code] || {}} onBack={() => setActive(null)}
-            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || pickQuestions(STEPS_PER_CH) })} />
-        : <><MiniGames onOpen={setMini} /><FormationMap worlds={worlds} prog={prog} onPick={setActive} /></>}
+            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || pickQuestions(STEPS_PER_CH) })}
+            onGame={(g) => setMini({ key: g.key, obj: g.obj })} />
+        : <FormationMap worlds={worlds} prog={prog} onPick={setActive} />}
 
       {quiz && world && (
         <QuizModal world={world} data={quiz} onClose={() => setQuiz(null)} onFinish={(stars) => finishChapter(quiz.code, quiz.chIdx, stars)} />
       )}
-      {mini === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
+      {mini?.key === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
+      {mini?.key === "simulateur" && <SimulateurPizza objectifId={mini.obj} onClose={() => setMini(null)} onFinish={(stars) => finishMini("simulateur", stars)} />}
     </>
   );
 }
@@ -159,8 +162,6 @@ function FormationMap({ worlds, prog, onPick }) {
 
   return (
     <div className="pq-board">
-      <div className="pq-ingredients" aria-hidden="true">🌾 💧 🫒 🧫 🍅 🧀 🔥 🍕</div>
-
       {hasTronc && <>
         <div className="pq-tier-label">Nos formations</div>
         {by.decouverte.length > 0 && <div className="pq-row">{by.decouverte.map((w) => card(w))}</div>}
@@ -201,17 +202,43 @@ function FormationMap({ worlds, prog, onPick }) {
   );
 }
 
-// Bandeau des mini-jeux (autres modes de jeu à côté du QCM).
-function MiniGames({ onOpen }) {
+// Les défis-jeux propres à chaque formation. DIFFÉRENTS selon le rôle : le Constructeur
+// (ordonner la recette) sur les formations « process », « Fais ta pizza » sur celles qui
+// travaillent les paramètres — et il s'ouvre directement sur le style visé (obj). Un jeu
+// « Bientôt » par formation garde la promesse sans mentir sur ce qui existe.
+const GAME_SIM = (obj, sub) => ({ key: "simulateur", obj, ic: "flame", tint: "var(--orange)", label: "Fais ta pizza", sub });
+const GAME_CONS = { key: "constructeur", ic: "pizza", tint: "var(--ember1)", label: "Le Constructeur", sub: "Ordonne la recette" };
+const GAME_SOON = { key: null, ic: "clock", tint: "var(--dim)", label: "Chrono Rush", sub: "Bientôt", soon: true };
+const GAMES_BY_ROLE = {
+  decouverte: [GAME_CONS, GAME_SOON],
+  niv1: [GAME_CONS, GAME_SIM("classique", "Réussis une classique"), GAME_SOON],
+  niv1pro: [GAME_CONS, GAME_SOON],
+  niv2: [GAME_SIM("contemporaine", "Réussis une contemporaine"), GAME_CONS, GAME_SOON],
+  expert: [GAME_SIM(null, "Tous les styles"), GAME_CONS, GAME_SOON],
+  spe: [GAME_SIM(null, "Réussis ta spécialité"), GAME_SOON],
+  autre: [GAME_CONS, GAME_SOON],
+};
+
+// Les défis d'un monde, rendus sous le chemin de chapitres.
+function WorldGames({ world, onGame }) {
+  const games = GAMES_BY_ROLE[roleOf(world)] || [GAME_CONS];
   return (
-    <div className="pq-minis">
-      <button className="pq-mini" onClick={() => onOpen("constructeur")}>
-        <span className="pq-mini-e" style={{ color: "var(--ember1)" }}><Icon name="pizza" size={24} /></span>
-        <span className="pq-mini-txt"><b>Le Constructeur</b><span className="pq-mini-sub">Ordonne la recette</span></span>
-      </button>
-      <div className="pq-mini soon"><span className="pq-mini-e" style={{ color: "var(--dim)" }}><Icon name="clock" size={24} /></span><span className="pq-mini-txt"><b>Chrono Rush</b><span className="pq-mini-sub">Bientôt</span></span></div>
-      <div className="pq-mini soon"><span className="pq-mini-e" style={{ color: "var(--dim)" }}><Icon name="shuffle" size={24} /></span><span className="pq-mini-txt"><b>Associations</b><span className="pq-mini-sub">Bientôt</span></span></div>
-    </div>
+    <>
+      <div className="pq-games-t">Les défis de cette formation</div>
+      <div className="pq-minis">
+        {games.map((g, i) => g.soon ? (
+          <div key={i} className="pq-mini soon">
+            <span className="pq-mini-e" style={{ color: g.tint }}><Icon name={g.ic} size={24} /></span>
+            <span className="pq-mini-txt"><b>{g.label}</b><span className="pq-mini-sub">{g.sub}</span></span>
+          </div>
+        ) : (
+          <button key={i} className="pq-mini" onClick={() => onGame(g)}>
+            <span className="pq-mini-e" style={{ color: g.tint }}><Icon name={g.ic} size={24} /></span>
+            <span className="pq-mini-txt"><b>{g.label}</b><span className="pq-mini-sub">{g.sub}</span></span>
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -240,8 +267,8 @@ function FCard({ w, prog, onPick, prereq }) {
   );
 }
 
-// Vue d'un monde : chemin de chapitres façon Duolingo.
-function WorldView({ world, prog, onBack, onChapter }) {
+// Vue d'un monde : chemin de chapitres façon Duolingo + les défis-jeux de la formation.
+function WorldView({ world, prog, onBack, onChapter, onGame }) {
   const chapters = chaptersFor(world);
   const doneCount = Object.keys(prog).length;
   return (
@@ -273,6 +300,7 @@ function WorldView({ world, prog, onBack, onChapter }) {
         })}
       </div>
       <p className="hint" style={{ textAlign: "center", marginTop: 8 }}>{doneCount}/{chapters.length} chapitres terminés</p>
+      <WorldGames world={world} onGame={onGame} />
     </div>
   );
 }
