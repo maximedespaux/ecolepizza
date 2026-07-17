@@ -34,6 +34,23 @@ const STATUS_LABEL = {
   NOUVELLE: "Reçue", EN_PREPARATION: "En préparation", PRETE: "Prête à retirer",
   REMISE: "Remise", FACTUREE: "Facturée", ANNULEE: "Annulée",
 };
+// Étapes visibles par le stagiaire (progression de sa demande).
+const DEMANDE_FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "REMISE", "FACTUREE"];
+
+function DemandeSteps({ status }) {
+  const idx = DEMANDE_FLOW.indexOf(status);
+  if (idx < 0) return <p className="hint" style={{ margin: "6px 0 0", color: "var(--ember1)" }}><Icon name="x" size={13} style={{ verticalAlign: "-2px" }} /> Demande annulée.</p>;
+  return (
+    <div className="cmd-steps" style={{ marginTop: 12 }}>
+      {DEMANDE_FLOW.map((s, i) => (
+        <div key={s} className={"cmd-step" + (i < idx ? " done" : i === idx ? " on" : "")}>
+          <span className="cmd-dot">{i < idx ? <Icon name="check" size={12} /> : i + 1}</span>
+          <span className="cmd-step-lbl">{STATUS_LABEL[s]}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 
@@ -532,8 +549,11 @@ function MesDemandes() {
           </span>
         </span>
       }>
+        {/* Progression de la demande : où en est ma commande. */}
+        <DemandeSteps status={r.status} />
+
         {/* Le créneau d'abord : c'est la seule ligne qui engage le stagiaire à se déplacer. */}
-        <p className={"dem-retrait" + (r.status === "PRETE" ? " prete" : "")}>
+        <p className={"dem-retrait" + (r.status === "PRETE" ? " prete" : "")} style={{ marginTop: 12 }}>
           <Icon name="clock" size={14} />
           {r.pickup_at
             ? <>Retrait le <b>{labelJour(String(r.pickup_at).slice(0, 10))} à {String(r.pickup_at).slice(11, 16)}</b></>
