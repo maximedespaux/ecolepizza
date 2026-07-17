@@ -89,12 +89,17 @@ function Ventes() {
     });
     setPick(""); setQty(1);
   }
-  // Ajoute un article de la boutique au panier (une unité par clic).
+  // Ajoute un article de la boutique au panier (une unité par clic), SANS dépasser le stock.
   function addItem(it) {
+    const stock = Number(it.quantity) || 0;
+    if (stock <= 0) return;
     setCart((c) => {
       const ex = c.find((l) => l.item_id === it.id);
-      if (ex) return c.map((l) => (l.item_id === it.id ? { ...l, quantity: l.quantity + 1 } : l));
-      return [...c, { item_id: it.id, name: it.name, quantity: 1, unit_price: Number(it.unit_price || 0), tax_rate: Number(it.tax_rate || 0), disc: "", stock: it.quantity }];
+      if (ex) {
+        if (ex.quantity >= stock) return c; // stock atteint : on n'ajoute pas
+        return c.map((l) => (l.item_id === it.id ? { ...l, quantity: Math.min(stock, l.quantity + 1) } : l));
+      }
+      return [...c, { item_id: it.id, name: it.name, quantity: 1, unit_price: Number(it.unit_price || 0), tax_rate: Number(it.tax_rate || 0), disc: "", stock }];
     });
   }
   const removeLine = (id) => setCart((c) => c.filter((l) => l.item_id !== id));
@@ -172,19 +177,23 @@ function Ventes() {
                     ))}
                   </div>
                   <div className="shop-grid">
-                    {posShown.map((it) => (
-                      <div key={it.id} className="shop-card">
-                        {!posCat ? <span className="shop-rayon">{it.category || "Divers"}</span> : null}
-                        <b className="shop-name">{it.name}</b>
-                        <span className="shop-price"><b className="tnum">{euro(it.unit_price)} <span className="shop-unit">HT</span></b></span>
-                        {it.quantity <= 0
-                          ? <span className="shop-stock"><Icon name="clock" size={12} /> Rupture</span>
-                          : <span className="hint" style={{ fontSize: 11 }}>{it.quantity} en stock</span>}
-                        <button className="btn sm shop-add" style={{ marginTop: 8, width: "100%" }} onClick={() => addItem(it)} disabled={it.quantity <= 0}>
-                          <Icon name="plus" size={14} /> Ajouter
-                        </button>
-                      </div>
-                    ))}
+                    {posShown.map((it) => {
+                      const inC = cart.find((l) => l.item_id === it.id)?.quantity || 0;
+                      const atMax = it.quantity <= 0 || inC >= it.quantity; // stock épuisé ou déjà tout au panier
+                      return (
+                        <div key={it.id} className="shop-card">
+                          {!posCat ? <span className="shop-rayon">{it.category || "Divers"}</span> : null}
+                          <b className="shop-name">{it.name}</b>
+                          <span className="shop-price"><b className="tnum">{euro(it.unit_price)} <span className="shop-unit">HT</span></b></span>
+                          {it.quantity <= 0
+                            ? <span className="shop-stock"><Icon name="clock" size={12} /> Rupture</span>
+                            : <span className="hint" style={{ fontSize: 11 }}>{it.quantity} en stock{inC ? ` · ${inC} au panier` : ""}</span>}
+                          <button className="btn sm shop-add" style={{ marginTop: 8, width: "100%" }} onClick={() => addItem(it)} disabled={atMax}>
+                            <Icon name={atMax ? "check" : "plus"} size={14} /> {atMax ? (it.quantity <= 0 ? "Rupture" : "Stock atteint") : "Ajouter"}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}
@@ -245,8 +254,8 @@ function Ventes() {
                           <b>{l.name}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{euro(l.unit_price)} HT · TVA {l.tax_rate}%</span>
                         </span>
-                        <input type="number" min="1" max={l.stock} value={l.quantity} title="Quantité"
-                          onChange={(e) => setLine(l.item_id, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                        <input type="number" min="1" max={l.stock} value={l.quantity} title={`Quantité (max ${l.stock} en stock)`}
+                          onChange={(e) => setLine(l.item_id, { quantity: Math.min(Number(l.stock) || 1, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
                           className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} />
                         <input type="number" min="0" max="100" value={l.disc} title="Remise %"
                           onChange={(e) => { const v = e.target.value; setLine(l.item_id, { disc: v === "" ? "" : Math.min(100, Math.max(0, Number(v) || 0)) }); }}
