@@ -15,7 +15,7 @@ const db = require('../config/database.js');
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
 
 /* Le stagiaire ne pilote pas son statut : c'est l'école qui prépare, remet et facture. */
-const STATUSES = ['NOUVELLE', 'EN_PREPARATION', 'PRETE', 'REMISE', 'FACTUREE', 'ANNULEE'];
+const STATUSES = ['NOUVELLE', 'EN_PREPARATION', 'PRETE', 'PAYE', 'FACTUREE', 'REMISE', 'ANNULEE'];
 
 /**
  * GET /api/boutique/demandes?status=…

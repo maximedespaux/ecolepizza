@@ -18,25 +18,29 @@ import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopReque
  * pas, elle met en relation — la facturer reviendrait à encaisser la vente d'un autre.
  */
 
-const FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "REMISE", "FACTUREE"];
+const FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "PAYE", "FACTUREE", "REMISE"];
 const LABEL = {
   NOUVELLE: "Reçue", EN_PREPARATION: "En préparation", PRETE: "Prête à retirer",
-  REMISE: "Remise", FACTUREE: "Facturée", ANNULEE: "Annulée",
+  PAYE: "Payé", FACTUREE: "Facturé", REMISE: "Remis", ANNULEE: "Annulée",
 };
 /* Classes réellement définies dans app.css : g (vert) · a (ambre) · r (rouge) · b (bleu) · n (neutre).
    Une classe inventée sortirait un badge sans style, et le build n'en dirait rien. */
-const TONE = { NOUVELLE: "r", EN_PREPARATION: "a", PRETE: "g", REMISE: "b", FACTUREE: "n", ANNULEE: "n" };
+const TONE = { NOUVELLE: "r", EN_PREPARATION: "a", PRETE: "g", PAYE: "a", FACTUREE: "n", REMISE: "b", ANNULEE: "n" };
 
 function Demande({ d, onChange }) {
   const [busy, setBusy] = useState(false);
   const idx = FLOW.indexOf(d.status);            // position dans le flux (−1 si ANNULEE)
   const inFlow = idx >= 0;
-  const locked = d.status === "FACTUREE" || d.status === "ANNULEE"; // plus d'avance/recul
+  const hasInvoice = !!d.invoice_id;
   const prev = idx > 0 ? FLOW[idx - 1] : null;
   const next = idx >= 0 && idx < FLOW.length - 1 ? FLOW[idx + 1] : null;
-  const facturable = d.lines.some((l) => l.source === "ECOLE" && l.unit_price_ht != null) && !d.invoice_id;
-  // La facture n'apparaît qu'EN FIN de parcours (prête / remise), plus au début.
-  const showFacture = facturable && (d.status === "PRETE" || d.status === "REMISE");
+  const facturable = d.lines.some((l) => l.source === "ECOLE" && l.unit_price_ht != null) && !hasInvoice;
+  // La facture = la transition « Payé → Facturé » : le bouton n'apparaît qu'à l'étape Payé.
+  const showFacture = facturable && d.status === "PAYE";
+  // On ne peut plus reculer une fois la facture émise.
+  const canPrev = !!prev && d.status !== "ANNULEE" && !hasInvoice;
+  // « Suivant » gère toutes les transitions SAUF « → Facturé » (qui passe par la facture).
+  const canNext = !!next && next !== "FACTUREE" && d.status !== "ANNULEE";
 
   async function setStatus(status) {
     setBusy(true);
@@ -119,10 +123,10 @@ function Demande({ d, onChange }) {
       )}
 
       <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
-        {prev && !locked ? <button className="btn sm ghost" onClick={() => setStatus(prev)} disabled={busy}>
+        {canPrev ? <button className="btn sm ghost" onClick={() => setStatus(prev)} disabled={busy}>
           <Icon name="chevron-left" size={14} /> Précédent
         </button> : null}
-        {next && next !== "FACTUREE" && !locked ? <button className="btn sm primary" onClick={() => setStatus(next)} disabled={busy}>
+        {canNext ? <button className="btn sm primary" onClick={() => setStatus(next)} disabled={busy}>
           Suivant : {LABEL[next]} <Icon name="chevron-right" size={14} />
         </button> : null}
         {showFacture ? <button className="btn sm" onClick={facturer} disabled={busy}>

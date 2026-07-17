@@ -32,10 +32,10 @@ import {
 
 const STATUS_LABEL = {
   NOUVELLE: "Reçue", EN_PREPARATION: "En préparation", PRETE: "Prête à retirer",
-  REMISE: "Remise", FACTUREE: "Facturée", ANNULEE: "Annulée",
+  PAYE: "Payé", FACTUREE: "Facturé", REMISE: "Remis", ANNULEE: "Annulée",
 };
 // Étapes visibles par le stagiaire (progression de sa demande).
-const DEMANDE_FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "REMISE", "FACTUREE"];
+const DEMANDE_FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "PAYE", "FACTUREE", "REMISE"];
 
 function DemandeSteps({ status }) {
   const idx = DEMANDE_FLOW.indexOf(status);
@@ -514,7 +514,7 @@ function PanierTab({ onSent }) {
    chercher), ambre = ça bouge, bleu = c'est fini, rouge = ça n'aboutira pas. Le libellé porte
    déjà le sens seul — la couleur ne fait que le rendre repérable d'un coup d'œil. */
 const STATUS_BADGE = {
-  NOUVELLE: "n", EN_PREPARATION: "a", PRETE: "g", REMISE: "b", FACTUREE: "b", ANNULEE: "r",
+  NOUVELLE: "n", EN_PREPARATION: "a", PRETE: "g", PAYE: "a", FACTUREE: "b", REMISE: "b", ANNULEE: "r",
 };
 
 /* Total d'une demande. Une ligne partenaire n'a pas de prix (« tarif sur demande ») : on ne
