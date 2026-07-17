@@ -89,6 +89,7 @@ function mergeSteps(rows = []) {
         if (r.company_level != null) m.company_level = r.company_level ? 1 : 0;
         if (r.company_sign != null) m.company_sign = r.company_sign ? 1 : 0;
         if (r.signers != null) m.signers = r.signers; // nouveau modèle : liste de signataires
+        if (r.avail_phase != null) m.avail_phase = r.avail_phase; // disponibilité : any|during|end
         if (r.active != null) m.active = r.active;
         m.has_file = !!r.has_file;
         bySlug.set(r.slug, m);

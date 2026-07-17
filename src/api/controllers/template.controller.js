@@ -22,7 +22,7 @@ async function loadRows(organizationId) {
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
          FROM document_template WHERE organization_id = ?`;
     // Colonnes optionnelles (migrations 077 / 086 / 087 / 088) : on retombe en cascade si absentes.
-    for (const extra of [', company_level, company_sign, signers', ', company_level, company_sign', ', company_level', '']) {
+    for (const extra of [', company_level, company_sign, signers, avail_phase', ', company_level, company_sign, signers', ', company_level, company_sign', ', company_level', '']) {
         try { const [rows] = await db.promise().query(sel(extra), [organizationId]); return rows; }
         catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; }
     }
@@ -113,7 +113,7 @@ async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
     // sans elles plutôt que d'échouer.
-    const OPTIONAL = ['layout', 'company_level', 'company_sign', 'signers'];
+    const OPTIONAL = ['layout', 'company_level', 'company_sign', 'signers', 'avail_phase'];
     const run = async (f) => {
         const keys = Object.keys(f);
         if (ex.length) {
@@ -169,6 +169,8 @@ const saveTemplate = async (req, res) => {
     if (b.active !== undefined) fields.active = b.active ? 1 : 0;
     if (b.company_level !== undefined) fields.company_level = b.company_level ? 1 : 0;
     if (b.company_sign !== undefined) fields.company_sign = b.company_sign ? 1 : 0;
+    // Disponibilité selon l'avancement de la formation : any | during | end (sinon NULL).
+    if (b.avail_phase !== undefined) fields.avail_phase = ['any', 'during', 'end'].includes(b.avail_phase) ? b.avail_phase : null;
     // Corps construit dans l'éditeur : passe l'étape en mode « builder ».
     if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }

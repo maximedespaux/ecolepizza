@@ -184,7 +184,10 @@ function StagiaireDetail() {
   const DURING_TYPES = new Set(["EMARGEMENT"]);
   const selTpl = templates.find((t) => t.slug === prep.slug);
   const selEnr = enrollments.filter((e) => prep.enrollment_ids.includes(e.id));
-  const phase = selTpl ? (END_TYPES.has(selTpl.doc_type) ? "end" : DURING_TYPES.has(selTpl.doc_type) ? "during" : "any") : "any";
+  // Disponibilité : réglage du modèle (avail_phase) prioritaire ; sinon repli sur le
+  // classement par type (rétro-compat pour les modèles non encore configurés).
+  const phaseOf = (t) => t?.avail_phase || (END_TYPES.has(t?.doc_type) ? "end" : DURING_TYPES.has(t?.doc_type) ? "during" : "any");
+  const phase = selTpl ? phaseOf(selTpl) : "any";
   const startedAll = selEnr.length > 0 && selEnr.every((e) => e.start_date && e.start_date <= todayISO);
   const finishedAll = selEnr.length > 0 && selEnr.every((e) => e.end_date && e.end_date <= todayISO);
   let gateReason = "";

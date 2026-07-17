@@ -477,6 +477,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
       ...(step.company_sign ? ["ENTREPRISE"] : []),
     ],
     company_level: !!step.company_level,
+    avail_phase: step.avail_phase || "", // "" = toujours · "during" · "end"
     sign_formateur: !!(step.config && step.config.show_formateurs),
     sign_intervenant: !!(step.config && step.config.show_intervenants),
     sign_organization: !!(step.config && step.config.show_organization),
@@ -511,6 +512,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         await saveTemplate(slug, {
           label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
           signers: form.signers, company_level: form.company_level,
+          avail_phase: form.avail_phase || "any",
           active: form.active, applies_when,
         });
       }
@@ -600,7 +602,16 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
                   <input type="checkbox" checked={hasSigner("EXTERNAL")} onChange={() => toggleSigner("EXTERNAL")} /> Externe</label>
               </div>
               <p className="hint" style={{ margin: "0 0 8px" }}>L'<b>organisme signe en dernier</b> (contreseing automatique après les autres parties). Un document est « signé » quand tous ses signataires ont signé.</p>
-              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 4 }}>
+              <div className="field" style={{ marginTop: 6, marginBottom: 0, maxWidth: 340 }}>
+                <label>Disponibilité</label>
+                <select className="inp" value={form.avail_phase} onChange={set("avail_phase")}>
+                  <option value="">Toujours disponible</option>
+                  <option value="during">Une fois la formation commencée</option>
+                  <option value="end">Une fois la formation terminée</option>
+                </select>
+                <p className="hint" style={{ margin: "4px 0 0" }}>Verrouille la génération selon les dates de session (ex. certificat de réalisation → terminée).</p>
+              </div>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 10 }}>
                 <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
                   <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif</label>
                 <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Document produit une seule fois par entreprise + session, qui liste tous les stagiaires du groupe (jeton « Stagiaires »).">
