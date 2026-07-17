@@ -657,8 +657,6 @@ function Boutique() {
       ) : null}
 
       <div className="shop-layout">
-        <CartAside count={n} onCheckout={() => setCheckout(true)} />
-
         <div className="shop-main">
           {checkout ? (
             <>
@@ -688,6 +686,8 @@ function Boutique() {
             </>
           )}
         </div>
+
+        <CartAside count={n} onCheckout={() => setCheckout(true)} />
       </div>
     </>
   );
