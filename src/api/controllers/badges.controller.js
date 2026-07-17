@@ -16,14 +16,17 @@ async function count(conn, sql, params) {
 const getBadges = async (req, res) => {
     const conn = db.promise();
     const org = req.user.organization_id;
-    const [lowStock, unpaid] = [
+    const [lowStock, unpaid, shopPending] = [
         await count(conn, 'SELECT COUNT(*) AS n FROM inventory_item WHERE organization_id = ? AND quantity <= threshold', [org]),
         await count(conn, "SELECT COUNT(*) AS n FROM invoice WHERE organization_id = ? AND type IN ('FACTURE','ACOMPTE') AND status IN ('EMISE','IMPAYEE')", [org]),
+        // Demandes boutique en cours : ni facturées ni annulées.
+        await count(conn, "SELECT COUNT(*) AS n FROM shop_request WHERE organization_id = ? AND status NOT IN ('FACTUREE', 'ANNULEE')", [org]),
     ];
     res.json({
         data: {
             '/inventaire': lowStock,
             '/factures': unpaid,
+            '/demandes-boutique': shopPending,
         },
     });
 };
