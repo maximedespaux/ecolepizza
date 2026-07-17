@@ -1200,6 +1200,19 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 
 /* Boutique stagiaire — grille de produits. auto-fill + minmax : la grille se remplit toute
    seule du téléphone au grand écran, sans media query à maintenir. */
+/* Boutique : panier persistant à gauche + catalogue à droite. */
+.shop-layout{display:grid;grid-template-columns:270px minmax(0,1fr);gap:20px;align-items:start}
+.shop-aside{position:sticky;top:70px}
+.shop-main{min-width:0}
+.cart-mini-list{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow-y:auto}
+.cart-mini{display:flex;align-items:center;gap:8px}
+.cart-mini-lbl{flex:1;min-width:0;font-size:12.5px;line-height:1.25;overflow:hidden}
+.cart-mini-qty{display:inline-flex;align-items:center;gap:5px;flex:none}
+.cart-mini-qty .iconbtn{padding:2px}
+@media(max-width:760px){
+  .shop-layout{grid-template-columns:1fr}
+  .shop-aside{position:static;order:2;margin-top:18px}
+}
 .shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
 .shop-card{display:flex;flex-direction:column;gap:5px;padding:14px 12px;border:1px solid var(--border);
   border-radius:14px;background:var(--surface);transition:border-color .14s var(--ease),transform .14s var(--ease)}

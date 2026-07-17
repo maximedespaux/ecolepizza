@@ -571,8 +571,60 @@ function MesDemandes() {
   });
 }
 
+/**
+ * Panier PERSISTANT à gauche de l'écran : toujours visible, il liste les articles ajoutés
+ * (via le localStorage géré par lib/cart.js). Le bouton « Valider » ouvre le récapitulatif
+ * complet (broderie + créneau) ; à l'envoi, le panier (localStorage) est vidé.
+ */
+function CartAside({ count, onCheckout }) {
+  const [lines, setLines] = useState(getCart);
+  useEffect(() => {
+    const sync = () => setLines(getCart());
+    window.addEventListener(CART_EVENT, sync);
+    return () => window.removeEventListener(CART_EVENT, sync);
+  }, []);
+  const t = cartTotals(lines);
+  return (
+    <aside className="shop-aside">
+      <div className="card" style={{ padding: 14 }}>
+        <div className="card-ttl" style={{ marginBottom: 10 }}><Icon name="shopping-cart" size={16} /> Mon panier{count ? ` (${count})` : ""}</div>
+        {lines.length === 0 ? (
+          <p className="hint" style={{ margin: 0 }}>Panier vide. Ajoute du matériel depuis la boutique.</p>
+        ) : (
+          <>
+            <div className="cart-mini-list">
+              {lines.map((l) => { const k = lineKey(l); return (
+                <div key={k} className="cart-mini">
+                  <span className="cart-mini-lbl">{l.label}
+                    {variantValue(l) ? <span className="badge b" style={{ marginLeft: 4 }}>{variantValue(l)}</span> : null}</span>
+                  <span className="cart-mini-qty">
+                    <button className="iconbtn" onClick={() => setQty(k, l.qty - 1)} aria-label="Retirer un"><Icon name="minus" size={12} /></button>
+                    <b className="tnum">{l.qty}</b>
+                    <button className="iconbtn" onClick={() => setQty(k, l.qty + 1)} aria-label="Ajouter un"><Icon name="plus" size={12} /></button>
+                  </span>
+                  <button className="iconbtn del" onClick={() => setQty(k, 0)} aria-label="Retirer"><Icon name="x" size={12} /></button>
+                </div>
+              ); })}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+              <span style={{ fontWeight: 700 }}>Total</span>
+              <b className="tnum">{euro(t.ttc)} TTC</b>
+            </div>
+            {t.aDefinir ? <p className="hint" style={{ margin: "4px 0 0", fontSize: 11 }}>Hors articles au tarif partenaire.</p> : null}
+            <button className="btn primary" style={{ width: "100%", marginTop: 12 }} onClick={onCheckout}>
+              <Icon name="send" size={14} /> Valider ma demande
+            </button>
+            <button className="btn ghost sm" style={{ width: "100%", marginTop: 6 }} onClick={() => clearCart()}>Vider le panier</button>
+          </>
+        )}
+      </div>
+    </aside>
+  );
+}
+
 function Boutique() {
   const [tab, setTab] = useState("ecole");
+  const [checkout, setCheckout] = useState(false); // récapitulatif (broderie + créneau) avant envoi
   const [n, setN] = useState(cartCount);
   const [sent, setSent] = useState(null);
   const [pretes, setPretes] = useState(0);
@@ -604,26 +656,39 @@ function Boutique() {
         </div>
       ) : null}
 
-      <div className="kind-seg" style={{ marginBottom: 18 }}>
-        <button className={"kind-btn" + (tab === "ecole" ? " on" : "")} onClick={() => setTab("ecole")}>
-          <Icon name="package" size={15} /> Le matériel de l'école
-        </button>
-        <button className={"kind-btn" + (tab === "partenaires" ? " on" : "")} onClick={() => setTab("partenaires")}>
-          <Icon name="users" size={15} /> Offres partenaires
-        </button>
-        <button className={"kind-btn" + (tab === "panier" ? " on" : "")} onClick={() => setTab("panier")}>
-          <Icon name="shopping-cart" size={15} /> Mon panier{n ? ` (${n})` : ""}
-        </button>
-        <button className={"kind-btn" + (tab === "demandes" ? " on" : "")} onClick={() => setTab("demandes")}>
-          <Icon name="history" size={15} /> Mes demandes
-          {pretes ? <span className="kind-pastille" title="prête(s) à retirer">{pretes}</span> : null}
-        </button>
-      </div>
+      <div className="shop-layout">
+        <CartAside count={n} onCheckout={() => setCheckout(true)} />
 
-      {tab === "ecole" ? <EcoleTab />
-        : tab === "partenaires" ? <PartenairesTab />
-        : tab === "demandes" ? <MesDemandes />
-        : <PanierTab onSent={(ref) => { setSent(ref); setTab("demandes"); }} />}
+        <div className="shop-main">
+          {checkout ? (
+            <>
+              <button className="btn ghost sm" style={{ marginBottom: 14 }} onClick={() => setCheckout(false)}>
+                <Icon name="chevron-left" size={14} /> Continuer mes achats
+              </button>
+              <PanierTab onSent={(ref) => { setSent(ref); setCheckout(false); setTab("demandes"); }} />
+            </>
+          ) : (
+            <>
+              <div className="kind-seg" style={{ marginBottom: 18 }}>
+                <button className={"kind-btn" + (tab === "ecole" ? " on" : "")} onClick={() => setTab("ecole")}>
+                  <Icon name="package" size={15} /> Le matériel de l'école
+                </button>
+                <button className={"kind-btn" + (tab === "partenaires" ? " on" : "")} onClick={() => setTab("partenaires")}>
+                  <Icon name="users" size={15} /> Offres partenaires
+                </button>
+                <button className={"kind-btn" + (tab === "demandes" ? " on" : "")} onClick={() => setTab("demandes")}>
+                  <Icon name="history" size={15} /> Mes demandes
+                  {pretes ? <span className="kind-pastille" title="prête(s) à retirer">{pretes}</span> : null}
+                </button>
+              </div>
+
+              {tab === "ecole" ? <EcoleTab />
+                : tab === "partenaires" ? <PartenairesTab />
+                : <MesDemandes />}
+            </>
+          )}
+        </div>
+      </div>
     </>
   );
 }
