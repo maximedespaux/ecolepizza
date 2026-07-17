@@ -165,6 +165,27 @@ const invoiceShopRequest = async (req, res) => {
 };
 
 /**
+ * DELETE /api/boutique/demandes/:id — supprime une demande (et ses lignes, en cascade).
+ * Refuse si la demande est déjà FACTURÉE (une facture existe) : détacher/supprimer
+ * d'abord la facture pour garder la traçabilité.
+ */
+const deleteShopRequest = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[r]] = await conn.query('SELECT id, invoice_id, status FROM shop_request WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!r) return res.status(404).json({ message: 'Demande introuvable.' });
+        if (r.invoice_id || r.status === 'FACTUREE') return res.status(409).json({ message: 'Demande facturée : gérez d’abord la facture.' });
+        await conn.query('DELETE FROM shop_request WHERE id = ? AND organization_id = ?', [req.params.id, orgId]); // lignes en cascade
+        res.json({ success: true });
+    } catch (err) {
+        if (isMissingSchema(err)) return res.status(503).json({ message: 'Migration 096 non jouée.' });
+        console.error('Erreur suppression demande :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
  * GET /api/boutique/retraits?from=YYYY-MM-DD&to=YYYY-MM-DD
  * Les retraits prévus sur une plage — sert à afficher « Récupérer le matériel » sur la page
  * d'une session, aux dates de cette session.
@@ -214,4 +235,4 @@ const listPickups = async (req, res) => {
     }
 };
 
-module.exports = { listShopRequests, updateShopRequest, invoiceShopRequest, listPickups };
+module.exports = { listShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, listPickups };

@@ -624,6 +624,9 @@ export function updateShopRequest(id, patch) {
 export function invoiceShopRequest(id) {
   return request(`/boutique/demandes/${id}/facture`, { method: "POST" });
 }
+export function deleteShopRequest(id) {
+  return request(`/boutique/demandes/${id}`, { method: "DELETE" });
+}
 // Retraits de matériel prévus sur une plage de dates (page d'une session).
 export function getPickups(from, to) {
   return request(`/boutique/retraits?from=${from}&to=${to}`);

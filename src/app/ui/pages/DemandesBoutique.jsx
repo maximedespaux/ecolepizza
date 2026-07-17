@@ -5,7 +5,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
 import { initials } from "../lib/format.js";
-import { getShopRequests, updateShopRequest, invoiceShopRequest } from "../api/apiClient.js";
+import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest } from "../api/apiClient.js";
 
 /**
  * Zone « Demandes boutique » — le pendant école de la boutique stagiaire.
@@ -39,6 +39,13 @@ function Demande({ d, onChange }) {
   async function facturer() {
     setBusy(true);
     try { await invoiceShopRequest(d.id); onChange(); } finally { setBusy(false); }
+  }
+  async function supprimer() {
+    if (!window.confirm(`Supprimer définitivement la demande ${d.ref} de ${d.learner.last_name} ${d.learner.first_name} ?`)) return;
+    setBusy(true);
+    try { await deleteShopRequest(d.id); onChange(); }
+    catch (e) { window.alert(e.message || "Suppression impossible."); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -101,6 +108,7 @@ function Demande({ d, onChange }) {
         {d.invoice_id ? <span className="badge g"><Icon name="check" size={12} /> Facturée</span> : null}
         <span style={{ flex: 1 }} />
         {d.status !== "ANNULEE" ? <button className="btn sm ghost" onClick={() => setStatus("ANNULEE")} disabled={busy}>Annuler</button> : null}
+        {!d.invoice_id ? <button className="btn sm ghost danger" onClick={supprimer} disabled={busy} title="Supprimer la demande"><Icon name="trash" size={14} /></button> : null}
       </div>
     </Card>
   );
