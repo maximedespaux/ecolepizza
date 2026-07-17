@@ -170,7 +170,7 @@ function Suivi() {
       <PageHead
         eyebrow="Qualiopi"
         title="Suivi de conformité"
-        lead="Suivez la conformité des dossiers, et retrouvez tous les documents partagés et signés, classés par année, semaine, formation et stagiaire."
+        lead="Conformité des dossiers et coffre des documents signés."
         actions={
           <div style={{ display: "flex", gap: 8 }}>
             <button className={"btn sm " + (tab === "conformite" ? "primary" : "ghost")} onClick={() => setTab("conformite")}>Conformité</button>
@@ -372,7 +372,7 @@ function ArchivesView({ onError, onInfo }) {
       </div>
       {isAdmin && !isEnt && (
         <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
-          Choisissez un dossier organisé en <b>année / semaine / (formation) / stagiaire</b>. Seuls les PDF sont importés ; pour de gros volumes, importez année par année ou semaine par semaine.
+          Dossier <b>année / semaine / formation / stagiaire</b> · PDF uniquement.
         </p>
       )}
 

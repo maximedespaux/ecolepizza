@@ -328,8 +328,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           {parcoursKind === "stagiaire" ? (
             <>
               <p className="hint" style={{ marginTop: 0 }}>
-                Composez l'enchaînement des documents du dossier : <b>＋ Ajouter une étape</b> pour en insérer une, <b>✕</b> pour la retirer. Les variantes d'un même jalon (ex. <b>Devis particulier</b> / <b>Devis entreprise</b>) s'affichent comme un choix « OU » : chaque dossier n'en suit qu'une, selon son financement. Les documents de groupe (🏢 « Document entreprise ») ne s'ajoutent pas ici : ils se gèrent dans l'onglet <b>À l'arrivée via une entreprise</b>. Glissez un bloc pour réordonner ; les QCM rattachés sont proposés à l'ajout.
-                <br />Clique sur une <b style={{ color: "var(--ember1)" }}>flèche 🚧</b> entre deux jalons pour placer le <b>point d'accès à l'émargement</b> : le stagiaire ne pourra émarger qu'après avoir signé tous ses documents situés avant ce point.
+                Enchaînement des documents du dossier · variantes empilées = choix « OU » · <b style={{ color: "var(--ember1)" }}>🚧</b> = accès émargement · 🏢 se gèrent dans l'autre onglet.
               </p>
               {steps.length === 0 ? (
                 <p className="hint">Aucun document candidat.</p>
@@ -613,7 +612,7 @@ function CompanySection({ steps, value, onChange, onToggleActive }) {
   return (
     <div className="parcours compact" ref={ref}>
       <p className="hint" style={{ marginTop: 0 }}>
-        Documents traités quand une <b>entreprise</b> inscrit ses stagiaires : ajoutez ici les documents de <b>groupe</b> (🏢) <b>et</b> les documents <b>stagiaire</b> concernés. Glissez un bloc pour réordonner. Cette section sert de repère sur la fiche entreprise ; elle n'enlève rien au parcours du dossier.
+        Parcours quand une <b>entreprise</b> inscrit ses stagiaires : documents de <b>groupe</b> (🏢) <b>et</b> stagiaire. Glissez pour réordonner.
       </p>
       <div className="parcours-flow">
         {chosen.map((s, i) => (

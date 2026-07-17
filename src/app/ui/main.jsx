@@ -49,6 +49,8 @@ import EmargementStagiaire from "./pages/EmargementStagiaire.jsx";
 import MesFormations from "./pages/MesFormations.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
 import PizzaQuest from "./pages/PizzaQuest.jsx";
+import Boutique from "./pages/Boutique.jsx";
+import DemandesBoutique from "./pages/DemandesBoutique.jsx";
 import PateWizard from "./pages/PateWizard.jsx";
 import GarnitureWizard from "./pages/GarnitureWizard.jsx";
 import RealisationWizard from "./pages/RealisationWizard.jsx";
@@ -162,6 +164,7 @@ function AppRoutes() {
           <Route path="communaute" element={<Communaute />} />
           <Route path="notions" element={<Notions />} />
           <Route path="pizza-quest" element={<PizzaQuest />} />
+          <Route path="boutique" element={<Boutique />} />
           {isIntervenant && <Route path="intervention" element={<IntervenantEspace />} />}
           {user?.has_company && <Route path="entreprise-documents" element={<RepresentantEspace />} />}
           <Route path="*" element={<Navigate to="/formations" replace />} />
@@ -185,6 +188,7 @@ function AppRoutes() {
           <Route path="partenaires" element={<Guard nav="/partenaires" roles={STAFF}><Partenaires /></Guard>} />
           <Route path="ventes" element={<Guard nav="/ventes" roles={ADMIN}><Ventes /></Guard>} />
           <Route path="inventaire" element={<Guard nav="/ventes" roles={ADMIN}><Inventaire /></Guard>} />
+          <Route path="demandes-boutique" element={<Guard nav="/demandes-boutique" roles={ADMIN}><DemandesBoutique /></Guard>} />
           <Route path="factures" element={<Guard nav="/factures" roles={ADMIN}><Factures /></Guard>} />
           <Route path="comptabilite" element={<Guard nav="/comptabilite" roles={ADMIN}><Comptabilite /></Guard>} />
           <Route path="produit-divers" element={<Guard nav="/produit-divers" roles={STAFF}><ProduitDivers /></Guard>} />

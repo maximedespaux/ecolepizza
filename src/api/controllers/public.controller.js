@@ -40,6 +40,10 @@ const submitSign = async (req, res) => {
         const signer_name = String((req.body || {}).signer_name || '').trim();
         const signature_data = (req.body || {}).signature_data;
         if (!signer_name || !signature_data) return res.status(422).json({ message: 'Nom et signature requis.' });
+        // Hygiène d'entrée : la signature doit être une image data-URL (png/jpeg/gif), taille bornée.
+        if (typeof signature_data !== 'string' || !/^data:image\/(png|jpe?g|gif);base64,/.test(signature_data) || signature_data.length > 2_000_000) {
+            return res.status(422).json({ message: 'Signature invalide.' });
+        }
         const [[doc]] = await conn.query('SELECT * FROM generated_document WHERE id = ?', [link.document_id]);
         if (!doc) return res.status(404).json({ message: 'Document introuvable.' });
         if (doc.status === 'SIGNE') return res.status(409).json({ message: 'Ce document a déjà été signé.' });

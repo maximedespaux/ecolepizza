@@ -568,6 +568,9 @@ export function getMonEspace() {
   return request("/mon-espace");
 }
 
+export function getMyAccess() {
+  return request("/mon-espace/access", { silent: true });
+}
 export function getMyFormations() {
   return request("/mon-espace/formations");
 }
@@ -585,6 +588,45 @@ export function saveMyAvatar(avatar) {
 }
 export function saveMyQuest(progress) {
   return request("/mon-espace/quest", { method: "PUT", body: JSON.stringify({ progress }), silent: true });
+}
+
+// --- Boutique stagiaire ---
+// Deux sources DIFFÉRENTES, à ne pas fusionner : `getBoutique` = le stock que l'école achète
+// et revend (elle est le marchand) ; `getBoutiquePartenaires` = ce que vendent nos partenaires
+// (l'école présente et met en relation). Prix, responsabilité et SAV n'ont rien à voir.
+export function getBoutique() {
+  return request("/mon-espace/boutique");
+}
+export function getBoutiquePartenaires() {
+  return request("/mon-espace/boutique/partenaires");
+}
+// Le panier validé devient une DEMANDE (pas une commande payée) : le stagiaire retire à
+// l'école et paie sur place. Les prix sont relus en base côté serveur — on n'envoie que les ids.
+export function createShopRequest(lines, note, pickup_at) {
+  return request("/mon-espace/boutique/demande", { method: "POST", body: JSON.stringify({ lines, note, pickup_at }) });
+}
+// Les créneaux viennent de l'API, jamais d'une table recopiée dans le front : sinon les deux
+// divergent et on propose un créneau que le serveur refuse (cf. api/lib/horaires.js).
+export function getPickupSlots(textile) {
+  return request(`/mon-espace/boutique/creneaux${textile ? "?textile=1" : ""}`);
+}
+export function getMyShopRequests() {
+  return request("/mon-espace/boutique/mes-demandes");
+}
+
+// --- Boutique côté école (zone « Demandes ») ---
+export function getShopRequests(status) {
+  return request(`/boutique/demandes${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+}
+export function updateShopRequest(id, patch) {
+  return request(`/boutique/demandes/${id}`, { method: "PUT", body: JSON.stringify(patch) });
+}
+export function invoiceShopRequest(id) {
+  return request(`/boutique/demandes/${id}/facture`, { method: "POST" });
+}
+// Retraits de matériel prévus sur une plage de dates (page d'une session).
+export function getPickups(from, to) {
+  return request(`/boutique/retraits?from=${from}&to=${to}`);
 }
 
 // --- Fiches techniques (recettes) + catalogue d'ingrédients ---

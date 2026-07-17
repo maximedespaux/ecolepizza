@@ -40,6 +40,7 @@ export const NAV = [
     grp: "Ventes & Finance",     // encaissement, stock, compta
     items: [
       { to: "/ventes", ic: "cart", label: "Ventes & Inventaire", roles: ADMIN },
+      { to: "/demandes-boutique", ic: "package", label: "Demandes boutique", roles: ADMIN },
       { to: "/produit-divers", ic: "coins", label: "Produit divers", roles: ["FORMATEUR"] },
       { to: "/factures", ic: "receipt", label: "Facturation", roles: ADMIN },
       { to: "/comptabilite", ic: "calculator", label: "Comptabilité", roles: ADMIN },
@@ -80,6 +81,7 @@ export const PAGE_TITLES = {
   "/partenaires": "Partenaires",
   "/inventaire": "Inventaire",
   "/ventes": "Ventes de Matériels et Inventaire",
+  "/demandes-boutique": "Demandes boutique",
   "/factures": "Facturation",
   "/comptabilite": "Comptabilité",
   "/reglages": "Organisme",

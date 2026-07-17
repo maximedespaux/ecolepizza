@@ -97,7 +97,10 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; // migration 049 non jouée : signature statique
         }
     }
-    const [[learner]] = await conn.query('SELECT * FROM learner WHERE id = ?', [learnerId]);
+    // Anti-fuite inter-organisation : on ne charge le stagiaire QUE s'il appartient à
+    // l'organisme du document (sinon un document d'un org lié à un learner_id d'un autre
+    // org ne doit jamais révéler ses données).
+    const [[learner]] = await conn.query('SELECT * FROM learner WHERE id = ? AND organization_id = ?', [learnerId, organizationId]);
     let company = null;
     const [formations] = await conn.query(
         `SELECT p.code, p.title, p.days, p.hours, p.price, p.hygiene, p.rs_code AS rs_code,
@@ -311,7 +314,17 @@ const createDocument = async (req, res) => {
     }
     try {
         const conn = db.promise();
-        const documentId = await prepareLearnerDoc(conn, req.user.organization_id, { learnerId: learner_id, type, templateSlug: template_slug, title, enrollmentIds: enrollment_ids });
+        const orgId = req.user.organization_id;
+        // Anti-injection inter-organisation : le stagiaire ET les dossiers fournis dans le
+        // corps doivent appartenir à l'organisme de l'appelant (et les dossiers à ce stagiaire).
+        const [[l]] = await conn.query('SELECT id FROM learner WHERE id = ? AND organization_id = ?', [learner_id, orgId]);
+        if (!l) return res.status(404).json({ error: 'Stagiaire introuvable.' });
+        const enrIds = [...new Set(enrollment_ids.map((x) => String(x)))];
+        const [okEnr] = await conn.query(
+            'SELECT id FROM enrollment WHERE id IN (?) AND organization_id = ? AND learner_id = ?',
+            [enrIds, orgId, learner_id]);
+        if (okEnr.length !== enrIds.length) return res.status(422).json({ error: 'Formation(s) invalide(s) pour ce stagiaire.' });
+        const documentId = await prepareLearnerDoc(conn, orgId, { learnerId: learner_id, type, templateSlug: template_slug, title, enrollmentIds: enrIds });
         res.status(201).json({ message: 'Document préparé', id: documentId });
     } catch (err) {
         console.error('Erreur création document :', err);

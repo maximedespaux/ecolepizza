@@ -11,6 +11,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import Emargement from "../components/Emargement.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import SessionIntervenants from "../components/SessionIntervenants.jsx";
+import SessionRetraits from "../components/SessionRetraits.jsx";
 import NotesModal from "../components/NotesModal.jsx";
 import { colorOf, initials, scoreBadge } from "../lib/format.js";
 
@@ -259,6 +260,7 @@ function SessionDetail() {
       </div>
 
       <div style={{ marginTop: 16 }}>
+        <SessionRetraits startDate={session.start_date} endDate={session.end_date} />
         <SessionIntervenants sessionId={id} startDate={session.start_date} endDate={session.end_date} canEdit={isAdmin} />
       </div>
 

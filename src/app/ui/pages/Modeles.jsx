@@ -610,9 +610,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
           )}
           {!isEmarg && form.company_level && (
             <p className="hint" style={{ margin: "8px 0 0" }}>
-              Généré une fois par <b>entreprise + OPCO + session</b>, listant les stagiaires du groupe. Utilise le jeton <b>« Stagiaires »</b> (groupe Entreprise) pour la liste simple.
-              <br />Pour une <b>ligne personnalisée par stagiaire</b>, tape un bloc en texte brut : <code>{"{#Stagiaires}"}</code> … <code>{"{/Stagiaires}"}</code>. À l'intérieur, utilise les jetons <b>par stagiaire</b> : <code>{"{Personne}"}</code>, <code>{"{Civilité}"}</code>, <code>{"{Nom}"}</code>, <code>{"{Prénom}"}</code>, <code>{"{Email}"}</code>, <code>{"{Téléphone}"}</code>, <code>{"{OPCO}"}</code>, <code>{"{Ville}"}</code>, <code>{"{D_Naissance}"}</code>, <code>{"{N°}"}</code>.
-              <br />Ex. : <code>{"{#Stagiaires}"}{"{N°}"}. {"{Personne}"} — {"{OPCO}"}{"{/Stagiaires}"}</code>
+              Généré par <b>entreprise + OPCO + session</b>. Jeton <b>« Stagiaires »</b> = liste ; bloc <code>{"{#Stagiaires}…{/Stagiaires}"}</code> = ligne par stagiaire (palette <b>Groupe entreprise</b>).
             </p>
           )}
           <p className="sub" style={{ marginTop: 10 }}>

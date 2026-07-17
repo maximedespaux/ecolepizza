@@ -292,6 +292,24 @@ const PATHS = {
       <path d="M5 12h14" /><path d="M12 5v14" />
     </>
   ),
+  "minus": <path d="M5 12h14" />,
+  "edit": (
+    <>
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+    </>
+  ),
+  "shopping-cart": (
+    <>
+      <circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" />
+      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+    </>
+  ),
+  "info": (
+    <>
+      <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
+    </>
+  ),
   "check": <path d="M20 6 9 17l-5-5" />,
   "check-circle": (
     <>
@@ -300,7 +318,6 @@ const PATHS = {
   ),
   "circle": (<><circle cx="12" cy="12" r="10" /></>),
   "star": (<><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></>),
-  "search": (<><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></>),
   "x-circle": (
     <>
       <circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" />

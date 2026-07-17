@@ -4,6 +4,7 @@ import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import { colorOf } from "../lib/format.js";
 import { NIV1_CHAPTERS } from "../lib/niv1Questions.js";
+import { NIV2_CHAPTERS } from "../lib/niv2Questions.js";
 import { saveQuestProgress } from "../lib/gamification.js";
 
 /**
@@ -39,8 +40,12 @@ const DEMO_CHAPTERS = [
 ];
 const STEPS_PER_CH = 6;
 
-// Chapitres d'un monde : vraies questions pour le Niveau I, démo pour le reste.
-const chaptersFor = (w) => (roleOf(w) === "niv1" ? NIV1_CHAPTERS : DEMO_CHAPTERS);
+/* Chapitres d'un monde : chaque rôle a son manuel, donc sa banque. Ceux qui n'en ont pas
+   encore retombent sur la démo (8 questions recyclées) — c'est un pis-aller très visible,
+   il faut le remplacer manuel par manuel. Reste à faire : decouverte, niv1pro, niv2 → fait,
+   expert, spe. */
+const BANKS = { niv1: NIV1_CHAPTERS, niv2: NIV2_CHAPTERS };
+const chaptersFor = (w) => BANKS[roleOf(w)] || DEMO_CHAPTERS;
 
 const KEY = "pizzaquest.v1";
 const loadProg = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
@@ -76,7 +81,7 @@ function PizzaQuest() {
     getMyFormations().then((r) => {
       setWorlds((r.data || []).map((f) => ({
         code: f.program_code, title: f.program_title,
-        color: f.color || colorOf(f.program_code), unlocked: !!f.enrolled,
+        color: f.color || colorOf(f.program_code), unlocked: !!f.finished || ((!!f.has_badge || !!f.enrolled) && !f.revoked),
       })));
     }).catch(() => setWorlds([]));
   }, []);
@@ -222,7 +227,7 @@ function FCard({ w, prog, onPick, prereq }) {
       style={w.unlocked ? { background: w.color } : undefined}
       disabled={!w.unlocked}
       onClick={() => onPick(w.code)}
-      title={w.unlocked ? w.title : "Inscris-toi à une session pour débloquer ce niveau"}
+      title={w.unlocked ? w.title : "Obtiens le badge de ce niveau pour le débloquer"}
     >
       {prereq && <span className="pq-prereq" title="Prérequis">!</span>}
       <span className="pq-fcard-top">
@@ -296,6 +301,11 @@ function QuizModal({ world, data, onClose, onFinish }) {
   const type = q.t || "qcm";
   // Colonne de droite mélangée (recalculée à chaque question).
   const rightCol = useMemo(() => (type === "assoc" ? shuffled(q.pairs.map((p, li) => ({ text: p[1], li }))) : []), [q, type]);
+  /* Les banques écrivent la bonne réponse en premier (a: 0) — c'est lisible à la relecture,
+     mais affiché tel quel, taper le 1er bouton donnait 100 % sans rien connaître : le quiz ne
+     testait plus rien. On mélange donc à l'affichage, en gardant l'index d'origine pour la
+     correction. useMemo : sinon les choix sauteraient entre le clic et l'affichage du résultat. */
+  const choices = useMemo(() => (type === "qcm" ? shuffled((q.c || []).map((text, ci) => ({ text, ci }))) : []), [q, type]);
   const assocSolved = type === "assoc" && q.pairs && Object.keys(matched).length === q.pairs.length;
   const answered = type === "assoc" ? assocSolved : picked !== null;
   const total = questions.length;
@@ -351,10 +361,10 @@ function QuizModal({ world, data, onClose, onFinish }) {
 
             {type === "qcm" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {q.c.map((choice, ci) => {
+                {choices.map(({ text, ci }) => {
                   let cls = "pq-choice";
                   if (answered) { if (ci === q.a) cls += " ok"; else if (ci === picked) cls += " ko"; }
-                  return <button key={ci} className={cls} onClick={() => choose(ci)} disabled={answered}>{choice}</button>;
+                  return <button key={ci} className={cls} onClick={() => choose(ci)} disabled={answered}>{text}</button>;
                 })}
               </div>
             )}

@@ -147,6 +147,15 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:9px 15px;border-radius:11px;font-size:14px;font-weight:600;transition:.16s var(--ease);white-space:nowrap;position:relative;overflow:hidden}
 .btn:hover{border-color:var(--dim)}
 .btn:active{transform:translateY(1px) scale(.99)}
+/* Un bouton désactivé DOIT se voir. Sans ça, il gardait l'apparence d'un bouton actif — halo
+   compris sur .primary : on clique, rien ne se passe, on ne comprend pas pourquoi. Le curseur
+   « interdit » et l'opacité disent que ce n'est pas le moment, sans faire disparaître le
+   bouton (il faut pouvoir lire ce qu'on obtiendra). Les :hover/:active sont neutralisés,
+   sinon le bouton continue de réagir sous la souris et fait croire qu'il marche. */
+.btn:disabled,.btn[disabled]{opacity:.45;cursor:not-allowed;box-shadow:none;filter:grayscale(.35)}
+.btn:disabled:hover,.btn[disabled]:hover{border-color:var(--border)}
+.btn:disabled:active,.btn[disabled]:active{transform:none}
+.iconbtn:disabled,.iconbtn[disabled]{opacity:.45;cursor:not-allowed}
 .btn.primary{background:var(--grad-ember);color:#fff;border:none;box-shadow:var(--shadow-glow)}
 .btn.primary:hover{filter:brightness(1.06)}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
@@ -1136,6 +1145,162 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .tipo-nm{font-size:10.5px;color:var(--dim);text-align:center;line-height:1.2}
 .tipo-w{font-size:9.5px;font-weight:700;color:var(--orange)}
 
+/* Boutique stagiaire — grille de produits. auto-fill + minmax : la grille se remplit toute
+   seule du téléphone au grand écran, sans media query à maintenir. */
+.shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
+.shop-card{display:flex;flex-direction:column;gap:5px;padding:14px 12px;border:1px solid var(--border);
+  border-radius:14px;background:var(--surface);transition:border-color .14s var(--ease),transform .14s var(--ease)}
+.shop-card:hover{border-color:var(--gold);transform:translateY(-2px)}
+/* Puce de rayon : le glyphe ET le nom du rayon, jamais l'un sans l'autre. Seul, le glyphe se
+   fait prendre pour la photo du produit (quatre pelles partagent le même dessin) ; accompagné,
+   il redevient une étiquette de rayon. Même logique que .rayon-tab, en plus discret. */
+.shop-rayon{align-self:flex-start;display:inline-flex;align-items:center;gap:5px;
+  padding:3px 7px 3px 6px;border-radius:999px;background:var(--surface2);
+  font-size:10px;font-weight:700;letter-spacing:.02em;color:var(--muted);margin-bottom:2px}
+.shop-rayon svg{color:var(--navy);flex-shrink:0}
+[data-theme="dark"] .shop-rayon svg{color:var(--gold)}
+/* Le nom EST l'asset : sans photo produit, c'est la seule chose qui distingue une pelle ronde
+   Ø 23 d'une Ø 33. Il passe donc en tête de hiérarchie. */
+.shop-name{font-size:13.5px;line-height:1.32;color:var(--text)}
+/* Côté partenaires : la RÉFÉRENCE du fabricant (« A-32RF/60 »), pas un rayon. Elle ne sert
+   qu'à celui qui appellera le partenaire pour la commander — d'où le gris discret. */
+.shop-ref{font-size:10.5px;color:var(--muted)}
+.shop-price{margin-top:auto;padding-top:6px;display:flex;flex-direction:column;gap:1px}
+.shop-price b{font-size:15px;white-space:nowrap}
+.shop-unit{font-size:10.5px;font-weight:600;color:var(--muted)}
+/* --muted et pas --dim : mesuré, --dim tombe à 2.59:1 en clair et 3.77:1 en sombre sur le fond
+   des cartes — sous le minimum de 4.5:1. Le prix HT n'est pas de la décoration : c'est le chiffre
+   que lit un stagiaire qui monte sa pizzeria et récupère la TVA. */
+.shop-ht{font-size:11px;color:var(--muted);white-space:nowrap}
+/* Barré, mais pas décoratif : c'est en lisant ce prix que le stagiaire voit ce que le tarif
+   école lui fait gagner. Donc lisible — cf. .shop-ht sur le choix de --muted. */
+.shop-old{font-size:11.5px;color:var(--muted);text-decoration:line-through}
+.shop-note{font-size:10.5px;color:var(--muted);line-height:1.35;border-top:1px solid var(--border-soft);padding-top:5px;margin-top:2px}
+/* N'apparaît QUE si l'article n'est pas en stock — c'est une exception, pas une étiquette.
+   L'ambre, pas le rouge : « sur commande » n'est pas une erreur, juste un délai. */
+.shop-stock{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--orange)}
+/* Bouton d'ajout : neutre au repos, il ne s'allume qu'au survol de SA carte. Trente boutons
+   rouges alignés ne hiérarchisent rien. Au doigt (aucun survol sur mobile) il reste un bouton
+   parfaitement lisible : le survol enrichit, il ne conditionne pas. */
+/* 44px : c'est LA cible du doigt sur cette page, et .btn.sm ne fait que 30px de haut. On ne
+   touche pas à .btn.sm globalement (42 écrans l'utilisent) — on l'agrandit ici, là où le
+   stagiaire tape trente fois d'affilée sur son téléphone. */
+.shop-add{min-height:44px;justify-content:center;transition:background .14s var(--ease),color .14s var(--ease),border-color .14s var(--ease)}
+.shop-card:hover .shop-add:not(.ok){background:var(--grad-ember);color:#fff;border-color:transparent}
+.shop-add.ok{background:var(--green);color:#fff;border-color:transparent}
+
+/* Panier : une ligne = libellé + quantité + sous-total + retirer. Les boutons de quantité
+   font 30px — en dessous, on les rate au pouce sur téléphone. */
+.cart-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-soft)}
+.cart-row:last-of-type{border-bottom:none}
+.cart-lbl{flex:1;min-width:0;font-size:13px;line-height:1.35}
+.cart-qty{display:inline-flex;align-items:center;gap:4px;flex:none}
+.cart-qty .iconbtn{width:30px;height:30px}
+.cart-qty b{min-width:22px;text-align:center;font-size:13.5px}
+.cart-sum{width:82px;text-align:right;flex:none;font-size:13.5px}
+/* Taille / coupe : des boutons, pas un <select>. 6 options tiennent à l'écran, et un menu
+   déroulant les cacherait derrière un clic de plus — le pire contrôle sur téléphone. */
+.var-lbl{display:block;font-size:11.5px;font-weight:700;margin-bottom:5px;color:var(--text)}
+.var-row{display:flex;gap:5px;flex-wrap:wrap}
+.var-btn{min-width:40px;height:36px;padding:0 10px;border:1px solid var(--border);border-radius:9px;
+  background:var(--surface);color:var(--text);font:700 13px/1 var(--font-b);cursor:pointer;transition:.12s var(--ease)}
+.var-btn.wide{flex:1;min-width:62px}
+.var-btn:hover{border-color:var(--gold)}
+.var-btn.on{background:var(--grad-ember);color:#fff;border-color:transparent}
+
+/* Calendrier de retrait (façon Calendly). Grille 7 colonnes fixes : un calendrier dont les
+   colonnes bougeraient d'un mois à l'autre ne se lit plus. Semaine commençant LUNDI. */
+.cal-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin:0 0 10px}
+.cal-nav b{font:700 14px/1 var(--font-d);min-width:132px;text-align:center;text-transform:capitalize}
+.cal-dows{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:5px}
+.cal-dows span{text-align:center;font-size:10.5px;font-weight:700;color:var(--dim)}
+.cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal-day{aspect-ratio:1;min-height:38px;border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  color:var(--text);font:600 13px/1 var(--font-b);cursor:pointer;transition:.12s var(--ease)}
+.cal-day:hover:not(:disabled){border-color:var(--gold)}
+.cal-day.on{background:var(--grad-ember);color:#fff;border-color:transparent}
+/* Jour fermé : visible mais clairement inerte. On le GARDE affiché — un trou dans la grille
+   décalerait les colonnes et on ne lirait plus le calendrier. */
+.cal-day.off{opacity:.3;cursor:not-allowed;background:transparent;border-style:dashed}
+.cal-slots{margin-top:16px;padding-top:14px;border-top:1px solid var(--border-soft)}
+.cal-slots-t{display:block;font-size:12px;margin-bottom:8px}
+.cal-vide{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--border-soft)}
+
+/* Créneaux de retrait. auto-fill : 13 créneaux le lundi, 7 le mercredi — la grille s'adapte
+   sans média-query. 40px de haut : en dessous on les rate au pouce. */
+.slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:7px}
+.slot{height:40px;border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  color:var(--text);font:600 13px/1 var(--font-b);cursor:pointer;transition:.12s var(--ease)}
+.slot:hover{border-color:var(--gold)}
+.slot.on{background:var(--grad-ember);color:#fff;border-color:transparent}
+
+/* Broderie : chaque article a son bloc, sinon on ne sait plus quel nom va sur quoi. */
+.brod-bloc{padding:12px 0;border-bottom:1px solid var(--border-soft)}
+.brod-bloc:last-child{border-bottom:none;padding-bottom:0}
+.brod-art{display:block;font-size:13px;margin-bottom:8px}
+.brod-apercu{margin:8px 0 0;padding:7px 11px;border-radius:9px;background:var(--surface3);font-size:12.5px}
+.brod-apercu span{color:var(--muted)}
+.brod-apercu b{font-size:14px;letter-spacing:.02em}
+.brod-apercu.ko{background:var(--rosso-bg)}
+.brod-apercu.ko span{color:var(--ember1)}
+.inp.ko{border-color:var(--ember1)}
+/* --muted (6.19:1) et pas --gold (1.74:1 sur carte blanche) : cf. .dem-brod. */
+.shop-brod{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--muted)}
+
+/* Broderie : le champ est rattaché VISUELLEMENT à sa ligne (retrait + liseré), sinon on ne
+   sait plus quel nom va sur quel article quand il y a deux vestes. */
+.cart-perso{margin:0 0 10px 14px;padding:8px 0 8px 12px;border-left:2px solid var(--gold)}
+.cart-perso label{display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--text)}
+.cart-perso .inp{max-width:280px;font-size:13px}
+.cart-perso .inp.ko{border-color:var(--ember1)}
+.dem-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft);font-size:13px}
+.dem-row:last-child{border-bottom:none}
+
+/* ── Mes demandes (onglet historique du stagiaire) ─────────────────────────────────────── */
+/* Le créneau EN PREMIER et détaché : c'est la seule information de l'écran qui engage le
+   stagiaire à se déplacer. Il vire au vert quand la demande est prête — la couleur signale
+   « il y a quelque chose à faire », elle ne décore pas. */
+.dem-retrait{display:flex;align-items:center;gap:7px;margin:0 0 12px;padding:9px 12px;
+  border-radius:10px;background:var(--surface2);font-size:13px;color:var(--muted)}
+.dem-retrait b{color:var(--text)}
+/* Le VERT reste au fond et sur l'icône ; le texte, lui, garde la couleur normale. Mesuré :
+   --green sur --green-bg ne donne que 2.99:1 en clair — sous le minimum de 4.5:1. Le fond vert
+   suffit à signaler « c'est prêt » ; peindre le texte en vert par-dessus le rendait juste plus
+   dur à lire. */
+.dem-retrait.prete{background:var(--green-bg);color:var(--text)}
+.dem-retrait.prete svg{color:var(--green)}
+
+.dem-lignes{list-style:none;margin:0;padding:0}
+.dem-lignes li{display:flex;align-items:baseline;gap:10px;padding:7px 0;
+  border-bottom:1px solid var(--border-soft);font-size:13px}
+.dem-lignes li:last-child{border-bottom:none}
+.dem-qty{flex-shrink:0;min-width:28px;color:var(--muted);font-weight:700}
+.dem-lbl{flex:1;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.dem-var{font-size:10px}
+/* Ce qui sera brodé : la seule chose de la demande qui ne se corrige plus après coup. Il doit
+   donc être le texte le PLUS lisible de la ligne — pas le plus décoré. En doré (--gold) il
+   tombait à 1.74:1 sur une carte blanche : joli en sombre, illisible en clair. Le mot « brodé »
+   porte le sens ; la couleur n'a rien à ajouter. */
+.dem-brod{font-style:normal;font-size:11px;font-weight:700;color:var(--text)}
+.dem-prix{flex-shrink:0;font-weight:600;white-space:nowrap}
+
+.dem-pied{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-top:12px;padding-top:11px;border-top:1px solid var(--border)}
+.dem-pied b{font-size:15px}
+.dem-note{display:flex;align-items:center;gap:6px;margin:10px 0 0;font-size:11.5px;color:var(--muted)}
+
+/* Pastille de l'onglet : compte les demandes PRÊTES, rien d'autre. Un compteur qui affiche
+   tout l'historique ne s'éteint jamais et devient un décor qu'on cesse de voir. */
+.kind-pastille{display:inline-flex;align-items:center;justify-content:center;min-width:18px;
+  height:18px;padding:0 5px;margin-left:2px;border-radius:999px;background:var(--green);
+  color:#fff;font-size:11px;font-weight:800;line-height:1}
+.kind-btn.on .kind-pastille{background:rgba(255,255,255,.28)}
+.ok-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 16px;padding:11px 14px;border-radius:12px;
+  background:color-mix(in srgb,var(--green) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--green) 40%,transparent);
+  color:var(--text);font-size:13px;line-height:1.5}
+.ok-banner svg{color:var(--green);flex:none}
+.ok-banner span{flex:1;min-width:0}
+
 .rayon-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
 .rayon-tab{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:background .12s var(--ease),border-color .12s var(--ease),color .12s var(--ease)}
 .rayon-tab:hover{border-color:var(--gold)}
@@ -1152,6 +1317,109 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .mode-card b{font-size:13px}
 .mode-card>span{font-size:11px;color:var(--muted)}
 .mode-card.on>span{color:var(--ember1)}
+/* ── Conseil matériel (fours / pétrins) ─────────────────────────────────────────────────── */
+/* Comparateur de prix (fours partenaires) + badges de specs */
+.spec-badges{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0}
+.spec-badges .badge{font-size:9.5px;padding:2px 6px;gap:3px}
+.cmp{display:flex;flex-direction:column;gap:3px;margin-top:auto;padding-top:6px}
+.cmp-src{font-size:10px;color:var(--muted)}
+.cmp-range b{font-size:15px;white-space:nowrap}
+/* L'écart entre revendeurs = l'argument. Fond ambre léger + texte normal (pas d'ambre EN
+   texte, qui échoue au contraste). Le poids et le fond suffisent à le faire ressortir. */
+.cmp-ecart{display:inline-block;margin-left:2px;font-size:10px;font-weight:700;color:var(--text);
+  background:var(--amber-bg);padding:1px 6px;border-radius:999px}
+.cmp-toggle{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;padding:2px 0;
+  background:none;border:none;color:var(--muted);font-weight:600;font-size:11px;cursor:pointer}
+.cmp-toggle:hover{color:var(--text)}
+.cmp-list{list-style:none;margin:2px 0 0;padding:0;display:grid;gap:4px}
+.cmp-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px}
+.cmp-list a{display:inline-flex;align-items:center;gap:4px;color:var(--text);text-decoration:none}
+.cmp-list a:hover{text-decoration:underline}
+.cmp-list a svg{color:var(--muted)}
+.cmp-list li span{font-weight:600;white-space:nowrap;color:var(--text)}
+.cmp-devis{display:inline-flex;align-items:center;gap:5px;margin-top:auto;padding-top:6px;
+  font-size:12px;font-weight:600;color:var(--muted)}
+.cmp-devis svg{flex-shrink:0}
+
+/* En-tête cliquable de la carte « Aide au choix » : toute la barre est la cible. */
+.cm-open{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
+  background:none;border:none;padding:0;cursor:pointer;color:var(--text)}
+.cm-open .card-ttl{margin:0}
+.cm-open:hover .card-ttl{color:var(--ember1)}
+.cm-step{margin-bottom:16px}
+.cm-q{font-size:14px;margin:0 0 10px}
+.cm-q b{color:var(--text);margin-right:4px}
+.cm-multi{font-size:11px;font-weight:600;color:var(--muted);margin-left:6px}
+.cm-chips{display:flex;flex-wrap:wrap;gap:8px}
+/* Puce de choix : le libellé + sa donnée chiffrée (température ou capacité). Le chiffre EST
+   l'info — c'est lui qui décide, pas une icône. Taille ≥44px de haut pour le doigt. */
+.cm-chip{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;
+  min-height:44px;padding:6px 13px;border:1px solid var(--border);border-radius:11px;
+  background:var(--surface);color:var(--text);font-weight:600;font-size:13.5px;cursor:pointer;
+  transition:border-color .12s var(--ease),background .12s var(--ease)}
+.cm-chip:hover{border-color:var(--gold)}
+.cm-chip.on{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,var(--surface))}
+.cm-chip-t{font-size:10.5px;font-weight:600;color:var(--muted)}
+/* Sur la puce sélectionnée, le sous-texte passe en --text : sur le fond teinté ember, --muted
+   tombe sous 4.5:1. Plus foncé = plus lisible, et ça marque la sélection. */
+.cm-chip.on .cm-chip-t{color:var(--text)}
+
+.cm-avpn{display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;
+  border-radius:10px;background:var(--surface2);font-size:13px;cursor:pointer}
+.cm-avpn input{width:17px;height:17px;accent-color:var(--ember1);cursor:pointer}
+
+/* La quantité de pâte : gros champ, l'équivalent en pâtons juste dessous. */
+.cm-kg{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.cm-kg-in{display:inline-flex;align-items:baseline;gap:6px;border:1px solid var(--border);
+  border-radius:11px;padding:8px 14px;background:var(--surface)}
+.cm-kg-in input{width:64px;border:none;background:none;color:var(--text);font-size:22px;
+  font-weight:800;font-variant-numeric:tabular-nums;outline:none;-moz-appearance:textfield}
+.cm-kg-in input::-webkit-outer-spin-button,.cm-kg-in input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.cm-kg-in span{font-size:14px;font-weight:700;color:var(--muted)}
+.cm-kg-eq{font-size:12.5px;color:var(--muted);min-height:1em}
+
+/* Le verdict : la ligne qui répond à la question posée. Fond tenu, texte normal (pas de
+   couleur peinte sur le texte — cf. leçon .dem-retrait). */
+.cm-verdict{display:flex;align-items:flex-start;gap:9px;margin:0 0 16px;padding:11px 14px;
+  border-radius:12px;background:var(--surface2);font-size:13.5px;line-height:1.5;color:var(--text)}
+.cm-verdict svg{flex-shrink:0;margin-top:2px;color:var(--ember1)}
+.cm-verdict b{font-variant-numeric:tabular-nums}
+.cm-count{color:var(--muted)}
+/* --text gras et pas --orange : --orange tombe à 2.68:1 sur ce fond. Le poids porte l'accent. */
+.cm-avpn-note{color:var(--text);font-weight:700}
+.cm-vide{margin:0 0 16px}
+
+.cm-opts{display:grid;gap:10px}
+.cm-opt{border:1px solid var(--border);border-radius:13px;padding:13px 14px;background:var(--surface);
+  transition:border-color .14s var(--ease)}
+.cm-opt:hover{border-color:var(--border-soft)}
+/* Écartée : on la GARDE visible mais en retrait — c'est l'explication qui a de la valeur, pas
+   le masquage. 0.6 reste au-dessus du seuil lisible, contrairement au .38 d'un vrai disabled. */
+.cm-opt.off{opacity:.6;background:var(--surface2)}
+.cm-opt-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.cm-opt-h b{font-size:14.5px}
+.cm-temp{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted);
+  padding:2px 7px;border-radius:999px;background:var(--surface3)}
+.cm-resume{margin:7px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+
+.cm-detail{margin-top:9px}
+.cm-detail-t{display:inline-flex;align-items:center;gap:5px;padding:3px 0;background:none;border:none;
+  color:var(--muted);font-weight:600;font-size:12px;cursor:pointer}
+.cm-detail-t:hover{color:var(--text)}
+.cm-detail-b{margin-top:6px}
+.cm-pts{list-style:none;margin:0;padding:0;display:grid;gap:5px}
+.cm-pts+.cm-pts{margin-top:8px}
+.cm-pts li{display:flex;align-items:flex-start;gap:7px;font-size:12.5px;line-height:1.45;color:var(--text)}
+.cm-pts li svg{flex-shrink:0;margin-top:2px}
+.cm-pour li svg{color:var(--green)}
+/* Les contraintes en ambre : ce n'est pas une erreur, c'est ce qu'on découvre trop tard
+   normalement (ramonage, triphasé, encombrement). --orange passe le contraste sur carte. */
+.cm-contr li{color:var(--muted)}
+.cm-contr li svg{color:var(--orange)}
+
+.cm-src{display:flex;align-items:center;gap:6px;margin:16px 0 0;font-size:11.5px;color:var(--muted)}
+.cm-src svg{flex-shrink:0}
+
 /* Panneau food-pairing (garniture) */
 .pair-panel{border:1px solid color-mix(in srgb,var(--green) 30%,var(--border));background:color-mix(in srgb,var(--green) 6%,var(--surface));border-radius:12px;padding:12px 13px;margin-bottom:14px}
 .pair-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:8px}

@@ -239,6 +239,16 @@ const updateLearner = async (req, res) => {
             );
         }
 
+        // Formations TERMINÉES (marquées manuellement) — colonne optionnelle (migration 094).
+        // Traitée à part pour tolérer l'absence de la colonne sans casser le reste.
+        if (Object.prototype.hasOwnProperty.call(body, 'completed_levels')) {
+            const cl = String(body.completed_levels || '').trim() || null;
+            try {
+                await conn.query('UPDATE learner SET completed_levels = ? WHERE id = ? AND organization_id = ?',
+                    [cl, learnerId, organizationId]);
+            } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+        }
+
         // Le « type de devis » (financement) pilote le parcours documentaire, qui est
         // calculé à partir de enrollment.financing. On propage donc le changement à
         // tous les dossiers du stagiaire pour que le parcours (Devis particulier /
