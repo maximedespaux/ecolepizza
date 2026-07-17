@@ -35,12 +35,12 @@ function Demande({ d, onChange }) {
   const prev = idx > 0 ? FLOW[idx - 1] : null;
   const next = idx >= 0 && idx < FLOW.length - 1 ? FLOW[idx + 1] : null;
   const facturable = d.lines.some((l) => l.source === "ECOLE" && l.unit_price_ht != null) && !hasInvoice;
-  // La facture = la transition « Payé → Facturé » : le bouton n'apparaît qu'à l'étape Payé.
-  const showFacture = facturable && d.status === "PAYE";
   // On ne peut plus reculer une fois la facture émise.
   const canPrev = !!prev && d.status !== "ANNULEE" && !hasInvoice;
-  // « Suivant » gère toutes les transitions SAUF « → Facturé » (qui passe par la facture).
-  const canNext = !!next && next !== "FACTUREE" && d.status !== "ANNULEE";
+  // « Suivant » gère TOUTES les transitions, facture comprise : à l'étape Payé, avancer
+  // vers Facturé CRÉE la facture (si facturable) ; sinon simple changement de statut.
+  const canNext = !!next && d.status !== "ANNULEE";
+  const nextIsFacture = next === "FACTUREE" && facturable;
 
   async function setStatus(status) {
     setBusy(true);
@@ -49,6 +49,14 @@ function Demande({ d, onChange }) {
   async function facturer() {
     setBusy(true);
     try { await invoiceShopRequest(d.id); onChange(); } finally { setBusy(false); }
+  }
+  // Étape suivante : crée la facture si on passe à « Facturé » (et que c'est facturable),
+  // sinon avance simplement le statut.
+  async function goNext() {
+    if (!next) return;
+    if (nextIsFacture) return facturer();
+    setBusy(true);
+    try { await updateShopRequest(d.id, { status: next }); onChange(); } finally { setBusy(false); }
   }
   async function supprimer() {
     if (!window.confirm(`Supprimer définitivement la demande ${d.ref} de ${d.learner.last_name} ${d.learner.first_name} ?`)) return;
@@ -126,11 +134,10 @@ function Demande({ d, onChange }) {
         {canPrev ? <button className="btn sm ghost" onClick={() => setStatus(prev)} disabled={busy}>
           <Icon name="chevron-left" size={14} /> Précédent
         </button> : null}
-        {canNext ? <button className="btn sm primary" onClick={() => setStatus(next)} disabled={busy}>
-          Suivant : {LABEL[next]} <Icon name="chevron-right" size={14} />
-        </button> : null}
-        {showFacture ? <button className="btn sm" onClick={facturer} disabled={busy}>
-          <Icon name="file-text" size={14} /> Créer la facture
+        {canNext ? <button className="btn sm primary" onClick={goNext} disabled={busy}>
+          {nextIsFacture
+            ? <><Icon name="file-text" size={14} /> Créer la facture</>
+            : <>Suivant : {LABEL[next]} <Icon name="chevron-right" size={14} /></>}
         </button> : null}
         {d.invoice_id ? <span className="badge g"><Icon name="check" size={12} /> Facturée</span> : null}
         <span style={{ flex: 1 }} />
