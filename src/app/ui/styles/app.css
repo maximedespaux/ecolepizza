@@ -1202,6 +1202,7 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
    seule du téléphone au grand écran, sans media query à maintenir. */
 /* Boutique : panier persistant à gauche + catalogue à droite. */
 .shop-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
+.shop-layout.no-cart{grid-template-columns:1fr} /* panier masqué : le catalogue occupe toute la largeur */
 .shop-aside{position:sticky;top:70px}
 .shop-main{min-width:0}
 .cart-mini-list{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow-y:auto}

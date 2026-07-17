@@ -625,6 +625,7 @@ function CartAside({ count, onCheckout }) {
 function Boutique() {
   const [tab, setTab] = useState("ecole");
   const [checkout, setCheckout] = useState(false); // récapitulatif (broderie + créneau) avant envoi
+  const [showCart, setShowCart] = useState(true);   // panier affiché/masqué (le catalogue s'élargit)
   const [n, setN] = useState(cartCount);
   const [sent, setSent] = useState(null);
   const [pretes, setPretes] = useState(0);
@@ -656,7 +657,13 @@ function Boutique() {
         </div>
       ) : null}
 
-      <div className="shop-layout">
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <button className="btn sm ghost" onClick={() => setShowCart((v) => !v)} title={showCart ? "Masquer le panier" : "Afficher le panier"}>
+          <Icon name={showCart ? "chevron-right" : "shopping-cart"} size={14} /> {showCart ? "Masquer le panier" : `Panier${n ? ` (${n})` : ""}`}
+        </button>
+      </div>
+
+      <div className={"shop-layout" + (showCart ? "" : " no-cart")}>
         <div className="shop-main">
           {checkout ? (
             <>
@@ -687,7 +694,7 @@ function Boutique() {
           )}
         </div>
 
-        <CartAside count={n} onCheckout={() => setCheckout(true)} />
+        {showCart && <CartAside count={n} onCheckout={() => setCheckout(true)} />}
       </div>
     </>
   );
