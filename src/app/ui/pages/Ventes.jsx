@@ -65,6 +65,13 @@ function Ventes() {
     return Object.entries(g).sort((a, b) => a[0].localeCompare(b[0]));
   }, [inventory]);
 
+  // « Boutique » importée dans la caisse : catalogue des articles à prix (mêmes articles
+  // que la boutique du stagiaire — inventory_item avec un prix), en grille cliquable.
+  const [posCat, setPosCat] = useState("");
+  const posItems = useMemo(() => inventory.filter((i) => i.unit_price != null), [inventory]);
+  const posCats = useMemo(() => [...new Set(posItems.map((i) => i.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr")), [posItems]);
+  const posShown = posCat ? posItems.filter((i) => i.category === posCat) : posItems;
+
   const matches = useMemo(() => {
     const q = clientQuery.trim().toLowerCase();
     if (!q) return [];
@@ -81,6 +88,14 @@ function Ventes() {
       return [...c, { item_id: it.id, name: it.name, quantity: n, unit_price: Number(it.unit_price || 0), tax_rate: Number(it.tax_rate || 0), disc: "", stock: it.quantity }];
     });
     setPick(""); setQty(1);
+  }
+  // Ajoute un article de la boutique au panier (une unité par clic).
+  function addItem(it) {
+    setCart((c) => {
+      const ex = c.find((l) => l.item_id === it.id);
+      if (ex) return c.map((l) => (l.item_id === it.id ? { ...l, quantity: l.quantity + 1 } : l));
+      return [...c, { item_id: it.id, name: it.name, quantity: 1, unit_price: Number(it.unit_price || 0), tax_rate: Number(it.tax_rate || 0), disc: "", stock: it.quantity }];
+    });
   }
   const removeLine = (id) => setCart((c) => c.filter((l) => l.item_id !== id));
   const setLine = (id, patch) => setCart((c) => c.map((l) => (l.item_id === id ? { ...l, ...patch } : l)));
@@ -143,6 +158,39 @@ function Ventes() {
               <button className="iconbtn" onClick={() => setLastInvoice(null)} aria-label="Fermer"><Icon name="x" size={14} /></button>
             </div>
           )}
+          {/* Boutique importée : grille d'articles cliquable pour composer le panier. */}
+          <div style={{ marginBottom: 16 }}>
+            <Card title={<span className="card-ttl"><Icon name="package" size={16} /> Boutique — cliquer pour ajouter</span>}>
+              {posItems.length === 0 ? (
+                <EmptyState icon="package">Aucun article en boutique. Ajoute un prix aux articles dans l'onglet Inventaire.</EmptyState>
+              ) : (
+                <>
+                  <div className="rayon-tabs" style={{ marginBottom: 12 }}>
+                    <button className={"rayon-tab" + (posCat === "" ? " on" : "")} onClick={() => setPosCat("")}>Tout ({posItems.length})</button>
+                    {posCats.map((c) => (
+                      <button key={c} className={"rayon-tab" + (posCat === c ? " on" : "")} onClick={() => setPosCat(c)}>{c}</button>
+                    ))}
+                  </div>
+                  <div className="shop-grid">
+                    {posShown.map((it) => (
+                      <div key={it.id} className="shop-card">
+                        {!posCat ? <span className="shop-rayon">{it.category || "Divers"}</span> : null}
+                        <b className="shop-name">{it.name}</b>
+                        <span className="shop-price"><b className="tnum">{euro(it.unit_price)} <span className="shop-unit">HT</span></b></span>
+                        {it.quantity <= 0
+                          ? <span className="shop-stock"><Icon name="clock" size={12} /> Rupture</span>
+                          : <span className="hint" style={{ fontSize: 11 }}>{it.quantity} en stock</span>}
+                        <button className="btn sm shop-add" style={{ marginTop: 8, width: "100%" }} onClick={() => addItem(it)} disabled={it.quantity <= 0}>
+                          <Icon name="plus" size={14} /> Ajouter
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </Card>
+          </div>
+
           <div className="grid cols-2">
             <Card title="Point de vente">
               <div className="row3" style={{ alignItems: "end" }}>
