@@ -306,8 +306,7 @@ function TemplateEditor() {
         <aside className="tpl-palette">
           <div className="tpl-palette-hd">Champs disponibles</div>
           <p className="sub" style={{ margin: "0 10px 8px", fontSize: 11 }}>
-            Cliquez ou glissez un champ dans l'en-tête, le corps ou le pied de page. Il sera remplacé par la donnée réelle.
-            Les champs proposés sont ceux activés dans <b>Champs documents</b>.
+            Cliquez ou glissez un champ dans le document.
           </p>
           {catalog.length === 0 && (
             <p className="sub" style={{ margin: "0 10px 10px", fontSize: 11 }}>
@@ -319,7 +318,7 @@ function TemplateEditor() {
             <div className="tok-group-hd" style={{ cursor: "default" }}><span><Icon name="pencil" size={13} /> Signatures</span></div>
             <div className="tok-list" style={{ padding: "0 10px 8px" }}>
               <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
-                Insérez un bloc de signature nommé. Chaque bloc est signé séparément par la personne attribuée, depuis son compte.
+                Bloc de signature nommé, signé séparément par chaque personne.
               </p>
               {SIG_PRESETS.map((s) => (
                 <button key={s} className="tok-chip" title={`Bloc de signature « ${s} » — cliquer ou glisser`}
@@ -358,7 +357,7 @@ function TemplateEditor() {
                   {g.group === "Groupe entreprise" && (
                     <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border-soft)" }}>
                       <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
-                        <b>Bloc par stagiaire</b> : répété pour chaque stagiaire du groupe. Placez les jetons ci-dessous <b>entre</b> les marqueurs.
+                        <b>Bloc par stagiaire</b> : jetons à placer <b>entre</b> les marqueurs.
                       </p>
                       <button className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple"
                         draggable

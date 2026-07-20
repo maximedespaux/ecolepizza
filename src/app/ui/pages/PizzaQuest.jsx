@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { getMyFormations } from "../api/apiClient.js";
+import { getMyFormations, getMyProfile, getPlayableChapters } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
+import SimulateurPizza from "../components/SimulateurPizza.jsx";
 import { colorOf } from "../lib/format.js";
 import { NIV1_CHAPTERS } from "../lib/niv1Questions.js";
+import { NIV2_CHAPTERS } from "../lib/niv2Questions.js";
 import { saveQuestProgress } from "../lib/gamification.js";
+import { worldXp, chapterXpEarned, xpOfQuestion } from "../lib/questxp.js";
 
 /**
  * Pizza Quest — entraînement QCM ludique (façon Duolingo × Mario/Royal Match).
@@ -13,21 +16,37 @@ import { saveQuestProgress } from "../lib/gamification.js";
  * thématisé pizza (blé, eau, huile, levure…). On clique une formation → son « monde »
  * (chemin de chapitres) → un chapitre = mini-QCM (les « étapes »).
  *
- * Le monde « Niveau I » utilise les vraies questions du manuel (banque niv1Questions,
- * formats variés : QCM / Vrai-Faux / Associations). Les autres niveaux restent en
- * démo (questions d'exemple) en attendant leurs manuels. Progression en localStorage
- * (à remplacer par une progression serveur).
+ * Les mondes « Niveau I » et « Niveau II » ont leurs VRAIES questions, tirées de leurs
+ * manuels (banques niv1Questions / niv2Questions ; formats QCM / Vrai-Faux / Associations).
+ * Les quatre autres retombent sur DEMO_QUESTIONS en attendant leurs manuels.
+ * Toutes les questions, démo comprise, portent leur explication (`expl`) et leur page de
+ * manuel (`src`) : se tromper doit apprendre quelque chose, pas seulement coûter un cœur.
+ * Progression miroir localStorage + serveur (learner_quest_progress) : réhydratée au
+ * montage, donc un cache vidé ne perd rien.
  */
 
+/* Questions de repli, servies aux mondes qui n'ont pas encore leur banque (Découverte,
+   Niveau I Pro, Expert, Spécialisations). Elles portent leur explication comme les vraies
+   banques — un stagiaire de ces mondes apprend donc autant, même si le volume reste maigre.
+   ⚠️ 8 questions recyclées sur 36 tirages : c'est un pis-aller très visible, à remplacer
+   manuel par manuel. */
 const DEMO_QUESTIONS = [
-  { q: "Que signifie « TH » dans un empâtement ?", c: ["Taux d'hydratation", "Température de l'huile", "Temps de repos", "Type de farine"], a: 0 },
-  { q: "Pour 1 kg de farine à 65 % d'hydratation, combien d'eau ?", c: ["650 g", "65 g", "165 g", "6,5 kg"], a: 0 },
-  { q: "La « force » d'une farine se mesure par…", c: ["Le W (force boulangère)", "Sa couleur", "Son prix", "Son taux de sucre"], a: 0 },
-  { q: "La poolish est une préfermentation…", c: ["Liquide (≈100 % d'hydratation)", "Sèche (≈45 %)", "Sans levure", "À base d'huile"], a: 0 },
-  { q: "La biga est une préfermentation…", c: ["Sèche (≈45–50 %)", "Liquide 100 %", "À base de tomate", "Sans farine"], a: 0 },
-  { q: "Le « pointage » désigne…", c: ["La 1re fermentation en masse", "La cuisson", "Le façonnage", "Le nappage"], a: 0 },
-  { q: "Le sel dans la pâte sert surtout à…", c: ["Renforcer le gluten & réguler la fermentation", "Colorer la pâte", "Sucrer", "Faire lever plus vite"], a: 0 },
-  { q: "Température d'un four à bois pour une napolitaine ?", c: ["≈ 430–480 °C", "180 °C", "250 °C", "600 °C"], a: 0 },
+  { q: "Que signifie « TH » dans un empâtement ?", c: ["Taux d'hydratation", "Température de l'huile", "Temps de repos", "Type de farine"], a: 0,
+    expl: "Le TH est le poids d'eau rapporté au poids de farine, en pourcentage. C'est LA valeur qui décrit un empâtement : tout le reste se calcule à partir d'elle.", src: "Manuel Niveau I, p. 32" },
+  { q: "Pour 1 kg de farine à 65 % d'hydratation, combien d'eau ?", c: ["650 g", "65 g", "165 g", "6,5 kg"], a: 0,
+    expl: "L'hydratation se calcule TOUJOURS sur le poids de farine : 1 000 g × 65 % = 650 g d'eau. Jamais sur le poids total de la pâte.", src: "Manuel Niveau I, p. 27 et 32" },
+  { q: "La « force » d'une farine se mesure par…", c: ["Le W (force boulangère)", "Sa couleur", "Son prix", "Son taux de sucre"], a: 0,
+    expl: "Le W vient de l'alvéographe de Chopin. Il dit combien de temps la pâte tient la fermentation — à ne pas confondre avec le type (T55, T65), qui parle de cendres.", src: "Manuel Niveau I, p. 17-18" },
+  { q: "La poolish est une préfermentation…", c: ["Liquide (≈100 % d'hydratation)", "Sèche (≈45 %)", "Sans levure", "À base d'huile"], a: 0,
+    expl: "Liquide, parce qu'on y met autant de farine que d'eau. Elle repose 12 à 15 h maximum et donne un goût très prononcé.", src: "Manuel Niveau II, p. 22-23" },
+  { q: "La biga est une préfermentation…", c: ["Sèche (≈45–50 %)", "Liquide 100 %", "À base de tomate", "Sans farine"], a: 0,
+    expl: "Solide — un « starter » à 45 % d'hydratation, qui repose 16 à 20 h à 19-24 °C. C'est l'opposé du poolish, et elle se stocke bien mieux.", src: "Manuel Niveau II, p. 25" },
+  { q: "Le « pointage » désigne…", c: ["La 1re fermentation en masse", "La cuisson", "Le façonnage", "Le nappage"], a: 0,
+    expl: "La pâte fermente encore en masse, avant division. Le repos des pâtons après boulage, lui, s'appelle l'apprêt : deux moments distincts qu'on confond souvent.", src: "Manuel Niveau I, p. 28-31" },
+  { q: "Le sel dans la pâte sert surtout à…", c: ["Renforcer le gluten & réguler la fermentation", "Colorer la pâte", "Sucrer", "Faire lever plus vite"], a: 0,
+    expl: "Il resserre le gluten et freine la levure : goût ET tenue. Sans sel, la fermentation s'emballe et la pâte s'affaisse. Dose usuelle : 17 à 22 g par kilo de farine.", src: "Manuel Niveau I, p. 24" },
+  { q: "Température d'un four à bois pour une napolitaine ?", c: ["≈ 430–480 °C", "180 °C", "250 °C", "600 °C"], a: 0,
+    expl: "C'est cette chaleur qui cuit la pizza en 60 à 90 secondes et fait gonfler le cornicione. Sous 400 °C, la pâte sèche avant d'avoir levé.", src: "Manuel Niveau I, p. 47-48" },
 ];
 const DEMO_CHAPTERS = [
   { title: "Les farines", ic: "package" },
@@ -39,8 +58,21 @@ const DEMO_CHAPTERS = [
 ];
 const STEPS_PER_CH = 6;
 
-// Chapitres d'un monde : vraies questions pour le Niveau I, démo pour le reste.
-const chaptersFor = (w) => (roleOf(w) === "niv1" ? NIV1_CHAPTERS : DEMO_CHAPTERS);
+/* Chapitres d'un monde : chaque rôle a son manuel, donc sa banque. Ceux qui n'en ont pas
+   encore retombent sur la démo (8 questions recyclées sur 36 tirages) — pis-aller très
+   visible. FAIT : niv1, niv2. RESTE À ÉCRIRE : decouverte, niv1pro, expert, spe. */
+const BANKS = { niv1: NIV1_CHAPTERS, niv2: NIV2_CHAPTERS };
+/**
+ * Chapitres d'un monde. La banque de l'ORGANISME (base, cf. Configuration → Pizza Quest)
+ * l'emporte dès qu'elle existe ; sinon on retombe sur les banques codées en dur, puis sur
+ * la démo. Ce repli est ce qui permet de livrer la base sans rien casser tant que
+ * l'organisme n'a pas importé ni saisi ses questions.
+ *
+ * `w.dbChapters` est renseigné par PizzaQuest après appel de l'API.
+ */
+const chaptersFor = (w) => (w && w.dbChapters && w.dbChapters.length
+  ? w.dbChapters
+  : (BANKS[roleOf(w)] || DEMO_CHAPTERS));
 
 const KEY = "pizzaquest.v1";
 const loadProg = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
@@ -70,18 +102,76 @@ function PizzaQuest() {
   const [active, setActive] = useState(null); // null = carte ; sinon code du monde
   const [prog, setProg] = useState(loadProg);
   const [quiz, setQuiz] = useState(null);
-  const [mini, setMini] = useState(null); // mini-jeu ouvert (ex. "constructeur")
+  const [mini, setMini] = useState(null); // { key, obj? } du mini-jeu ouvert, ou null
 
   useEffect(() => {
     getMyFormations().then((r) => {
       setWorlds((r.data || []).map((f) => ({
-        code: f.program_code, title: f.program_title,
-        color: f.color || colorOf(f.program_code), unlocked: !!f.enrolled,
+        code: f.program_code, title: f.program_title, program_id: f.program_id,
+        color: f.color || colorOf(f.program_code),
+        // Une formation DÉJÀ TERMINÉE reste ouverte quoi qu'il arrive : lui opposer un
+        // prérequis après coup reviendrait à reprendre un acquis.
+        unlocked: !!f.finished
+          || ((!!f.has_badge || !!f.enrolled) && !f.revoked && !f.prereq_locked),
+        // Ce qui manque, nommé : un cadenas muet n'indique pas quoi faire pour l'ouvrir.
+        prereqMissing: f.prereq_locked ? (f.prereq_missing || []) : [],
+        theme: f.quest_theme || null,
+        tier: f.quest_tier || null,
+        dbChapters: null, // complété juste après par la banque de l'organisme
       })));
     }).catch(() => setWorlds([]));
   }, []);
 
-  const xp = useMemo(() => Object.values(prog).reduce((s, w) => s + Object.values(w).reduce((a, st) => a + st * 10, 0), 0), [prog]);
+  // Banque de l'organisme, par formation. Chargée APRÈS la carte : les mondes s'affichent
+  // tout de suite avec leurs chapitres codés en dur, puis basculent sur ceux de la base si
+  // l'organisme en a. Un échec ou une banque vide laisse simplement le repli en place.
+  useEffect(() => {
+    if (!worlds || !worlds.length) return;
+    let alive = true;
+    const aCharger = worlds.filter((w) => w.program_id && w.dbChapters === null);
+    if (!aCharger.length) return;
+    Promise.all(aCharger.map((w) =>
+      getPlayableChapters(w.program_id)
+        .then((r) => ({ code: w.code, chapters: (r && r.data && r.data.chapters) || [] }))
+        .catch(() => ({ code: w.code, chapters: [] }))
+    )).then((res) => {
+      if (!alive) return;
+      const parCode = new Map(res.map((x) => [x.code, x.chapters]));
+      setWorlds((ws) => ws.map((w) => (parCode.has(w.code) ? { ...w, dbChapters: parCode.get(w.code) } : w)));
+    });
+    return () => { alive = false; };
+  }, [worlds]);
+
+  // Réhydrate la progression depuis le serveur (source de vérité) et fusionne avec le local
+  // (meilleur score conservé). Le localStorage peut être vidé sans perdre la progression.
+  useEffect(() => {
+    getMyProfile().then((r) => {
+      const server = (r && r.data && r.data.progress) || {};
+      if (!Object.keys(server).length) return;
+      setProg((local) => {
+        const merged = { ...local };
+        for (const [w, steps] of Object.entries(server)) {
+          merged[w] = { ...(merged[w] || {}) };
+          for (const [st, stars] of Object.entries(steps)) merged[w][st] = Math.max(Number(stars) || 0, merged[w][st] || 0);
+        }
+        try { localStorage.setItem(KEY, JSON.stringify(merged)); } catch { /* ignore */ }
+        return merged;
+      });
+    }).catch(() => {});
+  }, []);
+
+  // XP dérivé des questions réellement jouées (barème de l'organisme), et non plus d'un
+  // forfait par étoile. Les mondes dont on n'a pas la banque retombent sur l'ancien calcul.
+  const xp = useMemo(() => {
+    if (!worlds) return 0;
+    const parCode = new Map(worlds.map((w) => [w.code, chaptersFor(w)]));
+    return Object.entries(prog).reduce((total, [code, steps]) => {
+      const chapters = parCode.get(code);
+      return total + (chapters
+        ? worldXp(chapters, steps)
+        : Object.values(steps).reduce((a, st) => a + st * 10, 0));
+    }, 0);
+  }, [prog, worlds]);
   const totalStars = useMemo(() => Object.values(prog).reduce((s, w) => s + Object.values(w).reduce((a, v) => a + v, 0), 0), [prog]);
 
   function finishChapter(code, chIdx, stars) {
@@ -112,32 +202,46 @@ function PizzaQuest() {
           <div className="pq-stat"><span style={{ fontSize: 15 }}>⭐</span><b>{totalStars}</b><span>étoiles</span></div>
         </div>
       </div>
-      <p className="hint" style={{ marginTop: -6 }}>Le <b>Niveau I</b> contient les vraies questions du manuel (QCM, vrai/faux, associations). Les autres niveaux arrivent bientôt.</p>
+      <p className="hint" style={{ marginTop: -6 }}>
+        Questions du manuel — QCM, vrai/faux et associations. Chaque bonne réponse s'accompagne
+        de son explication : c'est là que le chapitre se révise.
+      </p>
 
       {world
         ? <WorldView world={world} prog={prog[world.code] || {}} onBack={() => setActive(null)}
-            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || pickQuestions(STEPS_PER_CH) })} />
-        : <><MiniGames onOpen={setMini} /><FormationMap worlds={worlds} prog={prog} onPick={setActive} /></>}
+            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || pickQuestions(STEPS_PER_CH) })}
+            onGame={(g) => setMini({ key: g.key, obj: g.obj })} />
+        : <FormationMap worlds={worlds} prog={prog} onPick={setActive} />}
 
       {quiz && world && (
         <QuizModal world={world} data={quiz} onClose={() => setQuiz(null)} onFinish={(stars) => finishChapter(quiz.code, quiz.chIdx, stars)} />
       )}
-      {mini === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
+      {mini?.key === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
+      {mini?.key === "simulateur" && <SimulateurPizza objectifId={mini.obj} onClose={() => setMini(null)} onFinish={(stars) => finishMini("simulateur", stars)} />}
     </>
   );
 }
 
-// Carte de parcours : le schéma des formations, en jeu (le tronc + les spécialisations).
+/**
+ * Carte de parcours.
+ *
+ * Deux mises en page, et c'est l'ORGANISME qui tranche sans le savoir : dès qu'il a rangé
+ * au moins une formation (Configuration → Pizza Quest), on affiche SON classement — thèmes
+ * en sections, paliers en rangées ordonnées. Tant qu'il n'a rien rangé, on garde la carte
+ * historique déduite des noms de formation, pour ne pas afficher une page vide à ceux qui
+ * n'ont jamais ouvert cet écran.
+ */
 function FormationMap({ worlds, prog, onPick }) {
+  const card = (w, prereq) => <FCard key={w.code} w={w} prog={prog[w.code]} onPick={onPick} prereq={prereq} />;
+  const range = worlds.some((w) => w.theme || w.tier);
+  if (range) return <CarteRangee worlds={worlds} card={card} />;
+
   const by = { decouverte: [], niv1: [], niv1pro: [], niv2: [], expert: [], spe: [], autre: [] };
   for (const w of worlds) by[roleOf(w)].push(w);
-  const card = (w, prereq) => <FCard key={w.code} w={w} prog={prog[w.code]} onPick={onPick} prereq={prereq} />;
   const hasTronc = by.decouverte.length || by.niv1.length || by.niv1pro.length || by.niv2.length || by.expert.length;
 
   return (
     <div className="pq-board">
-      <div className="pq-ingredients" aria-hidden="true">🌾 💧 🫒 🧫 🍅 🧀 🔥 🍕</div>
-
       {hasTronc && <>
         <div className="pq-tier-label">Nos formations</div>
         {by.decouverte.length > 0 && <div className="pq-row">{by.decouverte.map((w) => card(w))}</div>}
@@ -178,17 +282,114 @@ function FormationMap({ worlds, prog, onPick }) {
   );
 }
 
-// Bandeau des mini-jeux (autres modes de jeu à côté du QCM).
-function MiniGames({ onOpen }) {
+/**
+ * Carte construite sur le classement de l'organisme : une SECTION par thème (« de quoi ça
+ * parle »), une RANGÉE par palier à l'intérieur (« à quel niveau »), dans l'ordre défini en
+ * configuration. Les rangées s'enchaînent avec le même chevron que la carte historique :
+ * c'est ce qui donne à lire une progression plutôt qu'une grille.
+ *
+ * Les formations non rangées ne disparaissent pas — elles atterrissent en fin de section, ou
+ * dans une section « Autres formations ». Un catalogue à moitié classé reste donc complet.
+ */
+function CarteRangee({ worlds, card }) {
+  const SANS = "__sans__";
+  const ordre = (c) => (c && typeof c.sort_order === "number" ? c.sort_order : 9999);
+
+  // Thèmes présents, dans leur ordre de configuration ; les non-rangées en dernier.
+  const themes = [];
+  const vus = new Map();
+  for (const w of worlds) {
+    const key = w.theme ? w.theme.id : SANS;
+    if (!vus.has(key)) { vus.set(key, { key, cat: w.theme || null, worlds: [] }); themes.push(vus.get(key)); }
+    vus.get(key).worlds.push(w);
+  }
+  themes.sort((a, b) => (a.key === SANS) - (b.key === SANS) || ordre(a.cat) - ordre(b.cat));
+
   return (
-    <div className="pq-minis">
-      <button className="pq-mini" onClick={() => onOpen("constructeur")}>
-        <span className="pq-mini-e" style={{ color: "var(--ember1)" }}><Icon name="pizza" size={24} /></span>
-        <span className="pq-mini-txt"><b>Le Constructeur</b><span className="pq-mini-sub">Ordonne la recette</span></span>
-      </button>
-      <div className="pq-mini soon"><span className="pq-mini-e" style={{ color: "var(--dim)" }}><Icon name="clock" size={24} /></span><span className="pq-mini-txt"><b>Chrono Rush</b><span className="pq-mini-sub">Bientôt</span></span></div>
-      <div className="pq-mini soon"><span className="pq-mini-e" style={{ color: "var(--dim)" }}><Icon name="shuffle" size={24} /></span><span className="pq-mini-txt"><b>Associations</b><span className="pq-mini-sub">Bientôt</span></span></div>
+    <div className="pq-board">
+      {themes.map((section, si) => {
+        // Paliers de CETTE section, ordonnés ; les formations sans palier ferment la marche.
+        const paliers = [];
+        const vusP = new Map();
+        for (const w of section.worlds) {
+          const key = w.tier ? w.tier.id : SANS;
+          if (!vusP.has(key)) { vusP.set(key, { key, cat: w.tier || null, worlds: [] }); paliers.push(vusP.get(key)); }
+          vusP.get(key).worlds.push(w);
+        }
+        paliers.sort((a, b) => (a.key === SANS) - (b.key === SANS) || ordre(a.cat) - ordre(b.cat));
+
+        return (
+          <div key={section.key}>
+            {si > 0 && <div className="pq-divider" />}
+            <div className="pq-tier-label" style={section.cat?.color ? { color: section.cat.color } : undefined}>
+              {section.cat ? section.cat.name : "Autres formations"}
+            </div>
+            {paliers.map((p, pi) => (
+              <div key={p.key}>
+                {/* Le chevron ne sépare que deux paliers : il annonce une progression, pas
+                    une simple mise en page. */}
+                {pi > 0 && <div className="pq-connect"><Icon name="chevron-down" size={22} /></div>}
+                {p.cat && (
+                  <div className="pq-sub-label" style={p.cat.color ? { color: p.cat.color } : undefined}>
+                    {p.cat.name}
+                  </div>
+                )}
+                <div className="pq-row">{p.worlds.map((w) => card(w))}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+
+      {worlds.some((w) => (w.prereqMissing || []).length > 0) && (
+        <div style={{ textAlign: "center", marginTop: 14 }}>
+          <span className="pq-legend">
+            <span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span>
+            {" "}= une formation doit être terminée avant
+          </span>
+        </div>
+      )}
     </div>
+  );
+}
+
+// Les défis-jeux propres à chaque formation. DIFFÉRENTS selon le rôle : le Constructeur
+// (ordonner la recette) sur les formations « process », « Fais ta pizza » sur celles qui
+// travaillent les paramètres — et il s'ouvre directement sur le style visé (obj). Un jeu
+// « Bientôt » par formation garde la promesse sans mentir sur ce qui existe.
+const GAME_SIM = (obj, sub) => ({ key: "simulateur", obj, ic: "flame", tint: "var(--orange)", label: "Fais ta pizza", sub });
+const GAME_CONS = { key: "constructeur", ic: "pizza", tint: "var(--ember1)", label: "Le Constructeur", sub: "Ordonne la recette" };
+const GAME_SOON = { key: null, ic: "clock", tint: "var(--dim)", label: "Chrono Rush", sub: "Bientôt", soon: true };
+const GAMES_BY_ROLE = {
+  decouverte: [GAME_CONS, GAME_SOON],
+  niv1: [GAME_CONS, GAME_SIM("classique", "Réussis une classique"), GAME_SOON],
+  niv1pro: [GAME_CONS, GAME_SOON],
+  niv2: [GAME_SIM("contemporaine", "Réussis une contemporaine"), GAME_CONS, GAME_SOON],
+  expert: [GAME_SIM(null, "Tous les styles"), GAME_CONS, GAME_SOON],
+  spe: [GAME_SIM(null, "Réussis ta spécialité"), GAME_SOON],
+  autre: [GAME_CONS, GAME_SOON],
+};
+
+// Les défis d'un monde, rendus sous le chemin de chapitres.
+function WorldGames({ world, onGame }) {
+  const games = GAMES_BY_ROLE[roleOf(world)] || [GAME_CONS];
+  return (
+    <>
+      <div className="pq-games-t">Les défis de cette formation</div>
+      <div className="pq-minis">
+        {games.map((g, i) => g.soon ? (
+          <div key={i} className="pq-mini soon">
+            <span className="pq-mini-e" style={{ color: g.tint }}><Icon name={g.ic} size={24} /></span>
+            <span className="pq-mini-txt"><b>{g.label}</b><span className="pq-mini-sub">{g.sub}</span></span>
+          </div>
+        ) : (
+          <button key={i} className="pq-mini" onClick={() => onGame(g)}>
+            <span className="pq-mini-e" style={{ color: g.tint }}><Icon name={g.ic} size={24} /></span>
+            <span className="pq-mini-txt"><b>{g.label}</b><span className="pq-mini-sub">{g.sub}</span></span>
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -198,27 +399,40 @@ function FCard({ w, prog, onPick, prereq }) {
   const stars = prog ? Object.values(prog).reduce((a, s) => a + s, 0) : 0;
   const nbCh = chaptersFor(w).length;
   const ing = INGREDIENT[roleOf(w)];
+  // Prérequis PARAMÉTRÉS par l'organisme (cf. Configuration → Pizza Quest). Ils priment sur
+  // l'heuristique de mise en page (`prereq`, déduite du nom du niveau) : eux seuls savent
+  // ce qui manque VRAIMENT, et peuvent donc le nommer.
+  const manque = w.prereqMissing || [];
+  const raison = manque.length
+    ? `À terminer d'abord : ${manque.map((m) => m.code).join(", ")}`
+    : "Obtiens le badge de ce niveau pour le débloquer";
   return (
     <button
       className={"pq-fcard" + (w.unlocked ? "" : " locked")}
       style={w.unlocked ? { background: w.color } : undefined}
       disabled={!w.unlocked}
       onClick={() => onPick(w.code)}
-      title={w.unlocked ? w.title : "Inscris-toi à une session pour débloquer ce niveau"}
+      title={w.unlocked ? w.title : raison}
     >
-      {prereq && <span className="pq-prereq" title="Prérequis">!</span>}
+      {(prereq || manque.length > 0) && (
+        <span className="pq-prereq" title={manque.length ? raison : "Prérequis"}>!</span>
+      )}
       <span className="pq-fcard-top">
         <span className="pq-fcard-code">{w.code}</span>
         <span className="pq-fcard-ing" aria-hidden="true">{w.unlocked ? ing : <Icon name="lock" size={16} />}</span>
       </span>
       <span className="pq-fcard-title">{w.title}</span>
-      <span className="pq-fcard-meta">{w.unlocked ? `${done}/${nbCh} chapitres · ${stars} ⭐` : "Non débloqué"}</span>
+      <span className="pq-fcard-meta">
+        {w.unlocked ? `${done}/${nbCh} chapitres · ${stars} ⭐`
+          : manque.length ? `Après ${manque.map((m) => m.code).join(" + ")}`
+            : "Non débloqué"}
+      </span>
     </button>
   );
 }
 
-// Vue d'un monde : chemin de chapitres façon Duolingo.
-function WorldView({ world, prog, onBack, onChapter }) {
+// Vue d'un monde : chemin de chapitres façon Duolingo + les défis-jeux de la formation.
+function WorldView({ world, prog, onBack, onChapter, onGame }) {
   const chapters = chaptersFor(world);
   const doneCount = Object.keys(prog).length;
   return (
@@ -227,6 +441,11 @@ function WorldView({ world, prog, onBack, onChapter }) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
         <span className="pq-world-dot" style={{ background: world.color }}>{world.code}</span>
         <b style={{ fontSize: 15 }}>{world.title}</b>
+        {/* Classement défini par l'organisme — rappelé ici pour situer la formation dans
+            son parcours, comme sur la carte. */}
+        {[world.theme, world.tier].filter(Boolean).map((c) => (
+          <span key={c.id} className="badge n" style={c.color ? { color: c.color } : undefined}>{c.name}</span>
+        ))}
       </div>
       <div className="pq-path">
         {chapters.map((ch, i) => {
@@ -250,6 +469,7 @@ function WorldView({ world, prog, onBack, onChapter }) {
         })}
       </div>
       <p className="hint" style={{ textAlign: "center", marginTop: 8 }}>{doneCount}/{chapters.length} chapitres terminés</p>
+      <WorldGames world={world} onGame={onGame} />
     </div>
   );
 }
@@ -278,6 +498,11 @@ function QuizModal({ world, data, onClose, onFinish }) {
   const type = q.t || "qcm";
   // Colonne de droite mélangée (recalculée à chaque question).
   const rightCol = useMemo(() => (type === "assoc" ? shuffled(q.pairs.map((p, li) => ({ text: p[1], li }))) : []), [q, type]);
+  /* Les banques écrivent la bonne réponse en premier (a: 0) — c'est lisible à la relecture,
+     mais affiché tel quel, taper le 1er bouton donnait 100 % sans rien connaître : le quiz ne
+     testait plus rien. On mélange donc à l'affichage, en gardant l'index d'origine pour la
+     correction. useMemo : sinon les choix sauteraient entre le clic et l'affichage du résultat. */
+  const choices = useMemo(() => (type === "qcm" ? shuffled((q.c || []).map((text, ci) => ({ text, ci }))) : []), [q, type]);
   const assocSolved = type === "assoc" && q.pairs && Object.keys(matched).length === q.pairs.length;
   const answered = type === "assoc" ? assocSolved : picked !== null;
   const total = questions.length;
@@ -329,14 +554,17 @@ function QuizModal({ world, data, onClose, onFinish }) {
             <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px", display: "flex", alignItems: "center", gap: 8 }}>
               <span className={"pq-tag pq-tag-" + type}>{type === "vf" ? "Vrai / Faux" : type === "assoc" ? "Associe" : "QCM"}</span>
             </p>
-            <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 14px" }}>{idx + 1}. {q.q}</p>
+            <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px" }}>{idx + 1}. {q.q}</p>
+            {/* Ce que vaut la question, tel que l'organisme l'a réglé. Affiché AVANT de
+                répondre : savoir qu'une question pèse lourd fait relire l'énoncé. */}
+            <p className="hint" style={{ margin: "0 0 14px" }}>{xpOfQuestion(q)} XP</p>
 
             {type === "qcm" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {q.c.map((choice, ci) => {
+                {choices.map(({ text, ci }) => {
                   let cls = "pq-choice";
                   if (answered) { if (ci === q.a) cls += " ok"; else if (ci === picked) cls += " ko"; }
-                  return <button key={ci} className={cls} onClick={() => choose(ci)} disabled={answered}>{choice}</button>;
+                  return <button key={ci} className={cls} onClick={() => choose(ci)} disabled={answered}>{text}</button>;
                 })}
               </div>
             )}
@@ -378,11 +606,24 @@ function QuizModal({ world, data, onClose, onFinish }) {
             )}
 
             {answered && (
-              <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                <span style={{ fontWeight: 700, color: good ? "var(--green)" : "var(--ember1)" }}>
-                  {good ? "Bravo !" : `Réponse : ${answerLabel}`}
-                </span>
-                <button className="btn primary" onClick={next}>{idx + 1 >= total ? "Terminer" : "Suivant"} <Icon name="chevron-right" size={15} /></button>
+              <div className="pq-after">
+                <div className="pq-after-h">
+                  <span className={"pq-verdict " + (good ? "ok" : "ko")}>
+                    <Icon name={good ? "check-circle" : "x-circle"} size={16} />
+                    {good ? "Bravo !" : `Réponse : ${answerLabel}`}
+                  </span>
+                  <button className="btn primary" onClick={next}>{idx + 1 >= total ? "Terminer" : "Suivant"} <Icon name="chevron-right" size={15} /></button>
+                </div>
+                {/* Le POURQUOI. Sans lui, le stagiaire retient la bonne case et pas la raison —
+                    et une bonne case oubliée ne se retrouve pas. `src` cite la page du manuel
+                    pour qu'il puisse y retourner. Les questions sans `expl` s'affichent comme
+                    avant : le champ est facultatif, on enrichit banque par banque. */}
+                {q.expl && (
+                  <p className="pq-expl">
+                    <Icon name="book-open" size={13} />
+                    <span>{q.expl}{q.src ? <em> — {q.src}</em> : null}</span>
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -394,7 +635,11 @@ function QuizModal({ world, data, onClose, onFinish }) {
             <p className="hint" style={{ marginTop: 0 }}>{stars >= 2 ? "Excellent, prêt pour le QCM !" : stars === 1 ? "Bien — retente pour 3 étoiles." : "Reprends le chapitre du manuel et réessaie."}</p>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12 }}>
               <button className="btn ghost" onClick={onClose}>Fermer</button>
-              <button className="btn primary" onClick={() => onFinish(stars)}>Valider (+{correct * 10} XP)</button>
+              {/* XP annoncé = celui qui sera effectivement compté (même formule que le total
+                  en en-tête), pour qu'aucun écart n'apparaisse après validation. */}
+              <button className="btn primary" onClick={() => onFinish(stars)}>
+                Valider (+{chapterXpEarned({ questions }, stars)} XP)
+              </button>
             </div>
           </div>
         )}

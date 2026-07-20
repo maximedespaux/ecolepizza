@@ -447,12 +447,55 @@ export function submitQuiz(documentId, answers) { return request(`/quizzes/take/
 export function getFormationSteps(id) {
   return request(`/formations/${id}/steps`);
 }
-export function saveFormationSteps(id, steps, break_slug, company_steps) {
+export function saveFormationSteps(id, steps, break_slug, company_steps, company_break_slug) {
   const body = { steps };
   if (break_slug !== undefined) body.break_slug = break_slug;
   if (company_steps !== undefined) body.company_steps = company_steps;
+  if (company_break_slug !== undefined) body.company_break_slug = company_break_slug;
   return request(`/formations/${id}/steps`, { method: "PUT", body: JSON.stringify(body) });
 }
+/* ---- Pizza Quest : structure (thèmes, paliers, prérequis) ---------------------------- */
+export function getQuestStructure() { return request("/quest/structure"); }
+export function createQuestCategory(payload) {
+  return request("/quest/categories", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateQuestCategory(id, payload) {
+  return request(`/quest/categories/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function deleteQuestCategory(id) {
+  return request(`/quest/categories/${id}`, { method: "DELETE" });
+}
+export function setProgramQuestCategories(id, payload) {
+  return request(`/quest/programs/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function addQuestPrerequisite(payload) {
+  return request("/quest/prerequisites", { method: "POST", body: JSON.stringify(payload) });
+}
+export function deleteQuestPrerequisite(id) {
+  return request(`/quest/prerequisites/${id}`, { method: "DELETE" });
+}
+
+/* ---- Pizza Quest : banque de questions ----------------------------------------------- */
+export function getQuestContent(programId) {
+  return request(`/quest/content${programId ? `?program_id=${encodeURIComponent(programId)}` : ""}`);
+}
+export function createQuestDifficulty(p) { return request("/quest/difficulties", { method: "POST", body: JSON.stringify(p) }); }
+export function updateQuestDifficulty(id, p) { return request(`/quest/difficulties/${id}`, { method: "PUT", body: JSON.stringify(p) }); }
+export function deleteQuestDifficulty(id) { return request(`/quest/difficulties/${id}`, { method: "DELETE" }); }
+
+export function createQuestChapter(p) { return request("/quest/chapters", { method: "POST", body: JSON.stringify(p) }); }
+export function updateQuestChapter(id, p) { return request(`/quest/chapters/${id}`, { method: "PUT", body: JSON.stringify(p) }); }
+export function deleteQuestChapter(id) { return request(`/quest/chapters/${id}`, { method: "DELETE" }); }
+
+export function createQuestQuestion(p) { return request("/quest/questions", { method: "POST", body: JSON.stringify(p) }); }
+export function updateQuestQuestion(id, p) { return request(`/quest/questions/${id}`, { method: "PUT", body: JSON.stringify(p) }); }
+export function deleteQuestQuestion(id) { return request(`/quest/questions/${id}`, { method: "DELETE" }); }
+
+// Chapitres jouables d'une formation (espace stagiaire). Vide = rien en base.
+export function getPlayableChapters(programId) {
+  return request(`/mon-espace/quest/${programId}/chapitres`, { silent: true });
+}
+
 export function getFormation(id) {
   return request(`/formations/${id}`);
 }
@@ -568,6 +611,9 @@ export function getMonEspace() {
   return request("/mon-espace");
 }
 
+export function getMyAccess() {
+  return request("/mon-espace/access", { silent: true });
+}
 export function getMyFormations() {
   return request("/mon-espace/formations");
 }
@@ -587,6 +633,55 @@ export function saveMyQuest(progress) {
   return request("/mon-espace/quest", { method: "PUT", body: JSON.stringify({ progress }), silent: true });
 }
 
+// --- Boutique stagiaire ---
+// Deux sources DIFFÉRENTES, à ne pas fusionner : `getBoutique` = le stock que l'école achète
+// et revend (elle est le marchand) ; `getBoutiquePartenaires` = ce que vendent nos partenaires
+// (l'école présente et met en relation). Prix, responsabilité et SAV n'ont rien à voir.
+export function getBoutique() {
+  return request("/mon-espace/boutique");
+}
+export function getBoutiquePartenaires() {
+  return request("/mon-espace/boutique/partenaires");
+}
+// Le panier validé devient une DEMANDE (pas une commande payée) : le stagiaire retire à
+// l'école et paie sur place. Les prix sont relus en base côté serveur — on n'envoie que les ids.
+// Annulation par le stagiaire — refusée par le serveur dès que la demande a avancé.
+export function cancelMyShopRequest(id) {
+  return request(`/mon-espace/boutique/demande/${id}/annuler`, { method: "PUT" });
+}
+export function createShopRequest(lines, note, pickup_at) {
+  return request("/mon-espace/boutique/demande", { method: "POST", body: JSON.stringify({ lines, note, pickup_at }) });
+}
+// Les créneaux viennent de l'API, jamais d'une table recopiée dans le front : sinon les deux
+// divergent et on propose un créneau que le serveur refuse (cf. api/lib/horaires.js).
+export function getPickupSlots(textile) {
+  return request(`/mon-espace/boutique/creneaux${textile ? "?textile=1" : ""}`);
+}
+export function getMyShopRequests() {
+  return request("/mon-espace/boutique/mes-demandes");
+}
+
+// --- Boutique côté école (zone « Demandes ») ---
+export function getShopRequests(status) {
+  return request(`/boutique/demandes${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+}
+export function updateShopRequest(id, patch) {
+  return request(`/boutique/demandes/${id}`, { method: "PUT", body: JSON.stringify(patch) });
+}
+export function invoiceShopRequest(id) {
+  return request(`/boutique/demandes/${id}/facture`, { method: "POST" });
+}
+export function deleteShopRequest(id) {
+  return request(`/boutique/demandes/${id}`, { method: "DELETE" });
+}
+export function deleteAllShopRequests() {
+  return request(`/boutique/demandes`, { method: "DELETE" });
+}
+// Retraits de matériel prévus sur une plage de dates (page d'une session).
+export function getPickups(from, to) {
+  return request(`/boutique/retraits?from=${from}&to=${to}`);
+}
+
 // --- Fiches techniques (recettes) + catalogue d'ingrédients ---
 export function searchCatalog(arg) {
   const p = typeof arg === "string" ? { q: arg } : (arg || {});
@@ -596,6 +691,12 @@ export function searchCatalog(arg) {
 }
 export function getCatalogFamilies() { return request("/recipes/catalog/families", { silent: true }); }
 export function getCatalogBrands() { return request("/recipes/catalog/brands", { silent: true }); }
+
+// --- Mercuriale (liste de prix curée par utilisateur) ---
+export function getMercuriale() { return request("/mercuriale", { silent: true }); }
+export function addMercurialeItem(item) { return request("/mercuriale", { method: "POST", body: JSON.stringify(item) }); }
+export function updateMercurialeItem(id, patch) { return request(`/mercuriale/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export function deleteMercurialeItem(id) { return request(`/mercuriale/${id}`, { method: "DELETE" }); }
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }
@@ -616,6 +717,11 @@ export function getLearnerDocuments(learnerId) {
 
 export function createDocument(payload) {
   return request("/documents", { method: "POST", body: JSON.stringify(payload) });
+}
+
+// Vérifie qu'un modèle s'applique aux dossiers choisis. -> { ok, failed:[{slug,label}] }
+export function checkDocumentConditions(payload) {
+  return request("/documents/check-conditions", { method: "POST", body: JSON.stringify(payload), silent: true });
 }
 
 export function getDocument(id) {

@@ -13,6 +13,11 @@
   --font-d:"Mulish",system-ui,sans-serif; --font-b:"Mulish",system-ui,sans-serif; --font-m:"Space Mono",ui-monospace,monospace;
   --r:16px; --r-sm:11px; --ease:cubic-bezier(.22,.61,.36,1);
   --shadow-glow:0 8px 30px -8px rgba(220,62,55,.4);
+  /* Échelle d'élévation cohérente (cartes → panneaux → modales) */
+  --shadow-1:0 1px 2px rgba(31,33,64,.05), 0 1px 3px rgba(31,33,64,.05);
+  --shadow-2:0 4px 12px -4px rgba(31,33,64,.12), 0 2px 6px -2px rgba(31,33,64,.06);
+  --shadow-3:0 18px 44px -16px rgba(31,33,64,.28), 0 6px 16px -8px rgba(31,33,64,.14);
+  --shadow-navy:0 20px 48px -18px rgba(30,30,80,.55);
   --orange:#ff6900; --gold:#fcb900;                   /* accents pizza : flamme (four) + or (fromage) */
   --grad-warm:linear-gradient(135deg,#ff6900,#fcb900);
   --shadow-gold:0 8px 30px -10px rgba(252,185,0,.45);
@@ -43,6 +48,23 @@
   --cat-mp:#ef7d3a; --cat-sal:#4a9fd8; --cat-loy:#f0b84e;
   --cat-mkt:#33c495; --cat-ene:#7fc9f0; --cat-div:#d98fbb;
 }
+/* Alias historiques (--panel / --line / --ember-soft) employés un peu partout dans la
+   feuille de style. Ils n'étaient DÉFINIS NULLE PART : chaque `var(--panel,#fff)`
+   retombait donc sur sa valeur de repli CLAIRE, d'où des cartes blanches en thème
+   sombre (parcours documentaire, panneaux d'ajout…). On les rattache ici aux
+   variables de thème : `var()` étant résolu au moment de l'usage, un seul jeu
+   d'alias suit automatiquement le thème actif. */
+:root{
+  --panel:var(--surface);        /* fond de carte / pastille */
+  --panel2:var(--surface2);      /* fond de panneau secondaire */
+  --line:var(--border);          /* filet de séparation, bordure de panneau */
+  --ember-soft:var(--rosso-bg);  /* aplat rouge tomate discret (survol, badge) */
+  --gold-soft:var(--gold-bg);    /* aplat or discret */
+  --ink:var(--text);             /* texte plein (était utilisé SANS repli) */
+}
+/* Voile de survol : sombre sur fond clair, clair sur fond sombre. */
+[data-theme="light"]{ --hover:rgba(0,0,0,.05) }
+[data-theme="dark"] { --hover:rgba(255,255,255,.06) }
 
 *{box-sizing:border-box}
 html,body,#root{margin:0;padding:0;min-height:100vh}
@@ -142,6 +164,15 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:9px 15px;border-radius:11px;font-size:14px;font-weight:600;transition:.16s var(--ease);white-space:nowrap;position:relative;overflow:hidden}
 .btn:hover{border-color:var(--dim)}
 .btn:active{transform:translateY(1px) scale(.99)}
+/* Un bouton désactivé DOIT se voir. Sans ça, il gardait l'apparence d'un bouton actif — halo
+   compris sur .primary : on clique, rien ne se passe, on ne comprend pas pourquoi. Le curseur
+   « interdit » et l'opacité disent que ce n'est pas le moment, sans faire disparaître le
+   bouton (il faut pouvoir lire ce qu'on obtiendra). Les :hover/:active sont neutralisés,
+   sinon le bouton continue de réagir sous la souris et fait croire qu'il marche. */
+.btn:disabled,.btn[disabled]{opacity:.45;cursor:not-allowed;box-shadow:none;filter:grayscale(.35)}
+.btn:disabled:hover,.btn[disabled]:hover{border-color:var(--border)}
+.btn:disabled:active,.btn[disabled]:active{transform:none}
+.iconbtn:disabled,.iconbtn[disabled]{opacity:.45;cursor:not-allowed}
 .btn.primary{background:var(--grad-ember);color:#fff;border:none;box-shadow:var(--shadow-glow)}
 .btn.primary:hover{filter:brightness(1.06)}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
@@ -156,7 +187,7 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 
 /* Cards / grid ------------------------------------------------------- */
 .grid{display:grid;gap:16px}.cols-2{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:repeat(3,1fr)}.cols-4{grid-template-columns:repeat(4,1fr)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;transition:.2s var(--ease);animation:rise .45s var(--ease) both}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-1);transition:box-shadow .2s var(--ease),transform .2s var(--ease),border-color .2s var(--ease);animation:rise .45s var(--ease) both}
 .card.hover{cursor:pointer}
 .card.hover:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
 .card h3{font-size:17px}
@@ -542,12 +573,43 @@ tbody tr:last-child td{border-bottom:none}
 .iconbtn:disabled{opacity:.35;cursor:not-allowed}
 
 /* ===== Atelier pâte (espace stagiaire) ================================== */
-.dough-result{color:#fff;background:linear-gradient(135deg,var(--navy),var(--navy-dark))}
-.dough-line{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.10);border-radius:12px;padding:10px 12px;margin-bottom:9px}
+.dough-result{position:relative;color:#fff;border:none;padding:24px;border-radius:20px;background:radial-gradient(120% 120% at 100% 0%,var(--navy-2) 0%,var(--navy) 45%,var(--navy-dark) 100%);box-shadow:var(--shadow-navy)}
+.dough-result::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(160deg,rgba(255,255,255,.22),rgba(255,255,255,0) 40%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.dough-line{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:10px 12px;margin-bottom:8px;transition:background .16s var(--ease),transform .16s var(--ease)}
+.dough-line:hover{background:rgba(255,255,255,.15)}
 .dough-bar{display:flex;height:12px;border-radius:99px;overflow:hidden;margin-bottom:16px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
-.dough-bar span{display:block;height:100%;transition:width .25s var(--ease)}
-.ate-lbl{font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.dough-bar span{display:block;height:100%;transition:width .3s var(--ease)}
+/* Barre de composition interactive (tooltip au survol) */
+.dough-bar2{display:flex;border-radius:99px;position:relative;margin-bottom:16px;box-shadow:inset 0 0 0 1px rgba(128,128,150,.18)}
+.dough-seg{display:block;height:100%;position:relative;transition:width .3s var(--ease);cursor:default;outline:none}
+.dough-seg:first-child{border-radius:99px 0 0 99px}
+.dough-seg:last-child{border-radius:0 99px 99px 0}
+.dough-seg:hover{filter:brightness(1.08)}
+.dough-seg-tip{position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%) translateY(4px) scale(.96);background:#fff;color:var(--navy);padding:5px 10px;border-radius:9px;font:600 11.5px/1.2 var(--font-d);white-space:nowrap;opacity:0;pointer-events:none;transition:.15s var(--ease);z-index:20;box-shadow:0 8px 22px -6px rgba(15,17,40,.4);border:1px solid rgba(15,17,40,.06)}
+.dough-seg-tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#fff}
+.dough-seg:hover .dough-seg-tip,.dough-seg:focus-visible .dough-seg-tip{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+.ate-lbl{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.ate-num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--ember1) 14%,var(--surface));color:var(--ember1);font-size:11px;font-weight:800;flex:none}
 .ate-step{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.15);display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
+/* Curseur d'hydratation — repère du minimum recommandé (manuel) */
+.hydra-track{position:relative;height:6px;border-radius:99px;background:var(--surface2);margin:0 0 7px}
+.hydra-zone{position:absolute;top:0;bottom:0;right:0;border-radius:99px;background:color-mix(in srgb,var(--green) 35%,transparent)}
+.hydra-mark{position:absolute;top:-3px;width:2px;height:12px;border-radius:2px;background:var(--green);transform:translateX(-1px)}
+.hydra-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:99px}
+.hydra-badge.ok{background:color-mix(in srgb,var(--green) 16%,var(--surface));color:var(--green)}
+.hydra-badge.low{background:color-mix(in srgb,var(--gold) 22%,var(--surface));color:var(--orange)}
+.hydra-badge.high{background:color-mix(in srgb,var(--ember1) 16%,var(--surface));color:var(--ember1)}
+.hydra-mark.hi{background:var(--ember1)}
+/* Conditions de fermentation (stockage) — durée + température, ambiante et/ou contrôlée */
+.stock-cond{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;align-items:end;border:1px solid var(--border-soft);border-radius:12px;padding:11px 13px;margin-bottom:10px}
+.stock-lbl{grid-column:1 / -1;display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--text)}
+/* Section repliable (réglages avancés du calculateur) */
+.ate-fold{border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden}
+.ate-fold-head{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:var(--surface2);border:none;cursor:pointer;color:var(--dim)}
+.ate-fold-head:hover{background:color-mix(in srgb,var(--ember1) 6%,var(--surface2))}
+.ate-fold.open .ate-fold-head{color:var(--text);border-bottom:1px solid var(--border-soft)}
+.ate-fold-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:inline-flex;align-items:center;gap:7px}
+.ate-fold-body{padding:14px}
 
 /* Espace stagiaire — menu déroulant « Outils & Communauté » */
 .stu-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:60;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:6px;min-width:210px;display:flex;flex-direction:column;gap:2px}
@@ -818,7 +880,20 @@ tbody tr:last-child td{border-bottom:none}
 
 /* Pizza Quest — accueil : le schéma des formations en carte de jeu */
 .pq-board{background:var(--surface2);border:1px solid var(--border-soft);border-radius:16px;padding:22px 18px 26px}
-.pq-ingredients{display:flex;gap:12px;justify-content:center;font-size:22px;margin-bottom:16px;user-select:none}
+/* Après-réponse du quiz : le verdict + le POURQUOI. Le verdict reste en --text, seule l'icône
+   porte la couleur (vert/rouge) — --green et --ember1 échouent au contraste en petit texte. */
+.pq-after{margin-top:14px}
+.pq-after-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.pq-verdict{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:14px;color:var(--text)}
+.pq-verdict.ok svg{color:var(--green)}
+.pq-verdict.ko svg{color:var(--ember1)}
+.pq-expl{display:flex;align-items:flex-start;gap:7px;margin:10px 0 0;padding:10px 12px;border-radius:11px;
+  background:var(--surface2);font-size:12.5px;line-height:1.5;color:var(--text)}
+.pq-expl svg{flex-shrink:0;margin-top:2px;color:var(--muted)}
+.pq-expl em{font-style:normal;color:var(--muted)}
+
+/* Titre de la rangée de défis-jeux dans un monde. */
+.pq-games-t{font-size:13px;font-weight:700;color:var(--text);margin:20px 0 10px;text-align:center}
 .pq-tier-label{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:center;margin:6px 0 12px}
 .pq-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
 .pq-fcard{position:relative;flex:1 1 230px;max-width:300px;min-height:88px;border:none;border-radius:14px;padding:14px 16px;color:#fff;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;box-shadow:0 4px 0 0 rgba(0,0,0,.18);transition:transform .1s var(--ease)}
@@ -834,6 +909,9 @@ tbody tr:last-child td{border-bottom:none}
 .pq-connect{display:flex;justify-content:center;gap:70px;color:var(--dim);margin:4px 0}
 .pq-legend{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;border-radius:10px;padding:6px 12px 6px 8px;font-weight:700;font-size:12px}
 .pq-divider{height:2px;background:var(--border);border-radius:2px;margin:22px auto;max-width:520px}
+/* Palier à l'intérieur d'un thème (classement de l'organisme) : plus discret que le titre
+   de section, sinon les deux niveaux de titre se disputent la lecture. */
+.pq-sub-label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center;margin:0 0 8px}
 
 /* Profil stagiaire — avatar picker + grade */
 .pf-avatar{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;color:#fff;font-size:30px;font-weight:800;flex:none}
@@ -849,6 +927,58 @@ tbody tr:last-child td{border-bottom:none}
 .pf-check{position:absolute;bottom:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;border:2px solid var(--surface)}
 
 /* Pizza Quest — mini-jeux + Le Constructeur (ordonnancement) */
+/* ── Simulateur « Fais ta pizza » ───────────────────────────────────────────────────────── */
+.modal.sim{max-width:520px}
+/* Choix de l'objectif */
+.sim-objs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sim-obj{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:13px 14px;
+  border:1px solid var(--border);border-radius:13px;background:var(--surface);cursor:pointer;
+  text-align:left;transition:border-color .12s var(--ease),transform .12s var(--ease)}
+.sim-obj:hover{border-color:var(--gold);transform:translateY(-2px)}
+.sim-obj-e{font-size:26px;line-height:1}
+.sim-obj b{font-size:14px}
+.sim-obj-d{font-size:11.5px;color:var(--muted);line-height:1.4}
+/* Écran de jeu */
+.sim-goal{display:flex;align-items:center;gap:9px;margin:0 0 14px;padding:9px 12px;border-radius:11px;
+  background:var(--surface2);font-size:13px;color:var(--text)}
+.sim-goal .sim-obj-e{font-size:22px}
+/* Briefing d'instructions : ce qu'il faut viser, en mots. Fond doux, pas d'alerte. */
+.sim-brief{margin:0 0 14px;padding:11px 13px;border-radius:11px;background:var(--surface2);border:1px solid var(--border-soft)}
+.sim-brief-t{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px}
+.sim-brief ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.sim-brief li{font-size:12.5px;line-height:1.4;color:var(--text)}
+.sim-brief li b{color:var(--text)}
+.sim-stage{display:flex;justify-content:center;padding:6px 0 14px}
+.sim-ctrl{display:block;margin-bottom:16px}
+.sim-ctrl-h{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:7px}
+.sim-ctrl-h b{color:var(--text);font-variant-numeric:tabular-nums;margin-left:4px}
+.sim-pills{display:flex;gap:7px;flex-wrap:wrap}
+.sim-pill{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:70px;min-height:44px;
+  padding:6px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  color:var(--text);font-weight:600;font-size:12.5px;cursor:pointer;transition:border-color .12s var(--ease),background .12s var(--ease)}
+.sim-pill span{font-size:10px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.sim-pill:hover{border-color:var(--gold)}
+.sim-pill.on{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,var(--surface))}
+.sim-range{width:100%;accent-color:var(--ember1);height:26px;cursor:pointer}
+.sim-range-hint{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+/* Résultat */
+.sim-result{text-align:center}
+.sim-stars{font-size:34px;letter-spacing:6px;line-height:1;margin:4px 0 10px}
+.sim-stars span{color:var(--border)}
+.sim-stars span.on{color:var(--gold)}
+.sim-verdict-t{font-size:15px;font-weight:700;color:var(--text);margin:0 0 16px}
+.sim-feedback{list-style:none;margin:0;padding:0;display:grid;gap:9px;text-align:left}
+.sim-feedback li{display:flex;align-items:flex-start;gap:9px;padding:10px 12px;border-radius:11px;
+  background:var(--surface2);font-size:12.5px;line-height:1.45;color:var(--text)}
+.sim-feedback li svg{flex-shrink:0;margin-top:1px}
+.sim-feedback li em{display:block;margin-top:3px;font-style:normal;color:var(--muted);font-size:11.5px}
+/* Vert = juste, ambre = approchant, rouge = raté — mais seulement sur l'ICÔNE (graphique, 3:1),
+   jamais sur le texte, qui reste --text/--muted pour tenir le contraste. */
+.sim-feedback li.ok svg{color:var(--green)}
+.sim-feedback li.mid svg{color:var(--orange)}
+.sim-feedback li.ko svg{color:var(--ember1)}
+
 .pq-minis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
 .pq-mini{display:flex;align-items:center;gap:10px;flex:1 1 180px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;transition:transform .1s var(--ease),border-color .1s var(--ease)}
 .pq-mini:hover:not(.soon){transform:translateY(-2px);border-color:var(--ember1)}
@@ -959,9 +1089,21 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .comm-main{display:flex;align-items:center;gap:10px;padding:11px 12px;cursor:pointer}
 .comm-main:hover{background:var(--surface2)}
 .comm-bar{display:flex;gap:8px;padding:0 12px 11px;flex-wrap:wrap}
-.comm-thread{padding:12px;border-top:1px solid var(--border-soft);background:var(--surface2)}
+.comm-thread{padding:12px;border-top:1px solid var(--border-soft);background:var(--surface2);border-radius:12px}
 .comm-c{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border-soft)}
 .comm-c:first-child{padding-top:0}
+/* Communauté — galerie de cartes (v2) */
+.comm-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.comm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px}
+.comm-card2{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden;transition:transform .14s var(--ease),box-shadow .14s var(--ease),border-color .14s var(--ease)}
+.comm-card2:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 12px 28px -16px rgba(0,0,0,.4)}
+.comm-card2-body{flex:1;display:flex;flex-direction:column;gap:8px;padding:15px 16px 13px;cursor:pointer}
+.comm-kind{align-self:flex-start;display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.comm-title{font-size:16px;font-weight:800;line-height:1.22;color:var(--text)}
+.comm-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.comm-foot{display:flex;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--border-soft);background:var(--surface2)}
+.comm-foot .btn{padding:5px 10px}
+.comm-save{margin-left:auto}
 
 /* Fiche technique — tableau de garniture aligné et espacé */
 .ing-table{display:flex;flex-direction:column;gap:9px}
@@ -978,6 +1120,17 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .kind-btn.on{background:var(--grad-ember);color:#fff;border:none;box-shadow:var(--shadow-glow)}
 .kind-hint{margin-left:6px;flex:1;min-width:180px}
 @media(max-width:600px){.kind-hint{flex-basis:100%;margin-left:0}}
+/* Choix du type de fiche (préparation / recette) — cartes explicites */
+.kind-choose{display:flex;gap:12px;margin:0 0 20px;flex-wrap:wrap}
+.kind-opt{flex:1;min-width:220px;display:flex;align-items:center;gap:12px;text-align:left;padding:13px 15px;border:1.5px solid var(--border);border-radius:14px;background:var(--surface);color:var(--text);cursor:pointer;transition:.15s var(--ease)}
+.kind-opt:hover{border-color:var(--gold);background:var(--surface2)}
+.kind-opt.on{border-color:transparent;background:var(--grad-ember);color:#fff;box-shadow:var(--shadow-glow)}
+.kind-opt-ic{display:inline-grid;place-items:center;width:38px;height:38px;flex:none;border-radius:11px;background:color-mix(in srgb,var(--ember1) 12%,var(--surface));color:var(--ember1)}
+.kind-opt.on .kind-opt-ic{background:rgba(255,255,255,.18);color:#fff}
+.kind-opt-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.kind-opt-txt b{font-size:15px;font-weight:800}
+.kind-opt-txt span{font-size:12px;color:var(--muted);line-height:1.35}
+.kind-opt.on .kind-opt-txt span{color:rgba(255,255,255,.85)}
 /* Étiquette « type de fiche » + ligne d'ingrédient importée */
 .fiche-tag{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;background:var(--gold-soft,rgba(198,160,74,.16));color:var(--gold,#9a7b2e);font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0}
 .comp-label{display:flex;align-items:center;gap:8px;background:var(--surface2);cursor:default;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -1019,3 +1172,409 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .gs-clear{border:none;background:none;color:var(--muted);cursor:pointer;padding:3px;border-radius:6px;display:inline-flex;align-items:center}
 .gs-clear:hover{color:var(--text);background:var(--surface2)}
 .inp:disabled{background:var(--surface2);color:var(--muted);cursor:not-allowed;opacity:.85}
+
+/* Assistant pas-à-pas — empâtement (PateWizard) */
+.wiz-steps{display:flex;align-items:flex-start;gap:2px;margin:0 0 20px;overflow-x:auto;padding-bottom:2px}
+.wiz-dot{position:relative;flex:1 1 0;min-width:54px;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:2px 0;color:var(--muted)}
+.wiz-dot::before{content:"";position:absolute;top:15px;left:calc(-50% + 16px);width:calc(100% - 32px);height:2px;background:var(--border);z-index:0}
+.wiz-dot:first-child::before{display:none}
+.wiz-dot-n{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);font:800 13px/1 var(--font-d);color:var(--muted);transition:all .18s}
+.wiz-dot-l{font-size:11px;font-weight:600;text-align:center;line-height:1.15;white-space:nowrap}
+.wiz-dot:hover .wiz-dot-n{border-color:var(--gold);color:var(--text)}
+.wiz-dot.done .wiz-dot-n{background:color-mix(in srgb,var(--green) 18%,var(--surface));border-color:var(--green);color:var(--green)}
+.wiz-dot.done::before{background:var(--green)}
+.wiz-dot.on{color:var(--text)}
+.wiz-dot.on .wiz-dot-n{background:var(--grad-ember);border:none;color:#fff;box-shadow:var(--shadow-glow)}
+.wiz-q{display:flex;align-items:center;gap:9px;font-size:15px;margin:2px 0 15px;color:var(--text)}
+.wiz-q svg{color:var(--ember1);flex-shrink:0}
+.uc-hero{border-top:3px solid var(--gold)}
+/* Accueil d'outil (BuilderHub) */
+.hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,340px));gap:16px;justify-content:start}
+.hub-card{display:flex;flex-direction:column;align-items:flex-start;gap:9px;text-align:left;padding:24px 22px;border:1px solid var(--border);border-top:3px solid var(--gold);border-radius:16px;background:var(--surface);color:var(--text);cursor:pointer;box-shadow:var(--shadow-1);transition:transform .18s var(--ease),box-shadow .18s var(--ease)}
+.hub-card:hover{transform:translateY(-4px);box-shadow:var(--shadow-3)}
+.hub-card:active{transform:translateY(-1px) scale(.99)}
+.hub-top{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:2px}
+.hub-ic{display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:13px;transition:transform .18s var(--ease)}
+.hub-card:hover .hub-ic{transform:scale(1.08) rotate(-4deg)}
+.hub-badge{min-width:24px;height:24px;padding:0 8px;border-radius:99px;background:var(--surface2);color:var(--muted);font-size:12.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.hub-arrow{margin-left:auto;color:var(--dim);opacity:0;transform:translateX(-5px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
+.hub-card:hover .hub-arrow{opacity:1;transform:translateX(0)}
+.hub-t{font-size:15.5px;color:var(--text)}
+/* Retour tactile cohérent sur les puces/lignes interactives (ui-ux-pro-max : scale-feedback) */
+.gp-chip:active,.pick-row:active,.kind-btn:active,.wiz-dot:active{transform:scale(.97)}
+.gp-chip,.pick-row,.kind-btn{transition:transform .14s var(--ease),background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
+.gp-chip.sug:hover{background:color-mix(in srgb,var(--green) 12%,var(--surface))}
+/* Sélecteur de produit (garniture) */
+.gp-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-weight:600;font-size:13px;cursor:pointer;transition:all .12s}
+.gp-chip:hover{border-color:var(--gold)}
+.gp-chip.on{background:var(--grad-ember);color:#fff;border-color:transparent}
+.gp-chip.sug{border-style:dashed;border-color:var(--green);color:var(--green)}
+.gp-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border-soft)}
+/* Détails dépliables d'un build enregistré (accordéon liste) */
+.acc-body{animation:accOpen .2s var(--ease)}
+@keyframes accOpen{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+/* Sélecteur de produits catalogue réel (garniture pro) : rayons + résultats */
+/* Choix du type de farine : des cartes plutôt qu'un menu déroulant natif. C'est LA leçon
+   France ↔ Italie, elle mérite mieux qu'une liste. La pastille porte la vraie couleur de la
+   farine (même calcul que le pâton, cf. flourColor) : on voit d'un coup d'œil que plus le
+   type monte, plus la farine fonce — plus de son, donc plus d'eau bue (manuel p.32). */
+.tipo-row{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:thin}
+/* 116px : « Tipo Intégrale » est le libellé le plus long — en dessous il passe à la ligne et
+   décale tout le contenu de la carte par rapport à ses voisines. */
+.tipo-card{flex:0 0 auto;width:116px;min-height:44px;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 8px;border:1px solid var(--border);border-radius:14px;background:var(--surface);cursor:pointer;transition:border-color .14s var(--ease),transform .14s var(--ease),box-shadow .14s var(--ease)}
+.tipo-card:hover{border-color:var(--gold);transform:translateY(-2px)}
+.tipo-card.on{border-color:var(--ember1);box-shadow:inset 0 0 0 1px var(--ember1),var(--shadow-2)}
+.tipo-dot{width:34px;height:34px;border-radius:50%;box-shadow:inset 0 -3px 7px rgba(0,0,0,.16),0 0 0 1px rgba(0,0,0,.08)}
+.tipo-it{font:800 13.5px/1 var(--font-d);color:var(--text);white-space:nowrap}
+.tipo-fr{font-size:11px;font-weight:600;color:var(--muted)}
+.tipo-nm{font-size:10.5px;color:var(--dim);text-align:center;line-height:1.2}
+.tipo-w{font-size:9.5px;font-weight:700;color:var(--orange)}
+
+/* Boutique stagiaire — grille de produits. auto-fill + minmax : la grille se remplit toute
+   seule du téléphone au grand écran, sans media query à maintenir. */
+/* Boutique : panier persistant à gauche + catalogue à droite. */
+.shop-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
+.shop-layout.no-cart{grid-template-columns:1fr} /* panier masqué : le catalogue occupe toute la largeur */
+.shop-aside{position:sticky;top:70px}
+.shop-main{min-width:0}
+.cart-mini-list{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow-y:auto}
+.cart-mini{display:flex;align-items:center;gap:8px}
+.cart-mini-lbl{flex:1;min-width:0;font-size:12.5px;line-height:1.25;overflow:hidden}
+.cart-mini-qty{display:inline-flex;align-items:center;gap:5px;flex:none}
+.cart-mini-qty .iconbtn{padding:2px}
+@media(max-width:760px){
+  .shop-layout{grid-template-columns:1fr}
+  .shop-aside{position:static;margin-top:18px}
+}
+/* Étapes d'une commande boutique (admin). */
+.cmd-steps{display:flex;align-items:flex-start;gap:0;margin-top:14px;overflow-x:auto;overflow-y:hidden}
+.cmd-step{flex:1;min-width:64px;display:flex;flex-direction:column;align-items:center;gap:5px;position:relative;text-align:center}
+.cmd-step::before{content:"";position:absolute;top:12px;left:-50%;width:100%;height:2px;background:var(--border)}
+.cmd-step:first-child::before{display:none}
+.cmd-step.done::before,.cmd-step.on::before{background:var(--grad-ember)}
+.cmd-dot{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;
+  background:var(--surface);border:2px solid var(--border);color:var(--muted);position:relative;z-index:1}
+.cmd-step.done .cmd-dot{background:var(--grad-ember);border-color:transparent;color:#fff}
+.cmd-step.on .cmd-dot{border-color:var(--ember1,#c0392b);color:var(--ember1,#c0392b)}
+.cmd-step-lbl{font-size:11px;color:var(--muted);line-height:1.2}
+.cmd-step.on .cmd-step-lbl{color:var(--text);font-weight:700}
+.shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
+.shop-card{display:flex;flex-direction:column;gap:5px;padding:14px 12px;border:1px solid var(--border);
+  border-radius:14px;background:var(--surface);transition:border-color .14s var(--ease),transform .14s var(--ease)}
+.shop-card:hover{border-color:var(--gold);transform:translateY(-2px)}
+/* Puce de rayon : le glyphe ET le nom du rayon, jamais l'un sans l'autre. Seul, le glyphe se
+   fait prendre pour la photo du produit (quatre pelles partagent le même dessin) ; accompagné,
+   il redevient une étiquette de rayon. Même logique que .rayon-tab, en plus discret. */
+.shop-rayon{align-self:flex-start;display:inline-flex;align-items:center;gap:5px;
+  padding:3px 7px 3px 6px;border-radius:999px;background:var(--surface2);
+  font-size:10px;font-weight:700;letter-spacing:.02em;color:var(--muted);margin-bottom:2px}
+.shop-rayon svg{color:var(--navy);flex-shrink:0}
+[data-theme="dark"] .shop-rayon svg{color:var(--gold)}
+/* Le nom EST l'asset : sans photo produit, c'est la seule chose qui distingue une pelle ronde
+   Ø 23 d'une Ø 33. Il passe donc en tête de hiérarchie. */
+.shop-name{font-size:13.5px;line-height:1.32;color:var(--text)}
+/* Côté partenaires : la RÉFÉRENCE du fabricant (« A-32RF/60 »), pas un rayon. Elle ne sert
+   qu'à celui qui appellera le partenaire pour la commander — d'où le gris discret. */
+.shop-ref{font-size:10.5px;color:var(--muted)}
+.shop-price{margin-top:auto;padding-top:6px;display:flex;flex-direction:column;gap:1px}
+.shop-price b{font-size:15px;white-space:nowrap}
+.shop-unit{font-size:10.5px;font-weight:600;color:var(--muted)}
+/* --muted et pas --dim : mesuré, --dim tombe à 2.59:1 en clair et 3.77:1 en sombre sur le fond
+   des cartes — sous le minimum de 4.5:1. Le prix HT n'est pas de la décoration : c'est le chiffre
+   que lit un stagiaire qui monte sa pizzeria et récupère la TVA. */
+.shop-ht{font-size:11px;color:var(--muted);white-space:nowrap}
+/* Barré, mais pas décoratif : c'est en lisant ce prix que le stagiaire voit ce que le tarif
+   école lui fait gagner. Donc lisible — cf. .shop-ht sur le choix de --muted. */
+.shop-old{font-size:11.5px;color:var(--muted);text-decoration:line-through}
+.shop-note{font-size:10.5px;color:var(--muted);line-height:1.35;border-top:1px solid var(--border-soft);padding-top:5px;margin-top:2px}
+/* N'apparaît QUE si l'article n'est pas en stock — c'est une exception, pas une étiquette.
+   L'ambre, pas le rouge : « sur commande » n'est pas une erreur, juste un délai. */
+.shop-stock{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--orange)}
+/* Bouton d'ajout : neutre au repos, il ne s'allume qu'au survol de SA carte. Trente boutons
+   rouges alignés ne hiérarchisent rien. Au doigt (aucun survol sur mobile) il reste un bouton
+   parfaitement lisible : le survol enrichit, il ne conditionne pas. */
+/* 44px : c'est LA cible du doigt sur cette page, et .btn.sm ne fait que 30px de haut. On ne
+   touche pas à .btn.sm globalement (42 écrans l'utilisent) — on l'agrandit ici, là où le
+   stagiaire tape trente fois d'affilée sur son téléphone. */
+.shop-add{min-height:44px;justify-content:center;transition:background .14s var(--ease),color .14s var(--ease),border-color .14s var(--ease)}
+.shop-card:hover .shop-add:not(.ok){background:var(--grad-ember);color:#fff;border-color:transparent}
+.shop-add.ok{background:var(--green);color:#fff;border-color:transparent}
+
+/* Panier : une ligne = libellé + quantité + sous-total + retirer. Les boutons de quantité
+   font 30px — en dessous, on les rate au pouce sur téléphone. */
+.cart-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-soft)}
+.cart-row:last-of-type{border-bottom:none}
+.cart-lbl{flex:1;min-width:0;font-size:13px;line-height:1.35}
+.cart-qty{display:inline-flex;align-items:center;gap:4px;flex:none}
+.cart-qty .iconbtn{width:30px;height:30px}
+.cart-qty b{min-width:22px;text-align:center;font-size:13.5px}
+.cart-sum{width:82px;text-align:right;flex:none;font-size:13.5px}
+/* Taille / coupe : des boutons, pas un <select>. 6 options tiennent à l'écran, et un menu
+   déroulant les cacherait derrière un clic de plus — le pire contrôle sur téléphone. */
+.var-lbl{display:block;font-size:11.5px;font-weight:700;margin-bottom:5px;color:var(--text)}
+.var-row{display:flex;gap:5px;flex-wrap:wrap}
+.var-btn{min-width:40px;height:36px;padding:0 10px;border:1px solid var(--border);border-radius:9px;
+  background:var(--surface);color:var(--text);font:700 13px/1 var(--font-b);cursor:pointer;transition:.12s var(--ease)}
+.var-btn.wide{flex:1;min-width:62px}
+.var-btn:hover{border-color:var(--gold)}
+.var-btn.on{background:var(--grad-ember);color:#fff;border-color:transparent}
+
+/* Calendrier de retrait (façon Calendly). Grille 7 colonnes fixes : un calendrier dont les
+   colonnes bougeraient d'un mois à l'autre ne se lit plus. Semaine commençant LUNDI. */
+.cal-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin:0 0 10px}
+.cal-nav b{font:700 14px/1 var(--font-d);min-width:132px;text-align:center;text-transform:capitalize}
+.cal-dows{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:5px}
+.cal-dows span{text-align:center;font-size:10.5px;font-weight:700;color:var(--dim)}
+.cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal-day{aspect-ratio:1;min-height:38px;border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  color:var(--text);font:600 13px/1 var(--font-b);cursor:pointer;transition:.12s var(--ease)}
+.cal-day:hover:not(:disabled){border-color:var(--gold)}
+.cal-day.on{background:var(--grad-ember);color:#fff;border-color:transparent}
+/* Jour fermé : visible mais clairement inerte. On le GARDE affiché — un trou dans la grille
+   décalerait les colonnes et on ne lirait plus le calendrier. */
+.cal-day.off{opacity:.3;cursor:not-allowed;background:transparent;border-style:dashed}
+.cal-slots{margin-top:16px;padding-top:14px;border-top:1px solid var(--border-soft)}
+.cal-slots-t{display:block;font-size:12px;margin-bottom:8px}
+.cal-vide{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--border-soft)}
+
+/* Créneaux de retrait. auto-fill : 13 créneaux le lundi, 7 le mercredi — la grille s'adapte
+   sans média-query. 40px de haut : en dessous on les rate au pouce. */
+.slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:7px}
+.slot{height:40px;border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  color:var(--text);font:600 13px/1 var(--font-b);cursor:pointer;transition:.12s var(--ease)}
+.slot:hover{border-color:var(--gold)}
+.slot.on{background:var(--grad-ember);color:#fff;border-color:transparent}
+
+/* Broderie : chaque article a son bloc, sinon on ne sait plus quel nom va sur quoi. */
+.brod-bloc{padding:12px 0;border-bottom:1px solid var(--border-soft)}
+.brod-bloc:last-child{border-bottom:none;padding-bottom:0}
+.brod-art{display:block;font-size:13px;margin-bottom:8px}
+.brod-apercu{margin:8px 0 0;padding:7px 11px;border-radius:9px;background:var(--surface3);font-size:12.5px}
+.brod-apercu span{color:var(--muted)}
+.brod-apercu b{font-size:14px;letter-spacing:.02em}
+.brod-apercu.ko{background:var(--rosso-bg)}
+.brod-apercu.ko span{color:var(--ember1)}
+.inp.ko{border-color:var(--ember1)}
+/* --muted (6.19:1) et pas --gold (1.74:1 sur carte blanche) : cf. .dem-brod. */
+.shop-brod{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--muted)}
+
+/* Broderie : le champ est rattaché VISUELLEMENT à sa ligne (retrait + liseré), sinon on ne
+   sait plus quel nom va sur quel article quand il y a deux vestes. */
+.cart-perso{margin:0 0 10px 14px;padding:8px 0 8px 12px;border-left:2px solid var(--gold)}
+.cart-perso label{display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;color:var(--text)}
+.cart-perso .inp{max-width:280px;font-size:13px}
+.cart-perso .inp.ko{border-color:var(--ember1)}
+.dem-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft);font-size:13px}
+.dem-row:last-child{border-bottom:none}
+
+/* ── Mes demandes (onglet historique du stagiaire) ─────────────────────────────────────── */
+/* Le créneau EN PREMIER et détaché : c'est la seule information de l'écran qui engage le
+   stagiaire à se déplacer. Il vire au vert quand la demande est prête — la couleur signale
+   « il y a quelque chose à faire », elle ne décore pas. */
+.dem-retrait{display:flex;align-items:center;gap:7px;margin:0 0 12px;padding:9px 12px;
+  border-radius:10px;background:var(--surface2);font-size:13px;color:var(--muted)}
+.dem-retrait b{color:var(--text)}
+/* Le VERT reste au fond et sur l'icône ; le texte, lui, garde la couleur normale. Mesuré :
+   --green sur --green-bg ne donne que 2.99:1 en clair — sous le minimum de 4.5:1. Le fond vert
+   suffit à signaler « c'est prêt » ; peindre le texte en vert par-dessus le rendait juste plus
+   dur à lire. */
+.dem-retrait.prete{background:var(--green-bg);color:var(--text)}
+.dem-retrait.prete svg{color:var(--green)}
+
+.dem-lignes{list-style:none;margin:0;padding:0}
+.dem-lignes li{display:flex;align-items:baseline;gap:10px;padding:7px 0;
+  border-bottom:1px solid var(--border-soft);font-size:13px}
+.dem-lignes li:last-child{border-bottom:none}
+.dem-qty{flex-shrink:0;min-width:28px;color:var(--muted);font-weight:700}
+.dem-lbl{flex:1;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.dem-var{font-size:10px}
+/* Ce qui sera brodé : la seule chose de la demande qui ne se corrige plus après coup. Il doit
+   donc être le texte le PLUS lisible de la ligne — pas le plus décoré. En doré (--gold) il
+   tombait à 1.74:1 sur une carte blanche : joli en sombre, illisible en clair. Le mot « brodé »
+   porte le sens ; la couleur n'a rien à ajouter. */
+.dem-brod{font-style:normal;font-size:11px;font-weight:700;color:var(--text)}
+.dem-prix{flex-shrink:0;font-weight:600;white-space:nowrap}
+
+.dem-pied{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-top:12px;padding-top:11px;border-top:1px solid var(--border)}
+.dem-pied b{font-size:15px}
+.dem-note{display:flex;align-items:center;gap:6px;margin:10px 0 0;font-size:11.5px;color:var(--muted)}
+
+/* Pastille de l'onglet : compte les demandes PRÊTES, rien d'autre. Un compteur qui affiche
+   tout l'historique ne s'éteint jamais et devient un décor qu'on cesse de voir. */
+.kind-pastille{display:inline-flex;align-items:center;justify-content:center;min-width:18px;
+  height:18px;padding:0 5px;margin-left:2px;border-radius:999px;background:var(--green);
+  color:#fff;font-size:11px;font-weight:800;line-height:1}
+.kind-btn.on .kind-pastille{background:rgba(255,255,255,.28)}
+.ok-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 16px;padding:11px 14px;border-radius:12px;
+  background:color-mix(in srgb,var(--green) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--green) 40%,transparent);
+  color:var(--text);font-size:13px;line-height:1.5}
+.ok-banner svg{color:var(--green);flex:none}
+.ok-banner span{flex:1;min-width:0}
+
+.rayon-tabs{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:2px}
+.rayon-tab{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:background .12s var(--ease),border-color .12s var(--ease),color .12s var(--ease)}
+.rayon-tab:hover{border-color:var(--gold)}
+.rayon-tab.on{background:var(--grad-ember);color:#fff;border-color:transparent}
+.cat-results{display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto;margin-top:9px;padding-right:2px}
+.cat-row{display:flex;align-items:center;gap:10px;padding:8px 11px;border:1px solid var(--border-soft);border-radius:10px;background:var(--surface);text-align:left;width:100%;cursor:pointer;color:var(--text);transition:border-color .12s var(--ease),transform .12s var(--ease)}
+.cat-row:hover{border-color:var(--green);transform:translateY(-1px)}
+.cat-row.added{opacity:.5;pointer-events:none}
+.cat-empty{padding:16px;text-align:center;color:var(--muted);font-size:12.5px}
+/* Cartes « mode de base » (prête / préparée / cuisinée) */
+.mode-card{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;padding:9px 13px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--text);cursor:pointer;min-width:132px;transition:border-color .12s var(--ease),background .12s var(--ease)}
+.mode-card:hover{border-color:var(--gold)}
+.mode-card.on{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,var(--surface))}
+.mode-card b{font-size:13px}
+.mode-card>span{font-size:11px;color:var(--muted)}
+.mode-card.on>span{color:var(--ember1)}
+/* ── Conseil matériel (fours / pétrins) ─────────────────────────────────────────────────── */
+/* Comparateur de prix (fours partenaires) + badges de specs */
+.spec-badges{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0}
+.spec-badges .badge{font-size:9.5px;padding:2px 6px;gap:3px}
+.cmp{display:flex;flex-direction:column;gap:3px;margin-top:auto;padding-top:6px}
+.cmp-src{font-size:10px;color:var(--muted)}
+.cmp-range b{font-size:15px;white-space:nowrap}
+/* L'écart entre revendeurs = l'argument. Fond ambre léger + texte normal (pas d'ambre EN
+   texte, qui échoue au contraste). Le poids et le fond suffisent à le faire ressortir. */
+.cmp-ecart{display:inline-block;margin-left:2px;font-size:10px;font-weight:700;color:var(--text);
+  background:var(--amber-bg);padding:1px 6px;border-radius:999px}
+.cmp-toggle{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;padding:2px 0;
+  background:none;border:none;color:var(--muted);font-weight:600;font-size:11px;cursor:pointer}
+.cmp-toggle:hover{color:var(--text)}
+.cmp-list{list-style:none;margin:2px 0 0;padding:0;display:grid;gap:4px}
+.cmp-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px}
+.cmp-list a{display:inline-flex;align-items:center;gap:4px;color:var(--text);text-decoration:none}
+.cmp-list a:hover{text-decoration:underline}
+.cmp-list a svg{color:var(--muted)}
+.cmp-list li span{font-weight:600;white-space:nowrap;color:var(--text)}
+.cmp-devis{display:inline-flex;align-items:center;gap:5px;margin-top:auto;padding-top:6px;
+  font-size:12px;font-weight:600;color:var(--muted)}
+.cmp-devis svg{flex-shrink:0}
+
+/* En-tête cliquable de la carte « Aide au choix » : toute la barre est la cible. */
+.cm-open{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
+  background:none;border:none;padding:0;cursor:pointer;color:var(--text)}
+.cm-open .card-ttl{margin:0}
+.cm-open:hover .card-ttl{color:var(--ember1)}
+.cm-step{margin-bottom:16px}
+.cm-q{font-size:14px;margin:0 0 10px}
+.cm-q b{color:var(--text);margin-right:4px}
+.cm-multi{font-size:11px;font-weight:600;color:var(--muted);margin-left:6px}
+.cm-chips{display:flex;flex-wrap:wrap;gap:8px}
+/* Puce de choix : le libellé + sa donnée chiffrée (température ou capacité). Le chiffre EST
+   l'info — c'est lui qui décide, pas une icône. Taille ≥44px de haut pour le doigt. */
+.cm-chip{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;
+  min-height:44px;padding:6px 13px;border:1px solid var(--border);border-radius:11px;
+  background:var(--surface);color:var(--text);font-weight:600;font-size:13.5px;cursor:pointer;
+  transition:border-color .12s var(--ease),background .12s var(--ease)}
+.cm-chip:hover{border-color:var(--gold)}
+.cm-chip.on{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,var(--surface))}
+.cm-chip-t{font-size:10.5px;font-weight:600;color:var(--muted)}
+/* Sur la puce sélectionnée, le sous-texte passe en --text : sur le fond teinté ember, --muted
+   tombe sous 4.5:1. Plus foncé = plus lisible, et ça marque la sélection. */
+.cm-chip.on .cm-chip-t{color:var(--text)}
+
+.cm-avpn{display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;
+  border-radius:10px;background:var(--surface2);font-size:13px;cursor:pointer}
+.cm-avpn input{width:17px;height:17px;accent-color:var(--ember1);cursor:pointer}
+
+/* La quantité de pâte : gros champ, l'équivalent en pâtons juste dessous. */
+.cm-kg{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.cm-kg-in{display:inline-flex;align-items:baseline;gap:6px;border:1px solid var(--border);
+  border-radius:11px;padding:8px 14px;background:var(--surface)}
+.cm-kg-in input{width:64px;border:none;background:none;color:var(--text);font-size:22px;
+  font-weight:800;font-variant-numeric:tabular-nums;outline:none;-moz-appearance:textfield}
+.cm-kg-in input::-webkit-outer-spin-button,.cm-kg-in input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.cm-kg-in span{font-size:14px;font-weight:700;color:var(--muted)}
+.cm-kg-eq{font-size:12.5px;color:var(--muted);min-height:1em}
+
+/* Le verdict : la ligne qui répond à la question posée. Fond tenu, texte normal (pas de
+   couleur peinte sur le texte — cf. leçon .dem-retrait). */
+.cm-verdict{display:flex;align-items:flex-start;gap:9px;margin:0 0 16px;padding:11px 14px;
+  border-radius:12px;background:var(--surface2);font-size:13.5px;line-height:1.5;color:var(--text)}
+.cm-verdict svg{flex-shrink:0;margin-top:2px;color:var(--ember1)}
+.cm-verdict b{font-variant-numeric:tabular-nums}
+.cm-count{color:var(--muted)}
+/* --text gras et pas --orange : --orange tombe à 2.68:1 sur ce fond. Le poids porte l'accent. */
+.cm-avpn-note{color:var(--text);font-weight:700}
+.cm-vide{margin:0 0 16px}
+
+.cm-opts{display:grid;gap:10px}
+.cm-opt{border:1px solid var(--border);border-radius:13px;padding:13px 14px;background:var(--surface);
+  transition:border-color .14s var(--ease)}
+.cm-opt:hover{border-color:var(--border-soft)}
+/* Écartée : on la GARDE visible mais en retrait — c'est l'explication qui a de la valeur, pas
+   le masquage. 0.6 reste au-dessus du seuil lisible, contrairement au .38 d'un vrai disabled. */
+.cm-opt.off{opacity:.6;background:var(--surface2)}
+.cm-opt-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.cm-opt-h b{font-size:14.5px}
+.cm-temp{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted);
+  padding:2px 7px;border-radius:999px;background:var(--surface3)}
+.cm-resume{margin:7px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+
+.cm-detail{margin-top:9px}
+.cm-detail-t{display:inline-flex;align-items:center;gap:5px;padding:3px 0;background:none;border:none;
+  color:var(--muted);font-weight:600;font-size:12px;cursor:pointer}
+.cm-detail-t:hover{color:var(--text)}
+.cm-detail-b{margin-top:6px}
+.cm-pts{list-style:none;margin:0;padding:0;display:grid;gap:5px}
+.cm-pts+.cm-pts{margin-top:8px}
+.cm-pts li{display:flex;align-items:flex-start;gap:7px;font-size:12.5px;line-height:1.45;color:var(--text)}
+.cm-pts li svg{flex-shrink:0;margin-top:2px}
+.cm-pour li svg{color:var(--green)}
+/* Les contraintes en ambre : ce n'est pas une erreur, c'est ce qu'on découvre trop tard
+   normalement (ramonage, triphasé, encombrement). --orange passe le contraste sur carte. */
+.cm-contr li{color:var(--muted)}
+.cm-contr li svg{color:var(--orange)}
+
+.cm-src{display:flex;align-items:center;gap:6px;margin:16px 0 0;font-size:11.5px;color:var(--muted)}
+.cm-src svg{flex-shrink:0}
+
+/* Panneau food-pairing (garniture) */
+.pair-panel{border:1px solid color-mix(in srgb,var(--green) 30%,var(--border));background:color-mix(in srgb,var(--green) 6%,var(--surface));border-radius:12px;padding:12px 13px;margin-bottom:14px}
+.pair-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:8px}
+.pair-badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:#5f9e3f;text-transform:uppercase;letter-spacing:.04em}
+.pair-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.pair-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--border-soft);border-radius:10px;background:var(--surface);cursor:pointer;color:var(--text);transition:transform .12s var(--ease),border-color .12s var(--ease)}
+.pair-item:hover{border-color:var(--green);transform:translateY(-1px)}
+.pair-item:active{transform:scale(.98)}
+/* Sélecteur empâtement/garniture (réalisation) */
+.pick-row{display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--muted);cursor:pointer;transition:all .12s;width:100%}
+.pick-row:hover{border-color:var(--gold);color:var(--text)}
+.pick-row.on{border-color:var(--ember1);color:var(--ember1);background:color-mix(in srgb,var(--ember1) 7%,var(--surface))}
+/* Ligne « mélange de farines / adjonction » (nom + curseur % + retirer) */
+.mix-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+/* Impression de la fiche de progression : ne garder que .print-area */
+@media print{
+  body *{visibility:hidden !important}
+  .print-area,.print-area *{visibility:visible !important}
+  .print-area{position:absolute;left:0;top:0;width:100%;padding:0}
+  .no-print{display:none !important}
+  .card{box-shadow:none !important;border:none !important}
+}
+/* Colonnes : l'assistant à gauche, le résultat en direct à droite (empilé sur tablette/mobile). */
+.wiz-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,400px);gap:22px;align-items:start}
+@media(max-width:820px){.wiz-layout{grid-template-columns:1fr}}
+/* La colonne résultat suit le scroll : on règle à gauche, on lit le résultat à droite sans
+   perdre le fil en descendant dans les étapes. 76px = les 63px de la topbar collante (mesurés)
+   + 13px de respiration, sinon le panneau viendrait se coller sous elle. */
+@media(min-width:821px){.wiz-side{position:sticky;top:76px}}
+/* Sous 820px la grille passe en 1 colonne : le résultat part SOUS le pli et on règlerait son
+   hydratation à l'aveugle. Ce dock garde le visuel + le chiffre clé sous les yeux pendant qu'on
+   règle, et renvoie au panneau complet d'un tap. Il vit dans la colonne de gauche : dès qu'on
+   descend jusqu'au vrai panneau, il sort de l'écran — on n'a plus besoin de lui. */
+.wiz-dock{display:none}
+@media(max-width:820px){
+  .wiz-dock{display:flex;align-items:center;gap:11px;position:sticky;bottom:10px;z-index:25;width:100%;margin:18px 0 0;padding:9px 12px 9px 9px;border:none;border-radius:16px;color:#fff;text-align:left;cursor:pointer;
+    background:radial-gradient(120% 120% at 100% 0%,var(--navy-2) 0%,var(--navy) 45%,var(--navy-dark) 100%);
+    box-shadow:0 12px 32px -8px rgba(15,17,40,.6),inset 0 0 0 1px rgba(255,255,255,.1);transition:transform .12s var(--ease)}
+  .wiz-dock:active{transform:scale(.99)}
+  .wiz-dock-v{width:54px;flex-shrink:0;display:block}
+  .wiz-dock-t{display:block;font:800 15px/1.15 var(--font-d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wiz-dock-s{display:block;font-size:11px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+@media(max-width:560px){.wiz-dot-l{display:none}.wiz-dot{min-width:40px}}
+.doc-rule-warning{display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;padding:10px 14px;border:1px solid var(--ember1);border-radius:10px;background:rgba(220,62,55,.08);color:var(--ember1);font-size:.9rem;line-height:1.4}
+.doc-rule-warning svg{flex:0 0 auto;margin-top:1px}
+.doc-rule-warning strong{color:var(--ember1)}

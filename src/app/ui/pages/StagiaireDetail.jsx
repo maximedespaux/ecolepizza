@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment,
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -43,6 +43,7 @@ function StagiaireDetail() {
   const [enrollments, setEnrollments] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [prep, setPrep] = useState({ slug: "", title: "", enrollment_ids: [] });
+  const [blockedRules, setBlockedRules] = useState([]); // règles non respectées pour le modèle+dossiers choisis
   const [viewId, setViewId] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [parcoursEnr, setParcoursEnr] = useState(null);
@@ -99,6 +100,10 @@ function StagiaireDetail() {
     }
     if (prep.enrollment_ids.length === 0) {
       setStatus({ type: "error", message: "Sélectionnez au moins une formation." });
+      return;
+    }
+    if (blockedRules.length > 0) {
+      setStatus({ type: "error", message: `Ce document ne peut pas être généré à cause de la règle : ${blockedRules.map((r) => r.label).join(", ")}` });
       return;
     }
     try {
@@ -178,21 +183,21 @@ function StagiaireDetail() {
 
   const c = l.company;
 
-  // Verrouillage de la préparation selon l'avancement de la formation.
-  const todayISO = new Date().toISOString().slice(0, 10);
-  const END_TYPES = new Set(["CERTIFICAT_REALISATION", "DIPLOME", "ATTESTATION_ASSIDUITE", "EVALUATION_SATISFACTION", "ATTESTATION_HYGIENE"]);
-  const DURING_TYPES = new Set(["EMARGEMENT"]);
+  // AUCUNE restriction codée en dur sur les documents : la disponibilité d'un document
+  // est pilotée par l'organisme via ses CONDITIONS (Modèles → Conditions / applies_when).
   const selTpl = templates.find((t) => t.slug === prep.slug);
-  const selEnr = enrollments.filter((e) => prep.enrollment_ids.includes(e.id));
-  const phase = selTpl ? (END_TYPES.has(selTpl.doc_type) ? "end" : DURING_TYPES.has(selTpl.doc_type) ? "during" : "any") : "any";
-  const startedAll = selEnr.length > 0 && selEnr.every((e) => e.start_date && e.start_date <= todayISO);
-  const finishedAll = selEnr.length > 0 && selEnr.every((e) => e.end_date && e.end_date <= todayISO);
-  let gateReason = "";
-  if (prep.enrollment_ids.length > 0) {
-    if (phase === "during" && !startedAll) gateReason = "Disponible une fois la formation commencée.";
-    else if (phase === "end" && !finishedAll) gateReason = "Disponible une fois la formation terminée.";
-  }
-  const canPrepare = enrollments.length > 0 && prep.enrollment_ids.length > 0 && !!selTpl && !gateReason;
+  // Vérifie côté serveur si le modèle choisi s'applique aux dossiers sélectionnés
+  // (règles / conditions de l'organisme). On n'interdit rien en dur : on prévient.
+  useEffect(() => {
+    if (!prep.slug || prep.enrollment_ids.length === 0) { setBlockedRules([]); return; }
+    let alive = true;
+    checkDocumentConditions({ template_slug: prep.slug, enrollment_ids: prep.enrollment_ids })
+      .then((r) => { if (alive) setBlockedRules(r?.data?.failed || []); })
+      .catch(() => { if (alive) setBlockedRules([]); });
+    return () => { alive = false; };
+  }, [prep.slug, prep.enrollment_ids]);
+
+  const canPrepare = enrollments.length > 0 && prep.enrollment_ids.length > 0 && !!selTpl && blockedRules.length === 0;
 
   // Dossier dont on affiche le parcours (onglet sélectionné).
   const curEnrId = parcoursEnr || enrollments[0]?.id || null;
@@ -350,10 +355,19 @@ function StagiaireDetail() {
               </div>
             )}
           </div>
+          {blockedRules.length > 0 && (
+            <div className="doc-rule-warning" role="alert">
+              <Icon name="ban" />
+              <div>
+                {blockedRules.map((r) => (
+                  <div key={r.slug}>Ce document ne peut pas être généré à cause de la règle : <strong>{r.label}</strong></div>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button type="submit" className="btn primary" disabled={!canPrepare}>Générer le document</button>
-            {gateReason && <span className="hint" style={{ color: "var(--amber, #b8860b)" }}>{gateReason}</span>}
-            {!gateReason && prep.enrollment_ids.length === 0 && enrollments.length > 0 && <span className="hint">Sélectionnez au moins une formation.</span>}
+            {prep.enrollment_ids.length === 0 && enrollments.length > 0 && <span className="hint">Sélectionnez au moins une formation.</span>}
           </div>
         </form>
 

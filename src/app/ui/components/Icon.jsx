@@ -292,12 +292,32 @@ const PATHS = {
       <path d="M5 12h14" /><path d="M12 5v14" />
     </>
   ),
+  "minus": <path d="M5 12h14" />,
+  "edit": (
+    <>
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+    </>
+  ),
+  "shopping-cart": (
+    <>
+      <circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" />
+      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+    </>
+  ),
+  "info": (
+    <>
+      <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
+    </>
+  ),
   "check": <path d="M20 6 9 17l-5-5" />,
   "check-circle": (
     <>
       <path d="M21.8 10A10 10 0 1 1 17 3.34" /><path d="m9 11 3 3L22 4" />
     </>
   ),
+  "circle": (<><circle cx="12" cy="12" r="10" /></>),
+  "star": (<><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></>),
   "x-circle": (
     <>
       <circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" />
@@ -468,6 +488,11 @@ const PATHS = {
       <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
     </>
   ),
+  "printer": (
+    <>
+      <path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect width="12" height="8" x="6" y="14" />
+    </>
+  ),
   "shuffle": (
     <>
       <path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.8-1.1 2-1.7 3.3-1.7H22" />
@@ -503,10 +528,43 @@ const PATHS = {
       <circle cx="8.5" cy="11" r="3" /><circle cx="15" cy="9.5" r="2.5" /><circle cx="14" cy="16" r="2.5" />
     </>
   ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+    </>
+  ),
+  heart: (
+    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+  ),
+  "message-circle": (
+    <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+  ),
+  phone: (
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92Z" />
+  ),
+  mail: (
+    <>
+      <rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+    </>
+  ),
+  bookmark: (
+    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+  ),
+  "book-open": (
+    <>
+      <path d="M12 7v14" /><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
+    </>
+  ),
+  "graduation-cap": (
+    <>
+      <path d="M22 10v6M2 10l10-5 10 5-10 5z" /><path d="M6 12v5c3 3 9 3 12 0v-5" />
+    </>
+  ),
 };
 
-/** Icône SVG décorative. `name` = clé du dico (sinon la chaîne est rendue telle quelle). */
-export function Icon({ name, size = 18, strokeWidth = 2, className = "", style }) {
+/** Icône SVG décorative. `name` = clé du dico (sinon la chaîne est rendue telle quelle).
+ *  `fill` permet de remplir une forme fermée (ex. cœur « aimé »). */
+export function Icon({ name, size = 18, strokeWidth = 2, className = "", style, fill = "none" }) {
   const inner = PATHS[name];
   if (!inner) return <span className={className} style={style}>{name}</span>;
   return (
@@ -515,7 +573,7 @@ export function Icon({ name, size = 18, strokeWidth = 2, className = "", style }
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill="none"
+      fill={fill}
       stroke="currentColor"
       strokeWidth={strokeWidth}
       strokeLinecap="round"

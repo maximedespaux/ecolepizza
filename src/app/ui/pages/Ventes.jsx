@@ -65,6 +65,13 @@ function Ventes() {
     return Object.entries(g).sort((a, b) => a[0].localeCompare(b[0]));
   }, [inventory]);
 
+  // « Boutique » importée dans la caisse : catalogue des articles à prix (mêmes articles
+  // que la boutique du stagiaire — inventory_item avec un prix), en grille cliquable.
+  const [posCat, setPosCat] = useState("");
+  const posItems = useMemo(() => inventory.filter((i) => i.unit_price != null), [inventory]);
+  const posCats = useMemo(() => [...new Set(posItems.map((i) => i.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr")), [posItems]);
+  const posShown = posCat ? posItems.filter((i) => i.category === posCat) : posItems;
+
   const matches = useMemo(() => {
     const q = clientQuery.trim().toLowerCase();
     if (!q) return [];
@@ -81,6 +88,19 @@ function Ventes() {
       return [...c, { item_id: it.id, name: it.name, quantity: n, unit_price: Number(it.unit_price || 0), tax_rate: Number(it.tax_rate || 0), disc: "", stock: it.quantity }];
     });
     setPick(""); setQty(1);
+  }
+  // Ajoute un article de la boutique au panier (une unité par clic), SANS dépasser le stock.
+  function addItem(it) {
+    const stock = Number(it.quantity) || 0;
+    if (stock <= 0) return;
+    setCart((c) => {
+      const ex = c.find((l) => l.item_id === it.id);
+      if (ex) {
+        if (ex.quantity >= stock) return c; // stock atteint : on n'ajoute pas
+        return c.map((l) => (l.item_id === it.id ? { ...l, quantity: Math.min(stock, l.quantity + 1) } : l));
+      }
+      return [...c, { item_id: it.id, name: it.name, quantity: 1, unit_price: Number(it.unit_price || 0), tax_rate: Number(it.tax_rate || 0), disc: "", stock }];
+    });
   }
   const removeLine = (id) => setCart((c) => c.filter((l) => l.item_id !== id));
   const setLine = (id, patch) => setCart((c) => c.map((l) => (l.item_id === id ? { ...l, ...patch } : l)));
@@ -143,29 +163,44 @@ function Ventes() {
               <button className="iconbtn" onClick={() => setLastInvoice(null)} aria-label="Fermer"><Icon name="x" size={14} /></button>
             </div>
           )}
-          <div className="grid cols-2">
-            <Card title="Point de vente">
-              <div className="row3" style={{ alignItems: "end" }}>
-                <div className="field" style={{ gridColumn: "span 2" }}>
-                  <label>Produit</label>
-                  <select className="inp" value={pick} onChange={(e) => setPick(e.target.value)}>
-                    <option value="">— Choisir un produit —</option>
-                    {grouped.map(([cat, items]) => (
-                      <optgroup key={cat} label={cat}>
-                        {items.map((it) => (
-                          <option key={it.id} value={it.id} disabled={it.quantity <= 0}>
-                            {it.name} — {euro(it.unit_price || 0)} HT ({it.quantity} en stock)
-                          </option>
-                        ))}
-                      </optgroup>
+          {/* Caisse : boutique (catalogue) à gauche, panier avec client + paiement à droite. */}
+          <div className="grid cols-2" style={{ alignItems: "start" }}>
+            <Card title={<span className="card-ttl"><Icon name="package" size={16} /> Boutique — cliquer pour ajouter</span>}>
+              {posItems.length === 0 ? (
+                <EmptyState icon="package">Aucun article en boutique. Ajoute un prix aux articles dans l'onglet Inventaire.</EmptyState>
+              ) : (
+                <>
+                  <div className="rayon-tabs" style={{ marginBottom: 12 }}>
+                    <button className={"rayon-tab" + (posCat === "" ? " on" : "")} onClick={() => setPosCat("")}>Tout ({posItems.length})</button>
+                    {posCats.map((c) => (
+                      <button key={c} className={"rayon-tab" + (posCat === c ? " on" : "")} onClick={() => setPosCat(c)}>{c}</button>
                     ))}
-                  </select>
-                </div>
-                <Field label="Qté" type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} />
-              </div>
-              <button className="btn" onClick={addToCart} disabled={!pick}>＋ Ajouter au panier</button>
+                  </div>
+                  <div className="shop-grid">
+                    {posShown.map((it) => {
+                      const inC = cart.find((l) => l.item_id === it.id)?.quantity || 0;
+                      const atMax = it.quantity <= 0 || inC >= it.quantity; // stock épuisé ou déjà tout au panier
+                      return (
+                        <div key={it.id} className="shop-card">
+                          {!posCat ? <span className="shop-rayon">{it.category || "Divers"}</span> : null}
+                          <b className="shop-name">{it.name}</b>
+                          <span className="shop-price"><b className="tnum">{euro(it.unit_price)} <span className="shop-unit">HT</span></b></span>
+                          {it.quantity <= 0
+                            ? <span className="shop-stock"><Icon name="clock" size={12} /> Rupture</span>
+                            : <span className="hint" style={{ fontSize: 11 }}>{it.quantity} en stock{inC ? ` · ${inC} au panier` : ""}</span>}
+                          <button className="btn sm shop-add" style={{ marginTop: 8, width: "100%" }} onClick={() => addItem(it)} disabled={atMax}>
+                            <Icon name={atMax ? "check" : "plus"} size={14} /> {atMax ? (it.quantity <= 0 ? "Rupture" : "Stock atteint") : "Ajouter"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </Card>
 
-              <div className="divider" />
+            <Card title={<span className="card-ttl"><Icon name="shopping-cart" size={16} /> Panier ({cart.length})</span>}>
+              {/* Client + moyen de paiement, en tête du panier. */}
               <div className="field">
                 <label>Client</label>
                 {client ? (
@@ -200,9 +235,7 @@ function Ventes() {
                   <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} /> Payé à l'encaissement
                 </label>
               </div>
-            </Card>
-
-            <Card title={`Panier (${cart.length})`}>
+              <div className="divider" />
               {cart.length === 0 ? (
                 <EmptyState icon="package">Panier vide. Ajoutez des produits.</EmptyState>
               ) : (
@@ -221,8 +254,8 @@ function Ventes() {
                           <b>{l.name}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{euro(l.unit_price)} HT · TVA {l.tax_rate}%</span>
                         </span>
-                        <input type="number" min="1" max={l.stock} value={l.quantity} title="Quantité"
-                          onChange={(e) => setLine(l.item_id, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                        <input type="number" min="1" max={l.stock} value={l.quantity} title={`Quantité (max ${l.stock} en stock)`}
+                          onChange={(e) => setLine(l.item_id, { quantity: Math.min(Number(l.stock) || 1, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
                           className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} />
                         <input type="number" min="0" max="100" value={l.disc} title="Remise %"
                           onChange={(e) => { const v = e.target.value; setLine(l.item_id, { disc: v === "" ? "" : Math.min(100, Math.max(0, Number(v) || 0)) }); }}

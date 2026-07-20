@@ -87,9 +87,14 @@ function buildOptions(docs, eqMap) {
       options.push({
         key: `group:${gk}`, group: gk, members: members.map((m) => m.slug),
         label: members.map((m) => m.label).join(" / "), type: "model",
+        company_level: members.some((m) => m.company_level),
       });
     } else {
-      options.push({ key: `slug:${d.slug}`, ref: d.slug, label: d.label, type: d.system ? "system" : (d.quiz_id ? "quiz" : "model") });
+      options.push({
+        key: `slug:${d.slug}`, ref: d.slug, label: d.label,
+        type: d.system ? "system" : (d.quiz_id ? "quiz" : "model"),
+        company_level: !!d.company_level,
+      });
     }
   }
   return options;
@@ -139,8 +144,10 @@ function FolderNode({ folder, options, depth, onChange, onDelete }) {
         ))}
         <select value="" onChange={(e) => addItem(e.target.value)}>
           <option value="">＋ Attribuer un document…</option>
+          {/* 🏢 = document de GROUPE (une seule signature collective) — repère utile côté
+              archivage entreprise, où documents de groupe et de stagiaires cohabitent. */}
           {options.filter((o) => !items.some((it) => itemId(it) === itemId(o))).map((o) => (
-            <option key={o.key} value={o.key}>{o.label}</option>
+            <option key={o.key} value={o.key}>{o.company_level ? "🏢 " : ""}{o.label}</option>
           ))}
         </select>
       </div>

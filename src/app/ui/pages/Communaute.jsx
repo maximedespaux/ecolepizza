@@ -2,25 +2,40 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import PageHead from "../components/PageHead.jsx";
-import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
+import DoughBar from "../components/DoughBar.jsx";
 import { euro } from "../lib/format.js";
+import { computeBuild, gfmt } from "../lib/dough.js";
+import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
 import { parseAvatar } from "../lib/gamification.js";
 import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment } from "../api/apiClient.js";
 
 /**
- * Communauté — les fiches techniques partagées par les stagiaires de l'organisme.
- * Chaque carte porte son bouton « j'aime » (❤️) et sa section commentaires en ligne
- * (ajouter / modifier / supprimer les siens). Le détail (ingrédients + coût) s'ouvre à droite.
+ * Communauté — les fiches techniques partagées par les stagiaires de l'organisme,
+ * en galerie de cartes. Chaque carte porte son type (pâte / préparation / recette),
+ * son auteur, ses « j'aime » et ses commentaires. Un clic ouvre le détail en modale
+ * (ingrédients, coût, prix conseillé, fil de commentaires). On peut aimer, commenter,
+ * ou enregistrer une fiche dans ses propres fiches pour l'adapter.
  */
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+// Wishlist (« mettre de côté ») — distincte de « Enregistrer » (qui copie la fiche). Stockée en
+// localStorage en attendant un endpoint serveur (comme les likes) → à synchroniser plus tard.
+const WISH_KEY = "impasto.wishlist";
+const readWish = () => { try { return new Set(JSON.parse(localStorage.getItem(WISH_KEY)) || []); } catch { return new Set(); } };
+const writeWish = (s) => { try { localStorage.setItem(WISH_KEY, JSON.stringify([...s])); } catch { /* ignore */ } };
 const KIND_TABS = [
   { k: "ALL", label: "Toutes" },
-  { k: "PATE", label: "Pâtes" },
-  { k: "PREPARATION", label: "Préparations" },
-  { k: "RECETTE", label: "Recettes" },
+  { k: "PATE", label: "Empâtements" },
+  { k: "PREPARATION", label: "Garnitures" },
+  { k: "RECETTE", label: "Réalisations" },
 ];
+// Type de fiche → libellé, couleur d'accent et icône (badges).
+const kindMeta = (k) => (
+  k === "PATE" ? { label: "Empâtement", color: "var(--gold)", icon: "wheat" }
+    : k === "PREPARATION" ? { label: "Garniture", color: "var(--green)", icon: "list-checks" }
+      : { label: "Réalisation", color: "var(--ember1)", icon: "pizza" }
+);
 // Hashtags (#tag) de la description → badges.
 const TAG_RE = /#[\p{L}\p{N}_-]+/gu;
 const parseTags = (s) => Array.from(new Set((String(s || "").match(TAG_RE) || []).map((t) => t.slice(1))));
@@ -29,8 +44,6 @@ function Tags({ text }) {
   if (!tags.length) return null;
   return <div className="tag-row">{tags.map((t) => <span key={t} className="badge-tag">#{t}</span>)}</div>;
 }
-// Libellé affiché : la préparation n'a pas de « type », on montre son genre.
-const typeLabel = (s) => (s.kind === "PREPARATION" ? "Préparation" : s.type || (s.kind === "PATE" ? "Pâte" : ""));
 
 // Petite pastille cliquable « auteur » (avatar + nom) → ouvre son profil.
 function AuthorChip({ id, name, avatar, onOpen }) {
@@ -60,15 +73,25 @@ function ProfileModal({ profile, loading, onClose }) {
             <>
               <span className="prof-ava" style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
               <div style={{ fontWeight: 800, fontSize: 18, marginTop: 10 }}>{profile.name}</div>
-              {profile.company && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>🏢 {profile.company}</div>}
+              {profile.company && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}><Icon name="building" size={13} /> {profile.company}</div>}
+              {profile.badges && profile.badges.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center", marginTop: 10 }}>
+                  {profile.badges.map((b) => (
+                    <span key={b.code} className="badge n mono" title={b.title || b.code}
+                      style={{ background: b.color || "var(--navy)", color: "#fff", borderColor: "transparent", fontSize: 10, padding: "2px 8px" }}>
+                      {b.code}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "center", gap: 22, marginTop: 16 }}>
                 <span><b style={{ fontSize: 18 }}>{profile.shared_count}</b><br /><span className="hint">fiche{profile.shared_count > 1 ? "s" : ""} partagée{profile.shared_count > 1 ? "s" : ""}</span></span>
-                <span><b style={{ fontSize: 18 }}>❤️ {profile.likes_received}</b><br /><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>
+                <span><b style={{ fontSize: 18 }}>♥ {profile.likes_received}</b><br /><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>
               </div>
               {(profile.phone || profile.email) && (
-                <div style={{ marginTop: 16, textAlign: "left", display: "flex", flexDirection: "column", gap: 4 }}>
-                  {profile.phone && <span style={{ fontSize: 13 }}>📞 {profile.phone}</span>}
-                  {profile.email && <span style={{ fontSize: 13 }}>✉️ {profile.email}</span>}
+                <div style={{ marginTop: 16, textAlign: "left", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {profile.phone && <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 7 }}><Icon name="phone" size={13} /> {profile.phone}</span>}
+                  {profile.email && <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 7 }}><Icon name="mail" size={13} /> {profile.email}</span>}
                 </div>
               )}
             </>
@@ -79,30 +102,73 @@ function ProfileModal({ profile, loading, onClose }) {
     document.body
   );
 }
+
+// Coûts d'une fiche (pour le détail) : coût matière par pizza + prix conseillé.
 function costs(d) {
   const nb = Math.max(1, num(d.servings));
   const dough = ((num(d.paton_g) / 1000) / 1.68) * num(d.flour_price);
   const line = (t) => (t.unit === "g" ? (num(t.qty) / 1000) * num(t.unit_price) : num(t.qty) * num(t.unit_price));
   const topping = (d.ingredients || []).reduce((s, t) => s + line(t), 0);
   const per = dough + topping;
-  return { per, price: per * (1 + num(d.margin_pct) / 100), nb, line };
+  return { per, price: per * (1 + num(d.margin_pct) / 100), nb, line, ingSum: topping };
+}
+
+// Fil de commentaires — défini AU NIVEAU MODULE (hors de Communaute). S'il était défini dans
+// le composant, il serait recréé à chaque frappe et le <textarea> perdrait le focus (une lettre
+// puis sortie du champ). Les états/handlers sont passés en props.
+function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onSubmit, onSaveEdit, onDelete }) {
+  const cs = comments[id];
+  return (
+    <div className="comm-thread">
+      {!cs ? <p className="hint" style={{ margin: 0 }}>Chargement…</p> : cs.length === 0 ? (
+        <p className="hint" style={{ margin: 0 }}>Sois le premier à commenter cette fiche.</p>
+      ) : cs.map((c) => (
+        <div key={c.id} className="comm-c">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 12 }}><b>{c.author_name || "Stagiaire"}</b> <span className="hint">· {c.created_at || "à l'instant"}</span></span>
+            {editing[c.id] != null ? (
+              <div style={{ marginTop: 4 }}>
+                <textarea className="inp" rows={2} value={editing[c.id]} onChange={(e) => setEditing((m) => ({ ...m, [c.id]: e.target.value }))} style={{ width: "100%" }} />
+                <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                  <button className="btn sm primary" disabled={!editing[c.id].trim()} onClick={() => onSaveEdit(id, c.id)}><Icon name="check" size={12} /> Enregistrer</button>
+                  <button className="btn sm ghost" onClick={() => setEditing((m) => { const n = { ...m }; delete n[c.id]; return n; })}>Annuler</button>
+                </div>
+              </div>
+            ) : (
+              <span style={{ display: "block", fontSize: 13.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</span>
+            )}
+          </div>
+          {c.mine && editing[c.id] == null && (
+            <span style={{ display: "flex", gap: 2 }}>
+              <button className="iconbtn" title="Modifier" onClick={() => setEditing((m) => ({ ...m, [c.id]: c.body }))}><Icon name="pencil" size={13} /></button>
+              <button className="iconbtn del" title="Supprimer" onClick={() => onDelete(id, c.id)}><Icon name="trash" size={13} /></button>
+            </span>
+          )}
+        </div>
+      ))}
+      <textarea className="inp" rows={2} value={draft[id] || ""} onChange={(e) => setDraft((m) => ({ ...m, [id]: e.target.value }))} placeholder="Ajoute un commentaire…" style={{ marginTop: 10, width: "100%" }} />
+      <button className="btn sm primary" disabled={!(draft[id] || "").trim()} onClick={() => onSubmit(id)} style={{ marginTop: 6 }}><Icon name="send" size={13} /> Commenter</button>
+    </div>
+  );
 }
 
 export default function Communaute() {
   const [list, setList] = useState([]);
-  const [openId, setOpenId] = useState(null);       // fiche dont le détail est ouvert (droite)
+  const [openId, setOpenId] = useState(null);       // fiche dont le détail est ouvert (modale)
   const [detail, setDetail] = useState(null);
   const [busy, setBusy] = useState(false);
   const [likeState, setLikeState] = useState({});   // id -> { liked, count }
   const [comments, setComments] = useState({});     // id -> [commentaire] (chargé à la demande)
-  const [threadOpen, setThreadOpen] = useState(null); // id dont le fil est déplié en ligne
   const [draft, setDraft] = useState({});           // id -> texte du nouveau commentaire
   const [editing, setEditing] = useState({});       // cid -> texte en cours d'édition
   const [sort, setSort] = useState("recent");       // "recent" | "liked"
   const [query, setQuery] = useState("");           // recherche plein texte
   const [kindFilter, setKindFilter] = useState("ALL"); // ALL | PATE | PREPARATION | RECETTE
+  const [wish, setWish] = useState(readWish);           // fiches mises de côté (localStorage)
+  const [onlyWish, setOnlyWish] = useState(false);      // filtre « ma wishlist »
   const [profileOpen, setProfileOpen] = useState(false);
   const [profile, setProfile] = useState(null);
+  const toggleWish = (id) => setWish((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); writeWish(n); return n; });
   const navigate = useNavigate();
 
   function openProfile(userId) {
@@ -120,6 +186,7 @@ export default function Communaute() {
   }, []);
   useEffect(() => {
     if (!openId) { setDetail(null); return; }
+    setDetail(null);
     getRecipe(openId).then((r) => { setDetail(r.data); ingest(r.data); }).catch(() => setDetail(null));
   }, [openId]);
 
@@ -128,7 +195,6 @@ export default function Communaute() {
     setLikeState((m) => ({ ...m, [d.id]: { liked: !!d.liked, count: d.like_count || 0 } }));
     setComments((m) => ({ ...m, [d.id]: d.comments || [] }));
   };
-  const loadComments = (id) => { if (comments[id]) return; getRecipe(id).then((r) => ingest(r.data)).catch(() => {}); };
   const bumpList = (id, patch) => setList((ls) => ls.map((x) => (x.id === id ? { ...x, ...patch(x) } : x)));
   const commentCount = (s) => (comments[s.id] ? comments[s.id].length : (s.comment_count || 0));
 
@@ -170,159 +236,237 @@ export default function Communaute() {
     setBusy(true);
     try {
       await createRecipe({ ...d, id: null, name: `${d.name} (copie)`, visibility: "PRIVATE" });
-      navigate("/fiche-recette");
+      navigate(d.kind === "PATE" ? "/empatements" : d.kind === "PREPARATION" ? "/garnitures" : "/realisations");
     } catch { /* ignore */ }
     finally { setBusy(false); }
   }
 
-  // Fil de commentaires réutilisé (carte en ligne + détail).
-  const Thread = ({ id }) => {
-    const cs = comments[id];
-    return (
-      <div className="comm-thread">
-        {!cs ? <p className="hint" style={{ margin: 0 }}>Chargement…</p> : cs.length === 0 ? (
-          <p className="hint" style={{ margin: 0 }}>Sois le premier à commenter cette fiche.</p>
-        ) : cs.map((c) => (
-          <div key={c.id} className="comm-c">
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: 12 }}><b>{c.author_name || "Stagiaire"}</b> <span className="hint">· {c.created_at || "à l'instant"}</span></span>
-              {editing[c.id] != null ? (
-                <div style={{ marginTop: 4 }}>
-                  <textarea className="inp" rows={2} value={editing[c.id]} onChange={(e) => setEditing((m) => ({ ...m, [c.id]: e.target.value }))} style={{ width: "100%" }} />
-                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-                    <button className="btn sm primary" disabled={!editing[c.id].trim()} onClick={() => saveEdit(id, c.id)}><Icon name="check" size={12} /> Enregistrer</button>
-                    <button className="btn sm ghost" onClick={() => setEditing((m) => { const n = { ...m }; delete n[c.id]; return n; })}>Annuler</button>
-                  </div>
-                </div>
-              ) : (
-                <span style={{ display: "block", fontSize: 13.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</span>
-              )}
-            </div>
-            {c.mine && editing[c.id] == null && (
-              <span style={{ display: "flex", gap: 2 }}>
-                <button className="iconbtn" title="Modifier" onClick={() => setEditing((m) => ({ ...m, [c.id]: c.body }))}><Icon name="pencil" size={13} /></button>
-                <button className="iconbtn del" title="Supprimer" onClick={() => delComment(id, c.id)}><Icon name="trash" size={13} /></button>
-              </span>
-            )}
-          </div>
-        ))}
-        <textarea className="inp" rows={2} value={draft[id] || ""} onChange={(e) => setDraft((m) => ({ ...m, [id]: e.target.value }))} placeholder="Ajoute un commentaire…" style={{ marginTop: 10, width: "100%" }} />
-        <button className="btn sm primary" disabled={!(draft[id] || "").trim()} onClick={() => submitComment(id)} style={{ marginTop: 6 }}><Icon name="send" size={13} /> Commenter</button>
-      </div>
-    );
-  };
+  // Liste filtrée + triée.
+  const q = query.trim().toLowerCase();
+  const shown = list.filter((s) => {
+    if (onlyWish && !wish.has(s.id)) return false;
+    if (kindFilter !== "ALL" && s.kind !== kindFilter) return false;
+    if (!q) return true;
+    return [s.name, s.description, s.type, s.author_name].some((f) => String(f || "").toLowerCase().includes(q));
+  }).sort((a, b) => {
+    if (sort !== "liked") return 0; // ordre serveur = plus récentes d'abord
+    const la = likeState[a.id]?.count ?? a.like_count ?? 0;
+    const lb = likeState[b.id]?.count ?? b.like_count ?? 0;
+    return lb - la || (b.comment_count || 0) - (a.comment_count || 0);
+  });
 
   return (
     <>
       <PageHead eyebrow="Outils · communauté" title="Communauté"
-        lead="Les fiches techniques partagées par les autres stagiaires. Aime, commente, ou copie-en une dans tes recettes pour l'adapter." />
+        lead="Les fiches partagées par les autres stagiaires : empâtements, garnitures et réalisations. Aime, commente, mets de côté (wishlist), ou enregistre-en une dans tes fiches pour l'adapter." />
 
       {list.length === 0 ? (
-        <EmptyState icon="users">Aucune recette partagée pour l'instant. Sois le premier : partage une fiche technique depuis « Fiche technique ».</EmptyState>
+        <EmptyState icon="users">Aucune fiche partagée pour l'instant. Sois le premier : partage une pâte, une préparation ou une recette depuis « Fiche technique » ou le « Calculateur de pâte ».</EmptyState>
       ) : (
-        <div className="grid cols-2" style={{ alignItems: "start" }}>
-          <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Recettes partagées ({list.length})</span>}
-            more={<span className="seg">
+        <>
+          {/* Barre d'outils : recherche + type + tri */}
+          <div className="comm-toolbar">
+            <span className="gs-search" style={{ flex: 1, minWidth: 200 }}>
+              <Icon name="search" size={14} />
+              <input placeholder="Rechercher (nom, description, #tag, auteur)…" value={query} onChange={(e) => setQuery(e.target.value)} />
+              {query && <button className="gs-clear" title="Effacer" onClick={() => setQuery("")}><Icon name="x" size={13} /></button>}
+            </span>
+            <span className="seg" style={{ flexWrap: "wrap" }}>
+              {KIND_TABS.map((t) => (
+                <button key={t.k} className={"seg-btn" + (kindFilter === t.k ? " on" : "")} onClick={() => setKindFilter(t.k)}>{t.label}</button>
+              ))}
+            </span>
+            <span className="seg">
               <button className={"seg-btn" + (sort === "recent" ? " on" : "")} onClick={() => setSort("recent")}>Récentes</button>
-              <button className={"seg-btn" + (sort === "liked" ? " on" : "")} onClick={() => setSort("liked")}><span aria-hidden>❤️</span> Populaires</button>
-            </span>}>
-            {/* Filtres : recherche plein texte + type de fiche */}
-            <div className="comm-filters">
-              <span className="gs-search" style={{ flex: 1 }}>
-                <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
-                <input placeholder="Rechercher (nom, description, #tag, auteur)…" value={query} onChange={(e) => setQuery(e.target.value)} />
-                {query && <button className="gs-clear" title="Effacer" onClick={() => setQuery("")}><Icon name="x" size={13} /></button>}
-              </span>
-              <span className="seg" style={{ flexWrap: "wrap" }}>
-                {KIND_TABS.map((t) => (
-                  <button key={t.k} className={"seg-btn" + (kindFilter === t.k ? " on" : "")} onClick={() => setKindFilter(t.k)}>{t.label}</button>
-                ))}
-              </span>
-            </div>
-            {(() => {
-              const q = query.trim().toLowerCase();
-              const shown = list.filter((s) => {
-                if (kindFilter !== "ALL" && s.kind !== kindFilter) return false;
-                if (!q) return true;
-                return [s.name, s.description, s.type, s.author_name].some((f) => String(f || "").toLowerCase().includes(q));
-              }).sort((a, b) => {
-                if (sort !== "liked") return 0; // ordre serveur = plus récentes d'abord
-                const la = likeState[a.id]?.count ?? a.like_count ?? 0;
-                const lb = likeState[b.id]?.count ?? b.like_count ?? 0;
-                return lb - la || (b.comment_count || 0) - (a.comment_count || 0);
-              });
-              if (shown.length === 0) return <p className="hint" style={{ margin: "6px 2px" }}>Aucune fiche ne correspond à ta recherche.</p>;
-              return (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button className={"seg-btn" + (sort === "liked" ? " on" : "")} onClick={() => setSort("liked")}><Icon name="heart" size={12} /> Populaires</button>
+            </span>
+            <button className={"btn sm " + (onlyWish ? "primary" : "ghost")} onClick={() => setOnlyWish((w) => !w)} title="N'afficher que ma wishlist">
+              <Icon name="bookmark" size={13} fill={onlyWish ? "currentColor" : "none"} /> Ma wishlist{wish.size ? ` (${wish.size})` : ""}
+            </button>
+          </div>
+
+          {shown.length === 0 ? (
+            <EmptyState icon={onlyWish ? "bookmark" : "search"}>{onlyWish ? "Ta wishlist est vide — mets des fiches de côté avec le marque-page." : "Aucune fiche ne correspond à ta recherche."}</EmptyState>
+          ) : (
+            <div className="comm-grid">
               {shown.map((s) => {
+                const km = kindMeta(s.kind);
                 const lk = likeState[s.id] || { liked: false, count: s.like_count || 0 };
-                const tOpen = threadOpen === s.id;
                 return (
-                  <div key={s.id} className={"comm-card" + (openId === s.id ? " on" : "")}>
-                    <div className="comm-main" onClick={() => setOpenId((cur) => (cur === s.id ? null : s.id))}>
-                      <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                        <b>{s.name}</b>
-                        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>{typeLabel(s)} · <AuthorChip id={s.author_user_id} name={s.author_name} avatar={s.author_avatar} onOpen={openProfile} /> · {s.updated_at}</span>
-                        <Tags text={s.description} />
+                  <div key={s.id} className="comm-card2">
+                    <div className="comm-card2-body" onClick={() => setOpenId(s.id)} role="button" tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === "Enter") setOpenId(s.id); }}>
+                      <span className="comm-kind" style={{ background: `color-mix(in srgb, ${km.color} 15%, var(--surface))`, color: km.color }}>
+                        <Icon name={km.icon} size={12} /> {km.label}{s.kind === "RECETTE" && s.type ? ` · ${s.type}` : ""}
                       </span>
-                      <Icon name={openId === s.id ? "chevron-down" : "chevron-right"} size={16} />
+                      <div className="comm-title">{s.name}</div>
+                      <div className="comm-meta">
+                        <AuthorChip id={s.author_user_id} name={s.author_name} avatar={s.author_avatar} onOpen={openProfile} />
+                        <span>· {s.updated_at}</span>
+                      </div>
+                      <Tags text={s.description} />
                     </div>
-                    <div className="comm-bar">
+                    <div className="comm-foot">
                       <button className={"btn sm " + (lk.liked ? "primary" : "ghost")} onClick={() => toggleLike(s.id)} title={lk.liked ? "Je n'aime plus" : "J'aime"}>
-                        <span aria-hidden>{lk.liked ? "❤️" : "🤍"}</span> {lk.count}
+                        <Icon name="heart" size={13} fill={lk.liked ? "currentColor" : "none"} /> {lk.count}
                       </button>
-                      <button className={"btn sm " + (tOpen ? "primary" : "ghost")} onClick={() => { setThreadOpen(tOpen ? null : s.id); if (!tOpen) loadComments(s.id); }}>
-                        <span aria-hidden>💬</span> {commentCount(s)}
+                      <button className="btn sm ghost" onClick={() => setOpenId(s.id)} title="Voir &amp; commenter">
+                        <Icon name="message-circle" size={13} /> {commentCount(s)}
                       </button>
-                      <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Enregistrer dans mes recettes"><Icon name="folder-check" size={13} /> Enregistrer</button>
+                      <button className={"btn sm " + (wish.has(s.id) ? "primary" : "ghost") + " comm-save"} onClick={() => toggleWish(s.id)}
+                        title={wish.has(s.id) ? "Retirer de ma wishlist" : "Mettre de côté (wishlist)"}>
+                        <Icon name="bookmark" size={13} fill={wish.has(s.id) ? "currentColor" : "none"} />
+                      </button>
+                      <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /></button>
                     </div>
-                    {tOpen && <Thread id={s.id} />}
                   </div>
                 );
               })}
             </div>
+          )}
+        </>
+      )}
+
+      {/* Modale détail : ingrédients, coût, prix, commentaires */}
+      {openId && createPortal(
+        <div className="overlay" onClick={() => setOpenId(null)}>
+          <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+            {!detail ? (
+              <div className="mbody" style={{ padding: 28 }}><p className="hint" style={{ margin: 0 }}>Chargement…</p></div>
+            ) : (() => {
+              const km = kindMeta(detail.kind);
+              const c = costs(detail);
+              const lk = likeState[detail.id] || { liked: false, count: 0 };
+              return (
+                <>
+                  <div className="mhead">
+                    <h3 style={{ fontSize: 16, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      <span className="comm-kind" style={{ background: `color-mix(in srgb, ${km.color} 15%, var(--surface))`, color: km.color, flex: "none" }}>
+                        <Icon name={km.icon} size={12} /> {km.label}
+                      </span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{detail.name}</span>
+                    </h3>
+                    <button className="x" onClick={() => setOpenId(null)} aria-label="Fermer"><Icon name="x" size={16} /></button>
+                  </div>
+                  <div className="mbody">
+                    <div className="hint" style={{ marginTop: -2, display: "flex", alignItems: "center", gap: 5 }}>
+                      par <AuthorChip id={detail.author_user_id} name={detail.author_name} avatar={detail.author_avatar} onOpen={openProfile} /> · {detail.updated_at}
+                    </div>
+                    {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0 6px" }}>{detail.description}</p>}
+                    <Tags text={detail.description} />
+
+                    {detail.kind === "PATE" && (() => {
+                      const dpv = typeof detail.dough_params === "string" ? (() => { try { return JSON.parse(detail.dough_params); } catch { return {}; } })() : (detail.dough_params || {});
+                      const B = computeBuild({ ...detail, dough_params: dpv });
+                      return (
+                        <div style={{ margin: "14px 0 0" }}>
+                          <div className="hint" style={{ marginBottom: 8 }}>{B.preset.nom}{B.napoSpec ? ` · ${B.napoSpec.label}` : ""} · {String(B.dp.method || "direct").toLowerCase()}{B.dp.autolyse ? " · autolyse" : ""} · W {B.w} · {B.hydraTotal} % hydratation · {B.effNb} pâtons de {B.patonG} g</div>
+                          <DoughBar items={B.dough} total={B.totalDough} />
+                          {B.dough.map((i) => (
+                            <div key={i.k} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, borderBottom: "1px solid var(--border-soft)", padding: "5px 0" }}>
+                              <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={15} /></span>
+                              <b style={{ flex: 1 }}>{i.k}</b><span className="hint">{i.pct}</span><span className="mono">{gfmt(i.v)}</span>
+                            </div>
+                          ))}
+                          {B.dp.shareCost !== false && <p className="hint" style={{ marginTop: 10 }}>Coût matière : <b>{euro(B.costPerPaton)}</b> / pâton · <b>{euro(B.costPerKg)}</b> / kg</p>}
+                          <details style={{ marginTop: 8 }}>
+                            <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Déroulé des étapes ({B.steps.length})</summary>
+                            <ol style={{ margin: "8px 0 0", paddingLeft: 20, fontSize: 12.5, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 6 }}>
+                              {B.steps.map((s, i) => <li key={i}><b style={{ color: "var(--text)" }}>{s.t}.</b> {s.d}</li>)}
+                            </ol>
+                          </details>
+                        </div>
+                      );
+                    })()}
+
+                    {detail.kind === "PREPARATION" && (() => {
+                      const dpv = typeof detail.dough_params === "string" ? (() => { try { return JSON.parse(detail.dough_params); } catch { return {}; } })() : (detail.dough_params || {});
+                      if (!dpv.garn) return null;
+                      const gc = garnitureCost(dpv.garn);
+                      return (
+                        <div style={{ margin: "14px 0 0" }}>
+                          {gc.items.map((i) => (
+                            <div key={i.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, borderBottom: "1px solid var(--border-soft)", padding: "5px 0" }}>
+                              <span>{i.emoji}</span><b style={{ flex: 1 }}>{i.label}{i.fragile ? " ❄️" : ""}</b><span className="hint">{num(i.qty)} g</span><span className="mono">{euro((num(i.qty) / 1000) * num(i.price))}</span>
+                            </div>
+                          ))}
+                          {dpv.shareCost !== false && <p className="hint" style={{ marginTop: 10 }}>Coût matière : <b>{euro(gc.total)}</b> / pizza</p>}
+                        </div>
+                      );
+                    })()}
+
+                    {detail.kind === "RECETTE" && (() => {
+                      const dpv = typeof detail.dough_params === "string" ? (() => { try { return JSON.parse(detail.dough_params); } catch { return {}; } })() : (detail.dough_params || {});
+                      const rl = dpv.real; if (!rl) return null;
+                      const cm = (rl.emp ? computeBuild(rl.emp).costPerPaton : 0) + garnitureCost((rl.garn?.dough_params || {}).garn).total;
+                      const price = cm * (1 + num(detail.margin_pct) / 100);
+                      const axes = realisationAxes({ service: rl.service, doughType: rl.emp?.type, garn: (rl.garn?.dough_params || {}).garn });
+                      const tone = { ok: "#7bb661", warn: "var(--orange)", bad: "var(--ember1)" };
+                      return (
+                        <div style={{ margin: "14px 0 0" }}>
+                          <div className="hint" style={{ marginBottom: 8 }}>{[svcLabel(rl.service), fourLabel(rl.four)].filter(Boolean).join(" · ")}</div>
+                          {rl.emp && <div style={{ display: "flex", gap: 8, fontSize: 13, padding: "4px 0" }}><Icon name="wheat" size={15} /><b style={{ flex: 1 }}>{rl.emp.name}</b></div>}
+                          {rl.garn && <div style={{ display: "flex", gap: 8, fontSize: 13, padding: "4px 0" }}><Icon name="pizza" size={15} /><b style={{ flex: 1 }}>{rl.garn.name}</b></div>}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 8 }}>
+                            <span className="hint">Coût {euro(cm)} · marge {detail.margin_pct} %</span>
+                            <b style={{ fontSize: 19, color: "var(--ember1)" }}>{euro(price)} <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>/ pizza</span></b>
+                          </div>
+                          <div style={{ marginTop: 10 }}>
+                            {axes.map((a, i) => (
+                              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                                <span style={{ width: 8, height: 8, borderRadius: "50%", background: tone[a.tone], marginTop: 5, flexShrink: 0 }} />
+                                <div><b style={{ fontSize: 12.5 }}>{a.t}</b><div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.4 }}>{a.d}</div></div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {(detail.ingredients || []).length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "14px 0 0" }}>
+                        {detail.ingredients.map((t, i) => (
+                          <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderBottom: "1px solid var(--border-soft)", paddingBottom: 4 }}>
+                            <span>{t.label} <span className="hint">· {num(t.qty)} {t.unit}</span></span>
+                            <span className="mono">{euro(c.line(t))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {detail.kind === "RECETTE" && (detail.ingredients || []).length > 0 ? (
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 12 }}>
+                        <span className="hint">Coût {euro(c.per)} / pizza · marge {detail.margin_pct} %</span>
+                        <b style={{ fontSize: 20, color: "var(--ember1)" }}>{euro(c.price)} <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>/ pizza</span></b>
+                      </div>
+                    ) : (detail.ingredients || []).length > 0 ? (
+                      <p className="hint" style={{ marginTop: 12 }}>Coût des ingrédients : <b>{euro(c.ingSum)}</b></p>
+                    ) : null}
+
+                    {/* Actions */}
+                    <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+                      <button className={"btn sm " + (lk.liked ? "primary" : "ghost")} onClick={() => toggleLike(detail.id)} title={lk.liked ? "Je n'aime plus" : "J'aime"}>
+                        <Icon name="heart" size={14} fill={lk.liked ? "currentColor" : "none"} /> {lk.count} j'aime
+                      </button>
+                      <button className={"btn sm " + (wish.has(detail.id) ? "primary" : "ghost")} onClick={() => toggleWish(detail.id)} title={wish.has(detail.id) ? "Retirer de ma wishlist" : "Mettre de côté"}>
+                        <Icon name="bookmark" size={14} fill={wish.has(detail.id) ? "currentColor" : "none"} /> {wish.has(detail.id) ? "Mise de côté" : "Wishlist"}
+                      </button>
+                      <button className="btn sm primary comm-save" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /> Enregistrer</button>
+                    </div>
+
+                    {/* Commentaires */}
+                    <div style={{ marginTop: 18, borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+                      <div className="card-ttl" style={{ fontSize: 14, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}><Icon name="message-circle" size={15} /> Commentaires ({(comments[detail.id] || []).length})</div>
+                      <CommentThread id={detail.id} comments={comments} editing={editing} setEditing={setEditing}
+                        draft={draft} setDraft={setDraft} onSubmit={submitComment} onSaveEdit={saveEdit} onDelete={delComment} />
+                    </div>
+                  </div>
+                </>
               );
             })()}
-          </Card>
-
-          <div>
-            {!detail ? (
-              <Card><p className="hint" style={{ margin: 0 }}>Sélectionne une recette pour voir le détail (ingrédients &amp; coût).</p></Card>
-            ) : (
-              <Card title={<span className="card-ttl"><Icon name="pizza" size={16} /> {detail.name}</span>}
-                more={<span style={{ display: "flex", gap: 8 }}>
-                  <button className={"btn sm " + ((likeState[detail.id]?.liked) ? "primary" : "ghost")} onClick={() => toggleLike(detail.id)} title={(likeState[detail.id]?.liked) ? "Je n'aime plus" : "J'aime"}>
-                    <span aria-hidden>{(likeState[detail.id]?.liked) ? "❤️" : "🤍"}</span> {likeState[detail.id]?.count || 0}
-                  </button>
-                  <button className="btn sm primary" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes recettes"><Icon name="folder-check" size={13} /> Enregistrer</button>
-                </span>}>
-                <div className="hint" style={{ marginTop: -4, display: "flex", alignItems: "center", gap: 5 }}>{typeLabel(detail)} · <AuthorChip id={detail.author_user_id} name={detail.author_name} avatar={detail.author_avatar} onOpen={openProfile} /></div>
-                {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0" }}>{detail.description}</p>}
-                <Tags text={detail.description} />
-                {(() => { const c = costs(detail); return (
-                  <>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "10px 0" }}>
-                      {(detail.ingredients || []).map((t, i) => (
-                        <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderBottom: "1px solid var(--border-soft)", paddingBottom: 4 }}>
-                          <span>{t.label} <span className="hint">· {num(t.qty)} {t.unit}</span></span>
-                          <span className="mono">{euro(c.line(t))}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 8 }}>
-                      <span className="hint">Coût {euro(c.per)} / pizza · marge {detail.margin_pct} %</span>
-                      <b style={{ fontSize: 18, color: "var(--ember1)" }}>{euro(c.price)} <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>/ pizza</span></b>
-                    </div>
-                  </>
-                ); })()}
-                <div style={{ marginTop: 18, borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
-                  <div className="card-ttl" style={{ fontSize: 14, marginBottom: 10 }}>💬 Commentaires ({(comments[detail.id] || []).length})</div>
-                  <Thread id={detail.id} />
-                </div>
-              </Card>
-            )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {profileOpen && <ProfileModal profile={profile} loading={!profile} onClose={() => setProfileOpen(false)} />}

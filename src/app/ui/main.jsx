@@ -22,6 +22,7 @@ import EntrepriseDetail from "./pages/EntrepriseDetail.jsx";
 import SignerPublic from "./pages/SignerPublic.jsx";
 import Formations from "./pages/Formations.jsx";
 import Quiz from "./pages/Quiz.jsx";
+import QuestManager from "./pages/QuestManager.jsx";
 import Sessions from "./pages/Sessions.jsx";
 import Pipeline from "./pages/Pipeline.jsx";
 import SessionDetail from "./pages/SessionDetail.jsx";
@@ -49,8 +50,13 @@ import EmargementStagiaire from "./pages/EmargementStagiaire.jsx";
 import MesFormations from "./pages/MesFormations.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
 import PizzaQuest from "./pages/PizzaQuest.jsx";
-import FicheRecette from "./pages/FicheRecette.jsx";
+import Boutique from "./pages/Boutique.jsx";
+import DemandesBoutique from "./pages/DemandesBoutique.jsx";
+import PateWizard from "./pages/PateWizard.jsx";
+import GarnitureWizard from "./pages/GarnitureWizard.jsx";
+import RealisationWizard from "./pages/RealisationWizard.jsx";
 import Communaute from "./pages/Communaute.jsx";
+import Notions from "./pages/Notions.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -153,9 +159,13 @@ function AppRoutes() {
           <Route path="emargement" element={<EmargementStagiaire />} />
           <Route path="formations" element={<MesFormations />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
-          <Route path="fiche-recette" element={<FicheRecette />} />
+          <Route path="empatements" element={<PateWizard />} />
+          <Route path="garnitures" element={<GarnitureWizard />} />
+          <Route path="realisations" element={<RealisationWizard />} />
           <Route path="communaute" element={<Communaute />} />
+          <Route path="notions" element={<Notions />} />
           <Route path="pizza-quest" element={<PizzaQuest />} />
+          <Route path="boutique" element={<Boutique />} />
           {isIntervenant && <Route path="intervention" element={<IntervenantEspace />} />}
           {user?.has_company && <Route path="entreprise-documents" element={<RepresentantEspace />} />}
           <Route path="*" element={<Navigate to="/formations" replace />} />
@@ -175,10 +185,12 @@ function AppRoutes() {
           <Route path="sessions/:id" element={<Guard nav="/sessions" roles={STAFF}><SessionDetail /></Guard>} />
           <Route path="formations" element={<Guard nav="/formations" roles={STAFF}><Formations /></Guard>} />
           <Route path="qcm" element={<Guard nav="/qcm" roles={ADMIN}><Quiz /></Guard>} />
+          <Route path="pizza-quest-admin" element={<Guard nav="/pizza-quest-admin" roles={ADMIN}><QuestManager /></Guard>} />
           <Route path="opcos" element={<Guard nav="/opcos" roles={ADMIN}><Opcos /></Guard>} />
           <Route path="partenaires" element={<Guard nav="/partenaires" roles={STAFF}><Partenaires /></Guard>} />
           <Route path="ventes" element={<Guard nav="/ventes" roles={ADMIN}><Ventes /></Guard>} />
           <Route path="inventaire" element={<Guard nav="/ventes" roles={ADMIN}><Inventaire /></Guard>} />
+          <Route path="demandes-boutique" element={<Guard nav="/demandes-boutique" roles={ADMIN}><DemandesBoutique /></Guard>} />
           <Route path="factures" element={<Guard nav="/factures" roles={ADMIN}><Factures /></Guard>} />
           <Route path="comptabilite" element={<Guard nav="/comptabilite" roles={ADMIN}><Comptabilite /></Guard>} />
           <Route path="produit-divers" element={<Guard nav="/produit-divers" roles={STAFF}><ProduitDivers /></Guard>} />

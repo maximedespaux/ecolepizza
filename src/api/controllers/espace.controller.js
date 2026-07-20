@@ -1,10 +1,12 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep } = require('../lib/documents.js');
+const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigners } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
+const { resolveUnlocked } = require('../lib/questgraph.js');
 const { encrypt } = require('../lib/crypto.js');
+const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -105,12 +107,91 @@ async function completionOf(conn, e, steps, agefice = false) {
     return { complete, dayPassed, signed, total };
 }
 
+// Accès à l'émargement — VOLET ENTREPRISE (migration 100). Point de rupture placé dans la
+// section « À l'arrivée via une entreprise » (training_program.company_steps, migration 092) :
+// company_break_slug = slug de l'étape juste avant le point. Ne s'applique QU'AUX stagiaires
+// inscrits via une entreprise. Comptent, parmi les étapes situées à/avant le point :
+//   · documents de GROUPE (🏢) → leur UNIQUE signature collective (ORG + Entreprise) ;
+//   · documents STAGIAIRE     → la signature du stagiaire sur son propre document.
+// Les étapes sans signataire, les QCM et l'émargement lui-même sont ignorés.
+// Aucun point / pas d'entreprise / migration absente → aucun blocage (fail-open).
+async function companyEmargementGate(conn, e, orgId) {
+    const none = { locked: false, need: 0, done: 0, break_label: null };
+    if (!e.program_id || !e.enrollment_id) return none;
+
+    // Entreprise + session du dossier (l'entreprise peut être portée par le dossier ou la fiche).
+    let companyId = null, sessionId = null;
+    try {
+        const [[r]] = await conn.query(
+            `SELECT COALESCE(en.company_id, l.company_id) AS cid, en.session_id AS sid
+             FROM enrollment en LEFT JOIN learner l ON l.id = en.learner_id
+             WHERE en.id = ? AND en.organization_id = ?`,
+            [e.enrollment_id, orgId]
+        );
+        if (r) { companyId = r.cid || null; sessionId = r.sid || null; }
+    } catch { return none; }
+    if (!companyId) return none; // arrivée « seul » → le volet entreprise ne s'applique pas
+
+    // Sous-parcours entreprise + point de rupture de la formation.
+    let list = [], breakSlug = null;
+    try {
+        const [[p]] = await conn.query(
+            'SELECT company_steps AS cs, company_break_slug AS cbs FROM training_program WHERE id = ?', [e.program_id]);
+        breakSlug = p && p.cbs ? p.cbs : null;
+        let cs = p && p.cs;
+        if (typeof cs === 'string') { try { cs = JSON.parse(cs); } catch { cs = []; } }
+        list = Array.isArray(cs) ? cs : [];
+    } catch { return none; } // colonnes absentes (migrations 092 / 100 non jouées)
+    if (!breakSlug || !list.length) return none;
+    const idx = list.indexOf(breakSlug);
+    if (idx < 0) return none;
+
+    // Étapes à/avant le point, résolues sur le parcours de l'organisme.
+    const bySlug = new Map((await loadOrgSteps(orgId)).map((s) => [s.slug, s]));
+    const break_label = (bySlug.get(breakSlug) || {}).label || null;
+    const required = list.slice(0, idx + 1)
+        .map((sl) => bySlug.get(sl))
+        .filter((s) => s && s.active && s.doc_type !== 'QCM' && s.doc_type !== 'EMARGEMENT' && stepSigners(s).length > 0);
+    if (!required.length) return { ...none, break_label };
+
+    // Documents du DOSSIER (stagiaire).
+    const ownBySlug = {}, ownByType = {};
+    const [own] = await conn.query(
+        `SELECT gd.type, gd.template_slug, gd.status FROM generated_document gd
+         JOIN document_formation df ON df.document_id = gd.id WHERE df.enrollment_id = ?`,
+        [e.enrollment_id]
+    );
+    for (const r of own) { if (r.template_slug) ownBySlug[r.template_slug] = r.status; ownByType[r.type] = r.status; }
+
+    // Documents de GROUPE de l'entreprise (scope COMPANY), pour cette session si connue.
+    const grpBySlug = {};
+    try {
+        const [grp] = await conn.query(
+            `SELECT template_slug, status FROM generated_document
+             WHERE organization_id = ? AND scope = 'COMPANY' AND company_id = ?
+               AND (? IS NULL OR session_id IS NULL OR session_id = ?)`,
+            [orgId, companyId, sessionId, sessionId]
+        );
+        // Un document de groupe non signé ne doit pas être écrasé par un homonyme signé.
+        for (const r of grp) {
+            if (!r.template_slug) continue;
+            if (grpBySlug[r.template_slug] !== 'SIGNE') grpBySlug[r.template_slug] = r.status;
+        }
+    } catch { /* schéma documents entreprise absent → ces étapes resteront « à faire » */ }
+
+    const isDone = (s) => (s.company_level
+        ? grpBySlug[s.slug] === 'SIGNE'
+        : (ownBySlug[s.slug] === 'SIGNE' || ownByType[s.doc_type] === 'SIGNE'));
+    const done = required.filter(isDone).length;
+    return { locked: done < required.length, need: required.length, done, break_label };
+}
+
 // Accès à l'émargement : point de rupture positionné ENTRE deux jalons du parcours DE LA
 // FORMATION (training_program.emargement_break_slug = slug de l'étape juste avant le point).
 // Le stagiaire doit avoir signé tous les documents qu'il doit signer situés à/avant ce point
 // (par sort_order du parcours de la formation). Aucun point → aucun blocage.
 // Renvoie { locked, need, done, break_label }.
-async function emargementGate(conn, e, orgId, agefice = false) {
+async function dossierEmargementGate(conn, e, orgId, agefice = false) {
     if (!e.program_id) return { locked: false, need: 0, done: 0, break_label: null };
     let breakSlug = null;
     try {
@@ -142,6 +223,31 @@ async function emargementGate(conn, e, orgId, agefice = false) {
     for (const r of rows) { if (r.template_slug) statusBySlug[r.template_slug] = r.status; statusByType[r.type] = r.status; }
     const done = required.filter((s) => statusBySlug[s.slug] === 'SIGNE' || statusByType[s.doc_type] === 'SIGNE').length;
     return { locked: done < required.length, need: required.length, done, break_label };
+}
+
+/**
+ * Accès à l'émargement, TOUS VOLETS CONFONDUS. Les DEUX points de rupture doivent être
+ * franchis : celui du « Parcours du dossier » et — pour un stagiaire arrivé via une
+ * entreprise — celui de la section « À l'arrivée via une entreprise ».
+ * Les compteurs sont cumulés ; `break_label` est celui du volet encore bloquant.
+ */
+async function emargementGate(conn, e, orgId, agefice = false) {
+    const [dossier, company] = await Promise.all([
+        dossierEmargementGate(conn, e, orgId, agefice),
+        companyEmargementGate(conn, e, orgId),
+    ]);
+    const locked = dossier.locked || company.locked;
+    // Libellé affiché : le volet qui bloque encore (dossier prioritaire), sinon le dernier point posé.
+    const break_label = (dossier.locked ? dossier.break_label : null)
+        || (company.locked ? company.break_label : null)
+        || dossier.break_label || company.break_label || null;
+    return {
+        locked,
+        need: dossier.need + company.need,
+        done: dossier.done + company.done,
+        break_label,
+        dossier, company, // détail par volet (diagnostic / affichage fin)
+    };
 }
 
 /**
@@ -202,6 +308,58 @@ const getMonEspace = async (req, res) => {
  * Toutes les cartes sont visibles ; une carte se déverrouille si le stagiaire a
  * suivi cette formation et qu'elle est complète (dernier jour passé + signée).
  */
+/**
+ * GET /api/mon-espace/access — le stagiaire a-t-il franchi le POINT D'ACCÈS (breakpoint
+ * émargement) d'au moins une de ses formations ? Sert à débloquer Pizza Quest + Outils &
+ * Communauté. Aucune formation avec point d'accès → débloqué (rien à bloquer). En erreur
+ * on débloque (fail-open : on ne bloque jamais par bug).
+ */
+const getMyAccess = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        // Pas de fiche stagiaire (intervenant, staff…) : on ne bloque pas.
+        if (!learner) return res.json({ data: { quest_unlocked: true } });
+        const [enrollments] = await conn.query(
+            `SELECT e.id AS enrollment_id, e.financing, s.program_id,
+                    DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
+                    p.code AS program_code, p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
+             FROM enrollment e
+             LEFT JOIN training_session s ON s.id = e.session_id
+             LEFT JOIN training_program p ON p.id = s.program_id
+             WHERE e.learner_id = ?`,
+            [learner.id]
+        );
+        const agefice = (learner.opco || '').toUpperCase() === 'AGEFICE';
+        // Au moins une formation TERMINÉE (marquée manuellement OU complétée auto) → débloqué,
+        // même sans point d'accès franchi (cas des personnes déjà venues / déjà formées).
+        const doneSet = new Set(String(learner.completed_levels || '').split(',').map((s) => s.trim()).filter(Boolean));
+        let finished = doneSet.size > 0;
+        if (!finished && enrollments.length) {
+            const steps = await loadOrgSteps(learner.organization_id);
+            for (const e of enrollments) {
+                const c = await completionOf(conn, e, steps, agefice);
+                if (c.complete) { finished = true; break; }
+            }
+        }
+        if (finished) return res.json({ data: { quest_unlocked: true } });
+
+        // AUCUNE formation → verrouillé (rien à débloquer tant qu'il n'est pas inscrit).
+        if (!enrollments.length) return res.json({ data: { quest_unlocked: false } });
+        const gating = [];
+        for (const e of enrollments) {
+            const g = await emargementGate(conn, e, learner.organization_id, agefice);
+            if (g.need > 0) gating.push(g);
+        }
+        // Inscrit : débloqué si aucune formation n'a de point d'accès, ou si au moins un est franchi.
+        const quest_unlocked = gating.length === 0 || gating.some((g) => !g.locked);
+        res.json({ data: { quest_unlocked } });
+    } catch (err) {
+        console.error('Erreur accès stagiaire :', err);
+        res.json({ data: { quest_unlocked: true } });
+    }
+};
+
 const getMyFormations = async (req, res) => {
     try {
         const conn = db.promise();
@@ -210,19 +368,40 @@ const getMyFormations = async (req, res) => {
 
         // Catalogue complet des formations de l'organisme (avec le descriptif,
         // pour l'aperçu en lecture seule des formations non suivies).
-        const [programs] = await conn.query(
-            `SELECT id, code, title, level, color, days, hours, price, hygiene, rs_code,
-                    audience, objectives, objective_general, duration_detail, program_detail
-             FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
-            [learner.organization_id]
-        );
+        // Les colonnes quest_* (migration 101) peuvent ne pas exister : on retente sans elles
+        // plutôt que de casser la page « Mes formations » pour un paramétrage optionnel.
+        const PROG_COLS = `id, code, title, level, color, days, hours, price, hygiene, rs_code,
+                    audience, objectives, objective_general, duration_detail, program_detail`;
+        let programs;
+        try {
+            [programs] = await conn.query(
+                `SELECT ${PROG_COLS}, quest_theme_id, quest_tier_id
+                 FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
+                [learner.organization_id]
+            );
+        } catch (e) {
+            if (!isMissingSchema(e)) throw e;
+            [programs] = await conn.query(
+                `SELECT ${PROG_COLS} FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
+                [learner.organization_id]
+            );
+            programs = programs.map((p) => ({ ...p, quest_theme_id: null, quest_tier_id: null }));
+        }
+        // Thèmes / paliers (Pizza Quest) — facultatifs : sans eux la carte reste plate.
+        const questCats = new Map();
+        try {
+            const [cats] = await conn.query(
+                'SELECT id, kind, name, color, icon, sort_order FROM quest_category WHERE organization_id = ?',
+                [learner.organization_id]);
+            for (const c of cats) questCats.set(c.id, c);
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
 
         // Inscriptions du stagiaire (pour déverrouiller les cartes concernées).
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.financing, s.program_id, s.year, s.week,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
-                    p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
+                    p.code AS program_code, p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
              FROM enrollment e
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
@@ -232,14 +411,16 @@ const getMyFormations = async (req, res) => {
 
         // Une carte par formation ; on ouvre par défaut la session la plus RÉCENTE.
         // On compte aussi le nombre de sessions suivies (onglets dans le détail).
+        const agefice = (learner.opco || "").toUpperCase() === "AGEFICE";
         const steps = await loadOrgSteps(learner.organization_id);
         const byProgram = {};
         for (const e of enrollments) {
-            const c = await completionOf(conn, e, steps, (learner.opco || "").toUpperCase() === "AGEFICE");
+            const c = await completionOf(conn, e, steps, agefice);
+            const g = await emargementGate(conn, e, learner.organization_id, agefice); // point d'accès (breakpoint)
             const info = {
                 enrollment_id: e.enrollment_id, complete: c.complete, dayPassed: c.dayPassed,
                 signed: c.signed, total: c.total, start_date: e.start_date, end_date: e.end_date,
-                year: e.year, week: e.week,
+                year: e.year, week: e.week, gate_need: g.need, gate_locked: g.locked,
             };
             const cur = byProgram[e.program_id];
             if (!cur) byProgram[e.program_id] = { ...info, session_count: 1 };
@@ -249,8 +430,41 @@ const getMyFormations = async (req, res) => {
             }
         }
 
+        // Badges du stagiaire (codes/niveaux de formation attachés à sa fiche) :
+        // ils débloquent le niveau correspondant dans Pizza Quest.
+        const badgeSet = new Set(String(learner.levels || '').split(',').map((s) => s.trim()).filter(Boolean));
+        // Formations marquées TERMINÉES manuellement (migration 094, colonne optionnelle).
+        const doneSet = new Set(String(learner.completed_levels || '').split(',').map((s) => s.trim()).filter(Boolean));
+
+        // PRÉREQUIS (migration 101) : « pour attaquer B, il faut avoir terminé A ». On résout
+        // en deux temps car « terminée » se calcule par formation (badge manuel OU complétion
+        // documentaire), donc il faut d'abord établir la liste des formations terminées.
+        const estTerminee = (p) => {
+            const e = byProgram[p.id] || null;
+            const badge = (p.level && String(p.level).trim()) || p.code;
+            return doneSet.has(badge) || doneSet.has(p.code) || !!(e && e.complete);
+        };
+        const doneIds = programs.filter(estTerminee).map((p) => p.id);
+        let prereqEdges = [];
+        try {
+            const [rows] = await conn.query(
+                'SELECT program_id, requires_program_id FROM quest_prerequisite WHERE organization_id = ?',
+                [learner.organization_id]);
+            prereqEdges = rows;
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        const unlockMap = resolveUnlocked(programs.map((p) => p.id), prereqEdges, doneIds);
+        const titreDe = new Map(programs.map((p) => [p.id, { code: p.code, title: p.title }]));
+
         const formations = programs.map((p) => {
             const e = byProgram[p.id] || null;
+            const badge = (p.level && String(p.level).trim()) || p.code;
+            const hasBadge = badgeSet.has(badge) || badgeSet.has(p.code);
+            // Terminée = marquée manuellement OU complétion auto des documents.
+            const finished = doneSet.has(badge) || doneSet.has(p.code) || !!(e && e.complete);
+            // RÉVOQUÉE : session commencée + point d'accès (breakpoint) NON franchi + non terminée.
+            // → retire le badge (niveau) et l'accès à la formation dans « Mes documents ».
+            const sessionStarted = !!(e && e.start_date && e.start_date <= todayISO());
+            const revoked = !!e && sessionStarted && (e.gate_need || 0) > 0 && !!e.gate_locked && !finished;
             return {
                 program_id: p.id, program_code: p.code, program_title: p.title,
                 // Descriptif (aperçu lecture seule).
@@ -258,7 +472,15 @@ const getMyFormations = async (req, res) => {
                 hygiene: p.hygiene, rs_code: p.rs_code,
                 audience: p.audience, objectives: p.objectives, objective_general: p.objective_general,
                 duration_detail: p.duration_detail, program_detail: p.program_detail,
-                enrolled: !!e,
+                enrolled: !!e, has_badge: hasBadge, finished, revoked,
+                // Rangement Pizza Quest (facultatif).
+                quest_theme: questCats.get(p.quest_theme_id) || null,
+                quest_tier: questCats.get(p.quest_tier_id) || null,
+                // Prérequis : `prereq_locked` = il reste des formations à terminer avant.
+                // `prereq_missing` les nomme, pour l'afficher plutôt qu'un cadenas muet.
+                prereq_locked: !(unlockMap.get(p.id) || { unlocked: true }).unlocked,
+                prereq_missing: ((unlockMap.get(p.id) || {}).missing || [])
+                    .map((id) => titreDe.get(id) || { code: '?', title: 'formation supprimée' }),
                 enrollment_id: e ? e.enrollment_id : null,
                 complete: e ? e.complete : false,
                 dayPassed: e ? e.dayPassed : false,
@@ -436,8 +658,17 @@ const signMyEmargement = async (req, res) => {
 // migration 070 (renvoie un profil vide / no-op au lieu d'échouer).
 
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
-const AVATAR_IDS = new Set(['pizza','chef','flame','wheat','tomato','cheese','olive','chili','mushroom','bread','chef2','chef3','basil','oven',
-    'burger','fries','pasta','salad','egg','bacon','shrimp','sushi','taco','hotdog','sandwich','croissant','pretzel','avocado','pepper','corn','grapes','lemon','icecream','coffee']);
+// Avatars illustrés proposés aujourd'hui (cf. front AvatarArt.jsx) + « img » = le stagiaire
+// utilise sa PHOTO (l'image vit dans learner_avatar, migration 094).
+const AVATAR_IDS = new Set(['pizza','paton','oven','pelle','petrin','chef','flame','wheat','farine',
+    'tomato','cheese','basil','olive','chili','mushroom','huile','img']);
+// Anciens ids (jeu d'emoji générique : burger, sushi, café…), retirés du sélecteur mais
+// TOUJOURS ACCEPTÉS : des stagiaires les ont en base. Les refuser ferait échouer leur
+// prochaine sauvegarde de profil pour un choix qu'ils n'ont plus les moyens de corriger.
+// Le front les remappe à l'affichage (LEGACY_AVATAR dans gamification.js).
+const LEGACY_AVATAR_IDS = new Set(['bread','chef2','chef3','burger','fries','pasta','salad','egg','bacon',
+    'shrimp','sushi','taco','hotdog','sandwich','croissant','pretzel','avocado','pepper','corn','grapes','lemon','icecream','coffee']);
+const isKnownAvatar = (id) => AVATAR_IDS.has(id) || LEGACY_AVATAR_IDS.has(id);
 
 /** GET /api/mon-espace/profile — avatar + progression { world: { step: stars } } + XP. */
 const getMyProfile = async (req, res) => {
@@ -471,7 +702,7 @@ const saveMyAvatar = async (req, res) => {
         const avatar = req.body && req.body.avatar;
         if (avatar != null && avatar !== '') {
             const [id, color] = String(avatar).split('|'); // "id" ou "id|#rrggbb"
-            if (!AVATAR_IDS.has(id)) return res.status(422).json({ message: 'Avatar inconnu.' });
+            if (!isKnownAvatar(id)) return res.status(422).json({ message: 'Avatar inconnu.' });
             if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) return res.status(422).json({ message: 'Couleur invalide.' });
         }
         try { await conn.query('UPDATE learner SET avatar = ? WHERE id = ?', [avatar || null, learner.id]); }
@@ -479,6 +710,553 @@ const saveMyAvatar = async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur avatar stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * Le catalogue admin porte des mentions de gestion entre parenthèses — « Veste brodée Molinel
+ * (uniquement pour nos stagiaires) ». Utile au secrétariat, absurde côté stagiaire : ici, tout
+ * le monde EST stagiaire. On les retire à l'affichage plutôt que de renommer l'article, parce
+ * que la mention garde tout son sens dans l'inventaire admin.
+ */
+const RESERVE_RE = /\s*\((?:uniquement\s+)?(?:pour|r[ée]serv[ée]e?\s+(?:aux|à))\s+(?:nos\s+)?stagiaires?\)\s*$/i;
+const cleanName = (n) => String(n || '').replace(RESERVE_RE, '').trim();
+
+/* Articles à personnaliser : la veste Molinel est BRODÉE — sans le nom, la commande est
+   inexploitable. Le déclencheur est la CATÉGORIE, pas le libellé : le jour où il y aura un
+   tablier ou une casquette, ils demanderont le nom sans qu'on retouche le code. */
+const PERSONALIZABLE_CATEGORIES = new Set(['Textile']);
+const isPersonalizable = (cat) => PERSONALIZABLE_CATEGORIES.has(String(cat || ''));
+
+/* Délai de fabrication du textile : la veste part chez le brodeur, elle n'est pas en rayon.
+   En JOURS OUVRÉS (cf. minPickupDate) et pas calendaires — le brodeur ne travaille pas le
+   week-end, donc y compter deux jours promettrait une veste qui n'existe pas.
+
+   Ce 3 n'est pas un arrondi : il vient de la règle de l'école, « commandée avant le mardi
+   soir, la veste est là pour la fin du stage ». Mardi + 3 ouvrés = vendredi ✓ ; mercredi + 3
+   = le lundi suivant, le stagiaire est reparti — d'où la limite du mardi soir. Le changer,
+   c'est déplacer cette limite : à 5, plus AUCUN stagiaire ne repart avec sa veste (toutes les
+   formations sauf TMP durent 5 jours ou moins) et tout bascule en expédition. */
+const TEXTILE_DELAI_OUVRES = 3;
+
+/* Déclinaisons du textile. L'inventaire ne tient qu'UNE ligne « Veste brodée Molinel » — pas
+   un article par taille — donc la taille se choisit à la demande. Servi au front par l'API :
+   une liste recopiée dans le front finirait par diverger de ce que le serveur accepte. */
+const TAILLES = ['S', 'M', 'L', 'XL'];
+const COUPES = ['Femme', 'Homme'];
+const variantOptions = (cat) => (isPersonalizable(cat) ? { tailles: TAILLES, coupes: COUPES } : null);
+/* Une déclinaison valide, telle qu'elle sera stockée : « L · Femme ». */
+const parseVariant = (v) => {
+    const [t, c] = String(v || '').split('·').map((x) => x.trim());
+    return TAILLES.includes(t) && COUPES.includes(c) ? `${t} · ${c}` : null;
+};
+
+/**
+ * GET /api/mon-espace/boutique — le matériel que l'ÉCOLE vend (onglet prioritaire).
+ * Source : `inventory_item`, le stock réel. L'école est le marchand : elle achète chez
+ * gi.metal à son tarif, marge, facture et remet en main propre le dernier jour. Aucun tiers.
+ * On n'expose PAS `threshold` (seuil de réappro) : c'est une info de gestion interne.
+ * `quantity` sert seulement à dire « en stock » ou « sur commande » — on ne montre pas le
+ * nombre, sinon un stagiaire qui voit « 2 restants » se croit chez un marchand pressé.
+ */
+/**
+ * Quantités déjà RÉSERVÉES par les demandes en cours -> Map inventory_item_id => qty.
+ *
+ * Statuts retenus : tout sauf REMISE (l'article est parti, sa sortie de stock est passée en
+ * caisse) et ANNULEE (la demande n'existe plus). `excludeRequestId` sert à recalculer sans
+ * compter une demande précise — utile si un jour on autorise sa modification.
+ * Table absente (migration 096 non jouée) → aucune réservation, on ne bloque personne.
+ */
+async function reservedByPendingRequests(conn, orgId, excludeRequestId = null) {
+    const map = new Map();
+    try {
+        const [rows] = await conn.query(
+            `SELECT li.inventory_item_id AS id, SUM(li.qty) AS n
+             FROM shop_request_line li
+             JOIN shop_request r ON r.id = li.request_id
+             WHERE r.organization_id = ? AND li.source = 'ECOLE' AND li.inventory_item_id IS NOT NULL
+               AND r.status NOT IN ('REMISE', 'ANNULEE')
+               ${excludeRequestId ? 'AND r.id <> ?' : ''}
+             GROUP BY li.inventory_item_id`,
+            excludeRequestId ? [orgId, excludeRequestId] : [orgId]
+        );
+        for (const r of rows) map.set(r.id, Number(r.n) || 0);
+    } catch (e) { if (!isMissingSchema(e)) throw e; }
+    return map;
+}
+
+const getBoutique = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        const [rows] = await conn.query(
+            `SELECT id, name, category, unit_price, tax_rate, quantity
+             FROM inventory_item WHERE organization_id = ? AND unit_price IS NOT NULL
+             ORDER BY category, name`,
+            [learner.organization_id]
+        );
+        // Stock DISPONIBLE = stock physique − ce qui est déjà réservé par des demandes en
+        // cours. Une demande ne décrémente pas l'inventaire (seule la caisse le fait, à la
+        // vente) : sans cette déduction, trois stagiaires peuvent commander le même dernier
+        // article et l'école se retrouve à en promettre trois. On s'arrête à REMISE :
+        // l'article est alors physiquement parti et sa sortie de stock est passée en caisse
+        // — le compter encore reviendrait à le déduire deux fois.
+        const reserved = await reservedByPendingRequests(conn, learner.organization_id);
+        const data = rows.map((r) => {
+            const dispo = Math.max(0, Number(r.quantity) - (reserved.get(r.id) || 0));
+            return {
+                id: r.id, name: cleanName(r.name), category: r.category,
+                price_ht: Number(r.unit_price), tax_rate: Number(r.tax_rate),
+                price_ttc: +(Number(r.unit_price) * (1 + Number(r.tax_rate) / 100)).toFixed(2),
+                stock: dispo,            // ce qu'il reste réellement à prendre
+                in_stock: dispo > 0,
+                personalizable: isPersonalizable(r.category),
+                variants: variantOptions(r.category),
+            };
+        });
+        res.json({ data });
+    } catch (err) {
+        console.error('Erreur boutique :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/mon-espace/boutique/partenaires — les offres de nos partenaires, par partenaire.
+ * Ici l'école NE VEND PAS : elle présente et met en relation. D'où `price_school` à côté de
+ * `price_public` — l'écart est ce qui donne au stagiaire une raison de passer par nous.
+ * Un partenaire sans produit actif n'est pas renvoyé : une vitrine vide ne rend service à
+ * personne, et ferait croire à un partenariat qui n'existe pas encore.
+ */
+const getBoutiquePartenaires = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        let rows = [];
+        try {
+            [rows] = await conn.query(
+                `SELECT pp.id, pp.name, pp.category, pp.reference, pp.price_public, pp.price_school,
+                        pp.url, pp.image_url, pp.note, pp.specs,
+                        p.id AS partner_id, p.name AS partner_name, p.category AS partner_category,
+                        p.discount_pct, p.website
+                 FROM partner_product pp
+                 JOIN partner p ON p.id = pp.partner_id
+                 WHERE pp.organization_id = ? AND pp.active = 1
+                 -- PAS « ORDER BY p.category » : c'est un ENUM, et MySQL trie les ENUM par ordre
+                 -- de DÉCLARATION, pas alphabétiquement. Or 'MATERIEL' y est déclaré avant 'FOUR'
+                 -- — le stagiaire tombait donc sur une trancheuse à jambon avant les fours. Cet
+                 -- ordre-là est celui de l'annuaire des fournisseurs ; ici on équipe une pizzeria,
+                 -- et le four est la décision la plus lourde. On impose donc l'ordre de la vitrine.
+                 ORDER BY CASE p.category WHEN 'FOUR' THEN 1 WHEN 'MATERIEL' THEN 2 ELSE 3 END,
+                          p.name, pp.sort_order, pp.name`,
+                [learner.organization_id]
+            );
+        } catch (e) {
+            if (isMissingSchema(e)) return res.json({ data: [] }); // migration 095 non jouée
+            throw e;
+        }
+        // Regroupé PAR PARTENAIRE : c'est l'entrée demandée côté stagiaire (« chez qui ? »),
+        // pas par catégorie — un four et une pelle ne se comparent pas.
+        const byPartner = new Map();
+        for (const r of rows) {
+            if (!byPartner.has(r.partner_id)) {
+                byPartner.set(r.partner_id, {
+                    partner_id: r.partner_id, partner_name: r.partner_name,
+                    partner_category: r.partner_category, discount_pct: r.discount_pct,
+                    website: r.website, products: [],
+                });
+            }
+            byPartner.get(r.partner_id).products.push({
+                id: r.id, name: r.name, category: r.category, reference: r.reference,
+                price_public: r.price_public == null ? null : Number(r.price_public),
+                price_school: r.price_school == null ? null : Number(r.price_school),
+                url: r.url, image_url: r.image_url, note: r.note,
+                // specs est une colonne JSON : selon le driver elle arrive déjà en objet, ou en
+                // chaîne à parser. On tolère les deux plutôt que de supposer.
+                specs: r.specs == null ? null : (typeof r.specs === 'string' ? JSON.parse(r.specs) : r.specs),
+                prix: [], // rempli juste après par les relevés revendeurs
+            });
+        }
+
+        // Les prix constatés chez les revendeurs (comparateur). Table séparée, une requête à
+        // part : un four a plusieurs prix, un bac n'en a aucun. On les attache aux produits par
+        // id. `min`/`max` sont l'argument du comparateur — l'écart entre revendeurs.
+        const ids = rows.map((r) => r.id);
+        if (ids.length) {
+            let prixRows = [];
+            try {
+                [prixRows] = await conn.query(
+                    `SELECT partner_product_id, reseller, url, price_ht, includes_install, seen_at
+                     FROM partner_product_price WHERE partner_product_id IN (?)
+                     ORDER BY price_ht`, [ids]);
+            } catch (e) {
+                if (!isMissingSchema(e)) throw e; // migration 097 non jouée : on sert sans prix
+            }
+            const parProduit = new Map();
+            for (const pr of prixRows) {
+                if (!parProduit.has(pr.partner_product_id)) parProduit.set(pr.partner_product_id, []);
+                parProduit.get(pr.partner_product_id).push({
+                    reseller: pr.reseller, url: pr.url, price_ht: Number(pr.price_ht),
+                    includes_install: !!pr.includes_install,
+                    seen_at: pr.seen_at instanceof Date ? pr.seen_at.toISOString().slice(0, 10) : String(pr.seen_at).slice(0, 10),
+                });
+            }
+            for (const g of byPartner.values()) {
+                for (const prod of g.products) {
+                    const l = parProduit.get(prod.id) || [];
+                    prod.prix = l;
+                    prod.prix_min = l.length ? l[0].price_ht : null;         // trié par price_ht
+                    prod.prix_max = l.length ? l[l.length - 1].price_ht : null;
+                }
+            }
+        }
+        res.json({ data: [...byPartner.values()] });
+    } catch (err) {
+        console.error('Erreur offres partenaires :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * Référence lisible d'une demande : EPJJD-2026-0042.
+ * Lisible et DICTABLE : le stagiaire la donne au téléphone, l'école la retrouve. Un uuid ne
+ * se dicte pas. Le compteur repart à 1 chaque année, par organisation.
+ */
+async function nextShopRef(conn, orgId) {
+    const year = new Date().getFullYear();
+    const [[org]] = await conn.query('SELECT code FROM organization WHERE id = ? LIMIT 1', [orgId]);
+    const code = String((org && org.code) || 'EP').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'EP';
+    const prefix = `${code}-${year}-`;
+    const [[last]] = await conn.query(
+        'SELECT ref FROM shop_request WHERE organization_id = ? AND ref LIKE ? ORDER BY ref DESC LIMIT 1',
+        [orgId, `${prefix}%`]
+    );
+    const n = last ? Number(String(last.ref).slice(prefix.length)) + 1 : 1;
+    return prefix + String(n).padStart(4, '0');
+}
+
+/**
+ * GET /api/mon-espace/boutique/creneaux?textile=1 — les créneaux de retrait des 10 prochaines
+ * semaines. 10 et pas 4 : le calendrier laisse naviguer sur deux mois, il lui faut de quoi les
+ * remplir. C'est l'API qui les calcule, PAS le front : une table d'horaires recopiée des deux
+ * côtés finit par diverger, et le stagiaire se voit refuser un créneau qu'on venait de lui
+ * proposer.
+ *
+ * `textile=1` = le panier contient un article brodé → on n'ouvre qu'à partir du délai de
+ * fabrication. Le front grise ainsi les jours trop proches AU LIEU de laisser choisir puis
+ * refuser à l'envoi.
+ */
+const getPickupSlots = async (req, res) => {
+    try {
+        const textile = req.query.textile === '1';
+        const minDate = textile ? minPickupDate(TEXTILE_DELAI_OUVRES) : null;
+        const days = [];
+        const d = new Date(); d.setHours(12, 0, 0, 0); // midi : à l'abri des bascules d'heure d'été
+        for (let i = 0; i < 70; i++) {
+            d.setDate(d.getDate() + 1); // à partir de demain : préparer une commande prend un jour
+            const slots = slotsForDay(d.getDay());
+            if (!slots.length) continue; // fermé : on ne renvoie pas le jour du tout
+            // Date LOCALE assemblée à la main — toISOString() repasserait en UTC et
+            // décalerait le jour (cf. lib/horaires.js).
+            const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            if (minDate && date < minDate) continue; // trop tôt pour une broderie
+            days.push({ date, dow: d.getDay(), slots });
+        }
+        res.json({ data: days, min_date: minDate, delai_ouvres: textile ? TEXTILE_DELAI_OUVRES : 0 });
+    } catch (err) {
+        console.error('Erreur créneaux :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/mon-espace/boutique/demande — le panier validé devient une demande.
+ * Body : { lines: [{ source, id, qty }], note }
+ * Pas de paiement : le stagiaire retire à l'école et paie sur place (cf. `invoice`).
+ * Les libellés et prix sont RELUS EN BASE puis figés dans la demande — jamais pris du client :
+ * sinon n'importe qui poste un prix de 1 € et l'école facture ce qu'on lui a dicté.
+ */
+const createShopRequest = async (req, res) => {
+    const conn = db.promise();
+    try {
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        const lines = Array.isArray(req.body && req.body.lines) ? req.body.lines : [];
+        if (!lines.length) return res.status(422).json({ message: 'Demande vide.' });
+        if (lines.length > 50) return res.status(422).json({ message: 'Trop d’articles (50 maximum).' });
+
+        const resolved = [];
+        for (const l of lines) {
+            const qty = Math.max(1, Math.min(99, Number(l.qty) || 1));
+            if (l.source === 'PARTENAIRE') {
+                const [[p]] = await conn.query(
+                    'SELECT id, name, price_school, price_public FROM partner_product WHERE id = ? AND organization_id = ? AND active = 1',
+                    [l.id, learner.organization_id]
+                );
+                if (!p) continue; // article retiré entre-temps : on l'ignore plutôt que de tout refuser
+                const price = p.price_school != null ? p.price_school : p.price_public;
+                resolved.push({ source: 'PARTENAIRE', pprod: p.id, item: null, label: p.name, qty,
+                    price: price == null ? null : Number(price), tax: 20, perso: null, variant: null, brodable: false });
+            } else {
+                const [[it]] = await conn.query(
+                    'SELECT id, name, category, unit_price, tax_rate FROM inventory_item WHERE id = ? AND organization_id = ?',
+                    [l.id, learner.organization_id]
+                );
+                if (!it || it.unit_price == null) continue;
+                // Broderie et taille n'existent que pour le textile. On les IGNORE ailleurs au
+                // lieu de recopier ce que le client envoie : sinon une pelle postée avec un
+                // `personalization` afficherait un ordre de broderie sur un manche de louche —
+                // et lui collerait les 5 jours ouvrés de délai, pour rien.
+                const brodable = isPersonalizable(it.category);
+                const perso = brodable ? String(l.personalization || '').trim().slice(0, 120) : '';
+                const variant = brodable ? parseVariant(l.variant) : null;
+                if (brodable) {
+                    // Un article brodé sans nom est inexploitable : on refuse plutôt que de créer
+                    // une demande que l'école devra courir après par téléphone. Sans le nom, la
+                    // veste part chez le brodeur sans savoir quoi broder ; sans la taille,
+                    // l'école ne sait pas laquelle sortir du carton.
+                    if (!perso) return res.status(422).json({ message: `« ${cleanName(it.name)} » est brodé : indique le nom et le prénom.` });
+                    if (!variant) return res.status(422).json({ message: `« ${cleanName(it.name)} » : choisis la taille et la coupe.` });
+                }
+                resolved.push({ source: 'ECOLE', pprod: null, item: it.id, label: cleanName(it.name), qty,
+                    price: Number(it.unit_price), tax: Number(it.tax_rate), perso: perso || null, variant, brodable });
+            }
+        }
+        if (!resolved.length) return res.status(422).json({ message: 'Aucun article valide dans la demande.' });
+
+        // STOCK — contrôle qui fait autorité. Le panier plafonne déjà les quantités à l'écran,
+        // mais c'est du confort : rien n'empêche de poster la requête à la main. On revalide
+        // donc ici, sur le stock DISPONIBLE (physique − déjà réservé par les demandes en cours).
+        //
+        // On additionne PAR ARTICLE et pas par ligne : une veste en M et la même en L font deux
+        // lignes (la déclinaison les sépare) mais puisent dans le même article d'inventaire.
+        // Vérifier ligne par ligne laisserait passer 2 vestes quand il n'en reste qu'une.
+        {
+            const reserved = await reservedByPendingRequests(conn, learner.organization_id);
+            const wanted = new Map();
+            for (const r of resolved) {
+                if (r.source !== 'ECOLE' || !r.item) continue; // le partenaire vend son propre stock
+                wanted.set(r.item, (wanted.get(r.item) || 0) + r.qty);
+            }
+            if (wanted.size) {
+                const [stocks] = await conn.query(
+                    'SELECT id, name, quantity FROM inventory_item WHERE organization_id = ? AND id IN (?)',
+                    [learner.organization_id, [...wanted.keys()]]
+                );
+                for (const it of stocks) {
+                    const dispo = Math.max(0, Number(it.quantity) - (reserved.get(it.id) || 0));
+                    const veut = wanted.get(it.id) || 0;
+                    if (veut > dispo) {
+                        const nom = cleanName(it.name);
+                        return res.status(409).json({
+                            message: dispo === 0
+                                ? `« ${nom} » vient de partir : il n'y en a plus de disponible. Retire-le de ton panier.`
+                                : `« ${nom} » : il n'en reste que ${dispo}. Ajuste la quantité (tu en demandes ${veut}).`,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Créneau de retrait : facultatif, mais s'il est là il doit tomber pendant les
+        // heures d'ouverture. On revalide côté serveur — le front peut avoir une vieille
+        // version en cache, ou quelqu'un poster directement.
+        const pickup = (req.body && req.body.pickup_at) || null;
+        const chk = isOpenAt(pickup);
+        if (!chk.ok) return res.status(422).json({ message: chk.reason });
+        // Délai de broderie : revalidé ici, le front peut être en cache ou contourné.
+        if (pickup && resolved.some((r) => r.brodable)) {
+            const min = minPickupDate(TEXTILE_DELAI_OUVRES);
+            if (String(pickup).slice(0, 10) < min) {
+                return res.status(422).json({ message: `Le textile est brodé sur commande : compte ${TEXTILE_DELAI_OUVRES} jours ouvrés. Le retrait n’est possible qu’à partir du ${min.split('-').reverse().join('/')}.` });
+            }
+        }
+
+        const ref = await nextShopRef(conn, learner.organization_id);
+        await conn.query(
+            'INSERT INTO shop_request (id, organization_id, learner_id, ref, note, pickup_at) VALUES (uuid(), ?, ?, ?, ?, ?)',
+            [learner.organization_id, learner.id, ref, String((req.body && req.body.note) || '').slice(0, 500) || null,
+             pickup ? String(pickup).slice(0, 16).replace('T', ' ') + ':00' : null]
+        );
+        const [[created]] = await conn.query('SELECT id FROM shop_request WHERE ref = ? LIMIT 1', [ref]);
+        for (let i = 0; i < resolved.length; i++) {
+            const r = resolved[i];
+            await conn.query(
+                `INSERT INTO shop_request_line (id, request_id, source, inventory_item_id, partner_product_id, label, qty, unit_price_ht, tax_rate, personalization, variant, sort_order)
+                 VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [created.id, r.source, r.item, r.pprod, r.label, r.qty, r.price, r.tax, r.perso, r.variant, i]
+            );
+        }
+        res.status(201).json({ success: true, ref, id: created.id });
+    } catch (err) {
+        if (isMissingSchema(err)) return res.status(503).json({ message: 'Migration 096 non jouée : boutique indisponible.' });
+        console.error('Erreur demande boutique :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** GET /api/mon-espace/boutique/mes-demandes — le suivi côté stagiaire. */
+const getMyShopRequests = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        let rows = [];
+        try {
+            [rows] = await conn.query(
+                // DATE_FORMAT et pas `r.pickup_at` brut : le driver rendrait un objet Date, que
+                // res.json() sérialise en UTC (« …T10:00:00.000Z » pour un rendez-vous de 12h00).
+                // Le front y découpe l'heure telle quelle et affichait 10:00 — deux heures avant
+                // l'heure réelle, sur un rendez-vous physique. On renvoie donc la MÊME forme que
+                // celle qu'on accepte à l'écriture : heure locale, sans Z (cf. lib/horaires.js).
+                `SELECT r.id, r.ref, r.status, r.note,
+                        DATE_FORMAT(r.created_at, '%Y-%m-%dT%H:%i') AS created_at,
+                        DATE_FORMAT(r.pickup_at, '%Y-%m-%dT%H:%i') AS pickup_at,
+                        l.source, l.label, l.qty, l.unit_price_ht, l.tax_rate, l.personalization, l.variant
+                 FROM shop_request r LEFT JOIN shop_request_line l ON l.request_id = r.id
+                 WHERE r.learner_id = ? ORDER BY r.created_at DESC, l.sort_order`,
+                [learner.id]
+            );
+        } catch (e) { if (isMissingSchema(e)) return res.json({ data: [] }); throw e; }
+        const byId = new Map();
+        for (const r of rows) {
+            if (!byId.has(r.id)) byId.set(r.id, { id: r.id, ref: r.ref, status: r.status, note: r.note, pickup_at: r.pickup_at, created_at: r.created_at, lines: [] });
+            if (r.label) byId.get(r.id).lines.push({ source: r.source, label: r.label, qty: r.qty,
+                unit_price_ht: r.unit_price_ht == null ? null : Number(r.unit_price_ht), tax_rate: Number(r.tax_rate),
+                personalization: r.personalization, variant: r.variant });
+        }
+        res.json({ data: [...byId.values()] });
+    } catch (err) {
+        console.error('Erreur mes demandes :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PUT /api/mon-espace/boutique/demande/:id/annuler — le stagiaire annule SA demande.
+ *
+ * Autorisé uniquement tant que l'école n'a rien engagé, c'est-à-dire au statut NOUVELLE
+ * (« Reçue ») : dès la préparation, du textile a pu partir à la broderie et l'annulation
+ * se règle de vive voix, pas d'un clic.
+ *
+ * Le garde-fou vit dans le WHERE, pas dans un `if` précédé d'un SELECT : deux onglets
+ * ouverts (ou l'école passant la demande en préparation au même instant) suffiraient
+ * sinon à annuler une demande déjà engagée. Ici, l'UPDATE ne touche la ligne que si elle
+ * appartient TOUJOURS à ce stagiaire ET qu'elle est TOUJOURS en NOUVELLE.
+ */
+const cancelMyShopRequest = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        let r;
+        try {
+            [r] = await conn.query(
+                `UPDATE shop_request SET status = 'ANNULEE'
+                 WHERE id = ? AND learner_id = ? AND organization_id = ?
+                   AND status = 'NOUVELLE' AND invoice_id IS NULL`,
+                [req.params.id, learner.id, learner.organization_id]
+            );
+        } catch (e) {
+            if (isMissingSchema(e)) return res.status(503).json({ message: 'Boutique indisponible.' });
+            throw e;
+        }
+        if (!r.affectedRows) {
+            // Demande inexistante, appartenant à quelqu'un d'autre, ou déjà avancée : même
+            // réponse dans les trois cas — on ne renseigne pas sur l'existence d'une demande.
+            return res.status(409).json({ message: "Cette demande ne peut plus être annulée. Contacte l'école si besoin." });
+        }
+        res.json({ success: true, message: 'Demande annulée.' });
+    } catch (err) {
+        console.error('Erreur annulation demande :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/mon-espace/avatar-image — photo de profil (visage, logo…).
+ * Le NAVIGATEUR a déjà recadré en carré 500x500 et compressé : on ne fait que valider et
+ * stocker. Aucun traitement d'image côté serveur (pas de sharp à installer).
+ * Pose learner.avatar = « img » pour que le profil bascule sur la photo.
+ */
+const saveMyAvatarImage = async (req, res) => {
+    try {
+        const f = req.file;
+        if (!f || !f.buffer || !f.buffer.length) return res.status(422).json({ message: 'Image requise.' });
+        // Le carré 500x500 compressé tient très largement sous 300 Ko ; au-delà, c'est que
+        // l'image n'est pas passée par le recadrage du navigateur.
+        if (f.buffer.length > 300 * 1024) return res.status(413).json({ message: 'Image trop lourde (300 Ko maximum).' });
+        const mime = String(f.mimetype || '');
+        if (!['image/webp', 'image/jpeg', 'image/png'].includes(mime)) {
+            return res.status(415).json({ message: 'Format accepté : WebP, JPEG ou PNG.' });
+        }
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+
+        await conn.query(
+            `INSERT INTO learner_avatar (learner_id, organization_id, mime, bytes) VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE mime = VALUES(mime), bytes = VALUES(bytes)`,
+            [learner.id, learner.organization_id, mime, f.buffer]
+        );
+        // On garde la couleur de fond déjà choisie, s'il y en a une.
+        const color = String(req.body && req.body.color ? req.body.color : '');
+        const value = /^#[0-9a-fA-F]{6}$/.test(color) ? `img|${color}` : 'img';
+        await conn.query('UPDATE learner SET avatar = ? WHERE id = ?', [value, learner.id]);
+        res.json({ success: true, avatar: value });
+    } catch (err) {
+        if (isMissingSchema(err)) return res.status(503).json({ message: 'Migration 094 non jouée : photo de profil indisponible.' });
+        console.error('Erreur photo de profil :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/mon-espace/avatar-image/:learnerId — sert la photo.
+ * Ouvert à tout compte authentifié de l'ORGANISATION : les avatars s'affichent dans la
+ * communauté, donc chacun voit ceux des autres — mais pas ceux d'un autre organisme.
+ */
+const getAvatarImage = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const me = await learnerForUser(conn, req.user.id);
+        const orgId = (me && me.organization_id) || (req.user && req.user.organization_id);
+        if (!orgId) return res.status(404).end();
+        const [[row]] = await conn.query(
+            'SELECT mime, bytes, updated_at FROM learner_avatar WHERE learner_id = ? AND organization_id = ? LIMIT 1',
+            [req.params.learnerId, orgId]
+        );
+        if (!row) return res.status(404).end();
+        // ETag sur la date de mise à jour : l'image ne bouge qu'au changement de photo, et
+        // la communauté en affiche beaucoup — sans ça, on la retélécharge à chaque écran.
+        const etag = `W/"${new Date(row.updated_at).getTime()}"`;
+        if (req.headers['if-none-match'] === etag) return res.status(304).end();
+        res.set('Content-Type', row.mime);
+        res.set('Cache-Control', 'private, max-age=0, must-revalidate');
+        res.set('ETag', etag);
+        res.send(row.bytes);
+    } catch (err) {
+        if (isMissingSchema(err)) return res.status(404).end();
+        console.error('Erreur lecture photo de profil :', err);
+        res.status(500).end();
+    }
+};
+
+/** DELETE /api/mon-espace/avatar-image — retire la photo, retour aux avatars illustrés. */
+const deleteMyAvatarImage = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        await conn.query('DELETE FROM learner_avatar WHERE learner_id = ?', [learner.id]);
+        await conn.query("UPDATE learner SET avatar = NULL WHERE id = ? AND avatar LIKE 'img%'", [learner.id]);
+        res.json({ success: true });
+    } catch (err) {
+        if (isMissingSchema(err)) return res.json({ success: true }); // rien à supprimer
+        console.error('Erreur suppression photo de profil :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -616,4 +1394,5 @@ const updateMyInfos = async (req, res) => {
     }
 };
 
-module.exports = { getMonEspace, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility };
+// Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
+module.exports = { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots };

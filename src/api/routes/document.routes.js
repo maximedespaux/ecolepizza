@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument, createSignLink,
+    listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument, createSignLink, checkDocumentConditions,
 } = require('../controllers/document.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -10,6 +10,8 @@ const router = express.Router();
 router.get('/', authenticateToken, authorizeRoles(...STAFF_ROLES), listDocuments);
 // Génération / envoi / suppression : bureau uniquement (pas le formateur).
 router.post('/', authenticateToken, authorizeRoles(...ADMIN_ROLES), createDocument);
+// Vérifie qu'un modèle s'applique aux dossiers choisis (règles de l'organisme) — aperçu avant génération.
+router.post('/check-conditions', authenticateToken, authorizeRoles(...ADMIN_ROLES), checkDocumentConditions);
 router.post('/:id/send', authenticateToken, authorizeRoles(...ADMIN_ROLES), sendDocument);
 router.delete('/:id', authenticateToken, authorizeRoles(...ADMIN_ROLES), deleteDocument);
 

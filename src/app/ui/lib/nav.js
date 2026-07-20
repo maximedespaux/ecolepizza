@@ -40,6 +40,7 @@ export const NAV = [
     grp: "Ventes & Finance",     // encaissement, stock, compta
     items: [
       { to: "/ventes", ic: "cart", label: "Ventes & Inventaire", roles: ADMIN },
+      { to: "/demandes-boutique", ic: "package", label: "Demandes boutique", roles: ADMIN },
       { to: "/produit-divers", ic: "coins", label: "Produit divers", roles: ["FORMATEUR"] },
       { to: "/factures", ic: "receipt", label: "Facturation", roles: ADMIN },
       { to: "/comptabilite", ic: "calculator", label: "Comptabilité", roles: ADMIN },
@@ -60,6 +61,7 @@ export const NAV = [
       { to: "/roles", ic: "shield", label: "Rôles d'accès", roles: OWNER },
       { to: "/modeles", ic: "file-text", label: "Modèles de documents", roles: ADMIN },
       { to: "/qcm", ic: "list-checks", label: "Modèles de QCM", roles: ADMIN },
+      { to: "/pizza-quest-admin", ic: "pizza", label: "Pizza Quest", roles: ADMIN },
       { to: "/opcos", ic: "landmark", label: "OPCO / financeurs", roles: ADMIN },
     ],
   },
@@ -75,11 +77,13 @@ export const PAGE_TITLES = {
   "/suivi": "Suivi Qualiopi",
   "/formations": "Formations",
   "/qcm": "Modèles de QCM",
+  "/pizza-quest-admin": "Pizza Quest",
   "/produit-divers": "Produit divers",
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
   "/inventaire": "Inventaire",
   "/ventes": "Ventes de Matériels et Inventaire",
+  "/demandes-boutique": "Demandes boutique",
   "/factures": "Facturation",
   "/comptabilite": "Comptabilité",
   "/reglages": "Organisme",
@@ -137,6 +141,7 @@ export function navMode(user, path) {
 const SECTION_OF = {
   "/stagiaires": "/stagiaires", "/entreprises": "/entreprises", "/sessions": "/sessions", "/formations": "/formations",
   "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
+  "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",
   "/reglages": "/reglages", "/modeles": "/modeles", "/equipe": "/equipe",

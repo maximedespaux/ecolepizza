@@ -19,7 +19,8 @@ const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
 const { buildEmargementDocHtml } = require('../lib/emargement.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
-const { getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
+const { getEnabledFields, loadDossierFactsMap, evalCondition } = require('../lib/conditions.js');
+const { matchStep } = require('../lib/documents.js');
 const { notify } = require('./notification.controller.js');
 
 // IP « client » (best-effort, derrière proxy éventuel).
@@ -97,7 +98,10 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; // migration 049 non jouée : signature statique
         }
     }
-    const [[learner]] = await conn.query('SELECT * FROM learner WHERE id = ?', [learnerId]);
+    // Anti-fuite inter-organisation : on ne charge le stagiaire QUE s'il appartient à
+    // l'organisme du document (sinon un document d'un org lié à un learner_id d'un autre
+    // org ne doit jamais révéler ses données).
+    const [[learner]] = await conn.query('SELECT * FROM learner WHERE id = ? AND organization_id = ?', [learnerId, organizationId]);
     let company = null;
     const [formations] = await conn.query(
         `SELECT p.code, p.title, p.days, p.hours, p.price, p.hygiene, p.rs_code AS rs_code,
@@ -311,11 +315,95 @@ const createDocument = async (req, res) => {
     }
     try {
         const conn = db.promise();
-        const documentId = await prepareLearnerDoc(conn, req.user.organization_id, { learnerId: learner_id, type, templateSlug: template_slug, title, enrollmentIds: enrollment_ids });
+        const orgId = req.user.organization_id;
+        // Anti-injection inter-organisation : le stagiaire ET les dossiers fournis dans le
+        // corps doivent appartenir à l'organisme de l'appelant (et les dossiers à ce stagiaire).
+        const [[l]] = await conn.query('SELECT id FROM learner WHERE id = ? AND organization_id = ?', [learner_id, orgId]);
+        if (!l) return res.status(404).json({ error: 'Stagiaire introuvable.' });
+        const enrIds = [...new Set(enrollment_ids.map((x) => String(x)))];
+        const [okEnr] = await conn.query(
+            'SELECT id FROM enrollment WHERE id IN (?) AND organization_id = ? AND learner_id = ?',
+            [enrIds, orgId, learner_id]);
+        if (okEnr.length !== enrIds.length) return res.status(422).json({ error: 'Formation(s) invalide(s) pour ce stagiaire.' });
+        const documentId = await prepareLearnerDoc(conn, orgId, { learnerId: learner_id, type, templateSlug: template_slug, title, enrollmentIds: enrIds });
         res.status(201).json({ message: 'Document préparé', id: documentId });
     } catch (err) {
         console.error('Erreur création document :', err);
         res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+// Libellés des conditions INTÉGRÉES (applies_when), pour un message lisible.
+const BUILTIN_RULE_LABELS = {
+    financing: 'Type de financement', rs: 'Formation certifiante (RS)',
+    hygiene: 'Formation hygiène', jours: 'Nombre de jours', agefice: 'Financement AGEFICE',
+};
+
+/**
+ * POST /api/documents/check-conditions — le modèle s'applique-t-il aux dossiers choisis ?
+ * Corps : { template_slug, enrollment_ids }. Renvoie { ok, failed:[{slug,label}] } —
+ * les RÈGLES (conditions de l'organisme) non respectées, pour l'expliquer à l'écran.
+ * En erreur : on renvoie ok (jamais de blocage dû à un bug).
+ */
+const checkDocumentConditions = async (req, res) => {
+    const passthrough = () => res.json({ data: { ok: true, failed: [] } });
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const { template_slug, enrollment_ids } = req.body || {};
+        if (!template_slug || !Array.isArray(enrollment_ids) || !enrollment_ids.length) return passthrough();
+
+        const step = (await loadOrgSteps(orgId)).find((s) => s.slug === template_slug);
+        if (!step) return passthrough();
+        const applies = step.applies_when || {};
+        const customSlugs = Array.isArray(applies.conditions) ? applies.conditions : [];
+        const builtinKeys = ['financing', 'rs', 'hygiene', 'jours', 'agefice'].filter((k) => applies[k] != null);
+        if (!customSlugs.length && !builtinKeys.length) return passthrough(); // aucune règle
+
+        // Conditions personnalisées AVEC leur intitulé lisible.
+        const condById = new Map();
+        try {
+            const [rows] = await conn.query('SELECT slug, label, field, op, value FROM document_condition WHERE organization_id = ?', [orgId]);
+            for (const r of rows) {
+                let v = r.value;
+                try { v = r.value == null ? null : JSON.parse(r.value); } catch { /* garde brut */ }
+                condById.set(r.slug, { label: r.label, field: r.field, op: r.op, value: v });
+            }
+        } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
+
+        // Dossiers ciblés (strictement ceux de l'organisme).
+        const [enrs] = await conn.query(
+            `SELECT e.id, e.financing, l.opco, p.rs_code, p.hygiene, p.days
+             FROM enrollment e
+             LEFT JOIN learner l ON l.id = e.learner_id
+             LEFT JOIN training_session s ON s.id = e.session_id
+             LEFT JOIN training_program p ON p.id = s.program_id
+             WHERE e.organization_id = ? AND e.id IN (?)`,
+            [orgId, enrollment_ids]
+        );
+        if (!enrs.length) return passthrough();
+        const catalog = await getEnabledFields(conn, orgId, 'condition');
+        const factsMap = await loadDossierFactsMap(conn, orgId, enrs.map((e) => e.id), catalog);
+
+        const failed = new Map(); // clé -> intitulé (dédupliqué entre dossiers)
+        for (const e of enrs) {
+            const facts = factsMap.get(e.id) || {};
+            const ctx = {
+                financing: e.financing, rsCode: e.rs_code, hygiene: !!e.hygiene, jours: e.days,
+                agefice: (e.opco || '').toUpperCase() === 'AGEFICE', ...facts,
+            };
+            for (const k of builtinKeys) {
+                if (!matchStep({ [k]: applies[k] }, ctx)) failed.set(`builtin:${k}`, BUILTIN_RULE_LABELS[k] || k);
+            }
+            for (const slug of customSlugs) {
+                const cond = condById.get(slug);
+                if (cond && !evalCondition(cond, facts)) failed.set(slug, cond.label || slug);
+            }
+        }
+        res.json({ data: { ok: failed.size === 0, failed: [...failed].map(([slug, label]) => ({ slug, label })) } });
+    } catch (err) {
+        console.error('Erreur vérification des conditions :', err);
+        passthrough();
     }
 };
 
@@ -948,4 +1036,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp };
+module.exports = { listDocuments, createDocument, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp };
