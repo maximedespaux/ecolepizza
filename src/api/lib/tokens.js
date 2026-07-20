@@ -161,13 +161,72 @@ const TOKEN_CATALOG = [
             { key: 'Date signature', label: 'Date de signature', sample: '06/07/2026' },
         ],
     },
+    // Examen de certification — alimente le PROCÈS-VERBAL DE SESSION.
+    //
+    // Ces jetons sont la réponse directe au motif de refus du dossier RNCP n° 21983 :
+    // « on n'arrive pas à savoir quelle est la certification qui a été visée ». Un PV
+    // rédigé avec ce groupe ne peut pas être ambigu — il porte la certification, le
+    // numéro RNCP, la voie d'accès, le centre, le lieu et le jury nommément.
+    {
+        group: 'Examen',
+        tokens: [
+            { key: 'Certification', label: 'Certification visée', sample: 'Artisan pizzaïolo' },
+            { key: 'Code RNCP', label: 'Numéro RNCP', sample: 'RNCP41234' },
+            { key: 'PV', label: 'Numéro de procès-verbal', sample: 'EPJJD-EX-2026-014' },
+            { key: 'Date examen', label: "Date de la session d'examen", sample: '12/11/2026' },
+            { key: 'Lieu examen', label: "Lieu de la session (adresse)", sample: '101 rue Alsace-Lorraine, 65300 Lannemezan' },
+            { key: 'Centre examen', label: 'Centre habilité', sample: 'École Pizzaïolo Jean-Jacques Despaux' },
+            { key: "Voie d'accès", label: "Voie d'accès du candidat", sample: 'Formation continue' },
+            // Le jury, membre par membre. Sa composition est une condition de validité :
+            // majorité extérieure à l'organisme, et aucun membre n'ayant formé le candidat.
+            { key: 'Jury président', label: 'Président du jury', sample: 'M. Paul Rossi — pizzaïolo, La Napoli' },
+            { key: 'Jury professionnel', label: 'Membre professionnel', sample: 'Mme Léa Fabre — pizzaïola, Le Four' },
+            { key: 'Jury formateur', label: 'Membre formateur', sample: 'M. Guillaume Despaux — formateur' },
+            { key: 'Jury mention', label: 'Attestation de composition du jury', sample: 'Deux membres sur trois extérieurs à l\'organisme. Aucun membre n\'a formé les candidats évalués.' },
+            // Résultats. {Résultats} est un TABLEAU HTML (bloc par bloc) : cf. RAW_TOKENS.
+            { key: 'Blocs présentés', label: 'Blocs présentés', sample: 'BC01, BC02' },
+            { key: 'Blocs acquis', label: 'Blocs acquis', sample: 'BC01' },
+            { key: 'Résultats', label: 'Tableau des résultats par bloc', sample: '(tableau bloc / points / seuil / verdict)' },
+            { key: 'Décision', label: 'Décision du jury', sample: 'BLOCS ACQUIS' },
+            { key: 'Observations', label: 'Observations du jury', sample: 'C1.7 non acquise : cause du défaut non identifiée.' },
+        ],
+    },
 ];
 
 // Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires']);
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats']);
 
 // Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
 const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Tableau des résultats d'examen, un bloc par ligne. RAW : injecté tel quel dans le PV.
+// Le verdict n'est pas recalculé ici — il est lu depuis `verdicts`, figé à la clôture de la
+// session. Un candidat garde le résultat obtenu sous le barème en vigueur ce jour-là, même
+// si le barème évolue ensuite.
+function resultatsTable(verdicts) {
+    const rows = Object.entries(verdicts || {});
+    if (!rows.length) return '';
+    const head = '<tr><th>Bloc</th><th>Points</th><th>Seuil</th><th>Résultat</th></tr>';
+    const body = rows.map(([code, v]) => {
+        const acquis = v && v.acquis ? 'ACQUIS' : 'NON ACQUIS';
+        // Le motif : un bloc peut tomber au-dessus du seuil, par compétence non compensable
+        // ou par critère éliminatoire. Une décision défavorable se motive, sinon elle n'est
+        // pas opposable au recours.
+        const motif = v && !v.acquis
+            ? (v.elimManques && v.elimManques.length ? ' — critère éliminatoire non satisfait'
+                : (v.insuffisantes && v.insuffisantes.length ? ` — ${v.insuffisantes.join(', ')} sous 50 %` : ''))
+            : '';
+        return `<tr><td>${escCell(code)}</td><td>${escCell(v && v.total)}</td>`
+             + `<td>${escCell(v && v.seuil)}</td><td>${escCell(acquis + motif)}</td></tr>`;
+    }).join('');
+    return `<table><tbody>${head}${body}</tbody></table>`;
+}
+
+// « M. Paul Rossi — pizzaïolo, La Napoli ». Le rôle vient de la position dans le jury.
+const juryMembre = (m) => {
+    if (!m) return '';
+    return [m.nom, [m.qualite, m.employeur].filter(Boolean).join(', ')].filter(Boolean).join(' — ');
+};
 
 // Liste des stagiaires d'un groupe (document « entreprise »), un par ligne :
 //   M. Jean DUPONT
@@ -358,6 +417,29 @@ function resolveTokens(ctx = {}) {
     const semaine = f.week ? `Semaine ${f.week} — ${f.year || ''}`.trim() : frDate(start);
     const sig = ctx.signature || {};
 
+    // Examen de certification. `ex` = la session, `res` = le résultat du candidat.
+    const ex = ctx.exam || {};
+    const res = ctx.examResult || {};
+    const jury = Array.isArray(ex.jury) ? ex.jury : [];
+    const VOIES = {
+        FORMATION_CONTINUE: 'Formation continue',
+        CANDIDATURE_INDIVIDUELLE: 'Candidature individuelle',
+        VAE: 'Validation des acquis de l\'expérience',
+    };
+    const DECISIONS = {
+        CERTIFIE: 'CERTIFICATION DÉLIVRÉE', BLOCS_ACQUIS: 'BLOCS ACQUIS',
+        AJOURNE: 'AJOURNÉ', ABSENT: 'ABSENT', EXCLU: 'EXCLU', EN_COURS: '',
+    };
+    const verdicts = res.verdicts || {};
+    const blocsAcquis = Object.entries(verdicts).filter(([, v]) => v && v.acquis).map(([c]) => c);
+    // La mention n'est pas cosmétique : la majorité extérieure et l'absence de lien
+    // formateur-candidat sont des conditions de validité de la session.
+    const nbExternes = jury.filter((m) => m && m.externe).length;
+    const juryMention = jury.length
+        ? `${nbExternes} membre${nbExternes > 1 ? 's' : ''} sur ${jury.length} extérieur${nbExternes > 1 ? 's' : ''} à l'organisme. `
+          + `Aucun membre n'a formé les candidats évalués.`
+        : '';
+
     return {
         // Stagiaire
         Personne: fullName, 'Civilité': l.civility || '', Nom: l.last_name || '', 'Prénom': l.first_name || '',
@@ -406,6 +488,17 @@ function resolveTokens(ctx = {}) {
         'Adresse organisme': orgAddress, 'Ville organisme': o.town || '',
         'Téléphone organisme': o.phone || '', 'Email organisme': o.email || '',
         IBAN: o.iban || '', BIC: o.bic || '', Banque: o.bank_name || '',
+        // Examen de certification (procès-verbal de session)
+        Certification: ex.certification || '', 'Code RNCP': ex.rncp_code || '',
+        PV: ex.pv_ref || '', 'Date examen': frDate(ex.date_examen),
+        'Lieu examen': ex.lieu || '', 'Centre examen': ex.centre || '',
+        "Voie d'accès": VOIES[ex.voie_acces] || '',
+        'Jury président': juryMembre(jury[0]), 'Jury professionnel': juryMembre(jury[1]),
+        'Jury formateur': juryMembre(jury[2]), 'Jury mention': juryMention,
+        'Blocs présentés': (res.blocs_presentes || []).join(', '),
+        'Blocs acquis': blocsAcquis.join(', '),
+        'Résultats': resultatsTable(verdicts),
+        'Décision': DECISIONS[res.decision] || '', Observations: res.observations || '',
         // Dates
         Date: today, Today: today,
         // Signature (valeurs HTML : cf. RAW_TOKENS)

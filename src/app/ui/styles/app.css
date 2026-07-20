@@ -863,6 +863,18 @@ tbody tr:last-child td{border-bottom:none}
 
 /* Pizza Quest — accueil : le schéma des formations en carte de jeu */
 .pq-board{background:var(--surface2);border:1px solid var(--border-soft);border-radius:16px;padding:22px 18px 26px}
+/* Après-réponse du quiz : le verdict + le POURQUOI. Le verdict reste en --text, seule l'icône
+   porte la couleur (vert/rouge) — --green et --ember1 échouent au contraste en petit texte. */
+.pq-after{margin-top:14px}
+.pq-after-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.pq-verdict{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:14px;color:var(--text)}
+.pq-verdict.ok svg{color:var(--green)}
+.pq-verdict.ko svg{color:var(--ember1)}
+.pq-expl{display:flex;align-items:flex-start;gap:7px;margin:10px 0 0;padding:10px 12px;border-radius:11px;
+  background:var(--surface2);font-size:12.5px;line-height:1.5;color:var(--text)}
+.pq-expl svg{flex-shrink:0;margin-top:2px;color:var(--muted)}
+.pq-expl em{font-style:normal;color:var(--muted)}
+
 /* Titre de la rangée de défis-jeux dans un monde. */
 .pq-games-t{font-size:13px;font-weight:700;color:var(--text);margin:20px 0 10px;text-align:center}
 .pq-tier-label{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:center;margin:6px 0 12px}

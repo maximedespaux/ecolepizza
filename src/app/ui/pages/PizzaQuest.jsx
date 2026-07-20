@@ -15,21 +15,37 @@ import { saveQuestProgress } from "../lib/gamification.js";
  * thématisé pizza (blé, eau, huile, levure…). On clique une formation → son « monde »
  * (chemin de chapitres) → un chapitre = mini-QCM (les « étapes »).
  *
- * Le monde « Niveau I » utilise les vraies questions du manuel (banque niv1Questions,
- * formats variés : QCM / Vrai-Faux / Associations). Les autres niveaux restent en
- * démo (questions d'exemple) en attendant leurs manuels. Progression miroir localStorage +
- * serveur (learner_quest_progress) : réhydratée au montage, donc un cache vidé ne perd rien.
+ * Les mondes « Niveau I » et « Niveau II » ont leurs VRAIES questions, tirées de leurs
+ * manuels (banques niv1Questions / niv2Questions ; formats QCM / Vrai-Faux / Associations).
+ * Les quatre autres retombent sur DEMO_QUESTIONS en attendant leurs manuels.
+ * Toutes les questions, démo comprise, portent leur explication (`expl`) et leur page de
+ * manuel (`src`) : se tromper doit apprendre quelque chose, pas seulement coûter un cœur.
+ * Progression miroir localStorage + serveur (learner_quest_progress) : réhydratée au
+ * montage, donc un cache vidé ne perd rien.
  */
 
+/* Questions de repli, servies aux mondes qui n'ont pas encore leur banque (Découverte,
+   Niveau I Pro, Expert, Spécialisations). Elles portent leur explication comme les vraies
+   banques — un stagiaire de ces mondes apprend donc autant, même si le volume reste maigre.
+   ⚠️ 8 questions recyclées sur 36 tirages : c'est un pis-aller très visible, à remplacer
+   manuel par manuel. */
 const DEMO_QUESTIONS = [
-  { q: "Que signifie « TH » dans un empâtement ?", c: ["Taux d'hydratation", "Température de l'huile", "Temps de repos", "Type de farine"], a: 0 },
-  { q: "Pour 1 kg de farine à 65 % d'hydratation, combien d'eau ?", c: ["650 g", "65 g", "165 g", "6,5 kg"], a: 0 },
-  { q: "La « force » d'une farine se mesure par…", c: ["Le W (force boulangère)", "Sa couleur", "Son prix", "Son taux de sucre"], a: 0 },
-  { q: "La poolish est une préfermentation…", c: ["Liquide (≈100 % d'hydratation)", "Sèche (≈45 %)", "Sans levure", "À base d'huile"], a: 0 },
-  { q: "La biga est une préfermentation…", c: ["Sèche (≈45–50 %)", "Liquide 100 %", "À base de tomate", "Sans farine"], a: 0 },
-  { q: "Le « pointage » désigne…", c: ["La 1re fermentation en masse", "La cuisson", "Le façonnage", "Le nappage"], a: 0 },
-  { q: "Le sel dans la pâte sert surtout à…", c: ["Renforcer le gluten & réguler la fermentation", "Colorer la pâte", "Sucrer", "Faire lever plus vite"], a: 0 },
-  { q: "Température d'un four à bois pour une napolitaine ?", c: ["≈ 430–480 °C", "180 °C", "250 °C", "600 °C"], a: 0 },
+  { q: "Que signifie « TH » dans un empâtement ?", c: ["Taux d'hydratation", "Température de l'huile", "Temps de repos", "Type de farine"], a: 0,
+    expl: "Le TH est le poids d'eau rapporté au poids de farine, en pourcentage. C'est LA valeur qui décrit un empâtement : tout le reste se calcule à partir d'elle.", src: "Manuel Niveau I, p. 32" },
+  { q: "Pour 1 kg de farine à 65 % d'hydratation, combien d'eau ?", c: ["650 g", "65 g", "165 g", "6,5 kg"], a: 0,
+    expl: "L'hydratation se calcule TOUJOURS sur le poids de farine : 1 000 g × 65 % = 650 g d'eau. Jamais sur le poids total de la pâte.", src: "Manuel Niveau I, p. 27 et 32" },
+  { q: "La « force » d'une farine se mesure par…", c: ["Le W (force boulangère)", "Sa couleur", "Son prix", "Son taux de sucre"], a: 0,
+    expl: "Le W vient de l'alvéographe de Chopin. Il dit combien de temps la pâte tient la fermentation — à ne pas confondre avec le type (T55, T65), qui parle de cendres.", src: "Manuel Niveau I, p. 17-18" },
+  { q: "La poolish est une préfermentation…", c: ["Liquide (≈100 % d'hydratation)", "Sèche (≈45 %)", "Sans levure", "À base d'huile"], a: 0,
+    expl: "Liquide, parce qu'on y met autant de farine que d'eau. Elle repose 12 à 15 h maximum et donne un goût très prononcé.", src: "Manuel Niveau II, p. 22-23" },
+  { q: "La biga est une préfermentation…", c: ["Sèche (≈45–50 %)", "Liquide 100 %", "À base de tomate", "Sans farine"], a: 0,
+    expl: "Solide — un « starter » à 45 % d'hydratation, qui repose 16 à 20 h à 19-24 °C. C'est l'opposé du poolish, et elle se stocke bien mieux.", src: "Manuel Niveau II, p. 25" },
+  { q: "Le « pointage » désigne…", c: ["La 1re fermentation en masse", "La cuisson", "Le façonnage", "Le nappage"], a: 0,
+    expl: "La pâte fermente encore en masse, avant division. Le repos des pâtons après boulage, lui, s'appelle l'apprêt : deux moments distincts qu'on confond souvent.", src: "Manuel Niveau I, p. 28-31" },
+  { q: "Le sel dans la pâte sert surtout à…", c: ["Renforcer le gluten & réguler la fermentation", "Colorer la pâte", "Sucrer", "Faire lever plus vite"], a: 0,
+    expl: "Il resserre le gluten et freine la levure : goût ET tenue. Sans sel, la fermentation s'emballe et la pâte s'affaisse. Dose usuelle : 17 à 22 g par kilo de farine.", src: "Manuel Niveau I, p. 24" },
+  { q: "Température d'un four à bois pour une napolitaine ?", c: ["≈ 430–480 °C", "180 °C", "250 °C", "600 °C"], a: 0,
+    expl: "C'est cette chaleur qui cuit la pizza en 60 à 90 secondes et fait gonfler le cornicione. Sous 400 °C, la pâte sèche avant d'avoir levé.", src: "Manuel Niveau I, p. 47-48" },
 ];
 const DEMO_CHAPTERS = [
   { title: "Les farines", ic: "package" },
@@ -42,9 +58,8 @@ const DEMO_CHAPTERS = [
 const STEPS_PER_CH = 6;
 
 /* Chapitres d'un monde : chaque rôle a son manuel, donc sa banque. Ceux qui n'en ont pas
-   encore retombent sur la démo (8 questions recyclées) — c'est un pis-aller très visible,
-   il faut le remplacer manuel par manuel. Reste à faire : decouverte, niv1pro, niv2 → fait,
-   expert, spe. */
+   encore retombent sur la démo (8 questions recyclées sur 36 tirages) — pis-aller très
+   visible. FAIT : niv1, niv2. RESTE À ÉCRIRE : decouverte, niv1pro, expert, spe. */
 const BANKS = { niv1: NIV1_CHAPTERS, niv2: NIV2_CHAPTERS };
 const chaptersFor = (w) => BANKS[roleOf(w)] || DEMO_CHAPTERS;
 
@@ -434,11 +449,24 @@ function QuizModal({ world, data, onClose, onFinish }) {
             )}
 
             {answered && (
-              <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                <span style={{ fontWeight: 700, color: good ? "var(--green)" : "var(--ember1)" }}>
-                  {good ? "Bravo !" : `Réponse : ${answerLabel}`}
-                </span>
-                <button className="btn primary" onClick={next}>{idx + 1 >= total ? "Terminer" : "Suivant"} <Icon name="chevron-right" size={15} /></button>
+              <div className="pq-after">
+                <div className="pq-after-h">
+                  <span className={"pq-verdict " + (good ? "ok" : "ko")}>
+                    <Icon name={good ? "check-circle" : "x-circle"} size={16} />
+                    {good ? "Bravo !" : `Réponse : ${answerLabel}`}
+                  </span>
+                  <button className="btn primary" onClick={next}>{idx + 1 >= total ? "Terminer" : "Suivant"} <Icon name="chevron-right" size={15} /></button>
+                </div>
+                {/* Le POURQUOI. Sans lui, le stagiaire retient la bonne case et pas la raison —
+                    et une bonne case oubliée ne se retrouve pas. `src` cite la page du manuel
+                    pour qu'il puisse y retourner. Les questions sans `expl` s'affichent comme
+                    avant : le champ est facultatif, on enrichit banque par banque. */}
+                {q.expl && (
+                  <p className="pq-expl">
+                    <Icon name="book-open" size={13} />
+                    <span>{q.expl}{q.src ? <em> — {q.src}</em> : null}</span>
+                  </p>
+                )}
               </div>
             )}
           </div>
