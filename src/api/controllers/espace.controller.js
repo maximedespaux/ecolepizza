@@ -1,9 +1,10 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep } = require('../lib/documents.js');
+const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigners } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
+const { resolveUnlocked } = require('../lib/questgraph.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 
@@ -106,12 +107,91 @@ async function completionOf(conn, e, steps, agefice = false) {
     return { complete, dayPassed, signed, total };
 }
 
+// Accès à l'émargement — VOLET ENTREPRISE (migration 100). Point de rupture placé dans la
+// section « À l'arrivée via une entreprise » (training_program.company_steps, migration 092) :
+// company_break_slug = slug de l'étape juste avant le point. Ne s'applique QU'AUX stagiaires
+// inscrits via une entreprise. Comptent, parmi les étapes situées à/avant le point :
+//   · documents de GROUPE (🏢) → leur UNIQUE signature collective (ORG + Entreprise) ;
+//   · documents STAGIAIRE     → la signature du stagiaire sur son propre document.
+// Les étapes sans signataire, les QCM et l'émargement lui-même sont ignorés.
+// Aucun point / pas d'entreprise / migration absente → aucun blocage (fail-open).
+async function companyEmargementGate(conn, e, orgId) {
+    const none = { locked: false, need: 0, done: 0, break_label: null };
+    if (!e.program_id || !e.enrollment_id) return none;
+
+    // Entreprise + session du dossier (l'entreprise peut être portée par le dossier ou la fiche).
+    let companyId = null, sessionId = null;
+    try {
+        const [[r]] = await conn.query(
+            `SELECT COALESCE(en.company_id, l.company_id) AS cid, en.session_id AS sid
+             FROM enrollment en LEFT JOIN learner l ON l.id = en.learner_id
+             WHERE en.id = ? AND en.organization_id = ?`,
+            [e.enrollment_id, orgId]
+        );
+        if (r) { companyId = r.cid || null; sessionId = r.sid || null; }
+    } catch { return none; }
+    if (!companyId) return none; // arrivée « seul » → le volet entreprise ne s'applique pas
+
+    // Sous-parcours entreprise + point de rupture de la formation.
+    let list = [], breakSlug = null;
+    try {
+        const [[p]] = await conn.query(
+            'SELECT company_steps AS cs, company_break_slug AS cbs FROM training_program WHERE id = ?', [e.program_id]);
+        breakSlug = p && p.cbs ? p.cbs : null;
+        let cs = p && p.cs;
+        if (typeof cs === 'string') { try { cs = JSON.parse(cs); } catch { cs = []; } }
+        list = Array.isArray(cs) ? cs : [];
+    } catch { return none; } // colonnes absentes (migrations 092 / 100 non jouées)
+    if (!breakSlug || !list.length) return none;
+    const idx = list.indexOf(breakSlug);
+    if (idx < 0) return none;
+
+    // Étapes à/avant le point, résolues sur le parcours de l'organisme.
+    const bySlug = new Map((await loadOrgSteps(orgId)).map((s) => [s.slug, s]));
+    const break_label = (bySlug.get(breakSlug) || {}).label || null;
+    const required = list.slice(0, idx + 1)
+        .map((sl) => bySlug.get(sl))
+        .filter((s) => s && s.active && s.doc_type !== 'QCM' && s.doc_type !== 'EMARGEMENT' && stepSigners(s).length > 0);
+    if (!required.length) return { ...none, break_label };
+
+    // Documents du DOSSIER (stagiaire).
+    const ownBySlug = {}, ownByType = {};
+    const [own] = await conn.query(
+        `SELECT gd.type, gd.template_slug, gd.status FROM generated_document gd
+         JOIN document_formation df ON df.document_id = gd.id WHERE df.enrollment_id = ?`,
+        [e.enrollment_id]
+    );
+    for (const r of own) { if (r.template_slug) ownBySlug[r.template_slug] = r.status; ownByType[r.type] = r.status; }
+
+    // Documents de GROUPE de l'entreprise (scope COMPANY), pour cette session si connue.
+    const grpBySlug = {};
+    try {
+        const [grp] = await conn.query(
+            `SELECT template_slug, status FROM generated_document
+             WHERE organization_id = ? AND scope = 'COMPANY' AND company_id = ?
+               AND (? IS NULL OR session_id IS NULL OR session_id = ?)`,
+            [orgId, companyId, sessionId, sessionId]
+        );
+        // Un document de groupe non signé ne doit pas être écrasé par un homonyme signé.
+        for (const r of grp) {
+            if (!r.template_slug) continue;
+            if (grpBySlug[r.template_slug] !== 'SIGNE') grpBySlug[r.template_slug] = r.status;
+        }
+    } catch { /* schéma documents entreprise absent → ces étapes resteront « à faire » */ }
+
+    const isDone = (s) => (s.company_level
+        ? grpBySlug[s.slug] === 'SIGNE'
+        : (ownBySlug[s.slug] === 'SIGNE' || ownByType[s.doc_type] === 'SIGNE'));
+    const done = required.filter(isDone).length;
+    return { locked: done < required.length, need: required.length, done, break_label };
+}
+
 // Accès à l'émargement : point de rupture positionné ENTRE deux jalons du parcours DE LA
 // FORMATION (training_program.emargement_break_slug = slug de l'étape juste avant le point).
 // Le stagiaire doit avoir signé tous les documents qu'il doit signer situés à/avant ce point
 // (par sort_order du parcours de la formation). Aucun point → aucun blocage.
 // Renvoie { locked, need, done, break_label }.
-async function emargementGate(conn, e, orgId, agefice = false) {
+async function dossierEmargementGate(conn, e, orgId, agefice = false) {
     if (!e.program_id) return { locked: false, need: 0, done: 0, break_label: null };
     let breakSlug = null;
     try {
@@ -143,6 +223,31 @@ async function emargementGate(conn, e, orgId, agefice = false) {
     for (const r of rows) { if (r.template_slug) statusBySlug[r.template_slug] = r.status; statusByType[r.type] = r.status; }
     const done = required.filter((s) => statusBySlug[s.slug] === 'SIGNE' || statusByType[s.doc_type] === 'SIGNE').length;
     return { locked: done < required.length, need: required.length, done, break_label };
+}
+
+/**
+ * Accès à l'émargement, TOUS VOLETS CONFONDUS. Les DEUX points de rupture doivent être
+ * franchis : celui du « Parcours du dossier » et — pour un stagiaire arrivé via une
+ * entreprise — celui de la section « À l'arrivée via une entreprise ».
+ * Les compteurs sont cumulés ; `break_label` est celui du volet encore bloquant.
+ */
+async function emargementGate(conn, e, orgId, agefice = false) {
+    const [dossier, company] = await Promise.all([
+        dossierEmargementGate(conn, e, orgId, agefice),
+        companyEmargementGate(conn, e, orgId),
+    ]);
+    const locked = dossier.locked || company.locked;
+    // Libellé affiché : le volet qui bloque encore (dossier prioritaire), sinon le dernier point posé.
+    const break_label = (dossier.locked ? dossier.break_label : null)
+        || (company.locked ? company.break_label : null)
+        || dossier.break_label || company.break_label || null;
+    return {
+        locked,
+        need: dossier.need + company.need,
+        done: dossier.done + company.done,
+        break_label,
+        dossier, company, // détail par volet (diagnostic / affichage fin)
+    };
 }
 
 /**
@@ -263,12 +368,33 @@ const getMyFormations = async (req, res) => {
 
         // Catalogue complet des formations de l'organisme (avec le descriptif,
         // pour l'aperçu en lecture seule des formations non suivies).
-        const [programs] = await conn.query(
-            `SELECT id, code, title, level, color, days, hours, price, hygiene, rs_code,
-                    audience, objectives, objective_general, duration_detail, program_detail
-             FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
-            [learner.organization_id]
-        );
+        // Les colonnes quest_* (migration 101) peuvent ne pas exister : on retente sans elles
+        // plutôt que de casser la page « Mes formations » pour un paramétrage optionnel.
+        const PROG_COLS = `id, code, title, level, color, days, hours, price, hygiene, rs_code,
+                    audience, objectives, objective_general, duration_detail, program_detail`;
+        let programs;
+        try {
+            [programs] = await conn.query(
+                `SELECT ${PROG_COLS}, quest_theme_id, quest_tier_id
+                 FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
+                [learner.organization_id]
+            );
+        } catch (e) {
+            if (!isMissingSchema(e)) throw e;
+            [programs] = await conn.query(
+                `SELECT ${PROG_COLS} FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
+                [learner.organization_id]
+            );
+            programs = programs.map((p) => ({ ...p, quest_theme_id: null, quest_tier_id: null }));
+        }
+        // Thèmes / paliers (Pizza Quest) — facultatifs : sans eux la carte reste plate.
+        const questCats = new Map();
+        try {
+            const [cats] = await conn.query(
+                'SELECT id, kind, name, color, icon, sort_order FROM quest_category WHERE organization_id = ?',
+                [learner.organization_id]);
+            for (const c of cats) questCats.set(c.id, c);
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
 
         // Inscriptions du stagiaire (pour déverrouiller les cartes concernées).
         const [enrollments] = await conn.query(
@@ -309,6 +435,26 @@ const getMyFormations = async (req, res) => {
         const badgeSet = new Set(String(learner.levels || '').split(',').map((s) => s.trim()).filter(Boolean));
         // Formations marquées TERMINÉES manuellement (migration 094, colonne optionnelle).
         const doneSet = new Set(String(learner.completed_levels || '').split(',').map((s) => s.trim()).filter(Boolean));
+
+        // PRÉREQUIS (migration 101) : « pour attaquer B, il faut avoir terminé A ». On résout
+        // en deux temps car « terminée » se calcule par formation (badge manuel OU complétion
+        // documentaire), donc il faut d'abord établir la liste des formations terminées.
+        const estTerminee = (p) => {
+            const e = byProgram[p.id] || null;
+            const badge = (p.level && String(p.level).trim()) || p.code;
+            return doneSet.has(badge) || doneSet.has(p.code) || !!(e && e.complete);
+        };
+        const doneIds = programs.filter(estTerminee).map((p) => p.id);
+        let prereqEdges = [];
+        try {
+            const [rows] = await conn.query(
+                'SELECT program_id, requires_program_id FROM quest_prerequisite WHERE organization_id = ?',
+                [learner.organization_id]);
+            prereqEdges = rows;
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        const unlockMap = resolveUnlocked(programs.map((p) => p.id), prereqEdges, doneIds);
+        const titreDe = new Map(programs.map((p) => [p.id, { code: p.code, title: p.title }]));
+
         const formations = programs.map((p) => {
             const e = byProgram[p.id] || null;
             const badge = (p.level && String(p.level).trim()) || p.code;
@@ -327,6 +473,14 @@ const getMyFormations = async (req, res) => {
                 audience: p.audience, objectives: p.objectives, objective_general: p.objective_general,
                 duration_detail: p.duration_detail, program_detail: p.program_detail,
                 enrolled: !!e, has_badge: hasBadge, finished, revoked,
+                // Rangement Pizza Quest (facultatif).
+                quest_theme: questCats.get(p.quest_theme_id) || null,
+                quest_tier: questCats.get(p.quest_tier_id) || null,
+                // Prérequis : `prereq_locked` = il reste des formations à terminer avant.
+                // `prereq_missing` les nomme, pour l'afficher plutôt qu'un cadenas muet.
+                prereq_locked: !(unlockMap.get(p.id) || { unlocked: true }).unlocked,
+                prereq_missing: ((unlockMap.get(p.id) || {}).missing || [])
+                    .map((id) => titreDe.get(id) || { code: '?', title: 'formation supprimée' }),
                 enrollment_id: e ? e.enrollment_id : null,
                 complete: e ? e.complete : false,
                 dayPassed: e ? e.dayPassed : false,
@@ -606,6 +760,32 @@ const parseVariant = (v) => {
  * `quantity` sert seulement à dire « en stock » ou « sur commande » — on ne montre pas le
  * nombre, sinon un stagiaire qui voit « 2 restants » se croit chez un marchand pressé.
  */
+/**
+ * Quantités déjà RÉSERVÉES par les demandes en cours -> Map inventory_item_id => qty.
+ *
+ * Statuts retenus : tout sauf REMISE (l'article est parti, sa sortie de stock est passée en
+ * caisse) et ANNULEE (la demande n'existe plus). `excludeRequestId` sert à recalculer sans
+ * compter une demande précise — utile si un jour on autorise sa modification.
+ * Table absente (migration 096 non jouée) → aucune réservation, on ne bloque personne.
+ */
+async function reservedByPendingRequests(conn, orgId, excludeRequestId = null) {
+    const map = new Map();
+    try {
+        const [rows] = await conn.query(
+            `SELECT li.inventory_item_id AS id, SUM(li.qty) AS n
+             FROM shop_request_line li
+             JOIN shop_request r ON r.id = li.request_id
+             WHERE r.organization_id = ? AND li.source = 'ECOLE' AND li.inventory_item_id IS NOT NULL
+               AND r.status NOT IN ('REMISE', 'ANNULEE')
+               ${excludeRequestId ? 'AND r.id <> ?' : ''}
+             GROUP BY li.inventory_item_id`,
+            excludeRequestId ? [orgId, excludeRequestId] : [orgId]
+        );
+        for (const r of rows) map.set(r.id, Number(r.n) || 0);
+    } catch (e) { if (!isMissingSchema(e)) throw e; }
+    return map;
+}
+
 const getBoutique = async (req, res) => {
     try {
         const conn = db.promise();
@@ -617,14 +797,25 @@ const getBoutique = async (req, res) => {
              ORDER BY category, name`,
             [learner.organization_id]
         );
-        const data = rows.map((r) => ({
-            id: r.id, name: cleanName(r.name), category: r.category,
-            price_ht: Number(r.unit_price), tax_rate: Number(r.tax_rate),
-            price_ttc: +(Number(r.unit_price) * (1 + Number(r.tax_rate) / 100)).toFixed(2),
-            in_stock: Number(r.quantity) > 0,
-            personalizable: isPersonalizable(r.category),
-            variants: variantOptions(r.category),
-        }));
+        // Stock DISPONIBLE = stock physique − ce qui est déjà réservé par des demandes en
+        // cours. Une demande ne décrémente pas l'inventaire (seule la caisse le fait, à la
+        // vente) : sans cette déduction, trois stagiaires peuvent commander le même dernier
+        // article et l'école se retrouve à en promettre trois. On s'arrête à REMISE :
+        // l'article est alors physiquement parti et sa sortie de stock est passée en caisse
+        // — le compter encore reviendrait à le déduire deux fois.
+        const reserved = await reservedByPendingRequests(conn, learner.organization_id);
+        const data = rows.map((r) => {
+            const dispo = Math.max(0, Number(r.quantity) - (reserved.get(r.id) || 0));
+            return {
+                id: r.id, name: cleanName(r.name), category: r.category,
+                price_ht: Number(r.unit_price), tax_rate: Number(r.tax_rate),
+                price_ttc: +(Number(r.unit_price) * (1 + Number(r.tax_rate) / 100)).toFixed(2),
+                stock: dispo,            // ce qu'il reste réellement à prendre
+                in_stock: dispo > 0,
+                personalizable: isPersonalizable(r.category),
+                variants: variantOptions(r.category),
+            };
+        });
         res.json({ data });
     } catch (err) {
         console.error('Erreur boutique :', err);
@@ -836,6 +1027,40 @@ const createShopRequest = async (req, res) => {
         }
         if (!resolved.length) return res.status(422).json({ message: 'Aucun article valide dans la demande.' });
 
+        // STOCK — contrôle qui fait autorité. Le panier plafonne déjà les quantités à l'écran,
+        // mais c'est du confort : rien n'empêche de poster la requête à la main. On revalide
+        // donc ici, sur le stock DISPONIBLE (physique − déjà réservé par les demandes en cours).
+        //
+        // On additionne PAR ARTICLE et pas par ligne : une veste en M et la même en L font deux
+        // lignes (la déclinaison les sépare) mais puisent dans le même article d'inventaire.
+        // Vérifier ligne par ligne laisserait passer 2 vestes quand il n'en reste qu'une.
+        {
+            const reserved = await reservedByPendingRequests(conn, learner.organization_id);
+            const wanted = new Map();
+            for (const r of resolved) {
+                if (r.source !== 'ECOLE' || !r.item) continue; // le partenaire vend son propre stock
+                wanted.set(r.item, (wanted.get(r.item) || 0) + r.qty);
+            }
+            if (wanted.size) {
+                const [stocks] = await conn.query(
+                    'SELECT id, name, quantity FROM inventory_item WHERE organization_id = ? AND id IN (?)',
+                    [learner.organization_id, [...wanted.keys()]]
+                );
+                for (const it of stocks) {
+                    const dispo = Math.max(0, Number(it.quantity) - (reserved.get(it.id) || 0));
+                    const veut = wanted.get(it.id) || 0;
+                    if (veut > dispo) {
+                        const nom = cleanName(it.name);
+                        return res.status(409).json({
+                            message: dispo === 0
+                                ? `« ${nom} » vient de partir : il n'y en a plus de disponible. Retire-le de ton panier.`
+                                : `« ${nom} » : il n'en reste que ${dispo}. Ajuste la quantité (tu en demandes ${veut}).`,
+                        });
+                    }
+                }
+            }
+        }
+
         // Créneau de retrait : facultatif, mais s'il est là il doit tomber pendant les
         // heures d'ouverture. On revalide côté serveur — le front peut avoir une vieille
         // version en cache, ou quelqu'un poster directement.
@@ -906,6 +1131,47 @@ const getMyShopRequests = async (req, res) => {
         res.json({ data: [...byId.values()] });
     } catch (err) {
         console.error('Erreur mes demandes :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PUT /api/mon-espace/boutique/demande/:id/annuler — le stagiaire annule SA demande.
+ *
+ * Autorisé uniquement tant que l'école n'a rien engagé, c'est-à-dire au statut NOUVELLE
+ * (« Reçue ») : dès la préparation, du textile a pu partir à la broderie et l'annulation
+ * se règle de vive voix, pas d'un clic.
+ *
+ * Le garde-fou vit dans le WHERE, pas dans un `if` précédé d'un SELECT : deux onglets
+ * ouverts (ou l'école passant la demande en préparation au même instant) suffiraient
+ * sinon à annuler une demande déjà engagée. Ici, l'UPDATE ne touche la ligne que si elle
+ * appartient TOUJOURS à ce stagiaire ET qu'elle est TOUJOURS en NOUVELLE.
+ */
+const cancelMyShopRequest = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        let r;
+        try {
+            [r] = await conn.query(
+                `UPDATE shop_request SET status = 'ANNULEE'
+                 WHERE id = ? AND learner_id = ? AND organization_id = ?
+                   AND status = 'NOUVELLE' AND invoice_id IS NULL`,
+                [req.params.id, learner.id, learner.organization_id]
+            );
+        } catch (e) {
+            if (isMissingSchema(e)) return res.status(503).json({ message: 'Boutique indisponible.' });
+            throw e;
+        }
+        if (!r.affectedRows) {
+            // Demande inexistante, appartenant à quelqu'un d'autre, ou déjà avancée : même
+            // réponse dans les trois cas — on ne renseigne pas sur l'existence d'une demande.
+            return res.status(409).json({ message: "Cette demande ne peut plus être annulée. Contacte l'école si besoin." });
+        }
+        res.json({ success: true, message: 'Demande annulée.' });
+    } catch (err) {
+        console.error('Erreur annulation demande :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -1129,4 +1395,4 @@ const updateMyInfos = async (req, res) => {
 };
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
-module.exports = { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, getPickupSlots };
+module.exports = { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots };

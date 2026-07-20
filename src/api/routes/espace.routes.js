@@ -1,7 +1,8 @@
 const express = require('express');
 const multer = require('multer');
 // Union des deux branches : getMyAccess + le bloc boutique/avatar. `multer` reste (upload avatar).
-const { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, getPickupSlots } = require('../controllers/espace.controller.js');
+const { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots } = require('../controllers/espace.controller.js');
+const { getPlayableChapters } = require('../controllers/questContent.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -15,6 +16,9 @@ router.get('/', authenticateToken, getMonEspace);
 router.get('/access', authenticateToken, getMyAccess);
 router.get('/formations', authenticateToken, getMyFormations);
 router.get('/formations/:id', authenticateToken, getMyFormation);
+// Chapitres jouables de Pizza Quest pour une formation (banque de l'organisme).
+// Réponse vide = rien d'importé : le jeu retombe sur sa banque codée en dur.
+router.get('/quest/:programId/chapitres', authenticateToken, getPlayableChapters);
 router.get('/emargement', authenticateToken, getMyEmargement);
 router.post('/emargement/:recordId/sign', authenticateToken, signMyEmargement);
 router.get('/profile', authenticateToken, getMyProfile);
@@ -30,6 +34,8 @@ router.get('/boutique/partenaires', authenticateToken, getBoutiquePartenaires);
 router.get('/boutique/creneaux', authenticateToken, getPickupSlots);
 router.post('/boutique/demande', authenticateToken, createShopRequest);
 router.get('/boutique/mes-demandes', authenticateToken, getMyShopRequests);
+// Annulation par le stagiaire — possible tant que la demande est « Reçue » (contrôlé dans le WHERE).
+router.put('/boutique/demande/:id/annuler', authenticateToken, cancelMyShopRequest);
 router.put('/quest', authenticateToken, saveMyQuest);
 
 module.exports = router;

@@ -53,6 +53,9 @@ const listShopRequests = async (req, res) => {
             if (!byId.has(r.id)) {
                 byId.set(r.id, {
                     id: r.id, ref: r.ref, status: r.status, note: r.note, admin_note: r.admin_note,
+                    // pickup_at était bien SÉLECTIONNÉ mais jamais recopié ici : l'école ne
+                    // voyait donc jamais le créneau, pourtant saisi par le stagiaire.
+                    pickup_at: r.pickup_at,
                     invoice_id: r.invoice_id, created_at: r.created_at, updated_at: r.updated_at,
                     learner: { id: r.learner_id, first_name: r.first_name, last_name: r.last_name,
                                email: r.email, phone: r.phone },

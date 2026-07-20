@@ -7,6 +7,16 @@ import { euro } from "../lib/format.js";
 import { initials } from "../lib/format.js";
 import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, deleteAllShopRequests } from "../api/apiClient.js";
 
+// Créneau de retrait en clair (« lundi 27 juillet »), comme côté stagiaire : une date
+// ISO nue se relit mal quand on prépare les commandes de la journée.
+const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+function labelJour(iso) {
+  const [y, m, d] = String(iso).split("-").map(Number);
+  if (!y || !m || !d) return String(iso);
+  return `${JOURS[new Date(y, m - 1, d).getDay()]} ${d} ${MOIS[m - 1]}`;
+}
+
 /**
  * Zone « Demandes boutique » — le pendant école de la boutique stagiaire.
  *
@@ -85,10 +95,23 @@ function Demande({ d, onChange }) {
         {d.learner.email || "—"} · {d.learner.phone || "—"} · demandé le {new Date(d.created_at).toLocaleDateString("fr-FR")}
       </p>
 
+      {/* Créneau de retrait : QUAND le stagiaire passe chercher. Saisi par lui, mis en
+          évidence ici — c'est ce qui dicte l'ordre de préparation. */}
+      <div className="cart-perso" style={{ marginBottom: 10 }}>
+        <label>Retrait</label>
+        {d.pickup_at
+          ? <b style={{ fontSize: 14 }}>{labelJour(String(d.pickup_at).slice(0, 10))} à {String(d.pickup_at).slice(11, 16)}</b>
+          : <span className="hint">Non précisé — le stagiaire passera quand il pourra</span>}
+      </div>
+
       {d.lines.map((l, i) => (
         <div key={i}>
           <div className="cart-row">
             <b className="cart-lbl">{l.label}
+              {/* Déclinaison (taille · coupe, couleur…) : c'est l'article qu'on sort du carton.
+                  L'inventaire ne tient qu'une ligne par produit, donc sans ça on ne sait pas
+                  quoi préparer. */}
+              {l.variant ? <span className="badge b" style={{ marginLeft: 6 }}>{l.variant}</span> : null}
               {l.source === "PARTENAIRE" ? <span className="badge n" style={{ marginLeft: 6 }}>partenaire</span> : null}</b>
             <span className="tnum" style={{ width: 34, textAlign: "right" }}>× {l.qty}</span>
             <b className="tnum cart-sum">

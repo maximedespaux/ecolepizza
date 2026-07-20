@@ -48,18 +48,51 @@ export const variantValue = (l) => (l.taille && l.coupe ? `${l.taille} · ${l.co
 export const brodOk = (l) => !l.personalizable
   || (!!String(l.nom || "").trim() && !!String(l.prenom || "").trim() && !!l.taille && !!l.coupe);
 
+/**
+ * Plafond d'une ligne : le stock DISPONIBLE relevé à l'ajout (`stock`, servi par l'API),
+ * sinon 99. Une ligne partenaire n'a pas de stock chez nous — le partenaire vend le sien.
+ *
+ * Ce plafond est du CONFORT D'INTERFACE : il évite de composer un panier qu'on devra
+ * refuser. Il peut être périmé (l'école réassortit, un autre stagiaire commande), donc il
+ * ne fait pas autorité — c'est le serveur qui tranche à la validation.
+ */
+const stockMax = (l) => (l.stock == null ? 99 : Math.max(0, Number(l.stock) || 0));
+
+/**
+ * Quantité déjà au panier pour un ARTICLE, toutes lignes confondues.
+ * Une veste en M et la même en L sont deux lignes (la déclinaison les sépare) mais tirent
+ * sur le même article d'inventaire : le stock se compte donc par article, pas par ligne.
+ */
+export const qtyForItem = (lines, source, id) =>
+  lines.filter((l) => l.source === source && l.id === id).reduce((s, l) => s + l.qty, 0);
+
+/** Ce qu'on peut ENCORE ajouter pour cet article, compte tenu du panier. */
+export function roomFor(line, lines = read()) {
+  return Math.max(0, Math.min(99, stockMax(line)) - qtyForItem(lines, line.source, line.id));
+}
+
+/** Ajoute au panier sans dépasser le stock. Renvoie `false` si le plafond est déjà atteint. */
 export function addToCart(line) {
   const lines = read();
+  const room = roomFor(line, lines);
+  if (room <= 0) return false;
+  const add = Math.min(line.qty || 1, room);
   const i = lines.findIndex((l) => lineKey(l) === lineKey(line));
-  if (i >= 0) lines[i].qty = Math.min(99, lines[i].qty + (line.qty || 1));
-  else lines.push({ ...line, qty: Math.min(99, line.qty || 1) });
+  if (i >= 0) lines[i].qty += add;
+  else lines.push({ ...line, qty: add });
   write(lines);
+  return true;
 }
 export function setQty(key, qty) {
   const lines = read();
   const i = lines.findIndex((l) => lineKey(l) === key);
   if (i < 0) return;
-  if (qty <= 0) lines.splice(i, 1); else lines[i].qty = Math.min(99, qty);
+  if (qty <= 0) { lines.splice(i, 1); write(lines); return; }
+  const l = lines[i];
+  // Ce que prennent les AUTRES lignes du même article : la quantité demandée ici ne peut
+  // pas empiéter dessus.
+  const autres = qtyForItem(lines, l.source, l.id) - l.qty;
+  lines[i].qty = Math.max(1, Math.min(qty, Math.min(99, stockMax(l)) - autres));
   write(lines);
 }
 /** Corrige la broderie ou la déclinaison d'une ligne (clé AVANT modification). */

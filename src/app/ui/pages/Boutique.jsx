@@ -10,10 +10,14 @@ import { UserContext } from "../context/UserContext.jsx";
 import { euro } from "../lib/format.js";
 import {
   getCart, addToCart, setQty, setBroderie, clearCart, cartTotals, cartCount,
-  lineKey, brodValue, variantValue, brodOk, CART_EVENT,
+  lineKey, brodValue, variantValue, brodOk, roomFor, CART_EVENT,
 } from "../lib/cart.js";
+
+// Au-delà, on n'affiche pas le nombre : un décompte permanent est du bruit, et pousse
+// à l'achat. En dessous, c'est une info qui évite un panier refusé.
+const STOCK_BAS = 5;
 import {
-  getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests,
+  getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest,
 } from "../api/apiClient.js";
 
 /**
@@ -165,10 +169,22 @@ function AddBtn({ line, produit }) {
   const { user } = useContext(UserContext);
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
+  // Place restante pour CET article, panier compris. Recalculée à chaque changement de
+  // panier : ajouter la dernière veste doit griser le bouton immédiatement.
+  const [room, setRoom] = useState(() => roomFor(line));
+  useEffect(() => {
+    const sync = () => setRoom(roomFor(line));
+    sync();
+    window.addEventListener(CART_EVENT, sync);
+    return () => window.removeEventListener(CART_EVENT, sync);
+  }, [line.id, line.source, line.stock]);
+
   const flash = () => { setDone(true); setTimeout(() => setDone(false), 1200); };
+  const epuise = room <= 0;
   const click = () => {
+    if (epuise) return;
     if (line.personalizable) { setOpen(true); return; } // il faut savoir quoi broder
-    addToCart(line); flash();
+    if (addToCart(line)) flash();
   };
   return (
     <>
@@ -177,13 +193,16 @@ function AddBtn({ line, produit }) {
           (c'est « Valider ma demande », dans le panier). Ici le bouton reste neutre et ne
           s'allume qu'au survol de sa carte (cf. .shop-add). Il vire au vert une fois ajouté :
           la couleur suit l'état, elle ne décore pas. */}
-      <button className={"btn sm shop-add" + (done ? " ok" : "")} onClick={click} style={{ marginTop: 8, width: "100%" }}>
-        <Icon name={done ? "check" : "plus"} size={14} /> {done ? "Ajouté" : "Ajouter"}
+      <button className={"btn sm shop-add" + (done ? " ok" : "")} onClick={click} disabled={epuise}
+        title={epuise ? "Tout le stock disponible est déjà dans ton panier" : undefined}
+        style={{ marginTop: 8, width: "100%" }}>
+        <Icon name={done ? "check" : epuise ? "ban" : "plus"} size={14} />{" "}
+        {done ? "Ajouté" : epuise ? "Stock atteint" : "Ajouter"}
       </button>
       {open ? (
         <BroderieModal produit={produit} onClose={() => setOpen(false)}
           defaults={{ nom: user?.last_name || "", prenom: user?.first_name || "" }}
-          onAdd={(b) => { addToCart({ ...line, ...b }); flash(); }} />
+          onAdd={(b) => { if (addToCart({ ...line, ...b })) flash(); }} />
       ) : null}
     </>
   );
@@ -232,15 +251,18 @@ function EcoleTab() {
               <b className="tnum">{euro(p.price_ttc)} <span className="shop-unit">TTC</span></b>
               <span className="shop-ht tnum">{euro(p.price_ht)} HT</span>
             </span>
-            {/* Uniquement quand l'article N'EST PAS là. « En stock » répété sur les 30 cartes est
-                du bruit qu'on apprend à ne plus voir — et le jour où il manque vraiment, on ne le
-                voit pas non plus. Jamais le nombre : « 2 restants » presse le stagiaire comme un
-                marchand, ce n'est pas le rapport qu'on a avec lui. */}
+            {/* Disponibilité réelle (stock − demandes en cours). On affiche le NOMBRE, mais
+                sobrement et seulement quand il est bas : annoncer « 24 disponibles » sur une
+                pelle est du bruit, et un décompte permanent presserait le stagiaire comme un
+                marchand. En dessous du seuil, le chiffre est une information utile — il évite
+                de composer un panier qu'on devra lui refuser. */}
             {!p.in_stock ? (
-              <span className="shop-stock"><Icon name="clock" size={12} /> Sur commande</span>
+              <span className="shop-stock"><Icon name="clock" size={12} /> Rupture — sur commande</span>
+            ) : p.stock != null && p.stock <= STOCK_BAS ? (
+              <span className="shop-stock"><Icon name="package" size={12} /> Plus que {p.stock} en stock</span>
             ) : null}
             <AddBtn produit={p} line={{ source: "ECOLE", id: p.id, label: p.name, price_ht: p.price_ht,
-              tax_rate: p.tax_rate, personalizable: p.personalizable, variants: p.variants }} />
+              tax_rate: p.tax_rate, personalizable: p.personalizable, variants: p.variants, stock: p.stock }} />
           </div>
         ))}
       </div>
@@ -426,7 +448,8 @@ function PanierTab({ onSent }) {
             <span className="cart-qty">
               <button className="iconbtn" onClick={() => setQty(k, l.qty - 1)} aria-label="Retirer un"><Icon name="minus" size={13} /></button>
               <b className="tnum">{l.qty}</b>
-              <button className="iconbtn" onClick={() => setQty(k, l.qty + 1)} aria-label="Ajouter un"><Icon name="plus" size={13} /></button>
+              <button className="iconbtn" onClick={() => setQty(k, l.qty + 1)} aria-label="Ajouter un"
+                disabled={roomFor(l, lines) <= 0} title={roomFor(l, lines) <= 0 ? "Stock disponible atteint" : undefined}><Icon name="plus" size={13} /></button>
             </span>
             <b className="tnum cart-sum">
               {l.price_ht == null ? <span className="hint">à définir</span>
@@ -530,7 +553,24 @@ function totalDemande(lines) {
 
 function MesDemandes() {
   const [rows, setRows] = useState(null);
-  useEffect(() => { getMyShopRequests().then((r) => setRows(r.data || [])).catch(() => setRows([])); }, []);
+  const [busy, setBusy] = useState(null);   // id en cours d'annulation
+  const [erreur, setErreur] = useState(null); // { id, message } — rattaché à SA demande
+  const reload = () => getMyShopRequests().then((r) => setRows(r.data || [])).catch(() => setRows([]));
+  useEffect(() => { reload(); }, []);
+
+  // Annulation possible tant que l'école n'a rien engagé (statut « Reçue »). On confirme
+  // d'abord : une demande annulée ne se réactive pas, il faut la recomposer.
+  async function annuler(r) {
+    if (!window.confirm(`Annuler la demande ${r.ref} ? Cette action est définitive — il faudra recomposer ton panier.`)) return;
+    setBusy(r.id); setErreur(null);
+    try {
+      await cancelMyShopRequest(r.id);
+      await reload();
+    } catch (e) {
+      setErreur({ id: r.id, message: e.message || "L'annulation a échoué." });
+      await reload(); // l'école a pu faire avancer la demande entre-temps : on resynchronise
+    } finally { setBusy(null); }
+  }
 
   if (!rows) return <p className="hint">Chargement…</p>;
   if (!rows.length) {
@@ -586,6 +626,18 @@ function MesDemandes() {
           <b className="tnum">{euro(t.ttc)} TTC</b>
         </div>
         {r.note ? <p className="dem-note"><Icon name="info" size={12} /> Ton mot : « {r.note} »</p> : null}
+
+        {/* Annulation : uniquement au statut « Reçue ». Passée en préparation, du textile a pu
+            partir à la broderie — on renvoie alors vers l'école plutôt qu'un bouton. */}
+        {r.status === "NOUVELLE" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+            <button type="button" className="btn sm ghost danger" disabled={busy === r.id} onClick={() => annuler(r)}>
+              <Icon name="ban" size={14} /> {busy === r.id ? "Annulation…" : "Annuler ma demande"}
+            </button>
+            <span className="hint">Possible tant que l'école n'a pas commencé la préparation.</span>
+          </div>
+        ) : null}
+        {erreur && erreur.id === r.id ? <p className="hint" style={{ color: "var(--ember1)", marginTop: 8 }}>{erreur.message}</p> : null}
       </Card>
     );
   });
@@ -620,7 +672,8 @@ function CartAside({ count, onCheckout }) {
                   <span className="cart-mini-qty">
                     <button className="iconbtn" onClick={() => setQty(k, l.qty - 1)} aria-label="Retirer un"><Icon name="minus" size={12} /></button>
                     <b className="tnum">{l.qty}</b>
-                    <button className="iconbtn" onClick={() => setQty(k, l.qty + 1)} aria-label="Ajouter un"><Icon name="plus" size={12} /></button>
+                    <button className="iconbtn" onClick={() => setQty(k, l.qty + 1)} aria-label="Ajouter un"
+                      disabled={roomFor(l, lines) <= 0} title={roomFor(l, lines) <= 0 ? "Stock disponible atteint" : undefined}><Icon name="plus" size={12} /></button>
                   </span>
                   <button className="iconbtn del" onClick={() => setQty(k, 0)} aria-label="Retirer"><Icon name="x" size={12} /></button>
                 </div>

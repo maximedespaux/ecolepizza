@@ -22,6 +22,7 @@ import EntrepriseDetail from "./pages/EntrepriseDetail.jsx";
 import SignerPublic from "./pages/SignerPublic.jsx";
 import Formations from "./pages/Formations.jsx";
 import Quiz from "./pages/Quiz.jsx";
+import QuestManager from "./pages/QuestManager.jsx";
 import Sessions from "./pages/Sessions.jsx";
 import Pipeline from "./pages/Pipeline.jsx";
 import SessionDetail from "./pages/SessionDetail.jsx";
@@ -184,6 +185,7 @@ function AppRoutes() {
           <Route path="sessions/:id" element={<Guard nav="/sessions" roles={STAFF}><SessionDetail /></Guard>} />
           <Route path="formations" element={<Guard nav="/formations" roles={STAFF}><Formations /></Guard>} />
           <Route path="qcm" element={<Guard nav="/qcm" roles={ADMIN}><Quiz /></Guard>} />
+          <Route path="pizza-quest-admin" element={<Guard nav="/pizza-quest-admin" roles={ADMIN}><QuestManager /></Guard>} />
           <Route path="opcos" element={<Guard nav="/opcos" roles={ADMIN}><Opcos /></Guard>} />
           <Route path="partenaires" element={<Guard nav="/partenaires" roles={STAFF}><Partenaires /></Guard>} />
           <Route path="ventes" element={<Guard nav="/ventes" roles={ADMIN}><Ventes /></Guard>} />

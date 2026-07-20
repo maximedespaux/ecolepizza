@@ -447,12 +447,55 @@ export function submitQuiz(documentId, answers) { return request(`/quizzes/take/
 export function getFormationSteps(id) {
   return request(`/formations/${id}/steps`);
 }
-export function saveFormationSteps(id, steps, break_slug, company_steps) {
+export function saveFormationSteps(id, steps, break_slug, company_steps, company_break_slug) {
   const body = { steps };
   if (break_slug !== undefined) body.break_slug = break_slug;
   if (company_steps !== undefined) body.company_steps = company_steps;
+  if (company_break_slug !== undefined) body.company_break_slug = company_break_slug;
   return request(`/formations/${id}/steps`, { method: "PUT", body: JSON.stringify(body) });
 }
+/* ---- Pizza Quest : structure (thèmes, paliers, prérequis) ---------------------------- */
+export function getQuestStructure() { return request("/quest/structure"); }
+export function createQuestCategory(payload) {
+  return request("/quest/categories", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateQuestCategory(id, payload) {
+  return request(`/quest/categories/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function deleteQuestCategory(id) {
+  return request(`/quest/categories/${id}`, { method: "DELETE" });
+}
+export function setProgramQuestCategories(id, payload) {
+  return request(`/quest/programs/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function addQuestPrerequisite(payload) {
+  return request("/quest/prerequisites", { method: "POST", body: JSON.stringify(payload) });
+}
+export function deleteQuestPrerequisite(id) {
+  return request(`/quest/prerequisites/${id}`, { method: "DELETE" });
+}
+
+/* ---- Pizza Quest : banque de questions ----------------------------------------------- */
+export function getQuestContent(programId) {
+  return request(`/quest/content${programId ? `?program_id=${encodeURIComponent(programId)}` : ""}`);
+}
+export function createQuestDifficulty(p) { return request("/quest/difficulties", { method: "POST", body: JSON.stringify(p) }); }
+export function updateQuestDifficulty(id, p) { return request(`/quest/difficulties/${id}`, { method: "PUT", body: JSON.stringify(p) }); }
+export function deleteQuestDifficulty(id) { return request(`/quest/difficulties/${id}`, { method: "DELETE" }); }
+
+export function createQuestChapter(p) { return request("/quest/chapters", { method: "POST", body: JSON.stringify(p) }); }
+export function updateQuestChapter(id, p) { return request(`/quest/chapters/${id}`, { method: "PUT", body: JSON.stringify(p) }); }
+export function deleteQuestChapter(id) { return request(`/quest/chapters/${id}`, { method: "DELETE" }); }
+
+export function createQuestQuestion(p) { return request("/quest/questions", { method: "POST", body: JSON.stringify(p) }); }
+export function updateQuestQuestion(id, p) { return request(`/quest/questions/${id}`, { method: "PUT", body: JSON.stringify(p) }); }
+export function deleteQuestQuestion(id) { return request(`/quest/questions/${id}`, { method: "DELETE" }); }
+
+// Chapitres jouables d'une formation (espace stagiaire). Vide = rien en base.
+export function getPlayableChapters(programId) {
+  return request(`/mon-espace/quest/${programId}/chapitres`, { silent: true });
+}
+
 export function getFormation(id) {
   return request(`/formations/${id}`);
 }
@@ -602,6 +645,10 @@ export function getBoutiquePartenaires() {
 }
 // Le panier validé devient une DEMANDE (pas une commande payée) : le stagiaire retire à
 // l'école et paie sur place. Les prix sont relus en base côté serveur — on n'envoie que les ids.
+// Annulation par le stagiaire — refusée par le serveur dès que la demande a avancé.
+export function cancelMyShopRequest(id) {
+  return request(`/mon-espace/boutique/demande/${id}/annuler`, { method: "PUT" });
+}
 export function createShopRequest(lines, note, pickup_at) {
   return request("/mon-espace/boutique/demande", { method: "POST", body: JSON.stringify({ lines, note, pickup_at }) });
 }
@@ -670,6 +717,11 @@ export function getLearnerDocuments(learnerId) {
 
 export function createDocument(payload) {
   return request("/documents", { method: "POST", body: JSON.stringify(payload) });
+}
+
+// Vérifie qu'un modèle s'applique aux dossiers choisis. -> { ok, failed:[{slug,label}] }
+export function checkDocumentConditions(payload) {
+  return request("/documents/check-conditions", { method: "POST", body: JSON.stringify(payload), silent: true });
 }
 
 export function getDocument(id) {

@@ -61,6 +61,7 @@ export const NAV = [
       { to: "/roles", ic: "shield", label: "Rôles d'accès", roles: OWNER },
       { to: "/modeles", ic: "file-text", label: "Modèles de documents", roles: ADMIN },
       { to: "/qcm", ic: "list-checks", label: "Modèles de QCM", roles: ADMIN },
+      { to: "/pizza-quest-admin", ic: "pizza", label: "Pizza Quest", roles: ADMIN },
       { to: "/opcos", ic: "landmark", label: "OPCO / financeurs", roles: ADMIN },
     ],
   },
@@ -76,6 +77,7 @@ export const PAGE_TITLES = {
   "/suivi": "Suivi Qualiopi",
   "/formations": "Formations",
   "/qcm": "Modèles de QCM",
+  "/pizza-quest-admin": "Pizza Quest",
   "/produit-divers": "Produit divers",
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
@@ -139,6 +141,7 @@ export function navMode(user, path) {
 const SECTION_OF = {
   "/stagiaires": "/stagiaires", "/entreprises": "/entreprises", "/sessions": "/sessions", "/formations": "/formations",
   "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
+  "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",
   "/reglages": "/reglages", "/modeles": "/modeles", "/equipe": "/equipe",

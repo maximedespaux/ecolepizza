@@ -48,6 +48,23 @@
   --cat-mp:#ef7d3a; --cat-sal:#4a9fd8; --cat-loy:#f0b84e;
   --cat-mkt:#33c495; --cat-ene:#7fc9f0; --cat-div:#d98fbb;
 }
+/* Alias historiques (--panel / --line / --ember-soft) employés un peu partout dans la
+   feuille de style. Ils n'étaient DÉFINIS NULLE PART : chaque `var(--panel,#fff)`
+   retombait donc sur sa valeur de repli CLAIRE, d'où des cartes blanches en thème
+   sombre (parcours documentaire, panneaux d'ajout…). On les rattache ici aux
+   variables de thème : `var()` étant résolu au moment de l'usage, un seul jeu
+   d'alias suit automatiquement le thème actif. */
+:root{
+  --panel:var(--surface);        /* fond de carte / pastille */
+  --panel2:var(--surface2);      /* fond de panneau secondaire */
+  --line:var(--border);          /* filet de séparation, bordure de panneau */
+  --ember-soft:var(--rosso-bg);  /* aplat rouge tomate discret (survol, badge) */
+  --gold-soft:var(--gold-bg);    /* aplat or discret */
+  --ink:var(--text);             /* texte plein (était utilisé SANS repli) */
+}
+/* Voile de survol : sombre sur fond clair, clair sur fond sombre. */
+[data-theme="light"]{ --hover:rgba(0,0,0,.05) }
+[data-theme="dark"] { --hover:rgba(255,255,255,.06) }
 
 *{box-sizing:border-box}
 html,body,#root{margin:0;padding:0;min-height:100vh}
@@ -892,6 +909,9 @@ tbody tr:last-child td{border-bottom:none}
 .pq-connect{display:flex;justify-content:center;gap:70px;color:var(--dim);margin:4px 0}
 .pq-legend{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;border-radius:10px;padding:6px 12px 6px 8px;font-weight:700;font-size:12px}
 .pq-divider{height:2px;background:var(--border);border-radius:2px;margin:22px auto;max-width:520px}
+/* Palier à l'intérieur d'un thème (classement de l'organisme) : plus discret que le titre
+   de section, sinon les deux niveaux de titre se disputent la lecture. */
+.pq-sub-label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center;margin:0 0 8px}
 
 /* Profil stagiaire — avatar picker + grade */
 .pf-avatar{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;color:#fff;font-size:30px;font-weight:800;flex:none}
@@ -1555,3 +1575,6 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
   .wiz-dock-s{display:block;font-size:11px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 @media(max-width:560px){.wiz-dot-l{display:none}.wiz-dot{min-width:40px}}
+.doc-rule-warning{display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;padding:10px 14px;border:1px solid var(--ember1);border-radius:10px;background:rgba(220,62,55,.08);color:var(--ember1);font-size:.9rem;line-height:1.4}
+.doc-rule-warning svg{flex:0 0 auto;margin-top:1px}
+.doc-rule-warning strong{color:var(--ember1)}

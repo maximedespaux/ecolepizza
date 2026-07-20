@@ -138,6 +138,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [steps, setSteps] = useState([]);
   const [breakSlug, setBreakSlug] = useState(null); // point d'accès émargement (slug avant la flèche)
   const [companySteps, setCompanySteps] = useState([]); // sous-parcours « arrivée via entreprise » (slugs ordonnés)
+  const [companyBreakSlug, setCompanyBreakSlug] = useState(null); // point d'accès émargement du volet entreprise
   const [archiveTree, setArchiveTree] = useState({ folders: [] });
   const [companyArchiveTree, setCompanyArchiveTree] = useState({ folders: [] });
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
@@ -171,6 +172,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       let cs = r.data?.company_steps;
       if (typeof cs === "string") { try { cs = JSON.parse(cs); } catch { cs = []; } }
       setCompanySteps(Array.isArray(cs) ? cs : []);
+      setCompanyBreakSlug(r.data?.company_break_slug || null);
     }).catch(() => {});
   }, [program.id]);
   // Équivalences « OU » (org) : map slug -> groupe + liste des équivalences.
@@ -222,7 +224,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
         onSaved("Formation créée.");
       } else {
         await updateFormation(program.id, form);
-        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null, companySteps);
+        await saveFormationSteps(program.id, steps.map((s) => ({ slug: s.slug, active: s.active })), breakSlug || null, companySteps, companyBreakSlug || null);
         await saveArchiveTree(program.id, archiveTree, companyArchiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved("Formation mise à jour.");
       }
@@ -338,7 +340,8 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               )}
             </>
           ) : (
-            <CompanySection steps={steps} value={companySteps} onChange={setCompanySteps} onToggleActive={toggleStep} />
+            <CompanySection steps={steps} value={companySteps} onChange={setCompanySteps} onToggleActive={toggleStep}
+              breakSlug={companyBreakSlug} onSetBreak={setCompanyBreakSlug} />
           )}
           </div>
 
@@ -347,13 +350,15 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               const isEntArch = archKind === "entreprise";
               const curTree = isEntArch ? companyArchiveTree : archiveTree;
               const setCurTree = isEntArch ? setCompanyArchiveTree : setArchiveTree;
+              // Documents attribuables. Les feuilles d'émargement sont DÉJÀ présentes dans
+              // `steps` (injectées depuis emargement_template, doc_type EMARGEMENT) : elles
+              // apparaissent donc sous leur vrai nom, avec un slug qui existe réellement.
+              // Archivage ENTREPRISE : l'inscription passant par une entreprise, tout document
+              // signé peut lui être archivé — groupe (🏢) comme stagiaire → parcours actif entier.
+              const toDoc = (s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id, company_level: !!s.company_level });
               const docs = isEntArch
-                ? steps.filter((s) => s.active && s.company_level).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id }))
-                : [
-                    ...steps.filter((s) => s.active && !s.company_level).map((s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id })),
-                    // Documents « système » assemblés à partir des signatures (si la formation utilise l'émargement).
-                    ...(form.needs_emargement ? [{ slug: "sys:emargement", label: "Feuille d'émargement (stagiaire + formateur(s) + intervenant(s))", system: true }] : []),
-                  ];
+                ? steps.filter((s) => s.active).map(toDoc)
+                : steps.filter((s) => s.active && !s.company_level).map(toDoc);
               return (
                 <>
                   <div className="seg" style={{ marginBottom: 12 }}>
@@ -559,18 +564,19 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
 // Liste ORDONNÉE (glisser pour réordonner) de documents de GROUPE (🏢) et/ou
 // STAGIAIRE choisis parmi les étapes actives du parcours. Repère visuel côté fiche
 // entreprise ; n'altère pas le parcours principal.
-function CompanySection({ steps, value, onChange, onToggleActive }) {
+function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onSetBreak }) {
   const [adding, setAdding] = useState(false);
   const [drag, setDrag] = useState(null);
   const ref = useRef(null);
   const bySlug = new Map(steps.map((s) => [s.slug, s]));
   const chosen = value.map((sl) => bySlug.get(sl)).filter((s) => s && s.active);
   // Éligibles : documents de GROUPE (activables ici, qu'ils soient actifs ou non),
-  // documents STAGIAIRE et QCM déjà actifs dans le parcours du dossier (repère).
-  const eligible = steps.filter((s) => s.doc_type !== "EMARGEMENT" && !value.includes(s.slug)
-    && (s.company_level ? true : s.active));
+  // documents STAGIAIRE, QCM et feuilles d'émargement déjà actifs dans le parcours
+  // du dossier (repère).
+  const eligible = steps.filter((s) => !value.includes(s.slug) && (s.company_level ? true : s.active));
   const isGroup = (s) => !!s.company_level;
-  const isQuiz = (s) => !!s.quiz_id;
+  const isQuiz = (s) => !!s.quiz_id || s.doc_type === "QCM";
+  const isEmargement = (s) => s.doc_type === "EMARGEMENT";
 
   useEffect(() => {
     if (!adding) return;
@@ -588,6 +594,7 @@ function CompanySection({ steps, value, onChange, onToggleActive }) {
   const remove = (slug) => {
     const s = bySlug.get(slug);
     onChange(value.filter((x) => x !== slug));
+    if (slug === breakSlug) onSetBreak?.(null); // l'étape portait le point d'accès → on le retire
     if (s && s.company_level && s.active) onToggleActive?.(slug); // doc de groupe : n'existe qu'ici → désactiver
   };
   function drop(to) {
@@ -601,7 +608,9 @@ function CompanySection({ steps, value, onChange, onToggleActive }) {
   }
   const badge = (s, short) => {
     const grp = isGroup(s), quiz = isQuiz(s);
-    const text = quiz ? (short ? "❓" : "❓ QCM") : grp ? (short ? "🏢" : "🏢 Groupe") : (short ? "S" : "Stagiaire");
+    const text = isEmargement(s) ? (short ? "✍️" : "✍️ Émargement")
+      : quiz ? (short ? "❓" : "❓ QCM")
+        : grp ? (short ? "🏢" : "🏢 Groupe") : (short ? "S" : "Stagiaire");
     return (
       <span className="pf-badge" style={{ background: grp ? "var(--ember1,#c0392b)" : "var(--surface2)", color: grp ? "#fff" : "var(--text)" }}>
         {text}
@@ -612,7 +621,8 @@ function CompanySection({ steps, value, onChange, onToggleActive }) {
   return (
     <div className="parcours compact" ref={ref}>
       <p className="hint" style={{ marginTop: 0 }}>
-        Parcours quand une <b>entreprise</b> inscrit ses stagiaires : documents de <b>groupe</b> (🏢) <b>et</b> stagiaire. Glissez pour réordonner.
+        Parcours quand une <b>entreprise</b> inscrit ses stagiaires : documents de <b>groupe</b> (🏢) <b>et</b> stagiaire. Glissez pour réordonner ·{" "}
+        <b style={{ color: "var(--ember1)" }}>🚧</b> = accès émargement (les documents à gauche doivent être signés).
       </p>
       <div className="parcours-flow">
         {chosen.map((s, i) => (
@@ -627,7 +637,18 @@ function CompanySection({ steps, value, onChange, onToggleActive }) {
                 <button type="button" className="pf-x" title="Retirer de la section entreprise" onClick={() => remove(s.slug)}><Icon name="x" size={13} /></button>
               </div>
             </div>
-            <span className="pf-arrow" aria-hidden="true">→</span>
+            {typeof onSetBreak === "function" ? (
+              <button type="button" className={"pf-brk" + (breakSlug === s.slug ? " on" : "")}
+                title={breakSlug === s.slug
+                  ? "Retirer le point d'accès émargement (entreprise)"
+                  : "Placer ici le point d'accès à l'émargement : les documents à gauche devront être signés"}
+                onClick={() => onSetBreak(breakSlug === s.slug ? null : s.slug)}>
+                <span className="pf-brk-arrow" aria-hidden="true">→</span>
+                <span className="pf-brk-flag">🚧</span>
+              </button>
+            ) : (
+              <span className="pf-arrow" aria-hidden="true">→</span>
+            )}
           </div>
         ))}
         <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
@@ -645,16 +666,33 @@ function CompanySection({ steps, value, onChange, onToggleActive }) {
               <div className="pf-add-empty">Aucun document disponible — activez-le d'abord dans « Parcours du dossier ».</div>
             </>
           ) : (
-            <>
-              <div className="pf-add-title">Documents ({eligible.length})</div>
-              <div className="pf-add-grid">
-                {eligible.map((s) => (
-                  <button key={s.slug} type="button" className="pf-add-item" onClick={() => add(s.slug)}>
-                    {badge(s, true)}<span>{s.label}</span>
-                  </button>
-                ))}
-              </div>
-            </>
+            (() => {
+              // Même découpage que « Parcours du dossier » : documents, QCM, puis émargement.
+              const docs = eligible.filter((s) => !isQuiz(s) && !isEmargement(s));
+              const quizzes = eligible.filter(isQuiz);
+              const emargements = eligible.filter(isEmargement);
+              const renderItem = (s) => (
+                <button key={s.slug} type="button" className="pf-add-item" onClick={() => add(s.slug)}>
+                  {badge(s, true)}<span>{s.label}</span>
+                </button>
+              );
+              return (
+                <>
+                  <div className="pf-add-title">Documents{docs.length ? ` (${docs.length})` : ""}</div>
+                  {docs.length === 0
+                    ? <div className="pf-add-empty">Aucun document disponible.</div>
+                    : <div className="pf-add-grid">{docs.map(renderItem)}</div>}
+                  <div className="pf-add-title" style={{ marginTop: 12 }}>QCM{quizzes.length ? ` (${quizzes.length})` : ""}</div>
+                  {quizzes.length === 0
+                    ? <div className="pf-add-empty">Aucun QCM disponible.</div>
+                    : <div className="pf-add-grid">{quizzes.map(renderItem)}</div>}
+                  <div className="pf-add-title" style={{ marginTop: 12 }}>Émargement{emargements.length ? ` (${emargements.length})` : ""}</div>
+                  {emargements.length === 0
+                    ? <div className="pf-add-empty">Aucune feuille d'émargement disponible.</div>
+                    : <div className="pf-add-grid">{emargements.map(renderItem)}</div>}
+                </>
+              );
+            })()
           )}
         </div>
       )}

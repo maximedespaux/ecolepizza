@@ -463,6 +463,15 @@ const saveFormationSteps = async (req, res) => {
                     [json, req.params.id, req.user.organization_id]);
             } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 092 non jouée
         }
+        // Point d'accès à l'émargement DU SOUS-PARCOURS ENTREPRISE (migration 100) :
+        // slug de l'étape de la section entreprise juste avant le point de rupture.
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'company_break_slug')) {
+            const cbs = req.body.company_break_slug ? String(req.body.company_break_slug).trim().toLowerCase().slice(0, 191) : null;
+            try {
+                await conn.query('UPDATE training_program SET company_break_slug = ? WHERE id = ? AND organization_id = ?',
+                    [cbs, req.params.id, req.user.organization_id]);
+            } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 100 non jouée
+        }
         res.json({ success: true, message: 'Parcours enregistré.' });
     } catch (err) {
         console.error('Erreur enregistrement parcours :', err);
