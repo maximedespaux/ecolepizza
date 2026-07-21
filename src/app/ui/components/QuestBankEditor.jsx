@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
+import { colorOf } from "../lib/format.js";
 import {
   getQuestContent, createQuestChapter, updateQuestChapter, deleteQuestChapter,
   createQuestQuestion, updateQuestQuestion, deleteQuestQuestion,
@@ -29,6 +30,9 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
   const [bank, setBank] = useState(null);
   const [openCh, setOpenCh] = useState(null);   // chapitre déplié
   const [editing, setEditing] = useState(null); // { chapterId, question|null }
+  // Groupes REPLIÉS (et non dépliés) : à l'arrivée tout est visible, on referme ce dont on
+  // n'a pas besoin. L'inverse obligerait à déplier avant de voir quoi que ce soit.
+  const [plies, setPlies] = useState(() => new Set());
   const [newCh, setNewCh] = useState("");
 
   const reload = () => getQuestContent(programId || undefined)
@@ -49,6 +53,67 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
   // chapitres par formation. C'est le cas typique après un import dont la correspondance
   // de noms n'a rien trouvé — silencieux, d'où l'alerte.
   const orphelins = bank.chapters.filter((c) => !c.program_id);
+
+  // Chapitres groupés par formation, dans l'ordre du catalogue ; les non rattachés ferment
+  // la marche — c'est là qu'on va les chercher pour les corriger, pas au milieu.
+  const groupes = (() => {
+    const out = [];
+    for (const p of programs) {
+      const chapters = bank.chapters.filter((c) => c.program_id === p.id);
+      if (chapters.length) out.push({ key: p.id, prog: p, chapters });
+    }
+    if (orphelins.length) out.push({ key: "__sans__", prog: null, chapters: orphelins });
+    return out;
+  })();
+
+  /** Une ligne de chapitre — même rendu que la liste soit groupée ou non. */
+  const renderChapitre = (ch) => {
+    const qs = qOf(ch.id);
+    const ouvert = openCh === ch.id;
+    return (
+      <div key={ch.id} className="qb-ch">
+        <div className="qb-ch-head">
+          <button type="button" className="iconbtn" onClick={() => setOpenCh(ouvert ? null : ch.id)}
+            aria-label={ouvert ? "Replier" : "Déplier"}>
+            <Icon name={ouvert ? "chevron-down" : "chevron-right"} size={15} />
+          </button>
+          {/* Le titre prend la place restante ; c'est l'information qu'on lit d'abord. */}
+          <b className="qb-ch-title" title={ch.title}>{ch.title}</b>
+          <span className="hint qb-ch-count">{qs.length} question{qs.length > 1 ? "s" : ""}</span>
+          {!ch.active && <span className="badge n">inactif</span>}
+          <select className="qb-ch-sel" value={ch.program_id || ""} title="Formation rattachée"
+            onChange={(e) => run(() => updateQuestChapter(ch.id, { program_id: e.target.value || null }))}>
+            <option value="">— non rattaché</option>
+            {programs.map((p) => <option key={p.id} value={p.id}>{p.code}</option>)}
+          </select>
+          <button type="button" className="btn sm ghost danger"
+            onClick={() => {
+              if (window.confirm(`Supprimer « ${ch.title} » et ses ${qs.length} question(s) ? C'est définitif.`)) {
+                run(() => deleteQuestChapter(ch.id), "Chapitre supprimé.");
+              }
+            }}>
+            <Icon name="trash" size={13} />
+          </button>
+        </div>
+
+        {ouvert && (
+          <div className="qb-ch-body">
+            {qs.map((q) => (
+              <QuestionRow key={q.id} q={q} opts={optsOf(q.id)} difficulties={difficulties}
+                onEdit={() => setEditing({ chapterId: ch.id, question: q })}
+                onDelete={() => {
+                  if (window.confirm("Supprimer cette question ?")) run(() => deleteQuestQuestion(q.id), "Question supprimée.");
+                }} />
+            ))}
+            <button type="button" className="btn sm ghost" style={{ marginTop: 8 }}
+              onClick={() => setEditing({ chapterId: ch.id, question: null })}>
+              <Icon name="plus" size={14} /> Ajouter une question
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <Card title={<span className="card-ttl"><Icon name="book-open" size={16} /> Banque de questions</span>}>
@@ -93,53 +158,34 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
           Aucun chapitre{programId ? " pour cette formation" : ""}. Créez-en un, ou importez la banque
           fournie (<code>102_seed_quest_questions.sql</code>).
         </p>
-      ) : bank.chapters.map((ch) => {
-        const qs = qOf(ch.id);
-        const ouvert = openCh === ch.id;
-        return (
-          <div key={ch.id} className="qb-ch">
-            <div className="qb-ch-head">
-              <button type="button" className="iconbtn" onClick={() => setOpenCh(ouvert ? null : ch.id)}
-                aria-label={ouvert ? "Replier" : "Déplier"}>
+      ) : programId ? (
+        // Filtre sur UNE formation : la liste est déjà homogène, inutile de la regrouper.
+        bank.chapters.map(renderChapitre)
+      ) : (
+        // « Toutes » : sans séparation, les chapitres de plusieurs niveaux se suivaient sans
+        // qu'on sache où l'un finit. Un groupe repliable par formation, les non rattachés
+        // en dernier — c'est là qu'on va les chercher pour les corriger.
+        groupes.map((g) => {
+          const ouvert = !plies.has(g.key);
+          const nbQ = g.chapters.reduce((n, c) => n + qOf(c.id).length, 0);
+          return (
+            <section key={g.key} className="qb-grp">
+              <button type="button" className={"qb-grp-head" + (g.prog ? "" : " orphan")}
+                onClick={() => setPlies((s) => { const n = new Set(s); n.has(g.key) ? n.delete(g.key) : n.add(g.key); return n; })}>
                 <Icon name={ouvert ? "chevron-down" : "chevron-right"} size={15} />
+                {g.prog
+                  ? <><span className="qb-grp-code" style={{ background: g.prog.color || colorOf(g.prog.code) }}>{g.prog.code}</span>
+                      <b className="qb-grp-title">{g.prog.title}</b></>
+                  : <><Icon name="ban" size={14} /><b className="qb-grp-title">Non rattachés à une formation</b></>}
+                <span className="hint qb-grp-count">
+                  {g.chapters.length} chapitre{g.chapters.length > 1 ? "s" : ""} · {nbQ} question{nbQ > 1 ? "s" : ""}
+                </span>
               </button>
-              {/* Le titre prend la place restante ; c'est l'information qu'on lit d'abord. */}
-              <b className="qb-ch-title" title={ch.title}>{ch.title}</b>
-              <span className="hint qb-ch-count">{qs.length} question{qs.length > 1 ? "s" : ""}</span>
-              {!ch.active && <span className="badge n">inactif</span>}
-              <select className="qb-ch-sel" value={ch.program_id || ""} title="Formation rattachée"
-                onChange={(e) => run(() => updateQuestChapter(ch.id, { program_id: e.target.value || null }))}>
-                <option value="">— non rattaché</option>
-                {programs.map((p) => <option key={p.id} value={p.id}>{p.code}</option>)}
-              </select>
-              <button type="button" className="btn sm ghost danger"
-                onClick={() => {
-                  if (window.confirm(`Supprimer « ${ch.title} » et ses ${qs.length} question(s) ? C'est définitif.`)) {
-                    run(() => deleteQuestChapter(ch.id), "Chapitre supprimé.");
-                  }
-                }}>
-                <Icon name="trash" size={13} />
-              </button>
-            </div>
-
-            {ouvert && (
-              <div className="qb-ch-body">
-                {qs.map((q) => (
-                  <QuestionRow key={q.id} q={q} opts={optsOf(q.id)} difficulties={difficulties}
-                    onEdit={() => setEditing({ chapterId: ch.id, question: q })}
-                    onDelete={() => {
-                      if (window.confirm("Supprimer cette question ?")) run(() => deleteQuestQuestion(q.id), "Question supprimée.");
-                    }} />
-                ))}
-                <button type="button" className="btn sm ghost" style={{ marginTop: 8 }}
-                  onClick={() => setEditing({ chapterId: ch.id, question: null })}>
-                  <Icon name="plus" size={14} /> Ajouter une question
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })}
+              {ouvert && <div className="qb-grp-body">{g.chapters.map(renderChapitre)}</div>}
+            </section>
+          );
+        })
+      )}
 
       {editing && (
         <QuestionModal

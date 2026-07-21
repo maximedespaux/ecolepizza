@@ -1623,6 +1623,18 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
    réclamait toute la largeur et écrasait le titre du chapitre sur trois lignes. On lui
    fixe donc une largeur, et c'est le TITRE qui prend la place restante — c'est lui qu'on
    lit d'abord. */
+/* Regroupement par formation quand le filtre est sur « Toutes ». En-tête cliquable : on
+   replie une formation dont on ne s'occupe pas, sans perdre les autres de vue. */
+.qb-grp{margin-bottom:14px}
+.qb-grp-head{display:flex;align-items:center;gap:9px;width:100%;padding:7px 4px;border:none;background:none;
+  border-bottom:2px solid var(--border);cursor:pointer;color:inherit;font:inherit;text-align:left}
+.qb-grp-head:hover{border-bottom-color:var(--ember1)}
+.qb-grp-head.orphan{color:var(--ember1);border-bottom-color:color-mix(in srgb,var(--ember1) 45%,transparent)}
+.qb-grp-code{padding:2px 8px;border-radius:6px;color:#fff;font-size:11px;font-weight:800;font-family:var(--font-m);flex:none}
+.qb-grp-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.qb-grp-count{flex:none;white-space:nowrap}
+.qb-grp-body{padding-top:8px}
+
 .qb-ch{border:1px solid var(--border-soft);border-radius:10px;margin-bottom:8px}
 .qb-ch-head{display:flex;align-items:center;gap:10px;padding:9px 12px}
 .qb-ch-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
