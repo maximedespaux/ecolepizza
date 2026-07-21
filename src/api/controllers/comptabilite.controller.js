@@ -68,6 +68,53 @@ async function computeYear(conn, orgId, annee) {
     };
 }
 
+/**
+ * Gain d'UN mois : ce qui est entré moins ce qui est sorti, sur le mois donné.
+ *
+ * UNE DÉCISION À ASSUMER — l'attribution des inscriptions. Le tableau ANNUEL rattache le CA des
+ * inscriptions à l'ANNÉE DE LA SESSION (`session.year`). Un mois n'a pas d'année de session : il
+ * faut une vraie date. On prend `enrollment.created_at`, la date où l'inscription a été
+ * ENREGISTRÉE — c'est le moment où l'argent est entré, ce qu'un « gain du mois » cherche à
+ * mesurer. Conséquence à connaître : une inscription saisie en décembre pour une session de
+ * l'an prochain compte dans le gain de décembre, pas dans celui de la session. Les deux vues
+ * répondent à deux questions différentes ; mélanger leurs règles donnerait un chiffre qui ne
+ * réconcilie ni l'une ni l'autre.
+ *
+ * Matériel, produits divers et dépenses ont, eux, une vraie date : on filtre dessus directement.
+ */
+async function computeMonth(conn, orgId, annee, mois) {
+    const [[inscr]] = await conn.query(
+        `SELECT COALESCE(SUM(price), 0) AS ca
+         FROM enrollment
+         WHERE organization_id = ? AND YEAR(created_at) = ? AND MONTH(created_at) = ?`,
+        [orgId, annee, mois]
+    );
+    const [[mat]] = await conn.query(
+        `SELECT COALESCE(SUM(amount * quantity), 0) AS ca
+         FROM material_sale
+         WHERE organization_id = ? AND YEAR(date) = ? AND MONTH(date) = ?`,
+        [orgId, annee, mois]
+    );
+    const [[extra]] = await conn.query(
+        `SELECT COALESCE(SUM(amount), 0) AS ca
+         FROM revenue_extra
+         WHERE organization_id = ? AND YEAR(date) = ? AND MONTH(date) = ?`,
+        [orgId, annee, mois]
+    );
+    const [[dep]] = await conn.query(
+        `SELECT COALESCE(SUM(amount_ht), 0) AS total
+         FROM expense
+         WHERE organization_id = ? AND YEAR(date) = ? AND MONTH(date) = ?`,
+        [orgId, annee, mois]
+    );
+    const caInscriptions = num(inscr.ca);
+    const caMateriel = num(mat.ca);
+    const caExtra = num(extra.ca);
+    const ca = caInscriptions + caMateriel + caExtra;
+    const depenses = num(dep.total);
+    return { mois, ca, caInscriptions, caMateriel, caExtra, depenses, gain: ca - depenses };
+}
+
 async function loadSettings(conn, orgId) {
     const [rows] = await conn.query('SELECT * FROM accounting_settings WHERE organization_id = ?', [orgId]);
     const row = rows[0];
@@ -85,11 +132,16 @@ async function loadSettings(conn, orgId) {
 const getGestion = async (req, res) => {
     const orgId = req.user.organization_id;
     const annee = Number(req.query.annee) || currentYear();
+    // Mois demandé (1-12) ; par défaut le mois courant, mais borné à un mois réel pour qu'un
+    // ?mois=13 ou ?mois=0 ne produise pas une requête vide silencieuse.
+    const moisDemande = Number(req.query.mois) || (new Date().getMonth() + 1);
+    const mois = Math.min(12, Math.max(1, moisDemande));
     try {
         const conn = db.promise();
-        const [year, settings] = await Promise.all([
+        const [year, settings, moisData] = await Promise.all([
             computeYear(conn, orgId, annee),
             loadSettings(conn, orgId),
+            computeMonth(conn, orgId, annee, mois),
         ]);
         const [depenses] = await conn.query(
             `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount_ht, note
@@ -140,6 +192,16 @@ const getGestion = async (req, res) => {
                 ca: { total: ca, inscriptions: year.caInscriptions, materiel: year.caMateriel, extra: year.caExtra },
                 postes, totalDepenses: year.depensesTotal,
                 marge, margePct,
+                // Gain du mois sélectionné : entrées − sorties sur le mois, cf. computeMonth.
+                mois: {
+                    numero: moisData.mois,
+                    gain: moisData.gain,
+                    ca: moisData.ca,
+                    depenses: moisData.depenses,
+                    caInscriptions: moisData.caInscriptions,
+                    caMateriel: moisData.caMateriel,
+                    caExtra: moisData.caExtra,
+                },
                 dividendeCible, dividendeVise, dividendePossible, dividendeRealiste,
                 partRealistePct, dividendeStatut, dividendeMessage,
                 targets: settings.targets,

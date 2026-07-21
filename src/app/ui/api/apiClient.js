@@ -244,8 +244,9 @@ export function geocodeCarte(limit = 80) {
 }
 
 // --- Comptabilité / Gestion ---
-export function getComptabilite(annee) {
-  return request(`/comptabilite?annee=${annee}`);
+export function getComptabilite(annee, mois) {
+  // `mois` optionnel (1-12) : le gain du mois. Omis, le serveur prend le mois courant.
+  return request(`/comptabilite?annee=${annee}${mois ? `&mois=${mois}` : ""}`);
 }
 export function getComptaPerformance(annee) {
   return request(`/comptabilite/performance?annee=${annee}`);
