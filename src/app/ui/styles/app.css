@@ -227,7 +227,11 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
 thead th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border)}
 tbody td{padding:12px 14px;border-bottom:1px solid var(--border-soft)}
-tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
+/* La propriété est NOMMÉE, et ce n'est pas cosmétique : en raccourci, ce `transition` valait
+   `all`, donc il retardait aussi tout `transform` ou `opacity` posé plus tard sur une ligne.
+   Or certaines lignes sont deplaçables (.drag-row) — un transform différé sur un élément
+   `draggable` décale l'image fantôme du navigateur et fausse la cible de dépôt. */
+tbody tr{transition:background .12s var(--ease)}tbody tr:hover{background:var(--surface2)}
 tbody tr:last-child td{border-bottom:none}
 
 /* Forms -------------------------------------------------------------- */
@@ -1993,3 +1997,79 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
    simplement pas encore atteint. */
 .pq-node:disabled{transition:opacity .2s var(--ease)}
 .pq-node:disabled:hover{opacity:.75}
+
+/* ===== Animations d'ambiance — côté organisme =========================== */
+/* Le socle partagé (cartes, grilles, bandeaux, modales, onglets segmentés) s'applique déjà
+   ici : cette section ne traite que ce qui est PROPRE au back-office et restait figé.
+   Même principe que pour l'espace stagiaire — situer, pas décorer.
+   Le réglage système « animations réduites » les supprime toutes en bloc (règle en tête de
+   fichier) : rien à répéter. */
+
+/* --- GLISSER-DÉPOSER : la règle à ne pas enfreindre -----------------------
+   Trois zones du back-office sont deplaçables : les lignes réordonnables (.drag-row, dans
+   Formations et Modèles), les étapes du parcours documentaire (.pf-node) et les jetons de la
+   palette (TemplateEditor). Sur ces éléments on ne transitionne QUE `background`,
+   `border-color` et `opacity` — JAMAIS `transform`, qui décalerait l'image fantôme générée
+   par le navigateur et fausserait le calcul de la cible de dépôt.
+   Et pendant le glisser lui-même, plus aucune transition : le retour visuel doit être
+   immédiat, sinon on doute d'avoir attrapé la ligne. */
+.drag-row.dragging,.pf-node.drag{transition:none}
+
+/* --- Pipeline : le seul kanban, et il ne se glisse pas (les cartes changent de colonne par
+   boutons). Rien n'y interdit donc le relief au survol. */
+.pipe-card{transition:transform .14s var(--ease),box-shadow .14s var(--ease),border-color .14s var(--ease)}
+.pipe-card:hover{transform:translateY(-2px);box-shadow:0 10px 24px -14px rgba(44,51,113,.4)}
+.pipe-col{animation:rise .4s var(--ease) both}
+.pipe-col:nth-child(2){animation-delay:.05s}
+.pipe-col:nth-child(3){animation-delay:.1s}
+.pipe-col:nth-child(4){animation-delay:.15s}
+.pipe-col:nth-child(n+5){animation-delay:.2s}
+
+/* --- Lignes de liste : elles n'avaient aucun retour au survol, sur des pages où l'on suit
+   une ligne du regard jusqu'à son bouton d'action, tout à droite. */
+.list-row,.apport-row,.dept-row,.sess-comp-hd,.inv-cat{transition:background .14s var(--ease)}
+.list-row:hover,.apport-row:hover{background:var(--surface2)}
+
+/* --- Accordéons. Le chevron tournait déjà ; le contenu déplié, lui, apparaissait d'un bloc.
+   `accOpen` existe et sert déjà aux dépliants de l'espace stagiaire : on le réutilise plutôt
+   que d'écrire une seconde animation qui ferait la même chose à quelques millisecondes près. */
+.arch-sum,.qb-grp-head,.qb-ch-head{transition:background .14s var(--ease),border-color .14s var(--ease)}
+.arch-in,.qb-grp-body,.qb-ch-body{animation:accOpen .2s var(--ease) both}
+
+/* --- Popover d'icônes (banque de questions) : il surgissait sec. */
+.qb-ico-pop{animation:rise .16s var(--ease) both}
+.qb-ico-btn,.qb-ico-opt,.tb-btn{transition:background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
+
+/* --- Onglets soulignés : la couleur du texte glissait, le soulignement sautait. Pas
+   d'indicateur mobile ici — il demanderait de mesurer la position de l'onglet actif en
+   JavaScript, pour un gain qui ne vaut pas cette dépendance. */
+.tab{transition:color .15s var(--ease),border-color .15s var(--ease),background .15s var(--ease)}
+
+/* --- Parcours documentaire (Formations). `background` et `border-color` seulement : ces
+   nœuds sont deplaçables, cf. la règle plus haut. */
+.pf-node,.pf-add,.pf-add-item{transition:background .14s var(--ease),border-color .14s var(--ease)}
+
+/* --- Feuille de route (Suivi) : le passage « à faire → en cours → fait » était instantané.
+   C'est pourtant le seul endroit où l'on voit un dossier avancer. */
+.rm-dot,.rm-conn{transition:background .3s var(--ease),border-color .3s var(--ease),color .3s var(--ease)}
+.rm-step{animation:rise .4s var(--ease) both}
+.rm-step:nth-child(2){animation-delay:.06s}
+.rm-step:nth-child(3){animation-delay:.12s}
+.rm-step:nth-child(4){animation-delay:.18s}
+.rm-step:nth-child(n+5){animation-delay:.24s}
+
+/* --- Barres de répartition (Comptabilité). `.progress span` se remplit déjà en 0,5 s ;
+   celles-ci sautaient à leur largeur finale. Même durée, pour que deux barres côte à côte
+   sur la même page ne se remplissent pas à deux vitesses. */
+.poste-bar > span,.stack-bar > span{transition:width .5s var(--ease)}
+.mini-kpi{animation:rise .45s var(--ease) both}
+
+/* --- Barre latérale. Le liseré de la rubrique active apparaissait d'un coup : un ::before
+   n'hérite pas de la transition de son parent, il lui faut la sienne. */
+.menu a.on::before{transition:opacity .18s var(--ease),transform .18s var(--ease)}
+.menu a .count{animation:pastille .24s var(--ease) both}
+.side-foot{transition:background .15s var(--ease)}
+.profile-menu{animation:rise .16s var(--ease) both}
+
+/* --- Calendrier : la case ajoutable ne signalait rien avant le clic. */
+.cal-cell.addable{transition:background .14s var(--ease),border-color .14s var(--ease)}
