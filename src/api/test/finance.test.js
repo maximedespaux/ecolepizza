@@ -16,6 +16,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const lire = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+/** Le code sans ses commentaires : une explication qui NOMME un défaut retiré ne doit pas le
+ *  faire re-signaler. Ce piège s'est déclenché dès le premier essai. */
+const net = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
 
 // --- Ce que le code fait réellement, rejoué à l'identique ----------------------------------
 
@@ -219,7 +223,7 @@ test('le total des dépenses inclut toutes les lignes affichées', () => {
         '250 € apparaissent dans la liste sans entrer dans le total — écart silencieux');
 });
 
-// --- Identité du vendeur --------------------------------------------------------------------
+// --- Identité du vendeur, et d'où vient la mise en page -------------------------------------
 
 test("l'organisme est réellement chargé sur la facture", () => {
     // Défaut trouvé sur un PDF réel : l'en-tête vendeur affichait « Organisme » et « SIRET — ».
@@ -228,61 +232,62 @@ test("l'organisme est réellement chargé sur la facture", () => {
     // qui n'a pas d'index 0. L'organisme n'était donc jamais chargé, et le XML partait sans
     // BT-31/BT-32. Une facture sans identité du vendeur n'a pas de valeur probante.
     const src = lire('controllers/invoice.controller.js');
-    const bloc = src.slice(src.indexOf("FROM organization WHERE id = ?"));
+    const bloc = src.slice(src.indexOf('FROM organization WHERE id = ?'));
     assert.match(bloc.slice(0, 200), /const o = org \|\| \{\}/,
         'la double déstructuration est de retour : l\'organisme ne sera pas chargé');
 });
 
-test('le modèle de facture ne touche pas au XML', () => {
-    // Le modèle décide de ce que le client LIT ; le code, de ce que sa comptabilité IMPORTE.
-    // Le XML est normé (EN 16931) : le laisser configurer produirait des factures non conformes.
-    const src = lire('controllers/invoice.controller.js');
-    const bloc = src.slice(src.indexOf('async function buildInvoicePdf'));
-    const corps = bloc.slice(0, bloc.indexOf('\n}\n') + 3);
-    assert.match(corps, /attacherFacturX\(pdf, xml\)/,
-        'le XML doit être attaché au PDF issu du modèle');
-    assert.doesNotMatch(corps, /buildCII/,
-        'le XML ne doit pas être reconstruit ici, encore moins depuis le modèle');
-});
-
 test("il n'existe plus de mise en page interne pour la facture", () => {
-    // Décision revue : la règle est désormais la MÊME que pour les documents de dossier.
-    // Une pièce dont le contenu n'est fixé nulle part n'a pas à être émise — et un gabarit de
-    // secours qui traîne finit toujours par resservir « juste pour dépanner ».
-    const fx = lire('lib/facturx.js');
-    assert.doesNotMatch(fx, /async function buildFacturXPdf/,
+    // Même règle que pour les documents de dossier : une pièce dont le contenu n'est fixé
+    // nulle part n'a pas à être émise. Un gabarit de secours qui traîne finit par resservir.
+    assert.doesNotMatch(lire('lib/facturx.js'), /async function buildFacturXPdf/,
         'la mise en page interne est de retour dans lib/facturx.js');
     assert.doesNotMatch(lire('controllers/invoice.controller.js'), /buildFacturXPdf/,
         'un repli vers la mise en page interne a été rebranché');
 });
 
-test('sans modèle, la facture est refusée avec un motif', () => {
+test('le modèle de facture se désigne par son TYPE, sans réglage séparé', () => {
+    // Une première version ajoutait une colonne `invoice_template_slug` à shop_settings, avec
+    // sa migration et son sélecteur. Elle créait un SECOND mécanisme de désignation à côté de
+    // celui qui existe pour tous les autres documents (`document_template.doc_type`) — et deux
+    // mécanismes pour la même question finissent toujours par se contredire. Tout est retiré.
+    assert.match(lire('controllers/invoice.controller.js'), /doc_type \|\| ''\)\.toUpperCase\(\) === 'FACTURE'/,
+        'le modèle doit être trouvé par son doc_type');
+    for (const f of ['controllers/invoice.controller.js', 'controllers/sale.controller.js']) {
+        assert.doesNotMatch(net(lire(f)), /invoice_template_slug/, `${f} : le réglage séparé est revenu`);
+    }
+    const migrations = fs.readdirSync(path.join(__dirname, '..', '..', '..', 'database/migrations'));
+    assert.ok(!migrations.some((m) => /invoice_template/.test(m)),
+        'la migration du réglage séparé est revenue');
+});
+
+test('sans modèle de type FACTURE, la facture est refusée avec un motif', () => {
     const src = lire('controllers/invoice.controller.js');
-    const bloc = src.slice(src.indexOf('async function buildInvoicePdf'));
-    const corps = bloc.slice(0, bloc.indexOf('\n}\n') + 3);
-    assert.match(corps, /if \(!slug\)[\s\S]{0,120}throw refus/,
-        'aucun modèle désigné doit lever un refus, pas produire un PDF');
-    assert.match(corps, /Modèles de documents/,
+    const corps = src.slice(src.indexOf('async function buildInvoicePdf'));
+    assert.match(corps.slice(0, corps.indexOf('\n}\n')), /if \(!factures\.length\)[\s\S]{0,140}throw refus/,
+        'aucun modèle FACTURE doit lever un refus, pas produire un PDF');
+    assert.match(corps.slice(0, corps.indexOf('\n}\n')), /Modeles de documents/,
         'le refus doit nommer l\'écran où créer le modèle');
-    // Le refus doit devenir un 422 lisible, pas un 500 muet.
+    // Un refus de configuration se corrige en deux clics : il doit arriver lisible, pas en 500.
     assert.match(src, /if \(e && e\.motif\) return res\.status\(422\)/,
         'le motif doit remonter à l\'utilisateur');
 });
 
-test('seul un modèle de type FACTURE peut servir de facture', () => {
-    // Vérifié À DEUX ENDROITS, et ce n'est pas redondant : un modèle peut changer de type
-    // après avoir été choisi. Sans le contrôle au rendu, une facture partirait mise en page
-    // comme une convention, et on ne s'en apercevrait qu'une fois chez le client.
-    const inv = lire('controllers/invoice.controller.js');
-    const bloc = inv.slice(inv.indexOf('async function buildInvoicePdf'));
-    assert.match(bloc.slice(0, bloc.indexOf('\n}\n') + 3), /doc_type[\s\S]{0,60}!== 'FACTURE'/,
-        'le type doit être revérifié au moment de produire le PDF');
+test('plusieurs modèles FACTURE se départagent par leurs conditions', () => {
+    // Même moteur que les variantes devis particulier / entreprise / RS7404 : on ne réinvente
+    // pas un second arbitrage à côté de celui qui existe.
+    const src = lire('controllers/invoice.controller.js');
+    const corps = src.slice(src.indexOf('async function buildInvoicePdf'));
+    const fn = corps.slice(0, corps.indexOf('\n}\n'));
+    assert.match(fn, /matchStep\(x\.applies_when, ctx\)/, 'les conditions doivent départager');
+    assert.match(fn, /sort_order/, 'à conditions égales, l\'ordre des Modèles doit trancher');
+});
 
-    const sale = lire('controllers/sale.controller.js');
-    assert.match(sale, /!== 'FACTURE'/,
-        'le type doit être vérifié à l\'enregistrement du réglage');
-
-    const ui = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/pages/Ventes.jsx'), 'utf8');
-    assert.match(ui, /doc_type[\s\S]{0,60}=== "FACTURE"/,
-        'le sélecteur ne doit proposer que des modèles de type FACTURE');
+test('le modèle ne touche pas au XML', () => {
+    // Le modèle décide de ce que le client LIT, le code de ce que sa comptabilité IMPORTE.
+    const src = lire('controllers/invoice.controller.js');
+    const corps = src.slice(src.indexOf('async function buildInvoicePdf'));
+    const fn = corps.slice(0, corps.indexOf('\n}\n'));
+    assert.match(fn, /attacherFacturX\(pdf, xml\)/, 'le XML doit être attaché au PDF du modèle');
+    assert.doesNotMatch(fn, /buildCII/, 'le XML ne doit pas être reconstruit depuis le modèle');
 });

@@ -4,6 +4,7 @@ const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 const { buildCII, attacherFacturX, ventilerTva } = require('../lib/facturx.js');
 const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
+const { matchStep } = require('../lib/documents.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
 
@@ -353,34 +354,50 @@ const getInvoiceXml = async (req, res) => {
  *
  * Lève une erreur portant `.motif` — l'appelant en fait un 422 lisible plutôt qu'un 500 muet.
  */
+/**
+ * Produit le PDF de la facture, a partir du modele de type FACTURE de l'organisme.
+ *
+ * AUCUN REGLAGE, AUCUNE COLONNE. Le lien « ce modele est ma facture » n'a pas besoin d'etre
+ * stocke : il est deja dans le modele lui-meme, par son `doc_type`. Une premiere version
+ * ajoutait une colonne `invoice_template_slug` a shop_settings, ce qui creait un SECOND
+ * mecanisme de designation a cote de celui qui existe pour tous les autres documents — et deux
+ * mecanismes pour la meme question finissent toujours par se contredire.
+ *
+ * PLUSIEURS MODELES DE TYPE FACTURE sont permis : ils se departagent par leurs conditions
+ * (`applies_when`), exactement comme les variantes devis particulier / entreprise / RS7404. On
+ * reutilise `matchStep`, le meme moteur que partout ailleurs. A conditions egales, le plus
+ * petit `sort_order` gagne — c'est l'ordre qu'affiche deja l'ecran Modeles.
+ *
+ * PAS DE MODELE, PAS DE FACTURE. Il n'existe plus de mise en page interne : elle a ete retiree
+ * du code, pas debranchee. Meme regle que pour les documents de dossier.
+ *
+ * LE XML N'EST JAMAIS CONFIE AU MODELE. Il est norme (EN 16931) : le modele decide de ce que
+ * le client LIT, le code de ce que sa comptabilite IMPORTE.
+ *
+ * Leve une erreur portant `.motif` — l'appelant en fait un 422 lisible plutot qu'un 500 muet.
+ */
 async function buildInvoicePdf(conn, orgId, data, xml) {
     const refus = (motif) => Object.assign(new Error(motif), { motif });
 
-    let slug = null;
-    try {
-        const [[st]] = await conn.query(
-            'SELECT invoice_template_slug FROM shop_settings WHERE organization_id = ?', [orgId]);
-        slug = (st && st.invoice_template_slug) || null;
-    } catch (e) {
-        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
-        throw refus("Le réglage du modèle de facture n'existe pas encore en base (migration 109 non jouée).");
-    }
-    if (!slug) {
-        throw refus("Aucun modèle de facture n'est configuré. Créez un modèle de type FACTURE dans "
-            + 'Modèles de documents, puis désignez-le dans Ventes & Inventaire → Réglages de facturation.');
-    }
-
     const steps = await loadOrgSteps(orgId);
-    const step = steps.find((x) => x.slug === slug);
-    if (step && String(step.doc_type || '').toUpperCase() !== 'FACTURE') {
-        throw refus(`Le modèle « ${step.label || slug} » n'est plus de type FACTURE. `
-            + 'Corrigez son type dans Modèles de documents, ou désignez-en un autre.');
+    const factures = steps.filter((x) => x.active && String(x.doc_type || '').toUpperCase() === 'FACTURE');
+    if (!factures.length) {
+        throw refus("Aucun modele de type FACTURE n'existe. Creez-le dans Modeles de documents : "
+            + 'sans lui, aucune facture ne peut etre editee.');
     }
 
-    const content = await getTemplateContent(orgId, slug);
+    // Contexte de conditions. Une facture en sait peu sur le dossier — le financement suffit a
+    // departager « facture particulier » et « facture entreprise », qui est le cas courant.
+    const ctx = { financing: data.buyer.siret ? 'PROFESSIONNEL' : 'PARTICULIER' };
+    const eligibles = factures.filter((x) => matchStep(x.applies_when, ctx));
+    const step = (eligibles.length ? eligibles : factures)
+        .slice()
+        .sort((a, b) => Number(a.sort_order || 100) - Number(b.sort_order || 100))[0];
+
+    const content = await getTemplateContent(orgId, step.slug);
     if (!content || content.kind !== 'builder') {
-        throw refus(`Le modèle « ${slug} » est introuvable ou n'a pas de corps éditable. `
-            + 'Ouvrez-le dans Modèles de documents → Éditer.');
+        throw refus(`Le modele « ${step.label || step.slug} » n'a pas de corps editable. `
+            + 'Ouvrez-le dans Modeles de documents -> Editer.');
     }
 
     const html = renderTemplateHtml(content.html, invoiceTokens(data), {
@@ -389,7 +406,7 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
         footerHtml: content.footer,
     });
     const pdf = await htmlToPdf(html);
-    if (!pdf) throw refus('La conversion du modèle en PDF a échoué. Vérifiez le contenu du modèle.');
+    if (!pdf) throw refus('La conversion du modele en PDF a echoue. Verifiez le contenu du modele.');
     return await attacherFacturX(pdf, xml);
 }
 

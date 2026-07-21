@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { loadOrgSteps } = require('./template.controller.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 
@@ -107,8 +106,6 @@ const deleteSale = (req, res) => {
 const DEFAULT_SETTINGS = {
     invoice_prefix: 'F', next_number: 1,
     payment_methods: 'Espèces,CB,Virement,Chèque', legal_mentions: null, tva_applies: 1,
-    // NULL = mise en page interne de la facture. Voir buildInvoicePdf.
-    invoice_template_slug: null,
 };
 
 // Charge les paramètres boutique (crée la ligne par défaut si absente).
@@ -137,20 +134,6 @@ const saveShopSettings = async (req, res) => {
     try {
         const conn = db.promise();
         await loadSettings(conn, req.user.organization_id); // garantit l'existence
-        // Le modèle désigné doit être de type FACTURE. Refuser ici évite de découvrir l'erreur
-        // au moment d'éditer une facture pour un client — c'est-à-dire trop tard.
-        if (b.invoice_template_slug) {
-            const steps = await loadOrgSteps(req.user.organization_id);
-            const step = steps.find((x) => x.slug === b.invoice_template_slug);
-            if (!step) return res.status(422).json({ error: 'Modèle introuvable.' });
-            if (String(step.doc_type || '').toUpperCase() !== 'FACTURE') {
-                return res.status(422).json({
-                    error: `« ${step.label || step.slug} » est de type ${step.doc_type || '(aucun)'}. `
-                        + 'Seul un modèle de type FACTURE peut servir de facture.',
-                });
-            }
-        }
-
         const communs = [
             String(b.invoice_prefix || 'F').slice(0, 20),
             Math.max(1, parseInt(b.next_number, 10) || 1),
@@ -158,23 +141,11 @@ const saveShopSettings = async (req, res) => {
             b.legal_mentions || null,
             b.tva_applies ? 1 : 0,
         ];
-        // Le modèle de facture peut ne pas exister (migration 109 non jouée) : on réenregistre
-        // alors sans lui, plutôt que de refuser tout l'écran de réglages pour une colonne.
-        try {
-            await conn.query(
-                `UPDATE shop_settings SET invoice_prefix = ?, next_number = ?, payment_methods = ?,
-                        legal_mentions = ?, tva_applies = ?, invoice_template_slug = ?
-                  WHERE organization_id = ?`,
-                [...communs, b.invoice_template_slug || null, req.user.organization_id]
-            );
-        } catch (e) {
-            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
-            await conn.query(
-                `UPDATE shop_settings SET invoice_prefix = ?, next_number = ?, payment_methods = ?,
-                        legal_mentions = ?, tva_applies = ? WHERE organization_id = ?`,
-                [...communs, req.user.organization_id]
-            );
-        }
+        await conn.query(
+            `UPDATE shop_settings SET invoice_prefix = ?, next_number = ?, payment_methods = ?,
+                    legal_mentions = ?, tva_applies = ? WHERE organization_id = ?`,
+            [...communs, req.user.organization_id]
+        );
         res.json({ success: true, message: 'Paramètres enregistrés.' });
     } catch (err) {
         console.error('Erreur enregistrement paramètres boutique :', err);
