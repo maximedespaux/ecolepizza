@@ -910,7 +910,10 @@ tbody tr:last-child td{border-bottom:none}
 .pq-node{position:relative;z-index:1;width:46px;height:46px;border-radius:50%;border:none;background:var(--c,var(--navy));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000);transition:transform .1s var(--ease),box-shadow .1s var(--ease)}
 .pq-node:hover:not(:disabled){transform:translateY(-2px)}
 .pq-node:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000)}
+/* Vert = sans faute, c'est fini. Doré = acquis mais perfectible : la couleur dit à elle
+   seule qu'il reste à y gagner, et la pastille reste cliquable pour retenter les 3 étoiles. */
 .pq-node.done{background:var(--green);box-shadow:0 4px 0 0 #1f7a44;cursor:default}
+.pq-node.partiel{background:var(--gold);color:#3a2c00;box-shadow:0 4px 0 0 #b8860b}
 .pq-node.locked{background:var(--surface);color:var(--dim);border:2px solid var(--border);box-shadow:none;cursor:not-allowed}
 /* Chapitre EN COURS : le seul jouable, donc le seul qui doit attirer l'œil au milieu du
    chemin.

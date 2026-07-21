@@ -645,6 +645,11 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
           // ne se rejouent pas (ni pour refaire les étoiles, ni au risque d'un cœur), les
           // suivants attendent leur tour.
           const encours = i === courant;
+          // Un chapitre acquis SANS les 3 étoiles reste ouvert : il y a encore à y gagner.
+          // Seul le sans-faute se ferme — le rejouer ne rapporterait rien et coûterait un
+          // cœur en cas de faux pas.
+          const parfait = done && stars >= 3;
+          const partiel = done && !parfait;
           const verrou = !done && !encours;
           // Le zigzag se lit horizontalement : le décalage joue sur la hauteur.
           const offset = DECALAGES[i % 6];
@@ -663,17 +668,21 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
             "--len": `${Math.hypot(ECART_X, dy).toFixed(1)}px`,
             "--ang": `${(Math.atan2(-dy, -ECART_X) * 180 / Math.PI).toFixed(2)}deg`,
           };
-          const titre = done ? `${ch.title} — terminé (${stars}/3 ⭐)`
-            : encours ? (sansCoeur ? "Plus de cœur — attends d'en récupérer un" : ch.title)
-              : "Termine les chapitres précédents";
+          const titre = parfait ? `${ch.title} — sans faute (3/3 ⭐)`
+            : partiel ? (sansCoeur
+              ? `Plus de cœur — attends d'en récupérer un pour retenter les 3 ⭐`
+              : `${ch.title} — ${stars}/3 ⭐, retente pour les 3`)
+              : encours ? (sansCoeur ? "Plus de cœur — attends d'en récupérer un" : ch.title)
+                : "Termine les chapitres précédents";
           return (
             <div key={i} className={"pq-node-wrap" + (i > 0 && (i - 1) in prog ? " lien-fait" : "")}
               ref={cible ? nodeRef : null}
               style={{ top: `${offset}px`, ...lien }}>
-              <button className={"pq-node" + (done ? " done" : "") + (verrou ? " locked" : "") + (encours ? " on" : "")}
-                style={{ "--c": world.color }} disabled={done || verrou || sansCoeur}
+              <button className={"pq-node" + (parfait ? " done" : "") + (partiel ? " partiel" : "")
+                + (verrou ? " locked" : "") + (encours ? " on" : "")}
+                style={{ "--c": world.color }} disabled={parfait || verrou || sansCoeur}
                 onClick={() => onChapter(i, ch)} title={titre}>
-                <Icon name={done ? "check" : verrou ? "lock" : ch.ic} size={18} />
+                <Icon name={parfait ? "check" : verrou ? "lock" : ch.ic} size={18} />
               </button>
               <div className="pq-node-label">
                 <b>{ch.title}</b>
