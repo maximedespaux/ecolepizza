@@ -64,6 +64,13 @@ function roleOf(w) {
 }
 const INGREDIENT = { decouverte: "🍕", niv1: "🌾", niv1pro: "🌾", niv2: "🧫", expert: "🏆", spe: "🔥", autre: "🧑‍🍳" };
 
+/* Géométrie du chemin. Les décalages verticaux dessinent le sentier ; ECART_X est la
+   distance entre deux CENTRES de pastilles — largeur d'une pastille (46) + l'écart de la
+   rangée (26). Ces deux constantes doivent rester d'accord avec .pq-node et .pq-path : le
+   segment de liaison est calculé à partir d'elles. */
+const DECALAGES = [0, -26, -38, -26, 0, 26];
+const ECART_X = 72;
+
 function PizzaQuest() {
   const [worlds, setWorlds] = useState(null);
   const [active, setActive] = useState(null); // null = carte ; sinon code du monde
@@ -547,12 +554,21 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
           const encours = i === courant;
           const verrou = !done && !encours;
           // Le zigzag se lit horizontalement : le décalage joue sur la hauteur.
-          const offset = [0, -26, -38, -26, 0, 26][i % 6];
+          const offset = DECALAGES[i % 6];
+          // Segment reliant le CENTRE de la pastille précédente au centre de celle-ci.
+          // Les pastilles n'étant pas à la même hauteur, un trait horizontal ne joignait
+          // rien : on calcule longueur et angle réels, et le trait passe SOUS les pastilles.
+          const dy = offset - DECALAGES[(i - 1 + 6) % 6];
+          const lien = {
+            "--len": `${Math.hypot(ECART_X, dy).toFixed(1)}px`,
+            "--ang": `${(Math.atan2(-dy, -ECART_X) * 180 / Math.PI).toFixed(2)}deg`,
+          };
           const titre = done ? `${ch.title} — terminé (${stars}/3 ⭐)`
             : encours ? (sansCoeur ? "Plus de cœur — attends d'en récupérer un" : ch.title)
               : "Termine les chapitres précédents";
           return (
-            <div key={i} className="pq-node-wrap" style={{ transform: `translateY(${offset}px)` }}>
+            <div key={i} className={"pq-node-wrap" + (i > 0 && (i - 1) in prog ? " lien-fait" : "")}
+              style={{ transform: `translateY(${offset}px)`, ...lien }}>
               <button className={"pq-node" + (done ? " done" : "") + (verrou ? " locked" : "") + (encours ? " on" : "")}
                 style={{ "--c": world.color }} disabled={done || verrou || sansCoeur}
                 onClick={() => onChapter(i, ch)} title={titre}>

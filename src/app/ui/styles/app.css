@@ -866,13 +866,24 @@ tbody tr:last-child td{border-bottom:none}
   padding:44px 50% 30px;margin:0 -16px;scrollbar-width:thin}
 .pq-path::-webkit-scrollbar{height:6px}
 .pq-path::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
-/* Le trait qui relie les pastilles : un fond, pas un élément — rien à insérer entre elles. */
 .pq-node-wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;flex:none;
   scroll-snap-align:center;transition:transform .2s var(--ease)}
-.pq-node-wrap::before{content:"";position:absolute;top:23px;left:-26px;width:26px;height:3px;
-  background:var(--border);border-radius:2px}
+/* Segment de liaison : part du CENTRE de cette pastille et rejoint le centre de la
+   précédente. Les pastilles n'étant pas à la même hauteur, un trait horizontal ne joignait
+   ni l'une ni l'autre — d'où longueur (--len) et angle (--ang) calculés en JS à partir des
+   décalages, puis une simple rotation.
+   `z-index:0` contre `z-index:1` sur la pastille : le trait PASSE DESSOUS, il n'entame pas
+   le disque et le chemin se lit d'un trait continu. */
+.pq-node-wrap::before{content:"";position:absolute;top:23px;left:23px;z-index:0;
+  width:var(--len,72px);height:5px;margin-top:-2.5px;border-radius:3px;background:var(--border);
+  transform-origin:0 50%;transform:rotate(var(--ang,180deg))}
 .pq-node-wrap:first-child::before{display:none}
-.pq-node{width:46px;height:46px;border-radius:50%;border:none;background:var(--c,var(--navy));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000);transition:transform .1s var(--ease),box-shadow .1s var(--ease)}
+/* Segment déjà parcouru (le chapitre précédent est terminé) : il colore le chemin derrière
+   soi, ce qui donne à voir la progression sans compter les pastilles. */
+.pq-node-wrap.lien-fait::before{background:var(--green)}
+/* `position:relative; z-index:1` : la pastille passe AU-DESSUS du segment de liaison, qui
+   part de son centre — sans quoi le trait la barrerait. */
+.pq-node{position:relative;z-index:1;width:46px;height:46px;border-radius:50%;border:none;background:var(--c,var(--navy));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000);transition:transform .1s var(--ease),box-shadow .1s var(--ease)}
 .pq-node:hover:not(:disabled){transform:translateY(-2px)}
 .pq-node:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000)}
 .pq-node.done{background:var(--green);box-shadow:0 4px 0 0 #1f7a44;cursor:default}
