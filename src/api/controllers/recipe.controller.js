@@ -236,6 +236,41 @@ const listShared = async (req, res) => {
                 // pourtant le même affichage.
                 rows.forEach((r) => { r.new_comments = 0; });
             }
+            // Qui a commenté, pour montrer les visages sur la carte. Un compteur dit combien,
+            // il ne dit pas qui — et « 4 commentaires » n'a pas le même poids selon qu'ils
+            // viennent d'inconnus ou du formateur.
+            //
+            // DISTINCT PAR PERSONNE, pas par commentaire : quelqu'un qui répond trois fois
+            // remplirait sinon la rangée à lui seul. On garde les plus récents d'abord,
+            // l'ordre du fil, et on s'arrête à quatre — au-delà les pastilles deviennent
+            // illisibles, le compte chiffré prend le relais.
+            try {
+                const [qui] = await conn.query(
+                    `SELECT c.recipe_id, c.user_id, MAX(c.created_at) AS last_at,
+                            COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''),
+                                     MAX(c.author_name)) AS name,
+                            MAX(l.avatar) AS avatar
+                       FROM recipe_comment c
+                       LEFT JOIN user u ON u.id = c.user_id
+                       LEFT JOIN learner l ON l.user_id = c.user_id
+                      WHERE c.recipe_id IN (?)
+                      GROUP BY c.recipe_id, c.user_id, u.first_name, u.last_name
+                      ORDER BY last_at DESC`,
+                    [ids]
+                );
+                const par = {};
+                for (const x of qui) {
+                    (par[x.recipe_id] ||= []).push({ user_id: x.user_id, name: x.name, avatar: x.avatar });
+                }
+                rows.forEach((r) => {
+                    const tous = par[r.id] || [];
+                    r.commenters = tous.slice(0, 4);
+                    r.commenters_total = tous.length; // distinctes, pour le « +N »
+                });
+            } catch (e) {
+                if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e;
+                rows.forEach((r) => { r.commenters = []; r.commenters_total = 0; });
+            }
             try {
                 const [[me]] = await conn.query('SELECT community_seen_at FROM user WHERE id = ?', [req.user.id]);
                 const seen = me?.community_seen_at ?? null;

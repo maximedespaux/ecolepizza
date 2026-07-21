@@ -106,6 +106,40 @@ function AuthorChip({ id, name, avatar, onOpen }) {
   );
 }
 
+/**
+ * Les visages de ceux qui ont commenté, en rang serré sur la carte.
+ *
+ * Un compteur dit COMBIEN, il ne dit pas QUI — et « 4 commentaires » n'a pas le même poids
+ * selon qu'ils viennent d'inconnus ou du formateur. Reconnaître un visage évite d'ouvrir la
+ * fiche pour le découvrir.
+ *
+ * Le chevauchement est volontaire : il tient dans la place d'un seul avatar et demi, et se
+ * lit comme un groupe plutôt que comme une liste. Le plus récent devant — c'est celui dont
+ * la réponse attend.
+ *
+ * Chaque pastille est cliquable et ouvre le profil, comme l'auteur juste au-dessus : une
+ * pastille qui ressemble à l'AuthorChip et ne réagirait pas serait une fausse promesse.
+ */
+function Commenters({ gens, total, onOpen }) {
+  if (!gens || !gens.length) return null;
+  const reste = Math.max(0, (total || gens.length) - gens.length);
+  return (
+    <span className="comm-faces" title={gens.map((g) => g.name || "Stagiaire").join(", ") + (reste ? ` et ${reste} autre${reste > 1 ? "s" : ""}` : "")}>
+      {gens.map((g, i) => {
+        const av = g.avatar ? parseAvatar(g.avatar) : null;
+        return (
+          <button key={g.user_id || i} className="comm-face" aria-label={g.name || "Stagiaire"}
+            style={{ zIndex: gens.length - i, ...(av ? { background: av.color, color: "#fff" } : null) }}
+            onClick={(e) => { e.stopPropagation(); if (g.user_id) onOpen(g.user_id); }}>
+            {av ? av.emoji : <Icon name="user" size={10} />}
+          </button>
+        );
+      })}
+      {reste > 0 && <span className="comm-face reste">+{reste}</span>}
+    </span>
+  );
+}
+
 // Fenêtre profil de l'auteur : avatar, nom, nombre de fiches partagées, cœurs reçus.
 function ProfileModal({ profile, loading, onClose }) {
   const av = profile && profile.avatar ? parseAvatar(profile.avatar) : null;
@@ -394,6 +428,7 @@ export default function Communaute() {
                       <button className="btn sm ghost" onClick={() => setOpenId(s.id)} title="Voir &amp; commenter">
                         <Icon name="message-circle" size={13} /> {commentCount(s)}
                       </button>
+                      <Commenters gens={s.commenters} total={s.commenters_total} onOpen={openProfile} />
                       <button className={"btn sm " + (wish.has(s.id) ? "primary" : "ghost") + " comm-save"} onClick={() => toggleWish(s.id)}
                         title={wish.has(s.id) ? "Retirer de ma wishlist" : "Mettre de côté (wishlist)"}>
                         <Icon name="bookmark" size={13} fill={wish.has(s.id) ? "currentColor" : "none"} />
