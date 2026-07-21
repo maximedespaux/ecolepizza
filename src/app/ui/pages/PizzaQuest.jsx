@@ -195,7 +195,7 @@ function PizzaQuest() {
  * n'ont jamais ouvert cet écran.
  */
 function FormationMap({ worlds, prog, onPick }) {
-  const card = (w, prereq) => <FCard key={w.code} w={w} prog={prog[w.code]} onPick={onPick} prereq={prereq} />;
+  const card = (w) => <FCard key={w.code} w={w} prog={prog[w.code]} onPick={onPick} />;
   const range = worlds.some((w) => w.theme || w.tier);
   if (range) return <CarteRangee worlds={worlds} card={card} />;
 
@@ -207,20 +207,22 @@ function FormationMap({ worlds, prog, onPick }) {
     <div className="pq-board">
       {hasTronc && <>
         <div className="pq-tier-label">Nos formations</div>
-        {by.decouverte.length > 0 && <div className="pq-row">{by.decouverte.map((w) => card(w))}</div>}
+        {by.decouverte.length > 0 && <><div className="pq-row">{by.decouverte.map((w) => card(w))}</div><PrerequisResume worlds={by.decouverte} /></>}
         {(by.niv1.length > 0 || by.niv1pro.length > 0) && (
-          <div className="pq-row" style={{ marginTop: 12 }}>{by.niv1.map((w) => card(w))}{by.niv1pro.map((w) => card(w))}</div>
+          <><div className="pq-row" style={{ marginTop: 12 }}>{by.niv1.map((w) => card(w))}{by.niv1pro.map((w) => card(w))}</div><PrerequisResume worlds={[...by.niv1, ...by.niv1pro]} /></>
         )}
         {by.niv2.length > 0 && (
           <>
             <div className="pq-connect"><Icon name="chevron-down" size={22} /><Icon name="chevron-down" size={22} /></div>
-            <div className="pq-row">{by.niv2.map((w) => card(w, true))}</div>
+            <div className="pq-row">{by.niv2.map((w) => card(w))}</div>
+            <PrerequisResume worlds={by.niv2} />
           </>
         )}
         {by.expert.length > 0 && (
           <>
             <div className="pq-connect"><Icon name="chevron-down" size={22} /></div>
-            <div className="pq-row">{by.expert.map((w) => card(w, true))}</div>
+            <div className="pq-row">{by.expert.map((w) => card(w))}</div>
+            <PrerequisResume worlds={by.expert} />
           </>
         )}
       </>}
@@ -229,35 +231,36 @@ function FormationMap({ worlds, prog, onPick }) {
         <div className="pq-divider" />
         <div className="pq-tier-label">Nos spécialisations</div>
         <div className="pq-row">{by.spe.map((w) => card(w))}</div>
+        <PrerequisResume worlds={by.spe} />
       </>}
 
       {by.autre.length > 0 && <>
         <div className="pq-divider" />
         <div className="pq-tier-label">Autres</div>
         <div className="pq-row">{by.autre.map((w) => card(w))}</div>
+        <PrerequisResume worlds={by.autre} />
       </>}
-
-      <PrerequisResume worlds={worlds} />
     </div>
   );
 }
 
 /**
- * Récapitulatif des prérequis, sous la carte et UNE SEULE FOIS.
+ * Explication des pastilles « ! » d'UN GROUPE, affichée juste sous ce groupe.
  *
- * Remplace la pastille « ! » qui était posée sur chaque carte : elle répétait le même fait
- * autant de fois qu'il y avait de niveaux enchaînés, et il fallait survoler chaque carte
- * pour reconstituer l'ordre. Ici l'enchaînement se lit d'un bloc — « pour X, il faut Y » —
- * avec l'état de chaque prérequis (vert = acquis).
+ * La pastille signale, ce bloc explique — et il est placé là où les pastilles se trouvent,
+ * pas en pied de page : sur une carte qui compte plusieurs rangées, chercher au bas de
+ * l'écran ce que signifie un « ! » aperçu en haut fait perdre le fil.
+ *
+ * Ne rend rien si aucune formation du groupe n'a de prérequis.
  */
 function PrerequisResume({ worlds }) {
-  const avec = worlds.filter((w) => (w.prereqAll || []).length > 0);
+  const avec = (worlds || []).filter((w) => (w.prereqAll || []).length > 0);
   if (!avec.length) return null;
   return (
     <div className="pq-prereq-box">
-      <div className="pq-prereq-h"><Icon name="list-checks" size={13} /> Ordre des formations</div>
       {avec.map((w) => (
-        <p key={w.code} className="pq-prereq-line" style={{ margin: "6px 0 0" }}>
+        <p key={w.code} className="pq-prereq-line" style={{ margin: 0 }}>
+          <span className="pq-prereq-mini" aria-hidden="true">!</span>
           <b>{w.code}</b>
           <span className="field-opt">après</span>
           {w.prereqAll.map((p) => (
@@ -324,13 +327,13 @@ function CarteRangee({ worlds, card }) {
                   </div>
                 )}
                 <div className="pq-row">{p.worlds.map((w) => card(w))}</div>
+                {/* Sous CE palier : ce que signalent les « ! » de la rangée juste au-dessus. */}
+                <PrerequisResume worlds={p.worlds} />
               </div>
             ))}
           </div>
         );
       })}
-
-      <PrerequisResume worlds={worlds} />
     </div>
   );
 }
@@ -381,12 +384,13 @@ function FCard({ w, prog, onPick }) {
   const stars = prog ? Object.values(prog).reduce((a, s) => a + s, 0) : 0;
   const nbCh = chaptersFor(w).length;
   const ing = INGREDIENT[roleOf(w)];
-  // Les prérequis ne sont plus signalés SUR la carte : une pastille par formation répétait
-  // la même information autant de fois qu'il y avait de niveaux enchaînés, et il fallait
-  // survoler chacune pour reconstituer l'ordre. Ils sont récapitulés une seule fois sous
-  // la carte (cf. PrerequisResume). Ne reste ici que ce qui est propre à CETTE formation :
-  // ce qu'il lui manque, quand elle est verrouillée.
+  // Pastille « ! » dès que la formation a un prérequis, acquis ou non : elle SIGNALE, et le
+  // détail se lit dans le récapitulatif placé sous le groupe où elle apparaît.
   const manque = w.prereqMissing || [];
+  const tous = w.prereqAll || [];
+  const infobulle = tous.length
+    ? `Prérequis :\n${tous.map((p) => `${p.done ? "✓" : "✗"} ${p.code} — ${p.title}`).join("\n")}`
+    : null;
   const raison = manque.length
     ? `À terminer d'abord : ${manque.map((m) => m.code).join(", ")}`
     : "Obtiens le badge de ce niveau pour le débloquer";
@@ -396,8 +400,11 @@ function FCard({ w, prog, onPick }) {
       style={w.unlocked ? { background: w.color } : undefined}
       disabled={!w.unlocked}
       onClick={() => onPick(w.code)}
-      title={w.unlocked ? w.title : raison}
+      title={w.unlocked ? (infobulle || w.title) : raison}
     >
+      {tous.length > 0 && (
+        <span className="pq-prereq" title={infobulle || "Prérequis"} aria-label={infobulle || "Prérequis"}>!</span>
+      )}
       <span className="pq-fcard-top">
         <span className="pq-fcard-code">{w.code}</span>
         <span className="pq-fcard-ing" aria-hidden="true">{w.unlocked ? ing : <Icon name="lock" size={16} />}</span>

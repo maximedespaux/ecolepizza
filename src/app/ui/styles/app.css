@@ -908,11 +908,16 @@ tbody tr:last-child td{border-bottom:none}
 .pq-fcard-ing{font-size:20px;line-height:1}
 .pq-fcard-title{font-size:15px;font-weight:800;line-height:1.15}
 .pq-fcard-meta{font-size:11px;opacity:.92;margin-top:4px}
-/* Récapitulatif des prérequis, sous la carte et une seule fois. Il a remplacé la pastille
-   « ! » posée sur chaque carte : celle-ci répétait le même fait à chaque niveau enchaîné et
-   obligeait à survoler les cartes une à une pour reconstituer l'ordre. */
-.pq-prereq-box{margin-top:18px;padding:12px 14px;border:1px solid var(--border-soft);border-radius:12px;background:var(--surface2)}
+.pq-prereq{position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2c00;display:grid;place-items:center;font-weight:900;font-size:15px;border:2px solid var(--surface2);cursor:help}
+/* Récapitulatif des prérequis, placé sous LE GROUPE où les pastilles apparaissent — et non
+   en pied de page : la pastille signale, l'explication se lit juste en dessous, sans avoir
+   à parcourir toute la carte pour la trouver. */
+.pq-prereq-box{margin:10px auto 0;max-width:520px;padding:9px 12px;border:1px solid var(--border-soft);border-radius:10px;background:var(--surface2)}
 .pq-prereq-h{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+/* Rappel de la pastille en tête de ligne : c'est ce qui relie l'explication au « ! » vu
+   sur la carte juste au-dessus. */
+.pq-prereq-mini{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;
+  background:var(--gold);color:#3a2c00;font-weight:900;font-size:11px;flex:none}
 /* Rappel des prérequis en tête d'un monde, avec leur état. */
 .pq-prereq-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px;font-size:12.5px}
 .pq-prereq-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-weight:700;
