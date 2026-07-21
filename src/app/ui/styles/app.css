@@ -905,7 +905,15 @@ tbody tr:last-child td{border-bottom:none}
 .pq-fcard-ing{font-size:20px;line-height:1}
 .pq-fcard-title{font-size:15px;font-weight:800;line-height:1.15}
 .pq-fcard-meta{font-size:11px;opacity:.92;margin-top:4px}
-.pq-prereq{position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2c00;display:grid;place-items:center;font-weight:900;font-size:15px;border:2px solid var(--surface2)}
+.pq-prereq{position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2c00;display:grid;place-items:center;font-weight:900;font-size:15px;border:2px solid var(--surface2);cursor:help}
+/* Prérequis TOUS acquis : l'information reste (« ce niveau vient après un autre ») mais
+   n'alerte plus — d'où le « i » sobre plutôt que le « ! » doré. */
+.pq-prereq.ok{background:var(--surface3);color:var(--muted);font-size:14px;font-style:italic}
+/* Rappel des prérequis en tête d'un monde, avec leur état. */
+.pq-prereq-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px;font-size:12.5px}
+.pq-prereq-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-weight:700;
+  border:1px solid var(--border);background:var(--surface2);color:var(--muted)}
+.pq-prereq-chip.ok{border-color:color-mix(in srgb,var(--green) 45%,transparent);background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green)}
 .pq-connect{display:flex;justify-content:center;gap:70px;color:var(--dim);margin:4px 0}
 .pq-legend{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;border-radius:10px;padding:6px 12px 6px 8px;font-weight:700;font-size:12px}
 .pq-divider{height:2px;background:var(--border);border-radius:2px;margin:22px auto;max-width:520px}

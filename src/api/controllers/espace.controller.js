@@ -4,7 +4,7 @@ const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigner
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
-const { resolveUnlocked } = require('../lib/questgraph.js');
+const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 
@@ -454,6 +454,16 @@ const getMyFormations = async (req, res) => {
         } catch (e) { if (!isMissingSchema(e)) throw e; }
         const unlockMap = resolveUnlocked(programs.map((p) => p.id), prereqEdges, doneIds);
         const titreDe = new Map(programs.map((p) => [p.id, { code: p.code, title: p.title }]));
+        // Prérequis DIRECTS de chaque formation, avec leur état. On renvoie la liste complète
+        // et pas seulement ce qui manque : le stagiaire doit pouvoir lire « pour l'Expert, il
+        // faut le Niveau II » même une fois le Niveau II acquis — c'est le plan de parcours,
+        // pas une alerte. Les manquants restent distingués par `done`.
+        const prereqGraph = buildGraph(prereqEdges);
+        const finiSet = new Set(doneIds);
+        const prereqsDe = (id) => [...(prereqGraph.get(id) || [])].map((rid) => ({
+            ...(titreDe.get(rid) || { code: '?', title: 'formation supprimée' }),
+            done: finiSet.has(rid),
+        }));
 
         const formations = programs.map((p) => {
             const e = byProgram[p.id] || null;
@@ -481,6 +491,8 @@ const getMyFormations = async (req, res) => {
                 prereq_locked: !(unlockMap.get(p.id) || { unlocked: true }).unlocked,
                 prereq_missing: ((unlockMap.get(p.id) || {}).missing || [])
                     .map((id) => titreDe.get(id) || { code: '?', title: 'formation supprimée' }),
+                // Tous les prérequis directs, acquis compris (chacun avec son `done`).
+                prereq_all: prereqsDe(p.id),
                 enrollment_id: e ? e.enrollment_id : null,
                 complete: e ? e.complete : false,
                 dayPassed: e ? e.dayPassed : false,

@@ -75,6 +75,9 @@ function PizzaQuest() {
           || ((!!f.has_badge || !!f.enrolled) && !f.revoked && !f.prereq_locked),
         // Ce qui manque, nommé : un cadenas muet n'indique pas quoi faire pour l'ouvrir.
         prereqMissing: f.prereq_locked ? (f.prereq_missing || []) : [],
+        // TOUS les prérequis, acquis compris : c'est le plan de parcours (« pour l'Expert,
+        // il faut le Niveau II »), lisible même une fois le Niveau II obtenu.
+        prereqAll: f.prereq_all || [],
         theme: f.quest_theme || null,
         tier: f.quest_tier || null,
         dbChapters: null, // complété juste après par la banque de l'organisme
@@ -301,11 +304,17 @@ function CarteRangee({ worlds, card }) {
         );
       })}
 
-      {worlds.some((w) => (w.prereqMissing || []).length > 0) && (
-        <div style={{ textAlign: "center", marginTop: 14 }}>
-          <span className="pq-legend">
-            <span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span>
-            {" "}= une formation doit être terminée avant
+      {worlds.some((w) => (w.prereqAll || []).length > 0) && (
+        <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+          {worlds.some((w) => (w.prereqMissing || []).length > 0) && (
+            <span className="pq-legend">
+              <span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span>
+              {" "}= il reste une formation à terminer avant
+            </span>
+          )}
+          <span className="pq-legend" style={{ background: "var(--surface3)", color: "var(--muted)" }}>
+            <span className="pq-prereq ok" style={{ position: "static", width: 20, height: 20 }}>i</span>
+            {" "}= vient après une autre formation · survolez pour voir laquelle
           </span>
         </div>
       )}
@@ -363,7 +372,15 @@ function FCard({ w, prog, onPick, prereq }) {
   // l'heuristique de mise en page (`prereq`, déduite du nom du niveau) : eux seuls savent
   // ce qui manque VRAIMENT, et peuvent donc le nommer.
   const manque = w.prereqMissing || [];
-  const raison = manque.length
+  const tous = w.prereqAll || [];
+  // Le repère s'affiche dès qu'il Y A un prérequis, acquis ou non : il dit « cette formation
+  // vient après une autre », ce qui reste vrai une fois celle-ci terminée. Sa forme change —
+  // « ! » tant qu'il manque quelque chose, « i » quand tout est acquis.
+  const bloque = manque.length > 0;
+  const infobulle = tous.length
+    ? `Prérequis :\n${tous.map((p) => `${p.done ? "✓" : "✗"} ${p.code} — ${p.title}`).join("\n")}`
+    : null;
+  const raison = bloque
     ? `À terminer d'abord : ${manque.map((m) => m.code).join(", ")}`
     : "Obtiens le badge de ce niveau pour le débloquer";
   return (
@@ -372,10 +389,13 @@ function FCard({ w, prog, onPick, prereq }) {
       style={w.unlocked ? { background: w.color } : undefined}
       disabled={!w.unlocked}
       onClick={() => onPick(w.code)}
-      title={w.unlocked ? w.title : raison}
+      title={w.unlocked ? (infobulle || w.title) : raison}
     >
-      {(prereq || manque.length > 0) && (
-        <span className="pq-prereq" title={manque.length ? raison : "Prérequis"}>!</span>
+      {(prereq || tous.length > 0) && (
+        <span className={"pq-prereq" + (bloque ? "" : " ok")}
+          title={infobulle || "Prérequis"} aria-label={infobulle || "Prérequis"}>
+          {bloque ? "!" : "i"}
+        </span>
       )}
       <span className="pq-fcard-top">
         <span className="pq-fcard-code">{w.code}</span>
@@ -409,6 +429,19 @@ function WorldView({ world, prog, onBack, onChapter, onGame }) {
           <span key={c.id} className="badge n" style={c.color ? { color: c.color } : undefined}>{c.name}</span>
         ))}
       </div>
+      {/* Le parcours en toutes lettres : de quoi cette formation dépend, et où on en est.
+          Sur la carte l'information tient dans une pastille ; ici elle a la place d'être lue. */}
+      {(world.prereqAll || []).length > 0 && (
+        <p className="pq-prereq-line">
+          <span className="field-opt">Accessible après :</span>
+          {world.prereqAll.map((p) => (
+            <span key={p.code} className={"pq-prereq-chip" + (p.done ? " ok" : "")} title={p.title}>
+              <Icon name={p.done ? "check" : "lock"} size={11} /> {p.code}
+            </span>
+          ))}
+        </p>
+      )}
+
       {/* Aucun chapitre : on le dit franchement plutôt que de servir des questions
           génériques. Les défis-jeux, eux, restent disponibles. */}
       {!chaptersLoading(world) && chapters.length === 0 && (
