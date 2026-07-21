@@ -223,11 +223,6 @@ function FormationMap({ worlds, prog, onPick }) {
             <div className="pq-row">{by.expert.map((w) => card(w, true))}</div>
           </>
         )}
-        {(by.niv2.length > 0 || by.expert.length > 0) && (
-          <div style={{ textAlign: "center", marginTop: 12 }}>
-            <span className="pq-legend"><span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span> = prérequis (niveau précédent)</span>
-          </div>
-        )}
       </>}
 
       {by.spe.length > 0 && <>
@@ -241,6 +236,37 @@ function FormationMap({ worlds, prog, onPick }) {
         <div className="pq-tier-label">Autres</div>
         <div className="pq-row">{by.autre.map((w) => card(w))}</div>
       </>}
+
+      <PrerequisResume worlds={worlds} />
+    </div>
+  );
+}
+
+/**
+ * Récapitulatif des prérequis, sous la carte et UNE SEULE FOIS.
+ *
+ * Remplace la pastille « ! » qui était posée sur chaque carte : elle répétait le même fait
+ * autant de fois qu'il y avait de niveaux enchaînés, et il fallait survoler chaque carte
+ * pour reconstituer l'ordre. Ici l'enchaînement se lit d'un bloc — « pour X, il faut Y » —
+ * avec l'état de chaque prérequis (vert = acquis).
+ */
+function PrerequisResume({ worlds }) {
+  const avec = worlds.filter((w) => (w.prereqAll || []).length > 0);
+  if (!avec.length) return null;
+  return (
+    <div className="pq-prereq-box">
+      <div className="pq-prereq-h"><Icon name="list-checks" size={13} /> Ordre des formations</div>
+      {avec.map((w) => (
+        <p key={w.code} className="pq-prereq-line" style={{ margin: "6px 0 0" }}>
+          <b>{w.code}</b>
+          <span className="field-opt">après</span>
+          {w.prereqAll.map((p) => (
+            <span key={p.code} className={"pq-prereq-chip" + (p.done ? " ok" : "")} title={p.title}>
+              <Icon name={p.done ? "check" : "lock"} size={11} /> {p.code}
+            </span>
+          ))}
+        </p>
+      ))}
     </div>
   );
 }
@@ -304,14 +330,7 @@ function CarteRangee({ worlds, card }) {
         );
       })}
 
-      {worlds.some((w) => (w.prereqAll || []).length > 0) && (
-        <div style={{ textAlign: "center", marginTop: 14 }}>
-          <span className="pq-legend">
-            <span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span>
-            {" "}= vient après une autre formation · survolez pour voir laquelle
-          </span>
-        </div>
-      )}
+      <PrerequisResume worlds={worlds} />
     </div>
   );
 }
@@ -357,24 +376,18 @@ function WorldGames({ world, onGame }) {
 }
 
 // Carte-formation (rectangle coloré façon schéma) → ouvre le monde.
-function FCard({ w, prog, onPick, prereq }) {
+function FCard({ w, prog, onPick }) {
   const done = prog ? Object.keys(prog).length : 0;
   const stars = prog ? Object.values(prog).reduce((a, s) => a + s, 0) : 0;
   const nbCh = chaptersFor(w).length;
   const ing = INGREDIENT[roleOf(w)];
-  // Prérequis PARAMÉTRÉS par l'organisme (cf. Configuration → Pizza Quest). Ils priment sur
-  // l'heuristique de mise en page (`prereq`, déduite du nom du niveau) : eux seuls savent
-  // ce qui manque VRAIMENT, et peuvent donc le nommer.
+  // Les prérequis ne sont plus signalés SUR la carte : une pastille par formation répétait
+  // la même information autant de fois qu'il y avait de niveaux enchaînés, et il fallait
+  // survoler chacune pour reconstituer l'ordre. Ils sont récapitulés une seule fois sous
+  // la carte (cf. PrerequisResume). Ne reste ici que ce qui est propre à CETTE formation :
+  // ce qu'il lui manque, quand elle est verrouillée.
   const manque = w.prereqMissing || [];
-  const tous = w.prereqAll || [];
-  // Le repère s'affiche dès qu'il Y A un prérequis, acquis ou non : il dit « cette formation
-  // vient après une autre », ce qui reste vrai une fois celle-ci terminée. Une seule pastille
-  // dans les deux cas ; c'est l'infobulle qui détaille l'état (✓ / ✗).
-  const bloque = manque.length > 0;
-  const infobulle = tous.length
-    ? `Prérequis :\n${tous.map((p) => `${p.done ? "✓" : "✗"} ${p.code} — ${p.title}`).join("\n")}`
-    : null;
-  const raison = bloque
+  const raison = manque.length
     ? `À terminer d'abord : ${manque.map((m) => m.code).join(", ")}`
     : "Obtiens le badge de ce niveau pour le débloquer";
   return (
@@ -383,11 +396,8 @@ function FCard({ w, prog, onPick, prereq }) {
       style={w.unlocked ? { background: w.color } : undefined}
       disabled={!w.unlocked}
       onClick={() => onPick(w.code)}
-      title={w.unlocked ? (infobulle || w.title) : raison}
+      title={w.unlocked ? w.title : raison}
     >
-      {(prereq || tous.length > 0) && (
-        <span className="pq-prereq" title={infobulle || "Prérequis"} aria-label={infobulle || "Prérequis"}>!</span>
-      )}
       <span className="pq-fcard-top">
         <span className="pq-fcard-code">{w.code}</span>
         <span className="pq-fcard-ing" aria-hidden="true">{w.unlocked ? ing : <Icon name="lock" size={16} />}</span>
