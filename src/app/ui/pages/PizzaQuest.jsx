@@ -305,15 +305,9 @@ function CarteRangee({ worlds, card }) {
       })}
 
       {worlds.some((w) => (w.prereqAll || []).length > 0) && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
-          {worlds.some((w) => (w.prereqMissing || []).length > 0) && (
-            <span className="pq-legend">
-              <span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span>
-              {" "}= il reste une formation à terminer avant
-            </span>
-          )}
+        <div style={{ textAlign: "center", marginTop: 14 }}>
           <span className="pq-legend">
-            <span className="pq-prereq ok" style={{ position: "static", width: 20, height: 20 }}>i</span>
+            <span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span>
             {" "}= vient après une autre formation · survolez pour voir laquelle
           </span>
         </div>
@@ -374,8 +368,8 @@ function FCard({ w, prog, onPick, prereq }) {
   const manque = w.prereqMissing || [];
   const tous = w.prereqAll || [];
   // Le repère s'affiche dès qu'il Y A un prérequis, acquis ou non : il dit « cette formation
-  // vient après une autre », ce qui reste vrai une fois celle-ci terminée. Sa forme change —
-  // « ! » tant qu'il manque quelque chose, « i » quand tout est acquis.
+  // vient après une autre », ce qui reste vrai une fois celle-ci terminée. Une seule pastille
+  // dans les deux cas ; c'est l'infobulle qui détaille l'état (✓ / ✗).
   const bloque = manque.length > 0;
   const infobulle = tous.length
     ? `Prérequis :\n${tous.map((p) => `${p.done ? "✓" : "✗"} ${p.code} — ${p.title}`).join("\n")}`
@@ -392,10 +386,7 @@ function FCard({ w, prog, onPick, prereq }) {
       title={w.unlocked ? (infobulle || w.title) : raison}
     >
       {(prereq || tous.length > 0) && (
-        <span className={"pq-prereq" + (bloque ? "" : " ok")}
-          title={infobulle || "Prérequis"} aria-label={infobulle || "Prérequis"}>
-          {bloque ? "!" : "i"}
-        </span>
+        <span className="pq-prereq" title={infobulle || "Prérequis"} aria-label={infobulle || "Prérequis"}>!</span>
       )}
       <span className="pq-fcard-top">
         <span className="pq-fcard-code">{w.code}</span>

@@ -906,10 +906,9 @@ tbody tr:last-child td{border-bottom:none}
 .pq-fcard-title{font-size:15px;font-weight:800;line-height:1.15}
 .pq-fcard-meta{font-size:11px;opacity:.92;margin-top:4px}
 .pq-prereq{position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2c00;display:grid;place-items:center;font-weight:900;font-size:15px;border:2px solid var(--surface2);cursor:help}
-/* Un seul repère, doré, que les prérequis soient acquis ou non : c'est le même fait porté
-   par la pastille (« ce niveau vient après un autre »). Seul le glyphe distingue l'état —
-   « ! » s'il reste à faire, « i » si tout est acquis — et l'infobulle donne le détail. */
-.pq-prereq.ok{font-size:14px;font-style:italic}
+/* UN SEUL repère, doré et identique, que les prérequis soient acquis ou non : il porte le
+   même fait dans les deux cas (« ce niveau vient après un autre »). Le détail — ce qui est
+   acquis, ce qui reste — est dans l'infobulle, pas dans une seconde pastille. */
 /* Rappel des prérequis en tête d'un monde, avec leur état. */
 .pq-prereq-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px;font-size:12.5px}
 .pq-prereq-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-weight:700;
