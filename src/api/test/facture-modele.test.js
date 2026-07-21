@@ -12,6 +12,8 @@
  */
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { resolveTokens, articleRowTokens, expandListBlocks } = require('../lib/tokens.js');
@@ -94,14 +96,32 @@ test('un bloc sans article ne laisse pas le gabarit en clair', () => {
     assert.doesNotMatch(out, /Désignation/, 'le gabarit non développé apparaîtrait sur la facture');
 });
 
-test('les jetons de facture sont proposés dans la palette', () => {
-    // Sans catalogue, ils existent mais restent introuvables : personne ne devine
-    // « {Prix unitaire HT} » en regardant un éditeur vide.
-    const { TOKEN_CATALOG } = require('../lib/tokens.js');
-    const groupe = TOKEN_CATALOG.find((g) => g.group === 'Facture');
-    assert.ok(groupe, 'le groupe Facture manque dans la palette');
-    const cles = groupe.tokens.map((t) => t.key);
-    for (const k of ['Numéro facture', 'Acheteur', 'Total TTC', 'Articles']) {
-        assert.ok(cles.includes(k), `${k} absent de la palette`);
+test('les jetons de facture sont proposés dans la PALETTE de l\'éditeur', () => {
+    // CE TEST VÉRIFIAIT LA MAUVAISE SOURCE. Il regardait TOKEN_CATALOG et passait au vert,
+    // alors que la palette de l'éditeur ne lit PAS ce catalogue : elle se construit dans
+    // `getTokens` à partir des Champs documents plus quelques groupes assemblés à la main.
+    // Les jetons étaient donc résolvables mais INTROUVABLES — et un jeton qu'on ne peut pas
+    // insérer n'existe pas pour la personne qui construit son modèle.
+    //
+    // On vise maintenant le contrôleur qui sert réellement la palette.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/template.controller.js'), 'utf8');
+    assert.match(src, /groups\.push\(factureTokensGroup\(\)\)/,
+        'le groupe Facture n\'est pas ajouté à la palette');
+    assert.match(src, /groups\.push\(articleTokensGroup\(\)\)/,
+        'le groupe Ligne de facture n\'est pas ajouté à la palette');
+    // Et leur place dans l'ordre des groupes, sinon ils tombent en fin de liste.
+    assert.match(src, /'Organisme', 'Facture', 'Ligne de facture'/,
+        'les groupes de facture doivent être rangés après Organisme');
+});
+
+test('les jetons de ligne proposés correspondent à ceux que le bloc remplit', () => {
+    // Une palette qui propose un jeton que le rendu ne connaît pas produit une facture avec
+    // « {Quantité} » imprimé en clair — le pire résultat possible sur une pièce client.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/template.controller.js'), 'utf8');
+    const bloc = src.slice(src.indexOf('function articleTokensGroup'));
+    const proposes = [...bloc.slice(0, bloc.indexOf('\n}')).matchAll(/t\('([^']+)'/g)].map((m) => m[1]);
+    const remplis = Object.keys(articleRowTokens({ name: 'x', qty: 1, unit_price_ht: 1, amount: 1, taxRate: 20 }, 0));
+    for (const k of proposes) {
+        assert.ok(remplis.includes(k), `« ${k} » est proposé dans la palette mais jamais rempli`);
     }
 });

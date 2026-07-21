@@ -274,6 +274,49 @@ function groupTokensGroup() {
     return { group: 'Groupe entreprise', tokens };
 }
 
+/**
+ * Jetons de FACTURE, proposés dans la palette de l'éditeur.
+ *
+ * Ils vivent dans TOKEN_CATALOG comme les autres, mais la palette ne lit PAS ce catalogue :
+ * elle se construit à partir des Champs documents (`fieldTokenGroups`) plus quelques groupes
+ * assemblés à la main, dont celui-ci. Les avoir ajoutés au seul catalogue les rendait
+ * résolvables mais INTROUVABLES — un jeton qu'on ne peut pas insérer n'existe pas pour la
+ * personne qui construit son modèle.
+ *
+ * `{Articles}` est listé en dernier : c'est le seul qui s'utilise aussi comme BLOC répétable,
+ * {#Articles}…{/Articles}, une ligne par article vendu.
+ */
+function factureTokensGroup() {
+    const byKey = {};
+    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
+    const cat = TOKEN_CATALOG.find((g) => g.group === 'Facture');
+    const tokens = (cat ? cat.tokens.map((t) => t.key) : [])
+        .map((k) => byKey[k]).filter(Boolean)
+        .map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
+    return { group: 'Facture', tokens };
+}
+
+/**
+ * Jetons disponibles À L'INTÉRIEUR du bloc {#Articles}. Groupe séparé, parce qu'ils n'ont de
+ * sens QUE là : hors du bloc, {Quantité} ne désigne rien.
+ */
+function articleTokensGroup() {
+    const t = (key, label, sample) => ({ key, label, sample });
+    return {
+        group: 'Ligne de facture',
+        tokens: [
+            t('N°', 'Numéro de ligne', '1'),
+            t('Désignation', 'Désignation de l’article', 'Biberon valve 455 ml'),
+            t('Quantité', 'Quantité', '2'),
+            t('Prix unitaire HT', 'Prix unitaire HT', '8,91 €'),
+            t('Montant HT', 'Montant HT de la ligne', '17,82 €'),
+            t('Taux TVA', 'Taux de TVA de la ligne', '20,00 %'),
+            t('Montant TVA', 'Montant de TVA de la ligne', '3,56 €'),
+            t('Montant TTC', 'Montant TTC de la ligne', '21,38 €'),
+        ],
+    };
+}
+
 // Jetons personnalisés de l'organisme (table custom_token). Résilient si migration absente.
 async function loadCustomTokens(orgId) {
     // `category` (migration 093) est optionnel : on réessaie sans si la colonne manque.
@@ -296,10 +339,10 @@ async function loadCustomTokens(orgId) {
 const GROUP_ORDER = [
     'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
     'Inscription', 'Formation', 'Session', 'Lieu de formation',
-    'Organisme', 'Calculé / dates', 'Personnalisés',
+    'Organisme', 'Facture', 'Ligne de facture', 'Calculé / dates', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
-const CURATED_GROUPS = new Set(['Calculé / dates', 'Groupe entreprise']);
+const CURATED_GROUPS = new Set(['Calculé / dates', 'Groupe entreprise', 'Facture', 'Ligne de facture']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -328,6 +371,8 @@ const getTokens = async (req, res) => {
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
         groups.push(groupTokensGroup());
+        groups.push(factureTokensGroup());
+        groups.push(articleTokensGroup());
         // Jetons personnalisés : rangés dans le groupe de leur CATÉGORIE (migration 093).
         // Sans catégorie → groupe « Personnalisés ». On fusionne dans un groupe existant
         // du même nom (ex. « Groupe entreprise »), sinon on le crée.
