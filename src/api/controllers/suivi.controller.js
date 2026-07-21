@@ -20,12 +20,17 @@ const getSuivi = async (req, res) => {
             `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.crm_stage, e.session_id,
                     e.company_id AS enr_company_id,
                     l.first_name, l.last_name, l.opco,
-                    COALESCE(e.company_id, l.company_id) AS company_id, c.name AS company_name,
+                    /* L'entreprise d'un dossier est celle du DOSSIER, jamais celle de la fiche
+                       personne. Un COALESCE vers l.company_id trainait ici : il ressuscitait
+                       l'entreprise sur les inscriptions ou le stagiaire s'est engage seul,
+                       parce que learner.company_id reste pose a vie des le premier
+                       rattachement. Meme personne, deux dossiers, deux parcours possibles. */
+                    e.company_id AS company_id, c.name AS company_name,
                     p.id AS program_id, p.code AS program_code, p.title AS program_title,
                     p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
              FROM enrollment e
              LEFT JOIN learner l ON l.id = e.learner_id
-             LEFT JOIN company c ON c.id = COALESCE(e.company_id, l.company_id)
+             LEFT JOIN company c ON c.id = e.company_id
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
              WHERE e.organization_id = ?`,

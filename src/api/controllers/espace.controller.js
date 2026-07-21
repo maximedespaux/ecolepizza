@@ -120,12 +120,19 @@ async function companyEmargementGate(conn, e, orgId) {
     const none = { locked: false, need: 0, done: 0, break_label: null };
     if (!e.program_id || !e.enrollment_id) return none;
 
-    // Entreprise + session du dossier (l'entreprise peut être portée par le dossier ou la fiche).
+    // Entreprise + session DU DOSSIER, et de lui seul.
+    //
+    // Il y avait ici un COALESCE vers learner.company_id, au motif que « l'entreprise peut être
+    // portée par le dossier ou la fiche ». C'était l'inverse du besoin : learner.company_id est
+    // posé à vie au premier rattachement, si bien qu'une personne déjà venue par son employeur
+    // et qui s'inscrit ensuite d'elle-même se voyait appliquer le volet entreprise sur ce
+    // second dossier — donc bloquée derrière des documents que son employeur n'a aucune raison
+    // de signer. Le rattachement d'un dossier, c'est enrollment.company_id.
     let companyId = null, sessionId = null;
     try {
         const [[r]] = await conn.query(
-            `SELECT COALESCE(en.company_id, l.company_id) AS cid, en.session_id AS sid
-             FROM enrollment en LEFT JOIN learner l ON l.id = en.learner_id
+            `SELECT en.company_id AS cid, en.session_id AS sid
+             FROM enrollment en
              WHERE en.id = ? AND en.organization_id = ?`,
             [e.enrollment_id, orgId]
         );
@@ -167,10 +174,14 @@ async function companyEmargementGate(conn, e, orgId) {
     // Documents de GROUPE de l'entreprise (scope COMPANY), pour cette session si connue.
     const grpBySlug = {};
     try {
+        // `session_id IS NULL` laissait passer les documents de groupe de N'IMPORTE QUELLE
+        // session de cette entreprise : une convention signée pour la session de mars pouvait
+        // débloquer celle de septembre. On ne l'accepte donc que faute de mieux, quand le
+        // dossier lui-même n'a pas de session.
         const [grp] = await conn.query(
             `SELECT template_slug, status FROM generated_document
              WHERE organization_id = ? AND scope = 'COMPANY' AND company_id = ?
-               AND (? IS NULL OR session_id IS NULL OR session_id = ?)`,
+               AND (? IS NULL OR session_id = ?)`,
             [orgId, companyId, sessionId, sessionId]
         );
         // Un document de groupe non signé ne doit pas être écrasé par un homonyme signé.
@@ -266,7 +277,12 @@ const getMonEspace = async (req, res) => {
             `SELECT d.id, d.type, d.template_slug, d.title, d.status, d.quiz_id,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at, d.signer_name,
-                    GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations
+                    GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations,
+                    /* Le rattachement entreprise est une propriété DU DOSSIER de ce document,
+                       pas du stagiaire : un même stagiaire peut avoir un dossier porté par son
+                       employeur et un autre qu'il porte seul. MAX() parce que le GROUP BY
+                       agrège les dossiers d'un document multi-formations. */
+                    MAX(e.company_id) AS doc_company_id
              FROM generated_document d
              LEFT JOIN document_formation df ON df.document_id = d.id
              LEFT JOIN enrollment e ON e.id = df.enrollment_id
@@ -279,14 +295,19 @@ const getMonEspace = async (req, res) => {
         );
 
         // Le stagiaire doit-il signer chaque document ? Piloté par le modèle (Modeles).
-        // Exception : les documents « signés par l'entreprise » quand le stagiaire est
-        // rattaché à une entreprise → c'est le représentant qui signe (pas le stagiaire).
+        // Exception : les documents « signés par l'entreprise » quand LE DOSSIER de ce document
+        // est rattaché à une entreprise → c'est le représentant qui signe.
+        //
+        // Cette exception se décidait auparavant une fois pour toutes, à partir de
+        // learner.company_id. Ce champ étant posé à vie au premier rattachement, un stagiaire
+        // déjà venu par son employeur ne pouvait plus jamais signer un document, même sur une
+        // inscription qu'il portait seul.
         const orgSteps = await loadOrgSteps(req.user.organization_id);
-        const hasCompany = !!learner.company_id;
         for (const d of documents) {
-            const byCompany = hasCompany && companySignsDoc(orgSteps, d);
+            const byCompany = !!d.doc_company_id && companySignsDoc(orgSteps, d);
             d.company_sign = byCompany;
             d.signable = d.quiz_id ? false : (!byCompany && (d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d)));
+            delete d.doc_company_id; // donnée de calcul, pas d'affichage
         }
 
         res.json({
@@ -394,17 +415,24 @@ async function communityNewsCount(conn, userId, orgId) {
 
 async function pendingDocsCount(conn, learner, orgId) {
     try {
+        // company_id remonte PAR DOCUMENT, via le dossier auquel il appartient : c'est le
+        // dossier qui dit si l'entreprise signe, jamais la fiche du stagiaire. Sinon la
+        // pastille cessait de compter les documents d'une inscription portée seul, dès lors
+        // que la personne était déjà passée une fois par un employeur.
         const [rows] = await conn.query(
-            `SELECT id, type, template_slug, quiz_id FROM generated_document
-             WHERE learner_id = ? AND status IN ('ENVOYE','CONSULTE')`,
+            `SELECT d.id, d.type, d.template_slug, d.quiz_id, MAX(e.company_id) AS doc_company_id
+             FROM generated_document d
+             LEFT JOIN document_formation df ON df.document_id = d.id
+             LEFT JOIN enrollment e ON e.id = df.enrollment_id
+             WHERE d.learner_id = ? AND d.status IN ('ENVOYE','CONSULTE')
+             GROUP BY d.id`,
             [learner.id]
         );
         if (!rows.length) return 0;
         const orgSteps = await loadOrgSteps(orgId);
-        const hasCompany = !!learner.company_id;
         return rows.filter((d) => {
-            if (d.quiz_id) return true;                                   // QCM à faire
-            if (hasCompany && companySignsDoc(orgSteps, d)) return false; // signé par l'entreprise
+            if (d.quiz_id) return true;                                          // QCM à faire
+            if (d.doc_company_id && companySignsDoc(orgSteps, d)) return false;  // signé par l'entreprise
             return d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d);
         }).length;
     } catch (e) {

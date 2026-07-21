@@ -5,12 +5,33 @@ const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
 const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc } = require('../lib/documents.js');
 
-// Signature d'un document de dossier INCOMBE à l'entreprise ? (modèle company_sign +
-// dossier rattaché à une entreprise). Dans ce cas le stagiaire ne signe pas lui-même.
+/**
+ * La signature de ce document incombe-t-elle à l'entreprise ?
+ *
+ * Deux conditions : le modèle le prévoit (company_sign) ET LE DOSSIER auquel ce document
+ * appartient est rattaché à une entreprise.
+ *
+ * C'est bien le DOSSIER qui tranche, pas la fiche du stagiaire. On lisait auparavant
+ * learner.company_id — or ce champ est posé à vie dès le premier rattachement. Une personne
+ * venue une fois par son employeur, puis inscrite d'elle-même à une autre session, voyait donc
+ * TOUS ses documents passer « à signer par l'entreprise », y compris ceux de la session
+ * qu'elle payait seule : elle ne pouvait plus signer ses propres papiers, et l'employeur
+ * recevait des documents qui ne le regardaient pas.
+ *
+ * Un document sans dossier rattaché (document libre) n'est signé par personne d'autre que son
+ * destinataire : sans enrollment, pas d'entreprise.
+ */
 async function docSignedByCompany(conn, orgSteps, doc) {
     if (!companySignsDoc(orgSteps, doc) || !doc.learner_id) return false;
-    try { const [[l]] = await conn.query('SELECT company_id FROM learner WHERE id = ?', [doc.learner_id]); return !!(l && l.company_id); }
-    catch { return false; }
+    try {
+        const [[r]] = await conn.query(
+            `SELECT e.company_id FROM document_formation df
+             JOIN enrollment e ON e.id = df.enrollment_id
+             WHERE df.document_id = ? LIMIT 1`,
+            [doc.id]
+        );
+        return !!(r && r.company_id);
+    } catch { return false; }
 }
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { composeDocumentPdf } = require('../lib/pdfcompose.js');
@@ -109,7 +130,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 s.year, s.week,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                 DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
-                e.financing, e.price AS enroll_price, e.acompte
+                e.financing, e.price AS enroll_price, e.acompte, e.company_id
          FROM document_formation df
          JOIN enrollment e ON e.id = df.enrollment_id
          LEFT JOIN training_session s ON s.id = e.session_id
@@ -117,9 +138,13 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
          WHERE df.document_id = ?`,
         [documentId]
     );
+    // L'entreprise dont on remplira les jetons est celle DU DOSSIER de ce document. Lire
+    // learner.company_id faisait apparaître l'employeur sur les documents d'une inscription
+    // que le stagiaire portait seul — même raison que dans docSignedByCompany.
     const isPro = formations.some((f) => f.financing === 'PROFESSIONNEL');
-    if (isPro && learner && learner.company_id) {
-        const [cRows] = await conn.query('SELECT * FROM company WHERE id = ?', [learner.company_id]);
+    const dossierCompanyId = (formations.find((f) => f.company_id) || {}).company_id || null;
+    if (isPro && dossierCompanyId) {
+        const [cRows] = await conn.query('SELECT * FROM company WHERE id = ?', [dossierCompanyId]);
         company = cRows[0] || null;
     }
     // Document « entreprise » (migration 077) : entreprise portée par le document, et
