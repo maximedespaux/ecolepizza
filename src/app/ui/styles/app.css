@@ -1881,7 +1881,9 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
   50%    {box-shadow:0 0 0 5px rgba(226,163,32,0),0 0 0 1px var(--gold) inset}
 }
 .comm-card2.halo-com{border-color:var(--ember1);animation:halo-com 1.9s var(--ease) infinite}
-.comm-card2.halo-aime{border-color:var(--gold);animation:halo-aime 2.6s var(--ease) infinite}
+/* 2s = exactement le temps de présence exigé par VU_DELAI_MS (Communaute.jsx) : une
+   pulsation entière se joue, puis le halo s'efface. Les deux valeurs vont de pair. */
+.comm-card2.halo-aime{border-color:var(--gold);animation:halo-aime 2s var(--ease) infinite}
 /* Les deux à la fois : le commentaire l'emporte, c'est lui qui demande une action. La bordure
    doit suivre l'animation — sans cette seconde déclaration, `.halo-aime` la gardait dorée
    (même spécificité, écrite après) et la carte battait en rouge dans un cerne or. */

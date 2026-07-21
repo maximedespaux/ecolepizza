@@ -12,6 +12,17 @@ import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
 import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead } from "../api/apiClient.js";
 
 /**
+ * Temps de présence à l'écran avant qu'un halo « j'aime » s'éteigne.
+ *
+ * Cale sur la durée d'UNE pulsation dorée (voir .comm-card2.halo-aime dans app.css) : le halo
+ * joue son cycle en entier, puis s'efface. À 1,2 s il s'interrompait au milieu d'une
+ * respiration — on voyait quelque chose bouger sans avoir le temps de lire quoi.
+ *
+ * Si l'un des deux change, changer l'autre : c'est leur égalité qui produit l'effet.
+ */
+const VU_DELAI_MS = 2000;
+
+/**
  * Une carte de la galerie, et ses deux halos.
  *
  * LES DEUX SIGNAUX NE S'ÉTEIGNENT PAS AU MÊME MOMENT, et c'est tout l'objet de ce composant :
@@ -26,8 +37,7 @@ import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe
  *
  * D'où l'IntersectionObserver : « vu » veut dire vu, pas « présent dans une page qu'on a
  * ouverte ». Une carte tout en bas d'une galerie de 200, jamais atteinte par le défilement,
- * n'a pas été vue — son halo l'attendra. Le délai laisse le temps de le remarquer, sinon un
- * halo posé sur une carte déjà à l'écran s'éteindrait avant d'avoir servi à quoi que ce soit.
+ * n'a pas été vue — son halo l'attendra.
  */
 function CommCard({ recipe: s, children }) {
   const ref = useRef(null);
@@ -45,8 +55,8 @@ function CommCard({ recipe: s, children }) {
     let minuteur = null;
     const obs = new IntersectionObserver(([e]) => {
       if (e.isIntersecting) {
-        // 1,2 s à l'écran : le temps de le voir. Repartir avant ne compte pas.
-        minuteur = setTimeout(() => setAimeVu(true), 1200);
+        // Repartir avant la fin ne compte pas : le minuteur est annulé plus bas.
+        minuteur = setTimeout(() => setAimeVu(true), VU_DELAI_MS);
       } else if (minuteur) {
         clearTimeout(minuteur); minuteur = null;
       }
