@@ -1583,6 +1583,13 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
   .wiz-dock-s{display:block;font-size:11px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 @media(max-width:560px){.wiz-dot-l{display:none}.wiz-dot{min-width:40px}}
+/* Pastille de l'espace stagiaire (documents à signer / QCM à faire). Le bouton de menu est
+   déjà rouge quand il est actif : la pastille passe alors en blanc sur fond transparent
+   pour rester lisible, au lieu de disparaître dans l'aplat. */
+.stu-count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;
+  border-radius:99px;background:var(--ember1);color:#fff;font-size:10.5px;font-weight:800;line-height:1}
+.btn.primary .stu-count{background:#fff;color:var(--ember1)}
+
 /* ---- Prérequis Pizza Quest (organisme) ----------------------------------------------- */
 /* Une ligne par formation : on lit « celle-ci vient après celles-là » et on la modifie au
    même endroit. Le liseré à gauche rappelle la couleur de la formation. */

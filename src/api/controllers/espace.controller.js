@@ -314,12 +314,49 @@ const getMonEspace = async (req, res) => {
  * Communauté. Aucune formation avec point d'accès → débloqué (rien à bloquer). En erreur
  * on débloque (fail-open : on ne bloque jamais par bug).
  */
+/**
+ * Nombre de documents EN ATTENTE D'UNE ACTION du stagiaire — la pastille du menu.
+ *
+ * Comptent : les QCM non répondus, et les documents non signés que le stagiaire doit signer
+ * lui-même. Ne comptent PAS les documents seulement « à consulter » : rien ne trace leur
+ * lecture, la pastille resterait donc allumée à vie et on cesserait de la voir.
+ * Ni ceux signés par l'entreprise quand le stagiaire y est rattaché — ce n'est pas lui
+ * qui signe.
+ *
+ * Ne matérialise pas les QCM automatiques (releaseAutoQuizzes) : ce serait une écriture à
+ * chaque navigation. Un QCM du jour apparaît donc dans la pastille dès la page ouverte.
+ */
+async function pendingDocsCount(conn, learner, orgId) {
+    try {
+        const [rows] = await conn.query(
+            `SELECT id, type, template_slug, quiz_id FROM generated_document
+             WHERE learner_id = ? AND status IN ('ENVOYE','CONSULTE')`,
+            [learner.id]
+        );
+        if (!rows.length) return 0;
+        const orgSteps = await loadOrgSteps(orgId);
+        const hasCompany = !!learner.company_id;
+        return rows.filter((d) => {
+            if (d.quiz_id) return true;                                   // QCM à faire
+            if (hasCompany && companySignsDoc(orgSteps, d)) return false; // signé par l'entreprise
+            return d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d);
+        }).length;
+    } catch (e) {
+        if (isMissingSchema(e)) return 0;
+        console.error('Erreur comptage documents en attente :', e);
+        return 0; // une pastille absente vaut mieux qu'un menu en erreur
+    }
+}
+
 const getMyAccess = async (req, res) => {
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         // Pas de fiche stagiaire (intervenant, staff…) : on ne bloque pas.
-        if (!learner) return res.json({ data: { quest_unlocked: true } });
+        if (!learner) return res.json({ data: { quest_unlocked: true, pending_docs: 0 } });
+        // Pastille du menu : calculée pour TOUTES les sorties ci-dessous, sans quoi elle
+        // disparaîtrait dès qu'une formation est terminée ou qu'aucune n'est suivie.
+        const pending_docs = await pendingDocsCount(conn, learner, learner.organization_id);
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.financing, s.program_id,
                     DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
@@ -342,10 +379,10 @@ const getMyAccess = async (req, res) => {
                 if (c.complete) { finished = true; break; }
             }
         }
-        if (finished) return res.json({ data: { quest_unlocked: true } });
+        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs } });
 
         // AUCUNE formation → verrouillé (rien à débloquer tant qu'il n'est pas inscrit).
-        if (!enrollments.length) return res.json({ data: { quest_unlocked: false } });
+        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs } });
         const gating = [];
         for (const e of enrollments) {
             const g = await emargementGate(conn, e, learner.organization_id, agefice);
@@ -353,10 +390,10 @@ const getMyAccess = async (req, res) => {
         }
         // Inscrit : débloqué si aucune formation n'a de point d'accès, ou si au moins un est franchi.
         const quest_unlocked = gating.length === 0 || gating.some((g) => !g.locked);
-        res.json({ data: { quest_unlocked } });
+        res.json({ data: { quest_unlocked, pending_docs } });
     } catch (err) {
         console.error('Erreur accès stagiaire :', err);
-        res.json({ data: { quest_unlocked: true } });
+        res.json({ data: { quest_unlocked: true, pending_docs: 0 } });
     }
 };
 

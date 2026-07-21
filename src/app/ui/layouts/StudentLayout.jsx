@@ -2,7 +2,6 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { Outlet, Navigate, NavLink, useLocation } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
-import ChangePasswordModal from "../components/ChangePasswordModal.jsx";
 import ProfileModal from "../components/ProfileModal.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
@@ -56,14 +55,21 @@ function OutilsMenu({ locked }) {
 function StudentLayout() {
   const { user, isConnected, isLoading, logout } = useContext(UserContext);
   const loc = useLocation();
-  const [pwOpen, setPwOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [unlocked, setUnlocked] = useState(true); // fail-open : débloqué par défaut
+  const [pending, setPending] = useState(0);      // documents à signer / QCM à faire
   const [avatar, setAvatar] = useState(() => getAvatar(user?.id));
   // A-t-il franchi le point d'accès (breakpoint) d'une formation ? Débloque Pizza Quest + Outils.
   useEffect(() => {
     if (!user?.id) return;
-    getMyAccess().then((r) => setUnlocked(r?.data?.quest_unlocked !== false)).catch(() => setUnlocked(true));
+    // Relancé à chaque changement de page : la pastille se met donc à jour dès qu'un
+    // document est signé, sans rechargement.
+    getMyAccess()
+      .then((r) => {
+        setUnlocked(r?.data?.quest_unlocked !== false);
+        setPending(Number(r?.data?.pending_docs) || 0);
+      })
+      .catch(() => setUnlocked(true));
   }, [user?.id, loc.pathname]);
   useEffect(() => {
     const sync = () => setAvatar(getAvatar(user?.id));
@@ -94,8 +100,13 @@ function StudentLayout() {
           </div>
         </div>
         <nav style={{ display: "flex", gap: 6, marginLeft: 8 }}>
-          {/* Une seule entrée : documents reçus et formations vivent sur la même page. */}
-          <NavLink to="/mon-espace" className={navClass}>Mes documents</NavLink>
+          {/* Une seule entrée : documents reçus et formations vivent sur la même page.
+              La pastille compte ce qui attend une action — signature ou QCM. */}
+          <NavLink to="/mon-espace" className={navClass}
+            title={pending > 0 ? `${pending} document${pending > 1 ? "s" : ""} à consulter ou signer` : undefined}>
+            Mes documents
+            {pending > 0 && <span className="stu-count">{pending}</span>}
+          </NavLink>
           {/* Pizza Quest verrouillé tant que les documents ne sont pas signés (feature « accès »).
               La Boutique reste accessible — elle n'est PAS dans GATED_PATHS : c'est un service,
               pas du contenu pédagogique. */}
@@ -109,7 +120,8 @@ function StudentLayout() {
         </nav>
         <div className="spacer" />
         <ThemeToggle />
-        <button className="btn sm ghost" onClick={() => setPwOpen(true)} title="Changer mon mot de passe"><Icon name="key" size={15} /> Mot de passe</button>
+        {/* Le changement de mot de passe vit dans le profil (onglet Compte) : le doubler
+            dans la barre en faisait la seconde action la plus visible de l'espace. */}
         <button className="avatar" title="Mon profil" onClick={() => setProfileOpen(true)}
           style={{ border: "none", cursor: "pointer", ...(avatar ? { background: avatar.color, fontSize: 18 } : null) }}>
           {avatar ? avatar.emoji : initials(user?.first_name, user?.last_name)}
@@ -126,7 +138,6 @@ function StudentLayout() {
         )}
       </main>
 
-      {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </div>
   );
