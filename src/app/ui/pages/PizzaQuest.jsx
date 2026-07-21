@@ -39,6 +39,33 @@ import { worldXp, chapterXpEarned, xpOfQuestion } from "../lib/questxp.js";
 const chaptersFor = (w) => (w && Array.isArray(w.dbChapters) ? w.dbChapters : []);
 const chaptersLoading = (w) => !!w && w.dbChapters === null;
 
+/**
+ * Défilement horizontal animé, en ease-in-out.
+ *
+ * Fait à la main plutôt qu'avec `scrollTo({ behavior: "smooth" })` : la courbe native n'est
+ * ni réglable ni la même d'un navigateur à l'autre, et la durée nous échappe. Ici le trajet
+ * démarre doucement, prend de la vitesse au milieu et se pose en fin de course — c'est ce
+ * qui donne à lire le chemin parcouru plutôt qu'un saut.
+ *
+ * Renvoie une fonction d'ANNULATION (et non l'identifiant de la première image : chaque
+ * image en demande une nouvelle, annuler la première ne stopperait rien une fois lancée).
+ */
+function animerDefilement(boite, arrivee, duree = 800) {
+    const depart = boite.scrollLeft;
+    const delta = arrivee - depart;
+    const t0 = performance.now();
+    // Cubique : accélère jusqu'à mi-parcours, freine ensuite.
+    const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    let id = 0;
+    const pas = (maintenant) => {
+        const t = Math.min(1, (maintenant - t0) / duree);
+        boite.scrollLeft = depart + delta * ease(t);
+        if (t < 1) id = requestAnimationFrame(pas);
+    };
+    id = requestAnimationFrame(pas);
+    return () => cancelAnimationFrame(id);
+}
+
 /** « 4 min 05 » / « 45 s » — un compte à rebours se lit, il ne se calcule pas. */
 function msEnClair(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -507,22 +534,38 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
      et le stagiaire arrivait devant des chapitres déjà terminés, sans rien à y faire.
      On fait défiler LE CONTENEUR (et non `scrollIntoView`, qui déplacerait aussi la page
      verticalement) ; les positions sont mesurées à l'écran, donc indépendantes du parent
-     positionné. Instantané à l'arrivée, animé ensuite — quand un chapitre vient d'être
-     terminé, voir la carte avancer d'un cran dit ce qui s'est passé. */
+     positionné.
+     À l'ouverture, le chemin part du DÉBUT et remonte le parcours jusqu'au chapitre en
+     cours : on voit défiler ce qui est déjà acquis avant de s'arrêter là où il reste à
+     faire. Ensuite, un chapitre terminé fait simplement avancer la carte d'un cran. */
   const pathRef = useRef(null);
   const nodeRef = useRef(null);
   const dejaPlace = useRef(false);
+  const animRef = useRef(null); // fonction d'annulation de l'animation en cours
   useEffect(() => { dejaPlace.current = false; }, [world.code]);
   useEffect(() => {
     const boite = pathRef.current, cible = nodeRef.current;
     if (!boite || !cible) return;
-    const b = boite.getBoundingClientRect(), c = cible.getBoundingClientRect();
-    const delta = (c.left + c.width / 2) - (b.left + b.width / 2);
-    if (Math.abs(delta) < 1) return;
-    const doux = dejaPlace.current
-      && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    boite.scrollBy({ left: delta, behavior: doux ? "smooth" : "auto" });
+    const premier = !dejaPlace.current;
     dejaPlace.current = true;
+
+    // Départ du début pour la première mise en place : c'est ce trajet qu'on donne à voir.
+    if (premier) boite.scrollLeft = 0;
+
+    // Un cran de rendu avant de mesurer : au premier passage, les libellés viennent d'être
+    // posés et les positions ne sont pas encore définitives.
+    const id = requestAnimationFrame(() => {
+      const b = boite.getBoundingClientRect(), c = cible.getBoundingClientRect();
+      const delta = (c.left + c.width / 2) - (b.left + b.width / 2);
+      const arrivee = boite.scrollLeft + delta;
+      if (Math.abs(delta) < 1) return;
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+        boite.scrollLeft = arrivee;
+        return;
+      }
+      animRef.current = animerDefilement(boite, arrivee, premier ? 900 : 450);
+    });
+    return () => { cancelAnimationFrame(id); animRef.current?.(); };
   }, [world.code, courant, chapters.length]);
 
   return (
