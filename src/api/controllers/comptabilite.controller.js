@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 const {
     EXPENSE_CATEGORIES, CATEGORY_LABELS, DEFAULT_DIVIDENDE_CIBLE,
@@ -257,6 +258,12 @@ const createRevenue = async (req, res) => {
         return res.status(422).json({ error: 'Une commission doit être rattachée à un partenaire.' });
     }
     try {
+        // `partner_id` vient du corps : listRevenues joint `partner` sans filtre pour afficher
+        // son nom, un identifiant étranger ferait donc apparaître le partenaire d'un autre
+        // organisme dans nos produits.
+        if (!await belongsToOrg(db.promise(), 'partner', partner_id, req.user.organization_id)) {
+            return res.status(422).json({ error: 'Partenaire inconnu.' });
+        }
         const id = crypto.randomUUID();
         await db.promise().query(
             `INSERT INTO revenue_extra (id, organization_id, date, label, category, partner_id, amount, note)
@@ -291,6 +298,11 @@ const updateRevenue = async (req, res) => {
     const keys = Object.keys(fields);
     if (!keys.length) return res.status(400).json({ message: 'Aucun champ à mettre à jour' });
     try {
+        // Le WHERE protège bien la LIGNE modifiée ; il ne dit rien du partenaire qu'on y pose.
+        if (fields.partner_id !== undefined
+            && !await belongsToOrg(db.promise(), 'partner', fields.partner_id, req.user.organization_id)) {
+            return res.status(422).json({ error: 'Partenaire inconnu.' });
+        }
         const [r] = await db.promise().query(
             `UPDATE revenue_extra SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND organization_id = ?`,
             [...keys.map((k) => fields[k]), req.params.id, req.user.organization_id]

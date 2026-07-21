@@ -2,6 +2,7 @@ const db = require('../config/database.js');
 const { computeDocParcours, companyParcours } = require('../lib/parcours.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
+const { belongsToOrg } = require('../lib/tenancy.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 
 const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
@@ -169,6 +170,19 @@ const createEnrollment = async (req, res) => {
              WHERE s.id = ? AND s.organization_id = ?`,
             [session_id, orgId]
         );
+
+        // Les trois clés étrangères viennent du CORPS de la requête : sans ce contrôle, on
+        // crée chez soi un dossier qui pointe vers le stagiaire, la session ou l'entreprise
+        // d'un AUTRE organisme. La lecture suivante joint `learner`, `training_session` et
+        // `training_program` sans filtre — pour aller chercher un nom — et afficherait donc
+        // le nom d'un stagiaire étranger dans notre pipeline.
+        // `l` et `sess` étaient déjà chargés avec le bon filtre, mais leur résultat n'était
+        // jamais testé : la garde était écrite sans être appliquée.
+        if (!l) return res.status(422).json({ error: 'Stagiaire inconnu.' });
+        if (!sess) return res.status(422).json({ error: 'Session inconnue.' });
+        if (!await belongsToOrg(conn, 'company', company_id, orgId)) {
+            return res.status(422).json({ error: 'Entreprise inconnue.' });
+        }
 
         // Le financement (type de devis) suit celui du stagiaire s'il n'est pas fourni.
         let financing = req.body.financing;

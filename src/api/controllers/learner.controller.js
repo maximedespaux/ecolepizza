@@ -178,7 +178,10 @@ const updateLearner = async (req, res) => {
     try {
         const conn = db.promise();
         const [rows] = await conn.query(
-            'SELECT company_id FROM learner WHERE id = ? AND organization_id = ?',
+            // `financing` est lu pour savoir s'il CHANGE réellement (voir la propagation en
+            // fin de fonction) : sans lui, la comparaison porterait sur `undefined` et la
+            // garde laisserait tout passer.
+            'SELECT company_id, financing FROM learner WHERE id = ? AND organization_id = ?',
             [learnerId, organizationId]
         );
         if (rows.length === 0) {
@@ -249,14 +252,31 @@ const updateLearner = async (req, res) => {
             } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
         }
 
-        // Le « type de devis » (financement) pilote le parcours documentaire, qui est
-        // calculé à partir de enrollment.financing. On propage donc le changement à
-        // tous les dossiers du stagiaire pour que le parcours (Devis particulier /
-        // entreprise, contrat / convention…) reflète immédiatement le nouveau type.
-        if (body.financing === 'PARTICULIER' || body.financing === 'PROFESSIONNEL') {
+        // Le « type de devis » (financement) pilote le parcours documentaire, calculé à partir
+        // de enrollment.financing. On propage donc un CHANGEMENT aux dossiers concernés — mais
+        // sous deux gardes, absentes jusqu'ici.
+        //
+        // 1. SEULEMENT SI LA VALEUR A CHANGÉ. Le formulaire renvoie tous les champs à chaque
+        //    enregistrement : sans cette comparaison, corriger un numéro de téléphone
+        //    réécrivait le financement de tous les dossiers de la personne.
+        //
+        // 2. JAMAIS SUR UN DOSSIER PORTÉ PAR UNE ENTREPRISE. Un dossier rattaché à un
+        //    employeur est PROFESSIONNEL par construction, avec une convention déjà signée et
+        //    des documents de groupe émis. Le faire basculer en PARTICULIER depuis la fiche
+        //    personne changeait son parcours sous lui : les documents signés ne correspondaient
+        //    plus aux étapes attendues et la progression retombait, sans un mot ni une trace.
+        //
+        // C'est le même principe que le correctif company_id : ce que porte un dossier ne se
+        // décide pas depuis la fiche de la personne.
+        const financingAvant = rows[0].financing;
+        const financingApres = body.financing;
+        const aChange = (financingApres === 'PARTICULIER' || financingApres === 'PROFESSIONNEL')
+            && financingApres !== financingAvant;
+        if (aChange) {
             await conn.query(
-                'UPDATE enrollment SET financing = ? WHERE learner_id = ? AND organization_id = ?',
-                [body.financing, learnerId, organizationId]
+                `UPDATE enrollment SET financing = ?
+                  WHERE learner_id = ? AND organization_id = ? AND company_id IS NULL`,
+                [financingApres, learnerId, organizationId]
             );
         }
 

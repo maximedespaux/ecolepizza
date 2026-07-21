@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 
 // La table material_sale porte-t-elle le lien vers la facture (migration 069) ?
@@ -43,7 +44,7 @@ const getSales = async (req, res) => {
 /**
  * POST /api/ventes — enregistre une vente.
  */
-const createSale = (req, res) => {
+const createSale = async (req, res) => {
     const { date, product, category, quantity = 1, amount, learner_id, note } = req.body;
     if (!product || amount === undefined || amount === '') {
         return res.status(422).json({ error: 'Produit et montant requis' });
@@ -56,6 +57,13 @@ const createSale = (req, res) => {
     const qty = Number.parseInt(quantity, 10);
     if (!Number.isInteger(qty) || qty < 1 || qty > 100000) {
         return res.status(422).json({ error: 'Quantité invalide (entier positif requis).' });
+    }
+    // `learner_id` vient du corps : sans ce contrôle, la vente pointe vers un stagiaire d'un
+    // autre organisme, dont le nom s'afficherait ensuite dans notre liste de ventes (getSales
+    // joint `learner` sans filtre pour récupérer le nom).
+    const conn = db.promise();
+    if (!await belongsToOrg(conn, 'learner', learner_id, req.user.organization_id)) {
+        return res.status(422).json({ error: 'Stagiaire inconnu.' });
     }
     db.query(
         `INSERT INTO material_sale (id, organization_id, date, product, category, quantity, amount, learner_id, note)

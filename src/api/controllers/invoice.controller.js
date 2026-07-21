@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 const { buildCII, buildFacturXPdf } = require('../lib/facturx.js');
 
@@ -14,11 +15,6 @@ function validAmount(v) {
 }
 
 // Vérifie qu'un id référencé (entreprise, dossier) appartient bien à l'organisme.
-async function belongsToOrg(conn, table, id, orgId) {
-    if (!id) return true; // null autorisé
-    const [[row]] = await conn.query(`SELECT 1 AS ok FROM ${table} WHERE id = ? AND organization_id = ? LIMIT 1`, [id, orgId]);
-    return !!row;
-}
 
 // Assemble les données de facturation (vendeur, client, ligne) pour Factur-X.
 async function loadInvoiceData(conn, orgId, invoiceId) {
