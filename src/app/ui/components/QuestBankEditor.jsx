@@ -191,6 +191,16 @@ function QuestionRow({ q, opts, difficulties, onEdit, onDelete }) {
 
 /* ---- Édition d'une question ----------------------------------------------------------- */
 
+/**
+ * Éditeur d'une question, avec APERÇU EN DIRECT de ce que verra le stagiaire.
+ *
+ * L'aperçu est le cœur de cet écran : on écrit une question pour quelqu'un d'autre, et sans
+ * le rendu on ne voit pas ce qui compte — un leurre plus long que la bonne réponse, une
+ * explication qui répète l'énoncé, un intitulé illisible une fois les choix mélangés.
+ *
+ * Le formulaire n'affiche que les champs du type choisi : proposer des paires d'association
+ * sous un vrai/faux invite à les remplir pour rien.
+ */
 function QuestionModal({ question, options, difficulties, onClose, onSave }) {
   const [type, setType] = useState(question?.type || "QCM");
   const [text, setText] = useState(question?.text || "");
@@ -200,7 +210,6 @@ function QuestionModal({ question, options, difficulties, onClose, onSave }) {
   const [xp, setXp] = useState(question?.xp ?? "");
   const [active, setActive] = useState(question ? !!question.active : true);
   const [vf, setVf] = useState(question?.vf_answer ? "1" : "0");
-  // QCM : liste de choix + index du bon. ASSOC : liste de paires.
   const [choices, setChoices] = useState(() => {
     const c = options.filter((o) => !o.match_text).map((o) => o.text);
     return c.length ? c : ["", ""];
@@ -210,149 +219,281 @@ function QuestionModal({ question, options, difficulties, onClose, onSave }) {
     const p = options.filter((o) => o.match_text).map((o) => [o.text, o.match_text]);
     return p.length ? p : [["", ""], ["", ""]];
   });
-  const [err, setErr] = useState(null);
+
+  // Échap ferme, comme partout ailleurs dans l'application.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const diff = difficulties.find((d) => d.id === diffId) || null;
+  // XP effectif, résolu comme au jeu : valeur propre > difficulté > socle.
+  const xpEff = xp !== "" && xp != null ? Number(xp) : (diff ? diff.xp : 10);
+  const xpFrom = xp !== "" && xp != null ? "propre à la question" : diff ? `hérité de « ${diff.name} »` : "valeur par défaut";
+
+  /* Ce qui manque pour pouvoir enregistrer. On l'affiche EN CONTINU plutôt qu'au clic :
+     découvrir la raison d'un refus après coup fait recommencer la lecture du formulaire. */
+  const manque = [];
+  if (!text.trim()) manque.push("l'énoncé");
+  if (type === "QCM") {
+    const remplis = choices.filter((c) => c.trim()).length;
+    if (remplis < 2) manque.push("au moins deux choix");
+    else if (!choices[correct] || !choices[correct].trim()) manque.push("désigner la bonne réponse");
+  }
+  if (type === "ASSOC" && pairs.filter(([a, b]) => a.trim() && b.trim()).length < 2) {
+    manque.push("au moins deux paires complètes");
+  }
+  const pret = manque.length === 0;
 
   function submit(e) {
     e.preventDefault();
-    setErr(null);
+    if (!pret) return;
     const base = {
       type, text: text.trim(), explanation: expl.trim() || null, source: src.trim() || null,
       difficulty_id: diffId || null, xp: xp === "" ? null : Number(xp), active,
     };
-    if (!base.text) return setErr("Énoncé requis.");
     if (type === "VF") return onSave({ ...base, vf_answer: vf === "1" });
     if (type === "ASSOC") {
-      const p = pairs.map(([a, b]) => ({ text: a.trim(), match_text: b.trim() })).filter((x) => x.text && x.match_text);
-      if (p.length < 2) return setErr("Une association demande au moins deux paires complètes.");
-      return onSave({ ...base, pairs: p });
+      return onSave({
+        ...base,
+        pairs: pairs.map(([a, b]) => ({ text: a.trim(), match_text: b.trim() })).filter((x) => x.text && x.match_text),
+      });
     }
-    const c = choices.map((x) => x.trim()).filter(Boolean);
-    if (c.length < 2) return setErr("Un QCM demande au moins deux choix.");
-    if (correct >= c.length) return setErr("Désignez la bonne réponse.");
-    onSave({ ...base, choices: c, correct_index: correct });
+    // Les choix vides sont retirés : l'index de la bonne réponse doit suivre le décalage.
+    const gardes = choices.map((c, i) => ({ c: c.trim(), i })).filter((x) => x.c);
+    const idx = gardes.findIndex((x) => x.i === correct);
+    onSave({ ...base, choices: gardes.map((x) => x.c), correct_index: Math.max(0, idx) });
   }
+
+  /* Déplacement d'une ligne (choix ou paire) : l'ordre de saisie est celui de l'aperçu et,
+     pour une association, celui des colonnes. On garde la bonne réponse alignée. */
+  const move = (arr, setArr, i, d, onMoved) => {
+    const j = i + d;
+    if (j < 0 || j >= arr.length) return;
+    const next = [...arr];
+    [next[i], next[j]] = [next[j], next[i]];
+    setArr(next);
+    onMoved?.(i, j);
+  };
+  const moveChoice = (i, d) => move(choices, setChoices, i, d, (a, b) => {
+    setCorrect((c) => (c === a ? b : c === b ? a : c));
+  });
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
-        <form onSubmit={submit}>
-          <h3 style={{ marginTop: 0 }}>{question ? "Modifier la question" : "Nouvelle question"}</h3>
-
-          <div className="seg" style={{ marginBottom: 12 }}>
-            {TYPES.map((t) => (
-              <button key={t.v} type="button" className={"seg-btn" + (type === t.v ? " on" : "")}
-                onClick={() => setType(t.v)}><Icon name={t.ic} size={13} /> {t.label}</button>
-            ))}
+      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+        <form onSubmit={submit} style={{ display: "contents" }}>
+          <div className="mhead">
+            <h3>{question ? "Modifier la question" : "Nouvelle question"}</h3>
+            <button type="button" className="x" onClick={onClose} aria-label="Fermer">×</button>
           </div>
 
-          <div className="field">
-            <label>Énoncé</label>
-            <textarea className="inp" rows={2} value={text} onChange={(e) => setText(e.target.value)}
-              placeholder="Que mesure le « W » d'une farine ?" />
-          </div>
-
-          {type === "QCM" && (
-            <div className="field">
-              <label>Choix — cochez la bonne réponse</label>
-              {choices.map((c, i) => (
-                <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                  <input type="radio" name="correct" checked={correct === i} onChange={() => setCorrect(i)}
-                    title="Bonne réponse" />
-                  <input className="inp" value={c} placeholder={`Choix ${i + 1}`}
-                    onChange={(e) => setChoices(choices.map((x, j) => (j === i ? e.target.value : x)))} />
-                  {choices.length > 2 && (
-                    <button type="button" className="iconbtn del" title="Retirer"
-                      onClick={() => {
-                        setChoices(choices.filter((_, j) => j !== i));
-                        if (correct >= i && correct > 0) setCorrect(correct - 1);
-                      }}><Icon name="x" size={13} /></button>
-                  )}
-                </div>
+          <div className="mbody">
+            <div className="seg" style={{ marginBottom: 14 }}>
+              {TYPES.map((t) => (
+                <button key={t.v} type="button" className={"seg-btn" + (type === t.v ? " on" : "")}
+                  onClick={() => setType(t.v)}><Icon name={t.ic} size={13} /> {t.label}</button>
               ))}
-              <button type="button" className="btn sm ghost" onClick={() => setChoices([...choices, ""])}>
-                <Icon name="plus" size={13} /> Ajouter un choix
-              </button>
-              {/* Le jeu mélange les choix à l'affichage : la position ne trahit pas la réponse. */}
-              <p className="hint" style={{ marginTop: 6 }}>
-                Les choix sont mélangés à l'écran. Évitez les leurres absurdes : un mauvais choix
-                doit rester crédible, sinon la question ne teste plus rien.
-              </p>
             </div>
-          )}
 
-          {type === "VF" && (
-            <div className="field">
-              <label>L'affirmation est…</label>
-              <div className="seg">
-                <button type="button" className={"seg-btn" + (vf === "1" ? " on" : "")} onClick={() => setVf("1")}>Vraie</button>
-                <button type="button" className={"seg-btn" + (vf === "0" ? " on" : "")} onClick={() => setVf("0")}>Fausse</button>
+            <div className="qz-grid">
+              {/* ---- Colonne de saisie ---- */}
+              <div>
+                <div className="field">
+                  <label>Énoncé</label>
+                  <textarea className="inp" rows={2} value={text} onChange={(e) => setText(e.target.value)}
+                    placeholder="Que mesure le « W » d'une farine ?" autoFocus />
+                </div>
+
+                {type === "QCM" && (
+                  <div className="field">
+                    <label>Choix <span className="field-opt">— cliquez sur celui qui est correct</span></label>
+                    {choices.map((c, i) => (
+                      <div key={i} className={"qz-choice" + (correct === i ? " ok" : "")}>
+                        <button type="button" className="qz-mark" onClick={() => setCorrect(i)}
+                          title={correct === i ? "Bonne réponse" : "Désigner comme bonne réponse"}
+                          aria-label="Bonne réponse" aria-pressed={correct === i}>
+                          <Icon name={correct === i ? "check-circle" : "circle"} size={16} />
+                        </button>
+                        <input className="inp" value={c} placeholder={`Choix ${i + 1}`} maxLength={500}
+                          onChange={(e) => setChoices(choices.map((x, j) => (j === i ? e.target.value : x)))}
+                          onKeyDown={(e) => {
+                            // Entrée ajoute le choix suivant : on saisit une liste au clavier,
+                            // sans repasser par la souris entre chaque ligne.
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              if (i === choices.length - 1) setChoices([...choices, ""]);
+                            }
+                          }} />
+                        <span className="qz-tools">
+                          <button type="button" className="iconbtn" title="Monter" disabled={i === 0}
+                            onClick={() => moveChoice(i, -1)}><Icon name="arrow-up" size={12} /></button>
+                          <button type="button" className="iconbtn" title="Descendre" disabled={i === choices.length - 1}
+                            onClick={() => moveChoice(i, 1)}><Icon name="arrow-down" size={12} /></button>
+                          <button type="button" className="iconbtn del" title="Retirer" disabled={choices.length <= 2}
+                            onClick={() => {
+                              setChoices(choices.filter((_, j) => j !== i));
+                              if (correct >= i && correct > 0) setCorrect(correct - 1);
+                            }}><Icon name="x" size={12} /></button>
+                        </span>
+                      </div>
+                    ))}
+                    <button type="button" className="btn sm ghost" onClick={() => setChoices([...choices, ""])}>
+                      <Icon name="plus" size={13} /> Ajouter un choix
+                    </button>
+                    <p className="hint" style={{ marginTop: 6 }}>
+                      Les choix sont mélangés à l'écran : la position ne trahit rien. Un leurre doit
+                      rester crédible — une valeur plausible du métier, sinon la question ne teste plus rien.
+                    </p>
+                  </div>
+                )}
+
+                {type === "VF" && (
+                  <div className="field">
+                    <label>L'affirmation est…</label>
+                    <div className="seg">
+                      <button type="button" className={"seg-btn" + (vf === "1" ? " on" : "")} onClick={() => setVf("1")}>Vraie</button>
+                      <button type="button" className={"seg-btn" + (vf === "0" ? " on" : "")} onClick={() => setVf("0")}>Fausse</button>
+                    </div>
+                    <p className="hint" style={{ marginTop: 6 }}>
+                      Équilibrez vrais et faux sur l'ensemble du chapitre : si presque tout est vrai,
+                      répondre « vrai » partout suffit à passer.
+                    </p>
+                  </div>
+                )}
+
+                {type === "ASSOC" && (
+                  <div className="field">
+                    <label>Paires à relier</label>
+                    {pairs.map(([a, b], i) => (
+                      <div key={i} className="qz-pair">
+                        <input className="inp" value={a} placeholder="Terme" maxLength={500}
+                          onChange={(e) => setPairs(pairs.map((p, j) => (j === i ? [e.target.value, p[1]] : p)))} />
+                        <Icon name="chevron-right" size={13} />
+                        <input className="inp" value={b} placeholder="Correspondance" maxLength={500}
+                          onChange={(e) => setPairs(pairs.map((p, j) => (j === i ? [p[0], e.target.value] : p)))} />
+                        <span className="qz-tools">
+                          <button type="button" className="iconbtn" title="Monter" disabled={i === 0}
+                            onClick={() => move(pairs, setPairs, i, -1)}><Icon name="arrow-up" size={12} /></button>
+                          <button type="button" className="iconbtn" title="Descendre" disabled={i === pairs.length - 1}
+                            onClick={() => move(pairs, setPairs, i, 1)}><Icon name="arrow-down" size={12} /></button>
+                          <button type="button" className="iconbtn del" title="Retirer" disabled={pairs.length <= 2}
+                            onClick={() => setPairs(pairs.filter((_, j) => j !== i))}><Icon name="x" size={12} /></button>
+                        </span>
+                      </div>
+                    ))}
+                    <button type="button" className="btn sm ghost" onClick={() => setPairs([...pairs, ["", ""]])}>
+                      <Icon name="plus" size={13} /> Ajouter une paire
+                    </button>
+                  </div>
+                )}
+
+                <div className="field">
+                  <label>Explication <span className="field-opt">— affichée après la réponse</span></label>
+                  <textarea className="inp" rows={3} value={expl} onChange={(e) => setExpl(e.target.value)}
+                    placeholder="Le pourquoi : sans lui, le stagiaire retient la bonne case et pas la raison." />
+                </div>
+
+                <div className="qz-meta">
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Source</label>
+                    <input className="inp" value={src} maxLength={255} onChange={(e) => setSrc(e.target.value)}
+                      placeholder="Manuel Niveau I, p. 17" />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Difficulté</label>
+                    <select value={diffId} onChange={(e) => setDiffId(e.target.value)}>
+                      <option value="">—</option>
+                      {difficulties.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.xp} XP)</option>)}
+                    </select>
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>XP <span className="field-opt">— vide = hérité</span></label>
+                    <input className="inp" type="number" min="0" value={xp} onChange={(e) => setXp(e.target.value)}
+                      placeholder={diff ? String(diff.xp) : "10"} />
+                  </div>
+                </div>
+                <p className="hint" style={{ marginTop: 6 }}>
+                  Cette question vaudra <b>{xpEff} XP</b> <span className="field-opt">({xpFrom})</span>.
+                </p>
+
+                <label className="qz-active">
+                  <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+                  Active <span className="field-opt">— décochez pour la retirer du jeu sans la supprimer</span>
+                </label>
               </div>
-            </div>
-          )}
 
-          {type === "ASSOC" && (
-            <div className="field">
-              <label>Paires à relier</label>
-              {pairs.map(([a, b], i) => (
-                <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                  <input className="inp" value={a} placeholder="Terme"
-                    onChange={(e) => setPairs(pairs.map((p, j) => (j === i ? [e.target.value, p[1]] : p)))} />
-                  <Icon name="chevron-right" size={13} />
-                  <input className="inp" value={b} placeholder="Correspondance"
-                    onChange={(e) => setPairs(pairs.map((p, j) => (j === i ? [p[0], e.target.value] : p)))} />
-                  {pairs.length > 2 && (
-                    <button type="button" className="iconbtn del" title="Retirer"
-                      onClick={() => setPairs(pairs.filter((_, j) => j !== i))}><Icon name="x" size={13} /></button>
-                  )}
-                </div>
-              ))}
-              <button type="button" className="btn sm ghost" onClick={() => setPairs([...pairs, ["", ""]])}>
-                <Icon name="plus" size={13} /> Ajouter une paire
-              </button>
-            </div>
-          )}
-
-          <div className="field">
-            <label>Explication <span className="hint">— affichée après la réponse</span></label>
-            <textarea className="inp" rows={2} value={expl} onChange={(e) => setExpl(e.target.value)}
-              placeholder="Le pourquoi : sans lui, le stagiaire retient la bonne case et pas la raison." />
-          </div>
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <div className="field" style={{ flex: 1, minWidth: 170 }}>
-              <label>Source</label>
-              <input className="inp" value={src} onChange={(e) => setSrc(e.target.value)} placeholder="Manuel Niveau I, p. 17" />
-            </div>
-            <div className="field" style={{ width: 150 }}>
-              <label>Difficulté</label>
-              <select value={diffId} onChange={(e) => setDiffId(e.target.value)}>
-                <option value="">—</option>
-                {difficulties.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-            <div className="field" style={{ width: 120 }}>
-              <label>XP</label>
-              <input className="inp" type="number" min="0" value={xp} onChange={(e) => setXp(e.target.value)}
-                placeholder={difficulties.find((d) => d.id === diffId)?.xp ?? 10} />
+              {/* ---- Aperçu stagiaire ---- */}
+              <aside className="qz-preview">
+                <div className="qz-preview-h"><Icon name="eye" size={13} /> Vu par le stagiaire</div>
+                <QuestionPreview type={type} text={text} choices={choices} correct={correct}
+                  vf={vf} pairs={pairs} expl={expl} src={src} diff={diff} xp={xpEff} />
+              </aside>
             </div>
           </div>
-          <p className="hint" style={{ marginTop: -4 }}>
-            XP vide = celui de la difficulté choisie. Le renseigner ne vaut que pour cette question.
-          </p>
 
-          <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
-            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-            Active <span className="hint">— décochez pour la retirer du jeu sans la supprimer</span>
-          </label>
-
-          {err && <p className="hint" style={{ color: "var(--ember1)", marginTop: 8 }}>{err}</p>}
-
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+          <div className="mfoot">
+            {/* Ce qui bloque, dit avant le clic plutôt qu'après. */}
+            <span className="hint" style={{ marginRight: "auto", color: pret ? undefined : "var(--ember1)" }}>
+              {pret ? "Prêt à enregistrer." : `Il manque : ${manque.join(", ")}.`}
+            </span>
             <button type="button" className="btn ghost" onClick={onClose}>Annuler</button>
-            <button type="submit" className="btn primary">Enregistrer</button>
+            <button type="submit" className="btn primary" disabled={!pret}>Enregistrer</button>
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Rendu de la question tel qu'il apparaîtra en jeu. Volontairement fidèle sur ce qui
+ * influence la rédaction (longueur des choix, ton de l'explication) et non sur l'habillage.
+ * La bonne réponse est ici SIGNALÉE, ce qu'elle n'est évidemment pas en jeu : l'aperçu sert
+ * à relire, pas à simuler la partie.
+ */
+function QuestionPreview({ type, text, choices, correct, vf, pairs, expl, src, diff, xp }) {
+  const vide = !text.trim();
+  return (
+    <div className="qz-preview-body">
+      <p className="qz-pv-q">{vide ? <span className="field-opt">L'énoncé apparaîtra ici…</span> : text}</p>
+      <p className="qz-pv-meta">
+        {diff && <span className="badge n" style={diff.color ? { color: diff.color } : undefined}>{diff.name}</span>}
+        <span>{xp} XP</span>
+      </p>
+
+      {type === "QCM" && (
+        <div className="qz-pv-choices">
+          {choices.map((c, i) => (
+            c.trim() ? <div key={i} className={"qz-pv-choice" + (correct === i ? " ok" : "")}>{c}</div> : null
+          ))}
+        </div>
+      )}
+
+      {type === "VF" && (
+        <div className="qz-pv-choices">
+          {["Vrai", "Faux"].map((lbl, i) => (
+            <div key={lbl} className={"qz-pv-choice" + ((vf === "1" ? 0 : 1) === i ? " ok" : "")}>{lbl}</div>
+          ))}
+        </div>
+      )}
+
+      {type === "ASSOC" && (
+        <div className="qz-pv-pairs">
+          {pairs.filter(([a, b]) => a.trim() && b.trim()).map(([a, b], i) => (
+            <div key={i} className="qz-pv-pair"><span>{a}</span><Icon name="chevron-right" size={11} /><span>{b}</span></div>
+          ))}
+        </div>
+      )}
+
+      {(expl.trim() || src.trim()) && (
+        <div className="qz-pv-after">
+          <b>Bravo !</b>
+          {expl.trim() && <p>{expl}</p>}
+          {src.trim() && <p className="field-opt">{src}</p>}
+        </div>
+      )}
     </div>
   );
 }

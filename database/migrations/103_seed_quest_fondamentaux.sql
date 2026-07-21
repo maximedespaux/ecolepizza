@@ -23,7 +23,7 @@
    Commentaires en blocs et type uuid : mêmes raisons qu'en 101 et 102. */
 
 /* ---- Cibles de l'import ------------------------------------------------------------ */
-SET @org  = 'REMPLACER-PAR-UUID-ORGANISME';
+SET @org  = '6df7dddf-7df8-11f1-8ce4-525400cc2535';
 SET @prog = 'REMPLACER-PAR-UUID-FORMATION';
 
 /* Difficulté « Normal » si elle existe déjà (créée par 102) ; sinon les questions prennent
