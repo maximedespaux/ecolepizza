@@ -167,6 +167,11 @@ function StudentLayout() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      {/* En-tête ET tiroir dans un même bloc collant : c'est ce bloc qui colle, pas chacun de
+          son côté. Le tiroir suit donc la barre sans qu'on ait à lui donner un décalage en
+          pixels — un `top` en dur devrait valoir la hauteur exacte de la barre, qui change
+          avec le palier (la marque disparaît à 560px) et avec la taille de police du système. */}
+      <div className="stu-head">
       <header className="topbar stu-topbar">
         <div className="brand stu-brand" style={{ padding: 0, gap: 10 }}>
           <img src={LOGO} alt="École Pizza" style={{ width: 36, height: 36, borderRadius: 9, background: "#fff", padding: 3, objectFit: "contain" }} />
@@ -224,8 +229,6 @@ function StudentLayout() {
       {/* Tiroir de navigation (écrans étroits). Rendu seulement à l'ouverture : fermé, il ne
           coûte rien et ne peut pas capter le focus au clavier. */}
       {menuOpen && (
-        <>
-          <div className="stu-scrim" onClick={() => setMenuOpen(false)} />
           <div className="stu-drawer" role="navigation">
             <DrawerLink to="/mon-espace" ic="file-text" label="Mes documents" badge={pending} />
             <DrawerLink to="/pizza-quest" ic="pizza" label="Pizza Quest" locked={!unlocked} />
@@ -235,8 +238,11 @@ function StudentLayout() {
             <div className="stu-drawer-sep" />
             {extras.map((e) => <DrawerLink key={e.to} {...e} locked={e.gated && !unlocked} />)}
           </div>
-        </>
       )}
+      </div>
+      {/* Le voile est HORS du bloc collant : il doit couvrir tout l'écran, pas seulement la
+          hauteur de l'en-tête. */}
+      {menuOpen && <div className="stu-scrim" onClick={() => setMenuOpen(false)} />}
 
       <main className="content" style={{ maxWidth: 900 }}>
         {!unlocked && GATED_PATHS.some((p) => loc.pathname.startsWith(p)) ? (

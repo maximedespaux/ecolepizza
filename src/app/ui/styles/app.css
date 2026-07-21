@@ -1799,6 +1799,11 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
    doit pas faire disparaître l'alerte. Un point suffit — le compte exact est dans le tiroir. */
 .stu-burger-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;
   background:var(--ember1);box-shadow:0 0 0 2px var(--surface)}
+/* Bloc collant de l'espace stagiaire : la barre, et le tiroir quand il est ouvert. C'est LUI
+   qui colle — la barre à l'intérieur repasse donc en flux normal, sinon deux collants imbriqués
+   se disputeraient le même `top`. */
+.stu-head{position:sticky;top:0;z-index:30}
+.stu-head .topbar{position:static}
 .stu-scrim{position:fixed;inset:0;z-index:29;background:rgba(15,17,40,.35);backdrop-filter:blur(2px)}
 .stu-drawer{display:none}
 .stu-drawer-item{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;
@@ -1819,9 +1824,9 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
      Il est posé dans le flux, juste après l'en-tête, et non collé à un `top` en pixels :
      un décalage en dur devrait valoir la hauteur exacte de la barre, qui change avec le
      palier (la marque disparaît à 560px) et avec la taille de police du système. */
-  /* `position:relative` n'est pas decoratif : le `z-index` ne s'applique qu'a un element
-     positionne. Sans lui, le voile — lui, en `fixed` — se peint PAR-DESSUS le tiroir. */
-  .stu-drawer{display:flex;flex-direction:column;position:relative;z-index:30;
+  /* Le positionnement et l'empilement sont portes par .stu-head : le tiroir n'a plus qu'a se
+     laisser porter. Il garde son propre defilement pour les listes longues. */
+  .stu-drawer{display:flex;flex-direction:column;
     padding:8px;background:var(--surface);border-bottom:1px solid var(--border);
     box-shadow:0 16px 32px -16px rgba(10,12,30,.4);animation:rise .18s var(--ease) both;
     max-height:calc(100vh - 56px);overflow-y:auto}
