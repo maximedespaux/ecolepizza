@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getMyFormations, getMyProfile, getPlayableChapters, getQuestLives, loseQuestLife } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
@@ -502,6 +502,29 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
   const doneCount = Object.keys(prog).length;
   // Chapitre en cours = le premier non terminé. `-1` quand tout est fait.
   const courant = chapters.findIndex((_, i) => !(i in prog));
+
+  /* Amener le chapitre à faire sous les yeux. Sur un parcours entamé, il est loin à droite
+     et le stagiaire arrivait devant des chapitres déjà terminés, sans rien à y faire.
+     On fait défiler LE CONTENEUR (et non `scrollIntoView`, qui déplacerait aussi la page
+     verticalement) ; les positions sont mesurées à l'écran, donc indépendantes du parent
+     positionné. Instantané à l'arrivée, animé ensuite — quand un chapitre vient d'être
+     terminé, voir la carte avancer d'un cran dit ce qui s'est passé. */
+  const pathRef = useRef(null);
+  const nodeRef = useRef(null);
+  const dejaPlace = useRef(false);
+  useEffect(() => { dejaPlace.current = false; }, [world.code]);
+  useEffect(() => {
+    const boite = pathRef.current, cible = nodeRef.current;
+    if (!boite || !cible) return;
+    const b = boite.getBoundingClientRect(), c = cible.getBoundingClientRect();
+    const delta = (c.left + c.width / 2) - (b.left + b.width / 2);
+    if (Math.abs(delta) < 1) return;
+    const doux = dejaPlace.current
+      && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    boite.scrollBy({ left: delta, behavior: doux ? "smooth" : "auto" });
+    dejaPlace.current = true;
+  }, [world.code, courant, chapters.length]);
+
   return (
     <div className="pq-map">
       <button className="btn sm ghost" onClick={onBack} style={{ marginBottom: 12 }}><Icon name="chevron-left" size={15} /> Carte des formations</button>
@@ -547,7 +570,7 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
           en attendant, les défis ci-dessous sont ouverts.
         </p>
       )}
-      <div className="pq-path">
+      <div className="pq-path" ref={pathRef}>
         {chapters.map((ch, i) => {
           const stars = prog[i] || 0;
           const done = i in prog;
@@ -565,6 +588,10 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
           // créerait un contexte d'empilement, et le segment ne pourrait plus passer sous la
           // pastille de la case voisine — il lui barrerait la figure.
           const dy = offset - DECALAGES[(i - 1 + 6) % 6];
+          // Cible du défilement : le chapitre en cours, ou le dernier quand tout est fait
+          // — il n'y a alors plus rien « à faire », mais montrer la fin du parcours vaut
+          // mieux que rester bloqué au début.
+          const cible = i === (courant >= 0 ? courant : chapters.length - 1);
           const lien = {
             "--len": `${Math.hypot(ECART_X, dy).toFixed(1)}px`,
             "--ang": `${(Math.atan2(-dy, -ECART_X) * 180 / Math.PI).toFixed(2)}deg`,
@@ -574,6 +601,7 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
               : "Termine les chapitres précédents";
           return (
             <div key={i} className={"pq-node-wrap" + (i > 0 && (i - 1) in prog ? " lien-fait" : "")}
+              ref={cible ? nodeRef : null}
               style={{ top: `${offset}px`, ...lien }}>
               <button className={"pq-node" + (done ? " done" : "") + (verrou ? " locked" : "") + (encours ? " on" : "")}
                 style={{ "--c": world.color }} disabled={done || verrou || sansCoeur}
