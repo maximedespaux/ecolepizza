@@ -1583,12 +1583,6 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
   .wiz-dock-s{display:block;font-size:11px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 @media(max-width:560px){.wiz-dot-l{display:none}.wiz-dot{min-width:40px}}
-/* Titre de carte repliable (« Tous mes documents » dans l'espace stagiaire) : c'est un
-   bouton, mais il doit se lire comme le titre qu'il remplace. */
-.me-toggle{display:flex;align-items:center;gap:8px;width:100%;border:none;background:none;padding:0;
-  cursor:pointer;color:inherit;font:inherit;text-align:left}
-.me-toggle:hover{color:var(--ember1)}
-
 /* ---- Prérequis Pizza Quest (organisme) ----------------------------------------------- */
 /* Une ligne par formation : on lit « celle-ci vient après celles-là » et on la modifie au
    même endroit. Le liseré à gauche rappelle la couleur de la formation. */

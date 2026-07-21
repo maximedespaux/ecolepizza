@@ -18,11 +18,15 @@ import { colorOf, euro } from "../lib/format.js";
  *
  * Les deux répondaient à la même question — « qu'est-ce que j'ai à faire ? » — mais l'une par
  * pièce et l'autre par formation, obligeant à passer de l'une à l'autre pour savoir s'il
- * restait quelque chose à signer. D'où l'ordre retenu :
- *   1. À FAIRE — ce qui attend une action, signature ou QCM. En tête, parce que c'est daté.
- *   2. MES FORMATIONS — la grille, pour entrer dans le détail d'un dossier.
- *   3. TOUS MES DOCUMENTS — la liste complète, repliée : utile pour retrouver une pièce
- *      déjà signée, mais ce n'est pas ce qu'on vient chercher tous les jours.
+ * restait quelque chose à signer.
+ *
+ * D'où cette disposition :
+ *   · À FAIRE, AU-DESSUS DES ONGLETS — signatures et QCM en attente. Hors des onglets à
+ *     dessein : c'est daté, et le ranger derrière un onglet reviendrait à le cacher à
+ *     celui qui ouvre l'autre.
+ *   · Deux onglets pour le reste : MES FORMATIONS (entrer dans un dossier) et
+ *     MES DOCUMENTS (retrouver une pièce, signés compris). Deux façons de chercher la
+ *     même matière — l'une par dossier, l'autre par pièce.
  */
 
 // Libellé d'état : « À signer » seulement si le document est réellement à signer
@@ -44,7 +48,7 @@ function MonEspace() {
   const [viewId, setViewId] = useState(null);
   const [quizDoc, setQuizDoc] = useState(null);
   const [info, setInfo] = useState(null);      // formation non suivie, en lecture seule
-  const [toutOuvert, setToutOuvert] = useState(false);
+  const [tab, setTab] = useState("formations"); // "formations" | "documents"
 
   async function load() {
     try {
@@ -91,52 +95,57 @@ function MonEspace() {
 
       <StatusMessage status={status} />
 
-      {/* ---- 1. À faire ---------------------------------------------------------------- */}
+      {/* ---- À faire : hors onglets, pour rester visible depuis les deux ---------------- */}
       {enAttente.length > 0 && (
         <Card title={<span className="card-ttl"><Icon name="bell" size={16} /> À faire</span>}>
           <DocList docs={enAttente} onView={setViewId} onQuiz={setQuizDoc} />
         </Card>
       )}
 
-      {/* ---- 2. Mes formations --------------------------------------------------------- */}
-      <Card title={<span className="card-ttl"><Icon name="folder-check" size={16} /> Mes formations</span>}>
-        <p className="hint" style={{ marginTop: 0 }}>
-          Toutes vos démarches — avant, pendant et après la formation : convocation, règlement,
-          émargements, attestation, facture… Choisissez une formation pour ouvrir son dossier.
-        </p>
-        {!triees ? (
-          <p className="hint" style={{ margin: 0 }}>Chargement…</p>
-        ) : triees.length === 0 ? (
-          <EmptyState icon="pizza">Aucune formation au catalogue.</EmptyState>
-        ) : (
-          <div className="grid cols-3">
-            {triees.map((f) => <FormationCard key={f.program_id} f={f} navigate={navigate} onInfo={setInfo} />)}
-          </div>
-        )}
-      </Card>
+      <div className="seg" style={{ marginBottom: 14 }}>
+        <button type="button" className={"seg-btn" + (tab === "formations" ? " on" : "")}
+          onClick={() => setTab("formations")}>
+          <Icon name="folder-check" size={14} /> Mes formations{triees ? ` (${triees.length})` : ""}
+        </button>
+        <button type="button" className={"seg-btn" + (tab === "documents" ? " on" : "")}
+          onClick={() => setTab("documents")}>
+          <Icon name="file-text" size={14} /> Mes documents{documents.length ? ` (${documents.length})` : ""}
+        </button>
+      </div>
 
-      {/* ---- 3. Tous mes documents (replié) -------------------------------------------- */}
-      {documents.length > 0 && (
-        <Card title={
-          <button type="button" className="me-toggle" onClick={() => setToutOuvert((v) => !v)}>
-            <Icon name={toutOuvert ? "chevron-down" : "chevron-right"} size={15} />
-            <span className="card-ttl"><Icon name="file-text" size={16} /> Tous mes documents</span>
-            <span className="hint">({documents.length})</span>
-          </button>
-        }>
-          {toutOuvert
-            ? <DocList docs={documents} onView={setViewId} onQuiz={setQuizDoc} />
-            : <p className="hint" style={{ margin: 0 }}>
-                La liste complète, signés compris. Dépliez pour retrouver une pièce précise.
-              </p>}
+      {tab === "formations" && (
+        <Card>
+          <p className="hint" style={{ marginTop: 0 }}>
+            Toutes vos démarches — avant, pendant et après la formation : convocation, règlement,
+            émargements, attestation, facture… Choisissez une formation pour ouvrir son dossier.
+          </p>
+          {!triees ? (
+            <p className="hint" style={{ margin: 0 }}>Chargement…</p>
+          ) : triees.length === 0 ? (
+            <EmptyState icon="pizza">Aucune formation au catalogue.</EmptyState>
+          ) : (
+            <div className="grid cols-3">
+              {triees.map((f) => <FormationCard key={f.program_id} f={f} navigate={navigate} onInfo={setInfo} />)}
+            </div>
+          )}
         </Card>
       )}
 
-      {documents.length === 0 && data && (
+      {tab === "documents" && (
         <Card>
-          <EmptyState icon="pizza">
-            Aucun document pour le moment. Le secrétariat vous enverra vos documents avant la formation.
-          </EmptyState>
+          {documents.length === 0 ? (
+            <EmptyState icon="pizza">
+              Aucun document pour le moment. Le secrétariat vous enverra vos documents avant la formation.
+            </EmptyState>
+          ) : (
+            <>
+              <p className="hint" style={{ marginTop: 0 }}>
+                Toutes vos pièces, signées comprises. Celles qui attendent encore une action
+                restent rappelées en haut de page.
+              </p>
+              <DocList docs={documents} onView={setViewId} onQuiz={setQuizDoc} />
+            </>
+          )}
         </Card>
       )}
 
