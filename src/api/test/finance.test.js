@@ -218,3 +218,41 @@ test('le total des dépenses inclut toutes les lignes affichées', () => {
     assert.notStrictEqual(total, sommeAffichee,
         '250 € apparaissent dans la liste sans entrer dans le total — écart silencieux');
 });
+
+// --- Identité du vendeur --------------------------------------------------------------------
+
+test("l'organisme est réellement chargé sur la facture", () => {
+    // Défaut trouvé sur un PDF réel : l'en-tête vendeur affichait « Organisme » et « SIRET — ».
+    // `const [[org]] = await conn.query(...)` extrait DÉJÀ la première ligne — mysql2 rend
+    // [lignes, champs] — et le `org[0]` qui suivait la cherchait une seconde fois, sur un objet
+    // qui n'a pas d'index 0. L'organisme n'était donc jamais chargé, et le XML partait sans
+    // BT-31/BT-32. Une facture sans identité du vendeur n'a pas de valeur probante.
+    const src = lire('controllers/invoice.controller.js');
+    const bloc = src.slice(src.indexOf("FROM organization WHERE id = ?"));
+    assert.match(bloc.slice(0, 200), /const o = org \|\| \{\}/,
+        'la double déstructuration est de retour : l\'organisme ne sera pas chargé');
+});
+
+test('le modèle de facture ne touche pas au XML', () => {
+    // Le modèle décide de ce que le client LIT ; le code, de ce que sa comptabilité IMPORTE.
+    // Le XML est normé (EN 16931) : le laisser configurer produirait des factures non conformes.
+    const src = lire('controllers/invoice.controller.js');
+    const bloc = src.slice(src.indexOf('async function buildInvoicePdf'));
+    const corps = bloc.slice(0, bloc.indexOf('\n}\n') + 3);
+    assert.match(corps, /attacherFacturX\(pdf, xml\)/,
+        'le XML doit être attaché au PDF issu du modèle');
+    assert.doesNotMatch(corps, /buildCII/,
+        'le XML ne doit pas être reconstruit ici, encore moins depuis le modèle');
+});
+
+test('une facture reste produite même si le modèle est inutilisable', () => {
+    // Règle INVERSE de celle des documents de dossier, et c'est délibéré : là-bas un contenu
+    // inventé se fait signer ; ici la facture est la même pièce, seule sa présentation change.
+    // Ne rien livrer bloquerait un encaissement pour un problème de mise en page.
+    const src = lire('controllers/invoice.controller.js');
+    const bloc = src.slice(src.indexOf('async function buildInvoicePdf'));
+    const corps = bloc.slice(0, bloc.indexOf('\n}\n') + 3);
+    const replis = (corps.match(/return await buildFacturXPdf\(data, xml\)/g) || []).length;
+    assert.ok(replis >= 4, `seulement ${replis} replis vers la mise en page interne`);
+    assert.match(corps, /catch \(err\)/, 'un modèle qui échoue ne doit pas empêcher la facture');
+});

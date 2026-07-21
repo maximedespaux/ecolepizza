@@ -3,8 +3,7 @@ import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
-  getShopSettings, saveShopSettings, downloadFacturX,
-} from "../api/apiClient.js";
+  getShopSettings, saveShopSettings, downloadFacturX, getTemplates } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -407,7 +406,13 @@ function ShopSettings({ settings, onSaved, onError }) {
     payment_methods: settings?.payment_methods || "Espèces,CB,Virement,Chèque",
     legal_mentions: settings?.legal_mentions || "",
     tva_applies: settings ? !!settings.tva_applies : true,
+    invoice_template_slug: settings?.invoice_template_slug || "",
   }));
+  // Modèles proposables comme facture. On ne restreint pas au type FACTURE : un organisme
+  // peut avoir nommé le sien « Note de vente » ou l'avoir rangé sous un type maison, et lui
+  // interdire son propre modèle serait absurde.
+  const [modeles, setModeles] = useState([]);
+  useEffect(() => { getTemplates().then((r) => setModeles(r.data || [])).catch(() => {}); }, []);
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -435,6 +440,21 @@ function ShopSettings({ settings, onSaved, onError }) {
       </label>
       <div className="field"><label>Mentions légales (bas de facture)</label>
         <textarea className="inp" rows={3} value={form.legal_mentions} onChange={set("legal_mentions")} /></div>
+      {/* Mise en page de la facture. Par défaut celle de l'application ; un modèle permet d'y
+          mettre son logo, ses conditions, sa présentation. Le fichier Factur-X reste attaché
+          dans les deux cas — il est normé, il ne se met pas en page. */}
+      <div className="field"><label>Mise en page de la facture</label>
+        <select className="inp" value={form.invoice_template_slug}
+          onChange={(e) => setForm((p) => ({ ...p, invoice_template_slug: e.target.value }))}>
+          <option value="">Mise en page interne (par défaut)</option>
+          {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.slug}</option>)}
+        </select>
+        <p className="hint" style={{ margin: "4px 0 0" }}>
+          {form.invoice_template_slug
+            ? "Le PDF sera composé à partir de ce modèle. Le fichier Factur-X reste attaché, conforme."
+            : "Le PDF utilise la mise en page de l'application. Choisissez un modèle pour la remplacer."}
+        </p>
+      </div>
       <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer les réglages"}</button>
     </Card>
   );

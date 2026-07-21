@@ -2,7 +2,10 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
-const { buildCII, buildFacturXPdf } = require('../lib/facturx.js');
+const { buildCII, buildFacturXPdf, attacherFacturX, ventilerTva } = require('../lib/facturx.js');
+const { getTemplateContent } = require('./template.controller.js');
+const { renderTemplateHtml } = require('../lib/htmlfill.js');
+const { htmlToPdf } = require('../lib/docxpdf.js');
 
 const PREFIX = { DEVIS: 'D', ACOMPTE: 'A', FACTURE: 'F', AVOIR: 'AV' };
 const TYPE_LABEL = { DEVIS: 'Devis', ACOMPTE: 'Facture d\'acompte', FACTURE: 'Facture', AVOIR: 'Avoir' };
@@ -31,8 +34,15 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     if (rows.length === 0) return null;
     const inv = rows[0];
 
+    // `[[org]]` extrait DÉJÀ la première ligne : mysql2 rend [lignes, champs], donc la double
+    // déstructuration donne la ligne elle-même. Le `org[0]` qui suivait la cherchait une
+    // seconde fois et tombait sur `undefined` — l'organisme n'était donc JAMAIS chargé.
+    //
+    // Visible sur toute facture émise : l'en-tête vendeur affichait « Organisme » et
+    // « SIRET — » au lieu de la raison sociale et du SIRET réels. Une facture sans identité
+    // du vendeur n'a pas de valeur probante, et le XML Factur-X partait sans BT-31/BT-32.
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
-    const o = org[0] || {};
+    const o = org || {};
 
     // Client : nom libre > entreprise > stagiaire du dossier.
     let buyer = { name: 'Client', siret: null, address: {} };
@@ -307,6 +317,86 @@ const getInvoiceXml = async (req, res) => {
 };
 
 /**
+ * Produit le PDF de la facture, depuis le MODÈLE de l'organisme s'il en a désigné un.
+ *
+ * L'organisme choisit un modèle de document (Ventes → Réglages) ; il est alors rendu avec les
+ * jetons de la facture, converti en PDF, et le XML Factur-X lui est attaché comme d'habitude.
+ * Sans modèle désigné — le cas par défaut — la mise en page interne continue de servir, à
+ * l'identique. Personne ne se voit imposer un changement sur ses factures.
+ *
+ * LE XML N'EST JAMAIS CONFIÉ AU MODÈLE. Il est normé (EN 16931) : sa structure n'est pas une
+ * question de mise en page, et la laisser configurer produirait des factures non conformes. Le
+ * modèle décide de ce que le client LIT, le code de ce que sa comptabilité IMPORTE.
+ *
+ * Si le rendu du modèle échoue — modèle supprimé, conversion PDF indisponible — on retombe sur
+ * la mise en page interne plutôt que de ne rien livrer : une facture doit toujours pouvoir
+ * sortir. C'est l'inverse de la règle appliquée aux documents de dossier, et pour une raison :
+ * là-bas, un contenu inventé se fait signer ; ici, la facture est la même pièce, seule sa
+ * présentation diffère.
+ */
+async function buildInvoicePdf(conn, orgId, data, xml) {
+    let slug = null;
+    try {
+        const [[st]] = await conn.query(
+            'SELECT invoice_template_slug FROM shop_settings WHERE organization_id = ?', [orgId]);
+        slug = (st && st.invoice_template_slug) || null;
+    } catch (e) {
+        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+    }
+    if (!slug) return await buildFacturXPdf(data, xml);
+
+    try {
+        const content = await getTemplateContent(orgId, slug);
+        if (!content || content.kind !== 'builder') return await buildFacturXPdf(data, xml);
+        const html = renderTemplateHtml(content.html, invoiceTokens(data), {
+            title: `${data.typeLabel} ${data.number}`,
+            headerHtml: content.header,
+            footerHtml: content.footer,
+        });
+        const pdf = await htmlToPdf(html);
+        if (!pdf) return await buildFacturXPdf(data, xml);
+        return await attacherFacturX(pdf, xml);
+    } catch (err) {
+        console.error('Modèle de facture inutilisable, repli sur la mise en page interne :', err);
+        return await buildFacturXPdf(data, xml);
+    }
+}
+
+/**
+ * Les jetons offerts au modèle de facture.
+ *
+ * Nommés comme ceux des autres modèles pour qu'on n'ait pas à apprendre un second vocabulaire.
+ * La ventilation de TVA vient de `ventilerTva` — la même que celle du XML : deux calculs
+ * séparés finiraient par ne plus dire le même montant sur la même feuille.
+ */
+function invoiceTokens(d) {
+    const v = ventilerTva(d);
+    const eur = (n) => `${Number(n || 0).toFixed(2)} €`;
+    const jour = (ymd) => (ymd ? `${ymd.slice(6, 8)}/${ymd.slice(4, 6)}/${ymd.slice(0, 4)}` : '');
+    return {
+        organisme: { nom: d.seller.name, siret: d.seller.siret, tva: d.seller.vat, ...d.seller.address },
+        client: { nom: d.buyer.name, siret: d.buyer.siret, ...d.buyer.address },
+        facture: {
+            numero: d.number,
+            type: d.typeLabel,
+            date: jour(d.issueDate),
+            echeance: jour(d.dueDate),
+            total_ht: eur(v.base),
+            total_tva: eur(v.taxe),
+            total_ttc: eur(v.grand),
+            exoneree: d.tvaExoneree ? 'oui' : 'non',
+            taux: v.groupes.map((g) => `${g.taux.toFixed(2)} %`).join(', '),
+        },
+        lignes: (d.lines || []).map((l) => ({
+            designation: l.name,
+            montant_ht: eur(l.amount),
+            taux: `${Number(l.taxRate ?? d.taxRate ?? 20).toFixed(2)} %`,
+        })),
+        tva: v.groupes.map((g) => ({ taux: `${g.taux.toFixed(2)} %`, base: eur(g.base), montant: eur(g.taxe) })),
+    };
+}
+
+/**
  * GET /api/factures/:id/facturx — PDF Factur-X (PDF + XML embarqué).
  */
 const getInvoiceFacturX = async (req, res) => {
@@ -315,7 +405,7 @@ const getInvoiceFacturX = async (req, res) => {
         const data = await loadInvoiceData(conn, req.user.organization_id, req.params.id);
         if (!data) return res.status(404).json({ message: 'Facture introuvable' });
         const xml = buildCII(data);
-        const pdfBytes = await buildFacturXPdf(data, xml);
+        const pdfBytes = await buildInvoicePdf(conn, req.user.organization_id, data, xml);
         logAudit(req, 'invoice.facturx', 'Invoice', req.params.id);
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', `attachment; filename="${data.number}.pdf"`);

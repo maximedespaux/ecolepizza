@@ -106,6 +106,8 @@ const deleteSale = (req, res) => {
 const DEFAULT_SETTINGS = {
     invoice_prefix: 'F', next_number: 1,
     payment_methods: 'Espèces,CB,Virement,Chèque', legal_mentions: null, tva_applies: 1,
+    // NULL = mise en page interne de la facture. Voir buildInvoicePdf.
+    invoice_template_slug: null,
 };
 
 // Charge les paramètres boutique (crée la ligne par défaut si absente).
@@ -134,18 +136,30 @@ const saveShopSettings = async (req, res) => {
     try {
         const conn = db.promise();
         await loadSettings(conn, req.user.organization_id); // garantit l'existence
-        await conn.query(
-            `UPDATE shop_settings SET invoice_prefix = ?, next_number = ?, payment_methods = ?,
-                    legal_mentions = ?, tva_applies = ? WHERE organization_id = ?`,
-            [
-                String(b.invoice_prefix || 'F').slice(0, 20),
-                Math.max(1, parseInt(b.next_number, 10) || 1),
-                String(b.payment_methods || DEFAULT_SETTINGS.payment_methods).slice(0, 255),
-                b.legal_mentions || null,
-                b.tva_applies ? 1 : 0,
-                req.user.organization_id,
-            ]
-        );
+        const communs = [
+            String(b.invoice_prefix || 'F').slice(0, 20),
+            Math.max(1, parseInt(b.next_number, 10) || 1),
+            String(b.payment_methods || DEFAULT_SETTINGS.payment_methods).slice(0, 255),
+            b.legal_mentions || null,
+            b.tva_applies ? 1 : 0,
+        ];
+        // Le modèle de facture peut ne pas exister (migration 109 non jouée) : on réenregistre
+        // alors sans lui, plutôt que de refuser tout l'écran de réglages pour une colonne.
+        try {
+            await conn.query(
+                `UPDATE shop_settings SET invoice_prefix = ?, next_number = ?, payment_methods = ?,
+                        legal_mentions = ?, tva_applies = ?, invoice_template_slug = ?
+                  WHERE organization_id = ?`,
+                [...communs, b.invoice_template_slug || null, req.user.organization_id]
+            );
+        } catch (e) {
+            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+            await conn.query(
+                `UPDATE shop_settings SET invoice_prefix = ?, next_number = ?, payment_methods = ?,
+                        legal_mentions = ?, tva_applies = ? WHERE organization_id = ?`,
+                [...communs, req.user.organization_id]
+            );
+        }
         res.json({ success: true, message: 'Paramètres enregistrés.' });
     } catch (err) {
         console.error('Erreur enregistrement paramètres boutique :', err);

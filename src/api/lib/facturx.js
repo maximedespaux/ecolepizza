@@ -219,6 +219,21 @@ function buildXmp() {
 }
 
 /** Construit le PDF lisible + XML embarqué (Factur-X). */
+/**
+ * Attache le XML Factur-X à un PDF DÉJÀ construit, d'où qu'il vienne.
+ *
+ * Sépare les deux responsabilités que `buildFacturXPdf` mélangeait : dessiner la facture, et
+ * la rendre conforme. Seule la première est affaire de mise en page et peut donc être confiée
+ * à un modèle d'organisme ; la seconde est normée (EN 16931) et reste au code.
+ */
+async function attacherFacturX(pdfBytes, xml) {
+    const pdf = await PDFDocument.load(pdfBytes);
+    embedFacturX(pdf, xml);
+    pdf.setTitle('Facture');
+    pdf.setProducer('Impasto');
+    return Buffer.from(await pdf.save());
+}
+
 async function buildFacturXPdf(d, xml) {
     const pdf = await PDFDocument.create();
     const page = pdf.addPage([595, 842]); // A4
@@ -292,4 +307,4 @@ async function buildFacturXPdf(d, xml) {
     return pdf.save({ useObjectStreams: false });
 }
 
-module.exports = { ventilerTva, buildCII, buildFacturXPdf, TYPE_CODE };
+module.exports = { ventilerTva, attacherFacturX, buildCII, buildFacturXPdf, TYPE_CODE };
