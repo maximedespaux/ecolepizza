@@ -4,7 +4,11 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { UserProvider, UserContext } from "./context/UserContext.jsx";
 import { landingPath, navAllowed, OWNER_ROLES } from "./lib/nav.js";
+import { verrouillerZoom } from "./lib/nozoom.js";
 import "./styles/app.css";
+
+// Echelle figee : voir lib/nozoom.js pour ce que cela bloque, et ce que cela ne peut pas bloquer.
+verrouillerZoom();
 
 import AppLayout from "./layouts/AppLayout.jsx";
 import StudentLayout from "./layouts/StudentLayout.jsx";

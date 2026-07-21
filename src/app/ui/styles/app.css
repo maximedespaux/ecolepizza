@@ -1845,3 +1845,20 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .stu-row{display:flex;align-items:center;gap:12px;padding:10px 0;flex-wrap:wrap;
   border-bottom:1px solid var(--border-soft)}
 .stu-row-t{flex:1 1 190px;min-width:0}
+
+/* ===== Echelle figee ==================================================== */
+/* Voir lib/nozoom.js : ce bloc traite les deux zooms qui se corrigent en CSS, le script
+   s'occupe du pincement et du zoom navigateur. */
+/* `manipulation` supprime le double-tap zoom sans supprimer le defilement ni le pincement
+   (dont le script se charge). Il enleve aussi le delai de 300ms sur les taps. */
+html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* Sur un pointeur grossier (doigt), Safari iOS zoome des qu'un champ recoit le focus avec une
+   police sous 16px — et ne dezoome jamais ensuite. C'est le zoom parasite le plus courant sur
+   telephone. 16px est le seuil exact : en dessous ca zoome, a partir de la ca ne zoome plus. */
+/* `!important` est ici deliberé, pas un raccourci. Plusieurs composants fixent la police de
+   leur champ par un selecteur plus specifique — `.cart-perso .inp` a 13px, par exemple — et
+   l'emporteraient sur une regle simple, laissant le zoom revenir juste sur ces champs-la.
+   La contrainte vient de l'appareil, pas du composant : elle doit passer devant. */
+@media(pointer:coarse){
+  input,select,textarea,.inp{font-size:16px!important}
+}
