@@ -264,6 +264,28 @@ function AxeCard({ axe, cats, programs, run }) {
   const champ = axe.kind === "THEME" ? "quest_theme_id" : "quest_tier_id";
   const usage = (id) => programs.filter((p) => p[champ] === id).length;
 
+  /**
+   * Déplace une catégorie d'un cran. C'EST CET ORDRE qui décide de la disposition de la
+   * carte côté stagiaire : les paliers s'y enchaînent de haut en bas dans l'ordre défini
+   * ici. Créés dans le désordre, ils donnaient un parcours illisible — « Avancé » avant
+   * « Intermédiaire » alors que le second ouvre le premier.
+   *
+   * On RENUMÉROTE toute la liste plutôt que d'échanger deux valeurs : si deux catégories
+   * portaient le même rang (import, création concurrente), un échange ne changerait rien.
+   */
+  async function deplacer(i, sens) {
+    const j = i + sens;
+    if (j < 0 || j >= cats.length) return;
+    const ordre = [...cats];
+    [ordre[i], ordre[j]] = [ordre[j], ordre[i]];
+    await run(async () => {
+      for (const [k, c] of ordre.entries()) {
+        const rang = (k + 1) * 10;
+        if (c.sort_order !== rang) await updateQuestCategory(c.id, { sort_order: rang });
+      }
+    }, "Ordre enregistré.");
+  }
+
   return (
     <Card title={<span className="card-ttl"><Icon name={axe.ic} size={16} /> {axe.label}</span>}>
       <p className="hint" style={{ marginTop: 0 }}>{axe.help}</p>
@@ -284,15 +306,25 @@ function AxeCard({ axe, cats, programs, run }) {
       {cats.length === 0
         ? <p className="hint">Aucun {axe.one} pour l'instant.</p>
         : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {cats.map((c) => <CatRow key={c.id} cat={c} axe={axe} used={usage(c.id)} run={run} />)}
-          </div>
+          <>
+            <p className="hint" style={{ marginTop: -4 }}>
+              L'ordre ci-dessous est celui de la carte du stagiaire — du premier au dernier.
+              Rangez-les dans le sens du parcours.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {cats.map((c, i) => (
+                <CatRow key={c.id} cat={c} axe={axe} used={usage(c.id)} run={run}
+                  premier={i === 0} dernier={i === cats.length - 1}
+                  onMonter={() => deplacer(i, -1)} onDescendre={() => deplacer(i, 1)} />
+              ))}
+            </div>
+          </>
         )}
     </Card>
   );
 }
 
-function CatRow({ cat, axe, used, run }) {
+function CatRow({ cat, axe, used, run, premier, dernier, onMonter, onDescendre }) {
   const [edit, setEdit] = useState(false);
   const [nom, setNom] = useState(cat.name);
   const couleur = cat.color || colorOf(cat.name);
@@ -316,6 +348,15 @@ function CatRow({ cat, axe, used, run }) {
   }
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+      {/* Ordre du parcours : c'est lui qui décide de la disposition côté stagiaire. */}
+      <span style={{ display: "flex", gap: 2, flex: "0 0 auto" }}>
+        <button type="button" className="iconbtn" title="Monter" disabled={premier} onClick={onMonter}>
+          <Icon name="arrow-up" size={12} />
+        </button>
+        <button type="button" className="iconbtn" title="Descendre" disabled={dernier} onClick={onDescendre}>
+          <Icon name="arrow-down" size={12} />
+        </button>
+      </span>
       <span style={{ width: 12, height: 12, borderRadius: 4, background: couleur, flex: "0 0 auto" }} />
       <b style={{ flex: 1 }}>{cat.name}</b>
       <span className="hint">{used === 0 ? "aucune formation" : `${used} formation${used > 1 ? "s" : ""}`}</span>
