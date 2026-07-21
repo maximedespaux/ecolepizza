@@ -105,7 +105,7 @@ const deleteSale = (req, res) => {
  */
 const DEFAULT_SETTINGS = {
     invoice_prefix: 'F', next_number: 1,
-    payment_methods: 'Espèces,CB,Virement,Chèque', legal_mentions: null, tva_applies: 1,
+    payment_methods: 'Espèces,CB,Virement,Chèque', tva_applies: 1,
 };
 
 // Charge les paramètres boutique (crée la ligne par défaut si absente).
@@ -138,12 +138,17 @@ const saveShopSettings = async (req, res) => {
             String(b.invoice_prefix || 'F').slice(0, 20),
             Math.max(1, parseInt(b.next_number, 10) || 1),
             String(b.payment_methods || DEFAULT_SETTINGS.payment_methods).slice(0, 255),
-            b.legal_mentions || null,
             b.tva_applies ? 1 : 0,
         ];
         await conn.query(
+            // `legal_mentions` n'est plus ecrit : les mentions de bas de facture vivent dans le
+            // PIED du modele de type FACTURE (document_template.footer_html), avec le reste de
+            // la mise en page. Le champ etait de toute facon devenu inerte — la mise en page
+            // interne, seule a le lire, a ete retiree. Un reglage qu'on remplit sans effet est
+            // pire qu'un reglage absent : il fait croire que quelque chose a ete configure.
+            // La colonne reste en base, elle ne gene pas et personne ne l'ecrit plus.
             `UPDATE shop_settings SET invoice_prefix = ?, next_number = ?, payment_methods = ?,
-                    legal_mentions = ?, tva_applies = ? WHERE organization_id = ?`,
+                    tva_applies = ? WHERE organization_id = ?`,
             [...communs, req.user.organization_id]
         );
         res.json({ success: true, message: 'Paramètres enregistrés.' });

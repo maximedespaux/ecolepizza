@@ -412,7 +412,6 @@ function ShopSettings({ settings, onSaved, onError }) {
     invoice_prefix: settings?.invoice_prefix || "F",
     next_number: settings?.next_number || 1,
     payment_methods: settings?.payment_methods || "Espèces,CB,Virement,Chèque",
-    legal_mentions: settings?.legal_mentions || "",
     tva_applies: settings ? !!settings.tva_applies : true,
   }));
   const [saving, setSaving] = useState(false);
@@ -440,8 +439,7 @@ function ShopSettings({ settings, onSaved, onError }) {
         <input type="checkbox" checked={form.tva_applies} onChange={(e) => setForm((p) => ({ ...p, tva_applies: e.target.checked }))} />
         Appliquer la TVA (décochez pour une facturation exonérée)
       </label>
-      <div className="field"><label>Mentions légales (bas de facture)</label>
-        <textarea className="inp" rows={3} value={form.legal_mentions} onChange={set("legal_mentions")} /></div>
+
       {/* Mise en page de la facture. Par défaut celle de l'application ; un modèle permet d'y
           mettre son logo, ses conditions, sa présentation. Le fichier Factur-X reste attaché
           dans les deux cas — il est normé, il ne se met pas en page. */}
