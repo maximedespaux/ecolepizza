@@ -1819,7 +1819,9 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
      Il est posé dans le flux, juste après l'en-tête, et non collé à un `top` en pixels :
      un décalage en dur devrait valoir la hauteur exacte de la barre, qui change avec le
      palier (la marque disparaît à 560px) et avec la taille de police du système. */
-  .stu-drawer{display:flex;flex-direction:column;z-index:30;
+  /* `position:relative` n'est pas decoratif : le `z-index` ne s'applique qu'a un element
+     positionne. Sans lui, le voile — lui, en `fixed` — se peint PAR-DESSUS le tiroir. */
+  .stu-drawer{display:flex;flex-direction:column;position:relative;z-index:30;
     padding:8px;background:var(--surface);border-bottom:1px solid var(--border);
     box-shadow:0 16px 32px -16px rgba(10,12,30,.4);animation:rise .18s var(--ease) both;
     max-height:calc(100vh - 56px);overflow-y:auto}
