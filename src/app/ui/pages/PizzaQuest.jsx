@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getMyFormations, getMyProfile, getPlayableChapters, getQuestLives, loseQuestLife } from "../api/apiClient.js";
+import { getMyFormations, getMyProfile, getPlayableChapters, getQuestLives, loseQuestLife, resetQuestProgress } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import SimulateurPizza from "../components/SimulateurPizza.jsx";
@@ -135,6 +135,19 @@ function PizzaQuest() {
     .catch(() => {});
 
   const sansCoeur = !!vies && vies.regen_minutes > 0 && vies.hearts <= 0;
+
+  /* ⚠️ DÉBOGAGE — À RETIRER AVANT LA MISE EN SERVICE (avec resetQuestProgress dans
+     apiClient.js, la route DELETE /quest/progression et son contrôleur).
+     Efface la progression en base ET en local : garder le localStorage la ferait
+     réapparaître au premier enregistrement, puisqu'il est fusionné avec le serveur. */
+  async function reinitialiserProgression() {
+    if (!window.confirm("DEBUG — effacer toute ta progression Pizza Quest (chapitres, étoiles, cœurs) ?")) return;
+    try { await resetQuestProgress(); } catch { /* on vide quand même le local */ }
+    try { localStorage.removeItem(KEY); } catch { /* mode privé */ }
+    setProg({});
+    setActive(null);
+    await rafraichirVies();
+  }
 
   useEffect(() => {
     getMyFormations().then((r) => {
@@ -283,6 +296,16 @@ function PizzaQuest() {
       )}
       {mini?.key === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
       {mini?.key === "simulateur" && <SimulateurPizza objectifId={mini.obj} onClose={() => setMini(null)} onFinish={(stars) => finishMini("simulateur", stars)} />}
+
+      {/* ⚠️ BLOC DE DÉBOGAGE — À SUPPRIMER AVANT LA MISE EN SERVICE.
+          Retirer aussi : reinitialiserProgression() ci-dessus, resetQuestProgress dans
+          apiClient.js, la route DELETE /quest/progression et son contrôleur. */}
+      <div className="pq-debug">
+        <span>Outil de test</span>
+        <button type="button" className="btn sm ghost danger" onClick={reinitialiserProgression}>
+          <Icon name="refresh" size={13} /> Effacer ma progression
+        </button>
+      </div>
     </>
   );
 }

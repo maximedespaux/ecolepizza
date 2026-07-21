@@ -850,6 +850,13 @@ tbody tr:last-child td{border-bottom:none}
    `scroll-snap` cale la pastille au centre, sinon le geste s'arrête n'importe où.
    `overscroll-behavior-x: contain` empêche le geste de déclencher le retour arrière du
    navigateur quand on arrive au bout. */
+/* ⚠️ Bloc de débogage de Pizza Quest — à supprimer avec le bouton correspondant.
+   Volontairement à part et rayé : il doit se voir comme un corps étranger, pour qu'on
+   pense à l'enlever et qu'aucun stagiaire ne le prenne pour une fonction du jeu. */
+.pq-debug{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:28px;padding:10px;
+  border:1px dashed var(--border);border-radius:10px;opacity:.7}
+.pq-debug span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-weight:700}
+
 /* Cœurs dans l'en-tête. Les cœurs vides restent VISIBLES (🤍) : c'est le contraste plein
    vs vide qui dit combien il en manque, un simple nombre ne le montre pas. */
 .pq-hearts{display:inline-flex;gap:1px;font-size:13px;line-height:1}

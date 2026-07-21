@@ -1231,6 +1231,38 @@ const enveloppe = (e) => ({
     next_in_ms: e.nextInMs, full_in_ms: e.fullInMs,
 });
 
+/**
+ * DELETE /api/mon-espace/quest/progression — ⚠️ OUTIL DE DÉBOGAGE, À RETIRER.
+ *
+ * Remet à zéro la progression Pizza Quest du stagiaire CONNECTÉ : chapitres terminés,
+ * étoiles, et capital de cœurs (supprimer la ligne suffit, l'état repart au maximum).
+ * Sert à rejouer un parcours pendant la mise au point du jeu.
+ *
+ * Portée volontairement limitée au demandeur : personne ne peut effacer la progression
+ * d'un autre. Reste que c'est une destruction de données sans filet — à supprimer, ainsi
+ * que le bouton correspondant côté stagiaire, avant la mise en service.
+ */
+const resetQuestProgress = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        let efface = 0;
+        try {
+            const [r] = await conn.query('DELETE FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
+            efface = r.affectedRows || 0;
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        try {
+            await conn.query('DELETE FROM learner_quest_life WHERE learner_id = ?', [learner.id]);
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        console.warn(`[debug] progression Pizza Quest remise à zéro pour ${learner.id} (${efface} chapitre(s))`);
+        res.json({ success: true, message: `Progression remise à zéro (${efface} chapitre(s)).` });
+    } catch (err) {
+        console.error('Erreur remise à zéro progression :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** GET /api/mon-espace/quest/vies */
 const getQuestLives = async (req, res) => {
     try {
@@ -1538,4 +1570,4 @@ const updateMyInfos = async (req, res) => {
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
 module.exports = { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
-    getQuestLives, loseQuestLife };
+    getQuestLives, loseQuestLife, resetQuestProgress };
