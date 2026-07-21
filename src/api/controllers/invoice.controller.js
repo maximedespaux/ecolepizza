@@ -479,10 +479,8 @@ function invoiceCtx(org, data) {
             totalTva: eur(v.taxe),
             totalTtc: eur(v.grand),
             detailTva: v.groupes.map((g) => `${g.taux.toFixed(2)} % sur ${eur(g.base)} : ${eur(g.taxe)}`).join(' · '),
-            // Repli quand le modèle n'utilise pas le bloc {#Articles} : une ligne par article.
-            articlesTexte: (data.lines || [])
-                .map((l) => `${l.name}${l.qty ? ` — ${l.qty} × ${eur(l.unit_price_ht ?? (Number(l.amount) / l.qty))}` : ''} : ${eur(l.amount)}`)
-                .join('\n'),
+            // Le jeton {Articles} en fait un tableau complet (cf. articlesTable).
+            articles: data.lines || [],
         },
     };
 }

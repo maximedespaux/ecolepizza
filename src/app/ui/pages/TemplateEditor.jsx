@@ -412,14 +412,17 @@ function TemplateEditor() {
                   {g.group === "Ligne de facture" && (
                     <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border-soft)" }}>
                       <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
-                        <b>Une ligne par article vendu.</b> Insérez d'abord le tableau, puis placez
-                        ces champs <b>entre</b> les marqueurs.
+                        Pour un tableau simple, utilisez le champ <b>Tableau des articles</b> du groupe
+                        Facture : une seule puce, le tableau est mis en forme automatiquement.
+                        <br /><br />
+                        Ces champs-ci servent à composer un tableau <b>sur mesure</b>. Insérez d'abord la
+                        trame ci-dessous, puis placez-les dans ses cellules.
                       </p>
-                      <button className="tok-chip" title="Insère un tableau qui se répète pour chaque article"
+                      <button className="tok-chip" title="Insère une trame de tableau à personnaliser"
                         draggable
                         onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", BLOC_ARTICLES)}
                         onClick={() => insertRaw(BLOC_ARTICLES)}>
-                        <Icon name="plus" size={13} /> Tableau des articles
+                        <Icon name="plus" size={13} /> Trame sur mesure
                       </button>
                     </div>
                   )}

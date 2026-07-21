@@ -5,7 +5,7 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS, SIGNER_ROLES, stepSigners } = require('../lib/documents.js');
-const { TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
+const { articlesTable, TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
 const { decrypt } = require('../lib/crypto.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
 const { getEnabledFields } = require('../lib/conditions.js');
@@ -419,6 +419,13 @@ const getTokens = async (req, res) => {
 async function sampleTokenValues(orgId) {
     const m = {};
     for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || '';
+    // {Articles} est un TABLEAU (RAW_TOKENS) : un texte d'exemple s'afficherait tel quel au
+    // lieu d'une grille, et on ne pourrait pas juger de sa mise en page — tout l'objet d'un
+    // aperçu. On rend donc le vrai tableau, sur deux articles à des taux différents.
+    m['Articles'] = articlesTable([
+        { name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
+        { name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
+    ]);
     try { for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || ''; }
     catch { /* champs indisponibles : on garde les jetons intégrés */ }
     // Aperçu des champs Organisme : valeurs RÉELLES de la fiche organisme (plutôt qu'un exemple générique).

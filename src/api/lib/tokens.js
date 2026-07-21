@@ -160,7 +160,7 @@ const TOKEN_CATALOG = [
             { key: 'Total TVA', label: 'Total TVA', sample: '3,56 €' },
             { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21,38 €' },
             { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20,00 % sur 17,82 € : 3,56 €' },
-            { key: 'Articles', label: 'Lignes de la facture (tableau)', sample: 'Biberon valve 455 ml — 2 × 8,91 €' },
+            { key: 'Articles', label: 'Tableau des articles', sample: '(tableau désignation / qté / prix / total)' },
         ],
     },
     {
@@ -211,10 +211,44 @@ const TOKEN_CATALOG = [
 ];
 
 // Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats']);
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles']);
 
 // Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
 const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Tableau des articles d'une facture, un article par ligne. RAW : injecté tel quel.
+ *
+ * MÊME PRINCIPE QUE {Résultats} — un seul jeton qui produit un tableau complet. C'est la
+ * réponse à un défaut d'ergonomie réel : la première version demandait d'insérer un bloc
+ * {#Articles}…{/Articles} sous forme de TEXTE BRUT dans le document. On voyait alors des
+ * accolades et des marqueurs au milieu d'un modèle où tout le reste est une puce propre —
+ * fragile à l'édition (un retour à la ligne mal placé cassait le bloc) et illisible.
+ *
+ * Une puce, un tableau. Le bloc reste disponible pour qui veut choisir ses colonnes, mais il
+ * n'est plus le chemin normal.
+ *
+ * Les colonnes suivent l'ordre d'une facture : ce qu'on a acheté, combien, à quel prix, ce que
+ * ça fait. La colonne TVA n'apparaît QUE si les articles ont des taux différents — sur une
+ * facture à taux unique, elle répète la même valeur à chaque ligne pour rien, et le taux est
+ * déjà donné par {Détail TVA}.
+ */
+function articlesTable(list) {
+    const rows = Array.isArray(list) ? list : [];
+    if (!rows.length) return '';
+    const taux = new Set(rows.map((l) => Number(l.taxRate ?? 20)));
+    const mixte = taux.size > 1;
+    const head = '<tr><th>Désignation</th><th>Qté</th><th>P.U. HT</th><th>Montant HT</th>'
+        + (mixte ? '<th>TVA</th>' : '') + '<th>Total TTC</th></tr>';
+    const body = rows.map((l, i) => {
+        const c = articleRowTokens(l, i);
+        return `<tr><td>${escCell(c['Désignation'])}</td><td>${escCell(c['Quantité'])}</td>`
+             + `<td>${escCell(c['Prix unitaire HT'])}</td><td>${escCell(c['Montant HT'])}</td>`
+             + (mixte ? `<td>${escCell(c['Taux TVA'])}</td>` : '')
+             + `<td>${escCell(c['Montant TTC'])}</td></tr>`;
+    }).join('');
+    return `<table><tbody>${head}${body}</tbody></table>`;
+}
 
 // Tableau des résultats d'examen, un bloc par ligne. RAW : injecté tel quel dans le PV.
 // Le verdict n'est pas recalculé ici — il est lu depuis `verdicts`, figé à la clôture de la
@@ -494,9 +528,9 @@ function invoiceTokens(inv = {}) {
         'Total TVA': inv.totalTva || '',
         'Total TTC': inv.totalTtc || '',
         'Détail TVA': inv.detailTva || '',
-        // Repli commode : un modele qui n'utilise pas le bloc {#Articles} obtient quand meme
-        // une liste lisible, comme {Stagiaires} le fait pour un groupe.
-        'Articles': inv.articlesTexte || '',
+        // Tableau complet, comme {Résultats}. Le bloc {#Articles}…{/Articles} reste possible
+        // pour qui veut choisir ses colonnes ; ce jeton-ci est le chemin normal.
+        'Articles': articlesTable(inv.articles),
     };
 }
 
@@ -645,4 +679,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, articleRowTokens, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };

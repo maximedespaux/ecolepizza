@@ -185,3 +185,40 @@ test('l\'aperçu du modèle montre des articles d\'exemple', () => {
     assert.match(corps, /articlesExemple/, 'l\'aperçu ne fournit aucun article');
     assert.match(corps, /taxRate: 5\.5/, 'deux taux différents, pour que le cas mixte se voie');
 });
+
+// --- {Articles} : une puce, un tableau ------------------------------------------------------
+
+test('{Articles} produit un tableau complet, pas du texte', () => {
+    // Réponse à un défaut d'ergonomie : la première version demandait d'insérer un bloc
+    // {#Articles}…{/Articles} en TEXTE BRUT dans le document. On voyait des accolades au
+    // milieu d'un modèle où tout le reste est une puce propre, et un retour à la ligne mal
+    // placé cassait le bloc. Même principe que {Résultats}, qui existait déjà : une puce, un
+    // tableau.
+    const { articlesTable, RAW_TOKENS } = require('../lib/tokens.js');
+    const html = articlesTable(ARTICLES);
+    assert.match(html, /^<table>/, 'le jeton doit rendre un tableau');
+    assert.strictEqual((html.match(/<tr/g) || []).length, 3, 'en-tête + un article par ligne');
+    assert.ok(RAW_TOKENS.has('Articles'), 'sans RAW_TOKENS, le HTML sortirait échappé en clair');
+});
+
+test('la colonne TVA n\'apparaît que si les taux diffèrent', () => {
+    // Sur une facture à taux unique, elle répète la même valeur à chaque ligne pour rien — et
+    // le taux est déjà donné par {Détail TVA}.
+    const { articlesTable } = require('../lib/tokens.js');
+    const unique = articlesTable([ARTICLES[0]]);
+    const mixte = articlesTable(ARTICLES);
+    assert.doesNotMatch(unique, /<th>TVA<\/th>/, 'colonne inutile sur un taux unique');
+    assert.match(mixte, /<th>TVA<\/th>/, 'colonne nécessaire dès que les taux diffèrent');
+});
+
+test('un tableau sans article ne laisse pas d\'en-tête orpheline', () => {
+    const { articlesTable } = require('../lib/tokens.js');
+    assert.strictEqual(articlesTable([]), '');
+});
+
+test('l\'aperçu rend {Articles} en tableau, pas en texte d\'exemple', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/template.controller.js'), 'utf8');
+    const bloc = src.slice(src.indexOf('async function sampleTokenValues'));
+    assert.match(bloc.slice(0, 900), /m\['Articles'\] = articlesTable\(/,
+        "sans ça, l'aperçu afficherait le texte d'exemple au lieu d'une grille");
+});
