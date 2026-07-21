@@ -5,7 +5,7 @@ import PageHead from "../components/PageHead.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import DoughBar from "../components/DoughBar.jsx";
-import { euro } from "../lib/format.js";
+import { euro, colorOf } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
 import { parseAvatar } from "../lib/gamification.js";
@@ -76,9 +76,14 @@ function ProfileModal({ profile, loading, onClose }) {
               {profile.company && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}><Icon name="building" size={13} /> {profile.company}</div>}
               {profile.badges && profile.badges.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center", marginTop: 10 }}>
+                  {/* Même repli que partout ailleurs (profil personnel, carte Pizza Quest,
+                      fiches formation) : à défaut de couleur choisie par l'organisme, on
+                      DÉRIVE une couleur stable du code. Le repli « navy » qui traînait ici
+                      peignait en bleu marine toutes les formations sans couleur — le même
+                      niveau n'avait donc pas la même teinte selon le profil consulté. */}
                   {profile.badges.map((b) => (
                     <span key={b.code} className="badge n mono" title={b.title || b.code}
-                      style={{ background: b.color || "var(--navy)", color: "#fff", borderColor: "transparent", fontSize: 10, padding: "2px 8px" }}>
+                      style={{ background: b.color || colorOf(b.code), color: "#fff", borderColor: "transparent", fontSize: 10, padding: "2px 8px" }}>
                       {b.code}
                     </span>
                   ))}
