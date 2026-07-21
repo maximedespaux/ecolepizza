@@ -9,7 +9,7 @@ import { euro, colorOf } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
 import { parseAvatar } from "../lib/gamification.js";
-import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment } from "../api/apiClient.js";
+import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen } from "../api/apiClient.js";
 
 /**
  * Communauté — les fiches techniques partagées par les stagiaires de l'organisme,
@@ -187,6 +187,11 @@ export default function Communaute() {
       setList(data);
       const ls = {}; data.forEach((s) => { ls[s.id] = { liked: !!s.liked, count: s.like_count || 0 }; });
       setLikeState(ls);
+      // « Vu » seulement UNE FOIS LA GALERIE REÇUE, et jamais avant : le serveur calcule les
+      // repères de nouveauté à partir de cette même date. La poser à l'entrée dans la page
+      // les effacerait avant qu'on ait pu les voir. Les repères de CETTE visite restent
+      // affichés — ils vivent dans `data`, déjà en main — et auront disparu à la suivante.
+      markCommunitySeen().catch(() => {});
     }).catch(() => {});
   }, []);
   useEffect(() => {
@@ -298,13 +303,22 @@ export default function Communaute() {
                 const km = kindMeta(s.kind);
                 const lk = likeState[s.id] || { liked: false, count: s.like_count || 0 };
                 return (
-                  <div key={s.id} className="comm-card2">
+                  <div key={s.id} className={"comm-card2" + (s.new_comments > 0 ? " neuf" : "")}>
                     <div className="comm-card2-body" onClick={() => setOpenId(s.id)} role="button" tabIndex={0}
                       onKeyDown={(e) => { if (e.key === "Enter") setOpenId(s.id); }}>
                       <span className="comm-kind" style={{ background: `color-mix(in srgb, ${km.color} 15%, var(--surface))`, color: km.color }}>
                         <Icon name={km.icon} size={12} /> {km.label}{s.kind === "RECETTE" && s.type ? ` · ${s.type}` : ""}
                       </span>
-                      <div className="comm-title">{s.name}</div>
+                      <div className="comm-title">
+                        {s.name}
+                        {/* Ce qui a allumé la pastille du menu, reporté ici : la pastille dit
+                            « il y a du nouveau », ce repère dit OÙ. */}
+                        {s.new_comments > 0 && (
+                          <span className="comm-neuf" title={`${s.new_comments} nouveau${s.new_comments > 1 ? "x" : ""} commentaire${s.new_comments > 1 ? "s" : ""} depuis votre dernière visite`}>
+                            {s.new_comments} nouveau{s.new_comments > 1 ? "x" : ""}
+                          </span>
+                        )}
+                      </div>
                       <div className="comm-meta">
                         <AuthorChip id={s.author_user_id} name={s.author_name} avatar={s.author_avatar} onOpen={openProfile} />
                         <span>· {s.updated_at}</span>

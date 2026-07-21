@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 // Union des deux branches : getMyAccess + le bloc boutique/avatar. `multer` reste (upload avatar).
-const { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+const { getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
   getQuestLives, loseQuestLife, resetQuestProgress } = require('../controllers/espace.controller.js');
 const { getPlayableChapters } = require('../controllers/questContent.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
@@ -15,6 +15,8 @@ const avatarUpload = multer({ storage: multer.memoryStorage(), limits: { fileSiz
 
 router.get('/', authenticateToken, getMonEspace);
 router.get('/access', authenticateToken, getMyAccess);
+// Remet la pastille Communauté à zéro. Posté par la page une fois la galerie affichée.
+router.post('/communaute/vue', authenticateToken, markCommunitySeen);
 router.get('/formations', authenticateToken, getMyFormations);
 router.get('/formations/:id', authenticateToken, getMyFormation);
 // Chapitres jouables de Pizza Quest pour une formation (banque de l'organisme).

@@ -99,6 +99,7 @@ function StudentLayout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [unlocked, setUnlocked] = useState(true); // fail-open : débloqué par défaut
   const [pending, setPending] = useState(0);      // documents à signer / QCM à faire
+  const [news, setNews] = useState(0);            // commentaires nouveaux dans la Communauté
   const [avatar, setAvatar] = useState(() => getAvatar(user?.id));
   const [menuOpen, setMenuOpen] = useState(false); // tiroir de navigation, sous 900px
   // A-t-il franchi le point d'accès (breakpoint) d'une formation ? Débloque Pizza Quest + Outils.
@@ -110,8 +111,11 @@ function StudentLayout() {
       .then((r) => {
         setUnlocked(r?.data?.quest_unlocked !== false);
         setPending(Number(r?.data?.pending_docs) || 0);
+        setNews(Number(r?.data?.community_news) || 0);
       })
       .catch(() => setUnlocked(true));
+    // Rejoué à chaque changement de page : quitter la Communauté suffit donc à voir la
+    // pastille retomber, sans rechargement.
   }, [user?.id, loc.pathname]);
   useEffect(() => {
     const sync = () => setAvatar(getAvatar(user?.id));
@@ -144,7 +148,7 @@ function StudentLayout() {
   // Destinations hors « Outils », dans l'ordre de la barre. `gated` = fermé tant que le
   // point d'accès n'est pas franchi.
   const extras = [
-    { to: "/communaute", ic: "users", label: "Communauté", gated: true },
+    { to: "/communaute", ic: "users", label: "Communauté", gated: true, badge: news },
     ...(user?.role === "INTERVENANT" ? [{ to: "/intervention", ic: "clipboard-check", label: "Intervention" }] : []),
     ...(user?.has_company ? [{ to: "/entreprise-documents", ic: "building", label: "Entreprise" }] : []),
   ];
@@ -178,7 +182,11 @@ function StudentLayout() {
           {extras.map((e) => (
             e.gated && !unlocked
               ? <LockedBtn key={e.to}>{e.label}</LockedBtn>
-              : <NavLink key={e.to} to={e.to} className={navClass}>{e.label}</NavLink>
+              : <NavLink key={e.to} to={e.to} className={navClass}
+                  title={e.badge > 0 ? `${e.badge} nouveau${e.badge > 1 ? "x" : ""} commentaire${e.badge > 1 ? "s" : ""}` : undefined}>
+                  {e.label}
+                  {e.badge > 0 && <span className="stu-count">{e.badge}</span>}
+                </NavLink>
           ))}
         </nav>
 
@@ -192,11 +200,12 @@ function StudentLayout() {
         </button>
         <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion"><Icon name="power" size={18} /></button>
         {/* Bouton du tiroir : présent uniquement sous 900px, où la barre ne tient plus.
-            La pastille y est reportée, sinon replier la barre masquerait l'alerte. */}
+            La pastille y est reportée — documents ET Communauté —, sinon replier la barre
+            masquerait l'alerte. */}
         <button className="icon-btn stu-burger" onClick={() => setMenuOpen((o) => !o)}
           aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"} aria-expanded={menuOpen}>
           <Icon name={menuOpen ? "x" : "menu"} size={20} />
-          {!menuOpen && pending > 0 && <span className="stu-burger-dot" />}
+          {!menuOpen && (pending > 0 || news > 0) && <span className="stu-burger-dot" />}
         </button>
       </header>
 

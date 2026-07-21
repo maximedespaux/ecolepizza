@@ -1862,3 +1862,10 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 @media(pointer:coarse){
   input,select,textarea,.inp{font-size:16px!important}
 }
+
+/* Repère « du nouveau depuis votre dernière visite » sur une carte de la Communauté.
+   Le liseré porte le signal à lui seul dans la galerie ; l'étiquette dit combien. Les deux
+   retombent à la visite suivante — voir markCommunitySeen. */
+.comm-card2.neuf{border-color:var(--ember1);box-shadow:0 0 0 1px var(--ember1) inset}
+.comm-neuf{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:99px;vertical-align:middle;
+  background:var(--ember1);color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.02em;white-space:nowrap}

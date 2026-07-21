@@ -620,6 +620,11 @@ export function getMonEspace() {
 export function getMyAccess() {
   return request("/mon-espace/access", { silent: true });
 }
+// Remet la pastille Communauté à zéro. `silent` : rater ce marquage laisse une pastille de
+// trop, ce qui ne vaut pas un message d'erreur au stagiaire.
+export function markCommunitySeen() {
+  return request("/mon-espace/communaute/vue", { method: "POST", silent: true });
+}
 export function getMyFormations() {
   return request("/mon-espace/formations");
 }

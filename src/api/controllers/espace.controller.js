@@ -327,6 +327,54 @@ const getMonEspace = async (req, res) => {
  * Ne matérialise pas les QCM automatiques (releaseAutoQuizzes) : ce serait une écriture à
  * chaque navigation. Un QCM du jour apparaît donc dans la pastille dès la page ouverte.
  */
+/**
+ * Nombre de commentaires NOUVEAUX qui me concernent dans la Communauté — la pastille du menu.
+ *
+ * Deux cas comptent, et pas un de plus :
+ *   · un commentaire sur une fiche QUE J'AI PARTAGÉE ;
+ *   · un commentaire sur une fiche OÙ J'AI DÉJÀ COMMENTÉ — j'y ai pris part, la suite de la
+ *     conversation me regarde.
+ *
+ * Les « j'aime » sont volontairement exclus. Ils sont bien plus fréquents et n'appellent
+ * aucune réponse : les compter garderait la pastille allumée en permanence, et une pastille
+ * toujours allumée ne se regarde plus.
+ *
+ * Mes propres commentaires ne comptent pas (`c.user_id <> ?`) : commenter sa propre fiche
+ * allumerait sa propre pastille.
+ *
+ * Le périmètre est limité aux fiches ENCORE partagées dans MON organisme : la pastille ne
+ * doit compter que ce sur quoi je peux réellement cliquer. Une fiche repassée en privé
+ * disparaît donc du compteur, ce qui est le comportement voulu — sinon on annoncerait du
+ * nouveau vers une page inaccessible.
+ *
+ * La date de dernière visite est lue ici même : NULL (jamais venu) = tout est nouveau, ce qui
+ * est le bon accueil pour une première visite.
+ */
+async function communityNewsCount(conn, userId, orgId) {
+    try {
+        const [[me]] = await conn.query('SELECT community_seen_at FROM user WHERE id = ?', [userId]);
+        const seen = me?.community_seen_at ?? null;
+        const [[row]] = await conn.query(
+            `SELECT COUNT(*) AS n
+               FROM recipe_comment c
+               JOIN recipe r ON r.id = c.recipe_id
+              WHERE c.user_id <> ?
+                AND r.organization_id = ?
+                AND r.visibility = 'SHARED'
+                AND (? IS NULL OR c.created_at > ?)
+                AND (r.author_user_id = ?
+                     OR EXISTS (SELECT 1 FROM recipe_comment m
+                                 WHERE m.recipe_id = c.recipe_id AND m.user_id = ?))`,
+            [userId, orgId, seen, seen, userId, userId]
+        );
+        return Number(row?.n) || 0;
+    } catch (e) {
+        if (isMissingSchema(e)) return 0; // migration 106 non jouée
+        console.error('Erreur comptage nouveautés Communauté :', e);
+        return 0; // une pastille absente vaut mieux qu'un menu en erreur
+    }
+}
+
 async function pendingDocsCount(conn, learner, orgId) {
     try {
         const [rows] = await conn.query(
@@ -354,10 +402,11 @@ const getMyAccess = async (req, res) => {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         // Pas de fiche stagiaire (intervenant, staff…) : on ne bloque pas.
-        if (!learner) return res.json({ data: { quest_unlocked: true, pending_docs: 0 } });
+        if (!learner) return res.json({ data: { quest_unlocked: true, pending_docs: 0, community_news: await communityNewsCount(conn, req.user.id, req.user.organization_id) } });
         // Pastille du menu : calculée pour TOUTES les sorties ci-dessous, sans quoi elle
         // disparaîtrait dès qu'une formation est terminée ou qu'aucune n'est suivie.
         const pending_docs = await pendingDocsCount(conn, learner, learner.organization_id);
+        const community_news = await communityNewsCount(conn, req.user.id, learner.organization_id);
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.financing, s.program_id,
                     DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
@@ -380,10 +429,10 @@ const getMyAccess = async (req, res) => {
                 if (c.complete) { finished = true; break; }
             }
         }
-        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs } });
+        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs, community_news } });
 
         // AUCUNE formation → verrouillé (rien à débloquer tant qu'il n'est pas inscrit).
-        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs } });
+        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs, community_news } });
         const gating = [];
         for (const e of enrollments) {
             const g = await emargementGate(conn, e, learner.organization_id, agefice);
@@ -391,10 +440,31 @@ const getMyAccess = async (req, res) => {
         }
         // Inscrit : débloqué si aucune formation n'a de point d'accès, ou si au moins un est franchi.
         const quest_unlocked = gating.length === 0 || gating.some((g) => !g.locked);
-        res.json({ data: { quest_unlocked, pending_docs } });
+        res.json({ data: { quest_unlocked, pending_docs, community_news } });
     } catch (err) {
         console.error('Erreur accès stagiaire :', err);
-        res.json({ data: { quest_unlocked: true, pending_docs: 0 } });
+        res.json({ data: { quest_unlocked: true, pending_docs: 0, community_news: 0 } });
+    }
+};
+
+/**
+ * POST /api/mon-espace/communaute/vue — « j'ai vu la Communauté ».
+ *
+ * Appelé par le front UNE FOIS la galerie affichée, pas à l'entrée dans la page : le repérage
+ * des cartes concernées est calculé côté serveur à partir de cette même date. Marquer trop tôt
+ * les effacerait avant qu'on ait pu les voir.
+ *
+ * Idempotent, et sans effet de bord visible : reposer la date ne fait que remettre le
+ * compteur à zéro. En échec on répond quand même 200 — rater ce marquage laisse une pastille
+ * de trop, ce qui ne justifie pas d'afficher une erreur au stagiaire.
+ */
+const markCommunitySeen = async (req, res) => {
+    try {
+        await db.promise().query('UPDATE user SET community_seen_at = NOW() WHERE id = ?', [req.user.id]);
+        res.json({ data: { ok: true } });
+    } catch (err) {
+        if (!isMissingSchema(err)) console.error('Erreur marquage Communauté vue :', err);
+        res.json({ data: { ok: false } }); // migration 106 non jouée, ou écriture refusée
     }
 };
 
@@ -1569,5 +1639,5 @@ const updateMyInfos = async (req, res) => {
 };
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
-module.exports = { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+module.exports = { getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
     getQuestLives, loseQuestLife, resetQuestProgress };

@@ -200,6 +200,30 @@ const listShared = async (req, res) => {
                 const liked = new Set(mineLikes.map((x) => x.recipe_id));
                 rows.forEach((r) => { r.like_count = lm[r.id] || 0; r.comment_count = cm[r.id] || 0; r.liked = liked.has(r.id); });
             } catch (e) { if (!noTable(e)) throw e; }
+            // Nouveautés depuis ma dernière visite : ce qui allume la pastille du menu, reporté
+            // sur les cartes concernées pour qu'on sache OÙ aller. Mêmes deux cas que le
+            // compteur (cf. communityNewsCount) — ma fiche, ou un fil où j'ai commenté — sans
+            // quoi la pastille annoncerait un nombre que la galerie ne saurait pas montrer.
+            // Bloc séparé et tolérant : sans la migration 106, la galerie s'affiche sans repères.
+            try {
+                const [[me]] = await conn.query('SELECT community_seen_at FROM user WHERE id = ?', [req.user.id]);
+                const seen = me?.community_seen_at ?? null;
+                const [news] = await conn.query(
+                    `SELECT c.recipe_id, COUNT(*) AS n
+                       FROM recipe_comment c
+                       JOIN recipe r ON r.id = c.recipe_id
+                      WHERE c.recipe_id IN (?)
+                        AND c.user_id <> ?
+                        AND (? IS NULL OR c.created_at > ?)
+                        AND (r.author_user_id = ?
+                             OR EXISTS (SELECT 1 FROM recipe_comment m
+                                         WHERE m.recipe_id = c.recipe_id AND m.user_id = ?))
+                      GROUP BY c.recipe_id`,
+                    [ids, req.user.id, seen, seen, req.user.id, req.user.id]
+                );
+                const nm2 = Object.fromEntries(news.map((x) => [x.recipe_id, x.n]));
+                rows.forEach((r) => { r.new_comments = nm2[r.id] || 0; });
+            } catch (e) { if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e; }
         }
         res.json({ data: rows });
     } catch (err) {
