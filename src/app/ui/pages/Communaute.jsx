@@ -41,10 +41,24 @@ const VU_DELAI_MS = 2000;
  */
 function CommCard({ recipe: s, children }) {
   const ref = useRef(null);
-  // Le halo « j'aime » ne s'allume que s'il y en a au chargement : le passer à false ensuite
-  // est définitif pour cette visite.
   const [aimeVu, setAimeVu] = useState(false);
-  const haloAime = s.new_likes > 0 && !aimeVu;
+  /**
+   * `new_likes` est FIGÉ à la première vue, et c'est indispensable.
+   *
+   * La page marque la visite dès la galerie reçue — c'est ce qui fait retomber la pastille du
+   * menu. Mais du coup, toute relecture ultérieure de la galerie renvoie `new_likes: 0` : la
+   * visite a eu lieu, le serveur a raison de le dire. Sans ce gel, cette seconde réponse
+   * éteignait le halo à la milliseconde où elle arrivait — mesuré à 1 ms en développement, où
+   * React monte les composants deux fois.
+   *
+   * Autrement dit, la page invalidait elle-même la donnée dont son propre affichage dépendait.
+   * Le halo appartient à la visite en cours ; seul l'IntersectionObserver l'éteint.
+   *
+   * Les commentaires, eux, RESTENT réactifs : ouvrir une fiche remet son `new_comments` à zéro
+   * dans la liste, et c'est ainsi que leur halo doit s'éteindre.
+   */
+  const [aimeInitial] = useState(() => s.new_likes > 0);
+  const haloAime = aimeInitial && !aimeVu;
   const haloCom = s.new_comments > 0;
 
   useEffect(() => {
