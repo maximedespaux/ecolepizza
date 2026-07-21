@@ -906,12 +906,19 @@ tbody tr:last-child td{border-bottom:none}
 .pq-node.done{background:var(--green);box-shadow:0 4px 0 0 #1f7a44;cursor:default}
 .pq-node.locked{background:var(--surface);color:var(--dim);border:2px solid var(--border);box-shadow:none;cursor:not-allowed}
 /* Chapitre EN COURS : le seul jouable, donc le seul qui doit attirer l'œil au milieu du
-   chemin. Halo pulsé, arrêté si l'utilisateur préfère les animations réduites. */
-.pq-node.on{outline:3px solid var(--c,var(--navy));outline-offset:3px;animation:pq-pulse 1.8s var(--ease) infinite}
-.pq-node.on:disabled{animation:none;opacity:.55} /* plus de cœur : on montre, on n'invite pas */
-@keyframes pq-pulse{0%,100%{outline-color:color-mix(in srgb,var(--c,var(--navy)) 90%,transparent)}
-  50%{outline-color:color-mix(in srgb,var(--c,var(--navy)) 25%,transparent)}}
-@media(prefers-reduced-motion:reduce){.pq-node.on{animation:none}}
+   chemin.
+   Anneau en pseudo-élément et non en `outline` : la pastille porte une ombre pleine de 4 px
+   SOUS elle (l'effet bouton), sa masse visuelle mesure donc 50 px pour une boîte de 46 —
+   un anneau centré sur la boîte paraissait remonté. Ici on le décale de 2 px vers le bas
+   pour le centrer sur ce qu'on voit, ce qu'un `outline` ne permet pas. */
+.pq-node.on::after{content:"";position:absolute;inset:-6px;border-radius:50%;pointer-events:none;
+  border:3px solid var(--c,var(--navy));transform:translateY(2px);
+  animation:pq-pulse 1.8s var(--ease) infinite}
+.pq-node.on:disabled{opacity:.55} /* plus de cœur : on montre, on n'invite pas */
+.pq-node.on:disabled::after{animation:none}
+@keyframes pq-pulse{0%,100%{border-color:color-mix(in srgb,var(--c,var(--navy)) 90%,transparent)}
+  50%{border-color:color-mix(in srgb,var(--c,var(--navy)) 25%,transparent)}}
+@media(prefers-reduced-motion:reduce){.pq-node.on::after{animation:none}}
 .pq-node-label{text-align:center;font-size:11.5px;line-height:1.25;width:100%}
 .pq-node-label b{display:block}
 .pq-stars{font-size:10px;letter-spacing:1px}
