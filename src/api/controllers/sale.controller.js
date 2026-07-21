@@ -201,6 +201,14 @@ const checkout = async (req, res) => {
         const tvaApplies = !!settings.tva_applies;
         const payMethod = (req.body.payment_method || '').toString().slice(0, 30) || null;
 
+        // Le stagiaire est désormais ÉCRIT sur la facture, plus seulement lu pour en tirer un
+        // nom : il faut donc vérifier qu'il appartient à l'organisme. Un identifiant venu d'un
+        // autre organisme créerait ici une ligne qui pointe ailleurs — la famille de défauts
+        // « clé étrangère non vérifiée » relevée à la revue du back-office.
+        if (learner_id && !(await belongsToOrg(conn, 'learner', learner_id, orgId))) {
+            return res.status(422).json({ message: 'Stagiaire inconnu' });
+        }
+
         // Vérifie les articles + le stock avant d'appliquer.
         for (const ln of lines) {
             const [rows] = await conn.query(
@@ -279,11 +287,29 @@ const checkout = async (req, res) => {
 
         const remise = globalDisc > 0 ? ` (remise ${globalDisc}%)` : '';
         const description = ('Vente de matériel : ' + productNames.join(', ') + remise).slice(0, 255);
-        await conn.query(
-            `INSERT INTO invoice (id, organization_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status)
-             VALUES (?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?)`,
-            [invoiceId, orgId, name, description, number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status]
-        );
+        // ON GARDE LA RÉFÉRENCE DU STAGIAIRE, pas seulement son nom. Elle était perdue au moment
+        // même où on l'avait : son adresse e-mail (BT-49, obligatoire) et son adresse postale
+        // restaient sur sa fiche, inatteignables depuis la facture. Le nom reste écrit à côté —
+        // c'est lui qui a été imprimé, et renommer une fiche ne doit pas récrire une pièce déjà
+        // émise.
+        //
+        // La colonne peut ne pas exister (migration 111 non jouée) : on réessaie alors sans
+        // elle, et la vente se comporte comme avant plutôt que d'échouer.
+        const champs = [invoiceId, orgId, name, description, number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status];
+        try {
+            await conn.query(
+                `INSERT INTO invoice (id, organization_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status, learner_id)
+                 VALUES (?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?, ?)`,
+                [...champs, learner_id || null]
+            );
+        } catch (e) {
+            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+            await conn.query(
+                `INSERT INTO invoice (id, organization_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status)
+                 VALUES (?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?)`,
+                champs
+            );
+        }
         // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X.
         for (let i = 0; i < invLines.length; i++) {
             // Le taux réel de l'article accompagne la ligne : sans lui, Factur-X retombait sur

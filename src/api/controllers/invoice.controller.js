@@ -49,8 +49,25 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     // OBLIGATOIRE en France par BR-FR-12. Une facture émise pour un client saisi au nom libre
     // n'en a aucune et sera rejetée à la validation — d'où l'avertissement remonté plus bas.
     let buyer = { name: 'Client', siret: null, email: null, address: {} };
-    if (inv.buyer_name) {
-        buyer = { name: inv.buyer_name, siret: null, email: null, address: {} };
+    if (inv.learner_id) {
+        // La VENTE garde désormais la référence du stagiaire, pas seulement son nom. Sans elle,
+        // l'e-mail et l'adresse restaient sur la fiche, inatteignables depuis la facture.
+        const [l] = await conn.query(
+            'SELECT first_name, last_name, email, address, zip_code, town FROM learner WHERE id = ? AND organization_id = ?',
+            [inv.learner_id, orgId]
+        );
+        if (l[0]) {
+            buyer = {
+                // Le nom IMPRIMÉ reste celui de la facture : renommer une fiche ne doit pas
+                // changer l'acheteur d'une pièce déjà émise.
+                name: inv.buyer_name || `${l[0].first_name || ''} ${l[0].last_name || ''}`.trim(),
+                siret: null,
+                email: inv.buyer_email || l[0].email || null,
+                address: { line: l[0].address, zip: l[0].zip_code, city: l[0].town },
+            };
+        }
+    } else if (inv.buyer_name) {
+        buyer = { name: inv.buyer_name, siret: null, email: inv.buyer_email || null, address: {} };
     } else if (inv.company_id) {
         const [c] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [inv.company_id, orgId]);
         if (c[0]) buyer = { name: c[0].name, siret: c[0].siret, email: c[0].email || null, address: { line: c[0].address, zip: c[0].zip_code, city: c[0].town } };
@@ -451,7 +468,9 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
         headerHtml: content.header,
         footerHtml: content.footer,
     });
-    const pdf = await htmlToPdf(html);
+    // PDF/A-3 : exigé par Factur-X, et seul le moteur de rendu peut l'obtenir (polices
+    // embarquees, profil de sortie ICC, aucune couleur en espace dependant du peripherique).
+    const pdf = await htmlToPdf(html, true);
     if (!pdf) throw refus('La conversion du modele en PDF a echoue. Verifiez le contenu du modele.');
     return await attacherFacturX(pdf, xml);
 }

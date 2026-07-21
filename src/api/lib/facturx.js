@@ -268,7 +268,70 @@ function buildCII(d) {
 </rsm:CrossIndustryInvoice>`;
 }
 
-// XMP Factur-X (identification PDF/A-3 + extension Factur-X).
+/**
+ * Les descriptions XMP propres à Factur-X, à insérer dans le paquet existant.
+ *
+ * CE BLOC N'ÉTAIT JAMAIS ÉCRIT. `buildXmp` existait, produisait le bon XMP… et n'était appelé
+ * par personne. Le validateur le disait sans détour : « No Factur-X metadata found in XMP ».
+ * C'est le genre de fonction qui rassure à la lecture du code et ne fait rien à l'exécution.
+ *
+ * ON COMPLÈTE LE PAQUET, ON NE LE REMPLACE PAS. LibreOffice y a déjà mis l'identification
+ * PDF/A (pdfaid) et le producteur, ce dernier devant rester synchronisé avec le dictionnaire
+ * d'information du PDF. Réécrire le paquet entier casserait cette cohérence pour ajouter
+ * quatre lignes.
+ *
+ * LE SCHÉMA D'EXTENSION N'EST PAS DÉCORATIF : PDF/A interdit les propriétés XMP d'un espace de
+ * noms inconnu, sauf à le décrire. Sans cette description, les quatre propriétés `fx:` que
+ * l'on ajoute pour satisfaire Factur-X feraient échouer la conformité PDF/A — on corrigerait
+ * un défaut en en créant un autre.
+ */
+const XMP_FACTURX = `  <rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#">
+   <fx:DocumentType>INVOICE</fx:DocumentType>
+   <fx:DocumentFileName>factur-x.xml</fx:DocumentFileName>
+   <fx:Version>1.0</fx:Version>
+   <fx:ConformanceLevel>BASIC</fx:ConformanceLevel>
+  </rdf:Description>
+  <rdf:Description rdf:about="" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
+   <pdfaExtension:schemas>
+    <rdf:Bag>
+     <rdf:li rdf:parseType="Resource">
+      <pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema>
+      <pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#</pdfaSchema:namespaceURI>
+      <pdfaSchema:prefix>fx</pdfaSchema:prefix>
+      <pdfaSchema:property>
+       <rdf:Seq>
+        <rdf:li rdf:parseType="Resource">
+         <pdfaProperty:name>DocumentFileName</pdfaProperty:name>
+         <pdfaProperty:valueType>Text</pdfaProperty:valueType>
+         <pdfaProperty:category>external</pdfaProperty:category>
+         <pdfaProperty:description>Name of the embedded XML invoice file</pdfaProperty:description>
+        </rdf:li>
+        <rdf:li rdf:parseType="Resource">
+         <pdfaProperty:name>DocumentType</pdfaProperty:name>
+         <pdfaProperty:valueType>Text</pdfaProperty:valueType>
+         <pdfaProperty:category>external</pdfaProperty:category>
+         <pdfaProperty:description>INVOICE</pdfaProperty:description>
+        </rdf:li>
+        <rdf:li rdf:parseType="Resource">
+         <pdfaProperty:name>Version</pdfaProperty:name>
+         <pdfaProperty:valueType>Text</pdfaProperty:valueType>
+         <pdfaProperty:category>external</pdfaProperty:category>
+         <pdfaProperty:description>The actual version of the Factur-X XML schema</pdfaProperty:description>
+        </rdf:li>
+        <rdf:li rdf:parseType="Resource">
+         <pdfaProperty:name>ConformanceLevel</pdfaProperty:name>
+         <pdfaProperty:valueType>Text</pdfaProperty:valueType>
+         <pdfaProperty:category>external</pdfaProperty:category>
+         <pdfaProperty:description>The conformance level of the embedded Factur-X data</pdfaProperty:description>
+        </rdf:li>
+       </rdf:Seq>
+      </pdfaSchema:property>
+     </rdf:li>
+    </rdf:Bag>
+   </pdfaExtension:schemas>
+  </rdf:Description>`;
+
+/** Paquet XMP complet, pour un PDF qui n'en porterait aucun. */
 function buildXmp() {
     return `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -277,15 +340,53 @@ function buildXmp() {
    <pdfaid:part>3</pdfaid:part>
    <pdfaid:conformance>B</pdfaid:conformance>
   </rdf:Description>
-  <rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#">
-   <fx:DocumentType>INVOICE</fx:DocumentType>
-   <fx:DocumentFileName>factur-x.xml</fx:DocumentFileName>
-   <fx:Version>1.0</fx:Version>
-   <fx:ConformanceLevel>BASIC</fx:ConformanceLevel>
-  </rdf:Description>
+${XMP_FACTURX}
  </rdf:RDF>
 </x:xmpmeta>
 <?xpacket end="w"?>`;
+}
+
+/**
+ * Ajoute les descriptions Factur-X au paquet XMP d'un PDF, ou en pose un s'il n'en a pas.
+ *
+ * L'insertion se fait juste avant `</rdf:RDF>` : c'est un conteneur de descriptions, leur
+ * ordre est libre. Si le paquet en porte déjà (PDF réémis), on ne double pas — deux
+ * déclarations contradictoires vaudraient moins qu'une.
+ */
+function fusionnerXmp(existant, sync) {
+    let xmp = (!existant || !existant.includes('</rdf:RDF>')) ? buildXmp() : existant;
+    if (!xmp.includes('urn:factur-x:pdfa:CrossIndustryDocument')) {
+        xmp = xmp.replace('</rdf:RDF>', `${XMP_FACTURX}\n </rdf:RDF>`);
+    }
+    return sync ? synchroniser(xmp, sync) : xmp;
+}
+
+/**
+ * Aligne le XMP sur le dictionnaire d'information du PDF.
+ *
+ * PDF/A exige que les deux DISENT LA MÊME CHOSE. Or pdf-lib réécrit le producteur et le
+ * créateur à son propre nom dès qu'on enregistre : le fichier annonçait « pdf-lib » dans son
+ * dictionnaire et « LibreOffice » dans son XMP, ce qu'aucun validateur ne laisse passer. On ne
+ * peut pas empêcher pdf-lib de signer, alors on écrit la même signature des deux côtés.
+ *
+ * Constaté sur le fichier produit, pas sur le code : rien dans `attacherFacturX` ne laissait
+ * deviner qu'enregistrer changerait des métadonnées qu'on n'avait pas touchées.
+ */
+function synchroniser(xmp, { producer, creator, modifyDate }) {
+    const poser = (src, balise, valeur, ns) => {
+        const re = new RegExp(`<${balise}>[\\s\\S]*?</${balise}>`);
+        if (re.test(src)) return src.replace(re, `<${balise}>${esc(valeur)}</${balise}>`);
+        // Aucune occurrence : on ajoute une description portant son propre espace de noms.
+        return src.replace('</rdf:RDF>',
+            `  <rdf:Description rdf:about="" ${ns}><${balise}>${esc(valeur)}</${balise}></rdf:Description>\n </rdf:RDF>`);
+    };
+    const NS_PDF = 'xmlns:pdf="http://ns.adobe.com/pdf/1.3/"';
+    const NS_XMP = 'xmlns:xmp="http://ns.adobe.com/xap/1.0/"';
+    let out = poser(xmp, 'pdf:Producer', producer, NS_PDF);
+    out = poser(out, 'xmp:CreatorTool', creator, NS_XMP);
+    out = poser(out, 'xmp:ModifyDate', modifyDate, NS_XMP);
+    out = poser(out, 'xmp:MetadataDate', modifyDate, NS_XMP);
+    return out;
 }
 
 /** Construit le PDF lisible + XML embarqué (Factur-X). */
@@ -296,12 +397,43 @@ function buildXmp() {
  * la rendre conforme. Seule la première est affaire de mise en page et peut donc être confiée
  * à un modèle d'organisme ; la seconde est normée (EN 16931) et reste au code.
  */
+const PRODUCTEUR = 'Impasto';
+
 async function attacherFacturX(pdfBytes, xml) {
     const pdf = await PDFDocument.load(pdfBytes);
     embedFacturX(pdf, xml);
-    pdf.setTitle('Facture');
-    pdf.setProducer('Impasto');
+
+    // On signe des DEUX côtés, avec la même valeur. `setTitle` a été retiré : il posait un
+    // titre dans le dictionnaire sans équivalent dans le XMP, soit exactement l'écart que
+    // PDF/A interdit — et un titre « Facture » n'apprenait rien à personne.
+    const maintenant = new Date();
+    pdf.setProducer(PRODUCTEUR);
+    pdf.setCreator(PRODUCTEUR);
+    pdf.setModificationDate(maintenant);
+    ecrireXmp(pdf, maintenant);
+
     return Buffer.from(await pdf.save());
+}
+
+/** Remplace le flux /Metadata du catalogue par le paquet XMP complété et synchronisé. */
+function ecrireXmp(pdf, maintenant) {
+    const ctx = pdf.context;
+    let existant = null;
+    try {
+        const flux = pdf.catalog.lookup(PDFName.of('Metadata'));
+        if (flux && flux.getContents) existant = Buffer.from(flux.getContents()).toString('utf8');
+    } catch { /* pas de XMP lisible : on en pose un complet */ }
+
+    const xmp = fusionnerXmp(existant, {
+        producer: PRODUCTEUR,
+        creator: PRODUCTEUR,
+        modifyDate: maintenant.toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    });
+    const stream = PDFRawStream.of(
+        ctx.obj({ Type: 'Metadata', Subtype: 'XML' }),
+        Buffer.from(xmp, 'utf8')
+    );
+    pdf.catalog.set(PDFName.of('Metadata'), ctx.register(stream));
 }
 
 /* La mise en page interne de la facture vivait ici : un en-tete, un tableau et trois totaux
@@ -333,4 +465,4 @@ function manquantsFacturX(d) {
     return m;
 }
 
-module.exports = { ventilerTva, attacherFacturX, buildCII, manquantsFacturX, siren, TYPE_CODE };
+module.exports = { ventilerTva, attacherFacturX, buildCII, manquantsFacturX, fusionnerXmp, siren, TYPE_CODE };
