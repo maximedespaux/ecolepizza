@@ -447,13 +447,15 @@ function WorldView({ world, prog, onBack, onChapter, onGame }) {
           const stars = prog[i] || 0;
           const done = i in prog;
           const locked = i > 0 && !(i - 1 in prog);
-          const offset = [0, 46, 70, 46, 0, -46][i % 6];
+          // Décalages resserrés avec les pastilles : le zigzag doit rester lisible sans
+          // pousser le chemin hors de la largeur du contenu.
+          const offset = [0, 32, 48, 32, 0, -32][i % 6];
           return (
             <div key={i} className="pq-node-wrap" style={{ transform: `translateX(${offset}px)` }}>
               <button className={"pq-node" + (done ? " done" : "") + (locked ? " locked" : "")}
                 style={{ "--c": world.color }} disabled={locked}
                 onClick={() => onChapter(i, ch)} title={locked ? "Termine le chapitre précédent" : ch.title}>
-                <Icon name={locked ? "eye-off" : ch.ic} size={22} />
+                <Icon name={locked ? "eye-off" : ch.ic} size={18} />
               </button>
               <div className="pq-node-label">
                 <b>{ch.title}</b>

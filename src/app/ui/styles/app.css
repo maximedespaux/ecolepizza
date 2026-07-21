@@ -845,16 +845,19 @@ tbody tr:last-child td{border-bottom:none}
 .pq-world-dot{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:11px;flex:none}
 .pq-world-t{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pq-map{background:var(--surface2);border:1px solid var(--border-soft);border-radius:16px;padding:24px 16px}
-.pq-path{display:flex;flex-direction:column;align-items:center;gap:20px}
-.pq-node-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;transition:transform .2s var(--ease)}
-.pq-node{width:62px;height:62px;border-radius:50%;border:none;background:var(--c,var(--navy));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 5px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000);transition:transform .1s var(--ease),box-shadow .1s var(--ease)}
+/* Chemin des chapitres. Resserré : à six chapitres, des pastilles de 62 px espacées de
+   20 px faisaient défiler la page pour lire un parcours qu'on doit embrasser d'un coup
+   d'œil — c'est une carte, pas une liste. */
+.pq-path{display:flex;flex-direction:column;align-items:center;gap:12px}
+.pq-node-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;transition:transform .2s var(--ease)}
+.pq-node{width:46px;height:46px;border-radius:50%;border:none;background:var(--c,var(--navy));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000);transition:transform .1s var(--ease),box-shadow .1s var(--ease)}
 .pq-node:hover:not(:disabled){transform:translateY(-2px)}
-.pq-node:active:not(:disabled){transform:translateY(3px);box-shadow:0 2px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000)}
-.pq-node.done{background:var(--green);box-shadow:0 5px 0 0 #1f7a44}
+.pq-node:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000)}
+.pq-node.done{background:var(--green);box-shadow:0 4px 0 0 #1f7a44}
 .pq-node.locked{background:var(--surface);color:var(--dim);border:2px solid var(--border);box-shadow:none;cursor:not-allowed}
-.pq-node-label{text-align:center;font-size:12.5px}
+.pq-node-label{text-align:center;font-size:11.5px;line-height:1.25;max-width:190px}
 .pq-node-label b{display:block}
-.pq-stars{font-size:11px;letter-spacing:1px}
+.pq-stars{font-size:10px;letter-spacing:1px}
 .pq-progress{flex:1;height:10px;background:var(--surface2);border-radius:99px;overflow:hidden}
 .pq-progress span{display:block;height:100%;border-radius:99px;transition:width .2s var(--ease)}
 .pq-choice{text-align:left;padding:12px 14px;border:2px solid var(--border);border-radius:12px;background:var(--surface);font-size:14px;font-weight:600;color:var(--text);cursor:pointer;transition:.1s var(--ease)}
