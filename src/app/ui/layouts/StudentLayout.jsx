@@ -7,7 +7,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
 import { getMyAccess } from "../api/apiClient.js";
-import { getAvatar, AVATAR_EVENT, hydrateProfile } from "../lib/gamification.js";
+import { getAvatar, AVATAR_EVENT, COMMUNITY_EVENT, hydrateProfile } from "../lib/gamification.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 
@@ -117,6 +117,18 @@ function StudentLayout() {
     // Rejoué à chaque changement de page : quitter la Communauté suffit donc à voir la
     // pastille retomber, sans rechargement.
   }, [user?.id, loc.pathname]);
+  // La Communauté est rendue dans l'Outlet, la pastille vit ici : sans ce signal, ouvrir une
+  // fiche commentée laisserait le compteur figé jusqu'au prochain changement de page. On
+  // redemande le total au serveur plutôt que de le décrémenter — un compte tenu côté
+  // navigateur dériverait dès qu'un commentaire arrive pendant la visite.
+  useEffect(() => {
+    if (!user?.id) return;
+    const recompter = () => getMyAccess()
+      .then((r) => setNews(Number(r?.data?.community_news) || 0))
+      .catch(() => {});
+    window.addEventListener(COMMUNITY_EVENT, recompter);
+    return () => window.removeEventListener(COMMUNITY_EVENT, recompter);
+  }, [user?.id]);
   useEffect(() => {
     const sync = () => setAvatar(getAvatar(user?.id));
     sync();

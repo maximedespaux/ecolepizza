@@ -328,46 +328,63 @@ const getMonEspace = async (req, res) => {
  * chaque navigation. Un QCM du jour apparaît donc dans la pastille dès la page ouverte.
  */
 /**
- * Nombre de commentaires NOUVEAUX qui me concernent dans la Communauté — la pastille du menu.
+ * Ce qui m'attend dans la Communauté — la pastille du menu.
  *
- * Deux cas comptent, et pas un de plus :
- *   · un commentaire sur une fiche QUE J'AI PARTAGÉE ;
- *   · un commentaire sur une fiche OÙ J'AI DÉJÀ COMMENTÉ — j'y ai pris part, la suite de la
- *     conversation me regarde.
+ * DEUX SIGNAUX, DEUX EXIGENCES. Ils ne s'éteignent pas au même moment, et c'est toute la
+ * raison pour laquelle ils sont comptés séparément :
  *
- * Les « j'aime » sont volontairement exclus. Ils sont bien plus fréquents et n'appellent
- * aucune réponse : les compter garderait la pastille allumée en permanence, et une pastille
- * toujours allumée ne se regarde plus.
+ *   · COMMENTAIRES — ils appellent une réponse, donc ils restent comptés tant que la fiche
+ *     n'a pas été OUVERTE (recipe_read, migration 107). Traverser la Communauté sans entrer
+ *     dans la fiche ne les éteint pas : on ne les a pas lus.
+ *     Deux cas seulement : un commentaire sur une fiche QUE J'AI PARTAGÉE, ou sur une fiche
+ *     OÙ J'AI DÉJÀ COMMENTÉ — j'y ai pris part, la suite me regarde.
  *
- * Mes propres commentaires ne comptent pas (`c.user_id <> ?`) : commenter sa propre fiche
- * allumerait sa propre pastille.
+ *   · J'AIME — ils n'appellent rien. Les VOIR suffit, donc ils s'éteignent à la visite
+ *     (community_seen_at, migration 106). Uniquement sur MES fiches : être informé qu'on a
+ *     aimé la fiche d'un autre n'a pas de sens.
  *
- * Le périmètre est limité aux fiches ENCORE partagées dans MON organisme : la pastille ne
- * doit compter que ce sur quoi je peux réellement cliquer. Une fiche repassée en privé
- * disparaît donc du compteur, ce qui est le comportement voulu — sinon on annoncerait du
- * nouveau vers une page inaccessible.
+ * LE REPLI DE `read_at` MÉRITE UN MOT. Un commentaire est neuf s'il est postérieur à :
+ *   1. la lecture de SA fiche, si elle a eu lieu ;
+ *   2. sinon, la dernière visite de la Communauté — ce qui évite qu'à la mise en service de
+ *      la 107, où recipe_read est vide, chacun se réveille avec des mois d'historique dans
+ *      sa pastille. Ce que l'on avait déjà balayé du regard reste considéré comme vu ;
+ *   3. sinon (jamais venu), tout est neuf : c'est le bon accueil pour une première visite.
  *
- * La date de dernière visite est lue ici même : NULL (jamais venu) = tout est nouveau, ce qui
- * est le bon accueil pour une première visite.
+ * Mes propres commentaires et mes propres j'aime ne comptent pas : s'auto-notifier n'a
+ * aucun intérêt.
+ *
+ * Le périmètre reste les fiches ENCORE partagées dans MON organisme : la pastille ne doit
+ * annoncer que ce sur quoi on peut réellement cliquer. Une fiche repassée en privé en sort.
  */
 async function communityNewsCount(conn, userId, orgId) {
     try {
-        const [[me]] = await conn.query('SELECT community_seen_at FROM user WHERE id = ?', [userId]);
-        const seen = me?.community_seen_at ?? null;
         const [[row]] = await conn.query(
-            `SELECT COUNT(*) AS n
-               FROM recipe_comment c
-               JOIN recipe r ON r.id = c.recipe_id
-              WHERE c.user_id <> ?
-                AND r.organization_id = ?
-                AND r.visibility = 'SHARED'
-                AND (? IS NULL OR c.created_at > ?)
-                AND (r.author_user_id = ?
-                     OR EXISTS (SELECT 1 FROM recipe_comment m
-                                 WHERE m.recipe_id = c.recipe_id AND m.user_id = ?))`,
-            [userId, orgId, seen, seen, userId, userId]
+            `SELECT
+               (SELECT COUNT(*)
+                  FROM recipe_comment c
+                  JOIN recipe r ON r.id = c.recipe_id
+                  LEFT JOIN recipe_read rr ON rr.recipe_id = c.recipe_id AND rr.user_id = u.id
+                 WHERE c.user_id <> u.id
+                   AND r.organization_id = ?
+                   AND r.visibility = 'SHARED'
+                   AND c.created_at > COALESCE(rr.read_at, u.community_seen_at, '1970-01-01')
+                   AND (r.author_user_id = u.id
+                        OR EXISTS (SELECT 1 FROM recipe_comment m
+                                    WHERE m.recipe_id = c.recipe_id AND m.user_id = u.id))
+               ) AS comments,
+               (SELECT COUNT(*)
+                  FROM recipe_like lk
+                  JOIN recipe r2 ON r2.id = lk.recipe_id
+                 WHERE lk.user_id <> u.id
+                   AND r2.author_user_id = u.id
+                   AND r2.organization_id = ?
+                   AND r2.visibility = 'SHARED'
+                   AND lk.created_at > COALESCE(u.community_seen_at, '1970-01-01')
+               ) AS likes
+             FROM user u WHERE u.id = ?`,
+            [orgId, orgId, userId]
         );
-        return Number(row?.n) || 0;
+        return (Number(row?.comments) || 0) + (Number(row?.likes) || 0);
     } catch (e) {
         if (isMissingSchema(e)) return 0; // migration 106 non jouée
         console.error('Erreur comptage nouveautés Communauté :', e);

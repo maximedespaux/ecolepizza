@@ -23,11 +23,15 @@ const lire = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 const espace = lire('controllers/espace.controller.js');
 const recipe = lire('controllers/recipe.controller.js');
 
-/** Extrait la requête entre backticks qui suit un repère, et le tableau de paramètres. */
+/** Extrait la requête entre backticks qui ENTOURE ou suit un repère, et ses paramètres. */
 function requeteApres(src, repere) {
     const i = src.indexOf(repere);
     assert.notStrictEqual(i, -1, `repère introuvable : ${repere}`);
-    const debut = src.indexOf('`', i);
+    // Le repère peut être un commentaire AVANT la requête, ou un fragment DEDANS. La parité
+    // des backticks qui précèdent tranche : un nombre impair veut dire qu'on est à l'intérieur
+    // d'un littéral, donc que le backtick ouvrant est derrière nous.
+    const dedans = (src.slice(0, i).match(/`/g) || []).length % 2 === 1;
+    const debut = dedans ? src.lastIndexOf('`', i) : src.indexOf('`', i);
     const fin = src.indexOf('`', debut + 1);
     const sql = src.slice(debut + 1, fin);
     // Le tableau de paramètres suit la requête, entre crochets.
@@ -36,8 +40,11 @@ function requeteApres(src, repere) {
     return { sql, params: m ? m[1].split(',').map((s) => s.trim()).filter(Boolean) : [] };
 }
 
+// Repères choisis sur du code, pas sur des commentaires : une phrase se reformule, un nom
+// de table ou de colonne ne bouge qu'en même temps que la requête qu'on veut suivre.
 const compteur = requeteApres(espace, 'async function communityNewsCount');
-const cartes = requeteApres(recipe, 'Nouveautés depuis ma dernière visite');
+const cartes = requeteApres(recipe, 'SELECT c.recipe_id, COUNT(*) AS n');
+const cartesAime = requeteApres(recipe, 'SELECT lk.recipe_id, COUNT(*) AS n');
 
 test('le SQL du compteur est valide en dialecte MariaDB', () => {
     const p = new Parser();
@@ -63,33 +70,52 @@ test('autant de paramètres que de ? dans les repères de cartes', () => {
 
 // --- Les décisions produit, telles qu'elles ont été arbitrées ------------------------------
 
-test('mes propres commentaires ne comptent pas', () => {
-    // Sans cette clause, commenter sa propre fiche allumerait sa propre pastille.
-    for (const [nom, q] of [['compteur', compteur.sql], ['cartes', cartes.sql]]) {
-        assert.match(q, /c\.user_id\s*<>\s*\?/, `${nom} : l'exclusion de l'auteur a disparu`);
-    }
+test('mes propres commentaires et mes propres j\'aime ne comptent pas', () => {
+    // Sans ces clauses, commenter ou aimer sa propre fiche allumerait sa propre pastille.
+    assert.match(compteur.sql, /c\.user_id\s*<>\s*u\.id/, "l'exclusion de l'auteur du commentaire a disparu");
+    assert.match(compteur.sql, /lk\.user_id\s*<>\s*u\.id/, "l'exclusion de l'auteur du j'aime a disparu");
+    assert.match(cartes.sql, /c\.user_id\s*<>\s*\?/);
 });
 
-test('les deux cas retenus sont bien là : ma fiche, ou un fil où j\'ai commenté', () => {
+test('les deux cas retenus pour un commentaire : ma fiche, ou un fil où j\'ai commenté', () => {
     for (const [nom, q] of [['compteur', compteur.sql], ['cartes', cartes.sql]]) {
-        assert.match(q, /r\.author_user_id\s*=\s*\?/, `${nom} : le cas « ma fiche » a disparu`);
-        assert.match(q, /EXISTS\s*\(\s*SELECT[\s\S]*recipe_comment m[\s\S]*m\.user_id\s*=\s*\?/,
+        assert.match(q, /r\.author_user_id\s*=\s*(u\.id|\?)/, `${nom} : le cas « ma fiche » a disparu`);
+        assert.match(q, /EXISTS\s*\(\s*SELECT[\s\S]*recipe_comment m[\s\S]*m\.user_id\s*=\s*(u\.id|\?)/,
             `${nom} : le cas « fil où j'ai commenté » a disparu`);
     }
 });
 
-test('les j\'aime ne sont pas comptés', () => {
-    // Décision assumée : bien plus fréquents et sans réponse attendue, ils garderaient la
-    // pastille allumée en permanence — et une pastille toujours allumée ne se regarde plus.
-    for (const [nom, q] of [['compteur', compteur.sql], ['cartes', cartes.sql]]) {
-        assert.doesNotMatch(q, /recipe_like/, `${nom} : les j'aime se sont invités dans le compte`);
-    }
+test('un j\'aime ne compte que sur MES fiches', () => {
+    // Être informé qu'on a aimé la fiche d'un autre n'apprend rien.
+    assert.match(compteur.sql, /r2\.author_user_id\s*=\s*u\.id/);
 });
 
-test('une première visite (date NULL) montre tout comme nouveau', () => {
+/* Le cœur de la demande : les deux signaux ne s'éteignent PAS au même moment. Si ces deux
+   tests tombent ensemble, c'est que la distinction a été perdue en cours de route. */
+test('un COMMENTAIRE s\'éteint à la lecture de sa fiche, pas à la visite', () => {
+    // recipe_read est ce qui permet à un commentaire de survivre à une visite sans ouverture.
+    assert.match(compteur.sql, /LEFT JOIN recipe_read rr/, 'la lecture par fiche a disparu du compteur');
+    assert.match(compteur.sql, /COALESCE\(rr\.read_at,/, 'la lecture par fiche ne prime plus');
+    assert.match(cartes.sql, /LEFT JOIN recipe_read rr/, 'la lecture par fiche a disparu des repères');
+});
+
+test('un J\'AIME s\'éteint à la visite, sans notion de lecture', () => {
+    // Le bloc j'aime ne doit PAS consulter recipe_read : le voir suffit.
+    const bloc = compteur.sql.slice(compteur.sql.indexOf('recipe_like'));
+    assert.doesNotMatch(bloc, /recipe_read/, "le j'aime s'est mis à dépendre de la lecture d'une fiche");
+    assert.match(bloc, /community_seen_at/, "le j'aime ne s'éteint plus à la visite");
+});
+
+test('la reprise de l\'existant ne réveille pas des mois d\'historique', () => {
+    // À la mise en service de la 107, recipe_read est vide. Sans ce repli sur la date de
+    // dernière visite, chacun se réveillerait avec tout son historique dans la pastille.
+    assert.match(compteur.sql, /COALESCE\(rr\.read_at,\s*u\.community_seen_at,\s*'1970-01-01'\)/);
+});
+
+test('une première visite (aucune date) montre tout comme nouveau', () => {
+    // '1970-01-01' en dernier recours : sans lui, un COALESCE tout NULL ne ramènerait RIEN.
     for (const [nom, q] of [['compteur', compteur.sql], ['cartes', cartes.sql]]) {
-        assert.match(q, /\?\s+IS\s+NULL\s+OR\s+c\.created_at\s*>\s*\?/i,
-            `${nom} : sans ce garde, une date NULL ne ramènerait RIEN au lieu de tout`);
+        assert.match(q, /'1970-01-01'/, `${nom} : le recours de première visite a disparu`);
     }
 });
 
@@ -97,13 +123,31 @@ test('le compteur reste dans mon organisme et sur les fiches encore partagées',
     // La pastille ne doit annoncer que ce sur quoi on peut réellement cliquer.
     assert.match(compteur.sql, /r\.organization_id\s*=\s*\?/);
     assert.match(compteur.sql, /r\.visibility\s*=\s*'SHARED'/);
+    assert.match(compteur.sql, /r2\.organization_id\s*=\s*\?/);
+    assert.match(compteur.sql, /r2\.visibility\s*=\s*'SHARED'/);
 });
 
-test('le compte porte sur des lignes, donc une fiche à la fois mienne et commentée ne compte pas double', () => {
-    // Les deux cas sont réunis par un OR dans un même WHERE : une ligne qui satisfait les
-    // deux reste une ligne. Un JOIN ou une UNION ALL à la place aurait doublé le compte.
-    assert.match(compteur.sql, /COUNT\(\*\)/);
-    assert.doesNotMatch(compteur.sql, /UNION/i);
+test('les deux compteurs sont des sous-requêtes distinctes, donc pas de produit cartésien', () => {
+    // Joindre commentaires ET j'aime dans un même FROM multiplierait les lignes entre elles :
+    // 3 commentaires et 4 j'aime donneraient 12. Deux scalaires additionnés en JS l'évitent.
+    assert.match(compteur.sql, /\(SELECT COUNT\(\*\)[\s\S]*\) AS comments/);
+    assert.match(compteur.sql, /\(SELECT COUNT\(\*\)[\s\S]*\) AS likes/);
+});
+
+test('les repères « j\'aime » des cartes ne consultent pas la lecture par fiche', () => {
+    // Même règle que dans le compteur : voir un j'aime suffit, le lire n'a pas de sens.
+    assert.doesNotMatch(cartesAime.sql, /recipe_read/);
+    assert.match(cartesAime.sql, /r\.author_user_id\s*=\s*\?/, "un j'aime ne compte que sur MES fiches");
+});
+
+test('autant de paramètres que de ? dans les repères « j\'aime »', () => {
+    assert.strictEqual((cartesAime.sql.match(/\?/g) || []).length, cartesAime.params.length,
+        `SQL : ${cartesAime.params.join(' | ')}`);
+});
+
+test('le SQL des repères « j\'aime » est valide en dialecte MariaDB', () => {
+    const p = new Parser();
+    assert.doesNotThrow(() => p.astify(cartesAime.sql.replace(/IN \(\?\)/g, "IN ('x')").replace(/\?/g, 'NULL'), { database: 'mariadb' }));
 });
 
 // --- Le marquage « vu » --------------------------------------------------------------------

@@ -1863,9 +1863,35 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
   input,select,textarea,.inp{font-size:16px!important}
 }
 
-/* Repère « du nouveau depuis votre dernière visite » sur une carte de la Communauté.
-   Le liseré porte le signal à lui seul dans la galerie ; l'étiquette dit combien. Les deux
-   retombent à la visite suivante — voir markCommunitySeen. */
-.comm-card2.neuf{border-color:var(--ember1);box-shadow:0 0 0 1px var(--ember1) inset}
-.comm-neuf{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:99px;vertical-align:middle;
-  background:var(--ember1);color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.02em;white-space:nowrap}
+/* Halos des cartes de la Communauté. DEUX signaux, deux extinctions — voir CommCard.
+
+   Le commentaire appelle une réponse : son halo BAT, et ne s'éteint qu'à l'ouverture de la
+   fiche. Le j'aime n'appelle rien : son halo RESPIRE plus doucement et s'éteint dès que la
+   carte a passé un moment à l'écran. Deux rythmes et deux teintes, pour qu'on distingue
+   « on te répond » de « on t'a aimé » sans lire l'étiquette.
+
+   L'animation porte sur box-shadow et non sur border-width : changer une bordure relance la
+   mise en page à chaque image, et la galerie entière tressauterait. */
+@keyframes halo-com{
+  0%,100%{box-shadow:0 0 0 0 rgba(220,62,55,.55),0 0 0 1px var(--ember1) inset}
+  50%    {box-shadow:0 0 0 6px rgba(220,62,55,0),0 0 0 1px var(--ember1) inset}
+}
+@keyframes halo-aime{
+  0%,100%{box-shadow:0 0 0 0 rgba(226,163,32,.5),0 0 0 1px var(--gold) inset}
+  50%    {box-shadow:0 0 0 5px rgba(226,163,32,0),0 0 0 1px var(--gold) inset}
+}
+.comm-card2.halo-com{border-color:var(--ember1);animation:halo-com 1.9s var(--ease) infinite}
+.comm-card2.halo-aime{border-color:var(--gold);animation:halo-aime 2.6s var(--ease) infinite}
+/* Les deux à la fois : le commentaire l'emporte, c'est lui qui demande une action. */
+.comm-card2.halo-com.halo-aime{animation:halo-com 1.9s var(--ease) infinite}
+/* L'extinction du halo « j'aime » se voit : la carte redevient normale en douceur plutôt
+   que de perdre son cerne d'un coup, sinon on croit à un défaut d'affichage. */
+.comm-card2{transition:border-color .5s var(--ease),box-shadow .5s var(--ease)}
+/* Un clignotement permanent est exactement ce que ce réglage système demande d'éviter. Le
+   liseré, lui, reste : le signal n'est pas perdu, il cesse seulement de bouger. */
+@media(prefers-reduced-motion:reduce){
+  .comm-card2.halo-com,.comm-card2.halo-aime{animation:none;box-shadow:0 0 0 1px currentColor inset}
+}
+.comm-neuf{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;border-radius:99px;
+  vertical-align:middle;background:var(--ember1);color:#fff;font-size:10.5px;font-weight:800;white-space:nowrap}
+.comm-neuf.aime{background:var(--gold)}

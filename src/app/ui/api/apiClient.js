@@ -622,6 +622,10 @@ export function getMyAccess() {
 }
 // Remet la pastille Communauté à zéro. `silent` : rater ce marquage laisse une pastille de
 // trop, ce qui ne vaut pas un message d'erreur au stagiaire.
+// « J'ai ouvert cette fiche » : éteint son halo « nouveaux commentaires ».
+export function markRecipeRead(id) {
+  return request(`/recipes/${id}/read`, { method: "POST", silent: true });
+}
 export function markCommunitySeen() {
   return request("/mon-espace/communaute/vue", { method: "POST", silent: true });
 }

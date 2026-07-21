@@ -70,6 +70,19 @@ export function setAvatar(uid, id, color) {
 }
 export const AVATAR_EVENT = AVATAR_EVT;
 
+/**
+ * « Quelque chose a été vu ou lu dans la Communauté ». La pastille du menu vit dans
+ * StudentLayout, la Communauté est rendue dans son Outlet : sans ce signal, le compteur
+ * ne retomberait qu'au prochain changement de page — on ouvrirait une fiche commentée en
+ * voyant la pastille rester à 3.
+ *
+ * L'événement ne porte AUCUN nombre : il dit seulement « recompte ». Le serveur reste seul
+ * juge du total, ce qui évite de tenir un compte parallèle côté navigateur, qui dériverait
+ * dès qu'un commentaire arrive pendant la visite.
+ */
+export const COMMUNITY_EVENT = "impasto:communaute-vue";
+export const pingCommunaute = () => window.dispatchEvent(new Event(COMMUNITY_EVENT));
+
 // Fusionne deux cartes de progression { world: { step: stars } } en gardant le meilleur score.
 function mergeProgress(a = {}, b = {}) {
   const out = {};

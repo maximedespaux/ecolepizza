@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import PageHead from "../components/PageHead.jsx";
@@ -8,8 +8,56 @@ import DoughBar from "../components/DoughBar.jsx";
 import { euro, colorOf } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
-import { parseAvatar } from "../lib/gamification.js";
-import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen } from "../api/apiClient.js";
+import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
+import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead } from "../api/apiClient.js";
+
+/**
+ * Une carte de la galerie, et ses deux halos.
+ *
+ * LES DEUX SIGNAUX NE S'ÉTEIGNENT PAS AU MÊME MOMENT, et c'est tout l'objet de ce composant :
+ *
+ *   · COMMENTAIRE — il appelle une réponse. Son halo bat jusqu'à ce qu'on OUVRE la fiche.
+ *     Traverser la galerie ne suffit pas : on ne les a pas lus. L'extinction est portée par
+ *     le serveur (recipe_read), donc elle survit à un rechargement et à dix visites.
+ *
+ *   · J'AIME — il n'appelle rien. Le VOIR suffit. Son halo s'éteint dès que la carte a
+ *     réellement passé un moment à l'écran, ici même, sans rien demander au serveur : la
+ *     visite l'a déjà éteint côté base (community_seen_at).
+ *
+ * D'où l'IntersectionObserver : « vu » veut dire vu, pas « présent dans une page qu'on a
+ * ouverte ». Une carte tout en bas d'une galerie de 200, jamais atteinte par le défilement,
+ * n'a pas été vue — son halo l'attendra. Le délai laisse le temps de le remarquer, sinon un
+ * halo posé sur une carte déjà à l'écran s'éteindrait avant d'avoir servi à quoi que ce soit.
+ */
+function CommCard({ recipe: s, children }) {
+  const ref = useRef(null);
+  // Le halo « j'aime » ne s'allume que s'il y en a au chargement : le passer à false ensuite
+  // est définitif pour cette visite.
+  const [aimeVu, setAimeVu] = useState(false);
+  const haloAime = s.new_likes > 0 && !aimeVu;
+  const haloCom = s.new_comments > 0;
+
+  useEffect(() => {
+    if (!haloAime || !ref.current) return;
+    // Sans IntersectionObserver (navigateur ancien), on n'insiste pas : le halo restera le
+    // temps de la visite, ce qui est un défaut bien plus discret qu'un halo jamais éteint.
+    if (typeof IntersectionObserver === "undefined") return;
+    let minuteur = null;
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) {
+        // 1,2 s à l'écran : le temps de le voir. Repartir avant ne compte pas.
+        minuteur = setTimeout(() => setAimeVu(true), 1200);
+      } else if (minuteur) {
+        clearTimeout(minuteur); minuteur = null;
+      }
+    }, { threshold: 0.6 });
+    obs.observe(ref.current);
+    return () => { if (minuteur) clearTimeout(minuteur); obs.disconnect(); };
+  }, [haloAime]);
+
+  const cls = ["comm-card2", haloCom ? "halo-com" : "", haloAime ? "halo-aime" : ""].filter(Boolean).join(" ");
+  return <div ref={ref} className={cls}>{children}</div>;
+}
 
 /**
  * Communauté — les fiches techniques partagées par les stagiaires de l'organisme,
@@ -191,12 +239,20 @@ export default function Communaute() {
       // repères de nouveauté à partir de cette même date. La poser à l'entrée dans la page
       // les effacerait avant qu'on ait pu les voir. Les repères de CETTE visite restent
       // affichés — ils vivent dans `data`, déjà en main — et auront disparu à la suivante.
-      markCommunitySeen().catch(() => {});
+      // Les j'aime s'eteignent a la VISITE : on le dit au serveur tout de suite, la pastille
+      // du menu retombe d'autant. Les halos de CETTE visite restent affiches — ils vivent
+      // dans `data`, deja en main — et auront disparu a la suivante.
+      markCommunitySeen().then(pingCommunaute).catch(() => {});
     }).catch(() => {});
   }, []);
   useEffect(() => {
     if (!openId) { setDetail(null); return; }
     setDetail(null);
+    // Ouvrir la fiche, c'est LIRE ses commentaires : le halo s'eteint ici et nulle part
+    // ailleurs. On le retire aussi de la liste en memoire, sans recharger la galerie —
+    // sinon la carte resterait cerclee derriere la modale qu'on vient d'ouvrir.
+    markRecipeRead(openId).then(pingCommunaute).catch(() => {});
+    setList((l) => l.map((x) => (x.id === openId ? { ...x, new_comments: 0 } : x)));
     getRecipe(openId).then((r) => { setDetail(r.data); ingest(r.data); }).catch(() => setDetail(null));
   }, [openId]);
 
@@ -303,7 +359,7 @@ export default function Communaute() {
                 const km = kindMeta(s.kind);
                 const lk = likeState[s.id] || { liked: false, count: s.like_count || 0 };
                 return (
-                  <div key={s.id} className={"comm-card2" + (s.new_comments > 0 ? " neuf" : "")}>
+                  <CommCard key={s.id} recipe={s}>
                     <div className="comm-card2-body" onClick={() => setOpenId(s.id)} role="button" tabIndex={0}
                       onKeyDown={(e) => { if (e.key === "Enter") setOpenId(s.id); }}>
                       <span className="comm-kind" style={{ background: `color-mix(in srgb, ${km.color} 15%, var(--surface))`, color: km.color }}>
@@ -311,11 +367,17 @@ export default function Communaute() {
                       </span>
                       <div className="comm-title">
                         {s.name}
-                        {/* Ce qui a allumé la pastille du menu, reporté ici : la pastille dit
-                            « il y a du nouveau », ce repère dit OÙ. */}
+                        {/* La pastille du menu dit qu'il y a du nouveau ; ces reperes disent OU.
+                            Deux etiquettes distinctes parce que les deux signaux ne s'eteignent
+                            pas au meme moment — voir CommCard. */}
                         {s.new_comments > 0 && (
-                          <span className="comm-neuf" title={`${s.new_comments} nouveau${s.new_comments > 1 ? "x" : ""} commentaire${s.new_comments > 1 ? "s" : ""} depuis votre dernière visite`}>
-                            {s.new_comments} nouveau{s.new_comments > 1 ? "x" : ""}
+                          <span className="comm-neuf" title={`${s.new_comments} nouveau${s.new_comments > 1 ? "x" : ""} commentaire${s.new_comments > 1 ? "s" : ""} — ouvrez la fiche pour les lire`}>
+                            <Icon name="message-circle" size={11} /> {s.new_comments}
+                          </span>
+                        )}
+                        {s.new_likes > 0 && (
+                          <span className="comm-neuf aime" title={`${s.new_likes} nouveau${s.new_likes > 1 ? "x" : ""} j'aime sur votre fiche`}>
+                            <Icon name="heart" size={11} fill="currentColor" /> {s.new_likes}
                           </span>
                         )}
                       </div>
@@ -338,7 +400,7 @@ export default function Communaute() {
                       </button>
                       <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /></button>
                     </div>
-                  </div>
+                  </CommCard>
                 );
               })}
             </div>
