@@ -1613,6 +1613,24 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .pr-add:disabled{opacity:.4;cursor:default}
 .pr-add-sel{max-width:280px}
 
+/* ---- Banque de questions : ligne de chapitre ----------------------------------------- */
+/* `select` hérite de `width:100%` (règle globale des champs) : dans une rangée flex il
+   réclamait toute la largeur et écrasait le titre du chapitre sur trois lignes. On lui
+   fixe donc une largeur, et c'est le TITRE qui prend la place restante — c'est lui qu'on
+   lit d'abord. */
+.qb-ch{border:1px solid var(--border-soft);border-radius:10px;margin-bottom:8px}
+.qb-ch-head{display:flex;align-items:center;gap:10px;padding:9px 12px}
+.qb-ch-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qb-ch-count{flex:none;white-space:nowrap}
+.qb-ch-sel{flex:none;width:150px}
+.qb-ch-body{border-top:1px solid var(--border-soft);padding:10px 12px}
+@media(max-width:640px){
+  /* À l'étroit, la rangée passe sur deux lignes plutôt que de rogner le titre. */
+  .qb-ch-head{flex-wrap:wrap}
+  .qb-ch-title{flex:1 1 100%;white-space:normal}
+  .qb-ch-sel{width:130px}
+}
+
 /* ---- Éditeur de question Pizza Quest (banque de l'organisme) ------------------------- */
 /* Saisie à gauche, aperçu stagiaire à droite : on rédige pour quelqu'un d'autre, le rendu
    doit rester sous les yeux. En dessous de 900px la colonne d'aperçu passe dessous. */

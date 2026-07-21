@@ -54,7 +54,10 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
     <Card title={<span className="card-ttl"><Icon name="book-open" size={16} /> Banque de questions</span>}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
         <label className="hint">Formation</label>
-        <select value={programId} onChange={(e) => { setProgramId(e.target.value); setOpenCh(null); }}>
+        {/* Bornée, sinon le « width:100% » des champs lui fait prendre toute la rangée et
+            repousse le formulaire de création hors de l'écran. */}
+        <select style={{ flex: "0 1 260px", minWidth: 150 }} value={programId}
+          onChange={(e) => { setProgramId(e.target.value); setOpenCh(null); }}>
           <option value="">Toutes</option>
           {programs.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.title}</option>)}
         </select>
@@ -94,16 +97,17 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
         const qs = qOf(ch.id);
         const ouvert = openCh === ch.id;
         return (
-          <div key={ch.id} style={{ border: "1px solid var(--border-soft)", borderRadius: 10, marginBottom: 8 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "9px 12px" }}>
+          <div key={ch.id} className="qb-ch">
+            <div className="qb-ch-head">
               <button type="button" className="iconbtn" onClick={() => setOpenCh(ouvert ? null : ch.id)}
                 aria-label={ouvert ? "Replier" : "Déplier"}>
                 <Icon name={ouvert ? "chevron-down" : "chevron-right"} size={15} />
               </button>
-              <b style={{ flex: 1 }}>{ch.title}</b>
-              <span className="hint">{qs.length} question{qs.length > 1 ? "s" : ""}</span>
+              {/* Le titre prend la place restante ; c'est l'information qu'on lit d'abord. */}
+              <b className="qb-ch-title" title={ch.title}>{ch.title}</b>
+              <span className="hint qb-ch-count">{qs.length} question{qs.length > 1 ? "s" : ""}</span>
               {!ch.active && <span className="badge n">inactif</span>}
-              <select value={ch.program_id || ""} title="Formation rattachée"
+              <select className="qb-ch-sel" value={ch.program_id || ""} title="Formation rattachée"
                 onChange={(e) => run(() => updateQuestChapter(ch.id, { program_id: e.target.value || null }))}>
                 <option value="">— non rattaché</option>
                 {programs.map((p) => <option key={p.id} value={p.id}>{p.code}</option>)}
@@ -119,7 +123,7 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
             </div>
 
             {ouvert && (
-              <div style={{ borderTop: "1px solid var(--border-soft)", padding: "10px 12px" }}>
+              <div className="qb-ch-body">
                 {qs.map((q) => (
                   <QuestionRow key={q.id} q={q} opts={optsOf(q.id)} difficulties={difficulties}
                     onEdit={() => setEditing({ chapterId: ch.id, question: q })}
