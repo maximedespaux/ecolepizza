@@ -845,17 +845,46 @@ tbody tr:last-child td{border-bottom:none}
 .pq-world-dot{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:11px;flex:none}
 .pq-world-t{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pq-map{background:var(--surface2);border:1px solid var(--border-soft);border-radius:16px;padding:24px 16px}
-/* Chemin des chapitres. Resserré : à six chapitres, des pastilles de 62 px espacées de
-   20 px faisaient défiler la page pour lire un parcours qu'on doit embrasser d'un coup
-   d'œil — c'est une carte, pas une liste. */
-.pq-path{display:flex;flex-direction:column;align-items:center;gap:12px}
-.pq-node-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;transition:transform .2s var(--ease)}
+/* Chemin des chapitres, HORIZONTAL : on fait défiler du doigt (ou à la molette) de la
+   gauche vers la droite, chaque pastille décalée en hauteur pour dessiner un sentier.
+   `scroll-snap` cale la pastille au centre, sinon le geste s'arrête n'importe où.
+   `overscroll-behavior-x: contain` empêche le geste de déclencher le retour arrière du
+   navigateur quand on arrive au bout. */
+/* Cœurs dans l'en-tête. Les cœurs vides restent VISIBLES (🤍) : c'est le contraste plein
+   vs vide qui dit combien il en manque, un simple nombre ne le montre pas. */
+.pq-hearts{display:inline-flex;gap:1px;font-size:13px;line-height:1}
+.pq-hearts .vide{opacity:.5}
+.pq-regen{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+/* Plus de cœur : on l'annonce, avec l'attente restante — un chemin grisé sans explication
+   se lit comme une panne. */
+.pq-nohearts{display:flex;align-items:center;gap:10px;margin:10px 0 4px;padding:10px 14px;border-radius:12px;
+  border:1px solid var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,transparent);
+  color:var(--ember1);font-size:13px;line-height:1.4}
+
+.pq-path{display:flex;flex-direction:row;align-items:center;gap:26px;
+  overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+  padding:44px 50% 30px;margin:0 -16px;scrollbar-width:thin}
+.pq-path::-webkit-scrollbar{height:6px}
+.pq-path::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+/* Le trait qui relie les pastilles : un fond, pas un élément — rien à insérer entre elles. */
+.pq-node-wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;flex:none;
+  scroll-snap-align:center;transition:transform .2s var(--ease)}
+.pq-node-wrap::before{content:"";position:absolute;top:23px;left:-26px;width:26px;height:3px;
+  background:var(--border);border-radius:2px}
+.pq-node-wrap:first-child::before{display:none}
 .pq-node{width:46px;height:46px;border-radius:50%;border:none;background:var(--c,var(--navy));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000);transition:transform .1s var(--ease),box-shadow .1s var(--ease)}
 .pq-node:hover:not(:disabled){transform:translateY(-2px)}
 .pq-node:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000)}
-.pq-node.done{background:var(--green);box-shadow:0 4px 0 0 #1f7a44}
+.pq-node.done{background:var(--green);box-shadow:0 4px 0 0 #1f7a44;cursor:default}
 .pq-node.locked{background:var(--surface);color:var(--dim);border:2px solid var(--border);box-shadow:none;cursor:not-allowed}
-.pq-node-label{text-align:center;font-size:11.5px;line-height:1.25;max-width:190px}
+/* Chapitre EN COURS : le seul jouable, donc le seul qui doit attirer l'œil au milieu du
+   chemin. Halo pulsé, arrêté si l'utilisateur préfère les animations réduites. */
+.pq-node.on{outline:3px solid var(--c,var(--navy));outline-offset:3px;animation:pq-pulse 1.8s var(--ease) infinite}
+.pq-node.on:disabled{animation:none;opacity:.55} /* plus de cœur : on montre, on n'invite pas */
+@keyframes pq-pulse{0%,100%{outline-color:color-mix(in srgb,var(--c,var(--navy)) 90%,transparent)}
+  50%{outline-color:color-mix(in srgb,var(--c,var(--navy)) 25%,transparent)}}
+@media(prefers-reduced-motion:reduce){.pq-node.on{animation:none}}
+.pq-node-label{text-align:center;font-size:11.5px;line-height:1.25;max-width:120px}
 .pq-node-label b{display:block}
 .pq-stars{font-size:10px;letter-spacing:1px}
 .pq-progress{flex:1;height:10px;background:var(--surface2);border-radius:99px;overflow:hidden}

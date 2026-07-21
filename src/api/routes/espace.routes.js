@@ -1,7 +1,8 @@
 const express = require('express');
 const multer = require('multer');
 // Union des deux branches : getMyAccess + le bloc boutique/avatar. `multer` reste (upload avatar).
-const { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots } = require('../controllers/espace.controller.js');
+const { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+  getQuestLives, loseQuestLife } = require('../controllers/espace.controller.js');
 const { getPlayableChapters } = require('../controllers/questContent.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 
@@ -18,6 +19,9 @@ router.get('/formations', authenticateToken, getMyFormations);
 router.get('/formations/:id', authenticateToken, getMyFormation);
 // Chapitres jouables de Pizza Quest pour une formation (banque de l'organisme).
 // Réponse vide = rien d'importé : le jeu retombe sur sa banque codée en dur.
+// Cœurs : capital commun à tout Pizza Quest, tenu par le serveur.
+router.get('/quest/vies', authenticateToken, getQuestLives);
+router.post('/quest/vies/perdre', authenticateToken, loseQuestLife);
 router.get('/quest/:programId/chapitres', authenticateToken, getPlayableChapters);
 router.get('/emargement', authenticateToken, getMyEmargement);
 router.post('/emargement/:recordId/sign', authenticateToken, signMyEmargement);

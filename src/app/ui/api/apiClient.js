@@ -495,6 +495,9 @@ export function deleteQuestQuestion(id) { return request(`/quest/questions/${id}
 export function getPlayableChapters(programId) {
   return request(`/mon-espace/quest/${programId}/chapitres`, { silent: true });
 }
+// Cœurs : le capital est tenu par le serveur, jamais calculé côté client.
+export function getQuestLives() { return request("/mon-espace/quest/vies", { silent: true }); }
+export function loseQuestLife() { return request("/mon-espace/quest/vies/perdre", { method: "POST", silent: true }); }
 
 export function getFormation(id) {
   return request(`/formations/${id}`);
