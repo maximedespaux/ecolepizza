@@ -15,6 +15,17 @@ async function saleHasInvoiceLink(conn) {
     } catch { return false; }
 }
 
+/** Une colonne existe-t-elle ? Permet le fonctionnement dégradé tant qu'une migration n'est
+ *  pas appliquée — on n'insère `company_id` (112) que si la colonne est là. */
+async function hasColumn(conn, table, column) {
+    try {
+        const [c] = await conn.query(
+            `SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ? LIMIT 1`, [table, column]);
+        return c.length > 0;
+    } catch { return false; }
+}
+
 /**
  * GET /api/ventes — ventes de matériel + total. Renvoie le lien facture
  * (invoice_id / invoice_number) quand la migration 069 est appliquée.
@@ -23,13 +34,20 @@ const getSales = async (req, res) => {
     try {
         const conn = db.promise();
         const hasInv = await saleHasInvoiceLink(conn);
+        const hasCompany = await hasColumn(conn, 'material_sale', 'company_id');
         const invCols = hasInv ? 's.invoice_id, s.invoice_number,' : '';
+        // L'entreprise acheteuse, quand la colonne existe : l'historique doit nommer QUI a payé,
+        // pas seulement le stagiaire rattaché. Jointure et colonne omises tant que la 112 n'est
+        // pas jouée, pour que la requête reste valide.
+        const compCol = hasCompany ? 'co.name AS company_name,' : '';
+        const compJoin = hasCompany ? 'LEFT JOIN company co ON co.id = s.company_id' : '';
         const [results] = await conn.query(
             `SELECT s.id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.product, s.category,
-                    s.quantity, s.amount, s.note, s.learner_id, ${invCols}
+                    s.quantity, s.amount, s.note, s.learner_id, ${invCols} ${compCol}
                     l.first_name, l.last_name
              FROM material_sale s
              LEFT JOIN learner l ON l.id = s.learner_id
+             ${compJoin}
              WHERE s.organization_id = ?
              ORDER BY s.date DESC, s.created_at DESC`,
             [req.user.organization_id]
@@ -187,7 +205,11 @@ const saveShopSettings = async (req, res) => {
 };
 
 const checkout = async (req, res) => {
-    const { learner_id, buyer_name, lines } = req.body;
+    // L'ACHETEUR EST DE TROIS SORTES, exclusives : une entreprise, un stagiaire, ou un nom libre
+    // (vente comptoir). Quand c'est l'entreprise qui paie, `learner_id` reste possible mais ne
+    // désigne plus l'acheteur — seulement le stagiaire concerné par le matériel, pour retrouver
+    // la vente par lui aussi. C'est l'entreprise qui est facturée.
+    const { learner_id, company_id, buyer_name, lines } = req.body;
     const orgId = req.user.organization_id;
     if (!Array.isArray(lines) || lines.length === 0) {
         return res.status(422).json({ error: 'Panier vide' });
@@ -201,12 +223,15 @@ const checkout = async (req, res) => {
         const tvaApplies = !!settings.tva_applies;
         const payMethod = (req.body.payment_method || '').toString().slice(0, 30) || null;
 
-        // Le stagiaire est désormais ÉCRIT sur la facture, plus seulement lu pour en tirer un
-        // nom : il faut donc vérifier qu'il appartient à l'organisme. Un identifiant venu d'un
-        // autre organisme créerait ici une ligne qui pointe ailleurs — la famille de défauts
-        // « clé étrangère non vérifiée » relevée à la revue du back-office.
+        // Stagiaire comme entreprise sont ÉCRITS sur la facture, plus seulement lus pour en
+        // tirer un nom : il faut vérifier qu'ils appartiennent à l'organisme. Un identifiant
+        // venu d'un autre organisme créerait une ligne qui pointe ailleurs — la famille de
+        // défauts « clé étrangère non vérifiée » relevée à la revue du back-office.
         if (learner_id && !(await belongsToOrg(conn, 'learner', learner_id, orgId))) {
             return res.status(422).json({ message: 'Stagiaire inconnu' });
+        }
+        if (company_id && !(await belongsToOrg(conn, 'company', company_id, orgId))) {
+            return res.status(422).json({ message: 'Entreprise inconnue' });
         }
 
         // Vérifie les articles + le stock avant d'appliquer.
@@ -226,6 +251,7 @@ const checkout = async (req, res) => {
         // Facture liée : identifiant + numéro générés AVANT les lignes, pour que chaque
         // vente (material_sale) référence sa facture → regroupement de l'historique.
         const hasInvLink = await saleHasInvoiceLink(conn);
+        const hasSaleCompany = await hasColumn(conn, 'material_sale', 'company_id');
         const invoiceId = crypto.randomUUID();
         const year = new Date().getFullYear();
         const num = settings.next_number || 1;
@@ -256,19 +282,18 @@ const checkout = async (req, res) => {
             const lineHT = Number((unitNet * ln._qty).toFixed(2));
             const note = payMethod ? `Paiement : ${payMethod}` : null;
             await conn.query('UPDATE inventory_item SET quantity = quantity - ? WHERE id = ?', [ln._qty, ln.item_id]);
-            if (hasInvLink) {
-                await conn.query(
-                    `INSERT INTO material_sale (id, organization_id, date, product, category, quantity, amount, learner_id, note, invoice_id, invoice_number)
-                     VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [crypto.randomUUID(), orgId, it.name, it.category, ln._qty, unitNet.toFixed(2), learner_id || null, note, invoiceId, number]
-                );
-            } else {
-                await conn.query(
-                    `INSERT INTO material_sale (id, organization_id, date, product, category, quantity, amount, learner_id, note)
-                     VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?)`,
-                    [crypto.randomUUID(), orgId, it.name, it.category, ln._qty, unitNet.toFixed(2), learner_id || null, note]
-                );
-            }
+
+            // Colonnes construites selon les migrations présentes, plutôt qu'en quatre variantes
+            // de requête pour deux drapeaux : chaque combinaison oubliée serait un chemin non
+            // testé. On ajoute chaque colonne optionnelle quand elle existe, une seule fois.
+            const col = ['id', 'organization_id', 'date', 'product', 'category', 'quantity', 'amount', 'learner_id', 'note'];
+            const val = [crypto.randomUUID(), orgId, null /*date via CURDATE*/, it.name, it.category, ln._qty, unitNet.toFixed(2), learner_id || null, note];
+            if (hasSaleCompany) { col.push('company_id'); val.push(company_id || null); }
+            if (hasInvLink) { col.push('invoice_id', 'invoice_number'); val.push(invoiceId, number); }
+            const ph = col.map((c) => (c === 'date' ? 'CURDATE()' : '?'));
+            const args = val.filter((_, i) => col[i] !== 'date');
+            await conn.query(
+                `INSERT INTO material_sale (${col.join(', ')}) VALUES (${ph.join(', ')})`, args);
             totalHT += lineHT;
             const label = `${it.name}${ln._qty > 1 ? ` × ${ln._qty}` : ''}${ln._disc ? ` (remise ${ln._disc}%)` : ''}`;
             invLines.push({ description: label.slice(0, 255), amount_net: lineHT, rate, qty: ln._qty, unit: unitNet });
@@ -277,8 +302,14 @@ const checkout = async (req, res) => {
         const totalTVA = invLines.reduce((s, l) => s + l.amount_net * l.rate / 100, 0);
         totalHT = Number(totalHT.toFixed(2));
 
-        // Nom du client (stagiaire choisi > nom libre > comptoir).
+        // Nom imprimé sur la facture. Priorité : nom libre saisi > entreprise > stagiaire >
+        // comptoir. L'entreprise passe AVANT le stagiaire parce que, quand les deux sont là,
+        // c'est l'entreprise qui achète ; le stagiaire n'est qu'un rattachement.
         let name = buyer_name || null;
+        if (!name && company_id) {
+            const [c] = await conn.query('SELECT name FROM company WHERE id = ? AND organization_id = ?', [company_id, orgId]);
+            if (c[0]) name = c[0].name;
+        }
         if (!name && learner_id) {
             const [l] = await conn.query('SELECT first_name, last_name FROM learner WHERE id = ? AND organization_id = ?', [learner_id, orgId]);
             if (l[0]) name = `${l[0].first_name || ''} ${l[0].last_name || ''}`.trim();
@@ -287,26 +318,26 @@ const checkout = async (req, res) => {
 
         const remise = globalDisc > 0 ? ` (remise ${globalDisc}%)` : '';
         const description = ('Vente de matériel : ' + productNames.join(', ') + remise).slice(0, 255);
-        // ON GARDE LA RÉFÉRENCE DU STAGIAIRE, pas seulement son nom. Elle était perdue au moment
-        // même où on l'avait : son adresse e-mail (BT-49, obligatoire) et son adresse postale
-        // restaient sur sa fiche, inatteignables depuis la facture. Le nom reste écrit à côté —
-        // c'est lui qui a été imprimé, et renommer une fiche ne doit pas récrire une pièce déjà
-        // émise.
+        // ON GARDE LES RÉFÉRENCES, pas seulement le nom. L'e-mail (BT-49, obligatoire), le SIRET
+        // et l'adresse vivent sur la fiche entreprise ou stagiaire ; sans le lien ils restent
+        // inatteignables depuis la facture. Le nom reste écrit à côté — c'est lui qui a été
+        // imprimé, et renommer une fiche ne doit pas récrire une pièce déjà émise.
         //
-        // La colonne peut ne pas exister (migration 111 non jouée) : on réessaie alors sans
-        // elle, et la vente se comporte comme avant plutôt que d'échouer.
-        const champs = [invoiceId, orgId, name, description, number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status];
+        // `invoice.company_id` est une colonne de base : toujours écrite. `learner_id` (migration
+        // 111) est optionnelle — si elle manque, on réémet sans elle et la vente se comporte
+        // comme avant plutôt que d'échouer.
+        const champs = [invoiceId, orgId, company_id || null, name, description, number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status];
         try {
             await conn.query(
-                `INSERT INTO invoice (id, organization_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status, learner_id)
-                 VALUES (?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO invoice (id, organization_id, company_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status, learner_id)
+                 VALUES (?, ?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?, ?)`,
                 [...champs, learner_id || null]
             );
         } catch (e) {
             if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
             await conn.query(
-                `INSERT INTO invoice (id, organization_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status)
-                 VALUES (?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?)`,
+                `INSERT INTO invoice (id, organization_id, company_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status)
+                 VALUES (?, ?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?)`,
                 champs
             );
         }

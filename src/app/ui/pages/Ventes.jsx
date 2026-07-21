@@ -3,7 +3,7 @@ import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
-  getShopSettings, saveShopSettings, downloadFacturX, getTemplates } from "../api/apiClient.js";
+  getShopSettings, saveShopSettings, downloadFacturX, getTemplates, getCompanies } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -41,6 +41,16 @@ function Ventes() {
   const [cart, setCart] = useState([]);
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState(null);
+  // L'acheteur est de trois sortes exclusives : un stagiaire, une entreprise, ou personne
+  // (comptoir). La bascule choisit d'abord LE TYPE — une seule liste cherchée à la fois, plutôt
+  // qu'un champ qui mêle personnes et entreprises et laisse deviner ce qu'on a sous les yeux.
+  const [buyerType, setBuyerType] = useState("stagiaire"); // "stagiaire" | "entreprise"
+  const [companies, setCompanies] = useState([]);
+  const [companyQuery, setCompanyQuery] = useState("");
+  const [company, setCompany] = useState(null);
+  // Quand l'entreprise paie, on peut RATTACHER un stagiaire (matériel destiné à un apprenant
+  // précis) : c'est l'entreprise qui est facturée, le stagiaire n'est qu'un lien retrouvable.
+  const [attachLearner, setAttachLearner] = useState(false);
   const [discount, setDiscount] = useState(""); // % remise globale
   const [payment, setPayment] = useState("");
   const [paid, setPaid] = useState(true);
@@ -55,6 +65,7 @@ function Ventes() {
     loadSales();
     loadInventory();
     getStagiaires().then((r) => setLearners(r.data)).catch(() => {});
+    getCompanies().then((r) => setCompanies(r.data || [])).catch(() => {});
     getShopSettings().then((r) => { setSettings(r.data); setPayment((r.data.payment_methods || "").split(",")[0] || ""); }).catch(() => {});
   }, []);
 
@@ -81,6 +92,21 @@ function Ventes() {
     if (!q) return [];
     return learners.filter((l) => `${l.first_name} ${l.last_name} ${l.email || ""}`.toLowerCase().includes(q)).slice(0, 6);
   }, [clientQuery, learners]);
+
+  const companyMatches = useMemo(() => {
+    const q = companyQuery.trim().toLowerCase();
+    if (!q) return [];
+    return companies.filter((c) => `${c.name} ${c.siret || ""} ${c.email || ""}`.toLowerCase().includes(q)).slice(0, 6);
+  }, [companyQuery, companies]);
+
+  // Changer de type d'acheteur remet à zéro l'autre sélection : on ne facture jamais à la fois
+  // une entreprise et un stagiaire au titre d'acheteur — le stagiaire n'est qu'un rattachement.
+  function switchBuyerType(t) {
+    setBuyerType(t);
+    setClient(null); setClientQuery("");
+    setCompany(null); setCompanyQuery("");
+    setAttachLearner(false);
+  }
 
   function addToCart() {
     const it = inventory.find((i) => i.id === pick);
@@ -126,14 +152,19 @@ function Ventes() {
     if (cart.length === 0) return;
     setStatus(null);
     try {
+      // Entreprise : elle est l'acheteur (company_id) ; le stagiaire n'est envoyé QUE si on l'a
+      // explicitement rattaché. Stagiaire : lui seul, aucune entreprise.
+      const buyerFields = buyerType === "entreprise"
+        ? { company_id: company?.id || null, learner_id: (attachLearner && client?.id) || null }
+        : { learner_id: client?.id || null, company_id: null };
       const r = await checkoutSale({
-        learner_id: client?.id || null,
+        ...buyerFields,
         discount: Number(discount) || 0,
         payment_method: payment || null,
         status: paid ? "PAYEE" : "IMPAYEE",
         lines: cart.map((l) => ({ item_id: l.item_id, quantity: l.quantity, discount_pct: Number(l.disc) || 0 })),
       });
-      setCart([]); setClient(null); setClientQuery(""); setDiscount("");
+      setCart([]); switchBuyerType("stagiaire"); setDiscount("");
       setLastInvoice({ id: r.invoice_id, number: r.invoice_number });
       setStatus({ type: "success", message: `Vente validée — facture ${r.invoice_number} (${euro(r.total_ttc)} TTC) pour ${r.buyer}.` });
       loadSales(); loadInventory(); bumpBadges();
@@ -207,27 +238,96 @@ function Ventes() {
             </Card>
 
             <Card title={<span className="card-ttl"><Icon name="shopping-cart" size={16} /> Panier ({cart.length})</span>}>
-              {/* Client + moyen de paiement, en tête du panier. */}
+              {/* Acheteur + moyen de paiement, en tête du panier. */}
               <div className="field">
-                <label>Client</label>
-                {client ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span className="avatar" style={{ width: 28, height: 28, fontSize: 11 }}>{initials(...client.name.split(" "))}</span>
-                    <b style={{ flex: 1 }}>{client.name}</b>
-                    <button className="btn sm ghost" onClick={() => { setClient(null); setClientQuery(""); }}>Changer</button>
-                  </div>
+                <label>Acheteur</label>
+                {/* Bascule du type : une seule liste cherchée à la fois. */}
+                <div className="rayon-tabs" style={{ marginBottom: 8 }}>
+                  <button className={"rayon-tab" + (buyerType === "stagiaire" ? " on" : "")} onClick={() => switchBuyerType("stagiaire")}>
+                    <Icon name="user" size={13} /> Stagiaire
+                  </button>
+                  <button className={"rayon-tab" + (buyerType === "entreprise" ? " on" : "")} onClick={() => switchBuyerType("entreprise")}>
+                    <Icon name="building" size={13} /> Entreprise
+                  </button>
+                </div>
+
+                {buyerType === "stagiaire" ? (
+                  client ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span className="avatar" style={{ width: 28, height: 28, fontSize: 11 }}>{initials(...client.name.split(" "))}</span>
+                      <b style={{ flex: 1 }}>{client.name}</b>
+                      <button className="btn sm ghost" onClick={() => { setClient(null); setClientQuery(""); }}>Changer</button>
+                    </div>
+                  ) : (
+                    <>
+                      <input className="inp" placeholder="Rechercher un stagiaire… (ou laisser vide = vente comptoir)" value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} />
+                      {matches.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                          {matches.map((l) => (
+                            <button key={l.id} className="btn sm" style={{ justifyContent: "flex-start" }}
+                              onClick={() => setClient({ id: l.id, name: `${l.first_name} ${l.last_name}` })}>
+                              {l.last_name} {l.first_name} <span className="hint">· {l.email || "—"}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )
                 ) : (
                   <>
-                    <input className="inp" placeholder="Rechercher un stagiaire… (ou laisser vide = vente comptoir)" value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} />
-                    {matches.length > 0 && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                        {matches.map((l) => (
-                          <button key={l.id} className="btn sm" style={{ justifyContent: "flex-start" }}
-                            onClick={() => setClient({ id: l.id, name: `${l.first_name} ${l.last_name}` })}>
-                            {l.last_name} {l.first_name} <span className="hint">· {l.email || "—"}</span>
-                          </button>
-                        ))}
+                    {company ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <Icon name="building" size={18} />
+                        <b style={{ flex: 1 }}>{company.name}</b>
+                        <button className="btn sm ghost" onClick={() => { setCompany(null); setCompanyQuery(""); }}>Changer</button>
                       </div>
+                    ) : (
+                      <>
+                        <input className="inp" placeholder="Rechercher une entreprise…" value={companyQuery} onChange={(e) => setCompanyQuery(e.target.value)} />
+                        {companyMatches.length > 0 && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                            {companyMatches.map((c) => (
+                              <button key={c.id} className="btn sm" style={{ justifyContent: "flex-start" }}
+                                onClick={() => setCompany({ id: c.id, name: c.name })}>
+                                {c.name} <span className="hint">· {c.siret || "SIRET —"}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {companyQuery.trim() && companyMatches.length === 0 && (
+                          <span className="hint" style={{ marginTop: 6 }}>Aucune entreprise. Créez-la dans Entreprises.</span>
+                        )}
+                      </>
+                    )}
+
+                    {/* Rattacher un stagiaire, sans changer l'acheteur : la facture reste au nom
+                        de l'entreprise, le stagiaire sert à retrouver la vente. */}
+                    <label className="field" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
+                      <input type="checkbox" checked={attachLearner} onChange={(e) => { setAttachLearner(e.target.checked); if (!e.target.checked) { setClient(null); setClientQuery(""); } }} />
+                      Rattacher un stagiaire à cette vente
+                    </label>
+                    {attachLearner && (
+                      client ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span className="avatar" style={{ width: 28, height: 28, fontSize: 11 }}>{initials(...client.name.split(" "))}</span>
+                          <span style={{ flex: 1 }}>{client.name}</span>
+                          <button className="btn sm ghost" onClick={() => { setClient(null); setClientQuery(""); }}>Changer</button>
+                        </div>
+                      ) : (
+                        <>
+                          <input className="inp" placeholder="Rechercher le stagiaire concerné…" value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} />
+                          {matches.length > 0 && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                              {matches.map((l) => (
+                                <button key={l.id} className="btn sm" style={{ justifyContent: "flex-start" }}
+                                  onClick={() => setClient({ id: l.id, name: `${l.first_name} ${l.last_name}` })}>
+                                  {l.last_name} {l.first_name} <span className="hint">· {l.email || "—"}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )
                     )}
                   </>
                 )}
@@ -323,7 +423,9 @@ function SalesHistory({ sales, onRemove }) {
       if (!g) {
         g = {
           key, invoice_id: s.invoice_id || null, invoice_number: s.invoice_number || null,
-          date: s.date, client: s.last_name ? `${s.last_name} ${s.first_name || ""}`.trim() : "—",
+          // L'entreprise acheteuse prime dans l'affichage : c'est elle qui a payé. À défaut, le
+          // stagiaire ; à défaut encore, un tiret pour une vente comptoir.
+          date: s.date, client: s.company_name || (s.last_name ? `${s.last_name} ${s.first_name || ""}`.trim() : "—"),
           lines: [], total: 0, units: 0,
         };
         map.set(key, g);

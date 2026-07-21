@@ -48,8 +48,23 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     // `email` n'est pas décoratif : c'est BT-49, l'adresse électronique de l'acheteur, rendue
     // OBLIGATOIRE en France par BR-FR-12. Une facture émise pour un client saisi au nom libre
     // n'en a aucune et sera rejetée à la validation — d'où l'avertissement remonté plus bas.
+    // L'ORDRE DIT QUI EST FACTURÉ, et l'entreprise passe EN PREMIER. Quand une vente porte à la
+    // fois `company_id` et `learner_id`, c'est l'entreprise qui achète — le stagiaire n'est
+    // qu'un rattachement comptable. Tester learner_id d'abord facturerait la mauvaise partie, et
+    // priverait le XML du SIRET (BT-30) que porte l'entreprise, pas la personne.
     let buyer = { name: 'Client', siret: null, email: null, address: {} };
-    if (inv.learner_id) {
+    if (inv.company_id) {
+        const [c] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [inv.company_id, orgId]);
+        if (c[0]) {
+            buyer = {
+                // Le nom IMPRIMÉ prime : renommer une fiche ne doit pas récrire une pièce émise.
+                name: inv.buyer_name || c[0].name,
+                siret: c[0].siret,
+                email: inv.buyer_email || c[0].email || null,
+                address: { line: c[0].address, zip: c[0].zip_code, city: c[0].town },
+            };
+        }
+    } else if (inv.learner_id) {
         // La VENTE garde désormais la référence du stagiaire, pas seulement son nom. Sans elle,
         // l'e-mail et l'adresse restaient sur la fiche, inatteignables depuis la facture.
         const [l] = await conn.query(
@@ -58,8 +73,6 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         );
         if (l[0]) {
             buyer = {
-                // Le nom IMPRIMÉ reste celui de la facture : renommer une fiche ne doit pas
-                // changer l'acheteur d'une pièce déjà émise.
                 name: inv.buyer_name || `${l[0].first_name || ''} ${l[0].last_name || ''}`.trim(),
                 siret: null,
                 email: inv.buyer_email || l[0].email || null,
@@ -68,9 +81,6 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         }
     } else if (inv.buyer_name) {
         buyer = { name: inv.buyer_name, siret: null, email: inv.buyer_email || null, address: {} };
-    } else if (inv.company_id) {
-        const [c] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [inv.company_id, orgId]);
-        if (c[0]) buyer = { name: c[0].name, siret: c[0].siret, email: c[0].email || null, address: { line: c[0].address, zip: c[0].zip_code, city: c[0].town } };
     } else if (inv.enrollment_id) {
         const [l] = await conn.query(
             `SELECT l.first_name, l.last_name, l.email, l.address, l.zip_code, l.town
