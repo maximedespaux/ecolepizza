@@ -42,7 +42,7 @@ function StudentFormationDetail() {
   return (
     <>
       <div className="hero" style={{ background: "var(--grad-navy)" }}>
-        <button className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", padding: 0, color: "rgba(255,255,255,.8)" }} onClick={() => navigate("/formations")}>
+        <button className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", padding: 0, color: "rgba(255,255,255,.8)" }} onClick={() => navigate("/mon-espace")}>
           <Icon name="chevron-left" size={14} /> Mes documents
         </button>
         <h1>{data ? data.program_title : "Formation"}</h1>

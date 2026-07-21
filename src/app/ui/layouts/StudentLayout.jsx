@@ -94,8 +94,8 @@ function StudentLayout() {
           </div>
         </div>
         <nav style={{ display: "flex", gap: 6, marginLeft: 8 }}>
-          <NavLink to="/mon-espace" className={navClass}>Mon espace</NavLink>
-          <NavLink to="/formations" className={navClass}>Mes documents</NavLink>
+          {/* Une seule entrée : documents reçus et formations vivent sur la même page. */}
+          <NavLink to="/mon-espace" className={navClass}>Mes documents</NavLink>
           {/* Pizza Quest verrouillé tant que les documents ne sont pas signés (feature « accès »).
               La Boutique reste accessible — elle n'est PAS dans GATED_PATHS : c'est un service,
               pas du contenu pédagogique. */}
