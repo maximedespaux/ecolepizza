@@ -117,8 +117,10 @@ function Comptabilite() {
             {/* `.inp` impose width:100% aux <select> ; dans cette barre horizontale, deux selects
                 pleine largeur écrasaient le bouton Masquer voisin. On les laisse tenir la largeur
                 de leur contenu — width:auto — pour que la rangée reste alignée. */}
-            {/* Le mois ne pilote QUE le gain du mois ; le reste de la page reste annuel. */}
+            {/* Le mois ne pilote QUE le gain du mois ; le reste de la page reste annuel.
+                Valeur 0 = année entière (le total de l'année dans la même carte). */}
             <select className="inp" style={{ width: "auto" }} value={mois} onChange={(e) => setMois(Number(e.target.value))} aria-label="Mois (gain du mois)">
+              <option value={0}>Année entière</option>
               {MOIS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
             <select className="inp" style={{ width: "auto" }} value={annee} onChange={(e) => setAnnee(Number(e.target.value))} aria-label="Année">
@@ -148,13 +150,13 @@ function Comptabilite() {
             <div className="kpi"><div className="kpi-top"><div className="lbl">Dividendes réalistes ({data.partRealistePct}%)</div><span className="kpi-ic tone-orange"><Icon name="coins" size={18} /></span></div><div className="val tnum" style={{ color: data.dividendeRealiste > 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.dividendeRealiste)}</div></div>
           </div>
 
-          {/* Gain du mois : entrées − sorties sur le mois choisi. Distinct de la marge annuelle
-              au-dessus — d'où sa propre ligne, pour qu'on ne confonde pas un chiffre mensuel avec
-              un chiffre d'année. */}
+          {/* Gain du mois — ou de l'année entière si numero === 0. Entrées − sorties sur la
+              période choisie. Distinct de la marge annuelle au-dessus (qui rattache les
+              inscriptions à l'année de session) : ici, tout est daté à l'encaissement. */}
           {data.mois && (
             <div className="kpi" style={{ borderLeft: `3px solid ${data.mois.gain >= 0 ? "var(--green)" : "var(--ember1)"}` }}>
               <div className="kpi-top">
-                <div className="lbl">Gain du mois · {MOIS[data.mois.numero - 1]} {annee}</div>
+                <div className="lbl">{data.mois.numero === 0 ? `Gain de l'année ${annee}` : `Gain du mois · ${MOIS[data.mois.numero - 1]} ${annee}`}</div>
                 <span className={"kpi-ic " + (data.mois.gain >= 0 ? "tone-green" : "tone-ember")}><Icon name={data.mois.gain >= 0 ? "arrow-up" : "arrow-down"} size={18} /></span>
               </div>
               <div className="val tnum" style={{ color: data.mois.gain >= 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.mois.gain)}</div>

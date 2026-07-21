@@ -81,31 +81,41 @@ async function computeYear(conn, orgId, annee) {
  * réconcilie ni l'une ni l'autre.
  *
  * Matériel, produits divers et dépenses ont, eux, une vraie date : on filtre dessus directement.
+ *
+ * MOIS = 0 → ANNÉE ENTIÈRE. Le même calcul sans le filtre de mois : les douze mois s'additionnent
+ * alors exactement en l'année, ce qu'on ne peut garantir qu'en partageant une seule règle. On ne
+ * bascule PAS sur la marge annuelle (computeYear) pour ce total : elle rattache les inscriptions
+ * à l'année de session, pas à leur date d'encaissement, et un « gain de l'année » qui ne serait
+ * pas la somme de ses mois trahirait le sélecteur juste au-dessus.
  */
 async function computeMonth(conn, orgId, annee, mois) {
+    // Le filtre de mois n'est ajouté que pour un vrai mois ; à 0, il disparaît des quatre
+    // requêtes d'un coup — une seule condition, pas quatre variantes à garder synchrones.
+    const parMois = (col) => (mois ? ` AND MONTH(${col}) = ?` : '');
+    const arg = (col) => (mois ? [orgId, annee, mois] : [orgId, annee]);
     const [[inscr]] = await conn.query(
         `SELECT COALESCE(SUM(price), 0) AS ca
          FROM enrollment
-         WHERE organization_id = ? AND YEAR(created_at) = ? AND MONTH(created_at) = ?`,
-        [orgId, annee, mois]
+         WHERE organization_id = ? AND YEAR(created_at) = ?${parMois('created_at')}`,
+        arg('created_at')
     );
     const [[mat]] = await conn.query(
         `SELECT COALESCE(SUM(amount * quantity), 0) AS ca
          FROM material_sale
-         WHERE organization_id = ? AND YEAR(date) = ? AND MONTH(date) = ?`,
-        [orgId, annee, mois]
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
+        arg('date')
     );
     const [[extra]] = await conn.query(
         `SELECT COALESCE(SUM(amount), 0) AS ca
          FROM revenue_extra
-         WHERE organization_id = ? AND YEAR(date) = ? AND MONTH(date) = ?`,
-        [orgId, annee, mois]
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
+        arg('date')
     );
     const [[dep]] = await conn.query(
         `SELECT COALESCE(SUM(amount_ht), 0) AS total
          FROM expense
-         WHERE organization_id = ? AND YEAR(date) = ? AND MONTH(date) = ?`,
-        [orgId, annee, mois]
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
+        arg('date')
     );
     const caInscriptions = num(inscr.ca);
     const caMateriel = num(mat.ca);
@@ -132,10 +142,13 @@ async function loadSettings(conn, orgId) {
 const getGestion = async (req, res) => {
     const orgId = req.user.organization_id;
     const annee = Number(req.query.annee) || currentYear();
-    // Mois demandé (1-12) ; par défaut le mois courant, mais borné à un mois réel pour qu'un
-    // ?mois=13 ou ?mois=0 ne produise pas une requête vide silencieuse.
-    const moisDemande = Number(req.query.mois) || (new Date().getMonth() + 1);
-    const mois = Math.min(12, Math.max(1, moisDemande));
+    // Mois demandé : absent → mois courant ; vide ou 0 → ANNÉE ENTIÈRE (le total de l'année) ;
+    // sinon borné à [1,12] pour qu'un ?mois=13 ne produise pas une requête vide silencieuse.
+    const rawMois = req.query.mois;
+    let mois;
+    if (rawMois === undefined) mois = new Date().getMonth() + 1;
+    else if (rawMois === '' || Number(rawMois) === 0) mois = 0;
+    else mois = Math.min(12, Math.max(1, Number(rawMois)));
     try {
         const conn = db.promise();
         const [year, settings, moisData] = await Promise.all([

@@ -245,8 +245,10 @@ export function geocodeCarte(limit = 80) {
 
 // --- Comptabilité / Gestion ---
 export function getComptabilite(annee, mois) {
-  // `mois` optionnel (1-12) : le gain du mois. Omis, le serveur prend le mois courant.
-  return request(`/comptabilite?annee=${annee}${mois ? `&mois=${mois}` : ""}`);
+  // `mois` : 1-12 pour un mois, 0 pour l'année entière. On envoie même 0 (sinon le serveur
+  // retomberait sur le mois courant) ; seul `undefined` laisse le serveur choisir le défaut.
+  const m = Number.isFinite(mois) ? `&mois=${mois}` : "";
+  return request(`/comptabilite?annee=${annee}${m}`);
 }
 export function getComptaPerformance(annee) {
   return request(`/comptabilite/performance?annee=${annee}`);
