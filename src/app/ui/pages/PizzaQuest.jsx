@@ -555,9 +555,14 @@ function QuizModal({ world, data, onClose, onFinish }) {
               <span className={"pq-tag pq-tag-" + type}>{type === "vf" ? "Vrai / Faux" : type === "assoc" ? "Associe" : "QCM"}</span>
             </p>
             <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px" }}>{idx + 1}. {q.q}</p>
-            {/* Ce que vaut la question, tel que l'organisme l'a réglé. Affiché AVANT de
+            {/* Difficulté et XP, tels que l'organisme les a réglés. Affichés AVANT de
                 répondre : savoir qu'une question pèse lourd fait relire l'énoncé. */}
-            <p className="hint" style={{ margin: "0 0 14px" }}>{xpOfQuestion(q)} XP</p>
+            <p className="hint" style={{ margin: "0 0 14px", display: "flex", gap: 8, alignItems: "center" }}>
+              {q.diff && (
+                <span className="badge n" style={q.diff.color ? { color: q.diff.color } : undefined}>{q.diff.name}</span>
+              )}
+              <span>{xpOfQuestion(q)} XP</span>
+            </p>
 
             {type === "qcm" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

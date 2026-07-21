@@ -45,6 +45,10 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
   if (!bank) return <p className="hint">Chargement…</p>;
   const qOf = (chId) => bank.questions.filter((q) => q.chapter_id === chId);
   const optsOf = (qId) => bank.options.filter((o) => o.question_id === qId);
+  // Un chapitre sans formation n'apparaît NULLE PART côté stagiaire : le jeu charge les
+  // chapitres par formation. C'est le cas typique après un import dont la correspondance
+  // de noms n'a rien trouvé — silencieux, d'où l'alerte.
+  const orphelins = bank.chapters.filter((c) => !c.program_id);
 
   return (
     <Card title={<span className="card-ttl"><Icon name="book-open" size={16} /> Banque de questions</span>}>
@@ -66,6 +70,20 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
           <button type="submit" className="btn sm" disabled={!newCh.trim()}><Icon name="plus" size={14} /> Chapitre</button>
         </form>
       </div>
+
+      {orphelins.length > 0 && (
+        <div className="doc-rule-warning" role="alert" style={{ marginBottom: 12 }}>
+          <Icon name="ban" />
+          <div>
+            <b>{orphelins.length} chapitre{orphelins.length > 1 ? "s ne sont" : " n'est"} rattaché{orphelins.length > 1 ? "s" : ""} à aucune formation</b>
+            {" "}: {orphelins.length > 1 ? "ils n'apparaissent" : "il n'apparaît"} donc pas dans Pizza Quest,
+            côté stagiaire. Choisissez la formation dans la liste à droite de chaque chapitre.
+            <div className="hint" style={{ marginTop: 4 }}>
+              {orphelins.map((c) => c.title).join(" · ")}
+            </div>
+          </div>
+        </div>
+      )}
 
       {bank.chapters.length === 0 ? (
         <p className="hint">

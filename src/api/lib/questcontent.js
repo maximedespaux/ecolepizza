@@ -58,11 +58,15 @@ function buildChapters(chapters = [], questions = [], options = [], difficulties
 
 /** Une ligne quest_question (+ ses options) -> question du jeu. `null` si inexploitable. */
 function toGameQuestion(q, opts, diffById) {
+    const d = diffById.get(q.difficulty_id) || null;
     const base = {
         q: q.text,
         expl: q.explanation || undefined,
         src: q.source || undefined,
         xp: xpOf(q, diffById),
+        // Difficulté telle que l'organisme l'a nommée : affichée en jeu à côté de l'XP.
+        // `undefined` si la question n'en porte pas — rien à montrer plutôt qu'un « — ».
+        diff: d ? { name: d.name, color: d.color || null } : undefined,
     };
     if (q.type === 'VF') {
         return { ...base, t: 'vf', a: !!q.vf_answer };
