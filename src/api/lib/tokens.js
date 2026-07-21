@@ -240,6 +240,16 @@ function articlesTable(list) {
     const mixte = taux.size > 1;
     const head = '<tr><th>Désignation</th><th>Qté</th><th>P.U. HT</th><th>Montant HT</th>'
         + (mixte ? '<th>TVA</th>' : '') + '<th>Total TTC</th></tr>';
+
+    // LARGEURS DE COLONNES EXPLICITES. Sans elles, LibreOffice répartit à parts égales : la
+    // désignation d'un article se retrouvait sur deux lignes pendant que « Qté » — trois
+    // caractères — occupait autant de place, au point de se couper en « Q / té ». La
+    // désignation est le seul champ de longueur variable ; elle prend ce que les autres, de
+    // largeur connue, n'utilisent pas.
+    const cols = mixte
+        ? [46, 7, 13, 13, 8, 13]
+        : [50, 8, 14, 14, 14];
+    const colgroup = `<colgroup>${cols.map((w) => `<col width="${w}%">`).join('')}</colgroup>`;
     const body = rows.map((l, i) => {
         const c = articleRowTokens(l, i);
         return `<tr><td>${escCell(c['Désignation'])}</td><td>${escCell(c['Quantité'])}</td>`
@@ -247,7 +257,8 @@ function articlesTable(list) {
              + (mixte ? `<td>${escCell(c['Taux TVA'])}</td>` : '')
              + `<td>${escCell(c['Montant TTC'])}</td></tr>`;
     }).join('');
-    return `<table><tbody>${head}${body}</tbody></table>`;
+    // `width="100%"` : LibreOffice ignore la largeur CSS sur un tableau (cf. largeurTables).
+    return `<table width="100%">${colgroup}<tbody>${head}${body}</tbody></table>`;
 }
 
 // Tableau des résultats d'examen, un bloc par ligne. RAW : injecté tel quel dans le PV.

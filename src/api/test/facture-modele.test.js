@@ -197,7 +197,10 @@ test('{Articles} produit un tableau complet, pas du texte', () => {
     // tableau.
     const { articlesTable, RAW_TOKENS } = require('../lib/tokens.js');
     const html = articlesTable(ARTICLES);
-    assert.match(html, /^<table>/, 'le jeton doit rendre un tableau');
+    // On vise l'OUVERTURE d'un tableau, pas sa balise exacte : la première rédaction exigeait
+    // `^<table>` littéralement et est tombée le jour où le tableau a reçu sa largeur. Un test
+    // ne doit pas interdire un attribut dont il ne dit rien.
+    assert.match(html, /^<table\b/, 'le jeton doit rendre un tableau');
     assert.strictEqual((html.match(/<tr/g) || []).length, 3, 'en-tête + un article par ligne');
     assert.ok(RAW_TOKENS.has('Articles'), 'sans RAW_TOKENS, le HTML sortirait échappé en clair');
 });
@@ -251,4 +254,47 @@ test('l\'éditeur ne référence plus le modèle type retiré', () => {
     // complet, pas seulement que le bouton a disparu de l'écran.
     const ui = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/pages/TemplateEditor.jsx'), 'utf8');
     assert.doesNotMatch(ui, /modeleFacture|MODELE_FACTURE/, 'référence résiduelle au modèle type');
+});
+
+// --- La largeur des tableaux dans le PDF -----------------------------------------------------
+
+test('les tableaux portent la largeur en ATTRIBUT, pas seulement en CSS', () => {
+    // LIBREOFFICE IGNORE `width: 100%` EN CSS SUR UN TABLEAU. La feuille de style le déclarait
+    // depuis toujours et le PDF sortait des tableaux serrés sur la moitié gauche de la page.
+    // La règle CSS n'était pas fausse : elle n'était jamais lue. Constaté en rendant les deux
+    // formes côte à côte — impossible à voir en relisant le code, c'est une propriété du
+    // moteur de conversion.
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const html = renderTemplateHtml('<table><tbody><tr><td>a</td></tr></tbody></table>',
+        { org: {} }, { letterhead: false });
+    assert.match(html, /<table[^>]*\swidth="100%"/, 'largeur absente de l\'attribut');
+});
+
+test('une largeur choisie par l\'organisme n\'est pas écrasée', () => {
+    // La valeur par défaut ne doit pas défaire un choix explicite.
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    for (const t of ['<table width="40%"><tbody><tr><td>a</td></tr></tbody></table>',
+        '<table style="width:8cm"><tbody><tr><td>a</td></tr></tbody></table>']) {
+        const html = renderTemplateHtml(t, { org: {} }, { letterhead: false });
+        assert.doesNotMatch(html, /width="100%"/, `largeur écrasée : ${t}`);
+    }
+});
+
+test('le tableau des articles fixe ses largeurs de colonnes', () => {
+    // Sans colgroup, LibreOffice répartit à parts égales : la désignation passait sur deux
+    // lignes pendant que « Qté » — trois caractères — prenait autant de place, au point de se
+    // couper en « Q / té ».
+    const { articlesTable } = require('../lib/tokens.js');
+    const uni = articlesTable([{ name: 'Farine', qty: 1, unit_price_ht: 10, amount: 10, taxRate: 20 }]);
+    const mixte = articlesTable([
+        { name: 'Farine', qty: 1, unit_price_ht: 10, amount: 10, taxRate: 5.5 },
+        { name: 'Pelle', qty: 1, unit_price_ht: 10, amount: 10, taxRate: 20 },
+    ]);
+    for (const [t, colonnes] of [[uni, 5], [mixte, 6]]) {
+        const cols = [...t.matchAll(/<col width="(\d+)%">/g)].map((m) => Number(m[1]));
+        assert.strictEqual(cols.length, colonnes, 'une largeur par colonne');
+        assert.strictEqual(cols.reduce((a, b) => a + b, 0), 100, `les largeurs font ${cols.reduce((a, b) => a + b, 0)} %`);
+        // La désignation est le seul champ de longueur variable : elle doit dominer.
+        assert.ok(cols[0] >= 40, `désignation trop étroite (${cols[0]} %)`);
+    }
 });
