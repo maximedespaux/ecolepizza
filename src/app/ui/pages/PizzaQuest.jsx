@@ -274,11 +274,12 @@ function PizzaQuest() {
             setQuiz(null);
             if (coute) perdreUnCoeur();
           }}
-          onFinish={(stars) => {
-            // Chapitre échoué (aucune étoile) : un cœur. Réussi : rien.
-            if (stars <= 0 && vies && vies.regen_minutes > 0) perdreUnCoeur();
-            finishChapter(quiz.code, quiz.chIdx, stars);
-          }} />
+          sansCoeur={sansCoeur}
+          // Échec : le chapitre N'EST PAS enregistré — l'inscrire à 0 étoile le compterait
+          // comme acquis et ouvrirait le suivant. Seul le cœur est décompté.
+          onFail={() => { if (vies && vies.regen_minutes > 0) perdreUnCoeur(); }}
+          // Validation : au moins une étoile, garanti par l'écran de résultat.
+          onFinish={(stars) => finishChapter(quiz.code, quiz.chIdx, stars)} />
       )}
       {mini?.key === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
       {mini?.key === "simulateur" && <SimulateurPizza objectifId={mini.obj} onClose={() => setMini(null)} onFinish={(stars) => finishMini("simulateur", stars)} />}
@@ -674,7 +675,7 @@ function shuffled(arr) {
 
 // Mini-quiz d'un chapitre : une question à la fois, formats variés (QCM / vrai-faux /
 // associations), feedback immédiat, cœurs, résultat étoilé.
-function QuizModal({ world, data, onClose, onFinish }) {
+function QuizModal({ world, data, onClose, onFinish, onFail, sansCoeur }) {
   const { chapter, questions } = data;
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState(null);   // QCM : index ; Vrai/Faux : booléen
@@ -684,6 +685,12 @@ function QuizModal({ world, data, onClose, onFinish }) {
   const [correct, setCorrect] = useState(0);
   const [hearts, setHearts] = useState(3);
   const [done, setDone] = useState(false);
+
+  /** Remet le chapitre à zéro pour une nouvelle tentative (bouton « Recommencer »). */
+  function recommencer() {
+    setIdx(0); setPicked(null); setMatched({}); setSelLeft(null); setWrong(null);
+    setCorrect(0); setHearts(3); setDone(false);
+  }
 
   const q = questions[idx];
   const type = q.t || "qcm";
@@ -722,7 +729,16 @@ function QuizModal({ world, data, onClose, onFinish }) {
 
   const ratio = correct / total;
   const stars = ratio >= 0.9 ? 3 : ratio >= 0.7 ? 2 : ratio >= 0.5 ? 1 : 0;
+  const echoue = done && stars === 0; // moins de la moitié de bonnes réponses
   const good = type === "assoc" ? assocSolved : picked === q.a;
+
+  /* Un chapitre échoué coûte un cœur DÈS la fin de la tentative, et non au clic sur un
+     bouton : sans validation à donner, il n'y a plus de clic qui marque l'échec. Le garde
+     évite de le décompter deux fois si le composant se re-rend. */
+  const echecSignale = useRef(false);
+  useEffect(() => {
+    if (echoue && !echecSignale.current) { echecSignale.current = true; onFail?.(); }
+  }, [echoue, onFail]);
   const answerLabel = type === "vf" ? (q.a ? "Vrai" : "Faux") : type === "qcm" ? q.c[q.a] : "";
 
   return (
@@ -828,14 +844,28 @@ function QuizModal({ world, data, onClose, onFinish }) {
             <div style={{ fontSize: 40, marginBottom: 6 }}>{stars > 0 ? "🍕" : "💪"}</div>
             <div style={{ fontSize: 26, letterSpacing: 4, marginBottom: 8 }}>{[0, 1, 2].map((s) => <span key={s} style={{ opacity: s < stars ? 1 : 0.25 }}>⭐</span>)}</div>
             <p style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>{correct}/{total} bonnes réponses</p>
-            <p className="hint" style={{ marginTop: 0 }}>{stars >= 2 ? "Excellent, prêt pour le QCM !" : stars === 1 ? "Bien — retente pour 3 étoiles." : "Reprends le chapitre du manuel et réessaie."}</p>
+            <p className="hint" style={{ marginTop: 0 }}>
+              {stars >= 2 ? "Excellent, prêt pour le QCM !"
+                : stars === 1 ? "Bien — retente pour 3 étoiles."
+                  : "Il faut au moins une étoile (la moitié de bonnes réponses) pour valider le chapitre. Reprends-le dans le manuel et réessaie."}
+            </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12 }}>
               <button className="btn ghost" onClick={() => onClose(false)}>Fermer</button>
-              {/* XP annoncé = celui qui sera effectivement compté (même formule que le total
-                  en en-tête), pour qu'aucun écart n'apparaisse après validation. */}
-              <button className="btn primary" onClick={() => onFinish(stars)}>
-                Valider (+{chapterXpEarned({ questions }, stars)} XP)
-              </button>
+              {/* Échec (aucune étoile) : rien à valider, le chapitre n'est pas acquis. On
+                  propose de le refaire plutôt qu'un « Valider » qui l'enregistrerait à 0 et
+                  ouvrirait le suivant. Le bouton est barré s'il ne reste plus de cœur. */}
+              {echoue ? (
+                <button className="btn primary" onClick={recommencer} disabled={sansCoeur}
+                  title={sansCoeur ? "Plus de cœur — reviens quand tu en auras récupéré un" : undefined}>
+                  <Icon name="refresh" size={14} /> Recommencer
+                </button>
+              ) : (
+                /* XP annoncé = celui qui sera effectivement compté (même formule que le
+                   total en en-tête), pour qu'aucun écart n'apparaisse après validation. */
+                <button className="btn primary" onClick={() => onFinish(stars)}>
+                  Valider (+{chapterXpEarned({ questions }, stars)} XP)
+                </button>
+              )}
             </div>
           </div>
         )}
