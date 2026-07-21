@@ -573,6 +573,33 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
   const nodeRef = useRef(null);
   const dejaPlace = useRef(false);
   const animRef = useRef(null); // fonction d'annulation de l'animation en cours
+
+  /* Flèches de bord : elles disent qu'il RESTE du chemin de ce côté. Sans elles, un chemin
+     coupé net au bord de l'écran se lit comme un chemin fini — surtout au milieu du
+     parcours, où l'on ne voit ni le début ni la fin. Elles ne s'affichent que du côté où il
+     y a effectivement à aller, et font défiler de deux chapitres au clic. */
+  const [bords, setBords] = useState({ gauche: false, droite: false });
+  const majBords = () => {
+    const b = pathRef.current;
+    if (!b) return;
+    const marge = 4; // tolérance : les positions ne tombent pas au pixel près
+    setBords({
+      gauche: b.scrollLeft > marge,
+      droite: b.scrollLeft + b.clientWidth < b.scrollWidth - marge,
+    });
+  };
+  useEffect(() => {
+    majBords();
+    window.addEventListener("resize", majBords);
+    return () => window.removeEventListener("resize", majBords);
+  }, [world.code, chapters.length]);
+
+  const glisser = (sens) => {
+    const b = pathRef.current;
+    if (!b) return;
+    animRef.current?.();
+    animRef.current = animerDefilement(b, b.scrollLeft + sens * ECART_X * 2, 350);
+  };
   useEffect(() => { dejaPlace.current = false; }, [world.code]);
   useEffect(() => {
     const boite = pathRef.current, cible = nodeRef.current;
@@ -644,7 +671,18 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
           en attendant, les défis ci-dessous sont ouverts.
         </p>
       )}
-      <div className="pq-path" ref={pathRef}>
+      <div className="pq-path-wrap">
+      {bords.gauche && (
+        <button type="button" className="pq-nav g" onClick={() => glisser(-1)} aria-label="Chapitres précédents">
+          <Icon name="chevron-left" size={18} />
+        </button>
+      )}
+      {bords.droite && (
+        <button type="button" className="pq-nav d" onClick={() => glisser(1)} aria-label="Chapitres suivants">
+          <Icon name="chevron-right" size={18} />
+        </button>
+      )}
+      <div className="pq-path" ref={pathRef} onScroll={majBords}>
         {chapters.map((ch, i) => {
           const stars = prog[i] || 0;
           const done = i in prog;
@@ -698,6 +736,7 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
             </div>
           );
         })}
+      </div>
       </div>
       <p className="hint" style={{ textAlign: "center", marginTop: 8 }}>{doneCount}/{chapters.length} chapitres terminés</p>
       <WorldGames world={world} onGame={onGame} />

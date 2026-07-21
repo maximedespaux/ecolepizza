@@ -868,6 +868,19 @@ tbody tr:last-child td{border-bottom:none}
   border:1px solid var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,transparent);
   color:var(--ember1);font-size:13px;line-height:1.4}
 
+/* Flèches de bord : elles ne paraissent que du côté où il reste du chemin. Un chemin coupé
+   net au bord de l'écran se lit comme un chemin fini — c'est ce malentendu qu'elles lèvent.
+   Posées SUR le chemin (position absolue) plutôt qu'à côté : elles ne doivent pas rétrécir
+   la zone de jeu, déjà étroite sur mobile. */
+.pq-path-wrap{position:relative}
+.pq-nav{position:absolute;top:73px;transform:translateY(-50%);z-index:3;
+  width:34px;height:34px;display:grid;place-items:center;border-radius:50%;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--muted);
+  box-shadow:var(--shadow-2);transition:.14s var(--ease)}
+.pq-nav:hover{color:var(--ember1);border-color:var(--ember1)}
+.pq-nav.g{left:2px}
+.pq-nav.d{right:2px}
+
 /* --pq-w / --pq-gap : la géométrie du chemin tient dans ces deux valeurs. L'écart entre
    deux CENTRES vaut leur somme, et c'est ce même nombre (ECART_X) qui sert au calcul du
    segment côté JS — les deux doivent rester d'accord. */
