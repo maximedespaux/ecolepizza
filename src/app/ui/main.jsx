@@ -55,6 +55,10 @@ import DemandesBoutique from "./pages/DemandesBoutique.jsx";
 import PateWizard from "./pages/PateWizard.jsx";
 import GarnitureWizard from "./pages/GarnitureWizard.jsx";
 import RealisationWizard from "./pages/RealisationWizard.jsx";
+import Hygiene from "./pages/Hygiene.jsx";
+import HygieneRegister from "./pages/HygieneRegister.jsx";
+import HygieneHistorique from "./pages/HygieneHistorique.jsx";
+import HygieneReglages from "./pages/HygieneReglages.jsx";
 import Communaute from "./pages/Communaute.jsx";
 import Notions from "./pages/Notions.jsx";
 import NotFound from "./pages/NotFound.jsx";
@@ -162,6 +166,10 @@ function AppRoutes() {
           <Route path="empatements" element={<PateWizard />} />
           <Route path="garnitures" element={<GarnitureWizard />} />
           <Route path="realisations" element={<RealisationWizard />} />
+          <Route path="hygiene" element={<Hygiene />} />
+          <Route path="hygiene/historique" element={<HygieneHistorique />} />
+          <Route path="hygiene/reglages" element={<HygieneReglages />} />
+          <Route path="hygiene/:slug" element={<HygieneRegister />} />
           <Route path="communaute" element={<Communaute />} />
           <Route path="notions" element={<Notions />} />
           <Route path="pizza-quest" element={<PizzaQuest />} />

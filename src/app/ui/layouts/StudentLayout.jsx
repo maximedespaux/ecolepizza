@@ -15,14 +15,14 @@ const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 
 // Sections débloquées seulement après avoir franchi le point d'accès (breakpoint) d'une formation.
-const GATED_PATHS = ["/pizza-quest", "/empatements", "/garnitures", "/realisations", "/communaute", "/notions"];
+const GATED_PATHS = ["/pizza-quest", "/empatements", "/garnitures", "/realisations", "/hygiene", "/communaute", "/notions"];
 
 // Menu déroulant « Outils & Communauté » : outils stagiaire + communauté (à venir).
 function OutilsMenu({ locked }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const loc = useLocation();
-  const active = ["/empatements", "/garnitures", "/realisations", "/communaute", "/notions"].some((p) => loc.pathname.startsWith(p));
+  const active = ["/empatements", "/garnitures", "/realisations", "/hygiene", "/communaute", "/notions"].some((p) => loc.pathname.startsWith(p));
   useEffect(() => {
     const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", onDoc);
@@ -44,6 +44,7 @@ function OutilsMenu({ locked }) {
           <NavLink to="/empatements" className="stu-menu-item"><Icon name="wheat" size={15} /> Mes empâtements</NavLink>
           <NavLink to="/garnitures" className="stu-menu-item"><Icon name="list-checks" size={15} /> Mes garnitures</NavLink>
           <NavLink to="/realisations" className="stu-menu-item"><Icon name="pizza" size={15} /> Mes réalisations</NavLink>
+          <NavLink to="/hygiene" className="stu-menu-item"><Icon name="shield" size={15} /> Maîtrise sanitaire</NavLink>
           <NavLink to="/communaute" className="stu-menu-item"><Icon name="users" size={15} /> Communauté</NavLink>
           <NavLink to="/notions" className="stu-menu-item"><Icon name="book-open" size={15} /> Notions &amp; lexique</NavLink>
         </div>

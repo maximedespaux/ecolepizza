@@ -697,6 +697,35 @@ export function getMercuriale() { return request("/mercuriale", { silent: true }
 export function addMercurialeItem(item) { return request("/mercuriale", { method: "POST", body: JSON.stringify(item) }); }
 export function updateMercurialeItem(id, patch) { return request(`/mercuriale/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
 export function deleteMercurialeItem(id) { return request(`/mercuriale/${id}`, { method: "DELETE" }); }
+
+// --- Maîtrise sanitaire (HACCP) ---
+export function getHygieneSummary() { return request("/hygiene/summary", { silent: true }); }
+// Référentiel des points de contrôle (chambre froide, four, friteuse…).
+export function getHygieneEquipment(all) { return request(`/hygiene/equipment${all ? "?all=1" : ""}`, { silent: true }); }
+export function addHygieneEquipment(item) { return request("/hygiene/equipment", { method: "POST", body: JSON.stringify(item) }); }
+export function updateHygieneEquipment(id, patch) { return request(`/hygiene/equipment/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export function deleteHygieneEquipment(id) { return request(`/hygiene/equipment/${id}`, { method: "DELETE" }); }
+// Plan de nettoyage (modèle des tâches récurrentes).
+export function getHygieneTasks(all) { return request(`/hygiene/cleaning-tasks${all ? "?all=1" : ""}`, { silent: true }); }
+export function addHygieneTask(item) { return request("/hygiene/cleaning-tasks", { method: "POST", body: JSON.stringify(item) }); }
+export function updateHygieneTask(id, patch) { return request(`/hygiene/cleaning-tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export function deleteHygieneTask(id) { return request(`/hygiene/cleaning-tasks/${id}`, { method: "DELETE" }); }
+// Préréglages (fournisseurs / produits fréquents) — paramétrage anti-re-saisie.
+export function getHygienePresets(kind, all) {
+  const qs = new URLSearchParams(Object.entries({ kind, all: all ? "1" : "" }).filter(([, v]) => v)).toString();
+  return request(`/hygiene/presets${qs ? `?${qs}` : ""}`, { silent: true });
+}
+export function addHygienePreset(item) { return request("/hygiene/presets", { method: "POST", body: JSON.stringify(item) }); }
+export function updateHygienePreset(id, patch) { return request(`/hygiene/presets/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export function deleteHygienePreset(id) { return request(`/hygiene/presets/${id}`, { method: "DELETE" }); }
+// Journal universel (relevés, livraisons, tâches cochées, étiquettes…).
+export function getHygieneEntries(params = {}) {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "")).toString();
+  return request(`/hygiene/entries${qs ? `?${qs}` : ""}`, { silent: true });
+}
+export function addHygieneEntry(entry) { return request("/hygiene/entries", { method: "POST", body: JSON.stringify(entry) }); }
+export function updateHygieneEntry(id, patch) { return request(`/hygiene/entries/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export function deleteHygieneEntry(id) { return request(`/hygiene/entries/${id}`, { method: "DELETE" }); }
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }
