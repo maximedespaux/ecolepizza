@@ -267,9 +267,25 @@ function RangementCard({ programs, themes, tiers, run }) {
   return (
     <Card title={<span className="card-ttl"><Icon name="columns" size={16} /> Rangement des formations</span>}>
       <p className="hint" style={{ marginTop: 0 }}>
-        Chaque formation est un « monde » de Pizza Quest. Le thème et le palier sont facultatifs :
-        laissés vides, la formation reste sur la carte sans regroupement.
+        Chaque formation rangée devient un « monde » de Pizza Quest. Donner un thème ou un
+        palier, c'est <b>mettre la formation sur la carte</b> : une formation sans l'un ni
+        l'autre n'y apparaît pas. Tant qu'aucune n'est rangée, la carte les affiche toutes.
       </p>
+      {(() => {
+        // Conséquence invisible depuis cet écran : on la chiffre plutôt que de laisser
+        // l'organisme constater l'absence côté stagiaire.
+        const rangees = programs.filter((p) => p.quest_theme_id || p.quest_tier_id);
+        const hors = programs.length - rangees.length;
+        if (!rangees.length || !hors) return null;
+        return (
+          <p className="hint" style={{ marginTop: -4, color: "var(--ember1)" }}>
+            <Icon name="info" size={12} style={{ verticalAlign: "-2px" }} />{" "}
+            {hors} formation{hors > 1 ? "s ne sont" : " n'est"} rangée{hors > 1 ? "s" : ""} ni par
+            thème ni par palier : elle{hors > 1 ? "s" : ""} n'apparaî{hors > 1 ? "ssent" : "t"} pas
+            dans Pizza Quest.
+          </p>
+        );
+      })()}
       <div style={{ overflowX: "auto" }}>
         <table className="tbl">
           <thead>

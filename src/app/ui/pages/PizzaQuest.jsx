@@ -196,8 +196,13 @@ function PizzaQuest() {
  */
 function FormationMap({ worlds, prog, onPick }) {
   const card = (w) => <FCard key={w.code} w={w} prog={prog[w.code]} onPick={onPick} />;
-  const range = worlds.some((w) => w.theme || w.tier);
-  if (range) return <CarteRangee worlds={worlds} card={card} />;
+  // Dès que l'organisme a commencé à ranger son catalogue, le rangement fait office de
+  // SÉLECTION : une formation sans thème ni palier n'est pas au programme de Pizza Quest et
+  // ne s'affiche pas. Ranger une formation, c'est la mettre sur la carte.
+  const rangees = worlds.filter((w) => w.theme || w.tier);
+  if (rangees.length) return <CarteRangee worlds={rangees} card={card} />;
+  // Aucun rangement du tout : on garde la carte historique et TOUTES les formations —
+  // appliquer la règle ici viderait Pizza Quest chez qui n'a jamais ouvert cet écran.
 
   const by = { decouverte: [], niv1: [], niv1pro: [], niv2: [], expert: [], spe: [], autre: [] };
   for (const w of worlds) by[roleOf(w)].push(w);
