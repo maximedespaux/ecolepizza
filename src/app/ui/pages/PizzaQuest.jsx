@@ -245,31 +245,25 @@ function FormationMap({ worlds, prog, onPick }) {
 }
 
 /**
- * Explication des pastilles « ! » d'UN GROUPE, affichée juste sous ce groupe.
+ * Légende des pastilles « ! » d'UN GROUPE, affichée juste sous ce groupe.
  *
- * La pastille signale, ce bloc explique — et il est placé là où les pastilles se trouvent,
- * pas en pied de page : sur une carte qui compte plusieurs rangées, chercher au bas de
- * l'écran ce que signifie un « ! » aperçu en haut fait perdre le fil.
+ * La pastille signale, la légende dit ce qu'elle veut dire — et elle est placée là où les
+ * pastilles se trouvent, pas en pied de page : sur une carte à plusieurs rangées, chercher
+ * au bas de l'écran le sens d'un « ! » aperçu en haut fait perdre le fil.
  *
+ * Le DÉTAIL (quelle formation, déjà acquise ou non) reste dans l'infobulle de la carte et,
+ * en toutes lettres, à l'ouverture du monde : la légende n'a pas à répéter le parcours.
  * Ne rend rien si aucune formation du groupe n'a de prérequis.
  */
 function PrerequisResume({ worlds }) {
   const avec = (worlds || []).filter((w) => (w.prereqAll || []).length > 0);
   if (!avec.length) return null;
   return (
-    <div className="pq-prereq-box">
-      {avec.map((w) => (
-        <p key={w.code} className="pq-prereq-line" style={{ margin: 0 }}>
-          <span className="pq-prereq-mini" aria-hidden="true">!</span>
-          <b>{w.code}</b>
-          <span className="field-opt">après</span>
-          {w.prereqAll.map((p) => (
-            <span key={p.code} className={"pq-prereq-chip" + (p.done ? " ok" : "")} title={p.title}>
-              <Icon name={p.done ? "check" : "lock"} size={11} /> {p.code}
-            </span>
-          ))}
-        </p>
-      ))}
+    <div style={{ textAlign: "center", marginTop: 10 }}>
+      <span className="pq-legend">
+        <span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span>
+        {" "}= prérequis (niveau précédent)
+      </span>
     </div>
   );
 }
