@@ -65,11 +65,14 @@ function roleOf(w) {
 const INGREDIENT = { decouverte: "🍕", niv1: "🌾", niv1pro: "🌾", niv2: "🧫", expert: "🏆", spe: "🔥", autre: "🧑‍🍳" };
 
 /* Géométrie du chemin. Les décalages verticaux dessinent le sentier ; ECART_X est la
-   distance entre deux CENTRES de pastilles — largeur d'une pastille (46) + l'écart de la
-   rangée (26). Ces deux constantes doivent rester d'accord avec .pq-node et .pq-path : le
-   segment de liaison est calculé à partir d'elles. */
+   distance entre deux CENTRES de pastilles.
+   Chaque case a une LARGEUR FIXE (--pq-w = 116) et la rangée un écart constant
+   (--pq-gap = 8) : l'écart entre centres vaut donc leur somme, 124. Sans largeur fixe, la
+   case s'étirait à la taille de son libellé et cette distance changeait à chaque paire —
+   le segment, lui, était calculé sur une valeur unique et tombait à côté.
+   À modifier EN MÊME TEMPS que --pq-w / --pq-gap dans .pq-path. */
 const DECALAGES = [0, -26, -38, -26, 0, 26];
-const ECART_X = 72;
+const ECART_X = 124;
 
 function PizzaQuest() {
   const [worlds, setWorlds] = useState(null);
@@ -558,6 +561,9 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
           // Segment reliant le CENTRE de la pastille précédente au centre de celle-ci.
           // Les pastilles n'étant pas à la même hauteur, un trait horizontal ne joignait
           // rien : on calcule longueur et angle réels, et le trait passe SOUS les pastilles.
+          // Le décalage vertical passe par `top` et non par `transform` : une transformation
+          // créerait un contexte d'empilement, et le segment ne pourrait plus passer sous la
+          // pastille de la case voisine — il lui barrerait la figure.
           const dy = offset - DECALAGES[(i - 1 + 6) % 6];
           const lien = {
             "--len": `${Math.hypot(ECART_X, dy).toFixed(1)}px`,
@@ -568,7 +574,7 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
               : "Termine les chapitres précédents";
           return (
             <div key={i} className={"pq-node-wrap" + (i > 0 && (i - 1) in prog ? " lien-fait" : "")}
-              style={{ transform: `translateY(${offset}px)`, ...lien }}>
+              style={{ top: `${offset}px`, ...lien }}>
               <button className={"pq-node" + (done ? " done" : "") + (verrou ? " locked" : "") + (encours ? " on" : "")}
                 style={{ "--c": world.color }} disabled={done || verrou || sansCoeur}
                 onClick={() => onChapter(i, ch)} title={titre}>
