@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
+import { MODELE_FACTURE } from "../lib/modeleFacture.js";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { buildExtensions } from "../lib/editorConfig.js";
@@ -74,6 +75,7 @@ function TemplateEditor() {
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
+  const [docType, setDocType] = useState(""); // type du modèle : conditionne l'offre « Facture type »
   const [showFields, setShowFields] = useState(false); // modale « Champs documents »
   const [showCustom, setShowCustom] = useState(false); // modale « Jetons personnalisés »
   const fieldsRef = useRef(null);
@@ -100,6 +102,7 @@ function TemplateEditor() {
         setCatalog(cat.data || []);
         setOpenGroups(Object.fromEntries((cat.data || []).map((g, i) => [g.group, i === 0])));
         const d = res.data || {};
+        setDocType(d.doc_type || "");
         if (body) body.commands.setContent(d.body_html || "<p></p>");
         if (header) header.commands.setContent(d.header_html || "");
         if (footer) footer.commands.setContent(d.footer_html || "");
@@ -225,6 +228,24 @@ function TemplateEditor() {
       .filter((g) => g.tokens.length);
   }, [catalog, rechJeton]);
 
+  /**
+   * Remplit l'éditeur avec une facture type.
+   *
+   * On REMPLACE le contenu, on ne l'ajoute pas : mélanger un modèle type à un travail en cours
+   * donnerait un document incohérent, avec des mentions en double. La confirmation ne se pose
+   * que s'il y a réellement quelque chose à perdre.
+   *
+   * Rien n'est enregistré : l'organisme relit puis enregistre lui-même. Une facture engage son
+   * émetteur — personne d'autre ne doit décider de ce qu'elle affirme.
+   */
+  function chargerModeleFacture() {
+    if (!body) return;
+    const actuel = clean(body.getHTML());
+    if (actuel && !window.confirm("Remplacer le contenu actuel par la facture type ?")) return;
+    body.commands.setContent(MODELE_FACTURE);
+    setStatus({ type: "success", message: "Facture type chargée. Relisez-la, complétez les mentions signalées en rouge, puis enregistrez." });
+  }
+
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
   }
@@ -289,6 +310,13 @@ function TemplateEditor() {
           <button className="btn ghost sm" onClick={() => navigate("/modeles")}>← Modèles</button>
           <h2 style={{ margin: 0, fontSize: 17 }}>Éditeur — <span className="mono">{slug}</span></h2>
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            {/* Ne s'affiche que sur un modèle de FACTURE : ailleurs, ce serait du bruit. */}
+            {String(docType || "").toUpperCase() === "FACTURE" && (
+              <button className="btn sm ghost" onClick={chargerModeleFacture}
+                title="Remplit l'éditeur avec une facture type portant les mentions obligatoires">
+                <Icon name="file-text" size={13} /> Facture type
+              </button>
+            )}
             <button className="btn sm ghost" onClick={() => setShowFields(true)} title="Gérer les champs disponibles du dossier">Champs documents</button>
             <button className="btn sm ghost" onClick={() => setShowCustom(true)} title="Créer des jetons calculés (dates, combinaisons…)">Jetons perso</button>
             <button className={"btn sm ghost" + (showPreview ? " on" : "")} onClick={() => setShowPreview((v) => !v)}>

@@ -461,8 +461,20 @@ function invoiceCtx(org, data) {
     // personne. Les deux familles de jetons restent disponibles, seule l'une est remplie.
     const estEntreprise = !!data.buyer.siret;
 
+    // Les jetons « Champs documents » (field:organization.…) sont remplis depuis `ctx.fields`.
+    // Sans eux, TOUS les champs de la palette « Organisme » sortaient VIDES sur une facture —
+    // raison sociale, SIRET, NDA, IBAN… — alors qu'ils sont proposés à l'insertion. Un jeton
+    // qu'on peut poser et qui ne se remplit jamais est pire que pas de jeton du tout.
+    // On expose la fiche organisme telle quelle : la palette et le rendu voient la même chose.
+    const fields = {};
+    for (const [k, v] of Object.entries(org || {})) {
+        if (v == null || typeof v === 'object') continue;
+        fields[`organization.${k}`] = v;
+    }
+
     return {
         org,
+        fields,
         company: estEntreprise ? { name: data.buyer.name, siret: data.buyer.siret, address: a.line, zip_code: a.zip, town: a.city } : {},
         learner: estEntreprise ? {} : { first_name: data.buyer.name, address: a.line, zip_code: a.zip, town: a.city },
         formations: [],

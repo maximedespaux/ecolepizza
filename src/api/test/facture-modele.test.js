@@ -14,6 +14,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
+const lireApi = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { resolveTokens, articleRowTokens, expandListBlocks } = require('../lib/tokens.js');
@@ -221,4 +222,76 @@ test('l\'aperçu rend {Articles} en tableau, pas en texte d\'exemple', () => {
     const bloc = src.slice(src.indexOf('async function sampleTokenValues'));
     assert.match(bloc.slice(0, 900), /m\['Articles'\] = articlesTable\(/,
         "sans ça, l'aperçu afficherait le texte d'exemple au lieu d'une grille");
+});
+
+// --- Le modèle de facture prêt à l'emploi ---------------------------------------------------
+
+const MODELE = (() => {
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/lib/modeleFacture.js'), 'utf8');
+    const code = src.replace('export const', 'const') + '\nmodule.exports = { MODELE_FACTURE };';
+    const m = { exports: {} };
+    new Function('module', 'exports', code)(m, m.exports);
+    return m.exports.MODELE_FACTURE;
+})();
+
+test('les jetons « Champs documents » se remplissent sur une facture', () => {
+    // DÉFAUT TROUVÉ EN RENDANT LE MODÈLE, pas en le lisant. `fillHtml` remplit les jetons
+    // field:… depuis `ctx.fields` ; le contexte facture ne le peuplait pas. TOUS les champs de
+    // la palette « Organisme » sortaient donc VIDES — raison sociale, SIRET, NDA, IBAN — alors
+    // qu'ils sont proposés à l'insertion. Un jeton qu'on peut poser et qui ne se remplit jamais
+    // est pire que pas de jeton du tout.
+    const src = lireApi('controllers/invoice.controller.js');
+    const bloc = src.slice(src.indexOf('function invoiceCtx'));
+    const corps = bloc.slice(0, bloc.indexOf('\n}\n'));
+    assert.match(corps, /fields\[`organization\.\$\{k\}`\]/, 'ctx.fields n\'est pas peuplé');
+    assert.match(corps, /^\s+fields,$/m, 'ctx.fields n\'est pas transmis');
+});
+
+test('le modèle type porte les mentions obligatoires d\'une facture', () => {
+    // Art. L441-9 C. com. et 242 nonies A ann. II CGI. Partir d'une page blanche, c'est en
+    // oublier — et un oubli ne se voit qu'au contrôle, ou quand un client refuse de payer.
+    // Les champs du dossier portent le préfixe `field:` — c'est la clé RÉELLE, pas le nom de
+    // colonne. Mon premier essai l'avait oublié et le test tombait à juste titre.
+    const requis = [
+        'field:organization.legal_name', 'field:organization.siret',
+        'field:organization.vat_number', 'field:organization.nda',
+        'Numéro facture', 'Date facture', 'Échéance facture',
+        'Acheteur', 'Adresse acheteur', 'Articles', 'Total HT', 'Total TVA', 'Total TTC',
+        'Détail TVA',
+    ];
+    for (const k of requis) {
+        assert.ok(MODELE.includes(`data-token="${k}"`), `mention obligatoire absente : ${k}`);
+    }
+    assert.match(MODELE, /indemnité forfaitaire de 40/, 'indemnité de recouvrement absente');
+    assert.match(MODELE, /trois fois le taux/, 'pénalités de retard absentes');
+    assert.match(MODELE, /L441-10/, 'référence légale des pénalités absente');
+});
+
+test('le modèle signale les mentions que la fiche organisme ne porte pas', () => {
+    // Forme juridique, capital social et RCS sont obligatoires pour une société commerciale et
+    // n'ont pas de champ. Les omettre en silence produirait une facture non conforme sans que
+    // personne ne s'en aperçoive : le modèle les rappelle en clair, à compléter ou à retirer.
+    assert.match(MODELE, /Capital social/);
+    assert.match(MODELE, /RCS/);
+    assert.match(MODELE, /à compléter ou à supprimer/);
+});
+
+test('les puces du modèle portent leur libellé', () => {
+    // Sans `data-label`, l'éditeur affiche la CLÉ : « field:organization.legal_name » en plein
+    // milieu du document, illisible pour qui relit son modèle. Constaté dans l'éditeur réel.
+    const puces = [...MODELE.matchAll(/<span data-token="([^"]+)"([^>]*)>/g)];
+    assert.ok(puces.length >= 20, `seulement ${puces.length} puces`);
+    for (const [, cle, attrs] of puces) {
+        assert.match(attrs, /data-label="[^"]+"/, `${cle} : libellé manquant`);
+    }
+});
+
+test('le modèle type n\'est proposé que sur un modèle de FACTURE', () => {
+    // Ailleurs, ce bouton serait du bruit — et un clic malheureux écraserait une convention.
+    const ui = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/pages/TemplateEditor.jsx'), 'utf8');
+    assert.match(ui, /docType[\s\S]{0,40}=== "FACTURE"/, 'le bouton n\'est pas conditionné au type');
+    assert.match(ui, /window\.confirm/, 'remplacer un contenu existant doit être confirmé');
+    // Et l'API doit renvoyer le type, sinon la condition est toujours fausse.
+    assert.match(lireApi('controllers/template.controller.js'), /doc_type: docType/,
+        'sans doc_type renvoyé, le bouton ne s\'affiche jamais');
 });
