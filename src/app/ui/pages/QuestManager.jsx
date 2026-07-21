@@ -308,19 +308,39 @@ function RangementCard({ programs, themes, tiers, run }) {
 
 /* ---- Prérequis ----------------------------------------------------------------------- */
 
+/**
+ * Prérequis — une ligne PAR FORMATION plutôt qu'un formulaire global et une liste à part.
+ *
+ * L'écran répond à la question qu'on se pose vraiment en configurant un catalogue : « celle-ci,
+ * elle vient après quoi ? ». On la lit et on la modifie au même endroit, sans choisir d'abord
+ * une cible dans une liste déroulante pour découvrir ensuite ce qu'elle contenait déjà.
+ *
+ * Chaque formation affiche aussi ce qu'elle OUVRE. C'est l'information qui manque au moment de
+ * supprimer un prérequis ou de réorganiser : on voit ce qui dépend d'elle avant d'y toucher.
+ */
 function PrerequisCard({ programs, prerequisites, run }) {
-  const [cible, setCible] = useState("");
-  const [requis, setRequis] = useState("");
-  const nom = (id) => {
-    const p = programs.find((x) => x.id === id);
-    return p ? `${p.code} — ${p.title}` : "formation supprimée";
-  };
-  // Prérequis regroupés par formation cible : on lit « pour X, il faut Y et Z ».
-  const parCible = new Map();
+  const [ouvert, setOuvert] = useState(null); // formation dont le sélecteur d'ajout est ouvert
+
+  const parId = new Map(programs.map((p) => [p.id, p]));
+  const nom = (id) => parId.get(id) || { code: "?", title: "formation supprimée" };
+  // Prérequis d'une formation, et réciproquement ce qu'elle débloque.
+  const requisDe = new Map(programs.map((p) => [p.id, []]));
+  const ouvreVers = new Map(programs.map((p) => [p.id, []]));
   for (const pr of prerequisites) {
-    if (!parCible.has(pr.program_id)) parCible.set(pr.program_id, []);
-    parCible.get(pr.program_id).push(pr);
+    if (requisDe.has(pr.program_id)) requisDe.get(pr.program_id).push(pr);
+    if (ouvreVers.has(pr.requires_program_id)) ouvreVers.get(pr.requires_program_id).push(pr.program_id);
   }
+
+  /* Profondeur = longueur du plus long chemin de prérequis. Sert à ordonner l'écran comme
+     le parcours se déroule : les formations d'entrée d'abord, les suites ensuite. Le graphe
+     est acyclique (garanti à l'écriture), la descente termine donc toujours. */
+  const profondeur = (id, vus = new Set()) => {
+    if (vus.has(id)) return 0; // sécurité si un cycle avait échappé au contrôle
+    vus.add(id);
+    const rs = requisDe.get(id) || [];
+    return rs.length ? 1 + Math.max(...rs.map((r) => profondeur(r.requires_program_id, new Set(vus)))) : 0;
+  };
+  const ordonnees = [...programs].sort((a, b) => profondeur(a.id) - profondeur(b.id) || a.code.localeCompare(b.code));
 
   if (programs.length < 2) {
     return <EmptyState icon="list-checks" title="Pas assez de formations"
@@ -330,53 +350,76 @@ function PrerequisCard({ programs, prerequisites, run }) {
   return (
     <Card title={<span className="card-ttl"><Icon name="list-checks" size={16} /> Prérequis entre formations</span>}>
       <p className="hint" style={{ marginTop: 0 }}>
-        « Pour attaquer cette formation, il faut avoir <b>terminé</b> celle-là. » Sur la carte du
-        stagiaire, un monde dont les prérequis ne sont pas remplis reste verrouillé, avec la liste
-        de ce qui manque. Une formation peut en exiger plusieurs.
+        « Pour attaquer cette formation, il faut avoir <b>terminé</b> celle-là. » Côté stagiaire,
+        un monde dont les prérequis manquent reste verrouillé, avec la liste de ce qui reste à faire.
+        Les formations sont classées ci-dessous dans l'ordre du parcours — celles sans prérequis en tête.
       </p>
 
-      <form style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!cible || !requis) return;
-          run(() => addQuestPrerequisite({ program_id: cible, requires_program_id: requis }), "Prérequis ajouté.");
-          setRequis("");
-        }}>
-        <span>Pour</span>
-        <select value={cible} onChange={(e) => setCible(e.target.value)}>
-          <option value="">choisir une formation…</option>
-          {programs.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.title}</option>)}
-        </select>
-        <span>il faut avoir terminé</span>
-        <select value={requis} onChange={(e) => setRequis(e.target.value)} disabled={!cible}>
-          <option value="">choisir…</option>
-          {programs.filter((p) => p.id !== cible).map((p) => <option key={p.id} value={p.id}>{p.code} — {p.title}</option>)}
-        </select>
-        <button type="submit" className="btn sm" disabled={!cible || !requis}><Icon name="plus" size={14} /> Ajouter</button>
-      </form>
+      <div className="pr-list">
+        {ordonnees.map((p) => {
+          const requis = requisDe.get(p.id) || [];
+          const debloque = ouvreVers.get(p.id) || [];
+          // Candidats : tout sauf elle-même et ses prérequis déjà posés. Un lien qui
+          // boucherait est refusé par le serveur, avec son motif.
+          const dejaRequis = new Set(requis.map((r) => r.requires_program_id));
+          const candidats = programs.filter((x) => x.id !== p.id && !dejaRequis.has(x.id));
 
-      {prerequisites.length === 0
-        ? <p className="hint">Aucun prérequis : toutes les formations sont accessibles librement.</p>
-        : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {[...parCible.entries()].map(([progId, liste]) => (
-              <div key={progId}>
-                <b>{nom(progId)}</b>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                  {liste.map((pr) => (
-                    <span key={pr.id} className="pill" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                      <Icon name="lock" size={12} /> {nom(pr.requires_program_id)}
-                      <button type="button" className="pf-x" title="Retirer ce prérequis"
-                        onClick={() => run(() => deleteQuestPrerequisite(pr.id), "Prérequis retiré.")}>
-                        <Icon name="x" size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
+          return (
+            <div key={p.id} className="pr-row">
+              <div className="pr-head">
+                <span className="pr-dot" style={{ background: p.color || colorOf(p.code) }} />
+                <b>{p.code}</b>
+                <span className="hint pr-title">{p.title}</span>
+                {debloque.length > 0 && (
+                  <span className="hint pr-opens" title={debloque.map((id) => nom(id).title).join("\n")}>
+                    <Icon name="key" size={12} /> ouvre {debloque.map((id) => nom(id).code).join(", ")}
+                  </span>
+                )}
               </div>
-            ))}
-          </div>
-        )}
+
+              <div className="pr-body">
+                <span className="pr-lbl">Après :</span>
+                {requis.length === 0 && <span className="hint">accessible directement</span>}
+                {requis.map((r) => (
+                  <span key={r.id} className="pr-chip">
+                    <Icon name="lock" size={11} />
+                    <b>{nom(r.requires_program_id).code}</b>
+                    <button type="button" className="pf-x" title={`Retirer ${nom(r.requires_program_id).code}`}
+                      onClick={() => run(() => deleteQuestPrerequisite(r.id), "Prérequis retiré.")}>
+                      <Icon name="x" size={11} />
+                    </button>
+                  </span>
+                ))}
+
+                {ouvert === p.id ? (
+                  <select autoFocus value="" className="pr-add-sel"
+                    onBlur={() => setOuvert(null)}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      run(() => addQuestPrerequisite({ program_id: p.id, requires_program_id: e.target.value }), "Prérequis ajouté.");
+                      setOuvert(null);
+                    }}>
+                    <option value="">choisir une formation…</option>
+                    {candidats.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}
+                  </select>
+                ) : (
+                  <button type="button" className="pr-add" disabled={candidats.length === 0}
+                    onClick={() => setOuvert(p.id)}
+                    title={candidats.length ? "Ajouter un prérequis" : "Aucune autre formation disponible"}>
+                    <Icon name="plus" size={12} /> prérequis
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {prerequisites.length === 0 && (
+        <p className="hint" style={{ marginTop: 12 }}>
+          Aucun prérequis pour l'instant : toutes les formations sont accessibles librement.
+        </p>
+      )}
     </Card>
   );
 }

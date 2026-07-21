@@ -906,9 +906,10 @@ tbody tr:last-child td{border-bottom:none}
 .pq-fcard-title{font-size:15px;font-weight:800;line-height:1.15}
 .pq-fcard-meta{font-size:11px;opacity:.92;margin-top:4px}
 .pq-prereq{position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2c00;display:grid;place-items:center;font-weight:900;font-size:15px;border:2px solid var(--surface2);cursor:help}
-/* Prérequis TOUS acquis : l'information reste (« ce niveau vient après un autre ») mais
-   n'alerte plus — d'où le « i » sobre plutôt que le « ! » doré. */
-.pq-prereq.ok{background:var(--surface3);color:var(--muted);font-size:14px;font-style:italic}
+/* Un seul repère, doré, que les prérequis soient acquis ou non : c'est le même fait porté
+   par la pastille (« ce niveau vient après un autre »). Seul le glyphe distingue l'état —
+   « ! » s'il reste à faire, « i » si tout est acquis — et l'infobulle donne le détail. */
+.pq-prereq.ok{font-size:14px;font-style:italic}
 /* Rappel des prérequis en tête d'un monde, avec leur état. */
 .pq-prereq-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px;font-size:12.5px}
 .pq-prereq-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-weight:700;
@@ -1583,6 +1584,26 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
   .wiz-dock-s{display:block;font-size:11px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 @media(max-width:560px){.wiz-dot-l{display:none}.wiz-dot{min-width:40px}}
+/* ---- Prérequis Pizza Quest (organisme) ----------------------------------------------- */
+/* Une ligne par formation : on lit « celle-ci vient après celles-là » et on la modifie au
+   même endroit. Le liseré à gauche rappelle la couleur de la formation. */
+.pr-list{display:flex;flex-direction:column;gap:8px}
+.pr-row{border:1px solid var(--border-soft);border-radius:11px;padding:10px 12px;background:var(--surface2)}
+.pr-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px}
+.pr-dot{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.pr-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Ce que la formation débloque : à connaître AVANT de retirer un prérequis. */
+.pr-opens{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;color:var(--green)}
+.pr-body{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pr-lbl{font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+.pr-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 4px 3px 9px;border-radius:99px;font-size:12.5px;
+  border:1px solid var(--border);background:var(--surface);color:var(--text)}
+.pr-add{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:12.5px;font-weight:600;
+  border:1px dashed var(--border);background:none;color:var(--muted);cursor:pointer;transition:.14s var(--ease)}
+.pr-add:hover:not(:disabled){border-color:var(--ember1);color:var(--ember1)}
+.pr-add:disabled{opacity:.4;cursor:default}
+.pr-add-sel{max-width:280px}
+
 /* ---- Éditeur de question Pizza Quest (banque de l'organisme) ------------------------- */
 /* Saisie à gauche, aperçu stagiaire à droite : on rédige pour quelqu'un d'autre, le rendu
    doit rester sous les yeux. En dessous de 900px la colonne d'aperçu passe dessous. */

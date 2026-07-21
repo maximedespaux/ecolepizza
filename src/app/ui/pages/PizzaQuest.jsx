@@ -312,7 +312,7 @@ function CarteRangee({ worlds, card }) {
               {" "}= il reste une formation à terminer avant
             </span>
           )}
-          <span className="pq-legend" style={{ background: "var(--surface3)", color: "var(--muted)" }}>
+          <span className="pq-legend">
             <span className="pq-prereq ok" style={{ position: "static", width: 20, height: 20 }}>i</span>
             {" "}= vient après une autre formation · survolez pour voir laquelle
           </span>
