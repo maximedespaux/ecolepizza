@@ -108,6 +108,13 @@ function ProfilTab({ avatar, choose, chooseColor, grade, next, score, pct, xp, s
         </div>
         <div className="pq-progress" style={{ height: 12 }}><span style={{ width: `${pct}%`, background: "var(--gold)" }} /></div>
         {next && <div className="hint" style={{ marginTop: 5 }}>Encore <b>{next.min - score} pts</b> pour <b>{next.emoji} {next.name}</b></div>}
+        {/* D'où viennent ces points. Sans cette ligne, on lisait le score comme un total
+            d'XP de jeu — et remettre Pizza Quest à zéro sans le voir bouger n'avait aucun
+            sens, puisque l'essentiel vient des formations terminées. */}
+        <div className="hint" style={{ marginTop: 4 }}>
+          <b>{xp}</b> XP gagnés dans Pizza Quest
+          {done > 0 && <> + <b>{done}</b> formation{done > 1 ? "s" : ""} terminée{done > 1 ? "s" : ""} (100 pts chacune)</>}
+        </div>
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           <span className="pf-chip"><Icon name="target" size={13} /> {xp} XP</span>
           <span className="pf-chip">⭐ {stars} étoiles</span>
