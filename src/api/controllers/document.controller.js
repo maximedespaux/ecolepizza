@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { renderDocumentHTML } = require('../lib/render.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
 const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc } = require('../lib/documents.js');
@@ -452,8 +451,17 @@ const getDocument = async (req, res) => {
             if (own.length === 0) return res.status(403).json({ message: 'Accès refusé' });
         }
 
-        const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
-        const html = renderDocumentHTML(doc.type, ctx, doc.title);
+        // Le corps vient du MODÈLE, et de lui seul. Il existait ici un rendu de secours codé
+        // en dur (lib/render.js) qui fabriquait un document plausible pour n'importe quel type
+        // quand aucun modèle n'était défini. Résultat observé : une convention de formation
+        // complète, affichée SOUS un bandeau « Aucun modèle pour cette étape », déjà signée
+        // par l'organisme et par le stagiaire.
+        //
+        // C'est le pire des cas pour une pièce contractuelle : son contenu n'était fixé nulle
+        // part. Il dépendait du code de rendu, donc deux signatures apposées à six mois
+        // d'intervalle pouvaient porter sur des textes différents, sans que rien ne le dise.
+        // Un document sans modèle n'a pas de contenu — on l'annonce, on n'en invente pas un.
+        const html = await buildDocHtml(conn, doc.organization_id, doc);
         // Signature stagiaire pilotée par le modèle (Modeles de document : stagiaire_sign).
         const orgSteps = await loadOrgSteps(doc.organization_id);
         // Document dont la signature incombe à l'entreprise : pas signable par le stagiaire.
@@ -475,6 +483,9 @@ const getDocument = async (req, res) => {
                 signer_user_agent: decrypt(doc.signer_user_agent) || null,
                 signed_hash: doc.signed_hash || null,
                 html,
+                // Dit au front POURQUOI il n'y a pas de corps, pour qu'il n'affiche pas un
+                // cadre vide sans explication.
+                no_template: html === null || html === undefined,
             },
         });
     } catch (err) {
@@ -789,13 +800,47 @@ const previewHtml = async (req, res) => {
 };
 
 /**
+ * Un modèle existe-t-il pour ce document ? Renvoie le motif du refus, ou null si tout va bien.
+ *
+ * On vérifie AVANT l'envoi et non à l'affichage : c'est le seul moment où le problème est
+ * encore réparable sans conséquence. Un document parti sans modèle a déjà été vu, parfois
+ * signé — et une signature apposée sur un contenu qui n'est fixé nulle part ne vaut pas
+ * grand-chose.
+ *
+ * Les feuilles d'émargement échappent à la règle : leur mise en page est produite par le code
+ * (lib/emargement.js) à partir du modèle d'émargement de la session, pas par un modèle de
+ * document.
+ */
+async function motifModeleManquant(conn, orgId, doc) {
+    if (isEmargDoc(doc)) return null;
+    let f = {};
+    try {
+        const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
+        f = (ctx.formations && ctx.formations[0]) || {};
+    } catch { /* contexte indisponible : on juge sur le seul type */ }
+    const slug = doc.template_slug
+        || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
+    if (!slug) {
+        return `Aucun modèle n'est associé au type « ${doc.type} ». Créez-le dans Modèles de documents avant d'envoyer.`;
+    }
+    const content = await getTemplateContent(orgId, slug);
+    if (!content) {
+        return `Le modèle « ${slug} » n'existe pas encore. Créez-le dans Modèles de documents → Éditer avant d'envoyer.`;
+    }
+    return null;
+}
+
+/**
  * Envoie un document préparé (A_FAIRE → ENVOYE). L'organisme n'est apposé à l'envoi que
  * pour les documents SANS partie signataire (org-seul). Réutilisable (envoi de groupe).
  * Renvoie true si envoyé.
  */
 async function sendPreparedDoc(conn, orgId, docId) {
-    const [[doc]] = await conn.query('SELECT id, type, template_slug, status FROM generated_document WHERE id = ? AND organization_id = ?', [docId, orgId]);
+    const [[doc]] = await conn.query('SELECT id, type, template_slug, status, learner_id FROM generated_document WHERE id = ? AND organization_id = ?', [docId, orgId]);
     if (!doc || doc.status !== 'A_FAIRE') return false;
+    // Envoi de groupe : un document sans modèle est simplement sauté. L'appelant compte les
+    // envois réussis, le total lui dira qu'il en manque.
+    if (await motifModeleManquant(conn, orgId, doc)) return false;
     let orgSet = ''; const orgVals = [];
     try {
         const orgSteps = await loadOrgSteps(orgId);
@@ -823,12 +868,17 @@ const sendDocument = async (req, res) => {
         const conn = db.promise();
         const orgId = req.user.organization_id;
         const [[doc]] = await conn.query(
-            'SELECT id, type, template_slug, status FROM generated_document WHERE id = ? AND organization_id = ?',
+            'SELECT id, type, template_slug, status, learner_id FROM generated_document WHERE id = ? AND organization_id = ?',
             [req.params.id, orgId]
         );
         if (!doc || doc.status !== 'A_FAIRE') {
             return res.status(400).json({ message: 'Document déjà envoyé ou introuvable.' });
         }
+
+        // Pas de modèle, pas d'envoi. Le document généré à partir de rien était auparavant
+        // envoyé puis signé, avec un contenu qui n'existait dans aucun modèle.
+        const motif = await motifModeleManquant(conn, orgId, doc);
+        if (motif) return res.status(422).json({ message: motif });
 
         // L'ORGANISME signe en DERNIER : à l'envoi, on n'appose sa signature QUE si aucune
         // partie (stagiaire / entreprise) ne doit signer — ex. Invitation, Certificat de

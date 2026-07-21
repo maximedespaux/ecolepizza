@@ -126,7 +126,24 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
           ) : pdfError ? (
             <div style={{ padding: "16px 18px" }}>
               <div className="status err" style={{ marginBottom: 12 }}>Aperçu indisponible : {pdfError}</div>
-              {doc && <div className="doc-sheet" dangerouslySetInnerHTML={{ __html: doc.html }} />}
+              {/* Sans modèle, il n'y a rien à montrer — et surtout rien à inventer. Ce repli
+                  affichait auparavant un document reconstitué par le code : on a pu voir une
+                  convention de formation complète, déjà signée, sous un bandeau « Aucun
+                  modèle ». Le contenu signé n'était alors fixé nulle part. */}
+              {doc?.no_template ? (
+                <div className="doc-sheet" style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>
+                  <Icon name="file-text" size={28} />
+                  <p style={{ margin: "10px 0 4px", fontWeight: 700, color: "var(--text)" }}>
+                    Ce document n'a pas encore de modèle.
+                  </p>
+                  <p className="hint" style={{ margin: 0 }}>
+                    Son contenu doit être défini dans <b>Modèles de documents</b> avant de pouvoir être
+                    affiché ou envoyé.
+                  </p>
+                </div>
+              ) : doc ? (
+                <div className="doc-sheet" dangerouslySetInnerHTML={{ __html: doc.html }} />
+              ) : null}
             </div>
           ) : (
             <p className="hint" style={{ padding: 18 }}>Génération de l'aperçu…</p>
