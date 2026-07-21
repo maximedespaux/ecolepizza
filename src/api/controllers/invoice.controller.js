@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
-const { buildCII, attacherFacturX, ventilerTva } = require('../lib/facturx.js');
+const { buildCII, attacherFacturX, ventilerTva, manquantsFacturX } = require('../lib/facturx.js');
 const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
@@ -45,19 +45,22 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     const o = org || {};
 
     // Client : nom libre > entreprise > stagiaire du dossier.
-    let buyer = { name: 'Client', siret: null, address: {} };
+    // `email` n'est pas décoratif : c'est BT-49, l'adresse électronique de l'acheteur, rendue
+    // OBLIGATOIRE en France par BR-FR-12. Une facture émise pour un client saisi au nom libre
+    // n'en a aucune et sera rejetée à la validation — d'où l'avertissement remonté plus bas.
+    let buyer = { name: 'Client', siret: null, email: null, address: {} };
     if (inv.buyer_name) {
-        buyer = { name: inv.buyer_name, siret: null, address: {} };
+        buyer = { name: inv.buyer_name, siret: null, email: null, address: {} };
     } else if (inv.company_id) {
         const [c] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [inv.company_id, orgId]);
-        if (c[0]) buyer = { name: c[0].name, siret: c[0].siret, address: { line: c[0].address, zip: c[0].zip_code, city: c[0].town } };
+        if (c[0]) buyer = { name: c[0].name, siret: c[0].siret, email: c[0].email || null, address: { line: c[0].address, zip: c[0].zip_code, city: c[0].town } };
     } else if (inv.enrollment_id) {
         const [l] = await conn.query(
-            `SELECT l.first_name, l.last_name, l.address, l.zip_code, l.town
+            `SELECT l.first_name, l.last_name, l.email, l.address, l.zip_code, l.town
              FROM enrollment e JOIN learner l ON l.id = e.learner_id WHERE e.id = ?`,
             [inv.enrollment_id]
         );
-        if (l[0]) buyer = { name: `${l[0].first_name || ''} ${l[0].last_name || ''}`.trim(), siret: null, address: { line: l[0].address, zip: l[0].zip_code, city: l[0].town } };
+        if (l[0]) buyer = { name: `${l[0].first_name || ''} ${l[0].last_name || ''}`.trim(), siret: null, email: l[0].email || null, address: { line: l[0].address, zip: l[0].zip_code, city: l[0].town } };
     }
 
     // Lignes de la facture (plusieurs dossiers possibles) ; repli sur ligne unique.
@@ -115,6 +118,7 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
             name: o.legal_name || 'Organisme',
             siret: o.siret || null,
             vat: o.vat_number || null,
+            email: o.email || null, // BT-34, obligatoire (BR-FR-13)
             address: { line: o.address, zip: o.zip_code, city: o.town },
         },
         buyer,
@@ -304,6 +308,21 @@ const deleteInvoice = (req, res) => {
 };
 
 /**
+ * Signale ce qui empêchera la facture de passer la validation française.
+ *
+ * On N'EMPÊCHE PAS l'émission : la facture reste juridiquement valable, et refuser de la
+ * produire parce qu'un e-mail manque bloquerait l'organisme sans rien résoudre. Mais on ne se
+ * tait pas non plus — sans ça, le défaut ne se découvre qu'au rejet par la plateforme, des
+ * jours plus tard, loin de l'écran où il se corrige.
+ */
+function avertirConformite(res, data) {
+    const manque = manquantsFacturX(data);
+    if (!manque.length) return;
+    console.warn(`Facture ${data.number} : non conforme XP Z12-012, il manque ${manque.join(', ')}`);
+    res.set('X-Facturx-Manquants', encodeURIComponent(manque.join(' | ')));
+}
+
+/**
  * GET /api/factures/:id/xml — XML CII (Factur-X BASIC).
  */
 const getInvoiceXml = async (req, res) => {
@@ -312,6 +331,7 @@ const getInvoiceXml = async (req, res) => {
         const data = await loadInvoiceData(conn, req.user.organization_id, req.params.id);
         if (!data) return res.status(404).json({ message: 'Facture introuvable' });
         const xml = buildCII(data);
+        avertirConformite(res, data);
         res.set('Content-Type', 'application/xml; charset=utf-8');
         res.set('Content-Disposition', `attachment; filename="${data.number}.xml"`);
         res.send(xml);
@@ -506,6 +526,7 @@ const getInvoiceFacturX = async (req, res) => {
         const data = await loadInvoiceData(conn, req.user.organization_id, req.params.id);
         if (!data) return res.status(404).json({ message: 'Facture introuvable' });
         const xml = buildCII(data);
+        avertirConformite(res, data);
         let pdfBytes;
         try {
             pdfBytes = await buildInvoicePdf(conn, req.user.organization_id, data, xml);

@@ -45,6 +45,46 @@ const money = (n) => Number(n || 0).toFixed(2);
 const TYPE_CODE = { FACTURE: '380', AVOIR: '381', ACOMPTE: '386', DEVIS: '380' };
 
 /**
+ * Le SIREN d'un SIRET : ses neuf premiers chiffres.
+ *
+ * BT-30 (identifiant d'enregistrement légal du vendeur) attend un SIREN, pas un SIRET. On y
+ * écrivait le SIRET complet, et BR-FR-10 le rejetait : « doit être composé exactement de 9
+ * chiffres ». Le SIRET n'est pas perdu pour autant — il part en BT-29, sa vraie place.
+ *
+ * Les deux ne disent pas la même chose : le SIREN identifie l'ENTREPRISE, le SIRET l'un de ses
+ * ÉTABLISSEMENTS. Un organisme à deux sites a un SIREN et deux SIRET.
+ *
+ * Rien n'est deviné : une valeur qui n'a ni 9 ni 14 chiffres est rendue telle quelle, à charge
+ * pour le validateur de la signaler. Tronquer une saisie douteuse produirait un identifiant
+ * plausible mais faux — le pire résultat possible pour une donnée d'identification.
+ */
+function siren(siret) {
+    const chiffres = String(siret || '').replace(/\D/g, '');
+    if (chiffres.length === 14 || chiffres.length === 9) return chiffres.slice(0, 9);
+    return chiffres;
+}
+
+/**
+ * Les trois mentions que la facturation entre professionnels rend obligatoires (BR-FR-05).
+ *
+ * Elles figuraient déjà en toutes lettres sur le PDF via le modèle de document, mais le PDF
+ * n'est pas ce que lit une plateforme : c'est le XML qui fait foi, et il partait sans elles.
+ * D'où trois rejets — un par code — sur une facture pourtant complète à l'œil.
+ *
+ *   PMD  pénalités de retard ......... art. L441-10 C. com., plancher de 3× l'intérêt légal
+ *   PMT  frais de recouvrement ....... indemnité forfaitaire de 40 EUR, due de plein droit
+ *   AAB  escompte .................... son ABSENCE doit être dite, pas seulement sa présence
+ *
+ * BR-FR-06 impose de n'écrire chaque code qu'UNE fois : ces notes sont donc posées ici, à un
+ * seul endroit, et pas ajoutées à celles que pourrait porter la facture.
+ */
+const MENTIONS_LEGALES = [
+    ['PMD', 'En cas de retard de paiement, des pénalités sont exigibles au taux de trois fois le taux de l\'intérêt légal, sans qu\'un rappel soit nécessaire (art. L441-10 du Code de commerce).'],
+    ['PMT', 'Tout retard de paiement entraîne de plein droit une indemnité forfaitaire pour frais de recouvrement de 40 euros (art. L441-10 du Code de commerce et D441-5).'],
+    ['AAB', 'Aucun escompte n\'est accordé pour paiement anticipé.'],
+];
+
+/**
  * @param {object} d données assemblées (cf. invoice.controller)
  * @returns {string} XML CII (Factur-X BASIC)
  */
@@ -133,8 +173,30 @@ function buildCII(d) {
         <ram:CountryID>FR</ram:CountryID>
       </ram:PostalTradeAddress>`;
 
-    const sellerSiret = d.seller.siret ? `<ram:SpecifiedLegalOrganization><ram:ID schemeID="0002">${esc(d.seller.siret.replace(/\s/g, ''))}</ram:ID></ram:SpecifiedLegalOrganization>` : '';
-    const buyerSiret = d.buyer.siret ? `<ram:SpecifiedLegalOrganization><ram:ID schemeID="0002">${esc(d.buyer.siret.replace(/\s/g, ''))}</ram:ID></ram:SpecifiedLegalOrganization>` : '';
+    // BT-29 = SIRET (l'établissement, schéma 0009) ; BT-30 = SIREN (l'entreprise, schéma 0002).
+    // Écrire le SIRET dans BT-30 était le défaut signalé par BR-FR-10.
+    const identite = (p) => {
+        const s = String(p.siret || '').replace(/\s/g, '');
+        if (!s) return { id: '', legal: '' };
+        return {
+            id: `<ram:ID schemeID="0009">${esc(s)}</ram:ID>`,
+            legal: `<ram:SpecifiedLegalOrganization><ram:ID schemeID="0002">${esc(siren(s))}</ram:ID></ram:SpecifiedLegalOrganization>`,
+        };
+    };
+    const idVendeur = identite(d.seller);
+    const idClient = identite(d.buyer);
+
+    /**
+     * BT-34 / BT-49 — adresse électronique du vendeur et de l'acheteur, obligatoires en France
+     * (BR-FR-13 et BR-FR-12). C'est l'adresse où la facture est remise et où l'on répond.
+     *
+     * ABSENTE = ÉLÉMENT ABSENT, jamais une valeur de remplacement. Une adresse inventée ferait
+     * passer la validation en désignant un destinataire qui n'existe pas : le rejet se
+     * déplacerait du validateur vers un client qui ne reçoit rien, et bien plus tard.
+     */
+    const adresseElectronique = (mail) => (mail
+        ? `<ram:URIUniversalCommunication><ram:URIID schemeID="EM">${esc(String(mail).trim())}</ram:URIID></ram:URIUniversalCommunication>`
+        : '');
     // BT-31 (n° TVA, schéma VA) si disponible, sinon BT-32 (identifiant fiscal, schéma FC = SIRET).
     // Requis par BR-S-02 dès qu'une ligne est au taux normal.
     const sellerTaxReg = d.seller.vat
@@ -158,20 +220,28 @@ function buildCII(d) {
     <ram:ID>${esc(d.number)}</ram:ID>
     <ram:TypeCode>${typeCode}</ram:TypeCode>
     <ram:IssueDateTime><udt:DateTimeString format="102">${d.issueDate}</udt:DateTimeString></ram:IssueDateTime>
+    ${MENTIONS_LEGALES.map(([code, texte]) => `<ram:IncludedNote>
+      <ram:Content>${esc(texte)}</ram:Content>
+      <ram:SubjectCode>${code}</ram:SubjectCode>
+    </ram:IncludedNote>`).join('\n    ')}
   </rsm:ExchangedDocument>
   <rsm:SupplyChainTradeTransaction>
     ${lineItems}
     <ram:ApplicableHeaderTradeAgreement>
       <ram:SellerTradeParty>
+        ${idVendeur.id}
         <ram:Name>${esc(d.seller.name)}</ram:Name>
-        ${sellerSiret}
+        ${idVendeur.legal}
         ${addr(d.seller.address)}
+        ${adresseElectronique(d.seller.email)}
         ${sellerTaxReg}
       </ram:SellerTradeParty>
       <ram:BuyerTradeParty>
+        ${idClient.id}
         <ram:Name>${esc(d.buyer.name)}</ram:Name>
-        ${buyerSiret}
+        ${idClient.legal}
         ${addr(d.buyer.address)}
+        ${adresseElectronique(d.buyer.email)}
       </ram:BuyerTradeParty>
     </ram:ApplicableHeaderTradeAgreement>
     <ram:ApplicableHeaderTradeDelivery/>
@@ -246,4 +316,21 @@ async function attacherFacturX(pdfBytes, xml) {
 
 
 
-module.exports = { ventilerTva, attacherFacturX, buildCII, TYPE_CODE };
+/**
+ * Ce qui manque pour qu'une facture passe la validation française (XP Z12-012).
+ *
+ * `buildCII` ne peut PAS inventer ces valeurs : ni un SIRET, ni une adresse électronique. Il
+ * pourrait se taire, mais alors le défaut ne se découvrirait qu'au rejet par la plateforme,
+ * loin de l'écran où on peut le corriger. Autant le nommer tout de suite, et en français.
+ *
+ * @returns {string[]} libellés des données manquantes, vide si la facture est complète
+ */
+function manquantsFacturX(d) {
+    const m = [];
+    if (!d.seller.email) m.push("l'adresse e-mail de votre organisme (Réglages → Organisme)");
+    if (!d.seller.siret) m.push('le SIRET de votre organisme (Réglages → Organisme)');
+    if (!d.buyer.email) m.push("l'adresse e-mail du client de cette facture");
+    return m;
+}
+
+module.exports = { ventilerTva, attacherFacturX, buildCII, manquantsFacturX, siren, TYPE_CODE };
