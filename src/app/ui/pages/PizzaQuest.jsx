@@ -134,7 +134,9 @@ function PizzaQuest() {
     .then((r) => { if (r?.data) { setVies(r.data); setReste(r.data.next_in_ms || 0); } })
     .catch(() => {});
 
-  const sansCoeur = !!vies && vies.regen_minutes > 0 && vies.hearts <= 0;
+  // La mécanique des cœurs n'est active que si l'organisme a réglé un délai (0 = désactivée).
+  const coeursActifs = !!vies && vies.regen_minutes > 0;
+  const sansCoeur = coeursActifs && vies.hearts <= 0;
 
   /* ⚠️ DÉBOGAGE — À RETIRER AVANT LA MISE EN SERVICE (avec resetQuestProgress dans
      apiClient.js, la route DELETE /quest/progression et son contrôleur).
@@ -249,7 +251,7 @@ function PizzaQuest() {
           <div className="pq-stat"><Icon name="target" size={16} /><b>{xp}</b><span>XP</span></div>
           <div className="pq-stat"><span style={{ fontSize: 15 }}>⭐</span><b>{totalStars}</b><span>étoiles</span></div>
           {/* Cœurs : affichés seulement si la mécanique est active (délai > 0 côté organisme). */}
-          {vies && vies.regen_minutes > 0 && (
+          {coeursActifs && (
             <div className="pq-stat" title={vies.hearts >= vies.max ? "Cœurs au complet" : `Prochain cœur dans ${msEnClair(reste)}`}>
               <span className="pq-hearts">
                 {Array.from({ length: vies.max }, (_, i) => (
@@ -280,17 +282,19 @@ function PizzaQuest() {
           onClose={(abandon) => {
             // `abandon` = sortie AVANT la fin du chapitre. Fermer l'écran de résultat ne
             // coûte rien : les questions ont été faites.
-            const coute = abandon && !!vies && vies.regen_minutes > 0;
+            const coute = abandon && coeursActifs;
             // On demande confirmation : un clic à côté de la fenêtre ne doit pas coûter
             // un cœur sans prévenir.
             if (coute && !window.confirm("Quitter ce chapitre maintenant ? Tu perdras un cœur.")) return;
             setQuiz(null);
             if (coute) perdreUnCoeur();
           }}
-          sansCoeur={sansCoeur}
+          sansCoeur={sansCoeur} coeursActifs={coeursActifs}
           // Échec : le chapitre N'EST PAS enregistré — l'inscrire à 0 étoile le compterait
           // comme acquis et ouvrirait le suivant. Seul le cœur est décompté.
-          onFail={() => { if (vies && vies.regen_minutes > 0) perdreUnCoeur(); }}
+          onFail={() => { if (coeursActifs) perdreUnCoeur(); }}
+          // Reprise après échec : une tentative de plus, un cœur de plus.
+          onRetry={() => { if (coeursActifs) perdreUnCoeur(); }}
           // Validation : au moins une étoile, garanti par l'écran de résultat.
           onFinish={(stars) => finishChapter(quiz.code, quiz.chIdx, stars)} />
       )}
@@ -707,7 +711,7 @@ function shuffled(arr) {
 
 // Mini-quiz d'un chapitre : une question à la fois, formats variés (QCM / vrai-faux /
 // associations), feedback immédiat, cœurs, résultat étoilé.
-function QuizModal({ world, data, onClose, onFinish, onFail, sansCoeur }) {
+function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur, coeursActifs }) {
   const { chapter, questions } = data;
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState(null);   // QCM : index ; Vrai/Faux : booléen
@@ -887,9 +891,13 @@ function QuizModal({ world, data, onClose, onFinish, onFail, sansCoeur }) {
                   propose de le refaire plutôt qu'un « Valider » qui l'enregistrerait à 0 et
                   ouvrirait le suivant. Le bouton est barré s'il ne reste plus de cœur. */}
               {echoue ? (
-                <button className="btn primary" onClick={recommencer} disabled={sansCoeur}
+                /* Une nouvelle tentative se paie : sans cela, on relancerait le chapitre
+                   en boucle jusqu'à tomber sur les bonnes cases. Le coût est annoncé sur
+                   le bouton — on ne dépense pas un cœur sans l'avoir vu venir. */
+                <button className="btn primary" disabled={sansCoeur}
+                  onClick={() => { onRetry?.(); recommencer(); }}
                   title={sansCoeur ? "Plus de cœur — reviens quand tu en auras récupéré un" : undefined}>
-                  <Icon name="refresh" size={14} /> Recommencer
+                  <Icon name="refresh" size={14} /> Recommencer{coeursActifs ? " (−1 ❤️)" : ""}
                 </button>
               ) : (
                 /* XP annoncé = celui qui sera effectivement compté (même formule que le
