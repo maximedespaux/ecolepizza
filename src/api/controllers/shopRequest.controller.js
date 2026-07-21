@@ -149,7 +149,15 @@ const invoiceShopRequest = async (req, res) => {
         );
         if (!lines.length) return res.status(422).json({ message: 'Aucune ligne facturable par l’école dans cette demande.' });
 
-        const totalTtc = lines.reduce((s, l) => s + Number(l.unit_price_ht) * l.qty * (1 + Number(l.tax_rate) / 100), 0);
+        // Le montant stocké est le HT, PAS le TTC. `amount_net` est la base hors taxe partout
+        // ailleurs (invoice.controller la passe telle quelle à Factur-X comme BasisAmount) :
+        // y écrire un TTC avec `tva_exoneree = 0` faisait appliquer 20 % PAR-DESSUS un montant
+        // qui les contenait déjà — 144 € facturés pour 120 € dus, sur chaque commande.
+        const totalHt = lines.reduce((s, l) => s + Number(l.unit_price_ht) * l.qty, 0);
+        // Le taux d'en-tête n'a de sens que si toutes les lignes le partagent ; sinon chaque
+        // ligne porte le sien et la ventilation se fait à l'édition (cf. ventilerTva).
+        const taux = [...new Set(lines.map((l) => Number(l.tax_rate)))];
+        const tauxEntete = taux.length === 1 ? taux[0] : null;
         const year = new Date().getFullYear();
         const [[last]] = await conn.query(
             "SELECT number FROM invoice WHERE organization_id = ? AND number LIKE ? ORDER BY number DESC LIMIT 1",
@@ -158,19 +166,41 @@ const invoiceShopRequest = async (req, res) => {
         const n = last ? Number(String(last.number).split('-').pop()) + 1 : 1;
         const number = `BQ-${year}-${String(n).padStart(4, '0')}`;
 
-        await conn.query(
-            `INSERT INTO invoice (id, organization_id, buyer_name, description, type, number, amount_net, tva_exoneree, status)
-             VALUES (uuid(), ?, ?, ?, 'FACTURE', ?, ?, 0, 'BROUILLON')`,
-            [orgId, `${r.first_name || ''} ${r.last_name || ''}`.trim(), `Boutique — demande ${r.ref}`, number, totalTtc.toFixed(2)]
-        );
+        // `tax_rate` peut manquer (migration 108 non jouée) : on retombe alors sur l'insertion
+        // sans la colonne, et l'édition applique 20 % comme avant.
+        const acheteur = `${r.first_name || ''} ${r.last_name || ''}`.trim();
+        const libelle = `Boutique — demande ${r.ref}`;
+        try {
+            await conn.query(
+                `INSERT INTO invoice (id, organization_id, buyer_name, description, type, number, amount_net, tax_rate, tva_exoneree, status)
+                 VALUES (uuid(), ?, ?, ?, 'FACTURE', ?, ?, ?, 0, 'BROUILLON')`,
+                [orgId, acheteur, libelle, number, totalHt.toFixed(2), tauxEntete]
+            );
+        } catch (e) {
+            if (!isMissingSchema(e)) throw e;
+            await conn.query(
+                `INSERT INTO invoice (id, organization_id, buyer_name, description, type, number, amount_net, tva_exoneree, status)
+                 VALUES (uuid(), ?, ?, ?, 'FACTURE', ?, ?, 0, 'BROUILLON')`,
+                [orgId, acheteur, libelle, number, totalHt.toFixed(2)]
+            );
+        }
         const [[inv]] = await conn.query('SELECT id FROM invoice WHERE number = ? LIMIT 1', [number]);
         for (let i = 0; i < lines.length; i++) {
             const l = lines[i];
-            const ttc = Number(l.unit_price_ht) * l.qty * (1 + Number(l.tax_rate) / 100);
-            await conn.query(
-                'INSERT INTO invoice_line (id, invoice_id, description, amount_net, sort_order) VALUES (uuid(), ?, ?, ?, ?)',
-                [inv.id, `${l.label}${l.variant ? ` (${l.variant})` : ''} × ${l.qty}${l.personalization ? ` — ${l.personalization}` : ''}`, ttc.toFixed(2), i]
-            );
+            const ht = Number(l.unit_price_ht) * l.qty;
+            const desc = `${l.label}${l.variant ? ` (${l.variant})` : ''} × ${l.qty}${l.personalization ? ` — ${l.personalization}` : ''}`;
+            try {
+                await conn.query(
+                    'INSERT INTO invoice_line (id, invoice_id, description, amount_net, tax_rate, sort_order) VALUES (uuid(), ?, ?, ?, ?, ?)',
+                    [inv.id, desc, ht.toFixed(2), Number(l.tax_rate), i]
+                );
+            } catch (e) {
+                if (!isMissingSchema(e)) throw e;
+                await conn.query(
+                    'INSERT INTO invoice_line (id, invoice_id, description, amount_net, sort_order) VALUES (uuid(), ?, ?, ?, ?)',
+                    [inv.id, desc, ht.toFixed(2), i]
+                );
+            }
         }
         await conn.query("UPDATE shop_request SET invoice_id = ?, status = 'FACTUREE' WHERE id = ?", [inv.id, r.id]);
         res.status(201).json({ success: true, invoice_id: inv.id, number });

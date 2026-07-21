@@ -51,7 +51,23 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     }
 
     // Lignes de la facture (plusieurs dossiers possibles) ; repli sur ligne unique.
-    const [lineRows] = await conn.query(
+    // `il.tax_rate` peut ne pas exister (migration 108 non jouée) : la requête est rejouée
+    // sans lui, et l'édition retombe alors sur 20 % comme avant.
+    let lineRows;
+    try {
+        [lineRows] = await conn.query(
+            `SELECT il.description, il.amount_net, il.tax_rate, p.title AS program_title, l.first_name, l.last_name
+             FROM invoice_line il
+             LEFT JOIN enrollment e ON e.id = il.enrollment_id
+             LEFT JOIN training_session s ON s.id = e.session_id
+             LEFT JOIN training_program p ON p.id = s.program_id
+             LEFT JOIN learner l ON l.id = e.learner_id
+             WHERE il.invoice_id = ? ORDER BY il.sort_order, il.id`,
+            [invoiceId]
+        );
+    } catch (e) {
+        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+        [lineRows] = await conn.query(
         `SELECT il.description, il.amount_net, p.title AS program_title, l.first_name, l.last_name
          FROM invoice_line il
          LEFT JOIN enrollment e ON e.id = il.enrollment_id
@@ -59,13 +75,14 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
          LEFT JOIN training_program p ON p.id = s.program_id
          LEFT JOIN learner l ON l.id = e.learner_id
          WHERE il.invoice_id = ? ORDER BY il.sort_order, il.id`,
-        [invoiceId]
-    );
+            [invoiceId]
+        );
+    }
     const lineName = (r) => r.description
         || [r.program_title, (r.last_name ? `${r.last_name} ${r.first_name || ''}`.trim() : '')].filter(Boolean).join(' — ')
         || 'Prestation de formation';
     const lines = lineRows.length
-        ? lineRows.map((r) => ({ name: lineName(r), amount: Number(r.amount_net) }))
+        ? lineRows.map((r) => ({ name: lineName(r), amount: Number(r.amount_net), taxRate: r.tax_rate ?? null }))
         : [{ name: inv.description || inv.program_title || 'Prestation de formation', amount: Number(inv.amount_net) }];
 
     return {
@@ -76,6 +93,7 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         dueDate: inv.due_ymd || null,
         amountNet: inv.amount_net,
         tvaExoneree: !!inv.tva_exoneree,
+        taxRate: inv.tax_rate ?? null, // NULL = facture antérieure à la 108 → 20 % comme avant
         lines,
         lineName: inv.description || inv.program_title || 'Prestation de formation',
         seller: {

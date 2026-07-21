@@ -198,7 +198,19 @@ const checkout = async (req, res) => {
         const invLines = [];
         for (const ln of lines) {
             const it = ln._it;
-            const unitNet = Number(it.unit_price || 0) * (1 - ln._disc / 100) * factor; // HT remisé
+            // Le prix unitaire est arrondi UNE FOIS, puis multiplié — et c'est ce même
+            // arrondi qui part en comptabilité (material_sale.amount) et en facture
+            // (invoice_line.amount_net).
+            //
+            // Auparavant la facture arrondissait APRÈS la multiplication et la comptabilité
+            // AVANT : 9,99 € remisé 10 % sur 9 articles donnait 80,92 € d'un côté et 80,91 €
+            // de l'autre. Un centime, mais systématique et toujours dans le même sens dès
+            // qu'une remise crée une troisième décimale — un rapprochement bancaire qui ne
+            // tombe jamais juste.
+            //
+            // Arrondir le prix UNITAIRE d'abord est aussi ce que le client peut vérifier : le
+            // ticket affiche un prix unitaire, il doit pouvoir le multiplier lui-même.
+            const unitNet = Number((Number(it.unit_price || 0) * (1 - ln._disc / 100) * factor).toFixed(2));
             const rate = tvaApplies ? Number(it.tax_rate || 0) : 0;
             const lineHT = Number((unitNet * ln._qty).toFixed(2));
             const note = payMethod ? `Paiement : ${payMethod}` : null;
@@ -241,10 +253,20 @@ const checkout = async (req, res) => {
         );
         // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X.
         for (let i = 0; i < invLines.length; i++) {
-            await conn.query(
-                'INSERT INTO invoice_line (id, invoice_id, enrollment_id, description, amount_net, sort_order) VALUES (?, ?, NULL, ?, ?, ?)',
-                [crypto.randomUUID(), invoiceId, invLines[i].description, invLines[i].amount_net, i]
-            );
+            // Le taux réel de l'article accompagne la ligne : sans lui, Factur-X retombait sur
+            // 20 % en dur et facturait une farine à 5,5 % comme une pelle à 20 %.
+            try {
+                await conn.query(
+                    'INSERT INTO invoice_line (id, invoice_id, enrollment_id, description, amount_net, tax_rate, sort_order) VALUES (?, ?, NULL, ?, ?, ?, ?)',
+                    [crypto.randomUUID(), invoiceId, invLines[i].description, invLines[i].amount_net, invLines[i].rate, i]
+                );
+            } catch (e) {
+                if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+                await conn.query(
+                    'INSERT INTO invoice_line (id, invoice_id, enrollment_id, description, amount_net, sort_order) VALUES (?, ?, NULL, ?, ?, ?)',
+                    [crypto.randomUUID(), invoiceId, invLines[i].description, invLines[i].amount_net, i]
+                );
+            }
         }
         logAudit(req, 'sale.checkout', 'Invoice', invoiceId);
         res.status(201).json({

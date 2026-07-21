@@ -5,11 +5,10 @@
  * Elle ne se découvre qu'au rapprochement bancaire, des mois plus tard, ou par le client qui
  * conteste. Ces tests fixent les montants attendus en euros pour que l'écart, lui, soit bruyant.
  *
- * CERTAINS DE CES TESTS ÉCHOUENT À DESSEIN quand le défaut est encore là : ils sont écrits
- * autour du montant JUSTE, pas du montant actuel. Un test qui entérine le bug ne sert à rien.
- * Les défauts confirmés et corrigés dans cette passe sont marqués « corrigé » ; ceux laissés en
- * l'état sont marqués `{ skip: true }` avec la raison — ils documentent la dette sans faire
- * échouer la suite.
+ * Ces tests sont écrits autour du montant JUSTE, pas du montant actuel : un test qui entérine
+ * le bug ne sert à rien. Ceux qui restent en `{ skip }` portent la raison de leur dette — ils
+ * la rendent visible au lieu de la laisser passer sous silence, et échoueront le jour où l'on
+ * s'y attaquera, ce qui est le but.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -20,11 +19,16 @@ const lire = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 
 // --- Ce que le code fait réellement, rejoué à l'identique ----------------------------------
 
-/** Reproduit lib/facturx.js:55-58 — le calcul de TVA de la facture émise. */
-const facturx = (amountNet, tvaExoneree) => {
-    const net = Number(amountNet);
-    const tax = tvaExoneree ? 0 : Math.round(net * 20) / 100;
-    return { net, tax, grand: net + tax };
+/**
+ * On appelle le VRAI calcul, plus une copie. Il vient d'être extrait dans `ventilerTva`
+ * précisément pour être atteignable ici : tant qu'il vivait à l'intérieur de la génération
+ * XML, tout test aurait porté sur une réimplémentation — et un test qui approuve une copie
+ * n'approuve rien.
+ */
+const { ventilerTva } = require('../lib/facturx.js');
+const facturx = (amountNet, tvaExoneree, taxRate, lines) => {
+    const v = ventilerTva({ amountNet, tvaExoneree, taxRate, lines });
+    return { net: v.base, tax: v.taxe, grand: v.grand, groupes: v.groupes };
 };
 
 test('Factur-X : une facture exonérée ne porte aucune TVA', () => {
@@ -40,14 +44,38 @@ test('Factur-X : 20 % sur une base HT donne le total attendu', () => {
 });
 
 /**
- * LE TAUX EST EN DUR À 20 %. La base de données connaît pourtant les vrais taux
- * (inventory_item.tax_rate, shop_request_line.tax_rate) et sale.controller les calcule
- * correctement — mais la facture ne les stocke jamais.
+ * Le taux était en dur à 20 %, alors que la base connaît les vrais taux
+ * (inventory_item.tax_rate, shop_request_line.tax_rate) et que sale.controller les calculait
+ * déjà correctement — sans jamais les conserver. La migration 108 leur donne une place sur la
+ * facture, et ventilerTva les utilise.
  */
-test('un article à 5,5 % est facturé au bon taux', { skip: 'défaut connu : taux 20 % en dur dans lib/facturx.js:56 et :196' }, () => {
+test('un article à 5,5 % est facturé au bon taux', () => {
     // 100 € HT de farine à 5,5 % doivent donner 5,50 € de TVA, pas 20 €.
-    const f = facturx(100, false);
-    assert.strictEqual(f.tax, 5.5, 'la facture applique 20 % quel que soit le taux réel');
+    const f = facturx(100, false, 5.5);
+    assert.strictEqual(f.tax, 5.5);
+    assert.strictEqual(f.grand, 105.5);
+});
+
+test('une facture antérieure à la migration 108 garde ses montants', () => {
+    // Sans taux stocké, on retombe sur 20 % : une pièce comptable déjà envoyée ne doit pas
+    // changer de montant parce qu'on rejoue son édition.
+    const f = facturx(1000, false, null);
+    assert.strictEqual(f.tax, 200);
+});
+
+test('un panier à taux mixtes produit un groupe de taxe par taux', () => {
+    // Factur-X l'exige (BR-CO-14) ; avec un seul groupe l'XML était arithmétiquement faux.
+    const f = facturx(200, false, null, [{ amount: 100, taxRate: 5.5 }, { amount: 100, taxRate: 20 }]);
+    assert.strictEqual(f.groupes.length, 2);
+    assert.strictEqual(f.tax, 25.5, '5,50 € + 20,00 €');
+    assert.strictEqual(f.grand, 225.5);
+});
+
+test('la TVA est arrondie PAR TAUX, comme l\'exige la ventilation', () => {
+    const f = facturx(20.03, false, null, [{ amount: 10.01, taxRate: 5.5 }, { amount: 10.02, taxRate: 20 }]);
+    const parGroupe = f.groupes.map((g) => g.taxe);
+    assert.deepStrictEqual(parGroupe, [0.55, 2]);
+    assert.strictEqual(f.tax, 2.55, 'somme des groupes arrondis, pas arrondi de la somme');
 });
 
 /**
@@ -59,24 +87,31 @@ test('un article à 5,5 % est facturé au bon taux', { skip: 'défaut connu : ta
  */
 test('boutique : le montant facturé ne doit pas être taxé deux fois', () => {
     const ligneHT = 100, taux = 20;
-    const ttc = ligneHT * (1 + taux / 100);              // 120 € — ce que le stagiaire doit
-    const facture = facturx(ttc, false);                  // ce que le code produit aujourd'hui
-    const surfacturation = facture.grand - ttc;
+    // Le contrôleur stocke désormais la base HT ; la TVA est calculée à l'édition.
+    const facture = facturx(ligneHT, false, taux);
+    assert.strictEqual(facture.grand, 120, 'le stagiaire doit 120 €, pas 144 €');
 
-    assert.strictEqual(ttc, 120);
-    assert.strictEqual(facture.grand, 144, 'le calcul actuel produit bien 144 €');
-    assert.strictEqual(surfacturation, 24, '24 € facturés en trop sur 120 € dus');
-
-    // Ce que le contrôleur DEVRAIT stocker : la base HT, TVA calculée ensuite.
-    const correct = facturx(ligneHT, false);
-    assert.strictEqual(correct.grand, 120, 'stocker le HT redonne le bon total');
+    // Ce que produisait l'ancien code, gardé pour mémoire : stocker le TTC faisait appliquer
+    // 20 % par-dessus un montant qui les contenait déjà.
+    const ancien = facturx(ligneHT * (1 + taux / 100), false, taux);
+    assert.strictEqual(ancien.grand, 144);
+    assert.strictEqual(ancien.grand - facture.grand, 24, '24 € de surfacturation évités');
 });
 
-test('boutique : la colonne amount_net reçoit bien un HT', { skip: 'défaut connu : shopRequest.controller.js:152 et :169 y écrivent un TTC' }, () => {
+test('boutique : la colonne amount_net reçoit bien un HT', () => {
+    // On vise le CALCUL, pas le nom de la variable : renommer `totalTtc` en `totalHt` sans
+    // changer la formule aurait trompé une vérification par nom. Ce qui trahit un TTC, c'est
+    // la présence du taux dans le calcul du montant stocké.
     const src = lire('controllers/shopRequest.controller.js');
-    const bloc = src.slice(src.indexOf('INSERT INTO invoice ('), src.indexOf('UPDATE shop_request SET invoice_id'));
-    assert.doesNotMatch(bloc, /totalTtc\.toFixed\(2\)/, 'un TTC est écrit dans la colonne HT');
-    assert.doesNotMatch(bloc, /ttc\.toFixed\(2\)/, 'un TTC est écrit dans amount_net de la ligne');
+    const total = src.match(/const totalHt = [^;]+;/);
+    assert.ok(total, 'le total stocké doit être nommé totalHt');
+    assert.doesNotMatch(total[0], /tax_rate/,
+        'le montant stocké applique un taux : c\'est un TTC, pas une base HT');
+
+    const ligne = src.match(/const ht = [^;]+;/);
+    assert.ok(ligne, 'le montant de ligne doit être nommé ht');
+    assert.doesNotMatch(ligne[0], /tax_rate|1\.2|ttc/i,
+        'le montant de ligne applique un taux : c\'est un TTC');
 });
 
 // --- Arrondis : où l'arrondi tombe change le total ----------------------------------------
@@ -96,10 +131,27 @@ test('arrondir avant ou après la multiplication ne donne pas le même total', (
     assert.strictEqual(commeCompta(unit, 9), 80.91);
 });
 
-test('la facture et la comptabilité annoncent le même montant pour une vente', { skip: 'défaut connu : sale.controller.js:196 arrondit après, :217 arrondit avant' }, () => {
-    const unit = 9.99 * 0.9;
-    assert.strictEqual(commeFacture(unit, 9), commeCompta(unit, 9),
-        "un centime d'écart par ligne, toujours dans le même sens");
+test('la facture et la comptabilité annoncent le même montant pour une vente', () => {
+    // La comptabilité relit `material_sale.amount * quantity`, donc le prix unitaire STOCKÉ.
+    // Pour que les deux tombent juste, le code doit arrondir ce prix unitaire AVANT de
+    // multiplier — c'est aussi ce que le client peut vérifier, le ticket affichant un prix
+    // unitaire qu'il doit pouvoir multiplier lui-même.
+    //
+    // On vérifie la SOURCE et pas une reformulation : une égalité entre deux helpers écrits
+    // ici passerait quel que soit le code réel.
+    const src = lire('controllers/sale.controller.js');
+    const decl = src.match(/const unitNet = [^;]+;/);
+    assert.ok(decl, 'unitNet introuvable');
+    assert.match(decl[0], /\.toFixed\(2\)\)/,
+        'le prix unitaire doit être arrondi avant toute multiplication');
+
+    // Et la conséquence chiffrée, pour que le test dise aussi POURQUOI.
+    const arrondiUnitaire = (unit, qty) => Number((Number(unit.toFixed(2)) * qty).toFixed(2));
+    for (const [prix, remise, qty] of [[9.99, 10, 9], [19.99, 7, 11], [100 / 3, 0, 3]]) {
+        const unit = prix * (1 - remise / 100);
+        assert.strictEqual(arrondiUnitaire(unit, qty), commeCompta(unit, qty),
+            `${prix} € remisé ${remise} % × ${qty}`);
+    }
 });
 
 // --- Reste à payer -------------------------------------------------------------------------

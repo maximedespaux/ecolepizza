@@ -48,13 +48,63 @@ const TYPE_CODE = { FACTURE: '380', AVOIR: '381', ACOMPTE: '386', DEVIS: '380' }
  * @param {object} d données assemblées (cf. invoice.controller)
  * @returns {string} XML CII (Factur-X BASIC)
  */
+/**
+ * Ventile une facture par taux de TVA.
+ *
+ * TROIS CHOSES QUE LE CODE PRÉCÉDENT NE SAVAIT PAS FAIRE, et qui coûtaient de l'argent :
+ *
+ *   1. Le taux était écrit 20 % EN DUR, alors que la base connaît les vrais taux
+ *      (inventory_item.tax_rate, shop_request_line.tax_rate) et que sale.controller les
+ *      calcule correctement — sans jamais les conserver. Une farine à 5,5 % partait facturée
+ *      à 20 %, soit 14,50 EUR de trop sur 100 EUR.
+ *   2. Un panier MIXTE était inexprimable. Factur-X exige un groupe ApplicableTradeTax par
+ *      taux ; il n'y en avait qu'un. Un livre à 5,5 % et une pelle à 20 % sur la même facture
+ *      produisaient un XML arithmétiquement faux (BR-CO-14).
+ *   3. La TVA était calculée sur le TOTAL, pas par groupe. Or l'arrondi légal se fait par
+ *      taux : deux groupes arrondis séparément ne donnent pas toujours le total arrondi.
+ *
+ * Le taux retenu pour une ligne est, dans l'ordre : le sien, celui de la facture, puis 20 %.
+ * Ce dernier repli garde les factures ANTÉRIEURES à la migration 108 identiques à ce qu'elles
+ * étaient : une pièce comptable déjà envoyée ne doit pas changer de montant quand on rejoue
+ * son édition.
+ *
+ * Exonéré (art. 261-4-4°) court-circuite tout : un seul groupe à 0 %, catégorie E.
+ */
+function ventilerTva(d) {
+    const net = Number(d.amountNet);
+    if (d.tvaExoneree) {
+        return { groupes: [{ cat: 'E', taux: 0, base: net, taxe: 0 }], base: net, taxe: 0, grand: net };
+    }
+    const tauxDefaut = Number.isFinite(Number(d.taxRate)) && d.taxRate !== null ? Number(d.taxRate) : 20;
+    const lignes = (d.lines && d.lines.length) ? d.lines : [{ name: d.lineName, amount: net }];
+
+    const parTaux = new Map();
+    for (const ln of lignes) {
+        const t = Number.isFinite(Number(ln.taxRate)) && ln.taxRate !== null && ln.taxRate !== undefined
+            ? Number(ln.taxRate) : tauxDefaut;
+        parTaux.set(t, (parTaux.get(t) || 0) + Number(ln.amount || 0));
+    }
+    // Arrondi PAR GROUPE, comme l'exige la ventilation légale.
+    const groupes = [...parTaux.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([taux, base]) => ({
+            cat: taux === 0 ? 'Z' : 'S',
+            taux,
+            base: Math.round(base * 100) / 100,
+            taxe: Math.round(base * taux) / 100,
+        }));
+    const base = Math.round(groupes.reduce((s, g) => s + g.base, 0) * 100) / 100;
+    const taxe = Math.round(groupes.reduce((s, g) => s + g.taxe, 0) * 100) / 100;
+    return { groupes, base, taxe, grand: Math.round((base + taxe) * 100) / 100 };
+}
+
 function buildCII(d) {
     const exo = d.tvaExoneree;
-    const cat = exo ? 'E' : 'S';
-    const rate = exo ? '0.00' : '20.00';
-    const net = Number(d.amountNet);
-    const tax = exo ? 0 : Math.round(net * 20) / 100;
-    const grand = net + tax;
+    const v = ventilerTva(d);
+    const net = v.base, tax = v.taxe, grand = v.grand;
+    // Taux de repli pour les LIGNES qui n'en portent pas : celui du premier groupe.
+    const cat = v.groupes[0].cat;
+    const rate = v.groupes[0].taux.toFixed(2);
     const typeCode = TYPE_CODE[d.type] || '380';
 
     // Une ou plusieurs lignes (plusieurs dossiers/formations sur une facture).
@@ -69,8 +119,8 @@ function buildCII(d) {
       <ram:SpecifiedLineTradeSettlement>
         <ram:ApplicableTradeTax>
           <ram:TypeCode>VAT</ram:TypeCode>
-          <ram:CategoryCode>${cat}</ram:CategoryCode>
-          <ram:RateApplicablePercent>${rate}</ram:RateApplicablePercent>
+          <ram:CategoryCode>${exo ? 'E' : (Number(ln.taxRate ?? d.taxRate ?? 20) === 0 ? 'Z' : 'S')}</ram:CategoryCode>
+          <ram:RateApplicablePercent>${(exo ? 0 : Number(ln.taxRate ?? d.taxRate ?? 20)).toFixed(2)}</ram:RateApplicablePercent>
         </ram:ApplicableTradeTax>
         <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>${money(Number(ln.amount))}</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
       </ram:SpecifiedLineTradeSettlement>
@@ -127,14 +177,14 @@ function buildCII(d) {
     <ram:ApplicableHeaderTradeDelivery/>
     <ram:ApplicableHeaderTradeSettlement>
       <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
-      <ram:ApplicableTradeTax>
-        <ram:CalculatedAmount>${money(tax)}</ram:CalculatedAmount>
+      ${v.groupes.map((g) => `<ram:ApplicableTradeTax>
+        <ram:CalculatedAmount>${money(g.taxe)}</ram:CalculatedAmount>
         <ram:TypeCode>VAT</ram:TypeCode>
-        ${exemption}
-        <ram:BasisAmount>${money(net)}</ram:BasisAmount>
-        <ram:CategoryCode>${cat}</ram:CategoryCode>
-        <ram:RateApplicablePercent>${rate}</ram:RateApplicablePercent>
-      </ram:ApplicableTradeTax>
+        ${g.cat === 'E' ? exemption : ''}
+        <ram:BasisAmount>${money(g.base)}</ram:BasisAmount>
+        <ram:CategoryCode>${g.cat}</ram:CategoryCode>
+        <ram:RateApplicablePercent>${g.taux.toFixed(2)}</ram:RateApplicablePercent>
+      </ram:ApplicableTradeTax>`).join('\n      ')}
       ${paymentTerms}
       <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
         <ram:LineTotalAmount>${money(net)}</ram:LineTotalAmount>
@@ -191,9 +241,11 @@ async function buildFacturXPdf(d, xml) {
     y -= 13; text(`${d.buyer.address.line || ''} ${d.buyer.address.zip || ''} ${d.buyer.address.city || ''}`, 40, 9);
     if (d.buyer.siret) { y -= 12; text(`SIRET ${d.buyer.siret}`, 40, 9); }
 
-    // Ligne + totaux
-    const net = Number(d.amountNet);
-    const tax = d.tvaExoneree ? 0 : Math.round(net * 20) / 100;
+    // Ligne + totaux — MÊME ventilation que le XML. Les deux calculaient chacun leur TVA à
+    // 20 % en dur : le PDF que reçoit le client et le XML que lit sa comptabilité devaient
+    // rester d'accord par coïncidence. Ils partagent maintenant la même fonction.
+    const v = ventilerTva(d);
+    const net = v.base, tax = v.taxe;
     y -= 34; text('Désignation', 40, 9, bold); text('Montant HT', 460, 9, bold);
     y -= 4; page.drawLine({ start: { x: 40, y }, end: { x: 555, y }, thickness: 1, color: red });
     const pdfLines = (d.lines && d.lines.length) ? d.lines : [{ name: d.lineName, amount: net }];
@@ -201,8 +253,19 @@ async function buildFacturXPdf(d, xml) {
         y -= 16; text(String(ln.name || 'Prestation de formation').slice(0, 78), 40, 10); text(`${Number(ln.amount).toFixed(2)} €`, 460, 10);
     }
     y -= 24; text('Total HT', 380, 10); text(`${net.toFixed(2)} €`, 460, 10);
-    y -= 14; text('TVA', 380, 10); text(`${tax.toFixed(2)} €`, 460, 10);
-    y -= 14; text('Total TTC', 380, 11, bold); text(`${(net + tax).toFixed(2)} €`, 460, 11, bold);
+    // Un panier peut mêler plusieurs taux : on détaille alors la TVA par taux, ce qu'une
+    // ligne unique « TVA » ne saurait pas montrer et que la ventilation légale exige.
+    if (!d.tvaExoneree && v.groupes.length > 1) {
+        for (const g of v.groupes) {
+            y -= 14; text(`TVA ${g.taux.toFixed(2)} % sur ${g.base.toFixed(2)} €`, 380, 9);
+            text(`${g.taxe.toFixed(2)} €`, 460, 9);
+        }
+        y -= 14; text('Total TVA', 380, 10); text(`${tax.toFixed(2)} €`, 460, 10);
+    } else {
+        y -= 14; text(d.tvaExoneree ? 'TVA' : `TVA ${v.groupes[0].taux.toFixed(2)} %`, 380, 10);
+        text(`${tax.toFixed(2)} €`, 460, 10);
+    }
+    y -= 14; text('Total TTC', 380, 11, bold); text(`${v.grand.toFixed(2)} €`, 460, 11, bold);
 
     y -= 22; text(d.dueDate ? "Conditions de paiement : à la date d'échéance indiquée." : 'Conditions de paiement : à réception de la facture.', 40, 8, font, rgb(0.4, 0.4, 0.4));
     if (d.tvaExoneree) { y -= 14; text('TVA non applicable — art. 261-4-4° du CGI (formation professionnelle).', 40, 8, font, rgb(0.4, 0.4, 0.4)); }
@@ -229,4 +292,4 @@ async function buildFacturXPdf(d, xml) {
     return pdf.save({ useObjectStreams: false });
 }
 
-module.exports = { buildCII, buildFacturXPdf, TYPE_CODE };
+module.exports = { ventilerTva, buildCII, buildFacturXPdf, TYPE_CODE };
