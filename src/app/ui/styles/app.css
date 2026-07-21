@@ -1786,3 +1786,60 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .doc-rule-warning{display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;padding:10px 14px;border:1px solid var(--ember1);border-radius:10px;background:rgba(220,62,55,.08);color:var(--ember1);font-size:.9rem;line-height:1.4}
 .doc-rule-warning svg{flex:0 0 auto;margin-top:1px}
 .doc-rule-warning strong{color:var(--ember1)}
+
+/* ===== Espace stagiaire : barre étroite ================================= */
+/* La barre aligne marque + 6 destinations + thème + avatar + déconnexion. Au-delà d'environ
+   900px tout tient sur une ligne ; en deçà, les destinations partent dans un tiroir. Le seuil
+   est celui où la barre déborde réellement, pas une taille d'appareil : un iPad en portrait
+   (768px) et un téléphone en paysage tombent tous deux du bon côté. */
+.stu-topbar{gap:10px}
+.stu-nav{display:flex;gap:6px;margin-left:8px;flex-wrap:wrap}
+.stu-burger{display:none;position:relative;flex:0 0 auto}
+/* Pastille des documents en attente, reportée sur le bouton du tiroir : replier la barre ne
+   doit pas faire disparaître l'alerte. Un point suffit — le compte exact est dans le tiroir. */
+.stu-burger-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;
+  background:var(--ember1);box-shadow:0 0 0 2px var(--surface)}
+.stu-scrim{position:fixed;inset:0;z-index:29;background:rgba(15,17,40,.35);backdrop-filter:blur(2px)}
+.stu-drawer{display:none}
+.stu-drawer-item{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;
+  font-size:14.5px;font-weight:600;color:var(--text);text-decoration:none;min-height:44px}
+.stu-drawer-item.on{background:var(--grad-ember);color:#fff}
+.stu-drawer-item.on .stu-count{background:#fff;color:var(--ember1)}
+.stu-drawer-item.locked{color:var(--dim);font-weight:500;cursor:default}
+.stu-drawer-lbl{padding:12px 12px 4px;font-size:11px;font-weight:800;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.07em}
+.stu-drawer-sep{height:1px;margin:8px 4px;background:var(--border-soft)}
+
+@media(max-width:900px){
+  /* Les destinations quittent la barre : elles reviennent dans le tiroir, en entier. */
+  .stu-nav{display:none}
+  .stu-burger{display:grid}
+  /* Le tiroir se déplie SOUS la barre collante plutôt qu'en plein écran : la barre reste
+     visible, donc le bouton qui l'a ouvert reste sous le pouce pour le refermer.
+     Il est posé dans le flux, juste après l'en-tête, et non collé à un `top` en pixels :
+     un décalage en dur devrait valoir la hauteur exacte de la barre, qui change avec le
+     palier (la marque disparaît à 560px) et avec la taille de police du système. */
+  .stu-drawer{display:flex;flex-direction:column;z-index:30;
+    padding:8px;background:var(--surface);border-bottom:1px solid var(--border);
+    box-shadow:0 16px 32px -16px rgba(10,12,30,.4);animation:rise .18s var(--ease) both;
+    max-height:calc(100vh - 56px);overflow-y:auto}
+}
+@media(max-width:560px){
+  /* Marque réduite au logo : « Impasto » et son sous-titre valent moins, ici, que la place
+     qu'ils prennent au thème, à l'avatar et au menu. */
+  .stu-brand .name,.stu-sub{display:none}
+  .topbar{padding:10px 14px;gap:8px}
+  /* La déconnexion RESTE : le profil ne la propose pas, la masquer ici enfermerait le
+     stagiaire dans sa session. Sans la marque, la place ne manque plus de toute façon. */
+}
+
+/* Ligne de liste de l'espace stagiaire : intitulé souple, puis statut et action.
+   Les quatre listes (documents de Mon espace, documents et émargements d'une formation,
+   émargements du jour) partageaient le même style inline, à l'identique. Il vit ici, avec
+   le repli en moins : `.btn` est en `white-space:nowrap` et le `Badge` ne se comprime pas
+   davantage, donc sous ~330px l'intitulé était le seul à céder — jusqu'à écraser à zéro et
+   pousser toute la page en défilement horizontal. La base de 190px fait descendre le statut
+   et l'action à la ligne suivante avant d'en arriver là. */
+.stu-row{display:flex;align-items:center;gap:12px;padding:10px 0;flex-wrap:wrap;
+  border-bottom:1px solid var(--border-soft)}
+.stu-row-t{flex:1 1 190px;min-width:0}

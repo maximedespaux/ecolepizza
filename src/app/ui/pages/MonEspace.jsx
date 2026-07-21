@@ -172,8 +172,8 @@ function DocList({ docs, onView, onQuiz }) {
       {docs.map((d) => {
         const [label, tone] = statusFor(d);
         return (
-          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
-            <span style={{ flex: 1, minWidth: 0 }}>
+          <div key={d.id} className="stu-row">
+            <span className="stu-row-t">
               <b>{d.title}</b>
               <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
                 {d.formations || ""}{d.signed_at ? ` · signé le ${d.signed_at}` : d.sent_at ? ` · reçu le ${d.sent_at}` : ""}
@@ -276,7 +276,9 @@ function FormationInfoModal({ f, onClose }) {
             Formation non suivie — ces informations sont fournies à titre indicatif.
             Inscrivez-vous à une session pour y accéder.
           </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {/* Durée / heures / tarif : trois colonnes tant qu'elles tiennent, puis autant que
+              la modale en accepte. En dur à 3, elles se tassaient à ~90px sur un téléphone. */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12 }}>
             <InfoRow label="Durée" value={f.days ? `${f.days} jour(s)` : null} />
             <InfoRow label="Heures" value={f.hours ? `${f.hours} h` : null} />
             <InfoRow label="Tarif" value={f.price ? euro(f.price) : null} />

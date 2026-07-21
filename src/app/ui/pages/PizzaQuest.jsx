@@ -247,7 +247,7 @@ function PizzaQuest() {
           <h1 style={{ marginBottom: 4 }}>Pizza Quest</h1>
           <p style={{ margin: 0 }}>Entraîne-toi pour le QCM de demain — choisis une formation sur la carte.</p>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <div className="pq-stat"><Icon name="target" size={16} /><b>{xp}</b><span>XP</span></div>
           <div className="pq-stat"><span style={{ fontSize: 15 }}>⭐</span><b>{totalStars}</b><span>étoiles</span></div>
           {/* Cœurs : affichés seulement si la mécanique est active (délai > 0 côté organisme). */}

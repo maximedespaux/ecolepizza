@@ -16,30 +16,51 @@ const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 // Sections débloquées seulement après avoir franchi le point d'accès (breakpoint) d'une formation.
 const GATED_PATHS = ["/pizza-quest", "/empatements", "/garnitures", "/realisations", "/communaute", "/notions"];
 
+const LOCK_TITLE = "Signez vos documents jusqu'au point d'accès pour débloquer";
+
 /**
- * Menu déroulant « Outils » : ce que le stagiaire produit ou consulte pour lui-même —
- * ses empâtements, ses garnitures, ses réalisations, et le lexique.
+ * Les outils : ce que le stagiaire produit ou consulte pour lui-même.
+ *
+ * Déclarés UNE fois. La barre large les range sous un déroulant « Outils » ; le tiroir
+ * étroit les pose à plat sous un intertitre — un déroulant dans un tiroir demanderait
+ * deux taps pour arriver au même endroit. Deux présentations, une seule liste : sans ça,
+ * ajouter un outil obligerait à penser à le déclarer aux deux endroits.
+ */
+const OUTILS = [
+  { to: "/empatements", ic: "wheat", label: "Mes empâtements" },
+  { to: "/garnitures", ic: "list-checks", label: "Mes garnitures" },
+  { to: "/realisations", ic: "pizza", label: "Mes réalisations" },
+  { to: "/notions", ic: "book-open", label: "Notions & lexique" },
+];
+
+/** Bouton d'une destination verrouillée, dans la barre large. */
+function LockedBtn({ children }) {
+  return (
+    <button className="btn sm ghost" disabled title={LOCK_TITLE}
+      style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: 0.55 }}>
+      <Icon name="lock" size={13} /> {children}
+    </button>
+  );
+}
+
+/**
+ * Menu déroulant « Outils » (barre large uniquement).
  *
  * La Communauté en a été SORTIE : elle n'est pas un outil mais un lieu, et la ranger avec
- * eux la cachait derrière un déroulant alors qu'elle se visite d'un clic. Elle a désormais
- * sa propre entrée, à côté.
+ * eux la cachait derrière un déroulant alors qu'elle se visite d'un clic.
  */
 function OutilsMenu({ locked }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const loc = useLocation();
-  const active = ["/empatements", "/garnitures", "/realisations", "/notions"].some((p) => loc.pathname.startsWith(p));
+  const active = OUTILS.some((o) => loc.pathname.startsWith(o.to));
   useEffect(() => {
     const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
   useEffect(() => { setOpen(false); }, [loc.pathname]);
-  if (locked) return (
-    <button className="btn sm ghost" disabled title="Signez vos documents jusqu'au point d'accès pour débloquer" style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: 0.55 }}>
-      <Icon name="lock" size={13} /> Outils
-    </button>
-  );
+  if (locked) return <LockedBtn>Outils</LockedBtn>;
   return (
     <span ref={ref} style={{ position: "relative" }}>
       <button className={`btn sm ${active ? "primary" : "ghost"}`} onClick={() => setOpen((o) => !o)} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -47,13 +68,27 @@ function OutilsMenu({ locked }) {
       </button>
       {open && (
         <div className="stu-menu">
-          <NavLink to="/empatements" className="stu-menu-item"><Icon name="wheat" size={15} /> Mes empâtements</NavLink>
-          <NavLink to="/garnitures" className="stu-menu-item"><Icon name="list-checks" size={15} /> Mes garnitures</NavLink>
-          <NavLink to="/realisations" className="stu-menu-item"><Icon name="pizza" size={15} /> Mes réalisations</NavLink>
-          <NavLink to="/notions" className="stu-menu-item"><Icon name="book-open" size={15} /> Notions &amp; lexique</NavLink>
+          {OUTILS.map((o) => (
+            <NavLink key={o.to} to={o.to} className="stu-menu-item"><Icon name={o.ic} size={15} /> {o.label}</NavLink>
+          ))}
         </div>
       )}
     </span>
+  );
+}
+
+/** Une destination dans le tiroir étroit : pleine largeur, cible tactile confortable. */
+function DrawerLink({ to, ic, label, badge, locked }) {
+  if (locked) return (
+    <span className="stu-drawer-item locked" title={LOCK_TITLE}>
+      <Icon name="lock" size={16} /> {label}
+    </span>
+  );
+  return (
+    <NavLink to={to} className={({ isActive }) => `stu-drawer-item${isActive ? " on" : ""}`}>
+      <Icon name={ic} size={16} /> <span style={{ flex: 1 }}>{label}</span>
+      {badge > 0 && <span className="stu-count">{badge}</span>}
+    </NavLink>
   );
 }
 
@@ -65,6 +100,7 @@ function StudentLayout() {
   const [unlocked, setUnlocked] = useState(true); // fail-open : débloqué par défaut
   const [pending, setPending] = useState(0);      // documents à signer / QCM à faire
   const [avatar, setAvatar] = useState(() => getAvatar(user?.id));
+  const [menuOpen, setMenuOpen] = useState(false); // tiroir de navigation, sous 900px
   // A-t-il franchi le point d'accès (breakpoint) d'une formation ? Débloque Pizza Quest + Outils.
   useEffect(() => {
     if (!user?.id) return;
@@ -85,6 +121,16 @@ function StudentLayout() {
   }, [user?.id]);
   // Charge le profil (avatar + progression) depuis la base et le fusionne au local.
   useEffect(() => { if (user?.id) hydrateProfile(user.id); }, [user?.id]);
+  // Naviguer referme le tiroir : sinon il masquerait la page qu'on vient d'ouvrir.
+  useEffect(() => { setMenuOpen(false); }, [loc.pathname]);
+  // Repasser en large avec le tiroir ouvert laisserait un panneau fantôme par-dessus la page :
+  // la barre complète est de retour et le bouton menu, lui, a disparu — plus rien pour le fermer.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 901px)");
+    const onChange = (e) => { if (e.matches) setMenuOpen(false); };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   if (isLoading) {
     return (
@@ -95,17 +141,27 @@ function StudentLayout() {
   }
   if (!isConnected) return <Navigate to="/login" replace />;
 
+  // Destinations hors « Outils », dans l'ordre de la barre. `gated` = fermé tant que le
+  // point d'accès n'est pas franchi.
+  const extras = [
+    { to: "/communaute", ic: "users", label: "Communauté", gated: true },
+    ...(user?.role === "INTERVENANT" ? [{ to: "/intervention", ic: "clipboard-check", label: "Intervention" }] : []),
+    ...(user?.has_company ? [{ to: "/entreprise-documents", ic: "building", label: "Entreprise" }] : []),
+  ];
+
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <header className="topbar" style={{ justifyContent: "space-between" }}>
-        <div className="brand" style={{ padding: 0, gap: 10 }}>
+      <header className="topbar stu-topbar">
+        <div className="brand stu-brand" style={{ padding: 0, gap: 10 }}>
           <img src={LOGO} alt="École Pizza" style={{ width: 36, height: 36, borderRadius: 9, background: "#fff", padding: 3, objectFit: "contain" }} />
           <div>
             <div className="name" style={{ fontSize: 17 }}>Impasto</div>
-            <div className="sub" style={{ fontSize: 10, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em" }}>Espace stagiaire</div>
+            {/* Sous-titre décoratif : il cède la place au nom de marque sur un écran étroit. */}
+            <div className="sub stu-sub" style={{ fontSize: 10, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em" }}>Espace stagiaire</div>
           </div>
         </div>
-        <nav style={{ display: "flex", gap: 6, marginLeft: 8 }}>
+
+        <nav className="stu-nav">
           {/* Une seule entrée : documents reçus et formations vivent sur la même page.
               La pastille compte ce qui attend une action — signature ou QCM. */}
           <NavLink to="/mon-espace" className={navClass}
@@ -116,19 +172,16 @@ function StudentLayout() {
           {/* Pizza Quest verrouillé tant que les documents ne sont pas signés (feature « accès »).
               La Boutique reste accessible — elle n'est PAS dans GATED_PATHS : c'est un service,
               pas du contenu pédagogique. */}
-          {unlocked
-            ? <NavLink to="/pizza-quest" className={navClass}>Pizza Quest</NavLink>
-            : <button className="btn sm ghost" disabled title="Signez vos documents jusqu'au point d'accès pour débloquer" style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: 0.55 }}><Icon name="lock" size={13} /> Pizza Quest</button>}
+          {unlocked ? <NavLink to="/pizza-quest" className={navClass}>Pizza Quest</NavLink> : <LockedBtn>Pizza Quest</LockedBtn>}
           <NavLink to="/boutique" className={navClass}>Boutique</NavLink>
           <OutilsMenu locked={!unlocked} />
-          {/* La Communauté a son entrée propre : c'est un lieu, pas un outil. Verrouillée
-              comme le reste tant que le point d'accès n'est pas franchi. */}
-          {unlocked
-            ? <NavLink to="/communaute" className={navClass}>Communauté</NavLink>
-            : <button className="btn sm ghost" disabled title="Signez vos documents jusqu'au point d'accès pour débloquer" style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: 0.55 }}><Icon name="lock" size={13} /> Communauté</button>}
-          {user?.role === "INTERVENANT" && <NavLink to="/intervention" className={navClass}>Intervention</NavLink>}
-          {user?.has_company && <NavLink to="/entreprise-documents" className={navClass}>Entreprise</NavLink>}
+          {extras.map((e) => (
+            e.gated && !unlocked
+              ? <LockedBtn key={e.to}>{e.label}</LockedBtn>
+              : <NavLink key={e.to} to={e.to} className={navClass}>{e.label}</NavLink>
+          ))}
         </nav>
+
         <div className="spacer" />
         <ThemeToggle />
         {/* Le changement de mot de passe vit dans le profil (onglet Compte) : le doubler
@@ -138,7 +191,32 @@ function StudentLayout() {
           {avatar ? avatar.emoji : initials(user?.first_name, user?.last_name)}
         </button>
         <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion"><Icon name="power" size={18} /></button>
+        {/* Bouton du tiroir : présent uniquement sous 900px, où la barre ne tient plus.
+            La pastille y est reportée, sinon replier la barre masquerait l'alerte. */}
+        <button className="icon-btn stu-burger" onClick={() => setMenuOpen((o) => !o)}
+          aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"} aria-expanded={menuOpen}>
+          <Icon name={menuOpen ? "x" : "menu"} size={20} />
+          {!menuOpen && pending > 0 && <span className="stu-burger-dot" />}
+        </button>
       </header>
+
+      {/* Tiroir de navigation (écrans étroits). Rendu seulement à l'ouverture : fermé, il ne
+          coûte rien et ne peut pas capter le focus au clavier. */}
+      {menuOpen && (
+        <>
+          <div className="stu-scrim" onClick={() => setMenuOpen(false)} />
+          <div className="stu-drawer" role="navigation">
+            <DrawerLink to="/mon-espace" ic="file-text" label="Mes documents" badge={pending} />
+            <DrawerLink to="/pizza-quest" ic="pizza" label="Pizza Quest" locked={!unlocked} />
+            <DrawerLink to="/boutique" ic="cart" label="Boutique" />
+            <div className="stu-drawer-lbl">Outils</div>
+            {OUTILS.map((o) => <DrawerLink key={o.to} {...o} locked={!unlocked} />)}
+            <div className="stu-drawer-sep" />
+            {extras.map((e) => <DrawerLink key={e.to} {...e} locked={e.gated && !unlocked} />)}
+          </div>
+        </>
+      )}
+
       <main className="content" style={{ maxWidth: 900 }}>
         {!unlocked && GATED_PATHS.some((p) => loc.pathname.startsWith(p)) ? (
           <EmptyState icon="lock">
