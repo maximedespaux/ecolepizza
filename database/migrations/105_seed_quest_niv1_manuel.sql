@@ -33,8 +33,8 @@
    cascade). Vos retouches sur CES chapitres seraient donc écrasées. */
 
 /* ---- Cibles de l'import ------------------------------------------------------------ */
-SET @org  = 'REMPLACER-PAR-UUID-ORGANISME';
-SET @prog = 'REMPLACER-PAR-UUID-FORMATION-NIVEAU-I';
+SET @org  = '6df7dddf-7df8-11f1-8ce4-525400cc2535';
+SET @prog = 'dce56d25-69a4-4d8a-bd0d-0a3ffff4de83';
 
 SET @d_facile    = (SELECT id FROM quest_difficulty WHERE organization_id = @org AND slug = 'facile'    LIMIT 1);
 SET @d_normal    = (SELECT id FROM quest_difficulty WHERE organization_id = @org AND slug = 'normal'    LIMIT 1);

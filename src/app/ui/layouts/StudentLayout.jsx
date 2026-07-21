@@ -16,12 +16,19 @@ const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 // Sections débloquées seulement après avoir franchi le point d'accès (breakpoint) d'une formation.
 const GATED_PATHS = ["/pizza-quest", "/empatements", "/garnitures", "/realisations", "/communaute", "/notions"];
 
-// Menu déroulant « Outils & Communauté » : outils stagiaire + communauté (à venir).
+/**
+ * Menu déroulant « Outils » : ce que le stagiaire produit ou consulte pour lui-même —
+ * ses empâtements, ses garnitures, ses réalisations, et le lexique.
+ *
+ * La Communauté en a été SORTIE : elle n'est pas un outil mais un lieu, et la ranger avec
+ * eux la cachait derrière un déroulant alors qu'elle se visite d'un clic. Elle a désormais
+ * sa propre entrée, à côté.
+ */
 function OutilsMenu({ locked }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const loc = useLocation();
-  const active = ["/empatements", "/garnitures", "/realisations", "/communaute", "/notions"].some((p) => loc.pathname.startsWith(p));
+  const active = ["/empatements", "/garnitures", "/realisations", "/notions"].some((p) => loc.pathname.startsWith(p));
   useEffect(() => {
     const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", onDoc);
@@ -30,20 +37,19 @@ function OutilsMenu({ locked }) {
   useEffect(() => { setOpen(false); }, [loc.pathname]);
   if (locked) return (
     <button className="btn sm ghost" disabled title="Signez vos documents jusqu'au point d'accès pour débloquer" style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: 0.55 }}>
-      <Icon name="lock" size={13} /> Outils &amp; Communauté
+      <Icon name="lock" size={13} /> Outils
     </button>
   );
   return (
     <span ref={ref} style={{ position: "relative" }}>
       <button className={`btn sm ${active ? "primary" : "ghost"}`} onClick={() => setOpen((o) => !o)} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-        Outils &amp; Communauté <Icon name="chevron-down" size={13} />
+        Outils <Icon name="chevron-down" size={13} />
       </button>
       {open && (
         <div className="stu-menu">
           <NavLink to="/empatements" className="stu-menu-item"><Icon name="wheat" size={15} /> Mes empâtements</NavLink>
           <NavLink to="/garnitures" className="stu-menu-item"><Icon name="list-checks" size={15} /> Mes garnitures</NavLink>
           <NavLink to="/realisations" className="stu-menu-item"><Icon name="pizza" size={15} /> Mes réalisations</NavLink>
-          <NavLink to="/communaute" className="stu-menu-item"><Icon name="users" size={15} /> Communauté</NavLink>
           <NavLink to="/notions" className="stu-menu-item"><Icon name="book-open" size={15} /> Notions &amp; lexique</NavLink>
         </div>
       )}
@@ -115,6 +121,11 @@ function StudentLayout() {
             : <button className="btn sm ghost" disabled title="Signez vos documents jusqu'au point d'accès pour débloquer" style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: 0.55 }}><Icon name="lock" size={13} /> Pizza Quest</button>}
           <NavLink to="/boutique" className={navClass}>Boutique</NavLink>
           <OutilsMenu locked={!unlocked} />
+          {/* La Communauté a son entrée propre : c'est un lieu, pas un outil. Verrouillée
+              comme le reste tant que le point d'accès n'est pas franchi. */}
+          {unlocked
+            ? <NavLink to="/communaute" className={navClass}>Communauté</NavLink>
+            : <button className="btn sm ghost" disabled title="Signez vos documents jusqu'au point d'accès pour débloquer" style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: 0.55 }}><Icon name="lock" size={13} /> Communauté</button>}
           {user?.role === "INTERVENANT" && <NavLink to="/intervention" className={navClass}>Intervention</NavLink>}
           {user?.has_company && <NavLink to="/entreprise-documents" className={navClass}>Entreprise</NavLink>}
         </nav>
