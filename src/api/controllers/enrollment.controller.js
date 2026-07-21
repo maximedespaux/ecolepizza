@@ -1,5 +1,5 @@
 const db = require('../config/database.js');
-const { computeDocParcours } = require('../lib/parcours.js');
+const { computeDocParcours, companyParcours } = require('../lib/parcours.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
@@ -99,14 +99,7 @@ const getParcours = async (req, res) => {
         // Stagiaire envoyé par une entreprise : on rattache les documents de GROUPE
         // (scope entreprise) pour que leur statut (signé…) se reflète dans son parcours,
         // même s'ils ne sont pas liés à son inscription.
-        if (e.company_id) {
-            try {
-                const [cdocs] = await conn.query(
-                    "SELECT id, type, status, template_slug, quiz_id FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND scope = 'COMPANY' ORDER BY created_at DESC",
-                    [orgId, e.company_id, e.session_id]);
-                docs.push(...cdocs);
-            } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
-        }
+        // (les documents de groupe sont ajoutés plus bas, avec le parcours entreprise)
 
         let parc = { steps: [], percent: 0, currentIndex: 0, currentKey: null };
         if (e.program_id) {
@@ -126,22 +119,11 @@ const getParcours = async (req, res) => {
             // documents de GROUPE (visibles mais générés côté entreprise). On construit
             // donc les étapes directement depuis la section (toutes présentes), sinon on
             // retombe sur le parcours du dossier « seul ».
-            let steps = null;
-            if (e.company_id) {
-                let intakeOrder = [];
-                try {
-                    const [[pr]] = await conn.query('SELECT company_steps FROM training_program WHERE id = ? AND organization_id = ?', [program.id, orgId]);
-                    let cs = pr && pr.company_steps;
-                    if (typeof cs === 'string') { try { cs = JSON.parse(cs); } catch { cs = []; } }
-                    intakeOrder = Array.isArray(cs) ? cs : [];
-                } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
-                if (intakeOrder.length) {
-                    const allSteps = await formationSteps(conn, orgId, program);
-                    const bySlug = new Map(allSteps.map((s) => [s.slug, s]));
-                    steps = intakeOrder.map((sl) => bySlug.get(sl)).filter(Boolean);
-                }
-            }
-            if (!steps) steps = await enrollmentSteps(conn, orgId, program, ctx, condById);
+            const ent = await companyParcours(conn, orgId,
+                { programId: program.id, companyId: e.company_id, sessionId: e.session_id },
+                () => formationSteps(conn, orgId, program));
+            if (ent.docs.length) docs.push(...ent.docs);
+            const steps = ent.steps || await enrollmentSteps(conn, orgId, program, ctx, condById);
             parc = computeDocParcours({ steps, docs });
         }
 
