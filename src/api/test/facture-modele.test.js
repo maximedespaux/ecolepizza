@@ -125,3 +125,63 @@ test('les jetons de ligne proposés correspondent à ceux que le bloc remplit', 
         assert.ok(remplis.includes(k), `« ${k} » est proposé dans la palette mais jamais rempli`);
     }
 });
+
+// --- Le tableau des articles, tel que l'ÉDITEUR le produit ---------------------------------
+
+test('le bloc survit à la grammaire de l\'éditeur (marqueurs dans des cellules)', () => {
+    // DÉFAUT CONSTATÉ DANS L'ÉDITEUR RÉEL, pas déduit. L'éditeur est un ProseMirror : sa
+    // grammaire interdit du texte directement dans un <tbody>. Un gabarit « <tbody>{#Articles}
+    // <tr>… » voit ses marqueurs REMONTÉS hors du tableau à l'insertion — ils atterrissent
+    // dans un paragraphe au-dessus, et la ligne ne se répète jamais.
+    //
+    // Les marqueurs vivent donc dans des cellules, et c'est la LIGNE qui les contient qu'on
+    // répète. On teste exactement le balisage que l'éditeur enregistre.
+    const html = '<table><tbody><tr><th>Désignation</th><th>Qté</th><th>TTC</th></tr>'
+        + '<tr><td>{#Articles}{Désignation}</td><td>{Quantité}</td><td>{Montant TTC}{/Articles}</td></tr>'
+        + '</tbody></table>';
+    const out = expandListBlocks(html, 'Articles', [
+        { name: 'Biberon', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
+        { name: 'Farine', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
+    ], articleRowTokens);
+
+    assert.strictEqual((out.match(/<tr/g) || []).length, 3, 'une ligne d\'en-tête + une par article');
+    assert.doesNotMatch(out, /\{[#/]Articles\}/, 'les marqueurs doivent disparaître du rendu');
+    assert.ok(out.includes('Biberon') && out.includes('Farine'), 'les deux articles doivent sortir');
+    assert.ok(out.includes('21.38 €') && out.includes('25.32 €'), 'chaque ligne garde SON taux');
+});
+
+test('l\'en-tête du tableau ne se répète pas', () => {
+    // L'erreur classique de ce genre de gabarit : englober l'en-tête dans le bloc.
+    const html = '<table><tbody><tr><th>Désignation</th></tr>'
+        + '<tr><td>{#Articles}{Désignation}{/Articles}</td></tr></tbody></table>';
+    const out = expandListBlocks(html, 'Articles', [{ name: 'A', amount: 1 }, { name: 'B', amount: 1 }], articleRowTokens);
+    assert.strictEqual((out.match(/Désignation<\/th>/g) || []).length, 1);
+});
+
+test('un tableau sans article ne laisse pas de ligne fantôme', () => {
+    const html = '<table><tbody><tr><th>Désignation</th></tr>'
+        + '<tr><td>{#Articles}{Désignation}{/Articles}</td></tr></tbody></table>';
+    const out = expandListBlocks(html, 'Articles', [], articleRowTokens);
+    assert.strictEqual((out.match(/<tr/g) || []).length, 1, 'seul l\'en-tête doit rester');
+    assert.doesNotMatch(out, /Désignation<\/td>|\{/, 'ni gabarit ni marqueur en clair');
+});
+
+test('le gabarit inséré par l\'éditeur place les marqueurs dans des cellules', () => {
+    // Si quelqu'un « corrige » le gabarit en remettant {#Articles} dans le <tbody>, la
+    // fonctionnalité redevient silencieusement inopérante — sans erreur, juste un tableau vide.
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/pages/TemplateEditor.jsx'), 'utf8');
+    const bloc = src.slice(src.indexOf('const BLOC_ARTICLES'), src.indexOf('const BLOC_ARTICLES') + 700);
+    assert.doesNotMatch(bloc, /<tbody>\{#Articles\}/, 'marqueur dans le tbody : il sera remonté hors du tableau');
+    assert.match(bloc, /<td>\{#Articles\}/, 'le marqueur ouvrant doit être dans une cellule');
+    assert.match(bloc, /\{\/Articles\}<\/td>/, 'le marqueur fermant doit être dans une cellule');
+});
+
+test('l\'aperçu du modèle montre des articles d\'exemple', () => {
+    // Sans eux, un modèle de facture s'aperçoit avec un tableau vide : impossible de juger sa
+    // mise en page, ce qui est pourtant tout l'objet d'un aperçu.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/template.controller.js'), 'utf8');
+    const bloc = src.slice(src.indexOf('const previewPdf'));
+    const corps = bloc.slice(0, bloc.indexOf('\n};'));
+    assert.match(corps, /articlesExemple/, 'l\'aperçu ne fournit aucun article');
+    assert.match(corps, /taxRate: 5\.5/, 'deux taux différents, pour que le cas mixte se voie');
+});

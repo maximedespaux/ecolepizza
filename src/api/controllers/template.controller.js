@@ -339,10 +339,10 @@ async function loadCustomTokens(orgId) {
 const GROUP_ORDER = [
     'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
     'Inscription', 'Formation', 'Session', 'Lieu de formation',
-    'Organisme', 'Facture', 'Ligne de facture', 'Calculé / dates', 'Personnalisés',
+    'Organisme', 'Facture', 'Ligne de facture', 'Dates et valeurs calculées', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
-const CURATED_GROUPS = new Set(['Calculé / dates', 'Groupe entreprise', 'Facture', 'Ligne de facture']);
+const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Ligne de facture']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -386,6 +386,18 @@ const getTokens = async (req, res) => {
 
         // Réorganisation : ordre de groupes canonique + tri alphabétique des jetons
         // (hors groupes curatés) + suppression des groupes vides.
+        // « Calculé » n'avait qu'UN jeton et vivait a cote de « Calculé / dates » : deux noms
+        // presque identiques pour une seule idee, et un groupe d'un element qui n'apprend rien.
+        // On les reunit sous un intitule qui dit ce qu'ils SONT — des valeurs deduites du
+        // dossier, qu'on ne saisit nulle part.
+        const calcDates = groups.find((g) => g.group === 'Calculé / dates');
+        const calc = groups.find((g) => g.group === 'Calculé');
+        if (calcDates && calc) {
+            calcDates.tokens = [...calcDates.tokens, ...calc.tokens];
+            groups.splice(groups.indexOf(calc), 1);
+        }
+        for (const g of groups) if (g.group === 'Calculé / dates') g.group = 'Dates et valeurs calculées';
+
         const rank = (g) => { const i = GROUP_ORDER.indexOf(g); return i < 0 ? GROUP_ORDER.length : i; };
         groups.sort((a, b) => rank(a.group) - rank(b.group) || a.group.localeCompare(b.group, 'fr'));
         for (const g of groups) {
@@ -482,10 +494,18 @@ const previewPdf = async (req, res) => {
     try {
         const { body_html, header_html, footer_html, layout } = req.body || {};
         const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [req.user.organization_id]);
+        // Articles d'exemple : sans eux, un modèle de facture s'aperçoit avec un tableau VIDE
+        // — le bloc {#Articles} se développe sur une liste vide et ne produit aucune ligne.
+        // On ne peut alors pas juger de sa mise en page, ce qui est pourtant tout l'objet d'un
+        // aperçu. Deux articles à des taux différents, pour que le cas mixte se voie aussi.
+        const articlesExemple = [
+            { name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
+            { name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
+        ];
         const pdf = await composeDocumentPdf({
             bodyHtml: body_html || '<p></p>',
             headerHtml: header_html, footerHtml: footer_html,
-            ctx: { org: org || {} },
+            ctx: { org: org || {}, articles: articlesExemple },
             sampleValues: await sampleTokenValues(req.user.organization_id),
             bleed: (layout && layout.bleed) || {},
         });

@@ -306,21 +306,45 @@ function articleRowTokens(l, i) {
  */
 function expandListBlocks(html, nom, rows, rowTokens) {
     const list = Array.isArray(rows) ? rows : [];
-    const re = new RegExp(`\\{#\\s*${nom}\\s*\\}([\\s\\S]*?)\\{/\\s*${nom}\\s*\\}`, 'g');
-    return String(html || '').replace(re, (m, tpl) => {
+    let out = String(html || '');
+
+    /* FORME TABLEAU, traitée en premier.
+     *
+     * L'éditeur de modèles est un ProseMirror : sa grammaire interdit du texte directement
+     * dans un <tbody>. Un gabarit écrit « <tbody>{#Articles}<tr>… » voit donc ses marqueurs
+     * REMONTÉS hors du tableau à l'insertion — ils atterrissent dans un paragraphe au-dessus,
+     * et le bloc ne se répète jamais. Constaté dans l'éditeur réel.
+     *
+     * Les marqueurs vivent donc DANS des cellules, ce que la grammaire accepte, et c'est la
+     * LIGNE qui les contient qu'on répète. `<tr>` complet à chaque article, marqueurs retirés.
+     */
+    const reLigne = new RegExp(
+        `<tr\\b[^>]*>(?:(?!</tr>)[\\s\\S])*?\\{#\\s*${nom}\\s*\\}[\\s\\S]*?\\{/\\s*${nom}\\s*\\}(?:(?!</tr>)[\\s\\S])*?</tr>`, 'g');
+    out = out.replace(reLigne, (ligne) => {
         if (!list.length) return '';
-        return list.map((r, i) => {
-            const vals = rowTokens(r, i);
-            let out = tpl;
-            for (const [k, v] of Object.entries(vals)) {
-                const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'),
-                    String(v == null ? '' : v));
-                out = out.split(`{${k}}`).join(String(v == null ? '' : v));
-            }
-            return out;
-        }).join('');
+        const gabarit = ligne
+            .replace(new RegExp(`\\{#\\s*${nom}\\s*\\}`, 'g'), '')
+            .replace(new RegExp(`\\{/\\s*${nom}\\s*\\}`, 'g'), '');
+        return list.map((r, i) => remplirLigne(gabarit, rowTokens(r, i))).join('');
     });
+
+    const re = new RegExp(`\\{#\\s*${nom}\\s*\\}([\\s\\S]*?)\\{/\\s*${nom}\\s*\\}`, 'g');
+    return out.replace(re, (m, tpl) => {
+        if (!list.length) return '';
+        return list.map((r, i) => remplirLigne(tpl, rowTokens(r, i))).join('');
+    });
+}
+
+/** Remplace, dans un gabarit, les jetons d'UNE ligne — puces de l'éditeur comme texte {Clé}. */
+function remplirLigne(gabarit, vals) {
+    let out = gabarit;
+    for (const [k, v] of Object.entries(vals)) {
+        const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const val = String(v == null ? '' : v);
+        out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'), val);
+        out = out.split(`{${k}}`).join(val);
+    }
+    return out;
 }
 
 // Développe les blocs répétés « par stagiaire du groupe » AVANT le remplacement normal :
