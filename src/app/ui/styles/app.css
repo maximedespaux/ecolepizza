@@ -864,8 +864,14 @@ tbody tr:last-child td{border-bottom:none}
 /* --pq-w / --pq-gap : la géométrie du chemin tient dans ces deux valeurs. L'écart entre
    deux CENTRES vaut leur somme, et c'est ce même nombre (ECART_X) qui sert au calcul du
    segment côté JS — les deux doivent rester d'accord. */
+/* `align-items:flex-start` et NON `center` : les cases n'ont pas la même hauteur (un
+   libellé tient sur une, deux ou trois lignes). Centrées, chaque pastille se retrouvait à
+   une hauteur différente selon la longueur de son titre — un décalage que le calcul du
+   segment ignore, puisqu'il ne connaît que les décalages voulus. Alignées par le HAUT,
+   toutes les pastilles sont au même niveau et seuls les décalages jouent ; les libellés
+   dépassent vers le bas, sans effet sur le tracé. */
 .pq-path{--pq-w:116px;--pq-gap:8px;
-  display:flex;flex-direction:row;align-items:center;gap:var(--pq-gap);
+  display:flex;flex-direction:row;align-items:flex-start;gap:var(--pq-gap);
   overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;overscroll-behavior-x:contain;
   padding:56px 50% 40px;margin:0 -16px;scrollbar-width:thin}
 .pq-path::-webkit-scrollbar{height:6px}
