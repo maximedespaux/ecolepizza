@@ -260,9 +260,11 @@ function PrerequisResume({ worlds }) {
   if (!avec.length) return null;
   return (
     <div style={{ textAlign: "center", marginTop: 10 }}>
+      {/* Mise en forme de la pastille : dans .pq-legend .pq-prereq, pas en style inline —
+          des surcharges partielles laissaient la police et la bordure de la carte. */}
       <span className="pq-legend">
-        <span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span>
-        {" "}= prérequis (niveau précédent)
+        <span className="pq-prereq" aria-hidden="true">!</span>
+        = prérequis (niveau précédent)
       </span>
     </div>
   );

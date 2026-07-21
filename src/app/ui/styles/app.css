@@ -913,6 +913,11 @@ tbody tr:last-child td{border-bottom:none}
    fois en pied de page : sur une carte à plusieurs rangées, le sens du « ! » doit se lire
    à côté du « ! ». */
 .pq-legend{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;border-radius:10px;padding:6px 12px 6px 8px;font-weight:700;font-size:12px}
+/* La pastille de la légende n'est pas celle d'une carte : ni positionnée en absolu, ni
+   bordée (le liseré couleur « surface » n'a rien à faire sur l'aplat vert). Taille et
+   interlignage remis à l'échelle du pastillon, sinon un « ! » de 15 px dans un cercle de
+   20 px (16 px utiles après bordure) déborde et paraît décentré. */
+.pq-legend .pq-prereq{position:static;width:20px;height:20px;border:none;font-size:12px;line-height:1}
 /* Rappel des prérequis en tête d'un monde, avec leur état. */
 .pq-prereq-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px;font-size:12.5px}
 .pq-prereq-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-weight:700;
