@@ -201,7 +201,7 @@ test('{Articles} produit un tableau complet, pas du texte', () => {
     // `^<table>` littéralement et est tombée le jour où le tableau a reçu sa largeur. Un test
     // ne doit pas interdire un attribut dont il ne dit rien.
     assert.match(html, /^<table\b/, 'le jeton doit rendre un tableau');
-    assert.strictEqual((html.match(/<tr/g) || []).length, 3, 'en-tête + un article par ligne');
+    assert.strictEqual((html.match(/<tr/g) || []).length, 4, 'en-tête + un article par ligne + totaux');
     assert.ok(RAW_TOKENS.has('Articles'), 'sans RAW_TOKENS, le HTML sortirait échappé en clair');
 });
 
@@ -296,5 +296,80 @@ test('le tableau des articles fixe ses largeurs de colonnes', () => {
         assert.strictEqual(cols.reduce((a, b) => a + b, 0), 100, `les largeurs font ${cols.reduce((a, b) => a + b, 0)} %`);
         // La désignation est le seul champ de longueur variable : elle doit dominer.
         assert.ok(cols[0] >= 40, `désignation trop étroite (${cols[0]} %)`);
+    }
+});
+
+// --- La ligne de totaux ----------------------------------------------------------------------
+
+const { articlesTable } = require('../lib/tokens.js');
+/** Les cellules d'un tableau, dans l'ordre, débarrassées de leur mise en forme. */
+const cellules = (html) => [...html.matchAll(/<t[dh]>([\s\S]*?)<\/t[dh]>/g)]
+    .map((m) => m[1].replace(/<[^>]+>/g, '').trim());
+
+test('le tableau des articles se termine par une ligne de totaux', () => {
+    const t = articlesTable(ARTICLES);
+    const c = cellules(t);
+    const i = c.lastIndexOf('Total');
+    assert.ok(i > 0, 'aucune ligne de totaux');
+    // Quantité, HT et TTC totalisés ; le prix unitaire ne l'est pas — additionner des prix
+    // unitaires ne produirait aucune grandeur ayant un sens.
+    assert.strictEqual(c[i + 1], '5', '2 + 3 articles');
+    assert.strictEqual(c[i + 2], '', 'les prix unitaires ne s\'additionnent pas');
+    assert.strictEqual(c[i + 3], '29.82 €');
+});
+
+test('LE TOTAL EST LA SOMME DE CE QUI EST IMPRIMÉ, pas des valeurs brutes', () => {
+    // LE POINT DÉLICAT. Les montants de ligne sont arrondis au centime pour l'affichage.
+    // Additionner les valeurs d'origine donnerait un total qui ne correspond PAS à la colonne
+    // au-dessus : un client qui vérifie à la calculette trouverait un centime d'écart, et
+    // aurait raison de le signaler. Sur une pièce comptable, un total qui ne tombe pas juste
+    // met en doute tout le reste.
+    //
+    // Cas construit pour ça : 54,999 + 64,905 = 119,904, soit 119,90 € en sommant les valeurs
+    // brutes — mais la colonne affiche 55,00 € et 64,91 €, dont la somme est 119,91 €.
+    const t = articlesTable([
+        { name: 'Farine T65', qty: 3, unit_price_ht: 18.333, amount: 54.999, taxRate: 5.5 },
+        { name: 'Pelle inox', qty: 1, unit_price_ht: 64.905, amount: 64.905, taxRate: 20 },
+    ]);
+    const c = cellules(t);
+    const i = c.lastIndexOf('Total');
+    const ht = c.slice(0, i).filter((_, k) => k >= 6).filter((v) => /€$/.test(v));
+    assert.ok(c.includes('55.00 €') && c.includes('64.91 €'), 'colonne HT attendue');
+    assert.strictEqual(c[i + 3], '119.91 €', 'le total doit suivre la colonne, pas les valeurs brutes');
+    assert.notStrictEqual(c[i + 3], '119.90 €', 'somme des valeurs brutes : ne correspondrait pas à l\'affichage');
+    void ht;
+    // Même exigence sur le TTC : 58,02 + 77,89.
+    assert.strictEqual(c[i + 5], '135.91 €');
+});
+
+test('la colonne TVA reste vide dans les totaux', () => {
+    // Additionner 5,5 % et 20 % ne veut rien dire, et un taux moyen serait une information
+    // fausse. La ventilation par taux est donnée ailleurs, par {Détail TVA}.
+    const c = cellules(articlesTable(ARTICLES));
+    const i = c.lastIndexOf('Total');
+    assert.strictEqual(c[i + 4], '', 'un taux totalisé serait faux');
+});
+
+test('sans quantités, la case des quantités totales reste vide', () => {
+    // Une facture de formation n'a pas de quantités : un « 0 » ressemblerait à une donnée
+    // alors que c'est une absence.
+    const c = cellules(articlesTable([
+        { name: 'Formation NIV2', amount: 850, taxRate: 0 },
+        { name: 'Formation NIV3', amount: 950, taxRate: 0 },
+    ]));
+    const i = c.lastIndexOf('Total');
+    assert.strictEqual(c[i + 1], '');
+    assert.strictEqual(c[i + 3], '1800.00 €', 'le HT reste totalisé');
+});
+
+test('la ligne de totaux a autant de cellules que l\'en-tête', () => {
+    // Une cellule de moins et LibreOffice décale toute la ligne : le total HT s'afficherait
+    // sous « P.U. HT ». On vérifie donc les deux formes, avec et sans colonne TVA.
+    for (const rows of [ARTICLES, [ARTICLES[0]]]) {
+        const t = articlesTable(rows);
+        const lignes = t.split('<tr>').slice(1);
+        const compte = (l) => (l.match(/<t[dh]\b/g) || []).length;
+        assert.strictEqual(compte(lignes[lignes.length - 1]), compte(lignes[0]),
+            'la ligne de totaux n\'a pas le même nombre de colonnes que l\'en-tête');
     }
 });

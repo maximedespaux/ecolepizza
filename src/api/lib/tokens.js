@@ -250,15 +250,49 @@ function articlesTable(list) {
         ? [46, 7, 13, 13, 8, 13]
         : [50, 8, 14, 14, 14];
     const colgroup = `<colgroup>${cols.map((w) => `<col width="${w}%">`).join('')}</colgroup>`;
-    const body = rows.map((l, i) => {
-        const c = articleRowTokens(l, i);
-        return `<tr><td>${escCell(c['Désignation'])}</td><td>${escCell(c['Quantité'])}</td>`
-             + `<td>${escCell(c['Prix unitaire HT'])}</td><td>${escCell(c['Montant HT'])}</td>`
-             + (mixte ? `<td>${escCell(c['Taux TVA'])}</td>` : '')
-             + `<td>${escCell(c['Montant TTC'])}</td></tr>`;
-    }).join('');
+    const cellules = rows.map((l, i) => articleRowTokens(l, i));
+    const body = cellules.map((c) => (
+        `<tr><td>${escCell(c['Désignation'])}</td><td>${escCell(c['Quantité'])}</td>`
+        + `<td>${escCell(c['Prix unitaire HT'])}</td><td>${escCell(c['Montant HT'])}</td>`
+        + (mixte ? `<td>${escCell(c['Taux TVA'])}</td>` : '')
+        + `<td>${escCell(c['Montant TTC'])}</td></tr>`
+    )).join('');
+
     // `width="100%"` : LibreOffice ignore la largeur CSS sur un tableau (cf. largeurTables).
-    return `<table width="100%">${colgroup}<tbody>${head}${body}</tbody></table>`;
+    return `<table width="100%">${colgroup}<tbody>${head}${body}${totalRow(cellules, mixte)}</tbody></table>`;
+}
+
+/**
+ * Ligne de totaux, en bas du tableau des articles.
+ *
+ * ON ADDITIONNE CE QUI EST IMPRIMÉ, pas les valeurs d'origine. C'est le point délicat : les
+ * montants de ligne sont arrondis au centime pour l'affichage, et additionner les valeurs
+ * brutes donnerait un total qui ne correspond PAS à la colonne au-dessus. Un client qui
+ * vérifie sa facture à la calculette trouverait un centime d'écart et aurait raison de le
+ * signaler — sur une pièce comptable, un total qui ne tombe pas juste met en doute le reste.
+ *
+ * On relit donc les chaînes de la colonne. Ça paraît détourné, mais c'est exactement la
+ * garantie qu'on veut : le total est, par construction, la somme de ce que le lecteur voit.
+ *
+ * LA COLONNE TVA RESTE VIDE quand les taux diffèrent : additionner 5,5 % et 20 % ne veut rien
+ * dire, et y écrire un taux moyen serait une information fausse. La ventilation par taux est
+ * donnée ailleurs, par {Détail TVA}.
+ *
+ * LA QUANTITÉ N'EST TOTALISÉE QUE SI ELLE EXISTE. Une facture de formation n'a pas de
+ * quantités ; un « 0 » y ressemblerait à une donnée alors que c'est une absence.
+ */
+function totalRow(cellules, mixte) {
+    const nombre = (s) => Number(String(s || '').replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+    const eur = (n) => `${n.toFixed(2)} €`;
+
+    const qtes = cellules.map((c) => c['Quantité']).filter((q) => q !== '');
+    const totalQte = qtes.length ? String(qtes.reduce((s, q) => s + nombre(q), 0)) : '';
+    const totalHt = cellules.reduce((s, c) => s + nombre(c['Montant HT']), 0);
+    const totalTtc = cellules.reduce((s, c) => s + nombre(c['Montant TTC']), 0);
+
+    const g = (v) => `<td><strong>${escCell(v)}</strong></td>`;
+    return `<tr><td><strong>Total</strong></td>${g(totalQte)}<td></td>${g(eur(totalHt))}`
+        + (mixte ? '<td></td>' : '') + `${g(eur(totalTtc))}</tr>`;
 }
 
 // Tableau des résultats d'examen, un bloc par ligne. RAW : injecté tel quel dans le PV.
