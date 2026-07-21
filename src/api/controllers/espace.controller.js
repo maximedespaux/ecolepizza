@@ -368,6 +368,12 @@ const getMyFormations = async (req, res) => {
 
         // Catalogue complet des formations de l'organisme (avec le descriptif,
         // pour l'aperçu en lecture seule des formations non suivies).
+        // ORDER BY sort_order, code — et non « code » seul : l'ordre du catalogue est celui
+        // que l'organisme a choisi en réordonnant ses formations, et c'est lui qui doit se
+        // retrouver sur la carte Pizza Quest comme dans « Mes formations ». Trié
+        // alphabétiquement, RS7404 passait derrière les NIV1* pour la seule raison que R
+        // suit N — un ordre que personne n'avait décidé.
+        //
         // Les colonnes quest_* (migration 101) peuvent ne pas exister : on retente sans elles
         // plutôt que de casser la page « Mes formations » pour un paramétrage optionnel.
         const PROG_COLS = `id, code, title, level, color, days, hours, price, hygiene, rs_code,
@@ -376,13 +382,13 @@ const getMyFormations = async (req, res) => {
         try {
             [programs] = await conn.query(
                 `SELECT ${PROG_COLS}, quest_theme_id, quest_tier_id
-                 FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
+                 FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY sort_order, code`,
                 [learner.organization_id]
             );
         } catch (e) {
             if (!isMissingSchema(e)) throw e;
             [programs] = await conn.query(
-                `SELECT ${PROG_COLS} FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
+                `SELECT ${PROG_COLS} FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY sort_order, code`,
                 [learner.organization_id]
             );
             programs = programs.map((p) => ({ ...p, quest_theme_id: null, quest_tier_id: null }));
