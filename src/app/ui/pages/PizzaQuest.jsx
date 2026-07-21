@@ -293,8 +293,11 @@ function PizzaQuest() {
           // Échec : le chapitre N'EST PAS enregistré — l'inscrire à 0 étoile le compterait
           // comme acquis et ouvrirait le suivant. Seul le cœur est décompté.
           onFail={() => { if (coeursActifs) perdreUnCoeur(); }}
-          // Reprise après échec : une tentative de plus, un cœur de plus.
-          onRetry={() => { if (coeursActifs) perdreUnCoeur(); }}
+          // Reprise après échec : GRATUITE. Le cœur est déjà pris par l'échec qui précède,
+          // et une tentative ne doit coûter qu'une fois. Facturer aussi le bouton rendait
+          // « Recommencer » plus cher que fermer puis rouvrir le chapitre depuis la carte —
+          // deux chemins pour le même geste, l'un puni, l'autre non.
+          onRetry={null}
           // Validation : au moins une étoile, garanti par l'écran de résultat.
           onFinish={(stars) => finishChapter(quiz.code, quiz.chIdx, stars)} />
       )}
@@ -891,13 +894,13 @@ function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur,
                   propose de le refaire plutôt qu'un « Valider » qui l'enregistrerait à 0 et
                   ouvrirait le suivant. Le bouton est barré s'il ne reste plus de cœur. */}
               {echoue ? (
-                /* Une nouvelle tentative se paie : sans cela, on relancerait le chapitre
-                   en boucle jusqu'à tomber sur les bonnes cases. Le coût est annoncé sur
-                   le bouton — on ne dépense pas un cœur sans l'avoir vu venir. */
+                /* Relancer ne coûte rien : l'échec qui précède a déjà pris son cœur. Ce qui
+                   ration la boucle, c'est que chaque tentative ratée en coûte un — pas le
+                   fait d'appuyer sur le bouton. */
                 <button className="btn primary" disabled={sansCoeur}
                   onClick={() => { onRetry?.(); recommencer(); }}
                   title={sansCoeur ? "Plus de cœur — reviens quand tu en auras récupéré un" : undefined}>
-                  <Icon name="refresh" size={14} /> Recommencer{coeursActifs ? " (−1 ❤️)" : ""}
+                  <Icon name="refresh" size={14} /> Recommencer
                 </button>
               ) : (
                 /* XP annoncé = celui qui sera effectivement compté (même formule que le
