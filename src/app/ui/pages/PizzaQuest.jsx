@@ -4,8 +4,6 @@ import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import SimulateurPizza from "../components/SimulateurPizza.jsx";
 import { colorOf } from "../lib/format.js";
-import { NIV1_CHAPTERS } from "../lib/niv1Questions.js";
-import { NIV2_CHAPTERS } from "../lib/niv2Questions.js";
 import { saveQuestProgress } from "../lib/gamification.js";
 import { worldXp, chapterXpEarned, xpOfQuestion } from "../lib/questxp.js";
 
@@ -16,73 +14,35 @@ import { worldXp, chapterXpEarned, xpOfQuestion } from "../lib/questxp.js";
  * thématisé pizza (blé, eau, huile, levure…). On clique une formation → son « monde »
  * (chemin de chapitres) → un chapitre = mini-QCM (les « étapes »).
  *
- * Les mondes « Niveau I » et « Niveau II » ont leurs VRAIES questions, tirées de leurs
- * manuels (banques niv1Questions / niv2Questions ; formats QCM / Vrai-Faux / Associations).
- * Les quatre autres retombent sur DEMO_QUESTIONS en attendant leurs manuels.
- * Toutes les questions, démo comprise, portent leur explication (`expl`) et leur page de
- * manuel (`src`) : se tromper doit apprendre quelque chose, pas seulement coûter un cœur.
+ * Les questions viennent EXCLUSIVEMENT de la banque de l'organisme (Configuration →
+ * Pizza Quest), chargée par formation. Une formation sans chapitre affiche un état vide :
+ * plus aucune question de démonstration ni banque codée en dur, qui donnaient à voir au
+ * stagiaire du contenu que son école n'avait jamais écrit.
+ * Chaque question porte son explication (`expl`) et sa page de manuel (`src`) : se tromper
+ * doit apprendre quelque chose, pas seulement coûter un cœur.
  * Progression miroir localStorage + serveur (learner_quest_progress) : réhydratée au
  * montage, donc un cache vidé ne perd rien.
  */
 
-/* Questions de repli, servies aux mondes qui n'ont pas encore leur banque (Découverte,
-   Niveau I Pro, Expert, Spécialisations). Elles portent leur explication comme les vraies
-   banques — un stagiaire de ces mondes apprend donc autant, même si le volume reste maigre.
-   ⚠️ 8 questions recyclées sur 36 tirages : c'est un pis-aller très visible, à remplacer
-   manuel par manuel. */
-const DEMO_QUESTIONS = [
-  { q: "Que signifie « TH » dans un empâtement ?", c: ["Taux d'hydratation", "Température de l'huile", "Temps de repos", "Type de farine"], a: 0,
-    expl: "Le TH est le poids d'eau rapporté au poids de farine, en pourcentage. C'est LA valeur qui décrit un empâtement : tout le reste se calcule à partir d'elle.", src: "Manuel Niveau I, p. 32" },
-  { q: "Pour 1 kg de farine à 65 % d'hydratation, combien d'eau ?", c: ["650 g", "65 g", "165 g", "6,5 kg"], a: 0,
-    expl: "L'hydratation se calcule TOUJOURS sur le poids de farine : 1 000 g × 65 % = 650 g d'eau. Jamais sur le poids total de la pâte.", src: "Manuel Niveau I, p. 27 et 32" },
-  { q: "La « force » d'une farine se mesure par…", c: ["Le W (force boulangère)", "Sa couleur", "Son prix", "Son taux de sucre"], a: 0,
-    expl: "Le W vient de l'alvéographe de Chopin. Il dit combien de temps la pâte tient la fermentation — à ne pas confondre avec le type (T55, T65), qui parle de cendres.", src: "Manuel Niveau I, p. 17-18" },
-  { q: "La poolish est une préfermentation…", c: ["Liquide (≈100 % d'hydratation)", "Sèche (≈45 %)", "Sans levure", "À base d'huile"], a: 0,
-    expl: "Liquide, parce qu'on y met autant de farine que d'eau. Elle repose 12 à 15 h maximum et donne un goût très prononcé.", src: "Manuel Niveau II, p. 22-23" },
-  { q: "La biga est une préfermentation…", c: ["Sèche (≈45–50 %)", "Liquide 100 %", "À base de tomate", "Sans farine"], a: 0,
-    expl: "Solide — un « starter » à 45 % d'hydratation, qui repose 16 à 20 h à 19-24 °C. C'est l'opposé du poolish, et elle se stocke bien mieux.", src: "Manuel Niveau II, p. 25" },
-  { q: "Le « pointage » désigne…", c: ["La 1re fermentation en masse", "La cuisson", "Le façonnage", "Le nappage"], a: 0,
-    expl: "La pâte fermente encore en masse, avant division. Le repos des pâtons après boulage, lui, s'appelle l'apprêt : deux moments distincts qu'on confond souvent.", src: "Manuel Niveau I, p. 28-31" },
-  { q: "Le sel dans la pâte sert surtout à…", c: ["Renforcer le gluten & réguler la fermentation", "Colorer la pâte", "Sucrer", "Faire lever plus vite"], a: 0,
-    expl: "Il resserre le gluten et freine la levure : goût ET tenue. Sans sel, la fermentation s'emballe et la pâte s'affaisse. Dose usuelle : 17 à 22 g par kilo de farine.", src: "Manuel Niveau I, p. 24" },
-  { q: "Température d'un four à bois pour une napolitaine ?", c: ["≈ 430–480 °C", "180 °C", "250 °C", "600 °C"], a: 0,
-    expl: "C'est cette chaleur qui cuit la pizza en 60 à 90 secondes et fait gonfler le cornicione. Sous 400 °C, la pâte sèche avant d'avoir levé.", src: "Manuel Niveau I, p. 47-48" },
-];
-const DEMO_CHAPTERS = [
-  { title: "Les farines", ic: "package" },
-  { title: "L'hydratation", ic: "droplet" },
-  { title: "Le pétrissage", ic: "refresh" },
-  { title: "La fermentation", ic: "flame" },
-  { title: "La cuisson", ic: "pizza" },
-  { title: "Dressage & service", ic: "check-circle" },
-];
-const STEPS_PER_CH = 6;
+/* Plus de questions de repli ici. La banque de l'organisme (base, cf. Configuration →
+   Pizza Quest) est la SEULE source : un monde sans chapitre affiche un état vide et non
+   des questions de démonstration. Servir du contenu que l'organisme n'a pas écrit lui
+   faisait découvrir, côté stagiaire, des questions absentes de son import. */
 
-/* Chapitres d'un monde : chaque rôle a son manuel, donc sa banque. Ceux qui n'en ont pas
-   encore retombent sur la démo (8 questions recyclées sur 36 tirages) — pis-aller très
-   visible. FAIT : niv1, niv2. RESTE À ÉCRIRE : decouverte, niv1pro, expert, spe. */
-const BANKS = { niv1: NIV1_CHAPTERS, niv2: NIV2_CHAPTERS };
 /**
- * Chapitres d'un monde. La banque de l'ORGANISME (base, cf. Configuration → Pizza Quest)
- * l'emporte dès qu'elle existe ; sinon on retombe sur les banques codées en dur, puis sur
- * la démo. Ce repli est ce qui permet de livrer la base sans rien casser tant que
- * l'organisme n'a pas importé ni saisi ses questions.
+ * Chapitres d'un monde — UNIQUEMENT ceux de l'organisme (cf. Configuration → Pizza Quest).
  *
- * `w.dbChapters` est renseigné par PizzaQuest après appel de l'API.
+ * `w.dbChapters` vaut `null` tant que l'API n'a pas répondu, et un tableau ensuite : c'est
+ * ce qui distingue « en cours de chargement » de « aucun chapitre », deux états qui ne
+ * s'affichent pas pareil.
  */
-const chaptersFor = (w) => (w && w.dbChapters && w.dbChapters.length
-  ? w.dbChapters
-  : (BANKS[roleOf(w)] || DEMO_CHAPTERS));
+const chaptersFor = (w) => (w && Array.isArray(w.dbChapters) ? w.dbChapters : []);
+const chaptersLoading = (w) => !!w && w.dbChapters === null;
 
 const KEY = "pizzaquest.v1";
 const loadProg = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
 // Enregistre en local ET en base (miroir) via gamification.saveQuestProgress.
 const saveProg = (p) => saveQuestProgress(p);
-const pickQuestions = (n) => {
-  const pool = [...DEMO_QUESTIONS], out = [];
-  for (let i = 0; i < n && pool.length; i++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
-  return out;
-};
 
 // Rôle d'une formation dans le schéma (par mots-clés du titre) + ingrédient-thème.
 function roleOf(w) {
@@ -209,7 +169,7 @@ function PizzaQuest() {
 
       {world
         ? <WorldView world={world} prog={prog[world.code] || {}} onBack={() => setActive(null)}
-            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || pickQuestions(STEPS_PER_CH) })}
+            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || [] })}
             onGame={(g) => setMini({ key: g.key, obj: g.obj })} />
         : <FormationMap worlds={worlds} prog={prog} onPick={setActive} />}
 
@@ -423,9 +383,11 @@ function FCard({ w, prog, onPick, prereq }) {
       </span>
       <span className="pq-fcard-title">{w.title}</span>
       <span className="pq-fcard-meta">
-        {w.unlocked ? `${done}/${nbCh} chapitres · ${stars} ⭐`
-          : manque.length ? `Après ${manque.map((m) => m.code).join(" + ")}`
-            : "Non débloqué"}
+        {!w.unlocked
+          ? (manque.length ? `Après ${manque.map((m) => m.code).join(" + ")}` : "Non débloqué")
+          : chaptersLoading(w) ? "…"
+            : nbCh === 0 ? "Questions à venir"
+              : `${done}/${nbCh} chapitres · ${stars} ⭐`}
       </span>
     </button>
   );
@@ -447,6 +409,15 @@ function WorldView({ world, prog, onBack, onChapter, onGame }) {
           <span key={c.id} className="badge n" style={c.color ? { color: c.color } : undefined}>{c.name}</span>
         ))}
       </div>
+      {/* Aucun chapitre : on le dit franchement plutôt que de servir des questions
+          génériques. Les défis-jeux, eux, restent disponibles. */}
+      {!chaptersLoading(world) && chapters.length === 0 && (
+        <p className="hint" style={{ margin: "10px 0 16px" }}>
+          <Icon name="clock" size={13} style={{ verticalAlign: "-2px" }} />{" "}
+          Les questions de cette formation ne sont pas encore en ligne. Reviens plus tard —
+          en attendant, les défis ci-dessous sont ouverts.
+        </p>
+      )}
       <div className="pq-path">
         {chapters.map((ch, i) => {
           const stars = prog[i] || 0;
