@@ -1894,8 +1894,11 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
    (même spécificité, écrite après) et la carte battait en rouge dans un cerne or. */
 .comm-card2.halo-com.halo-aime{animation:halo-com 1.9s var(--ease) infinite;border-color:var(--ember1)}
 /* L'extinction du halo « j'aime » se voit : la carte redevient normale en douceur plutôt
-   que de perdre son cerne d'un coup, sinon on croit à un défaut d'affichage. */
-.comm-card2{transition:border-color .5s var(--ease),box-shadow .5s var(--ease)}
+   que de perdre son cerne d'un coup, sinon on croit à un défaut d'affichage.
+   Le `transform` garde SA durée courte — cette déclaration remplaçait la transition d'origine
+   et privait la carte de sa réaction au survol. Deux vitesses, deux usages : le halo respire,
+   le survol répond. */
+.comm-card2{transition:transform .14s var(--ease),border-color .5s var(--ease),box-shadow .5s var(--ease)}
 /* Un clignotement permanent est exactement ce que ce réglage système demande d'éviter. Le
    liseré, lui, reste : le signal n'est pas perdu, il cesse seulement de bouger. */
 @media(prefers-reduced-motion:reduce){
@@ -1923,3 +1926,70 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 .comm-face.reste{margin-left:3px;width:auto;min-width:21px;padding:0 5px;border-radius:99px;
   font-size:9.5px;font-weight:800;color:var(--dim);cursor:default}
 .comm-face.reste:hover{transform:none}
+
+/* ===== Animations d'ambiance ============================================ */
+/* Principe : rien qui attire l'œil pour lui-même. Ces mouvements servent à situer — d'où ça
+   vient, ce qui vient de changer, ce qui répond au doigt — et se remarquent surtout par leur
+   absence. Tout passe par `transform` et `opacity`, les deux seules propriétés que le
+   navigateur anime sans relancer la mise en page.
+   Le réglage système « animations réduites » les supprime toutes en bloc (règle en tête de
+   fichier) : rien à répéter ici. */
+
+/* Arrivée en cascade. Elle existait déjà mais s'arrêtait au 4e élément : au-delà, tout le
+   reste de la grille apparaissait d'un coup, ce qui se voyait plus que la cascade elle-même.
+   Elle va jusqu'au 8e, puis s'arrête net — décaler le 30e ferait attendre une seconde pour
+   rien. */
+.grid > *:nth-child(5),.comm-grid > *:nth-child(5){animation-delay:.2s}
+.grid > *:nth-child(6),.comm-grid > *:nth-child(6){animation-delay:.24s}
+.grid > *:nth-child(7),.comm-grid > *:nth-child(7){animation-delay:.28s}
+.grid > *:nth-child(n+8),.comm-grid > *:nth-child(n+8){animation-delay:.32s}
+.comm-grid > *:nth-child(2){animation-delay:.05s}
+.comm-grid > *:nth-child(3){animation-delay:.1s}
+.comm-grid > *:nth-child(4){animation-delay:.15s}
+
+/* Le bandeau de titre est le plus gros bloc de chaque page : il apparaissait sec pendant que
+   les cartes, elles, montaient. Il ouvre maintenant le mouvement au lieu de le contredire. */
+.hero{animation:rise .4s var(--ease) both}
+
+/* Les cartes de la Communauté montent comme celles du reste de l'application, et se soulèvent
+   au survol comme `.card.hover` : elles s'ouvrent au clic, autant l'annoncer. */
+.comm-card2{animation:rise .45s var(--ease) both}
+.comm-card2:hover{transform:translateY(-2px);box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
+
+/* Le tiroir de navigation se déplie déjà ; son contenu suit en cascade courte. Le retard est
+   faible à dessein — on ouvre ce menu pour aller quelque part, pas pour le regarder.
+   La cascade porte sur TOUS les enfants, pas sur les seules entrées : l'intertitre « Outils »
+   et le séparateur en sont aussi. Les viser par leur classe décalait le compte, et une entrée
+   sautait une marche. */
+.stu-drawer > *{animation:rise .26s var(--ease) both}
+.stu-drawer > *:nth-child(2){animation-delay:.03s}
+.stu-drawer > *:nth-child(3){animation-delay:.06s}
+.stu-drawer > *:nth-child(4){animation-delay:.09s}
+.stu-drawer > *:nth-child(5){animation-delay:.12s}
+.stu-drawer > *:nth-child(n+6){animation-delay:.15s}
+
+/* Le voile des fenêtres modales apparaissait d'un bloc alors que la fenêtre, elle, montait en
+   douceur : le fond arrivait avant son contenu. */
+@keyframes voile{from{opacity:0}to{opacity:1}}
+.overlay{animation:voile .2s var(--ease) both}
+
+/* Onglets segmentés : la pastille active glissait d'un onglet à l'autre sans transition. */
+.seg-btn{transition:color .18s var(--ease),background .18s var(--ease)}
+
+/* Une pastille de comptage qui apparaît mérite d'être vue apparaître — c'est une information
+   nouvelle, pas un élément de décor déjà là. */
+@keyframes pastille{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+.stu-count,.stu-burger-dot{animation:pastille .24s var(--ease) both}
+
+/* Lignes de liste (documents, émargements) : un fond au survol dit ce que la souris désigne,
+   sur des lignes hautes où l'œil se perd facilement. Le retrait négatif fait déborder le fond
+   du padding de la carte, sinon la bande s'arrête au ras du texte. */
+.stu-row{transition:background .16s var(--ease);border-radius:8px;
+  margin-inline:-8px;padding-inline:8px}
+.stu-row:hover{background:var(--surface2)}
+
+/* Pizza Quest : le chapitre jouable respire déjà (pq-pulse). Les autres nœuds gagnent la même
+   réponse au survol que les boutons, pour qu'un chapitre verrouillé se distingue d'un chapitre
+   simplement pas encore atteint. */
+.pq-node:disabled{transition:opacity .2s var(--ease)}
+.pq-node:disabled:hover{opacity:.75}
