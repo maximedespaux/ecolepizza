@@ -217,20 +217,89 @@ const updateQuestChapter = async (req, res) => {
     }
 };
 
-/** Questions et options suivent par cascade (cf. clés étrangères de la migration 102). */
+/**
+ * Position d'un chapitre dans la liste JOUABLE de sa formation, ou -1 s'il n'y figure pas
+ * (inactif, ou vidé de ses questions exploitables).
+ *
+ * C'est cette position — et non l'identifiant du chapitre — que la progression des
+ * stagiaires référence (learner_quest_progress.step). D'où ce détour : supprimer un
+ * chapitre ne suffit pas, il faut savoir QUEL rang disparaît pour nettoyer et décaler.
+ */
+async function rangJouable(conn, orgId, programId, chapterId) {
+    const bank = await loadBank(conn, orgId, programId);
+    const jouables = buildChapters(
+        bank.chapters.filter((c) => c.active),
+        bank.questions.filter((q) => q.active),
+        bank.options, bank.difficulties
+    );
+    return jouables.findIndex((c) => c.id === chapterId);
+}
+
+/**
+ * Supprime un chapitre. Questions et options suivent par cascade (clés étrangères de la
+ * migration 102) ; l'AVANCEMENT des stagiaires, lui, est dans une autre table et doit être
+ * nettoyé ici.
+ *
+ * Deux gestes, dans cet ordre :
+ *   1. effacer la progression du rang supprimé — sans quoi le chapitre resterait « terminé »
+ *      pour des stagiaires, et son XP continuerait de compter alors qu'il n'existe plus ;
+ *   2. DÉCALER d'un rang les progressions suivantes — la progression étant référencée par
+ *      position, tout ce qui suivait glisse d'un cran et pointerait sinon vers le mauvais
+ *      chapitre (« La cuisson » héritant des étoiles de « L'empâtement »).
+ *
+ * L'XP n'est stocké nulle part : il se recalcule à partir de la progression et des questions
+ * (cf. lib/questxp). Retirer la progression retire donc l'XP, sans autre écriture.
+ */
 const deleteQuestChapter = async (req, res) => {
     try {
         const conn = db.promise();
+        const orgId = req.user.organization_id;
+        let chap, code = null, rang = -1;
         try {
-            const [r] = await conn.query('DELETE FROM quest_chapter WHERE id = ? AND organization_id = ?',
-                [req.params.id, req.user.organization_id]);
-            if (!r.affectedRows) return res.status(404).json({ message: 'Chapitre introuvable.' });
+            const [[c]] = await conn.query(
+                'SELECT id, program_id, title FROM quest_chapter WHERE id = ? AND organization_id = ?',
+                [req.params.id, orgId]);
+            if (!c) return res.status(404).json({ message: 'Chapitre introuvable.' });
+            chap = c;
+            if (chap.program_id) {
+                // La progression est classée par CODE de formation (le « monde »).
+                const [[p]] = await conn.query('SELECT code FROM training_program WHERE id = ?', [chap.program_id]);
+                code = p ? p.code : null;
+                rang = await rangJouable(conn, orgId, chap.program_id, chap.id);
+            }
+            await conn.query('DELETE FROM quest_chapter WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         } catch (e) {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
             throw e;
         }
-        await logAudit(req, 'DELETE', 'quest_chapter', req.params.id, null);
-        res.json({ success: true, message: 'Chapitre supprimé.' });
+
+        // Chapitre non rattaché, ou qui n'était pas jouable : aucun stagiaire ne peut l'avoir
+        // joué, il n'y a donc rien à nettoyer ni à décaler.
+        let nettoyes = 0;
+        if (code && rang >= 0) {
+            try {
+                const [del] = await conn.query(
+                    'DELETE FROM learner_quest_progress WHERE organization_id = ? AND world = ? AND CAST(step AS UNSIGNED) = ?',
+                    [orgId, code, rang]);
+                nettoyes = del.affectedRows || 0;
+                await conn.query(
+                    `UPDATE learner_quest_progress SET step = CAST(CAST(step AS UNSIGNED) - 1 AS CHAR)
+                     WHERE organization_id = ? AND world = ? AND CAST(step AS UNSIGNED) > ?`,
+                    [orgId, code, rang]
+                );
+            } catch (e) {
+                // Progression absente (migration 070 non jouée) : la suppression reste valide.
+                if (!isMissingSchema(e)) throw e;
+            }
+        }
+
+        await logAudit(req, 'DELETE', 'quest_chapter', req.params.id, { title: chap.title, rang, progressions: nettoyes });
+        res.json({
+            success: true,
+            message: nettoyes
+                ? `Chapitre supprimé — avancement effacé pour ${nettoyes} stagiaire(s).`
+                : 'Chapitre supprimé.',
+        });
     } catch (err) {
         console.error('Erreur suppression chapitre :', err);
         res.status(500).json({ error: 'Internal Server Error' });

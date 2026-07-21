@@ -49,6 +49,10 @@ function buildChapters(chapters = [], questions = [], options = [], difficulties
     return [...chapters]
         .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
         .map((ch) => ({
+            // `id` sert à retrouver la POSITION d'un chapitre dans la liste jouable — c'est
+            // cette position que la progression des stagiaires référence (cf. suppression
+            // d'un chapitre, qui doit décaler les suivantes).
+            id: ch.id,
             title: ch.title,
             ic: ch.icon || null,
             questions: (qByChapter.get(ch.id) || []).map((q) => toGameQuestion(q, optsByQ.get(q.id) || [], diffById)).filter(Boolean),

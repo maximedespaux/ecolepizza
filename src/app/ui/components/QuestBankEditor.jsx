@@ -121,8 +121,14 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
 
   async function run(fn, ok) {
     onStatus(null);
-    try { await fn(); await reload(); if (ok) onStatus({ type: "success", message: ok }); }
-    catch (e) { onStatus({ type: "error", message: e.message || "Action impossible." }); }
+    try {
+      const r = await fn();
+      await reload();
+      // À défaut de message imposé, on relaie celui du serveur : lui seul sait, par exemple,
+      // combien de stagiaires ont perdu leur avancement à la suppression d'un chapitre.
+      const msg = ok || (r && r.message);
+      if (msg) onStatus({ type: "success", message: msg });
+    } catch (e) { onStatus({ type: "error", message: e.message || "Action impossible." }); }
   }
 
   if (!bank) return <p className="hint">Chargement…</p>;
@@ -170,8 +176,14 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
           </select>
           <button type="button" className="btn sm ghost danger"
             onClick={() => {
-              if (window.confirm(`Supprimer « ${ch.title} » et ses ${qs.length} question(s) ? C'est définitif.`)) {
-                run(() => deleteQuestChapter(ch.id), "Chapitre supprimé.");
+              // La suppression touche AUSSI les stagiaires : leur avancement sur ce
+              // chapitre disparaît, et l'XP qu'il rapportait avec lui. À dire avant.
+              if (window.confirm(
+                `Supprimer « ${ch.title} » et ses ${qs.length} question(s) ?\n\n`
+                + "L'avancement des stagiaires sur ce chapitre sera effacé, et l'XP qu'il "
+                + "rapportait retiré de leur total.\n\nC'est définitif."
+              )) {
+                run(() => deleteQuestChapter(ch.id));
               }
             }}>
             <Icon name="trash" size={13} />
