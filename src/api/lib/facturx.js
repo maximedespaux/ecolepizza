@@ -4,7 +4,7 @@
 //  (art. 261-4-4° du CGI) : catégorie de taxe « E », taux 0.
 //
 //  buildCII(data)     -> chaîne XML Cross-Industry Invoice (à valider EN16931)
-//  buildFacturXPdf()  -> Uint8Array d'un PDF contenant factur-x.xml + XMP
+//  attacherFacturX()  -> attache factur-x.xml a un PDF deja construit
 // ============================================================================
 const { PDFDocument, StandardFonts, rgb, PDFName, PDFString, PDFHexString, PDFRawStream } = require('pdf-lib');
 
@@ -234,77 +234,16 @@ async function attacherFacturX(pdfBytes, xml) {
     return Buffer.from(await pdf.save());
 }
 
-async function buildFacturXPdf(d, xml) {
-    const pdf = await PDFDocument.create();
-    const page = pdf.addPage([595, 842]); // A4
-    const font = await pdf.embedFont(StandardFonts.Helvetica);
-    const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-    const red = rgb(0.86, 0.24, 0.22);
-    const dark = rgb(0.12, 0.13, 0.25);
-    let y = 800;
-    const text = (t, x, size = 10, f = font, color = dark) => { page.drawText(String(t), { x, y, size, font: f, color }); };
+/* La mise en page interne de la facture vivait ici : un en-tete, un tableau et trois totaux
+   poses au pixel avec pdf-lib. Elle a ete RETIREE, pas debranchee.
 
-    text(d.seller.name, 40, 14, bold);
-    y -= 16; text(`${d.seller.address.line || ''} · ${d.seller.address.zip || ''} ${d.seller.address.city || ''}`, 40, 9);
-    y -= 12; text(`SIRET ${d.seller.siret || '—'}${d.seller.vat ? ` · TVA ${d.seller.vat}` : ''}`, 40, 9);
-    y -= 30; text(`${d.typeLabel} ${d.number}`, 40, 18, bold, red);
-    y -= 20; text(`Date : ${d.issueDate.slice(6, 8)}/${d.issueDate.slice(4, 6)}/${d.issueDate.slice(0, 4)}`, 40, 10);
-    if (d.dueDate) { y -= 13; text(`Échéance : ${d.dueDate.slice(6, 8)}/${d.dueDate.slice(4, 6)}/${d.dueDate.slice(0, 4)}`, 40, 10); }
+   Aucun organisme ne pouvait la changer, et tant qu'elle existait elle servait de repli
+   silencieux : une facture partait avec une presentation que personne n'avait choisie. C'est
+   desormais un modele de document de type FACTURE qui la produit — voir buildInvoicePdf dans
+   invoice.controller.js. Sans modele, aucune facture n'est emise, et on le dit.
 
-    y -= 26; text('Client', 40, 9, bold);
-    y -= 14; text(d.buyer.name, 40, 11, bold);
-    y -= 13; text(`${d.buyer.address.line || ''} ${d.buyer.address.zip || ''} ${d.buyer.address.city || ''}`, 40, 9);
-    if (d.buyer.siret) { y -= 12; text(`SIRET ${d.buyer.siret}`, 40, 9); }
+   Un gabarit de secours qui traine finit toujours par resservir. */
 
-    // Ligne + totaux — MÊME ventilation que le XML. Les deux calculaient chacun leur TVA à
-    // 20 % en dur : le PDF que reçoit le client et le XML que lit sa comptabilité devaient
-    // rester d'accord par coïncidence. Ils partagent maintenant la même fonction.
-    const v = ventilerTva(d);
-    const net = v.base, tax = v.taxe;
-    y -= 34; text('Désignation', 40, 9, bold); text('Montant HT', 460, 9, bold);
-    y -= 4; page.drawLine({ start: { x: 40, y }, end: { x: 555, y }, thickness: 1, color: red });
-    const pdfLines = (d.lines && d.lines.length) ? d.lines : [{ name: d.lineName, amount: net }];
-    for (const ln of pdfLines) {
-        y -= 16; text(String(ln.name || 'Prestation de formation').slice(0, 78), 40, 10); text(`${Number(ln.amount).toFixed(2)} €`, 460, 10);
-    }
-    y -= 24; text('Total HT', 380, 10); text(`${net.toFixed(2)} €`, 460, 10);
-    // Un panier peut mêler plusieurs taux : on détaille alors la TVA par taux, ce qu'une
-    // ligne unique « TVA » ne saurait pas montrer et que la ventilation légale exige.
-    if (!d.tvaExoneree && v.groupes.length > 1) {
-        for (const g of v.groupes) {
-            y -= 14; text(`TVA ${g.taux.toFixed(2)} % sur ${g.base.toFixed(2)} €`, 380, 9);
-            text(`${g.taxe.toFixed(2)} €`, 460, 9);
-        }
-        y -= 14; text('Total TVA', 380, 10); text(`${tax.toFixed(2)} €`, 460, 10);
-    } else {
-        y -= 14; text(d.tvaExoneree ? 'TVA' : `TVA ${v.groupes[0].taux.toFixed(2)} %`, 380, 10);
-        text(`${tax.toFixed(2)} €`, 460, 10);
-    }
-    y -= 14; text('Total TTC', 380, 11, bold); text(`${v.grand.toFixed(2)} €`, 460, 11, bold);
 
-    y -= 22; text(d.dueDate ? "Conditions de paiement : à la date d'échéance indiquée." : 'Conditions de paiement : à réception de la facture.', 40, 8, font, rgb(0.4, 0.4, 0.4));
-    if (d.tvaExoneree) { y -= 14; text('TVA non applicable — art. 261-4-4° du CGI (formation professionnelle).', 40, 8, font, rgb(0.4, 0.4, 0.4)); }
-    y -= 30; text('Facture électronique conforme Factur-X (EN 16931, profil BASIC).', 40, 8, font, rgb(0.4, 0.4, 0.4));
 
-    pdf.setTitle(`${d.typeLabel} ${d.number}`);
-    pdf.setProducer('Impasto — École Pizza');
-    pdf.setCreator('Impasto Factur-X');
-
-    // XML embarqué (cœur de la facture électronique) + AF/AFRelationship.
-    embedFacturX(pdf, xml);
-
-    // Métadonnées XMP (identification PDF/A-3 + Factur-X).
-    try {
-        const xmp = buildXmp();
-        const stream = pdf.context.stream(xmp, { Type: 'Metadata', Subtype: 'XML' });
-        const ref = pdf.context.register(stream);
-        pdf.catalog.set(PDFName.of('Metadata'), ref);
-    } catch (e) {
-        console.error('XMP:', e.message);
-    }
-
-    // Sans flux d'objets compressés : structures Factur-X directement lisibles.
-    return pdf.save({ useObjectStreams: false });
-}
-
-module.exports = { ventilerTva, attacherFacturX, buildCII, buildFacturXPdf, TYPE_CODE };
+module.exports = { ventilerTva, attacherFacturX, buildCII, TYPE_CODE };

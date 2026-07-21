@@ -245,14 +245,44 @@ test('le modèle de facture ne touche pas au XML', () => {
         'le XML ne doit pas être reconstruit ici, encore moins depuis le modèle');
 });
 
-test('une facture reste produite même si le modèle est inutilisable', () => {
-    // Règle INVERSE de celle des documents de dossier, et c'est délibéré : là-bas un contenu
-    // inventé se fait signer ; ici la facture est la même pièce, seule sa présentation change.
-    // Ne rien livrer bloquerait un encaissement pour un problème de mise en page.
+test("il n'existe plus de mise en page interne pour la facture", () => {
+    // Décision revue : la règle est désormais la MÊME que pour les documents de dossier.
+    // Une pièce dont le contenu n'est fixé nulle part n'a pas à être émise — et un gabarit de
+    // secours qui traîne finit toujours par resservir « juste pour dépanner ».
+    const fx = lire('lib/facturx.js');
+    assert.doesNotMatch(fx, /async function buildFacturXPdf/,
+        'la mise en page interne est de retour dans lib/facturx.js');
+    assert.doesNotMatch(lire('controllers/invoice.controller.js'), /buildFacturXPdf/,
+        'un repli vers la mise en page interne a été rebranché');
+});
+
+test('sans modèle, la facture est refusée avec un motif', () => {
     const src = lire('controllers/invoice.controller.js');
     const bloc = src.slice(src.indexOf('async function buildInvoicePdf'));
     const corps = bloc.slice(0, bloc.indexOf('\n}\n') + 3);
-    const replis = (corps.match(/return await buildFacturXPdf\(data, xml\)/g) || []).length;
-    assert.ok(replis >= 4, `seulement ${replis} replis vers la mise en page interne`);
-    assert.match(corps, /catch \(err\)/, 'un modèle qui échoue ne doit pas empêcher la facture');
+    assert.match(corps, /if \(!slug\)[\s\S]{0,120}throw refus/,
+        'aucun modèle désigné doit lever un refus, pas produire un PDF');
+    assert.match(corps, /Modèles de documents/,
+        'le refus doit nommer l\'écran où créer le modèle');
+    // Le refus doit devenir un 422 lisible, pas un 500 muet.
+    assert.match(src, /if \(e && e\.motif\) return res\.status\(422\)/,
+        'le motif doit remonter à l\'utilisateur');
+});
+
+test('seul un modèle de type FACTURE peut servir de facture', () => {
+    // Vérifié À DEUX ENDROITS, et ce n'est pas redondant : un modèle peut changer de type
+    // après avoir été choisi. Sans le contrôle au rendu, une facture partirait mise en page
+    // comme une convention, et on ne s'en apercevrait qu'une fois chez le client.
+    const inv = lire('controllers/invoice.controller.js');
+    const bloc = inv.slice(inv.indexOf('async function buildInvoicePdf'));
+    assert.match(bloc.slice(0, bloc.indexOf('\n}\n') + 3), /doc_type[\s\S]{0,60}!== 'FACTURE'/,
+        'le type doit être revérifié au moment de produire le PDF');
+
+    const sale = lire('controllers/sale.controller.js');
+    assert.match(sale, /!== 'FACTURE'/,
+        'le type doit être vérifié à l\'enregistrement du réglage');
+
+    const ui = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/pages/Ventes.jsx'), 'utf8');
+    assert.match(ui, /doc_type[\s\S]{0,60}=== "FACTURE"/,
+        'le sélecteur ne doit proposer que des modèles de type FACTURE');
 });

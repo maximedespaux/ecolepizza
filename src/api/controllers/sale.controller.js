@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { loadOrgSteps } = require('./template.controller.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 
@@ -136,6 +137,20 @@ const saveShopSettings = async (req, res) => {
     try {
         const conn = db.promise();
         await loadSettings(conn, req.user.organization_id); // garantit l'existence
+        // Le modèle désigné doit être de type FACTURE. Refuser ici évite de découvrir l'erreur
+        // au moment d'éditer une facture pour un client — c'est-à-dire trop tard.
+        if (b.invoice_template_slug) {
+            const steps = await loadOrgSteps(req.user.organization_id);
+            const step = steps.find((x) => x.slug === b.invoice_template_slug);
+            if (!step) return res.status(422).json({ error: 'Modèle introuvable.' });
+            if (String(step.doc_type || '').toUpperCase() !== 'FACTURE') {
+                return res.status(422).json({
+                    error: `« ${step.label || step.slug} » est de type ${step.doc_type || '(aucun)'}. `
+                        + 'Seul un modèle de type FACTURE peut servir de facture.',
+                });
+            }
+        }
+
         const communs = [
             String(b.invoice_prefix || 'F').slice(0, 20),
             Math.max(1, parseInt(b.next_number, 10) || 1),

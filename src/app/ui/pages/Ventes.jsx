@@ -29,6 +29,11 @@ function Ventes() {
   const [learners, setLearners] = useState([]);
   const [settings, setSettings] = useState(null);
   const [status, setStatus] = useState(null);
+  // Le téléchargement peut être REFUSÉ (aucun modèle de facture configuré, modèle qui n'est
+  // plus de type FACTURE…). Le serveur renvoie alors un motif qui dit quoi corriger : il doit
+  // arriver jusqu'à l'écran, pas mourir dans une promesse rejetée.
+  const telechargerFacture = (id, numero) =>
+    downloadFacturX(id, numero).catch((e) => setStatus({ type: "error", message: e.message }));
 
   // Panier / caisse
   const [pick, setPick] = useState("");
@@ -158,7 +163,10 @@ function Ventes() {
             <div className="card" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, borderLeft: "3px solid var(--green)" }}>
               <Icon name="receipt" size={18} />
               <span style={{ flex: 1 }}>Facture <b>{lastInvoice.number}</b> créée avec les articles sélectionnés.</span>
-              <button className="btn sm" onClick={() => downloadFacturX(lastInvoice.id, lastInvoice.number)}><Icon name="download" size={14} /> Télécharger le PDF</button>
+              {/* Sans `catch`, un refus du serveur — modèle de facture non configuré, par
+                  exemple — se perdait dans une promesse rejetée : le bouton ne faisait
+                  simplement rien, sans un mot. */}
+              <button className="btn sm" onClick={() => telechargerFacture(lastInvoice.id, lastInvoice.number)}><Icon name="download" size={14} /> Télécharger le PDF</button>
               <button className="iconbtn" onClick={() => setLastInvoice(null)} aria-label="Fermer"><Icon name="x" size={14} /></button>
             </div>
           )}
@@ -373,7 +381,7 @@ function SalesHistory({ sales, onRemove }) {
                         <td className="mono tnum" style={{ textAlign: "right" }}>{euro(g.total)}</td>
                         <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
                           {g.invoice_id && (
-                            <button className="iconbtn" title="Télécharger la facture (PDF)" onClick={() => downloadFacturX(g.invoice_id, g.invoice_number || "facture")}><Icon name="download" size={15} /></button>
+                            <button className="iconbtn" title="Télécharger la facture (PDF)" onClick={() => telechargerFacture(g.invoice_id, g.invoice_number || "facture")}><Icon name="download" size={15} /></button>
                           )}
                         </td>
                       </tr>
@@ -408,11 +416,14 @@ function ShopSettings({ settings, onSaved, onError }) {
     tva_applies: settings ? !!settings.tva_applies : true,
     invoice_template_slug: settings?.invoice_template_slug || "",
   }));
-  // Modèles proposables comme facture. On ne restreint pas au type FACTURE : un organisme
-  // peut avoir nommé le sien « Note de vente » ou l'avoir rangé sous un type maison, et lui
-  // interdire son propre modèle serait absurde.
+  // SEULS les modèles de type FACTURE. Le serveur applique la même règle à l'enregistrement
+  // et au moment de produire le PDF — un modèle peut changer de type après avoir été choisi.
   const [modeles, setModeles] = useState([]);
-  useEffect(() => { getTemplates().then((r) => setModeles(r.data || [])).catch(() => {}); }, []);
+  useEffect(() => {
+    getTemplates()
+      .then((r) => setModeles((r.data || []).filter((m) => String(m.doc_type || "").toUpperCase() === "FACTURE")))
+      .catch(() => {});
+  }, []);
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -443,16 +454,18 @@ function ShopSettings({ settings, onSaved, onError }) {
       {/* Mise en page de la facture. Par défaut celle de l'application ; un modèle permet d'y
           mettre son logo, ses conditions, sa présentation. Le fichier Factur-X reste attaché
           dans les deux cas — il est normé, il ne se met pas en page. */}
-      <div className="field"><label>Mise en page de la facture</label>
+      <div className="field"><label>Modèle de facture</label>
         <select className="inp" value={form.invoice_template_slug}
           onChange={(e) => setForm((p) => ({ ...p, invoice_template_slug: e.target.value }))}>
-          <option value="">Mise en page interne (par défaut)</option>
+          <option value="">— Aucun (aucune facture ne pourra être éditée) —</option>
           {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.slug}</option>)}
         </select>
         <p className="hint" style={{ margin: "4px 0 0" }}>
           {form.invoice_template_slug
-            ? "Le PDF sera composé à partir de ce modèle. Le fichier Factur-X reste attaché, conforme."
-            : "Le PDF utilise la mise en page de l'application. Choisissez un modèle pour la remplacer."}
+            ? "Le PDF est composé à partir de ce modèle. Le fichier Factur-X y reste attaché, conforme."
+            : modeles.length === 0
+              ? "Aucun modèle de type FACTURE n'existe. Créez-le dans Modèles de documents : sans lui, aucune facture ne peut être éditée."
+              : "Choisissez le modèle qui servira de facture. Sans modèle désigné, aucune facture ne peut être éditée."}
         </p>
       </div>
       <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer les réglages"}</button>

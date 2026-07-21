@@ -2,8 +2,8 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
-const { buildCII, buildFacturXPdf, attacherFacturX, ventilerTva } = require('../lib/facturx.js');
-const { getTemplateContent } = require('./template.controller.js');
+const { buildCII, attacherFacturX, ventilerTva } = require('../lib/facturx.js');
+const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
 
@@ -334,7 +334,28 @@ const getInvoiceXml = async (req, res) => {
  * là-bas, un contenu inventé se fait signer ; ici, la facture est la même pièce, seule sa
  * présentation diffère.
  */
+/**
+ * Produit le PDF de la facture, à partir du MODÈLE désigné par l'organisme.
+ *
+ * PAS DE MODÈLE, PAS DE FACTURE. Il n'existe plus de mise en page interne : elle a été retirée
+ * du code, pas seulement débranchée. C'est la même règle que pour les documents de dossier, et
+ * pour la même raison — une pièce dont le contenu n'est fixé nulle part n'a pas à être émise.
+ * Un gabarit de secours qui traîne finit toujours par resservir « juste pour dépanner », et
+ * personne ne sait plus alors ce qui a été envoyé au client.
+ *
+ * Le modèle doit être de type FACTURE. C'est vérifié ici en plus de l'être à l'enregistrement
+ * du réglage : un modèle peut changer de type après avoir été choisi, et une facture rendue à
+ * partir d'un modèle de convention ne se remarquerait qu'une fois chez le client.
+ *
+ * LE XML N'EST JAMAIS CONFIÉ AU MODÈLE. Il est normé (EN 16931) : sa structure n'est pas une
+ * question de mise en page. Le modèle décide de ce que le client LIT, le code de ce que sa
+ * comptabilité IMPORTE.
+ *
+ * Lève une erreur portant `.motif` — l'appelant en fait un 422 lisible plutôt qu'un 500 muet.
+ */
 async function buildInvoicePdf(conn, orgId, data, xml) {
+    const refus = (motif) => Object.assign(new Error(motif), { motif });
+
     let slug = null;
     try {
         const [[st]] = await conn.query(
@@ -342,24 +363,34 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
         slug = (st && st.invoice_template_slug) || null;
     } catch (e) {
         if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+        throw refus("Le réglage du modèle de facture n'existe pas encore en base (migration 109 non jouée).");
     }
-    if (!slug) return await buildFacturXPdf(data, xml);
+    if (!slug) {
+        throw refus("Aucun modèle de facture n'est configuré. Créez un modèle de type FACTURE dans "
+            + 'Modèles de documents, puis désignez-le dans Ventes & Inventaire → Réglages de facturation.');
+    }
 
-    try {
-        const content = await getTemplateContent(orgId, slug);
-        if (!content || content.kind !== 'builder') return await buildFacturXPdf(data, xml);
-        const html = renderTemplateHtml(content.html, invoiceTokens(data), {
-            title: `${data.typeLabel} ${data.number}`,
-            headerHtml: content.header,
-            footerHtml: content.footer,
-        });
-        const pdf = await htmlToPdf(html);
-        if (!pdf) return await buildFacturXPdf(data, xml);
-        return await attacherFacturX(pdf, xml);
-    } catch (err) {
-        console.error('Modèle de facture inutilisable, repli sur la mise en page interne :', err);
-        return await buildFacturXPdf(data, xml);
+    const steps = await loadOrgSteps(orgId);
+    const step = steps.find((x) => x.slug === slug);
+    if (step && String(step.doc_type || '').toUpperCase() !== 'FACTURE') {
+        throw refus(`Le modèle « ${step.label || slug} » n'est plus de type FACTURE. `
+            + 'Corrigez son type dans Modèles de documents, ou désignez-en un autre.');
     }
+
+    const content = await getTemplateContent(orgId, slug);
+    if (!content || content.kind !== 'builder') {
+        throw refus(`Le modèle « ${slug} » est introuvable ou n'a pas de corps éditable. `
+            + 'Ouvrez-le dans Modèles de documents → Éditer.');
+    }
+
+    const html = renderTemplateHtml(content.html, invoiceTokens(data), {
+        title: `${data.typeLabel} ${data.number}`,
+        headerHtml: content.header,
+        footerHtml: content.footer,
+    });
+    const pdf = await htmlToPdf(html);
+    if (!pdf) throw refus('La conversion du modèle en PDF a échoué. Vérifiez le contenu du modèle.');
+    return await attacherFacturX(pdf, xml);
 }
 
 /**
@@ -405,7 +436,15 @@ const getInvoiceFacturX = async (req, res) => {
         const data = await loadInvoiceData(conn, req.user.organization_id, req.params.id);
         if (!data) return res.status(404).json({ message: 'Facture introuvable' });
         const xml = buildCII(data);
-        const pdfBytes = await buildInvoicePdf(conn, req.user.organization_id, data, xml);
+        let pdfBytes;
+        try {
+            pdfBytes = await buildInvoicePdf(conn, req.user.organization_id, data, xml);
+        } catch (e) {
+            // Un refus de configuration n'est pas une panne : il se corrige en deux clics, à
+            // condition de dire lesquels. Un 500 muet enverrait chercher dans les journaux.
+            if (e && e.motif) return res.status(422).json({ message: e.motif });
+            throw e;
+        }
         logAudit(req, 'invoice.facturx', 'Invoice', req.params.id);
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', `attachment; filename="${data.number}.pdf"`);
