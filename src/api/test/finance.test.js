@@ -246,19 +246,29 @@ test("il n'existe plus de mise en page interne pour la facture", () => {
         'un repli vers la mise en page interne a été rebranché');
 });
 
-test('le modèle de facture se désigne par son TYPE, sans réglage séparé', () => {
-    // Une première version ajoutait une colonne `invoice_template_slug` à shop_settings, avec
-    // sa migration et son sélecteur. Elle créait un SECOND mécanisme de désignation à côté de
-    // celui qui existe pour tous les autres documents (`document_template.doc_type`) — et deux
-    // mécanismes pour la même question finissent toujours par se contredire. Tout est retiré.
-    assert.match(lire('controllers/invoice.controller.js'), /doc_type \|\| ''\)\.toUpperCase\(\) === 'FACTURE'/,
-        'le modèle doit être trouvé par son doc_type');
-    for (const f of ['controllers/invoice.controller.js', 'controllers/sale.controller.js']) {
-        assert.doesNotMatch(net(lire(f)), /invoice_template_slug/, `${f} : le réglage séparé est revenu`);
-    }
-    const migrations = fs.readdirSync(path.join(__dirname, '..', '..', '..', 'database/migrations'));
-    assert.ok(!migrations.some((m) => /invoice_template/.test(m)),
-        'la migration du réglage séparé est revenue');
+test('le modèle de facture se choisit explicitement, pas par déduction', () => {
+    // DÉCISION REVUE. Une version précédente trouvait le modèle par son seul type, en
+    // départageant les variantes par leurs conditions. Ça ne tient pas dès qu'un organisme a
+    // plusieurs modèles FACTURE qui ne se distinguent PAS par une condition — une facture de
+    // formation et une facture de boutique s'adressent au même client dans le même cas. Le
+    // choix aurait alors été décidé par un `sort_order` que personne ne pense à regarder.
+    const inv = net(lire('controllers/invoice.controller.js'));
+    assert.match(inv, /invoice_template_slug/, 'le réglage explicite a disparu');
+    assert.match(inv, /doc_type \|\| ''\)\.toUpperCase\(\) === 'FACTURE'/,
+        'seuls les modèles de type FACTURE restent éligibles');
+    // Le serveur doit refuser un modèle qui n'est pas de ce type, à l'enregistrement.
+    assert.match(net(lire('controllers/sale.controller.js')), /!== 'FACTURE'/,
+        'le type doit être vérifié à l\'enregistrement du réglage');
+});
+
+test('un seul modèle FACTURE se passe de désignation', () => {
+    // Désigner l'unique candidat serait une formalité sans enjeu. L'ambiguïté ne naît qu'à
+    // partir de deux — et c'est seulement là qu'on exige un choix.
+    const inv = net(lire('controllers/invoice.controller.js'));
+    assert.match(inv, /factures\.length === 1 \? factures\[0\] : null/,
+        'le cas du modèle unique doit être traité sans réglage');
+    assert.match(inv, /Designez celui qui doit servir/,
+        'à partir de deux modèles, le refus doit demander un choix explicite');
 });
 
 test('sans modèle de type FACTURE, la facture est refusée avec un motif', () => {
@@ -271,16 +281,6 @@ test('sans modèle de type FACTURE, la facture est refusée avec un motif', () =
     // Un refus de configuration se corrige en deux clics : il doit arriver lisible, pas en 500.
     assert.match(src, /if \(e && e\.motif\) return res\.status\(422\)/,
         'le motif doit remonter à l\'utilisateur');
-});
-
-test('plusieurs modèles FACTURE se départagent par leurs conditions', () => {
-    // Même moteur que les variantes devis particulier / entreprise / RS7404 : on ne réinvente
-    // pas un second arbitrage à côté de celui qui existe.
-    const src = lire('controllers/invoice.controller.js');
-    const corps = src.slice(src.indexOf('async function buildInvoicePdf'));
-    const fn = corps.slice(0, corps.indexOf('\n}\n'));
-    assert.match(fn, /matchStep\(x\.applies_when, ctx\)/, 'les conditions doivent départager');
-    assert.match(fn, /sort_order/, 'à conditions égales, l\'ordre des Modèles doit trancher');
 });
 
 test('le modèle ne touche pas au XML', () => {

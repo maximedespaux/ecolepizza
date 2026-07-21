@@ -191,8 +191,9 @@ const invoiceShopRequest = async (req, res) => {
             const desc = `${l.label}${l.variant ? ` (${l.variant})` : ''} × ${l.qty}${l.personalization ? ` — ${l.personalization}` : ''}`;
             try {
                 await conn.query(
-                    'INSERT INTO invoice_line (id, invoice_id, description, amount_net, tax_rate, sort_order) VALUES (uuid(), ?, ?, ?, ?, ?)',
-                    [inv.id, desc, ht.toFixed(2), Number(l.tax_rate), i]
+                    `INSERT INTO invoice_line (id, invoice_id, description, amount_net, tax_rate, qty, unit_price_ht, sort_order)
+                     VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?)`,
+                    [inv.id, desc, ht.toFixed(2), Number(l.tax_rate), l.qty, Number(l.unit_price_ht), i]
                 );
             } catch (e) {
                 if (!isMissingSchema(e)) throw e;

@@ -4,7 +4,6 @@ const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 const { buildCII, attacherFacturX, ventilerTva } = require('../lib/facturx.js');
 const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
-const { matchStep } = require('../lib/documents.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
 
@@ -67,7 +66,8 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     let lineRows;
     try {
         [lineRows] = await conn.query(
-            `SELECT il.description, il.amount_net, il.tax_rate, p.title AS program_title, l.first_name, l.last_name
+            `SELECT il.description, il.amount_net, il.tax_rate, il.qty, il.unit_price_ht,
+                    p.title AS program_title, l.first_name, l.last_name
              FROM invoice_line il
              LEFT JOIN enrollment e ON e.id = il.enrollment_id
              LEFT JOIN training_session s ON s.id = e.session_id
@@ -93,7 +93,11 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         || [r.program_title, (r.last_name ? `${r.last_name} ${r.first_name || ''}`.trim() : '')].filter(Boolean).join(' — ')
         || 'Prestation de formation';
     const lines = lineRows.length
-        ? lineRows.map((r) => ({ name: lineName(r), amount: Number(r.amount_net), taxRate: r.tax_rate ?? null }))
+        ? lineRows.map((r) => ({
+            name: lineName(r), amount: Number(r.amount_net), taxRate: r.tax_rate ?? null,
+            qty: r.qty != null ? Number(r.qty) : null,
+            unit_price_ht: r.unit_price_ht != null ? Number(r.unit_price_ht) : null,
+        }))
         : [{ name: inv.description || inv.program_title || 'Prestation de formation', amount: Number(inv.amount_net) }];
 
     return {
@@ -386,13 +390,34 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
             + 'sans lui, aucune facture ne peut etre editee.');
     }
 
-    // Contexte de conditions. Une facture en sait peu sur le dossier — le financement suffit a
-    // departager « facture particulier » et « facture entreprise », qui est le cas courant.
-    const ctx = { financing: data.buyer.siret ? 'PROFESSIONNEL' : 'PARTICULIER' };
-    const eligibles = factures.filter((x) => matchStep(x.applies_when, ctx));
-    const step = (eligibles.length ? eligibles : factures)
-        .slice()
-        .sort((a, b) => Number(a.sort_order || 100) - Number(b.sort_order || 100))[0];
+    // LE CHOIX EST EXPLICITE, pas deduit. On avait d'abord retenu de trouver le modele par son
+    // seul type, en departageant d'eventuelles variantes par leurs conditions. Ca ne tient pas
+    // des qu'un organisme a plusieurs modeles FACTURE qui ne se distinguent PAS par une
+    // condition — une facture de formation et une facture de boutique s'adressent au meme
+    // client dans le meme cas. Le choix serait alors decide par un `sort_order` que personne ne
+    // pense a regarder, et une facture partirait avec la mauvaise presentation.
+    let slug = null;
+    try {
+        const [[st]] = await conn.query(
+            'SELECT invoice_template_slug FROM shop_settings WHERE organization_id = ?', [orgId]);
+        slug = (st && st.invoice_template_slug) || null;
+    } catch (e) {
+        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+    }
+
+    // Un seul modele FACTURE : le designer serait une formalite sans enjeu, on le prend.
+    // L'ambiguite ne nait qu'a partir de deux.
+    const step = slug
+        ? factures.find((x) => x.slug === slug)
+        : (factures.length === 1 ? factures[0] : null);
+
+    if (!step) {
+        throw refus(slug
+            ? `Le modele designe comme facture (« ${slug} ») n'existe plus ou n'est plus de type FACTURE. `
+              + 'Choisissez-en un autre dans Ventes & Inventaire -> Reglages de facturation.'
+            : `${factures.length} modeles de type FACTURE existent. Designez celui qui doit servir `
+              + 'de facture dans Ventes & Inventaire -> Reglages de facturation.');
+    }
 
     const content = await getTemplateContent(orgId, step.slug);
     if (!content || content.kind !== 'builder') {
@@ -400,7 +425,8 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
             + 'Ouvrez-le dans Modeles de documents -> Editer.');
     }
 
-    const html = renderTemplateHtml(content.html, invoiceTokens(data), {
+    const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
+    const html = renderTemplateHtml(content.html, invoiceCtx(org || {}, data), {
         title: `${data.typeLabel} ${data.number}`,
         headerHtml: content.header,
         footerHtml: content.footer,
@@ -411,36 +437,53 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
 }
 
 /**
- * Les jetons offerts au modèle de facture.
+ * Le CONTEXTE passé au modèle de facture.
  *
- * Nommés comme ceux des autres modèles pour qu'on n'ait pas à apprendre un second vocabulaire.
- * La ventilation de TVA vient de `ventilerTva` — la même que celle du XML : deux calculs
- * séparés finiraient par ne plus dire le même montant sur la même feuille.
+ * DÉFAUT CORRIGÉ ICI, et il était sérieux : cette fonction renvoyait auparavant un objet
+ * maison `{ organisme, client, facture, lignes }`, passé tel quel comme `ctx` à
+ * `renderTemplateHtml`. Or celui-ci appelle `resolveTokens(ctx)`, qui attend la forme
+ * `{ org, learner, company, formations }`. Aucun des 99 jetons standard ne trouvait donc sa
+ * valeur : une facture rendue depuis un modèle sortait avec TOUS ses jetons vides. Le PDF
+ * était produit, l'erreur ne se voyait qu'en le lisant.
+ *
+ * On construit donc un vrai `ctx` : `org` pour l'organisme, `company` ou `learner` selon
+ * l'acheteur — de sorte que {Nom entreprise} ou {Personne} fonctionnent selon le cas — plus un
+ * bloc `invoice` que `resolveTokens` fusionne, et `articles` pour le bloc {#Articles}.
  */
-function invoiceTokens(d) {
-    const v = ventilerTva(d);
+function invoiceCtx(org, data) {
+    const v = ventilerTva(data);
     const eur = (n) => `${Number(n || 0).toFixed(2)} €`;
     const jour = (ymd) => (ymd ? `${ymd.slice(6, 8)}/${ymd.slice(4, 6)}/${ymd.slice(0, 4)}` : '');
+    const a = data.buyer.address || {};
+    const adresse = [a.line, [a.zip, a.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+
+    // L'acheteur est une entreprise s'il porte un SIRET ; sinon on le traite comme une
+    // personne. Les deux familles de jetons restent disponibles, seule l'une est remplie.
+    const estEntreprise = !!data.buyer.siret;
+
     return {
-        organisme: { nom: d.seller.name, siret: d.seller.siret, tva: d.seller.vat, ...d.seller.address },
-        client: { nom: d.buyer.name, siret: d.buyer.siret, ...d.buyer.address },
-        facture: {
-            numero: d.number,
-            type: d.typeLabel,
-            date: jour(d.issueDate),
-            echeance: jour(d.dueDate),
-            total_ht: eur(v.base),
-            total_tva: eur(v.taxe),
-            total_ttc: eur(v.grand),
-            exoneree: d.tvaExoneree ? 'oui' : 'non',
-            taux: v.groupes.map((g) => `${g.taux.toFixed(2)} %`).join(', '),
+        org,
+        company: estEntreprise ? { name: data.buyer.name, siret: data.buyer.siret, address: a.line, zip_code: a.zip, town: a.city } : {},
+        learner: estEntreprise ? {} : { first_name: data.buyer.name, address: a.line, zip_code: a.zip, town: a.city },
+        formations: [],
+        articles: data.lines || [],
+        invoice: {
+            number: data.number,
+            typeLabel: data.typeLabel,
+            dateFr: jour(data.issueDate),
+            dueFr: jour(data.dueDate),
+            buyerName: data.buyer.name,
+            buyerAddress: adresse,
+            buyerSiret: data.buyer.siret || '',
+            totalHt: eur(v.base),
+            totalTva: eur(v.taxe),
+            totalTtc: eur(v.grand),
+            detailTva: v.groupes.map((g) => `${g.taux.toFixed(2)} % sur ${eur(g.base)} : ${eur(g.taxe)}`).join(' · '),
+            // Repli quand le modèle n'utilise pas le bloc {#Articles} : une ligne par article.
+            articlesTexte: (data.lines || [])
+                .map((l) => `${l.name}${l.qty ? ` — ${l.qty} × ${eur(l.unit_price_ht ?? (Number(l.amount) / l.qty))}` : ''} : ${eur(l.amount)}`)
+                .join('\n'),
         },
-        lignes: (d.lines || []).map((l) => ({
-            designation: l.name,
-            montant_ht: eur(l.amount),
-            taux: `${Number(l.taxRate ?? d.taxRate ?? 20).toFixed(2)} %`,
-        })),
-        tva: v.groupes.map((g) => ({ taux: `${g.taux.toFixed(2)} %`, base: eur(g.base), montant: eur(g.taxe) })),
     };
 }
 

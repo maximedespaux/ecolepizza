@@ -3,7 +3,7 @@
 // (<span data-token="Clé">…</span>) produite par l'éditeur, soit en texte brut
 // {Clé} (modèles convertis depuis les anciens fichiers Word). Les deux formes
 // sont remplacées par la valeur réelle issue du catalogue partagé.
-const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks } = require('./tokens.js');
+const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens } = require('./tokens.js');
 const { resolveCustomTokens } = require('./customtokens.js');
 
 function escapeHtml(s) {
@@ -52,6 +52,10 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     // Blocs répétés par stagiaire du groupe : {#Stagiaires}…{/Stagiaires} (documents entreprise).
     // Les jetons personnalisés ({custom:…}) y sont recalculés PAR stagiaire.
     out = expandGroupBlocks(out, ctx && ctx.groupStagiaires, ctx && ctx.customTokens, values);
+    // Lignes d'une facture : {#Articles}…{/Articles}. Même mécanisme, autre liste.
+    if (ctx && Array.isArray(ctx.articles)) {
+        out = expandListBlocks(out, 'Articles', ctx.articles, articleRowTokens);
+    }
 
     const render = (key) => (RAW_TOKENS.has(key) ? values[key] : escapeHtml(values[key]));
     // Un emplacement nommé désigne-t-il le stagiaire ? (Stagiaire 1…, élève, apprenant…)

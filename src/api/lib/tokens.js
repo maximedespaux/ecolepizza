@@ -147,6 +147,23 @@ const TOKEN_CATALOG = [
         ],
     },
     {
+        group: 'Facture',
+        tokens: [
+            { key: 'Numéro facture', label: 'Numéro', sample: 'F-2026-0012' },
+            { key: 'Type facture', label: 'Type de pièce', sample: 'Facture' },
+            { key: 'Date facture', label: 'Date d’émission', sample: '21/07/2026' },
+            { key: 'Échéance facture', label: 'Date d’échéance', sample: '20/08/2026' },
+            { key: 'Acheteur', label: 'Nom de l’acheteur', sample: 'Guillaume DESPAUX' },
+            { key: 'Adresse acheteur', label: 'Adresse de l’acheteur', sample: '12 rue des Fours, 33000 Bordeaux' },
+            { key: 'Siret acheteur', label: 'SIRET de l’acheteur', sample: '123 456 789 00012' },
+            { key: 'Total HT', label: 'Total hors taxes', sample: '17,82 €' },
+            { key: 'Total TVA', label: 'Total TVA', sample: '3,56 €' },
+            { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21,38 €' },
+            { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20,00 % sur 17,82 € : 3,56 €' },
+            { key: 'Articles', label: 'Lignes de la facture (tableau)', sample: 'Biberon valve 455 ml — 2 × 8,91 €' },
+        ],
+    },
+    {
         group: 'Dates',
         tokens: [
             { key: 'Date', label: 'Date du jour', sample: '06/07/2026' },
@@ -252,6 +269,58 @@ function stagiaireRowTokens(s, i) {
         Ville: s.town || '', Adresse: s.address || '', CP: s.zip_code || '',
         'Lieu naissance': s.birth_place || '', D_Naissance: frDate(s.birthday), Naissance: frDate(s.birthday),
     };
+}
+
+/**
+ * Jetons disponibles À L'INTÉRIEUR d'un bloc {#Articles}…{/Articles}.
+ *
+ * Même principe que `stagiaireRowTokens` : le bloc est répété une fois par ligne de facture,
+ * et ces jetons-là sont recalculés à chaque tour. Les jetons globaux (Organisme, Total TTC…)
+ * restent accessibles dans le bloc — c'est `expandBlocks` qui ne remplace que les jetons de
+ * ligne, laissant les autres au remplacement normal.
+ */
+function articleRowTokens(l, i) {
+    const eur = (n) => (n == null || n === '' ? '' : `${Number(n).toFixed(2)} €`);
+    const qte = Number(l.qty || 0) || null;
+    const pu = l.unit_price_ht != null ? Number(l.unit_price_ht) : (qte ? Number(l.amount) / qte : null);
+    const taux = Number(l.taxRate ?? 20);
+    const ht = Number(l.amount || 0);
+    return {
+        'N°': String(i + 1),
+        'Désignation': l.name || '',
+        'Quantité': qte != null ? String(qte) : '',
+        'Prix unitaire HT': eur(pu),
+        'Montant HT': eur(ht),
+        'Taux TVA': `${taux.toFixed(2)} %`,
+        'Montant TVA': eur(Math.round(ht * taux) / 100),
+        'Montant TTC': eur(ht + Math.round(ht * taux) / 100),
+    };
+}
+
+/**
+ * Développe les blocs répétés d'une LISTE nommée : {#Articles}…{/Articles}.
+ *
+ * Généralise ce que `expandGroupBlocks` faisait pour les seuls stagiaires. Deux blocs, deux
+ * listes, un seul mécanisme — plutôt qu'une seconde fonction qui ferait la même chose à un
+ * nom près et divergerait à la première correction.
+ */
+function expandListBlocks(html, nom, rows, rowTokens) {
+    const list = Array.isArray(rows) ? rows : [];
+    const re = new RegExp(`\\{#\\s*${nom}\\s*\\}([\\s\\S]*?)\\{/\\s*${nom}\\s*\\}`, 'g');
+    return String(html || '').replace(re, (m, tpl) => {
+        if (!list.length) return '';
+        return list.map((r, i) => {
+            const vals = rowTokens(r, i);
+            let out = tpl;
+            for (const [k, v] of Object.entries(vals)) {
+                const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'),
+                    String(v == null ? '' : v));
+                out = out.split(`{${k}}`).join(String(v == null ? '' : v));
+            }
+            return out;
+        }).join('');
+    });
 }
 
 // Développe les blocs répétés « par stagiaire du groupe » AVANT le remplacement normal :
@@ -376,6 +445,37 @@ function findMissingTokens(htmlParts, ctx) {
 }
 
 /** Table { Jeton: valeur } à partir du contexte (org, learner, company, formations). */
+/**
+ * Valeurs des jetons propres a une FACTURE.
+ *
+ * Separe de `resolveTokens` parce qu'ils ne viennent pas du meme endroit : une facture n'a pas
+ * de dossier, pas de session, pas de formation. Elle a un acheteur — qui peut etre un stagiaire
+ * OU une entreprise OU un nom libre saisi au comptoir — des lignes, et des totaux.
+ *
+ * Ils sont FUSIONNES aux jetons standard : un modele de facture peut donc utiliser
+ * {Organisme}, {Adresse organisme} ou {Siret organisme} comme n'importe quel autre document.
+ */
+function invoiceTokens(inv = {}) {
+    if (!inv || !inv.number) return {};
+    const v = inv.tva || {};
+    return {
+        'Numéro facture': inv.number || '',
+        'Type facture': inv.typeLabel || 'Facture',
+        'Date facture': inv.dateFr || '',
+        'Échéance facture': inv.dueFr || '',
+        'Acheteur': inv.buyerName || '',
+        'Adresse acheteur': inv.buyerAddress || '',
+        'Siret acheteur': inv.buyerSiret || '',
+        'Total HT': inv.totalHt || '',
+        'Total TVA': inv.totalTva || '',
+        'Total TTC': inv.totalTtc || '',
+        'Détail TVA': inv.detailTva || '',
+        // Repli commode : un modele qui n'utilise pas le bloc {#Articles} obtient quand meme
+        // une liste lisible, comme {Stagiaires} le fait pour un groupe.
+        'Articles': inv.articlesTexte || '',
+    };
+}
+
 function resolveTokens(ctx = {}) {
     const o = ctx.org || {};
     const l = ctx.learner || {};
@@ -439,6 +539,8 @@ function resolveTokens(ctx = {}) {
         ? `${nbExternes} membre${nbExternes > 1 ? 's' : ''} sur ${jury.length} extérieur${nbExternes > 1 ? 's' : ''} à l'organisme. `
           + `Aucun membre n'a formé les candidats évalués.`
         : '';
+
+    const factureVals = invoiceTokens(ctx.invoice);
 
     return {
         // Stagiaire
@@ -513,7 +615,10 @@ function resolveTokens(ctx = {}) {
             Objectifs: x.objectives || '', 'Déroulé': x.program_detail || '', 'DuréeDétail': x.duration_detail || '',
             Debut: frDate(x.start_date), Fin: frDate(x.end_date),
         })),
+        // Jetons propres a une FACTURE. Fusionnes en dernier : ils ne remplacent rien, ils
+        // s'ajoutent — un modele de facture garde acces a {Organisme}, {Adresse organisme}…
+        ...factureVals,
     };
 }
 
-module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, articleRowTokens, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };

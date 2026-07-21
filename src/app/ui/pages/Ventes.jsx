@@ -3,7 +3,7 @@ import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
-  getShopSettings, saveShopSettings, downloadFacturX } from "../api/apiClient.js";
+  getShopSettings, saveShopSettings, downloadFacturX, getTemplates } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -413,7 +413,16 @@ function ShopSettings({ settings, onSaved, onError }) {
     next_number: settings?.next_number || 1,
     payment_methods: settings?.payment_methods || "Espèces,CB,Virement,Chèque",
     tva_applies: settings ? !!settings.tva_applies : true,
+    invoice_template_slug: settings?.invoice_template_slug || "",
   }));
+  // SEULS les modèles de type FACTURE. Le serveur applique la même règle à l'enregistrement et
+  // au moment de produire le PDF — un modèle peut changer de type après avoir été choisi.
+  const [modeles, setModeles] = useState([]);
+  useEffect(() => {
+    getTemplates()
+      .then((r) => setModeles((r.data || []).filter((m) => String(m.doc_type || "").toUpperCase() === "FACTURE")))
+      .catch(() => {});
+  }, []);
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -443,16 +452,26 @@ function ShopSettings({ settings, onSaved, onError }) {
       {/* Mise en page de la facture. Par défaut celle de l'application ; un modèle permet d'y
           mettre son logo, ses conditions, sa présentation. Le fichier Factur-X reste attaché
           dans les deux cas — il est normé, il ne se met pas en page. */}
-      {/* Il n'y a PAS de sélecteur ici, et c'est délibéré. La facture est produite à partir du
-          modèle dont le type est FACTURE, dans Modèles de documents — le même mécanisme que
-          pour tous les autres documents. Un réglage séparé aurait créé une seconde façon de
-          désigner le même modèle, et deux mécanismes pour une même question finissent
-          toujours par se contredire. */}
-      <p className="hint" style={{ margin: "0 0 12px" }}>
-        La mise en page de la facture vient du modèle de type <b>FACTURE</b> défini dans
-        <b> Modèles de documents</b>. Plusieurs modèles de ce type se départagent par leurs
-        conditions, comme les variantes de devis.
-      </p>
+      {/* Le choix est EXPLICITE. Le déduire du seul type ne tient pas dès qu'un organisme a
+          plusieurs modèles FACTURE qui ne se distinguent pas par une condition — facture de
+          formation et facture de boutique, par exemple. Le choix serait alors décidé par un
+          ordre d'affichage que personne ne pense à regarder. */}
+      <div className="field"><label>Modèle de facture</label>
+        <select className="inp" value={form.invoice_template_slug}
+          onChange={(e) => setForm((p) => ({ ...p, invoice_template_slug: e.target.value }))}>
+          <option value="">— Aucun —</option>
+          {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.slug}</option>)}
+        </select>
+        <p className="hint" style={{ margin: "4px 0 0" }}>
+          {modeles.length === 0
+            ? "Aucun modèle de type FACTURE n'existe. Créez-le dans Modèles de documents : sans lui, aucune facture ne peut être éditée."
+            : form.invoice_template_slug
+              ? "Le PDF est composé à partir de ce modèle. Le fichier Factur-X y reste attaché, conforme."
+              : modeles.length === 1
+                ? "Un seul modèle de type FACTURE existe : il sera utilisé même sans être désigné ici."
+                : "Plusieurs modèles de type FACTURE existent : désignez celui qui doit servir de facture."}
+        </p>
+      </div>
       <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer les réglages"}</button>
     </Card>
   );
