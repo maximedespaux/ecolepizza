@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { colorOf } from "../lib/format.js";
@@ -24,6 +24,85 @@ const TYPES = [
   { v: "VF", label: "Vrai / Faux", ic: "check-circle" },
   { v: "ASSOC", label: "Association", ic: "shuffle" },
 ];
+
+/**
+ * Icônes proposées pour un chapitre. Sélection VOLONTAIREMENT COURTE, tirée du vocabulaire
+ * du métier et du déroulé d'un empâtement : les quatre-vingts icônes de l'application
+ * (tableau de bord, facture, imprimante…) n'ont rien à dire ici et noieraient les bonnes.
+ * L'icône n'est pas décorative — c'est elle qui marque le chapitre sur le chemin du
+ * stagiaire, elle doit se reconnaître d'un coup d'œil.
+ */
+const ICONES_CHAPITRE = [
+  { n: "wheat", l: "Farine, céréales" },
+  { n: "droplet", l: "Eau, hydratation" },
+  { n: "salt", l: "Sel" },
+  { n: "oil", l: "Huile" },
+  { n: "yeast", l: "Levure" },
+  { n: "refresh", l: "Pétrissage, fermentation" },
+  { n: "clock", l: "Temps, protocole" },
+  { n: "thermometer", l: "Température" },
+  { n: "flame", l: "Cuisson, four" },
+  { n: "pizza", l: "Pizza, réalisation" },
+  { n: "utensils", l: "Service, dressage" },
+  { n: "package", l: "Matériel, ingrédients" },
+  { n: "flask", l: "Mesures, calculs" },
+  { n: "calculator", l: "Calcul" },
+  { n: "list-checks", l: "Méthode, étapes" },
+  { n: "check-circle", l: "Contrôle, validation" },
+  { n: "clipboard-check", l: "Hygiène, conformité" },
+  { n: "spray-can", l: "Nettoyage" },
+  { n: "book-open", l: "Théorie, lexique" },
+  { n: "graduation-cap", l: "Examen, certification" },
+  { n: "star", l: "Perfectionnement" },
+  { n: "target", l: "Objectif" },
+];
+
+/**
+ * Icône d'un chapitre : l'affiche et permet d'en changer d'un clic.
+ * Le choix s'applique immédiatement — un chapitre n'a qu'un champ, un bouton « enregistrer »
+ * pour une icône serait une étape de plus pour rien.
+ */
+function ChapterIcon({ value, onPick }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", close);
+    window.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc); };
+  }, [open]);
+
+  const courant = ICONES_CHAPITRE.find((i) => i.n === value);
+  return (
+    <span className="qb-ico" ref={ref}>
+      <button type="button" className={"qb-ico-btn" + (value ? "" : " vide")} onClick={() => setOpen((o) => !o)}
+        title={value ? `Icône : ${courant ? courant.l : value} — cliquer pour changer` : "Aucune icône — cliquer pour en choisir une"}>
+        <Icon name={value || "image"} size={15} />
+      </button>
+      {open && (
+        <div className="qb-ico-pop">
+          <div className="qb-ico-grid">
+            {ICONES_CHAPITRE.map((i) => (
+              <button key={i.n} type="button" title={i.l}
+                className={"qb-ico-opt" + (i.n === value ? " on" : "")}
+                onClick={() => { onPick(i.n); setOpen(false); }}>
+                <Icon name={i.n} size={16} />
+              </button>
+            ))}
+          </div>
+          {value && (
+            <button type="button" className="btn sm ghost" style={{ width: "100%", marginTop: 6 }}
+              onClick={() => { onPick(null); setOpen(false); }}>
+              Retirer l'icône
+            </button>
+          )}
+        </div>
+      )}
+    </span>
+  );
+}
 
 export default function QuestBankEditor({ programs, difficulties, onStatus }) {
   const [programId, setProgramId] = useState("");
@@ -77,6 +156,9 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
             aria-label={ouvert ? "Replier" : "Déplier"}>
             <Icon name={ouvert ? "chevron-down" : "chevron-right"} size={15} />
           </button>
+          {/* L'icône qui marquera ce chapitre sur le chemin du stagiaire. */}
+          <ChapterIcon value={ch.icon}
+            onPick={(icon) => run(() => updateQuestChapter(ch.id, { icon }), "Icône enregistrée.")} />
           {/* Le titre prend la place restante ; c'est l'information qu'on lit d'abord. */}
           <b className="qb-ch-title" title={ch.title}>{ch.title}</b>
           <span className="hint qb-ch-count">{qs.length} question{qs.length > 1 ? "s" : ""}</span>

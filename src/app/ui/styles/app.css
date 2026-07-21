@@ -1635,6 +1635,21 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .qb-grp-count{flex:none;white-space:nowrap}
 .qb-grp-body{padding-top:8px}
 
+/* Icône d'un chapitre : bouton-aperçu + palette. Le bouton reste discret (c'est un réglage,
+   pas une action) mais montre l'icône telle qu'elle apparaîtra au stagiaire. */
+.qb-ico{position:relative;flex:none;display:inline-flex}
+.qb-ico-btn{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--text);transition:.14s var(--ease)}
+.qb-ico-btn:hover{border-color:var(--ember1);color:var(--ember1)}
+.qb-ico-btn.vide{border-style:dashed;color:var(--dim)}
+.qb-ico-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:8;padding:8px;border-radius:11px;
+  border:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow-3);width:212px}
+.qb-ico-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.qb-ico-opt{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;cursor:pointer;
+  border:1px solid transparent;background:none;color:var(--muted);transition:.12s var(--ease)}
+.qb-ico-opt:hover{background:var(--surface2);color:var(--text)}
+.qb-ico-opt.on{border-color:var(--ember1);color:var(--ember1);background:color-mix(in srgb,var(--ember1) 10%,transparent)}
+
 .qb-ch{border:1px solid var(--border-soft);border-radius:10px;margin-bottom:8px}
 .qb-ch-head{display:flex;align-items:center;gap:10px;padding:9px 12px}
 .qb-ch-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
