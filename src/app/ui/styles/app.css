@@ -1882,8 +1882,10 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 }
 .comm-card2.halo-com{border-color:var(--ember1);animation:halo-com 1.9s var(--ease) infinite}
 .comm-card2.halo-aime{border-color:var(--gold);animation:halo-aime 2.6s var(--ease) infinite}
-/* Les deux à la fois : le commentaire l'emporte, c'est lui qui demande une action. */
-.comm-card2.halo-com.halo-aime{animation:halo-com 1.9s var(--ease) infinite}
+/* Les deux à la fois : le commentaire l'emporte, c'est lui qui demande une action. La bordure
+   doit suivre l'animation — sans cette seconde déclaration, `.halo-aime` la gardait dorée
+   (même spécificité, écrite après) et la carte battait en rouge dans un cerne or. */
+.comm-card2.halo-com.halo-aime{animation:halo-com 1.9s var(--ease) infinite;border-color:var(--ember1)}
 /* L'extinction du halo « j'aime » se voit : la carte redevient normale en douceur plutôt
    que de perdre son cerne d'un coup, sinon on croit à un défaut d'affichage. */
 .comm-card2{transition:border-color .5s var(--ease),box-shadow .5s var(--ease)}

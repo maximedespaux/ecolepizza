@@ -228,7 +228,14 @@ const listShared = async (req, res) => {
                 );
                 const nm2 = Object.fromEntries(news.map((x) => [x.recipe_id, x.n]));
                 rows.forEach((r) => { r.new_comments = nm2[r.id] || 0; });
-            } catch (e) { if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e; }
+            } catch (e) {
+                if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e;
+                // Migration 107 non jouée : le champ doit exister quand même, à zéro. Le laisser
+                // absent obligerait chaque lecteur de cette API à distinguer « aucun nouveau
+                // commentaire » de « la question n'a pas pu être posée » — deux cas qui appellent
+                // pourtant le même affichage.
+                rows.forEach((r) => { r.new_comments = 0; });
+            }
             try {
                 const [[me]] = await conn.query('SELECT community_seen_at FROM user WHERE id = ?', [req.user.id]);
                 const seen = me?.community_seen_at ?? null;
@@ -246,7 +253,10 @@ const listShared = async (req, res) => {
                 );
                 const lmap = Object.fromEntries(nl.map((x) => [x.recipe_id, x.n]));
                 rows.forEach((r) => { r.new_likes = lmap[r.id] || 0; });
-            } catch (e) { if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e; }
+            } catch (e) {
+                if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e;
+                rows.forEach((r) => { r.new_likes = 0; }); // migration 106 non jouée
+            }
         }
         res.json({ data: rows });
     } catch (err) {
