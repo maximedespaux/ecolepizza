@@ -30,6 +30,7 @@ const OUTILS = [
   { to: "/empatements", ic: "wheat", label: "Mes empâtements" },
   { to: "/garnitures", ic: "list-checks", label: "Mes garnitures" },
   { to: "/realisations", ic: "pizza", label: "Mes réalisations" },
+  { to: "/hygiene", ic: "shield", label: "Maîtrise sanitaire" },
   { to: "/notions", ic: "book-open", label: "Notions & lexique" },
 ];
 
