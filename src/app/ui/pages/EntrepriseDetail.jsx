@@ -41,7 +41,22 @@ export default function EntrepriseDetail() {
 
   // Inscription de groupe
   const [sessions, setSessions] = useState([]);
-  const [sessionId, setSessionId] = useState("");
+  /**
+   * DEUX sessions distinctes, et elles ne veulent pas dire la même chose :
+   *
+   *   · `enrollSessionId` — celle où l'on s'apprête à INSCRIRE un groupe. Toutes les sessions
+   *     de l'organisme sont éligibles : on inscrit forcément dans une session où l'entreprise
+   *     n'est pas encore présente.
+   *   · `viewSessionId` — celle dont on CONSULTE le parcours et les documents. Seules les
+   *     sessions où l'entreprise a réellement inscrit quelqu'un ont un sens ici.
+   *
+   * Une seule variable servait aux deux. Choisir une session pour inscrire faisait donc
+   * basculer le parcours affiché en dessous vers cette session-là — y compris vers une session
+   * où l'entreprise n'a personne, parce qu'un stagiaire s'y est inscrit de lui-même. Le
+   * dossier que cette personne porte seule n'a rien à faire dans la vue de son employeur.
+   */
+  const [enrollSessionId, setEnrollSessionId] = useState("");
+  const [viewSessionId, setViewSessionId] = useState("");
   const [registering, setRegistering] = useState(false);
   const [result, setResult] = useState(null); // { created: [...] }
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // recharge le parcours entreprise
@@ -65,8 +80,8 @@ export default function EntrepriseDetail() {
   function load() {
     getCompany(id).then((r) => {
       setData(r.data); setForm(r.data || {});
-      // Session par défaut = session la plus récente de l'entreprise (pas de sélection manuelle).
-      setSessionId((cur) => cur || (r.data?.sessions?.[0]?.id || ""));
+      // Vue par défaut = session la plus récente DE L'ENTREPRISE.
+      setViewSessionId((cur) => cur || (r.data?.sessions?.[0]?.id || ""));
     }).catch((e) => setStatus({ type: "error", message: e.message }));
   }
   useEffect(() => { load(); }, [id]);
@@ -74,9 +89,9 @@ export default function EntrepriseDetail() {
   useEffect(() => { getOpcos().then((r) => setOpcoNames((r.data || []).map((o) => o.name).filter(Boolean))).catch(() => {}); }, []);
   useEffect(() => {
     setLearnerDocs([]);
-    if (!sessionId) return;
-    getCompanyLearnerDocuments(id, sessionId).then((r) => setLearnerDocs(r.data || [])).catch(() => {});
-  }, [id, sessionId, parcoursRefresh]);
+    if (!viewSessionId) return;
+    getCompanyLearnerDocuments(id, viewSessionId).then((r) => setLearnerDocs(r.data || [])).catch(() => {});
+  }, [id, viewSessionId, parcoursRefresh]);
   // Modèles de documents de GROUPE par session de l'entreprise (pour le formulaire).
   const sessionKey = (data?.sessions || []).map((s) => s.id).join(",");
   useEffect(() => {
@@ -85,7 +100,7 @@ export default function EntrepriseDetail() {
     Promise.all(sess.map((s) => getCompanyDocTemplates(id, s.id).then((r) => [s.id, r.data || []]).catch(() => [s.id, []])))
       .then((pairs) => setGroupTplsBySession(Object.fromEntries(pairs)));
     // Par défaut : la session courante est cochée.
-    setPrep((p) => (p.sessionIds.size ? p : { ...p, sessionIds: new Set(sessionId ? [sessionId] : []) }));
+    setPrep((p) => (p.sessionIds.size ? p : { ...p, sessionIds: new Set(viewSessionId ? [viewSessionId] : []) }));
   }, [id, sessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Documents « entreprise » déjà générés (rafraîchis après génération/envoi/suppression).
   useEffect(() => {
@@ -111,12 +126,12 @@ export default function EntrepriseDetail() {
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function enrollSession() {
-    if (!sessionId) { setStatus({ type: "error", message: "Choisis une session." }); return; }
+    if (!enrollSessionId) { setStatus({ type: "error", message: "Choisis une session." }); return; }
     const ids = (data?.learners || []).map((l) => l.id).filter((lid) => selected.has(lid));
     if (!ids.length) { setStatus({ type: "error", message: "Sélectionne au moins un stagiaire." }); return; }
     setRegistering(true); setStatus(null); setResult(null);
     try {
-      const r = await registerCompanyStagiaires(id, { session_id: sessionId, learner_ids: ids });
+      const r = await registerCompanyStagiaires(id, { session_id: enrollSessionId, learner_ids: ids });
       setResult(r.data);
       const n = (r.data?.created || []).filter((c) => c.enrolled).length;
       setStatus({ type: "success", message: n ? `${n} stagiaire(s) ajouté(s) à la session.` : "Aucun nouveau stagiaire à ajouter (déjà inscrits)." });
@@ -139,7 +154,7 @@ export default function EntrepriseDetail() {
   function prepareCompanyDoc(slug) {
     setPrep((p) => {
       const ids = new Set(p.sessionIds);
-      if (sessionId) ids.add(sessionId);
+      if (viewSessionId) ids.add(viewSessionId);
       return { ...p, slug, sessionIds: ids };
     });
     setTimeout(() => document.getElementById("ent-prepare")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
@@ -262,7 +277,7 @@ export default function EntrepriseDetail() {
           </div>
 
           <div className="field"><label>Session</label>
-            <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+            <select className="inp" value={enrollSessionId} onChange={(e) => setEnrollSessionId(e.target.value)}>
               <option value="">— Choisir une session —</option>
               {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
             </select>
@@ -290,7 +305,7 @@ export default function EntrepriseDetail() {
           )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-            <button className="btn primary" onClick={enrollSession} disabled={registering || !sessionId || selected.size === 0}>
+            <button className="btn primary" onClick={enrollSession} disabled={registering || !enrollSessionId || selected.size === 0}>
               <Icon name="check" size={15} /> Ajouter la sélection à la session
             </button>
           </div>
@@ -366,17 +381,17 @@ export default function EntrepriseDetail() {
           <p className="hint" style={{ margin: "0 0 12px" }}>🏢 document de groupe · les documents stagiaire se génèrent depuis leur fiche.</p>
           {(data.sessions || []).length > 1 && (
             <div className="field" style={{ maxWidth: 360 }}><label>Session</label>
-              <select className="inp" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+              <select className="inp" value={viewSessionId} onChange={(e) => setViewSessionId(e.target.value)}>
                 {data.sessions.map((s) => <option key={s.id} value={s.id}>{`${s.program_code || s.program_title} · S${s.week} ${s.year}`}</option>)}
               </select>
             </div>
           )}
-          {!sessionId ? (
+          {!viewSessionId ? (
             <EmptyState icon="file-text">Aucune session pour cette entreprise. Inscris un groupe à une session ci-dessus.</EmptyState>
           ) : (
             <EnrollmentParcours
-              fetcher={() => getCompanyParcours(id, sessionId)}
-              resetKey={`${id}:${sessionId}`}
+              fetcher={() => getCompanyParcours(id, viewSessionId)}
+              resetKey={`${id}:${viewSessionId}`}
               refresh={parcoursRefresh}
               onPrepare={prepareCompanyDoc}
               onOpenDoc={openCompanyDoc}
@@ -458,7 +473,7 @@ export default function EntrepriseDetail() {
       </div>
 
       {/* Documents des stagiaires à signer par le représentant (à leur place). */}
-      {sessionId && (
+      {viewSessionId && (
         <div style={{ marginTop: 22 }}>
           <Card title={<span className="card-ttl"><Icon name="pencil" size={16} /> Signatures stagiaires par le représentant</span>}>
             <p className="hint" style={{ margin: "0 0 12px" }}>Le représentant signe à la place du stagiaire ; sa copie signée lui revient.</p>

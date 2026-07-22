@@ -67,8 +67,16 @@ const getCompany = async (req, res) => {
         if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
         const [learners] = await conn.query(
             `SELECT l.id, l.civility, l.first_name, l.last_name, l.email, l.phone, l.financing,
-                    (SELECT COUNT(*) FROM enrollment e WHERE e.learner_id = l.id) AS enrollment_count
-             FROM learner l WHERE l.company_id = ? AND l.organization_id = ?
+                    /* Les dossiers QUE CETTE ENTREPRISE porte, pas tous ceux du stagiaire.
+                       Le compte portait sur l'ensemble de ses inscriptions : une personne
+                       venue une fois par son employeur, puis inscrite d'elle-même ailleurs,
+                       s'affichait « 2 dossiers » sur la fiche de l'employeur — dont un qui ne
+                       le regarde pas et qu'il ne peut d'ailleurs pas ouvrir. */
+                    (SELECT COUNT(*) FROM enrollment e
+                      WHERE e.learner_id = l.id AND e.company_id = c.id) AS enrollment_count
+             FROM learner l
+             JOIN company c ON c.id = l.company_id
+             WHERE l.company_id = ? AND l.organization_id = ?
              ORDER BY l.last_name, l.first_name`,
             [req.params.id, req.user.organization_id]
         );

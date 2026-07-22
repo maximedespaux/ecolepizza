@@ -14,10 +14,15 @@ import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
+// Types proposés à la saisie. La liste n'est qu'une aide : le champ reste libre, un organisme
+// peut définir son propre type. FACTURE / ACOMPTE / AVOIR y figurent désormais — ils
+// existaient déjà côté facturation (invoice.type) mais n'étaient proposés nulle part ici,
+// donc aucun modèle ne pouvait leur être associé.
 const DOC_TYPES = [
   "PROGRAMME", "FICHE_SEMAINE", "TEST_POSITIONNEMENT", "DEVIS", "CONTRAT", "CONVENTION",
   "CONVOCATION", "INVITATION", "DROIT_IMAGE", "EMARGEMENT", "ATTESTATION_HYGIENE",
   "CERTIFICAT_REALISATION", "CGV", "EVALUATION_FINANCEUR", "EVALUATION_MANAGEUR",
+  "FACTURE", "ACOMPTE", "AVOIR",
 ];
 
 // Résumé lisible des conditions d'application. `condBySlug` = conditions

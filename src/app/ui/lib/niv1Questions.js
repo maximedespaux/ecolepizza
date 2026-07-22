@@ -1,3 +1,8 @@
+// ⚠️ CE FICHIER N'EST PLUS LU PAR LE JEU. Pizza Quest sert exclusivement la banque de
+// l'organisme (base de données, cf. Configuration → Pizza Quest) ; ces questions y ont été
+// importées via database/tools/export-quest-questions.mjs → 102_seed_quest_questions.sql.
+// Il ne subsiste que comme SOURCE de cet export : modifier une question ici ne change rien
+// pour les stagiaires — il faut la modifier dans l'application, ou réexporter et réimporter.
 // Banque de questions — Niveau I (Pizza classique), tirée du Manuel Technique Niveau I.
 // Formats : "qcm" (choix), "vf" (vrai/faux), "assoc" (associations).
 //

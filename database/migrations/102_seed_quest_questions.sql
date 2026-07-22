@@ -18,18 +18,14 @@
 /* ---- Cibles de l'import ------------------------------------------------------------ */
 /* L'organisme destinataire. Par défaut le plus ancien : dans une base mono-organisme,
    c'est le bon. Sinon : SET @org = (SELECT id FROM organization WHERE code = 'XXX'); */
-SET @org = (SELECT id FROM organization ORDER BY created_at LIMIT 1);
+SET @org = "6df7dddf-7df8-11f1-8ce4-525400cc2535";
 
 /* Les formations qui recevront ces chapitres. Le test « Niveau II » passe AVANT « Niveau I »
    car « niveau i » se retrouve dans « niveau ii » — l'ordre inverse rangerait tout le Niveau II
    dans le Niveau I. NULL est toléré : les chapitres sont alors importés sans formation, à
    rattacher ensuite dans l'application. */
-SET @prog_niv2 = (SELECT id FROM training_program WHERE organization_id = @org
-    AND LOWER(CONCAT(title, ' ', code)) REGEXP 'niveau ii|empatement|empâtement' LIMIT 1);
-SET @prog_niv1 = (SELECT id FROM training_program WHERE organization_id = @org
-    AND LOWER(CONCAT(title, ' ', code)) REGEXP 'niveau i|classique'
-    AND LOWER(CONCAT(title, ' ', code)) NOT REGEXP 'niveau ii|empatement|empâtement' LIMIT 1);
-
+SET @prog_niv2 = "9a5bfd15-0980-4595-9ab9-4c1e512d34c0";
+SET @prog_niv1 = "dce56d25-69a4-4d8a-bd0d-0a3ffff4de83";
 /* ---- Difficultés -------------------------------------------------------------------- */
 /* Trois paliers pour démarrer, avec leur XP par défaut. Renommez-les, changez l'XP ou
    supprimez-en depuis l'application : rien ici n'est figé. Les questions importées partent

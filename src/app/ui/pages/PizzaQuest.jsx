@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { getMyFormations, getMyProfile, getPlayableChapters } from "../api/apiClient.js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getMyFormations, getMyProfile, getPlayableChapters, getQuestLives, loseQuestLife, resetQuestProgress } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import SimulateurPizza from "../components/SimulateurPizza.jsx";
 import { colorOf } from "../lib/format.js";
-import { NIV1_CHAPTERS } from "../lib/niv1Questions.js";
-import { NIV2_CHAPTERS } from "../lib/niv2Questions.js";
 import { saveQuestProgress } from "../lib/gamification.js";
 import { worldXp, chapterXpEarned, xpOfQuestion } from "../lib/questxp.js";
 
@@ -16,73 +14,69 @@ import { worldXp, chapterXpEarned, xpOfQuestion } from "../lib/questxp.js";
  * thématisé pizza (blé, eau, huile, levure…). On clique une formation → son « monde »
  * (chemin de chapitres) → un chapitre = mini-QCM (les « étapes »).
  *
- * Les mondes « Niveau I » et « Niveau II » ont leurs VRAIES questions, tirées de leurs
- * manuels (banques niv1Questions / niv2Questions ; formats QCM / Vrai-Faux / Associations).
- * Les quatre autres retombent sur DEMO_QUESTIONS en attendant leurs manuels.
- * Toutes les questions, démo comprise, portent leur explication (`expl`) et leur page de
- * manuel (`src`) : se tromper doit apprendre quelque chose, pas seulement coûter un cœur.
+ * Les questions viennent EXCLUSIVEMENT de la banque de l'organisme (Configuration →
+ * Pizza Quest), chargée par formation. Une formation sans chapitre affiche un état vide :
+ * plus aucune question de démonstration ni banque codée en dur, qui donnaient à voir au
+ * stagiaire du contenu que son école n'avait jamais écrit.
+ * Chaque question porte son explication (`expl`) et sa page de manuel (`src`) : se tromper
+ * doit apprendre quelque chose, pas seulement coûter un cœur.
  * Progression miroir localStorage + serveur (learner_quest_progress) : réhydratée au
  * montage, donc un cache vidé ne perd rien.
  */
 
-/* Questions de repli, servies aux mondes qui n'ont pas encore leur banque (Découverte,
-   Niveau I Pro, Expert, Spécialisations). Elles portent leur explication comme les vraies
-   banques — un stagiaire de ces mondes apprend donc autant, même si le volume reste maigre.
-   ⚠️ 8 questions recyclées sur 36 tirages : c'est un pis-aller très visible, à remplacer
-   manuel par manuel. */
-const DEMO_QUESTIONS = [
-  { q: "Que signifie « TH » dans un empâtement ?", c: ["Taux d'hydratation", "Température de l'huile", "Temps de repos", "Type de farine"], a: 0,
-    expl: "Le TH est le poids d'eau rapporté au poids de farine, en pourcentage. C'est LA valeur qui décrit un empâtement : tout le reste se calcule à partir d'elle.", src: "Manuel Niveau I, p. 32" },
-  { q: "Pour 1 kg de farine à 65 % d'hydratation, combien d'eau ?", c: ["650 g", "65 g", "165 g", "6,5 kg"], a: 0,
-    expl: "L'hydratation se calcule TOUJOURS sur le poids de farine : 1 000 g × 65 % = 650 g d'eau. Jamais sur le poids total de la pâte.", src: "Manuel Niveau I, p. 27 et 32" },
-  { q: "La « force » d'une farine se mesure par…", c: ["Le W (force boulangère)", "Sa couleur", "Son prix", "Son taux de sucre"], a: 0,
-    expl: "Le W vient de l'alvéographe de Chopin. Il dit combien de temps la pâte tient la fermentation — à ne pas confondre avec le type (T55, T65), qui parle de cendres.", src: "Manuel Niveau I, p. 17-18" },
-  { q: "La poolish est une préfermentation…", c: ["Liquide (≈100 % d'hydratation)", "Sèche (≈45 %)", "Sans levure", "À base d'huile"], a: 0,
-    expl: "Liquide, parce qu'on y met autant de farine que d'eau. Elle repose 12 à 15 h maximum et donne un goût très prononcé.", src: "Manuel Niveau II, p. 22-23" },
-  { q: "La biga est une préfermentation…", c: ["Sèche (≈45–50 %)", "Liquide 100 %", "À base de tomate", "Sans farine"], a: 0,
-    expl: "Solide — un « starter » à 45 % d'hydratation, qui repose 16 à 20 h à 19-24 °C. C'est l'opposé du poolish, et elle se stocke bien mieux.", src: "Manuel Niveau II, p. 25" },
-  { q: "Le « pointage » désigne…", c: ["La 1re fermentation en masse", "La cuisson", "Le façonnage", "Le nappage"], a: 0,
-    expl: "La pâte fermente encore en masse, avant division. Le repos des pâtons après boulage, lui, s'appelle l'apprêt : deux moments distincts qu'on confond souvent.", src: "Manuel Niveau I, p. 28-31" },
-  { q: "Le sel dans la pâte sert surtout à…", c: ["Renforcer le gluten & réguler la fermentation", "Colorer la pâte", "Sucrer", "Faire lever plus vite"], a: 0,
-    expl: "Il resserre le gluten et freine la levure : goût ET tenue. Sans sel, la fermentation s'emballe et la pâte s'affaisse. Dose usuelle : 17 à 22 g par kilo de farine.", src: "Manuel Niveau I, p. 24" },
-  { q: "Température d'un four à bois pour une napolitaine ?", c: ["≈ 430–480 °C", "180 °C", "250 °C", "600 °C"], a: 0,
-    expl: "C'est cette chaleur qui cuit la pizza en 60 à 90 secondes et fait gonfler le cornicione. Sous 400 °C, la pâte sèche avant d'avoir levé.", src: "Manuel Niveau I, p. 47-48" },
-];
-const DEMO_CHAPTERS = [
-  { title: "Les farines", ic: "package" },
-  { title: "L'hydratation", ic: "droplet" },
-  { title: "Le pétrissage", ic: "refresh" },
-  { title: "La fermentation", ic: "flame" },
-  { title: "La cuisson", ic: "pizza" },
-  { title: "Dressage & service", ic: "check-circle" },
-];
-const STEPS_PER_CH = 6;
+/* Plus de questions de repli ici. La banque de l'organisme (base, cf. Configuration →
+   Pizza Quest) est la SEULE source : un monde sans chapitre affiche un état vide et non
+   des questions de démonstration. Servir du contenu que l'organisme n'a pas écrit lui
+   faisait découvrir, côté stagiaire, des questions absentes de son import. */
 
-/* Chapitres d'un monde : chaque rôle a son manuel, donc sa banque. Ceux qui n'en ont pas
-   encore retombent sur la démo (8 questions recyclées sur 36 tirages) — pis-aller très
-   visible. FAIT : niv1, niv2. RESTE À ÉCRIRE : decouverte, niv1pro, expert, spe. */
-const BANKS = { niv1: NIV1_CHAPTERS, niv2: NIV2_CHAPTERS };
 /**
- * Chapitres d'un monde. La banque de l'ORGANISME (base, cf. Configuration → Pizza Quest)
- * l'emporte dès qu'elle existe ; sinon on retombe sur les banques codées en dur, puis sur
- * la démo. Ce repli est ce qui permet de livrer la base sans rien casser tant que
- * l'organisme n'a pas importé ni saisi ses questions.
+ * Chapitres d'un monde — UNIQUEMENT ceux de l'organisme (cf. Configuration → Pizza Quest).
  *
- * `w.dbChapters` est renseigné par PizzaQuest après appel de l'API.
+ * `w.dbChapters` vaut `null` tant que l'API n'a pas répondu, et un tableau ensuite : c'est
+ * ce qui distingue « en cours de chargement » de « aucun chapitre », deux états qui ne
+ * s'affichent pas pareil.
  */
-const chaptersFor = (w) => (w && w.dbChapters && w.dbChapters.length
-  ? w.dbChapters
-  : (BANKS[roleOf(w)] || DEMO_CHAPTERS));
+const chaptersFor = (w) => (w && Array.isArray(w.dbChapters) ? w.dbChapters : []);
+const chaptersLoading = (w) => !!w && w.dbChapters === null;
+
+/**
+ * Défilement horizontal animé, en ease-in-out.
+ *
+ * Fait à la main plutôt qu'avec `scrollTo({ behavior: "smooth" })` : la courbe native n'est
+ * ni réglable ni la même d'un navigateur à l'autre, et la durée nous échappe. Ici le trajet
+ * démarre doucement, prend de la vitesse au milieu et se pose en fin de course — c'est ce
+ * qui donne à lire le chemin parcouru plutôt qu'un saut.
+ *
+ * Renvoie une fonction d'ANNULATION (et non l'identifiant de la première image : chaque
+ * image en demande une nouvelle, annuler la première ne stopperait rien une fois lancée).
+ */
+function animerDefilement(boite, arrivee, duree = 800) {
+    const depart = boite.scrollLeft;
+    const delta = arrivee - depart;
+    const t0 = performance.now();
+    // Cubique : accélère jusqu'à mi-parcours, freine ensuite.
+    const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    let id = 0;
+    const pas = (maintenant) => {
+        const t = Math.min(1, (maintenant - t0) / duree);
+        boite.scrollLeft = depart + delta * ease(t);
+        if (t < 1) id = requestAnimationFrame(pas);
+    };
+    id = requestAnimationFrame(pas);
+    return () => cancelAnimationFrame(id);
+}
+
+/** « 4 min 05 » / « 45 s » — un compte à rebours se lit, il ne se calcule pas. */
+function msEnClair(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  if (s < 60) return `${s} s`;
+  return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}`;
+}
 
 const KEY = "pizzaquest.v1";
 const loadProg = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
 // Enregistre en local ET en base (miroir) via gamification.saveQuestProgress.
 const saveProg = (p) => saveQuestProgress(p);
-const pickQuestions = (n) => {
-  const pool = [...DEMO_QUESTIONS], out = [];
-  for (let i = 0; i < n && pool.length; i++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
-  return out;
-};
 
 // Rôle d'une formation dans le schéma (par mots-clés du titre) + ingrédient-thème.
 function roleOf(w) {
@@ -97,12 +91,65 @@ function roleOf(w) {
 }
 const INGREDIENT = { decouverte: "🍕", niv1: "🌾", niv1pro: "🌾", niv2: "🧫", expert: "🏆", spe: "🔥", autre: "🧑‍🍳" };
 
+/* Géométrie du chemin. Les décalages verticaux dessinent le sentier ; ECART_X est la
+   distance entre deux CENTRES de pastilles.
+   Chaque case a une LARGEUR FIXE (--pq-w = 116) et la rangée un écart constant
+   (--pq-gap = 8) : l'écart entre centres vaut donc leur somme, 124. Sans largeur fixe, la
+   case s'étirait à la taille de son libellé et cette distance changeait à chaque paire —
+   le segment, lui, était calculé sur une valeur unique et tombait à côté.
+   À modifier EN MÊME TEMPS que --pq-w / --pq-gap dans .pq-path. */
+const DECALAGES = [0, -26, -38, -26, 0, 26];
+const ECART_X = 124;
+
 function PizzaQuest() {
   const [worlds, setWorlds] = useState(null);
   const [active, setActive] = useState(null); // null = carte ; sinon code du monde
   const [prog, setProg] = useState(loadProg);
   const [quiz, setQuiz] = useState(null);
   const [mini, setMini] = useState(null); // { key, obj? } du mini-jeu ouvert, ou null
+  // Cœurs : le capital est tenu par le SERVEUR. On n'en garde ici qu'un reflet, et on ne
+  // décrémente jamais localement — sinon un rechargement rendrait les cœurs perdus.
+  const [vies, setVies] = useState(null);
+  const [reste, setReste] = useState(0); // ms avant le prochain cœur (décompte affiché)
+
+  const rafraichirVies = () => getQuestLives()
+    .then((r) => { if (r?.data) { setVies(r.data); setReste(r.data.next_in_ms || 0); } })
+    .catch(() => {});
+  useEffect(() => { rafraichirVies(); }, []);
+
+  // Décompte local, purement visuel : à zéro on redemande au serveur, seul juge du capital.
+  useEffect(() => {
+    if (!reste) return;
+    const t = setInterval(() => {
+      setReste((ms) => {
+        if (ms <= 1000) { rafraichirVies(); return 0; }
+        return ms - 1000;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [reste > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Un chapitre échoué ou abandonné coûte un cœur. Le serveur décide, on rafraîchit. */
+  const perdreUnCoeur = () => loseQuestLife()
+    .then((r) => { if (r?.data) { setVies(r.data); setReste(r.data.next_in_ms || 0); } })
+    .catch(() => {});
+
+  // La mécanique des cœurs n'est active que si l'organisme a réglé un délai (0 = désactivée).
+  const coeursActifs = !!vies && vies.regen_minutes > 0;
+  const sansCoeur = coeursActifs && vies.hearts <= 0;
+
+  /* ⚠️ DÉBOGAGE — À RETIRER AVANT LA MISE EN SERVICE (avec resetQuestProgress dans
+     apiClient.js, la route DELETE /quest/progression et son contrôleur).
+     Efface la progression en base ET en local : garder le localStorage la ferait
+     réapparaître au premier enregistrement, puisqu'il est fusionné avec le serveur. */
+  async function reinitialiserProgression() {
+    if (!window.confirm("DEBUG — effacer toute ta progression Pizza Quest (chapitres, étoiles, cœurs) ?")) return;
+    try { await resetQuestProgress(); } catch { /* on vide quand même le local */ }
+    try { localStorage.removeItem(KEY); } catch { /* mode privé */ }
+    setProg({});
+    setActive(null);
+    await rafraichirVies();
+  }
 
   useEffect(() => {
     getMyFormations().then((r) => {
@@ -115,6 +162,9 @@ function PizzaQuest() {
           || ((!!f.has_badge || !!f.enrolled) && !f.revoked && !f.prereq_locked),
         // Ce qui manque, nommé : un cadenas muet n'indique pas quoi faire pour l'ouvrir.
         prereqMissing: f.prereq_locked ? (f.prereq_missing || []) : [],
+        // TOUS les prérequis, acquis compris : c'est le plan de parcours (« pour l'Expert,
+        // il faut le Niveau II »), lisible même une fois le Niveau II obtenu.
+        prereqAll: f.prereq_all || [],
         theme: f.quest_theme || null,
         tier: f.quest_tier || null,
         dbChapters: null, // complété juste après par la banque de l'organisme
@@ -197,9 +247,20 @@ function PizzaQuest() {
           <h1 style={{ marginBottom: 4 }}>Pizza Quest</h1>
           <p style={{ margin: 0 }}>Entraîne-toi pour le QCM de demain — choisis une formation sur la carte.</p>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <div className="pq-stat"><Icon name="target" size={16} /><b>{xp}</b><span>XP</span></div>
           <div className="pq-stat"><span style={{ fontSize: 15 }}>⭐</span><b>{totalStars}</b><span>étoiles</span></div>
+          {/* Cœurs : affichés seulement si la mécanique est active (délai > 0 côté organisme). */}
+          {coeursActifs && (
+            <div className="pq-stat" title={vies.hearts >= vies.max ? "Cœurs au complet" : `Prochain cœur dans ${msEnClair(reste)}`}>
+              <span className="pq-hearts">
+                {Array.from({ length: vies.max }, (_, i) => (
+                  <span key={i} className={i < vies.hearts ? "" : "vide"}>{i < vies.hearts ? "❤️" : "🤍"}</span>
+                ))}
+              </span>
+              {vies.hearts < vies.max && <span className="pq-regen">{msEnClair(reste)}</span>}
+            </div>
+          )}
         </div>
       </div>
       <p className="hint" style={{ marginTop: -6 }}>
@@ -208,16 +269,50 @@ function PizzaQuest() {
       </p>
 
       {world
-        ? <WorldView world={world} prog={prog[world.code] || {}} onBack={() => setActive(null)}
-            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || pickQuestions(STEPS_PER_CH) })}
+        ? <WorldView world={world} prog={prog[world.code] || {}} onBack={() => setActive(null)} sansCoeur={sansCoeur}
+            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || [] })}
             onGame={(g) => setMini({ key: g.key, obj: g.obj })} />
         : <FormationMap worlds={worlds} prog={prog} onPick={setActive} />}
 
+      {/* Abandon (croix, clic à côté) : le chapitre n'est pas validé et coûte un cœur — sans
+          quoi on quitterait dès la première question difficile pour retenter aussitôt.
+          Fin de chapitre : un cœur perdu seulement si le chapitre est ÉCHOUÉ (0 étoile). */}
       {quiz && world && (
-        <QuizModal world={world} data={quiz} onClose={() => setQuiz(null)} onFinish={(stars) => finishChapter(quiz.code, quiz.chIdx, stars)} />
+        <QuizModal world={world} data={quiz}
+          onClose={(abandon) => {
+            // `abandon` = sortie AVANT la fin du chapitre. Fermer l'écran de résultat ne
+            // coûte rien : les questions ont été faites.
+            const coute = abandon && coeursActifs;
+            // On demande confirmation : un clic à côté de la fenêtre ne doit pas coûter
+            // un cœur sans prévenir.
+            if (coute && !window.confirm("Quitter ce chapitre maintenant ? Tu perdras un cœur.")) return;
+            setQuiz(null);
+            if (coute) perdreUnCoeur();
+          }}
+          sansCoeur={sansCoeur} coeursActifs={coeursActifs}
+          // Échec : le chapitre N'EST PAS enregistré — l'inscrire à 0 étoile le compterait
+          // comme acquis et ouvrirait le suivant. Seul le cœur est décompté.
+          onFail={() => { if (coeursActifs) perdreUnCoeur(); }}
+          // Reprise après échec : GRATUITE. Le cœur est déjà pris par l'échec qui précède,
+          // et une tentative ne doit coûter qu'une fois. Facturer aussi le bouton rendait
+          // « Recommencer » plus cher que fermer puis rouvrir le chapitre depuis la carte —
+          // deux chemins pour le même geste, l'un puni, l'autre non.
+          onRetry={null}
+          // Validation : au moins une étoile, garanti par l'écran de résultat.
+          onFinish={(stars) => finishChapter(quiz.code, quiz.chIdx, stars)} />
       )}
       {mini?.key === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
       {mini?.key === "simulateur" && <SimulateurPizza objectifId={mini.obj} onClose={() => setMini(null)} onFinish={(stars) => finishMini("simulateur", stars)} />}
+
+      {/* ⚠️ BLOC DE DÉBOGAGE — À SUPPRIMER AVANT LA MISE EN SERVICE.
+          Retirer aussi : reinitialiserProgression() ci-dessus, resetQuestProgress dans
+          apiClient.js, la route DELETE /quest/progression et son contrôleur. */}
+      <div className="pq-debug">
+        <span>Outil de test</span>
+        <button type="button" className="btn sm ghost danger" onClick={reinitialiserProgression}>
+          <Icon name="refresh" size={13} /> Effacer ma progression
+        </button>
+      </div>
     </>
   );
 }
@@ -232,9 +327,14 @@ function PizzaQuest() {
  * n'ont jamais ouvert cet écran.
  */
 function FormationMap({ worlds, prog, onPick }) {
-  const card = (w, prereq) => <FCard key={w.code} w={w} prog={prog[w.code]} onPick={onPick} prereq={prereq} />;
-  const range = worlds.some((w) => w.theme || w.tier);
-  if (range) return <CarteRangee worlds={worlds} card={card} />;
+  const card = (w) => <FCard key={w.code} w={w} prog={prog[w.code]} onPick={onPick} />;
+  // Dès que l'organisme a commencé à ranger son catalogue, le rangement fait office de
+  // SÉLECTION : une formation sans thème ni palier n'est pas au programme de Pizza Quest et
+  // ne s'affiche pas. Ranger une formation, c'est la mettre sur la carte.
+  const rangees = worlds.filter((w) => w.theme || w.tier);
+  if (rangees.length) return <CarteRangee worlds={rangees} card={card} />;
+  // Aucun rangement du tout : on garde la carte historique et TOUTES les formations —
+  // appliquer la règle ici viderait Pizza Quest chez qui n'a jamais ouvert cet écran.
 
   const by = { decouverte: [], niv1: [], niv1pro: [], niv2: [], expert: [], spe: [], autre: [] };
   for (const w of worlds) by[roleOf(w)].push(w);
@@ -244,26 +344,23 @@ function FormationMap({ worlds, prog, onPick }) {
     <div className="pq-board">
       {hasTronc && <>
         <div className="pq-tier-label">Nos formations</div>
-        {by.decouverte.length > 0 && <div className="pq-row">{by.decouverte.map((w) => card(w))}</div>}
+        {by.decouverte.length > 0 && <><div className="pq-row">{by.decouverte.map((w) => card(w))}</div><PrerequisResume worlds={by.decouverte} /></>}
         {(by.niv1.length > 0 || by.niv1pro.length > 0) && (
-          <div className="pq-row" style={{ marginTop: 12 }}>{by.niv1.map((w) => card(w))}{by.niv1pro.map((w) => card(w))}</div>
+          <><div className="pq-row" style={{ marginTop: 12 }}>{by.niv1.map((w) => card(w))}{by.niv1pro.map((w) => card(w))}</div><PrerequisResume worlds={[...by.niv1, ...by.niv1pro]} /></>
         )}
         {by.niv2.length > 0 && (
           <>
             <div className="pq-connect"><Icon name="chevron-down" size={22} /><Icon name="chevron-down" size={22} /></div>
-            <div className="pq-row">{by.niv2.map((w) => card(w, true))}</div>
+            <div className="pq-row">{by.niv2.map((w) => card(w))}</div>
+            <PrerequisResume worlds={by.niv2} />
           </>
         )}
         {by.expert.length > 0 && (
           <>
             <div className="pq-connect"><Icon name="chevron-down" size={22} /></div>
-            <div className="pq-row">{by.expert.map((w) => card(w, true))}</div>
+            <div className="pq-row">{by.expert.map((w) => card(w))}</div>
+            <PrerequisResume worlds={by.expert} />
           </>
-        )}
-        {(by.niv2.length > 0 || by.expert.length > 0) && (
-          <div style={{ textAlign: "center", marginTop: 12 }}>
-            <span className="pq-legend"><span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span> = prérequis (niveau précédent)</span>
-          </div>
         )}
       </>}
 
@@ -271,13 +368,41 @@ function FormationMap({ worlds, prog, onPick }) {
         <div className="pq-divider" />
         <div className="pq-tier-label">Nos spécialisations</div>
         <div className="pq-row">{by.spe.map((w) => card(w))}</div>
+        <PrerequisResume worlds={by.spe} />
       </>}
 
       {by.autre.length > 0 && <>
         <div className="pq-divider" />
         <div className="pq-tier-label">Autres</div>
         <div className="pq-row">{by.autre.map((w) => card(w))}</div>
+        <PrerequisResume worlds={by.autre} />
       </>}
+    </div>
+  );
+}
+
+/**
+ * Légende des pastilles « ! » d'UN GROUPE, affichée juste sous ce groupe.
+ *
+ * La pastille signale, la légende dit ce qu'elle veut dire — et elle est placée là où les
+ * pastilles se trouvent, pas en pied de page : sur une carte à plusieurs rangées, chercher
+ * au bas de l'écran le sens d'un « ! » aperçu en haut fait perdre le fil.
+ *
+ * Le DÉTAIL (quelle formation, déjà acquise ou non) reste dans l'infobulle de la carte et,
+ * en toutes lettres, à l'ouverture du monde : la légende n'a pas à répéter le parcours.
+ * Ne rend rien si aucune formation du groupe n'a de prérequis.
+ */
+function PrerequisResume({ worlds }) {
+  const avec = (worlds || []).filter((w) => (w.prereqAll || []).length > 0);
+  if (!avec.length) return null;
+  return (
+    <div style={{ textAlign: "center", marginTop: 10 }}>
+      {/* Mise en forme de la pastille : dans .pq-legend .pq-prereq, pas en style inline —
+          des surcharges partielles laissaient la police et la bordure de la carte. */}
+      <span className="pq-legend">
+        <span className="pq-prereq" aria-hidden="true">!</span>
+        = prérequis (niveau précédent)
+      </span>
     </div>
   );
 }
@@ -335,20 +460,13 @@ function CarteRangee({ worlds, card }) {
                   </div>
                 )}
                 <div className="pq-row">{p.worlds.map((w) => card(w))}</div>
+                {/* Sous CE palier : ce que signalent les « ! » de la rangée juste au-dessus. */}
+                <PrerequisResume worlds={p.worlds} />
               </div>
             ))}
           </div>
         );
       })}
-
-      {worlds.some((w) => (w.prereqMissing || []).length > 0) && (
-        <div style={{ textAlign: "center", marginTop: 14 }}>
-          <span className="pq-legend">
-            <span className="pq-prereq" style={{ position: "static", width: 20, height: 20 }}>!</span>
-            {" "}= une formation doit être terminée avant
-          </span>
-        </div>
-      )}
     </div>
   );
 }
@@ -394,15 +512,18 @@ function WorldGames({ world, onGame }) {
 }
 
 // Carte-formation (rectangle coloré façon schéma) → ouvre le monde.
-function FCard({ w, prog, onPick, prereq }) {
+function FCard({ w, prog, onPick }) {
   const done = prog ? Object.keys(prog).length : 0;
   const stars = prog ? Object.values(prog).reduce((a, s) => a + s, 0) : 0;
   const nbCh = chaptersFor(w).length;
   const ing = INGREDIENT[roleOf(w)];
-  // Prérequis PARAMÉTRÉS par l'organisme (cf. Configuration → Pizza Quest). Ils priment sur
-  // l'heuristique de mise en page (`prereq`, déduite du nom du niveau) : eux seuls savent
-  // ce qui manque VRAIMENT, et peuvent donc le nommer.
+  // Pastille « ! » dès que la formation a un prérequis, acquis ou non : elle SIGNALE, et le
+  // détail se lit dans le récapitulatif placé sous le groupe où elle apparaît.
   const manque = w.prereqMissing || [];
+  const tous = w.prereqAll || [];
+  const infobulle = tous.length
+    ? `Prérequis :\n${tous.map((p) => `${p.done ? "✓" : "✗"} ${p.code} — ${p.title}`).join("\n")}`
+    : null;
   const raison = manque.length
     ? `À terminer d'abord : ${manque.map((m) => m.code).join(", ")}`
     : "Obtiens le badge de ce niveau pour le débloquer";
@@ -412,10 +533,10 @@ function FCard({ w, prog, onPick, prereq }) {
       style={w.unlocked ? { background: w.color } : undefined}
       disabled={!w.unlocked}
       onClick={() => onPick(w.code)}
-      title={w.unlocked ? w.title : raison}
+      title={w.unlocked ? (infobulle || w.title) : raison}
     >
-      {(prereq || manque.length > 0) && (
-        <span className="pq-prereq" title={manque.length ? raison : "Prérequis"}>!</span>
+      {tous.length > 0 && (
+        <span className="pq-prereq" title={infobulle || "Prérequis"} aria-label={infobulle || "Prérequis"}>!</span>
       )}
       <span className="pq-fcard-top">
         <span className="pq-fcard-code">{w.code}</span>
@@ -423,18 +544,88 @@ function FCard({ w, prog, onPick, prereq }) {
       </span>
       <span className="pq-fcard-title">{w.title}</span>
       <span className="pq-fcard-meta">
-        {w.unlocked ? `${done}/${nbCh} chapitres · ${stars} ⭐`
-          : manque.length ? `Après ${manque.map((m) => m.code).join(" + ")}`
-            : "Non débloqué"}
+        {!w.unlocked
+          ? (manque.length ? `Après ${manque.map((m) => m.code).join(" + ")}` : "Non débloqué")
+          : chaptersLoading(w) ? "…"
+            : nbCh === 0 ? "Questions à venir"
+              : `${done}/${nbCh} chapitres · ${stars} ⭐`}
       </span>
     </button>
   );
 }
 
 // Vue d'un monde : chemin de chapitres façon Duolingo + les défis-jeux de la formation.
-function WorldView({ world, prog, onBack, onChapter, onGame }) {
+function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
   const chapters = chaptersFor(world);
   const doneCount = Object.keys(prog).length;
+  // Chapitre en cours = le premier non terminé. `-1` quand tout est fait.
+  const courant = chapters.findIndex((_, i) => !(i in prog));
+
+  /* Amener le chapitre à faire sous les yeux. Sur un parcours entamé, il est loin à droite
+     et le stagiaire arrivait devant des chapitres déjà terminés, sans rien à y faire.
+     On fait défiler LE CONTENEUR (et non `scrollIntoView`, qui déplacerait aussi la page
+     verticalement) ; les positions sont mesurées à l'écran, donc indépendantes du parent
+     positionné.
+     À l'ouverture, le chemin part du DÉBUT et remonte le parcours jusqu'au chapitre en
+     cours : on voit défiler ce qui est déjà acquis avant de s'arrêter là où il reste à
+     faire. Ensuite, un chapitre terminé fait simplement avancer la carte d'un cran. */
+  const pathRef = useRef(null);
+  const nodeRef = useRef(null);
+  const dejaPlace = useRef(false);
+  const animRef = useRef(null); // fonction d'annulation de l'animation en cours
+
+  /* Flèches de bord : elles disent qu'il RESTE du chemin de ce côté. Sans elles, un chemin
+     coupé net au bord de l'écran se lit comme un chemin fini — surtout au milieu du
+     parcours, où l'on ne voit ni le début ni la fin. Elles ne s'affichent que du côté où il
+     y a effectivement à aller, et font défiler de deux chapitres au clic. */
+  const [bords, setBords] = useState({ gauche: false, droite: false });
+  const majBords = () => {
+    const b = pathRef.current;
+    if (!b) return;
+    const marge = 4; // tolérance : les positions ne tombent pas au pixel près
+    setBords({
+      gauche: b.scrollLeft > marge,
+      droite: b.scrollLeft + b.clientWidth < b.scrollWidth - marge,
+    });
+  };
+  useEffect(() => {
+    majBords();
+    window.addEventListener("resize", majBords);
+    return () => window.removeEventListener("resize", majBords);
+  }, [world.code, chapters.length]);
+
+  const glisser = (sens) => {
+    const b = pathRef.current;
+    if (!b) return;
+    animRef.current?.();
+    animRef.current = animerDefilement(b, b.scrollLeft + sens * ECART_X * 2, 350);
+  };
+  useEffect(() => { dejaPlace.current = false; }, [world.code]);
+  useEffect(() => {
+    const boite = pathRef.current, cible = nodeRef.current;
+    if (!boite || !cible) return;
+    const premier = !dejaPlace.current;
+    dejaPlace.current = true;
+
+    // Départ du début pour la première mise en place : c'est ce trajet qu'on donne à voir.
+    if (premier) boite.scrollLeft = 0;
+
+    // Un cran de rendu avant de mesurer : au premier passage, les libellés viennent d'être
+    // posés et les positions ne sont pas encore définitives.
+    const id = requestAnimationFrame(() => {
+      const b = boite.getBoundingClientRect(), c = cible.getBoundingClientRect();
+      const delta = (c.left + c.width / 2) - (b.left + b.width / 2);
+      const arrivee = boite.scrollLeft + delta;
+      if (Math.abs(delta) < 1) return;
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+        boite.scrollLeft = arrivee;
+        return;
+      }
+      animRef.current = animerDefilement(boite, arrivee, premier ? 900 : 450);
+    });
+    return () => { cancelAnimationFrame(id); animRef.current?.(); };
+  }, [world.code, courant, chapters.length]);
+
   return (
     <div className="pq-map">
       <button className="btn sm ghost" onClick={onBack} style={{ marginBottom: 12 }}><Icon name="chevron-left" size={15} /> Carte des formations</button>
@@ -447,18 +638,96 @@ function WorldView({ world, prog, onBack, onChapter, onGame }) {
           <span key={c.id} className="badge n" style={c.color ? { color: c.color } : undefined}>{c.name}</span>
         ))}
       </div>
-      <div className="pq-path">
+      {/* Le parcours en toutes lettres : de quoi cette formation dépend, et où on en est.
+          Sur la carte l'information tient dans une pastille ; ici elle a la place d'être lue. */}
+      {(world.prereqAll || []).length > 0 && (
+        <p className="pq-prereq-line">
+          <span className="field-opt">Accessible après :</span>
+          {world.prereqAll.map((p) => (
+            <span key={p.code} className={"pq-prereq-chip" + (p.done ? " ok" : "")} title={p.title}>
+              <Icon name={p.done ? "check" : "lock"} size={11} /> {p.code}
+            </span>
+          ))}
+        </p>
+      )}
+
+      {/* Plus de cœur : le chemin est grisé, il faut dire pourquoi et pour combien de temps. */}
+      {sansCoeur && (
+        <p className="pq-nohearts">
+          <span style={{ fontSize: 18 }}>💔</span>
+          <span>
+            <b>Plus de cœur.</b> Tu en récupères un régulièrement — reviens dans un moment
+            pour reprendre le chapitre. Les défis ci-dessous restent ouverts.
+          </span>
+        </p>
+      )}
+
+      {/* Aucun chapitre : on le dit franchement plutôt que de servir des questions
+          génériques. Les défis-jeux, eux, restent disponibles. */}
+      {!chaptersLoading(world) && chapters.length === 0 && (
+        <p className="hint" style={{ margin: "10px 0 16px" }}>
+          <Icon name="clock" size={13} style={{ verticalAlign: "-2px" }} />{" "}
+          Les questions de cette formation ne sont pas encore en ligne. Reviens plus tard —
+          en attendant, les défis ci-dessous sont ouverts.
+        </p>
+      )}
+      <div className="pq-path-wrap">
+      {bords.gauche && (
+        <button type="button" className="pq-nav g" onClick={() => glisser(-1)} aria-label="Chapitres précédents">
+          <Icon name="chevron-left" size={18} />
+        </button>
+      )}
+      {bords.droite && (
+        <button type="button" className="pq-nav d" onClick={() => glisser(1)} aria-label="Chapitres suivants">
+          <Icon name="chevron-right" size={18} />
+        </button>
+      )}
+      <div className="pq-path" ref={pathRef} onScroll={majBords}>
         {chapters.map((ch, i) => {
           const stars = prog[i] || 0;
           const done = i in prog;
-          const locked = i > 0 && !(i - 1 in prog);
-          const offset = [0, 46, 70, 46, 0, -46][i % 6];
+          // UN SEUL chapitre jouable : le premier non terminé. Les précédents sont acquis et
+          // ne se rejouent pas (ni pour refaire les étoiles, ni au risque d'un cœur), les
+          // suivants attendent leur tour.
+          const encours = i === courant;
+          // Un chapitre acquis SANS les 3 étoiles reste ouvert : il y a encore à y gagner.
+          // Seul le sans-faute se ferme — le rejouer ne rapporterait rien et coûterait un
+          // cœur en cas de faux pas.
+          const parfait = done && stars >= 3;
+          const partiel = done && !parfait;
+          const verrou = !done && !encours;
+          // Le zigzag se lit horizontalement : le décalage joue sur la hauteur.
+          const offset = DECALAGES[i % 6];
+          // Segment reliant le CENTRE de la pastille précédente au centre de celle-ci.
+          // Les pastilles n'étant pas à la même hauteur, un trait horizontal ne joignait
+          // rien : on calcule longueur et angle réels, et le trait passe SOUS les pastilles.
+          // Le décalage vertical passe par `top` et non par `transform` : une transformation
+          // créerait un contexte d'empilement, et le segment ne pourrait plus passer sous la
+          // pastille de la case voisine — il lui barrerait la figure.
+          const dy = offset - DECALAGES[(i - 1 + 6) % 6];
+          // Cible du défilement : le chapitre en cours, ou le dernier quand tout est fait
+          // — il n'y a alors plus rien « à faire », mais montrer la fin du parcours vaut
+          // mieux que rester bloqué au début.
+          const cible = i === (courant >= 0 ? courant : chapters.length - 1);
+          const lien = {
+            "--len": `${Math.hypot(ECART_X, dy).toFixed(1)}px`,
+            "--ang": `${(Math.atan2(-dy, -ECART_X) * 180 / Math.PI).toFixed(2)}deg`,
+          };
+          const titre = parfait ? `${ch.title} — sans faute (3/3 ⭐)`
+            : partiel ? (sansCoeur
+              ? `Plus de cœur — attends d'en récupérer un pour retenter les 3 ⭐`
+              : `${ch.title} — ${stars}/3 ⭐, retente pour les 3`)
+              : encours ? (sansCoeur ? "Plus de cœur — attends d'en récupérer un" : ch.title)
+                : "Termine les chapitres précédents";
           return (
-            <div key={i} className="pq-node-wrap" style={{ transform: `translateX(${offset}px)` }}>
-              <button className={"pq-node" + (done ? " done" : "") + (locked ? " locked" : "")}
-                style={{ "--c": world.color }} disabled={locked}
-                onClick={() => onChapter(i, ch)} title={locked ? "Termine le chapitre précédent" : ch.title}>
-                <Icon name={locked ? "eye-off" : ch.ic} size={22} />
+            <div key={i} className={"pq-node-wrap" + (i > 0 && (i - 1) in prog ? " lien-fait" : "")}
+              ref={cible ? nodeRef : null}
+              style={{ top: `${offset}px`, ...lien }}>
+              <button className={"pq-node" + (parfait ? " done" : "") + (partiel ? " partiel" : "")
+                + (verrou ? " locked" : "") + (encours ? " on" : "")}
+                style={{ "--c": world.color }} disabled={parfait || verrou || sansCoeur}
+                onClick={() => onChapter(i, ch)} title={titre}>
+                <Icon name={parfait ? "check" : verrou ? "lock" : ch.ic} size={18} />
               </button>
               <div className="pq-node-label">
                 <b>{ch.title}</b>
@@ -467,6 +736,7 @@ function WorldView({ world, prog, onBack, onChapter, onGame }) {
             </div>
           );
         })}
+      </div>
       </div>
       <p className="hint" style={{ textAlign: "center", marginTop: 8 }}>{doneCount}/{chapters.length} chapitres terminés</p>
       <WorldGames world={world} onGame={onGame} />
@@ -483,7 +753,7 @@ function shuffled(arr) {
 
 // Mini-quiz d'un chapitre : une question à la fois, formats variés (QCM / vrai-faux /
 // associations), feedback immédiat, cœurs, résultat étoilé.
-function QuizModal({ world, data, onClose, onFinish }) {
+function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur, coeursActifs }) {
   const { chapter, questions } = data;
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState(null);   // QCM : index ; Vrai/Faux : booléen
@@ -493,6 +763,12 @@ function QuizModal({ world, data, onClose, onFinish }) {
   const [correct, setCorrect] = useState(0);
   const [hearts, setHearts] = useState(3);
   const [done, setDone] = useState(false);
+
+  /** Remet le chapitre à zéro pour une nouvelle tentative (bouton « Recommencer »). */
+  function recommencer() {
+    setIdx(0); setPicked(null); setMatched({}); setSelLeft(null); setWrong(null);
+    setCorrect(0); setHearts(3); setDone(false);
+  }
 
   const q = questions[idx];
   const type = q.t || "qcm";
@@ -531,18 +807,27 @@ function QuizModal({ world, data, onClose, onFinish }) {
 
   const ratio = correct / total;
   const stars = ratio >= 0.9 ? 3 : ratio >= 0.7 ? 2 : ratio >= 0.5 ? 1 : 0;
+  const echoue = done && stars === 0; // moins de la moitié de bonnes réponses
   const good = type === "assoc" ? assocSolved : picked === q.a;
+
+  /* Un chapitre échoué coûte un cœur DÈS la fin de la tentative, et non au clic sur un
+     bouton : sans validation à donner, il n'y a plus de clic qui marque l'échec. Le garde
+     évite de le décompter deux fois si le composant se re-rend. */
+  const echecSignale = useRef(false);
+  useEffect(() => {
+    if (echoue && !echecSignale.current) { echecSignale.current = true; onFail?.(); }
+  }, [echoue, onFail]);
   const answerLabel = type === "vf" ? (q.a ? "Vrai" : "Faux") : type === "qcm" ? q.c[q.a] : "";
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay" onClick={() => onClose(!done)}>
       <div className="modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
           <h3 style={{ fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
             <span className="pq-world-dot" style={{ background: world.color, width: 24, height: 24, fontSize: 11 }}>{world.code}</span>
             {chapter.title}
           </h3>
-          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
+          <button className="x" onClick={() => onClose(!done)} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
 
         {!done ? (
@@ -555,9 +840,14 @@ function QuizModal({ world, data, onClose, onFinish }) {
               <span className={"pq-tag pq-tag-" + type}>{type === "vf" ? "Vrai / Faux" : type === "assoc" ? "Associe" : "QCM"}</span>
             </p>
             <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px" }}>{idx + 1}. {q.q}</p>
-            {/* Ce que vaut la question, tel que l'organisme l'a réglé. Affiché AVANT de
+            {/* Difficulté et XP, tels que l'organisme les a réglés. Affichés AVANT de
                 répondre : savoir qu'une question pèse lourd fait relire l'énoncé. */}
-            <p className="hint" style={{ margin: "0 0 14px" }}>{xpOfQuestion(q)} XP</p>
+            <p className="hint" style={{ margin: "0 0 14px", display: "flex", gap: 8, alignItems: "center" }}>
+              {q.diff && (
+                <span className="badge n" style={q.diff.color ? { color: q.diff.color } : undefined}>{q.diff.name}</span>
+              )}
+              <span>{xpOfQuestion(q)} XP</span>
+            </p>
 
             {type === "qcm" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -632,14 +922,32 @@ function QuizModal({ world, data, onClose, onFinish }) {
             <div style={{ fontSize: 40, marginBottom: 6 }}>{stars > 0 ? "🍕" : "💪"}</div>
             <div style={{ fontSize: 26, letterSpacing: 4, marginBottom: 8 }}>{[0, 1, 2].map((s) => <span key={s} style={{ opacity: s < stars ? 1 : 0.25 }}>⭐</span>)}</div>
             <p style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>{correct}/{total} bonnes réponses</p>
-            <p className="hint" style={{ marginTop: 0 }}>{stars >= 2 ? "Excellent, prêt pour le QCM !" : stars === 1 ? "Bien — retente pour 3 étoiles." : "Reprends le chapitre du manuel et réessaie."}</p>
+            <p className="hint" style={{ marginTop: 0 }}>
+              {stars >= 2 ? "Excellent, prêt pour le QCM !"
+                : stars === 1 ? "Bien — retente pour 3 étoiles."
+                  : "Il faut au moins une étoile (la moitié de bonnes réponses) pour valider le chapitre. Reprends-le dans le manuel et réessaie."}
+            </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12 }}>
-              <button className="btn ghost" onClick={onClose}>Fermer</button>
-              {/* XP annoncé = celui qui sera effectivement compté (même formule que le total
-                  en en-tête), pour qu'aucun écart n'apparaisse après validation. */}
-              <button className="btn primary" onClick={() => onFinish(stars)}>
-                Valider (+{chapterXpEarned({ questions }, stars)} XP)
-              </button>
+              <button className="btn ghost" onClick={() => onClose(false)}>Fermer</button>
+              {/* Échec (aucune étoile) : rien à valider, le chapitre n'est pas acquis. On
+                  propose de le refaire plutôt qu'un « Valider » qui l'enregistrerait à 0 et
+                  ouvrirait le suivant. Le bouton est barré s'il ne reste plus de cœur. */}
+              {echoue ? (
+                /* Relancer ne coûte rien : l'échec qui précède a déjà pris son cœur. Ce qui
+                   ration la boucle, c'est que chaque tentative ratée en coûte un — pas le
+                   fait d'appuyer sur le bouton. */
+                <button className="btn primary" disabled={sansCoeur}
+                  onClick={() => { onRetry?.(); recommencer(); }}
+                  title={sansCoeur ? "Plus de cœur — reviens quand tu en auras récupéré un" : undefined}>
+                  <Icon name="refresh" size={14} /> Recommencer
+                </button>
+              ) : (
+                /* XP annoncé = celui qui sera effectivement compté (même formule que le
+                   total en en-tête), pour qu'aucun écart n'apparaisse après validation. */
+                <button className="btn primary" onClick={() => onFinish(stars)}>
+                  Valider (+{chapterXpEarned({ questions }, stars)} XP)
+                </button>
+              )}
             </div>
           </div>
         )}

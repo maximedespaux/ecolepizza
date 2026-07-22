@@ -49,17 +49,20 @@ export default function ProfileModal({ onClose }) {
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
         <div className="mbody">
-          {/* Identité (gauche) + accès / niveaux attribués (droite) */}
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
+          {/* Identité (gauche) + accès / niveaux attribués (droite).
+              Les deux colonnes se replient l'une sous l'autre quand la modale est étroite :
+              « Mes accès » avait une largeur fixe de 150px qu'elle ne rendait jamais, si bien
+              que sur un téléphone le nom héritait de 80px et s'affichait « Guilla… ». */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
             <span className="pf-avatar" style={{ background: avatar ? avatar.color : "var(--navy)", flex: "none" }}>
               {avatar ? avatar.emoji : initials(user?.first_name, user?.last_name)}
             </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: "1 1 170px", minWidth: 0 }}>
               <div style={{ fontSize: 17, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{who}</div>
               <div style={{ fontSize: 13, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.email}</div>
               <div style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginTop: 2 }}>{grade.emoji} {grade.name}</div>
             </div>
-            <div style={{ flex: "none", width: 150, textAlign: "right" }}>
+            <div style={{ flex: "1 1 150px", textAlign: "right" }}>
               <div className="hint" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 800, marginBottom: 3 }}>Mes accès</div>
               <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>{roleLabel}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>

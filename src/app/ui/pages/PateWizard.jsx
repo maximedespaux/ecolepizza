@@ -354,7 +354,9 @@ export default function PateWizard() {
                 {!napoLevFixed && bassMax > 0 && (
                   <Slider label={`Eau de bassinage (facultatif · max ${bassMax} %)`} val={Math.min(num(dp.bassinage), bassMax)} min={0} max={bassMax} step={0.5} set={(v) => setDP("bassinage", v)} />
                 )}
-                <p className="hint" style={{ margin: "6px 0 0" }}>Hydratation totale <b style={{ color: "var(--green)" }}>{totalHydra} %</b> = coulage {num(dp.hydra)} %{(num(dp.bassinage) + compW) > 0 ? ` + bassinage ${+(num(dp.bassinage) + compW).toFixed(1)} %` : ""}{napoLevFixed ? " · cahier" : ` · coulage calé sur W ${wv} (plafond ${maxTotal} %)`}.</p>
+                {/* Le détail « = coulage X % + bassinage Y % » répétait les deux curseurs situés
+                    juste au-dessus. Ne reste que ce qu'ils ne disent pas : le total et son plafond. */}
+                <p className="hint" style={{ margin: "6px 0 0" }}>Hydratation totale <b style={{ color: "var(--green)" }}>{totalHydra} %</b>{napoLevFixed ? " · cahier" : ` · plafond ${maxTotal} % pour un W ${wv}`}.</p>
                 {!isNapo && (
                   <div style={{ marginTop: 12, padding: "10px 12px", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
@@ -375,7 +377,7 @@ export default function PateWizard() {
                       {LEVURE_TYPES.map((y) => <button key={y.k} onClick={() => setYeastType(y.k)} className={`btn ${yeastType === y.k ? "primary" : "ghost"}`}>{y.label}</button>)}
                     </div>
                     <div className="grid cols-2" style={{ gap: 12, marginBottom: 12 }}>
-                      <div className="field" style={{ marginBottom: 0 }}><label>Température de la farine (°C)</label><input className="inp" type="number" min="0" max="40" value={dp.flourTemp ?? 17} onChange={(e) => setFlourTemp(Number(e.target.value))} /></div>
+                      <FlourTempField dp={dp} set={setFlourTemp} />
                       <div>
                         <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>Stockage</label>
                         <div style={{ display: "flex", gap: 6 }}>
@@ -404,7 +406,7 @@ export default function PateWizard() {
             {cur.key === "temp" && (
               <div>
                 <div className="grid cols-2" style={{ gap: 12, alignItems: "stretch" }}>
-                  <div className="field" style={{ marginBottom: 0 }}><label>Température de la farine (°C)</label><input className="inp" type="number" min="0" max="35" value={dp.flourTemp ?? 17} onChange={(e) => setFlourTemp(Number(e.target.value))} /></div>
+                  <FlourTempField dp={dp} set={setFlourTemp} />
                   <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 1, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface2)" }}>
                     <span className="hint" style={{ fontSize: 11 }}>Eau de coulage <span style={{ opacity: .7 }}>(TB 50)</span></span>
                     <b className="tnum" style={{ fontSize: 19, color: eauCoulage < 4 ? "var(--blue)" : "var(--text)" }}>{eauCoulage} °C</b>
@@ -480,7 +482,9 @@ export default function PateWizard() {
               </>
             ) : (
               <>
-                <p className="hint" style={{ color: "rgba(255,255,255,.7)", marginTop: 0, fontSize: 11.5 }}>Tarifs en €/kg — estime le coût matière de la pâte.</p>
+                {/* « estime le coût matière de la pâte » redisait l'onglet « Coût » et la ligne
+                    « Total matière » plus bas. Ne reste que l'unité des champs saisissables. */}
+                <p className="hint" style={{ color: "rgba(255,255,255,.7)", marginTop: 0, fontSize: 11.5 }}>Tarifs en €/kg, modifiables.</p>
                 {costLines.map((l) => (
                   <div key={l.k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,.12)" }}>
                     <b style={{ flex: 1, fontSize: 13 }}>{l.label}</b>
@@ -537,6 +541,69 @@ export default function PateWizard() {
 
 // Fiche de progression — récap lecture seule d'un empâtement sauvé (composition + coût + déroulé),
 // imprimable. Ouvre depuis « Mes empâtements » ; « Modifier » renvoie au quiz.
+/**
+ * Composition de l'empâtement : la barre puis le détail ligne à ligne.
+ *
+ * Écrite une seule fois : la fiche complète et le dépliant de la liste l'affichaient chacune
+ * avec son propre balisage, à quelques pixels près. Deux copies d'un même tableau finissent
+ * toujours par diverger — l'une gagne une colonne que l'autre n'a pas.
+ * `dense` ne change que l'échelle, pour le dépliant.
+ */
+/**
+ * Déroulé des étapes — même liste numérotée dans la fiche et dans le dépliant.
+ * Deuxième bloc à n'exister qu'une fois, pour la même raison que [CompositionList].
+ */
+/**
+ * Température de la farine — saisie une seule fois, à deux endroits.
+ *
+ * L'étape « Levure » et l'étape « Coulage » demandent toutes deux cette valeur (elle pilote la
+ * dose de levure ET l'eau de coulage), et chacune bornait son champ à sa façon : max 40 ici,
+ * max 35 là. Même donnée, deux plafonds — donc un champ unique, borné une fois.
+ */
+function FlourTempField({ dp, set }) {
+  return (
+    <div className="field" style={{ marginBottom: 0 }}>
+      <label>Température de la farine (°C)</label>
+      <input className="inp" type="number" min="0" max="40" value={dp.flourTemp ?? 17} onChange={(e) => set(Number(e.target.value))} />
+    </div>
+  );
+}
+
+function StepsList({ build, dense }) {
+  return (
+    <>
+      <div className="ate-lbl" style={{ marginBottom: dense ? 8 : 12 }}>Déroulé des étapes</div>
+      <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: dense ? 10 : 11 }}>
+        {build.steps.map((s, idx) => (
+          <li key={idx} style={{ display: "flex", gap: dense ? 10 : 12, breakInside: "avoid" }}>
+            <span style={{ width: dense ? 22 : 24, height: dense ? 22 : 24, borderRadius: "50%", background: "var(--grad-ember)", color: "#fff", display: "grid", placeItems: "center", fontSize: dense ? 11 : 12, fontWeight: 800, flexShrink: 0 }}>{idx + 1}</span>
+            <div><b style={{ fontSize: dense ? 12.5 : 13.5 }}>{s.t}</b><div style={{ fontSize: dense ? 12 : 12.5, color: "var(--muted)", lineHeight: 1.5 }}>{s.d}</div></div>
+          </li>
+        ))}
+      </ol>
+    </>
+  );
+}
+
+function CompositionList({ build, dense }) {
+  return (
+    <>
+      <div className="ate-lbl" style={{ marginBottom: 8 }}>
+        Composition <span className="hint" style={{ fontWeight: 400 }}>({gfmt(build.totalDough)})</span>
+      </div>
+      <DoughBar items={build.dough} total={build.totalDough} />
+      {build.dough.map((i) => (
+        <div key={i.k} style={{ display: "flex", alignItems: "center", gap: 8, padding: dense ? "5px 0" : "6px 0", borderBottom: "1px solid var(--border-soft)" }}>
+          <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={dense ? 15 : 16} /></span>
+          <b style={{ flex: 1, fontSize: dense ? 12.5 : 13 }}>{i.k}</b>
+          <span style={{ fontSize: 11, color: "var(--muted)" }}>{i.pct}</span>
+          <b className="tnum" style={{ width: 78, textAlign: "right" }}>{gfmt(i.v)}</b>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function RecapFiche({ recipe, onBack, onEdit, onDuplicate, onShare, onDelete, busy }) {
   const B = computeBuild(recipe);
   const dp = B.dp;
@@ -560,16 +627,7 @@ function RecapFiche({ recipe, onBack, onEdit, onDuplicate, onShare, onDelete, bu
 
         <div className="grid cols-2" style={{ gap: 22, marginTop: 18, alignItems: "start" }}>
           <div>
-            <div className="ate-lbl" style={{ marginBottom: 8 }}>Composition <span className="hint" style={{ fontWeight: 400 }}>({gfmt(B.totalDough)})</span></div>
-            <DoughBar items={B.dough} total={B.totalDough} />
-            {B.dough.map((i) => (
-              <div key={i.k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={16} /></span>
-                <b style={{ flex: 1, fontSize: 13 }}>{i.k}</b>
-                <span style={{ fontSize: 11, color: "var(--muted)" }}>{i.pct}</span>
-                <b className="tnum" style={{ width: 78, textAlign: "right" }}>{gfmt(i.v)}</b>
-              </div>
-            ))}
+            <CompositionList build={B} />
           </div>
           <div>
             <div className="ate-lbl" style={{ marginBottom: 8 }}>Coût matière</div>
@@ -588,15 +646,7 @@ function RecapFiche({ recipe, onBack, onEdit, onDuplicate, onShare, onDelete, bu
         </div>
 
         <div style={{ marginTop: 22 }}>
-          <div className="ate-lbl" style={{ marginBottom: 12 }}>Déroulé des étapes</div>
-          <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 11 }}>
-            {B.steps.map((s, idx) => (
-              <li key={idx} style={{ display: "flex", gap: 12, breakInside: "avoid" }}>
-                <span style={{ width: 24, height: 24, borderRadius: "50%", background: "var(--grad-ember)", color: "#fff", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{idx + 1}</span>
-                <div><b style={{ fontSize: 13.5 }}>{s.t}</b><div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>{s.d}</div></div>
-              </li>
-            ))}
-          </ol>
+          <StepsList build={B} />
         </div>
       </Card>
     </div>
@@ -617,27 +667,10 @@ function BuildDetails({ recipe }) {
       </div>
       <div className="grid cols-2" style={{ gap: 24, alignItems: "start" }}>
         <div>
-          <div className="ate-lbl" style={{ marginBottom: 8 }}>Composition <span className="hint" style={{ fontWeight: 400 }}>({gfmt(B.totalDough)})</span></div>
-          <DoughBar items={B.dough} total={B.totalDough} />
-          {B.dough.map((i) => (
-            <div key={i.k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--border-soft)" }}>
-              <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={15} /></span>
-              <b style={{ flex: 1, fontSize: 12.5 }}>{i.k}</b>
-              <span style={{ fontSize: 11, color: "var(--muted)" }}>{i.pct}</span>
-              <b className="tnum" style={{ width: 72, textAlign: "right", fontSize: 12.5 }}>{gfmt(i.v)}</b>
-            </div>
-          ))}
+          <CompositionList build={B} dense />
         </div>
         <div>
-          <div className="ate-lbl" style={{ marginBottom: 8 }}>Déroulé des étapes</div>
-          <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 10 }}>
-            {B.steps.map((s, idx) => (
-              <li key={idx} style={{ display: "flex", gap: 10 }}>
-                <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--grad-ember)", color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{idx + 1}</span>
-                <div><b style={{ fontSize: 12.5 }}>{s.t}</b><div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>{s.d}</div></div>
-              </li>
-            ))}
-          </ol>
+          <StepsList build={B} dense />
         </div>
       </div>
     </div>

@@ -200,6 +200,98 @@ const listShared = async (req, res) => {
                 const liked = new Set(mineLikes.map((x) => x.recipe_id));
                 rows.forEach((r) => { r.like_count = lm[r.id] || 0; r.comment_count = cm[r.id] || 0; r.liked = liked.has(r.id); });
             } catch (e) { if (!noTable(e)) throw e; }
+            // Les deux signaux du menu, reportés carte par carte : la pastille dit qu'il y a du
+            // nouveau, ces repères disent OÙ. Mêmes règles que communityNewsCount — sans quoi
+            // la pastille annoncerait un total que la galerie ne saurait pas montrer.
+            //
+            // Ils sont RENDUS DIFFÉREMMENT parce qu'ils ne s'éteignent pas au même moment :
+            //   · new_comments s'éteint à l'OUVERTURE de la fiche (recipe_read) ;
+            //   · new_likes s'éteint à la VISITE (community_seen_at), voir les avoir suffit.
+            // Bloc séparé et tolérant : sans les migrations 106/107, la galerie s'affiche
+            // simplement sans repères plutôt que de tomber en erreur.
+            try {
+                const [[me]] = await conn.query('SELECT community_seen_at FROM user WHERE id = ?', [req.user.id]);
+                const seen = me?.community_seen_at ?? null;
+                const [news] = await conn.query(
+                    `SELECT c.recipe_id, COUNT(*) AS n
+                       FROM recipe_comment c
+                       JOIN recipe r ON r.id = c.recipe_id
+                       LEFT JOIN recipe_read rr ON rr.recipe_id = c.recipe_id AND rr.user_id = ?
+                      WHERE c.recipe_id IN (?)
+                        AND c.user_id <> ?
+                        AND c.created_at > COALESCE(rr.read_at, ?, '1970-01-01')
+                        AND (r.author_user_id = ?
+                             OR EXISTS (SELECT 1 FROM recipe_comment m
+                                         WHERE m.recipe_id = c.recipe_id AND m.user_id = ?))
+                      GROUP BY c.recipe_id`,
+                    [req.user.id, ids, req.user.id, seen, req.user.id, req.user.id]
+                );
+                const nm2 = Object.fromEntries(news.map((x) => [x.recipe_id, x.n]));
+                rows.forEach((r) => { r.new_comments = nm2[r.id] || 0; });
+            } catch (e) {
+                if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e;
+                // Migration 107 non jouée : le champ doit exister quand même, à zéro. Le laisser
+                // absent obligerait chaque lecteur de cette API à distinguer « aucun nouveau
+                // commentaire » de « la question n'a pas pu être posée » — deux cas qui appellent
+                // pourtant le même affichage.
+                rows.forEach((r) => { r.new_comments = 0; });
+            }
+            // Qui a commenté, pour montrer les visages sur la carte. Un compteur dit combien,
+            // il ne dit pas qui — et « 4 commentaires » n'a pas le même poids selon qu'ils
+            // viennent d'inconnus ou du formateur.
+            //
+            // DISTINCT PAR PERSONNE, pas par commentaire : quelqu'un qui répond trois fois
+            // remplirait sinon la rangée à lui seul. On garde les plus récents d'abord,
+            // l'ordre du fil, et on s'arrête à quatre — au-delà les pastilles deviennent
+            // illisibles, le compte chiffré prend le relais.
+            try {
+                const [qui] = await conn.query(
+                    `SELECT c.recipe_id, c.user_id, MAX(c.created_at) AS last_at,
+                            COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''),
+                                     MAX(c.author_name)) AS name,
+                            MAX(l.avatar) AS avatar
+                       FROM recipe_comment c
+                       LEFT JOIN user u ON u.id = c.user_id
+                       LEFT JOIN learner l ON l.user_id = c.user_id
+                      WHERE c.recipe_id IN (?)
+                      GROUP BY c.recipe_id, c.user_id, u.first_name, u.last_name
+                      ORDER BY last_at DESC`,
+                    [ids]
+                );
+                const par = {};
+                for (const x of qui) {
+                    (par[x.recipe_id] ||= []).push({ user_id: x.user_id, name: x.name, avatar: x.avatar });
+                }
+                rows.forEach((r) => {
+                    const tous = par[r.id] || [];
+                    r.commenters = tous.slice(0, 4);
+                    r.commenters_total = tous.length; // distinctes, pour le « +N »
+                });
+            } catch (e) {
+                if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e;
+                rows.forEach((r) => { r.commenters = []; r.commenters_total = 0; });
+            }
+            try {
+                const [[me]] = await conn.query('SELECT community_seen_at FROM user WHERE id = ?', [req.user.id]);
+                const seen = me?.community_seen_at ?? null;
+                // Uniquement sur MES fiches : savoir qu'on a aimé la fiche d'un autre n'apprend rien.
+                const [nl] = await conn.query(
+                    `SELECT lk.recipe_id, COUNT(*) AS n
+                       FROM recipe_like lk
+                       JOIN recipe r ON r.id = lk.recipe_id
+                      WHERE lk.recipe_id IN (?)
+                        AND lk.user_id <> ?
+                        AND r.author_user_id = ?
+                        AND lk.created_at > COALESCE(?, '1970-01-01')
+                      GROUP BY lk.recipe_id`,
+                    [ids, req.user.id, req.user.id, seen]
+                );
+                const lmap = Object.fromEntries(nl.map((x) => [x.recipe_id, x.n]));
+                rows.forEach((r) => { r.new_likes = lmap[r.id] || 0; });
+            } catch (e) {
+                if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e;
+                rows.forEach((r) => { r.new_likes = 0; }); // migration 106 non jouée
+            }
         }
         res.json({ data: rows });
     } catch (err) {
@@ -461,4 +553,32 @@ const deleteComment = async (req, res) => {
     }
 };
 
-module.exports = { searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment };
+/**
+ * POST /api/recipes/:id/read — « j'ai ouvert cette fiche ».
+ *
+ * Éteint le halo « nouveaux commentaires » de CETTE fiche, et fait retomber d'autant la
+ * pastille du menu. Posé à l'ouverture de la modale détail, là où les commentaires
+ * s'affichent vraiment : c'est le seul moment où « lu » n'est pas un mensonge.
+ *
+ * ON DUPLICATE KEY UPDATE plutôt qu'un INSERT IGNORE : rouvrir une fiche doit remonter la
+ * date, sinon seule la toute première ouverture compterait et les commentaires suivants
+ * resteraient signalés à vie.
+ *
+ * Répond 200 même en échec : rater ce marquage laisse un halo de trop, ce qui ne justifie
+ * pas d'interrompre la lecture. Sans la migration 107, la table manque et on dégrade.
+ */
+const markRecipeRead = async (req, res) => {
+    try {
+        await db.promise().query(
+            `INSERT INTO recipe_read (recipe_id, user_id) VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE read_at = NOW()`,
+            [req.params.id, req.user.id]
+        );
+        res.json({ data: { ok: true } });
+    } catch (err) {
+        if (!noTable(err)) console.error('Erreur marquage fiche lue :', err);
+        res.json({ data: { ok: false } }); // migration 107 non jouée
+    }
+};
+
+module.exports = { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment };

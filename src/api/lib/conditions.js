@@ -117,9 +117,35 @@ const FR_LABELS = {
     year: 'Année', week: 'Semaine', trainer: 'Formateur', status: 'Statut',
     // Entreprise
     'company.name': "Nom de l'entreprise", 'company.legal_name': 'Raison sociale', siret: 'SIRET',
-    vat_number: 'N° TVA', naf_ape: 'Code NAF/APE',
+    vat_number: 'N° TVA', naf_ape: 'Code NAF/APE', legal_status: 'Forme juridique',
+    // Organisme. Sans ces entrées, le repli fabriquait « Organisme · Nda », « · Bic »,
+    // « · Short name » — le nom de la colonne, en anglais, coupé au milieu. Personne ne devine
+    // ce qu'est un « Nda » en construisant un modèle de facture.
+    'organization.legal_name': "Raison sociale de l'organisme",
+    'organization.short_name': 'Nom court',
+    'organization.manager': 'Responsable',
+    'organization.nda': "N° de déclaration d'activité (NDA)",
+    'organization.iban': 'IBAN',
+    'organization.bic': 'BIC / SWIFT',
+    'organization.bank_name': 'Banque',
+    'organization.logo_image': 'Logo',
+    'organization.vat_rate': 'Taux de TVA',
+    // Formation
+    horaires: 'Horaires',
 };
 const frLabel = (table, column) => FR_LABELS[`${table}.${column}`] || FR_LABELS[column] || null;
+
+/**
+ * Ce libellé enregistré est-il en réalité l'ancien repli automatique ?
+ *
+ * Le repli produit « Organisme · Short name » : le nom de la table, un point médian, et le nom
+ * de la colonne anglaise remis en forme. Un organisme qui renomme un champ n'écrit pas ça —
+ * il écrit « Nom court ». La forme suffit donc à distinguer un choix d'un vestige.
+ */
+function estLibelleAuto(label, f) {
+    const prefixe = `${TABLE_LABEL[f.table] || f.table} · `;
+    return String(label).startsWith(prefixe);
+}
 
 // Introspecte les colonnes éligibles des tables « dossier ». -> [{table,column,type,options,label}]
 async function introspectFields(conn) {
@@ -180,7 +206,12 @@ async function getAllFields(conn, orgId) {
         return {
             key, table: f.table, tableLabel: TABLE_LABEL[f.table] || (f.table === 'virtual' ? 'Calculé' : f.table),
             column: f.column, type: f.type, options: f.options,
-            label: (s && s.label) || f.label,
+            // Un libellé ENREGISTRÉ l'emporte — c'est un renommage voulu par l'organisme.
+            // SAUF s'il a exactement la forme du repli automatique « Table · Nom_de_colonne » :
+            // celui-là n'a pas été choisi, il a été figé à une époque où la traduction française
+            // ne couvrait pas cette colonne. Le garder afficherait « Organisme · Nda » pour
+            // toujours, alors que la traduction existe désormais.
+            label: (s && s.label && !estLibelleAuto(s.label, f)) ? s.label : f.label,
             enabled_token: enabledToken, enabled_condition: enabledCondition,
             enabled: enabledToken, // rétro-compat (ancien drapeau unique = usage jeton)
         };

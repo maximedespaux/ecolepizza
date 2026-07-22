@@ -12,6 +12,29 @@ import CustomTokenManager from "../components/CustomTokenManager.jsx";
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
 
+/**
+ * Tableau des articles d'une facture, prêt à l'emploi.
+ *
+ * LES MARQUEURS SONT DANS DES CELLULES, et ce n'est pas un détail. L'éditeur est un
+ * ProseMirror : sa grammaire interdit du texte directement dans un `<tbody>`. Un gabarit écrit
+ * « <tbody>{#Articles}<tr>… » voit ses marqueurs REMONTÉS hors du tableau à l'insertion — ils
+ * atterrissent dans un paragraphe au-dessus, et la ligne ne se répète jamais. Constaté dans
+ * l'éditeur réel, pas déduit.
+ *
+ * `{#Articles}` ouvre donc la première cellule et `{/Articles}` ferme la dernière : le
+ * rendu répète la LIGNE qui les contient (cf. expandListBlocks).
+ *
+ * L'en-tête est une ligne à part, hors des marqueurs — sinon elle se répéterait à chaque
+ * article. C'est l'erreur classique de ce genre de gabarit, et la raison pour laquelle on
+ * l'insère déjà monté plutôt que de laisser l'écrire à la main.
+ */
+const BLOC_ARTICLES = '<table><tbody><tr>'
+  + '<th>Désignation</th><th>Qté</th><th>P.U. HT</th><th>Montant HT</th><th>TVA</th><th>Total TTC</th>'
+  + '</tr><tr>'
+  + '<td>{#Articles}{Désignation}</td><td>{Quantité}</td><td>{Prix unitaire HT}</td>'
+  + '<td>{Montant HT}</td><td>{Taux TVA}</td><td>{Montant TTC}{/Articles}</td>'
+  + '</tr></tbody></table>';
+
 // Jetons résolus PAR STAGIAIRE à l'intérieur d'un bloc {#Stagiaires}…{/Stagiaires}
 // (documents de groupe / entreprise). Insérés en TEXTE brut.
 const GROUP_ROW_TOKENS = [
@@ -190,6 +213,18 @@ function TemplateEditor() {
     };
   }, [showPreview, body, pageContentPx]);
 
+  // Recherche dans la palette : filtre les jetons, garde les groupes qui en contiennent, et
+  // les ouvre tous — chercher puis devoir déplier n'aurait aucun sens.
+  const [rechJeton, setRechJeton] = useState("");
+  const catalogFiltre = useMemo(() => {
+    const q = rechJeton.trim().toLowerCase();
+    if (!q) return catalog;
+    const norm = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return (catalog || [])
+      .map((g) => ({ ...g, tokens: g.tokens.filter((t) => norm(t.label).includes(norm(q)) || norm(t.key).includes(norm(q))) }))
+      .filter((g) => g.tokens.length);
+  }, [catalog, rechJeton]);
+
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
   }
@@ -338,21 +373,59 @@ function TemplateEditor() {
             </div>
           </div>
 
-          {catalog.map((g) => (
+          {/* Recherche : onze groupes et plus de quatre-vingt-dix jetons. Sans elle, trouver
+              « SIRET » demande d'ouvrir les groupes un par un — et de savoir dans lequel il
+              se range, ce qu'on ignore justement quand on cherche. */}
+          <div className="field" style={{ margin: "0 0 10px" }}>
+            <input className="inp" value={rechJeton} onChange={(e) => setRechJeton(e.target.value)}
+              placeholder="🔍 Rechercher un champ…" />
+          </div>
+
+          {catalogFiltre.map((g) => (
             <div key={g.group} className="tok-group">
               <button className="tok-group-hd" onClick={() => setOpenGroups((p) => ({ ...p, [g.group]: !p[g.group] }))}>
                 <span>{g.group}</span><span className="chev"><Icon name="chevron-down" size={14} style={{ transform: openGroups[g.group] ? "none" : "rotate(-90deg)", transition: "transform .15s var(--ease)" }} /></span>
               </button>
-              {openGroups[g.group] && (
+              {(rechJeton.trim() || openGroups[g.group]) && (
                 <div className="tok-list">
                   {g.tokens.map((t) => (
-                    <button key={t.key} className="tok-chip" title={`{${t.key}} — ex. ${t.sample || ""}`}
-                      draggable
-                      onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
-                      onClick={() => insertToken(t)}>
-                      {t.label}
-                    </button>
+                    g.group === "Ligne de facture" ? (
+                      <button key={t.key} className="tok-chip" title={`{${t.key}} — à placer DANS le tableau des articles`}
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", "{" + t.key + "}")}
+                        onClick={() => insertRaw("{" + t.key + "}")}>
+                        {t.label}
+                      </button>
+                    ) : (
+                      <button key={t.key} className="tok-chip" title={`{${t.key}} — ex. ${t.sample || ""}`}
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
+                        onClick={() => insertToken(t)}>
+                        {t.label}
+                      </button>
+                    )
                   ))}
+                  {/* Ligne de facture : ces jetons n'ont de sens QUE dans un bloc
+                      {#Articles}…{/Articles}. Sans un moyen de créer ce bloc, les proposer était
+                      un piège — on cliquait « Quantité », on obtenait une facture vide, et rien
+                      ne disait pourquoi. Le bloc s'insère donc prêt à l'emploi, en tableau. */}
+                  {g.group === "Ligne de facture" && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border-soft)" }}>
+                      <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
+                        Pour un tableau simple, utilisez le champ <b>Tableau des articles</b> du groupe
+                        Facture : une seule puce, le tableau est mis en forme automatiquement.
+                        <br /><br />
+                        Ces champs-ci servent à composer un tableau <b>sur mesure</b>. Insérez d'abord la
+                        trame ci-dessous, puis placez-les dans ses cellules.
+                      </p>
+                      <button className="tok-chip" title="Insère une trame de tableau à personnaliser"
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", BLOC_ARTICLES)}
+                        onClick={() => insertRaw(BLOC_ARTICLES)}>
+                        <Icon name="plus" size={13} /> Trame sur mesure
+                      </button>
+                    </div>
+                  )}
                   {/* Groupe entreprise : jetons répétés PAR STAGIAIRE (bloc), insérés en texte brut. */}
                   {g.group === "Groupe entreprise" && (
                     <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border-soft)" }}>

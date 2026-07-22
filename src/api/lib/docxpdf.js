@@ -27,8 +27,30 @@ function findSoffice() {
     return null;
 }
 
-/** Convertit un Buffer source (.docx ou .html) en Buffer PDF via LibreOffice. */
-function convertToPdf(inputBuffer, ext) {
+/**
+ * Le filtre d'export PDF de LibreOffice, en PDF/A-3 quand on le demande.
+ *
+ * POURQUOI PASSER PAR LIBREOFFICE plutôt que de rendre le PDF conforme après coup. PDF/A-3
+ * n'est pas une case à cocher : il exige que TOUTES les polices soient embarquées, qu'aucune
+ * couleur ne soit exprimée dans un espace dépendant du périphérique sans profil de sortie, et
+ * que le fichier porte un OutputIntent avec un profil ICC. Une facture ordinaire produisait
+ * 113 échecs sur la seule règle DeviceRGB — un par élément coloré.
+ *
+ * Rattraper ça avec pdf-lib voudrait dire réécrire chaque opérateur de couleur du flux de
+ * contenu et embarquer un profil ICC à la main. LibreOffice le fait déjà, correctement, en
+ * changeant un paramètre d'export. La conformité appartient au moteur de rendu ; l'ajouter
+ * après coup, c'est réparer ce qu'on aurait pu ne pas casser.
+ *
+ * `SelectPdfVersion` : 0 = PDF ordinaire, 1 = PDF/A-1, 2 = PDF/A-2, 3 = PDF/A-3.
+ */
+const FILTRE_PDF = 'pdf';
+const FILTRE_PDFA3 = 'pdf:writer_pdf_Export:{"SelectPdfVersion":{"type":"long","value":3}}';
+
+/**
+ * Convertit un Buffer source (.docx ou .html) en Buffer PDF via LibreOffice.
+ * @param {boolean} [pdfa] exporter en PDF/A-3 (archivage longue durée, requis par Factur-X)
+ */
+function convertToPdf(inputBuffer, ext, pdfa) {
     const bin = findSoffice();
     if (!bin) {
         const e = new Error('LibreOffice introuvable — installez-le ou définissez SOFFICE_PATH.');
@@ -44,7 +66,7 @@ function convertToPdf(inputBuffer, ext) {
         const r = spawnSync(bin, [
             '--headless', '--norestore',
             `-env:UserInstallation=file://${path.join(dir, 'profile')}`,
-            '--convert-to', 'pdf', '--outdir', dir, inPath,
+            '--convert-to', pdfa ? FILTRE_PDFA3 : FILTRE_PDF, '--outdir', dir, inPath,
         ], { timeout: 90000 });
         if (!fs.existsSync(outPath)) {
             const msg = (r.stderr && r.stderr.toString()) || (r.error && r.error.message) || 'conversion échouée';
@@ -61,9 +83,12 @@ function docxToPdf(docxBuffer) {
     return convertToPdf(docxBuffer, 'docx');
 }
 
-/** Convertit une chaîne HTML complète en Buffer PDF (modèles construits dans l'app). */
-function htmlToPdf(html) {
-    return convertToPdf(Buffer.from(html, 'utf8'), 'html');
+/**
+ * Convertit une chaîne HTML complète en Buffer PDF (modèles construits dans l'app).
+ * @param {boolean} [pdfa] exporter en PDF/A-3 — réservé aux factures, cf. FILTRE_PDFA3
+ */
+function htmlToPdf(html, pdfa) {
+    return convertToPdf(Buffer.from(html, 'utf8'), 'html', pdfa);
 }
 
 module.exports = { docxToPdf, htmlToPdf, convertToPdf, findSoffice };

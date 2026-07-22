@@ -163,9 +163,12 @@ export const LEVURE_STORAGE = [
   { key: "froid", label: "Chambre froide", factor: 0.4, note: "maturation longue au froid → moins de levure" },
 ];
 export const levStorageOf = (k) => LEVURE_STORAGE.find((s) => s.key === k) || LEVURE_STORAGE[0];
-// Dose de levure recommandée = base (table du manuel selon la T° du LOCAL) × facteur de stockage.
-export const recoLevureFull = (localTemp, type, storageKey) => {
-  const base = recoLevure(num(localTemp) || 20, type);
+// Dose recommandée = table du manuel × facteur de stockage.
+// Le paramètre est la température de la FARINE, pas celle du local : c'est ainsi que le
+// manuel indexe sa table (p. 19, colonne « Température farine »), et c'est bien `flourTemp`
+// que passent les appelants. Le nom précédent (`localTemp`) laissait croire l'inverse.
+export const recoLevureFull = (flourTemp, type, storageKey) => {
+  const base = recoLevure(num(flourTemp) || 20, type);
   return +(base * levStorageOf(storageKey).factor).toFixed(3);
 };
 

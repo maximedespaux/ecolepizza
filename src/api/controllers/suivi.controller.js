@@ -1,5 +1,5 @@
 const db = require('../config/database.js');
-const { computeDocParcours } = require('../lib/parcours.js');
+const { computeDocParcours, companyParcours } = require('../lib/parcours.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
@@ -20,12 +20,17 @@ const getSuivi = async (req, res) => {
             `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.crm_stage, e.session_id,
                     e.company_id AS enr_company_id,
                     l.first_name, l.last_name, l.opco,
-                    COALESCE(e.company_id, l.company_id) AS company_id, c.name AS company_name,
+                    /* L'entreprise d'un dossier est celle du DOSSIER, jamais celle de la fiche
+                       personne. Un COALESCE vers l.company_id trainait ici : il ressuscitait
+                       l'entreprise sur les inscriptions ou le stagiaire s'est engage seul,
+                       parce que learner.company_id reste pose a vie des le premier
+                       rattachement. Meme personne, deux dossiers, deux parcours possibles. */
+                    e.company_id AS company_id, c.name AS company_name,
                     p.id AS program_id, p.code AS program_code, p.title AS program_title,
                     p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
              FROM enrollment e
              LEFT JOIN learner l ON l.id = e.learner_id
-             LEFT JOIN company c ON c.id = COALESCE(e.company_id, l.company_id)
+             LEFT JOIN company c ON c.id = e.company_id
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
              WHERE e.organization_id = ?`,
@@ -38,23 +43,9 @@ const getSuivi = async (req, res) => {
         const factsMap = await loadDossierFactsMap(
             conn, req.user.organization_id, enrollments.map((e) => e.enrollment_id), fieldCatalog);
 
-        // Section « à l'arrivée via une entreprise » (company_steps) par formation,
-        // chargée à la demande et mise en cache (un dossier envoyé par une entreprise
-        // suit CE parcours, comme la fiche entreprise et la fiche stagiaire).
+        // Le parcours « à l'arrivée via une entreprise » vit dans lib/parcours.js, partagé
+        // avec la fiche dossier et le tableau du Pipeline.
         const orgId = req.user.organization_id;
-        const intakeCache = new Map(); // program_id -> [slugs]
-        async function companyStepsFor(programId) {
-            if (intakeCache.has(programId)) return intakeCache.get(programId);
-            let order = [];
-            try {
-                const [[pr]] = await conn.query('SELECT company_steps FROM training_program WHERE id = ? AND organization_id = ?', [programId, orgId]);
-                let cs = pr && pr.company_steps;
-                if (typeof cs === 'string') { try { cs = JSON.parse(cs); } catch { cs = []; } }
-                order = Array.isArray(cs) ? cs : [];
-            } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
-            intakeCache.set(programId, order);
-            return order;
-        }
         // formationSteps par formation (toutes les étapes candidates), en cache.
         const allStepsCache = new Map(); // program_id -> allSteps
         async function allStepsFor(program) {
@@ -87,20 +78,11 @@ const getSuivi = async (req, res) => {
                 // Dossier envoyé par une entreprise : même parcours que l'entreprise
                 // (section company_steps, TOUTES les étapes) + statut des documents de
                 // GROUPE rattaché.
-                if (e.enr_company_id) {
-                    const intakeOrder = await companyStepsFor(program.id);
-                    if (intakeOrder.length) {
-                        const all = await allStepsFor(program);
-                        const bySlug = new Map(all.map((s) => [s.slug, s]));
-                        steps = intakeOrder.map((sl) => bySlug.get(sl)).filter(Boolean);
-                    }
-                    try {
-                        const [cdocs] = await conn.query(
-                            "SELECT id, type, status, template_slug, quiz_id FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND scope = 'COMPANY' ORDER BY created_at DESC",
-                            [orgId, e.enr_company_id, e.session_id]);
-                        docs.push(...cdocs);
-                    } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; }
-                }
+                const ent = await companyParcours(conn, orgId,
+                    { programId: program.id, companyId: e.enr_company_id, sessionId: e.session_id },
+                    () => allStepsFor(program));
+                if (ent.steps) steps = ent.steps;
+                if (ent.docs.length) docs.push(...ent.docs);
                 const parc = computeDocParcours({ steps, docs });
                 total = parc.steps.length;
                 done = parc.currentIndex;

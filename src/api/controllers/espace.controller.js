@@ -4,7 +4,8 @@ const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigner
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
-const { resolveUnlocked } = require('../lib/questgraph.js');
+const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
+const { etatCoeurs, retirerCoeur, reglages } = require('../lib/questlives.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 
@@ -119,12 +120,19 @@ async function companyEmargementGate(conn, e, orgId) {
     const none = { locked: false, need: 0, done: 0, break_label: null };
     if (!e.program_id || !e.enrollment_id) return none;
 
-    // Entreprise + session du dossier (l'entreprise peut être portée par le dossier ou la fiche).
+    // Entreprise + session DU DOSSIER, et de lui seul.
+    //
+    // Il y avait ici un COALESCE vers learner.company_id, au motif que « l'entreprise peut être
+    // portée par le dossier ou la fiche ». C'était l'inverse du besoin : learner.company_id est
+    // posé à vie au premier rattachement, si bien qu'une personne déjà venue par son employeur
+    // et qui s'inscrit ensuite d'elle-même se voyait appliquer le volet entreprise sur ce
+    // second dossier — donc bloquée derrière des documents que son employeur n'a aucune raison
+    // de signer. Le rattachement d'un dossier, c'est enrollment.company_id.
     let companyId = null, sessionId = null;
     try {
         const [[r]] = await conn.query(
-            `SELECT COALESCE(en.company_id, l.company_id) AS cid, en.session_id AS sid
-             FROM enrollment en LEFT JOIN learner l ON l.id = en.learner_id
+            `SELECT en.company_id AS cid, en.session_id AS sid
+             FROM enrollment en
              WHERE en.id = ? AND en.organization_id = ?`,
             [e.enrollment_id, orgId]
         );
@@ -166,10 +174,14 @@ async function companyEmargementGate(conn, e, orgId) {
     // Documents de GROUPE de l'entreprise (scope COMPANY), pour cette session si connue.
     const grpBySlug = {};
     try {
+        // `session_id IS NULL` laissait passer les documents de groupe de N'IMPORTE QUELLE
+        // session de cette entreprise : une convention signée pour la session de mars pouvait
+        // débloquer celle de septembre. On ne l'accepte donc que faute de mieux, quand le
+        // dossier lui-même n'a pas de session.
         const [grp] = await conn.query(
             `SELECT template_slug, status FROM generated_document
              WHERE organization_id = ? AND scope = 'COMPANY' AND company_id = ?
-               AND (? IS NULL OR session_id IS NULL OR session_id = ?)`,
+               AND (? IS NULL OR session_id = ?)`,
             [orgId, companyId, sessionId, sessionId]
         );
         // Un document de groupe non signé ne doit pas être écrasé par un homonyme signé.
@@ -265,7 +277,12 @@ const getMonEspace = async (req, res) => {
             `SELECT d.id, d.type, d.template_slug, d.title, d.status, d.quiz_id,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at, d.signer_name,
-                    GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations
+                    GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations,
+                    /* Le rattachement entreprise est une propriété DU DOSSIER de ce document,
+                       pas du stagiaire : un même stagiaire peut avoir un dossier porté par son
+                       employeur et un autre qu'il porte seul. MAX() parce que le GROUP BY
+                       agrège les dossiers d'un document multi-formations. */
+                    MAX(e.company_id) AS doc_company_id
              FROM generated_document d
              LEFT JOIN document_formation df ON df.document_id = d.id
              LEFT JOIN enrollment e ON e.id = df.enrollment_id
@@ -278,14 +295,19 @@ const getMonEspace = async (req, res) => {
         );
 
         // Le stagiaire doit-il signer chaque document ? Piloté par le modèle (Modeles).
-        // Exception : les documents « signés par l'entreprise » quand le stagiaire est
-        // rattaché à une entreprise → c'est le représentant qui signe (pas le stagiaire).
+        // Exception : les documents « signés par l'entreprise » quand LE DOSSIER de ce document
+        // est rattaché à une entreprise → c'est le représentant qui signe.
+        //
+        // Cette exception se décidait auparavant une fois pour toutes, à partir de
+        // learner.company_id. Ce champ étant posé à vie au premier rattachement, un stagiaire
+        // déjà venu par son employeur ne pouvait plus jamais signer un document, même sur une
+        // inscription qu'il portait seul.
         const orgSteps = await loadOrgSteps(req.user.organization_id);
-        const hasCompany = !!learner.company_id;
         for (const d of documents) {
-            const byCompany = hasCompany && companySignsDoc(orgSteps, d);
+            const byCompany = !!d.doc_company_id && companySignsDoc(orgSteps, d);
             d.company_sign = byCompany;
             d.signable = d.quiz_id ? false : (!byCompany && (d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d)));
+            delete d.doc_company_id; // donnée de calcul, pas d'affichage
         }
 
         res.json({
@@ -314,12 +336,122 @@ const getMonEspace = async (req, res) => {
  * Communauté. Aucune formation avec point d'accès → débloqué (rien à bloquer). En erreur
  * on débloque (fail-open : on ne bloque jamais par bug).
  */
+/**
+ * Nombre de documents EN ATTENTE D'UNE ACTION du stagiaire — la pastille du menu.
+ *
+ * Comptent : les QCM non répondus, et les documents non signés que le stagiaire doit signer
+ * lui-même. Ne comptent PAS les documents seulement « à consulter » : rien ne trace leur
+ * lecture, la pastille resterait donc allumée à vie et on cesserait de la voir.
+ * Ni ceux signés par l'entreprise quand le stagiaire y est rattaché — ce n'est pas lui
+ * qui signe.
+ *
+ * Ne matérialise pas les QCM automatiques (releaseAutoQuizzes) : ce serait une écriture à
+ * chaque navigation. Un QCM du jour apparaît donc dans la pastille dès la page ouverte.
+ */
+/**
+ * Ce qui m'attend dans la Communauté — la pastille du menu.
+ *
+ * DEUX SIGNAUX, DEUX EXIGENCES. Ils ne s'éteignent pas au même moment, et c'est toute la
+ * raison pour laquelle ils sont comptés séparément :
+ *
+ *   · COMMENTAIRES — ils appellent une réponse, donc ils restent comptés tant que la fiche
+ *     n'a pas été OUVERTE (recipe_read, migration 107). Traverser la Communauté sans entrer
+ *     dans la fiche ne les éteint pas : on ne les a pas lus.
+ *     Deux cas seulement : un commentaire sur une fiche QUE J'AI PARTAGÉE, ou sur une fiche
+ *     OÙ J'AI DÉJÀ COMMENTÉ — j'y ai pris part, la suite me regarde.
+ *
+ *   · J'AIME — ils n'appellent rien. Les VOIR suffit, donc ils s'éteignent à la visite
+ *     (community_seen_at, migration 106). Uniquement sur MES fiches : être informé qu'on a
+ *     aimé la fiche d'un autre n'a pas de sens.
+ *
+ * LE REPLI DE `read_at` MÉRITE UN MOT. Un commentaire est neuf s'il est postérieur à :
+ *   1. la lecture de SA fiche, si elle a eu lieu ;
+ *   2. sinon, la dernière visite de la Communauté — ce qui évite qu'à la mise en service de
+ *      la 107, où recipe_read est vide, chacun se réveille avec des mois d'historique dans
+ *      sa pastille. Ce que l'on avait déjà balayé du regard reste considéré comme vu ;
+ *   3. sinon (jamais venu), tout est neuf : c'est le bon accueil pour une première visite.
+ *
+ * Mes propres commentaires et mes propres j'aime ne comptent pas : s'auto-notifier n'a
+ * aucun intérêt.
+ *
+ * Le périmètre reste les fiches ENCORE partagées dans MON organisme : la pastille ne doit
+ * annoncer que ce sur quoi on peut réellement cliquer. Une fiche repassée en privé en sort.
+ */
+async function communityNewsCount(conn, userId, orgId) {
+    try {
+        const [[row]] = await conn.query(
+            `SELECT
+               (SELECT COUNT(*)
+                  FROM recipe_comment c
+                  JOIN recipe r ON r.id = c.recipe_id
+                  LEFT JOIN recipe_read rr ON rr.recipe_id = c.recipe_id AND rr.user_id = u.id
+                 WHERE c.user_id <> u.id
+                   AND r.organization_id = ?
+                   AND r.visibility = 'SHARED'
+                   AND c.created_at > COALESCE(rr.read_at, u.community_seen_at, '1970-01-01')
+                   AND (r.author_user_id = u.id
+                        OR EXISTS (SELECT 1 FROM recipe_comment m
+                                    WHERE m.recipe_id = c.recipe_id AND m.user_id = u.id))
+               ) AS comments,
+               (SELECT COUNT(*)
+                  FROM recipe_like lk
+                  JOIN recipe r2 ON r2.id = lk.recipe_id
+                 WHERE lk.user_id <> u.id
+                   AND r2.author_user_id = u.id
+                   AND r2.organization_id = ?
+                   AND r2.visibility = 'SHARED'
+                   AND lk.created_at > COALESCE(u.community_seen_at, '1970-01-01')
+               ) AS likes
+             FROM user u WHERE u.id = ?`,
+            [orgId, orgId, userId]
+        );
+        return (Number(row?.comments) || 0) + (Number(row?.likes) || 0);
+    } catch (e) {
+        if (isMissingSchema(e)) return 0; // migration 106 non jouée
+        console.error('Erreur comptage nouveautés Communauté :', e);
+        return 0; // une pastille absente vaut mieux qu'un menu en erreur
+    }
+}
+
+async function pendingDocsCount(conn, learner, orgId) {
+    try {
+        // company_id remonte PAR DOCUMENT, via le dossier auquel il appartient : c'est le
+        // dossier qui dit si l'entreprise signe, jamais la fiche du stagiaire. Sinon la
+        // pastille cessait de compter les documents d'une inscription portée seul, dès lors
+        // que la personne était déjà passée une fois par un employeur.
+        const [rows] = await conn.query(
+            `SELECT d.id, d.type, d.template_slug, d.quiz_id, MAX(e.company_id) AS doc_company_id
+             FROM generated_document d
+             LEFT JOIN document_formation df ON df.document_id = d.id
+             LEFT JOIN enrollment e ON e.id = df.enrollment_id
+             WHERE d.learner_id = ? AND d.status IN ('ENVOYE','CONSULTE')
+             GROUP BY d.id`,
+            [learner.id]
+        );
+        if (!rows.length) return 0;
+        const orgSteps = await loadOrgSteps(orgId);
+        return rows.filter((d) => {
+            if (d.quiz_id) return true;                                          // QCM à faire
+            if (d.doc_company_id && companySignsDoc(orgSteps, d)) return false;  // signé par l'entreprise
+            return d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d);
+        }).length;
+    } catch (e) {
+        if (isMissingSchema(e)) return 0;
+        console.error('Erreur comptage documents en attente :', e);
+        return 0; // une pastille absente vaut mieux qu'un menu en erreur
+    }
+}
+
 const getMyAccess = async (req, res) => {
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         // Pas de fiche stagiaire (intervenant, staff…) : on ne bloque pas.
-        if (!learner) return res.json({ data: { quest_unlocked: true } });
+        if (!learner) return res.json({ data: { quest_unlocked: true, pending_docs: 0, community_news: await communityNewsCount(conn, req.user.id, req.user.organization_id) } });
+        // Pastille du menu : calculée pour TOUTES les sorties ci-dessous, sans quoi elle
+        // disparaîtrait dès qu'une formation est terminée ou qu'aucune n'est suivie.
+        const pending_docs = await pendingDocsCount(conn, learner, learner.organization_id);
+        const community_news = await communityNewsCount(conn, req.user.id, learner.organization_id);
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.financing, s.program_id,
                     DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
@@ -342,10 +474,10 @@ const getMyAccess = async (req, res) => {
                 if (c.complete) { finished = true; break; }
             }
         }
-        if (finished) return res.json({ data: { quest_unlocked: true } });
+        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs, community_news } });
 
         // AUCUNE formation → verrouillé (rien à débloquer tant qu'il n'est pas inscrit).
-        if (!enrollments.length) return res.json({ data: { quest_unlocked: false } });
+        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs, community_news } });
         const gating = [];
         for (const e of enrollments) {
             const g = await emargementGate(conn, e, learner.organization_id, agefice);
@@ -353,10 +485,31 @@ const getMyAccess = async (req, res) => {
         }
         // Inscrit : débloqué si aucune formation n'a de point d'accès, ou si au moins un est franchi.
         const quest_unlocked = gating.length === 0 || gating.some((g) => !g.locked);
-        res.json({ data: { quest_unlocked } });
+        res.json({ data: { quest_unlocked, pending_docs, community_news } });
     } catch (err) {
         console.error('Erreur accès stagiaire :', err);
-        res.json({ data: { quest_unlocked: true } });
+        res.json({ data: { quest_unlocked: true, pending_docs: 0, community_news: 0 } });
+    }
+};
+
+/**
+ * POST /api/mon-espace/communaute/vue — « j'ai vu la Communauté ».
+ *
+ * Appelé par le front UNE FOIS la galerie affichée, pas à l'entrée dans la page : le repérage
+ * des cartes concernées est calculé côté serveur à partir de cette même date. Marquer trop tôt
+ * les effacerait avant qu'on ait pu les voir.
+ *
+ * Idempotent, et sans effet de bord visible : reposer la date ne fait que remettre le
+ * compteur à zéro. En échec on répond quand même 200 — rater ce marquage laisse une pastille
+ * de trop, ce qui ne justifie pas d'afficher une erreur au stagiaire.
+ */
+const markCommunitySeen = async (req, res) => {
+    try {
+        await db.promise().query('UPDATE user SET community_seen_at = NOW() WHERE id = ?', [req.user.id]);
+        res.json({ data: { ok: true } });
+    } catch (err) {
+        if (!isMissingSchema(err)) console.error('Erreur marquage Communauté vue :', err);
+        res.json({ data: { ok: false } }); // migration 106 non jouée, ou écriture refusée
     }
 };
 
@@ -368,6 +521,12 @@ const getMyFormations = async (req, res) => {
 
         // Catalogue complet des formations de l'organisme (avec le descriptif,
         // pour l'aperçu en lecture seule des formations non suivies).
+        // ORDER BY sort_order, code — et non « code » seul : l'ordre du catalogue est celui
+        // que l'organisme a choisi en réordonnant ses formations, et c'est lui qui doit se
+        // retrouver sur la carte Pizza Quest comme dans « Mes formations ». Trié
+        // alphabétiquement, RS7404 passait derrière les NIV1* pour la seule raison que R
+        // suit N — un ordre que personne n'avait décidé.
+        //
         // Les colonnes quest_* (migration 101) peuvent ne pas exister : on retente sans elles
         // plutôt que de casser la page « Mes formations » pour un paramétrage optionnel.
         const PROG_COLS = `id, code, title, level, color, days, hours, price, hygiene, rs_code,
@@ -376,13 +535,13 @@ const getMyFormations = async (req, res) => {
         try {
             [programs] = await conn.query(
                 `SELECT ${PROG_COLS}, quest_theme_id, quest_tier_id
-                 FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
+                 FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY sort_order, code`,
                 [learner.organization_id]
             );
         } catch (e) {
             if (!isMissingSchema(e)) throw e;
             [programs] = await conn.query(
-                `SELECT ${PROG_COLS} FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code`,
+                `SELECT ${PROG_COLS} FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY sort_order, code`,
                 [learner.organization_id]
             );
             programs = programs.map((p) => ({ ...p, quest_theme_id: null, quest_tier_id: null }));
@@ -454,6 +613,16 @@ const getMyFormations = async (req, res) => {
         } catch (e) { if (!isMissingSchema(e)) throw e; }
         const unlockMap = resolveUnlocked(programs.map((p) => p.id), prereqEdges, doneIds);
         const titreDe = new Map(programs.map((p) => [p.id, { code: p.code, title: p.title }]));
+        // Prérequis DIRECTS de chaque formation, avec leur état. On renvoie la liste complète
+        // et pas seulement ce qui manque : le stagiaire doit pouvoir lire « pour l'Expert, il
+        // faut le Niveau II » même une fois le Niveau II acquis — c'est le plan de parcours,
+        // pas une alerte. Les manquants restent distingués par `done`.
+        const prereqGraph = buildGraph(prereqEdges);
+        const finiSet = new Set(doneIds);
+        const prereqsDe = (id) => [...(prereqGraph.get(id) || [])].map((rid) => ({
+            ...(titreDe.get(rid) || { code: '?', title: 'formation supprimée' }),
+            done: finiSet.has(rid),
+        }));
 
         const formations = programs.map((p) => {
             const e = byProgram[p.id] || null;
@@ -481,6 +650,8 @@ const getMyFormations = async (req, res) => {
                 prereq_locked: !(unlockMap.get(p.id) || { unlocked: true }).unlocked,
                 prereq_missing: ((unlockMap.get(p.id) || {}).missing || [])
                     .map((id) => titreDe.get(id) || { code: '?', title: 'formation supprimée' }),
+                // Tous les prérequis directs, acquis compris (chacun avec son `done`).
+                prereq_all: prereqsDe(p.id),
                 enrollment_id: e ? e.enrollment_id : null,
                 complete: e ? e.complete : false,
                 dayPassed: e ? e.dayPassed : false,
@@ -1135,6 +1306,124 @@ const getMyShopRequests = async (req, res) => {
     }
 };
 
+/* ---- Cœurs de Pizza Quest ------------------------------------------------------------- */
+
+/** Réglages de l'organisme (colonnes optionnelles : migration 104 peut ne pas être jouée). */
+async function reglagesCoeurs(conn, orgId) {
+    try {
+        const [[o]] = await conn.query(
+            'SELECT quest_max_hearts, quest_regen_minutes FROM organization WHERE id = ?', [orgId]);
+        return o || {};
+    } catch (e) { if (isMissingSchema(e)) return {}; throw e; }
+}
+
+/**
+ * Lit l'état des cœurs et PERSISTE les crédits accordés par le temps écoulé.
+ * L'écriture n'a lieu que si des cœurs ont effectivement été gagnés (`changed`) : une simple
+ * consultation ne doit pas écrire.
+ */
+async function lireCoeurs(conn, learner, orgId) {
+    const org = await reglagesCoeurs(conn, orgId);
+    let row = null;
+    try {
+        const [[r]] = await conn.query(
+            'SELECT hearts, updated_at FROM learner_quest_life WHERE learner_id = ?', [learner.id]);
+        row = r || null;
+    } catch (e) { if (isMissingSchema(e)) return etatCoeurs(null, org); throw e; }
+
+    const etat = etatCoeurs(row, org);
+    if (row && etat.changed) {
+        await conn.query(
+            'UPDATE learner_quest_life SET hearts = ?, updated_at = ? WHERE learner_id = ?',
+            [etat.hearts, etat.updatedAt, learner.id]
+        ).catch(() => {}); // le crédit se recalculera à la prochaine lecture
+    }
+    return etat;
+}
+
+const enveloppe = (e) => ({
+    hearts: e.hearts, max: e.max, regen_minutes: e.delai,
+    next_in_ms: e.nextInMs, full_in_ms: e.fullInMs,
+});
+
+/**
+ * DELETE /api/mon-espace/quest/progression — ⚠️ OUTIL DE DÉBOGAGE, À RETIRER.
+ *
+ * Remet à zéro la progression Pizza Quest du stagiaire CONNECTÉ : chapitres terminés,
+ * étoiles, et capital de cœurs (supprimer la ligne suffit, l'état repart au maximum).
+ * Sert à rejouer un parcours pendant la mise au point du jeu.
+ *
+ * Portée volontairement limitée au demandeur : personne ne peut effacer la progression
+ * d'un autre. Reste que c'est une destruction de données sans filet — à supprimer, ainsi
+ * que le bouton correspondant côté stagiaire, avant la mise en service.
+ */
+const resetQuestProgress = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        let efface = 0;
+        try {
+            const [r] = await conn.query('DELETE FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
+            efface = r.affectedRows || 0;
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        try {
+            await conn.query('DELETE FROM learner_quest_life WHERE learner_id = ?', [learner.id]);
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        console.warn(`[debug] progression Pizza Quest remise à zéro pour ${learner.id} (${efface} chapitre(s))`);
+        res.json({ success: true, message: `Progression remise à zéro (${efface} chapitre(s)).` });
+    } catch (err) {
+        console.error('Erreur remise à zéro progression :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** GET /api/mon-espace/quest/vies */
+const getQuestLives = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        // Pas de fiche stagiaire : on ne bloque pas le jeu, cœurs pleins.
+        if (!learner) return res.json({ data: { hearts: 5, max: 5, regen_minutes: 0, next_in_ms: 0, full_in_ms: 0 } });
+        res.json({ data: enveloppe(await lireCoeurs(conn, learner, learner.organization_id)) });
+    } catch (err) {
+        console.error('Erreur cœurs quest :', err);
+        // Jamais bloquer le jeu sur une erreur de compteur.
+        res.json({ data: { hearts: 5, max: 5, regen_minutes: 0, next_in_ms: 0, full_in_ms: 0 } });
+    }
+};
+
+/**
+ * POST /api/mon-espace/quest/vies/perdre — un chapitre échoué ou abandonné.
+ * Le décompte est fait ICI et pas côté client : c'est le serveur qui tient le capital.
+ */
+const loseQuestLife = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.json({ data: { hearts: 5, max: 5, regen_minutes: 0, next_in_ms: 0, full_in_ms: 0 } });
+        const org = await reglagesCoeurs(conn, learner.organization_id);
+        // Régénération neutralisée : rien à retirer, le capital reste plein.
+        if (!reglages(org).delai) return res.json({ data: enveloppe(etatCoeurs(null, org)) });
+
+        const etat = await lireCoeurs(conn, learner, learner.organization_id);
+        const apres = retirerCoeur(etat);
+        try {
+            await conn.query(
+                `INSERT INTO learner_quest_life (learner_id, organization_id, hearts, updated_at)
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE hearts = VALUES(hearts), updated_at = VALUES(updated_at)`,
+                [learner.id, learner.organization_id, apres.hearts, apres.updatedAt]
+            );
+        } catch (e) { if (isMissingSchema(e)) return res.json({ data: enveloppe(etat) }); throw e; }
+
+        res.json({ data: enveloppe(etatCoeurs({ hearts: apres.hearts, updated_at: apres.updatedAt }, org)) });
+    } catch (err) {
+        console.error('Erreur perte de cœur :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /**
  * PUT /api/mon-espace/boutique/demande/:id/annuler — le stagiaire annule SA demande.
  *
@@ -1395,4 +1684,5 @@ const updateMyInfos = async (req, res) => {
 };
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
-module.exports = { getMonEspace, getMyAccess, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots };
+module.exports = { getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+    getQuestLives, loseQuestLife, resetQuestProgress };

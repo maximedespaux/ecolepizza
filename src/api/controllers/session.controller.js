@@ -1,5 +1,5 @@
 const db = require('../config/database.js');
-const { computeDocParcours } = require('../lib/parcours.js');
+const { computeDocParcours, companyParcours, companyStepSlugs } = require('../lib/parcours.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
 const { parseApplies } = require('../lib/documents.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
@@ -269,9 +269,24 @@ const getSessionBoard = async (req, res) => {
         // Chaque variante (slug/quiz) pointe vers l'index de sa colonne fusionnée.
         const keyIndex = new Map();
         groups.forEach((g, i) => g.steps.forEach((st) => keyIndex.set(keyOf(st), i)));
+        // Les étapes propres au parcours ENTREPRISE doivent aussi avoir une colonne : sans
+        // cela, une carte dont l'étape courante n'appartient qu'à ce parcours ne trouvait pas
+        // où se poser et atterrissait dans « Terminé » — un dossier à peine commencé s'affichait
+        // donc comme fini. On les ajoute à la fin, dans leur ordre, sans toucher aux autres.
+        {
+            const bySlug = new Map(colSteps.map((st) => [st.slug, st]));
+            for (const slug of await companyStepSlugs(conn, req.user.organization_id, program.id)) {
+                const st = bySlug.get(slug);
+                if (!st || keyIndex.has(keyOf(st))) continue;
+                keyIndex.set(keyOf(st), columns.length);
+                columns.push({ index: columns.length, key: keyOf(st), label: st.label,
+                    ic: st.quiz_id ? '❓' : (st.stagiaire_sign ? '✍️' : '📄') });
+            }
+        }
 
         const [enr] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.learner_id, e.financing, l.first_name, l.last_name, l.opco
+            `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.company_id, e.session_id,
+                    l.first_name, l.last_name, l.opco
              FROM enrollment e LEFT JOIN learner l ON l.id = e.learner_id
              WHERE e.session_id = ? AND e.organization_id = ?
              ORDER BY l.last_name, l.first_name`,
@@ -289,7 +304,7 @@ const getSessionBoard = async (req, res) => {
                 jours: s.days, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
                 ...(factsMap.get(e.enrollment_id) || {}),
             };
-            const steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
+            let steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
             const [docs] = await conn.query(
                 `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id FROM generated_document gd
                  JOIN document_formation df ON df.document_id = gd.id
@@ -297,6 +312,14 @@ const getSessionBoard = async (req, res) => {
                  ORDER BY gd.created_at DESC`,
                 [e.enrollment_id]
             );
+            // Dossier envoyé par une entreprise : parcours plus court, et documents de groupe
+            // à compter. Ce tableau était le SEUL des trois écrans à l'ignorer — il montrait
+            // les mêmes dossiers à 1/14 quand le Suivi disait 1/2.
+            const ent = await companyParcours(conn, req.user.organization_id,
+                { programId: program.id, companyId: e.company_id, sessionId: e.session_id },
+                () => formationSteps(conn, req.user.organization_id, program));
+            if (ent.steps) steps = ent.steps;
+            if (ent.docs.length) docs.push(...ent.docs);
             const parc = computeDocParcours({ steps, docs });
             const column = parc.currentKey == null
                 ? columns.length

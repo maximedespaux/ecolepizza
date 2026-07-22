@@ -49,6 +49,10 @@ function buildChapters(chapters = [], questions = [], options = [], difficulties
     return [...chapters]
         .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
         .map((ch) => ({
+            // `id` sert à retrouver la POSITION d'un chapitre dans la liste jouable — c'est
+            // cette position que la progression des stagiaires référence (cf. suppression
+            // d'un chapitre, qui doit décaler les suivantes).
+            id: ch.id,
             title: ch.title,
             ic: ch.icon || null,
             questions: (qByChapter.get(ch.id) || []).map((q) => toGameQuestion(q, optsByQ.get(q.id) || [], diffById)).filter(Boolean),
@@ -58,11 +62,15 @@ function buildChapters(chapters = [], questions = [], options = [], difficulties
 
 /** Une ligne quest_question (+ ses options) -> question du jeu. `null` si inexploitable. */
 function toGameQuestion(q, opts, diffById) {
+    const d = diffById.get(q.difficulty_id) || null;
     const base = {
         q: q.text,
         expl: q.explanation || undefined,
         src: q.source || undefined,
         xp: xpOf(q, diffById),
+        // Difficulté telle que l'organisme l'a nommée : affichée en jeu à côté de l'XP.
+        // `undefined` si la question n'en porte pas — rien à montrer plutôt qu'un « — ».
+        diff: d ? { name: d.name, color: d.color || null } : undefined,
     };
     if (q.type === 'VF') {
         return { ...base, t: 'vf', a: !!q.vf_answer };

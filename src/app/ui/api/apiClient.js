@@ -244,8 +244,11 @@ export function geocodeCarte(limit = 80) {
 }
 
 // --- Comptabilité / Gestion ---
-export function getComptabilite(annee) {
-  return request(`/comptabilite?annee=${annee}`);
+export function getComptabilite(annee, mois) {
+  // `mois` : 1-12 pour un mois, 0 pour l'année entière. On envoie même 0 (sinon le serveur
+  // retomberait sur le mois courant) ; seul `undefined` laisse le serveur choisir le défaut.
+  const m = Number.isFinite(mois) ? `&mois=${mois}` : "";
+  return request(`/comptabilite?annee=${annee}${m}`);
 }
 export function getComptaPerformance(annee) {
   return request(`/comptabilite/performance?annee=${annee}`);
@@ -495,6 +498,12 @@ export function deleteQuestQuestion(id) { return request(`/quest/questions/${id}
 export function getPlayableChapters(programId) {
   return request(`/mon-espace/quest/${programId}/chapitres`, { silent: true });
 }
+// Cœurs : le capital est tenu par le serveur, jamais calculé côté client.
+export function getQuestLives() { return request("/mon-espace/quest/vies", { silent: true }); }
+export function loseQuestLife() { return request("/mon-espace/quest/vies/perdre", { method: "POST", silent: true }); }
+// ⚠️ DÉBOGAGE — remet à zéro SA propre progression Pizza Quest. À retirer avec le bouton
+// correspondant (PizzaQuest.jsx) avant la mise en service.
+export function resetQuestProgress() { return request("/mon-espace/quest/progression", { method: "DELETE" }); }
 
 export function getFormation(id) {
   return request(`/formations/${id}`);
@@ -613,6 +622,15 @@ export function getMonEspace() {
 
 export function getMyAccess() {
   return request("/mon-espace/access", { silent: true });
+}
+// Remet la pastille Communauté à zéro. `silent` : rater ce marquage laisse une pastille de
+// trop, ce qui ne vaut pas un message d'erreur au stagiaire.
+// « J'ai ouvert cette fiche » : éteint son halo « nouveaux commentaires ».
+export function markRecipeRead(id) {
+  return request(`/recipes/${id}/read`, { method: "POST", silent: true });
+}
+export function markCommunitySeen() {
+  return request("/mon-espace/communaute/vue", { method: "POST", silent: true });
 }
 export function getMyFormations() {
   return request("/mon-espace/formations");

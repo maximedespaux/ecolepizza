@@ -49,8 +49,8 @@ function EmargementStagiaire() {
             {recs.map((r) => {
               const future = r.date > data.today;
               return (
-                <div key={r.record_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 4px", borderBottom: "1px solid var(--border-soft)" }}>
-                  <span style={{ flex: 1, minWidth: 0 }}>
+                <div key={r.record_id} className="stu-row" style={{ padding: "10px 4px" }}>
+                  <span className="stu-row-t">
                     <b style={{ textTransform: "capitalize" }}>{frDate(r.date)} — {SLOT[r.slot] || r.slot}</b>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
                       {r.program_code ? `${r.program_code} · ` : ""}{r.program_title || ""}

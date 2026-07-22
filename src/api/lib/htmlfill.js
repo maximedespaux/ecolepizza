@@ -3,7 +3,7 @@
 // (<span data-token="Clé">…</span>) produite par l'éditeur, soit en texte brut
 // {Clé} (modèles convertis depuis les anciens fichiers Word). Les deux formes
 // sont remplacées par la valeur réelle issue du catalogue partagé.
-const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks } = require('./tokens.js');
+const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens } = require('./tokens.js');
 const { resolveCustomTokens } = require('./customtokens.js');
 
 function escapeHtml(s) {
@@ -52,6 +52,10 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     // Blocs répétés par stagiaire du groupe : {#Stagiaires}…{/Stagiaires} (documents entreprise).
     // Les jetons personnalisés ({custom:…}) y sont recalculés PAR stagiaire.
     out = expandGroupBlocks(out, ctx && ctx.groupStagiaires, ctx && ctx.customTokens, values);
+    // Lignes d'une facture : {#Articles}…{/Articles}. Même mécanisme, autre liste.
+    if (ctx && Array.isArray(ctx.articles)) {
+        out = expandListBlocks(out, 'Articles', ctx.articles, articleRowTokens);
+    }
 
     const render = (key) => (RAW_TOKENS.has(key) ? values[key] : escapeHtml(values[key]));
     // Un emplacement nommé désigne-t-il le stagiaire ? (Stagiaire 1…, élève, apprenant…)
@@ -165,9 +169,35 @@ const DOC_CSS = `
      d'où l'espace insécable ; on annule sa hauteur pour qu'il reste invisible. */
   p.doc-pagebreak { page-break-after: always; height: 0; margin: 0; padding: 0; font-size: 0; line-height: 0; }`;
 
+/**
+ * Donne aux tableaux la largeur que la feuille de style leur promet déjà.
+ *
+ * LIBREOFFICE IGNORE `width: 100%` EN CSS SUR UN TABLEAU. Il n'honore que l'attribut HTML.
+ * Résultat : `DOC_CSS` déclare depuis toujours des tableaux pleine largeur, et le PDF sortait
+ * des tableaux serrés sur la moitié gauche de la page, colonnes écrasées — « Qté » revenait à
+ * la ligne en « Q / té ». La règle CSS n'était pas fausse, elle n'était simplement jamais lue.
+ *
+ * Vérifié en rendant les deux formes côte à côte : seule celle portant l'attribut occupe la
+ * largeur utile. On ne pouvait pas le savoir en relisant le code — c'est une propriété du
+ * moteur de conversion, pas du nôtre.
+ *
+ * ON N'ÉCRASE PAS UNE LARGEUR EXPLICITE. Un tableau auquel l'organisme a donné sa propre
+ * largeur dans l'éditeur la garde : la valeur par défaut ne doit pas défaire un choix.
+ *
+ * Posé ici plutôt que dans chaque générateur de tableau : la règle vaut pour TOUS les tableaux
+ * d'un document — ceux du code comme ceux dessinés à la main dans l'éditeur.
+ */
+function largeurTables(html) {
+    return String(html || '').replace(/<table\b([^>]*)>/gi, (tag, attrs) => (
+        /\bwidth\s*=/i.test(attrs) || /style\s*=\s*"[^"]*\bwidth\s*:/i.test(attrs)
+            ? tag
+            : `<table${attrs} width="100%">`
+    ));
+}
+
 /** Document HTML complet (en-tête + corps rempli + pied de page + CSS) prêt pour le PDF. */
 function renderTemplateHtml(bodyHtml, ctx, opts = {}) {
-    const filled = fillHtml(bodyHtml, ctx);
+    const filled = largeurTables(fillHtml(bodyHtml, ctx));
     const org = ctx.org || {};
     // En-tête : personnalisé (éditeur) prioritaire, sinon papier à en-tête auto.
     let head = '';
@@ -194,7 +224,7 @@ ${DOC_CSS}
  * topMm/bottomMm = marges haut/bas ; les côtés restent à 18mm.
  */
 function renderBodyOnlyDoc(bodyHtml, ctx, { topMm = 20, bottomMm = 20, sideMm = 18, values } = {}) {
-    const filled = fillHtml(bodyHtml, ctx, values);
+    const filled = largeurTables(fillHtml(bodyHtml, ctx, values));
     return `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
 <style>

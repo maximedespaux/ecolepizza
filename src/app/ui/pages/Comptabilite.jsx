@@ -33,8 +33,11 @@ const today = () => new Date().toISOString().slice(0, 10);
 // Titre de carte avec icône de tête.
 const T = (icon, text) => <span className="card-ttl"><Icon name={icon} size={16} /> {text}</span>;
 
+const MOIS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+
 function Comptabilite() {
   const [annee, setAnnee] = useState(new Date().getFullYear());
+  const [mois, setMois] = useState(new Date().getMonth() + 1);
   const [tab, setTab] = useState("gestion");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -47,10 +50,10 @@ function Comptabilite() {
   const [cibleForm, setCibleForm] = useState({});
   const [dividendeForm, setDividendeForm] = useState("10");
 
-  const load = useCallback(async (an, { silent = false } = {}) => {
+  const load = useCallback(async (an, mo, { silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
-      const { data: d } = await getComptabilite(an);
+      const { data: d } = await getComptabilite(an, mo);
       setData(d);
       const t = {};
       for (const c of CATS) t[c.v] = String(d.targets[c.v] ?? "");
@@ -62,7 +65,7 @@ function Comptabilite() {
       setLoading(false);
     }
   }, []);
-  useEffect(() => { load(annee); }, [annee, load]);
+  useEffect(() => { load(annee, mois); }, [annee, mois, load]);
 
   async function submitDep() {
     if (!dep.label.trim() || !dep.montantHT) { setStatus({ type: "error", message: "Libellé et montant requis." }); return; }
@@ -71,19 +74,19 @@ function Comptabilite() {
       await createExpense(dep);
       setDep({ label: "", categorie: dep.categorie, montantHT: "", date: today() });
       setStatus({ type: "success", message: "Dépense enregistrée." });
-      load(annee, { silent: true });
+      load(annee, mois, { silent: true });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSavingDep(false); }
   }
 
   async function delDep(d) {
     if (!window.confirm(`Supprimer « ${d.label} » ?`)) return;
-    try { await deleteExpense(d.id); load(annee, { silent: true }); } catch (e) { setStatus({ type: "error", message: e.message }); }
+    try { await deleteExpense(d.id); load(annee, mois, { silent: true }); } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   async function delRev(r) {
     if (!window.confirm(`Supprimer le produit « ${r.label} » (${euro(r.amount)}) ?`)) return;
-    try { await deleteRevenue(r.id); load(annee, { silent: true }); } catch (e) { setStatus({ type: "error", message: e.message }); }
+    try { await deleteRevenue(r.id); load(annee, mois, { silent: true }); } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   async function saveCibles() {
@@ -93,7 +96,7 @@ function Comptabilite() {
       await saveComptaTargets({ targets, dividendeCible: Number(dividendeForm) });
       setEditCibles(false);
       setStatus({ type: "success", message: "Cibles enregistrées." });
-      load(annee, { silent: true });
+      load(annee, mois, { silent: true });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
@@ -111,7 +114,16 @@ function Comptabilite() {
         actions={
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <MoneyToggle />
-            <select className="inp" value={annee} onChange={(e) => setAnnee(Number(e.target.value))} aria-label="Année">
+            {/* `.inp` impose width:100% aux <select> ; dans cette barre horizontale, deux selects
+                pleine largeur écrasaient le bouton Masquer voisin. On les laisse tenir la largeur
+                de leur contenu — width:auto — pour que la rangée reste alignée. */}
+            {/* Le mois ne pilote QUE le gain du mois ; le reste de la page reste annuel.
+                Valeur 0 = année entière (le total de l'année dans la même carte). */}
+            <select className="inp" style={{ width: "auto" }} value={mois} onChange={(e) => setMois(Number(e.target.value))} aria-label="Mois (gain du mois)">
+              <option value={0}>Année entière</option>
+              {MOIS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+            <select className="inp" style={{ width: "auto" }} value={annee} onChange={(e) => setAnnee(Number(e.target.value))} aria-label="Année">
               {(data?.annees ?? [annee]).map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
@@ -137,6 +149,22 @@ function Comptabilite() {
             <div className="kpi"><div className="kpi-top"><div className="lbl">Marge ({data.margePct}%)</div><span className="kpi-ic tone-green"><Icon name="target" size={18} /></span></div><div className="val tnum" style={{ color: data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.marge)}</div></div>
             <div className="kpi"><div className="kpi-top"><div className="lbl">Dividendes réalistes ({data.partRealistePct}%)</div><span className="kpi-ic tone-orange"><Icon name="coins" size={18} /></span></div><div className="val tnum" style={{ color: data.dividendeRealiste > 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.dividendeRealiste)}</div></div>
           </div>
+
+          {/* Gain du mois — ou de l'année entière si numero === 0. Entrées − sorties sur la
+              période choisie. Distinct de la marge annuelle au-dessus (qui rattache les
+              inscriptions à l'année de session) : ici, tout est daté à l'encaissement. */}
+          {data.mois && (
+            <div className="kpi" style={{ borderLeft: `3px solid ${data.mois.gain >= 0 ? "var(--green)" : "var(--ember1)"}` }}>
+              <div className="kpi-top">
+                <div className="lbl">{data.mois.numero === 0 ? `Gain de l'année ${annee}` : `Gain du mois · ${MOIS[data.mois.numero - 1]} ${annee}`}</div>
+                <span className={"kpi-ic " + (data.mois.gain >= 0 ? "tone-green" : "tone-ember")}><Icon name={data.mois.gain >= 0 ? "arrow-up" : "arrow-down"} size={18} /></span>
+              </div>
+              <div className="val tnum" style={{ color: data.mois.gain >= 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.mois.gain)}</div>
+              <div className="sub" style={{ marginTop: 4 }}>
+                {euro(data.mois.ca)} de recettes − {euro(data.mois.depenses)} de dépenses
+              </div>
+            </div>
+          )}
 
           {/* Composition du CA (3 cartes %) */}
           <Card title={T("calculator", "Composition du chiffre d'affaires")}>
