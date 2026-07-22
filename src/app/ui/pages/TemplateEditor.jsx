@@ -8,7 +8,7 @@ import { getTokenCatalog, getTemplateBody, saveTemplateBody, templatePreviewPdfU
 import StatusMessage from "../components/StatusMessage.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import CustomTokenManager from "../components/CustomTokenManager.jsx";
-import { categoryChipStyle, categoryAccent } from "../lib/categoryColors.js";
+import { categoryChipStyle, categoryAccent, registerTokenGroups } from "../lib/categoryColors.js";
 
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
@@ -113,6 +113,9 @@ function TemplateEditor() {
         const [cat, res] = await Promise.all([getTokenCatalog(slug), getTemplateBody(slug)]);
         if (!alive) return;
         setCatalog(cat.data || []);
+        // Enregistre clé→catégorie AVANT d'insérer le contenu : les puces se colorent alors
+        // par catégorie dès leur premier rendu (cf. TokenView / categoryColors).
+        registerTokenGroups(cat.data || []);
         setOpenGroups(Object.fromEntries((cat.data || []).map((g, i) => [g.group, i === 0])));
         const d = res.data || {};
         if (body) body.commands.setContent(d.body_html || "<p></p>");

@@ -52,3 +52,18 @@ export function categoryChipStyle(name) {
 export function categoryAccent(name) {
   return `hsl(${categoryHue(name)} 62% 50%)`;
 }
+
+// Registre CLÉ de jeton → groupe, rempli par l'éditeur au chargement du catalogue. Sert à colorer
+// AUSSI les puces DÉJÀ INSÉRÉES dans le document selon leur catégorie (la puce ne connaît que sa
+// clé). Rempli avant l'insertion du contenu, donc disponible au rendu des puces.
+let KEY_GROUP = {};
+export function registerTokenGroups(catalog) {
+  const m = {};
+  for (const g of catalog || []) for (const t of (g.tokens || [])) if (t && t.key) m[t.key] = g.group;
+  KEY_GROUP = m;
+}
+// Style d'une puce insérée, d'après sa clé. null si la catégorie est inconnue (→ couleur par défaut).
+export function chipStyleForKey(key) {
+  const g = KEY_GROUP[String(key || "")];
+  return g ? categoryChipStyle(g) : null;
+}

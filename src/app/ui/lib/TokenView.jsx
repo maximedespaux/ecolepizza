@@ -1,4 +1,5 @@
 import { NodeViewWrapper } from "@tiptap/react";
+import { chipStyleForKey } from "./categoryColors.js";
 
 // Dimensions par défaut du cadre de signature — DOIVENT rester synchronisées avec
 // SIG_W / SIG_H côté rendu (src/api/lib/tokens.js).
@@ -20,8 +21,11 @@ export default function TokenView({ node, updateAttributes, selected }) {
   const { token, label, w, h } = node.attrs;
 
   if (!isSig(token)) {
+    // Teinte de la catégorie du jeton (comme la puce de la palette) — repérage visuel de la
+    // famille (Stagiaire, Facture…) directement dans le document. null = catégorie inconnue → défaut.
+    const catStyle = chipStyleForKey(token);
     return (
-      <NodeViewWrapper as="span" className="doc-token" contentEditable={false}>
+      <NodeViewWrapper as="span" className="doc-token" contentEditable={false} style={catStyle || undefined}>
         {label || token || ""}
       </NodeViewWrapper>
     );
