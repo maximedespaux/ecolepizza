@@ -422,3 +422,25 @@ test('un tableau « pleine largeur » (défaut) occupe toute la largeur', () => 
     assert.match(out, /<table[^>]*\bwidth="100%"/, 'le défaut n\'est pas pleine largeur');
     assert.doesNotMatch(out, /white-space:nowrap/, 'le défaut ne doit pas forcer le nowrap');
 });
+
+test('pleine largeur : les colonnes en pixels de l\'éditeur sont converties en % et la table s\'étire', () => {
+    // BUG SIGNALÉ : un tableau « pleine largeur » ne prenait pas toute la largeur, parce que
+    // ProseMirror fige des largeurs de colonnes en PIXELS qui bloquent l'étirement. On les
+    // convertit en pourcentages (proportions gardées) et on force width="100%".
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const t = '<table data-border="solid"><colgroup><col style="width:90px"><col style="width:30px"></colgroup>'
+        + '<tbody><tr><td>a</td><td>b</td></tr></tbody></table>';
+    const out = renderTemplateHtml(t, { org: {} }, { letterhead: false });
+    assert.match(out, /<table[^>]*\bwidth="100%"/, 'la table ne s\'étire pas à 100%');
+    assert.match(out, /<col width="75%">/, 'la colonne de 90px n\'est pas convertie en 75%');
+    assert.match(out, /<col width="25%">/, 'la colonne de 30px n\'est pas convertie en 25%');
+    assert.doesNotMatch(out, /width:\s*90px/, 'la largeur en pixels subsiste');
+});
+
+test('mode « half » : tableau compact aligné à droite (totaux)', () => {
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const t = '<table data-border="solid" data-width="half"><tbody><tr><td>Total TTC</td><td>17,40 €</td></tr></tbody></table>';
+    const out = renderTemplateHtml(t, { org: {} }, { letterhead: false });
+    assert.match(out, /<table[^>]*align="right"/, 'le tableau half n\'est pas aligné à droite');
+    assert.match(out, /<table[^>]*\bwidth="45%"/, 'le tableau half n\'est pas compact');
+});

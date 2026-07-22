@@ -192,6 +192,7 @@ function RichToolbar({ editor, compact = false }) {
           <Sep />
           <Btn title="Pleine largeur" active={(editor.getAttributes("table").widthMode || "full") === "full"} on={() => c().updateAttributes("table", { widthMode: "full" }).run()}>↔</Btn>
           <Btn title="Ajusté au contenu (sans couper le texte)" active={editor.getAttributes("table").widthMode === "auto"} on={() => c().updateAttributes("table", { widthMode: "auto" }).run()}>⇥⇤</Btn>
+          <Btn title="Compact, aligné à droite (totaux…)" active={editor.getAttributes("table").widthMode === "half"} on={() => c().updateAttributes("table", { widthMode: "half" }).run()}>▟</Btn>
           <Btn title="Supprimer le tableau" on={() => c().deleteTable().run()}>⌫tab</Btn>
         </>
       )}

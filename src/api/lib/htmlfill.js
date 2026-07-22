@@ -191,16 +191,50 @@ const DOC_CSS = `
  * Posé ici plutôt que dans chaque générateur de tableau : la règle vaut pour TOUS les tableaux
  * d'un document — ceux du code comme ceux dessinés à la main dans l'éditeur.
  */
+/** Retire toute largeur fixe (attribut width réel — pas data-width — et width:…px en style) des
+ *  attributs d'un <table>. `(?<!-)` protège `data-width`. */
+function sansLargeur(attrs) {
+    return attrs
+        .replace(/(?<!-)\bwidth\s*=\s*"[^"]*"/i, '')
+        .replace(/style\s*=\s*"([^"]*)"/i, (s, st) => {
+            const x = st.replace(/(?:min-|max-)?width\s*:\s*[^;]+;?/gi, '').trim();
+            return x ? `style="${x}"` : '';
+        })
+        .replace(/\s+/g, ' ').trim();
+}
+
+/** Le tableau porte-t-il une largeur EXPLICITE de l'auteur (%, cm, mm, em) ? On la respecte —
+ *  contrairement à une largeur en PIXELS, que l'éditeur fige et qu'on veut pouvoir étirer. */
+function largeurExplicite(attrs) {
+    const w = /(?<!-)\bwidth\s*=\s*"([^"]*)"/i.exec(attrs);
+    if (w && /(%|cm|mm|em)/i.test(w[1])) return true;
+    const s = /style\s*=\s*"([^"]*)"/i.exec(attrs);
+    if (s && /\bwidth\s*:\s*[\d.]+\s*(%|cm|mm|em)/i.test(s[1])) return true;
+    return false;
+}
+
+/** Convertit les largeurs de colonnes en PIXELS (ProseMirror : <col style="width:101px">) en
+ *  POURCENTAGES, pour qu'elles s'adaptent à la largeur de la table au lieu de la figer. */
+function colsEnPourcent(inner) {
+    const cols = [...inner.matchAll(/<col\b[^>]*>/gi)].map((c) => c[0]);
+    const px = cols.map((c) => {
+        const m = /width\s*:\s*([\d.]+)px/i.exec(c) || /\bwidth\s*=\s*"?([\d.]+)(?:px)?"?/i.exec(c);
+        return m ? parseFloat(m[1]) : null;
+    });
+    if (!cols.length || !px.every((v) => v != null)) return inner;
+    const tot = px.reduce((s, v) => s + v, 0) || 1;
+    let i = 0;
+    return inner.replace(/<col\b[^>]*>/gi, () => `<col width="${Math.round((px[i++] / tot) * 1000) / 10}%">`);
+}
+
 function largeurTables(html) {
     return String(html || '').replace(/<table\b([^>]*)>([\s\S]*?)<\/table>/gi, (m, attrs, inner) => {
-        // « auto » = ajusté au contenu : les colonnes prennent la largeur de leur texte, sans le
-        // couper. LibreOffice ne suit pas table-layout de façon fiable ; on obtient l'effet en
-        // (1) laissant la largeur libre, (2) neutralisant les largeurs de colonnes fixes, et
-        // (3) empêchant le retour à la ligne DANS les cellules — c'est ce qui coupait « Quantité »
-        // en « Quanti / té ».
-        if (/data-width\s*=\s*["']?auto/i.test(attrs)) {
-            // `(?<!-)` : ne pas toucher au `width` de `data-width`, seulement l'attribut width réel.
-            const a = attrs.replace(/(?<!-)\bwidth\s*=\s*"[^"]*"/i, '').trim();
+        const mode = (/data-width\s*=\s*["']?(auto|half)/i.exec(attrs) || [])[1];
+
+        // « auto » = ajusté au contenu : colonnes libres, cellules non coupées (c'est ce qui
+        // évitait « Quantité » coupé en « Quanti / té »). LibreOffice ne suit pas table-layout,
+        // d'où le white-space:nowrap injecté.
+        if (/auto/i.test(mode || '')) {
             const body = inner
                 .replace(/<col\b[^>]*>/gi, '<col>')
                 .replace(/<(td|th)\b([^>]*)>/gi, (cm, tag, cattrs) => (
@@ -208,12 +242,20 @@ function largeurTables(html) {
                         ? `<${tag}${cattrs.replace(/\bstyle\s*=\s*(["'])/i, (sm, q) => `style=${q}white-space:nowrap;`)}>`
                         : `<${tag}${cattrs} style="white-space:nowrap">`
                 ));
-            return `<table ${a}>${body}</table>`;
+            return `<table ${sansLargeur(attrs)}>${body}</table>`;
         }
-        // Pleine largeur (défaut) : on force 100% seulement si aucune largeur n'est déjà fixée.
-        // `(?<!-)` pour ignorer `data-width`, qui n'est pas une largeur de tableau.
-        const dejaLarge = /(?<!-)\bwidth\s*=/i.test(attrs) || /style\s*=\s*"[^"]*\bwidth\s*:/i.test(attrs);
-        return `<table${dejaLarge ? attrs : `${attrs} width="100%"`}>${inner}</table>`;
+        // « half » = compact, aligné à droite (encadré de totaux…). L'alignement est RÉINJECTÉ à
+        // chaque rendu, car l'éditeur ne conserve que les attributs data-*.
+        if (/half/i.test(mode || '')) {
+            return `<table ${sansLargeur(attrs)} align="right" width="45%">${colsEnPourcent(inner)}</table>`;
+        }
+        // Une largeur EXPLICITE de l'auteur (40 %, 8 cm…) est respectée telle quelle.
+        if (largeurExplicite(attrs)) return `<table${attrs}>${inner}</table>`;
+        // PLEINE LARGEUR (défaut) : le tableau doit occuper 100%. L'ÉDITEUR (ProseMirror) fige
+        // pourtant des largeurs de colonnes en PIXELS qui, seules, empêchent l'étirement — c'est
+        // ce qui faisait qu'un tableau « pleine largeur » ne prenait pas toute la largeur. On les
+        // convertit en pourcentages (proportions gardées) et on force width="100%".
+        return `<table ${sansLargeur(attrs)} width="100%">${colsEnPourcent(inner)}</table>`;
     });
 }
 
