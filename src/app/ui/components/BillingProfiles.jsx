@@ -145,7 +145,8 @@ function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
         <div className="field" style={{ gridColumn: "1 / -1" }}>
           <label>Format du numéro de facture</label>
           <input ref={fmtRef} className="inp mono" value={form.number_format || ""}
-            onChange={(e) => set("number_format", e.target.value)} placeholder="{PREFIX}-{YYYY}-{SEQ}" />
+            onChange={(e) => set("number_format", e.target.value)}
+            placeholder={`Ex : FACT-{YYYY}-{SEQ}  donne  FACT-${new Date().getFullYear()}-0001`} />
           {/* Chips à insérer : on clique un jeton, on tape les séparateurs (. - /) au clavier. */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0 0" }}>
             {JETONS_NUMERO.map(([tok, ex]) => (
