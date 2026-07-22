@@ -37,7 +37,7 @@ const StyledTable = Table.extend({
 import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
-import { FontSize, LineHeight, PageBreak } from "./tiptapExtensions.js";
+import { FontSize, LineHeight, PageBreak, Columns, Column } from "./tiptapExtensions.js";
 import { TokenNode } from "./TokenNode.js";
 
 /** Jeu d'extensions partagé par les éditeurs (corps, en-tête, pied de page). */
@@ -59,6 +59,8 @@ export function buildExtensions({ tokens = true } = {}) {
     TableRow,
     TableHeader,
     TableCell,
+    Columns,
+    Column,
   ];
   if (tokens) ext.push(TokenNode);
   return ext;

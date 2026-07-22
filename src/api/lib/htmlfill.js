@@ -114,16 +114,69 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     // 3) Lignes vides : LibreOffice supprime un <p> vide (perte de l'espacement voulu par
     //    l'utilisateur). On y place un espace insécable pour qu'il occupe bien une ligne.
     out = out.replace(/<p\b([^>]*)>(?:\s|&nbsp;| |<br\s*\/?>)*<\/p>/gi, '<p$1> </p>');
+    // 3b) Blocs « colonnes » de l'éditeur → colonnes FLOTTANTES (côte à côte fiable sous
+    //     LibreOffice, y compris quand une colonne contient un tableau). Fait AVANT les bordures.
+    out = columnsToFloats(out);
     // 4) Bordures de tableau : LibreOffice IGNORE le CSS des bordures de cellule ; on injecte
     //    le style EN LIGNE sur chaque cellule selon le style choisi (data-border).
     out = applyTableBorders(out);
     return out;
 }
 
+/**
+ * Parcourt les <table>…</table> ÉQUILIBRÉS de premier niveau (gère l'imbrication) et remplace
+ * chacun par `fn(attrs, inner)`. Contrairement à une regex non gourmande — qui s'arrête au
+ * PREMIER </table> et casse dès qu'un tableau en contient un autre — ce scanner compte les
+ * ouvertures/fermetures pour trouver la vraie fermeture. Indispensable depuis qu'une colonne
+ * peut contenir un tableau (bloc « deux colonnes »).
+ */
+function mapOuterTables(html, fn) {
+    const s = String(html || '');
+    const low = s.toLowerCase();
+    let out = '', idx = 0;
+    while (idx < s.length) {
+        const open = low.indexOf('<table', idx);
+        if (open === -1) { out += s.slice(idx); break; }
+        const gt = s.indexOf('>', open);
+        if (gt === -1) { out += s.slice(idx); break; }
+        out += s.slice(idx, open);
+        const attrs = s.slice(open + 6, gt); // ce qui suit « <table »
+        let depth = 1, j = gt + 1, closeStart = -1, closeEnd = -1;
+        while (j < s.length && depth > 0) {
+            const no = low.indexOf('<table', j);
+            const nc = low.indexOf('</table', j);
+            if (nc === -1) break;
+            if (no !== -1 && no < nc) { depth++; j = no + 6; }
+            else { depth--; if (depth === 0) { closeStart = nc; closeEnd = s.indexOf('>', nc) + 1; } j = nc + 7; }
+        }
+        if (closeStart === -1) { out += s.slice(open); break; } // non équilibré : laissé tel quel
+        out += fn(attrs, s.slice(gt + 1, closeStart));
+        idx = closeEnd;
+    }
+    return out;
+}
+
+/**
+ * Applique `transform(attrs, inner)` à CHAQUE tableau, à tous les niveaux. Les tableaux
+ * imbriqués sont traités récursivement puis mis de côté (jetons \x00…\x00) : `transform` ne
+ * voit donc QUE les cellules/colonnes DIRECTES du tableau courant — jamais celles d'un tableau
+ * contenu (un tableau de totaux dans une colonne garde ainsi ses bordures et sa largeur).
+ */
+function processTables(html, transform) {
+    return mapOuterTables(html, (attrs, inner) => {
+        const stash = [];
+        const flat = mapOuterTables(inner, (a2, i2) => {
+            stash.push(processTables(`<table${a2}>${i2}</table>`, transform));
+            return '\x00T' + (stash.length - 1) + '\x00';
+        });
+        return transform(attrs, flat).replace(/\x00T(\d+)\x00/g, (m, n) => stash[+n]);
+    });
+}
+
 // Applique le style de bordure d'un tableau (data-border : solid|dashed|none, défaut solid)
 // en INLINE sur chaque cellule (seule forme respectée par LibreOffice) + un padding.
 function applyTableBorders(html) {
-    return String(html || '').replace(/<table\b([^>]*)>([\s\S]*?)<\/table>/gi, (m, attrs, inner) => {
+    return processTables(html, (attrs, inner) => {
         const bm = /data-border\s*=\s*["']?(solid|dashed|none)/i.exec(attrs);
         const kind = bm ? bm[1].toLowerCase() : 'solid';
         const border = kind === 'none' ? 'none' : kind === 'dashed' ? '1px dashed #999' : '1px solid #999';
@@ -136,6 +189,95 @@ function applyTableBorders(html) {
         });
         return `<table${attrs}>${newInner}</table>`;
     });
+}
+
+/** Index juste après le <div> ouvert en `open` : renvoie { innerStart, innerEnd, end } de la
+ *  balise appariée (compte l'imbrication des <div>), ou null si déséquilibré. */
+function matchDiv(s, low, open) {
+    const gt = s.indexOf('>', open);
+    if (gt === -1) return null;
+    let depth = 1, j = gt + 1;
+    while (j < s.length && depth > 0) {
+        const no = low.indexOf('<div', j);
+        const nc = low.indexOf('</div', j);
+        if (nc === -1) return null;
+        if (no !== -1 && no < nc) { depth++; j = no + 4; }
+        else { depth--; if (depth === 0) return { innerStart: gt + 1, innerEnd: nc, end: s.indexOf('>', nc) + 1 }; j = nc + 5; }
+    }
+    return null;
+}
+
+/** Prochain <div dont la balise ouvrante satisfait `re`, à partir de `from` (-1 sinon). */
+function findDiv(s, low, from, re) {
+    let i = from;
+    while (i < s.length) {
+        const o = low.indexOf('<div', i);
+        if (o === -1) return -1;
+        const gt = s.indexOf('>', o);
+        if (gt === -1) return -1;
+        if (re.test(s.slice(o, gt + 1))) return o;
+        i = o + 4;
+    }
+    return -1;
+}
+
+/**
+ * Convertit les blocs « colonnes » de l'éditeur (<div data-cols>…<div data-col>…</div>…</div>)
+ * en colonnes FLOTTANTES (float:left).
+ *
+ * POURQUOI PAS UN TABLEAU DE MISE EN PAGE. C'était le premier choix — une cellule par colonne.
+ * Mais LibreOffice place mal un TABLEAU imbriqué dans la DERNIÈRE cellule d'une ligne dès que la
+ * cellule voisine fait plusieurs lignes : le tableau (les totaux, typiquement) « retombe » SOUS
+ * la colonne au lieu de rester à côté. Reproduit au rendu, indépendamment du CSS (colgroup,
+ * table-layout:fixed, cellules enveloppées… rien n'y faisait). Les colonnes flottantes n'ont pas
+ * ce défaut : texte, tableau ou image tiennent côte à côte quel que soit le côté choisi.
+ *
+ * `box-sizing:border-box` (DOC_CSS) fait que la gouttière (padding-right) n'élargit pas la
+ * colonne : les largeurs en % somment donc bien à 100 %. Récursif (colonnes dans une colonne).
+ */
+function columnsToFloats(html) {
+    const s = String(html || '');
+    const low = s.toLowerCase();
+    const RE_COLS = /\bdata-cols\b/;
+    let out = '', idx = 0;
+    while (idx < s.length) {
+        const open = findDiv(s, low, idx, RE_COLS);
+        if (open === -1) { out += s.slice(idx); break; }
+        const m = matchDiv(s, low, open);
+        if (!m) { out += s.slice(idx); break; }
+        out += s.slice(idx, open) + buildFloatRow(s.slice(m.innerStart, m.innerEnd));
+        idx = m.end;
+    }
+    return out;
+}
+
+function buildFloatRow(inner) {
+    const s = String(inner);
+    const low = s.toLowerCase();
+    const RE_COL = /\bdata-col\b/; // \b : ne matche pas « data-cols »
+    const cols = [];
+    let idx = 0;
+    while (idx < s.length) {
+        const open = findDiv(s, low, idx, RE_COL);
+        if (open === -1) break;
+        const m = matchDiv(s, low, open);
+        if (!m) break;
+        const tag = s.slice(open, s.indexOf('>', open) + 1);
+        const wm = /data-w\s*=\s*"(\d+(?:\.\d+)?)"/i.exec(tag);
+        cols.push({ w: wm ? parseFloat(wm[1]) : null, html: columnsToFloats(s.slice(m.innerStart, m.innerEnd)) });
+        idx = m.end;
+    }
+    if (!cols.length) return '';
+    const n = cols.length;
+    const equal = Math.floor((100 / n) * 10) / 10; // arrondi bas : jamais > 100 % au total
+    const boxes = cols.map((c, i) => {
+        const w = c.w != null ? c.w : equal;
+        const gut = i < n - 1 ? ';padding-right:12px' : ''; // gouttière sauf après la dernière
+        return `<div class="col-box" style="float:left;width:${w}%${gut}">${c.html}</div>`;
+    }).join('');
+    // overflow:hidden = la rangée englobe ses colonnes flottées ; le clear final relance le flux
+    // normal (le contenu suivant passe DESSOUS, jamais à côté).
+    return `<div class="cols-row" style="width:100%;overflow:hidden;margin:8px 0">${boxes}<div style="clear:both"></div></div>`;
 }
 
 /** En-tête (papier à en-tête) construit à partir de l'organisme. */
@@ -228,7 +370,7 @@ function colsEnPourcent(inner) {
 }
 
 function largeurTables(html) {
-    return String(html || '').replace(/<table\b([^>]*)>([\s\S]*?)<\/table>/gi, (m, attrs, inner) => {
+    return processTables(html, (attrs, inner) => {
         const mode = (/data-width\s*=\s*["']?(auto|half)/i.exec(attrs) || [])[1];
 
         // « auto » = ajusté au contenu : colonnes libres, cellules non coupées (c'est ce qui

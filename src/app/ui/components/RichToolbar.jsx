@@ -167,6 +167,7 @@ function RichToolbar({ editor, compact = false }) {
           <Btn title="Lien" active={editor.isActive("link")} on={addLink}><Icon name="link" size={16} /></Btn>
           <Btn title="Image" on={() => imgInput.current?.click()}><Icon name="image" size={16} /></Btn>
           <TableInserter onInsert={(rows, cols) => c().insertTable({ rows, cols, withHeaderRow: true }).run()} />
+          <Btn title="Bloc deux colonnes (texte à côté d'un tableau, même bande)" on={() => c().insertColumns(2).run()}>◫</Btn>
           <Btn title="Ligne horizontale" on={() => c().setHorizontalRule().run()}>—</Btn>
           <Btn title="Saut de page (Ctrl/Cmd + Entrée)" on={() => c().setPageBreak().run()}>⇟</Btn>
           <input ref={imgInput} type="file" accept="image/*" style={{ display: "none" }}
@@ -194,6 +195,17 @@ function RichToolbar({ editor, compact = false }) {
           <Btn title="Ajusté au contenu (sans couper le texte)" active={editor.getAttributes("table").widthMode === "auto"} on={() => c().updateAttributes("table", { widthMode: "auto" }).run()}>⇥⇤</Btn>
           <Btn title="Compact, aligné à droite (totaux…)" active={editor.getAttributes("table").widthMode === "half"} on={() => c().updateAttributes("table", { widthMode: "half" }).run()}>▟</Btn>
           <Btn title="Supprimer le tableau" on={() => c().deleteTable().run()}>⌫tab</Btn>
+        </>
+      )}
+
+      {editor.isActive("columns") && !compact && (
+        <>
+          <Sep />
+          <Btn title="Colonnes égales" on={() => c().setColumnsRatio([]).run()}>50/50</Btn>
+          <Btn title="Colonne de gauche plus large" on={() => c().setColumnsRatio([62, 38]).run()}>⅔ / ⅓</Btn>
+          <Btn title="Colonne de droite plus large" on={() => c().setColumnsRatio([38, 62]).run()}>⅓ / ⅔</Btn>
+          <Btn title="Ajouter une colonne" on={() => c().addColumn().run()}>＋col</Btn>
+          <Btn title="Retirer cette colonne" on={() => c().removeColumn().run()}>⌫col</Btn>
         </>
       )}
     </div>

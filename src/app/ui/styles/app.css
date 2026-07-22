@@ -726,6 +726,17 @@ tbody tr:last-child td{border-bottom:none}
 /* Style de bordure du tableau (choisi dans la barre d'outils). */
 .doc-canvas table.tbl-b-dashed th,.doc-canvas table.tbl-b-dashed td{border:1px dashed var(--line,#999)}
 .doc-canvas table.tbl-b-none th,.doc-canvas table.tbl-b-none td{border:1px dotted #e2e2e6} /* repère léger dans l'éditeur ; aucune bordure au PDF */
+/* Bloc « deux colonnes » : reflète FIDÈLEMENT le tableau de mise en page du PDF (cellules
+   alignées en haut, largeurs en %, tableau interne pleine largeur de sa colonne). Le padding
+   5px 7px reprend celui injecté sur les cellules du tableau de mise en page au rendu, pour que
+   la place occupée dans l'éditeur soit celle du document final. */
+.doc-canvas .doc-cols{display:flex;width:100%;margin:8px 0;align-items:flex-start}
+.doc-canvas .doc-col{flex:1 1 0;min-width:0;padding:5px 7px;border:1px dashed #dcdce2;border-radius:4px}
+.doc-canvas .doc-col+.doc-col{margin-left:-1px} /* filets mitoyens confondus, comme une gouttière */
+.doc-canvas .doc-cols:focus-within .doc-col,.doc-canvas .doc-col:hover{border-color:#c6c6cf}
+.doc-canvas .doc-col>:first-child{margin-top:0}
+.doc-canvas .doc-col>:last-child{margin-bottom:0}
+.doc-canvas .doc-col table{margin:2px 0} /* le tableau remplit la colonne (width:100% hérité) */
 /* Les images ne débordent pas la colonne page (comme au rendu PDF, borné à la largeur utile). */
 .doc-canvas img{max-width:100%;height:auto}
 .doc-canvas.preview .prev-val{background:#eef6ee;border-radius:4px;padding:0 3px}
