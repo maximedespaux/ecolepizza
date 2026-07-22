@@ -147,6 +147,23 @@ const TOKEN_CATALOG = [
         ],
     },
     {
+        group: 'Facture',
+        tokens: [
+            { key: 'Numéro facture', label: 'Numéro', sample: 'F-2026-0012' },
+            { key: 'Type facture', label: 'Type de pièce', sample: 'Facture' },
+            { key: 'Date facture', label: 'Date d’émission', sample: '21/07/2026' },
+            { key: 'Échéance facture', label: 'Date d’échéance', sample: '20/08/2026' },
+            { key: 'Acheteur', label: 'Nom de l’acheteur', sample: 'Guillaume DESPAUX' },
+            { key: 'Adresse acheteur', label: 'Adresse de l’acheteur', sample: '12 rue des Fours, 33000 Bordeaux' },
+            { key: 'Siret acheteur', label: 'SIRET de l’acheteur', sample: '123 456 789 00012' },
+            { key: 'Total HT', label: 'Total hors taxes', sample: '17,82 €' },
+            { key: 'Total TVA', label: 'Total TVA', sample: '3,56 €' },
+            { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21,38 €' },
+            { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20,00 % sur 17,82 € : 3,56 €' },
+            { key: 'Articles', label: 'Tableau des articles', sample: '(tableau désignation / qté / prix / total)' },
+        ],
+    },
+    {
         group: 'Dates',
         tokens: [
             { key: 'Date', label: 'Date du jour', sample: '06/07/2026' },
@@ -194,10 +211,89 @@ const TOKEN_CATALOG = [
 ];
 
 // Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats']);
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles']);
 
 // Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
 const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Tableau des articles d'une facture, un article par ligne. RAW : injecté tel quel.
+ *
+ * MÊME PRINCIPE QUE {Résultats} — un seul jeton qui produit un tableau complet. C'est la
+ * réponse à un défaut d'ergonomie réel : la première version demandait d'insérer un bloc
+ * {#Articles}…{/Articles} sous forme de TEXTE BRUT dans le document. On voyait alors des
+ * accolades et des marqueurs au milieu d'un modèle où tout le reste est une puce propre —
+ * fragile à l'édition (un retour à la ligne mal placé cassait le bloc) et illisible.
+ *
+ * Une puce, un tableau. Le bloc reste disponible pour qui veut choisir ses colonnes, mais il
+ * n'est plus le chemin normal.
+ *
+ * Les colonnes suivent l'ordre d'une facture : ce qu'on a acheté, combien, à quel prix, ce que
+ * ça fait. La colonne TVA n'apparaît QUE si les articles ont des taux différents — sur une
+ * facture à taux unique, elle répète la même valeur à chaque ligne pour rien, et le taux est
+ * déjà donné par {Détail TVA}.
+ */
+function articlesTable(list) {
+    const rows = Array.isArray(list) ? list : [];
+    if (!rows.length) return '';
+    const taux = new Set(rows.map((l) => Number(l.taxRate ?? 20)));
+    const mixte = taux.size > 1;
+    const head = '<tr><th>Désignation</th><th>Qté</th><th>P.U. HT</th><th>Montant HT</th>'
+        + (mixte ? '<th>TVA</th>' : '') + '<th>Total TTC</th></tr>';
+
+    // LARGEURS DE COLONNES EXPLICITES. Sans elles, LibreOffice répartit à parts égales : la
+    // désignation d'un article se retrouvait sur deux lignes pendant que « Qté » — trois
+    // caractères — occupait autant de place, au point de se couper en « Q / té ». La
+    // désignation est le seul champ de longueur variable ; elle prend ce que les autres, de
+    // largeur connue, n'utilisent pas.
+    const cols = mixte
+        ? [46, 7, 13, 13, 8, 13]
+        : [50, 8, 14, 14, 14];
+    const colgroup = `<colgroup>${cols.map((w) => `<col width="${w}%">`).join('')}</colgroup>`;
+    const cellules = rows.map((l, i) => articleRowTokens(l, i));
+    const body = cellules.map((c) => (
+        `<tr><td>${escCell(c['Désignation'])}</td><td>${escCell(c['Quantité'])}</td>`
+        + `<td>${escCell(c['Prix unitaire HT'])}</td><td>${escCell(c['Montant HT'])}</td>`
+        + (mixte ? `<td>${escCell(c['Taux TVA'])}</td>` : '')
+        + `<td>${escCell(c['Montant TTC'])}</td></tr>`
+    )).join('');
+
+    // `width="100%"` : LibreOffice ignore la largeur CSS sur un tableau (cf. largeurTables).
+    return `<table width="100%">${colgroup}<tbody>${head}${body}${totalRow(cellules, mixte)}</tbody></table>`;
+}
+
+/**
+ * Ligne de totaux, en bas du tableau des articles.
+ *
+ * ON ADDITIONNE CE QUI EST IMPRIMÉ, pas les valeurs d'origine. C'est le point délicat : les
+ * montants de ligne sont arrondis au centime pour l'affichage, et additionner les valeurs
+ * brutes donnerait un total qui ne correspond PAS à la colonne au-dessus. Un client qui
+ * vérifie sa facture à la calculette trouverait un centime d'écart et aurait raison de le
+ * signaler — sur une pièce comptable, un total qui ne tombe pas juste met en doute le reste.
+ *
+ * On relit donc les chaînes de la colonne. Ça paraît détourné, mais c'est exactement la
+ * garantie qu'on veut : le total est, par construction, la somme de ce que le lecteur voit.
+ *
+ * LA COLONNE TVA RESTE VIDE quand les taux diffèrent : additionner 5,5 % et 20 % ne veut rien
+ * dire, et y écrire un taux moyen serait une information fausse. La ventilation par taux est
+ * donnée ailleurs, par {Détail TVA}.
+ *
+ * LA QUANTITÉ N'EST TOTALISÉE QUE SI ELLE EXISTE. Une facture de formation n'a pas de
+ * quantités ; un « 0 » y ressemblerait à une donnée alors que c'est une absence.
+ */
+function totalRow(cellules, mixte) {
+    const nombre = (s) => Number(String(s || '').replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+    const eur = (n) => `${n.toFixed(2)} €`;
+
+    const qtes = cellules.map((c) => c['Quantité']).filter((q) => q !== '');
+    const totalQte = qtes.length ? String(qtes.reduce((s, q) => s + nombre(q), 0)) : '';
+    const totalHt = cellules.reduce((s, c) => s + nombre(c['Montant HT']), 0);
+    const totalTtc = cellules.reduce((s, c) => s + nombre(c['Montant TTC']), 0);
+
+    const g = (v) => `<td><strong>${escCell(v)}</strong></td>`;
+    return `<tr><td><strong>Total</strong></td>${g(totalQte)}<td></td>${g(eur(totalHt))}`
+        + (mixte ? '<td></td>' : '') + `${g(eur(totalTtc))}</tr>`;
+}
 
 // Tableau des résultats d'examen, un bloc par ligne. RAW : injecté tel quel dans le PV.
 // Le verdict n'est pas recalculé ici — il est lu depuis `verdicts`, figé à la clôture de la
@@ -252,6 +348,82 @@ function stagiaireRowTokens(s, i) {
         Ville: s.town || '', Adresse: s.address || '', CP: s.zip_code || '',
         'Lieu naissance': s.birth_place || '', D_Naissance: frDate(s.birthday), Naissance: frDate(s.birthday),
     };
+}
+
+/**
+ * Jetons disponibles À L'INTÉRIEUR d'un bloc {#Articles}…{/Articles}.
+ *
+ * Même principe que `stagiaireRowTokens` : le bloc est répété une fois par ligne de facture,
+ * et ces jetons-là sont recalculés à chaque tour. Les jetons globaux (Organisme, Total TTC…)
+ * restent accessibles dans le bloc — c'est `expandBlocks` qui ne remplace que les jetons de
+ * ligne, laissant les autres au remplacement normal.
+ */
+function articleRowTokens(l, i) {
+    const eur = (n) => (n == null || n === '' ? '' : `${Number(n).toFixed(2)} €`);
+    const qte = Number(l.qty || 0) || null;
+    const pu = l.unit_price_ht != null ? Number(l.unit_price_ht) : (qte ? Number(l.amount) / qte : null);
+    const taux = Number(l.taxRate ?? 20);
+    const ht = Number(l.amount || 0);
+    return {
+        'N°': String(i + 1),
+        'Désignation': l.name || '',
+        'Quantité': qte != null ? String(qte) : '',
+        'Prix unitaire HT': eur(pu),
+        'Montant HT': eur(ht),
+        'Taux TVA': `${taux.toFixed(2)} %`,
+        'Montant TVA': eur(Math.round(ht * taux) / 100),
+        'Montant TTC': eur(ht + Math.round(ht * taux) / 100),
+    };
+}
+
+/**
+ * Développe les blocs répétés d'une LISTE nommée : {#Articles}…{/Articles}.
+ *
+ * Généralise ce que `expandGroupBlocks` faisait pour les seuls stagiaires. Deux blocs, deux
+ * listes, un seul mécanisme — plutôt qu'une seconde fonction qui ferait la même chose à un
+ * nom près et divergerait à la première correction.
+ */
+function expandListBlocks(html, nom, rows, rowTokens) {
+    const list = Array.isArray(rows) ? rows : [];
+    let out = String(html || '');
+
+    /* FORME TABLEAU, traitée en premier.
+     *
+     * L'éditeur de modèles est un ProseMirror : sa grammaire interdit du texte directement
+     * dans un <tbody>. Un gabarit écrit « <tbody>{#Articles}<tr>… » voit donc ses marqueurs
+     * REMONTÉS hors du tableau à l'insertion — ils atterrissent dans un paragraphe au-dessus,
+     * et le bloc ne se répète jamais. Constaté dans l'éditeur réel.
+     *
+     * Les marqueurs vivent donc DANS des cellules, ce que la grammaire accepte, et c'est la
+     * LIGNE qui les contient qu'on répète. `<tr>` complet à chaque article, marqueurs retirés.
+     */
+    const reLigne = new RegExp(
+        `<tr\\b[^>]*>(?:(?!</tr>)[\\s\\S])*?\\{#\\s*${nom}\\s*\\}[\\s\\S]*?\\{/\\s*${nom}\\s*\\}(?:(?!</tr>)[\\s\\S])*?</tr>`, 'g');
+    out = out.replace(reLigne, (ligne) => {
+        if (!list.length) return '';
+        const gabarit = ligne
+            .replace(new RegExp(`\\{#\\s*${nom}\\s*\\}`, 'g'), '')
+            .replace(new RegExp(`\\{/\\s*${nom}\\s*\\}`, 'g'), '');
+        return list.map((r, i) => remplirLigne(gabarit, rowTokens(r, i))).join('');
+    });
+
+    const re = new RegExp(`\\{#\\s*${nom}\\s*\\}([\\s\\S]*?)\\{/\\s*${nom}\\s*\\}`, 'g');
+    return out.replace(re, (m, tpl) => {
+        if (!list.length) return '';
+        return list.map((r, i) => remplirLigne(tpl, rowTokens(r, i))).join('');
+    });
+}
+
+/** Remplace, dans un gabarit, les jetons d'UNE ligne — puces de l'éditeur comme texte {Clé}. */
+function remplirLigne(gabarit, vals) {
+    let out = gabarit;
+    for (const [k, v] of Object.entries(vals)) {
+        const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const val = String(v == null ? '' : v);
+        out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'), val);
+        out = out.split(`{${k}}`).join(val);
+    }
+    return out;
 }
 
 // Développe les blocs répétés « par stagiaire du groupe » AVANT le remplacement normal :
@@ -376,6 +548,37 @@ function findMissingTokens(htmlParts, ctx) {
 }
 
 /** Table { Jeton: valeur } à partir du contexte (org, learner, company, formations). */
+/**
+ * Valeurs des jetons propres a une FACTURE.
+ *
+ * Separe de `resolveTokens` parce qu'ils ne viennent pas du meme endroit : une facture n'a pas
+ * de dossier, pas de session, pas de formation. Elle a un acheteur — qui peut etre un stagiaire
+ * OU une entreprise OU un nom libre saisi au comptoir — des lignes, et des totaux.
+ *
+ * Ils sont FUSIONNES aux jetons standard : un modele de facture peut donc utiliser
+ * {Organisme}, {Adresse organisme} ou {Siret organisme} comme n'importe quel autre document.
+ */
+function invoiceTokens(inv = {}) {
+    if (!inv || !inv.number) return {};
+    const v = inv.tva || {};
+    return {
+        'Numéro facture': inv.number || '',
+        'Type facture': inv.typeLabel || 'Facture',
+        'Date facture': inv.dateFr || '',
+        'Échéance facture': inv.dueFr || '',
+        'Acheteur': inv.buyerName || '',
+        'Adresse acheteur': inv.buyerAddress || '',
+        'Siret acheteur': inv.buyerSiret || '',
+        'Total HT': inv.totalHt || '',
+        'Total TVA': inv.totalTva || '',
+        'Total TTC': inv.totalTtc || '',
+        'Détail TVA': inv.detailTva || '',
+        // Tableau complet, comme {Résultats}. Le bloc {#Articles}…{/Articles} reste possible
+        // pour qui veut choisir ses colonnes ; ce jeton-ci est le chemin normal.
+        'Articles': articlesTable(inv.articles),
+    };
+}
+
 function resolveTokens(ctx = {}) {
     const o = ctx.org || {};
     const l = ctx.learner || {};
@@ -439,6 +642,8 @@ function resolveTokens(ctx = {}) {
         ? `${nbExternes} membre${nbExternes > 1 ? 's' : ''} sur ${jury.length} extérieur${nbExternes > 1 ? 's' : ''} à l'organisme. `
           + `Aucun membre n'a formé les candidats évalués.`
         : '';
+
+    const factureVals = invoiceTokens(ctx.invoice);
 
     return {
         // Stagiaire
@@ -513,7 +718,10 @@ function resolveTokens(ctx = {}) {
             Objectifs: x.objectives || '', 'Déroulé': x.program_detail || '', 'DuréeDétail': x.duration_detail || '',
             Debut: frDate(x.start_date), Fin: frDate(x.end_date),
         })),
+        // Jetons propres a une FACTURE. Fusionnes en dernier : ils ne remplacent rien, ils
+        // s'ajoutent — un modele de facture garde acces a {Organisme}, {Adresse organisme}…
+        ...factureVals,
     };
 }
 
-module.exports = { TOKEN_CATALOG, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };

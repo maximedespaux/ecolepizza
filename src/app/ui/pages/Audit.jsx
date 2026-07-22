@@ -5,17 +5,7 @@ import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
-
-const ACTION_LABEL = {
-  "document.send": ["Document envoyé", "b"],
-  "document.sign": ["Document signé", "g"],
-  "document.create": ["Document préparé", "n"],
-  "sale.create": ["Vente enregistrée", "a"],
-  "attendance.generate": ["Émargement généré", "n"],
-  "organization.update": ["Organisme modifié", "n"],
-  "learner.create": ["Stagiaire ajouté", "n"],
-  "session.create": ["Session planifiée", "n"],
-};
+import { auditLabel, entityLabel } from "../lib/auditLabels.js";
 
 function Audit() {
   const [rows, setRows] = useState([]);
@@ -46,13 +36,13 @@ function Audit() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {rows.map((r) => {
-              const [label, tone] = ACTION_LABEL[r.action] || [r.action, "n"];
+              const { label, tone } = auditLabel(r.action, r.entity);
               const who = [r.first_name, r.last_name].filter(Boolean).join(" ") || r.email || "Système";
               return (
                 <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
                   <span className="mono" style={{ fontSize: 12, color: "var(--dim)", width: 120 }}>{r.created_at}</span>
                   <Badge tone={tone}>{label}</Badge>
-                  <span style={{ flex: 1, fontSize: 13, color: "var(--muted)" }}>{r.entity || ""}</span>
+                  <span style={{ flex: 1, fontSize: 13, color: "var(--muted)" }}>{entityLabel(r.entity)}</span>
                   <span style={{ fontSize: 12.5 }}>{who}</span>
                 </div>
               );

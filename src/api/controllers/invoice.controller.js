@@ -1,7 +1,11 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
-const { buildCII, buildFacturXPdf } = require('../lib/facturx.js');
+const { buildCII, attacherFacturX, ventilerTva, manquantsFacturX } = require('../lib/facturx.js');
+const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
+const { renderTemplateHtml } = require('../lib/htmlfill.js');
+const { htmlToPdf } = require('../lib/docxpdf.js');
 
 const PREFIX = { DEVIS: 'D', ACOMPTE: 'A', FACTURE: 'F', AVOIR: 'AV' };
 const TYPE_LABEL = { DEVIS: 'Devis', ACOMPTE: 'Facture d\'acompte', FACTURE: 'Facture', AVOIR: 'Avoir' };
@@ -14,11 +18,6 @@ function validAmount(v) {
 }
 
 // Vérifie qu'un id référencé (entreprise, dossier) appartient bien à l'organisme.
-async function belongsToOrg(conn, table, id, orgId) {
-    if (!id) return true; // null autorisé
-    const [[row]] = await conn.query(`SELECT 1 AS ok FROM ${table} WHERE id = ? AND organization_id = ? LIMIT 1`, [id, orgId]);
-    return !!row;
-}
 
 // Assemble les données de facturation (vendeur, client, ligne) pour Factur-X.
 async function loadInvoiceData(conn, orgId, invoiceId) {
@@ -35,27 +34,81 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     if (rows.length === 0) return null;
     const inv = rows[0];
 
+    // `[[org]]` extrait DÉJÀ la première ligne : mysql2 rend [lignes, champs], donc la double
+    // déstructuration donne la ligne elle-même. Le `org[0]` qui suivait la cherchait une
+    // seconde fois et tombait sur `undefined` — l'organisme n'était donc JAMAIS chargé.
+    //
+    // Visible sur toute facture émise : l'en-tête vendeur affichait « Organisme » et
+    // « SIRET — » au lieu de la raison sociale et du SIRET réels. Une facture sans identité
+    // du vendeur n'a pas de valeur probante, et le XML Factur-X partait sans BT-31/BT-32.
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
-    const o = org[0] || {};
+    const o = org || {};
 
     // Client : nom libre > entreprise > stagiaire du dossier.
-    let buyer = { name: 'Client', siret: null, address: {} };
-    if (inv.buyer_name) {
-        buyer = { name: inv.buyer_name, siret: null, address: {} };
-    } else if (inv.company_id) {
+    // `email` n'est pas décoratif : c'est BT-49, l'adresse électronique de l'acheteur, rendue
+    // OBLIGATOIRE en France par BR-FR-12. Une facture émise pour un client saisi au nom libre
+    // n'en a aucune et sera rejetée à la validation — d'où l'avertissement remonté plus bas.
+    // L'ORDRE DIT QUI EST FACTURÉ, et l'entreprise passe EN PREMIER. Quand une vente porte à la
+    // fois `company_id` et `learner_id`, c'est l'entreprise qui achète — le stagiaire n'est
+    // qu'un rattachement comptable. Tester learner_id d'abord facturerait la mauvaise partie, et
+    // priverait le XML du SIRET (BT-30) que porte l'entreprise, pas la personne.
+    let buyer = { name: 'Client', siret: null, email: null, address: {} };
+    if (inv.company_id) {
         const [c] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [inv.company_id, orgId]);
-        if (c[0]) buyer = { name: c[0].name, siret: c[0].siret, address: { line: c[0].address, zip: c[0].zip_code, city: c[0].town } };
+        if (c[0]) {
+            buyer = {
+                // Le nom IMPRIMÉ prime : renommer une fiche ne doit pas récrire une pièce émise.
+                name: inv.buyer_name || c[0].name,
+                siret: c[0].siret,
+                email: inv.buyer_email || c[0].email || null,
+                address: { line: c[0].address, zip: c[0].zip_code, city: c[0].town },
+            };
+        }
+    } else if (inv.learner_id) {
+        // La VENTE garde désormais la référence du stagiaire, pas seulement son nom. Sans elle,
+        // l'e-mail et l'adresse restaient sur la fiche, inatteignables depuis la facture.
+        const [l] = await conn.query(
+            'SELECT first_name, last_name, email, address, zip_code, town FROM learner WHERE id = ? AND organization_id = ?',
+            [inv.learner_id, orgId]
+        );
+        if (l[0]) {
+            buyer = {
+                name: inv.buyer_name || `${l[0].first_name || ''} ${l[0].last_name || ''}`.trim(),
+                siret: null,
+                email: inv.buyer_email || l[0].email || null,
+                address: { line: l[0].address, zip: l[0].zip_code, city: l[0].town },
+            };
+        }
+    } else if (inv.buyer_name) {
+        buyer = { name: inv.buyer_name, siret: null, email: inv.buyer_email || null, address: {} };
     } else if (inv.enrollment_id) {
         const [l] = await conn.query(
-            `SELECT l.first_name, l.last_name, l.address, l.zip_code, l.town
+            `SELECT l.first_name, l.last_name, l.email, l.address, l.zip_code, l.town
              FROM enrollment e JOIN learner l ON l.id = e.learner_id WHERE e.id = ?`,
             [inv.enrollment_id]
         );
-        if (l[0]) buyer = { name: `${l[0].first_name || ''} ${l[0].last_name || ''}`.trim(), siret: null, address: { line: l[0].address, zip: l[0].zip_code, city: l[0].town } };
+        if (l[0]) buyer = { name: `${l[0].first_name || ''} ${l[0].last_name || ''}`.trim(), siret: null, email: l[0].email || null, address: { line: l[0].address, zip: l[0].zip_code, city: l[0].town } };
     }
 
     // Lignes de la facture (plusieurs dossiers possibles) ; repli sur ligne unique.
-    const [lineRows] = await conn.query(
+    // `il.tax_rate` peut ne pas exister (migration 108 non jouée) : la requête est rejouée
+    // sans lui, et l'édition retombe alors sur 20 % comme avant.
+    let lineRows;
+    try {
+        [lineRows] = await conn.query(
+            `SELECT il.description, il.amount_net, il.tax_rate, il.qty, il.unit_price_ht,
+                    p.title AS program_title, l.first_name, l.last_name
+             FROM invoice_line il
+             LEFT JOIN enrollment e ON e.id = il.enrollment_id
+             LEFT JOIN training_session s ON s.id = e.session_id
+             LEFT JOIN training_program p ON p.id = s.program_id
+             LEFT JOIN learner l ON l.id = e.learner_id
+             WHERE il.invoice_id = ? ORDER BY il.sort_order, il.id`,
+            [invoiceId]
+        );
+    } catch (e) {
+        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+        [lineRows] = await conn.query(
         `SELECT il.description, il.amount_net, p.title AS program_title, l.first_name, l.last_name
          FROM invoice_line il
          LEFT JOIN enrollment e ON e.id = il.enrollment_id
@@ -63,13 +116,18 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
          LEFT JOIN training_program p ON p.id = s.program_id
          LEFT JOIN learner l ON l.id = e.learner_id
          WHERE il.invoice_id = ? ORDER BY il.sort_order, il.id`,
-        [invoiceId]
-    );
+            [invoiceId]
+        );
+    }
     const lineName = (r) => r.description
         || [r.program_title, (r.last_name ? `${r.last_name} ${r.first_name || ''}`.trim() : '')].filter(Boolean).join(' — ')
         || 'Prestation de formation';
     const lines = lineRows.length
-        ? lineRows.map((r) => ({ name: lineName(r), amount: Number(r.amount_net) }))
+        ? lineRows.map((r) => ({
+            name: lineName(r), amount: Number(r.amount_net), taxRate: r.tax_rate ?? null,
+            qty: r.qty != null ? Number(r.qty) : null,
+            unit_price_ht: r.unit_price_ht != null ? Number(r.unit_price_ht) : null,
+        }))
         : [{ name: inv.description || inv.program_title || 'Prestation de formation', amount: Number(inv.amount_net) }];
 
     return {
@@ -80,12 +138,14 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         dueDate: inv.due_ymd || null,
         amountNet: inv.amount_net,
         tvaExoneree: !!inv.tva_exoneree,
+        taxRate: inv.tax_rate ?? null, // NULL = facture antérieure à la 108 → 20 % comme avant
         lines,
         lineName: inv.description || inv.program_title || 'Prestation de formation',
         seller: {
             name: o.legal_name || 'Organisme',
             siret: o.siret || null,
             vat: o.vat_number || null,
+            email: o.email || null, // BT-34, obligatoire (BR-FR-13)
             address: { line: o.address, zip: o.zip_code, city: o.town },
         },
         buyer,
@@ -275,6 +335,21 @@ const deleteInvoice = (req, res) => {
 };
 
 /**
+ * Signale ce qui empêchera la facture de passer la validation française.
+ *
+ * On N'EMPÊCHE PAS l'émission : la facture reste juridiquement valable, et refuser de la
+ * produire parce qu'un e-mail manque bloquerait l'organisme sans rien résoudre. Mais on ne se
+ * tait pas non plus — sans ça, le défaut ne se découvre qu'au rejet par la plateforme, des
+ * jours plus tard, loin de l'écran où il se corrige.
+ */
+function avertirConformite(res, data) {
+    const manque = manquantsFacturX(data);
+    if (!manque.length) return;
+    console.warn(`Facture ${data.number} : non conforme XP Z12-012, il manque ${manque.join(', ')}`);
+    res.set('X-Facturx-Manquants', encodeURIComponent(manque.join(' | ')));
+}
+
+/**
  * GET /api/factures/:id/xml — XML CII (Factur-X BASIC).
  */
 const getInvoiceXml = async (req, res) => {
@@ -283,6 +358,7 @@ const getInvoiceXml = async (req, res) => {
         const data = await loadInvoiceData(conn, req.user.organization_id, req.params.id);
         if (!data) return res.status(404).json({ message: 'Facture introuvable' });
         const xml = buildCII(data);
+        avertirConformite(res, data);
         res.set('Content-Type', 'application/xml; charset=utf-8');
         res.set('Content-Disposition', `attachment; filename="${data.number}.xml"`);
         res.send(xml);
@@ -293,6 +369,184 @@ const getInvoiceXml = async (req, res) => {
 };
 
 /**
+ * Produit le PDF de la facture, depuis le MODÈLE de l'organisme s'il en a désigné un.
+ *
+ * L'organisme choisit un modèle de document (Ventes → Réglages) ; il est alors rendu avec les
+ * jetons de la facture, converti en PDF, et le XML Factur-X lui est attaché comme d'habitude.
+ * Sans modèle désigné — le cas par défaut — la mise en page interne continue de servir, à
+ * l'identique. Personne ne se voit imposer un changement sur ses factures.
+ *
+ * LE XML N'EST JAMAIS CONFIÉ AU MODÈLE. Il est normé (EN 16931) : sa structure n'est pas une
+ * question de mise en page, et la laisser configurer produirait des factures non conformes. Le
+ * modèle décide de ce que le client LIT, le code de ce que sa comptabilité IMPORTE.
+ *
+ * Si le rendu du modèle échoue — modèle supprimé, conversion PDF indisponible — on retombe sur
+ * la mise en page interne plutôt que de ne rien livrer : une facture doit toujours pouvoir
+ * sortir. C'est l'inverse de la règle appliquée aux documents de dossier, et pour une raison :
+ * là-bas, un contenu inventé se fait signer ; ici, la facture est la même pièce, seule sa
+ * présentation diffère.
+ */
+/**
+ * Produit le PDF de la facture, à partir du MODÈLE désigné par l'organisme.
+ *
+ * PAS DE MODÈLE, PAS DE FACTURE. Il n'existe plus de mise en page interne : elle a été retirée
+ * du code, pas seulement débranchée. C'est la même règle que pour les documents de dossier, et
+ * pour la même raison — une pièce dont le contenu n'est fixé nulle part n'a pas à être émise.
+ * Un gabarit de secours qui traîne finit toujours par resservir « juste pour dépanner », et
+ * personne ne sait plus alors ce qui a été envoyé au client.
+ *
+ * Le modèle doit être de type FACTURE. C'est vérifié ici en plus de l'être à l'enregistrement
+ * du réglage : un modèle peut changer de type après avoir été choisi, et une facture rendue à
+ * partir d'un modèle de convention ne se remarquerait qu'une fois chez le client.
+ *
+ * LE XML N'EST JAMAIS CONFIÉ AU MODÈLE. Il est normé (EN 16931) : sa structure n'est pas une
+ * question de mise en page. Le modèle décide de ce que le client LIT, le code de ce que sa
+ * comptabilité IMPORTE.
+ *
+ * Lève une erreur portant `.motif` — l'appelant en fait un 422 lisible plutôt qu'un 500 muet.
+ */
+/**
+ * Produit le PDF de la facture, a partir du modele de type FACTURE de l'organisme.
+ *
+ * AUCUN REGLAGE, AUCUNE COLONNE. Le lien « ce modele est ma facture » n'a pas besoin d'etre
+ * stocke : il est deja dans le modele lui-meme, par son `doc_type`. Une premiere version
+ * ajoutait une colonne `invoice_template_slug` a shop_settings, ce qui creait un SECOND
+ * mecanisme de designation a cote de celui qui existe pour tous les autres documents — et deux
+ * mecanismes pour la meme question finissent toujours par se contredire.
+ *
+ * PLUSIEURS MODELES DE TYPE FACTURE sont permis : ils se departagent par leurs conditions
+ * (`applies_when`), exactement comme les variantes devis particulier / entreprise / RS7404. On
+ * reutilise `matchStep`, le meme moteur que partout ailleurs. A conditions egales, le plus
+ * petit `sort_order` gagne — c'est l'ordre qu'affiche deja l'ecran Modeles.
+ *
+ * PAS DE MODELE, PAS DE FACTURE. Il n'existe plus de mise en page interne : elle a ete retiree
+ * du code, pas debranchee. Meme regle que pour les documents de dossier.
+ *
+ * LE XML N'EST JAMAIS CONFIE AU MODELE. Il est norme (EN 16931) : le modele decide de ce que
+ * le client LIT, le code de ce que sa comptabilite IMPORTE.
+ *
+ * Leve une erreur portant `.motif` — l'appelant en fait un 422 lisible plutot qu'un 500 muet.
+ */
+async function buildInvoicePdf(conn, orgId, data, xml) {
+    const refus = (motif) => Object.assign(new Error(motif), { motif });
+
+    const steps = await loadOrgSteps(orgId);
+    const factures = steps.filter((x) => x.active && String(x.doc_type || '').toUpperCase() === 'FACTURE');
+    if (!factures.length) {
+        throw refus("Aucun modele de type FACTURE n'existe. Creez-le dans Modeles de documents : "
+            + 'sans lui, aucune facture ne peut etre editee.');
+    }
+
+    // LE CHOIX EST EXPLICITE, pas deduit. On avait d'abord retenu de trouver le modele par son
+    // seul type, en departageant d'eventuelles variantes par leurs conditions. Ca ne tient pas
+    // des qu'un organisme a plusieurs modeles FACTURE qui ne se distinguent PAS par une
+    // condition — une facture de formation et une facture de boutique s'adressent au meme
+    // client dans le meme cas. Le choix serait alors decide par un `sort_order` que personne ne
+    // pense a regarder, et une facture partirait avec la mauvaise presentation.
+    let slug = null;
+    try {
+        const [[st]] = await conn.query(
+            'SELECT invoice_template_slug FROM shop_settings WHERE organization_id = ?', [orgId]);
+        slug = (st && st.invoice_template_slug) || null;
+    } catch (e) {
+        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+    }
+
+    // Un seul modele FACTURE : le designer serait une formalite sans enjeu, on le prend.
+    // L'ambiguite ne nait qu'a partir de deux.
+    const step = slug
+        ? factures.find((x) => x.slug === slug)
+        : (factures.length === 1 ? factures[0] : null);
+
+    if (!step) {
+        throw refus(slug
+            ? `Le modele designe comme facture (« ${slug} ») n'existe plus ou n'est plus de type FACTURE. `
+              + 'Choisissez-en un autre dans Ventes & Inventaire -> Reglages de facturation.'
+            : `${factures.length} modeles de type FACTURE existent. Designez celui qui doit servir `
+              + 'de facture dans Ventes & Inventaire -> Reglages de facturation.');
+    }
+
+    const content = await getTemplateContent(orgId, step.slug);
+    if (!content || content.kind !== 'builder') {
+        throw refus(`Le modele « ${step.label || step.slug} » n'a pas de corps editable. `
+            + 'Ouvrez-le dans Modeles de documents -> Editer.');
+    }
+
+    const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
+    const html = renderTemplateHtml(content.html, invoiceCtx(org || {}, data), {
+        title: `${data.typeLabel} ${data.number}`,
+        headerHtml: content.header,
+        footerHtml: content.footer,
+    });
+    // PDF/A-3 : exigé par Factur-X, et seul le moteur de rendu peut l'obtenir (polices
+    // embarquees, profil de sortie ICC, aucune couleur en espace dependant du peripherique).
+    const pdf = await htmlToPdf(html, true);
+    if (!pdf) throw refus('La conversion du modele en PDF a echoue. Verifiez le contenu du modele.');
+    return await attacherFacturX(pdf, xml);
+}
+
+/**
+ * Le CONTEXTE passé au modèle de facture.
+ *
+ * DÉFAUT CORRIGÉ ICI, et il était sérieux : cette fonction renvoyait auparavant un objet
+ * maison `{ organisme, client, facture, lignes }`, passé tel quel comme `ctx` à
+ * `renderTemplateHtml`. Or celui-ci appelle `resolveTokens(ctx)`, qui attend la forme
+ * `{ org, learner, company, formations }`. Aucun des 99 jetons standard ne trouvait donc sa
+ * valeur : une facture rendue depuis un modèle sortait avec TOUS ses jetons vides. Le PDF
+ * était produit, l'erreur ne se voyait qu'en le lisant.
+ *
+ * On construit donc un vrai `ctx` : `org` pour l'organisme, `company` ou `learner` selon
+ * l'acheteur — de sorte que {Nom entreprise} ou {Personne} fonctionnent selon le cas — plus un
+ * bloc `invoice` que `resolveTokens` fusionne, et `articles` pour le bloc {#Articles}.
+ */
+function invoiceCtx(org, data) {
+    const v = ventilerTva(data);
+    const eur = (n) => `${Number(n || 0).toFixed(2)} €`;
+    const jour = (ymd) => (ymd ? `${ymd.slice(6, 8)}/${ymd.slice(4, 6)}/${ymd.slice(0, 4)}` : '');
+    const a = data.buyer.address || {};
+    const adresse = [a.line, [a.zip, a.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+
+    // L'acheteur est une entreprise s'il porte un SIRET ; sinon on le traite comme une
+    // personne. Les deux familles de jetons restent disponibles, seule l'une est remplie.
+    const estEntreprise = !!data.buyer.siret;
+
+    // Les jetons « Champs documents » (field:organization.…) sont remplis depuis `ctx.fields`.
+    // Sans eux, TOUS les champs de la palette « Organisme » sortaient VIDES sur une facture —
+    // raison sociale, SIRET, NDA, IBAN… — alors qu'ils sont proposés à l'insertion. Un jeton
+    // qu'on peut poser et qui ne se remplit jamais est pire que pas de jeton du tout.
+    // On expose la fiche organisme telle quelle : la palette et le rendu voient la même chose.
+    const fields = {};
+    for (const [k, v] of Object.entries(org || {})) {
+        if (v == null || typeof v === 'object') continue;
+        fields[`organization.${k}`] = v;
+    }
+
+    return {
+        org,
+        fields,
+        company: estEntreprise ? { name: data.buyer.name, siret: data.buyer.siret, address: a.line, zip_code: a.zip, town: a.city } : {},
+        learner: estEntreprise ? {} : { first_name: data.buyer.name, address: a.line, zip_code: a.zip, town: a.city },
+        formations: [],
+        articles: data.lines || [],
+        invoice: {
+            number: data.number,
+            typeLabel: data.typeLabel,
+            dateFr: jour(data.issueDate),
+            dueFr: jour(data.dueDate),
+            buyerName: data.buyer.name,
+            buyerAddress: adresse,
+            buyerSiret: data.buyer.siret || '',
+            totalHt: eur(v.base),
+            totalTva: eur(v.taxe),
+            totalTtc: eur(v.grand),
+            detailTva: v.groupes.map((g) => `${g.taux.toFixed(2)} % sur ${eur(g.base)} : ${eur(g.taxe)}`).join(' · '),
+            // Le jeton {Articles} en fait un tableau complet (cf. articlesTable).
+            articles: data.lines || [],
+        },
+    };
+}
+
+/**
  * GET /api/factures/:id/facturx — PDF Factur-X (PDF + XML embarqué).
  */
 const getInvoiceFacturX = async (req, res) => {
@@ -301,7 +555,16 @@ const getInvoiceFacturX = async (req, res) => {
         const data = await loadInvoiceData(conn, req.user.organization_id, req.params.id);
         if (!data) return res.status(404).json({ message: 'Facture introuvable' });
         const xml = buildCII(data);
-        const pdfBytes = await buildFacturXPdf(data, xml);
+        avertirConformite(res, data);
+        let pdfBytes;
+        try {
+            pdfBytes = await buildInvoicePdf(conn, req.user.organization_id, data, xml);
+        } catch (e) {
+            // Un refus de configuration n'est pas une panne : il se corrige en deux clics, à
+            // condition de dire lesquels. Un 500 muet enverrait chercher dans les journaux.
+            if (e && e.motif) return res.status(422).json({ message: e.motif });
+            throw e;
+        }
         logAudit(req, 'invoice.facturx', 'Invoice', req.params.id);
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', `attachment; filename="${data.number}.pdf"`);

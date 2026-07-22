@@ -42,7 +42,7 @@ function StudentFormationDetail() {
   return (
     <>
       <div className="hero" style={{ background: "var(--grad-navy)" }}>
-        <button className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", padding: 0, color: "rgba(255,255,255,.8)" }} onClick={() => navigate("/formations")}>
+        <button className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", padding: 0, color: "rgba(255,255,255,.8)" }} onClick={() => navigate("/mon-espace")}>
           <Icon name="chevron-left" size={14} /> Mes documents
         </button>
         <h1>{data ? data.program_title : "Formation"}</h1>
@@ -76,9 +76,9 @@ function StudentFormationDetail() {
               {data.documents.map((d) => {
                 const [label, tone] = STATUS[d.status] || [d.status, "n"];
                 return (
-                  <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                  <div key={d.id} className="stu-row">
                     <span style={{ color: "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name={d.quiz_id ? "list-checks" : "file-text"} size={17} /></span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className="stu-row-t">
                       <b>{d.title}</b>
                       {d.signed_at && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>Signé le {d.signed_at}</span>}
                     </span>
@@ -123,9 +123,9 @@ function StudentFormationDetail() {
               {data.emargement.map((r) => {
                 const future = r.date > (data.today || "");
                 return (
-                  <div key={r.record_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                  <div key={r.record_id} className="stu-row">
                     <span style={{ color: r.signed ? "var(--green)" : "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name="calendar" size={16} /></span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className="stu-row-t">
                       <b style={{ textTransform: "capitalize" }}>{frDate(r.date)} — {SLOT[r.slot] || r.slot}</b>
                     </span>
                     {r.signed ? (

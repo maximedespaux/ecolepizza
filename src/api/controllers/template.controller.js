@@ -5,7 +5,7 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS, SIGNER_ROLES, stepSigners } = require('../lib/documents.js');
-const { TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
+const { articlesTable, TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
 const { decrypt } = require('../lib/crypto.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
 const { getEnabledFields } = require('../lib/conditions.js');
@@ -274,6 +274,49 @@ function groupTokensGroup() {
     return { group: 'Groupe entreprise', tokens };
 }
 
+/**
+ * Jetons de FACTURE, proposés dans la palette de l'éditeur.
+ *
+ * Ils vivent dans TOKEN_CATALOG comme les autres, mais la palette ne lit PAS ce catalogue :
+ * elle se construit à partir des Champs documents (`fieldTokenGroups`) plus quelques groupes
+ * assemblés à la main, dont celui-ci. Les avoir ajoutés au seul catalogue les rendait
+ * résolvables mais INTROUVABLES — un jeton qu'on ne peut pas insérer n'existe pas pour la
+ * personne qui construit son modèle.
+ *
+ * `{Articles}` est listé en dernier : c'est le seul qui s'utilise aussi comme BLOC répétable,
+ * {#Articles}…{/Articles}, une ligne par article vendu.
+ */
+function factureTokensGroup() {
+    const byKey = {};
+    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
+    const cat = TOKEN_CATALOG.find((g) => g.group === 'Facture');
+    const tokens = (cat ? cat.tokens.map((t) => t.key) : [])
+        .map((k) => byKey[k]).filter(Boolean)
+        .map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
+    return { group: 'Facture', tokens };
+}
+
+/**
+ * Jetons disponibles À L'INTÉRIEUR du bloc {#Articles}. Groupe séparé, parce qu'ils n'ont de
+ * sens QUE là : hors du bloc, {Quantité} ne désigne rien.
+ */
+function articleTokensGroup() {
+    const t = (key, label, sample) => ({ key, label, sample });
+    return {
+        group: 'Ligne de facture',
+        tokens: [
+            t('N°', 'Numéro de ligne', '1'),
+            t('Désignation', 'Désignation de l’article', 'Biberon valve 455 ml'),
+            t('Quantité', 'Quantité', '2'),
+            t('Prix unitaire HT', 'Prix unitaire HT', '8,91 €'),
+            t('Montant HT', 'Montant HT de la ligne', '17,82 €'),
+            t('Taux TVA', 'Taux de TVA de la ligne', '20,00 %'),
+            t('Montant TVA', 'Montant de TVA de la ligne', '3,56 €'),
+            t('Montant TTC', 'Montant TTC de la ligne', '21,38 €'),
+        ],
+    };
+}
+
 // Jetons personnalisés de l'organisme (table custom_token). Résilient si migration absente.
 async function loadCustomTokens(orgId) {
     // `category` (migration 093) est optionnel : on réessaie sans si la colonne manque.
@@ -296,10 +339,10 @@ async function loadCustomTokens(orgId) {
 const GROUP_ORDER = [
     'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
     'Inscription', 'Formation', 'Session', 'Lieu de formation',
-    'Organisme', 'Calculé / dates', 'Personnalisés',
+    'Organisme', 'Facture', 'Ligne de facture', 'Dates et valeurs calculées', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
-const CURATED_GROUPS = new Set(['Calculé / dates', 'Groupe entreprise']);
+const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Ligne de facture']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -328,6 +371,8 @@ const getTokens = async (req, res) => {
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
         groups.push(groupTokensGroup());
+        groups.push(factureTokensGroup());
+        groups.push(articleTokensGroup());
         // Jetons personnalisés : rangés dans le groupe de leur CATÉGORIE (migration 093).
         // Sans catégorie → groupe « Personnalisés ». On fusionne dans un groupe existant
         // du même nom (ex. « Groupe entreprise »), sinon on le crée.
@@ -341,6 +386,18 @@ const getTokens = async (req, res) => {
 
         // Réorganisation : ordre de groupes canonique + tri alphabétique des jetons
         // (hors groupes curatés) + suppression des groupes vides.
+        // « Calculé » n'avait qu'UN jeton et vivait a cote de « Calculé / dates » : deux noms
+        // presque identiques pour une seule idee, et un groupe d'un element qui n'apprend rien.
+        // On les reunit sous un intitule qui dit ce qu'ils SONT — des valeurs deduites du
+        // dossier, qu'on ne saisit nulle part.
+        const calcDates = groups.find((g) => g.group === 'Calculé / dates');
+        const calc = groups.find((g) => g.group === 'Calculé');
+        if (calcDates && calc) {
+            calcDates.tokens = [...calcDates.tokens, ...calc.tokens];
+            groups.splice(groups.indexOf(calc), 1);
+        }
+        for (const g of groups) if (g.group === 'Calculé / dates') g.group = 'Dates et valeurs calculées';
+
         const rank = (g) => { const i = GROUP_ORDER.indexOf(g); return i < 0 ? GROUP_ORDER.length : i; };
         groups.sort((a, b) => rank(a.group) - rank(b.group) || a.group.localeCompare(b.group, 'fr'));
         for (const g of groups) {
@@ -362,6 +419,13 @@ const getTokens = async (req, res) => {
 async function sampleTokenValues(orgId) {
     const m = {};
     for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || '';
+    // {Articles} est un TABLEAU (RAW_TOKENS) : un texte d'exemple s'afficherait tel quel au
+    // lieu d'une grille, et on ne pourrait pas juger de sa mise en page — tout l'objet d'un
+    // aperçu. On rend donc le vrai tableau, sur deux articles à des taux différents.
+    m['Articles'] = articlesTable([
+        { name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
+        { name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
+    ]);
     try { for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || ''; }
     catch { /* champs indisponibles : on garde les jetons intégrés */ }
     // Aperçu des champs Organisme : valeurs RÉELLES de la fiche organisme (plutôt qu'un exemple générique).
@@ -437,10 +501,18 @@ const previewPdf = async (req, res) => {
     try {
         const { body_html, header_html, footer_html, layout } = req.body || {};
         const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [req.user.organization_id]);
+        // Articles d'exemple : sans eux, un modèle de facture s'aperçoit avec un tableau VIDE
+        // — le bloc {#Articles} se développe sur une liste vide et ne produit aucune ligne.
+        // On ne peut alors pas juger de sa mise en page, ce qui est pourtant tout l'objet d'un
+        // aperçu. Deux articles à des taux différents, pour que le cas mixte se voie aussi.
+        const articlesExemple = [
+            { name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
+            { name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
+        ];
         const pdf = await composeDocumentPdf({
             bodyHtml: body_html || '<p></p>',
             headerHtml: header_html, footerHtml: footer_html,
-            ctx: { org: org || {} },
+            ctx: { org: org || {}, articles: articlesExemple },
             sampleValues: await sampleTokenValues(req.user.organization_id),
             bleed: (layout && layout.bleed) || {},
         });
@@ -482,12 +554,16 @@ const pageMetrics = async (req, res) => {
 const getTemplateBody = async (req, res) => {
     try {
         const content = await getTemplateContent(req.user.organization_id, req.params.slug);
-        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: '', header_html: '', footer_html: '', layout: null } });
+        // Le TYPE accompagne le corps : l'éditeur en a besoin pour n'offrir la « Facture type »
+        // que là où elle a un sens. Sans lui, le bouton ne s'afficherait jamais.
+        const steps = await loadOrgSteps(req.user.organization_id);
+        const docType = (steps.find((x) => x.slug === req.params.slug) || {}).doc_type || null;
+        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', doc_type: docType, body_html: '', header_html: '', footer_html: '', layout: null } });
         if (content.kind === 'docx') {
             // Ancien modèle .docx sans corps éditable : on renvoie un corps vide à composer.
-            return res.json({ data: { slug: req.params.slug, kind: 'docx', body_html: '', header_html: '', footer_html: '', layout: null } });
+            return res.json({ data: { slug: req.params.slug, kind: 'docx', doc_type: docType, body_html: '', header_html: '', footer_html: '', layout: null } });
         }
-        res.json({ data: { slug: req.params.slug, kind: 'builder', body_html: content.html, header_html: content.header || '', footer_html: content.footer || '', layout: content.layout || null } });
+        res.json({ data: { slug: req.params.slug, kind: 'builder', doc_type: docType, body_html: content.html, header_html: content.header || '', footer_html: content.footer || '', layout: content.layout || null } });
     } catch (err) {
         console.error('Erreur lecture corps modèle :', err);
         res.status(500).json({ error: 'Internal Server Error' });

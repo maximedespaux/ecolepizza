@@ -10,6 +10,7 @@ import {
   getQuestStructure, createQuestCategory, updateQuestCategory, deleteQuestCategory,
   setProgramQuestCategories, addQuestPrerequisite, deleteQuestPrerequisite,
   getQuestContent, createQuestDifficulty, updateQuestDifficulty, deleteQuestDifficulty,
+  getOrganisation, updateOrganisation,
 } from "../api/apiClient.js";
 
 /**
@@ -85,6 +86,9 @@ export default function QuestManager() {
         <button type="button" className={"seg-btn" + (tab === "questions" ? " on" : "")} onClick={() => setTab("questions")}>
           Questions
         </button>
+        <button type="button" className={"seg-btn" + (tab === "vies" ? " on" : "")} onClick={() => setTab("vies")}>
+          Cœurs
+        </button>
       </div>
 
       {tab === "categories" && AXES.map((axe) => (
@@ -104,7 +108,81 @@ export default function QuestManager() {
       {tab === "questions" && (
         <QuestBankEditor programs={programs} difficulties={difficulties} onStatus={setStatus} />
       )}
+
+      {tab === "vies" && <CoeursCard onStatus={setStatus} />}
     </>
+  );
+}
+
+/* ---- Cœurs ----------------------------------------------------------------------------- */
+
+/**
+ * Capital de cœurs et vitesse de reconstitution.
+ *
+ * Ce réglage décide du rythme : rater un chapitre coûte un cœur, en récupérer un demande
+ * d'attendre. C'est ce qui empêche de relancer un chapitre en boucle jusqu'à tomber sur les
+ * bonnes cases — mais trop serré, il transforme l'entraînement en punition.
+ */
+function CoeursCard({ onStatus }) {
+  const [max, setMax] = useState(5);
+  const [delai, setDelai] = useState(5);
+  const [charge, setCharge] = useState(false);
+
+  useEffect(() => {
+    getOrganisation()
+      .then((r) => {
+        const o = r.data || {};
+        if (o.quest_max_hearts != null) setMax(Number(o.quest_max_hearts));
+        if (o.quest_regen_minutes != null) setDelai(Number(o.quest_regen_minutes));
+        setCharge(true);
+      })
+      .catch(() => setCharge(true));
+  }, []);
+
+  async function enregistrer(e) {
+    e.preventDefault();
+    onStatus(null);
+    try {
+      await updateOrganisation({ quest_max_hearts: Number(max), quest_regen_minutes: Number(delai) });
+      onStatus({ type: "success", message: "Réglages des cœurs enregistrés." });
+    } catch (err) {
+      onStatus({ type: "error", message: err.message || "Enregistrement impossible." });
+    }
+  }
+
+  if (!charge) return <p className="hint">Chargement…</p>;
+  const pleinMin = Number(delai) * Number(max);
+
+  return (
+    <Card title={<span className="card-ttl">❤️ Cœurs &amp; reconstitution</span>}>
+      <p className="hint" style={{ marginTop: 0 }}>
+        Un stagiaire perd un cœur lorsqu'il <b>échoue</b> un chapitre ou qu'il l'<b>abandonne</b>
+        en cours. À court de cœurs, il ne peut plus lancer de chapitre tant qu'il n'en a pas
+        récupéré un. Les cœurs sont communs à toutes ses formations.
+      </p>
+
+      <form onSubmit={enregistrer} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <div className="field" style={{ margin: 0, width: 150 }}>
+          <label>Nombre de cœurs</label>
+          <input className="inp" type="number" min="1" max="50" value={max}
+            onChange={(e) => setMax(e.target.value)} />
+        </div>
+        <div className="field" style={{ margin: 0, width: 190 }}>
+          <label>Un cœur toutes les… <span className="field-opt">minutes</span></label>
+          <input className="inp" type="number" min="0" max="1440" value={delai}
+            onChange={(e) => setDelai(e.target.value)} />
+        </div>
+        <button type="submit" className="btn primary">Enregistrer</button>
+      </form>
+
+      <p className="hint" style={{ marginTop: 10 }}>
+        {Number(delai) === 0
+          ? <>À <b>0 minute</b>, la mécanique est neutralisée : les cœurs restent pleins et rien
+              ne limite les tentatives.</>
+          : <>Un stagiaire à court de cœurs attend <b>{delai} min</b> pour en récupérer un, et{" "}
+              <b>{pleinMin} min</b> pour retrouver ses {max} cœurs.</>}
+      </p>
+    </Card>
   );
 }
 
@@ -186,6 +264,28 @@ function AxeCard({ axe, cats, programs, run }) {
   const champ = axe.kind === "THEME" ? "quest_theme_id" : "quest_tier_id";
   const usage = (id) => programs.filter((p) => p[champ] === id).length;
 
+  /**
+   * Déplace une catégorie d'un cran. C'EST CET ORDRE qui décide de la disposition de la
+   * carte côté stagiaire : les paliers s'y enchaînent de haut en bas dans l'ordre défini
+   * ici. Créés dans le désordre, ils donnaient un parcours illisible — « Avancé » avant
+   * « Intermédiaire » alors que le second ouvre le premier.
+   *
+   * On RENUMÉROTE toute la liste plutôt que d'échanger deux valeurs : si deux catégories
+   * portaient le même rang (import, création concurrente), un échange ne changerait rien.
+   */
+  async function deplacer(i, sens) {
+    const j = i + sens;
+    if (j < 0 || j >= cats.length) return;
+    const ordre = [...cats];
+    [ordre[i], ordre[j]] = [ordre[j], ordre[i]];
+    await run(async () => {
+      for (const [k, c] of ordre.entries()) {
+        const rang = (k + 1) * 10;
+        if (c.sort_order !== rang) await updateQuestCategory(c.id, { sort_order: rang });
+      }
+    }, "Ordre enregistré.");
+  }
+
   return (
     <Card title={<span className="card-ttl"><Icon name={axe.ic} size={16} /> {axe.label}</span>}>
       <p className="hint" style={{ marginTop: 0 }}>{axe.help}</p>
@@ -206,15 +306,25 @@ function AxeCard({ axe, cats, programs, run }) {
       {cats.length === 0
         ? <p className="hint">Aucun {axe.one} pour l'instant.</p>
         : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {cats.map((c) => <CatRow key={c.id} cat={c} axe={axe} used={usage(c.id)} run={run} />)}
-          </div>
+          <>
+            <p className="hint" style={{ marginTop: -4 }}>
+              L'ordre ci-dessous est celui de la carte du stagiaire — du premier au dernier.
+              Rangez-les dans le sens du parcours.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {cats.map((c, i) => (
+                <CatRow key={c.id} cat={c} axe={axe} used={usage(c.id)} run={run}
+                  premier={i === 0} dernier={i === cats.length - 1}
+                  onMonter={() => deplacer(i, -1)} onDescendre={() => deplacer(i, 1)} />
+              ))}
+            </div>
+          </>
         )}
     </Card>
   );
 }
 
-function CatRow({ cat, axe, used, run }) {
+function CatRow({ cat, axe, used, run, premier, dernier, onMonter, onDescendre }) {
   const [edit, setEdit] = useState(false);
   const [nom, setNom] = useState(cat.name);
   const couleur = cat.color || colorOf(cat.name);
@@ -238,6 +348,15 @@ function CatRow({ cat, axe, used, run }) {
   }
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+      {/* Ordre du parcours : c'est lui qui décide de la disposition côté stagiaire. */}
+      <span style={{ display: "flex", gap: 2, flex: "0 0 auto" }}>
+        <button type="button" className="iconbtn" title="Monter" disabled={premier} onClick={onMonter}>
+          <Icon name="arrow-up" size={12} />
+        </button>
+        <button type="button" className="iconbtn" title="Descendre" disabled={dernier} onClick={onDescendre}>
+          <Icon name="arrow-down" size={12} />
+        </button>
+      </span>
       <span style={{ width: 12, height: 12, borderRadius: 4, background: couleur, flex: "0 0 auto" }} />
       <b style={{ flex: 1 }}>{cat.name}</b>
       <span className="hint">{used === 0 ? "aucune formation" : `${used} formation${used > 1 ? "s" : ""}`}</span>
@@ -267,9 +386,25 @@ function RangementCard({ programs, themes, tiers, run }) {
   return (
     <Card title={<span className="card-ttl"><Icon name="columns" size={16} /> Rangement des formations</span>}>
       <p className="hint" style={{ marginTop: 0 }}>
-        Chaque formation est un « monde » de Pizza Quest. Le thème et le palier sont facultatifs :
-        laissés vides, la formation reste sur la carte sans regroupement.
+        Chaque formation rangée devient un « monde » de Pizza Quest. Donner un thème ou un
+        palier, c'est <b>mettre la formation sur la carte</b> : une formation sans l'un ni
+        l'autre n'y apparaît pas. Tant qu'aucune n'est rangée, la carte les affiche toutes.
       </p>
+      {(() => {
+        // Conséquence invisible depuis cet écran : on la chiffre plutôt que de laisser
+        // l'organisme constater l'absence côté stagiaire.
+        const rangees = programs.filter((p) => p.quest_theme_id || p.quest_tier_id);
+        const hors = programs.length - rangees.length;
+        if (!rangees.length || !hors) return null;
+        return (
+          <p className="hint" style={{ marginTop: -4, color: "var(--ember1)" }}>
+            <Icon name="info" size={12} style={{ verticalAlign: "-2px" }} />{" "}
+            {hors} formation{hors > 1 ? "s ne sont" : " n'est"} rangée{hors > 1 ? "s" : ""} ni par
+            thème ni par palier : elle{hors > 1 ? "s" : ""} n'apparaî{hors > 1 ? "ssent" : "t"} pas
+            dans Pizza Quest.
+          </p>
+        );
+      })()}
       <div style={{ overflowX: "auto" }}>
         <table className="tbl">
           <thead>
@@ -308,19 +443,39 @@ function RangementCard({ programs, themes, tiers, run }) {
 
 /* ---- Prérequis ----------------------------------------------------------------------- */
 
+/**
+ * Prérequis — une ligne PAR FORMATION plutôt qu'un formulaire global et une liste à part.
+ *
+ * L'écran répond à la question qu'on se pose vraiment en configurant un catalogue : « celle-ci,
+ * elle vient après quoi ? ». On la lit et on la modifie au même endroit, sans choisir d'abord
+ * une cible dans une liste déroulante pour découvrir ensuite ce qu'elle contenait déjà.
+ *
+ * Chaque formation affiche aussi ce qu'elle OUVRE. C'est l'information qui manque au moment de
+ * supprimer un prérequis ou de réorganiser : on voit ce qui dépend d'elle avant d'y toucher.
+ */
 function PrerequisCard({ programs, prerequisites, run }) {
-  const [cible, setCible] = useState("");
-  const [requis, setRequis] = useState("");
-  const nom = (id) => {
-    const p = programs.find((x) => x.id === id);
-    return p ? `${p.code} — ${p.title}` : "formation supprimée";
-  };
-  // Prérequis regroupés par formation cible : on lit « pour X, il faut Y et Z ».
-  const parCible = new Map();
+  const [ouvert, setOuvert] = useState(null); // formation dont le sélecteur d'ajout est ouvert
+
+  const parId = new Map(programs.map((p) => [p.id, p]));
+  const nom = (id) => parId.get(id) || { code: "?", title: "formation supprimée" };
+  // Prérequis d'une formation, et réciproquement ce qu'elle débloque.
+  const requisDe = new Map(programs.map((p) => [p.id, []]));
+  const ouvreVers = new Map(programs.map((p) => [p.id, []]));
   for (const pr of prerequisites) {
-    if (!parCible.has(pr.program_id)) parCible.set(pr.program_id, []);
-    parCible.get(pr.program_id).push(pr);
+    if (requisDe.has(pr.program_id)) requisDe.get(pr.program_id).push(pr);
+    if (ouvreVers.has(pr.requires_program_id)) ouvreVers.get(pr.requires_program_id).push(pr.program_id);
   }
+
+  /* Profondeur = longueur du plus long chemin de prérequis. Sert à ordonner l'écran comme
+     le parcours se déroule : les formations d'entrée d'abord, les suites ensuite. Le graphe
+     est acyclique (garanti à l'écriture), la descente termine donc toujours. */
+  const profondeur = (id, vus = new Set()) => {
+    if (vus.has(id)) return 0; // sécurité si un cycle avait échappé au contrôle
+    vus.add(id);
+    const rs = requisDe.get(id) || [];
+    return rs.length ? 1 + Math.max(...rs.map((r) => profondeur(r.requires_program_id, new Set(vus)))) : 0;
+  };
+  const ordonnees = [...programs].sort((a, b) => profondeur(a.id) - profondeur(b.id) || a.code.localeCompare(b.code));
 
   if (programs.length < 2) {
     return <EmptyState icon="list-checks" title="Pas assez de formations"
@@ -330,53 +485,76 @@ function PrerequisCard({ programs, prerequisites, run }) {
   return (
     <Card title={<span className="card-ttl"><Icon name="list-checks" size={16} /> Prérequis entre formations</span>}>
       <p className="hint" style={{ marginTop: 0 }}>
-        « Pour attaquer cette formation, il faut avoir <b>terminé</b> celle-là. » Sur la carte du
-        stagiaire, un monde dont les prérequis ne sont pas remplis reste verrouillé, avec la liste
-        de ce qui manque. Une formation peut en exiger plusieurs.
+        « Pour attaquer cette formation, il faut avoir <b>terminé</b> celle-là. » Côté stagiaire,
+        un monde dont les prérequis manquent reste verrouillé, avec la liste de ce qui reste à faire.
+        Les formations sont classées ci-dessous dans l'ordre du parcours — celles sans prérequis en tête.
       </p>
 
-      <form style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!cible || !requis) return;
-          run(() => addQuestPrerequisite({ program_id: cible, requires_program_id: requis }), "Prérequis ajouté.");
-          setRequis("");
-        }}>
-        <span>Pour</span>
-        <select value={cible} onChange={(e) => setCible(e.target.value)}>
-          <option value="">choisir une formation…</option>
-          {programs.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.title}</option>)}
-        </select>
-        <span>il faut avoir terminé</span>
-        <select value={requis} onChange={(e) => setRequis(e.target.value)} disabled={!cible}>
-          <option value="">choisir…</option>
-          {programs.filter((p) => p.id !== cible).map((p) => <option key={p.id} value={p.id}>{p.code} — {p.title}</option>)}
-        </select>
-        <button type="submit" className="btn sm" disabled={!cible || !requis}><Icon name="plus" size={14} /> Ajouter</button>
-      </form>
+      <div className="pr-list">
+        {ordonnees.map((p) => {
+          const requis = requisDe.get(p.id) || [];
+          const debloque = ouvreVers.get(p.id) || [];
+          // Candidats : tout sauf elle-même et ses prérequis déjà posés. Un lien qui
+          // boucherait est refusé par le serveur, avec son motif.
+          const dejaRequis = new Set(requis.map((r) => r.requires_program_id));
+          const candidats = programs.filter((x) => x.id !== p.id && !dejaRequis.has(x.id));
 
-      {prerequisites.length === 0
-        ? <p className="hint">Aucun prérequis : toutes les formations sont accessibles librement.</p>
-        : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {[...parCible.entries()].map(([progId, liste]) => (
-              <div key={progId}>
-                <b>{nom(progId)}</b>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                  {liste.map((pr) => (
-                    <span key={pr.id} className="pill" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                      <Icon name="lock" size={12} /> {nom(pr.requires_program_id)}
-                      <button type="button" className="pf-x" title="Retirer ce prérequis"
-                        onClick={() => run(() => deleteQuestPrerequisite(pr.id), "Prérequis retiré.")}>
-                        <Icon name="x" size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
+          return (
+            <div key={p.id} className="pr-row">
+              <div className="pr-head">
+                <span className="pr-dot" style={{ background: p.color || colorOf(p.code) }} />
+                <b>{p.code}</b>
+                <span className="hint pr-title">{p.title}</span>
+                {debloque.length > 0 && (
+                  <span className="hint pr-opens" title={debloque.map((id) => nom(id).title).join("\n")}>
+                    <Icon name="key" size={12} /> ouvre {debloque.map((id) => nom(id).code).join(", ")}
+                  </span>
+                )}
               </div>
-            ))}
-          </div>
-        )}
+
+              <div className="pr-body">
+                <span className="pr-lbl">Après :</span>
+                {requis.length === 0 && <span className="hint">accessible directement</span>}
+                {requis.map((r) => (
+                  <span key={r.id} className="pr-chip">
+                    <Icon name="lock" size={11} />
+                    <b>{nom(r.requires_program_id).code}</b>
+                    <button type="button" className="pf-x" title={`Retirer ${nom(r.requires_program_id).code}`}
+                      onClick={() => run(() => deleteQuestPrerequisite(r.id), "Prérequis retiré.")}>
+                      <Icon name="x" size={11} />
+                    </button>
+                  </span>
+                ))}
+
+                {ouvert === p.id ? (
+                  <select autoFocus value="" className="pr-add-sel"
+                    onBlur={() => setOuvert(null)}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      run(() => addQuestPrerequisite({ program_id: p.id, requires_program_id: e.target.value }), "Prérequis ajouté.");
+                      setOuvert(null);
+                    }}>
+                    <option value="">choisir une formation…</option>
+                    {candidats.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}
+                  </select>
+                ) : (
+                  <button type="button" className="pr-add" disabled={candidats.length === 0}
+                    onClick={() => setOuvert(p.id)}
+                    title={candidats.length ? "Ajouter un prérequis" : "Aucune autre formation disponible"}>
+                    <Icon name="plus" size={12} /> prérequis
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {prerequisites.length === 0 && (
+        <p className="hint" style={{ marginTop: 12 }}>
+          Aucun prérequis pour l'instant : toutes les formations sont accessibles librement.
+        </p>
+      )}
     </Card>
   );
 }

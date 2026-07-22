@@ -83,6 +83,22 @@ function StagiaireDetail() {
   // Rafraîchit documents + parcours automatiquement (signatures faites ailleurs, envois…).
   useAutoRefresh(() => { loadDocs(); setParcoursRefresh((n) => n + 1); }, { interval: 20000 });
 
+  // Vérifie côté serveur si le modèle choisi s'applique aux dossiers sélectionnés
+  // (règles / conditions de l'organisme). On n'interdit rien en dur : on prévient.
+  //
+  // DOIT rester au-dessus du `if (!l)` plus bas : placé après, ce hook n'était pas appelé au
+  // premier rendu (fiche pas encore chargée) puis l'était une fois les données arrivées —
+  // le nombre de hooks changeait d'un rendu à l'autre et React interrompait la page, qui
+  // restait blanche.
+  useEffect(() => {
+    if (!prep.slug || prep.enrollment_ids.length === 0) { setBlockedRules([]); return; }
+    let alive = true;
+    checkDocumentConditions({ template_slug: prep.slug, enrollment_ids: prep.enrollment_ids })
+      .then((r) => { if (alive) setBlockedRules(r?.data?.failed || []); })
+      .catch(() => { if (alive) setBlockedRules([]); });
+    return () => { alive = false; };
+  }, [prep.slug, prep.enrollment_ids]);
+
   const toggleEnroll = (eid) => setPrep((p) => ({
     ...p,
     enrollment_ids: p.enrollment_ids.includes(eid)
@@ -186,17 +202,6 @@ function StagiaireDetail() {
   // AUCUNE restriction codée en dur sur les documents : la disponibilité d'un document
   // est pilotée par l'organisme via ses CONDITIONS (Modèles → Conditions / applies_when).
   const selTpl = templates.find((t) => t.slug === prep.slug);
-  // Vérifie côté serveur si le modèle choisi s'applique aux dossiers sélectionnés
-  // (règles / conditions de l'organisme). On n'interdit rien en dur : on prévient.
-  useEffect(() => {
-    if (!prep.slug || prep.enrollment_ids.length === 0) { setBlockedRules([]); return; }
-    let alive = true;
-    checkDocumentConditions({ template_slug: prep.slug, enrollment_ids: prep.enrollment_ids })
-      .then((r) => { if (alive) setBlockedRules(r?.data?.failed || []); })
-      .catch(() => { if (alive) setBlockedRules([]); });
-    return () => { alive = false; };
-  }, [prep.slug, prep.enrollment_ids]);
-
   const canPrepare = enrollments.length > 0 && prep.enrollment_ids.length > 0 && !!selTpl && blockedRules.length === 0;
 
   // Dossier dont on affiche le parcours (onglet sélectionné).

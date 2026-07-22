@@ -3,8 +3,7 @@ import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
-  getShopSettings, saveShopSettings, downloadFacturX,
-} from "../api/apiClient.js";
+  getShopSettings, saveShopSettings, downloadFacturX, getTemplates, getCompanies } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -30,6 +29,11 @@ function Ventes() {
   const [learners, setLearners] = useState([]);
   const [settings, setSettings] = useState(null);
   const [status, setStatus] = useState(null);
+  // Le téléchargement peut être REFUSÉ (aucun modèle de facture configuré, modèle qui n'est
+  // plus de type FACTURE…). Le serveur renvoie alors un motif qui dit quoi corriger : il doit
+  // arriver jusqu'à l'écran, pas mourir dans une promesse rejetée.
+  const telechargerFacture = (id, numero) =>
+    downloadFacturX(id, numero).catch((e) => setStatus({ type: "error", message: e.message }));
 
   // Panier / caisse
   const [pick, setPick] = useState("");
@@ -37,6 +41,16 @@ function Ventes() {
   const [cart, setCart] = useState([]);
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState(null);
+  // L'acheteur est de trois sortes exclusives : un stagiaire, une entreprise, ou personne
+  // (comptoir). La bascule choisit d'abord LE TYPE — une seule liste cherchée à la fois, plutôt
+  // qu'un champ qui mêle personnes et entreprises et laisse deviner ce qu'on a sous les yeux.
+  const [buyerType, setBuyerType] = useState("stagiaire"); // "stagiaire" | "entreprise"
+  const [companies, setCompanies] = useState([]);
+  const [companyQuery, setCompanyQuery] = useState("");
+  const [company, setCompany] = useState(null);
+  // Quand l'entreprise paie, on peut RATTACHER un stagiaire (matériel destiné à un apprenant
+  // précis) : c'est l'entreprise qui est facturée, le stagiaire n'est qu'un lien retrouvable.
+  const [attachLearner, setAttachLearner] = useState(false);
   const [discount, setDiscount] = useState(""); // % remise globale
   const [payment, setPayment] = useState("");
   const [paid, setPaid] = useState(true);
@@ -51,6 +65,7 @@ function Ventes() {
     loadSales();
     loadInventory();
     getStagiaires().then((r) => setLearners(r.data)).catch(() => {});
+    getCompanies().then((r) => setCompanies(r.data || [])).catch(() => {});
     getShopSettings().then((r) => { setSettings(r.data); setPayment((r.data.payment_methods || "").split(",")[0] || ""); }).catch(() => {});
   }, []);
 
@@ -77,6 +92,21 @@ function Ventes() {
     if (!q) return [];
     return learners.filter((l) => `${l.first_name} ${l.last_name} ${l.email || ""}`.toLowerCase().includes(q)).slice(0, 6);
   }, [clientQuery, learners]);
+
+  const companyMatches = useMemo(() => {
+    const q = companyQuery.trim().toLowerCase();
+    if (!q) return [];
+    return companies.filter((c) => `${c.name} ${c.siret || ""} ${c.email || ""}`.toLowerCase().includes(q)).slice(0, 6);
+  }, [companyQuery, companies]);
+
+  // Changer de type d'acheteur remet à zéro l'autre sélection : on ne facture jamais à la fois
+  // une entreprise et un stagiaire au titre d'acheteur — le stagiaire n'est qu'un rattachement.
+  function switchBuyerType(t) {
+    setBuyerType(t);
+    setClient(null); setClientQuery("");
+    setCompany(null); setCompanyQuery("");
+    setAttachLearner(false);
+  }
 
   function addToCart() {
     const it = inventory.find((i) => i.id === pick);
@@ -122,14 +152,19 @@ function Ventes() {
     if (cart.length === 0) return;
     setStatus(null);
     try {
+      // Entreprise : elle est l'acheteur (company_id) ; le stagiaire n'est envoyé QUE si on l'a
+      // explicitement rattaché. Stagiaire : lui seul, aucune entreprise.
+      const buyerFields = buyerType === "entreprise"
+        ? { company_id: company?.id || null, learner_id: (attachLearner && client?.id) || null }
+        : { learner_id: client?.id || null, company_id: null };
       const r = await checkoutSale({
-        learner_id: client?.id || null,
+        ...buyerFields,
         discount: Number(discount) || 0,
         payment_method: payment || null,
         status: paid ? "PAYEE" : "IMPAYEE",
         lines: cart.map((l) => ({ item_id: l.item_id, quantity: l.quantity, discount_pct: Number(l.disc) || 0 })),
       });
-      setCart([]); setClient(null); setClientQuery(""); setDiscount("");
+      setCart([]); switchBuyerType("stagiaire"); setDiscount("");
       setLastInvoice({ id: r.invoice_id, number: r.invoice_number });
       setStatus({ type: "success", message: `Vente validée — facture ${r.invoice_number} (${euro(r.total_ttc)} TTC) pour ${r.buyer}.` });
       loadSales(); loadInventory(); bumpBadges();
@@ -159,7 +194,10 @@ function Ventes() {
             <div className="card" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12, borderLeft: "3px solid var(--green)" }}>
               <Icon name="receipt" size={18} />
               <span style={{ flex: 1 }}>Facture <b>{lastInvoice.number}</b> créée avec les articles sélectionnés.</span>
-              <button className="btn sm" onClick={() => downloadFacturX(lastInvoice.id, lastInvoice.number)}><Icon name="download" size={14} /> Télécharger le PDF</button>
+              {/* Sans `catch`, un refus du serveur — modèle de facture non configuré, par
+                  exemple — se perdait dans une promesse rejetée : le bouton ne faisait
+                  simplement rien, sans un mot. */}
+              <button className="btn sm" onClick={() => telechargerFacture(lastInvoice.id, lastInvoice.number)}><Icon name="download" size={14} /> Télécharger le PDF</button>
               <button className="iconbtn" onClick={() => setLastInvoice(null)} aria-label="Fermer"><Icon name="x" size={14} /></button>
             </div>
           )}
@@ -200,27 +238,96 @@ function Ventes() {
             </Card>
 
             <Card title={<span className="card-ttl"><Icon name="shopping-cart" size={16} /> Panier ({cart.length})</span>}>
-              {/* Client + moyen de paiement, en tête du panier. */}
+              {/* Acheteur + moyen de paiement, en tête du panier. */}
               <div className="field">
-                <label>Client</label>
-                {client ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span className="avatar" style={{ width: 28, height: 28, fontSize: 11 }}>{initials(...client.name.split(" "))}</span>
-                    <b style={{ flex: 1 }}>{client.name}</b>
-                    <button className="btn sm ghost" onClick={() => { setClient(null); setClientQuery(""); }}>Changer</button>
-                  </div>
+                <label>Acheteur</label>
+                {/* Bascule du type : une seule liste cherchée à la fois. */}
+                <div className="rayon-tabs" style={{ marginBottom: 8 }}>
+                  <button className={"rayon-tab" + (buyerType === "stagiaire" ? " on" : "")} onClick={() => switchBuyerType("stagiaire")}>
+                    <Icon name="user" size={13} /> Stagiaire
+                  </button>
+                  <button className={"rayon-tab" + (buyerType === "entreprise" ? " on" : "")} onClick={() => switchBuyerType("entreprise")}>
+                    <Icon name="building" size={13} /> Entreprise
+                  </button>
+                </div>
+
+                {buyerType === "stagiaire" ? (
+                  client ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span className="avatar" style={{ width: 28, height: 28, fontSize: 11 }}>{initials(...client.name.split(" "))}</span>
+                      <b style={{ flex: 1 }}>{client.name}</b>
+                      <button className="btn sm ghost" onClick={() => { setClient(null); setClientQuery(""); }}>Changer</button>
+                    </div>
+                  ) : (
+                    <>
+                      <input className="inp" placeholder="Rechercher un stagiaire… (ou laisser vide = vente comptoir)" value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} />
+                      {matches.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                          {matches.map((l) => (
+                            <button key={l.id} className="btn sm" style={{ justifyContent: "flex-start" }}
+                              onClick={() => setClient({ id: l.id, name: `${l.first_name} ${l.last_name}` })}>
+                              {l.last_name} {l.first_name} <span className="hint">· {l.email || "—"}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )
                 ) : (
                   <>
-                    <input className="inp" placeholder="Rechercher un stagiaire… (ou laisser vide = vente comptoir)" value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} />
-                    {matches.length > 0 && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                        {matches.map((l) => (
-                          <button key={l.id} className="btn sm" style={{ justifyContent: "flex-start" }}
-                            onClick={() => setClient({ id: l.id, name: `${l.first_name} ${l.last_name}` })}>
-                            {l.last_name} {l.first_name} <span className="hint">· {l.email || "—"}</span>
-                          </button>
-                        ))}
+                    {company ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <Icon name="building" size={18} />
+                        <b style={{ flex: 1 }}>{company.name}</b>
+                        <button className="btn sm ghost" onClick={() => { setCompany(null); setCompanyQuery(""); }}>Changer</button>
                       </div>
+                    ) : (
+                      <>
+                        <input className="inp" placeholder="Rechercher une entreprise…" value={companyQuery} onChange={(e) => setCompanyQuery(e.target.value)} />
+                        {companyMatches.length > 0 && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                            {companyMatches.map((c) => (
+                              <button key={c.id} className="btn sm" style={{ justifyContent: "flex-start" }}
+                                onClick={() => setCompany({ id: c.id, name: c.name })}>
+                                {c.name} <span className="hint">· {c.siret || "SIRET —"}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {companyQuery.trim() && companyMatches.length === 0 && (
+                          <span className="hint" style={{ marginTop: 6 }}>Aucune entreprise. Créez-la dans Entreprises.</span>
+                        )}
+                      </>
+                    )}
+
+                    {/* Rattacher un stagiaire, sans changer l'acheteur : la facture reste au nom
+                        de l'entreprise, le stagiaire sert à retrouver la vente. */}
+                    <label className="field" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
+                      <input type="checkbox" checked={attachLearner} onChange={(e) => { setAttachLearner(e.target.checked); if (!e.target.checked) { setClient(null); setClientQuery(""); } }} />
+                      Rattacher un stagiaire à cette vente
+                    </label>
+                    {attachLearner && (
+                      client ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span className="avatar" style={{ width: 28, height: 28, fontSize: 11 }}>{initials(...client.name.split(" "))}</span>
+                          <span style={{ flex: 1 }}>{client.name}</span>
+                          <button className="btn sm ghost" onClick={() => { setClient(null); setClientQuery(""); }}>Changer</button>
+                        </div>
+                      ) : (
+                        <>
+                          <input className="inp" placeholder="Rechercher le stagiaire concerné…" value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} />
+                          {matches.length > 0 && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                              {matches.map((l) => (
+                                <button key={l.id} className="btn sm" style={{ justifyContent: "flex-start" }}
+                                  onClick={() => setClient({ id: l.id, name: `${l.first_name} ${l.last_name}` })}>
+                                  {l.last_name} {l.first_name} <span className="hint">· {l.email || "—"}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )
                     )}
                   </>
                 )}
@@ -316,7 +423,9 @@ function SalesHistory({ sales, onRemove }) {
       if (!g) {
         g = {
           key, invoice_id: s.invoice_id || null, invoice_number: s.invoice_number || null,
-          date: s.date, client: s.last_name ? `${s.last_name} ${s.first_name || ""}`.trim() : "—",
+          // L'entreprise acheteuse prime dans l'affichage : c'est elle qui a payé. À défaut, le
+          // stagiaire ; à défaut encore, un tiret pour une vente comptoir.
+          date: s.date, client: s.company_name || (s.last_name ? `${s.last_name} ${s.first_name || ""}`.trim() : "—"),
           lines: [], total: 0, units: 0,
         };
         map.set(key, g);
@@ -374,7 +483,7 @@ function SalesHistory({ sales, onRemove }) {
                         <td className="mono tnum" style={{ textAlign: "right" }}>{euro(g.total)}</td>
                         <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
                           {g.invoice_id && (
-                            <button className="iconbtn" title="Télécharger la facture (PDF)" onClick={() => downloadFacturX(g.invoice_id, g.invoice_number || "facture")}><Icon name="download" size={15} /></button>
+                            <button className="iconbtn" title="Télécharger la facture (PDF)" onClick={() => telechargerFacture(g.invoice_id, g.invoice_number || "facture")}><Icon name="download" size={15} /></button>
                           )}
                         </td>
                       </tr>
@@ -405,9 +514,17 @@ function ShopSettings({ settings, onSaved, onError }) {
     invoice_prefix: settings?.invoice_prefix || "F",
     next_number: settings?.next_number || 1,
     payment_methods: settings?.payment_methods || "Espèces,CB,Virement,Chèque",
-    legal_mentions: settings?.legal_mentions || "",
     tva_applies: settings ? !!settings.tva_applies : true,
+    invoice_template_slug: settings?.invoice_template_slug || "",
   }));
+  // SEULS les modèles de type FACTURE. Le serveur applique la même règle à l'enregistrement et
+  // au moment de produire le PDF — un modèle peut changer de type après avoir été choisi.
+  const [modeles, setModeles] = useState([]);
+  useEffect(() => {
+    getTemplates()
+      .then((r) => setModeles((r.data || []).filter((m) => String(m.doc_type || "").toUpperCase() === "FACTURE")))
+      .catch(() => {});
+  }, []);
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -433,8 +550,30 @@ function ShopSettings({ settings, onSaved, onError }) {
         <input type="checkbox" checked={form.tva_applies} onChange={(e) => setForm((p) => ({ ...p, tva_applies: e.target.checked }))} />
         Appliquer la TVA (décochez pour une facturation exonérée)
       </label>
-      <div className="field"><label>Mentions légales (bas de facture)</label>
-        <textarea className="inp" rows={3} value={form.legal_mentions} onChange={set("legal_mentions")} /></div>
+
+      {/* Mise en page de la facture. Par défaut celle de l'application ; un modèle permet d'y
+          mettre son logo, ses conditions, sa présentation. Le fichier Factur-X reste attaché
+          dans les deux cas — il est normé, il ne se met pas en page. */}
+      {/* Le choix est EXPLICITE. Le déduire du seul type ne tient pas dès qu'un organisme a
+          plusieurs modèles FACTURE qui ne se distinguent pas par une condition — facture de
+          formation et facture de boutique, par exemple. Le choix serait alors décidé par un
+          ordre d'affichage que personne ne pense à regarder. */}
+      <div className="field"><label>Modèle de facture</label>
+        <select className="inp" value={form.invoice_template_slug}
+          onChange={(e) => setForm((p) => ({ ...p, invoice_template_slug: e.target.value }))}>
+          <option value="">— Aucun —</option>
+          {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.slug}</option>)}
+        </select>
+        <p className="hint" style={{ margin: "4px 0 0" }}>
+          {modeles.length === 0
+            ? "Aucun modèle de type FACTURE n'existe. Créez-le dans Modèles de documents : sans lui, aucune facture ne peut être éditée."
+            : form.invoice_template_slug
+              ? "Le PDF est composé à partir de ce modèle. Le fichier Factur-X y reste attaché, conforme."
+              : modeles.length === 1
+                ? "Un seul modèle de type FACTURE existe : il sera utilisé même sans être désigné ici."
+                : "Plusieurs modèles de type FACTURE existent : désignez celui qui doit servir de facture."}
+        </p>
+      </div>
       <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer les réglages"}</button>
     </Card>
   );

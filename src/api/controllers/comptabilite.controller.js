@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 const {
     EXPENSE_CATEGORIES, CATEGORY_LABELS, DEFAULT_DIVIDENDE_CIBLE,
@@ -67,6 +68,63 @@ async function computeYear(conn, orgId, annee) {
     };
 }
 
+/**
+ * Gain d'UN mois : ce qui est entré moins ce qui est sorti, sur le mois donné.
+ *
+ * UNE DÉCISION À ASSUMER — l'attribution des inscriptions. Le tableau ANNUEL rattache le CA des
+ * inscriptions à l'ANNÉE DE LA SESSION (`session.year`). Un mois n'a pas d'année de session : il
+ * faut une vraie date. On prend `enrollment.created_at`, la date où l'inscription a été
+ * ENREGISTRÉE — c'est le moment où l'argent est entré, ce qu'un « gain du mois » cherche à
+ * mesurer. Conséquence à connaître : une inscription saisie en décembre pour une session de
+ * l'an prochain compte dans le gain de décembre, pas dans celui de la session. Les deux vues
+ * répondent à deux questions différentes ; mélanger leurs règles donnerait un chiffre qui ne
+ * réconcilie ni l'une ni l'autre.
+ *
+ * Matériel, produits divers et dépenses ont, eux, une vraie date : on filtre dessus directement.
+ *
+ * MOIS = 0 → ANNÉE ENTIÈRE. Le même calcul sans le filtre de mois : les douze mois s'additionnent
+ * alors exactement en l'année, ce qu'on ne peut garantir qu'en partageant une seule règle. On ne
+ * bascule PAS sur la marge annuelle (computeYear) pour ce total : elle rattache les inscriptions
+ * à l'année de session, pas à leur date d'encaissement, et un « gain de l'année » qui ne serait
+ * pas la somme de ses mois trahirait le sélecteur juste au-dessus.
+ */
+async function computeMonth(conn, orgId, annee, mois) {
+    // Le filtre de mois n'est ajouté que pour un vrai mois ; à 0, il disparaît des quatre
+    // requêtes d'un coup — une seule condition, pas quatre variantes à garder synchrones.
+    const parMois = (col) => (mois ? ` AND MONTH(${col}) = ?` : '');
+    const arg = (col) => (mois ? [orgId, annee, mois] : [orgId, annee]);
+    const [[inscr]] = await conn.query(
+        `SELECT COALESCE(SUM(price), 0) AS ca
+         FROM enrollment
+         WHERE organization_id = ? AND YEAR(created_at) = ?${parMois('created_at')}`,
+        arg('created_at')
+    );
+    const [[mat]] = await conn.query(
+        `SELECT COALESCE(SUM(amount * quantity), 0) AS ca
+         FROM material_sale
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
+        arg('date')
+    );
+    const [[extra]] = await conn.query(
+        `SELECT COALESCE(SUM(amount), 0) AS ca
+         FROM revenue_extra
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
+        arg('date')
+    );
+    const [[dep]] = await conn.query(
+        `SELECT COALESCE(SUM(amount_ht), 0) AS total
+         FROM expense
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
+        arg('date')
+    );
+    const caInscriptions = num(inscr.ca);
+    const caMateriel = num(mat.ca);
+    const caExtra = num(extra.ca);
+    const ca = caInscriptions + caMateriel + caExtra;
+    const depenses = num(dep.total);
+    return { mois, ca, caInscriptions, caMateriel, caExtra, depenses, gain: ca - depenses };
+}
+
 async function loadSettings(conn, orgId) {
     const [rows] = await conn.query('SELECT * FROM accounting_settings WHERE organization_id = ?', [orgId]);
     const row = rows[0];
@@ -84,11 +142,19 @@ async function loadSettings(conn, orgId) {
 const getGestion = async (req, res) => {
     const orgId = req.user.organization_id;
     const annee = Number(req.query.annee) || currentYear();
+    // Mois demandé : absent → mois courant ; vide ou 0 → ANNÉE ENTIÈRE (le total de l'année) ;
+    // sinon borné à [1,12] pour qu'un ?mois=13 ne produise pas une requête vide silencieuse.
+    const rawMois = req.query.mois;
+    let mois;
+    if (rawMois === undefined) mois = new Date().getMonth() + 1;
+    else if (rawMois === '' || Number(rawMois) === 0) mois = 0;
+    else mois = Math.min(12, Math.max(1, Number(rawMois)));
     try {
         const conn = db.promise();
-        const [year, settings] = await Promise.all([
+        const [year, settings, moisData] = await Promise.all([
             computeYear(conn, orgId, annee),
             loadSettings(conn, orgId),
+            computeMonth(conn, orgId, annee, mois),
         ]);
         const [depenses] = await conn.query(
             `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount_ht, note
@@ -139,6 +205,16 @@ const getGestion = async (req, res) => {
                 ca: { total: ca, inscriptions: year.caInscriptions, materiel: year.caMateriel, extra: year.caExtra },
                 postes, totalDepenses: year.depensesTotal,
                 marge, margePct,
+                // Gain du mois sélectionné : entrées − sorties sur le mois, cf. computeMonth.
+                mois: {
+                    numero: moisData.mois,
+                    gain: moisData.gain,
+                    ca: moisData.ca,
+                    depenses: moisData.depenses,
+                    caInscriptions: moisData.caInscriptions,
+                    caMateriel: moisData.caMateriel,
+                    caExtra: moisData.caExtra,
+                },
                 dividendeCible, dividendeVise, dividendePossible, dividendeRealiste,
                 partRealistePct, dividendeStatut, dividendeMessage,
                 targets: settings.targets,
@@ -257,6 +333,12 @@ const createRevenue = async (req, res) => {
         return res.status(422).json({ error: 'Une commission doit être rattachée à un partenaire.' });
     }
     try {
+        // `partner_id` vient du corps : listRevenues joint `partner` sans filtre pour afficher
+        // son nom, un identifiant étranger ferait donc apparaître le partenaire d'un autre
+        // organisme dans nos produits.
+        if (!await belongsToOrg(db.promise(), 'partner', partner_id, req.user.organization_id)) {
+            return res.status(422).json({ error: 'Partenaire inconnu.' });
+        }
         const id = crypto.randomUUID();
         await db.promise().query(
             `INSERT INTO revenue_extra (id, organization_id, date, label, category, partner_id, amount, note)
@@ -291,6 +373,11 @@ const updateRevenue = async (req, res) => {
     const keys = Object.keys(fields);
     if (!keys.length) return res.status(400).json({ message: 'Aucun champ à mettre à jour' });
     try {
+        // Le WHERE protège bien la LIGNE modifiée ; il ne dit rien du partenaire qu'on y pose.
+        if (fields.partner_id !== undefined
+            && !await belongsToOrg(db.promise(), 'partner', fields.partner_id, req.user.organization_id)) {
+            return res.status(422).json({ error: 'Partenaire inconnu.' });
+        }
         const [r] = await db.promise().query(
             `UPDATE revenue_extra SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND organization_id = ?`,
             [...keys.map((k) => fields[k]), req.params.id, req.user.organization_id]

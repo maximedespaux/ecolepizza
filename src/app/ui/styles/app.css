@@ -227,7 +227,11 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
 thead th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border)}
 tbody td{padding:12px 14px;border-bottom:1px solid var(--border-soft)}
-tbody tr{transition:.12s}tbody tr:hover{background:var(--surface2)}
+/* La propriété est NOMMÉE, et ce n'est pas cosmétique : en raccourci, ce `transition` valait
+   `all`, donc il retardait aussi tout `transform` ou `opacity` posé plus tard sur une ligne.
+   Or certaines lignes sont deplaçables (.drag-row) — un transform différé sur un élément
+   `draggable` décale l'image fantôme du navigateur et fausse la cible de dépôt. */
+tbody tr{transition:background .12s var(--ease)}tbody tr:hover{background:var(--surface2)}
 tbody tr:last-child td{border-bottom:none}
 
 /* Forms -------------------------------------------------------------- */
@@ -845,16 +849,106 @@ tbody tr:last-child td{border-bottom:none}
 .pq-world-dot{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:11px;flex:none}
 .pq-world-t{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pq-map{background:var(--surface2);border:1px solid var(--border-soft);border-radius:16px;padding:24px 16px}
-.pq-path{display:flex;flex-direction:column;align-items:center;gap:20px}
-.pq-node-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;transition:transform .2s var(--ease)}
-.pq-node{width:62px;height:62px;border-radius:50%;border:none;background:var(--c,var(--navy));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 5px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000);transition:transform .1s var(--ease),box-shadow .1s var(--ease)}
+/* Chemin des chapitres, HORIZONTAL : on fait défiler du doigt (ou à la molette) de la
+   gauche vers la droite, chaque pastille décalée en hauteur pour dessiner un sentier.
+   `scroll-snap` cale la pastille au centre, sinon le geste s'arrête n'importe où.
+   `overscroll-behavior-x: contain` empêche le geste de déclencher le retour arrière du
+   navigateur quand on arrive au bout. */
+/* ⚠️ Bloc de débogage de Pizza Quest — à supprimer avec le bouton correspondant.
+   Volontairement à part et rayé : il doit se voir comme un corps étranger, pour qu'on
+   pense à l'enlever et qu'aucun stagiaire ne le prenne pour une fonction du jeu. */
+.pq-debug{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:28px;padding:10px;
+  border:1px dashed var(--border);border-radius:10px;opacity:.7}
+.pq-debug span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-weight:700}
+
+/* Cœurs dans l'en-tête. Les cœurs vides restent VISIBLES (🤍) : c'est le contraste plein
+   vs vide qui dit combien il en manque, un simple nombre ne le montre pas. */
+.pq-hearts{display:inline-flex;gap:1px;font-size:13px;line-height:1}
+.pq-hearts .vide{opacity:.5}
+.pq-regen{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+/* Plus de cœur : on l'annonce, avec l'attente restante — un chemin grisé sans explication
+   se lit comme une panne. */
+.pq-nohearts{display:flex;align-items:center;gap:10px;margin:10px 0 4px;padding:10px 14px;border-radius:12px;
+  border:1px solid var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,transparent);
+  color:var(--ember1);font-size:13px;line-height:1.4}
+
+/* Flèches de bord : elles ne paraissent que du côté où il reste du chemin. Un chemin coupé
+   net au bord de l'écran se lit comme un chemin fini — c'est ce malentendu qu'elles lèvent.
+   Posées SUR le chemin (position absolue) plutôt qu'à côté : elles ne doivent pas rétrécir
+   la zone de jeu, déjà étroite sur mobile. */
+.pq-path-wrap{position:relative}
+.pq-nav{position:absolute;top:73px;transform:translateY(-50%);z-index:3;
+  width:34px;height:34px;display:grid;place-items:center;border-radius:50%;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--muted);
+  box-shadow:var(--shadow-2);transition:.14s var(--ease)}
+.pq-nav:hover{color:var(--ember1);border-color:var(--ember1)}
+.pq-nav.g{left:2px}
+.pq-nav.d{right:2px}
+
+/* --pq-w / --pq-gap : la géométrie du chemin tient dans ces deux valeurs. L'écart entre
+   deux CENTRES vaut leur somme, et c'est ce même nombre (ECART_X) qui sert au calcul du
+   segment côté JS — les deux doivent rester d'accord. */
+/* `align-items:flex-start` et NON `center` : les cases n'ont pas la même hauteur (un
+   libellé tient sur une, deux ou trois lignes). Centrées, chaque pastille se retrouvait à
+   une hauteur différente selon la longueur de son titre — un décalage que le calcul du
+   segment ignore, puisqu'il ne connaît que les décalages voulus. Alignées par le HAUT,
+   toutes les pastilles sont au même niveau et seuls les décalages jouent ; les libellés
+   dépassent vers le bas, sans effet sur le tracé. */
+.pq-path{--pq-w:116px;--pq-gap:8px;
+  display:flex;flex-direction:row;align-items:flex-start;gap:var(--pq-gap);
+  overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+  padding:56px 50% 40px;margin:0 -16px;scrollbar-width:thin}
+.pq-path::-webkit-scrollbar{height:6px}
+.pq-path::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+/* LARGEUR FIXE, et décalage vertical par `top` — deux choix liés au tracé du chemin :
+   · largeur fixe : sinon la case est aussi large que son libellé (« L'eau & la
+     température » contre « La levure ») et l'écart entre deux centres change à chaque
+     paire, alors que le segment est calculé sur un écart constant ;
+   · `top` plutôt que `transform` : une transformation crée un contexte d'empilement, et
+     le segment d'une case ne pouvait alors PAS passer sous la pastille de la case voisine
+     — il lui barrait la figure. */
+.pq-node-wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;flex:none;
+  width:var(--pq-w);scroll-snap-align:center;transition:top .2s var(--ease)}
+/* Segment de liaison : part du CENTRE de cette pastille et rejoint le centre de la
+   précédente. Les pastilles n'étant pas à la même hauteur, un trait horizontal ne joignait
+   ni l'une ni l'autre — d'où longueur (--len) et angle (--ang) calculés en JS à partir des
+   décalages, puis une simple rotation.
+   `z-index:0` contre `z-index:1` sur la pastille : le trait PASSE DESSOUS, il n'entame pas
+   le disque et le chemin se lit d'un trait continu. */
+.pq-node-wrap::before{content:"";position:absolute;top:23px;left:50%;z-index:0;
+  width:var(--len,124px);height:5px;margin-top:-2.5px;border-radius:3px;background:var(--border);
+  transform-origin:0 50%;transform:rotate(var(--ang,180deg))}
+.pq-node-wrap:first-child::before{display:none}
+/* Segment déjà parcouru (le chapitre précédent est terminé) : il colore le chemin derrière
+   soi, ce qui donne à voir la progression sans compter les pastilles. */
+.pq-node-wrap.lien-fait::before{background:var(--green)}
+/* `position:relative; z-index:1` : la pastille passe AU-DESSUS du segment de liaison, qui
+   part de son centre — sans quoi le trait la barrerait. */
+.pq-node{position:relative;z-index:1;width:46px;height:46px;border-radius:50%;border:none;background:var(--c,var(--navy));color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000);transition:transform .1s var(--ease),box-shadow .1s var(--ease)}
 .pq-node:hover:not(:disabled){transform:translateY(-2px)}
-.pq-node:active:not(:disabled){transform:translateY(3px);box-shadow:0 2px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000)}
-.pq-node.done{background:var(--green);box-shadow:0 5px 0 0 #1f7a44}
+.pq-node:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 0 color-mix(in srgb,var(--c,var(--navy)) 55%,#000)}
+/* Vert = sans faute, c'est fini. Doré = acquis mais perfectible : la couleur dit à elle
+   seule qu'il reste à y gagner, et la pastille reste cliquable pour retenter les 3 étoiles. */
+.pq-node.done{background:var(--green);box-shadow:0 4px 0 0 #1f7a44;cursor:default}
+.pq-node.partiel{background:var(--gold);color:#3a2c00;box-shadow:0 4px 0 0 #b8860b}
 .pq-node.locked{background:var(--surface);color:var(--dim);border:2px solid var(--border);box-shadow:none;cursor:not-allowed}
-.pq-node-label{text-align:center;font-size:12.5px}
+/* Chapitre EN COURS : le seul jouable, donc le seul qui doit attirer l'œil au milieu du
+   chemin.
+   Anneau en pseudo-élément et non en `outline` : la pastille porte une ombre pleine de 4 px
+   SOUS elle (l'effet bouton), sa masse visuelle mesure donc 50 px pour une boîte de 46 —
+   un anneau centré sur la boîte paraissait remonté. Ici on le décale de 2 px vers le bas
+   pour le centrer sur ce qu'on voit, ce qu'un `outline` ne permet pas. */
+.pq-node.on::after{content:"";position:absolute;inset:-6px;border-radius:50%;pointer-events:none;
+  border:3px solid var(--c,var(--navy));transform:translateY(2px);
+  animation:pq-pulse 1.8s var(--ease) infinite}
+.pq-node.on:disabled{opacity:.55} /* plus de cœur : on montre, on n'invite pas */
+.pq-node.on:disabled::after{animation:none}
+@keyframes pq-pulse{0%,100%{border-color:color-mix(in srgb,var(--c,var(--navy)) 90%,transparent)}
+  50%{border-color:color-mix(in srgb,var(--c,var(--navy)) 25%,transparent)}}
+@media(prefers-reduced-motion:reduce){.pq-node.on::after{animation:none}}
+.pq-node-label{text-align:center;font-size:11.5px;line-height:1.25;width:100%}
 .pq-node-label b{display:block}
-.pq-stars{font-size:11px;letter-spacing:1px}
+.pq-stars{font-size:10px;letter-spacing:1px}
 .pq-progress{flex:1;height:10px;background:var(--surface2);border-radius:99px;overflow:hidden}
 .pq-progress span{display:block;height:100%;border-radius:99px;transition:width .2s var(--ease)}
 .pq-choice{text-align:left;padding:12px 14px;border:2px solid var(--border);border-radius:12px;background:var(--surface);font-size:14px;font-weight:600;color:var(--text);cursor:pointer;transition:.1s var(--ease)}
@@ -905,9 +999,22 @@ tbody tr:last-child td{border-bottom:none}
 .pq-fcard-ing{font-size:20px;line-height:1}
 .pq-fcard-title{font-size:15px;font-weight:800;line-height:1.15}
 .pq-fcard-meta{font-size:11px;opacity:.92;margin-top:4px}
-.pq-prereq{position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2c00;display:grid;place-items:center;font-weight:900;font-size:15px;border:2px solid var(--surface2)}
-.pq-connect{display:flex;justify-content:center;gap:70px;color:var(--dim);margin:4px 0}
+.pq-prereq{position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2c00;display:grid;place-items:center;font-weight:900;font-size:15px;border:2px solid var(--surface2);cursor:help}
+/* Légende de la pastille, répétée sous CHAQUE groupe qui en contient une — et non une seule
+   fois en pied de page : sur une carte à plusieurs rangées, le sens du « ! » doit se lire
+   à côté du « ! ». */
 .pq-legend{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;border-radius:10px;padding:6px 12px 6px 8px;font-weight:700;font-size:12px}
+/* La pastille de la légende n'est pas celle d'une carte : ni positionnée en absolu, ni
+   bordée (le liseré couleur « surface » n'a rien à faire sur l'aplat vert). Taille et
+   interlignage remis à l'échelle du pastillon, sinon un « ! » de 15 px dans un cercle de
+   20 px (16 px utiles après bordure) déborde et paraît décentré. */
+.pq-legend .pq-prereq{position:static;width:20px;height:20px;border:none;font-size:12px;line-height:1}
+/* Rappel des prérequis en tête d'un monde, avec leur état. */
+.pq-prereq-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px;font-size:12.5px}
+.pq-prereq-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-weight:700;
+  border:1px solid var(--border);background:var(--surface2);color:var(--muted)}
+.pq-prereq-chip.ok{border-color:color-mix(in srgb,var(--green) 45%,transparent);background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green)}
+.pq-connect{display:flex;justify-content:center;gap:70px;color:var(--dim);margin:4px 0}
 .pq-divider{height:2px;background:var(--border);border-radius:2px;margin:22px auto;max-width:520px}
 /* Palier à l'intérieur d'un thème (classement de l'organisme) : plus discret que le titre
    de section, sinon les deux niveaux de titre se disputent la lecture. */
@@ -1575,190 +1682,394 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
   .wiz-dock-s{display:block;font-size:11px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 @media(max-width:560px){.wiz-dot-l{display:none}.wiz-dot{min-width:40px}}
+/* Pastille de l'espace stagiaire (documents à signer / QCM à faire). Le bouton de menu est
+   déjà rouge quand il est actif : la pastille passe alors en blanc sur fond transparent
+   pour rester lisible, au lieu de disparaître dans l'aplat. */
+.stu-count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;
+  border-radius:99px;background:var(--ember1);color:#fff;font-size:10.5px;font-weight:800;line-height:1}
+.btn.primary .stu-count{background:#fff;color:var(--ember1)}
+
+/* ---- Prérequis Pizza Quest (organisme) ----------------------------------------------- */
+/* Une ligne par formation : on lit « celle-ci vient après celles-là » et on la modifie au
+   même endroit. Le liseré à gauche rappelle la couleur de la formation. */
+.pr-list{display:flex;flex-direction:column;gap:8px}
+.pr-row{border:1px solid var(--border-soft);border-radius:11px;padding:10px 12px;background:var(--surface2)}
+.pr-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px}
+.pr-dot{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.pr-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Ce que la formation débloque : à connaître AVANT de retirer un prérequis. */
+.pr-opens{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;color:var(--green)}
+.pr-body{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pr-lbl{font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+.pr-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 4px 3px 9px;border-radius:99px;font-size:12.5px;
+  border:1px solid var(--border);background:var(--surface);color:var(--text)}
+.pr-add{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:12.5px;font-weight:600;
+  border:1px dashed var(--border);background:none;color:var(--muted);cursor:pointer;transition:.14s var(--ease)}
+.pr-add:hover:not(:disabled){border-color:var(--ember1);color:var(--ember1)}
+.pr-add:disabled{opacity:.4;cursor:default}
+.pr-add-sel{max-width:280px}
+
+/* ---- Banque de questions : ligne de chapitre ----------------------------------------- */
+/* `select` hérite de `width:100%` (règle globale des champs) : dans une rangée flex il
+   réclamait toute la largeur et écrasait le titre du chapitre sur trois lignes. On lui
+   fixe donc une largeur, et c'est le TITRE qui prend la place restante — c'est lui qu'on
+   lit d'abord. */
+/* Regroupement par formation quand le filtre est sur « Toutes ». En-tête cliquable : on
+   replie une formation dont on ne s'occupe pas, sans perdre les autres de vue. */
+.qb-grp{margin-bottom:14px}
+.qb-grp-head{display:flex;align-items:center;gap:9px;width:100%;padding:7px 4px;border:none;background:none;
+  border-bottom:2px solid var(--border);cursor:pointer;color:inherit;font:inherit;text-align:left}
+.qb-grp-head:hover{border-bottom-color:var(--ember1)}
+.qb-grp-head.orphan{color:var(--ember1);border-bottom-color:color-mix(in srgb,var(--ember1) 45%,transparent)}
+.qb-grp-code{padding:2px 8px;border-radius:6px;color:#fff;font-size:11px;font-weight:800;font-family:var(--font-m);flex:none}
+.qb-grp-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.qb-grp-count{flex:none;white-space:nowrap}
+.qb-grp-body{padding-top:8px}
+
+/* Icône d'un chapitre : bouton-aperçu + palette. Le bouton reste discret (c'est un réglage,
+   pas une action) mais montre l'icône telle qu'elle apparaîtra au stagiaire. */
+.qb-ico{position:relative;flex:none;display:inline-flex}
+.qb-ico-btn{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--text);transition:.14s var(--ease)}
+.qb-ico-btn:hover{border-color:var(--ember1);color:var(--ember1)}
+.qb-ico-btn.vide{border-style:dashed;color:var(--dim)}
+.qb-ico-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:8;padding:8px;border-radius:11px;
+  border:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow-3);width:212px}
+.qb-ico-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.qb-ico-opt{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;cursor:pointer;
+  border:1px solid transparent;background:none;color:var(--muted);transition:.12s var(--ease)}
+.qb-ico-opt:hover{background:var(--surface2);color:var(--text)}
+.qb-ico-opt.on{border-color:var(--ember1);color:var(--ember1);background:color-mix(in srgb,var(--ember1) 10%,transparent)}
+
+.qb-ch{border:1px solid var(--border-soft);border-radius:10px;margin-bottom:8px}
+.qb-ch-head{display:flex;align-items:center;gap:10px;padding:9px 12px}
+.qb-ch-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qb-ch-count{flex:none;white-space:nowrap}
+.qb-ch-sel{flex:none;width:150px}
+.qb-ch-body{border-top:1px solid var(--border-soft);padding:10px 12px}
+@media(max-width:640px){
+  /* À l'étroit, la rangée passe sur deux lignes plutôt que de rogner le titre. */
+  .qb-ch-head{flex-wrap:wrap}
+  .qb-ch-title{flex:1 1 100%;white-space:normal}
+  .qb-ch-sel{width:130px}
+}
+
+/* ---- Éditeur de question Pizza Quest (banque de l'organisme) ------------------------- */
+/* Saisie à gauche, aperçu stagiaire à droite : on rédige pour quelqu'un d'autre, le rendu
+   doit rester sous les yeux. En dessous de 900px la colonne d'aperçu passe dessous. */
+.qz-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);gap:18px;align-items:start}
+@media(max-width:900px){.qz-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* Une ligne de choix : marqueur « bonne réponse », champ, outils. */
+.qz-choice,.qz-pair{display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 6px;border-radius:9px;border:1px solid transparent;transition:.14s var(--ease)}
+.qz-choice.ok{border-color:var(--green);background:color-mix(in srgb,var(--green) 10%,transparent)}
+.qz-mark{border:none;background:none;padding:2px;cursor:pointer;color:var(--dim);display:grid;place-items:center;border-radius:50%;flex:0 0 auto}
+.qz-choice.ok .qz-mark{color:var(--green)}
+.qz-mark:hover{color:var(--green)}
+.qz-tools{display:flex;gap:2px;flex:0 0 auto}
+.qz-tools .iconbtn:disabled{opacity:.3;cursor:default}
+.qz-meta{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) 96px;gap:10px}
+@media(max-width:560px){.qz-meta{grid-template-columns:minmax(0,1fr)}}
+.qz-active{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px}
+
+/* Aperçu : volontairement sobre — il sert à relire une question, pas à imiter le jeu. */
+.qz-preview{position:sticky;top:0;border:1px solid var(--border);border-radius:12px;background:var(--surface2);overflow:hidden}
+.qz-preview-h{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border-soft);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+.qz-preview-body{padding:12px}
+.qz-pv-q{font-size:14px;font-weight:600;line-height:1.35;margin:0 0 6px}
+.qz-pv-meta{display:flex;gap:8px;align-items:center;margin:0 0 10px;font-size:12px;color:var(--muted)}
+.qz-pv-choices{display:flex;flex-direction:column;gap:6px}
+.qz-pv-choice{padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface);font-size:13px;line-height:1.3}
+.qz-pv-choice.ok{border-color:var(--green);background:color-mix(in srgb,var(--green) 12%,var(--surface));font-weight:600}
+.qz-pv-pairs{display:flex;flex-direction:column;gap:5px}
+.qz-pv-pair{display:flex;align-items:center;gap:6px;font-size:13px;padding:6px 9px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
+.qz-pv-pair span{flex:1;min-width:0}
+.qz-pv-after{margin-top:10px;padding:9px 11px;border-radius:9px;background:color-mix(in srgb,var(--green) 10%,transparent);border:1px solid color-mix(in srgb,var(--green) 35%,transparent);font-size:12.5px;line-height:1.4}
+.qz-pv-after p{margin:4px 0 0}
+
 .doc-rule-warning{display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;padding:10px 14px;border:1px solid var(--ember1);border-radius:10px;background:rgba(220,62,55,.08);color:var(--ember1);font-size:.9rem;line-height:1.4}
 .doc-rule-warning svg{flex:0 0 auto;margin-top:1px}
 .doc-rule-warning strong{color:var(--ember1)}
 
-/* ═══ Maîtrise sanitaire (HACCP) ═══ mobile d'abord ══════════════════════════════════════════ */
-.muted{color:var(--muted)}
-.icon-btn.danger:hover{color:var(--ember1);border-color:var(--ember1)}
+/* ===== Espace stagiaire : barre étroite ================================= */
+/* La barre aligne marque + 6 destinations + thème + avatar + déconnexion. Au-delà d'environ
+   900px tout tient sur une ligne ; en deçà, les destinations partent dans un tiroir. Le seuil
+   est celui où la barre déborde réellement, pas une taille d'appareil : un iPad en portrait
+   (768px) et un téléphone en paysage tombent tous deux du bon côté. */
+.stu-topbar{gap:10px}
+.stu-nav{display:flex;gap:6px;margin-left:8px;flex-wrap:wrap}
+.stu-burger{display:none;position:relative;flex:0 0 auto}
+/* Pastille des documents en attente, reportée sur le bouton du tiroir : replier la barre ne
+   doit pas faire disparaître l'alerte. Un point suffit — le compte exact est dans le tiroir. */
+.stu-burger-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;
+  background:var(--ember1);box-shadow:0 0 0 2px var(--surface)}
+/* Bloc collant de l'espace stagiaire : la barre, et le tiroir quand il est ouvert. C'est LUI
+   qui colle — la barre à l'intérieur repasse donc en flux normal, sinon deux collants imbriqués
+   se disputeraient le même `top`. */
+.stu-head{position:sticky;top:0;z-index:30}
+.stu-head .topbar{position:static}
+.stu-scrim{position:fixed;inset:0;z-index:29;background:rgba(15,17,40,.35);backdrop-filter:blur(2px)}
+.stu-drawer{display:none}
+.stu-drawer-item{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;
+  font-size:14.5px;font-weight:600;color:var(--text);text-decoration:none;min-height:44px}
+.stu-drawer-item.on{background:var(--grad-ember);color:#fff}
+.stu-drawer-item.on .stu-count{background:#fff;color:var(--ember1)}
+.stu-drawer-item.locked{color:var(--dim);font-weight:500;cursor:default}
+.stu-drawer-lbl{padding:12px 12px 4px;font-size:11px;font-weight:800;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.07em}
+.stu-drawer-sep{height:1px;margin:8px 4px;background:var(--border-soft)}
 
-/* — Hub : bandeau d'alertes — */
-.hs-alerts{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
-.hs-alert{display:flex;align-items:center;gap:11px;padding:12px 15px;border-radius:var(--r-sm);border:1px solid var(--border);font-size:14px;font-weight:600;color:var(--text);background:var(--surface);transition:.15s var(--ease)}
-.hs-alert span{flex:1}
-.hs-alert b{font-size:16px}
-.hs-alert.wait{border-color:var(--blue);background:var(--blue-bg)}
-.hs-alert.warn{border-color:var(--gold);background:var(--amber-bg)}
-.hs-alert.bad{border-color:var(--ember1);background:var(--rosso-bg);color:var(--ember1)}
-a.hs-alert:hover{transform:translateX(2px)}
-
-/* — Hub : trois colonnes façon logiciel HACCP — */
-.hs-cols{display:grid;grid-template-columns:1fr;gap:18px;margin-bottom:22px}
-.hs-col{--a:var(--navy)}
-.hs-col-head{font:800 13px/1 var(--font-d);text-transform:uppercase;letter-spacing:.06em;color:var(--a);padding:0 0 10px 2px;margin:0 0 12px;border-bottom:2px solid color-mix(in srgb,var(--a) 30%,transparent)}
-.hs-col-tiles{display:flex;flex-direction:column;gap:10px}
-.hs-mod{--a:var(--navy);display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--a);border-radius:var(--r-sm);transition:.15s var(--ease)}
-.hs-mod:hover{transform:translateX(2px);box-shadow:var(--shadow-2);border-color:var(--a)}
-.hs-mod-ic{flex:none;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--a);background:color-mix(in srgb,var(--a) 13%,transparent)}
-.hs-mod-t{flex:1;min-width:0;font:700 14.5px/1.2 var(--font-b);color:var(--text)}
-.hs-chip{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:52px;padding:5px 8px;border-radius:10px;line-height:1}
-.hs-chip-top{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;opacity:.85;margin-bottom:2px;white-space:nowrap}
-.hs-chip-n{font:800 18px/1 var(--font-d)}
-.hs-chip.wait{background:var(--blue-bg);color:var(--blue)}
-.hs-chip.bad{background:var(--rosso-bg);color:var(--ember1)}
-.hs-chip.ok{background:var(--green-bg);color:var(--green)}
-.hs-chip.done{background:color-mix(in srgb,var(--a) 14%,transparent);color:var(--a)}
-.hs-chip.idle{background:var(--surface2);color:var(--dim)}
-
-.hs-foot-link{display:flex;gap:13px;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-size:13px;line-height:1.5;transition:.15s var(--ease)}
-.hs-foot-link:hover{border-color:var(--green);transform:translateY(-1px);box-shadow:var(--shadow-2)}
-.hs-foot-link>svg:first-child{flex:none;color:var(--green)}
-.hs-foot-link>svg:last-child{flex:none;color:var(--dim)}
-.hs-foot-link b{color:var(--text)}
-
-/* — Page registre — */
-.hs-back{display:inline-flex;align-items:center;gap:3px;color:var(--ember1);font-weight:700}
-.hs-config-cta{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border-left:4px solid var(--gold)}
-.hs-form-card{margin-bottom:16px}
-.hs-form{display:flex;flex-direction:column;gap:2px}
-.hs-form-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
-.hs-form-actions .btn.primary{margin-left:auto}
-.hs-num{position:relative;display:flex;align-items:center}
-.hs-num .inp{padding-right:44px}
-.hs-unit{position:absolute;right:12px;font-size:13px;font-weight:700;color:var(--dim);pointer-events:none}
-.hs-check label{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;cursor:pointer}
-.hs-check input{width:auto}
-.hs-help{font-size:12px;color:var(--dim);margin-top:5px;line-height:1.4}
-.hs-preview{display:inline-flex;align-items:center;gap:6px;margin-top:7px;padding:5px 10px;border-radius:8px;font-size:12.5px;font-weight:700}
-.hs-preview.ok{color:var(--green);background:var(--green-bg)}
-.hs-preview.bad{color:var(--ember1);background:var(--rosso-bg)}
-
-/* — Journal — */
-.hs-log{display:flex;flex-direction:column;gap:0}
-.hs-log-row{display:flex;gap:12px;align-items:flex-start;padding:13px 2px;border-bottom:1px solid var(--border-soft)}
-.hs-log-row:last-child{border-bottom:none}
-.hs-log-main{flex:1;min-width:0}
-.hs-log-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.hs-log-top b{font:700 15px/1.2 var(--font-b)}
-.hs-log-val{font:800 15px/1 var(--font-m);color:var(--navy)}
-.hs-badge{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.01em}
-.hs-badge.ok{color:var(--green);background:var(--green-bg)}
-.hs-badge.bad{color:var(--ember1);background:var(--rosso-bg)}
-.hs-badge.warn{color:#a9760a;background:var(--amber-bg)}
-.hs-badge.muted{color:var(--dim);background:var(--surface2)}
-.hs-log-sub{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:4px}
-.hs-due.soon{color:var(--ember1);font-weight:700}
-.hs-log-corr{display:flex;gap:6px;align-items:flex-start;margin-top:6px;font-size:12.5px;color:var(--muted)}
-.hs-log-corr svg{flex:none;margin-top:2px;color:var(--green)}
-.hs-log-note{margin-top:5px;font-size:12.5px;color:var(--muted);font-style:italic}
-.hs-log-actions{display:flex;gap:2px;flex:none}
-.hs-log-actions .icon-btn{width:34px;height:34px;border-radius:9px}
-
-/* — Panneau référentiel — */
-.hs-ref-empty{text-align:center;padding:14px 0 4px;color:var(--muted)}
-.hs-ref-empty p{margin:0 0 10px}
-.hs-ref-list{display:flex;flex-direction:column;gap:0;margin:0 0 14px}
-.hs-ref-list li{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--border-soft)}
-.hs-ref-list li.off{opacity:.5}
-.hs-ref-main{flex:1;min-width:0;display:flex;flex-direction:column}
-.hs-ref-main b{font-size:14px}
-.hs-ref-sub{font-size:12px;color:var(--muted)}
-.hs-ref-form{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px dashed var(--border)}
-.hs-ref-row{display:flex;gap:8px}
-.hs-ref-row>*{flex:1;min-width:0}
-.hs-ref-form .btn{align-self:flex-start}
-
-/* — Historique unifié : filtres + journal — */
-.hs-filters{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}
-.hs-filters.sub{margin-bottom:16px}
-.hs-filters .seg-btn{border:1px solid var(--border);background:var(--surface);color:var(--muted);padding:6px 12px;border-radius:999px}
-.hs-filters .seg-btn.on{background:var(--grad-ember);color:#fff;border-color:transparent}
-.hs-filters-sep{width:1px;height:22px;background:var(--border);margin:0 2px}
-.chip-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border-soft);background:var(--surface2);color:var(--muted);padding:5px 10px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;transition:.14s var(--ease)}
-.chip-btn.on{background:var(--blue-bg);color:var(--blue);border-color:var(--blue)}
-.hs-hist-day{margin-bottom:4px}
-.hs-hist-date{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);padding:12px 2px 6px;position:sticky;top:0;background:var(--surface);z-index:1}
-.hs-hist-list{display:flex;flex-direction:column;gap:0}
-.hs-hist-row{display:flex;gap:11px;align-items:flex-start;padding:10px 2px;border-bottom:1px solid var(--border-soft)}
-.hs-hist-row:last-child{border-bottom:none}
-.hs-hist-ic{--a:var(--navy);flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--a);background:color-mix(in srgb,var(--a) 13%,transparent)}
-.hs-hist-main{flex:1;min-width:0}
-.hs-hist-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.hs-hist-top b{font:700 14px/1.2 var(--font-b)}
-.hs-hist-sub{display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:3px}
-.hs-hist-reg{font-weight:700;color:var(--dim)}
-
-/* Listes de la maîtrise sanitaire : pas de puces natives. */
-.hs-round-list,.hs-clean-list,.hs-log,.hs-hist-list,.hs-ref-list{list-style:none;margin:0;padding:0}
-.hs-clean-list{margin-bottom:6px}
-
-/* — Saisie éclair : tournée des températures — */
-.hs-round-head,.hs-clean .hs-round-head{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.35}
-.hs-round-head svg{flex:none;color:var(--blue)}
-.hs-round-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
-.hs-round-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);transition:.14s var(--ease)}
-.hs-round-row.conforme{border-color:var(--green);background:var(--green-bg)}
-.hs-round-row.non_conforme{border-color:var(--ember1);background:var(--rosso-bg)}
-.hs-round-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-.hs-round-name b{font-size:14.5px}
-.hs-round-seuil{font-size:11.5px;color:var(--muted)}
-.hs-round-field{flex:none;display:flex;align-items:center;gap:7px;color:var(--dim)}
-.hs-round-row.conforme .hs-round-field{color:var(--green)}
-.hs-round-row.non_conforme .hs-round-field{color:var(--ember1)}
-.hs-round-input{width:82px;text-align:right;font:800 18px/1 var(--font-m);padding:9px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text)}
-.hs-round-input:focus{outline:none;border-color:var(--blue)}
-.hs-round-unit{font-size:13px;font-weight:700;color:var(--dim)}
-.hs-round-save{width:100%;justify-content:center}
-
-/* — Saisie éclair : checklist nettoyage — */
-.hs-clean-list{display:flex;flex-direction:column;gap:8px}
-.hs-task-btn{width:100%;display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);cursor:pointer;text-align:left;transition:.14s var(--ease)}
-.hs-task-btn:hover{border-color:var(--teal,#0e9aa7)}
-.hs-task.done .hs-task-btn{border-color:var(--green);background:var(--green-bg)}
-.hs-task-box{flex:none;width:26px;height:26px;border-radius:8px;border:2px solid var(--border);display:grid;place-items:center;color:#fff;transition:.14s var(--ease)}
-.hs-task.done .hs-task-box{background:var(--green);border-color:var(--green)}
-.hs-task-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-.hs-task-main b{font-size:14.5px}
-.hs-task-sub{font-size:12px;color:var(--muted)}
-.hs-task-tag{flex:none;font-size:12px;font-weight:700;color:var(--green);white-space:nowrap}
-.hs-task-go{flex:none;font-size:12px;font-weight:600;color:var(--dim)}
-
-/* — Hub : onboarding illustré « comment ça marche » — */
-.hs-onboard{padding:18px;margin-bottom:20px;border:1px solid var(--border);background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow-1)}
-.hs-onboard-head{margin-bottom:16px}
-.hs-onboard-head b{display:block;font:800 17px/1.2 var(--font-d)}
-.hs-onboard-head span{font-size:13px;color:var(--muted)}
-.hs-steps{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:16px}
-.hs-step{--a:var(--navy);display:flex;flex-direction:column;gap:4px;padding:16px;border-radius:var(--r-sm);background:var(--surface2);border:1px solid var(--border-soft)}
-.hs-step>svg{color:var(--a);margin-bottom:6px}
-.hs-step b{font:700 14px/1.2 var(--font-b)}
-.hs-step span{font-size:12.5px;color:var(--muted);line-height:1.4}
-.hs-onboard-actions{display:flex;gap:10px;flex-wrap:wrap}
-
-/* — Page Paramétrage : sections — */
-.hs-reglage-t{display:inline-flex;align-items:center;gap:9px}
-.hs-reglage-ic{--a:var(--navy);flex:none;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--a);background:color-mix(in srgb,var(--a) 13%,transparent)}
-.hs-reglage-hint{font-size:12.5px;color:var(--muted);line-height:1.45;margin:0 0 14px}
-
-/* — Historique : recherche produit / lot — */
-.hs-search{display:flex;align-items:center;gap:8px;padding:2px 10px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);margin-bottom:12px}
-.hs-search svg{flex:none;color:var(--dim)}
-.hs-search .inp{border:none;background:none;padding:9px 0}
-.hs-search .inp:focus{outline:none}
-.hs-search .icon-btn{flex:none;width:30px;height:30px;border:none;background:none}
-.hs-search-hint{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin:-4px 0 12px 2px}
-.hs-search-hint svg{flex:none;color:var(--blue)}
-
-/* Accents par domaine/module — déclarés APRÈS les composants (.hs-col/.hs-mod/.hs-hist-ic posent
-   un --a par défaut) pour que la couleur du module l'emporte, à spécificité égale, par l'ordre. */
-.accent-blue{--a:#2c3371}.accent-amber{--a:#e8730c}.accent-teal{--a:#0e9aa7}.accent-violet{--a:#6b4fbb}
-.accent-gold{--a:#c9960a}.accent-rosso{--a:var(--ember1)}.accent-green{--a:#2f9e6f}.accent-navy{--a:#2c3371}
-
-@media(min-width:720px){
-  .hs-cols{grid-template-columns:1fr 1fr 1fr;align-items:start;gap:16px}
-  .hs-steps{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:900px){
+  /* Les destinations quittent la barre : elles reviennent dans le tiroir, en entier. */
+  .stu-nav{display:none}
+  .stu-burger{display:grid}
+  /* Le tiroir se déplie SOUS la barre collante plutôt qu'en plein écran : la barre reste
+     visible, donc le bouton qui l'a ouvert reste sous le pouce pour le refermer.
+     Il est posé dans le flux, juste après l'en-tête, et non collé à un `top` en pixels :
+     un décalage en dur devrait valoir la hauteur exacte de la barre, qui change avec le
+     palier (la marque disparaît à 560px) et avec la taille de police du système. */
+  /* Le positionnement et l'empilement sont portes par .stu-head : le tiroir n'a plus qu'a se
+     laisser porter. Il garde son propre defilement pour les listes longues. */
+  .stu-drawer{display:flex;flex-direction:column;
+    padding:8px;background:var(--surface);border-bottom:1px solid var(--border);
+    box-shadow:0 16px 32px -16px rgba(10,12,30,.4);animation:rise .18s var(--ease) both;
+    max-height:calc(100vh - 56px);overflow-y:auto}
 }
-@media(max-width:719px) and (min-width:520px){
-  .hs-cols{grid-template-columns:1fr 1fr}
+@media(max-width:560px){
+  /* Marque réduite au logo : « Impasto » et son sous-titre valent moins, ici, que la place
+     qu'ils prennent au thème, à l'avatar et au menu. */
+  .stu-brand .name,.stu-sub{display:none}
+  .topbar{padding:10px 14px;gap:8px}
+  /* La déconnexion RESTE : le profil ne la propose pas, la masquer ici enfermerait le
+     stagiaire dans sa session. Sans la marque, la place ne manque plus de toute façon. */
 }
+
+/* Ligne de liste de l'espace stagiaire : intitulé souple, puis statut et action.
+   Les quatre listes (documents de Mon espace, documents et émargements d'une formation,
+   émargements du jour) partageaient le même style inline, à l'identique. Il vit ici, avec
+   le repli en moins : `.btn` est en `white-space:nowrap` et le `Badge` ne se comprime pas
+   davantage, donc sous ~330px l'intitulé était le seul à céder — jusqu'à écraser à zéro et
+   pousser toute la page en défilement horizontal. La base de 190px fait descendre le statut
+   et l'action à la ligne suivante avant d'en arriver là. */
+.stu-row{display:flex;align-items:center;gap:12px;padding:10px 0;flex-wrap:wrap;
+  border-bottom:1px solid var(--border-soft)}
+.stu-row-t{flex:1 1 190px;min-width:0}
+
+/* ===== Echelle figee ==================================================== */
+/* Voir lib/nozoom.js : ce bloc traite les deux zooms qui se corrigent en CSS, le script
+   s'occupe du pincement et du zoom navigateur. */
+/* `manipulation` supprime le double-tap zoom sans supprimer le defilement ni le pincement
+   (dont le script se charge). Il enleve aussi le delai de 300ms sur les taps. */
+html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* Sur un pointeur grossier (doigt), Safari iOS zoome des qu'un champ recoit le focus avec une
+   police sous 16px — et ne dezoome jamais ensuite. C'est le zoom parasite le plus courant sur
+   telephone. 16px est le seuil exact : en dessous ca zoome, a partir de la ca ne zoome plus. */
+/* `!important` est ici deliberé, pas un raccourci. Plusieurs composants fixent la police de
+   leur champ par un selecteur plus specifique — `.cart-perso .inp` a 13px, par exemple — et
+   l'emporteraient sur une regle simple, laissant le zoom revenir juste sur ces champs-la.
+   La contrainte vient de l'appareil, pas du composant : elle doit passer devant. */
+@media(pointer:coarse){
+  input,select,textarea,.inp{font-size:16px!important}
+}
+
+/* Halos des cartes de la Communauté. DEUX signaux, deux extinctions — voir CommCard.
+
+   Le commentaire appelle une réponse : son halo BAT, et ne s'éteint qu'à l'ouverture de la
+   fiche. Le j'aime n'appelle rien : son halo RESPIRE plus doucement et s'éteint dès que la
+   carte a passé un moment à l'écran. Deux rythmes et deux teintes, pour qu'on distingue
+   « on te répond » de « on t'a aimé » sans lire l'étiquette.
+
+   L'animation porte sur box-shadow et non sur border-width : changer une bordure relance la
+   mise en page à chaque image, et la galerie entière tressauterait. */
+@keyframes halo-com{
+  0%,100%{box-shadow:0 0 0 0 rgba(220,62,55,.55),0 0 0 1px var(--ember1) inset}
+  50%    {box-shadow:0 0 0 6px rgba(220,62,55,0),0 0 0 1px var(--ember1) inset}
+}
+@keyframes halo-aime{
+  0%,100%{box-shadow:0 0 0 0 rgba(226,163,32,.5),0 0 0 1px var(--gold) inset}
+  50%    {box-shadow:0 0 0 5px rgba(226,163,32,0),0 0 0 1px var(--gold) inset}
+}
+.comm-card2.halo-com{border-color:var(--ember1);animation:halo-com 1.9s var(--ease) infinite}
+/* 2s = exactement le temps de présence exigé par VU_DELAI_MS (Communaute.jsx) : une
+   pulsation entière se joue, puis le halo s'efface. Les deux valeurs vont de pair. */
+.comm-card2.halo-aime{border-color:var(--gold);animation:halo-aime 2s var(--ease) infinite}
+/* Les deux à la fois : le commentaire l'emporte, c'est lui qui demande une action. La bordure
+   doit suivre l'animation — sans cette seconde déclaration, `.halo-aime` la gardait dorée
+   (même spécificité, écrite après) et la carte battait en rouge dans un cerne or. */
+.comm-card2.halo-com.halo-aime{animation:halo-com 1.9s var(--ease) infinite;border-color:var(--ember1)}
+/* L'extinction du halo « j'aime » se voit : la carte redevient normale en douceur plutôt
+   que de perdre son cerne d'un coup, sinon on croit à un défaut d'affichage.
+   Le `transform` garde SA durée courte — cette déclaration remplaçait la transition d'origine
+   et privait la carte de sa réaction au survol. Deux vitesses, deux usages : le halo respire,
+   le survol répond. */
+.comm-card2{transition:transform .14s var(--ease),border-color .5s var(--ease),box-shadow .5s var(--ease)}
+/* Un clignotement permanent est exactement ce que ce réglage système demande d'éviter. Le
+   liseré, lui, reste : le signal n'est pas perdu, il cesse seulement de bouger. */
+@media(prefers-reduced-motion:reduce){
+  .comm-card2.halo-com,.comm-card2.halo-aime{animation:none;box-shadow:0 0 0 1px currentColor inset}
+}
+.comm-neuf{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;border-radius:99px;
+  vertical-align:middle;background:var(--ember1);color:#fff;font-size:10.5px;font-weight:800;white-space:nowrap}
+.comm-neuf.aime{background:var(--gold)}
+
+/* Visages de ceux qui ont commenté une fiche, en rang serré sur la carte.
+   Les marges négatives font le chevauchement : la rangée tient dans la place d'un avatar et
+   demi et se lit comme un groupe. Le liseré de la couleur de la carte détache chaque pastille
+   de sa voisine — sans lui, des avatars de teintes proches formeraient une tache. */
+.comm-faces{display:inline-flex;align-items:center;margin-left:2px}
+.comm-face{width:21px;height:21px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+  margin-left:-6px;border:2px solid var(--surface);background:var(--surface2);color:var(--muted);
+  font-size:11px;line-height:1;padding:0;cursor:pointer;transition:transform .14s var(--ease)}
+.comm-face:first-child{margin-left:0}
+/* Au survol la pastille passe devant ses voisines, sinon le nom au survol désigne un visage
+   à moitié caché. */
+.comm-face:hover{transform:translateY(-2px) scale(1.12);z-index:9!important}
+/* Le compteur ne participe PAS au chevauchement : les visages peuvent se recouvrir, ils
+   restent reconnaissables ; un « +3 » amputé de son « + » ne veut plus rien dire. Mesuré au
+   navigateur — le dernier avatar mangeait exactement les 6px du signe. */
+.comm-face.reste{margin-left:3px;width:auto;min-width:21px;padding:0 5px;border-radius:99px;
+  font-size:9.5px;font-weight:800;color:var(--dim);cursor:default}
+.comm-face.reste:hover{transform:none}
+
+/* ===== Animations d'ambiance ============================================ */
+/* Principe : rien qui attire l'œil pour lui-même. Ces mouvements servent à situer — d'où ça
+   vient, ce qui vient de changer, ce qui répond au doigt — et se remarquent surtout par leur
+   absence. Tout passe par `transform` et `opacity`, les deux seules propriétés que le
+   navigateur anime sans relancer la mise en page.
+   Le réglage système « animations réduites » les supprime toutes en bloc (règle en tête de
+   fichier) : rien à répéter ici. */
+
+/* Arrivée en cascade. Elle existait déjà mais s'arrêtait au 4e élément : au-delà, tout le
+   reste de la grille apparaissait d'un coup, ce qui se voyait plus que la cascade elle-même.
+   Elle va jusqu'au 8e, puis s'arrête net — décaler le 30e ferait attendre une seconde pour
+   rien. */
+.grid > *:nth-child(5),.comm-grid > *:nth-child(5){animation-delay:.2s}
+.grid > *:nth-child(6),.comm-grid > *:nth-child(6){animation-delay:.24s}
+.grid > *:nth-child(7),.comm-grid > *:nth-child(7){animation-delay:.28s}
+.grid > *:nth-child(n+8),.comm-grid > *:nth-child(n+8){animation-delay:.32s}
+.comm-grid > *:nth-child(2){animation-delay:.05s}
+.comm-grid > *:nth-child(3){animation-delay:.1s}
+.comm-grid > *:nth-child(4){animation-delay:.15s}
+
+/* Le bandeau de titre est le plus gros bloc de chaque page : il apparaissait sec pendant que
+   les cartes, elles, montaient. Il ouvre maintenant le mouvement au lieu de le contredire. */
+.hero{animation:rise .4s var(--ease) both}
+
+/* Les cartes de la Communauté montent comme celles du reste de l'application, et se soulèvent
+   au survol comme `.card.hover` : elles s'ouvrent au clic, autant l'annoncer. */
+.comm-card2{animation:rise .45s var(--ease) both}
+.comm-card2:hover{transform:translateY(-2px);box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
+
+/* Le tiroir de navigation se déplie déjà ; son contenu suit en cascade courte. Le retard est
+   faible à dessein — on ouvre ce menu pour aller quelque part, pas pour le regarder.
+   La cascade porte sur TOUS les enfants, pas sur les seules entrées : l'intertitre « Outils »
+   et le séparateur en sont aussi. Les viser par leur classe décalait le compte, et une entrée
+   sautait une marche. */
+.stu-drawer > *{animation:rise .26s var(--ease) both}
+.stu-drawer > *:nth-child(2){animation-delay:.03s}
+.stu-drawer > *:nth-child(3){animation-delay:.06s}
+.stu-drawer > *:nth-child(4){animation-delay:.09s}
+.stu-drawer > *:nth-child(5){animation-delay:.12s}
+.stu-drawer > *:nth-child(n+6){animation-delay:.15s}
+
+/* Le voile des fenêtres modales apparaissait d'un bloc alors que la fenêtre, elle, montait en
+   douceur : le fond arrivait avant son contenu. */
+@keyframes voile{from{opacity:0}to{opacity:1}}
+.overlay{animation:voile .2s var(--ease) both}
+
+/* Onglets segmentés : la pastille active glissait d'un onglet à l'autre sans transition. */
+.seg-btn{transition:color .18s var(--ease),background .18s var(--ease)}
+
+/* Une pastille de comptage qui apparaît mérite d'être vue apparaître — c'est une information
+   nouvelle, pas un élément de décor déjà là. */
+@keyframes pastille{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+.stu-count,.stu-burger-dot{animation:pastille .24s var(--ease) both}
+
+/* Lignes de liste (documents, émargements) : un fond au survol dit ce que la souris désigne,
+   sur des lignes hautes où l'œil se perd facilement. Le retrait négatif fait déborder le fond
+   du padding de la carte, sinon la bande s'arrête au ras du texte. */
+.stu-row{transition:background .16s var(--ease);border-radius:8px;
+  margin-inline:-8px;padding-inline:8px}
+.stu-row:hover{background:var(--surface2)}
+
+/* Pizza Quest : le chapitre jouable respire déjà (pq-pulse). Les autres nœuds gagnent la même
+   réponse au survol que les boutons, pour qu'un chapitre verrouillé se distingue d'un chapitre
+   simplement pas encore atteint. */
+.pq-node:disabled{transition:opacity .2s var(--ease)}
+.pq-node:disabled:hover{opacity:.75}
+
+/* ===== Animations d'ambiance — côté organisme =========================== */
+/* Le socle partagé (cartes, grilles, bandeaux, modales, onglets segmentés) s'applique déjà
+   ici : cette section ne traite que ce qui est PROPRE au back-office et restait figé.
+   Même principe que pour l'espace stagiaire — situer, pas décorer.
+   Le réglage système « animations réduites » les supprime toutes en bloc (règle en tête de
+   fichier) : rien à répéter. */
+
+/* --- GLISSER-DÉPOSER : la règle à ne pas enfreindre -----------------------
+   Trois zones du back-office sont deplaçables : les lignes réordonnables (.drag-row, dans
+   Formations et Modèles), les étapes du parcours documentaire (.pf-node) et les jetons de la
+   palette (TemplateEditor). Sur ces éléments on ne transitionne QUE `background`,
+   `border-color` et `opacity` — JAMAIS `transform`, qui décalerait l'image fantôme générée
+   par le navigateur et fausserait le calcul de la cible de dépôt.
+   Et pendant le glisser lui-même, plus aucune transition : le retour visuel doit être
+   immédiat, sinon on doute d'avoir attrapé la ligne. */
+.drag-row.dragging,.pf-node.drag{transition:none}
+
+/* --- Pipeline : le seul kanban, et il ne se glisse pas (les cartes changent de colonne par
+   boutons). Rien n'y interdit donc le relief au survol. */
+.pipe-card{transition:transform .14s var(--ease),box-shadow .14s var(--ease),border-color .14s var(--ease)}
+.pipe-card:hover{transform:translateY(-2px);box-shadow:0 10px 24px -14px rgba(44,51,113,.4)}
+.pipe-col{animation:rise .4s var(--ease) both}
+.pipe-col:nth-child(2){animation-delay:.05s}
+.pipe-col:nth-child(3){animation-delay:.1s}
+.pipe-col:nth-child(4){animation-delay:.15s}
+.pipe-col:nth-child(n+5){animation-delay:.2s}
+
+/* --- Lignes de liste : elles n'avaient aucun retour au survol, sur des pages où l'on suit
+   une ligne du regard jusqu'à son bouton d'action, tout à droite. */
+.list-row,.apport-row,.dept-row,.sess-comp-hd,.inv-cat{transition:background .14s var(--ease)}
+.list-row:hover,.apport-row:hover{background:var(--surface2)}
+
+/* --- Accordéons. Le chevron tournait déjà ; le contenu déplié, lui, apparaissait d'un bloc.
+   `accOpen` existe et sert déjà aux dépliants de l'espace stagiaire : on le réutilise plutôt
+   que d'écrire une seconde animation qui ferait la même chose à quelques millisecondes près. */
+.arch-sum,.qb-grp-head,.qb-ch-head{transition:background .14s var(--ease),border-color .14s var(--ease)}
+.arch-in,.qb-grp-body,.qb-ch-body{animation:accOpen .2s var(--ease) both}
+
+/* --- Popover d'icônes (banque de questions) : il surgissait sec. */
+.qb-ico-pop{animation:rise .16s var(--ease) both}
+.qb-ico-btn,.qb-ico-opt,.tb-btn{transition:background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
+
+/* --- Onglets soulignés : la couleur du texte glissait, le soulignement sautait. Pas
+   d'indicateur mobile ici — il demanderait de mesurer la position de l'onglet actif en
+   JavaScript, pour un gain qui ne vaut pas cette dépendance. */
+.tab{transition:color .15s var(--ease),border-color .15s var(--ease),background .15s var(--ease)}
+
+/* --- Parcours documentaire (Formations). `background` et `border-color` seulement : ces
+   nœuds sont deplaçables, cf. la règle plus haut. */
+.pf-node,.pf-add,.pf-add-item{transition:background .14s var(--ease),border-color .14s var(--ease)}
+
+/* --- Feuille de route (Suivi) : le passage « à faire → en cours → fait » était instantané.
+   C'est pourtant le seul endroit où l'on voit un dossier avancer. */
+.rm-dot,.rm-conn{transition:background .3s var(--ease),border-color .3s var(--ease),color .3s var(--ease)}
+.rm-step{animation:rise .4s var(--ease) both}
+.rm-step:nth-child(2){animation-delay:.06s}
+.rm-step:nth-child(3){animation-delay:.12s}
+.rm-step:nth-child(4){animation-delay:.18s}
+.rm-step:nth-child(n+5){animation-delay:.24s}
+
+/* --- Barres de répartition (Comptabilité). `.progress span` se remplit déjà en 0,5 s ;
+   celles-ci sautaient à leur largeur finale. Même durée, pour que deux barres côte à côte
+   sur la même page ne se remplissent pas à deux vitesses. */
+.poste-bar > span,.stack-bar > span{transition:width .5s var(--ease)}
+.mini-kpi{animation:rise .45s var(--ease) both}
+
+/* --- Barre latérale. Le liseré de la rubrique active apparaissait d'un coup : un ::before
+   n'hérite pas de la transition de son parent, il lui faut la sienne. */
+.menu a.on::before{transition:opacity .18s var(--ease),transform .18s var(--ease)}
+.menu a .count{animation:pastille .24s var(--ease) both}
+.side-foot{transition:background .15s var(--ease)}
+.profile-menu{animation:rise .16s var(--ease) both}
+
+/* --- Calendrier : la case ajoutable ne signalait rien avant le clic. */
+.cal-cell.addable{transition:background .14s var(--ease),border-color .14s var(--ease)}

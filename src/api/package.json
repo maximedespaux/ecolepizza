@@ -30,6 +30,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "node-sql-parser": "^5.4.0",
     "nodemon": "^3.1.10"
   },
   "overrides": {

@@ -4,7 +4,11 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { UserProvider, UserContext } from "./context/UserContext.jsx";
 import { landingPath, navAllowed, OWNER_ROLES } from "./lib/nav.js";
+import { verrouillerZoom } from "./lib/nozoom.js";
 import "./styles/app.css";
+
+// Echelle figee : voir lib/nozoom.js pour ce que cela bloque, et ce que cela ne peut pas bloquer.
+verrouillerZoom();
 
 import AppLayout from "./layouts/AppLayout.jsx";
 import StudentLayout from "./layouts/StudentLayout.jsx";
@@ -47,7 +51,6 @@ import Notifications from "./pages/Notifications.jsx";
 import Platform from "./pages/Platform.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
 import EmargementStagiaire from "./pages/EmargementStagiaire.jsx";
-import MesFormations from "./pages/MesFormations.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
 import PizzaQuest from "./pages/PizzaQuest.jsx";
 import Boutique from "./pages/Boutique.jsx";
@@ -158,10 +161,13 @@ function AppRoutes() {
       ) : (isStudent || isIntervenant) ? (
         // --- Espace stagiaire (+ onglet « Intervention » si le compte est aussi intervenant) ---
         <Route path="/" element={<StudentLayout />}>
-          <Route index element={<Navigate to="/formations" replace />} />
+          <Route index element={<Navigate to="/mon-espace" replace />} />
+          {/* « Mon espace » et « Mes documents » ne font plus qu'une page (documents reçus
+              + grille des formations). /formations redirige donc, pour ne pas casser les
+              liens existants ; le détail d'un dossier garde son URL. */}
           <Route path="mon-espace" element={<MonEspace />} />
           <Route path="emargement" element={<EmargementStagiaire />} />
-          <Route path="formations" element={<MesFormations />} />
+          <Route path="formations" element={<Navigate to="/mon-espace" replace />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
           <Route path="empatements" element={<PateWizard />} />
           <Route path="garnitures" element={<GarnitureWizard />} />
@@ -176,7 +182,7 @@ function AppRoutes() {
           <Route path="boutique" element={<Boutique />} />
           {isIntervenant && <Route path="intervention" element={<IntervenantEspace />} />}
           {user?.has_company && <Route path="entreprise-documents" element={<RepresentantEspace />} />}
-          <Route path="*" element={<Navigate to="/formations" replace />} />
+          <Route path="*" element={<Navigate to="/mon-espace" replace />} />
         </Route>
       ) : (
         // --- Application (secrétariat / administration) ---
