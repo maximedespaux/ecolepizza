@@ -540,6 +540,8 @@ const previewPdf = async (req, res) => {
             ctx: { org: org || {}, articles: articlesExemple },
             sampleValues: await sampleTokenValues(req.user.organization_id),
             bleed: (layout && layout.bleed) || {},
+            // Papier à en-tête automatique désactivable (l'aperçu doit refléter le rendu réel).
+            useLetterhead: !(layout && layout.noLetterhead),
         });
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', 'inline; filename="apercu.pdf"');

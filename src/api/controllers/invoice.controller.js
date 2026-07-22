@@ -515,10 +515,15 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
     // portait pas) doivent afficher l'identité sous laquelle la facture sort.
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
     const identite = (data.emitter && data.emitter.legal_name) ? data.emitter : (org || {});
+    // PAPIER À EN-TÊTE AUTOMATIQUE. Quand l'en-tête du modèle est vide, l'app ajoute d'office un
+    // bandeau avec l'identité de l'organisme. Un modèle de facture qui porte DÉJÀ cette identité
+    // dans son corps (les deux encadrés vendeur/acheteur) se retrouve alors avec le nom en double,
+    // tout en haut. Le modèle peut donc le désactiver (layout.noLetterhead) — voir l'éditeur.
     const html = renderTemplateHtml(content.html, invoiceCtx(identite, data), {
         title: `${data.typeLabel} ${data.number}`,
         headerHtml: content.header,
         footerHtml: content.footer,
+        letterhead: !(content.layout && content.layout.noLetterhead),
     });
     // PDF/A-3 : exigé par Factur-X, et seul le moteur de rendu peut l'obtenir (polices
     // embarquees, profil de sortie ICC, aucune couleur en espace dependant du peripherique).

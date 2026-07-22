@@ -444,3 +444,19 @@ test('mode « half » : tableau compact aligné à droite (totaux)', () => {
     assert.match(out, /<table[^>]*align="right"/, 'le tableau half n\'est pas aligné à droite');
     assert.match(out, /<table[^>]*\bwidth="45%"/, 'le tableau half n\'est pas compact');
 });
+
+test('la facture peut désactiver le papier à en-tête automatique (identité déjà dans le corps)', () => {
+    // BUG SIGNALÉ : l'organisme apparaissait tout en haut de la facture alors que l'en-tête du
+    // modèle est vide — c'est le « papier à en-tête automatique », qui doublonne l'identité déjà
+    // présente dans le corps (encadré vendeur). Le modèle peut le couper via layout.noLetterhead.
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const org = { legal_name: 'BAROUSSE', address: '95 rue', town: 'LANNEMEZAN', siret: '123' };
+    const avec = renderTemplateHtml('<p>x</p>', { org }, { headerHtml: '', letterhead: true });
+    const sans = renderTemplateHtml('<p>x</p>', { org }, { headerHtml: '', letterhead: false });
+    assert.match(avec, /BAROUSSE/, 'par défaut, le papier à en-tête reste actif');
+    assert.doesNotMatch(sans, /BAROUSSE/, 'letterhead:false ne doit pas ajouter l\'identité de l\'organisme en haut');
+    // Et le contrôleur lit le drapeau du modèle.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/invoice.controller.js'), 'utf8');
+    assert.match(src, /letterhead: !\(content\.layout && content\.layout\.noLetterhead\)/,
+        'la facture ne respecte pas le réglage « en-tête automatique » du modèle');
+});

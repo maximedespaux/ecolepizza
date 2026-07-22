@@ -71,6 +71,9 @@ function TemplateEditor() {
   const [pdfErr, setPdfErr] = useState(null);
   const [bleed, setBleed] = useState({ header: false, body: false, footer: false }); // « bord à bord » par zone
   const toggleBleed = (k) => setBleed((p) => ({ ...p, [k]: !p[k] }));
+  // Papier à en-tête automatique : ON par défaut. Un modèle qui met déjà l'identité dans son
+  // corps (facture…) peut le couper pour ne pas avoir le nom de l'organisme en double, tout en haut.
+  const [noLetterhead, setNoLetterhead] = useState(false);
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
@@ -105,6 +108,7 @@ function TemplateEditor() {
         if (footer) footer.commands.setContent(d.footer_html || "");
         const bl = (d.layout && d.layout.bleed) || {};
         setBleed({ header: !!bl.header, body: !!bl.body, footer: !!bl.footer });
+        setNoLetterhead(!!(d.layout && d.layout.noLetterhead));
       } catch (e) { if (alive) setStatus({ type: "error", message: e.message }); }
     })();
     return () => { alive = false; };
@@ -120,14 +124,14 @@ function TemplateEditor() {
       body_html: body?.getHTML() || "<p></p>",
       header_html: clean(header?.getHTML()),
       footer_html: clean(footer?.getHTML()),
-      layout: { bleed },
+      layout: { bleed, noLetterhead },
     })
       .then((url) => { if (!alive) { URL.revokeObjectURL(url); return; } created = url; setPdfUrl(url); })
       .catch((e) => { if (alive) setPdfErr(e.message); })
       .finally(() => { if (alive) setPdfLoading(false); });
     return () => { alive = false; if (created) URL.revokeObjectURL(created); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPreview, bleed]);
+  }, [showPreview, bleed, noLetterhead]);
 
   const target = active || body;
 
@@ -275,7 +279,7 @@ function TemplateEditor() {
         body_html: body.getHTML(),
         header_html: clean(header?.getHTML()),
         footer_html: clean(footer?.getHTML()),
-        layout: { bleed },
+        layout: { bleed, noLetterhead },
       });
       setStatus({ type: "success", message: "Modèle enregistré." });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
@@ -316,7 +320,10 @@ function TemplateEditor() {
         ) : (
           <div className="tpl-doc">
             <div className="hf-zone">
-              <div className="hf-label">En-tête <span>· laissé vide = papier à en-tête automatique</span>
+              <div className="hf-label">En-tête <span>· {noLetterhead ? "aucun en-tête automatique" : "laissé vide = papier à en-tête automatique"}</span>
+                <label className="bleed-tog" title="Ajoute automatiquement l'identité de l'organisme en haut quand l'en-tête est vide. À décocher si le corps porte déjà l'identité (facture…).">
+                  <input type="checkbox" checked={!noLetterhead} onChange={() => setNoLetterhead((v) => !v)} /> papier à en-tête auto
+                </label>
                 <BleedToggle on={bleed.header} onChange={() => toggleBleed("header")} />
               </div>
               <div onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
