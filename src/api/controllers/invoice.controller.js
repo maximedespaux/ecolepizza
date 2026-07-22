@@ -61,6 +61,10 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     // qu'un rattachement comptable. Tester learner_id d'abord facturerait la mauvaise partie, et
     // priverait le XML du SIRET (BT-30) que porte l'entreprise, pas la personne.
     let buyer = { name: 'Client', siret: null, email: null, address: {} };
+    // La FICHE COMPLÈTE de l'acheteur (entreprise ou stagiaire), exposée ensuite en jetons
+    // « Champs documents » (field:company.* / field:learner.*) : la facture accède ainsi à tout ce
+    // que porte l'acheteur — e-mail, téléphone… — via les Champs documents plutôt qu'une liste figée.
+    let buyerFields = null;
     if (inv.company_id) {
         const [c] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [inv.company_id, orgId]);
         if (c[0]) {
@@ -71,12 +75,15 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
                 email: inv.buyer_email || c[0].email || null,
                 address: { line: c[0].address, zip: c[0].zip_code, city: c[0].town },
             };
+            buyerFields = { prefix: 'company', row: c[0] };
         }
     } else if (inv.learner_id) {
         // La VENTE garde désormais la référence du stagiaire, pas seulement son nom. Sans elle,
         // l'e-mail et l'adresse restaient sur la fiche, inatteignables depuis la facture.
         const [l] = await conn.query(
-            'SELECT first_name, last_name, email, address, zip_code, town FROM learner WHERE id = ? AND organization_id = ?',
+            `SELECT civility, first_name, last_name, email, phone, address, zip_code, town,
+                    birth_place, opco, professional_status, france_travail_id
+             FROM learner WHERE id = ? AND organization_id = ?`,
             [inv.learner_id, orgId]
         );
         if (l[0]) {
@@ -86,6 +93,7 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
                 email: inv.buyer_email || l[0].email || null,
                 address: { line: l[0].address, zip: l[0].zip_code, city: l[0].town },
             };
+            buyerFields = { prefix: 'learner', row: l[0] };
         }
     } else if (inv.buyer_name) {
         buyer = { name: inv.buyer_name, siret: null, email: inv.buyer_email || null, address: {} };
@@ -162,6 +170,7 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         // rende ses jetons `field:organization.*` avec ces valeurs-là.
         emitter: o,
         buyer,
+        buyerFields, // { prefix:'company'|'learner', row } → jetons Champs documents de l'acheteur
         // L'acheteur est-il une ENTREPRISE ? Signal fiable = la vente est rattachée à une company
         // (le SIRET peut manquer sur une société ; company_id, lui, tranche). Sert à choisir le
         // modèle de facture selon son destinataire (buyer_audience).
@@ -585,6 +594,18 @@ function invoiceCtx(org, data) {
         if (v == null || typeof v === 'object') continue;
         fields[`organization.${k}`] = v;
     }
+    // Champs de l'ACHETEUR → jetons « Champs documents » de son groupe : field:company.* si c'est
+    // une entreprise, field:learner.* si c'est un stagiaire. Le modèle de facture accède ainsi à
+    // TOUT ce que porte l'acheteur (e-mail, téléphone, adresse…) en cochant le champ voulu dans
+    // « Champs documents », sans jeton figé en dur. On saute les colonnes techniques / sensibles.
+    const bf = data.buyerFields;
+    if (bf && bf.row && bf.prefix) {
+        for (const [k, val] of Object.entries(bf.row)) {
+            if (val == null || typeof val === 'object') continue;
+            if (/(^id$|_id$|_enc$|password|social_security|sign_cert|signature|^lat$|^lng$|geo)/i.test(k)) continue;
+            fields[`${bf.prefix}.${k}`] = val;
+        }
+    }
 
     // RÈGLEMENT. La ventilation JSON s'il y en a une (paiement mixte, chèque détaillé) ; sinon,
     // un seul moyen couvrant tout le TTC. Chaque part porte son montant, sa banque et son numéro
@@ -659,4 +680,4 @@ const getInvoiceFacturX = async (req, res) => {
     }
 };
 
-module.exports = { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getInvoiceXml, getInvoiceFacturX, pickInvoiceTemplate };
+module.exports = { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getInvoiceXml, getInvoiceFacturX, pickInvoiceTemplate, invoiceCtx };
