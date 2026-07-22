@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import Card from "./Card.jsx";
 import {
-  getEmitters, createEmitter, updateEmitter, setDefaultEmitter, deleteEmitter,
+  getEmitters, createEmitter, updateEmitter, deleteEmitter,
 } from "../api/apiClient.js";
 
 /**
@@ -208,9 +208,6 @@ export default function BillingProfiles({ onError }) {
     } catch (e) { onError?.(e.message); }
     finally { setSaving(false); }
   }
-  async function makeDefault(id) {
-    try { await setDefaultEmitter(id); load(); } catch (e) { onError?.(e.message); }
-  }
   async function remove(row) {
     if (!window.confirm(`Supprimer l'entité « ${row.label || row.legal_name} » ?\nLes factures déjà émises sous ce nom sont conservées.`)) return;
     try { await deleteEmitter(row.id); load(); } catch (e) { onError?.(e.message); }
@@ -237,7 +234,6 @@ export default function BillingProfiles({ onError }) {
                 {r.legal_name} · {r.siret || "SIRET —"} · <span className="mono">{apercuNumero(r.number_format, r.next_number || 1)}</span>
               </div>
             </div>
-            {!r.is_default && <button className="btn ghost sm" onClick={() => makeDefault(r.id)} title="Utiliser par défaut">Par défaut</button>}
             <button className="btn ghost sm" onClick={() => setEditing(r)}><Icon name="settings" size={13} /></button>
             {/* L'entité organisme n'est pas supprimable : c'est l'émetteur de base. */}
             {!r.is_organization && <button className="iconbtn" onClick={() => remove(r)} aria-label="Supprimer"><Icon name="x" size={14} /></button>}
