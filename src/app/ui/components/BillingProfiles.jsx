@@ -147,17 +147,25 @@ function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
           <input ref={fmtRef} className="inp mono" value={form.number_format || ""}
             onChange={(e) => set("number_format", e.target.value)}
             placeholder={`Ex : FACT-{YYYY}-{SEQ}  donne  FACT-${new Date().getFullYear()}-0001`} />
-          {/* Chips à insérer : on clique un jeton, on tape les séparateurs (. - /) au clavier. */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0 0" }}>
+          {/* Chips à insérer : tintées et marquées d'un +, pour qu'on VOIE qu'elles se cliquent. */}
+          <div className="hint" style={{ display: "flex", alignItems: "center", gap: 6, margin: "8px 0 5px" }}>
+            <Icon name="plus" size={12} /> Cliquez un jeton pour l'insérer :
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {JETONS_NUMERO.map(([tok, ex]) => (
-              <button key={tok} type="button" className="btn ghost sm" onClick={() => insererJeton(tok)}
-                title={`Insérer ${tok}`} style={{ fontSize: 12 }}>
-                <span className="mono">{tok}</span> <span className="hint">{ex}</span>
+              <button key={tok} type="button" className="btn sm" onClick={() => insererJeton(tok)}
+                title={`Insérer ${tok}`}
+                style={{
+                  fontSize: 12, cursor: "pointer",
+                  background: "var(--blue-bg)", borderColor: "var(--blue)", color: "var(--blue)",
+                }}>
+                <Icon name="plus" size={11} /> <span className="mono">{tok}</span>
+                <span style={{ opacity: 0.7 }}>{ex}</span>
               </button>
             ))}
           </div>
           <p className="hint" style={{ margin: "6px 0 0" }}>
-            Clique un jeton pour l'insérer ; tape les séparateurs (<span className="mono">. - / .</span>) au clavier.
+            Entre les jetons, tapez vos séparateurs (<span className="mono">. - / _</span>) au clavier.
             <b> {"{SEQ}"} est obligatoire</b> — c'est le numéro qui change à chaque facture.
           </p>
         </div>
