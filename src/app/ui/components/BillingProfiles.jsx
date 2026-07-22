@@ -21,7 +21,25 @@ const VIDE = {
   label: "", legal_name: "", legal_status: "", capital: "", rcs: "", siret: "", vat_number: "",
   naf_ape: "", nda: "", address: "", zip_code: "", town: "", email: "", phone: "",
   iban: "", bic: "", bank_name: "", invoice_prefix: "F", default_template_slug: "",
+  number_format: "", tva_applies: 1, payment_methods: "", next_number: 1,
 };
+
+/**
+ * Aperçu d'un numéro selon le gabarit — le même expanseur que le serveur, en miniature. Montre
+ * tout de suite à quoi ressemblera « TXT.{YYYY}.901.{SEQ:4} ». Sans {SEQ}, on le signale.
+ */
+function apercuNumero(format, prefix, seq) {
+  const d = new Date();
+  const pad = (n, w) => String(n).padStart(w, "0");
+  const fmt = (format && format.trim()) || "{PREFIX}-{YYYY}-{SEQ}";
+  return fmt
+    .replace(/\{PREFIX\}/g, (prefix || "F").toUpperCase())
+    .replace(/\{YYYY\}/g, String(d.getFullYear()))
+    .replace(/\{YY\}/g, pad(d.getFullYear() % 100, 2))
+    .replace(/\{MM\}/g, pad(d.getMonth() + 1, 2))
+    .replace(/\{DD\}/g, pad(d.getDate(), 2))
+    .replace(/\{SEQ(?::(\d+))?\}/g, (_, w) => pad(seq || 1, w ? Number(w) : 4));
+}
 
 function Champ({ label, k, form, set, ph, wide }) {
   return (
@@ -35,7 +53,7 @@ function Champ({ label, k, form, set, ph, wide }) {
 function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
   const [form, setForm] = useState(() => ({ ...VIDE, ...initial }));
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
-  const an = new Date().getFullYear();
+  const formatOk = !form.number_format || /\{SEQ(?::\d+)?\}/.test(form.number_format);
   return (
     <div className="card" style={{ borderLeft: "3px solid var(--gold)", marginTop: 12 }}>
       <div className="grid cols-2" style={{ gap: 10 }}>
@@ -60,6 +78,18 @@ function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
           <label>Préfixe de numéro (distinct)</label>
           <input className="inp" value={form.invoice_prefix} onChange={(e) => set("invoice_prefix", e.target.value)} placeholder="BQ" />
         </div>
+        <div className="field">
+          <label>Moyens de paiement (caisse)</label>
+          <input className="inp" value={form.payment_methods || ""} onChange={(e) => set("payment_methods", e.target.value)} placeholder="Espèces,CB,Virement,Chèque" />
+        </div>
+        <div className="field" style={{ gridColumn: "1 / -1" }}>
+          <label>Format du numéro de facture</label>
+          <input className="inp mono" value={form.number_format || ""} onChange={(e) => set("number_format", e.target.value)} placeholder="{PREFIX}-{YYYY}-{SEQ}" />
+          <p className="hint" style={{ margin: "4px 0 0" }}>
+            Jetons : <span className="mono">{"{PREFIX} {YYYY} {YY} {MM} {DD} {SEQ} {SEQ:4}"}</span>. Le reste est
+            recopié tel quel. <b>{"{SEQ}"} est obligatoire</b> — c'est le numéro qui change à chaque facture.
+          </p>
+        </div>
         <div className="field" style={{ gridColumn: "1 / -1" }}>
           <label>Modèle de facture propre à cette entité</label>
           <select className="inp" value={form.default_template_slug || ""} onChange={(e) => set("default_template_slug", e.target.value)}>
@@ -67,13 +97,19 @@ function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
             {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.slug}</option>)}
           </select>
         </div>
+        <label className="field" style={{ gridColumn: "1 / -1", display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={!!form.tva_applies} onChange={(e) => set("tva_applies", e.target.checked ? 1 : 0)} />
+          Appliquer la TVA (décochez pour une facturation exonérée)
+        </label>
       </div>
       <p className="sub" style={{ margin: "4px 0 0" }}>
-        Exemple de numéro : <span className="mono">{(form.invoice_prefix || "F").toUpperCase()}-{an}-0001</span>
+        Prochain numéro : <span className="mono">{apercuNumero(form.number_format, form.invoice_prefix, form.next_number || 1)}</span>
+        {form.number_format && !/\{SEQ(?::\d+)?\}/.test(form.number_format)
+          ? <span style={{ color: "var(--ember1)" }}> — il manque {"{SEQ}"}</span> : null}
       </p>
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <button className="btn ghost sm" onClick={onCancel}>Annuler</button>
-        <button className="btn primary sm" disabled={saving || !form.legal_name.trim()} onClick={() => onSave(form)}>
+        <button className="btn primary sm" disabled={saving || !form.legal_name.trim() || !formatOk} onClick={() => onSave(form)}>
           <Icon name="check" size={14} /> {saving ? "Enregistrement…" : "Enregistrer"}
         </button>
       </div>

@@ -77,9 +77,13 @@ function Ventes() {
     getShopSettings().then((r) => { setSettings(r.data); setPayment((r.data.payment_methods || "").split(",")[0] || ""); }).catch(() => {});
   }, []);
 
+  // L'émettrice choisie porte désormais TVA et moyens de paiement ; à défaut, on retombe sur les
+  // réglages boutique, puis sur des valeurs par défaut. La caisse suit donc l'entité sélectionnée.
+  const selectedEmitter = useMemo(() => emitters.find((e) => e.id === emitterId) || null, [emitters, emitterId]);
   const payOptions = useMemo(
-    () => (settings?.payment_methods || "Espèces,CB,Virement,Chèque").split(",").map((s) => s.trim()).filter(Boolean),
-    [settings]
+    () => (selectedEmitter?.payment_methods || settings?.payment_methods || "Espèces,CB,Virement,Chèque")
+      .split(",").map((s) => s.trim()).filter(Boolean),
+    [selectedEmitter, settings]
   );
 
   const grouped = useMemo(() => {
@@ -143,7 +147,7 @@ function Ventes() {
   const removeLine = (id) => setCart((c) => c.filter((l) => l.item_id !== id));
   const setLine = (id, patch) => setCart((c) => c.map((l) => (l.item_id === id ? { ...l, ...patch } : l)));
 
-  const tvaApplies = settings ? !!settings.tva_applies : true;
+  const tvaApplies = selectedEmitter ? !!selectedEmitter.tva_applies : (settings ? !!settings.tva_applies : true);
   const totals = useMemo(() => {
     const d = Math.min(100, Math.max(0, Number(discount) || 0));
     const factor = 1 - d / 100;

@@ -16,7 +16,45 @@ const DIR = path.join(__dirname, '..');
 const net = (f) => fs.readFileSync(path.join(DIR, f), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
 
-const { nextNumberForEmitter } = require('../lib/emitter.js');
+const { nextNumberForEmitter, formatNumber } = require('../lib/emitter.js');
+
+// --- Le format de numéro personnalisable ----------------------------------------------------
+
+test('le gabarit compose le numéro comme demandé', () => {
+    const d = new Date('2026-03-09T12:00:00');
+    assert.strictEqual(
+        formatNumber({ invoice_prefix: 'TXT', number_format: 'TXT.{YYYY}.901.{SEQ:4}' }, 1, d),
+        'TXT.2026.901.0001', 'exemple de la demande');
+    assert.strictEqual(
+        formatNumber({ invoice_prefix: 'BQ', number_format: '{PREFIX}-{YY}{MM}-{SEQ:5}' }, 42, d),
+        'BQ-2603-00042', 'préfixe, année courte, mois, séquence large');
+});
+
+test('un gabarit vide retombe sur la forme historique', () => {
+    const d = new Date('2026-03-09T12:00:00');
+    assert.strictEqual(formatNumber({ invoice_prefix: 'F', number_format: null }, 14, d), 'F-2026-0014');
+    assert.strictEqual(formatNumber({ invoice_prefix: 'F', number_format: '   ' }, 14, d), 'F-2026-0014',
+        'un format tout en espaces vaut vide');
+});
+
+test('un jeton inconnu reste visible, il n\'est pas escamoté', () => {
+    // Une substitution silencieuse masquerait une faute de frappe ; on laisse le jeton en clair.
+    const d = new Date('2026-03-09T12:00:00');
+    assert.strictEqual(
+        formatNumber({ invoice_prefix: 'X', number_format: 'FIXE-{INCONNU}-{SEQ}' }, 3, d),
+        'FIXE-{INCONNU}-0003');
+});
+
+test('{SEQ} est exigé à l\'enregistrement : sans lui, des doublons', () => {
+    // La seule part variable. Un format qui l'omet fabriquerait deux fois le même numéro. On
+    // vérifie que `preparer` teste la présence de {SEQ} et refuse le format sinon.
+    const src = net('controllers/billingProfile.controller.js');
+    const fn = src.slice(src.indexOf('function preparer'), src.indexOf('const create'));
+    assert.match(fn, /\.test\(fmt\)/, 'aucun test sur le format');
+    assert.match(fn, /SEQ/, 'le jeton {SEQ} n\'est pas mentionné dans la validation');
+    assert.match(fn, /doit contenir \{SEQ\}/, 'pas de message qui exige {SEQ}');
+});
+
 
 // --- La numérotation par émettrice ----------------------------------------------------------
 
@@ -127,6 +165,40 @@ test('la première émettrice devient le défaut', () => {
 });
 
 // --- Fonctionnement dégradé sans la migration -----------------------------------------------
+
+// --- L'émettrice se suffit à elle-même (114) ------------------------------------------------
+
+test('la caisse prend TVA et moyens de paiement de l\'émettrice choisie', () => {
+    // Une société peut être exonérée quand une autre ne l'est pas : la TVA suit l'entité, avec
+    // repli sur le réglage boutique.
+    const src = net('controllers/sale.controller.js');
+    assert.match(src, /const tvaApplies = emetteur \? !!emetteur\.tva_applies : !!settings\.tva_applies/,
+        'la TVA ne suit pas l\'émettrice');
+});
+
+test('la première émettrice est semée depuis l\'organisme', () => {
+    // L'organisme EST déjà un émetteur ; on recopie son identité une fois plutôt que de la faire
+    // ressaisir. Une COPIE, pas un lien — une facture fige l'identité de son émetteur.
+    const src = net('controllers/billingProfile.controller.js');
+    assert.match(src, /function seedFromOrganization/, 'pas de semis depuis l\'organisme');
+    const seed = src.slice(src.indexOf('function seedFromOrganization'));
+    assert.match(seed.slice(0, 700), /FROM organization WHERE id = \?/, 'le semis ne lit pas l\'organisme');
+    assert.match(seed.slice(0, 900), /INSERT INTO billing_profile/, 'le semis n\'insère rien');
+    // Semé seulement quand il n'y en a aucune.
+    const list = src.slice(src.indexOf('const list ='));
+    assert.match(list.slice(0, 600), /if \(rows\.length === 0\)[\s\S]{0,80}seedFromOrganization/,
+        'le semis ne se déclenche pas sur une liste vide');
+});
+
+test('la facturation n\'a plus de réglage global doublon (ShopSettings retiré)', () => {
+    // Tout tient sur l'émettrice : numérotation, TVA, paiement, modèle. Le composant global a
+    // disparu pour qu'il n'existe pas deux endroits pour la même question.
+    const p = path.join(DIR, '..', 'app/ui/components/ShopSettings.jsx');
+    assert.ok(!fs.existsSync(p), 'ShopSettings.jsx aurait dû être supprimé');
+    const page = fs.readFileSync(path.join(DIR, '..', 'app/ui/pages/FacturationReglages.jsx'), 'utf8');
+    assert.doesNotMatch(page, /ShopSettings/, 'la page référence encore ShopSettings');
+    assert.match(page, /BillingProfiles/, 'la page ne montre plus les émettrices');
+});
 
 test('sans la migration 113, tout retombe sur l\'organisme sans échouer', () => {
     // Chaque helper avale l'absence de table/colonne ; la liste renvoie vide, les inserts se

@@ -23,23 +23,58 @@ const CHAMPS = [
     'label', 'legal_name', 'legal_status', 'capital', 'rcs', 'siret', 'vat_number', 'naf_ape',
     'nda', 'address', 'zip_code', 'town', 'country', 'phone', 'email', 'iban', 'bic', 'bank_name',
     'logo_image', 'signature_image', 'invoice_prefix', 'default_template_slug',
+    'number_format', 'tva_applies', 'payment_methods',
 ];
 
 /** Nettoie un préfixe : lettres, chiffres et tiret, en capitales, courts. Un préfixe vide
  *  rendrait la numérotation ambiguë ; on retombe alors sur 'F'. */
 const nettoiePrefixe = (p) => String(p || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) || 'F';
 
+const COLS = `id, label, legal_name, legal_status, capital, rcs, siret, vat_number, naf_ape,
+    nda, address, zip_code, town, country, phone, email, iban, bic, bank_name,
+    invoice_prefix, next_number, default_template_slug, is_default,
+    number_format, tva_applies, payment_methods`;
+
+/**
+ * Sème une première entité émettrice À PARTIR DE L'ORGANISME, si l'organisme n'en a aucune.
+ *
+ * L'organisme EST déjà un émetteur — son identité vit dans la table `organization`. Plutôt que
+ * d'obliger à la ressaisir, on la recopie une fois dans une entité par défaut : l'utilisateur
+ * repart d'un profil déjà rempli et n'a qu'à y greffer ce qui touche la facture (format de
+ * numéro, TVA, moyens de paiement). Une copie, pas un lien : une facture fige l'identité de son
+ * émetteur, et modifier l'organisme plus tard ne doit pas récrire les factures déjà émises.
+ *
+ * Silencieux et best-effort : si la copie échoue (course, colonne manquante), on renvoie la
+ * liste telle quelle plutôt que de bloquer l'écran.
+ */
+async function seedFromOrganization(conn, orgId) {
+    const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
+    if (!org || !org.legal_name) return; // rien à recopier
+    await conn.query(
+        `INSERT INTO billing_profile
+            (id, organization_id, label, legal_name, siret, vat_number, naf_ape, nda,
+             address, zip_code, town, phone, email, iban, bic, bank_name,
+             logo_image, signature_image, invoice_prefix, is_default)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [crypto.randomUUID(), orgId, org.legal_name, org.legal_name, org.siret, org.vat_number,
+         org.naf_ape, org.nda, org.address, org.zip_code, org.town, org.phone, org.email,
+         org.iban, org.bic, org.bank_name, org.logo_image, org.signature_image, 'F']
+    );
+}
+
 /** GET /api/emetteurs — liste des entités émettrices de l'organisme. */
 const list = async (req, res) => {
+    const conn = db.promise();
+    const orgId = req.user.organization_id;
     try {
-        const [rows] = await db.promise().query(
-            `SELECT id, label, legal_name, legal_status, capital, rcs, siret, vat_number, naf_ape,
-                    nda, address, zip_code, town, country, phone, email, iban, bic, bank_name,
-                    invoice_prefix, next_number, default_template_slug, is_default
-             FROM billing_profile WHERE organization_id = ?
-             ORDER BY is_default DESC, label`,
-            [req.user.organization_id]
-        );
+        let [rows] = await conn.query(
+            `SELECT ${COLS} FROM billing_profile WHERE organization_id = ? ORDER BY is_default DESC, label`, [orgId]);
+        // Aucune entité : on en sème une depuis l'organisme, puis on relit.
+        if (rows.length === 0) {
+            try { await seedFromOrganization(conn, orgId); } catch (e) { if (!isMissingSchema(e)) console.error('seed émetteur :', e.message); }
+            [rows] = await conn.query(
+                `SELECT ${COLS} FROM billing_profile WHERE organization_id = ? ORDER BY is_default DESC, label`, [orgId]);
+        }
         res.json({ data: rows });
     } catch (e) {
         if (isMissingSchema(e)) return res.json({ data: [] });
@@ -54,12 +89,21 @@ function preparer(body) {
     if (!legalName) {
         return { erreur: 'La raison sociale est obligatoire : elle identifie le vendeur sur la facture et dans le XML.' };
     }
+    // {SEQ} est la seule part qui varie d'une facture à l'autre. Un format qui l'omet
+    // fabriquerait des doublons de numéro, rejetés à l'unicité — autant le refuser tout de suite.
+    const fmt = String(body.number_format || '').trim();
+    if (fmt && !/\{SEQ(?::\d+)?\}/.test(fmt)) {
+        return { erreur: 'Le format de numéro doit contenir {SEQ} : c\'est la partie qui change à chaque facture. Sans elle, deux factures porteraient le même numéro.' };
+    }
     const v = {};
     for (const c of CHAMPS) v[c] = body[c] == null ? null : body[c];
     v.legal_name = legalName;
     v.label = String(body.label || '').trim() || legalName; // à défaut, le label EST la raison sociale
     v.country = (String(body.country || 'FR').trim().toUpperCase().slice(0, 2)) || 'FR';
     v.invoice_prefix = nettoiePrefixe(body.invoice_prefix);
+    v.number_format = fmt || null;
+    v.tva_applies = body.tva_applies == null ? 1 : (body.tva_applies ? 1 : 0); // 1 par défaut
+    v.payment_methods = String(body.payment_methods || '').trim() || null;
     return { valeurs: v };
 }
 

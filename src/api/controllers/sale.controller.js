@@ -221,7 +221,11 @@ const checkout = async (req, res) => {
     try {
         const conn = db.promise();
         const settings = await loadSettings(conn, orgId);
-        const tvaApplies = !!settings.tva_applies;
+        // ÉMETTRICE résolue tôt : c'est elle qui dit l'assujettissement à la TVA (une société
+        // peut être exonérée quand une autre ne l'est pas). Sans émettrice, on garde le réglage
+        // global de la boutique.
+        const emetteur = await resolveEmitter(conn, orgId, req.body.billing_profile_id);
+        const tvaApplies = emetteur ? !!emetteur.tva_applies : !!settings.tva_applies;
         const payMethod = (req.body.payment_method || '').toString().slice(0, 30) || null;
 
         // Stagiaire comme entreprise sont ÉCRITS sur la facture, plus seulement lus pour en
@@ -257,10 +261,8 @@ const checkout = async (req, res) => {
         const invoiceId = crypto.randomUUID();
         const year = new Date().getFullYear();
 
-        // ÉMETTRICE de la vente : celle demandée (si elle est à nous), sinon la défaut. Avec une
-        // émettrice, le numéro vient de SA séquence continue ; sans elle, on garde le compteur
-        // de la boutique (shop_settings), comportement d'avant.
-        const emetteur = await resolveEmitter(conn, orgId, req.body.billing_profile_id);
+        // Numéro : avec une émettrice, il vient de SA séquence continue et de SON gabarit ; sans
+        // elle, on garde le compteur de la boutique (shop_settings), comportement d'avant.
         let number;
         if (emetteur) {
             number = await nextNumberForEmitter(conn, emetteur);
