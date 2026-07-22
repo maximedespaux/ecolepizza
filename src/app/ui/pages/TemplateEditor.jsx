@@ -8,6 +8,7 @@ import { getTokenCatalog, getTemplateBody, saveTemplateBody, templatePreviewPdfU
 import StatusMessage from "../components/StatusMessage.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import CustomTokenManager from "../components/CustomTokenManager.jsx";
+import { categoryChipStyle, categoryAccent } from "../lib/categoryColors.js";
 
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
@@ -400,14 +401,18 @@ function TemplateEditor() {
           </div>
 
           {catalogFiltre.map((g) => (
-            <div key={g.group} className="tok-group">
+            <div key={g.group} className="tok-group" style={{ borderLeft: `3px solid ${categoryAccent(g.group)}` }}>
               <button className="tok-group-hd" onClick={() => setOpenGroups((p) => ({ ...p, [g.group]: !p[g.group] }))}>
-                <span>{g.group}</span><span className="chev"><Icon name="chevron-down" size={14} style={{ transform: openGroups[g.group] ? "none" : "rotate(-90deg)", transition: "transform .15s var(--ease)" }} /></span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: categoryAccent(g.group), flex: "0 0 auto" }} />
+                  {g.group}
+                </span>
+                <span className="chev"><Icon name="chevron-down" size={14} style={{ transform: openGroups[g.group] ? "none" : "rotate(-90deg)", transition: "transform .15s var(--ease)" }} /></span>
               </button>
               {(rechJeton.trim() || openGroups[g.group]) && (
                 <div className="tok-list">
                   {g.tokens.map((t) => (
-                    <button key={t.key} className="tok-chip"
+                    <button key={t.key} className="tok-chip" style={categoryChipStyle(g.group)}
                       title={g.group === "Ligne de facture"
                         ? `{${t.key}} — à placer DANS le tableau des articles`
                         : `{${t.key}} — ex. ${t.sample || ""}`}
@@ -430,7 +435,7 @@ function TemplateEditor() {
                         Ces champs-ci servent à composer un tableau <b>sur mesure</b>. Insérez d'abord la
                         trame ci-dessous, puis placez-les dans ses cellules.
                       </p>
-                      <button className="tok-chip" title="Insère une trame de tableau à personnaliser"
+                      <button className="tok-chip" style={categoryChipStyle(g.group)} title="Insère une trame de tableau à personnaliser"
                         draggable
                         onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", BLOC_ARTICLES)}
                         onClick={() => insertRaw(BLOC_ARTICLES)}>
@@ -444,7 +449,7 @@ function TemplateEditor() {
                       <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
                         <b>Bloc par stagiaire</b> : jetons à placer <b>entre</b> les marqueurs.
                       </p>
-                      <button className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple"
+                      <button className="tok-chip" style={categoryChipStyle(g.group)} title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple"
                         draggable
                         onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", BLOC_STAGIAIRES)}
                         onClick={() => insertRaw(BLOC_STAGIAIRES)}>
@@ -452,7 +457,7 @@ function TemplateEditor() {
                       </button>
                       <div style={{ height: 6 }} />
                       {GROUP_ROW_TOKENS.map((t) => (
-                        <button key={t.key} className="tok-chip" title={`{${t.key}} — à placer dans un bloc {#Stagiaires}…{/Stagiaires}`}
+                        <button key={t.key} className="tok-chip" style={categoryChipStyle(g.group)} title={`{${t.key}} — à placer dans un bloc {#Stagiaires}…{/Stagiaires}`}
                           draggable
                           onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
                           onClick={() => insertToken(t)}>{t.label}</button>
