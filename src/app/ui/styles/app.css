@@ -1340,7 +1340,10 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Boutique stagiaire — grille de produits. auto-fill + minmax : la grille se remplit toute
    seule du téléphone au grand écran, sans media query à maintenir. */
 /* Boutique : panier persistant à gauche + catalogue à droite. */
-.shop-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
+/* Panier plus étroit et repoussé à droite (gap plus large) : le catalogue occupe clairement la
+   majorité, les produits respirent. Le panier reste lisible à 280px — au-dessous, la liste
+   d'articles et les pas de quantité se serrent trop. Cf. la remontée du point de bascule. */
+.shop-layout{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:28px;align-items:start}
 .shop-layout.no-cart{grid-template-columns:1fr} /* panier masqué : le catalogue occupe toute la largeur */
 .shop-aside{position:sticky;top:70px}
 .shop-main{min-width:0}
@@ -1349,7 +1352,11 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .cart-mini-lbl{flex:1;min-width:0;font-size:12.5px;line-height:1.25;overflow:hidden}
 .cart-mini-qty{display:inline-flex;align-items:center;gap:5px;flex:none}
 .cart-mini-qty .iconbtn{padding:2px}
-@media(max-width:760px){
+/* Bascule remontée de 760 à 980px : entre les deux, le catalogue est coincé à deux colonnes
+   pendant que le panier prend presque la moitié (la nav latérale rogne encore la largeur utile).
+   Au-dessous de 980px, le catalogue passe pleine largeur et le panier glisse dessous — toujours
+   accessible, mais sans étouffer les produits. */
+@media(max-width:980px){
   .shop-layout{grid-template-columns:1fr}
   .shop-aside{position:static;margin-top:18px}
 }
