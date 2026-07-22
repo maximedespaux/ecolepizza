@@ -555,20 +555,6 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
               <datalist id="doctypes">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
             </div>
           )}
-          {/* Destinataire : uniquement pour les factures. Une facture à une ENTREPRISE et une à un
-              PARTICULIER n'ont pas la même forme ; l'app choisit le bon modèle selon l'acheteur. */}
-          {!isEmarg && ["FACTURE", "ACOMPTE", "AVOIR"].includes(String(form.doc_type || "").toUpperCase()) && (
-            <div className="field"><label>Destinataire de cette facture</label>
-              <select className="inp" value={form.buyer_audience} onChange={set("buyer_audience")}>
-                <option value="">Tous les acheteurs</option>
-                <option value="individual">Particuliers / stagiaires</option>
-                <option value="company">Entreprises</option>
-              </select>
-              <p className="hint" style={{ margin: "4px 0 0", fontSize: 12 }}>
-                À la vente, l'app prend le modèle qui correspond à l'acheteur ; sinon un modèle « Tous ».
-              </p>
-            </div>
-          )}
 
           {conditions.length > 0 ? (
             <>

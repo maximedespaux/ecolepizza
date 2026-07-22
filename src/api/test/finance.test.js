@@ -278,6 +278,19 @@ test('un seul modèle FACTURE se passe de désignation', () => {
         'le refus doit demander de renseigner le destinataire d\'au moins un modèle');
 });
 
+test('le modèle CHOISI à la vente prime sur la sélection automatique', () => {
+    // Le vendeur choisit le modèle dans le panier (invoice.template_slug). Ce choix, figé sur la
+    // facture, l'emporte sur la sélection auto (destinataire, réglage, unique).
+    const inv = net(lire('controllers/invoice.controller.js'));
+    assert.match(inv, /data\.templateSlug && factures\.find\(\(x\) => x\.slug === data\.templateSlug\)/,
+        'le modèle figé à la vente doit être cherché en premier');
+    assert.match(inv, /templateSlug: inv\.template_slug \|\| null/,
+        'loadInvoiceData doit exposer le modèle choisi à la vente');
+    // Et la caisse fige bien ce choix sur la facture.
+    const sale = net(lire('controllers/sale.controller.js'));
+    assert.match(sale, /iCol\.push\('template_slug'\)/, 'le checkout doit écrire le modèle choisi sur la facture');
+});
+
 test('sans modèle de type FACTURE, la facture est refusée avec un motif', () => {
     const src = lire('controllers/invoice.controller.js');
     const corps = src.slice(src.indexOf('async function buildInvoicePdf'));

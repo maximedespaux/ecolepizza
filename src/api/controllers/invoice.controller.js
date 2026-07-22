@@ -172,9 +172,11 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         buyer,
         buyerFields, // { prefix:'company'|'learner', row } → jetons Champs documents de l'acheteur
         // L'acheteur est-il une ENTREPRISE ? Signal fiable = la vente est rattachée à une company
-        // (le SIRET peut manquer sur une société ; company_id, lui, tranche). Sert à choisir le
-        // modèle de facture selon son destinataire (buyer_audience).
+        // (le SIRET peut manquer sur une société ; company_id, lui, tranche). Repli de sélection
+        // du modèle (buyer_audience) quand aucun modèle n'a été choisi à la vente.
         buyerIsCompany: !!inv.company_id,
+        // Modèle de facture CHOISI à la vente (migration 121). Prioritaire sur la sélection auto.
+        templateSlug: inv.template_slug || null,
     };
 }
 
@@ -522,7 +524,11 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
         if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
     }
 
-    const step = pickInvoiceTemplate(factures, data.buyerIsCompany, slug);
+    // PRIORITÉ AU MODÈLE CHOISI À LA VENTE. Si la facture porte un modèle explicite (choisi dans
+    // le panier au moment d'encaisser) et qu'il est bien un modèle FACTURE actif, il l'emporte.
+    // Sinon on retombe sur la sélection automatique (destinataire, réglage, unique).
+    const step = (data.templateSlug && factures.find((x) => x.slug === data.templateSlug))
+        || pickInvoiceTemplate(factures, data.buyerIsCompany, slug);
 
     if (!step) {
         throw refus(`Plusieurs modèles de type FACTURE existent, sans « destinataire » qui les `

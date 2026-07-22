@@ -3,7 +3,7 @@ import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
-  getShopSettings, downloadFacturX, getCompanies, getEmitters } from "../api/apiClient.js";
+  getShopSettings, downloadFacturX, getCompanies, getEmitters, getTemplates } from "../api/apiClient.js";
 import PaiementSplit, { resolvePayments } from "../components/PaiementSplit.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -55,6 +55,9 @@ function Ventes() {
   // montre le sélecteur que s'il existe PLUSIEURS entités — sinon c'est du bruit.
   const [emitters, setEmitters] = useState([]);
   const [emitterId, setEmitterId] = useState("");
+  // Modèle de facture choisi à la vente (OBLIGATOIRE) : la facture sort sous ce modèle.
+  const [factureTemplates, setFactureTemplates] = useState([]);
+  const [factureSlug, setFactureSlug] = useState("");
   const [discount, setDiscount] = useState(""); // % remise globale
   const [dueDate, setDueDate] = useState(""); // échéance de règlement (vide = à réception)
   // Répartition du règlement : une ligne par moyen, la dernière prenant le solde. Une seule
@@ -79,6 +82,12 @@ function Ventes() {
       setEmitterId((list.find((e) => e.is_default) || {}).id || ""); // présélectionne le défaut
     }).catch(() => {});
     getShopSettings().then((r) => setSettings(r.data)).catch(() => {});
+    // Modèles de FACTURE actifs : le vendeur choisit lequel utiliser pour cette vente.
+    getTemplates().then((r) => {
+      const list = (r.data || []).filter((t) => String(t.doc_type || "").toUpperCase() === "FACTURE" && t.active !== false && t.active !== 0);
+      setFactureTemplates(list);
+      if (list.length === 1) setFactureSlug(list[0].slug); // un seul modèle : présélectionné
+    }).catch(() => {});
   }, []);
 
   // L'émettrice choisie porte désormais TVA et moyens de paiement ; à défaut, on retombe sur les
@@ -176,6 +185,7 @@ function Ventes() {
 
   async function validate() {
     if (cart.length === 0) return;
+    if (!factureSlug) { setStatus({ type: "error", message: "Choisissez le modèle de facture avant d'encaisser." }); return; }
     setStatus(null);
     try {
       // Entreprise : elle est l'acheteur (company_id) ; le stagiaire n'est envoyé QUE si on l'a
@@ -189,6 +199,7 @@ function Ventes() {
       const r = await checkoutSale({
         ...buyerFields,
         billing_profile_id: emitterId || null,
+        invoice_template_slug: factureSlug,
         discount: Number(discount) || 0,
         due_date: dueDate || null,
         payment_method: parts[0]?.method || null,   // rétro-compat : moyen principal
@@ -366,6 +377,23 @@ function Ventes() {
                 )}
               </div>
 
+              {/* Modèle de facture (OBLIGATOIRE) : le vendeur choisit le type de facture à émettre. */}
+              <div className="field">
+                <label>Modèle de facture <span style={{ color: "var(--ember1)" }}>*</span></label>
+                <select className="inp" value={factureSlug} onChange={(e) => setFactureSlug(e.target.value)}
+                  style={!factureSlug ? { borderColor: "var(--ember1)" } : undefined}>
+                  <option value="">— Choisir le type de facture —</option>
+                  {factureTemplates.map((t) => (
+                    <option key={t.slug} value={t.slug}>{t.label || t.slug}</option>
+                  ))}
+                </select>
+                {factureTemplates.length === 0 && (
+                  <p className="hint" style={{ margin: "4px 0 0", fontSize: 12, color: "var(--ember1)" }}>
+                    Aucun modèle de type FACTURE. Créez-en un dans Modèles de documents.
+                  </p>
+                )}
+              </div>
+
               {/* Sous quelle identité la facture sort — seulement s'il y a un choix à faire. */}
               {emitters.length > 1 && (
                 <div className="field">
@@ -430,9 +458,12 @@ function Ventes() {
                       qui ne boucle pas ne doit pas partir. (Sans surcoût quand c'est payé.) */}
                   {(() => {
                     const trop = paid && !resolvePayments(payments, totals.ttc).valid;
+                    const sansModele = !factureSlug; // modèle de facture obligatoire
+                    const motif = trop ? "La répartition des paiements dépasse le total"
+                      : sansModele ? "Choisissez le modèle de facture" : undefined;
                     return (
                       <button className="btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }}
-                        onClick={validate} disabled={trop} title={trop ? "La répartition des paiements dépasse le total" : undefined}>
+                        onClick={validate} disabled={trop || sansModele} title={motif}>
                         Encaisser → créer la facture
                       </button>
                     );
