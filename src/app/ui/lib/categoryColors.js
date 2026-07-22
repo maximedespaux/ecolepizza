@@ -59,7 +59,15 @@ export function categoryAccent(name) {
 let KEY_GROUP = {};
 export function registerTokenGroups(catalog) {
   const m = {};
-  for (const g of catalog || []) for (const t of (g.tokens || [])) if (t && t.key) m[t.key] = g.group;
+  for (const g of catalog || []) {
+    for (const t of (g.tokens || [])) {
+      if (!t || !t.key) continue;
+      // PREMIÈRE occurrence gagnante + `origin` prioritaire : un jeton dupliqué (ex. les
+      // coordonnées de l'acheteur regroupées sous « Facture ») garde la couleur de SA catégorie
+      // d'origine (Entreprise / Stagiaire), pas celle du groupe où on l'a re-listé.
+      if (!(t.key in m)) m[t.key] = t.origin || g.group;
+    }
+  }
   KEY_GROUP = m;
 }
 // Style d'une puce insérée, d'après sa clé. null si la catégorie est inconnue (→ couleur par défaut).

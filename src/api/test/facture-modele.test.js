@@ -110,8 +110,9 @@ test('les jetons de facture sont proposés dans la PALETTE de l\'éditeur', () =
         'le groupe Facture n\'est pas ajouté à la palette');
     assert.match(src, /groups\.push\(articleTokensGroup\(\)\)/,
         'le groupe Ligne de facture n\'est pas ajouté à la palette');
-    // Et leur place dans l'ordre des groupes, sinon ils tombent en fin de liste.
-    assert.match(src, /'Facture', 'Ligne de facture'/,
+    // Et leur place dans l'ordre des groupes, sinon ils tombent en fin de liste. « Acheteur
+    // (facture) » — les coordonnées de l'acheteur regroupées — s'insère entre les deux.
+    assert.match(src, /'Facture', 'Acheteur \(facture\)', 'Ligne de facture'/,
         'les groupes de facture doivent être rangés ensemble, après l\'organisme');
 });
 

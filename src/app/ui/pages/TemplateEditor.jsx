@@ -415,7 +415,7 @@ function TemplateEditor() {
               {(rechJeton.trim() || openGroups[g.group]) && (
                 <div className="tok-list">
                   {g.tokens.map((t) => (
-                    <button key={t.key} className="tok-chip" style={categoryChipStyle(g.group)}
+                    <button key={t.key} className="tok-chip" style={categoryChipStyle(t.origin || g.group)}
                       title={g.group === "Ligne de facture"
                         ? `{${t.key}} — à placer DANS le tableau des articles`
                         : `{${t.key}} — ex. ${t.sample || ""}`}

@@ -303,6 +303,34 @@ function catalogGroup(catName, paletteName) {
 function factureTokensGroup() { return catalogGroup('Facture'); }
 
 /**
+ * Coordonnées de l'ACHETEUR pour une facture/devis, regroupées sous « Facture » à portée de main.
+ *
+ * Ce ne sont PAS de nouveaux jetons : ce sont les jetons « Champs documents » de l'acheteur
+ * (field:learner.* si c'est un stagiaire, field:company.* si c'est une entreprise), qui se
+ * remplissent déjà avec les valeurs de l'acheteur au rendu d'une facture. On les DUPLIQUE ici pour
+ * ne pas avoir à les chercher dans les groupes Stagiaire / Entreprise. `origin` porte la catégorie
+ * d'où ils viennent : la puce garde sa couleur d'origine (bleu Stagiaire / orange Entreprise).
+ */
+function acheteurFactureGroup() {
+    const t = (key, label, origin, sample) => ({ key, label, origin, sample });
+    return {
+        group: 'Acheteur (facture)',
+        tokens: [
+            // Acheteur ENTREPRISE (facture entreprise)
+            t('field:company.email', 'E-mail — acheteur entreprise', 'Entreprise', 'contact@napoli.fr'),
+            t('field:company.phone', 'Téléphone — acheteur entreprise', 'Entreprise', '05 56 11 22 33'),
+            t('field:company.address', 'Adresse — acheteur entreprise', 'Entreprise', '5 av. de la Gare'),
+            t('field:company.naf_ape', 'Code NAF/APE — acheteur entreprise', 'Entreprise', '5610C'),
+            t('field:company.legal_status', 'Forme juridique — acheteur entreprise', 'Entreprise', 'SARL'),
+            // Acheteur PARTICULIER / STAGIAIRE (facture particulier)
+            t('field:learner.email', 'E-mail — acheteur particulier', 'Stagiaire', 'jean@exemple.fr'),
+            t('field:learner.phone', 'Téléphone — acheteur particulier', 'Stagiaire', '06 12 34 56 78'),
+            t('field:learner.address', 'Adresse — acheteur particulier', 'Stagiaire', '12 rue des Fours'),
+        ],
+    };
+}
+
+/**
  * Jetons disponibles À L'INTÉRIEUR du bloc {#Articles}. Groupe séparé, parce qu'ils n'ont de
  * sens QUE là : hors du bloc, {Quantité} ne désigne rien.
  */
@@ -360,10 +388,10 @@ async function loadCustomTokens(orgId) {
 const GROUP_ORDER = [
     'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
     'Inscription', 'Formation', 'Session', 'Lieu de formation',
-    'Organisme', 'Émetteur (identité)', 'Facture', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
+    'Organisme', 'Émetteur (identité)', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
-const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
+const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -379,13 +407,21 @@ const getTokens = async (req, res) => {
         const orgId = req.user.organization_id;
         // Type du modèle en cours d'édition (résilient si la colonne/table manque).
         let companyLevel = null; // null = type inconnu → tout afficher
+        let docType = null;
         if (req.query.slug) {
             try {
                 const [[t]] = await db.promise().query(
-                    'SELECT company_level FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+                    'SELECT company_level, doc_type FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
                     [orgId, String(req.query.slug)]);
-                if (t) companyLevel = t.company_level ? 1 : 0;
-            } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+                if (t) { companyLevel = t.company_level ? 1 : 0; docType = String(t.doc_type || '').toUpperCase() || null; }
+            } catch (e) {
+                if (e && e.code === 'ER_BAD_FIELD_ERROR') { // company_level absent (077) : on lit au moins le type
+                    try { const [[t2]] = await db.promise().query(
+                        'SELECT doc_type FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1', [orgId, String(req.query.slug)]);
+                        if (t2) docType = String(t2.doc_type || '').toUpperCase() || null;
+                    } catch (e2) { if (!(e2 && e2.code === 'ER_NO_SUCH_TABLE')) throw e2; }
+                } else if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e;
+            }
         }
         const groups = await fieldTokenGroups(orgId);
         // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
@@ -397,6 +433,14 @@ const getTokens = async (req, res) => {
         // documents » (field:organization.*), qui viennent de la fiche organisme.
         groups.push(catalogGroup('Organisme', 'Émetteur (identité)'));
         groups.push(factureTokensGroup());
+        // Sur une facture/devis, l'ACHETEUR est un stagiaire OU une entreprise. Ses coordonnées
+        // (e-mail, téléphone, adresse…) existent déjà dans les Champs documents (field:learner.* /
+        // field:company.*) et se remplissent avec les valeurs de l'acheteur ; on les REGROUPE ici,
+        // à portée de main sous « Facture ». Chaque jeton garde la COULEUR de son origine
+        // (Entreprise / Stagiaire) via `origin`, pour qu'on voie d'où il vient.
+        if (!docType || ['FACTURE', 'ACOMPTE', 'AVOIR', 'DEVIS'].includes(docType)) {
+            groups.push(acheteurFactureGroup());
+        }
         groups.push(articleTokensGroup());
         groups.push(paiementTokensGroup());
         // Jetons personnalisés : rangés dans le groupe de leur CATÉGORIE (migration 093).
