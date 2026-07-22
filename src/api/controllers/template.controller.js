@@ -312,20 +312,21 @@ function factureTokensGroup() { return catalogGroup('Facture'); }
  * d'où ils viennent : la puce garde sa couleur d'origine (bleu Stagiaire / orange Entreprise).
  */
 function acheteurFactureGroup() {
-    const t = (key, label, origin, sample) => ({ key, label, origin, sample });
+    // label = texte COURT de la puce ; desc = explication LONGUE affichée au survol.
+    const t = (key, label, origin, sample, desc) => ({ key, label, origin, sample, desc });
     return {
         group: 'Acheteur (facture)',
         tokens: [
             // Acheteur ENTREPRISE (facture entreprise)
-            t('field:company.email', 'E-mail — acheteur entreprise', 'Entreprise', 'contact@napoli.fr'),
-            t('field:company.phone', 'Téléphone — acheteur entreprise', 'Entreprise', '05 56 11 22 33'),
-            t('field:company.address', 'Adresse — acheteur entreprise', 'Entreprise', '5 av. de la Gare'),
-            t('field:company.naf_ape', 'Code NAF/APE — acheteur entreprise', 'Entreprise', '5610C'),
-            t('field:company.legal_status', 'Forme juridique — acheteur entreprise', 'Entreprise', 'SARL'),
+            t('field:company.email', 'E-mail (entreprise)', 'Entreprise', 'contact@napoli.fr', "Adresse e-mail de l'acheteur lorsque c'est une ENTREPRISE. Se remplit avec l'e-mail de la fiche entreprise de l'acheteur."),
+            t('field:company.phone', 'Téléphone (entreprise)', 'Entreprise', '05 56 11 22 33', "Téléphone de l'acheteur ENTREPRISE (depuis sa fiche)."),
+            t('field:company.address', 'Adresse (entreprise)', 'Entreprise', '5 av. de la Gare', "Adresse postale de l'acheteur ENTREPRISE."),
+            t('field:company.naf_ape', 'NAF/APE (entreprise)', 'Entreprise', '5610C', "Code NAF/APE de l'acheteur ENTREPRISE."),
+            t('field:company.legal_status', 'Forme juridique (entreprise)', 'Entreprise', 'SARL', "Forme juridique de l'acheteur ENTREPRISE (SARL, SAS…)."),
             // Acheteur PARTICULIER / STAGIAIRE (facture particulier)
-            t('field:learner.email', 'E-mail — acheteur particulier', 'Stagiaire', 'jean@exemple.fr'),
-            t('field:learner.phone', 'Téléphone — acheteur particulier', 'Stagiaire', '06 12 34 56 78'),
-            t('field:learner.address', 'Adresse — acheteur particulier', 'Stagiaire', '12 rue des Fours'),
+            t('field:learner.email', 'E-mail (particulier)', 'Stagiaire', 'jean@exemple.fr', "Adresse e-mail de l'acheteur lorsque c'est un PARTICULIER / stagiaire."),
+            t('field:learner.phone', 'Téléphone (particulier)', 'Stagiaire', '06 12 34 56 78', "Téléphone de l'acheteur PARTICULIER / stagiaire."),
+            t('field:learner.address', 'Adresse (particulier)', 'Stagiaire', '12 rue des Fours', "Adresse postale de l'acheteur PARTICULIER / stagiaire."),
         ],
     };
 }

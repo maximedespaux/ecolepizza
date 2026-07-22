@@ -94,6 +94,24 @@ function TemplateEditor() {
   const fieldsRef = useRef(null);
   const [, force] = useState(0);
 
+  // Info-bulle GÉNÉREUSE au survol d'une puce : le libellé reste court, l'explication complète
+  // (à quoi sert le jeton, un exemple, sa clé) s'affiche en grand. Positionnée en `fixed` pour
+  // ne pas être rognée par le défilement de la palette.
+  const [tip, setTip] = useState(null); // { text, x, y }
+  const texteTip = (t, group) => {
+    const l = [t.desc || t.label];
+    if (group === "Ligne de facture") l.push("À placer DANS le tableau des articles.");
+    else if (group === "Ligne de règlement") l.push("À placer DANS le bloc des règlements.");
+    if (t.sample) l.push("Exemple : " + t.sample);
+    l.push("Jeton : {" + t.key + "}");
+    return l.join("\n");
+  };
+  const montrerTip = (e, t, group) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setTip({ text: texteTip(t, group), x: r.left + r.width / 2, y: r.top });
+  };
+  const cacherTip = () => setTip(null);
+
   const opts = (cls) => ({
     extensions: buildExtensions(),
     content: "",
@@ -416,9 +434,7 @@ function TemplateEditor() {
                 <div className="tok-list">
                   {g.tokens.map((t) => (
                     <button key={t.key} className="tok-chip" style={categoryChipStyle(t.origin || g.group)}
-                      title={g.group === "Ligne de facture"
-                        ? `{${t.key}} — à placer DANS le tableau des articles`
-                        : `{${t.key}} — ex. ${t.sample || ""}`}
+                      onMouseEnter={(e) => montrerTip(e, t, g.group)} onMouseLeave={cacherTip} onFocus={(e) => montrerTip(e, t, g.group)} onBlur={cacherTip}
                       draggable
                       onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
                       onClick={() => insertToken(t)}>
@@ -460,7 +476,8 @@ function TemplateEditor() {
                       </button>
                       <div style={{ height: 6 }} />
                       {GROUP_ROW_TOKENS.map((t) => (
-                        <button key={t.key} className="tok-chip" style={categoryChipStyle(g.group)} title={`{${t.key}} — à placer dans un bloc {#Stagiaires}…{/Stagiaires}`}
+                        <button key={t.key} className="tok-chip" style={categoryChipStyle(g.group)}
+                          onMouseEnter={(e) => montrerTip(e, { ...t, desc: `${t.label} — à placer dans un bloc « par stagiaire ».` }, g.group)} onMouseLeave={cacherTip}
                           draggable
                           onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
                           onClick={() => insertToken(t)}>{t.label}</button>
@@ -497,6 +514,16 @@ function TemplateEditor() {
             </div>
           </div>
         </div>
+      )}
+
+      {tip && (
+        <div style={{
+          position: "fixed", left: tip.x, top: tip.y - 10, transform: "translate(-50%, -100%)",
+          maxWidth: 300, whiteSpace: "pre-line", background: "#1f2430", color: "#f4f5fa",
+          border: "1px solid #3a3f4b", borderRadius: 8, padding: "9px 12px",
+          fontSize: 13.5, lineHeight: 1.45, fontWeight: 500, textAlign: "left",
+          boxShadow: "0 8px 24px rgba(0,0,0,.32)", zIndex: 1000, pointerEvents: "none",
+        }}>{tip.text}</div>
       )}
     </div>
   );
