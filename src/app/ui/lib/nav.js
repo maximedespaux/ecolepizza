@@ -57,6 +57,7 @@ export const NAV = [
     grp: "Configuration",        // paramétrage de l'organisme & modèles
     items: [
       { to: "/reglages", ic: "building", label: "Organisme", roles: ADMIN },
+      { to: "/reglages-facturation", ic: "receipt", label: "Facturation", roles: ADMIN },
       { to: "/equipe", ic: "team", label: "Équipe & accès", roles: OWNER },
       { to: "/roles", ic: "shield", label: "Rôles d'accès", roles: OWNER },
       { to: "/modeles", ic: "file-text", label: "Modèles de documents", roles: ADMIN },
@@ -87,6 +88,7 @@ export const PAGE_TITLES = {
   "/factures": "Facturation",
   "/comptabilite": "Comptabilité",
   "/reglages": "Organisme",
+  "/reglages-facturation": "Facturation",
   "/equipe": "Équipe & accès",
   "/roles": "Rôles d'accès",
   "/modeles": "Modèles de documents",
@@ -105,7 +107,7 @@ export function canAccess(role, roles) {
 export const OWNER_ROLES = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
 
 // Rubriques déplacées dans le hub « Paramètres » (menu profil) et retirées de la barre latérale.
-export const SETTINGS_PATHS = ["/reglages", "/equipe", "/roles"];
+export const SETTINGS_PATHS = ["/reglages", "/reglages-facturation", "/equipe", "/roles"];
 
 // Normalise nav_access en objet { chemin: "read" | "write" }.
 // Rétro-compat : un tableau (ancien format) = tout en écriture.
@@ -144,7 +146,7 @@ const SECTION_OF = {
   "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",
-  "/reglages": "/reglages", "/modeles": "/modeles", "/equipe": "/equipe",
+  "/reglages": "/reglages", "/reglages-facturation": "/reglages-facturation", "/modeles": "/modeles", "/equipe": "/equipe",
   "/audit": "/audit", "/suivi": "/suivi", "/dashboard": "/dashboard",
 };
 
