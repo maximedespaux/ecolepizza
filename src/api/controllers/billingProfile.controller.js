@@ -29,51 +29,79 @@ const CHAMPS = [
 const COLS = `id, label, legal_name, legal_status, capital, rcs, siret, vat_number, naf_ape,
     nda, address, zip_code, town, country, phone, email, iban, bic, bank_name,
     invoice_prefix, next_number, default_template_slug, is_default,
-    number_format, tva_applies, payment_methods`;
+    number_format, tva_applies, payment_methods, is_organization`;
+
+/** L'INSERT qui recopie l'organisme dans une entité. `asOrg` la marque comme l'entité organisme
+ *  et défaut ; sinon (117 non jouée) c'est une entité ordinaire. */
+async function insertOrgProfile(conn, orgId, org, asOrg) {
+    const cols = ['id', 'organization_id', 'label', 'legal_name', 'siret', 'vat_number', 'naf_ape',
+        'nda', 'address', 'zip_code', 'town', 'phone', 'email', 'iban', 'bic', 'bank_name',
+        'logo_image', 'signature_image', 'invoice_prefix', 'is_default'];
+    const vals = [crypto.randomUUID(), orgId, org.legal_name, org.legal_name, org.siret, org.vat_number,
+        org.naf_ape, org.nda, org.address, org.zip_code, org.town, org.phone, org.email,
+        org.iban, org.bic, org.bank_name, org.logo_image, org.signature_image, 'F', 1];
+    if (asOrg) { cols.push('is_organization'); vals.push(1); }
+    await conn.query(`INSERT INTO billing_profile (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
+}
 
 /**
- * Sème une première entité émettrice À PARTIR DE L'ORGANISME, si l'organisme n'en a aucune.
+ * Garantit que l'ENTITÉ ORGANISME existe, et qu'elle est le vendeur par défaut.
  *
- * L'organisme EST déjà un émetteur — son identité vit dans la table `organization`. Plutôt que
- * d'obliger à la ressaisir, on la recopie une fois dans une entité par défaut : l'utilisateur
- * repart d'un profil déjà rempli et n'a qu'à y greffer ce qui touche la facture (format de
- * numéro, TVA, moyens de paiement). Une copie, pas un lien : une facture fige l'identité de son
- * émetteur, et modifier l'organisme plus tard ne doit pas récrire les factures déjà émises.
+ * L'organisme est l'émetteur naturel : c'est sous son identité qu'on facture, et les autres
+ * entités ne sont que des alternatives. On recopie donc son identité dans une entité marquée
+ * `is_organization`, désignée par défaut. Une COPIE, pas un lien : une facture fige l'identité
+ * de son émetteur, modifier l'organisme plus tard ne récrit pas les factures émises.
  *
- * Silencieux et best-effort : si la copie échoue (course, colonne manquante), on renvoie la
- * liste telle quelle plutôt que de bloquer l'écran.
+ * DÉFAUT CORRIGÉ ICI : on ne semait qu'en l'absence TOTALE d'entité. Un organisme ayant déjà
+ * créé « Boutique » se retrouvait sans entité organisme, et son défaut tombait sur l'alternative.
+ * On sème désormais dès qu'aucune entité `is_organization` n'existe, même si d'autres sont là —
+ * et on rétrograde les autres, pour que l'organisme redevienne le défaut.
+ *
+ * Sans la 117, la colonne manque : on retombe sur l'ancien comportement (semer si vide).
  */
-async function seedFromOrganization(conn, orgId) {
+async function ensureOrgProfile(conn, orgId) {
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
     if (!org || !org.legal_name) return; // rien à recopier
-    await conn.query(
-        `INSERT INTO billing_profile
-            (id, organization_id, label, legal_name, siret, vat_number, naf_ape, nda,
-             address, zip_code, town, phone, email, iban, bic, bank_name,
-             logo_image, signature_image, invoice_prefix, is_default)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        [crypto.randomUUID(), orgId, org.legal_name, org.legal_name, org.siret, org.vat_number,
-         org.naf_ape, org.nda, org.address, org.zip_code, org.town, org.phone, org.email,
-         org.iban, org.bic, org.bank_name, org.logo_image, org.signature_image, 'F']
-    );
+    try {
+        const [[exist]] = await conn.query(
+            'SELECT id FROM billing_profile WHERE organization_id = ? AND is_organization = 1 LIMIT 1', [orgId]);
+        if (exist) return; // l'entité organisme est déjà là
+        // L'organisme devient LE défaut : on rétrograde les autres, puis on l'insère par défaut.
+        await conn.query('UPDATE billing_profile SET is_default = 0 WHERE organization_id = ?', [orgId]);
+        await insertOrgProfile(conn, orgId, org, true);
+    } catch (e) {
+        if (!isMissingSchema(e)) throw e;
+        // 117 non jouée : on ne sait pas marquer l'entité organisme. Ancien comportement — semer
+        // seulement si AUCUNE entité n'existe, pour ne pas dupliquer.
+        const [[{ n }]] = await conn.query('SELECT COUNT(*) AS n FROM billing_profile WHERE organization_id = ?', [orgId]);
+        if (n === 0) await insertOrgProfile(conn, orgId, org, false);
+    }
 }
 
 /** GET /api/emetteurs — liste des entités émettrices de l'organisme. */
 const list = async (req, res) => {
     const conn = db.promise();
     const orgId = req.user.organization_id;
+    const requete = () => conn.query(
+        `SELECT ${COLS} FROM billing_profile WHERE organization_id = ? ORDER BY is_organization DESC, is_default DESC, label`, [orgId]);
     try {
-        let [rows] = await conn.query(
-            `SELECT ${COLS} FROM billing_profile WHERE organization_id = ? ORDER BY is_default DESC, label`, [orgId]);
-        // Aucune entité : on en sème une depuis l'organisme, puis on relit.
-        if (rows.length === 0) {
-            try { await seedFromOrganization(conn, orgId); } catch (e) { if (!isMissingSchema(e)) console.error('seed émetteur :', e.message); }
-            [rows] = await conn.query(
-                `SELECT ${COLS} FROM billing_profile WHERE organization_id = ? ORDER BY is_default DESC, label`, [orgId]);
-        }
+        // L'entité organisme est garantie AVANT la lecture : elle doit toujours être là, défaut.
+        try { await ensureOrgProfile(conn, orgId); } catch (e) { if (!isMissingSchema(e)) console.error('semis émetteur :', e.message); }
+        const [rows] = await requete();
         res.json({ data: rows });
     } catch (e) {
-        if (isMissingSchema(e)) return res.json({ data: [] });
+        // COLS cite is_organization : sans la 117, la lecture échoue. On relit sans cette colonne.
+        if (isMissingSchema(e)) {
+            try {
+                const [rows] = await conn.query(
+                    `SELECT ${COLS.replace(', is_organization', '')} FROM billing_profile WHERE organization_id = ? ORDER BY is_default DESC, label`, [orgId]);
+                return res.json({ data: rows.map((r) => ({ ...r, is_organization: 0 })) });
+            } catch (e2) {
+                if (isMissingSchema(e2)) return res.json({ data: [] }); // table absente (113 non jouée)
+                console.error('Erreur liste émetteurs :', e2);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+        }
         console.error('Erreur liste émetteurs :', e);
         res.status(500).json({ error: 'Internal Server Error' });
     }
@@ -172,15 +200,25 @@ const setDefault = async (req, res) => {
  * DELETE /api/emetteurs/:id
  *
  * La FK invoice.billing_profile_id est ON DELETE SET NULL : les factures déjà émises survivent,
- * PDF figé et numéro conservé. On refuse seulement de supprimer le DERNIER défaut tant qu'il
- * reste d'autres entités sans défaut — sinon l'organisme se retrouverait sans émettrice désignée.
+ * PDF figé et numéro conservé. On REFUSE de supprimer l'entité organisme — c'est l'émetteur de
+ * base, et elle serait de toute façon re-semée au prochain chargement.
  */
 const remove = async (req, res) => {
     const conn = db.promise();
     const orgId = req.user.organization_id;
     try {
-        const [[row]] = await conn.query('SELECT is_default FROM billing_profile WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        // `is_organization` peut ne pas exister (117 non jouée) : on lit défensivement.
+        let row;
+        try {
+            [[row]] = await conn.query('SELECT is_default, is_organization FROM billing_profile WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        } catch (e) {
+            if (!isMissingSchema(e)) throw e;
+            [[row]] = await conn.query('SELECT is_default FROM billing_profile WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        }
         if (!row) return res.status(404).json({ message: 'Entité introuvable.' });
+        if (row.is_organization) {
+            return res.status(422).json({ message: 'L\'entité de l\'organisme ne peut pas être supprimée : c\'est votre émetteur par défaut. Vous pouvez en désigner un autre par défaut, ou modifier celle-ci.' });
+        }
         await conn.query('DELETE FROM billing_profile WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         // Si on a supprimé le défaut et qu'il reste des entités, on en promeut une : ne jamais
         // laisser l'organisme sans défaut alors qu'il a encore des émettrices.

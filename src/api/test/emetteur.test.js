@@ -184,18 +184,27 @@ test('la caisse prend TVA et moyens de paiement de l\'émettrice choisie', () =>
         'la TVA ne suit pas l\'émettrice');
 });
 
-test('la première émettrice est semée depuis l\'organisme', () => {
-    // L'organisme EST déjà un émetteur ; on recopie son identité une fois plutôt que de la faire
-    // ressaisir. Une COPIE, pas un lien — une facture fige l'identité de son émetteur.
+test('l\'entité organisme est garantie et devient le défaut, même avec d\'autres entités', () => {
+    // DÉFAUT CORRIGÉ : on ne semait qu'en l'absence TOTALE d'entité. Un organisme ayant déjà créé
+    // « Boutique » se retrouvait sans entité organisme, et son défaut tombait sur l'alternative.
+    // On sème désormais dès qu'aucune entité is_organization n'existe, et on rétrograde les autres.
     const src = net('controllers/billingProfile.controller.js');
-    assert.match(src, /function seedFromOrganization/, 'pas de semis depuis l\'organisme');
-    const seed = src.slice(src.indexOf('function seedFromOrganization'));
-    assert.match(seed.slice(0, 700), /FROM organization WHERE id = \?/, 'le semis ne lit pas l\'organisme');
-    assert.match(seed.slice(0, 900), /INSERT INTO billing_profile/, 'le semis n\'insère rien');
-    // Semé seulement quand il n'y en a aucune.
+    const ens = src.slice(src.indexOf('function ensureOrgProfile'), src.indexOf('const list ='));
+    assert.match(ens, /FROM organization WHERE id = \?/, 'le semis ne lit pas l\'organisme');
+    assert.match(ens, /is_organization = 1 LIMIT 1/, 'l\'existence de l\'entité organisme n\'est pas testée');
+    assert.match(ens, /UPDATE billing_profile SET is_default = 0 WHERE organization_id = \?/,
+        'les autres entités ne sont pas rétrogradées');
+    assert.match(ens, /insertOrgProfile\(conn, orgId, org, true\)/, 'l\'entité organisme n\'est pas semée en défaut');
+    // Et la liste garantit l'entité AVANT de lire.
     const list = src.slice(src.indexOf('const list ='));
-    assert.match(list.slice(0, 600), /if \(rows\.length === 0\)[\s\S]{0,80}seedFromOrganization/,
-        'le semis ne se déclenche pas sur une liste vide');
+    assert.match(list.slice(0, 400), /ensureOrgProfile\(conn, orgId\)/, 'la liste ne garantit pas l\'entité organisme');
+});
+
+test('l\'entité organisme ne peut pas être supprimée', () => {
+    // C'est l'émetteur de base, et elle serait re-semée au prochain chargement.
+    const src = net('controllers/billingProfile.controller.js');
+    const rem = src.slice(src.indexOf('const remove ='));
+    assert.match(rem.slice(0, 700), /if \(row\.is_organization\)/, 'la suppression de l\'entité organisme n\'est pas bloquée');
 });
 
 test('la facturation n\'a plus de réglage global doublon (ShopSettings retiré)', () => {
@@ -215,6 +224,8 @@ test('sans la migration 113, tout retombe sur l\'organisme sans échouer', () =>
     assert.match(emit, /const isMissingSchema = \(e\) =>/, 'pas de garde de schéma manquant');
     assert.match(emit, /if \(isMissingSchema\(e\)\) return null/, 'loadEmitter ne dégrade pas');
     const ctrl = net('controllers/billingProfile.controller.js');
-    assert.match(ctrl, /if \(isMissingSchema\(e\)\) return res\.json\(\{ data: \[\] \}\)/,
-        'la liste ne dégrade pas en liste vide');
+    assert.match(ctrl, /if \(isMissingSchema\(e2\)\) return res\.json\(\{ data: \[\] \}\)/,
+        'la liste ne dégrade pas en liste vide quand la table est absente');
+    // Et sans la 117 (colonne is_organization) : on relit sans elle plutôt que d'échouer.
+    assert.match(ctrl, /COLS\.replace\(', is_organization', ''\)/, 'la liste ne dégrade pas sans is_organization');
 });

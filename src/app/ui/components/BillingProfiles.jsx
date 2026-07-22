@@ -241,9 +241,10 @@ export default function BillingProfiles({ onError }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {rows.map((r) => (
           <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid var(--border-soft)" }}>
-            <Icon name="building" size={16} />
+            <Icon name={r.is_organization ? "star" : "building"} size={16} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <b>{r.label || r.legal_name}</b>
+              {r.is_organization ? <span className="badge b" style={{ marginLeft: 8 }}>organisme</span> : null}
               {r.is_default ? <span className="badge g" style={{ marginLeft: 8 }}>par défaut</span> : null}
               <div className="hint" style={{ fontSize: 12 }}>
                 {r.legal_name} · {r.siret || "SIRET —"} · <span className="mono">{apercuNumero(r.number_format, r.next_number || 1)}</span>
@@ -251,7 +252,8 @@ export default function BillingProfiles({ onError }) {
             </div>
             {!r.is_default && <button className="btn ghost sm" onClick={() => makeDefault(r.id)} title="Utiliser par défaut">Par défaut</button>}
             <button className="btn ghost sm" onClick={() => setEditing(r)}><Icon name="settings" size={13} /></button>
-            <button className="iconbtn" onClick={() => remove(r)} aria-label="Supprimer"><Icon name="x" size={14} /></button>
+            {/* L'entité organisme n'est pas supprimable : c'est l'émetteur de base. */}
+            {!r.is_organization && <button className="iconbtn" onClick={() => remove(r)} aria-label="Supprimer"><Icon name="x" size={14} /></button>}
           </div>
         ))}
         {rows.length === 0 && <p className="hint">Aucune entité émettrice : les factures sortent sous l'identité de l'organisme.</p>}
