@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
-import { getTemplates, saveTemplate, deleteTemplate, duplicateTemplate, reorderTemplates,
+import { getTemplates, saveTemplate, deleteTemplate, duplicateTemplate, renameTemplate, reorderTemplates,
   getConditionCatalog, getConditions, createCondition, updateCondition, deleteCondition, getFieldValues,
   getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
@@ -512,8 +512,17 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         if (isNew) await createEmargementTemplate({ name: form.label, applies_when, config });
         else await updateEmargementTemplate(step.id, { name: form.label, applies_when, active: form.active, config });
       } else {
-        const slug = isNew ? form.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-") : step.slug;
+        let slug = isNew ? form.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-") : step.slug;
         if (!slug) { onError("Identifiant (slug) requis."); setSaving(false); return; }
+        // Renommage d'un modèle EXISTANT (non-socle) : on répercute le slug PARTOUT (parcours,
+        // factures, réglages…) avant d'enregistrer sous le nouvel identifiant.
+        if (!isNew && !step.is_default) {
+          const newSlug = form.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "");
+          if (newSlug && newSlug !== step.slug) {
+            const r = await renameTemplate(step.slug, newSlug);
+            slug = (r && r.slug) || newSlug;
+          }
+        }
         await saveTemplate(slug, {
           label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
           signers: form.signers, company_level: form.company_level,
@@ -542,9 +551,25 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
               </select>
             </div>
           )}
-          {isNew && !isEmarg && (
+          {/* Identifiant (slug) : saisi à la création, MODIFIABLE ensuite pour un modèle propre à
+              l'organisme (ex. nettoyer le « -copie » d'une duplication). Le renommage répercute le
+              slug partout où il est référencé. Les modèles du socle ne sont pas renommables. */}
+          {!isEmarg && (isNew || !step.is_default) && (
             <div className="field"><label>Identifiant (slug)</label>
               <input className="inp mono" value={form.slug} onChange={set("slug")} placeholder="ex. attestation-tva" />
+              {!isNew && (
+                <p className="hint" style={{ margin: "4px 0 0", fontSize: 12 }}>
+                  Le renommer met à jour toutes les références (parcours, factures, réglages, documents générés).
+                </p>
+              )}
+            </div>
+          )}
+          {!isEmarg && !isNew && step.is_default && (
+            <div className="field"><label>Identifiant (slug)</label>
+              <input className="inp mono" value={step.slug} readOnly disabled />
+              <p className="hint" style={{ margin: "4px 0 0", fontSize: 12 }}>
+                Modèle du socle : identifiant non modifiable. Dupliquez-le pour repartir d'un slug libre.
+              </p>
             </div>
           )}
           <div className="field"><label>Intitulé</label>

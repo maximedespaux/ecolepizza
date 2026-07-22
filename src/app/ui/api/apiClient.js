@@ -902,6 +902,10 @@ export function deleteTemplate(slug) {
 export function duplicateTemplate(slug) {
   return request(`/templates/${slug}/duplicate`, { method: "POST" });
 }
+// Renomme l'identifiant (slug) d'un modèle, en répercutant partout où il est référencé.
+export function renameTemplate(slug, newSlug) {
+  return request(`/templates/${slug}/rename`, { method: "PUT", body: JSON.stringify({ new_slug: newSlug }) });
+}
 // Réordonne les modèles (glisser-déposer).
 export function reorderTemplates(orders) {
   // orders : [{ slug, sort_order }] (position globale) ; rétro-compat : tableau de slugs.

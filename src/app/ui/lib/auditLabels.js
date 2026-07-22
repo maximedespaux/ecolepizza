@@ -55,6 +55,7 @@ const ACTION_LABEL = {
     'template.save': ['Modèle enregistré', A],
     'template.upload': ['Modèle importé', G],
     'template.duplicate': ['Modèle dupliqué', G],
+    'template.rename': ['Identifiant de modèle renommé', A],
     'template.reorder': ['Modèles réordonnés', A],
     'template.delete': ['Modèle supprimé', R],
     'template.customTokens': ['Jetons personnalisés modifiés', A],
