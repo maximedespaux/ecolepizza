@@ -151,6 +151,36 @@ test('le bloc survit à la grammaire de l\'éditeur (marqueurs dans des cellules
     assert.ok(out.includes('21.38 €') && out.includes('25.32 €'), 'chaque ligne garde SON taux');
 });
 
+test('les jetons de ligne fonctionnent AUSSI en PUCE (et non plus seulement en {Clé} brut)', () => {
+    // DÉFAUT SIGNALÉ : les jetons « Ligne de facture » / « par stagiaire » s'inséraient en TEXTE
+    // {Clé}, qui s'affiche « {Clé} » dans l'éditeur et, hors bloc, reste tel quel au rendu. Ils
+    // s'insèrent désormais comme des PUCES nommées ; le bloc doit donc remplir les puces, ligne
+    // par ligne, exactement comme le {Clé} brut.
+    const pill = (k, l) => `<span data-token="${k}" data-label="${l || k}">${l || k}</span>`;
+    const html = '<table><tbody><tr><th>Article</th><th>Qté</th></tr>'
+        + `<tr><td>{#Articles}${pill('Désignation')}</td><td>${pill('Quantité', 'Qté')}{/Articles}</td></tr></tbody></table>`;
+    const out = expandListBlocks(html, 'Articles', [
+        { name: 'Biberon', qty: 2, amount: 17.82, taxRate: 20 },
+        { name: 'Farine', qty: 1, amount: 24, taxRate: 5.5 },
+    ], articleRowTokens);
+    assert.ok(out.includes('Biberon') && out.includes('Farine'), 'les puces de désignation doivent être remplies');
+    assert.doesNotMatch(out, /data-token=|\{[#/]?Articles\}/, 'aucune puce ni marqueur ne doit subsister');
+    assert.doesNotMatch(out, /\{Désignation\}|\{Quantité\}/, 'aucun {Clé} littéral ne doit rester');
+});
+
+test('un bloc {#Stagiaires} en PUCES se remplit stagiaire par stagiaire', () => {
+    const { fillHtml } = require('../lib/htmlfill.js');
+    const pill = (k, l) => `<span data-token="${k}" data-label="${l || k}">${l || k}</span>`;
+    const tpl = `<p>{#Stagiaires}${pill('Personne')} — ${pill('OPCO')}<br>{/Stagiaires}</p>`;
+    const out = fillHtml(tpl, { org: {}, groupStagiaires: [
+        { civility: 'M.', first_name: 'Jean', last_name: 'Dupont', opco: 'AKTO' },
+        { civility: 'Mme', first_name: 'Marie', last_name: 'Martin', opco: 'OCAPIAT' },
+    ] });
+    assert.ok(/Jean Dupont/.test(out) && /Marie Martin/.test(out), 'chaque stagiaire doit sortir');
+    assert.ok(/AKTO/.test(out) && /OCAPIAT/.test(out), 'l\'OPCO doit être résolu PAR stagiaire, pas globalement');
+    assert.doesNotMatch(out, /data-token=|\{Personne\}/, 'ni puce ni {Clé} ne doit subsister');
+});
+
 test('l\'en-tête du tableau ne se répète pas', () => {
     // L'erreur classique de ce genre de gabarit : englober l'en-tête dans le bloc.
     const html = '<table><tbody><tr><th>Désignation</th></tr>'

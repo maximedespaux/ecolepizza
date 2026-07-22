@@ -28,12 +28,23 @@ const clean = (html) => (EMPTY.test(html || "") ? "" : html);
  * article. C'est l'erreur classique de ce genre de gabarit, et la raison pour laquelle on
  * l'insère déjà monté plutôt que de laisser l'écrire à la main.
  */
+// Puce de jeton, telle que l'éditeur la sérialise (cf. TokenNode) : au rendu, le moteur la
+// remplace par la valeur — dans un bloc {#Articles}/{#Stagiaires}, ligne par ligne. On insère
+// donc des PUCES nommées, jamais du {Clé} brut (qui s'affiche « {Clé} » dans l'éditeur et, hors
+// bloc, resterait tel quel au rendu).
+const pill = (key, label) => `<span data-token="${key}" data-label="${label || key}">${label || key}</span>`;
+
 const BLOC_ARTICLES = '<table><tbody><tr>'
   + '<th>Désignation</th><th>Qté</th><th>P.U. HT</th><th>Montant HT</th><th>TVA</th><th>Total TTC</th>'
   + '</tr><tr>'
-  + '<td>{#Articles}{Désignation}</td><td>{Quantité}</td><td>{Prix unitaire HT}</td>'
-  + '<td>{Montant HT}</td><td>{Taux TVA}</td><td>{Montant TTC}{/Articles}</td>'
+  + `<td>{#Articles}${pill('Désignation')}</td><td>${pill('Quantité', 'Qté')}</td><td>${pill('Prix unitaire HT', 'P.U. HT')}</td>`
+  + `<td>${pill('Montant HT')}</td><td>${pill('Taux TVA', 'TVA')}</td><td>${pill('Montant TTC', 'Total TTC')}{/Articles}</td>`
   + '</tr></tbody></table>';
+
+// Bloc « par stagiaire » prêt à l'emploi : les jetons par stagiaire sont des PUCES, remplies
+// ligne par ligne par le moteur (expandGroupBlocks). Les marqueurs {#Stagiaires}/{/Stagiaires}
+// restent en texte : ils délimitent le bloc.
+const BLOC_STAGIAIRES = `{#Stagiaires}${pill('N°')}. ${pill('Personne')} — ${pill('OPCO')}<br>{/Stagiaires}`;
 
 // Jetons résolus PAR STAGIAIRE à l'intérieur d'un bloc {#Stagiaires}…{/Stagiaires}
 // (documents de groupe / entreprise). Insérés en TEXTE brut.
@@ -396,21 +407,15 @@ function TemplateEditor() {
               {(rechJeton.trim() || openGroups[g.group]) && (
                 <div className="tok-list">
                   {g.tokens.map((t) => (
-                    g.group === "Ligne de facture" ? (
-                      <button key={t.key} className="tok-chip" title={`{${t.key}} — à placer DANS le tableau des articles`}
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", "{" + t.key + "}")}
-                        onClick={() => insertRaw("{" + t.key + "}")}>
-                        {t.label}
-                      </button>
-                    ) : (
-                      <button key={t.key} className="tok-chip" title={`{${t.key}} — ex. ${t.sample || ""}`}
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
-                        onClick={() => insertToken(t)}>
-                        {t.label}
-                      </button>
-                    )
+                    <button key={t.key} className="tok-chip"
+                      title={g.group === "Ligne de facture"
+                        ? `{${t.key}} — à placer DANS le tableau des articles`
+                        : `{${t.key}} — ex. ${t.sample || ""}`}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
+                      onClick={() => insertToken(t)}>
+                      {t.label}
+                    </button>
                   ))}
                   {/* Ligne de facture : ces jetons n'ont de sens QUE dans un bloc
                       {#Articles}…{/Articles}. Sans un moyen de créer ce bloc, les proposer était
@@ -441,16 +446,16 @@ function TemplateEditor() {
                       </p>
                       <button className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple"
                         draggable
-                        onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", "{#Stagiaires}{N°}. {Personne} — {OPCO}<br>{/Stagiaires}")}
-                        onClick={() => insertRaw("{#Stagiaires}{N°}. {Personne} — {OPCO}<br>{/Stagiaires}")}>
+                        onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", BLOC_STAGIAIRES)}
+                        onClick={() => insertRaw(BLOC_STAGIAIRES)}>
                         <Icon name="plus" size={13} /> Bloc « par stagiaire »
                       </button>
                       <div style={{ height: 6 }} />
                       {GROUP_ROW_TOKENS.map((t) => (
                         <button key={t.key} className="tok-chip" title={`{${t.key}} — à placer dans un bloc {#Stagiaires}…{/Stagiaires}`}
                           draggable
-                          onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", "{" + t.key + "}")}
-                          onClick={() => insertRaw("{" + t.key + "}")}>{t.label}</button>
+                          onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
+                          onClick={() => insertToken(t)}>{t.label}</button>
                       ))}
                     </div>
                   )}

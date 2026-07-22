@@ -455,7 +455,18 @@ function expandGroupBlocks(html, list, customDefs, globalValues) {
             const repl = { ...row, ...custom };
             // On ne remplace QUE les jetons par stagiaire / personnalisés ; les jetons
             // purement globaux sont laissés au remplacement global (fillHtml).
-            return String(tpl).replace(/\{\s*([^{}|]+?)\s*(?:\|\s*([+-]?\d+)\s*)?\}/g, (mm, ref, off) => {
+            let out = String(tpl);
+            // 1) Puces (jetons cliqués dans la palette) : <span data-token="Clé">…</span>.
+            //    Les jetons par stagiaire s'insèrent désormais comme puces propres (et non plus
+            //    en {Clé} brut) — il faut donc les remplir ICI, par stagiaire, sinon la puce
+            //    « Prénom » retomberait sur le remplacement GLOBAL (le stagiaire du dossier).
+            for (const [k, val] of Object.entries(repl)) {
+                const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'),
+                    escCell(val == null ? '' : String(val)));
+            }
+            // 2) Forme texte {Clé} (modèles hérités, décalage de date {Jour1|+2}).
+            return out.replace(/\{\s*([^{}|]+?)\s*(?:\|\s*([+-]?\d+)\s*)?\}/g, (mm, ref, off) => {
                 if (!(ref in repl)) return mm;
                 let v = repl[ref] == null ? '' : String(repl[ref]);
                 if (off) v = shiftDate(v, parseInt(off, 10));
