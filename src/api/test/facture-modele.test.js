@@ -400,3 +400,25 @@ test('la palette propose {Référence} et le rendu la remplit — pas de jeton o
     const remplis = Object.keys(require('../lib/tokens.js').articleRowTokens({ reference: 'x', name: 'y', amount: 1, taxRate: 20 }, 0));
     assert.ok(remplis.includes('Référence'), '{Référence} est proposé mais jamais rempli');
 });
+
+// --- Largeur des tableaux : pleine largeur vs ajusté au contenu ------------------------------
+
+test('un tableau « auto » s\'ajuste au contenu sans couper le texte', () => {
+    // data-width="auto" : la largeur 100% est retirée, les largeurs de colonnes fixes neutralisées,
+    // et les cellules passent en white-space:nowrap — c'est ce qui empêche « Quantité » d'être
+    // coupé en « Quanti / té » dans le PDF (LibreOffice ne suit pas table-layout).
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const t = '<table data-width="auto" width="100%"><colgroup><col width="20%"></colgroup>'
+        + '<tbody><tr><th>Quantité</th></tr></tbody></table>';
+    const out = renderTemplateHtml(t, { org: {} }, { letterhead: false });
+    assert.doesNotMatch(out, /<table[^>]*\bwidth="100%"/, 'la pleine largeur n\'a pas été retirée');
+    assert.match(out, /white-space:nowrap/, 'les cellules ne sont pas en nowrap');
+    assert.match(out, /<col>/, 'les largeurs de colonnes fixes ne sont pas neutralisées');
+});
+
+test('un tableau « pleine largeur » (défaut) occupe toute la largeur', () => {
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const out = renderTemplateHtml('<table><tbody><tr><td>x</td></tr></tbody></table>', { org: {} }, { letterhead: false });
+    assert.match(out, /<table[^>]*\bwidth="100%"/, 'le défaut n\'est pas pleine largeur');
+    assert.doesNotMatch(out, /white-space:nowrap/, 'le défaut ne doit pas forcer le nowrap');
+});

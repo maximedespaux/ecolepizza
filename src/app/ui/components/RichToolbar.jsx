@@ -189,6 +189,9 @@ function RichToolbar({ editor, compact = false }) {
           <Btn title="Bordures pleines" active={editor.getAttributes("table").borderStyle === "solid" || !editor.getAttributes("table").borderStyle} on={() => c().updateAttributes("table", { borderStyle: "solid" }).run()}>▦</Btn>
           <Btn title="Bordures pointillées" active={editor.getAttributes("table").borderStyle === "dashed"} on={() => c().updateAttributes("table", { borderStyle: "dashed" }).run()}>┋</Btn>
           <Btn title="Sans bordure" active={editor.getAttributes("table").borderStyle === "none"} on={() => c().updateAttributes("table", { borderStyle: "none" }).run()}>▢</Btn>
+          <Sep />
+          <Btn title="Pleine largeur" active={(editor.getAttributes("table").widthMode || "full") === "full"} on={() => c().updateAttributes("table", { widthMode: "full" }).run()}>↔</Btn>
+          <Btn title="Ajusté au contenu (sans couper le texte)" active={editor.getAttributes("table").widthMode === "auto"} on={() => c().updateAttributes("table", { widthMode: "auto" }).run()}>⇥⇤</Btn>
           <Btn title="Supprimer le tableau" on={() => c().deleteTable().run()}>⌫tab</Btn>
         </>
       )}

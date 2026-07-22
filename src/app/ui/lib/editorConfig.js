@@ -23,6 +23,14 @@ const StyledTable = Table.extend({
           return { "data-border": b, class: `tbl-b-${b}` };
         },
       },
+      // Largeur du tableau : « full » = pleine largeur (défaut), « auto » = ajusté au contenu
+      // (les colonnes prennent la place de leur texte, sans le couper). Sérialisé en data-width ;
+      // le rendu PDF l'interprète (LibreOffice ne suit pas table-layout de façon fiable).
+      widthMode: {
+        default: "full",
+        parseHTML: (el) => el.getAttribute("data-width") || "full",
+        renderHTML: (attrs) => ({ "data-width": attrs.widthMode || "full" }),
+      },
     };
   },
 });

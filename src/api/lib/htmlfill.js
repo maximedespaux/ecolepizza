@@ -192,11 +192,29 @@ const DOC_CSS = `
  * d'un document — ceux du code comme ceux dessinés à la main dans l'éditeur.
  */
 function largeurTables(html) {
-    return String(html || '').replace(/<table\b([^>]*)>/gi, (tag, attrs) => (
-        /\bwidth\s*=/i.test(attrs) || /style\s*=\s*"[^"]*\bwidth\s*:/i.test(attrs)
-            ? tag
-            : `<table${attrs} width="100%">`
-    ));
+    return String(html || '').replace(/<table\b([^>]*)>([\s\S]*?)<\/table>/gi, (m, attrs, inner) => {
+        // « auto » = ajusté au contenu : les colonnes prennent la largeur de leur texte, sans le
+        // couper. LibreOffice ne suit pas table-layout de façon fiable ; on obtient l'effet en
+        // (1) laissant la largeur libre, (2) neutralisant les largeurs de colonnes fixes, et
+        // (3) empêchant le retour à la ligne DANS les cellules — c'est ce qui coupait « Quantité »
+        // en « Quanti / té ».
+        if (/data-width\s*=\s*["']?auto/i.test(attrs)) {
+            // `(?<!-)` : ne pas toucher au `width` de `data-width`, seulement l'attribut width réel.
+            const a = attrs.replace(/(?<!-)\bwidth\s*=\s*"[^"]*"/i, '').trim();
+            const body = inner
+                .replace(/<col\b[^>]*>/gi, '<col>')
+                .replace(/<(td|th)\b([^>]*)>/gi, (cm, tag, cattrs) => (
+                    /\bstyle\s*=\s*["']/.test(cattrs)
+                        ? `<${tag}${cattrs.replace(/\bstyle\s*=\s*(["'])/i, (sm, q) => `style=${q}white-space:nowrap;`)}>`
+                        : `<${tag}${cattrs} style="white-space:nowrap">`
+                ));
+            return `<table ${a}>${body}</table>`;
+        }
+        // Pleine largeur (défaut) : on force 100% seulement si aucune largeur n'est déjà fixée.
+        // `(?<!-)` pour ignorer `data-width`, qui n'est pas une largeur de tableau.
+        const dejaLarge = /(?<!-)\bwidth\s*=/i.test(attrs) || /style\s*=\s*"[^"]*\bwidth\s*:/i.test(attrs);
+        return `<table${dejaLarge ? attrs : `${attrs} width="100%"`}>${inner}</table>`;
+    });
 }
 
 /** Document HTML complet (en-tête + corps rempli + pied de page + CSS) prêt pour le PDF. */
