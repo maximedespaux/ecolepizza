@@ -286,15 +286,13 @@ function groupTokensGroup() {
  * `{Articles}` est listé en dernier : c'est le seul qui s'utilise aussi comme BLOC répétable,
  * {#Articles}…{/Articles}, une ligne par article vendu.
  */
-function factureTokensGroup() {
-    const byKey = {};
-    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
-    const cat = TOKEN_CATALOG.find((g) => g.group === 'Facture');
-    const tokens = (cat ? cat.tokens.map((t) => t.key) : [])
-        .map((k) => byKey[k]).filter(Boolean)
-        .map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
-    return { group: 'Facture', tokens };
+/** Un groupe de palette bâti à partir d'un groupe du TOKEN_CATALOG (jetons nommés). */
+function catalogGroup(catName, paletteName) {
+    const cat = TOKEN_CATALOG.find((g) => g.group === catName);
+    const tokens = (cat ? cat.tokens : []).map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
+    return { group: paletteName || catName, tokens };
 }
+function factureTokensGroup() { return catalogGroup('Facture'); }
 
 /**
  * Jetons disponibles À L'INTÉRIEUR du bloc {#Articles}. Groupe séparé, parce qu'ils n'ont de
@@ -340,10 +338,10 @@ async function loadCustomTokens(orgId) {
 const GROUP_ORDER = [
     'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
     'Inscription', 'Formation', 'Session', 'Lieu de formation',
-    'Organisme', 'Facture', 'Ligne de facture', 'Dates et valeurs calculées', 'Personnalisés',
+    'Organisme', 'Émetteur (identité)', 'Facture', 'Ligne de facture', 'Dates et valeurs calculées', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
-const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Ligne de facture']);
+const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Ligne de facture', 'Émetteur (identité)']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -372,6 +370,10 @@ const getTokens = async (req, res) => {
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
         groups.push(groupTokensGroup());
+        // Jetons NOMMÉS de l'organisme/émetteur ({Organisme}, {Forme juridique organisme}…) : sur
+        // une facture ils reprennent l'identité de l'entité émettrice. Distincts des « Champs
+        // documents » (field:organization.*), qui viennent de la fiche organisme.
+        groups.push(catalogGroup('Organisme', 'Émetteur (identité)'));
         groups.push(factureTokensGroup());
         groups.push(articleTokensGroup());
         // Jetons personnalisés : rangés dans le groupe de leur CATÉGORIE (migration 093).

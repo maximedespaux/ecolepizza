@@ -139,6 +139,11 @@ const TOKEN_CATALOG = [
             { key: 'NDA', label: 'N° déclaration d’activité', sample: '75330000000' },
             { key: 'Adresse organisme', label: 'Adresse', sample: '1 rue du Four, 33000 Bordeaux' },
             { key: 'Ville organisme', label: 'Ville', sample: 'Bordeaux' },
+            { key: 'Code postal organisme', label: 'Code postal', sample: '33000' },
+            { key: 'Forme juridique organisme', label: 'Forme juridique', sample: 'S.A.S.' },
+            { key: 'Capital organisme', label: 'Capital social', sample: '2000 euros' },
+            { key: 'RCS organisme', label: 'RCS + ville', sample: 'RCS Tarbes 879 955 136' },
+            { key: 'NAF organisme', label: 'Code NAF/APE', sample: '8559A' },
             { key: 'Téléphone organisme', label: 'Téléphone', sample: '05 56 00 00 00' },
             { key: 'Email organisme', label: 'E-mail', sample: 'contact@ecole-pizza.fr' },
             { key: 'IBAN', label: 'IBAN (RIB)', sample: 'FR76 3000 4000 0100 0001 2345 678' },
@@ -691,8 +696,12 @@ function resolveTokens(ctx = {}) {
         // Organisme
         Organisme: o.legal_name || '', 'Organisme court': o.short_name || '', Responsable: o.manager || '',
         'Siret organisme': o.siret || '', 'TVA organisme': o.vat_number || '', NDA: o.nda || '',
-        'Adresse organisme': orgAddress, 'Ville organisme': o.town || '',
+        'Adresse organisme': orgAddress, 'Ville organisme': o.town || '', 'Code postal organisme': o.zip_code || '',
         'Téléphone organisme': o.phone || '', 'Email organisme': o.email || '',
+        // Identité de société — portées par l'entité émettrice sur une facture (l'organisme
+        // n'a pas ces colonnes ; elles restent vides hors facture).
+        'Forme juridique organisme': o.legal_status || '', 'Capital organisme': o.capital || '',
+        'RCS organisme': o.rcs || '', 'NAF organisme': o.naf_ape || '',
         IBAN: o.iban || '', BIC: o.bic || '', Banque: o.bank_name || '',
         // Examen de certification (procès-verbal de session)
         Certification: ex.certification || '', 'Code RNCP': ex.rncp_code || '',

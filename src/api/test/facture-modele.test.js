@@ -111,8 +111,8 @@ test('les jetons de facture sont proposés dans la PALETTE de l\'éditeur', () =
     assert.match(src, /groups\.push\(articleTokensGroup\(\)\)/,
         'le groupe Ligne de facture n\'est pas ajouté à la palette');
     // Et leur place dans l'ordre des groupes, sinon ils tombent en fin de liste.
-    assert.match(src, /'Organisme', 'Facture', 'Ligne de facture'/,
-        'les groupes de facture doivent être rangés après Organisme');
+    assert.match(src, /'Facture', 'Ligne de facture'/,
+        'les groupes de facture doivent être rangés ensemble, après l\'organisme');
 });
 
 test('les jetons de ligne proposés correspondent à ceux que le bloc remplit', () => {
