@@ -231,8 +231,18 @@ const checkout = async (req, res) => {
         // 700 € carte). On ne retient que les parts valides — un moyen nommé, un montant positif.
         // Le résumé (moyen unique, ou « A + B ») sert à l'affichage et à la note ; le détail chiffré
         // part dans payment_split. La SOMME est vérifiée plus bas, une fois le total connu.
+        const estCheque = (m) => /ch[eè]que/i.test(String(m || ''));
         const parts = (Array.isArray(req.body.payments) ? req.body.payments : [])
-            .map((p) => ({ method: String(p && p.method || '').trim().slice(0, 40), amount: Number(p && p.amount) }))
+            .map((p) => {
+                const part = { method: String(p && p.method || '').trim().slice(0, 40), amount: Number(p && p.amount) };
+                // Infos du chèque (banque, numéro) : conservées pour le rapprochement et le suivi
+                // de l'encaissement. Seulement pour un chèque, et seulement si renseignées.
+                if (estCheque(part.method)) {
+                    if (p && String(p.bank || '').trim()) part.bank = String(p.bank).trim().slice(0, 120);
+                    if (p && String(p.cheque_number || '').trim()) part.cheque_number = String(p.cheque_number).trim().slice(0, 40);
+                }
+                return part;
+            })
             .filter((p) => p.method && Number.isFinite(p.amount) && p.amount > 0);
         const payMethod = parts.length
             ? parts.map((p) => p.method).join(' + ').slice(0, 30)
@@ -338,8 +348,10 @@ const checkout = async (req, res) => {
                     message: `La répartition des paiements (${somme.toFixed(2)} €) ne correspond pas au total à régler (${ttc.toFixed(2)} €).`,
                 });
             }
-            // Une seule part = paiement simple : inutile d'alourdir la facture d'un JSON.
-            if (parts.length > 1) paymentSplit = JSON.stringify(parts);
+            // On garde le détail dès qu'il y a plus d'un moyen, OU des infos de chèque à conserver
+            // (un chèque unique porte sa banque et son numéro, qui seraient sinon perdus).
+            const aDuDetail = parts.some((p) => p.bank || p.cheque_number);
+            if (parts.length > 1 || aDuDetail) paymentSplit = JSON.stringify(parts);
         }
 
         // Nom imprimé sur la facture. Priorité : nom libre saisi > entreprise > stagiaire >

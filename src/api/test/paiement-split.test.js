@@ -14,12 +14,14 @@ const DIR = path.join(__dirname, '..');
 const net = (f) => fs.readFileSync(path.join(DIR, f), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
 
-/** Charge resolvePayments (module UI ESM) dans ce contexte. */
+/** Charge resolvePayments + estCheque (module UI ESM) dans ce contexte. On prend le bloc entre
+ *  `export const estCheque` et `export default` — les deux helpers purs, sans le composant React
+ *  ni ses imports. Un scan d'accolade naïf casserait sur les blocs imbriqués du .map. */
 const resolvePayments = (() => {
     const src = fs.readFileSync(path.join(DIR, '..', 'app/ui/components/PaiementSplit.jsx'), 'utf8');
-    const début = src.indexOf('export function resolvePayments');
-    const fin = src.indexOf('\n}', début) + 2;
-    const code = src.slice(début, fin).replace('export function', 'function') + '\nmodule.exports = resolvePayments;';
+    const début = src.indexOf('export const estCheque');
+    const fin = src.indexOf('export default');
+    const code = src.slice(début, fin).replace(/export /g, '') + '\nmodule.exports = resolvePayments;';
     const m = { exports: {} };
     new Function('module', 'exports', code)(m, m.exports);
     return m.exports;
@@ -61,6 +63,44 @@ test('les lignes à zéro ne partent pas dans la répartition', () => {
     assert.deepStrictEqual(parts, [{ method: 'CB', amount: 500 }], 'une ligne à 0 € est écartée');
 });
 
+// --- Les infos du chèque --------------------------------------------------------------------
+
+test('un chèque emporte sa banque et son numéro', () => {
+    const { parts } = resolvePayments(
+        [{ method: 'Chèque', amount: '', bank: 'Crédit Agricole', cheque_number: '0004567' }], 250);
+    assert.deepStrictEqual(parts, [
+        { method: 'Chèque', amount: 250, bank: 'Crédit Agricole', cheque_number: '0004567' },
+    ], 'banque et numéro doivent accompagner le chèque');
+});
+
+test('deux chèques distincts sont admis, chacun avec ses infos', () => {
+    const { parts, valid } = resolvePayments([
+        { method: 'Chèque', amount: '100', bank: 'BNP', cheque_number: '11' },
+        { method: 'Chèque', amount: '', bank: 'LCL', cheque_number: '22' },
+    ], 300);
+    assert.ok(valid);
+    assert.strictEqual(parts.length, 2);
+    assert.strictEqual(parts[1].amount, 200, 'le second chèque prend le solde');
+    assert.strictEqual(parts[0].bank, 'BNP');
+    assert.strictEqual(parts[1].cheque_number, '22');
+});
+
+test('les infos de chèque ne s\'attachent pas à un autre moyen', () => {
+    // Une banque saisie par erreur sur une ligne CB ne doit pas être conservée.
+    const { parts } = resolvePayments([{ method: 'CB', amount: '', bank: 'X', cheque_number: 'Y' }], 80);
+    assert.deepStrictEqual(parts, [{ method: 'CB', amount: 80 }]);
+});
+
+test('un chèque unique fait quand même stocker le détail', () => {
+    // Sinon banque et numéro seraient perdus. La condition couvre « plus d'un moyen » OU « du
+    // détail à conserver ».
+    const src = net('controllers/sale.controller.js');
+    assert.match(src, /const aDuDetail = parts\.some\(\(p\) => p\.bank \|\| p\.cheque_number\)/,
+        'le détail d\'un chèque unique n\'est pas détecté');
+    // Et côté saisie serveur, les champs ne sont lus que pour un chèque.
+    assert.match(src, /if \(estCheque\(part\.method\)\)/, 'les infos de chèque ne sont pas restreintes au chèque');
+});
+
 // --- La validation côté serveur -------------------------------------------------------------
 
 test('le serveur revérifie que la somme des paiements tombe sur le TTC', () => {
@@ -77,7 +117,7 @@ test('le détail n\'est stocké qu\'à partir de deux moyens, et si la colonne e
     // Un paiement simple n'a pas besoin d'un JSON ; et sans la migration 116, la vente sort comme
     // avant plutôt que d'échouer.
     const src = net('controllers/sale.controller.js');
-    assert.match(src, /if \(parts\.length > 1\) paymentSplit = JSON\.stringify\(parts\)/, 'le détail multi-moyens n\'est pas conservé');
+    assert.match(src, /if \(parts\.length > 1 \|\| aDuDetail\) paymentSplit = JSON\.stringify\(parts\)/, 'le détail multi-moyens n\'est pas conservé');
     assert.match(src, /hasColumn\(conn, 'invoice', 'payment_split'\)/, 'pas de garde de colonne');
     assert.match(src, /if \(hasInvSplit\) \{ iCol\.push\('payment_split'\)/, 'payment_split n\'est pas conditionné à la colonne');
 });
