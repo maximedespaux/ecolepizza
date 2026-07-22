@@ -56,6 +56,7 @@ function Ventes() {
   const [emitters, setEmitters] = useState([]);
   const [emitterId, setEmitterId] = useState("");
   const [discount, setDiscount] = useState(""); // % remise globale
+  const [dueDate, setDueDate] = useState(""); // échéance de règlement (vide = à réception)
   // Répartition du règlement : une ligne par moyen, la dernière prenant le solde. Une seule
   // ligne = paiement simple. Le moyen se fixe quand les options chargent.
   const [payments, setPayments] = useState([{ method: "", amount: "" }]);
@@ -189,12 +190,13 @@ function Ventes() {
         ...buyerFields,
         billing_profile_id: emitterId || null,
         discount: Number(discount) || 0,
+        due_date: dueDate || null,
         payment_method: parts[0]?.method || null,   // rétro-compat : moyen principal
         payments: parts,
         status: paid ? "PAYEE" : "IMPAYEE",
         lines: cart.map((l) => ({ item_id: l.item_id, quantity: l.quantity, discount_pct: Number(l.disc) || 0 })),
       });
-      setCart([]); switchBuyerType("stagiaire"); setDiscount("");
+      setCart([]); switchBuyerType("stagiaire"); setDiscount(""); setDueDate("");
       setPayments([{ method: payOptions[0] || "", amount: "" }]);
       setLastInvoice({ id: r.invoice_id, number: r.invoice_number });
       setStatus({ type: "success", message: `Vente validée — facture ${r.invoice_number} (${euro(r.total_ttc)} TTC) pour ${r.buyer}.` });
@@ -377,9 +379,14 @@ function Ventes() {
               )}
 
               <PaiementSplit options={payOptions} total={totals.ttc} rows={payments} onChange={setPayments} />
-              <label className="field" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} /> Payé à l'encaissement
-              </label>
+              <div className="row2">
+                <div className="field"><label>Échéance de règlement</label>
+                  <input className="inp" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                </div>
+                <label className="field" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 22 }}>
+                  <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} /> Payé à l'encaissement
+                </label>
+              </div>
               <div className="divider" />
               {cart.length === 0 ? (
                 <EmptyState icon="package">Panier vide. Ajoutez des produits.</EmptyState>

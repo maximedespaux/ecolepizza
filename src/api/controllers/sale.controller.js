@@ -384,10 +384,13 @@ const checkout = async (req, res) => {
         // quatre variantes de requête : chaque combinaison oubliée serait un chemin non testé.
         const hasInvLearner = await hasColumn(conn, 'invoice', 'learner_id');
         const hasInvSplit = await hasColumn(conn, 'invoice', 'payment_split');
+        // Échéance : date de règlement (YYYY-MM-DD) saisie en caisse, ou rien. `due_date` est une
+        // colonne de base — on l'écrit toujours ; NULL = paiement à réception, comportement actuel.
+        const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.due_date || '')) ? req.body.due_date : null;
         const iCol = ['id', 'organization_id', 'company_id', 'buyer_name', 'description', 'type',
-            'number', 'amount_net', 'tva_exoneree', 'payment_method', 'status'];
+            'number', 'amount_net', 'tva_exoneree', 'payment_method', 'status', 'due_date'];
         const iVal = [invoiceId, orgId, company_id || null, name, description, 'FACTURE',
-            number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status];
+            number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status, dueDate];
         if (hasInvLearner) { iCol.push('learner_id'); iVal.push(learner_id || null); }
         if (hasInvEmitter) { iCol.push('billing_profile_id'); iVal.push(emetteur ? emetteur.id : null); }
         if (hasInvSplit) { iCol.push('payment_split'); iVal.push(paymentSplit); }

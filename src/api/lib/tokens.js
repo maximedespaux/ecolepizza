@@ -165,6 +165,9 @@ const TOKEN_CATALOG = [
             { key: 'Total TVA', label: 'Total TVA', sample: '3,56 €' },
             { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21,38 €' },
             { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20,00 % sur 17,82 € : 3,56 €' },
+            { key: 'Règlement', label: 'Moyen(s) de paiement', sample: 'Espèces + CB' },
+            { key: 'Détail règlement', label: 'Moyens et montants réglés', sample: 'Espèces : 300,00 € · CB : 700,00 €' },
+            { key: 'Règlements', label: 'Tableau des règlements', sample: '(tableau moyen / montant)' },
             { key: 'Articles', label: 'Tableau des articles', sample: '(tableau désignation / qté / prix / total)' },
         ],
     },
@@ -216,7 +219,7 @@ const TOKEN_CATALOG = [
 ];
 
 // Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles']);
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles', 'Règlements']);
 
 // Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
 const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -579,10 +582,43 @@ function invoiceTokens(inv = {}) {
         'Total TVA': inv.totalTva || '',
         'Total TTC': inv.totalTtc || '',
         'Détail TVA': inv.detailTva || '',
+        // Règlement : le moyen (résumé) et le détail moyen+montant. {Règlements} en fait un tableau.
+        'Règlement': inv.reglement || '',
+        'Détail règlement': inv.detailReglement || '',
+        'Règlements': paiementsTable(inv.payments),
         // Tableau complet, comme {Résultats}. Le bloc {#Articles}…{/Articles} reste possible
         // pour qui veut choisir ses colonnes ; ce jeton-ci est le chemin normal.
         'Articles': articlesTable(inv.articles),
     };
+}
+
+/**
+ * Jetons d'UNE ligne de règlement, dans un bloc {#Paiements}…{/Paiements}.
+ * Le montant réglé par ce moyen, plus banque et numéro pour un chèque.
+ */
+function paiementRowTokens(p, i) {
+    const eur = (n) => (n == null || n === '' ? '' : `${Number(n).toFixed(2)} €`);
+    return {
+        'N°': String(i + 1),
+        'Moyen': p.method || '',
+        'Montant réglé': eur(p.amount),
+        'Banque': p.bank || '',
+        'N° chèque': p.cheque_number || '',
+    };
+}
+
+/** Petit tableau des règlements (moyen | montant), colonne chèque si un chèque est détaillé. */
+function paiementsTable(list) {
+    const rows = Array.isArray(list) ? list : [];
+    if (!rows.length) return '';
+    const cheque = rows.some((p) => p.cheque_number || p.bank);
+    const head = `<tr><th>Moyen</th>${cheque ? '<th>Banque / n° chèque</th>' : ''}<th>Montant</th></tr>`;
+    const body = rows.map((p, i) => {
+        const c = paiementRowTokens(p, i);
+        const ref = [c['Banque'], c['N° chèque'] && `n° ${c['N° chèque']}`].filter(Boolean).join(' · ');
+        return `<tr><td>${escCell(c['Moyen'])}</td>${cheque ? `<td>${escCell(ref)}</td>` : ''}<td style="text-align:right">${escCell(c['Montant réglé'])}</td></tr>`;
+    }).join('');
+    return `<table width="100%">${head}${body}</table>`;
 }
 
 function resolveTokens(ctx = {}) {
@@ -734,4 +770,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };

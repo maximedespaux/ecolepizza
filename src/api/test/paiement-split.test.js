@@ -134,3 +134,50 @@ test('la migration 116 existe avec son retour arrière', () => {
         /ADD COLUMN IF NOT EXISTS payment_split/, 'colonne absente');
     assert.ok(fs.existsSync(path.join(d, '116_revert_invoice_payment_split.sql')), 'revert manquant');
 });
+
+// --- Jetons de règlement (modèle de facture) ------------------------------------------------
+
+const { invoiceTokens, paiementRowTokens } = require('../lib/tokens.js');
+
+test('les jetons {Règlement} et {Détail règlement} résument le paiement', () => {
+    const v = invoiceTokens({ number: 'F1',
+        reglement: 'Espèces + CB', detailReglement: 'Espèces : 300,00 € · CB : 700,00 €',
+        payments: [{ method: 'Espèces', amount: 300 }, { method: 'CB', amount: 700 }] });
+    assert.strictEqual(v['Règlement'], 'Espèces + CB', 'le résumé des moyens manque');
+    assert.match(v['Détail règlement'], /Espèces : 300,00 € · CB : 700,00 €/, 'le détail moyen+montant manque');
+    assert.match(v['Règlements'], /<table[\s\S]*Espèces[\s\S]*CB/, '{Règlements} n\'est pas un tableau des moyens');
+});
+
+test('une ligne de règlement porte moyen, montant, et infos chèque', () => {
+    const c = paiementRowTokens({ method: 'Chèque', amount: 150, bank: 'BNP', cheque_number: '42' }, 0);
+    assert.strictEqual(c['Moyen'], 'Chèque');
+    assert.strictEqual(c['Montant réglé'], '150.00 €');
+    assert.strictEqual(c['Banque'], 'BNP');
+    assert.strictEqual(c['N° chèque'], '42');
+});
+
+test('le bloc {#Paiements} produit une ligne par moyen, avec montant', () => {
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const modele = '<h1>x</h1><table>{#Paiements}<tr><td>{Moyen}</td><td>{Montant réglé}</td></tr>{/Paiements}</table>';
+    const ctx = { org: {}, payments: [{ method: 'Espèces', amount: 300 }, { method: 'CB', amount: 700 }], invoice: { number: 'F1' } };
+    const out = renderTemplateHtml(modele, ctx, { title: 'F', letterhead: false }).replace(/<[^>]+>/g, ' ');
+    assert.match(out, /Espèces\s+300\.00 €/, 'premier moyen + montant absent');
+    assert.match(out, /CB\s+700\.00 €/, 'second moyen + montant absent');
+});
+
+test('la vente en caisse stocke l\'échéance de règlement', () => {
+    // due_date est une colonne de base : toujours écrite, NULL = à réception.
+    const src = fs.readFileSync(path.join(DIR, 'controllers/sale.controller.js'), 'utf8');
+    assert.match(src, /\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(String\(req\.body\.due_date/, 'l\'échéance n\'est pas validée/lue');
+    assert.match(src, /iCol = \[[^\]]*'due_date'/, 'due_date n\'est pas dans l\'insert de facture');
+});
+
+test('{Règlement}, {Détail règlement}, {Règlements} sont dans la palette', () => {
+    const src = fs.readFileSync(path.join(DIR, 'lib/tokens.js'), 'utf8');
+    for (const k of ['Règlement', 'Détail règlement', 'Règlements']) {
+        assert.match(src, new RegExp(`key: '${k}'`), `${k} absent du catalogue`);
+    }
+    const ctrl = fs.readFileSync(path.join(DIR, 'controllers/template.controller.js'), 'utf8');
+    assert.match(ctrl, /group: 'Ligne de règlement'/, 'le groupe de règlement n\'est pas dans la palette');
+    assert.match(ctrl, /groups\.push\(paiementTokensGroup\(\)\)/, 'le groupe de règlement n\'est pas poussé');
+});

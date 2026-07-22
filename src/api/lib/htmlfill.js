@@ -3,7 +3,7 @@
 // (<span data-token="Clé">…</span>) produite par l'éditeur, soit en texte brut
 // {Clé} (modèles convertis depuis les anciens fichiers Word). Les deux formes
 // sont remplacées par la valeur réelle issue du catalogue partagé.
-const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens } = require('./tokens.js');
+const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens, paiementRowTokens } = require('./tokens.js');
 const { resolveCustomTokens } = require('./customtokens.js');
 
 function escapeHtml(s) {
@@ -55,6 +55,10 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     // Lignes d'une facture : {#Articles}…{/Articles}. Même mécanisme, autre liste.
     if (ctx && Array.isArray(ctx.articles)) {
         out = expandListBlocks(out, 'Articles', ctx.articles, articleRowTokens);
+    }
+    // Règlements : {#Paiements}…{/Paiements} — un moyen par ligne, avec son montant.
+    if (ctx && Array.isArray(ctx.payments)) {
+        out = expandListBlocks(out, 'Paiements', ctx.payments, paiementRowTokens);
     }
 
     const render = (key) => (RAW_TOKENS.has(key) ? values[key] : escapeHtml(values[key]));

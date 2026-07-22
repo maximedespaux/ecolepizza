@@ -5,7 +5,7 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS, SIGNER_ROLES, stepSigners } = require('../lib/documents.js');
-const { articlesTable, TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
+const { articlesTable, paiementsTable, TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
 const { decrypt } = require('../lib/crypto.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
 const { getEnabledFields } = require('../lib/conditions.js');
@@ -316,6 +316,20 @@ function articleTokensGroup() {
     };
 }
 
+/** Jetons disponibles DANS le bloc {#Paiements} — un moyen de règlement par ligne, son montant. */
+function paiementTokensGroup() {
+    const t = (key, label, sample) => ({ key, label, sample });
+    return {
+        group: 'Ligne de règlement',
+        tokens: [
+            t('Moyen', 'Moyen de paiement', 'Espèces'),
+            t('Montant réglé', 'Montant réglé par ce moyen', '300,00 €'),
+            t('Banque', 'Banque (chèque)', 'Crédit Agricole'),
+            t('N° chèque', 'Numéro de chèque', '0004567'),
+        ],
+    };
+}
+
 // Jetons personnalisés de l'organisme (table custom_token). Résilient si migration absente.
 async function loadCustomTokens(orgId) {
     // `category` (migration 093) est optionnel : on réessaie sans si la colonne manque.
@@ -338,10 +352,10 @@ async function loadCustomTokens(orgId) {
 const GROUP_ORDER = [
     'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
     'Inscription', 'Formation', 'Session', 'Lieu de formation',
-    'Organisme', 'Émetteur (identité)', 'Facture', 'Ligne de facture', 'Dates et valeurs calculées', 'Personnalisés',
+    'Organisme', 'Émetteur (identité)', 'Facture', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
-const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Ligne de facture', 'Émetteur (identité)']);
+const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -376,6 +390,7 @@ const getTokens = async (req, res) => {
         groups.push(catalogGroup('Organisme', 'Émetteur (identité)'));
         groups.push(factureTokensGroup());
         groups.push(articleTokensGroup());
+        groups.push(paiementTokensGroup());
         // Jetons personnalisés : rangés dans le groupe de leur CATÉGORIE (migration 093).
         // Sans catégorie → groupe « Personnalisés ». On fusionne dans un groupe existant
         // du même nom (ex. « Groupe entreprise »), sinon on le crée.
@@ -426,8 +441,15 @@ async function sampleTokenValues(orgId) {
     // lieu d'une grille, et on ne pourrait pas juger de sa mise en page — tout l'objet d'un
     // aperçu. On rend donc le vrai tableau, sur deux articles à des taux différents.
     m['Articles'] = articlesTable([
-        { name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
-        { name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
+        { reference: 'P0008', name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
+        { reference: 'P0014', name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
+    ]);
+    // Règlement d'exemple : deux moyens, pour juger l'affichage moyen + montant.
+    m['Règlement'] = 'Espèces + CB';
+    m['Détail règlement'] = 'Espèces : 20,00 € · CB : 25,82 €';
+    m['Règlements'] = paiementsTable([
+        { method: 'Espèces', amount: 20 },
+        { method: 'CB', amount: 25.82 },
     ]);
     try { for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || ''; }
     catch { /* champs indisponibles : on garde les jetons intégrés */ }

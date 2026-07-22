@@ -147,6 +147,10 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         taxRate: inv.tax_rate ?? null, // NULL = facture antérieure à la 108 → 20 % comme avant
         lines,
         lineName: inv.description || inv.program_title || 'Prestation de formation',
+        // Règlement : le moyen (résumé) et sa ventilation JSON s'il y en a une (paiement mixte,
+        // ou chèque avec banque/numéro). `payment_split` peut ne pas exister (migration 116).
+        paymentMethod: inv.payment_method || null,
+        paymentSplit: inv.payment_split || null,
         seller: {
             name: o.legal_name || 'Organisme',
             siret: o.siret || null,
@@ -559,6 +563,22 @@ function invoiceCtx(org, data) {
         fields[`organization.${k}`] = v;
     }
 
+    // RÈGLEMENT. La ventilation JSON s'il y en a une (paiement mixte, chèque détaillé) ; sinon,
+    // un seul moyen couvrant tout le TTC. Chaque part porte son montant, sa banque et son numéro
+    // de chèque le cas échéant — de quoi les afficher ligne par ligne dans le modèle.
+    let payments = [];
+    if (data.paymentSplit) {
+        try { payments = JSON.parse(data.paymentSplit); } catch { payments = []; }
+    }
+    if (!payments.length && data.paymentMethod) {
+        payments = [{ method: data.paymentMethod, amount: v.grand }];
+    }
+    const reglement = payments.map((p) => p.method).filter(Boolean).join(' + ')
+        || data.paymentMethod || '';
+    const detailReglement = payments
+        .map((p) => `${p.method} : ${eur(p.amount)}${p.cheque_number ? ` (chèque n° ${p.cheque_number}${p.bank ? `, ${p.bank}` : ''})` : ''}`)
+        .join(' · ');
+
     return {
         org,
         fields,
@@ -566,6 +586,7 @@ function invoiceCtx(org, data) {
         learner: estEntreprise ? {} : { first_name: data.buyer.name, address: a.line, zip_code: a.zip, town: a.city },
         formations: [],
         articles: data.lines || [],
+        payments, // bloc {#Paiements}…{/Paiements}
         invoice: {
             number: data.number,
             typeLabel: data.typeLabel,
@@ -578,6 +599,8 @@ function invoiceCtx(org, data) {
             totalTva: eur(v.taxe),
             totalTtc: eur(v.grand),
             detailTva: v.groupes.map((g) => `${g.taux.toFixed(2)} % sur ${eur(g.base)} : ${eur(g.taxe)}`).join(' · '),
+            reglement,           // {Règlement} : les moyens, ex. « Espèces + CB »
+            detailReglement,     // {Détail règlement} : moyens + montants, ex. « Espèces : 300 € · CB : 700 € »
             // Le jeton {Articles} en fait un tableau complet (cf. articlesTable).
             articles: data.lines || [],
         },
