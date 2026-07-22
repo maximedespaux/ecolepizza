@@ -159,10 +159,13 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
             address: { line: o.address, zip: o.zip_code, city: o.town },
         },
         // L'identité complète du vendeur retenu — organisme ou émettrice —, pour que le MODÈLE
-        // rende ses jetons `field:organization.*` avec ces valeurs-là, et pour lire le modèle de
-        // facture propre à l'entité (default_template_slug).
+        // rende ses jetons `field:organization.*` avec ces valeurs-là.
         emitter: o,
         buyer,
+        // L'acheteur est-il une ENTREPRISE ? Signal fiable = la vente est rattachée à une company
+        // (le SIRET peut manquer sur une société ; company_id, lui, tranche). Sert à choisir le
+        // modèle de facture selon son destinataire (buyer_audience).
+        buyerIsCompany: !!inv.company_id,
     };
 }
 
@@ -462,6 +465,28 @@ const getInvoiceXml = async (req, res) => {
  *
  * Leve une erreur portant `.motif` — l'appelant en fait un 422 lisible plutot qu'un 500 muet.
  */
+/**
+ * Choisit le modèle FACTURE selon le DESTINATAIRE (l'acheteur), parmi les modèles FACTURE actifs.
+ *
+ * Ordre : (1) un modèle dont le destinataire correspond exactement à l'acheteur — entreprise ou
+ * particulier ; (2) à défaut, un modèle « tous » (buyer_audience vide) ; (3) à défaut, l'ancien
+ * réglage global (slug de shop_settings) ; (4) à défaut, l'unique modèle FACTURE. Renvoie null si
+ * rien ne tranche (plusieurs modèles, aucun « tous », aucun réglage) — l'appelant explique alors.
+ *
+ * Pur (aucune I/O) pour être testable directement, indépendamment de la base.
+ */
+function pickInvoiceTemplate(factures, buyerIsCompany, fallbackSlug) {
+    const cible = buyerIsCompany ? 'company' : 'individual';
+    const dest = (x) => {
+        const a = String(x.buyer_audience || '').toLowerCase();
+        return (a === 'company' || a === 'individual') ? a : 'all';
+    };
+    return factures.find((x) => dest(x) === cible)                     // 1) destiné à cet acheteur
+        || factures.find((x) => dest(x) === 'all')                     // 2) « tous »
+        || (fallbackSlug ? factures.find((x) => x.slug === fallbackSlug) : null) // 3) ancien réglage
+        || (factures.length === 1 ? factures[0] : null);               // 4) l'unique modèle FACTURE
+}
+
 async function buildInvoicePdf(conn, orgId, data, xml) {
     const refus = (motif) => Object.assign(new Error(motif), { motif });
 
@@ -472,12 +497,13 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
             + 'sans lui, aucune facture ne peut etre editee.');
     }
 
-    // LE CHOIX EST EXPLICITE, pas deduit. On avait d'abord retenu de trouver le modele par son
-    // seul type, en departageant d'eventuelles variantes par leurs conditions. Ca ne tient pas
-    // des qu'un organisme a plusieurs modeles FACTURE qui ne se distinguent PAS par une
-    // condition — une facture de formation et une facture de boutique s'adressent au meme
-    // client dans le meme cas. Le choix serait alors decide par un `sort_order` que personne ne
-    // pense a regarder, et une facture partirait avec la mauvaise presentation.
+    // LE MODÈLE SUIT L'ACHETEUR. Une facture à une ENTREPRISE et une facture à un PARTICULIER
+    // n'ont pas la même forme (SIRET acheteur, représentant, mentions OPCO d'un côté, rien de
+    // l'autre). Chaque modèle FACTURE porte donc un « destinataire » (buyer_audience) ; on prend
+    // celui qui correspond à l'acheteur, sinon un modèle « tous », sinon l'unique. C'est plus sûr
+    // qu'un slug figé sur l'émettrice : le bon modèle se choisit tout seul, sans réglage à tenir.
+    // Ancien réglage global (shop_settings) : conservé comme DERNIER repli, pour un organisme qui
+    // n'a pas (encore) renseigné de destinataire sur ses modèles.
     let slug = null;
     try {
         const [[st]] = await conn.query(
@@ -487,21 +513,13 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
         if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
     }
 
-    // L'ÉMETTRICE CHOISIT SON MODÈLE en priorité : chaque entité a sa présentation. Son
-    // default_template_slug l'emporte sur le réglage global ; à défaut, on retombe sur le
-    // réglage, puis sur l'unique modèle FACTURE s'il n'y en a qu'un.
-    const slugEmetteur = data.emitter && data.emitter.default_template_slug;
-    const slugChoisi = slugEmetteur || slug;
-    const step = slugChoisi
-        ? factures.find((x) => x.slug === slugChoisi)
-        : (factures.length === 1 ? factures[0] : null);
+    const step = pickInvoiceTemplate(factures, data.buyerIsCompany, slug);
 
     if (!step) {
-        throw refus(slug
-            ? `Le modele designe comme facture (« ${slug} ») n'existe plus ou n'est plus de type FACTURE. `
-              + 'Choisissez-en un autre dans Ventes & Inventaire -> Reglages de facturation.'
-            : `${factures.length} modeles de type FACTURE existent. Designez celui qui doit servir `
-              + 'de facture dans Ventes & Inventaire -> Reglages de facturation.');
+        throw refus(`Plusieurs modèles de type FACTURE existent, sans « destinataire » qui les `
+            + `départage pour un acheteur ${data.buyerIsCompany ? 'entreprise' : 'particulier'}. `
+            + 'Ouvrez Modèles de documents et indiquez, sur au moins un modèle FACTURE, s\'il vise '
+            + 'les particuliers, les entreprises, ou tous.');
     }
 
     const content = await getTemplateContent(orgId, step.slug);
@@ -641,4 +659,4 @@ const getInvoiceFacturX = async (req, res) => {
     }
 };
 
-module.exports = { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getInvoiceXml, getInvoiceFacturX };
+module.exports = { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getInvoiceXml, getInvoiceFacturX, pickInvoiceTemplate };

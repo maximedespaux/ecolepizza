@@ -272,8 +272,10 @@ test('un seul modèle FACTURE se passe de désignation', () => {
     const inv = net(lire('controllers/invoice.controller.js'));
     assert.match(inv, /factures\.length === 1 \? factures\[0\] : null/,
         'le cas du modèle unique doit être traité sans réglage');
-    assert.match(inv, /Designez celui qui doit servir/,
-        'à partir de deux modèles, le refus doit demander un choix explicite');
+    // À partir de deux modèles sans destinataire qui les départage, le refus demande d'indiquer
+    // le destinataire (particulier / entreprise / tous), pas un choix figé.
+    assert.match(inv, /les particuliers, les entreprises, ou tous/,
+        'le refus doit demander de renseigner le destinataire d\'au moins un modèle');
 });
 
 test('sans modèle de type FACTURE, la facture est refusée avec un motif', () => {

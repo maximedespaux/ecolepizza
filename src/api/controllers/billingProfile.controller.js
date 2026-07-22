@@ -22,13 +22,13 @@ const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code ===
 const CHAMPS = [
     'label', 'legal_name', 'legal_status', 'capital', 'rcs', 'siret', 'vat_number', 'naf_ape',
     'nda', 'address', 'zip_code', 'town', 'country', 'phone', 'email', 'iban', 'bic', 'bank_name',
-    'logo_image', 'signature_image', 'default_template_slug',
+    'logo_image', 'signature_image',
     'number_format', 'tva_applies', 'payment_methods',
 ];
 
 const COLS = `id, label, legal_name, legal_status, capital, rcs, siret, vat_number, naf_ape,
     nda, address, zip_code, town, country, phone, email, iban, bic, bank_name,
-    invoice_prefix, next_number, default_template_slug, is_default,
+    invoice_prefix, next_number, is_default,
     number_format, tva_applies, payment_methods, is_organization`;
 
 /** L'INSERT qui recopie l'organisme dans une entité. `asOrg` la marque comme l'entité organisme

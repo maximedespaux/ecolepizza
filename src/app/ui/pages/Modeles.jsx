@@ -482,6 +482,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
       ...(step.company_sign ? ["ENTREPRISE"] : []),
     ],
     company_level: !!step.company_level,
+    buyer_audience: step.buyer_audience || "", // "" = tous, "individual", "company" (modèles FACTURE)
     sign_formateur: !!(step.config && step.config.show_formateurs),
     sign_intervenant: !!(step.config && step.config.show_intervenants),
     sign_organization: !!(step.config && step.config.show_organization),
@@ -516,6 +517,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         await saveTemplate(slug, {
           label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
           signers: form.signers, company_level: form.company_level,
+          buyer_audience: form.buyer_audience || null,
           active: form.active, applies_when,
         });
       }
@@ -551,6 +553,20 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
             <div className="field"><label>Type de document</label>
               <input className="inp" list="doctypes" value={form.doc_type} onChange={set("doc_type")} placeholder="DEVIS, CONTRAT…" />
               <datalist id="doctypes">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
+            </div>
+          )}
+          {/* Destinataire : uniquement pour les factures. Une facture à une ENTREPRISE et une à un
+              PARTICULIER n'ont pas la même forme ; l'app choisit le bon modèle selon l'acheteur. */}
+          {!isEmarg && ["FACTURE", "ACOMPTE", "AVOIR"].includes(String(form.doc_type || "").toUpperCase()) && (
+            <div className="field"><label>Destinataire de cette facture</label>
+              <select className="inp" value={form.buyer_audience} onChange={set("buyer_audience")}>
+                <option value="">Tous les acheteurs</option>
+                <option value="individual">Particuliers / stagiaires</option>
+                <option value="company">Entreprises</option>
+              </select>
+              <p className="hint" style={{ margin: "4px 0 0", fontSize: 12 }}>
+                À la vente, l'app prend le modèle qui correspond à l'acheteur ; sinon un modèle « Tous ».
+              </p>
             </div>
           )}
 

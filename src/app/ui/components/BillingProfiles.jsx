@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import Card from "./Card.jsx";
 import {
-  getEmitters, createEmitter, updateEmitter, setDefaultEmitter, deleteEmitter, getTemplates,
+  getEmitters, createEmitter, updateEmitter, setDefaultEmitter, deleteEmitter,
 } from "../api/apiClient.js";
 
 /**
@@ -20,7 +20,7 @@ import {
 const VIDE = {
   label: "", legal_name: "", legal_status: "", capital: "", rcs: "", siret: "", vat_number: "",
   naf_ape: "", nda: "", address: "", zip_code: "", town: "", email: "", phone: "",
-  iban: "", bic: "", bank_name: "", default_template_slug: "",
+  iban: "", bic: "", bank_name: "",
   number_format: "", tva_applies: 1, payment_methods: "", next_number: 1,
 };
 
@@ -101,7 +101,7 @@ const JETONS_NUMERO = [
   ["{DD}", "Jour"],
 ];
 
-function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
+function EmitterForm({ initial, onCancel, onSave, saving }) {
   const [form, setForm] = useState(() => ({ ...VIDE, ...initial }));
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const formatOk = !form.number_format || /\{SEQ(?::\d+)?\}/.test(form.number_format);
@@ -169,13 +169,6 @@ function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
             <b> {"{SEQ}"} est obligatoire</b> — c'est le numéro qui change à chaque facture.
           </p>
         </div>
-        <div className="field" style={{ gridColumn: "1 / -1" }}>
-          <label>Modèle de facture propre à cette entité</label>
-          <select className="inp" value={form.default_template_slug || ""} onChange={(e) => set("default_template_slug", e.target.value)}>
-            <option value="">— Le modèle de facture par défaut —</option>
-            {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.slug}</option>)}
-          </select>
-        </div>
         <label className="field" style={{ gridColumn: "1 / -1", display: "flex", gap: 8, alignItems: "center" }}>
           <input type="checkbox" checked={!!form.tva_applies} onChange={(e) => set("tva_applies", e.target.checked ? 1 : 0)} />
           Appliquer la TVA (décochez pour une facturation exonérée)
@@ -198,18 +191,12 @@ function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
 
 export default function BillingProfiles({ onError }) {
   const [rows, setRows] = useState([]);
-  const [modeles, setModeles] = useState([]);
   const [editing, setEditing] = useState(null); // objet en cours d'édition, ou "new", ou null
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
 
   const load = () => getEmitters().then((r) => setRows(r.data || [])).catch((e) => onError?.(e.message));
-  useEffect(() => {
-    load();
-    getTemplates()
-      .then((r) => setModeles((r.data || []).filter((m) => String(m.doc_type || "").toUpperCase() === "FACTURE")))
-      .catch(() => {});
-  }, []);
+  useEffect(() => { load(); }, []);
 
   async function save(form) {
     setSaving(true); setMsg(null);
@@ -262,7 +249,6 @@ export default function BillingProfiles({ onError }) {
       {editing ? (
         <EmitterForm
           initial={editing === "new" ? {} : editing}
-          modeles={modeles}
           saving={saving}
           onCancel={() => setEditing(null)}
           onSave={save}

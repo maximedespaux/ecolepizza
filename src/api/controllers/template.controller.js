@@ -21,8 +21,11 @@ async function loadRows(organizationId) {
         `SELECT ${META_COLS}${extra}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
          FROM document_template WHERE organization_id = ?`;
-    // Colonnes optionnelles (migrations 077 / 086 / 087 / 088) : on retombe en cascade si absentes.
-    for (const extra of [', company_level, company_sign, signers', ', company_level, company_sign', ', company_level', '']) {
+    // Colonnes optionnelles (migrations 077 / 086 / 087 / 088 / 119) : on retombe en cascade si absentes.
+    for (const extra of [
+        ', company_level, company_sign, signers, buyer_audience',
+        ', company_level, company_sign, signers',
+        ', company_level, company_sign', ', company_level', '']) {
         try { const [rows] = await db.promise().query(sel(extra), [organizationId]); return rows; }
         catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; }
     }
@@ -113,7 +116,7 @@ async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
     // sans elles plutôt que d'échouer.
-    const OPTIONAL = ['layout', 'company_level', 'company_sign', 'signers'];
+    const OPTIONAL = ['layout', 'company_level', 'company_sign', 'signers', 'buyer_audience'];
     const run = async (f) => {
         const keys = Object.keys(f);
         if (ex.length) {
@@ -169,6 +172,11 @@ const saveTemplate = async (req, res) => {
     if (b.active !== undefined) fields.active = b.active ? 1 : 0;
     if (b.company_level !== undefined) fields.company_level = b.company_level ? 1 : 0;
     if (b.company_sign !== undefined) fields.company_sign = b.company_sign ? 1 : 0;
+    // Destinataire d'un modèle de facture : 'individual' | 'company' | null (tous). Migration 119.
+    if (b.buyer_audience !== undefined) {
+        const a = String(b.buyer_audience || '').toLowerCase();
+        fields.buyer_audience = (a === 'individual' || a === 'company') ? a : null;
+    }
     // Corps construit dans l'éditeur : passe l'étape en mode « builder ».
     if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }
@@ -718,6 +726,7 @@ const duplicateTemplate = async (req, res) => {
             stagiaire_sign: meta.stagiaire_sign ? 1 : 0,
             company_level: meta.company_level ? 1 : 0,
             company_sign: meta.company_sign ? 1 : 0,
+            buyer_audience: meta.buyer_audience || null,
             signers: JSON.stringify(stepSigners(meta)),
             applies_when: meta.applies_when && Object.keys(meta.applies_when).length ? JSON.stringify(meta.applies_when) : null,
             active: 1,

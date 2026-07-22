@@ -104,11 +104,14 @@ test('le XML et le PDF prennent la MÊME identité — celle de l\'émettrice', 
     assert.match(src, /invoiceCtx\(identite, data\)/, 'le contexte de rendu n\'utilise pas l\'identité résolue');
 });
 
-test('l\'émettrice choisit son modèle de facture en priorité', () => {
+test('le modèle de facture suit le DESTINATAIRE, plus l\'émettrice', () => {
+    // Le modèle attaché à l'émettrice (default_template_slug) a été retiré : ce qui fait varier
+    // une facture, c'est QUI achète, pas sous quelle identité on émet. La sélection passe donc
+    // par pickInvoiceTemplate(factures, data.buyerIsCompany, …).
     const src = net('controllers/invoice.controller.js');
-    assert.match(src, /const slugEmetteur = data\.emitter && data\.emitter\.default_template_slug/,
-        'le modèle propre à l\'émettrice n\'est pas pris en compte');
-    assert.match(src, /const slugChoisi = slugEmetteur \|\| slug/, 'le modèle de l\'émettrice ne prime pas sur le réglage');
+    assert.doesNotMatch(src, /default_template_slug/, 'le modèle propre à l\'émettrice doit avoir disparu');
+    assert.match(src, /pickInvoiceTemplate\(factures, data\.buyerIsCompany/,
+        'le modèle n\'est pas choisi selon le destinataire de la facture');
 });
 
 // --- La numérotation est routée par l'émettrice dans les deux flux ---------------------------
