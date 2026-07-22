@@ -8,8 +8,8 @@ const { logAudit } = require('../lib/audit.js');
  * Voir migration 113 pour le POURQUOI. Ici, la règle qui compte : une entité émettrice est une
  * identité RÉELLE et COMPLÈTE, jamais une simple étiquette de nom. Le XML Factur-X porte le nom,
  * le SIRET, la TVA et l'adresse du vendeur ; ils basculent ensemble. Le code refuse donc une
- * entité sans raison sociale, et garde chaque préfixe de numérotation unique dans l'organisme —
- * deux séquences au même préfixe finiraient par produire le même numéro de facture.
+ * entité sans raison sociale. Le préfixe de numéro n'est plus un champ à part (115) : il vit dans
+ * le gabarit ; l'unicité des numéros repose sur uq_invoice_number, sur le numéro lui-même.
  *
  * Fonctionnement dégradé : si la migration 113 n'est pas jouée, la table n'existe pas. Les
  * lectures renvoient une liste vide (l'organisme reste l'unique émetteur), les écritures
@@ -18,17 +18,13 @@ const { logAudit } = require('../lib/audit.js');
 
 const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 
-/** Colonnes modifiables par l'utilisateur (le compteur et l'id n'en sont pas). */
+/** Colonnes modifiables par l'utilisateur (le compteur, l'id et le préfixe interne n'en sont pas). */
 const CHAMPS = [
     'label', 'legal_name', 'legal_status', 'capital', 'rcs', 'siret', 'vat_number', 'naf_ape',
     'nda', 'address', 'zip_code', 'town', 'country', 'phone', 'email', 'iban', 'bic', 'bank_name',
-    'logo_image', 'signature_image', 'invoice_prefix', 'default_template_slug',
+    'logo_image', 'signature_image', 'default_template_slug',
     'number_format', 'tva_applies', 'payment_methods',
 ];
-
-/** Nettoie un préfixe : lettres, chiffres et tiret, en capitales, courts. Un préfixe vide
- *  rendrait la numérotation ambiguë ; on retombe alors sur 'F'. */
-const nettoiePrefixe = (p) => String(p || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) || 'F';
 
 const COLS = `id, label, legal_name, legal_status, capital, rcs, siret, vat_number, naf_ape,
     nda, address, zip_code, town, country, phone, email, iban, bic, bank_name,
@@ -100,7 +96,6 @@ function preparer(body) {
     v.legal_name = legalName;
     v.label = String(body.label || '').trim() || legalName; // à défaut, le label EST la raison sociale
     v.country = (String(body.country || 'FR').trim().toUpperCase().slice(0, 2)) || 'FR';
-    v.invoice_prefix = nettoiePrefixe(body.invoice_prefix);
     v.number_format = fmt || null;
     v.tva_applies = body.tva_applies == null ? 1 : (body.tva_applies ? 1 : 0); // 1 par défaut
     v.payment_methods = String(body.payment_methods || '').trim() || null;
@@ -125,9 +120,6 @@ const create = async (req, res) => {
         logAudit(req, 'billing_profile.create', 'BillingProfile', id);
         res.status(201).json({ id, message: 'Entité émettrice créée.' });
     } catch (e) {
-        if (e && e.code === 'ER_DUP_ENTRY') {
-            return res.status(422).json({ message: `Le préfixe « ${valeurs.invoice_prefix} » est déjà utilisé par une autre entité. Chaque entité numérote ses factures à part : donnez-lui un préfixe distinct.` });
-        }
         if (isMissingSchema(e)) return res.status(422).json({ message: 'Fonction indisponible : la migration 113 n\'est pas encore appliquée.' });
         console.error('Erreur création émetteur :', e);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -149,9 +141,6 @@ const update = async (req, res) => {
         logAudit(req, 'billing_profile.update', 'BillingProfile', req.params.id);
         res.json({ message: 'Entité mise à jour.' });
     } catch (e) {
-        if (e && e.code === 'ER_DUP_ENTRY') {
-            return res.status(422).json({ message: `Le préfixe « ${valeurs.invoice_prefix} » est déjà utilisé par une autre entité.` });
-        }
         console.error('Erreur mise à jour émetteur :', e);
         res.status(500).json({ error: 'Internal Server Error' });
     }

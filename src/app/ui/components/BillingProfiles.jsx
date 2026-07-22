@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import Card from "./Card.jsx";
 import {
@@ -20,7 +20,7 @@ import {
 const VIDE = {
   label: "", legal_name: "", legal_status: "", capital: "", rcs: "", siret: "", vat_number: "",
   naf_ape: "", nda: "", address: "", zip_code: "", town: "", email: "", phone: "",
-  iban: "", bic: "", bank_name: "", invoice_prefix: "F", default_template_slug: "",
+  iban: "", bic: "", bank_name: "", default_template_slug: "",
   number_format: "", tva_applies: 1, payment_methods: "", next_number: 1,
 };
 
@@ -28,12 +28,12 @@ const VIDE = {
  * Aperçu d'un numéro selon le gabarit — le même expanseur que le serveur, en miniature. Montre
  * tout de suite à quoi ressemblera « TXT.{YYYY}.901.{SEQ:4} ». Sans {SEQ}, on le signale.
  */
-function apercuNumero(format, prefix, seq) {
+function apercuNumero(format, seq) {
   const d = new Date();
   const pad = (n, w) => String(n).padStart(w, "0");
-  const fmt = (format && format.trim()) || "{PREFIX}-{YYYY}-{SEQ}";
+  const fmt = (format && format.trim()) || "F-{YYYY}-{SEQ}";
   return fmt
-    .replace(/\{PREFIX\}/g, (prefix || "F").toUpperCase())
+    .replace(/\{PREFIX\}/g, "F") // rétro-compat : les formats existants gardent leur {PREFIX}
     .replace(/\{YYYY\}/g, String(d.getFullYear()))
     .replace(/\{YY\}/g, pad(d.getFullYear() % 100, 2))
     .replace(/\{MM\}/g, pad(d.getMonth() + 1, 2))
@@ -50,10 +50,34 @@ function Champ({ label, k, form, set, ph, wide }) {
   );
 }
 
+// Les jetons du numéro, chacun avec un exemple parlant. Insérés en un clic — on ne tape plus les
+// accolades à la main. {SEQ} d'abord : c'est le seul obligatoire, il doit sauter aux yeux.
+const JETONS_NUMERO = [
+  ["{SEQ}", "N° 0001"],
+  ["{SEQ:5}", "N° 00001"],
+  ["{YYYY}", "Année 2026"],
+  ["{YY}", "Année 26"],
+  ["{MM}", "Mois"],
+  ["{DD}", "Jour"],
+];
+
 function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
   const [form, setForm] = useState(() => ({ ...VIDE, ...initial }));
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const formatOk = !form.number_format || /\{SEQ(?::\d+)?\}/.test(form.number_format);
+
+  // Insère un jeton à l'endroit du curseur (ou en bout), et replace le curseur après lui — pour
+  // qu'on enchaîne « {PREFIX} », un point, « {YYYY} »… sans jamais écrire d'accolade soi-même.
+  const fmtRef = useRef(null);
+  function insererJeton(tok) {
+    const el = fmtRef.current;
+    const cur = form.number_format || "";
+    if (!el || el.selectionStart == null) { set("number_format", cur + tok); return; }
+    const a = el.selectionStart, b = el.selectionEnd;
+    set("number_format", cur.slice(0, a) + tok + cur.slice(b));
+    requestAnimationFrame(() => { el.focus(); el.selectionStart = el.selectionEnd = a + tok.length; });
+  }
+
   return (
     <div className="card" style={{ borderLeft: "3px solid var(--gold)", marginTop: 12 }}>
       <div className="grid cols-2" style={{ gap: 10 }}>
@@ -75,19 +99,25 @@ function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
         <Champ label="BIC" k="bic" form={form} set={set} />
         <Champ label="Banque" k="bank_name" form={form} set={set} />
         <div className="field">
-          <label>Préfixe de numéro (distinct)</label>
-          <input className="inp" value={form.invoice_prefix} onChange={(e) => set("invoice_prefix", e.target.value)} placeholder="BQ" />
-        </div>
-        <div className="field">
           <label>Moyens de paiement (caisse)</label>
           <input className="inp" value={form.payment_methods || ""} onChange={(e) => set("payment_methods", e.target.value)} placeholder="Espèces,CB,Virement,Chèque" />
         </div>
         <div className="field" style={{ gridColumn: "1 / -1" }}>
           <label>Format du numéro de facture</label>
-          <input className="inp mono" value={form.number_format || ""} onChange={(e) => set("number_format", e.target.value)} placeholder="{PREFIX}-{YYYY}-{SEQ}" />
-          <p className="hint" style={{ margin: "4px 0 0" }}>
-            Jetons : <span className="mono">{"{PREFIX} {YYYY} {YY} {MM} {DD} {SEQ} {SEQ:4}"}</span>. Le reste est
-            recopié tel quel. <b>{"{SEQ}"} est obligatoire</b> — c'est le numéro qui change à chaque facture.
+          <input ref={fmtRef} className="inp mono" value={form.number_format || ""}
+            onChange={(e) => set("number_format", e.target.value)} placeholder="{PREFIX}-{YYYY}-{SEQ}" />
+          {/* Chips à insérer : on clique un jeton, on tape les séparateurs (. - /) au clavier. */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0 0" }}>
+            {JETONS_NUMERO.map(([tok, ex]) => (
+              <button key={tok} type="button" className="btn ghost sm" onClick={() => insererJeton(tok)}
+                title={`Insérer ${tok}`} style={{ fontSize: 12 }}>
+                <span className="mono">{tok}</span> <span className="hint">{ex}</span>
+              </button>
+            ))}
+          </div>
+          <p className="hint" style={{ margin: "6px 0 0" }}>
+            Clique un jeton pour l'insérer ; tape les séparateurs (<span className="mono">. - / .</span>) au clavier.
+            <b> {"{SEQ}"} est obligatoire</b> — c'est le numéro qui change à chaque facture.
           </p>
         </div>
         <div className="field" style={{ gridColumn: "1 / -1" }}>
@@ -103,7 +133,7 @@ function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
         </label>
       </div>
       <p className="sub" style={{ margin: "4px 0 0" }}>
-        Prochain numéro : <span className="mono">{apercuNumero(form.number_format, form.invoice_prefix, form.next_number || 1)}</span>
+        Prochain numéro : <span className="mono">{apercuNumero(form.number_format, form.next_number || 1)}</span>
         {form.number_format && !/\{SEQ(?::\d+)?\}/.test(form.number_format)
           ? <span style={{ color: "var(--ember1)" }}> — il manque {"{SEQ}"}</span> : null}
       </p>
@@ -167,7 +197,7 @@ export default function BillingProfiles({ onError }) {
               <b>{r.label || r.legal_name}</b>
               {r.is_default ? <span className="badge g" style={{ marginLeft: 8 }}>par défaut</span> : null}
               <div className="hint" style={{ fontSize: 12 }}>
-                {r.legal_name} · {r.siret || "SIRET —"} · <span className="mono">{r.invoice_prefix}-…</span>
+                {r.legal_name} · {r.siret || "SIRET —"} · <span className="mono">{apercuNumero(r.number_format, r.next_number || 1)}</span>
               </div>
             </div>
             {!r.is_default && <button className="btn ghost sm" onClick={() => makeDefault(r.id)} title="Utiliser par défaut">Par défaut</button>}

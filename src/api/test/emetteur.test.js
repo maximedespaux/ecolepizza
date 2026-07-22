@@ -141,13 +141,21 @@ test('une émettrice sans raison sociale est refusée', () => {
     assert.match(fn.slice(0, 400), /if \(!legalName\)/, 'la raison sociale n\'est pas exigée');
 });
 
-test('deux émettrices ne peuvent pas partager un préfixe de numérotation', () => {
-    // La contrainte uq_billing_prefix + le message dédié : deux séquences au même préfixe se
-    // heurteraient sur l'unicité du numéro de facture.
-    const mig = fs.readFileSync(path.join(DIR, '..', '..', 'database', 'migrations', '113_billing_profile.sql'), 'utf8');
-    assert.match(mig, /UNIQUE KEY uq_billing_prefix \(organization_id, invoice_prefix\)/, 'préfixe non unique');
+test('le préfixe n\'est plus un champ à part, ni contraint', () => {
+    // 115 retire l'unicité du préfixe : le format englobe le préfixe (on l'écrit en clair dans
+    // le gabarit), et sans champ à remplir toutes les entités retomberaient sur le même défaut,
+    // bloquant la deuxième création. invoice_prefix n'est plus modifiable par l'utilisateur.
+    const mig = fs.readFileSync(path.join(DIR, '..', '..', 'database', 'migrations', '115_drop_billing_prefix_unique.sql'), 'utf8');
+    assert.match(mig, /DROP INDEX IF EXISTS uq_billing_prefix/, 'la contrainte de préfixe n\'est pas retirée');
     const src = net('controllers/billingProfile.controller.js');
-    assert.match(src, /ER_DUP_ENTRY/, 'le doublon de préfixe n\'est pas rattrapé en message lisible');
+    const champs = src.slice(src.indexOf('const CHAMPS'), src.indexOf('const CHAMPS') + 400);
+    assert.doesNotMatch(champs, /'invoice_prefix'/, 'invoice_prefix reste éditable alors qu\'il ne devrait plus');
+});
+
+test('l\'unicité des numéros repose sur le numéro lui-même, pas sur le préfixe', () => {
+    // Le vrai garde-fou, celui qui compte : deux factures ne peuvent pas porter le même numéro.
+    const schema = fs.readFileSync(path.join(DIR, '..', '..', 'database', 'schema.sql'), 'utf8');
+    assert.match(schema, /UNIQUE KEY uq_invoice_number \(number\)/, 'le numéro de facture doit rester unique');
 });
 
 test('supprimer une émettrice ne supprime pas les factures émises', () => {
