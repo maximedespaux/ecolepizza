@@ -52,6 +52,46 @@ function Champ({ label, k, form, set, ph, wide }) {
 
 // Les jetons du numéro, chacun avec un exemple parlant. Insérés en un clic — on ne tape plus les
 // accolades à la main. {SEQ} d'abord : c'est le seul obligatoire, il doit sauter aux yeux.
+// Moyens de paiement courants, proposés en cases à cocher. La valeur reste une liste séparée
+// par des virgules — les cases ne font que la composer, pour ne plus la taper à la main.
+const PAIEMENTS_STD = ["Espèces", "CB", "Virement", "Chèque"];
+
+function PaiementPicker({ value, onChange }) {
+  const choisis = String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
+  // On affiche les standards PLUS tout mode déjà enregistré hors standard, pour ne rien perdre
+  // d'une saisie antérieure.
+  const options = [...PAIEMENTS_STD, ...choisis.filter((c) => !PAIEMENTS_STD.includes(c))];
+  const [autre, setAutre] = useState("");
+
+  const toggle = (m) => {
+    const next = choisis.includes(m) ? choisis.filter((x) => x !== m) : [...choisis, m];
+    onChange(next.join(","));
+  };
+  const ajouter = () => {
+    const m = autre.trim();
+    if (m && !choisis.includes(m)) onChange([...choisis, m].join(","));
+    setAutre("");
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {options.map((m) => (
+          <label key={m} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+            <input type="checkbox" checked={choisis.includes(m)} onChange={() => toggle(m)} /> {m}
+          </label>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        <input className="inp" style={{ maxWidth: 200 }} value={autre} placeholder="Autre moyen…"
+          onChange={(e) => setAutre(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); ajouter(); } }} />
+        <button type="button" className="btn ghost sm" onClick={ajouter} disabled={!autre.trim()}>Ajouter</button>
+      </div>
+    </div>
+  );
+}
+
 const JETONS_NUMERO = [
   ["{SEQ}", "N° 0001"],
   ["{SEQ:5}", "N° 00001"],
@@ -98,9 +138,9 @@ function EmitterForm({ initial, modeles, onCancel, onSave, saving }) {
         <Champ label="IBAN" k="iban" form={form} set={set} />
         <Champ label="BIC" k="bic" form={form} set={set} />
         <Champ label="Banque" k="bank_name" form={form} set={set} />
-        <div className="field">
+        <div className="field" style={{ gridColumn: "1 / -1" }}>
           <label>Moyens de paiement (caisse)</label>
-          <input className="inp" value={form.payment_methods || ""} onChange={(e) => set("payment_methods", e.target.value)} placeholder="Espèces,CB,Virement,Chèque" />
+          <PaiementPicker value={form.payment_methods} onChange={(v) => set("payment_methods", v)} />
         </div>
         <div className="field" style={{ gridColumn: "1 / -1" }}>
           <label>Format du numéro de facture</label>
