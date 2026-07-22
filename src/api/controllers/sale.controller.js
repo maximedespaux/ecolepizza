@@ -262,7 +262,7 @@ const checkout = async (req, res) => {
         // Vérifie les articles + le stock avant d'appliquer.
         for (const ln of lines) {
             const [rows] = await conn.query(
-                'SELECT name, category, quantity, unit_price, tax_rate FROM inventory_item WHERE id = ? AND organization_id = ?',
+                'SELECT name, sku, category, quantity, unit_price, tax_rate FROM inventory_item WHERE id = ? AND organization_id = ?',
                 [ln.item_id, orgId]
             );
             if (rows.length === 0) return res.status(404).json({ message: 'Article introuvable' });
@@ -329,8 +329,11 @@ const checkout = async (req, res) => {
             await conn.query(
                 `INSERT INTO material_sale (${col.join(', ')}) VALUES (${ph.join(', ')})`, args);
             totalHT += lineHT;
-            const label = `${it.name}${ln._qty > 1 ? ` × ${ln._qty}` : ''}${ln._disc ? ` (remise ${ln._disc}%)` : ''}`;
-            invLines.push({ description: label.slice(0, 255), amount_net: lineHT, rate, qty: ln._qty, unit: unitNet });
+            // Désignation PROPRE (juste le nom) : la quantité et la remise ont leurs colonnes sur
+            // la facture. La référence (SKU) est figée à part. L'ancien libellé « nom × qté
+            // (remise) » doublonnait la colonne Qté.
+            const label = `${it.name}${ln._disc ? ` (remise ${ln._disc}%)` : ''}`;
+            invLines.push({ description: label.slice(0, 255), amount_net: lineHT, rate, qty: ln._qty, unit: unitNet, reference: it.sku || null });
             productNames.push(`${it.name} x${ln._qty}`);
         }
         const totalTVA = invLines.reduce((s, l) => s + l.amount_net * l.rate / 100, 0);
@@ -390,24 +393,21 @@ const checkout = async (req, res) => {
         if (hasInvSplit) { iCol.push('payment_split'); iVal.push(paymentSplit); }
         await conn.query(
             `INSERT INTO invoice (${iCol.join(', ')}) VALUES (${iCol.map(() => '?').join(', ')})`, iVal);
-        // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X.
+        // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X. Colonnes
+        // construites selon les migrations présentes : taux/qté/prix (108, 110) et référence
+        // (118) sont ajoutés quand ils existent, sinon la ligne sort sans eux.
+        const hasLineDetail = await hasColumn(conn, 'invoice_line', 'tax_rate');
+        const hasLineRef = await hasColumn(conn, 'invoice_line', 'reference');
         for (let i = 0; i < invLines.length; i++) {
-            // Le taux réel de l'article accompagne la ligne : sans lui, Factur-X retombait sur
-            // 20 % en dur et facturait une farine à 5,5 % comme une pelle à 20 %.
-            try {
-                await conn.query(
-                    `INSERT INTO invoice_line (id, invoice_id, enrollment_id, description, amount_net, tax_rate, qty, unit_price_ht, sort_order)
-                     VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
-                    [crypto.randomUUID(), invoiceId, invLines[i].description, invLines[i].amount_net,
-                     invLines[i].rate, invLines[i].qty, invLines[i].unit, i]
-                );
-            } catch (e) {
-                if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
-                await conn.query(
-                    'INSERT INTO invoice_line (id, invoice_id, enrollment_id, description, amount_net, sort_order) VALUES (?, ?, NULL, ?, ?, ?)',
-                    [crypto.randomUUID(), invoiceId, invLines[i].description, invLines[i].amount_net, i]
-                );
+            const lc = ['id', 'invoice_id', 'enrollment_id', 'description', 'amount_net', 'sort_order'];
+            const lv = [crypto.randomUUID(), invoiceId, null, invLines[i].description, invLines[i].amount_net, i];
+            if (hasLineDetail) {
+                lc.push('tax_rate', 'qty', 'unit_price_ht');
+                lv.push(invLines[i].rate, invLines[i].qty, invLines[i].unit);
             }
+            if (hasLineRef) { lc.push('reference'); lv.push(invLines[i].reference); }
+            await conn.query(
+                `INSERT INTO invoice_line (${lc.join(', ')}) VALUES (${lc.map(() => '?').join(', ')})`, lv);
         }
         logAudit(req, 'sale.checkout', 'Invoice', invoiceId);
         res.status(201).json({

@@ -98,34 +98,31 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         if (l[0]) buyer = { name: `${l[0].first_name || ''} ${l[0].last_name || ''}`.trim(), siret: null, email: l[0].email || null, address: { line: l[0].address, zip: l[0].zip_code, city: l[0].town } };
     }
 
-    // Lignes de la facture (plusieurs dossiers possibles) ; repli sur ligne unique.
-    // `il.tax_rate` peut ne pas exister (migration 108 non jouée) : la requête est rejouée
-    // sans lui, et l'édition retombe alors sur 20 % comme avant.
-    let lineRows;
-    try {
-        [lineRows] = await conn.query(
-            `SELECT il.description, il.amount_net, il.tax_rate, il.qty, il.unit_price_ht,
-                    p.title AS program_title, l.first_name, l.last_name
-             FROM invoice_line il
+    // Lignes de la facture (plusieurs dossiers possibles) ; repli sur ligne unique. Les colonnes
+    // détaillées apparaissent par migration : tax_rate/qty/unit_price (108, 110), reference (118).
+    // On essaie du plus riche au plus pauvre — chaque niveau tombe sur le suivant si une colonne
+    // manque, plutôt qu'une seule requête minimale qui perdrait aussi tax_rate/qty.
+    const jointures = `FROM invoice_line il
              LEFT JOIN enrollment e ON e.id = il.enrollment_id
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
              LEFT JOIN learner l ON l.id = e.learner_id
-             WHERE il.invoice_id = ? ORDER BY il.sort_order, il.id`,
-            [invoiceId]
-        );
-    } catch (e) {
-        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
-        [lineRows] = await conn.query(
-        `SELECT il.description, il.amount_net, p.title AS program_title, l.first_name, l.last_name
-         FROM invoice_line il
-         LEFT JOIN enrollment e ON e.id = il.enrollment_id
-         LEFT JOIN training_session s ON s.id = e.session_id
-         LEFT JOIN training_program p ON p.id = s.program_id
-         LEFT JOIN learner l ON l.id = e.learner_id
-         WHERE il.invoice_id = ? ORDER BY il.sort_order, il.id`,
-            [invoiceId]
-        );
+             WHERE il.invoice_id = ? ORDER BY il.sort_order, il.id`;
+    const niveaux = [
+        'il.description, il.amount_net, il.tax_rate, il.qty, il.unit_price_ht, il.reference,',
+        'il.description, il.amount_net, il.tax_rate, il.qty, il.unit_price_ht,',
+        'il.description, il.amount_net,',
+    ];
+    let lineRows;
+    for (const cols of niveaux) {
+        try {
+            [lineRows] = await conn.query(
+                `SELECT ${cols} p.title AS program_title, l.first_name, l.last_name ${jointures}`, [invoiceId]);
+            break;
+        } catch (e) {
+            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+            // colonne absente : on tente le niveau suivant, plus pauvre.
+        }
     }
     const lineName = (r) => r.description
         || [r.program_title, (r.last_name ? `${r.last_name} ${r.first_name || ''}`.trim() : '')].filter(Boolean).join(' — ')
@@ -135,6 +132,7 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
             name: lineName(r), amount: Number(r.amount_net), taxRate: r.tax_rate ?? null,
             qty: r.qty != null ? Number(r.qty) : null,
             unit_price_ht: r.unit_price_ht != null ? Number(r.unit_price_ht) : null,
+            reference: r.reference || null,
         }))
         : [{ name: inv.description || inv.program_title || 'Prestation de formation', amount: Number(inv.amount_net) }];
 

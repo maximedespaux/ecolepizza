@@ -306,6 +306,7 @@ function articleTokensGroup() {
         group: 'Ligne de facture',
         tokens: [
             t('N°', 'Numéro de ligne', '1'),
+            t('Référence', 'Référence / SKU de l’article', 'P0008'),
             t('Désignation', 'Désignation de l’article', 'Biberon valve 455 ml'),
             t('Quantité', 'Quantité', '2'),
             t('Prix unitaire HT', 'Prix unitaire HT', '8,91 €'),
@@ -506,8 +507,8 @@ const previewPdf = async (req, res) => {
         // On ne peut alors pas juger de sa mise en page, ce qui est pourtant tout l'objet d'un
         // aperçu. Deux articles à des taux différents, pour que le cas mixte se voie aussi.
         const articlesExemple = [
-            { name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
-            { name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
+            { reference: 'P0008', name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
+            { reference: 'P0014', name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
         ];
         const pdf = await composeDocumentPdf({
             bodyHtml: body_html || '<p></p>',

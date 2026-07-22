@@ -366,6 +366,7 @@ function articleRowTokens(l, i) {
     const ht = Number(l.amount || 0);
     return {
         'N°': String(i + 1),
+        'Référence': l.reference || '',
         'Désignation': l.name || '',
         'Quantité': qte != null ? String(qte) : '',
         'Prix unitaire HT': eur(pu),

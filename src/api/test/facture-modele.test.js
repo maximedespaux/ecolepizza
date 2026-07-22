@@ -373,3 +373,30 @@ test('la ligne de totaux a autant de cellules que l\'en-tête', () => {
             'la ligne de totaux n\'a pas le même nombre de colonnes que l\'en-tête');
     }
 });
+
+// --- La référence produit sur la ligne ------------------------------------------------------
+
+test('la ligne d\'article expose sa référence (SKU)', () => {
+    const { articleRowTokens } = require('../lib/tokens.js');
+    const c = articleRowTokens({ reference: 'P0008', name: 'Biberon', qty: 1, unit_price_ht: 8.91, amount: 8.91, taxRate: 20 }, 0);
+    assert.strictEqual(c['Référence'], 'P0008');
+    // Une ligne sans référence (formation, ancien article) rend une chaîne vide, pas undefined.
+    assert.strictEqual(articleRowTokens({ name: 'Formation', amount: 850, taxRate: 0 }, 0)['Référence'], '');
+});
+
+test('la vente fige la référence de l\'article et une désignation propre', () => {
+    // Le SKU vient d'inventory_item ; il est figé sur la ligne. La désignation ne doit plus
+    // porter « × qté » (la quantité a sa colonne) — sinon la facture itemisée doublonne.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/sale.controller.js'), 'utf8');
+    assert.match(src, /SELECT name, sku, category/, 'le SKU n\'est pas lu depuis l\'article');
+    assert.match(src, /reference: it\.sku \|\| null/, 'la référence n\'est pas figée sur la ligne');
+    assert.doesNotMatch(src, /\$\{it\.name\}\$\{ln\._qty > 1 \? ` × \$\{ln\._qty\}`/, 'la désignation porte encore « × qté »');
+    assert.match(src, /if \(hasLineRef\) \{ lc\.push\('reference'\)/, 'la référence n\'est pas conditionnée à la colonne (118)');
+});
+
+test('la palette propose {Référence} et le rendu la remplit — pas de jeton orphelin', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/template.controller.js'), 'utf8');
+    assert.match(src, /t\('Référence', 'Référence \/ SKU/, '{Référence} n\'est pas dans la palette');
+    const remplis = Object.keys(require('../lib/tokens.js').articleRowTokens({ reference: 'x', name: 'y', amount: 1, taxRate: 20 }, 0));
+    assert.ok(remplis.includes('Référence'), '{Référence} est proposé mais jamais rempli');
+});
