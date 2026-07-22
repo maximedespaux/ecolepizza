@@ -4,6 +4,7 @@ import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
   getShopSettings, downloadFacturX, getCompanies, getEmitters } from "../api/apiClient.js";
+import PaiementSplit, { resolvePayments } from "../components/PaiementSplit.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -55,7 +56,9 @@ function Ventes() {
   const [emitters, setEmitters] = useState([]);
   const [emitterId, setEmitterId] = useState("");
   const [discount, setDiscount] = useState(""); // % remise globale
-  const [payment, setPayment] = useState("");
+  // Répartition du règlement : une ligne par moyen, la dernière prenant le solde. Une seule
+  // ligne = paiement simple. Le moyen se fixe quand les options chargent.
+  const [payments, setPayments] = useState([{ method: "", amount: "" }]);
   const [paid, setPaid] = useState(true);
   const [lastInvoice, setLastInvoice] = useState(null); // facture créée (pour télécharger le PDF)
 
@@ -74,7 +77,7 @@ function Ventes() {
       setEmitters(list);
       setEmitterId((list.find((e) => e.is_default) || {}).id || ""); // présélectionne le défaut
     }).catch(() => {});
-    getShopSettings().then((r) => { setSettings(r.data); setPayment((r.data.payment_methods || "").split(",")[0] || ""); }).catch(() => {});
+    getShopSettings().then((r) => setSettings(r.data)).catch(() => {});
   }, []);
 
   // L'émettrice choisie porte désormais TVA et moyens de paiement ; à défaut, on retombe sur les
@@ -147,6 +150,16 @@ function Ventes() {
   const removeLine = (id) => setCart((c) => c.filter((l) => l.item_id !== id));
   const setLine = (id, patch) => setCart((c) => c.map((l) => (l.item_id === id ? { ...l, ...patch } : l)));
 
+  // Cale les moyens de paiement sur les options disponibles : au chargement (ligne sans moyen),
+  // et si l'émettrice change et retire un moyen qui n'existe plus.
+  useEffect(() => {
+    if (!payOptions.length) return;
+    setPayments((rows) => {
+      const fixed = rows.map((r) => (payOptions.includes(r.method) ? r : { ...r, method: payOptions[0] }));
+      return fixed.length ? fixed : [{ method: payOptions[0], amount: "" }];
+    });
+  }, [payOptions]);
+
   const tvaApplies = selectedEmitter ? !!selectedEmitter.tva_applies : (settings ? !!settings.tva_applies : true);
   const totals = useMemo(() => {
     const d = Math.min(100, Math.max(0, Number(discount) || 0));
@@ -169,15 +182,20 @@ function Ventes() {
       const buyerFields = buyerType === "entreprise"
         ? { company_id: company?.id || null, learner_id: (attachLearner && client?.id) || null }
         : { learner_id: client?.id || null, company_id: null };
+      // Répartition résolue : montants saisis + solde sur le dernier moyen. On envoie la liste ;
+      // le serveur revérifie que la somme tombe sur le TTC.
+      const { parts } = resolvePayments(payments, totals.ttc);
       const r = await checkoutSale({
         ...buyerFields,
         billing_profile_id: emitterId || null,
         discount: Number(discount) || 0,
-        payment_method: payment || null,
+        payment_method: parts[0]?.method || null,   // rétro-compat : moyen principal
+        payments: parts,
         status: paid ? "PAYEE" : "IMPAYEE",
         lines: cart.map((l) => ({ item_id: l.item_id, quantity: l.quantity, discount_pct: Number(l.disc) || 0 })),
       });
       setCart([]); switchBuyerType("stagiaire"); setDiscount("");
+      setPayments([{ method: payOptions[0] || "", amount: "" }]);
       setLastInvoice({ id: r.invoice_id, number: r.invoice_number });
       setStatus({ type: "success", message: `Vente validée — facture ${r.invoice_number} (${euro(r.total_ttc)} TTC) pour ${r.buyer}.` });
       loadSales(); loadInventory(); bumpBadges();
@@ -358,16 +376,10 @@ function Ventes() {
                 </div>
               )}
 
-              <div className="row2">
-                <div className="field"><label>Moyen de paiement</label>
-                  <select className="inp" value={payment} onChange={(e) => setPayment(e.target.value)}>
-                    {payOptions.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
-                <label className="field" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 22 }}>
-                  <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} /> Payé à l'encaissement
-                </label>
-              </div>
+              <PaiementSplit options={payOptions} total={totals.ttc} rows={payments} onChange={setPayments} />
+              <label className="field" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} /> Payé à l'encaissement
+              </label>
               <div className="divider" />
               {cart.length === 0 ? (
                 <EmptyState icon="package">Panier vide. Ajoutez des produits.</EmptyState>
@@ -407,9 +419,17 @@ function Ventes() {
                     <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}><span>TVA{tvaApplies ? "" : " (exonérée)"}</span><span className="mono">{euro(totals.tva)}</span></div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, marginTop: 4 }}><span>Total TTC</span><span className="mono">{euro(totals.ttc)}</span></div>
                   </div>
-                  <button className="btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={validate}>
-                    Encaisser → créer la facture
-                  </button>
+                  {/* On bloque l'encaissement si le règlement dépasse le total : une répartition
+                      qui ne boucle pas ne doit pas partir. (Sans surcoût quand c'est payé.) */}
+                  {(() => {
+                    const trop = paid && !resolvePayments(payments, totals.ttc).valid;
+                    return (
+                      <button className="btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }}
+                        onClick={validate} disabled={trop} title={trop ? "La répartition des paiements dépasse le total" : undefined}>
+                        Encaisser → créer la facture
+                      </button>
+                    );
+                  })()}
                 </>
               )}
             </Card>

@@ -226,7 +226,17 @@ const checkout = async (req, res) => {
         // global de la boutique.
         const emetteur = await resolveEmitter(conn, orgId, req.body.billing_profile_id);
         const tvaApplies = emetteur ? !!emetteur.tva_applies : !!settings.tva_applies;
-        const payMethod = (req.body.payment_method || '').toString().slice(0, 30) || null;
+
+        // VENTILATION DU RÈGLEMENT : un client peut payer en plusieurs moyens (300 € espèces +
+        // 700 € carte). On ne retient que les parts valides — un moyen nommé, un montant positif.
+        // Le résumé (moyen unique, ou « A + B ») sert à l'affichage et à la note ; le détail chiffré
+        // part dans payment_split. La SOMME est vérifiée plus bas, une fois le total connu.
+        const parts = (Array.isArray(req.body.payments) ? req.body.payments : [])
+            .map((p) => ({ method: String(p && p.method || '').trim().slice(0, 40), amount: Number(p && p.amount) }))
+            .filter((p) => p.method && Number.isFinite(p.amount) && p.amount > 0);
+        const payMethod = parts.length
+            ? parts.map((p) => p.method).join(' + ').slice(0, 30)
+            : ((req.body.payment_method || '').toString().slice(0, 30) || null);
 
         // Stagiaire comme entreprise sont ÉCRITS sur la facture, plus seulement lus pour en
         // tirer un nom : il faut vérifier qu'ils appartiennent à l'organisme. Un identifiant
@@ -316,6 +326,22 @@ const checkout = async (req, res) => {
         const totalTVA = invLines.reduce((s, l) => s + l.amount_net * l.rate / 100, 0);
         totalHT = Number(totalHT.toFixed(2));
 
+        // La somme des paiements doit tomber sur le total à régler (TTC). Sinon, la caisse ne
+        // boucle pas — mieux vaut refuser que d'enregistrer une vente dont la répartition ment.
+        // Vérifié seulement si un règlement est saisi ET que la vente est marquée payée.
+        const ttc = Number((totalHT + totalTVA).toFixed(2));
+        let paymentSplit = null;
+        if (status === 'PAYEE' && parts.length) {
+            const somme = Number(parts.reduce((s, p) => s + p.amount, 0).toFixed(2));
+            if (Math.abs(somme - ttc) > 0.01) {
+                return res.status(422).json({
+                    message: `La répartition des paiements (${somme.toFixed(2)} €) ne correspond pas au total à régler (${ttc.toFixed(2)} €).`,
+                });
+            }
+            // Une seule part = paiement simple : inutile d'alourdir la facture d'un JSON.
+            if (parts.length > 1) paymentSplit = JSON.stringify(parts);
+        }
+
         // Nom imprimé sur la facture. Priorité : nom libre saisi > entreprise > stagiaire >
         // comptoir. L'entreprise passe AVANT le stagiaire parce que, quand les deux sont là,
         // c'est l'entreprise qui achète ; le stagiaire n'est qu'un rattachement.
@@ -342,12 +368,14 @@ const checkout = async (req, res) => {
         // sinon la vente sort comme avant plutôt que d'échouer. Colonnes construites plutôt que
         // quatre variantes de requête : chaque combinaison oubliée serait un chemin non testé.
         const hasInvLearner = await hasColumn(conn, 'invoice', 'learner_id');
+        const hasInvSplit = await hasColumn(conn, 'invoice', 'payment_split');
         const iCol = ['id', 'organization_id', 'company_id', 'buyer_name', 'description', 'type',
             'number', 'amount_net', 'tva_exoneree', 'payment_method', 'status'];
         const iVal = [invoiceId, orgId, company_id || null, name, description, 'FACTURE',
             number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status];
         if (hasInvLearner) { iCol.push('learner_id'); iVal.push(learner_id || null); }
         if (hasInvEmitter) { iCol.push('billing_profile_id'); iVal.push(emetteur ? emetteur.id : null); }
+        if (hasInvSplit) { iCol.push('payment_split'); iVal.push(paymentSplit); }
         await conn.query(
             `INSERT INTO invoice (${iCol.join(', ')}) VALUES (${iCol.map(() => '?').join(', ')})`, iVal);
         // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X.
