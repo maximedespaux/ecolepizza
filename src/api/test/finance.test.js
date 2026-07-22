@@ -231,10 +231,15 @@ test("l'organisme est réellement chargé sur la facture", () => {
     // [lignes, champs] — et le `org[0]` qui suivait la cherchait une seconde fois, sur un objet
     // qui n'a pas d'index 0. L'organisme n'était donc jamais chargé, et le XML partait sans
     // BT-31/BT-32. Une facture sans identité du vendeur n'a pas de valeur probante.
-    const src = lire('controllers/invoice.controller.js');
+    // L'identité vendeur vient maintenant de l'émettrice si la facture en porte une, sinon de
+    // l'organisme — mais la garde reste la même : `org`, jamais `org[0]`.
+    // Sur le code sans commentaires : le bloc explicatif entre la requête et la ligne gardée
+    // dépasserait sinon la fenêtre, et un commentaire qui cite « org[0] » la ferait tomber à tort.
+    const src = net(lire('controllers/invoice.controller.js'));
     const bloc = src.slice(src.indexOf('FROM organization WHERE id = ?'));
-    assert.match(bloc.slice(0, 200), /const o = org \|\| \{\}/,
+    assert.match(bloc.slice(0, 200), /const o = emetteur \|\| org \|\| \{\}/,
         'la double déstructuration est de retour : l\'organisme ne sera pas chargé');
+    assert.doesNotMatch(bloc.slice(0, 200), /org\[0\]/, 'org[0] : la double déstructuration est de retour');
 });
 
 test("il n'existe plus de mise en page interne pour la facture", () => {

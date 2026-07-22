@@ -3,6 +3,7 @@ const db = require('../config/database.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
+const { resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
 
 // La table material_sale porte-t-elle le lien vers la facture (migration 069) ?
 // Permet un fonctionnement dégradé tant que la migration n'est pas appliquée.
@@ -252,11 +253,22 @@ const checkout = async (req, res) => {
         // vente (material_sale) référence sa facture → regroupement de l'historique.
         const hasInvLink = await saleHasInvoiceLink(conn);
         const hasSaleCompany = await hasColumn(conn, 'material_sale', 'company_id');
+        const hasInvEmitter = await hasColumn(conn, 'invoice', 'billing_profile_id');
         const invoiceId = crypto.randomUUID();
         const year = new Date().getFullYear();
-        const num = settings.next_number || 1;
-        const number = `${settings.invoice_prefix || 'F'}-${year}-${String(num).padStart(4, '0')}`;
-        await conn.query('UPDATE shop_settings SET next_number = ? WHERE organization_id = ?', [num + 1, orgId]);
+
+        // ÉMETTRICE de la vente : celle demandée (si elle est à nous), sinon la défaut. Avec une
+        // émettrice, le numéro vient de SA séquence continue ; sans elle, on garde le compteur
+        // de la boutique (shop_settings), comportement d'avant.
+        const emetteur = await resolveEmitter(conn, orgId, req.body.billing_profile_id);
+        let number;
+        if (emetteur) {
+            number = await nextNumberForEmitter(conn, emetteur);
+        } else {
+            const num = settings.next_number || 1;
+            number = `${settings.invoice_prefix || 'F'}-${year}-${String(num).padStart(4, '0')}`;
+            await conn.query('UPDATE shop_settings SET next_number = ? WHERE organization_id = ?', [num + 1, orgId]);
+        }
 
         // Applique : décrément stock + vente par ligne (remise ligne puis globale).
         // On construit aussi les lignes de facture (invoice_line) → facture détaillée + PDF.
@@ -323,24 +335,19 @@ const checkout = async (req, res) => {
         // inatteignables depuis la facture. Le nom reste écrit à côté — c'est lui qui a été
         // imprimé, et renommer une fiche ne doit pas récrire une pièce déjà émise.
         //
-        // `invoice.company_id` est une colonne de base : toujours écrite. `learner_id` (migration
-        // 111) est optionnelle — si elle manque, on réémet sans elle et la vente se comporte
-        // comme avant plutôt que d'échouer.
-        const champs = [invoiceId, orgId, company_id || null, name, description, number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status];
-        try {
-            await conn.query(
-                `INSERT INTO invoice (id, organization_id, company_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status, learner_id)
-                 VALUES (?, ?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?, ?)`,
-                [...champs, learner_id || null]
-            );
-        } catch (e) {
-            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
-            await conn.query(
-                `INSERT INTO invoice (id, organization_id, company_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status)
-                 VALUES (?, ?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?)`,
-                champs
-            );
-        }
+        // `invoice.company_id` est une colonne de base : toujours écrite. `learner_id` (111) et
+        // `billing_profile_id` (113) sont optionnelles — on les ajoute quand la colonne existe,
+        // sinon la vente sort comme avant plutôt que d'échouer. Colonnes construites plutôt que
+        // quatre variantes de requête : chaque combinaison oubliée serait un chemin non testé.
+        const hasInvLearner = await hasColumn(conn, 'invoice', 'learner_id');
+        const iCol = ['id', 'organization_id', 'company_id', 'buyer_name', 'description', 'type',
+            'number', 'amount_net', 'tva_exoneree', 'payment_method', 'status'];
+        const iVal = [invoiceId, orgId, company_id || null, name, description, 'FACTURE',
+            number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status];
+        if (hasInvLearner) { iCol.push('learner_id'); iVal.push(learner_id || null); }
+        if (hasInvEmitter) { iCol.push('billing_profile_id'); iVal.push(emetteur ? emetteur.id : null); }
+        await conn.query(
+            `INSERT INTO invoice (${iCol.join(', ')}) VALUES (${iCol.map(() => '?').join(', ')})`, iVal);
         // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X.
         for (let i = 0; i < invLines.length; i++) {
             // Le taux réel de l'article accompagne la ligne : sans lui, Factur-X retombait sur

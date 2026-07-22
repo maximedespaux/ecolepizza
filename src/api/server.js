@@ -48,6 +48,7 @@ const equipeRoutes = require('./routes/equipe.routes.js');
 const platformRoutes = require('./routes/platform.routes.js');
 const opcoRoutes = require('./routes/opco.routes.js');
 const accessProfileRoutes = require('./routes/accessProfile.routes.js');
+const billingProfileRoutes = require('./routes/billingProfile.routes.js');
 const eventsRoutes = require('./routes/events.routes.js');
 
 // --- CORS ---
@@ -133,6 +134,7 @@ app.use('/api/equipe', equipeRoutes);
 app.use('/api/platform', platformRoutes);
 app.use('/api/opcos', opcoRoutes);
 app.use('/api/access-profiles', accessProfileRoutes);
+app.use('/api/emetteurs', billingProfileRoutes);
 app.use('/api/events', eventsRoutes);
 
 // PUBLIC (sans authentification) : lien de signature partageable.

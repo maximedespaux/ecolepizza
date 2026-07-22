@@ -3,7 +3,8 @@ import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
-  getShopSettings, saveShopSettings, downloadFacturX, getTemplates, getCompanies } from "../api/apiClient.js";
+  getShopSettings, saveShopSettings, downloadFacturX, getTemplates, getCompanies, getEmitters } from "../api/apiClient.js";
+import BillingProfiles from "../components/BillingProfiles.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -51,6 +52,10 @@ function Ventes() {
   // Quand l'entreprise paie, on peut RATTACHER un stagiaire (matériel destiné à un apprenant
   // précis) : c'est l'entreprise qui est facturée, le stagiaire n'est qu'un lien retrouvable.
   const [attachLearner, setAttachLearner] = useState(false);
+  // Entité émettrice : sous quelle identité la facture sort. Vide = défaut du serveur. On ne
+  // montre le sélecteur que s'il existe PLUSIEURS entités — sinon c'est du bruit.
+  const [emitters, setEmitters] = useState([]);
+  const [emitterId, setEmitterId] = useState("");
   const [discount, setDiscount] = useState(""); // % remise globale
   const [payment, setPayment] = useState("");
   const [paid, setPaid] = useState(true);
@@ -66,6 +71,11 @@ function Ventes() {
     loadInventory();
     getStagiaires().then((r) => setLearners(r.data)).catch(() => {});
     getCompanies().then((r) => setCompanies(r.data || [])).catch(() => {});
+    getEmitters().then((r) => {
+      const list = r.data || [];
+      setEmitters(list);
+      setEmitterId((list.find((e) => e.is_default) || {}).id || ""); // présélectionne le défaut
+    }).catch(() => {});
     getShopSettings().then((r) => { setSettings(r.data); setPayment((r.data.payment_methods || "").split(",")[0] || ""); }).catch(() => {});
   }, []);
 
@@ -159,6 +169,7 @@ function Ventes() {
         : { learner_id: client?.id || null, company_id: null };
       const r = await checkoutSale({
         ...buyerFields,
+        billing_profile_id: emitterId || null,
         discount: Number(discount) || 0,
         payment_method: payment || null,
         status: paid ? "PAYEE" : "IMPAYEE",
@@ -332,6 +343,19 @@ function Ventes() {
                   </>
                 )}
               </div>
+
+              {/* Sous quelle identité la facture sort — seulement s'il y a un choix à faire. */}
+              {emitters.length > 1 && (
+                <div className="field">
+                  <label>Facturer au nom de</label>
+                  <select className="inp" value={emitterId} onChange={(e) => setEmitterId(e.target.value)}>
+                    {emitters.map((em) => (
+                      <option key={em.id} value={em.id}>{em.label || em.legal_name}{em.is_default ? " (défaut)" : ""}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="row2">
                 <div className="field"><label>Moyen de paiement</label>
                   <select className="inp" value={payment} onChange={(e) => setPayment(e.target.value)}>
@@ -396,7 +420,10 @@ function Ventes() {
       {tab === "inventaire" && <Inventaire embedded />}
 
       {tab === "reglages" && (
-        <ShopSettings settings={settings} onSaved={(s) => { setSettings(s); setStatus({ type: "success", message: "Réglages enregistrés." }); }} onError={(m) => setStatus({ type: "error", message: m })} />
+        <div className="grid" style={{ gap: 16 }}>
+          <ShopSettings settings={settings} onSaved={(s) => { setSettings(s); setStatus({ type: "success", message: "Réglages enregistrés." }); }} onError={(m) => setStatus({ type: "error", message: m })} />
+          <BillingProfiles onError={(m) => setStatus({ type: "error", message: m })} />
+        </div>
       )}
     </>
   );

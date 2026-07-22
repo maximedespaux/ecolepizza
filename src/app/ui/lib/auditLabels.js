@@ -109,6 +109,12 @@ const ACTION_LABEL = {
     'accessprofile.system': ['Profil d\'accès système modifié', A],
     'platform.org.create': ['Organisme créé (plateforme)', G],
 
+    // Entités émettrices (identités de facturation)
+    'billing_profile.create': ['Entité émettrice créée', G],
+    'billing_profile.update': ['Entité émettrice modifiée', A],
+    'billing_profile.default': ['Entité émettrice par défaut modifiée', A],
+    'billing_profile.delete': ['Entité émettrice supprimée', R],
+
     // Archives
     'archive.bulk_delete': ['Archives supprimées en lot', R],
 };
@@ -145,6 +151,7 @@ const ENTITY_LABEL = {
     Opco: ['OPCO', 'm'],
     Organization: ['Organisme', 'm'],
     AccessProfile: ['Profil d\'accès', 'm'],
+    BillingProfile: ['Entité émettrice', 'f'],
     Archive: ['Archive', 'f'],
     User: ['Membre', 'm'],
     quest_category: ['Catégorie (Pizza Quest)', 'f'],

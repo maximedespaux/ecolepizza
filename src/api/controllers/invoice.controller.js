@@ -6,6 +6,7 @@ const { buildCII, attacherFacturX, ventilerTva, manquantsFacturX } = require('..
 const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
+const { loadEmitter, resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
 
 const PREFIX = { DEVIS: 'D', ACOMPTE: 'A', FACTURE: 'F', AVOIR: 'AV' };
 const TYPE_LABEL = { DEVIS: 'Devis', ACOMPTE: 'Facture d\'acompte', FACTURE: 'Facture', AVOIR: 'Avoir' };
@@ -42,7 +43,14 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     // « SIRET — » au lieu de la raison sociale et du SIRET réels. Une facture sans identité
     // du vendeur n'a pas de valeur probante, et le XML Factur-X partait sans BT-31/BT-32.
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
-    const o = org || {};
+
+    // LE VENDEUR EST L'ÉMETTRICE de la facture, si elle en porte une ; sinon l'organisme. Les
+    // deux tables partagent les noms de colonnes d'identité (legal_name, siret, vat_number,
+    // adresse, iban…), donc tout ce qui suit — en-tête PDF, jetons, XML Factur-X — bascule sans
+    // rien savoir de l'origine. Une entité distincte a un SIRET et une TVA propres : c'est eux
+    // qui doivent partir dans le XML, pas ceux de l'organisme.
+    const emetteur = await loadEmitter(conn, orgId, inv.billing_profile_id);
+    const o = emetteur || org || {};
 
     // Client : nom libre > entreprise > stagiaire du dossier.
     // `email` n'est pas décoratif : c'est BT-49, l'adresse électronique de l'acheteur, rendue
@@ -148,6 +156,10 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
             email: o.email || null, // BT-34, obligatoire (BR-FR-13)
             address: { line: o.address, zip: o.zip_code, city: o.town },
         },
+        // L'identité complète du vendeur retenu — organisme ou émettrice —, pour que le MODÈLE
+        // rende ses jetons `field:organization.*` avec ces valeurs-là, et pour lire le modèle de
+        // facture propre à l'entité (default_template_slug).
+        emitter: o,
         buyer,
     };
 }
@@ -229,21 +241,42 @@ const createInvoice = async (req, res) => {
                 return res.status(422).json({ error: 'Dossier (inscription) inconnu.' });
             }
         }
+        // ÉMETTRICE : celle demandée (si elle est à nous), sinon la défaut, sinon aucune →
+        // l'organisme. Son numéro vient de SA séquence ; sans émettrice, on garde le compteur
+        // historique par type et par année.
+        const emetteur = await resolveEmitter(conn, req.user.organization_id, req.body.billing_profile_id);
         const year = new Date().getFullYear();
-        const [cnt] = await conn.query(
-            'SELECT COUNT(*) AS n FROM invoice WHERE organization_id = ? AND type = ? AND YEAR(created_at) = ?',
-            [req.user.organization_id, type, year]
-        );
-        const number = `${PREFIX[type]}-${year}-${String(cnt[0].n + 1).padStart(4, '0')}`;
+        let number;
+        if (emetteur) {
+            number = await nextNumberForEmitter(conn, emetteur);
+        } else {
+            const [cnt] = await conn.query(
+                'SELECT COUNT(*) AS n FROM invoice WHERE organization_id = ? AND type = ? AND YEAR(created_at) = ?',
+                [req.user.organization_id, type, year]
+            );
+            number = `${PREFIX[type]}-${year}-${String(cnt[0].n + 1).padStart(4, '0')}`;
+        }
         const mainEnroll = hasLines ? (cleanLines.find((l) => l.enrollment_id)?.enrollment_id || null) : (enrollment_id || null);
         const invoiceId = crypto.randomUUID();
 
-        await conn.query(
-            `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?)`,
-            [invoiceId, req.user.organization_id, mainEnroll, company_id || null, buyer_name || null,
-             type, number, total, tva_exoneree ? 1 : 0, due_date || null]
-        );
+        // billing_profile_id peut ne pas exister (migration 113 non jouée) : on réinsère alors
+        // sans lui, la facture sortant sous l'organisme comme avant.
+        const base = [invoiceId, req.user.organization_id, mainEnroll, company_id || null, buyer_name || null,
+            type, number, total, tva_exoneree ? 1 : 0, due_date || null];
+        try {
+            await conn.query(
+                `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date, billing_profile_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?, ?)`,
+                [...base, emetteur ? emetteur.id : null]
+            );
+        } catch (e) {
+            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+            await conn.query(
+                `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?)`,
+                base
+            );
+        }
         if (hasLines) {
             for (let i = 0; i < cleanLines.length; i++) {
                 const l = cleanLines[i];
@@ -452,10 +485,13 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
         if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
     }
 
-    // Un seul modele FACTURE : le designer serait une formalite sans enjeu, on le prend.
-    // L'ambiguite ne nait qu'a partir de deux.
-    const step = slug
-        ? factures.find((x) => x.slug === slug)
+    // L'ÉMETTRICE CHOISIT SON MODÈLE en priorité : chaque entité a sa présentation. Son
+    // default_template_slug l'emporte sur le réglage global ; à défaut, on retombe sur le
+    // réglage, puis sur l'unique modèle FACTURE s'il n'y en a qu'un.
+    const slugEmetteur = data.emitter && data.emitter.default_template_slug;
+    const slugChoisi = slugEmetteur || slug;
+    const step = slugChoisi
+        ? factures.find((x) => x.slug === slugChoisi)
         : (factures.length === 1 ? factures[0] : null);
 
     if (!step) {
@@ -472,8 +508,12 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
             + 'Ouvrez-le dans Modeles de documents -> Editer.');
     }
 
+    // Le contexte de rendu prend l'ÉMETTRICE, pas l'organisme : les jetons `field:organization.*`
+    // (raison sociale, SIRET, IBAN, et même forme juridique / capital / RCS que l'organisme ne
+    // portait pas) doivent afficher l'identité sous laquelle la facture sort.
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
-    const html = renderTemplateHtml(content.html, invoiceCtx(org || {}, data), {
+    const identite = (data.emitter && data.emitter.legal_name) ? data.emitter : (org || {});
+    const html = renderTemplateHtml(content.html, invoiceCtx(identite, data), {
         title: `${data.typeLabel} ${data.number}`,
         headerHtml: content.header,
         footerHtml: content.footer,

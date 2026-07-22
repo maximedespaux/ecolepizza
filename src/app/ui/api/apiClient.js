@@ -100,6 +100,23 @@ export function saveShopSettings(payload) {
   return request("/ventes/settings", { method: "PUT", body: JSON.stringify(payload) });
 }
 
+// --- Entités émettrices (identités de facturation) ---
+export function getEmitters() {
+  return request("/emetteurs");
+}
+export function createEmitter(payload) {
+  return request("/emetteurs", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateEmitter(id, payload) {
+  return request(`/emetteurs/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function setDefaultEmitter(id) {
+  return request(`/emetteurs/${id}/defaut`, { method: "PUT" });
+}
+export function deleteEmitter(id) {
+  return request(`/emetteurs/${id}`, { method: "DELETE" });
+}
+
 // --- Émargement ---
 export function getAttendance(sessionId) {
   return request(`/attendance/${sessionId}`);
