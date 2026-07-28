@@ -223,7 +223,7 @@ function Stagiaires() {
                 {l.professional_status && <Badge tone="n">{l.professional_status}</Badge>}
                 {l.has_account ? (
                   <>
-                    <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" onClick={() => resetPassword(l)}><Icon name="key" size={15} /></button>
+                    <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" aria-label={`Réinitialiser le mot de passe de ${l.last_name} ${l.first_name}`} onClick={() => resetPassword(l)}><Icon name="key" size={15} /></button>
                     <button type="button" className="iconbtn" title="Supprimer le compte de connexion (fiche conservée)"
                       aria-label={`Supprimer le compte de ${l.first_name} ${l.last_name}`} onClick={() => removeAccount(l)}><Icon name="ban" size={16} /></button>
                   </>

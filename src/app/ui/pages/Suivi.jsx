@@ -408,12 +408,12 @@ function ArchivesView({ onError, onInfo }) {
                                           </span>
                                         </span>
                                         <Badge tone={tone}>{lab}</Badge>
-                                        <button className="iconbtn" title="Aperçu"
+                                        <button className="iconbtn" title="Aperçu" aria-label={`Aperçu de ${d.title}`}
                                           onClick={() => d.source === "archive" ? window.open(archiveFileUrl(d.doc_id), "_blank", "noopener") : setViewId(d.doc_id)}><Icon name="eye" size={16} /></button>
-                                        <button className="iconbtn" title="Télécharger le PDF"
+                                        <button className="iconbtn" title="Télécharger le PDF" aria-label={`Télécharger le PDF de ${d.title}`}
                                           onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
                                         {isAdmin && (
-                                          <button className="iconbtn del" title="Supprimer ce document" onClick={() => deleteDocs([d], d.title)}><Icon name="trash" size={15} /></button>
+                                          <button className="iconbtn del" title="Supprimer ce document" aria-label={`Supprimer ${d.title}`} onClick={() => deleteDocs([d], d.title)}><Icon name="trash" size={15} /></button>
                                         )}
                                       </div>
                                     );
