@@ -155,6 +155,37 @@ cibles tactiles, `role="dialog"`, hiérarchie de titres) et §4.4 (métier) rest
 
 ---
 
+## 3 ter. Cadres, espace d'échange, admin (2026-07-28, suite)
+
+**Deux migrations JOUÉES sur la base de production**, avec l'accord de Maxime :
+
+- **113 — `learner.cadre` + `learner.cadres_exclusifs`.** Le choix de cadre est désormais
+  PUBLIC (les autres stagiaires le voient) et les trois cadres exclusifs sont attribuables
+  depuis la fiche stagiaire (`StagiaireDetail`, via la liste blanche `LEARNER_FIELDS`, donc
+  réservé aux administrateurs et journalisé). Le code fonctionne dans les deux états : les
+  nouvelles colonnes sont demandées par des requêtes SÉPARÉES, sans quoi une base sans 113
+  aurait perdu avatars et compteurs avec les cadres.
+- **114 — `community_post` / `community_answer` / `community_image`.** Table à part de
+  `recipe` : une question n'a ni ingrédient, ni rendement, ni coût, et l'ENUM
+  `recipe.kind` aurait imposé une garde « sauf si c'est une question » à chaque calcul.
+
+**⚠️ L'espace d'échange n'a PAS de front.** L'API est complète et montée
+(`/api/community/posts`, réponses, image, « ça m'a aidé ») mais personne ne l'appelle. C'est
+LE prochain chantier. Décisions déjà arbitrées par Maxime :
+fil UNIQUE avec filtres par nature (pas deux onglets : ~30 stagiaires actifs) · la Question
+d'abord, les annonces ensuite · photos stockées côté serveur.
+
+**Admin — trois pertes d'information silencieuses corrigées** (`400486d`) : `EmptyState` qui
+jetait `title`/`text` (7 appels muets), `.tablewrap` en `overflow:hidden` qui coupait
+147 px de colonnes sur `/factures` à 800 px, `StatusMessage` qui affichait « Chargement… »
+en vert. Le reste du §5 est ouvert.
+
+Un lanceur de migration existe (le client `mysql` n'est pas installé sur la machine) :
+`node <scratchpad>/migrer.js database/migrations/NNN.sql` — il réutilise
+`src/api/config/database.js`, qui charge le `.env` lui-même.
+
+---
+
 ## 4. Chantiers — ESPACE STAGIAIRE (par valeur/effort décroissant)
 
 ### 4.1 ✅ Trois corrections courtes — FAIT le 2026-07-28 (commit c6b5df2)
