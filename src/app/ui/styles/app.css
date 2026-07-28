@@ -432,8 +432,14 @@ tbody tr:last-child td{border-bottom:none}
      par un lecteur d'écran, qui continue d'annoncer la colonne de chaque cellule. */
   .dt,.dt tbody,.dt tr,.dt td{display:block;width:auto}
   .dt thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-  .dt tr{border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);
+  /* `flex` sur la ligne pour pouvoir RÉORDONNER : dans un tableau, la colonne qui identifie
+     n'est pas forcément la première (Formations met le code avant l'intitulé, ce qui est juste
+     en colonnes). En carte, le titre doit ouvrir — une carte qui commence par « CODE RS7404 »
+     puis donne son nom se lit à l'envers. `order` le hisse sans toucher à l'ordre du tableau. */
+  .dt tr{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);
     padding:13px 14px;margin-bottom:10px;transition:border-color .14s var(--ease),box-shadow .14s var(--ease)}
+  .dt td.dt-principal{order:-2}
+  .dt td.dt-actions{order:10}
   /* Le filet de survol du mode tableau deviendrait une barre le long d'une carte : ici c'est
      la bordure entière qui répond. */
   .dt tr:hover{background:var(--surface);box-shadow:var(--shadow-2);border-color:var(--muted)}

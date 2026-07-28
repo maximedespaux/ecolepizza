@@ -84,7 +84,7 @@ function Formations() {
         vide={<EmptyState icon="graduation" title="Aucune formation"
           text="Crée tes formations : elles servent de base aux sessions, aux dossiers et aux mondes de Pizza Quest." />}
         cols={[
-          { k: "poignee", t: "", th: { width: 30 },
+          { k: "poignee", t: "", sansCarte: true, th: { width: 30 },
             cell: () => <span className="drag-handle" title="Glisser pour réorganiser" aria-hidden="true">⠿</span> },
           { k: "code", t: "Code",
             cell: (p) => <span className="badge n mono" style={{ color: "#fff", background: p.color || colorOf(p.code), borderColor: "transparent" }}>{p.code}</span> },
@@ -93,7 +93,7 @@ function Formations() {
           { k: "hours", t: "Heures", cell: (p) => p.hours },
           { k: "price", t: "Prix", cell: (p) => <span className="mono">{euro(p.price)}</span> },
           { k: "nature", t: "Nature",
-            cell: (p) => (p.rs_code ? <Badge tone="b">Certifiante</Badge> : p.hygiene ? <Badge tone="a">Hygiène</Badge> : <span className="hint">—</span>) },
+            cell: (p) => (p.rs_code ? <Badge tone="b">Certifiante</Badge> : p.hygiene ? <Badge tone="a">Hygiène</Badge> : null) },
           { k: "actions", t: "", actions: true, td: { textAlign: "right", whiteSpace: "nowrap" },
             cell: (p) => (
               <>
