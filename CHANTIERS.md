@@ -202,9 +202,24 @@ passée en administration et `/communaute` est une route stagiaire. À regarder 
   **blanches** (`StagiaireDetail`, `SessionDetail`). En-têtes de tableau collants, survol de
   ligne avec filet à gauche.
 
-**RESTE au §5.5 : l'étape 4, le composant `<DataTable>` unique** (ou bascule en cartes sous
-700 px) — le plus gros chantier visuel. Et `ListeEtat` n'est branché sur AUCUNE des ~29 autres
-pages qui initialisent à `[]` : le composant existe, la reprise page par page est à faire.
+- **§5.5 étape 4 — `<DataTable>`** (`287da55`) : tableau au large, **cartes sous 700 px**. La
+  bascule est une **requête de conteneur** et non une media query — le même tableau peut vivre
+  pleine page ou dans une colonne étroite, c'est sa place réelle qui doit décider. Deux
+  marqueurs de colonne ne servent qu'en mode carte : `principal` (devient le titre, perd son
+  intitulé) et `actions` (passe en pied). Le `<thead>` est masqué en `clip-path` et non en
+  `display:none`, pour rester lu par un lecteur d'écran.
+
+**CE QUI RESTE — mécanique, et listé :**
+
+1. **Convertir les 13 autres pages à tableau** vers `<DataTable>`. `Opcos.jsx` est le MODÈLE à
+   recopier. Les pages : `Stagiaires`, `Sessions`, `Factures`, `Comptabilite`, `Inventaire`,
+   `Partenaires`, `Entreprises`, `Formations`, `Modeles`, `Suivi`, `AccessRoles`, `Equipe`,
+   `Audit` — repérables par `grep -l tablewrap ui/pages`.
+2. **Passer les ~29 pages de `useState([])` à `useState(null)`** et brancher `ListeEtat` ou
+   `<DataTable>`. Tant qu'elles sont à `[]`, elles annoncent « Aucun résultat » pendant tout
+   le chargement. `grep -lE "useState\(\[\]\)" ui/pages/*.jsx`.
+3. Toujours en attente : `pages/FicheRecette.jsx` (1028 lignes, routé nulle part) et les routes
+   serveur des cœurs (`lireCoeurs`, `/quest/hearts`), survivantes du retrait de la mécanique.
 
 Un lanceur de migration existe (le client `mysql` n'est pas installé sur la machine) :
 `node <scratchpad>/migrer.js database/migrations/NNN.sql` — il réutilise
