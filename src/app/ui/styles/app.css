@@ -1003,10 +1003,52 @@ tbody tr:last-child td{border-bottom:none}
 /* Largeur de base FIXE (et non `1 1 230px`) : en s'étirant, la dernière carte d'une rangée
    incomplète devenait deux fois plus large que ses voisines — le parcours se lisait alors
    comme une suite de blocs de tailles arbitraires au lieu d'une progression régulière. */
-.pq-fcard{position:relative;flex:0 1 252px;min-height:96px;border:none;border-radius:16px;padding:14px 16px 16px;color:#fff;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;
-  box-shadow:0 4px 0 0 rgba(0,0,0,.18);transition:transform .14s var(--spring),box-shadow .14s var(--ease)}
-.pq-fcard:hover:not(:disabled){transform:translateY(-3px);box-shadow:0 7px 0 0 rgba(0,0,0,.18)}
-.pq-fcard:active:not(:disabled){transform:translateY(2px);box-shadow:0 2px 0 0 rgba(0,0,0,.18)}
+/* PAS d'`overflow:hidden` ici : la pastille « ! » de prérequis est posée en `top/left:-9px`,
+   elle déborde volontairement de la carte et se ferait rogner. La jauge porte son propre
+   `overflow`, elle n'a pas besoin que le parent découpe. */
+.pq-fcard{position:relative;flex:0 1 252px;min-height:96px;border:none;border-radius:18px;padding:13px 15px 15px;color:#fff;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;
+  /* Relief « pâte à modeler » : un dégradé qui éclaire le haut et assombrit le bas donne son
+     volume à la touche, là où l'aplat uni la laissait plate. */
+  background:linear-gradient(180deg,
+    color-mix(in srgb,var(--pq-c,var(--navy)) 84%,#fff) 0%,
+    var(--pq-c,var(--navy)) 46%,
+    color-mix(in srgb,var(--pq-c,var(--navy)) 86%,#000) 100%);
+  /* Trois couches, chacune son rôle : la TRANCHE (teintée de la couleur de la carte et non en
+     noir — un noir plat salit toutes les teintes), l'OMBRE PORTÉE qui la décolle du fond, et
+     le FILET DE LUMIÈRE sur l'arête haute, qui est ce qui la fait paraître bombée. */
+  box-shadow:0 5px 0 0 color-mix(in srgb,var(--pq-c,var(--navy)) 58%,#000),
+             0 12px 22px -14px rgba(10,12,30,.55),
+             inset 0 1px 0 rgba(255,255,255,.3);
+  transition:transform .16s var(--spring),box-shadow .16s var(--ease),filter .16s var(--ease)}
+.pq-fcard:hover:not(:disabled){transform:translateY(-3px);filter:brightness(1.05) saturate(1.04);
+  box-shadow:0 8px 0 0 color-mix(in srgb,var(--pq-c,var(--navy)) 58%,#000),
+             0 18px 30px -16px rgba(10,12,30,.6),
+             inset 0 1px 0 rgba(255,255,255,.34)}
+/* À l'appui, la touche s'enfonce : elle descend exactement de ce que sa tranche perd. Sans
+   cette égalité, le bas de la carte bougerait — le geste ne se lirait plus comme un appui. */
+.pq-fcard:active:not(:disabled){transform:translateY(4px);
+  box-shadow:0 1px 0 0 color-mix(in srgb,var(--pq-c,var(--navy)) 58%,#000),
+             0 6px 12px -10px rgba(10,12,30,.5),
+             inset 0 1px 0 rgba(255,255,255,.24)}
+/* Le code de formation en pastille, l'ingrédient en jeton : deux repères posés, au lieu de
+   deux éléments flottant sur l'aplat. */
+.pq-fcard-code{align-self:flex-start;padding:2px 8px;border-radius:99px;background:rgba(0,0,0,.2)}
+/* Le jeton n'accueille plus un emoji mais trois étoiles : il s'allonge en pastille. */
+.pq-fcard-ing{display:inline-flex;align-items:center;justify-content:center;gap:1px;flex:none;
+  min-height:24px;padding:0 8px;border-radius:99px;
+  background:rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+/* Étoiles de difficulté : les pleines à fond, les vides en simple contour très atténué —
+   le CONTRASTE entre les deux est ce qui porte l'information, pas leur nombre. */
+.pq-diff{display:inline-flex;align-items:center;gap:1px;line-height:0;color:#fff}
+.pq-diff > svg{opacity:.42}
+.pq-diff > svg.on{opacity:1}
+.pq-fcard.locked .pq-fcard-ing{background:var(--surface2);box-shadow:none;padding:0;width:24px}
+/* Terminée : un liseré d'or et une lueur douce. La jauge pleine dit déjà « 6/6 » — l'or dit
+   « et c'est fini », qui n'est pas la même information au milieu d'un parcours. */
+.pq-fcard.fini{box-shadow:0 5px 0 0 color-mix(in srgb,var(--pq-c,var(--navy)) 58%,#000),
+             0 12px 26px -14px rgba(252,185,0,.55),
+             inset 0 0 0 2px var(--gold),
+             inset 0 1px 0 rgba(255,255,255,.3)}
 /* Verrouillée : un aplat uni la faisait disparaître du parcours alors qu'elle en fait partie
    — c'est l'objectif suivant, il doit rester visible. Hachures très douces : présente sans
    prétendre être jouable. */
@@ -1028,8 +1070,8 @@ tbody tr:last-child td{border-bottom:none}
 @keyframes pqPose{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.pq-row > *{animation:none}}
 .pq-fcard-top{display:flex;align-items:center;justify-content:space-between}
-.pq-fcard-code{font-size:11px;font-weight:800;letter-spacing:.06em;opacity:.92}
-.pq-fcard-ing{font-size:20px;line-height:1}
+.pq-fcard-code{font-size:10.5px;font-weight:800;letter-spacing:.06em;opacity:.95}
+.pq-fcard-ing{font-size:17px;line-height:1}
 .pq-fcard-title{font-size:15px;font-weight:800;line-height:1.15}
 .pq-fcard-meta{font-size:11px;opacity:.92;margin-top:4px}
 .pq-prereq{position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2c00;display:grid;place-items:center;font-weight:900;font-size:15px;border:2px solid var(--surface2);cursor:help}

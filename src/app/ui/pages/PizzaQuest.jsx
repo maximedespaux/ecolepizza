@@ -81,7 +81,38 @@ function roleOf(w) {
   if (/niveau i|classique/.test(t)) return "niv1";
   return "autre";
 }
-const INGREDIENT = { decouverte: "🍕", niv1: "🌾", niv1pro: "🌾", niv2: "🧫", expert: "🏆", spe: "🔥", autre: "🧑‍🍳" };
+/**
+ * NIVEAU DE DIFFICULTÉ, en étoiles — à la place des emojis-ingrédients (🍕 🌾 🧫 🏆…).
+ *
+ * L'emoji ne disait rien : un épi de blé sur le Niveau I et une boîte de Petri sur le
+ * Niveau II ne se comparent pas, alors que ces formations SE SUIVENT. Trois étoiles dont
+ * une, deux ou trois pleines disent la seule chose qu'on veut savoir avant de choisir :
+ * dans quoi on met les pieds. C'est aussi la règle de la charte — pas d'emoji comme icône.
+ *
+ * Les paliers reprennent ceux du parcours (Débutant · Intermédiaire · Avancé). Les
+ * spécialisations valent 2 : elles ne prolongent pas l'échelle, elles la traversent.
+ */
+const DIFFICULTE = {
+  decouverte: { n: 1, label: "Débutant" },
+  niv1:       { n: 1, label: "Débutant" },
+  niv1pro:    { n: 1, label: "Débutant" },
+  niv2:       { n: 2, label: "Intermédiaire" },
+  spe:        { n: 2, label: "Intermédiaire" },
+  expert:     { n: 3, label: "Avancé" },
+  autre:      { n: 1, label: "Débutant" },
+};
+
+/** Trois étoiles, dont `n` pleines. `aria-label` porte le mot — trois icônes ne se disent pas. */
+function Difficulte({ n, label }) {
+  return (
+    <span className="pq-diff" role="img" aria-label={`Niveau ${label}`} title={`Niveau ${label}`}>
+      {[1, 2, 3].map((i) => (
+        <Icon key={i} name="star" size={11} fill={i <= n ? "currentColor" : "none"}
+          className={i <= n ? "on" : ""} />
+      ))}
+    </span>
+  );
+}
 
 /* Géométrie du chemin. Les décalages verticaux dessinent le sentier ; ECART_X est la
    distance entre deux CENTRES de pastilles.
@@ -422,7 +453,7 @@ function FCard({ w, prog, onPick }) {
   const done = prog ? Object.keys(prog).length : 0;
   const stars = prog ? Object.values(prog).reduce((a, s) => a + s, 0) : 0;
   const nbCh = chaptersFor(w).length;
-  const ing = INGREDIENT[roleOf(w)];
+  const diff = DIFFICULTE[roleOf(w)] || DIFFICULTE.autre;
   // Pastille « ! » dès que la formation a un prérequis, acquis ou non : elle SIGNALE, et le
   // détail se lit dans le récapitulatif placé sous le groupe où elle apparaît.
   const manque = w.prereqMissing || [];
@@ -435,8 +466,11 @@ function FCard({ w, prog, onPick }) {
     : "Obtiens le badge de ce niveau pour le débloquer";
   return (
     <button
-      className={"pq-fcard" + (w.unlocked ? "" : " locked")}
-      style={w.unlocked ? { background: w.color } : undefined}
+      className={"pq-fcard" + (w.unlocked ? "" : " locked") + (w.unlocked && nbCh > 0 && done >= nbCh ? " fini" : "")}
+      /* La couleur est DÉCIDÉE ici (elle vient de la formation) mais passée en variable, pas
+         en `background` : un fond inline écraserait le dégradé, l'ombre colorée et le filet de
+         lumière qui donnent son relief à la carte. */
+      style={w.unlocked ? { "--pq-c": w.color } : undefined}
       disabled={!w.unlocked}
       onClick={() => onPick(w.code)}
       title={w.unlocked ? (infobulle || w.title) : raison}
@@ -446,7 +480,7 @@ function FCard({ w, prog, onPick }) {
       )}
       <span className="pq-fcard-top">
         <span className="pq-fcard-code">{w.code}</span>
-        <span className="pq-fcard-ing" aria-hidden="true">{w.unlocked ? ing : <Icon name="lock" size={16} />}</span>
+        <span className="pq-fcard-ing">{w.unlocked ? <Difficulte n={diff.n} label={diff.label} /> : <Icon name="lock" size={15} aria-hidden="true" />}</span>
       </span>
       <span className="pq-fcard-title">{w.title}</span>
       <span className="pq-fcard-meta">
@@ -454,7 +488,7 @@ function FCard({ w, prog, onPick }) {
           ? (manque.length ? `Après ${manque.map((m) => m.code).join(" + ")}` : "Non débloqué")
           : chaptersLoading(w) ? "…"
             : nbCh === 0 ? "Questions à venir"
-              : `${done}/${nbCh} chapitres · ${stars} ⭐`}
+              : <>{done}/{nbCh} chapitres · {stars} <Icon name="star" size={11} fill="currentColor" aria-hidden="true" /></>}
       </span>
       {/* La progression ne se lisait qu'en toutes lettres (« 8/20 chapitres »). Une jauge la
           donne d'un coup d'œil — et c'est elle qui fait qu'on repère la formation à reprendre
