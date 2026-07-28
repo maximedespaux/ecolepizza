@@ -68,13 +68,20 @@ function Pipeline() {
             const items = cardsByCol[col.index] || [];
             return (
               <div className={"pipe-col" + (col.final ? " pipe-done" : "")} key={col.key}>
+                {/* Le libellé vient du MODÈLE de document (choisi par l'école) et peut faire
+                    trois lignes — « Contrat de formation / Convention de formation
+                    simplifiée ». Il s'affichait tronqué net au bord de la colonne, sans
+                    infobulle : on ne savait pas de quelle étape il s'agissait. Il tient
+                    maintenant sur deux lignes, le reste en points de suspension, et le titre
+                    complet reste lisible au survol. */}
                 <div className="pipe-head">
-                  <span>{col.ic ? `${col.ic} ` : ""}{col.label}</span>
-                  <b className="tnum">{items.length}</b>
+                  <span className="pipe-head-t" title={col.label}>{col.ic ? `${col.ic} ` : ""}{col.label}</span>
+                  <b className="tnum pipe-n">{items.length}</b>
                 </div>
                 <div className="pipe-body">
                   {items.length === 0 ? (
-                    <p className="sub" style={{ textAlign: "center", padding: "8px 0", color: "var(--dim)" }}>—</p>
+                    // Un « — » nu ne dit pas si l'étape est vide ou si rien n'a chargé.
+                    <p className="pipe-vide">Personne à cette étape</p>
                   ) : items.map((r) => (
                     <div className="pipe-card" key={r.enrollment_id}>
                       <Link to={`/stagiaires/${r.learner_id}`} className="pipe-name">{r.name}</Link>

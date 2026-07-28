@@ -26,7 +26,14 @@
   color-scheme:light; /* contrôles natifs (cases à cocher, radios…) rendus en clair, jamais le widget sombre de l'OS */
   --bg:#f5f6fb; --bg2:#eef0f8; --surface:#ffffff; --surface2:#f5f6fb; --surface3:#eaecf5;
   --glass:rgba(255,255,255,.82); --border:#e3e6f1; --border-soft:#eef0f7;
-  --text:#1e2140; --muted:#5b6079; --dim:#9aa0bb;
+  /* `--dim` valait #9aa0bb : 2,4:1 sur --surface2, soit près de DEUX FOIS moins que le seuil
+     AA de 4,5:1. Or il sert de couleur de TEXTE à 94 endroits (47 en styles inline, 47 dans
+     cette feuille) — libellés de sections, sous-titres, compteurs, dates. Le corriger ici
+     plutôt qu'aux 94 sites : c'est un token, il doit porter la règle.
+     #686f8c donne 4,59:1 sur --surface2 (le fond le plus clair, donc le pire cas) et 4,95:1
+     sur le blanc. Il reste NETTEMENT plus discret que --muted (5,73:1) : la hiérarchie entre
+     les deux est conservée, elle passe seulement au-dessus du seuil de lisibilité. */
+  --text:#1e2140; --muted:#5b6079; --dim:#686f8c;
   --green:#2f9e6f; --green-bg:#e6f5ee; --blue:#2c3371; --blue-bg:#e9eaf5;
   --amber-bg:#fdeede; --rosso-bg:#fdeaea;
   --orange-bg:#fff0e0; --gold-bg:#fff7db;
@@ -39,7 +46,9 @@
   color-scheme:dark; /* contrôles natifs rendus en sombre, cohérents avec le thème */
   --bg:#12142a; --bg2:#171a34; --surface:#1d2040; --surface2:#242848; --surface3:#2d3159;
   --glass:rgba(18,20,42,.72); --border:#343a63; --border-soft:#2a2f52;
-  --text:#eef0fb; --muted:#a7add0; --dim:#727aa3;
+  /* Même correction en sombre : #727aa3 tombait à 3,42:1 sur --surface2. #8a92bd donne
+     4,71:1, contre 6,47:1 pour --muted — l'écart reste lisible comme une hiérarchie. */
+  --text:#eef0fb; --muted:#a7add0; --dim:#8a92bd;
   --green:#5fc08e; --green-bg:rgba(95,192,142,.14); --blue:#8ea2e0; --blue-bg:rgba(142,162,224,.16);
   --amber-bg:rgba(240,164,60,.14); --rosso-bg:rgba(220,62,55,.16);
   --orange-bg:rgba(255,105,0,.15); --gold-bg:rgba(252,185,0,.15);
@@ -598,11 +607,22 @@ tbody tr:last-child td{border-bottom:none}
 /* Responsive --------------------------------------------------------- */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;z-index:35}.scrim.show{display:block}
 @media(max-width:980px){
-  .cols-4{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:1fr}.cols-2{grid-template-columns:1fr}
+  /* `.cols-3` tombait directement à UNE colonne : trois indicateurs — trois nombres — se
+     retrouvaient empilés sur trois cartes de 200 px de haut, soit un demi-écran de téléphone
+     pour lire « 1 · 0 · 0 ». Deux colonnes tiennent parfaitement à cette largeur ; la colonne
+     unique est réservée aux écrans réellement étroits, plus bas. */
+  .cols-4{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:1fr 1fr}.cols-2{grid-template-columns:1fr}
   .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:.24s var(--ease)}.sidebar.open{transform:none}
   .topbar .menu-btn{display:block}.content{padding:18px 14px 70px}
 }
-@media(max-width:560px){.cols-4{grid-template-columns:1fr}.row3,.row2{grid-template-columns:1fr}}
+@media(max-width:560px){.cols-4{grid-template-columns:1fr}.cols-3{grid-template-columns:1fr}.row3,.row2{grid-template-columns:1fr}}
+/* Un indicateur resserré quand la place manque : c'est un NOMBRE, il n'a pas besoin d'autant
+   d'air qu'une carte de contenu. Sans cela, la ligne d'indicateurs mangeait l'écran avant
+   qu'on ait vu la moindre donnée. */
+@media(max-width:980px){
+  .kpi{padding:13px 15px}
+  .kpi .val{font-size:26px;margin-top:5px}
+}
 
 /* ===== Comptabilité ===================================================== */
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border-soft);margin:4px 0 18px}
@@ -685,9 +705,25 @@ tbody tr:last-child td{border-bottom:none}
 .stack-bar > span:last-child{border-right:none}
 
 /* ===== Pipeline CRM ===================================================== */
-.pipe{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}
+/* Le tableau défile latéralement : un dégradé sur le bord droit dit qu'il reste des colonnes.
+   Sans lui, la dernière colonne est coupée net et rien n'indique qu'il y en a d'autres —
+   c'est le même défaut que `.tablewrap` avait, à l'échelle du tableau de bord. */
+.pipe{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;align-items:flex-start;
+  scroll-snap-type:x proximity;
+  background:linear-gradient(to right,var(--bg),var(--bg)) right center / 22px 100% no-repeat,
+             linear-gradient(to right,rgba(10,12,30,.16),transparent) right center / 13px 100% no-repeat;
+  background-attachment:local,scroll}
+.pipe-col{scroll-snap-align:start}
+/* Deux lignes maximum, puis points de suspension : trois lignes de titre poussaient les
+   cartes hors du champ et rendaient les colonnes inégales. */
+.pipe-head-t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  min-width:0;line-height:1.3}
+/* Le compteur ne doit jamais être compressé par un titre long. */
+.pipe-n{flex:none;min-width:20px;text-align:right;color:var(--muted)}
+.pipe-vide{margin:0;padding:14px 6px;text-align:center;font-size:12px;color:var(--muted);
+  border:1px dashed var(--border);border-radius:var(--r-sm)}
 .pipe-col{flex:0 0 240px;background:var(--bg2);border:1px solid var(--border-soft);border-radius:var(--r);display:flex;flex-direction:column;max-height:calc(100vh - 220px)}
-.pipe-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;font:600 13px/1 var(--font-b);color:var(--text);border-bottom:1px solid var(--border-soft)}
+.pipe-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:10px 12px;font:600 13px/1.3 var(--font-b);color:var(--text);border-bottom:1px solid var(--border-soft)}
 .pipe-body{padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
 .pipe-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px;box-shadow:0 1px 2px rgba(20,24,60,.05)}
 .pipe-name{display:block;font-weight:600;color:var(--blue);text-decoration:none;font-size:13.5px}
