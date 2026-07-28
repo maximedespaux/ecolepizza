@@ -124,6 +124,37 @@ ailleurs.
 
 ---
 
+## 3 bis. Passe UI/UX de l'espace stagiaire (2026-07-28, soir)
+
+Onze commits sur `max`, arbre propre. Ce qui a changé, et pourquoi :
+
+- **Communauté en PUBLICATIONS** (`f4a16e2`) — l'auteur et son cadre passent en tête de carte,
+  à 38 px ; même en-tête dans la modale de détail. Cadres aussi sur les pastilles de
+  commentateurs et sur l'avatar de la barre (`AvatarCadre` enfin branché). Modale profil :
+  halo tiré de la couleur de l'avatar, compteurs animés.
+- **Cadres animés** — Braise a des FLAMMES (couronne floutée qui tourne à 3,1 s pendant que
+  la luminosité vacille à 1,7 s : c'est le décalage qui empêche l'œil de voir la boucle),
+  Maestro des ÉTINCELLES à CONTRE-SENS de son anneau. Découpés au masque et non glissés en
+  `z-index:-1` — un enfant en z-index négatif passe sous le fond de son parent, donc sous
+  l'avatar.
+- **Pizza Quest** (`d42edae`, `5f533c6`, `f2a5fb0`) — jauge de progression sur chaque touche,
+  largeur fixe (les rangées incomplètes étiraient la dernière carte du double), trait vertical
+  entre paliers, relief « pâte à modeler », **difficulté en trois étoiles** à la place des
+  emojis-ingrédients, QCM avec la même matière que les touches.
+- **Deux mécaniques fantômes retirées** : les ❤️ du QCM (`setHearts` n'était plus appelé —
+  trois vies figées) et le « +90 XP » du Constructeur. Toutes deux promettaient une monnaie
+  supprimée le matin même.
+- **Modales** (`8672022`, `6e493ce`) — la couche `.stu-app` leur est rendue (les portails
+  sortaient de StudentLayout et revenaient en registre administration, IntroGuide compris),
+  et `lib/useEchap.js` ferme avec Échap, une modale à la fois.
+- **§4.1 fait** (`c6b5df2`) — cf. ci-dessous.
+
+**Reste sur l'espace stagiaire** : Boutique, Notions, Mercuriale, les 3 assistants et
+StudentFormationDetail n'ont pas encore eu leur passe. Les points §4.3 (contrastes `--dim`,
+cibles tactiles, `role="dialog"`, hiérarchie de titres) et §4.4 (métier) restent ouverts.
+
+---
+
 ## 4. Chantiers — ESPACE STAGIAIRE (par valeur/effort décroissant)
 
 ### 4.1 ✅ Trois corrections courtes — FAIT le 2026-07-28 (commit c6b5df2)
