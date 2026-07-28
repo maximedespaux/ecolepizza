@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Icon } from "./Icon.jsx";
+import { useEchap } from "../lib/useEchap.js";
 
 /**
  * Le Constructeur de pizza — jeu d'ordonnancement : remettre les étapes de la
@@ -22,6 +23,7 @@ const RECIPE = [
 const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
 export default function ConstructorGame({ onClose, onFinish }) {
+  useEchap(onClose);
   const order = useMemo(() => shuffle(RECIPE.map((_, i) => i)), []);   // ordre d'affichage du vivier
   const [placed, setPlaced] = useState([]);                            // indices posés, dans l'ordre du joueur
   const [checked, setChecked] = useState(false);
@@ -87,7 +89,14 @@ export default function ConstructorGame({ onClose, onFinish }) {
 
           {checked && (
             <div style={{ textAlign: "center", marginTop: 14 }}>
-              <div style={{ fontSize: 26, letterSpacing: 4 }}>{[0, 1, 2].map((s) => <span key={s} style={{ opacity: s < stars ? 1 : 0.25 }}>⭐</span>)}</div>
+              {/* Mêmes étoiles que la fin d'un chapitre de Pizza Quest : c'est le même geste
+                  (« voilà ce que tu as obtenu »), il doit avoir la même forme. */}
+              <div className="pq-fin-stars" aria-label={`${stars} étoile${stars > 1 ? "s" : ""} sur 3`}>
+                {[0, 1, 2].map((s) => (
+                  <Icon key={s} name="star" size={32} fill={s < stars ? "currentColor" : "none"}
+                    className={s < stars ? "on" : ""} style={{ animationDelay: `${s * 0.14}s` }} />
+                ))}
+              </div>
               <p style={{ fontWeight: 700, margin: "4px 0 0" }}>{correct}/{N} étapes bien placées</p>
               <p className="hint" style={{ marginTop: 2 }}>{stars >= 2 ? "Belle recette !" : "Regarde le bon ordre ci-dessus et retente."}</p>
             </div>
@@ -95,9 +104,12 @@ export default function ConstructorGame({ onClose, onFinish }) {
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Fermer</button>
+          {/* « Valider » et non « Valider (+90 XP) » : l'XP a été retirée du jeu, ce bouton
+              promettait une monnaie qui n'existe plus. Ce sont les ÉTOILES qui comptent, et
+              elles sont affichées juste au-dessus. */}
           {!checked
             ? <button className="btn primary" disabled={placed.length !== N} onClick={() => setChecked(true)}>Vérifier</button>
-            : <button className="btn primary" onClick={() => onFinish(stars)}>Valider (+{correct * 10} XP)</button>}
+            : <button className="btn primary" onClick={() => onFinish(stars)}>Valider</button>}
         </div>
       </div>
     </div>

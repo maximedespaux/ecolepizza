@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { useEchap } from "../lib/useEchap.js";
 import { Icon } from "./Icon.jsx";
 
 /**
@@ -49,6 +50,7 @@ const TOOL = {
 };
 
 export default function IntroGuide({ open, onClose, page }) {
+  useEchap(onClose, open);
   if (!open) return null;
   const tool = page ? TOOL[page] : null;
   return createPortal(

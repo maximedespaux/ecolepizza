@@ -9,6 +9,7 @@ import AvatarCadre from "../components/AvatarCadre.jsx";
 import { euro, colorOf, initials } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { useCountUp } from "../lib/useCountUp.js";
+import { useEchap } from "../lib/useEchap.js";
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
 import { cadreFor, cadrePorteDe, useCadreChoisi } from "../lib/cadres.js";
 import { UserContext } from "../context/UserContext.jsx";
@@ -212,6 +213,7 @@ function Commenters({ gens, total, cadreDe, onOpen }) {
 
 // Fenêtre profil de l'auteur : avatar, nom, nombre de fiches partagées, cœurs reçus.
 function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
+  useEchap(onClose);
   const av = profile && profile.avatar ? parseAvatar(profile.avatar) : null;
   // Les deux compteurs montent de 0 à leur valeur — c'est le seul endroit de la Communauté
   // où l'on regarde le bilan de quelqu'un, et un nombre qui s'installe se retient mieux qu'un
@@ -349,6 +351,9 @@ export default function Communaute() {
   const toggleWish = (id) => setWish((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); writeWish(n); return n; });
   const navigate = useNavigate();
 
+  // Échap referme le détail. La modale de profil a le sien : ouverte par-dessus, elle capte
+  // l'évènement en premier et l'arrête — Échap ne referme donc jamais les deux d'un coup.
+  useEchap(() => setOpenId(null), !!openId);
   const { user } = useContext(UserContext);
   const moi = user?.id;
   // Le choix de cadre vit dans le navigateur de chacun : on ne le connaît donc QUE pour

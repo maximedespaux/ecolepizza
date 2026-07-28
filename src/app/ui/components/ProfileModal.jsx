@@ -5,6 +5,7 @@ import { Icon } from "./Icon.jsx";
 import { initials, colorOf } from "../lib/format.js";
 import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
 import { CADRES, cadreFor, cadrePossede, cadrePorte, getCadreChoisi, setCadreChoisi } from "../lib/cadres.js";
+import { useEchap } from "../lib/useEchap.js";
 
 /**
  * Profil stagiaire, en trois onglets :
@@ -17,6 +18,7 @@ const CIVILITIES = ["", "M.", "Mme"];
 const PALETTE = ["#dc3e37", "#ff6900", "#fcb900", "#2f9e6f", "#3aa0e0", "#2c3371", "#7b3f9e", "#8a5a2b", "#e0533e", "#111827"];
 
 export default function ProfileModal({ onClose }) {
+  useEchap(onClose);
   const { user, setUser } = useContext(UserContext);
   const uid = user?.id;
   const [tab, setTab] = useState("profil");
