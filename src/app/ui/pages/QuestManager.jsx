@@ -154,11 +154,24 @@ function CoeursCard({ onStatus }) {
   const pleinMin = Number(delai) * Number(max);
 
   return (
-    <Card title={<span className="card-ttl">❤️ Cœurs &amp; reconstitution</span>}>
-      <p className="hint" style={{ marginTop: 0 }}>
-        Un stagiaire perd un cœur lorsqu'il <b>échoue</b> un chapitre ou qu'il l'<b>abandonne</b>
-        en cours. À court de cœurs, il ne peut plus lancer de chapitre tant qu'il n'en a pas
-        récupéré un. Les cœurs sont communs à toutes ses formations.
+    <Card title={<span className="card-ttl"><Icon name="heart" size={16} /> Cœurs &amp; reconstitution</span>}>
+      {/* ⚠️ CETTE SECTION NE PILOTE PLUS RIEN.
+          Les cœurs ont été retirés de Pizza Quest le 2026-07-28 : ils BLOQUAIENT la révision,
+          et punir quelqu'un qui veut réviser est absurde dans une école. Le réglage subsiste
+          en base (`quest_max_hearts`, `quest_regen_minutes`) et l'écran continue de
+          l'enregistrer — mais plus aucun écran stagiaire ne le lit.
+          Le dire franchement plutôt que de retirer l'onglet en silence : la donnée existe
+          encore, et la décision de supprimer l'un et l'autre revient à Maxime. */}
+      <div className="status info" style={{ marginTop: 0 }}>
+        <b>Réglage sans effet.</b> Les cœurs ont été retirés du jeu — ils empêchaient de
+        réviser après un échec. Ce que vous saisissez ici est bien enregistré, mais aucun
+        écran stagiaire ne s'en sert. À supprimer ou à réactiver : c'est une décision à
+        prendre, pas un oubli.
+      </div>
+      <p className="hint">
+        <i>Fonctionnement d'origine :</i> un stagiaire perdait un cœur lorsqu'il échouait un
+        chapitre ou l'abandonnait en cours, et ne pouvait plus en lancer tant qu'il n'en avait
+        pas récupéré un.
       </p>
 
       <form onSubmit={enregistrer} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -192,12 +205,20 @@ function DifficultesCard({ difficulties, run }) {
   const [nom, setNom] = useState("");
   const [xp, setXp] = useState(10);
   return (
-    <Card title={<span className="card-ttl"><Icon name="target" size={16} /> Difficultés &amp; XP</span>}>
+    <Card title={<span className="card-ttl"><Icon name="target" size={16} /> Difficultés</span>}>
+      {/* Contrairement aux cœurs, cet onglet n'est PAS mort : le NOM et la COULEUR d'une
+          difficulté servent toujours — le QCM affiche « Facile » sous chaque question. Seule
+          la colonne XP est devenue inerte, l'XP ayant été retirée du jeu le 2026-07-28. On ne
+          retire donc pas l'écran, on dit lesquelles de ses valeurs comptent encore. */}
       <p className="hint" style={{ marginTop: 0 }}>
-        Chaque difficulté porte l'XP gagné par question. Régler « Difficile » à 20 requalifie
-        d'un coup toutes les questions de ce niveau — inutile de les rouvrir une à une. Une
-        question peut malgré tout fixer son propre XP, qui l'emporte alors.
+        Le <b>nom</b> et la <b>couleur</b> d'une difficulté s'affichent sous chaque question du
+        QCM : c'est ce qui dit au stagiaire dans quoi il met les pieds.
       </p>
+      <div className="status info">
+        <b>La colonne XP ne sert plus.</b> L'XP a été retirée de Pizza Quest — la progression
+        se lit maintenant aux <b>cadres</b>, gagnés sur les formations terminées. La valeur
+        reste enregistrée, elle n'est simplement plus lue.
+      </div>
 
       <form style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14, flexWrap: "wrap" }}
         onSubmit={(e) => {
