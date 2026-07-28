@@ -7,12 +7,14 @@ import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import { Squelette } from "../components/Squelette.jsx";
+import { Icon } from "../components/Icon.jsx";
 
 const TONE = { SIGNATURE: "g", PAIEMENT: "a", RELANCE: "r", QUALIOPI: "b", INFO: "n", SYSTEME: "n" };
 
 function Notifications() {
   const navigate = useNavigate();
-  const [rows, setRows] = useState([]);
+  const [rows, setRows] = useState(null); // `null` = on charge, `[]` = aucune notification
   const [status, setStatus] = useState(null);
 
   async function load() {
@@ -22,11 +24,19 @@ function Notifications() {
   useEffect(() => { load(); }, []);
   useAutoRefresh(load, { interval: 25000 });
 
-  async function readAll() { try { await markAllNotificationsRead(); load(); } catch { /* ignore */ } }
+  // Ces deux actions échouaient EN SILENCE. « Tout marquer comme lu » ne faisait alors
+  // simplement rien : ni changement à l'écran, ni message. On recliquait, sans comprendre.
+  async function readAll() {
+    try { await markAllNotificationsRead(); setStatus(null); load(); }
+    catch (e) { setStatus({ type: "error", message: e.message || "Impossible de tout marquer comme lu." }); }
+  }
 
   // Clic sur une notification : la marque comme lue puis redirige (si un lien existe).
   async function open(n) {
-    if (!n.is_read) { try { await markNotificationRead(n.id); } catch { /* ignore */ } }
+    if (!n.is_read) {
+      try { await markNotificationRead(n.id); }
+      catch (e) { setStatus({ type: "error", message: e.message || "Impossible de marquer comme lue." }); }
+    }
     if (n.link) navigate(n.link);
     else load();
   }
@@ -41,27 +51,44 @@ function Notifications() {
       <StatusMessage status={status} />
 
       <Card>
-        {rows.length === 0 ? (
-          <EmptyState icon="bell">Aucune notification.</EmptyState>
+        {rows == null ? (
+          <Squelette lignes={6} h={52} />
+        ) : rows.length === 0 ? (
+          <EmptyState icon="bell" title="Aucune notification"
+            text="Les signatures, relances et alertes de conformité s'afficheront ici." />
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {rows.map((n) => (
-              <div
-                key={n.id}
-                onClick={() => open(n)}
-                title={n.link ? "Ouvrir" : (n.is_read ? "" : "Marquer comme lu")}
-                style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderBottom: "1px solid var(--border-soft)", cursor: (n.link || !n.is_read) ? "pointer" : "default", background: n.is_read ? "transparent" : "var(--surface2)", borderRadius: 8 }}
-              >
-                <Badge tone={TONE[n.type] || "n"}>{n.type}</Badge>
-                <span style={{ flex: 1 }}>
-                  <b style={{ fontWeight: n.is_read ? 500 : 700 }}>{n.title}</b>
-                  {n.body && <span style={{ display: "block", fontSize: 12.5, color: "var(--muted)" }}>{n.body}</span>}
-                </span>
-                {n.link && <span style={{ fontSize: 12, color: "var(--dim)" }}>↗</span>}
-                <span style={{ fontSize: 12, color: "var(--dim)" }}>{n.created_at}</span>
-                {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--grad-ember)" }} />}
-              </div>
-            ))}
+          <div className="notif-liste">
+            {rows.map((n) => {
+              const agissable = n.link || !n.is_read;
+              const agir = () => agissable && open(n);
+              return (
+                // Une notification se lisait à la souris seule : `<div onClick>` sans rôle ni
+                // tabindex. Or c'est une LISTE D'ACTIONS — chaque ligne mène quelque part.
+                // Le nom accessible reprend le titre ET le corps : onze lignes « Document
+                // signé » ne se distinguent que par « signé par qui ».
+                <div
+                  key={n.id}
+                  className={"notif-ligne" + (n.is_read ? "" : " neuf")}
+                  role={agissable ? "button" : undefined}
+                  tabIndex={agissable ? 0 : undefined}
+                  aria-label={agissable ? `${n.title}${n.body ? ` — ${n.body}` : ""}${n.is_read ? "" : " (non lue)"}` : undefined}
+                  onClick={agir}
+                  onKeyDown={agissable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); agir(); } } : undefined}
+                  title={n.link ? "Ouvrir" : (n.is_read ? undefined : "Marquer comme lu")}
+                >
+                  <Badge tone={TONE[n.type] || "n"}>{n.type}</Badge>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b>{n.title}</b>
+                    {n.body && <span className="notif-corps">{n.body}</span>}
+                  </span>
+                  {/* Le « ↗ » littéral devient l'icône du jeu, comme partout ailleurs, et
+                      `aria-hidden` : il redit ce que le nom de la ligne annonce déjà. */}
+                  {n.link && <Icon name="chevron-right" size={15} aria-hidden="true" />}
+                  <span className="notif-date">{n.created_at}</span>
+                  {!n.is_read && <span className="notif-point" aria-hidden="true" />}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>

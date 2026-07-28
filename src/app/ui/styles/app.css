@@ -367,6 +367,22 @@ tbody tr:last-child td{border-bottom:none}
   .dt tfoot tr{border:none;background:var(--surface2);margin-top:4px}
 }
 
+/* ═══ NOTIFICATIONS ═════════════════════════════════════════════════════════════════════════
+   Une non-lue se distinguait par un fond `--surface2` et un titre en gras. À onze lignes
+   identiques (« Document signé »), c'était trop peu : le fond gris est aussi celui du survol,
+   et le gras se perd dans une pile. Un FILET COLORÉ à gauche tranche, lui, sans ambiguïté. */
+.notif-liste{display:flex;flex-direction:column;gap:2px}
+.notif-ligne{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;
+  border-bottom:1px solid var(--border-soft);transition:background .14s var(--ease)}
+.notif-ligne[role=button]{cursor:pointer}
+.notif-ligne[role=button]:hover{background:var(--surface2)}
+.notif-ligne.neuf{background:var(--surface2);box-shadow:inset 3px 0 0 0 var(--ember1)}
+.notif-ligne.neuf b{font-weight:700}
+.notif-ligne b{font-weight:500}
+.notif-corps{display:block;font-size:12.5px;color:var(--muted);line-height:1.4}
+.notif-date{font-size:12px;color:var(--muted);white-space:nowrap;flex:none}
+.notif-point{width:8px;height:8px;flex:none;border-radius:50%;background:var(--ember1)}
+
 .skel{display:block;border-radius:10px;background:var(--surface2);position:relative;overflow:hidden}
 .skel::after{content:"";position:absolute;inset:0;
   background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--border) 55%,transparent),transparent);

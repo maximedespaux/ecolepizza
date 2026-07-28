@@ -37,11 +37,16 @@ export default function LocationsManager() {
           <tbody>
             {list.map((l, i) => (
               <tr key={i}>
-                <td><input className="inp" value={l.name || ""} onChange={(e) => setRow(i, { name: e.target.value })} placeholder="Centre Bordeaux" /></td>
-                <td><input className="inp" value={l.address || ""} onChange={(e) => setRow(i, { address: e.target.value })} placeholder="12 rue des Fours" /></td>
-                <td><input className="inp" value={l.zip_code || ""} onChange={(e) => setRow(i, { zip_code: e.target.value })} placeholder="33000" /></td>
-                <td><input className="inp" value={l.town || ""} onChange={(e) => setRow(i, { town: e.target.value })} placeholder="Bordeaux" /></td>
-                <td><button className="btn sm ghost danger" onClick={() => remove(i)} title="Supprimer"><Icon name="x" size={13} /></button></td>
+                {/* Ces champs n'avaient QUE leur placeholder pour étiquette. Un placeholder
+                    disparaît dès la première frappe : à la relecture d'un formulaire rempli,
+                    plus rien ne dit quelle case contient quoi. L'en-tête de colonne joue ce
+                    rôle à l'œil, mais rien ne le relie au champ — d'où `aria-label`, qui
+                    nomme la colonne ET la ligne. */}
+                <td><input className="inp" aria-label={`Nom du lieu, ligne ${i + 1}`} value={l.name || ""} onChange={(e) => setRow(i, { name: e.target.value })} placeholder="Centre Bordeaux" /></td>
+                <td><input className="inp" aria-label={`Adresse${l.name ? ` de ${l.name}` : `, ligne ${i + 1}`}`} value={l.address || ""} onChange={(e) => setRow(i, { address: e.target.value })} placeholder="12 rue des Fours" /></td>
+                <td><input className="inp" aria-label={`Code postal${l.name ? ` de ${l.name}` : `, ligne ${i + 1}`}`} value={l.zip_code || ""} onChange={(e) => setRow(i, { zip_code: e.target.value })} placeholder="33000" /></td>
+                <td><input className="inp" aria-label={`Ville${l.name ? ` de ${l.name}` : `, ligne ${i + 1}`}`} value={l.town || ""} onChange={(e) => setRow(i, { town: e.target.value })} placeholder="Bordeaux" /></td>
+                <td><button className="btn sm ghost danger" onClick={() => remove(i)} title="Supprimer" aria-label={`Supprimer le lieu${l.name ? ` ${l.name}` : ` de la ligne ${i + 1}`}`}><Icon name="x" size={13} /></button></td>
               </tr>
             ))}
             {list.length === 0 && <tr><td colSpan={5} className="hint" style={{ padding: 12 }}>Aucun lieu. Ajoutez-en un.</td></tr>}

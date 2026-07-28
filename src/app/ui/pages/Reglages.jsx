@@ -51,8 +51,11 @@ function Reglages() {
               ))}
             </div>
             <div className="field" style={{ marginTop: 4 }}>
-              <label>Code organisme (connexion)</label>
-              <input className="inp mono" value={form.code || ""} onChange={set("code")} placeholder="ex. EPB33" />
+              {/* `htmlFor` : le seul champ de cette page écrit à la main plutôt qu'avec
+                  `<Field>`, et donc le seul dont l'étiquette n'était pas reliée. Cliquer
+                  « Code organisme » ne plaçait pas le curseur dans la case. */}
+              <label htmlFor="org-code">Code organisme (connexion)</label>
+              <input id="org-code" className="inp mono" value={form.code || ""} onChange={set("code")} placeholder="ex. EPB33" />
               <span className="sub" style={{ fontSize: 11 }}>
                 Code court unique. Les utilisateurs le saisissent à la connexion lorsqu'une même adresse e-mail existe dans plusieurs organismes.
               </span>
