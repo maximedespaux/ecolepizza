@@ -4,6 +4,17 @@
 
 export const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
+/**
+ * Température de farine, avec le défaut de 17 °C du manuel.
+ *
+ * Ni `num(v) || 17` ni `num(v) ?? 17` ne conviennent : le premier écrase un **0 °C saisi
+ * exprès** (farine sortie du froid — une valeur parfaitement légale, que le champ accepte),
+ * le second ne se déclenche jamais puisque `num()` renvoie 0 et jamais `null`. Il faut donc
+ * regarder la valeur AVANT conversion : c'est le seul endroit où « vide » et « zéro » se
+ * distinguent encore.
+ */
+export const tempFarine = (v) => (v === null || v === undefined || v === "" ? 17 : num(v));
+
 // Indice de force de la farine (W) — Manuel p.17 (usages) & p.32 (hydratation min + eau/kg).
 // `hydra` = hydratation min. de coulage ; `maxTotal` = hydratation TOTALE max (coulage + bassinage)
 // atteignable pour cette force — progressive : un W faible ne bassine presque pas, un W fort monte
@@ -168,7 +179,7 @@ export const levStorageOf = (k) => LEVURE_STORAGE.find((s) => s.key === k) || LE
 // manuel indexe sa table (p. 19, colonne « Température farine »), et c'est bien `flourTemp`
 // que passent les appelants. Le nom précédent (`localTemp`) laissait croire l'inverse.
 export const recoLevureFull = (flourTemp, type, storageKey) => {
-  const base = recoLevure(num(flourTemp) || 20, type);
+  const base = recoLevure(tempFarine(flourTemp), type);
   return +(base * levStorageOf(storageKey).factor).toFixed(3);
 };
 
@@ -222,7 +233,7 @@ export function computeBuild(r) {
   const costPerPaton = effNb ? totalCost / effNb : 0;
   const costPerKg = totalDough ? totalCost / (totalDough / 1000) : 0;
   const ferment = [num(dp.ambH) > 0 && `${dp.ambH} h à ${dp.ambT || "~22"} °C (ambiant)`, num(dp.ctrlH) > 0 && `${dp.ctrlH} h à ${dp.ctrlT || "3-4"} °C (contrôlé)`].filter(Boolean);
-  const flourTemp = num(dp.flourTemp) || 17;
+  const flourTemp = tempFarine(dp.flourTemp);
   // Déroulé des étapes (manuel) — adapté à la méthode (pré-ferment / autolyse / direct), aux farines
   // de substitution et aux adjonctions placées à leur moment d'incorporation (p.30).
   const indirect = INDIRECT.includes(dp.method);

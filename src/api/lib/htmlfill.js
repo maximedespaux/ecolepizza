@@ -3,7 +3,7 @@
 // (<span data-token="Clé">…</span>) produite par l'éditeur, soit en texte brut
 // {Clé} (modèles convertis depuis les anciens fichiers Word). Les deux formes
 // sont remplacées par la valeur réelle issue du catalogue partagé.
-const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens } = require('./tokens.js');
+const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens, SIG_W, SIG_H } = require('./tokens.js');
 const { resolveCustomTokens } = require('./customtokens.js');
 
 function escapeHtml(s) {

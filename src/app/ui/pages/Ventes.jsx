@@ -391,7 +391,7 @@ function Ventes() {
         </>
       )}
 
-      {tab === "historique" && <SalesHistory sales={sales} onRemove={remove} />}
+      {tab === "historique" && <SalesHistory sales={sales} onRemove={remove} onDownload={telechargerFacture} />}
 
       {tab === "inventaire" && <Inventaire embedded />}
 
@@ -403,7 +403,10 @@ function Ventes() {
 }
 
 // Historique des ventes : chiffre d'affaires + sélection de période (dates / raccourcis).
-function SalesHistory({ sales, onRemove }) {
+/* `onDownload` vient du parent : `telechargerFacture` y est défini avec sa gestion
+   d'erreur (setStatus). Il était appelé ici sans être dans la portée — le bouton
+   « Télécharger la facture » levait donc une ReferenceError au clic. */
+function SalesHistory({ sales, onRemove, onDownload }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [open, setOpen] = useState(() => new Set()); // factures dépliées
@@ -483,7 +486,7 @@ function SalesHistory({ sales, onRemove }) {
                         <td className="mono tnum" style={{ textAlign: "right" }}>{euro(g.total)}</td>
                         <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
                           {g.invoice_id && (
-                            <button className="iconbtn" title="Télécharger la facture (PDF)" onClick={() => telechargerFacture(g.invoice_id, g.invoice_number || "facture")}><Icon name="download" size={15} /></button>
+                            <button className="iconbtn" title="Télécharger la facture (PDF)" onClick={() => onDownload(g.invoice_id, g.invoice_number || "facture")}><Icon name="download" size={15} /></button>
                           )}
                         </td>
                       </tr>
