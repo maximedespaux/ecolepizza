@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { getStagiaires, getFormations, getSessions, getEnrollments, getSales, getAudit, getOrganisation } from "../api/apiClient.js";
 import Kpi from "../components/Kpi.jsx";
 import Card from "../components/Card.jsx";
+import DataTable from "../components/DataTable.jsx";
 import Badge from "../components/Badge.jsx";
 import Skeleton from "../components/Skeleton.jsx";
 import { Icon } from "../components/Icon.jsx";
@@ -137,35 +138,24 @@ function Dashboard() {
         ) : upcoming.length === 0 ? (
           <p className="lead" style={{ margin: 0 }}>Aucune session à venir.</p>
         ) : (
-          <div className="tablewrap" style={{ border: "none" }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Formation</th>
-                  <th style={{ textAlign: "center" }}>Inscrits</th>
-                  <th>Date</th>
-                  <th style={{ textAlign: "center" }}>Semaine</th>
-                </tr>
-              </thead>
-              <tbody>
-                {upcoming.map((s) => (
-                  <tr key={s.id}>
-                    <td>
-                      <Link to={`/sessions/${s.id}`} style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
-                        <span style={{ width: 9, height: 9, borderRadius: 999, background: colorOf(s.program_code), flex: "0 0 9px" }} />
-                        {s.program_title || s.program_code || "Formation"}
-                      </Link>
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <span className="pill" style={{ fontSize: 12 }}>{s.stagiaires ?? 0}</span>
-                    </td>
-                    <td className="tnum" style={{ whiteSpace: "nowrap" }}>{frDate(s.start_date)}</td>
-                    <td className="tnum" style={{ textAlign: "center", color: "var(--muted)" }}>S{s.week} · {s.year}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={upcoming}
+            rowKey={(s) => s.id}
+            cols={[
+              { k: "formation", t: "Formation", principal: true,
+                cell: (s) => (
+                  <Link to={`/sessions/${s.id}`} style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: 999, background: colorOf(s.program_code), flex: "0 0 9px" }} />
+                    {s.program_title || s.program_code || "Formation"}
+                  </Link>
+                ) },
+              { k: "inscrits", t: "Inscrits", th: { textAlign: "center" }, td: { textAlign: "center" },
+                cell: (s) => <span className="pill" style={{ fontSize: 12 }}>{s.stagiaires ?? 0}</span> },
+              { k: "date", t: "Date", td: { whiteSpace: "nowrap" }, cell: (s) => <span className="tnum">{frDate(s.start_date)}</span> },
+              { k: "semaine", t: "Semaine", th: { textAlign: "center" }, td: { textAlign: "center", color: "var(--muted)" },
+                cell: (s) => <span className="tnum">S{s.week} · {s.year}</span> },
+            ]}
+          />
         )}
       </Card>
 

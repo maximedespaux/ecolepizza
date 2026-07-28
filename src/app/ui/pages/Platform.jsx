@@ -3,6 +3,8 @@ import { getOrganizations, createOrganization } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import DataTable from "../components/DataTable.jsx";
+import EmptyState from "../components/EmptyState.jsx";
 import Badge from "../components/Badge.jsx";
 import { Icon } from "../components/Icon.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -75,28 +77,21 @@ function Platform() {
           )}
 
           <Card title={`Organismes (${orgs.length})`}>
-            <div className="tablewrap" style={{ border: "none" }}>
-              <table>
-                <thead>
-                  <tr><th>Organisme</th><th>Code</th><th>Ville</th><th>Comptes</th><th>Stagiaires</th><th>Créé le</th></tr>
-                </thead>
-                <tbody>
-                  {orgs.map((o) => (
-                    <tr key={o.id}>
-                      <td><b>{o.legal_name}</b>{o.short_name && <span style={{ display: "block", fontSize: 12, color: "var(--dim)" }}>{o.short_name}</span>}</td>
-                      <td><Badge tone="b">{o.code || "—"}</Badge></td>
-                      <td style={{ fontSize: 13, color: "var(--muted)" }}>{o.town || "—"}</td>
-                      <td className="tnum">{o.users}</td>
-                      <td className="tnum">{o.learners}</td>
-                      <td style={{ fontSize: 13, color: "var(--muted)" }}>{o.created_at}</td>
-                    </tr>
-                  ))}
-                  {orgs.length === 0 && (
-                    <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--dim)", padding: 20 }}>Aucun organisme.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              rows={orgs}
+              rowKey={(o) => o.id}
+              vide={<EmptyState icon="building" title="Aucun organisme"
+                text="Aucune école n'est encore déclarée sur cette instance." />}
+              cols={[
+                { k: "nom", t: "Organisme", principal: true,
+                  cell: (o) => <><b>{o.legal_name}</b>{o.short_name && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{o.short_name}</span>}</> },
+                { k: "code", t: "Code", cell: (o) => <Badge tone="b">{o.code || "—"}</Badge> },
+                { k: "ville", t: "Ville", td: { fontSize: 13, color: "var(--muted)" }, cell: (o) => o.town || "—" },
+                { k: "users", t: "Comptes", cell: (o) => <span className="tnum">{o.users}</span> },
+                { k: "learners", t: "Stagiaires", cell: (o) => <span className="tnum">{o.learners}</span> },
+                { k: "cree", t: "Créé le", td: { fontSize: 13, color: "var(--muted)" }, cell: (o) => o.created_at },
+              ]}
+            />
           </Card>
         </main>
       </div>
