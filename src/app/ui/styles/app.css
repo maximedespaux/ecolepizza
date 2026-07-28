@@ -2558,6 +2558,20 @@ button.av-wrap:active{transform:scale(.94)}
 .pf-cadre-ex{position:relative;display:inline-block;width:26px;height:26px;border-radius:50%;
   background:var(--surface3);flex:none}
 
+/* Attribution des cadres exclusifs (fiche stagiaire, espace ADMIN).
+   Registre sobre : ni relief, ni ressort — on décerne une distinction, on ne joue pas.
+   ⚠️ La pastille d'aperçu porte `position:relative` et des dimensions : l'anneau de cadre est
+   un `::before` absolu qui, sans ancêtre positionné, s'accroche à la carte entière. */
+.cadres-attrib{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.cadre-attrib{display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--border);
+  border-radius:var(--r-sm);background:var(--surface);cursor:pointer;transition:.14s var(--ease)}
+.cadre-attrib:hover{border-color:var(--muted)}
+.cadre-attrib.on{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 9%,var(--surface))}
+.cadre-attrib input{width:17px;height:17px;flex:none;cursor:pointer}
+.cadre-attrib-rond{position:relative;width:26px;height:26px;flex:none;border-radius:50%;background:var(--surface2)}
+.cadre-attrib-txt{display:flex;flex-direction:column;gap:1px;min-width:0}
+.cadre-attrib-txt b{font-size:13.5px}
+
 .pf-cadres{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:10px}
 .pf-cadre{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border-radius:14px;
   border:1.5px solid var(--border);background:var(--surface);cursor:pointer;transition:.16s var(--ease)}

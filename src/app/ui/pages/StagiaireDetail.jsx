@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions,
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, updateStagiaire,
 } from "../api/apiClient.js";
+import { CADRES, cadreClass } from "../lib/cadres.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -33,6 +34,60 @@ const d10 = (v) => (v ? String(v).slice(0, 10) : "");
 const T = (icon, text) => (
   <span className="card-ttl"><Icon name={icon} size={16} /> {text}</span>
 );
+
+/**
+ * Cadres exclusifs — les trois distinctions que l'ÉCOLE accorde.
+ *
+ * Les cadres de parcours (Bronze → Maestro) se déduisent seuls des formations terminées et
+ * n'ont donc rien à faire ici. Champion, Jury et Fondateur, eux, ne s'obtiennent pas en
+ * cumulant : ils se reçoivent. Sans cet écran ils restaient verrouillés pour tout le monde,
+ * affichés au stagiaire comme un objectif inaccessible.
+ *
+ * Registre SOBRE, pas la couche ludique : on est dans l'espace d'administration. La
+ * récompense est visible côté stagiaire, ici on ne fait que la décerner.
+ *
+ * L'écriture passe par PATCH /learners/:id, donc par `authorizeRoles(...ADMIN_ROLES)` : un
+ * formateur ne peut pas s'accorder un Champion. Elle entre aussi au journal d'audit.
+ */
+function CadresExclusifs({ learner, onSaved, onError }) {
+  const accordes = String(learner.cadres_exclusifs || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const [busy, setBusy] = useState(false);
+
+  function basculer(id) {
+    const suivant = accordes.includes(id) ? accordes.filter((x) => x !== id) : [...accordes, id];
+    setBusy(true);
+    // Chaîne vide et non `null` : la colonne accepte les deux, mais une chaîne vide se relit
+    // sans distinction de cas côté front (`split` d'une chaîne vide donne une liste vide).
+    updateStagiaire(learner.id, { cadres_exclusifs: suivant.join(",") })
+      .then(() => { onSaved(); onError({ type: "ok", message: "Cadres mis à jour." }); })
+      .catch((err) => onError({ type: "error", message: err.message }))
+      .finally(() => setBusy(false));
+  }
+
+  return (
+    <Card title={T("star", "Cadres exclusifs")}>
+      <p className="hint" style={{ marginTop: 0 }}>
+        Distinctions accordées par l'école. Les cadres de parcours (Bronze à Maestro) se
+        gagnent seuls, aux formations terminées — ils n'apparaissent pas ici.
+      </p>
+      <div className="cadres-attrib">
+        {CADRES.filter((c) => c.exclusif).map((c) => {
+          const on = accordes.includes(c.id);
+          return (
+            <label key={c.id} className={"cadre-attrib" + (on ? " on" : "")}>
+              <input type="checkbox" checked={on} disabled={busy} onChange={() => basculer(c.id)} />
+              <span className={"cadre-attrib-rond " + cadreClass(c.id)} aria-hidden="true" />
+              <span className="cadre-attrib-txt">
+                <b>{c.nom}</b>
+                <span className="hint">{c.condition}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
 
 function StagiaireDetail() {
   const { id } = useParams();
@@ -269,6 +324,8 @@ function StagiaireDetail() {
         <Card title={T("target", "Projet")}>
           {projects ? <p style={{ margin: 0 }}>{projects}</p> : <p className="hint" style={{ margin: 0 }}>Aucun projet renseigné.</p>}
         </Card>
+
+        <CadresExclusifs learner={l} onSaved={loadLearner} onError={setStatus} />
 
         {c && (
           <Card title={T("building", "Entreprise")} className="cols-2" >

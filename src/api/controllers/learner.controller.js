@@ -31,6 +31,11 @@ const LEARNER_FIELDS = [
     'experience_value', 'experience_unit', 'professional_status', 'cpf_amount',
     'france_travail_id', 'current_contract', 'social_security', 'financing', 'opco', 'levels',
     'project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job',
+    // Cadres exclusifs accordés par l'école (migration 113) — même idiome que `levels` : une
+    // liste séparée par des virgules. Passe par cette liste blanche, donc par PATCH /:id, donc
+    // par `authorizeRoles(...ADMIN_ROLES)` : un formateur ne peut pas s'accorder un Champion.
+    // Il entre aussi de ce fait au journal d'audit, comme tout autre champ de la fiche.
+    'cadres_exclusifs',
 ];
 
 // Colonnes de l'entreprise (section « Informations professionnelle »).
