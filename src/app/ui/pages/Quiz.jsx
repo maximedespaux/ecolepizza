@@ -91,7 +91,10 @@ function Quiz() {
   }
   async function onSend(q) {
     if (!q.sendable) {
-      window.alert(`Envoi impossible : ${q.send_reason || "les conditions d'envoi ne sont pas réunies."}`);
+      // La page porte déjà StatusMessage : une alerte native était le seul endroit de cet
+      // écran à sortir de la charte, et elle oblige à un clic pour être congédiée alors que
+      // le message doit rester lisible pendant qu'on corrige la cause.
+      setStatus({ type: "error", message: `Envoi impossible : ${q.send_reason || "les conditions d'envoi ne sont pas réunies."}` });
       return;
     }
     if (!window.confirm(`Envoyer « ${q.title} » à ${q.eligible_count} stagiaire(s) de la session en cours ?`)) return;
