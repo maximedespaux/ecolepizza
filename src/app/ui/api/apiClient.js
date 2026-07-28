@@ -503,7 +503,6 @@ export function getQuestLives() { return request("/mon-espace/quest/vies", { sil
 export function loseQuestLife() { return request("/mon-espace/quest/vies/perdre", { method: "POST", silent: true }); }
 // ⚠️ DÉBOGAGE — remet à zéro SA propre progression Pizza Quest. À retirer avec le bouton
 // correspondant (PizzaQuest.jsx) avant la mise en service.
-export function resetQuestProgress() { return request("/mon-espace/quest/progression", { method: "DELETE" }); }
 
 export function getFormation(id) {
   return request(`/formations/${id}`);

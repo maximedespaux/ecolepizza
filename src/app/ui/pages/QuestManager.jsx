@@ -10,7 +10,6 @@ import {
   getQuestStructure, createQuestCategory, updateQuestCategory, deleteQuestCategory,
   setProgramQuestCategories, addQuestPrerequisite, deleteQuestPrerequisite,
   getQuestContent, createQuestDifficulty, updateQuestDifficulty, deleteQuestDifficulty,
-  getOrganisation, updateOrganisation,
 } from "../api/apiClient.js";
 
 /**
@@ -81,13 +80,10 @@ export default function QuestManager() {
           Prérequis{prerequisites.length ? ` (${prerequisites.length})` : ""}
         </button>
         <button type="button" className={"seg-btn" + (tab === "difficultes" ? " on" : "")} onClick={() => setTab("difficultes")}>
-          Difficultés &amp; XP{difficulties.length ? ` (${difficulties.length})` : ""}
+          Difficultés{difficulties.length ? ` (${difficulties.length})` : ""}
         </button>
         <button type="button" className={"seg-btn" + (tab === "questions" ? " on" : "")} onClick={() => setTab("questions")}>
           Questions
-        </button>
-        <button type="button" className={"seg-btn" + (tab === "vies" ? " on" : "")} onClick={() => setTab("vies")}>
-          Cœurs
         </button>
       </div>
 
@@ -109,95 +105,15 @@ export default function QuestManager() {
         <QuestBankEditor programs={programs} difficulties={difficulties} onStatus={setStatus} />
       )}
 
-      {tab === "vies" && <CoeursCard onStatus={setStatus} />}
     </>
   );
 }
 
-/* ---- Cœurs ----------------------------------------------------------------------------- */
-
-/**
- * Capital de cœurs et vitesse de reconstitution.
- *
- * Ce réglage décide du rythme : rater un chapitre coûte un cœur, en récupérer un demande
- * d'attendre. C'est ce qui empêche de relancer un chapitre en boucle jusqu'à tomber sur les
- * bonnes cases — mais trop serré, il transforme l'entraînement en punition.
- */
-function CoeursCard({ onStatus }) {
-  const [max, setMax] = useState(5);
-  const [delai, setDelai] = useState(5);
-  const [charge, setCharge] = useState(false);
-
-  useEffect(() => {
-    getOrganisation()
-      .then((r) => {
-        const o = r.data || {};
-        if (o.quest_max_hearts != null) setMax(Number(o.quest_max_hearts));
-        if (o.quest_regen_minutes != null) setDelai(Number(o.quest_regen_minutes));
-        setCharge(true);
-      })
-      .catch(() => setCharge(true));
-  }, []);
-
-  async function enregistrer(e) {
-    e.preventDefault();
-    onStatus(null);
-    try {
-      await updateOrganisation({ quest_max_hearts: Number(max), quest_regen_minutes: Number(delai) });
-      onStatus({ type: "success", message: "Réglages des cœurs enregistrés." });
-    } catch (err) {
-      onStatus({ type: "error", message: err.message || "Enregistrement impossible." });
-    }
-  }
-
-  if (!charge) return <p className="hint">Chargement…</p>;
-  const pleinMin = Number(delai) * Number(max);
-
-  return (
-    <Card title={<span className="card-ttl"><Icon name="heart" size={16} /> Cœurs &amp; reconstitution</span>}>
-      {/* ⚠️ CETTE SECTION NE PILOTE PLUS RIEN.
-          Les cœurs ont été retirés de Pizza Quest le 2026-07-28 : ils BLOQUAIENT la révision,
-          et punir quelqu'un qui veut réviser est absurde dans une école. Le réglage subsiste
-          en base (`quest_max_hearts`, `quest_regen_minutes`) et l'écran continue de
-          l'enregistrer — mais plus aucun écran stagiaire ne le lit.
-          Le dire franchement plutôt que de retirer l'onglet en silence : la donnée existe
-          encore, et la décision de supprimer l'un et l'autre revient à Maxime. */}
-      <div className="status info" style={{ marginTop: 0 }}>
-        <b>Réglage sans effet.</b> Les cœurs ont été retirés du jeu — ils empêchaient de
-        réviser après un échec. Ce que vous saisissez ici est bien enregistré, mais aucun
-        écran stagiaire ne s'en sert. À supprimer ou à réactiver : c'est une décision à
-        prendre, pas un oubli.
-      </div>
-      <p className="hint">
-        <i>Fonctionnement d'origine :</i> un stagiaire perdait un cœur lorsqu'il échouait un
-        chapitre ou l'abandonnait en cours, et ne pouvait plus en lancer tant qu'il n'en avait
-        pas récupéré un.
-      </p>
-
-      <form onSubmit={enregistrer} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <div className="field" style={{ margin: 0, width: 150 }}>
-          <label>Nombre de cœurs</label>
-          <input className="inp" type="number" min="1" max="50" value={max}
-            onChange={(e) => setMax(e.target.value)} />
-        </div>
-        <div className="field" style={{ margin: 0, width: 190 }}>
-          <label>Un cœur toutes les… <span className="field-opt">minutes</span></label>
-          <input className="inp" type="number" min="0" max="1440" value={delai}
-            onChange={(e) => setDelai(e.target.value)} />
-        </div>
-        <button type="submit" className="btn primary">Enregistrer</button>
-      </form>
-
-      <p className="hint" style={{ marginTop: 10 }}>
-        {Number(delai) === 0
-          ? <>À <b>0 minute</b>, la mécanique est neutralisée : les cœurs restent pleins et rien
-              ne limite les tentatives.</>
-          : <>Un stagiaire à court de cœurs attend <b>{delai} min</b> pour en récupérer un, et{" "}
-              <b>{pleinMin} min</b> pour retrouver ses {max} cœurs.</>}
-      </p>
-    </Card>
-  );
-}
+/* Les CŒURS ont été supprimés (2026-07-28). Ils bloquaient la révision après un échec, et
+   punir quelqu'un qui veut réviser n'a pas de sens dans une école. Sont partis avec :
+   `api/lib/questlives.js`, les routes /quest/vies, les colonnes `quest_max_hearts` /
+   `quest_regen_minutes` et la table `learner_quest_life` (migration 115).
+   La progression se lit désormais aux CADRES, gagnés sur les formations terminées. */
 
 /* ---- Difficultés & XP ----------------------------------------------------------------- */
 

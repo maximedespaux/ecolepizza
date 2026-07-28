@@ -1107,16 +1107,6 @@ tbody tr:last-child td{border-bottom:none}
   border:1px dashed var(--border);border-radius:10px;opacity:.7}
 .pq-debug span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-weight:700}
 
-/* Cœurs dans l'en-tête. Les cœurs vides restent VISIBLES (🤍) : c'est le contraste plein
-   vs vide qui dit combien il en manque, un simple nombre ne le montre pas. */
-.pq-hearts{display:inline-flex;gap:1px;font-size:13px;line-height:1}
-.pq-hearts .vide{opacity:.5}
-.pq-regen{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
-/* Plus de cœur : on l'annonce, avec l'attente restante — un chemin grisé sans explication
-   se lit comme une panne. */
-.pq-nohearts{display:flex;align-items:center;gap:10px;margin:10px 0 4px;padding:10px 14px;border-radius:12px;
-  border:1px solid var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,transparent);
-  color:var(--ember1);font-size:13px;line-height:1.4}
 
 /* Flèches de bord : elles ne paraissent que du côté où il reste du chemin. Un chemin coupé
    net au bord de l'écran se lit comme un chemin fini — c'est ce malentendu qu'elles lèvent.

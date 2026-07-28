@@ -5,7 +5,6 @@ const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
-const { etatCoeurs, retirerCoeur, reglages } = require('../lib/questlives.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 
@@ -1360,123 +1359,13 @@ const getMyShopRequests = async (req, res) => {
     }
 };
 
-/* ---- Cœurs de Pizza Quest ------------------------------------------------------------- */
+/* Les CŒURS de Pizza Quest ont été supprimés (2026-07-28). Ils bloquaient la révision après
+   un échec — punir quelqu'un qui veut réviser est absurde dans une école. Sont partis avec :
+   `lib/questlives.js`, les routes /quest/vies, l'écran d'administration, les colonnes
+   `organization.quest_max_hearts` / `quest_regen_minutes` et la table `learner_quest_life`
+   (migration 115). La progression se lit désormais aux CADRES, gagnés sur les formations
+   terminées. */
 
-/** Réglages de l'organisme (colonnes optionnelles : migration 104 peut ne pas être jouée). */
-async function reglagesCoeurs(conn, orgId) {
-    try {
-        const [[o]] = await conn.query(
-            'SELECT quest_max_hearts, quest_regen_minutes FROM organization WHERE id = ?', [orgId]);
-        return o || {};
-    } catch (e) { if (isMissingSchema(e)) return {}; throw e; }
-}
-
-/**
- * Lit l'état des cœurs et PERSISTE les crédits accordés par le temps écoulé.
- * L'écriture n'a lieu que si des cœurs ont effectivement été gagnés (`changed`) : une simple
- * consultation ne doit pas écrire.
- */
-async function lireCoeurs(conn, learner, orgId) {
-    const org = await reglagesCoeurs(conn, orgId);
-    let row = null;
-    try {
-        const [[r]] = await conn.query(
-            'SELECT hearts, updated_at FROM learner_quest_life WHERE learner_id = ?', [learner.id]);
-        row = r || null;
-    } catch (e) { if (isMissingSchema(e)) return etatCoeurs(null, org); throw e; }
-
-    const etat = etatCoeurs(row, org);
-    if (row && etat.changed) {
-        await conn.query(
-            'UPDATE learner_quest_life SET hearts = ?, updated_at = ? WHERE learner_id = ?',
-            [etat.hearts, etat.updatedAt, learner.id]
-        ).catch(() => {}); // le crédit se recalculera à la prochaine lecture
-    }
-    return etat;
-}
-
-const enveloppe = (e) => ({
-    hearts: e.hearts, max: e.max, regen_minutes: e.delai,
-    next_in_ms: e.nextInMs, full_in_ms: e.fullInMs,
-});
-
-/**
- * DELETE /api/mon-espace/quest/progression — ⚠️ OUTIL DE DÉBOGAGE, À RETIRER.
- *
- * Remet à zéro la progression Pizza Quest du stagiaire CONNECTÉ : chapitres terminés,
- * étoiles, et capital de cœurs (supprimer la ligne suffit, l'état repart au maximum).
- * Sert à rejouer un parcours pendant la mise au point du jeu.
- *
- * Portée volontairement limitée au demandeur : personne ne peut effacer la progression
- * d'un autre. Reste que c'est une destruction de données sans filet — à supprimer, ainsi
- * que le bouton correspondant côté stagiaire, avant la mise en service.
- */
-const resetQuestProgress = async (req, res) => {
-    try {
-        const conn = db.promise();
-        const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
-        let efface = 0;
-        try {
-            const [r] = await conn.query('DELETE FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
-            efface = r.affectedRows || 0;
-        } catch (e) { if (!isMissingSchema(e)) throw e; }
-        try {
-            await conn.query('DELETE FROM learner_quest_life WHERE learner_id = ?', [learner.id]);
-        } catch (e) { if (!isMissingSchema(e)) throw e; }
-        console.warn(`[debug] progression Pizza Quest remise à zéro pour ${learner.id} (${efface} chapitre(s))`);
-        res.json({ success: true, message: `Progression remise à zéro (${efface} chapitre(s)).` });
-    } catch (err) {
-        console.error('Erreur remise à zéro progression :', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
-
-/** GET /api/mon-espace/quest/vies */
-const getQuestLives = async (req, res) => {
-    try {
-        const conn = db.promise();
-        const learner = await learnerForUser(conn, req.user.id);
-        // Pas de fiche stagiaire : on ne bloque pas le jeu, cœurs pleins.
-        if (!learner) return res.json({ data: { hearts: 5, max: 5, regen_minutes: 0, next_in_ms: 0, full_in_ms: 0 } });
-        res.json({ data: enveloppe(await lireCoeurs(conn, learner, learner.organization_id)) });
-    } catch (err) {
-        console.error('Erreur cœurs quest :', err);
-        // Jamais bloquer le jeu sur une erreur de compteur.
-        res.json({ data: { hearts: 5, max: 5, regen_minutes: 0, next_in_ms: 0, full_in_ms: 0 } });
-    }
-};
-
-/**
- * POST /api/mon-espace/quest/vies/perdre — un chapitre échoué ou abandonné.
- * Le décompte est fait ICI et pas côté client : c'est le serveur qui tient le capital.
- */
-const loseQuestLife = async (req, res) => {
-    try {
-        const conn = db.promise();
-        const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.json({ data: { hearts: 5, max: 5, regen_minutes: 0, next_in_ms: 0, full_in_ms: 0 } });
-        const org = await reglagesCoeurs(conn, learner.organization_id);
-        // Régénération neutralisée : rien à retirer, le capital reste plein.
-        if (!reglages(org).delai) return res.json({ data: enveloppe(etatCoeurs(null, org)) });
-
-        const etat = await lireCoeurs(conn, learner, learner.organization_id);
-        const apres = retirerCoeur(etat);
-        try {
-            await conn.query(
-                `INSERT INTO learner_quest_life (learner_id, organization_id, hearts, updated_at)
-                 VALUES (?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE hearts = VALUES(hearts), updated_at = VALUES(updated_at)`,
-                [learner.id, learner.organization_id, apres.hearts, apres.updatedAt]
-            );
-        } catch (e) { if (isMissingSchema(e)) return res.json({ data: enveloppe(etat) }); throw e; }
-
-        res.json({ data: enveloppe(etatCoeurs({ hearts: apres.hearts, updated_at: apres.updatedAt }, org)) });
-    } catch (err) {
-        console.error('Erreur perte de cœur :', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
 
 /**
  * PUT /api/mon-espace/boutique/demande/:id/annuler — le stagiaire annule SA demande.
@@ -1740,4 +1629,4 @@ const updateMyInfos = async (req, res) => {
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
 module.exports = {
     saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
-    getQuestLives, loseQuestLife, resetQuestProgress };
+};

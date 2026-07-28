@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 // Union des deux branches : getMyAccess + le bloc boutique/avatar. `multer` reste (upload avatar).
 const { saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
-  getQuestLives, loseQuestLife, resetQuestProgress } = require('../controllers/espace.controller.js');
+} = require('../controllers/espace.controller.js');
 const { getPlayableChapters } = require('../controllers/questContent.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 
@@ -22,10 +22,7 @@ router.get('/formations/:id', authenticateToken, getMyFormation);
 // Chapitres jouables de Pizza Quest pour une formation (banque de l'organisme).
 // Réponse vide = rien d'importé : le jeu retombe sur sa banque codée en dur.
 // Cœurs : capital commun à tout Pizza Quest, tenu par le serveur.
-router.get('/quest/vies', authenticateToken, getQuestLives);
-router.post('/quest/vies/perdre', authenticateToken, loseQuestLife);
 // ⚠️ DÉBOGAGE — remise à zéro de SA propre progression. À retirer avant la mise en service.
-router.delete('/quest/progression', authenticateToken, resetQuestProgress);
 router.get('/quest/:programId/chapitres', authenticateToken, getPlayableChapters);
 router.get('/emargement', authenticateToken, getMyEmargement);
 router.post('/emargement/:recordId/sign', authenticateToken, signMyEmargement);
