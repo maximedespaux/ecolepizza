@@ -718,6 +718,31 @@ export function deleteMercurialeItem(id) { return request(`/mercuriale/${id}`, {
 // Cadre porté (migration 113) : jusqu'ici le choix ne vivait qu'en localStorage, donc
 // personne d'autre ne pouvait le voir. Best-effort, comme l'avatar.
 export function saveMyCadre(cadre) { return request("/mon-espace/cadre", { method: "PUT", body: JSON.stringify({ cadre }) }); }
+
+// --- Espace d'échange : questions, réponses, photos (migration 114) ---
+export function getPosts() { return request("/community/posts", { silent: true }); }
+export function getPost(id) { return request(`/community/posts/${id}`); }
+export function createPost(p) { return request("/community/posts", { method: "POST", body: JSON.stringify(p) }); }
+export function updatePost(id, patch) { return request(`/community/posts/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export function deletePost(id) { return request(`/community/posts/${id}`, { method: "DELETE" }); }
+export function addAnswer(id, body) { return request(`/community/posts/${id}/answers`, { method: "POST", body: JSON.stringify({ body }) }); }
+export function deleteAnswer(id) { return request(`/community/answers/${id}`, { method: "DELETE" }); }
+/** URL de la photo — servie par une route authentifiée, donc utilisable directement en `src`. */
+export function postImageUrl(id) { return `${API_BASE_URL}/community/posts/${id}/image`; }
+/** Envoi de la photo. Le fichier est DÉJÀ redimensionné et compressé par le navigateur. */
+export async function uploadPostImage(id, blob) {
+  const fd = new FormData();
+  fd.append("image", blob, "photo.webp");
+  startLoading();
+  try {
+    const res = await fetch(`${API_BASE_URL}/community/posts/${id}/image`, { method: "POST", credentials: "include", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Envoi de la photo échoué");
+    return data;
+  } finally {
+    stopLoading();
+  }
+}
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }

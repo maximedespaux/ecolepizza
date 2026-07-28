@@ -1372,6 +1372,39 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .16s var(--ease)}
 .post-name:hover{color:var(--ember1)}
 .post-date{font-size:11.5px;color:var(--dim)}
+
+/* ═══ ESPACE D'ÉCHANGE ══════════════════════════════════════════════════════════════════════
+   Les questions vivent dans le MÊME fil que les fiches : elles reprennent donc `.comm-card2`
+   et ne s'en écartent que par ce qui doit se distinguer d'un coup d'œil — la nature, la photo,
+   et l'état « résolue ». Une carte trop différente sortirait du fil au lieu d'y prendre place. */
+.comm-kind.k-question{background:color-mix(in srgb,var(--blue) 15%,var(--surface));color:var(--blue)}
+.comm-kind.k-annonce{background:color-mix(in srgb,var(--ember1) 15%,var(--surface));color:var(--ember1)}
+/* Résolue : liseré vert. Une question résolue ne demande plus d'aide, elle en APPORTE — c'est
+   elle qu'on veut relire, elle mérite de se repérer dans le fil. */
+.q-card.resolue{border-color:color-mix(in srgb,var(--green) 45%,var(--border))}
+.q-card.annonce{border-color:color-mix(in srgb,var(--ember1) 40%,var(--border))}
+/* Extrait de l'énoncé : trois lignes, pas plus. Au-delà la carte devient un mur et le fil ne
+   se parcourt plus — c'est la modale qui porte le texte entier. */
+.q-extrait{margin:0;font-size:13px;line-height:1.5;color:var(--muted);
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.q-vignette{width:100%;height:150px;object-fit:cover;border-radius:12px;margin-top:4px;background:var(--surface2)}
+.q-pied{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.q-resolue{display:inline-flex;align-items:center;gap:4px;margin-left:auto;font-size:12px;font-weight:700;color:var(--green)}
+
+/* — Détail d'une question — */
+.q-corps{font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;margin:10px 0}
+.q-photo{width:100%;max-height:380px;object-fit:contain;border-radius:14px;background:var(--surface2);margin:8px 0}
+.q-reponses{margin-top:16px;border-top:1px solid var(--border-soft);padding-top:14px}
+.q-reponses-t{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;margin-bottom:10px}
+.q-reponse{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;
+  background:var(--surface2);margin-bottom:8px}
+/* La réponse retenue est mise en avant, pas déplacée en tête : elle garde sa place dans la
+   conversation — ce qui l'a précédée explique souvent pourquoi elle a aidé. */
+.q-reponse.retenue{background:color-mix(in srgb,var(--green) 10%,var(--surface));
+  box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--green) 42%,transparent)}
+.q-badge-aide{display:inline-flex;align-items:center;gap:3px;margin-left:7px;padding:1px 7px;border-radius:99px;
+  background:var(--green);color:#fff;font-size:10px;font-weight:800;letter-spacing:.02em;vertical-align:1px}
+.q-reponse .iconbtn.on{color:var(--green);border-color:color-mix(in srgb,var(--green) 45%,transparent)}
 .comm-title{font-size:16px;font-weight:800;line-height:1.22;color:var(--text)}
 .comm-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .comm-foot{display:flex;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--border-soft);background:var(--surface2)}

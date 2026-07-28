@@ -10,11 +10,12 @@ import { euro, colorOf, initials } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { useCountUp } from "../lib/useCountUp.js";
 import { useEchap } from "../lib/useEchap.js";
+import { QuestionCard, QuestionModal, QuestionForm } from "../components/QuestionPost.jsx";
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
 import { cadreFor, cadrePorteDe, useCadreChoisi } from "../lib/cadres.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
-import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead } from "../api/apiClient.js";
+import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts } from "../api/apiClient.js";
 
 /**
  * Temps de présence à l'écran avant qu'un halo « j'aime » s'éteigne.
@@ -101,8 +102,13 @@ const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const WISH_KEY = "impasto.wishlist";
 const readWish = () => { try { return new Set(JSON.parse(localStorage.getItem(WISH_KEY)) || []); } catch { return new Set(); } };
 const writeWish = (s) => { try { localStorage.setItem(WISH_KEY, JSON.stringify([...s])); } catch { /* ignore */ } };
+/* Le filtre porte sur la NATURE de la publication, fiches et questions confondues : c'est ce
+   qui permet au fil de rester unique tout en laissant chacun aller droit à ce qu'il cherche.
+   « Entraide » d'abord après « Toutes » — c'est la nature qu'on vient consulter, les fiches se
+   parcourent, les questions s'attendent. */
 const KIND_TABS = [
-  { k: "ALL", label: "Toutes" },
+  { k: "ALL", label: "Tout" },
+  { k: "ECHANGE", label: "Entraide" },
   { k: "PATE", label: "Empâtements" },
   { k: "PREPARATION", label: "Garnitures" },
   { k: "RECETTE", label: "Réalisations" },
@@ -348,6 +354,9 @@ export default function Communaute() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [profile, setProfile] = useState(null);
   const [profileId, setProfileId] = useState(null);  // à qui appartient le profil ouvert
+  const [posts, setPosts] = useState([]);           // questions et annonces (espace d'échange)
+  const [openPost, setOpenPost] = useState(null);   // publication ouverte en détail
+  const [composer, setComposer] = useState(false);  // formulaire « poser une question »
   const toggleWish = (id) => setWish((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); writeWish(n); return n; });
   const navigate = useNavigate();
 
@@ -400,7 +409,12 @@ export default function Communaute() {
       // dans `data`, deja en main — et auront disparu a la suivante.
       markCommunitySeen().then(pingCommunaute).catch(() => {});
     }).catch(() => {});
+    chargerPosts();
   }, []);
+  // Chargement SÉPARÉ des questions : deux sources, un seul fil. Un échec de l'une ne doit pas
+  // vider l'autre — c'est aussi ce qui fait que la page reste utile si la migration 114 n'est
+  // pas jouée (l'API répond alors une liste vide).
+  const chargerPosts = () => getPosts().then((r) => setPosts(r.data || [])).catch(() => {});
   useEffect(() => {
     if (!openId) { setDetail(null); return; }
     setDetail(null);
@@ -463,18 +477,32 @@ export default function Communaute() {
     finally { setBusy(false); }
   }
 
-  // Liste filtrée + triée.
+  /* LE FIL UNIQUE.
+     Deux sources — les fiches partagées et les publications d'entraide — fusionnées en un seul
+     flux. Chaque élément est étiqueté `_post` pour que le rendu sache quoi dessiner ; le tri
+     et la recherche, eux, travaillent sur des champs communs normalisés (`_date`, `_texte`).
+     Les annonces épinglées passent devant, quel que soit le tri : c'est leur raison d'être. */
   const q = query.trim().toLowerCase();
-  const shown = list.filter((s) => {
-    if (onlyWish && !wish.has(s.id)) return false;
-    if (kindFilter !== "ALL" && s.kind !== kindFilter) return false;
+  const fiches = list.map((x) => ({ ...x, _post: false, _date: x.updated_at, _texte: [x.name, x.description, x.type, x.author_name] }));
+  const echanges = posts.map((x) => ({ ...x, _post: true, _date: x.created_at, _texte: [x.title, x.body, x.author_name] }));
+
+  const shown = [...fiches, ...echanges].filter((s) => {
+    // La wishlist ne concerne que les fiches : on ne met pas une question « de côté », on y répond.
+    if (onlyWish && (s._post || !wish.has(s.id))) return false;
+    if (kindFilter === "ECHANGE" && !s._post) return false;
+    if (kindFilter !== "ALL" && kindFilter !== "ECHANGE" && (s._post || s.kind !== kindFilter)) return false;
     if (!q) return true;
-    return [s.name, s.description, s.type, s.author_name].some((f) => String(f || "").toLowerCase().includes(q));
+    return s._texte.some((f) => String(f || "").toLowerCase().includes(q));
   }).sort((a, b) => {
-    if (sort !== "liked") return 0; // ordre serveur = plus récentes d'abord
-    const la = likeState[a.id]?.count ?? a.like_count ?? 0;
-    const lb = likeState[b.id]?.count ?? b.like_count ?? 0;
-    return lb - la || (b.comment_count || 0) - (a.comment_count || 0);
+    if (a.pinned !== b.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+    if (sort === "liked") {
+      // « Populaires » n'a pas de sens pour une question : elle se classe à ses RÉPONSES, qui
+      // sont son équivalent d'engagement. Sans ça les questions tomberaient toutes en fin de fil.
+      const pa = a._post ? (a.answers || 0) : (likeState[a.id]?.count ?? a.like_count ?? 0);
+      const pb = b._post ? (b.answers || 0) : (likeState[b.id]?.count ?? b.like_count ?? 0);
+      if (pb !== pa) return pb - pa;
+    }
+    return String(b._date || "").localeCompare(String(a._date || ""));
   });
 
   return (
@@ -482,8 +510,13 @@ export default function Communaute() {
       <PageHead eyebrow="Outils · communauté" title="Communauté"
         lead="Les fiches partagées par les autres stagiaires : empâtements, garnitures et réalisations. Aime, commente, mets de côté (wishlist), ou enregistre-en une dans tes fiches pour l'adapter." />
 
-      {list.length === 0 ? (
-        <EmptyState icon="users">Aucune fiche partagée pour l'instant. Sois le premier : partage une pâte, une préparation ou une recette depuis « Fiche technique » ou le « Calculateur de pâte ».</EmptyState>
+      {list.length === 0 && posts.length === 0 ? (
+        <EmptyState icon="users" title="La communauté est encore vide"
+          text="Sois le premier : partage une fiche depuis le calculateur de pâte, ou pose une question — c'est souvent par là que ça commence.">
+          <button className="btn primary" onClick={() => setComposer(true)} style={{ marginTop: 14 }}>
+            <Icon name="help" size={14} /> Poser une question
+          </button>
+        </EmptyState>
       ) : (
         <>
           {/* Barre d'outils : recherche + type + tri */}
@@ -505,6 +538,11 @@ export default function Communaute() {
             <button className={"btn sm " + (onlyWish ? "primary" : "ghost")} onClick={() => setOnlyWish((w) => !w)} title="N'afficher que ma wishlist">
               <Icon name="bookmark" size={13} fill={onlyWish ? "currentColor" : "none"} /> Ma wishlist{wish.size ? ` (${wish.size})` : ""}
             </button>
+            {/* Poser une question est une ACTION, pas un filtre : elle est en primaire et à
+                part, sinon elle se perdrait au milieu des segments de tri. */}
+            <button className="btn sm primary" onClick={() => setComposer(true)}>
+              <Icon name="help" size={13} /> Poser une question
+            </button>
           </div>
 
           {shown.length === 0 ? (
@@ -514,6 +552,13 @@ export default function Communaute() {
               {shown.map((s) => {
                 const km = kindMeta(s.kind);
                 const lk = likeState[s.id] || { liked: false, count: s.like_count || 0 };
+                if (s._post) {
+                  return (
+                    <QuestionCard key={s.id} post={s}
+                      cadre={cadreDe(s.author_user_id, s.author_done, s.author_cadre, s.author_cadres_ex)}
+                      onOpen={setOpenPost} onProfil={openProfile} />
+                  );
+                }
                 return (
                   <CommCard key={s.id} recipe={s}>
                     <div className="comm-card2-body" onClick={() => setOpenId(s.id)} role="button" tabIndex={0}
@@ -710,6 +755,18 @@ export default function Communaute() {
       )}
 
       {profileOpen && <ProfileModal profile={profile} loading={!profile} cadre={cadreDe(profileId, profile?.done, profile?.cadre, profile?.cadres_ex)} onClose={() => setProfileOpen(false)} />}
+
+      {openPost && (
+        <QuestionModal id={openPost} moi={moi} cadreDe={cadreDe} onProfil={openProfile}
+          onClose={() => setOpenPost(null)} onChange={chargerPosts} />
+      )}
+      {composer && (
+        // `peutAnnoncer` : une ANNONCE engage l'école, seul le bureau peut en publier. Le
+        // serveur refuse de toute façon, mais proposer un choix qui sera rejeté est une
+        // mauvaise manière de le dire.
+        <QuestionForm onClose={() => setComposer(false)} onCreated={chargerPosts}
+          peutAnnoncer={["SUPER_ADMIN", "ADMIN", "SECRETARIAT", "INTERVENANT"].includes(user?.role)} />
+      )}
     </>
   );
 }
