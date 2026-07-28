@@ -6,6 +6,7 @@ import {
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import DataTable from "../components/DataTable.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 
@@ -512,30 +513,27 @@ function Performance({ annee }) {
         <PerfCard label="Marge" icon="target" tone="green" cur={euro(c.marge)} prev={euro(p.marge)} rc={c.marge} rp={p.marge} an={d.anneePrec} />
       </div>
       <Card title={T("receipt", `Dépenses par poste — ${d.annee} vs ${d.anneePrec}`)}>
-        <div className="tablewrap">
-          <table>
-            <thead><tr><th>Poste</th><th className="ta-r">{d.annee}</th><th className="ta-r">{d.anneePrec}</th><th className="ta-r">Écart</th></tr></thead>
-            <tbody>
-              {d.postesLabels.map((pl) => {
-                const cur = c.postes[pl.categorie] ?? 0, prev = p.postes[pl.categorie] ?? 0;
-                return (
-                  <tr key={pl.categorie}>
-                    <td>{pl.label}</td>
-                    <td className="ta-r tnum">{euro(cur)}</td>
-                    <td className="ta-r tnum" style={{ color: "var(--muted)" }}>{euro(prev)}</td>
-                    <td className="ta-r tnum"><Ecart diff={cur - prev} invert /></td>
-                  </tr>
-                );
-              })}
-              <tr style={{ fontWeight: 700 }}>
-                <td>Total</td>
-                <td className="ta-r tnum">{euro(c.depensesTotal)}</td>
-                <td className="ta-r tnum" style={{ color: "var(--muted)" }}>{euro(p.depensesTotal)}</td>
-                <td className="ta-r tnum"><Ecart diff={c.depensesTotal - p.depensesTotal} invert /></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={d.postesLabels}
+          rowKey={(pl) => pl.categorie}
+          cols={[
+            { k: "poste", t: "Poste", principal: true, cell: (pl) => pl.label },
+            { k: "cur", t: String(d.annee), th: { className: "ta-r" }, td: { textAlign: "right" },
+              cell: (pl) => <span className="tnum">{euro(c.postes[pl.categorie] ?? 0)}</span> },
+            { k: "prev", t: String(d.anneePrec), th: { className: "ta-r" }, td: { textAlign: "right", color: "var(--muted)" },
+              cell: (pl) => <span className="tnum">{euro(p.postes[pl.categorie] ?? 0)}</span> },
+            // `invert` : sur des DÉPENSES, une hausse est une mauvaise nouvelle — l'écart doit
+            // donc se colorer à l'envers d'un chiffre d'affaires.
+            { k: "ecart", t: "Écart", th: { className: "ta-r" }, td: { textAlign: "right" },
+              cell: (pl) => <span className="tnum"><Ecart diff={(c.postes[pl.categorie] ?? 0) - (p.postes[pl.categorie] ?? 0)} invert /></span> },
+          ]}
+          pied={{
+            poste: "Total",
+            cur: <span className="tnum">{euro(c.depensesTotal)}</span>,
+            prev: <span className="tnum">{euro(p.depensesTotal)}</span>,
+            ecart: <span className="tnum"><Ecart diff={c.depensesTotal - p.depensesTotal} invert /></span>,
+          }}
+        />
       </Card>
     </div>
   );

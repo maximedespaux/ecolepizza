@@ -317,6 +317,9 @@ tbody tr:last-child td{border-bottom:none}
    décider, pas la taille de l'écran — une media query rendrait la version large dans une
    colonne de 300 px sur un grand écran, ce qui est exactement le cas qu'on veut éviter. */
 .dt-wrap{container-type:inline-size}
+/* Ligne de totaux : elle se distingue par le POIDS et un filet plus marqué, pas par une
+   couleur — un total surligné se lit comme une alerte. */
+.dt tfoot .dt-total td{font-weight:700;border-top:2px solid var(--border);border-bottom:none;background:var(--surface2)}
 
 @container (max-width: 700px){
   /* `display:block` sur les éléments de tableau : c'est ce qui désactive la mise en page
@@ -349,6 +352,10 @@ tbody tr:last-child td{border-bottom:none}
   .dt td.dt-actions::before{display:none}
   /* Plus de défilement latéral à provoquer : la carte tient dans la largeur. */
   .dt-wrap .tablewrap{overflow:visible;background:none;background-image:none}
+  /* La ligne de totaux devient une carte à part, détachée de la liste — elle résume, elle
+     n'est pas un élément de plus. */
+  .dt tfoot{display:block}
+  .dt tfoot tr{border:none;background:var(--surface2);margin-top:4px}
 }
 
 .skel{display:block;border-radius:10px;background:var(--surface2);position:relative;overflow:hidden}

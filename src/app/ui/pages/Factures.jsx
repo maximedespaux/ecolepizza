@@ -6,6 +6,7 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
 import Badge from "../components/Badge.jsx";
+import DataTable from "../components/DataTable.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -160,34 +161,39 @@ function Factures() {
         {invoices.length === 0 ? (
           <EmptyState icon="receipt">Aucun document de facturation.</EmptyState>
         ) : (
-          <div className="tablewrap" style={{ border: "none" }}>
-            <table>
-              <thead><tr><th>Numéro</th><th>Type</th><th>Client / dossier</th><th className="ta-r">Montant</th><th>Statut</th><th></th></tr></thead>
-              <tbody>
-                {invoices.map((i) => {
-                  const [label, tone] = STATUS[i.status] || [i.status, "n"];
+          <DataTable
+            rows={invoices}
+            rowKey={(i) => i.id}
+            cols={[
+              { k: "number", t: "Numéro", cell: (i) => <span className="mono">{i.number}</span> },
+              { k: "who", t: "Client / dossier", principal: true,
+                cell: (i) => {
                   const who = i.company_name || (i.last_name ? `${i.last_name} ${i.first_name}` : "—");
-                  return (
-                    <tr key={i.id}>
-                      <td className="mono">{i.number}</td>
-                      <td>{i.type}</td>
-                      <td>{who}{Number(i.n_lines) > 1 ? ` · ${i.n_lines} dossiers` : i.program_code ? ` · ${i.program_code}` : ""}</td>
-                      <td className="mono tnum" style={{ textAlign: "right" }}>{euro(i.amount_net)}{Number(i.paid) > 0 && <span style={{ display: "block", fontSize: 11, color: "var(--green)" }}>payé {euro(i.paid)}</span>}</td>
-                      <td><Badge tone={tone}>{label}</Badge></td>
-                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                        {i.status === "BROUILLON" && <button className="btn sm" title="Émettre" onClick={() => setStatusOf(i.id, "EMISE")}>Émettre</button>}{" "}
-                        {i.status !== "PAYEE" && i.status !== "ANNULEE" && (i.type === "FACTURE" || i.type === "ACOMPTE") && <button className="btn sm" title="Encaisser le solde et marquer payée" onClick={() => pay(i)}>Payer</button>}{" "}
-                        <button className="btn sm" title="Aperçu de la facture" onClick={() => preview(i)}>Aperçu</button>{" "}
-                        <button className="btn sm" title="Télécharger la facture Factur-X (PDF)" onClick={() => dl(downloadFacturX, i)}>Factur-X</button>{" "}
-                        <button className="iconbtn" title="Télécharger le XML" onClick={() => dl(downloadInvoiceXml, i)}><Icon name="download" size={16} /></button>{" "}
-                        <button className="iconbtn del" title="Supprimer" onClick={() => remove(i.id)}><Icon name="trash" size={15} /></button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  return `${who}${Number(i.n_lines) > 1 ? ` · ${i.n_lines} dossiers` : i.program_code ? ` · ${i.program_code}` : ""}`;
+                } },
+              { k: "type", t: "Type", cell: (i) => i.type },
+              { k: "amount", t: "Montant", th: { className: "ta-r" }, td: { textAlign: "right" },
+                cell: (i) => (
+                  <span className="mono tnum">
+                    {euro(i.amount_net)}
+                    {Number(i.paid) > 0 && <span style={{ display: "block", fontSize: 11, color: "var(--green)" }}>payé {euro(i.paid)}</span>}
+                  </span>
+                ) },
+              { k: "statut", t: "Statut",
+                cell: (i) => { const [label, tone] = STATUS[i.status] || [i.status, "n"]; return <Badge tone={tone}>{label}</Badge>; } },
+              { k: "actions", t: "", actions: true, td: { textAlign: "right", whiteSpace: "nowrap" },
+                cell: (i) => (
+                  <>
+                    {i.status === "BROUILLON" && <button className="btn sm" title="Émettre" onClick={() => setStatusOf(i.id, "EMISE")}>Émettre</button>}{" "}
+                    {i.status !== "PAYEE" && i.status !== "ANNULEE" && (i.type === "FACTURE" || i.type === "ACOMPTE") && <button className="btn sm" title="Encaisser le solde et marquer payée" onClick={() => pay(i)}>Payer</button>}{" "}
+                    <button className="btn sm" title="Aperçu de la facture" onClick={() => preview(i)}>Aperçu</button>{" "}
+                    <button className="btn sm" title="Télécharger la facture Factur-X (PDF)" onClick={() => dl(downloadFacturX, i)}>Factur-X</button>{" "}
+                    <button className="iconbtn" title="Télécharger le XML" aria-label={`Télécharger le XML de ${i.number}`} onClick={() => dl(downloadInvoiceXml, i)}><Icon name="download" size={16} /></button>{" "}
+                    <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${i.number}`} onClick={() => remove(i.id)}><Icon name="trash" size={15} /></button>
+                  </>
+                ) },
+            ]}
+          />
         )}
       </Card>
     </>

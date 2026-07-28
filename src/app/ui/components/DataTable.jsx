@@ -25,7 +25,7 @@ import { Squelette } from "./Squelette.jsx";
  */
 export default function DataTable({
   rows, cols, vide, rowKey = (r, i) => r.id ?? i, rowProps,
-  className = "", lignesSquelette = 5,
+  pied, className = "", lignesSquelette = 5,
 }) {
   if (rows == null) {
     return (
@@ -67,6 +67,22 @@ export default function DataTable({
               );
             })}
           </tbody>
+          {/* Ligne de TOTAUX. Dans un `<tfoot>` et non dans le corps : c'est ce qui la fait
+              annoncer comme un pied de tableau, et c'est aussi ce qui l'empêche d'être
+              emportée par un tri à venir. `pied` reçoit les mêmes colonnes que le corps —
+              en mode carte, elle devient une carte à part, détachée de la liste. */}
+          {pied && (
+            <tfoot>
+              <tr className="dt-total">
+                {cols.map((c) => (
+                  <td key={c.k} data-intitule={c.t || undefined}
+                    className={c.actions ? "dt-actions" : undefined} style={c.td}>
+                    {pied[c.k]}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
