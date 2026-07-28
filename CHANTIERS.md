@@ -169,11 +169,23 @@ cibles tactiles, `role="dialog"`, hiérarchie de titres) et §4.4 (métier) rest
   `recipe` : une question n'a ni ingrédient, ni rendement, ni coût, et l'ENUM
   `recipe.kind` aurait imposé une garde « sauf si c'est une question » à chaque calcul.
 
-**⚠️ L'espace d'échange n'a PAS de front.** L'API est complète et montée
-(`/api/community/posts`, réponses, image, « ça m'a aidé ») mais personne ne l'appelle. C'est
-LE prochain chantier. Décisions déjà arbitrées par Maxime :
-fil UNIQUE avec filtres par nature (pas deux onglets : ~30 stagiaires actifs) · la Question
-d'abord, les annonces ensuite · photos stockées côté serveur.
+**✅ L'espace d'échange est complet** (API + front, `54e6a4d`) : fil UNIQUE fiches + questions,
+filtre « Entraide », réponses, « ça m'a aidé » (l'auteur seul, et réversible), photo réduite
+côté navigateur (`lib/image.js` — le serveur ne traite aucune image). Cycle API vérifié sur la
+base réelle. ⚠️ **Le rendu n'a jamais été vu à l'écran** : la session du navigateur était
+passée en administration et `/communaute` est une route stagiaire. À regarder en priorité.
+
+**Corrections de fond livrées dans la foulée :**
+- **Empâtements : une fiche pouvait afficher 140 % de farine** (`4b47460`). Le plafond de
+  substitution de 60 % n'était appliqué qu'à la farine de base ; les lignes affichaient les
+  pourcentages bruts, poids compris. `subsPlafonnees()` met à l'échelle en gardant les
+  rapports (70/30 → 42/18). Vérifié sur cinq cas.
+- **Hiérarchie de titres** (`129ca25`) — `Card` codait un `<h3>` en dur, donc `h1 → h3` sans
+  `h2` sur chaque page. Niveau paramétrable, `h2` par défaut.
+- **Contrastes `--dim`** sur `.field-opt`, `.ate-lbl`, `.stu-next-lbl` · **cible tactile**
+  `.cart-qty .iconbtn` passée de 30 à 40 px.
+- **Plus aucun `window.alert`** (`ea8c99a`). Les gardes `confirm`/`prompt` devant les
+  suppressions de masse sont conservées : une garde doit interrompre.
 
 **Admin — trois pertes d'information silencieuses corrigées** (`400486d`) : `EmptyState` qui
 jetait `title`/`text` (7 appels muets), `.tablewrap` en `overflow:hidden` qui coupait
