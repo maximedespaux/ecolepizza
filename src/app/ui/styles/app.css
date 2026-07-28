@@ -14,6 +14,7 @@
   --r:16px; --r-sm:11px; --ease:cubic-bezier(.22,.61,.36,1);
   --shadow-glow:0 8px 30px -8px rgba(220,62,55,.4);
   /* Échelle d'élévation cohérente (cartes → panneaux → modales) */
+  --relief:none;   /* en clair, c'est l'ombre qui porte l'élévation — cf. le thème sombre */
   --shadow-1:0 1px 2px rgba(31,33,64,.05), 0 1px 3px rgba(31,33,64,.05);
   --shadow-2:0 4px 12px -4px rgba(31,33,64,.12), 0 2px 6px -2px rgba(31,33,64,.06);
   --shadow-3:0 18px 44px -16px rgba(31,33,64,.28), 0 6px 16px -8px rgba(31,33,64,.14);
@@ -49,6 +50,21 @@
   /* Même correction en sombre : #727aa3 tombait à 3,42:1 sur --surface2. #8a92bd donne
      4,71:1, contre 6,47:1 pour --muted — l'écart reste lisible comme une hiérarchie. */
   --text:#eef0fb; --muted:#a7add0; --dim:#8a92bd;
+  /* OMBRES PROPRES AU THÈME SOMBRE.
+     Elles n'étaient définies qu'une fois, en navy `rgba(31,33,64,.05)` — pensées pour du
+     blanc. Posées sur une surface `#1d2040`, elles sont tout simplement INVISIBLES : chaque
+     carte de l'espace d'administration était donc parfaitement plate en sombre, distinguée du
+     fond par son seul filet de 1 px. C'est ce qui donnait l'impression que rien n'avait été
+     travaillé.
+     En sombre, l'élévation se joue en NOIR franc et non en teinte du thème : une ombre
+     colorée s'y lit comme un halo, pas comme une ombre. */
+  --shadow-1:0 1px 2px rgba(0,0,0,.32), 0 1px 3px rgba(0,0,0,.24);
+  --shadow-2:0 6px 18px -6px rgba(0,0,0,.55), 0 2px 6px -2px rgba(0,0,0,.38);
+  --shadow-3:0 24px 54px -18px rgba(0,0,0,.7), 0 8px 20px -10px rgba(0,0,0,.5);
+  /* Et le second signal d'élévation propre au sombre : un filet de lumière sur l'ARÊTE HAUTE.
+     C'est lui qui fait qu'une surface paraît posée devant le fond plutôt que découpée dedans —
+     une ombre seule n'y suffit pas, faute de contraste avec ce qu'il y a dessous. */
+  --relief:inset 0 1px 0 rgba(255,255,255,.055);
   --green:#5fc08e; --green-bg:rgba(95,192,142,.14); --blue:#8ea2e0; --blue-bg:rgba(142,162,224,.16);
   --amber-bg:rgba(240,164,60,.14); --rosso-bg:rgba(220,62,55,.16);
   --orange-bg:rgba(255,105,0,.15); --gold-bg:rgba(252,185,0,.15);
@@ -202,7 +218,7 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 
 /* Cards / grid ------------------------------------------------------- */
 .grid{display:grid;gap:16px}.cols-2{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:repeat(3,1fr)}.cols-4{grid-template-columns:repeat(4,1fr)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-1);transition:box-shadow .2s var(--ease),transform .2s var(--ease),border-color .2s var(--ease);animation:rise .45s var(--ease) both}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-1),var(--relief);transition:box-shadow .2s var(--ease),transform .2s var(--ease),border-color .2s var(--ease);animation:rise .45s var(--ease) both}
 .card.hover{cursor:pointer}
 .card.hover:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
 .card h3{font-size:17px}
@@ -227,7 +243,7 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
    chercher, il ne doit pas arriver en deuxième.
    `overflow:hidden` pour que le filet d'accent épouse les coins arrondis. */
 .kpi{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
-  padding:17px 20px 16px;animation:rise .45s var(--ease) both;
+  padding:17px 20px 16px;animation:rise .45s var(--ease) both;box-shadow:var(--shadow-1),var(--relief);
   transition:transform .2s var(--ease),box-shadow .2s var(--ease),border-color .2s var(--ease)}
 /* Filet teinté sur l'arête haute : c'est ce qui différencie quatre tuiles autrement
    identiques, à la vitesse du coup d'œil, sans lire un mot. */
@@ -243,7 +259,7 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
    hauteur, contrairement au « Voir → » qu'elle remplace. */
 .kpi-fleche{flex:none;transition:transform .2s var(--spring)}
 .kpi-lien{display:block;color:inherit;text-decoration:none}
-.kpi-lien:hover{transform:translateY(-3px);box-shadow:var(--shadow-2);border-color:color-mix(in srgb,currentColor 34%,var(--border))}
+.kpi-lien:hover{transform:translateY(-3px);box-shadow:var(--shadow-2),var(--relief);border-color:color-mix(in srgb,currentColor 34%,var(--border))}
 .kpi-lien:hover .kpi-fleche{transform:translateX(4px)}
 .kpi-lien:hover .kpi-ic{transform:scale(1.07)}
 .kpi-lien:active{transform:translateY(-1px)}
