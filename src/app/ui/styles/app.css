@@ -2257,6 +2257,17 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
     radial-gradient(50vw 36vw at 92% 4%, rgba(220,62,55,.12), transparent 62%),
     radial-gradient(44vw 30vw at 50% 108%, rgba(252,185,0,.08), transparent 60%);
 }
+/* Variante pour les PORTAILS. `createPortal(…, document.body)` sort la modale de l'arbre de
+   `StudentLayout` : elle perdait Fredoka, les coins 22 px et le retour tactile, et s'affichait
+   donc en registre « administration » au milieu de l'espace stagiaire — y compris IntroGuide,
+   le tout premier écran d'un nouveau stagiaire.
+   Le conteneur du portail reprend `.stu-app` pour retrouver les tokens, PLUS cette classe qui
+   coupe le halo : deux `::before` en `position:fixed;inset:0` peindraient la chaleur en
+   double sur tout l'écran, par-dessus le voile de la modale.
+   `position:relative` (hérité de `.stu-app`) ne crée PAS de bloc conteneur pour un enfant en
+   `position:fixed` — le voile continue donc de couvrir la fenêtre entière. */
+.stu-app-nu::before{display:none}
+
 /* Aucune règle de positionnement sur les enfants — deux régressions sont nées d'ici :
    `> *` cassait le `position:fixed` de la modale de profil, et le viser plus finement
    cassait le `sticky`/`z-index:30` de l'en-tête, qui repassait alors SOUS le voile du

@@ -219,6 +219,10 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
   const fiches = useCountUp(profile?.shared_count || 0, { duration: 700 });
   const coeurs = useCountUp(profile?.likes_received || 0, { duration: 700 });
   return createPortal(
+    /* Conteneur `stu-app` : un portail sort de StudentLayout et reviendrait au registre
+       « administration » (Mulish, coins 12 px) au milieu de l'espace stagiaire. `stu-app-nu`
+       coupe le halo, sinon peint une seconde fois par-dessus le voile. */
+    <div className="stu-app stu-app-nu">
     <div className="overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
@@ -270,6 +274,7 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
           )}
         </div>
       </div>
+    </div>
     </div>,
     document.body
   );
@@ -538,6 +543,7 @@ export default function Communaute() {
 
       {/* Modale détail : ingrédients, coût, prix, commentaires */}
       {openId && createPortal(
+        <div className="stu-app stu-app-nu">
         <div className="overlay" onClick={() => setOpenId(null)}>
           <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             {!detail ? (
@@ -676,6 +682,7 @@ export default function Communaute() {
               );
             })()}
           </div>
+        </div>
         </div>,
         document.body
       )}
