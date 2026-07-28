@@ -144,6 +144,7 @@ function Stagiaires() {
       <div className="searchbar">
         <input
           className="inp"
+          aria-label="Rechercher un stagiaire par nom, prénom ou e-mail"
           placeholder="Rechercher un stagiaire (nom, prénom ou email)…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -176,20 +177,20 @@ function Stagiaires() {
             </div>
           )}
         </span>
-        <select className="inp" style={{ maxWidth: 190 }} value={filters.financing} onChange={setFilter("financing")}>
+        <select className="inp" aria-label="Filtrer par financement" style={{ maxWidth: 190 }} value={filters.financing} onChange={setFilter("financing")}>
           <option value="">Tout financement</option>
           <option value="PARTICULIER">Particulier</option>
           <option value="PROFESSIONNEL">Professionnel</option>
         </select>
-        <select className="inp" style={{ maxWidth: 190 }} value={filters.status} onChange={setFilter("status")}>
+        <select className="inp" aria-label="Filtrer par statut" style={{ maxWidth: 190 }} value={filters.status} onChange={setFilter("status")}>
           <option value="">Tout statut</option>
           {STATUTS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <select className="inp" style={{ maxWidth: 190 }} value={filters.opco} onChange={setFilter("opco")}>
+        <select className="inp" aria-label="Filtrer par OPCO" style={{ maxWidth: 190 }} value={filters.opco} onChange={setFilter("opco")}>
           <option value="">Tout OPCO</option>
           {opcoNames.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-        <select className="inp" style={{ maxWidth: 190 }} value={filters.account} onChange={setFilter("account")}>
+        <select className="inp" aria-label="Filtrer par état du compte" style={{ maxWidth: 190 }} value={filters.account} onChange={setFilter("account")}>
           <option value="">Tout compte</option>
           <option value="yes">Avec compte</option>
           <option value="no">Sans compte</option>

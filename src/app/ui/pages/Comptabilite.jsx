@@ -267,18 +267,21 @@ function Comptabilite() {
           {/* Saisies */}
           <div className="grid cols-2">
             <Card title={T("receipt", "Enregistrer une dépense")}>
-              <div className="field"><label>Libellé</label>
-                <input className="inp" value={dep.label} onChange={(e) => setDep({ ...dep, label: e.target.value })} placeholder="Facture farine, loyer avril…" /></div>
+              {/* Les quatre étiquettes de ce formulaire étaient visibles mais non RELIÉES :
+                  cliquer « Montant HT » ne plaçait pas le curseur dans la case, et un lecteur
+                  d'écran annonçait quatre champs anonymes à la suite. */}
+              <div className="field"><label htmlFor="dep-libelle">Libellé</label>
+                <input id="dep-libelle" className="inp" value={dep.label} onChange={(e) => setDep({ ...dep, label: e.target.value })} placeholder="Facture farine, loyer avril…" /></div>
               <div className="row2">
-                <div className="field"><label>Poste</label>
-                  <select value={dep.categorie} onChange={(e) => setDep({ ...dep, categorie: e.target.value })}>
+                <div className="field"><label htmlFor="dep-poste">Poste</label>
+                  <select id="dep-poste" value={dep.categorie} onChange={(e) => setDep({ ...dep, categorie: e.target.value })}>
                     {CATS.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
                   </select></div>
-                <div className="field"><label>Montant HT (€)</label>
-                  <input className="inp" inputMode="decimal" value={dep.montantHT} onChange={(e) => setDep({ ...dep, montantHT: e.target.value })} placeholder="0" /></div>
+                <div className="field"><label htmlFor="dep-montant">Montant HT (€)</label>
+                  <input id="dep-montant" className="inp" inputMode="decimal" value={dep.montantHT} onChange={(e) => setDep({ ...dep, montantHT: e.target.value })} placeholder="0" /></div>
               </div>
-              <div className="field"><label>Date</label>
-                <input className="inp" type="date" value={dep.date} onChange={(e) => setDep({ ...dep, date: e.target.value })} /></div>
+              <div className="field"><label htmlFor="dep-date">Date</label>
+                <input id="dep-date" className="inp" type="date" value={dep.date} onChange={(e) => setDep({ ...dep, date: e.target.value })} /></div>
               <button className="btn primary" style={{ width: "100%" }} disabled={savingDep} onClick={submitDep}>
                 {savingDep ? "Enregistrement…" : "+ Ajouter la dépense"}
               </button>

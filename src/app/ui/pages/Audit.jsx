@@ -28,7 +28,7 @@ function Audit() {
       <StatusMessage status={status} />
 
       <div className="searchbar">
-        <input className="inp" placeholder="Rechercher une action…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="inp" aria-label="Rechercher une action dans le journal" placeholder="Rechercher une action…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       <Card title={`Événements${rows ? ` (${rows.length})` : ""}`}>

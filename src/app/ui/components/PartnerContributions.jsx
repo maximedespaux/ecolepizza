@@ -48,13 +48,13 @@ export default function ApportForm({ partners = [], onSaved }) {
       </p>
 
       <div className="row3" style={{ alignItems: "end" }}>
-        <div className="field"><label>Partenaire <span style={{ color: "var(--ember1)" }}>*</span></label>
-          <select value={form.partner_id} onChange={(e) => setForm({ ...form, partner_id: e.target.value })}>
+        <div className="field"><label htmlFor="ap-partenaire">Partenaire <span style={{ color: "var(--ember1)" }}>*</span></label>
+          <select id="ap-partenaire" value={form.partner_id} onChange={(e) => setForm({ ...form, partner_id: e.target.value })}>
             <option value="">— Sélectionner —</option>
             {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select></div>
-        <div className="field"><label>Type</label>
-          <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+        <div className="field"><label htmlFor="ap-type">Type</label>
+          <select id="ap-type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
             <optgroup label="Cash (→ chiffre d'affaires)">
               {APPORT_TYPES.filter((t) => t.cash).map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
             </optgroup>
@@ -62,16 +62,16 @@ export default function ApportForm({ partners = [], onSaved }) {
               {APPORT_TYPES.filter((t) => !t.cash).map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
             </optgroup>
           </select></div>
-        <div className="field"><label>Valeur (€) <span style={{ color: "var(--ember1)" }}>*</span></label>
-          <input className="inp" inputMode="decimal" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} placeholder="0" /></div>
+        <div className="field"><label htmlFor="ap-valeur">Valeur (€) <span style={{ color: "var(--ember1)" }}>*</span></label>
+          <input id="ap-valeur" className="inp" inputMode="decimal" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} placeholder="0" /></div>
       </div>
       <div className="row3" style={{ alignItems: "end" }}>
         <div className="field" style={{ gridColumn: "span 2" }}>
-          <label>{isCash ? "Libellé de la commission" : "Quoi (ce qui a été reçu)"} <span style={{ color: "var(--ember1)" }}>*</span></label>
-          <input className="inp" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })}
+          <label htmlFor="ap-libelle">{isCash ? "Libellé de la commission" : "Quoi (ce qui a été reçu)"} <span style={{ color: "var(--ember1)" }}>*</span></label>
+          <input id="ap-libelle" className="inp" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })}
             placeholder={isCash ? "Commission Le 5 Stagioni…" : "Pétrin 20L, four à bois, 50 kg farine T65…"} /></div>
-        <div className="field"><label>Date</label>
-          <input className="inp" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
+        <div className="field"><label htmlFor="ap-date">Date</label>
+          <input id="ap-date" className="inp" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <button className="btn primary" onClick={submit} disabled={saving}><Icon name="plus" size={15} /> {saving ? "Enregistrement…" : "Ajouter l'apport"}</button>

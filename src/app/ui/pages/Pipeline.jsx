@@ -48,7 +48,7 @@ function Pipeline() {
         title="Pipeline de session"
         lead="Choisissez une session : chaque colonne est une étape du parcours (de l'inscription au suivi), chaque stagiaire est positionné sur son étape en cours."
         actions={
-          <select className="inp" style={{ minWidth: 260 }} value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+          <select className="inp" aria-label="Choisir la session à afficher" style={{ minWidth: 260 }} value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
             {sessions.length === 0 && <option value="">— Aucune session —</option>}
             {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
           </select>

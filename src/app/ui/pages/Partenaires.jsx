@@ -80,7 +80,7 @@ function Partenaires() {
       {tab === "partenaires" ? (
         <>
           <div className="searchbar" style={{ marginBottom: 12 }}>
-            <select className="inp" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 240 }}>
+            <select className="inp" aria-label="Filtrer par catégorie de partenaire" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 240 }}>
               <option value="">Toutes les catégories</option>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -136,7 +136,7 @@ function Partenaires() {
                     {canEdit && (
                       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                         <button className="btn sm ghost" onClick={() => setEditing({ ...p })}>Modifier</button>
-                        <button className="btn sm ghost danger" onClick={() => onDelete(p)}><Icon name="trash" size={15} /></button>
+                        <button className="btn sm ghost danger" title={`Supprimer ${p.name}`} aria-label={`Supprimer le partenaire ${p.name}`} onClick={() => onDelete(p)}><Icon name="trash" size={15} /></button>
                       </div>
                     )}
                   </Card>
