@@ -7,6 +7,7 @@ import {
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
+import DataTable from "../components/DataTable.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 
@@ -122,31 +123,31 @@ function Quiz() {
         groupByFormation(quizzes).map((g) => (
           <Card key={g.key} title={g.program_code ? `${g.program_code} — ${g.program_title}` : "Non rattachés à une formation"}
             more={<Badge tone="n">{g.items.length}</Badge>}>
-            <div className="tablewrap" style={{ border: "none" }}>
-              <table>
-                <thead><tr><th>Titre</th><th>Jour</th><th>Envoi</th><th>Type</th><th>Questions</th><th></th></tr></thead>
-                <tbody>
-                  {g.items.map((q) => (
-                    <tr key={q.id}>
-                      <td><b>{q.title}</b></td>
-                      <td className="tnum">{dayTag(q.day)}</td>
-                      <td>{q.auto_send ? <Badge tone="g">Auto</Badge> : <span className="hint">Manuel</span>}</td>
-                      <td>{q.kind === "SURVEY" ? <Badge tone="n">Enquête</Badge> : <Badge tone="b">Noté</Badge>}</td>
-                      <td className="tnum">{q.n_questions}</td>
-                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                        <button className="btn sm ghost"
-                          style={q.sendable ? undefined : { opacity: 0.45 }}
-                          title={q.sendable ? `Envoyer aux stagiaires (${q.eligible_count})` : (q.send_reason || "Envoi indisponible")}
-                          onClick={() => onSend(q)}>Envoyer</button>{" "}
-                        <button className="btn sm ghost" onClick={() => onEdit(q)}>Éditer</button>{" "}
-                        <button className="btn sm ghost" title="Dupliquer ce QCM" onClick={() => onDuplicate(q)}>Dupliquer</button>{" "}
-                        <button className="btn sm ghost danger" onClick={() => onDelete(q)}><Icon name="trash" size={15} /></button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              rows={g.items}
+              rowKey={(q) => q.id}
+              cols={[
+                { k: "title", t: "Titre", principal: true, cell: (q) => <b>{q.title}</b> },
+                { k: "day", t: "Jour", cell: (q) => <span className="tnum">{dayTag(q.day)}</span> },
+                { k: "envoi", t: "Envoi", cell: (q) => (q.auto_send ? <Badge tone="g">Auto</Badge> : <span className="hint">Manuel</span>) },
+                { k: "kind", t: "Type", cell: (q) => (q.kind === "SURVEY" ? <Badge tone="n">Enquête</Badge> : <Badge tone="b">Noté</Badge>) },
+                { k: "n", t: "Questions", cell: (q) => <span className="tnum">{q.n_questions}</span> },
+                { k: "actions", t: "", actions: true, td: { textAlign: "right", whiteSpace: "nowrap" },
+                  cell: (q) => (
+                    <>
+                      {/* `disabled` plutôt qu'une simple opacité : un bouton qui a l'air actif et
+                          refuse au clic ment. Le `title` porte la raison — c'est lui qu'on lit
+                          quand on cherche pourquoi l'envoi n'est pas possible. */}
+                      <button className="btn sm ghost" disabled={!q.sendable}
+                        title={q.sendable ? `Envoyer aux stagiaires (${q.eligible_count})` : (q.send_reason || "Envoi indisponible")}
+                        onClick={() => onSend(q)}>Envoyer</button>{" "}
+                      <button className="btn sm ghost" onClick={() => onEdit(q)}>Éditer</button>{" "}
+                      <button className="btn sm ghost" title="Dupliquer ce QCM" onClick={() => onDuplicate(q)}>Dupliquer</button>{" "}
+                      <button className="btn sm ghost danger" title="Supprimer" aria-label={`Supprimer ${q.title}`} onClick={() => onDelete(q)}><Icon name="trash" size={15} /></button>
+                    </>
+                  ) },
+              ]}
+            />
           </Card>
         ))
       )}

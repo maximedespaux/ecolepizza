@@ -7,6 +7,7 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import Badge from "../components/Badge.jsx";
+import DataTable from "../components/DataTable.jsx";
 import { Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -43,51 +44,57 @@ function AccessRoles() {
 
       <Card title="Rôles système">
         <p className="sub" style={{ marginTop: 0 }}>Rôles intégrés (non modifiables). Cliquez « Dupliquer » pour créer un rôle personnalisé à partir de leur accès.</p>
-        <div className="tablewrap" style={{ border: "none" }}>
-          <table>
-            <thead><tr><th>Rôle</th><th>Pages accordées</th><th></th></tr></thead>
-            <tbody>
-              {BUILTIN_ROLES.map((b) => {
+        <DataTable
+          rows={BUILTIN_ROLES}
+          rowKey={(b) => b.role}
+          cols={[
+            { k: "role", t: "Rôle", principal: true,
+              cell: (b) => {
+                const ov = sysOverrides[b.role];
+                const col = (ov && ov.color) || b.color;
+                return <><Dot color={col} /><b>{b.name}</b> <Badge tone="n">système</Badge>{ov && <Badge tone="a">personnalisé</Badge>}</>;
+              } },
+            { k: "pages", t: "Pages accordées",
+              cell: (b) => {
+                const ov = sysOverrides[b.role];
+                const acc = ov ? (ov.nav_access || {}) : builtinRoleAccess(b.role);
+                return <Badge tone="b">{Object.keys(acc).length} page(s)</Badge>;
+              } },
+            { k: "actions", t: "", actions: true, td: { textAlign: "right", whiteSpace: "nowrap" },
+              cell: (b) => {
                 const ov = sysOverrides[b.role];
                 const acc = ov ? (ov.nav_access || {}) : builtinRoleAccess(b.role);
                 const col = (ov && ov.color) || b.color;
                 return (
-                  <tr key={b.role}>
-                    <td><Dot color={col} /><b>{b.name}</b> <Badge tone="n">système</Badge>{ov && <Badge tone="a">personnalisé</Badge>}</td>
-                    <td><Badge tone="b">{Object.keys(acc).length} page(s)</Badge></td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button className="btn sm ghost" onClick={() => setEditing({ _system: b.role, name: b.name, color: col, nav_access: acc })}>Modifier</button>{" "}
-                      <button className="btn sm ghost" onClick={() => setEditing({ _new: true, name: `${b.name} (copie)`, color: col, nav_access: acc })}>Dupliquer</button>
-                    </td>
-                  </tr>
+                  <>
+                    <button className="btn sm ghost" onClick={() => setEditing({ _system: b.role, name: b.name, color: col, nav_access: acc })}>Modifier</button>{" "}
+                    <button className="btn sm ghost" onClick={() => setEditing({ _new: true, name: `${b.name} (copie)`, color: col, nav_access: acc })}>Dupliquer</button>
+                  </>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
+              } },
+          ]}
+        />
       </Card>
 
       <Card title={`Rôles personnalisés (${roles.length})`}>
         {roles.length === 0 ? (
           <EmptyState icon="team">Aucun rôle personnalisé. Créez-en un ou dupliquez un rôle système.</EmptyState>
         ) : (
-          <div className="tablewrap" style={{ border: "none" }}>
-            <table>
-              <thead><tr><th>Rôle</th><th>Pages accordées</th><th></th></tr></thead>
-              <tbody>
-                {roles.map((r) => (
-                  <tr key={r.id}>
-                    <td><Dot color={r.color} /><b>{r.name}</b></td>
-                    <td><Badge tone="n">{pageCount(r.nav_access)} page(s)</Badge></td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button className="btn sm ghost" onClick={() => setEditing({ ...r })}>Éditer</button>{" "}
-                      <button className="iconbtn del" title="Supprimer" onClick={() => onDelete(r)}><Icon name="trash" size={15} /></button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={roles}
+            rowKey={(r) => r.id}
+            cols={[
+              { k: "role", t: "Rôle", principal: true, cell: (r) => <><Dot color={r.color} /><b>{r.name}</b></> },
+              { k: "pages", t: "Pages accordées", cell: (r) => <Badge tone="n">{pageCount(r.nav_access)} page(s)</Badge> },
+              { k: "actions", t: "", actions: true, td: { textAlign: "right", whiteSpace: "nowrap" },
+                cell: (r) => (
+                  <>
+                    <button className="btn sm ghost" onClick={() => setEditing({ ...r })}>Éditer</button>{" "}
+                    <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer le rôle ${r.name}`} onClick={() => onDelete(r)}><Icon name="trash" size={15} /></button>
+                  </>
+                ) },
+            ]}
+          />
         )}
       </Card>
 
