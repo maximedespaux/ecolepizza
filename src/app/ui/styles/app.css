@@ -994,12 +994,39 @@ tbody tr:last-child td{border-bottom:none}
 
 /* Titre de la rangée de défis-jeux dans un monde. */
 .pq-games-t{font-size:13px;font-weight:700;color:var(--text);margin:20px 0 10px;text-align:center}
-.pq-tier-label{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:center;margin:6px 0 12px}
+/* Titre de palier, tenu par deux filets : centré et seul, il flottait au milieu de la page
+   sans rien séparer. `--dim` en couleur de texte plafonne à ~2,6:1 en clair — sous le seuil
+   AA de 4,5:1 — d'où `--muted`, exactement le remplacement déjà arbitré ailleurs. */
+.pq-tier-label{display:flex;align-items:center;gap:12px;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:6px 0 14px}
+.pq-tier-label::before,.pq-tier-label::after{content:"";flex:1;height:2px;border-radius:2px;background:var(--border)}
 .pq-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
-.pq-fcard{position:relative;flex:1 1 230px;max-width:300px;min-height:88px;border:none;border-radius:14px;padding:14px 16px;color:#fff;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;box-shadow:0 4px 0 0 rgba(0,0,0,.18);transition:transform .1s var(--ease)}
-.pq-fcard:hover:not(:disabled){transform:translateY(-2px)}
+/* Largeur de base FIXE (et non `1 1 230px`) : en s'étirant, la dernière carte d'une rangée
+   incomplète devenait deux fois plus large que ses voisines — le parcours se lisait alors
+   comme une suite de blocs de tailles arbitraires au lieu d'une progression régulière. */
+.pq-fcard{position:relative;flex:0 1 252px;min-height:96px;border:none;border-radius:16px;padding:14px 16px 16px;color:#fff;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;
+  box-shadow:0 4px 0 0 rgba(0,0,0,.18);transition:transform .14s var(--spring),box-shadow .14s var(--ease)}
+.pq-fcard:hover:not(:disabled){transform:translateY(-3px);box-shadow:0 7px 0 0 rgba(0,0,0,.18)}
 .pq-fcard:active:not(:disabled){transform:translateY(2px);box-shadow:0 2px 0 0 rgba(0,0,0,.18)}
-.pq-fcard.locked{background:var(--surface);color:var(--muted);box-shadow:none;cursor:not-allowed;border:1px solid var(--border)}
+/* Verrouillée : un aplat uni la faisait disparaître du parcours alors qu'elle en fait partie
+   — c'est l'objectif suivant, il doit rester visible. Hachures très douces : présente sans
+   prétendre être jouable. */
+.pq-fcard.locked{color:var(--muted);box-shadow:none;cursor:not-allowed;border:1px solid var(--border);
+  background:repeating-linear-gradient(135deg,var(--surface) 0 10px,var(--surface2) 10px 20px)}
+/* Jauge de progression : la seule lecture immédiate de « où j'en suis ». Fond en blanc
+   translucide pour tenir sur les six couleurs de formation sans en fixer aucune. */
+.pq-fcard-jauge{margin-top:auto;height:6px;border-radius:99px;background:rgba(255,255,255,.28);overflow:hidden}
+.pq-fcard-jauge > span{display:block;height:100%;border-radius:99px;background:#fff;
+  transition:width .5s var(--ease)}
+/* Arrivée en cascade des cartes : le décalage fait lire la rangée dans l'ordre du parcours,
+   de gauche à droite, au lieu de la faire apparaître d'un bloc. Cinq crans suffisent — au-delà
+   la dernière carte se ferait attendre. Ressort court, sans rebond marqué. */
+.pq-row > *{animation:pqPose .38s var(--spring) both}
+.pq-row > *:nth-child(2){animation-delay:.06s}
+.pq-row > *:nth-child(3){animation-delay:.12s}
+.pq-row > *:nth-child(4){animation-delay:.18s}
+.pq-row > *:nth-child(n+5){animation-delay:.24s}
+@keyframes pqPose{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.pq-row > *{animation:none}}
 .pq-fcard-top{display:flex;align-items:center;justify-content:space-between}
 .pq-fcard-code{font-size:11px;font-weight:800;letter-spacing:.06em;opacity:.92}
 .pq-fcard-ing{font-size:20px;line-height:1}
@@ -1009,18 +1036,29 @@ tbody tr:last-child td{border-bottom:none}
 /* Légende de la pastille, répétée sous CHAQUE groupe qui en contient une — et non une seule
    fois en pied de page : sur une carte à plusieurs rangées, le sens du « ! » doit se lire
    à côté du « ! ». */
-.pq-legend{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;border-radius:10px;padding:6px 12px 6px 8px;font-weight:700;font-size:12px}
+/* Légende, pas bouton : l'aplat vert plein la faisait passer pour une action cliquable au
+   milieu du parcours, alors qu'elle ne fait qu'expliquer le « ! ». */
+.pq-legend{display:inline-flex;align-items:center;gap:8px;background:var(--surface);color:var(--muted);
+  border:1px solid var(--border);border-radius:99px;padding:4px 12px 4px 5px;font-weight:600;font-size:11.5px}
 /* La pastille de la légende n'est pas celle d'une carte : ni positionnée en absolu, ni
    bordée (le liseré couleur « surface » n'a rien à faire sur l'aplat vert). Taille et
    interlignage remis à l'échelle du pastillon, sinon un « ! » de 15 px dans un cercle de
    20 px (16 px utiles après bordure) déborde et paraît décentré. */
-.pq-legend .pq-prereq{position:static;width:20px;height:20px;border:none;font-size:12px;line-height:1}
+.pq-legend .pq-prereq{position:static;width:19px;height:19px;border:none;font-size:12px;line-height:1}
 /* Rappel des prérequis en tête d'un monde, avec leur état. */
 .pq-prereq-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px;font-size:12.5px}
 .pq-prereq-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-weight:700;
   border:1px solid var(--border);background:var(--surface2);color:var(--muted)}
 .pq-prereq-chip.ok{border-color:color-mix(in srgb,var(--green) 45%,transparent);background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green)}
-.pq-connect{display:flex;justify-content:center;gap:70px;color:var(--dim);margin:4px 0}
+/* Liaison entre paliers : les chevrons seuls flottaient. Un trait vertical les traverse —
+   c'est lui qui fait du tableau un CHEMIN, et les chevrons ne font plus qu'indiquer le sens. */
+.pq-connect{position:relative;display:flex;justify-content:center;gap:70px;color:var(--muted);margin:10px 0;padding:2px 0}
+.pq-connect::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;
+  background:linear-gradient(var(--border),color-mix(in srgb,var(--ember1) 45%,transparent));border-radius:2px}
+.pq-connect > svg{position:relative;animation:pqDescend 2.2s var(--ease) infinite}
+.pq-connect > svg:nth-child(2){animation-delay:.28s}
+@keyframes pqDescend{0%,100%{transform:translateY(-2px);opacity:.45}50%{transform:translateY(3px);opacity:1}}
+@media (prefers-reduced-motion:reduce){.pq-connect > svg{animation:none;opacity:.8}}
 .pq-divider{height:2px;background:var(--border);border-radius:2px;margin:22px auto;max-width:520px}
 /* Palier à l'intérieur d'un thème (classement de l'organisme) : plus discret que le titre
    de section, sinon les deux niveaux de titre se disputent la lecture. */

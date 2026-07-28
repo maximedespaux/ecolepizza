@@ -456,6 +456,15 @@ function FCard({ w, prog, onPick }) {
             : nbCh === 0 ? "Questions à venir"
               : `${done}/${nbCh} chapitres · ${stars} ⭐`}
       </span>
+      {/* La progression ne se lisait qu'en toutes lettres (« 8/20 chapitres »). Une jauge la
+          donne d'un coup d'œil — et c'est elle qui fait qu'on repère la formation à reprendre
+          sans lire toute la carte. Affichée seulement quand il y a réellement des chapitres :
+          une jauge vide sur une formation sans questions annoncerait un retard imaginaire. */}
+      {w.unlocked && nbCh > 0 && (
+        <span className="pq-fcard-jauge" aria-hidden="true">
+          <span style={{ width: `${Math.round((done / nbCh) * 100)}%` }} />
+        </span>
+      )}
     </button>
   );
 }
