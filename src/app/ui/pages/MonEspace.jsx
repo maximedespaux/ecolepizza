@@ -234,14 +234,37 @@ function FormationCard({ f, navigate, onInfo }) {
   const shown = locked ? "#9aa0b5" : color;
   const openable = !locked && f.enrollment_id; // le dossier exige une inscription
   const pct = f.total ? Math.round((f.signed / f.total) * 100) : 0;
+  // Ces cartes sont LE point d'entrée de l'espace stagiaire : un `<div onClick>` nu les rendait
+  // inatteignables au clavier — donc l'espace entier. `role` + `tabIndex` + Entrée/Espace leur
+  // rendent le comportement d'un bouton. Espace demande `preventDefault`, sinon le navigateur
+  // fait défiler la page en même temps qu'il ouvre la carte.
+  const ouvrir = openable ? () => navigate(`/formations/${f.enrollment_id}`) : () => onInfo(f);
+  // Le `title` seul donnait dix boutons au nom IDENTIQUE dans l'arbre d'accessibilité
+  // (« Voir mes documents et mon émargement » ×10) : de quoi rendre la liste illisible en
+  // navigation vocale. Le nom porte donc d'abord la formation, l'action ensuite.
+  //
+  // L'action se décide sur `openable`, PAS sur `locked` : une formation terminée sans
+  // inscription rattachée n'est pas verrouillée mais n'ouvre pas de dossier pour autant —
+  // elle affiche la fiche d'information. L'ancien libellé promettait « mes documents et mon
+  // émargement » puis ouvrait « Formation non suivie ».
+  const action = openable ? "voir mes documents et mon émargement" : "voir les informations";
+  const nom = `${f.program_title} — ${action}`;
   return (
     <div
       className="card hover"
+      role="button"
+      tabIndex={0}
+      aria-label={nom}
       style={{ cursor: "pointer", opacity: locked ? 0.72 : 1, borderTop: `3px solid ${shown}`,
         background: locked ? undefined : `color-mix(in srgb, ${color} 6%, var(--surface))` }}
-      onClick={openable ? () => navigate(`/formations/${f.enrollment_id}`) : () => onInfo(f)}
+      onClick={ouvrir}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        ouvrir();
+      }}
       title={f.revoked && !f.finished ? "Accès suspendu — point d'accès non atteint au début de la session"
-        : locked ? "Voir les informations (formation non suivie)" : "Voir mes documents et mon émargement"}
+        : openable ? "Voir mes documents et mon émargement" : "Voir les informations (formation non suivie)"}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <span className="badge n mono" style={{ background: shown, color: "#fff", borderColor: "transparent" }}>{f.program_code}</span>

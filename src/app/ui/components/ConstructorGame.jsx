@@ -50,9 +50,21 @@ export default function ConstructorGame({ onClose, onFinish }) {
               const idx = placed[pos];
               const ok = checked && idx === pos;
               const ko = checked && idx != null && idx !== pos;
+              // Le vivier est fait de vrais <button> : au clavier on POUVAIT remplir la
+              // séquence, mais plus jamais la corriger — retirer une étape n'existait qu'à la
+              // souris. Une case n'est focalisable que lorsqu'elle a réellement quelque chose
+              // à faire : ni vide, ni après vérification.
+              const retirable = idx != null && !checked;
               return (
                 <div key={pos} className={"cg-slot" + (idx == null ? " empty" : "") + (ok ? " ok" : "") + (ko ? " ko" : "")}
-                  onClick={() => idx != null && unplace(idx)} title={idx != null && !checked ? "Retirer" : undefined}>
+                  role={retirable ? "button" : undefined} tabIndex={retirable ? 0 : undefined}
+                  onClick={() => idx != null && unplace(idx)}
+                  onKeyDown={retirable ? (e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return;
+                    e.preventDefault();
+                    unplace(idx);
+                  } : undefined}
+                  title={retirable ? "Retirer" : undefined}>
                   <span className="cg-num">{pos + 1}</span>
                   {idx != null ? <span><span className="cg-e">{RECIPE[idx].e}</span> {RECIPE[idx].t}</span> : <span className="cg-ph">…</span>}
                   {checked && idx != null && <span style={{ marginLeft: "auto" }}>{ok ? "✅" : `→ ${pos + 1}. ${RECIPE[pos].t}`}</span>}

@@ -76,6 +76,12 @@ input,select,textarea{font-family:inherit;font-size:14px;color:var(--text)}
 /* Cases à cocher / radios : teinte de la charte (coché), rendu propre au thème (décoché). */
 input[type=checkbox],input[type=radio]{accent-color:var(--ember1);cursor:pointer}
 .mono{font-family:var(--font-m)} .tnum{font-variant-numeric:tabular-nums}
+/* Texte secondaire : « Chargement… », aides sous un champ, compteurs, précisions.
+   Employée 303 fois dans 53 fichiers, cette classe n'avait AUCUNE règle — tous ces
+   textes héritaient donc du corps (15px, --text) et pesaient autant que le contenu
+   principal. Toute la hiérarchie secondaire de l'application tient dans ces trois
+   déclarations. Volontairement sans marge : la plupart des appels posent la leur. */
+.hint{color:var(--muted);font-size:13px;line-height:1.5}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 /* Rendu global : scrollbars, sélection, focus clavier, défilement doux --- */
