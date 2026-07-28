@@ -8,6 +8,7 @@ import { CADRES, cadreClass } from "../lib/cadres.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
+import DataTable from "../components/DataTable.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Squelette } from "../components/Squelette.jsx";
@@ -388,38 +389,37 @@ function StagiaireDetail() {
             {enrollments.length === 0 ? (
               <p className="hint" style={{ margin: 0 }}>Ce stagiaire n'est inscrit à aucune formation. Inscrivez-le depuis une session.</p>
             ) : (
-              <div className="tablewrap" style={{ border: "none" }}>
-                <table className="enroll-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 34 }}></th>
-                      <th>Code</th>
-                      <th>Formation</th>
-                      <th>Semaine</th>
-                      <th>Dates</th>
-                      <th>Type</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {enrollments.map((e) => {
+              <DataTable
+                className="enroll-table"
+                rows={enrollments}
+                rowKey={(e) => e.id}
+                /* La ligne entière coche le dossier — la case seule serait une cible de 17 px.
+                   `aria-pressed` dit l'état à la navigation vocale, que la case porte déjà
+                   visuellement. */
+                rowProps={(e) => ({
+                  className: prep.enrollment_ids.includes(e.id) ? "on" : "",
+                  style: { cursor: "pointer" },
+                  onClick: () => toggleEnroll(e.id),
+                })}
+                cols={[
+                  { k: "coche", t: "", th: { width: 34 }, td: { textAlign: "center" },
+                    cell: (e) => (
+                      <input type="checkbox" checked={prep.enrollment_ids.includes(e.id)}
+                        aria-label={`Inclure le dossier ${e.program_code}`}
+                        onChange={() => toggleEnroll(e.id)} onClick={(ev) => ev.stopPropagation()} />
+                    ) },
+                  { k: "code", t: "Code", cell: (e) => <span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span> },
+                  { k: "titre", t: "Formation", principal: true, cell: (e) => e.program_title },
+                  { k: "semaine", t: "Semaine", cell: (e) => <span className="tnum">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "—"}</span> },
+                  { k: "dates", t: "Dates", td: { fontSize: 12.5, whiteSpace: "nowrap" },
+                    cell: (e) => {
                       const fr = (v) => (v ? new Date(v).toLocaleDateString("fr-FR") : "");
-                      const checked = prep.enrollment_ids.includes(e.id);
-                      return (
-                        <tr key={e.id} className={checked ? "on" : ""} onClick={() => toggleEnroll(e.id)} style={{ cursor: "pointer" }}>
-                          <td style={{ textAlign: "center" }}>
-                            <input type="checkbox" checked={checked} onChange={() => toggleEnroll(e.id)} onClick={(ev) => ev.stopPropagation()} />
-                          </td>
-                          <td><span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span></td>
-                          <td>{e.program_title}</td>
-                          <td className="tnum">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "—"}</td>
-                          <td style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>{e.start_date ? `${fr(e.start_date)}${e.end_date ? ` → ${fr(e.end_date)}` : ""}` : "—"}</td>
-                          <td style={{ fontSize: 12.5 }}>{e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      return e.start_date ? `${fr(e.start_date)}${e.end_date ? ` → ${fr(e.end_date)}` : ""}` : "—";
+                    } },
+                  { k: "type", t: "Type", td: { fontSize: 12.5 },
+                    cell: (e) => (e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier") },
+                ]}
+              />
             )}
           </div>
           {blockedRules.length > 0 && (

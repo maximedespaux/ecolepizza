@@ -12,6 +12,7 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import Badge from "../components/Badge.jsx";
+import DataTable from "../components/DataTable.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
 // Types proposés à la saisie. La liste n'est qu'une aide : le champ reste libre, un organisme
@@ -396,24 +397,22 @@ function ConditionsPanel({ conditions, catalog, onChanged, onCatalogChanged, onS
       )}
 
       {conditions.length > 0 && (
-        <div className="tablewrap" style={{ border: "none", marginBottom: 12 }}>
-          <table>
-            <thead><tr><th>Intitulé</th><th>Champ</th><th>Règle</th><th></th></tr></thead>
-            <tbody>
-              {conditions.map((c) => (
-                <tr key={c.id}>
-                  <td><b>{c.label}</b></td>
-                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{fieldLabel(c.field)}</td>
-                  <td style={{ fontSize: 12 }} className="mono">{condValueLabel(c)}</td>
-                  <td style={{ display: "flex", gap: 4 }}>
-                    <button className={"btn sm ghost" + (editingId === c.id ? " primary" : "")} title="Modifier" onClick={() => startEdit(c)}><Icon name="pencil" size={15} /></button>
-                    <button className="btn sm ghost danger" title="Supprimer" onClick={() => remove(c)}><Icon name="trash" size={15} /></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={conditions}
+          rowKey={(c) => c.id}
+          cols={[
+            { k: "label", t: "Intitulé", principal: true, cell: (c) => <b>{c.label}</b> },
+            { k: "field", t: "Champ", td: { fontSize: 12, color: "var(--muted)" }, cell: (c) => fieldLabel(c.field) },
+            { k: "regle", t: "Règle", td: { fontSize: 12 }, cell: (c) => <span className="mono">{condValueLabel(c)}</span> },
+            { k: "actions", t: "", actions: true,
+              cell: (c) => (
+                <>
+                  <button className={"btn sm ghost" + (editingId === c.id ? " primary" : "")} title="Modifier" aria-label={`Modifier ${c.label}`} onClick={() => startEdit(c)}><Icon name="pencil" size={15} /></button>
+                  <button className="btn sm ghost danger" title="Supprimer" aria-label={`Supprimer ${c.label}`} onClick={() => remove(c)}><Icon name="trash" size={15} /></button>
+                </>
+              ) },
+          ]}
+        />
       )}
 
       <div ref={formRef} style={editingId ? { border: "1px solid var(--ember1)", borderRadius: 12, padding: 12, background: "var(--surface2)" } : null}>
@@ -678,25 +677,23 @@ function EquivalencesPanel({ onStatus }) {
       </p>
 
       {equivalences.length > 0 && (
-        <div className="tablewrap" style={{ border: "none", marginBottom: 12 }}>
-          <table>
-            <thead><tr><th>Intitulé</th><th>Documents (OU)</th><th></th></tr></thead>
-            <tbody>
-              {equivalences.map((e) => (
-                <tr key={e.key}>
-                  <td><b>{e.label}</b>{e.is_default && <span className="hint" style={{ marginLeft: 6 }}>défaut</span>}</td>
-                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{(e.memberLabels || e.members).join(" / ")}</td>
-                  <td>{!e.is_default && (
-                    <span style={{ display: "inline-flex", gap: 4 }}>
-                      <button type="button" className="btn sm ghost" title="Modifier (ajouter / retirer des variantes)" onClick={() => startEdit(e)}><Icon name="settings" size={15} /></button>
-                      <button type="button" className="btn sm ghost danger" onClick={() => remove(e)}><Icon name="trash" size={15} /></button>
-                    </span>
-                  )}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={equivalences}
+          rowKey={(e) => e.key}
+          cols={[
+            { k: "label", t: "Intitulé", principal: true,
+              cell: (e) => <><b>{e.label}</b>{e.is_default && <span className="hint" style={{ marginLeft: 6 }}>défaut</span>}</> },
+            { k: "membres", t: "Documents (OU)", td: { fontSize: 12, color: "var(--muted)" },
+              cell: (e) => (e.memberLabels || e.members).join(" / ") },
+            { k: "actions", t: "", actions: true,
+              cell: (e) => (e.is_default ? null : (
+                <>
+                  <button type="button" className="btn sm ghost" title="Modifier (ajouter / retirer des variantes)" aria-label={`Modifier ${e.label}`} onClick={() => startEdit(e)}><Icon name="settings" size={15} /></button>
+                  <button type="button" className="btn sm ghost danger" title="Supprimer" aria-label={`Supprimer ${e.label}`} onClick={() => remove(e)}><Icon name="trash" size={15} /></button>
+                </>
+              )) },
+          ]}
+        />
       )}
 
       <div className="field"><label>{editId ? "Modifier l'équivalence" : "Nouvelle équivalence"} — cochez les documents alternatifs (« OU », autant que vous voulez)</label>
