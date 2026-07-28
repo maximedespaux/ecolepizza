@@ -198,7 +198,10 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .card.hover:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
 .card h3{font-size:17px}
 .card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
-.card-head h3{font-size:16px;color:var(--blue)}
+/* `.card-h` ET `h3` : le composant Card produit désormais un `h2` porteur de la classe (le
+   niveau est devenu paramétrable, cf. Card.jsx), mais plusieurs écrans posent encore un `h3`
+   à la main dans un `.card-head`. Les deux doivent se ressembler. */
+.card-head h3,.card-head .card-h{font-size:16px;color:var(--blue)}
 .card-ttl{display:inline-flex;align-items:center;gap:8px}
 .card-more{color:var(--ember1);font-size:13px;font-weight:600}.card-more:hover{text-decoration:underline}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;animation:rise .45s var(--ease) both}
@@ -278,6 +281,7 @@ tbody tr:last-child td{border-bottom:none}
    FAIRE — sur un écran vide c'est la seule chose à lire, elle mérite une largeur de lecture
    confortable plutôt que toute la page. */
 .empty-t{margin:0;font:700 15.5px/1.3 var(--font-b);color:var(--text)}
+
 .empty-x{margin:6px auto 0;max-width:46ch;font-size:13.5px;line-height:1.55;color:var(--muted)}
 
 /* Status message ----------------------------------------------------- */
@@ -343,7 +347,7 @@ tbody tr:last-child td{border-bottom:none}
 .login-card{width:100%;max-width:410px;animation:loginRise .55s var(--ease) .05s both}
 .login-card h1{font-size:28px;margin:2px 0 6px;letter-spacing:-.01em}
 .login-sub{font-size:14px;color:var(--muted);margin:0 0 22px}
-.field-opt{font-weight:500;color:var(--dim)}
+.field-opt{font-weight:500;color:var(--muted)}
 
 /* Champ avec icône de tête + bouton de fin optionnel */
 .inp-wrap{position:relative;display:flex;align-items:center}
@@ -620,7 +624,7 @@ tbody tr:last-child td{border-bottom:none}
 .dough-seg-tip{position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%) translateY(4px) scale(.96);background:#fff;color:var(--navy);padding:5px 10px;border-radius:9px;font:600 11.5px/1.2 var(--font-d);white-space:nowrap;opacity:0;pointer-events:none;transition:.15s var(--ease);z-index:20;box-shadow:0 8px 22px -6px rgba(15,17,40,.4);border:1px solid rgba(15,17,40,.06)}
 .dough-seg-tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#fff}
 .dough-seg:hover .dough-seg-tip,.dough-seg:focus-visible .dough-seg-tip{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
-.ate-lbl{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.ate-lbl{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
 .ate-num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--ember1) 14%,var(--surface));color:var(--ember1);font-size:11px;font-weight:800;flex:none}
 .ate-step{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.15);display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
 /* Curseur d'hydratation — repère du minimum recommandé (manuel) */
@@ -1612,7 +1616,10 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .cart-row:last-of-type{border-bottom:none}
 .cart-lbl{flex:1;min-width:0;font-size:13px;line-height:1.35}
 .cart-qty{display:inline-flex;align-items:center;gap:4px;flex:none}
-.cart-qty .iconbtn{width:30px;height:30px}
+/* 40 px et non 30 : sous 40, le doigt vise à côté — c'est le raisonnement déjà écrit
+   quelques lignes plus haut pour `.shop-add`. Ces deux boutons servent à corriger une
+   quantité au panier, geste qu'on répète et qu'on fait souvent au téléphone. */
+.cart-qty .iconbtn{width:40px;height:40px}
 .cart-qty b{min-width:22px;text-align:center;font-size:13.5px}
 .cart-sum{width:82px;text-align:right;flex:none;font-size:13.5px}
 /* Taille / coupe : des boutons, pas un <select>. 6 options tiennent à l'écran, et un menu
@@ -2504,7 +2511,7 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 .stu-next.jeu .stu-next-ic{color:var(--orange)}
 .stu-next.ok .stu-next-ic{color:var(--green)}
 .stu-next-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.stu-next-lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.stu-next-lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .stu-next-txt b{font:700 16px/1.2 var(--font-d);color:var(--text)}
 .stu-next-txt span:not(.stu-next-lbl){font-size:13px;color:var(--muted)}
 .stu-next-go{flex:none;display:inline-flex;align-items:center;gap:5px;padding:9px 15px;border-radius:99px;
