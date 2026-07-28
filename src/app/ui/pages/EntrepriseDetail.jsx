@@ -258,7 +258,7 @@ export default function EntrepriseDetail() {
           {/* Rattacher un stagiaire existant à l'entreprise */}
           <div className="field" style={{ position: "relative" }}><label>Rattacher un stagiaire</label>
             <span className="gs-search">
-              <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
+              <Icon name="search" size={14} aria-hidden="true" />
               <input placeholder="Rechercher un stagiaire déjà enregistré…" value={attachQ} onChange={(e) => setAttachQ(e.target.value)} />
               {attachQ && <button className="gs-clear" onClick={() => { setAttachQ(""); setAttachRes([]); }}><Icon name="x" size={13} /></button>}
             </span>

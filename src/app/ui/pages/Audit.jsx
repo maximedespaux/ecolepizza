@@ -27,8 +27,8 @@ function Audit() {
       <PageHead eyebrow="Système" title="Journal d'audit" lead="Traçabilité des actions sensibles (100 dernières)." />
       <StatusMessage status={status} />
 
-      <div className="searchbar">
-        <input className="inp" aria-label="Rechercher une action dans le journal" placeholder="Rechercher une action…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="filtres">
+        <input className="inp filtres-q" aria-label="Rechercher une action dans le journal" placeholder="Rechercher une action…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       <Card title={`Événements${rows ? ` (${rows.length})` : ""}`}>

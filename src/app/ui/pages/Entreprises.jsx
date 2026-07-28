@@ -40,7 +40,7 @@ export default function Entreprises() {
 
       <Card title={<span className="card-ttl"><Icon name="building" size={16} /> {rows.length} entreprise{rows.length > 1 ? "s" : ""}</span>}
         more={<span className="gs-search" style={{ maxWidth: 280 }}>
-          <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
+          <Icon name="search" size={14} aria-hidden="true" />
           <input aria-label="Rechercher une entreprise" placeholder="Rechercher…" value={query} onChange={(e) => setQuery(e.target.value)} />
           {query && <button className="gs-clear" onClick={() => setQuery("")}><Icon name="x" size={13} /></button>}
         </span>}>

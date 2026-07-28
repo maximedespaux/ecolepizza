@@ -79,7 +79,7 @@ function Partenaires() {
 
       {tab === "partenaires" ? (
         <>
-          <div className="searchbar" style={{ marginBottom: 12 }}>
+          <div className="filtres">
             <select className="inp" aria-label="Filtrer par catégorie de partenaire" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 240 }}>
               <option value="">Toutes les catégories</option>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
