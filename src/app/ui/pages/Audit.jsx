@@ -5,10 +5,11 @@ import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import { Squelette } from "../components/Squelette.jsx";
 import { auditLabel, entityLabel } from "../lib/auditLabels.js";
 
 function Audit() {
-  const [rows, setRows] = useState([]);
+  const [rows, setRows] = useState(null); // `null` = on charge, `[]` = journal vide
   const [q, setQ] = useState("");
   const [status, setStatus] = useState(null);
 
@@ -30,9 +31,12 @@ function Audit() {
         <input className="inp" placeholder="Rechercher une action…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
-      <Card title={`Événements (${rows.length})`}>
-        {rows.length === 0 ? (
-          <EmptyState icon="history">Aucun événement.</EmptyState>
+      <Card title={`Événements${rows ? ` (${rows.length})` : ""}`}>
+        {rows == null ? (
+          <Squelette lignes={6} h={44} />
+        ) : rows.length === 0 ? (
+          <EmptyState icon="history" title="Aucun événement"
+            text="Le journal est vide, ou aucun événement ne correspond aux filtres choisis." />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {rows.map((r) => {

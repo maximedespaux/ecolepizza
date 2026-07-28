@@ -26,7 +26,7 @@ const ACTION_LABEL = {
 
 function Dashboard() {
   const [stats, setStats] = useState({ stagiaires: 0, formations: 0, sessions: 0, dossiers: 0, ca: 0 });
-  const [upcoming, setUpcoming] = useState([]);
+  const [upcoming, setUpcoming] = useState(null); // `null` = on charge, `[]` = rien à venir
   const [recent, setRecent] = useState([]);
   const [activity, setActivity] = useState([]);
   const [org, setOrg] = useState(null);
@@ -135,11 +135,10 @@ function Dashboard() {
               </div>
             ))}
           </div>
-        ) : upcoming.length === 0 ? (
-          <p className="lead" style={{ margin: 0 }}>Aucune session à venir.</p>
         ) : (
           <DataTable
             rows={upcoming}
+            vide={<p className="lead" style={{ margin: 0 }}>Aucune session à venir.</p>}
             rowKey={(s) => s.id}
             cols={[
               { k: "formation", t: "Formation", principal: true,

@@ -10,6 +10,7 @@ import Badge from "../components/Badge.jsx";
 import DataTable from "../components/DataTable.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import { Squelette } from "../components/Squelette.jsx";
 
 const KINDS = [
   { v: "GRADED", label: "Noté (correction + score)" },
@@ -59,7 +60,7 @@ function groupByFormation(quizzes) {
 }
 
 function Quiz() {
-  const [quizzes, setQuizzes] = useState([]);
+  const [quizzes, setQuizzes] = useState(null); // `null` = on charge, `[]` = aucun QCM
   const [status, setStatus] = useState(null);
   const [editing, setEditing] = useState(null); // objet quiz en édition
   const [formations, setFormations] = useState([]);
@@ -117,8 +118,11 @@ function Quiz() {
         actions={<button className="btn primary" onClick={onNew}>＋ Nouveau QCM</button>} />
       <StatusMessage status={status} />
 
-      {quizzes.length === 0 ? (
-        <Card title="QCM (0)"><EmptyState icon="help">Aucun QCM.</EmptyState></Card>
+      {quizzes == null ? (
+        <Card title="QCM"><Squelette lignes={3} h={64} /></Card>
+      ) : quizzes.length === 0 ? (
+        <Card title="QCM (0)"><EmptyState icon="help" title="Aucun QCM"
+          text="Crée un QCM : il pourra ensuite être envoyé aux stagiaires d'une session, à la main ou automatiquement." /></Card>
       ) : (
         groupByFormation(quizzes).map((g) => (
           <Card key={g.key} title={g.program_code ? `${g.program_code} — ${g.program_title}` : "Non rattachés à une formation"}

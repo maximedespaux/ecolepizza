@@ -59,7 +59,7 @@ function fmtDate(v) {
 
 function Equipe() {
   const { user } = useContext(UserContext);
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(null); // `null` = on charge, `[]` = aucun membre
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(null);
   const [editing, setEditing] = useState(null); // membre en édition, ou { _new: true }
@@ -123,7 +123,7 @@ function Equipe() {
         </Card>
       )}
 
-      <Card title={`Membres (${items.length})`}>
+      <Card title={`Membres${items ? ` (${items.length})` : ""}`}>
         <DataTable
           rows={items}
           rowKey={(m) => m.id}

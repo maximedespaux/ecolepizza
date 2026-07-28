@@ -19,7 +19,9 @@ const emptyLine = () => ({ enrollment_id: "", description: "", amount_net: "" })
 const makeEmpty = () => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, due_date: "", lines: [emptyLine()] });
 
 function Factures() {
-  const [invoices, setInvoices] = useState([]);
+  // `null` et non `[]` : c'est ce qui distingue « on charge » de « c'est vide ». À `[]`, la
+  // page annonçait « Aucun document de facturation » pendant tout le chargement.
+  const [invoices, setInvoices] = useState(null);
   const [totals, setTotals] = useState({ emis: 0, paye: 0, impaye: 0 });
   const [enrollments, setEnrollments] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -157,12 +159,11 @@ function Factures() {
         </Card>
       )}
 
-      <Card title={`Documents (${invoices.length})`}>
-        {invoices.length === 0 ? (
-          <EmptyState icon="receipt">Aucun document de facturation.</EmptyState>
-        ) : (
+      <Card title={`Documents${invoices ? ` (${invoices.length})` : ""}`}>
           <DataTable
             rows={invoices}
+            vide={<EmptyState icon="receipt" title="Aucun document de facturation"
+              text="Devis, acomptes, factures et avoirs apparaîtront ici dès le premier document émis." />}
             rowKey={(i) => i.id}
             cols={[
               { k: "number", t: "Numéro", cell: (i) => <span className="mono">{i.number}</span> },
@@ -194,7 +195,6 @@ function Factures() {
                 ) },
             ]}
           />
-        )}
       </Card>
     </>
   );

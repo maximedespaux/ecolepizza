@@ -25,7 +25,7 @@ function generatePassword(len = 14) {
 /** Console plateforme : liste et création d'organismes (revente). */
 function Platform() {
   const { logout, user } = useContext(UserContext);
-  const [orgs, setOrgs] = useState([]);
+  const [orgs, setOrgs] = useState(null); // `null` = on charge, `[]` = aucun organisme
   const [status, setStatus] = useState(null);
   const [creating, setCreating] = useState(false);
   const [credential, setCredential] = useState(null);
@@ -76,7 +76,7 @@ function Platform() {
             </Card>
           )}
 
-          <Card title={`Organismes (${orgs.length})`}>
+          <Card title={`Organismes${orgs ? ` (${orgs.length})` : ""}`}>
             <DataTable
               rows={orgs}
               rowKey={(o) => o.id}
