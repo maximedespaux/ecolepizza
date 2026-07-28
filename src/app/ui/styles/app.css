@@ -455,6 +455,10 @@ tbody tr:last-child td{border-bottom:none}
   .dt td.dt-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;
     border-top:1px solid var(--border-soft)}
   .dt td.dt-actions::before{display:none}
+  /* Colonnes qui n'ont de sens qu'en tableau (chevron « ouvrir »…) : elles disparaissent. */
+  .dt td.dt-sans-carte{display:none}
+  /* Valeur absente : la ligne s'efface. En tableau elle garde sa place pour l'alignement. */
+  .dt td.dt-vide{display:none}
   /* Plus de défilement latéral à provoquer : la carte tient dans la largeur. */
   .dt-wrap .tablewrap{overflow:visible;background:none;background-image:none}
   /* La ligne de totaux devient une carte à part, détachée de la liste — elle résume, elle

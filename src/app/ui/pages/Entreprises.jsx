@@ -63,13 +63,14 @@ export default function Entreprises() {
             cols={[
               { k: "name", t: "Entreprise", principal: true,
                 cell: (c) => <><b>{c.name}</b>{c.email && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{c.email}</span>}</> },
-              { k: "siret", t: "SIRET", td: { fontSize: 12 }, cell: (c) => <span className="mono">{c.siret || "—"}</span> },
-              { k: "town", t: "Ville", cell: (c) => c.town || "—" },
-              { k: "ref", t: "Référent", cell: (c) => [c.representative_civ, c.representative_name].filter(Boolean).join(" ") || "—" },
+              { k: "siret", t: "SIRET", td: { fontSize: 12 }, cell: (c) => (c.siret ? <span className="mono">{c.siret}</span> : null) },
+              { k: "town", t: "Ville", cell: (c) => c.town || null },
+              { k: "ref", t: "Référent", cell: (c) => [c.representative_civ, c.representative_name].filter(Boolean).join(" ") || null },
               { k: "nb", t: "Stagiaires", cell: (c) => <Badge tone={c.learner_count > 0 ? "b" : "n"}>{c.learner_count || 0}</Badge> },
-              // Le chevron ne sert qu'au mode tableau : en carte, c'est la carte entière qui
-              // s'ouvre et une flèche isolée en pied ne désignerait rien.
-              { k: "go", t: "", actions: true, td: { textAlign: "right" }, cell: () => <Icon name="chevron-right" size={16} /> },
+              // Le chevron ne sert qu'au mode TABLEAU : en carte, c'est la carte entière qui
+              // s'ouvre, et une flèche seule en pied ressemble à un bouton qui ferait autre
+              // chose. `sansCarte` la retire — c'est exactement ce marqueur qui manquait.
+              { k: "go", t: "", sansCarte: true, td: { textAlign: "right" }, cell: () => <Icon name="chevron-right" size={16} aria-hidden="true" /> },
             ]}
           />
         )}

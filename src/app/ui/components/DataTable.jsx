@@ -21,7 +21,10 @@ import { Squelette } from "./Squelette.jsx";
  *   `principal` — la colonne qui identifie la ligne. Elle devient le titre de la carte et
  *      perd son intitulé : « Nom : Dupont » en tête d'une carte n'apprend rien.
  *   `actions`   — la colonne des boutons. Elle passe en pied de carte, séparée du contenu.
- * En mode tableau ces deux marqueurs ne changent rien : les colonnes restent dans leur ordre.
+ *   `sansCarte` — la colonne DISPARAÎT en mode carte. Pour ce qui n'a de sens qu'en tableau :
+ *      un chevron « ouvrir » n'apprend rien au pied d'une carte que l'on ouvre en entier, il
+ *      ressemble juste à un bouton qui ferait autre chose.
+ * En mode tableau ces marqueurs ne changent rien : les colonnes restent dans leur ordre.
  */
 export default function DataTable({
   rows, cols, vide, rowKey = (r, i) => r.id ?? i, rowProps,
@@ -53,16 +56,25 @@ export default function DataTable({
               const extra = rowProps ? rowProps(r, i) : null;
               return (
                 <tr key={rowKey(r, i)} {...extra}>
-                  {cols.map((c) => (
-                    // `data-intitule` porte l'en-tête jusqu'à la cellule : c'est lui que la
-                    // CSS affiche en mode carte, là où le `<thead>` a disparu. Sans lui, une
-                    // carte serait une pile de valeurs sans savoir de quoi elles parlent.
-                    <td key={c.k} data-intitule={c.t || undefined}
-                      className={[c.principal && "dt-principal", c.actions && "dt-actions"].filter(Boolean).join(" ") || undefined}
-                      style={c.td}>
-                      {c.cell ? c.cell(r, i) : r[c.k]}
-                    </td>
-                  ))}
+                  {cols.map((c) => {
+                    const v = c.cell ? c.cell(r, i) : r[c.k];
+                    /* Une cellule VIDE garde sa place en tableau — sans elle les colonnes se
+                       décaleraient — mais disparaît en carte : « VILLE — » sur trois lignes
+                       n'apprend rien qu'on ne sache déjà, et allonge la carte d'autant. Il
+                       suffit donc qu'une colonne renvoie `null` pour que sa ligne s'efface. */
+                    const vide = v === null || v === undefined || v === "";
+                    return (
+                      // `data-intitule` porte l'en-tête jusqu'à la cellule : c'est lui que la
+                      // CSS affiche en mode carte, là où le `<thead>` a disparu. Sans lui, une
+                      // carte serait une pile de valeurs sans savoir de quoi elles parlent.
+                      <td key={c.k} data-intitule={c.t || undefined}
+                        className={[c.principal && "dt-principal", c.actions && "dt-actions",
+                                    c.sansCarte && "dt-sans-carte", vide && "dt-vide"].filter(Boolean).join(" ") || undefined}
+                        style={c.td}>
+                        {v}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
