@@ -260,7 +260,7 @@ function Ventes() {
                     </div>
                   ) : (
                     <>
-                      <input className="inp" placeholder="Rechercher un stagiaire… (ou laisser vide = vente comptoir)" value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} />
+                      <input className="inp" aria-label="Rechercher un stagiaire à qui rattacher la vente" placeholder="Rechercher un stagiaire… (ou laisser vide = vente comptoir)" value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} />
                       {matches.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
                           {matches.map((l) => (
@@ -333,8 +333,8 @@ function Ventes() {
                 )}
               </div>
               <div className="row2">
-                <div className="field"><label>Moyen de paiement</label>
-                  <select className="inp" value={payment} onChange={(e) => setPayment(e.target.value)}>
+                <div className="field"><label htmlFor="caisse-paiement">Moyen de paiement</label>
+                  <select id="caisse-paiement" className="inp" value={payment} onChange={(e) => setPayment(e.target.value)}>
                     {payOptions.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
@@ -459,8 +459,8 @@ function SalesHistory({ sales, onRemove, onDownload }) {
       </div>
       <Card title="Historique des ventes">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end", marginBottom: 14 }}>
-          <div className="field" style={{ margin: 0 }}><label>Du</label><input className="inp" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-          <div className="field" style={{ margin: 0 }}><label>Au</label><input className="inp" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+          <div className="field" style={{ margin: 0 }}><label htmlFor="ventes-du">Du</label><input id="ventes-du" className="inp" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+          <div className="field" style={{ margin: 0 }}><label htmlFor="ventes-au">Au</label><input id="ventes-au" className="inp" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
           <button className="btn sm ghost" onClick={thisMonth}>Ce mois</button>
           <button className="btn sm ghost" onClick={last30}>30 jours</button>
           <button className="btn sm ghost" onClick={thisYear}>Cette année</button>
@@ -541,14 +541,14 @@ function ShopSettings({ settings, onSaved, onError }) {
   return (
     <Card title="Réglages de facturation">
       <div className="row2">
-        <div className="field"><label>Préfixe de numéro</label>
-          <input className="inp" value={form.invoice_prefix} onChange={set("invoice_prefix")} placeholder="F" /></div>
-        <div className="field"><label>Prochain numéro</label>
-          <input className="inp" type="number" min="1" value={form.next_number} onChange={set("next_number")} /></div>
+        <div className="field"><label htmlFor="fact-prefixe">Préfixe de numéro</label>
+          <input id="fact-prefixe" className="inp" value={form.invoice_prefix} onChange={set("invoice_prefix")} placeholder="F" /></div>
+        <div className="field"><label htmlFor="fact-numero">Prochain numéro</label>
+          <input id="fact-numero" className="inp" type="number" min="1" value={form.next_number} onChange={set("next_number")} /></div>
       </div>
       <p className="sub" style={{ marginTop: 0 }}>Exemple de numéro : <span className="mono">{form.invoice_prefix}-{new Date().getFullYear()}-{String(form.next_number).padStart(4, "0")}</span></p>
-      <div className="field"><label>Moyens de paiement (séparés par des virgules)</label>
-        <input className="inp" value={form.payment_methods} onChange={set("payment_methods")} placeholder="Espèces,CB,Virement,Chèque" /></div>
+      <div className="field"><label htmlFor="fact-paiements">Moyens de paiement (séparés par des virgules)</label>
+        <input id="fact-paiements" className="inp" value={form.payment_methods} onChange={set("payment_methods")} placeholder="Espèces,CB,Virement,Chèque" /></div>
       <label className="field" style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <input type="checkbox" checked={form.tva_applies} onChange={(e) => setForm((p) => ({ ...p, tva_applies: e.target.checked }))} />
         Appliquer la TVA (décochez pour une facturation exonérée)
@@ -561,8 +561,8 @@ function ShopSettings({ settings, onSaved, onError }) {
           plusieurs modèles FACTURE qui ne se distinguent pas par une condition — facture de
           formation et facture de boutique, par exemple. Le choix serait alors décidé par un
           ordre d'affichage que personne ne pense à regarder. */}
-      <div className="field"><label>Modèle de facture</label>
-        <select className="inp" value={form.invoice_template_slug}
+      <div className="field"><label htmlFor="fact-modele">Modèle de facture</label>
+        <select id="fact-modele" className="inp" value={form.invoice_template_slug}
           onChange={(e) => setForm((p) => ({ ...p, invoice_template_slug: e.target.value }))}>
           <option value="">— Aucun —</option>
           {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.slug}</option>)}
