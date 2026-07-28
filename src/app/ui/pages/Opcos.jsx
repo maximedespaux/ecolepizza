@@ -7,15 +7,19 @@ import Badge from "../components/Badge.jsx";
 import { Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import DataTable from "../components/DataTable.jsx";
 
 function Opcos() {
-  const [items, setItems] = useState([]);
+  // `null` et non `[]` : c'est la convention que `DataTable` attend — `null` fait afficher le
+  // squelette, `[]` l'état vide. Initialisée à `[]`, la page annonçait « Aucun OPCO » pendant
+  // toute la durée du chargement.
+  const [items, setItems] = useState(null);
   const [status, setStatus] = useState(null);
   const [editing, setEditing] = useState(null); // opco en édition, ou { _new:true }
 
   async function load() {
     try { const { data } = await getOpcos(); setItems(data); }
-    catch (e) { setStatus({ type: "error", message: e.message }); }
+    catch (e) { setItems([]); setStatus({ type: "error", message: e.message }); }
   }
   useEffect(() => { load(); }, []);
 
@@ -35,32 +39,33 @@ function Opcos() {
       />
       <StatusMessage status={status} />
 
-      <Card title={`OPCO / financeurs (${items.length})`}>
-        {items.length === 0 ? (
-          <EmptyState icon="euro">Aucun OPCO.</EmptyState>
-        ) : (
-          <div className="tablewrap" style={{ border: "none" }}>
-            <table>
-              <thead><tr><th>Nom</th><th>Ville</th><th>Contact</th><th>Assiduité</th><th></th></tr></thead>
-              <tbody>
-                {items.map((o) => (
-                  <tr key={o.id} style={{ opacity: o.active ? 1 : 0.5 }}>
-                    <td><b>{o.name}</b>{o.code && <span className="mono" style={{ display: "block", fontSize: 11, color: "var(--dim)" }}>{o.code}</span>}</td>
-                    <td style={{ fontSize: 13 }}>{[o.zip_code, o.town].filter(Boolean).join(" ") || "—"}</td>
-                    <td style={{ fontSize: 12, color: "var(--muted)" }}>
-                      {o.phone || ""}{o.phone && (o.email || o.website) ? " · " : ""}{o.email || o.website || ""}
-                    </td>
-                    <td>{o.triggers_assiduite ? <Badge tone="a">Attestation</Badge> : <span className="hint">—</span>}</td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button className="btn sm ghost" onClick={() => setEditing({ ...o })}>Éditer</button>{" "}
-                      <button className="iconbtn del" title="Supprimer" onClick={() => onDelete(o)}><Icon name="trash" size={15} /></button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <Card title={`OPCO / financeurs${items ? ` (${items.length})` : ""}`}>
+        <DataTable
+          rows={items}
+          rowKey={(o) => o.id}
+          // Un OPCO désactivé reste listé — il figure encore dans d'anciens dossiers — mais
+          // en retrait : il ne doit pas se proposer comme un choix courant.
+          rowProps={(o) => ({ style: { opacity: o.active ? 1 : 0.5 } })}
+          vide={<EmptyState icon="euro" title="Aucun OPCO"
+            text="Le référentiel est vide. Ajoute les financeurs que tu rencontres : ils apparaîtront ensuite dans les fiches stagiaires et entreprises." />}
+          cols={[
+            { k: "name", t: "Nom", principal: true,
+              cell: (o) => <><b>{o.name}</b>{o.code && <span className="mono" style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>{o.code}</span>}</> },
+            { k: "ville", t: "Ville", td: { fontSize: 13 },
+              cell: (o) => [o.zip_code, o.town].filter(Boolean).join(" ") || "—" },
+            { k: "contact", t: "Contact", td: { fontSize: 12, color: "var(--muted)" },
+              cell: (o) => `${o.phone || ""}${o.phone && (o.email || o.website) ? " · " : ""}${o.email || o.website || ""}` || "—" },
+            { k: "assiduite", t: "Assiduité",
+              cell: (o) => (o.triggers_assiduite ? <Badge tone="a">Attestation</Badge> : <span className="hint">—</span>) },
+            { k: "actions", t: "", actions: true, th: { width: 1 }, td: { textAlign: "right", whiteSpace: "nowrap" },
+              cell: (o) => (
+                <>
+                  <button className="btn sm ghost" onClick={() => setEditing({ ...o })}>Éditer</button>{" "}
+                  <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${o.name}`} onClick={() => onDelete(o)}><Icon name="trash" size={15} /></button>
+                </>
+              ) },
+          ]}
+        />
       </Card>
 
       {editing && (

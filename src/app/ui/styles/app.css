@@ -309,6 +309,48 @@ tbody tr:last-child td{border-bottom:none}
    ce bloc est justement ce qu'on ne regarde pas — il occupe la place le temps que le contenu
    arrive. `background-size` à 200 % : le dégradé est deux fois plus large que le bloc, c'est
    ce qui lui permet de le traverser entièrement. */
+/* ═══ DATATABLE ═════════════════════════════════════════════════════════════════════════════
+   Un tableau qui devient des CARTES quand la place manque (cf. components/DataTable.jsx).
+
+   La bascule est une REQUÊTE DE CONTENEUR et non une media query : le même tableau peut vivre
+   pleine page ou dans une colonne étroite à côté d'un panneau. C'est sa place réelle qui doit
+   décider, pas la taille de l'écran — une media query rendrait la version large dans une
+   colonne de 300 px sur un grand écran, ce qui est exactement le cas qu'on veut éviter. */
+.dt-wrap{container-type:inline-size}
+
+@container (max-width: 700px){
+  /* `display:block` sur les éléments de tableau : c'est ce qui désactive la mise en page
+     tabulaire. L'en-tête est retiré en `clip` et non en `display:none` — il reste ainsi lisible
+     par un lecteur d'écran, qui continue d'annoncer la colonne de chaque cellule. */
+  .dt,.dt tbody,.dt tr,.dt td{display:block;width:auto}
+  .dt thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .dt tr{border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);
+    padding:13px 14px;margin-bottom:10px;transition:border-color .14s var(--ease),box-shadow .14s var(--ease)}
+  /* Le filet de survol du mode tableau deviendrait une barre le long d'une carte : ici c'est
+     la bordure entière qui répond. */
+  .dt tr:hover{background:var(--surface);box-shadow:var(--shadow-2);border-color:var(--muted)}
+  .dt td{border:none;padding:3px 0;text-align:left!important}
+  /* Chaque valeur reçoit son intitulé, puisque l'en-tête a disparu. Deux colonnes : l'intitulé
+     tient une largeur fixe pour que les valeurs s'alignent d'une ligne à l'autre — une carte
+     dont les valeurs zigzaguent se lit moins vite qu'un tableau. */
+  .dt td[data-intitule]::before{content:attr(data-intitule);display:inline-block;width:38%;
+    min-width:88px;padding-right:10px;vertical-align:top;
+    font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .dt td[data-intitule]{display:flex;gap:0;align-items:baseline}
+  /* La colonne qui identifie la ligne devient le TITRE de la carte : elle perd son intitulé
+     (« Nom : Dupont » en tête d'une carte n'apprend rien) et prend le poids d'un titre. */
+  .dt td.dt-principal{display:block;font-size:15px;margin-bottom:6px;padding-bottom:6px;
+    border-bottom:1px solid var(--border-soft)}
+  .dt td.dt-principal::before{display:none}
+  /* Les actions passent en pied, détachées du contenu et alignées à gauche — en carte, un
+     bouton collé au bord droit devient une cible qu'on rate. */
+  .dt td.dt-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;
+    border-top:1px solid var(--border-soft)}
+  .dt td.dt-actions::before{display:none}
+  /* Plus de défilement latéral à provoquer : la carte tient dans la largeur. */
+  .dt-wrap .tablewrap{overflow:visible;background:none;background-image:none}
+}
+
 .skel{display:block;border-radius:10px;background:var(--surface2);position:relative;overflow:hidden}
 .skel::after{content:"";position:absolute;inset:0;
   background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--border) 55%,transparent),transparent);
