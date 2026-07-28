@@ -17,7 +17,7 @@ import { Squelette } from "./Squelette.jsx";
  * · Les trois états (chargement, vide, contenu) sont ici plutôt que recopiés trente fois.
  *   `rows === null` = on charge · `[]` = c'est vide · sinon le contenu.
  *
- * LES COLONNES portent deux marqueurs qui ne servent QU'EN MODE CARTE :
+ * LES COLONNES portent trois marqueurs qui ne servent QU'EN MODE CARTE :
  *   `principal` — la colonne qui identifie la ligne. Elle devient le titre de la carte et
  *      perd son intitulé : « Nom : Dupont » en tête d'une carte n'apprend rien.
  *   `actions`   — la colonne des boutons. Elle passe en pied de carte, séparée du contenu.

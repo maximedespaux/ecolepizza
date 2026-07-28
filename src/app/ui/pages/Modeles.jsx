@@ -51,6 +51,45 @@ function condValueLabel(c) {
   return `${c.op} ${v ?? ""}`.trim();
 }
 
+/* ---- Cellules calculées du tableau des étapes ------------------------------------------
+   Elles étaient écrites en fonctions immédiates DANS le rendu — vingt lignes de logique au
+   milieu d'une cellule, qu'il fallait dérouler mentalement pour savoir ce que la colonne
+   affichait. Nommées et sorties, elles se lisent, et le tableau redevient une liste de
+   colonnes. */
+
+/** Une feuille d'émargement n'est pas un document : elle ne se signe ni ne se rédige pareil. */
+const estEmarg = (t) => t.kind === "emargement";
+
+const LBL_SIGNATAIRE = { ORG: "Org", STAGIAIRE: "Stagiaire", ENTREPRISE: "Entreprise", EXTERNAL: "Externe" };
+
+/** Qui signe. Pour un émargement, ce sont des PICTOGRAMMES : la liste des présents varie. */
+function cellSignature(t) {
+  if (estEmarg(t)) {
+    return (
+      <span title="Stagiaire, et formateur/intervenant si activés" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Icon name="user" size={14} />
+        {t.config?.show_formateurs ? <Icon name="graduation" size={14} /> : null}
+        {t.config?.show_intervenants ? <Icon name="users" size={14} /> : null}
+      </span>
+    );
+  }
+  // `signers` est la forme actuelle ; les trois booléens sont l'ancienne, encore en base.
+  const roles = Array.isArray(t.signers) ? t.signers
+    : [...(t.signable ? ["ORG"] : []), ...(t.stagiaire_sign ? ["STAGIAIRE"] : []), ...(t.company_sign ? ["ENTREPRISE"] : [])];
+  if (!roles.length) return null;
+  return (
+    <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+      {roles.map((r) => <Badge key={r} tone={r === "ORG" ? "a" : "b"}>{LBL_SIGNATAIRE[r] || r}</Badge>)}
+    </span>
+  );
+}
+
+/** Le document a-t-il un corps ? Un émargement n'en a pas : il a une mise en page. */
+function cellEtat(t) {
+  if (estEmarg(t)) return <Badge tone="g">Mise en page</Badge>;
+  return t.has_body ? <Badge tone="g">Créé</Badge> : <span className="hint">à créer</span>;
+}
+
 function Modeles() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
@@ -180,78 +219,56 @@ function Modeles() {
 
       {view === "documents" && (
       <Card title={`Étapes (${allItems.length})`}>
-        <div className="tablewrap" style={{ border: "none" }}>
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 30 }}></th>
-                <th>Document</th>
-                <th>Type</th>
-                <th>Signature</th>
-                <th>Conditions</th>
-                <th>État</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {allItems.map((t) => {
-                const isEmarg = t.kind === "emargement";
-                return (
-                <tr key={keyOf(t)}
-                  className={"drag-row" + (drag === keyOf(t) ? " dragging" : "")}
-                  style={{ opacity: t.active ? 1 : 0.5 }}
-                  draggable
-                  onDragStart={() => setDrag(keyOf(t))}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => onDrop(t)}
-                  onDragEnd={() => setDrag(null)}
-                >
-                  <td className="drag-handle" title="Glisser pour réordonner">⠿</td>
-                  <td>
-                    <b>{t.label}</b>
-                    <span style={{ display: "block", fontSize: 11, color: "var(--dim)" }} className="mono">{t.slug}{!t.active && " · inactif"}</span>
-                  </td>
-                  <td>{isEmarg ? <Badge tone="a">Émargement</Badge> : <span className="mono" style={{ fontSize: 12 }}>{t.doc_type || "—"}</span>}</td>
-                  <td style={{ fontSize: 12 }}>
-                    {isEmarg
-                      ? <span title="Stagiaire, et formateur/intervenant si activés" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="user" size={14} />{t.config?.show_formateurs ? <Icon name="graduation" size={14} /> : null}{t.config?.show_intervenants ? <Icon name="users" size={14} /> : null}</span>
-                      : (() => {
-                          const roles = Array.isArray(t.signers) ? t.signers
-                            : [...(t.signable ? ["ORG"] : []), ...(t.stagiaire_sign ? ["STAGIAIRE"] : []), ...(t.company_sign ? ["ENTREPRISE"] : [])];
-                          const LBL = { ORG: "Org", STAGIAIRE: "Stagiaire", ENTREPRISE: "Entreprise", EXTERNAL: "Externe" };
-                          return roles.length
-                            ? <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>{roles.map((r) => <Badge key={r} tone={r === "ORG" ? "a" : "b"}>{LBL[r] || r}</Badge>)}</span>
-                            : <span style={{ color: "var(--dim)" }}>—</span>;
-                        })()}
-                  </td>
-                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{condLabel(t.applies_when, condBySlug)}</td>
-                  <td>
-                    {isEmarg
-                      ? <Badge tone="g">Mise en page</Badge>
-                      : (t.has_body ? <Badge tone="g">Créé</Badge> : <span style={{ color: "var(--dim)", fontSize: 12 }}>à créer</span>)}
-                  </td>
-                  <td>
-                    <div className="tpl-actions">
-                      <button className="btn sm primary" title={isEmarg ? "Éditer la mise en page" : "Ouvrir l'éditeur de document"}
-                        onClick={() => navigate(isEmarg ? `/modeles/emargement/${t.id}` : `/modeles/${t.slug}/editeur`)}>Éditer</button>
-                      <button className="btn sm ghost" title="Réglages" onClick={() => setEditing({ ...t })}><Icon name="settings" size={15} /></button>
-                      {!isEmarg && (
-                        <button className="btn sm ghost" title="Dupliquer ce modèle"
-                          disabled={busy === t.slug}
-                          onClick={() => onDuplicate(t)}><Icon name="copy" size={15} /></button>
-                      )}
-                      <button className="btn sm ghost danger"
-                        title="Supprimer définitivement"
-                        disabled={busy === (isEmarg ? t.id : t.slug)}
-                        onClick={() => isEmarg ? onDeleteEmarg(t) : onDelete(t)}><Icon name="trash" size={15} /></button>
-                    </div>
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {/* Les trois colonnes calculées le sont maintenant par des FONCTIONS NOMMÉES, hors
+            du rendu. Elles étaient des fonctions immédiates de vingt lignes plantées au
+            milieu du tableau : c'est ce qui rendait cette conversion risquée, et c'est aussi
+            ce qui rendait la cellule illisible. */}
+        <DataTable
+          rows={allItems}
+          rowKey={(t) => keyOf(t)}
+          /* Le glisser-déposer est porté par la ligne : en carte, la carte reste déplaçable. */
+          rowProps={(t) => ({
+            className: "drag-row" + (drag === keyOf(t) ? " dragging" : ""),
+            style: { opacity: t.active ? 1 : 0.5 },
+            draggable: true,
+            onDragStart: () => setDrag(keyOf(t)),
+            onDragOver: (e) => e.preventDefault(),
+            onDrop: () => onDrop(t),
+            onDragEnd: () => setDrag(null),
+          })}
+          cols={[
+            { k: "poignee", t: "", sansCarte: true, th: { width: 30 },
+              cell: () => <span className="drag-handle" title="Glisser pour réordonner" aria-hidden="true">⠿</span> },
+            { k: "doc", t: "Document", principal: true,
+              cell: (t) => (
+                <>
+                  <b>{t.label}</b>
+                  <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }} className="mono">{t.slug}{!t.active && " · inactif"}</span>
+                </>
+              ) },
+            { k: "type", t: "Type",
+              cell: (t) => (estEmarg(t) ? <Badge tone="a">Émargement</Badge> : <span className="mono" style={{ fontSize: 12 }}>{t.doc_type || null}</span>) },
+            { k: "signature", t: "Signature", td: { fontSize: 12 }, cell: (t) => cellSignature(t) },
+            { k: "conditions", t: "Conditions", td: { fontSize: 12, color: "var(--muted)" },
+              cell: (t) => condLabel(t.applies_when, condBySlug) || null },
+            { k: "etat", t: "État", cell: (t) => cellEtat(t) },
+            { k: "actions", t: "", actions: true,
+              cell: (t) => (
+                <div className="tpl-actions">
+                  <button className="btn sm primary" title={estEmarg(t) ? "Éditer la mise en page" : "Ouvrir l'éditeur de document"}
+                    onClick={() => navigate(estEmarg(t) ? `/modeles/emargement/${t.id}` : `/modeles/${t.slug}/editeur`)}>Éditer</button>
+                  <button className="btn sm ghost" title="Réglages" aria-label={`Réglages de ${t.label}`} onClick={() => setEditing({ ...t })}><Icon name="settings" size={15} /></button>
+                  {!estEmarg(t) && (
+                    <button className="btn sm ghost" title="Dupliquer ce modèle" aria-label={`Dupliquer ${t.label}`}
+                      disabled={busy === t.slug} onClick={() => onDuplicate(t)}><Icon name="copy" size={15} /></button>
+                  )}
+                  <button className="btn sm ghost danger" title="Supprimer définitivement" aria-label={`Supprimer ${t.label}`}
+                    disabled={busy === (estEmarg(t) ? t.id : t.slug)}
+                    onClick={() => (estEmarg(t) ? onDeleteEmarg(t) : onDelete(t))}><Icon name="trash" size={15} /></button>
+                </div>
+              ) },
+          ]}
+        />
       </Card>
       )}
 
