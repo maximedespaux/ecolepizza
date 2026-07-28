@@ -196,7 +196,7 @@ function Commenters({ gens, total, cadreDe, onOpen }) {
         // Le cadre vaut ici aussi : c'est la seule chose qui distingue, dans la rangée, la
         // réponse d'un Maestro de celle d'un débutant. Anneau aminci (`sm`) — à 21 px,
         // l'épaisseur de 3 px des grands avatars mangeait le visage.
-        const c = cadreDe(g.user_id, g.done);
+        const c = cadreDe(g.user_id, g.done, g.cadre, g.cadres_ex);
         return (
           <button key={g.user_id || i} className={`comm-face${c.id !== "aucun" ? ` cadre cadre-${c.id} sm` : ""}`}
             aria-label={`${g.name || "Stagiaire"}${c.id !== "aucun" ? ` · cadre ${c.nom}` : ""}`}
@@ -360,8 +360,25 @@ export default function Communaute() {
   // l'utilisateur courant. Pour les autres, on retombe sur leur cadre de parcours, seule
   // information dont le serveur dispose aujourd'hui (cf. CHANTIERS.md §4.2 point 6).
   const monChoix = useCadreChoisi(moi);
-  const cadreDe = (id, done = 0) =>
-    (id && id === moi ? cadrePorteDe(monChoix, done) : cadreFor(done).cadre);
+  /**
+   * Le cadre d'une personne, dans l'ordre des sources qui font foi.
+   *
+   * POUR SOI : le choix LOCAL d'abord. Il est déjà écrit en base, mais le lire depuis la
+   * réponse serveur ferait attendre un aller-retour pour voir son propre changement — le
+   * local donne l'effet immédiat, le serveur assure la diffusion.
+   *
+   * POUR LES AUTRES : leur choix tel que le serveur le connaît (`author_cadre`, migration
+   * 113). À défaut — migration non jouée, ou aucun choix exprimé — on retombe sur leur cadre
+   * de PARCOURS, déduit du nombre de formations terminées.
+   *
+   * Dans les deux cas la POSSESSION est revérifiée ici, à la lecture : un cadre choisi puis
+   * perdu (donnée corrigée par l'école) cesse d'être affiché sans qu'il faille repasser sur
+   * la base.
+   */
+  const cadreDe = (id, done = 0, choixServeur = null, exclusifs = []) =>
+    (id && id === moi
+      ? cadrePorteDe(monChoix, done, exclusifs)
+      : cadrePorteDe(choixServeur, done, exclusifs));
 
   function openProfile(userId) {
     setProfile(null); setProfileId(userId); setProfileOpen(true);
@@ -502,7 +519,7 @@ export default function Communaute() {
                     <div className="comm-card2-body" onClick={() => setOpenId(s.id)} role="button" tabIndex={0}
                       onKeyDown={(e) => { if (e.key === "Enter") setOpenId(s.id); }}>
                       <PostHead id={s.author_user_id} name={s.author_name} avatar={s.author_avatar}
-                        cadre={cadreDe(s.author_user_id, s.author_done)} date={s.updated_at} onOpen={openProfile} />
+                        cadre={cadreDe(s.author_user_id, s.author_done, s.author_cadre, s.author_cadres_ex)} date={s.updated_at} onOpen={openProfile} />
                       <span className="comm-kind" style={{ background: `color-mix(in srgb, ${km.color} 15%, var(--surface))`, color: km.color }}>
                         <Icon name={km.icon} size={12} /> {km.label}{s.kind === "RECETTE" && s.type ? ` · ${s.type}` : ""}
                       </span>
@@ -573,7 +590,7 @@ export default function Communaute() {
                         son auteur en note de bas de page. C'est aussi d'ici qu'on ouvre son
                         profil, geste attendu quand on lit ce qu'il a publié. */}
                     <PostHead id={detail.author_user_id} name={detail.author_name} avatar={detail.author_avatar}
-                      cadre={cadreDe(detail.author_user_id, detail.author_done)} date={detail.updated_at} onOpen={openProfile} />
+                      cadre={cadreDe(detail.author_user_id, detail.author_done, detail.author_cadre, detail.author_cadres_ex)} date={detail.updated_at} onOpen={openProfile} />
                     {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0 6px" }}>{detail.description}</p>}
                     <Tags text={detail.description} />
 
@@ -692,7 +709,7 @@ export default function Communaute() {
         document.body
       )}
 
-      {profileOpen && <ProfileModal profile={profile} loading={!profile} cadre={cadreDe(profileId, profile?.done)} onClose={() => setProfileOpen(false)} />}
+      {profileOpen && <ProfileModal profile={profile} loading={!profile} cadre={cadreDe(profileId, profile?.done, profile?.cadre, profile?.cadres_ex)} onClose={() => setProfileOpen(false)} />}
     </>
   );
 }

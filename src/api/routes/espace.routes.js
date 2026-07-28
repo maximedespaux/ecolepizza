@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 // Union des deux branches : getMyAccess + le bloc boutique/avatar. `multer` reste (upload avatar).
-const { getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+const { saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
   getQuestLives, loseQuestLife, resetQuestProgress } = require('../controllers/espace.controller.js');
 const { getPlayableChapters } = require('../controllers/questContent.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
@@ -34,6 +34,7 @@ router.get('/infos', authenticateToken, getMyInfos);
 router.put('/infos', authenticateToken, updateMyInfos);
 router.put('/visibility', authenticateToken, updateMyVisibility);
 router.put('/avatar', authenticateToken, saveMyAvatar);
+router.put('/cadre', authenticateToken, saveMyCadre);
 router.post('/avatar-image', authenticateToken, avatarUpload.single('image'), saveMyAvatarImage);
 router.get('/avatar-image/:learnerId', authenticateToken, getAvatarImage);
 router.delete('/avatar-image', authenticateToken, deleteMyAvatarImage);

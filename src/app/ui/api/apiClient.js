@@ -715,6 +715,9 @@ export function getMercuriale() { return request("/mercuriale", { silent: true }
 export function addMercurialeItem(item) { return request("/mercuriale", { method: "POST", body: JSON.stringify(item) }); }
 export function updateMercurialeItem(id, patch) { return request(`/mercuriale/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
 export function deleteMercurialeItem(id) { return request(`/mercuriale/${id}`, { method: "DELETE" }); }
+// Cadre porté (migration 113) : jusqu'ici le choix ne vivait qu'en localStorage, donc
+// personne d'autre ne pouvait le voir. Best-effort, comme l'avatar.
+export function saveMyCadre(cadre) { return request("/mon-espace/cadre", { method: "PUT", body: JSON.stringify({ cadre }) }); }
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }

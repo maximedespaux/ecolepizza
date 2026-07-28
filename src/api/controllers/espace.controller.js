@@ -470,6 +470,10 @@ const getMyAccess = async (req, res) => {
         // renvoyé ici plutôt que par un appel dédié : la barre appelle déjà cette route à
         // chaque page, et le compte est déjà calculé juste au-dessus.
         const formations_done = doneSet.size;
+        // Les cadres exclusifs accordés (migration 113) : l'en-tête en a besoin pour savoir si
+        // le cadre choisi est réellement possédé. `?? ''` et non `||` — une colonne absente
+        // (migration non jouée) donne `undefined`, qui doit donner une liste vide sans lever.
+        const cadres_exclusifs = String(learner.cadres_exclusifs ?? '').split(',').map((x) => x.trim()).filter(Boolean);
         let finished = doneSet.size > 0;
         if (!finished && enrollments.length) {
             const steps = await loadOrgSteps(learner.organization_id);
@@ -478,10 +482,10 @@ const getMyAccess = async (req, res) => {
                 if (c.complete) { finished = true; break; }
             }
         }
-        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs, community_news, formations_done } });
+        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs, community_news, formations_done, cadres_exclusifs } });
 
         // AUCUNE formation → verrouillé (rien à débloquer tant qu'il n'est pas inscrit).
-        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs, community_news, formations_done } });
+        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs, community_news, formations_done, cadres_exclusifs } });
         const gating = [];
         for (const e of enrollments) {
             const g = await emargementGate(conn, e, learner.organization_id, agefice);
@@ -489,7 +493,7 @@ const getMyAccess = async (req, res) => {
         }
         // Inscrit : débloqué si aucune formation n'a de point d'accès, ou si au moins un est franchi.
         const quest_unlocked = gating.length === 0 || gating.some((g) => !g.locked);
-        res.json({ data: { quest_unlocked, pending_docs, community_news, formations_done } });
+        res.json({ data: { quest_unlocked, pending_docs, community_news, formations_done, cadres_exclusifs } });
     } catch (err) {
         console.error('Erreur accès stagiaire :', err);
         res.json({ data: { quest_unlocked: true, pending_docs: 0, community_news: 0 } });
@@ -851,17 +855,25 @@ const getMyProfile = async (req, res) => {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: "Aucune fiche stagiaire liée à ce compte." });
-        let avatar = null, progress = {}, xp = 0, stars = 0;
+        let avatar = null, cadre = null, cadres_exclusifs = [], progress = {}, xp = 0, stars = 0;
         try {
             const [[l]] = await conn.query('SELECT avatar FROM learner WHERE id = ?', [learner.id]);
             avatar = (l && l.avatar) || null;
+            // Cadres : requête SÉPARÉE. Ces colonnes arrivent avec la migration 113 ; dans le
+            // même SELECT que l'avatar, une base où 113 n'est pas jouée aurait fait échouer la
+            // requête entière et emporté l'avatar avec les cadres.
+            try {
+                const [[lc]] = await conn.query('SELECT cadre, cadres_exclusifs FROM learner WHERE id = ?', [learner.id]);
+                cadre = (lc && lc.cadre) || null;
+                cadres_exclusifs = listeCadres(lc && lc.cadres_exclusifs);
+            } catch (e) { if (!isMissingSchema(e)) throw e; }
             const [rows] = await conn.query('SELECT world, step, stars FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
             for (const r of rows) {
                 (progress[r.world] ||= {})[r.step] = r.stars;
                 stars += r.stars; xp += r.stars * 10;
             }
         } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : profil vide
-        res.json({ data: { avatar, progress, xp, stars } });
+        res.json({ data: { avatar, cadre, cadres_exclusifs, progress, xp, stars } });
     } catch (err) {
         console.error('Erreur profil stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -885,6 +897,44 @@ const saveMyAvatar = async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur avatar stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PUT /api/mon-espace/cadre — { cadre }.
+ *
+ * Le cadre PORTÉ, pour que les autres stagiaires le voient : jusqu'ici le choix vivait en
+ * localStorage, donc la Communauté affichait à tous le cadre de parcours et jamais le choix.
+ *
+ * On ne vérifie PAS ici que le stagiaire possède ce cadre. C'est volontaire : la possession se
+ * déduit de `completed_levels` et de `cadres_exclusifs`, deux valeurs qui bougent dans le temps
+ * (une formation validée après coup, un cadre exclusif accordé puis corrigé). La règle est donc
+ * appliquée À LA LECTURE, là où l'on connaît l'état du moment — un cadre choisi puis perdu
+ * cesse simplement d'être affiché, sans qu'il faille repasser sur la base. Un cadre est de
+ * toute façon purement décoratif : il n'ouvre aucun droit.
+ *
+ * On valide en revanche la FORME, sans quoi la colonne accepterait n'importe quelle chaîne.
+ */
+const CADRES_CONNUS = ['aucun', 'bronze', 'argent', 'or', 'braise', 'maestro', 'champion', 'jury', 'fondateur'];
+const listeCadres = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
+
+const saveMyCadre = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        const cadre = req.body && req.body.cadre;
+        // NULL et « aucun » ne disent pas la même chose : NULL = aucun choix exprimé (on
+        // retombe sur le palier), « aucun » = le choix de ne rien porter.
+        if (cadre != null && cadre !== '' && !CADRES_CONNUS.includes(String(cadre))) {
+            return res.status(422).json({ message: 'Cadre inconnu.' });
+        }
+        try { await conn.query('UPDATE learner SET cadre = ? WHERE id = ?', [cadre || null, learner.id]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 113 non jouée
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur cadre stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -1688,5 +1738,6 @@ const updateMyInfos = async (req, res) => {
 };
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
-module.exports = { getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+module.exports = {
+    saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
     getQuestLives, loseQuestLife, resetQuestProgress };

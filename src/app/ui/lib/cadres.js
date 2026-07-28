@@ -18,6 +18,7 @@
  * forcément celui qu'il préfère montrer.
  */
 import { useEffect, useState } from "react";
+import { saveMyCadre } from "../api/apiClient.js";
 
 const CLE = (uid) => `impasto.cadre.${uid || "anon"}`;
 export const CADRE_EVENT = "impasto:cadre";
@@ -108,6 +109,10 @@ export function setCadreChoisi(uid, id) {
     if (id) localStorage.setItem(CLE(uid), id); else localStorage.removeItem(CLE(uid));
     window.dispatchEvent(new CustomEvent(CADRE_EVENT));
   } catch { /* navigation privée : le choix ne survivra pas, l'affichage reste correct */ }
+  // ET en base, pour que les AUTRES le voient — même schéma que `setAvatar` : le local sert
+  // aux lectures synchrones et à l'affichage immédiat, le serveur à la diffusion. Best-effort :
+  // hors ligne, on garde un affichage juste chez soi plutôt que de bloquer sur une erreur.
+  saveMyCadre(id || null).catch(() => {});
 }
 
 /** Classe CSS du cadre — chaîne vide quand il n'y en a pas, pour ne rien ajouter au DOM. */

@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser } from "../api/apiClient.js";
+import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser, getMyProfile } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import { initials, colorOf } from "../lib/format.js";
 import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
@@ -37,10 +37,13 @@ export default function ProfileModal({ onClose }) {
   // L'XP et les cœurs ont disparu : la progression se lit aux CADRES, gagnés sur les
   // formations réellement terminées (cf. lib/cadres.js).
   const { cadre: palier, suivant } = cadreFor(done);
-  // `attribues` : les exclusifs accordés par l'école. Pas encore de source serveur — la liste
-  // est vide, donc ils s'affichent verrouillés avec leur condition (un objectif visible vaut
-  // mieux qu'une case cachée).
-  const attribues = [];
+  // `attribues` : les cadres exclusifs accordés par l'école (migration 113). Tant qu'aucun
+  // n'est accordé la liste reste vide et ils s'affichent verrouillés AVEC leur condition —
+  // un objectif visible vaut mieux qu'une case cachée.
+  const [attribues, setAttribues] = useState([]);
+  useEffect(() => {
+    getMyProfile().then((r) => setAttribues(r?.data?.cadres_exclusifs || [])).catch(() => {});
+  }, []);
   const [choisi, setChoisi] = useState(() => getCadreChoisi(uid));
   const cadre = cadrePorte(uid, done, attribues);
   const choisirCadre = (id) => { setCadreChoisi(uid, id); setChoisi(id); };

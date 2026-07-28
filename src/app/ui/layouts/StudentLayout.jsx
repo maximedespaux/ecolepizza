@@ -104,6 +104,7 @@ function StudentLayout() {
   const [news, setNews] = useState(0);            // commentaires nouveaux dans la Communauté
   const [done, setDone] = useState(0);            // formations terminées → cadre de l'avatar
   const choixCadre = useCadreChoisi(user?.id);    // resynchronisé dès qu'il change de cadre
+  const [exclusifs, setExclusifs] = useState([]); // cadres exclusifs accordés par l'école
   const [avatar, setAvatar] = useState(() => getAvatar(user?.id));
   const [menuOpen, setMenuOpen] = useState(false); // tiroir de navigation, sous 900px
   // A-t-il franchi le point d'accès (breakpoint) d'une formation ? Débloque Pizza Quest + Outils.
@@ -117,6 +118,7 @@ function StudentLayout() {
         setPending(Number(r?.data?.pending_docs) || 0);
         setNews(Number(r?.data?.community_news) || 0);
         setDone(Number(r?.data?.formations_done) || 0);
+        setExclusifs(r?.data?.cadres_exclusifs || []);
       })
       .catch(() => setUnlocked(true));
     // Rejoué à chaque changement de page : quitter la Communauté suffit donc à voir la
@@ -224,7 +226,7 @@ function StudentLayout() {
         <AvatarCadre
           avatar={avatar}
           initiales={initials(user?.first_name, user?.last_name)}
-          cadre={cadrePorteDe(choixCadre, done).id}
+          cadre={cadrePorteDe(choixCadre, done, exclusifs).id}
           size={38}
           title="Mon profil"
           onClick={() => setProfileOpen(true)}
