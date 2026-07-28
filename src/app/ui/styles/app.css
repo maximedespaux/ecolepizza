@@ -248,13 +248,25 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
   background-size:24px 100%,14px 100%;
   background-attachment:local,scroll}
 table{width:100%;border-collapse:collapse;font-size:14px}
-thead th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border)}
+/* En-tête COLLANT : sur une liste de 1069 stagiaires, on perd le nom des colonnes au bout de
+   trois lignes de défilement et on relit la page en devinant. `z-index:2` le place au-dessus
+   des lignes sans le sortir de la carte. Le fond est opaque, sinon les lignes défilantes
+   transparaissent à travers.
+   `--muted` et non `--dim` : sur du 10,5 px en capitales — le pire cas de l'application —
+   `--dim` tombe très en dessous du seuil AA. */
+thead th{position:sticky;top:0;z-index:2;background:var(--surface);
+  text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--border)}
 tbody td{padding:12px 14px;border-bottom:1px solid var(--border-soft)}
 /* La propriété est NOMMÉE, et ce n'est pas cosmétique : en raccourci, ce `transition` valait
    `all`, donc il retardait aussi tout `transform` ou `opacity` posé plus tard sur une ligne.
    Or certaines lignes sont deplaçables (.drag-row) — un transform différé sur un élément
    `draggable` décale l'image fantôme du navigateur et fausse la cible de dépôt. */
-tbody tr{transition:background .12s var(--ease)}tbody tr:hover{background:var(--surface2)}
+/* Le survol change le fond ET pose un filet coloré à gauche : sur un tableau large, un simple
+   changement de fond se perd hors du champ de vision quand l'œil est à droite de la ligne.
+   `box-shadow` en encart plutôt qu'une bordure — une bordure décalerait les cellules d'un
+   pixel au survol, et toute la ligne tressauterait. */
+tbody tr{transition:background .12s var(--ease),box-shadow .12s var(--ease)}
+tbody tr:hover{background:var(--surface2);box-shadow:inset 3px 0 0 0 color-mix(in srgb,var(--blue) 45%,transparent)}
 tbody tr:last-child td{border-bottom:none}
 
 /* Forms -------------------------------------------------------------- */
@@ -291,6 +303,18 @@ tbody tr:last-child td{border-bottom:none}
 /* Neutre : ni réussite ni échec. « Chargement… » s'affichait jusqu'ici en vert, faute de ce
    cas — le composant ne connaissait que « erreur » et « le reste ». */
 .status.info{color:var(--muted);background:var(--surface2);border:1px solid var(--border-soft)}
+
+/* ═══ SQUELETTES DE CHARGEMENT ══════════════════════════════════════════════════════════════
+   Un balayage lent, pas une pulsation : la pulsation attire l'œil et le retient, alors que
+   ce bloc est justement ce qu'on ne regarde pas — il occupe la place le temps que le contenu
+   arrive. `background-size` à 200 % : le dégradé est deux fois plus large que le bloc, c'est
+   ce qui lui permet de le traverser entièrement. */
+.skel{display:block;border-radius:10px;background:var(--surface2);position:relative;overflow:hidden}
+.skel::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--border) 55%,transparent),transparent);
+  background-size:200% 100%;animation:skelBalayage 1.35s ease-in-out infinite}
+@keyframes skelBalayage{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.skel::after{animation:none;opacity:.5}}
 
 /* LECTURE SEULE — l'habillage de ce que `blockMutations` intercepte (cf. AppLayout.jsx).
    ⚠️ Cette liste de sélecteurs doit rester IDENTIQUE à `CONTROLES_MODIFIANTS` côté JS : c'est

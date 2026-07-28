@@ -10,6 +10,7 @@ import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
+import { Squelette } from "../components/Squelette.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
@@ -236,10 +237,14 @@ function StagiaireDetail() {
   }
 
   if (!l) {
+    // La page restait BLANCHE sous son titre le temps du chargement : rien ne distinguait
+    // « ça arrive » de « il n'y a rien », ni d'ailleurs d'une erreur avalée. Le squelette
+    // réserve en plus la place, donc la page ne saute pas quand la fiche arrive.
     return (
       <>
         <PageHead eyebrow="Stagiaire" title="Fiche stagiaire" />
         <StatusMessage status={status} />
+        {!status && <Squelette lignes={4} h={92} />}
       </>
     );
   }
