@@ -166,7 +166,9 @@ function StudentLayout() {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+    // `stu-app` porte toute la couche ludique (police ronde, coins doux, retour tactile,
+    // fond chaud) — cf. styles/app.css. L'application d'administration ne la reçoit jamais.
+    <div className="stu-app" style={{ minHeight: "100vh" }}>
       {/* En-tête ET tiroir dans un même bloc collant : c'est ce bloc qui colle, pas chacun de
           son côté. Le tiroir suit donc la barre sans qu'on ait à lui donner un décalage en
           pixels — un `top` en dur devrait valoir la hauteur exacte de la barre, qui change
@@ -244,7 +246,9 @@ function StudentLayout() {
           hauteur de l'en-tête. */}
       {menuOpen && <div className="stu-scrim" onClick={() => setMenuOpen(false)} />}
 
-      <main className="content" style={{ maxWidth: 900 }}>
+      {/* 1060 et non 900 : les cartes de formation sont sur trois colonnes — à 900px elles
+          tombaient sous 280px et le titre du programme passait sur trois lignes. */}
+      <main className="content" style={{ maxWidth: 1060 }}>
         {!unlocked && GATED_PATHS.some((p) => loc.pathname.startsWith(p)) ? (
           <EmptyState icon="lock">
             <b>Section verrouillée.</b><br />Signez d'abord vos documents jusqu'au <b>point d'accès</b> de votre formation pour débloquer Pizza Quest et les outils.

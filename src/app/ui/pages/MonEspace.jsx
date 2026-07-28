@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
-import { getMonEspace, getMyFormations } from "../api/apiClient.js";
+import { getMonEspace, getMyFormations, getMyAccess } from "../api/apiClient.js";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -11,6 +11,8 @@ import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import QuizModal from "../components/QuizModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { colorOf, euro } from "../lib/format.js";
+import { getAvatar, AVATAR_EVENT } from "../lib/gamification.js";
+import { RankBar, NextStep, prochaineEtape } from "../components/StuJourney.jsx";
 
 /**
  * Espace stagiaire — page unique, réunion de l'ancien « Mon espace » (la pile de documents
@@ -49,6 +51,16 @@ function MonEspace() {
   const [quizDoc, setQuizDoc] = useState(null);
   const [info, setInfo] = useState(null);      // formation non suivie, en lecture seule
   const [tab, setTab] = useState("formations"); // "formations" | "documents"
+  const [avatar, setAvatar] = useState(() => getAvatar(user?.id));
+  const [questUnlocked, setQuestUnlocked] = useState(false);
+  // L'avatar est modifiable depuis la modale de profil, hors de cette page : sans cette
+  // écoute, l'accueil garderait l'ancien emoji jusqu'au prochain rechargement.
+  useEffect(() => {
+    const sync = () => setAvatar(getAvatar(user?.id));
+    sync();
+    window.addEventListener(AVATAR_EVENT, sync);
+    return () => window.removeEventListener(AVATAR_EVENT, sync);
+  }, [user?.id]);
 
   async function load() {
     try {
@@ -59,6 +71,8 @@ function MonEspace() {
     }
   }
   useEffect(() => { load(); }, []);
+  // Sert à savoir si l'entraînement peut être proposé comme prochaine étape.
+  useEffect(() => { getMyAccess().then((r) => setQuestUnlocked(r?.data?.quest_unlocked !== false)).catch(() => {}); }, []);
   useEffect(() => {
     getMyFormations().then((r) => setFormations(r.data || []))
       .catch((err) => setStatus((s) => s || { type: "error", message: err.message }));
@@ -76,22 +90,34 @@ function MonEspace() {
   const triees = formations
     ? [...formations].sort((a, b) => (b.enrolled ? 1 : 0) - (a.enrolled ? 1 : 0))
     : null;
+  // Une formation terminée vaut 100 points de progression (cf. scoreOf).
+  const formationsDone = (formations || []).filter((f) => f.finished || f.complete).length;
+  const etape = prochaineEtape({ enAttente, questUnlocked, formations: formations || [] });
 
   return (
     <>
-      <div className="hero">
+      {/* Le labo et son four : le stagiaire retrouve son lieu de formation en ouvrant son espace. */}
+      <div className="hero photo" style={{ "--photo": `url(${import.meta.env.BASE_URL}brand/atelier.jpg)` }}>
         <div className="eyebrow">Espace stagiaire</div>
-        <h1>Bonjour {user?.first_name}</h1>
+        {/* L'avatar choisi par le stagiaire remonte dans l'accueil : c'est son espace, il doit
+            s'y reconnaître dès la première ligne — pas seulement dans un coin de la barre. */}
+        <div className="stu-hi">
+          {avatar && <span className="stu-hi-av" style={{ background: avatar.color }} aria-hidden="true">{avatar.emoji}</span>}
+          <h1>Bonjour {user?.first_name}</h1>
+        </div>
         <p>
-          Vos documents et vos formations, au même endroit : ce qui attend une signature,
-          puis le détail de chaque dossier.
+          {enAttente.length > 0
+            ? "Voici ce qui vous attend aujourd'hui — puis le détail de chacun de vos dossiers."
+            : "Tout est à jour. Retrouvez ici vos formations et l'ensemble de vos documents."}
         </p>
-        {enAttente.length > 0 && (
-          <div className="badge-row">
-            <span className="pill">{enAttente.length} document{enAttente.length > 1 ? "s" : ""} en attente</span>
-          </div>
-        )}
+        {/* Le rang sort de la modale de profil : une progression qu'on ne voit pas ne motive
+            personne. C'est la première chose que le stagiaire lit en arrivant. */}
+        <RankBar formationsDone={formationsDone} />
       </div>
+
+      {/* Une seule action mise en avant — la plus urgente. L'accueil dit quoi faire, il ne se
+          contente plus de ranger des pièces dans deux onglets. */}
+      <NextStep etape={etape} onOpenDoc={(d) => (d.quiz_id ? setQuizDoc(d.id) : setViewId(d.id))} />
 
       <StatusMessage status={status} />
 
@@ -207,6 +233,7 @@ function FormationCard({ f, navigate, onInfo }) {
   const locked = !f.finished && (!f.enrolled || f.revoked);
   const shown = locked ? "#9aa0b5" : color;
   const openable = !locked && f.enrollment_id; // le dossier exige une inscription
+  const pct = f.total ? Math.round((f.signed / f.total) * 100) : 0;
   return (
     <div
       className="card hover"
@@ -218,9 +245,21 @@ function FormationCard({ f, navigate, onInfo }) {
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <span className="badge n mono" style={{ background: shown, color: "#fff", borderColor: "transparent" }}>{f.program_code}</span>
-        <span style={{ color: locked ? "#9aa0b5" : (f.complete || f.finished) ? "var(--green)" : color, display: "inline-flex" }}>
-          <Icon name={locked ? "lock" : (f.complete || f.finished) ? "check-circle" : "folder-check"} size={17} />
-        </span>
+        {/* Anneau de progression : il remplace la barre plate d'autrefois. Un anneau se lit
+            d'un coup d'œil et porte le pourcentage en son centre — la barre, elle, obligeait
+            à aller chercher « 3/7 signé(s) » en pied de carte pour savoir où l'on en est.
+            Verrouillé ou hors inscription : on garde le pictogramme, il n'y a rien à mesurer. */}
+        {f.enrolled && !f.revoked && !locked ? (
+          <span className={"stu-ring" + (pct >= 100 ? " done" : "")}
+            style={{ "--p": pct, "--c": pct >= 100 ? "var(--green)" : color }}
+            title={`${f.signed}/${f.total} document(s) signé(s)`}>
+            <span>{pct}%</span>
+          </span>
+        ) : (
+          <span style={{ color: locked ? "#9aa0b5" : "var(--green)", display: "inline-flex" }}>
+            <Icon name={locked ? "lock" : "check-circle"} size={17} />
+          </span>
+        )}
       </div>
       <h3 style={{ fontSize: 15, margin: "10px 0 4px" }}>{f.program_title}</h3>
       <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>
@@ -230,15 +269,12 @@ function FormationCard({ f, navigate, onInfo }) {
         {f.session_count > 1 && <span style={{ marginLeft: 6, color: "var(--blue)", fontWeight: 700 }}>· {f.session_count} sessions</span>}
       </p>
 
-      {f.enrolled && !f.revoked && (
-        <div className="progress" style={{ margin: "12px 0 6px", height: 8 }}>
-          <span style={{ width: `${f.total ? (f.signed / f.total) * 100 : 0}%`, background: color }} />
-        </div>
-      )}
-      <p style={{ fontSize: 12, margin: f.enrolled && !locked ? 0 : "12px 0 0", fontWeight: 600,
+      {/* La barre de progression a été retirée : l'anneau en tête de carte porte la même
+          information, en plus lisible, et sans couper la carte en deux. */}
+      <p style={{ fontSize: 12, margin: "12px 0 0", fontWeight: 600,
         color: (f.revoked && !f.finished) ? "var(--ember1, #c0392b)" : (f.complete || f.finished) ? "var(--green)" : "var(--muted)" }}>
         {f.revoked && !f.finished
-          ? "🔒 Accès suspendu (point d'accès non atteint)"
+          ? "Accès suspendu (point d'accès non atteint)"
           : f.finished
             ? (openable ? "Terminée — documents & émargement →" : "Terminée")
             : !f.enrolled ? "Non suivie" : `Documents & émargement · ${f.signed}/${f.total} signé(s) →`}

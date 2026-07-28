@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import PageHead from "../components/PageHead.jsx";
@@ -8,6 +8,8 @@ import DoughBar from "../components/DoughBar.jsx";
 import { euro, colorOf } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
+import { cadreFor, cadrePorteDe, useCadreChoisi } from "../lib/cadres.js";
+import { UserContext } from "../context/UserContext.jsx";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
 import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead } from "../api/apiClient.js";
 
@@ -118,12 +120,15 @@ function Tags({ text }) {
 }
 
 // Petite pastille cliquable « auteur » (avatar + nom) → ouvre son profil.
-function AuthorChip({ id, name, avatar, onOpen }) {
+// Le `cadre` est résolu par le parent (cf. `cadreDe`) : lui seul sait qui est l'utilisateur
+// courant, et lui seul est rerendu quand ce dernier change de cadre.
+function AuthorChip({ id, name, avatar, cadre, onOpen }) {
   const av = avatar ? parseAvatar(avatar) : null;
   return (
-    <button className="author-chip" title="Voir le profil"
+    <button className="author-chip" title={`Voir le profil${cadre.id !== "aucun" ? ` · cadre ${cadre.nom}` : ""}`}
       onClick={(e) => { e.stopPropagation(); if (id) onOpen(id); }}>
-      <span className="author-ava" style={av ? { background: av.color, color: "#fff", fontSize: 11 } : null}>
+      <span className={`author-ava ${cadre.id !== "aucun" ? `cadre cadre-${cadre.id}` : ""}`}
+        style={av ? { background: av.color, color: "#fff", fontSize: 11 } : null}>
         {av ? av.emoji : <Icon name="user" size={11} />}
       </span>{name || "Stagiaire"}
     </button>
@@ -165,7 +170,7 @@ function Commenters({ gens, total, onOpen }) {
 }
 
 // Fenêtre profil de l'auteur : avatar, nom, nombre de fiches partagées, cœurs reçus.
-function ProfileModal({ profile, loading, onClose }) {
+function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
   const av = profile && profile.avatar ? parseAvatar(profile.avatar) : null;
   return createPortal(
     <div className="overlay" onClick={onClose}>
@@ -177,7 +182,13 @@ function ProfileModal({ profile, loading, onClose }) {
         <div className="mbody" style={{ textAlign: "center", padding: "22px 20px" }}>
           {loading || !profile ? <p className="hint">Chargement…</p> : (
             <>
-              <span className="prof-ava" style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
+              {/* Le cadre de parcours entoure le grand avatar : c'est le seul endroit de la
+                  Communauté où on regarde quelqu'un en face, il mérite l'effet complet. */}
+              <span className={`prof-ava ${cadreProfil.id !== "aucun" ? `cadre cadre-${cadreProfil.id}` : ""}`}
+                style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
+              {cadreProfil.id !== "aucun" && (
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginTop: 8 }}>Cadre {cadreProfil.nom}</div>
+              )}
               <div style={{ fontWeight: 800, fontSize: 18, marginTop: 10 }}>{profile.name}</div>
               {profile.company && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}><Icon name="building" size={13} /> {profile.company}</div>}
               {profile.badges && profile.badges.length > 0 && (
@@ -279,11 +290,21 @@ export default function Communaute() {
   const [onlyWish, setOnlyWish] = useState(false);      // filtre « ma wishlist »
   const [profileOpen, setProfileOpen] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [profileId, setProfileId] = useState(null);  // à qui appartient le profil ouvert
   const toggleWish = (id) => setWish((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); writeWish(n); return n; });
   const navigate = useNavigate();
 
+  const { user } = useContext(UserContext);
+  const moi = user?.id;
+  // Le choix de cadre vit dans le navigateur de chacun : on ne le connaît donc QUE pour
+  // l'utilisateur courant. Pour les autres, on retombe sur leur cadre de parcours, seule
+  // information dont le serveur dispose aujourd'hui (cf. CHANTIERS.md §4.2 point 6).
+  const monChoix = useCadreChoisi(moi);
+  const cadreDe = (id, done = 0) =>
+    (id && id === moi ? cadrePorteDe(monChoix, done) : cadreFor(done).cadre);
+
   function openProfile(userId) {
-    setProfile(null); setProfileOpen(true);
+    setProfile(null); setProfileId(userId); setProfileOpen(true);
     getAuthorProfile(userId).then((r) => setProfile(r.data)).catch(() => setProfileOpen(false));
   }
 
@@ -440,7 +461,7 @@ export default function Communaute() {
                         )}
                       </div>
                       <div className="comm-meta">
-                        <AuthorChip id={s.author_user_id} name={s.author_name} avatar={s.author_avatar} onOpen={openProfile} />
+                        <AuthorChip id={s.author_user_id} name={s.author_name} avatar={s.author_avatar} cadre={cadreDe(s.author_user_id, s.author_done)} onOpen={openProfile} />
                         <span>· {s.updated_at}</span>
                       </div>
                       <Tags text={s.description} />
@@ -490,7 +511,7 @@ export default function Communaute() {
                   </div>
                   <div className="mbody">
                     <div className="hint" style={{ marginTop: -2, display: "flex", alignItems: "center", gap: 5 }}>
-                      par <AuthorChip id={detail.author_user_id} name={detail.author_name} avatar={detail.author_avatar} onOpen={openProfile} /> · {detail.updated_at}
+                      par <AuthorChip id={detail.author_user_id} name={detail.author_name} avatar={detail.author_avatar} cadre={cadreDe(detail.author_user_id, detail.author_done)} onOpen={openProfile} /> · {detail.updated_at}
                     </div>
                     {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0 6px" }}>{detail.description}</p>}
                     <Tags text={detail.description} />
@@ -609,7 +630,7 @@ export default function Communaute() {
         document.body
       )}
 
-      {profileOpen && <ProfileModal profile={profile} loading={!profile} onClose={() => setProfileOpen(false)} />}
+      {profileOpen && <ProfileModal profile={profile} loading={!profile} cadre={cadreDe(profileId, profile?.done)} onClose={() => setProfileOpen(false)} />}
     </>
   );
 }

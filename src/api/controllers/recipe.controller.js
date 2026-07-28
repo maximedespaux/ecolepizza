@@ -185,11 +185,20 @@ const listShared = async (req, res) => {
                 const nm = Object.fromEntries(anames.map((x) => [x.rid, [x.f, x.l].filter(Boolean).join(' ').trim()]));
                 rows.forEach((r) => { if (nm[r.id]) r.author_name = nm[r.id]; });
             } catch (e) { /* users toujours présent, mais on ne bloque pas la liste */ }
-            // Avatar de l'auteur (séparé : la colonne learner.avatar peut manquer si migration 070 non jouée).
+            // Avatar de l'auteur ET son nombre de formations terminées (séparé : la colonne
+            // learner.avatar peut manquer si la migration 070 n'est pas jouée).
+            //
+            // `completed_levels` est une liste de niveaux séparés par des virgules : on la
+            // compte ici plutôt que de l'envoyer brute — le front n'a besoin que du nombre,
+            // et transmettre les niveaux d'un tiers exposerait son parcours détaillé.
             try {
-                const [avs] = await conn.query('SELECT r.id AS rid, l.avatar AS av FROM recipe r JOIN learner l ON l.user_id = r.author_user_id WHERE r.id IN (?)', [ids]);
+                const [avs] = await conn.query(
+                    'SELECT r.id AS rid, l.avatar AS av, l.completed_levels AS lv FROM recipe r JOIN learner l ON l.user_id = r.author_user_id WHERE r.id IN (?)',
+                    [ids]);
                 const am = Object.fromEntries(avs.map((x) => [x.rid, x.av]));
-                rows.forEach((r) => { r.author_avatar = am[r.id] || null; });
+                const nbNiveaux = (v) => String(v || '').split(',').map((t) => t.trim()).filter(Boolean).length;
+                const dm = Object.fromEntries(avs.map((x) => [x.rid, nbNiveaux(x.lv)]));
+                rows.forEach((r) => { r.author_avatar = am[r.id] || null; r.author_done = dm[r.id] || 0; });
             } catch (e) { /* migration 070 non jouée : pas d'avatar */ }
             try {
                 const [likes] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_like WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
@@ -438,11 +447,15 @@ const authorProfile = async (req, res) => {
         const [[sc]] = await conn.query(
             "SELECT COUNT(*) AS n FROM recipe WHERE author_user_id = ? AND visibility = 'SHARED' AND organization_id = ?",
             [uid, req.user.organization_id]);
-        let avatar = null, likes = 0, company = null, phone = null, email = null, badges = [];
+        let avatar = null, likes = 0, company = null, phone = null, email = null, badges = [], done = 0;
         try {
-            const [[lr]] = await conn.query('SELECT avatar, levels FROM learner WHERE user_id = ? LIMIT 1', [uid]);
+            const [[lr]] = await conn.query('SELECT avatar, levels, completed_levels FROM learner WHERE user_id = ? LIMIT 1', [uid]);
             if (lr) {
                 avatar = lr.avatar;
+                // Nombre de formations terminées → CADRE de parcours affiché dans la Communauté.
+                // On envoie le COMPTE, jamais la liste : le parcours détaillé d'un tiers ne
+                // regarde personne.
+                done = String(lr.completed_levels || '').split(',').map((t) => t.trim()).filter(Boolean).length;
                 // Badges (niveaux de formation) — TOUJOURS visibles (non désactivables).
                 const set = new Set(String(lr.levels || '').split(',').map((s) => s.trim()).filter(Boolean));
                 if (set.size) {
@@ -472,7 +485,7 @@ const authorProfile = async (req, res) => {
             }
         } catch (e) { if (!noTable(e)) throw e; }
         const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Stagiaire';
-        res.json({ data: { id: uid, name, avatar, shared_count: sc.n, likes_received: likes, company, phone, email, badges } });
+        res.json({ data: { id: uid, name, avatar, done, shared_count: sc.n, likes_received: likes, company, phone, email, badges } });
     } catch (err) {
         console.error('Erreur profil auteur :', err);
         res.status(500).json({ error: 'Internal Server Error' });

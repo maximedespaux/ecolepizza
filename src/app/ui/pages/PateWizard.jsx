@@ -8,13 +8,15 @@ import { Paton, doughLook, flourColor } from "../components/LivePizza.jsx";
 import WizDock from "../components/WizDock.jsx";
 import IntroGuide, { GUIDE_KEY } from "../components/IntroGuide.jsx";
 import { Icon } from "../components/Icon.jsx";
+import SaveToast from "../components/SaveToast.jsx";
+import WGauge from "../components/WGauge.jsx";
 import { euro } from "../lib/format.js";
 import { getMyRecipes, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMyFormations } from "../api/apiClient.js";
 import {
   num, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, W_MIN, W_MAX,
   hydraMinForW, maxTotalForW, wUsage, NAPO_SPECS, napoSpecOf, DP_DEFAULT,
   gfmt, LEVURE_TYPES, recoLevureFull, yeastLabel, ADJONCTIONS, SUBSTITUTIONS, subOf, TIPOS, tipoOf,
-  LEVURE_STORAGE, levStorageOf, compWaterPct, computeBuild,
+  LEVURE_STORAGE, levStorageOf, compWaterPct, computeBuild, tempFarine,
 } from "../lib/dough.js";
 
 /**
@@ -45,6 +47,8 @@ export default function PateWizard() {
   const [resultTab, setResultTab] = useState("compo"); // compo | cout
   const [saved, setSaved] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [enregistre, setEnregistre] = useState(0); // compteur : rejoue la confirmation à chaque succès
+  const [echec, setEchec] = useState(0);
   const [niv2, setNiv2] = useState(false);
   const [napo, setNapo] = useState(false);
   const [spe, setSpe] = useState(false);
@@ -82,7 +86,7 @@ export default function PateWizard() {
   const maxTotal = napoSpec ? napoSpec.hydraMax : (isSpe ? (curPreset.hydraMax || 80) : maxTotalForW(wv));
   const totalHydra = +(num(dp.hydra) + num(dp.bassinage) + compW).toFixed(1);
   const bassMax = Math.max(0, +(maxTotal - num(dp.hydra)).toFixed(1));
-  const flourTemp = num(dp.flourTemp) || 17;
+  const flourTemp = tempFarine(dp.flourTemp);
   const eauCoulage = Math.round(50 - 2 * flourTemp);
   const yeastType = dp.yeastType || "fraiche";
   const levStorage = dp.levStorage || "ambiante";
@@ -90,7 +94,7 @@ export default function PateWizard() {
 
   // Handlers typologie / W / hydratation / levure.
   function applyNapoSpec(spec) {
-    setR((p) => { const d = p.dough_params; const lev = spec.levure != null ? spec.levure : recoLevureFull(num(d.flourTemp) || 17, d.yeastType || "fraiche", d.levStorage || "ambiante");
+    setR((p) => { const d = p.dough_params; const lev = spec.levure != null ? spec.levure : recoLevureFull(tempFarine(d.flourTemp), d.yeastType || "fraiche", d.levStorage || "ambiante");
       return { ...p, paton_g: spec.paton, dough_params: { ...d, preset: "Napolitaine", napoSpec: spec.key, method: "Direct", w: spec.w, hydra: spec.hydra, hydraAuto: true, bassinage: 0, sel: spec.sel, huile: 0, levure: lev, ambH: spec.ambH ?? "", ambT: spec.ambT ?? "", ctrlH: spec.ctrlH ?? "", ctrlT: spec.ctrlT ?? "" } }; });
   }
   function applyPreset(pr) {
@@ -98,7 +102,7 @@ export default function PateWizard() {
     if (pr.nom === "Napolitaine") { applyNapoSpec(napoSpecOf("ecole")); return; }
     // Le plafond de coulage dépend du W seul (l'eau des farines qui boivent part en bassinage, manuel p.32).
     setR((p) => { const d = p.dough_params; const sp = pr.needs === "spe"; const mt = sp ? (pr.hydraMax || 80) : maxTotalForW(pr.w); const hydra = Math.min(pr.hydra, mt);
-      return { ...p, paton_g: pr.paton, dough_params: { ...d, preset: pr.nom, napoSpec: "", w: pr.w, hydra, hydraAuto: true, bassinage: Math.min(num(d.bassinage), Math.max(0, mt - hydra)), sel: pr.sel, huile: pr.huile, levure: recoLevureFull(num(d.flourTemp) || 17, d.yeastType || "fraiche", d.levStorage || "ambiante"), method: pr.methods.find((m) => !(INDIRECT.includes(m) && !niv2)) || pr.methods[0] } }; });
+      return { ...p, paton_g: pr.paton, dough_params: { ...d, preset: pr.nom, napoSpec: "", w: pr.w, hydra, hydraAuto: true, bassinage: Math.min(num(d.bassinage), Math.max(0, mt - hydra)), sel: pr.sel, huile: pr.huile, levure: recoLevureFull(tempFarine(d.flourTemp), d.yeastType || "fraiche", d.levStorage || "ambiante"), method: pr.methods.find((m) => !(INDIRECT.includes(m) && !niv2)) || pr.methods[0] } }; });
   }
   const setW = (w) => setR((p) => { const d = p.dough_params; const pr = PRESETS.find((x) => x.nom === d.preset) || PRESETS[0]; const sp = d.preset === "Napolitaine" ? napoSpecOf(d.napoSpec) : null; const isSp = pr.needs === "spe";
     const mt = sp ? sp.hydraMax : (isSp ? (pr.hydraMax || 80) : maxTotalForW(w)); const rm = sp ? sp.hydraMin : (isSp ? 62 : hydraMinForW(w));
@@ -110,7 +114,7 @@ export default function PateWizard() {
   const setHydra = (v) => setR((p) => ({ ...p, dough_params: { ...p.dough_params, hydra: v, hydraAuto: false, bassinage: Math.min(num(p.dough_params.bassinage), Math.max(0, maxTotal - v)) } }));
   const dpNapoFixed = (d) => d.preset === "Napolitaine" && d.napoSpec && d.napoSpec !== "ecole";
   // Levure = table du manuel selon la T° de la FARINE × facteur de stockage (recoLevureFull).
-  const relev = (d, patch) => ({ ...d, ...patch, ...(dpNapoFixed(d) ? {} : { levure: recoLevureFull(num(patch.flourTemp ?? d.flourTemp) || 17, patch.yeastType ?? d.yeastType ?? "fraiche", patch.levStorage ?? d.levStorage ?? "ambiante") }) });
+  const relev = (d, patch) => ({ ...d, ...patch, ...(dpNapoFixed(d) ? {} : { levure: recoLevureFull(tempFarine(patch.flourTemp ?? d.flourTemp), patch.yeastType ?? d.yeastType ?? "fraiche", patch.levStorage ?? d.levStorage ?? "ambiante") }) });
   const setYeastType = (t) => setR((p) => ({ ...p, dough_params: relev(p.dough_params, { yeastType: t }) }));
   const setLevStorage = (k) => setR((p) => ({ ...p, dough_params: relev(p.dough_params, { levStorage: k }) }));
   const setFlourTemp = (v) => setR((p) => ({ ...p, dough_params: relev(p.dough_params, { flourTemp: v }) }));
@@ -149,8 +153,11 @@ export default function PateWizard() {
       if (!asNew && r.id) { await updateRecipe(r.id, payload); setR((p) => ({ ...p, ...overrides })); }
       else { const res = await createRecipe({ ...payload, id: undefined }); setR((p) => ({ ...p, ...overrides, id: res.data && res.data.id })); }
       reload();
-    } catch { /* barre d'erreur globale */ }
-    finally { setBusy(false); }
+      setEnregistre((n) => n + 1);
+    } catch {
+      // L'échec doit se voir : sans retour, on reclique et on crée un doublon.
+      setEchec((n) => n + 1);
+    } finally { setBusy(false); }
   }
   // Reconstitue un « recipe » complet à partir d'un enregistrement (params désérialisés).
   const recipeOf = (s) => ({ ...NEW(), ...s, dough_params: { ...DP_DEFAULT, ...parseDP(s.dough_params) } });
@@ -171,15 +178,22 @@ export default function PateWizard() {
   }
   async function remove(id) { if (!window.confirm("Supprimer cet empâtement ?")) return; try { await deleteRecipe(id); if (r.id === id) setR(NEW()); if (detail?.id === id) setDetail(null); reload(); } catch { /* ignore */ } }
   const reset = () => { setR(NEW()); setStep(0); setResultTab("compo"); };
-  // Sauvegarde depuis la fin des étapes : demande le nom s'il est vide (modifiable à droite).
+  /**
+   * Enregistrement depuis la fin des étapes.
+   *
+   * Il n'y a plus de `window.prompt` pour réclamer un nom : annuler cette invite — ou
+   * simplement avoir un navigateur qui les bloque — faisait sortir la fonction EN SILENCE.
+   * On cliquait « Enregistrer », rien ne se passait, et rien n'expliquait pourquoi.
+   *
+   * Le prompt était de toute façon redondant : `persist()` calcule déjà le nom de repli
+   * « <typologie> maison », qui est précisément ce que le champ affiche en filigrane. On
+   * enregistre donc directement, et on inscrit ce nom dans le champ pour que le stagiaire
+   * VOIE sous quel nom sa fiche a été rangée.
+   */
   function saveBuild({ asNew = false, ...overrides } = {}) {
-    let name = (overrides.name ?? r.name ?? "").trim();
-    if (!name) {
-      name = (window.prompt("Nom de l'empâtement :", `${dp.preset} maison`) || "").trim();
-      if (!name) return;
-      setR((p) => ({ ...p, name }));
-      overrides.name = name;
-    }
+    const nom = (overrides.name ?? r.name ?? "").trim() || `${dp.preset} maison`;
+    overrides.name = nom;
+    setR((p) => ({ ...p, name: nom }));
     persist({ asNew, overrides });
   }
   const shared = r.visibility === "SHARED";
@@ -274,7 +288,9 @@ export default function PateWizard() {
                     <span className="hint" style={{ textAlign: "right", maxWidth: 190 }}>{wUsage(wv)}</span>
                   </div>
                   <input type="range" min={wLo} max={wHi} step={5} value={Math.min(Math.max(wv, wLo), wHi)} onChange={(e) => setW(Number(e.target.value))} style={{ width: "100%", accentColor: "var(--ember1)" }} />
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--muted)" }}><span>W {wLo}</span><span>W {wHi}</span></div>
+                  {/* La bande d'usages remplace les deux nombres de bornes : elle porte la même
+                      information et montre en plus à quelle famille de méthode on se situe. */}
+                  <WGauge value={wv} min={wLo} max={wHi} />
                 </div>
 
                 <div>
@@ -447,7 +463,7 @@ export default function PateWizard() {
               <label style={{ color: "rgba(255,255,255,.8)" }}>Nom de l'empâtement</label>
               <input className="inp" value={r.name} onChange={(e) => setR((p) => ({ ...p, name: e.target.value }))} placeholder={`${dp.preset} maison`} />
             </div>
-            {r.id && <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="pencil" size={12} /> Build existant — « Enregistrer » écrase, « Dupliquer » crée une copie.</div>}
+            {r.id && <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="pencil" size={12} /> Fiche déjà enregistrée — « Enregistrer » la met à jour.</div>}
 
             <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{curPreset.nom}{napoSpec ? ` · ${napoSpec.label}` : ""} · {String(dp.method).toLowerCase()}{dp.autolyse ? " · autolyse" : ""} · W {wv}</div>
             <div style={{ font: "800 24px/1.1 var(--font-d)", margin: "4px 0 2px" }}>{gfmt(totalDough)} de pâte</div>
@@ -535,6 +551,8 @@ export default function PateWizard() {
         </Card>
       )}
       </>)}
+      <SaveToast signal={enregistre} label={`Empâtement enregistré : ${r.name || "sans nom"}`} />
+      <SaveToast signal={echec} label="Enregistrement impossible — réessayez" tone="err" />
     </>
   );
 }
