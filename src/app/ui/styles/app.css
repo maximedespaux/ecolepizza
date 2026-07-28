@@ -954,13 +954,41 @@ tbody tr:last-child td{border-bottom:none}
 @media(prefers-reduced-motion:reduce){.pq-node.on::after{animation:none}}
 .pq-node-label{text-align:center;font-size:11.5px;line-height:1.25;width:100%}
 .pq-node-label b{display:block}
-.pq-stars{font-size:10px;letter-spacing:1px}
-.pq-progress{flex:1;height:10px;background:var(--surface2);border-radius:99px;overflow:hidden}
-.pq-progress span{display:block;height:100%;border-radius:99px;transition:width .2s var(--ease)}
-.pq-choice{text-align:left;padding:12px 14px;border:2px solid var(--border);border-radius:12px;background:var(--surface);font-size:14px;font-weight:600;color:var(--text);cursor:pointer;transition:.1s var(--ease)}
-.pq-choice:hover:not(:disabled){border-color:var(--navy);background:var(--surface2)}
-.pq-choice.ok{border-color:var(--green);background:color-mix(in srgb,var(--green) 14%,var(--surface));color:var(--green)}
-.pq-choice.ko{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 12%,var(--surface));color:var(--ember1)}
+/* Étoiles d'un chapitre : pleines = acquises, contour très atténué = à gagner. Le
+   contraste entre les deux porte l'information — pas leur nombre, toujours de trois. */
+.pq-stars{display:inline-flex;align-items:center;gap:1px;line-height:0;color:var(--gold)}
+.pq-stars > svg{opacity:.3}
+.pq-stars > svg.on{opacity:1}
+/* Écran de fin : les étoiles gagnées tombent l'une après l'autre. C'est le seul instant du
+   jeu où il y a quelque chose à savourer — les vides, elles, sont posées d'emblée. */
+.pq-fin-stars{display:flex;justify-content:center;gap:8px;margin-bottom:10px;color:var(--gold)}
+.pq-fin-stars > svg{opacity:.22}
+.pq-fin-stars > svg.on{opacity:1;animation:pqEtoile .5s var(--spring) both}
+@keyframes pqEtoile{from{opacity:0;transform:scale(.3) rotate(-25deg)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.pq-fin-stars > svg.on{animation:none}}
+.pq-progress{flex:1;height:10px;background:var(--surface2);border-radius:99px;overflow:hidden;
+  box-shadow:inset 0 1px 2px rgba(10,12,30,.12)}
+.pq-progress span{display:block;height:100%;border-radius:99px;transition:width .35s var(--spring);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+/* Réponses : même grammaire que les touches du parcours — une tranche sous le bouton, et un
+   appui qui l'enfonce d'exactement ce que la tranche perd. C'est ce qui donne au QCM la même
+   matière que le reste du jeu, au lieu de champs de formulaire posés dans une modale. */
+.pq-choice{position:relative;text-align:left;padding:12px 14px;border:2px solid var(--border);border-radius:14px;background:var(--surface);font-size:14px;font-weight:600;color:var(--text);cursor:pointer;
+  box-shadow:0 3px 0 0 var(--border);
+  transition:transform .12s var(--spring),box-shadow .12s var(--ease),border-color .12s var(--ease),background .12s var(--ease)}
+.pq-choice:hover:not(:disabled){border-color:var(--navy);background:var(--surface2);
+  transform:translateY(-1px);box-shadow:0 4px 0 0 color-mix(in srgb,var(--navy) 30%,var(--border))}
+.pq-choice:active:not(:disabled){transform:translateY(3px);box-shadow:0 0 0 0 var(--border)}
+/* Une réponse écartée s'efface au lieu de rester au même niveau que la bonne : après coup,
+   seules comptent celle qu'on a donnée et celle qu'il fallait donner. */
+.pq-choice:disabled{opacity:.5;box-shadow:none}
+.pq-choice.ok,.pq-choice.ko{opacity:1}
+.pq-choice.ok{border-color:var(--green);background:color-mix(in srgb,var(--green) 14%,var(--surface));color:var(--green);
+  box-shadow:0 3px 0 0 color-mix(in srgb,var(--green) 45%,transparent);animation:pqBonne .42s var(--spring)}
+.pq-choice.ko{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 12%,var(--surface));color:var(--ember1);
+  box-shadow:0 3px 0 0 color-mix(in srgb,var(--ember1) 45%,transparent);animation:pqShake .35s}
+@keyframes pqBonne{0%{transform:scale(1)}38%{transform:scale(1.035)}100%{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.pq-choice.ok,.pq-choice.ko{animation:none}}
 /* Étiquette de format de question */
 .pq-tag{display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:99px;border:1px solid transparent}
 .pq-tag-qcm{background:color-mix(in srgb,var(--blue) 14%,var(--surface));color:var(--blue)}

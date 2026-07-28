@@ -223,7 +223,7 @@ function PizzaQuest() {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {/* Les étoiles restent : elles notent la réussite d'un chapitre. Ce sont l'XP et les
               cœurs qui ont disparu — ils comptaient le temps passé et rationnaient l'accès. */}
-          <div className="pq-stat"><span style={{ fontSize: 15 }}>⭐</span><b>{totalStars}</b><span>étoiles</span></div>
+          <div className="pq-stat"><Icon name="star" size={15} fill="currentColor" aria-hidden="true" /><b>{totalStars}</b><span>étoiles</span></div>
         </div>
       </div>
       <p className="hint" style={{ marginTop: -6 }}>
@@ -651,8 +651,8 @@ function WorldView({ world, prog, onBack, onChapter, onGame }) {
             "--len": `${Math.hypot(ECART_X, dy).toFixed(1)}px`,
             "--ang": `${(Math.atan2(-dy, -ECART_X) * 180 / Math.PI).toFixed(2)}deg`,
           };
-          const titre = parfait ? `${ch.title} — sans faute (3/3 ⭐)`
-            : partiel ? `${ch.title} — ${stars}/3 ⭐, retente pour les 3`
+          const titre = parfait ? `${ch.title} — sans faute (3 étoiles sur 3)`
+            : partiel ? `${ch.title} — ${stars} étoile${stars > 1 ? "s" : ""} sur 3, retente pour les 3`
               : encours ? ch.title
                 : "Termine les chapitres précédents";
           return (
@@ -667,7 +667,9 @@ function WorldView({ world, prog, onBack, onChapter, onGame }) {
               </button>
               <div className="pq-node-label">
                 <b>{ch.title}</b>
-                <span className="pq-stars">{[0, 1, 2].map((s) => <span key={s} style={{ opacity: s < stars ? 1 : 0.25 }}>⭐</span>)}</span>
+                <span className="pq-stars" aria-label={`${stars} étoile${stars > 1 ? "s" : ""} sur 3`}>
+                  {[0, 1, 2].map((s) => <Icon key={s} name="star" size={11} fill={s < stars ? "currentColor" : "none"} className={s < stars ? "on" : ""} />)}
+                </span>
               </div>
             </div>
           );
@@ -697,13 +699,13 @@ function QuizModal({ world, data, onClose, onFinish, onRetry }) {
   const [selLeft, setSelLeft] = useState(null);  // Associations : gauche sélectionnée
   const [wrong, setWrong] = useState(null);      // Associations : droite en erreur (flash)
   const [correct, setCorrect] = useState(0);
-  const [hearts, setHearts] = useState(3);
+
   const [done, setDone] = useState(false);
 
   /** Remet le chapitre à zéro pour une nouvelle tentative (bouton « Recommencer »). */
   function recommencer() {
     setIdx(0); setPicked(null); setMatched({}); setSelLeft(null); setWrong(null);
-    setCorrect(0); setHearts(3); setDone(false);
+    setCorrect(0); setDone(false);
   }
 
   const q = questions[idx];
@@ -722,8 +724,9 @@ function QuizModal({ world, data, onClose, onFinish, onRetry }) {
   function choose(val) {
     if (answered) return;
     setPicked(val);
+    // Une mauvaise réponse ne coûte plus rien : elle affiche son explication, et c'est
+    // exactement là que le chapitre se révise. Le score final se compte sur les bonnes.
     if (val === q.a) setCorrect((c) => c + 1);
-    else setHearts((h) => h - 1);
   }
   function tapRight(r) {
     if (selLeft === null || matched[r.li]) return;
@@ -737,7 +740,7 @@ function QuizModal({ world, data, onClose, onFinish, onRetry }) {
     }
   }
   function next() {
-    if (hearts <= 0 || idx + 1 >= questions.length) { setDone(true); return; }
+    if (idx + 1 >= questions.length) { setDone(true); return; }
     setIdx((i) => i + 1); setPicked(null); setMatched({}); setSelLeft(null);
   }
 
@@ -761,9 +764,13 @@ function QuizModal({ world, data, onClose, onFinish, onRetry }) {
 
         {!done ? (
           <div className="mbody">
+            {/* Les cœurs ont disparu avec l'XP : `setHearts` n'était plus appelé nulle part,
+                si bien que trois ❤️ s'affichaient en permanence sans jamais bouger — une
+                promesse de mécanique de jeu qui n'existait plus. Le compteur de questions
+                dit ce qu'il faut : où l'on en est. */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
               <div className="pq-progress"><span style={{ width: `${(idx / total) * 100}%`, background: world.color }} /></div>
-              <span style={{ whiteSpace: "nowrap", fontSize: 14 }}>{"❤️".repeat(Math.max(0, hearts))}</span>
+              <span className="hint" style={{ whiteSpace: "nowrap" }}>{idx + 1} / {total}</span>
             </div>
             <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px", display: "flex", alignItems: "center", gap: 8 }}>
               <span className={"pq-tag pq-tag-" + type}>{type === "vf" ? "Vrai / Faux" : type === "assoc" ? "Associe" : "QCM"}</span>
@@ -847,8 +854,15 @@ function QuizModal({ world, data, onClose, onFinish, onRetry }) {
           </div>
         ) : (
           <div className="mbody" style={{ textAlign: "center", padding: "24px 20px" }}>
-            <div style={{ fontSize: 40, marginBottom: 6 }}>{stars > 0 ? "🍕" : "💪"}</div>
-            <div style={{ fontSize: 26, letterSpacing: 4, marginBottom: 8 }}>{[0, 1, 2].map((s) => <span key={s} style={{ opacity: s < stars ? 1 : 0.25 }}>⭐</span>)}</div>
+            {/* Les trois étoiles DISENT déjà le résultat : l'emoji au-dessus le répétait en
+                plus gros. Elles arrivent l'une après l'autre — c'est le seul moment du jeu
+                où l'on a quelque chose à savourer. */}
+            <div className="pq-fin-stars" aria-label={`${stars} étoile${stars > 1 ? "s" : ""} sur 3`}>
+              {[0, 1, 2].map((s) => (
+                <Icon key={s} name="star" size={38} fill={s < stars ? "currentColor" : "none"}
+                  className={s < stars ? "on" : ""} style={{ animationDelay: `${s * 0.14}s` }} />
+              ))}
+            </div>
             <p style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>{correct}/{total} bonnes réponses</p>
             <p className="hint" style={{ marginTop: 0 }}>
               {stars >= 2 ? "Excellent, prêt pour le QCM !"
