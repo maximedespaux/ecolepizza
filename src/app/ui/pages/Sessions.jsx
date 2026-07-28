@@ -259,7 +259,15 @@ function Sessions() {
                   <div
                     key={dayStr}
                     className={`cal-cell${inMonth ? "" : " out"}${wknd ? " wknd" : ""}${isToday(day) ? " today" : ""}${addable ? " addable" : ""}`}
+                    /* Le calendrier ne se pilotait qu'à la souris : ni les jours libres ni les
+                       sessions n'étaient atteignables au clavier, alors que la page invite en
+                       toutes lettres à « cliquer un jour libre ». `aria-label` porte la DATE
+                       — un lecteur d'écran annonçait « bouton » sans dire lequel. */
+                    role={addable ? "button" : undefined}
+                    tabIndex={addable ? 0 : undefined}
+                    aria-label={addable ? `Ajouter une formation le ${day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}` : undefined}
                     onClick={addable ? () => openAdd(dayStr) : undefined}
+                    onKeyDown={addable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAdd(dayStr); } } : undefined}
                     title={addable ? "Ajouter une formation ce jour" : undefined}
                   >
                     <div className="cal-daynum">{day.getDate()}</div>
@@ -272,6 +280,10 @@ function Sessions() {
                           className="cal-evt"
                           style={{ background: colorOf(s.program_code) }}
                           title={`${s.program_title} — ${s.stagiaires} stagiaire(s)`}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Ouvrir la session ${s.program_title}, ${s.stagiaires} stagiaire(s)`}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); navigate(`/sessions/${s.id}`); } }}
                           onClick={(e) => { e.stopPropagation(); navigate(`/sessions/${s.id}`); }}
                         >
                           {s.program_code}
