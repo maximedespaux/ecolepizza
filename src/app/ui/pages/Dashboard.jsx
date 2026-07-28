@@ -115,15 +115,18 @@ function Dashboard() {
           ))
         ) : (
           <>
-            <Kpi label="Stagiaires" value={stats.stagiaires} sub="Voir →" to="/stagiaires" icon="users" tone="blue" countUp />
-            <Kpi label="Dossiers actifs" value={stats.dossiers} sub="Hors formations passées →" to="/suivi" icon="folder-check" tone="green" countUp />
-            <Kpi label="Sessions à venir" value={stats.sessions} sub="Hors formations passées →" to="/sessions" icon="calendar" tone="orange" countUp />
-            <Kpi label="Ventes (CA)" value={stats.ca} format={euro} sub="Voir →" to="/ventes" icon="euro" tone="ember" countUp />
+            {/* Plus de « → » écrite à la main : la tuile pose sa propre flèche, qui AVANCE au
+                survol. Le sous-titre reprend donc sa vraie fonction — préciser ce que le
+                nombre compte — au lieu de répéter « Voir ». */}
+            <Kpi label="Stagiaires" value={stats.stagiaires} sub="Toutes fiches confondues" to="/stagiaires" icon="users" tone="blue" countUp />
+            <Kpi label="Dossiers actifs" value={stats.dossiers} sub="Hors formations passées" to="/suivi" icon="folder-check" tone="green" countUp />
+            <Kpi label="Sessions à venir" value={stats.sessions} sub="Hors formations passées" to="/sessions" icon="calendar" tone="orange" countUp />
+            <Kpi label="Ventes (CA)" value={stats.ca} format={euro} sub="Matériel et produits divers" to="/ventes" icon="euro" tone="ember" countUp />
           </>
         )}
       </div>
 
-      <Card title="Prochaines sessions" className="fade" more={<Link to="/sessions" className="card-more">Planning →</Link>} style={{ marginBottom: 16 }}>
+      <Card title="Prochaines sessions" className="fade" more={<Link to="/sessions" className="card-more">Planning <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>} style={{ marginBottom: 16 }}>
         {loading ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "4px 0" }}>
             {[0, 1, 2].map((i) => (
@@ -159,7 +162,7 @@ function Dashboard() {
       </Card>
 
       <div className="grid cols-2">
-        <Card title="Derniers dossiers" more={<Link to="/suivi" className="card-more">Suivi →</Link>}>
+        <Card title="Derniers dossiers" more={<Link to="/suivi" className="card-more">Suivi <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>}>
           {loading ? (
             [0, 1, 2, 3].map((i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: "1px solid var(--border-soft)" }}>
@@ -177,7 +180,7 @@ function Dashboard() {
           ))}
         </Card>
 
-        <Card title="Activité récente" more={<Link to="/audit" className="card-more">Journal →</Link>}>
+        <Card title="Activité récente" more={<Link to="/audit" className="card-more">Journal <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>}>
           {loading ? (
             [0, 1, 2, 3].map((i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>

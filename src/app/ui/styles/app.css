@@ -212,16 +212,59 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
    à la main dans un `.card-head`. Les deux doivent se ressembler. */
 .card-head h3,.card-head .card-h{font-size:16px;color:var(--blue)}
 .card-ttl{display:inline-flex;align-items:center;gap:8px}
-.card-more{color:var(--ember1);font-size:13px;font-weight:600}.card-more:hover{text-decoration:underline}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;animation:rise .45s var(--ease) both}
-.kpi .lbl{font-size:12.5px;color:var(--muted)}
-.kpi .val{font-family:var(--font-d);font-size:32px;font-weight:600;margin-top:8px;line-height:1;font-variant-numeric:tabular-nums}
-.kpi .sub{font-size:12px;margin-top:6px;color:var(--muted)}
-.kpi.card.hover:hover{transform:translateY(-3px)}
-.kpi.card.hover:hover .val{color:var(--ember1)}
+/* Lien « voir plus » d'un en-tête de carte. La flèche avance au survol, comme sur les tuiles
+   d'indicateur : un seul geste pour tous les « ça mène ailleurs » de l'application. Elle
+   remplace le « → » écrit à la main, qui ne pouvait pas bouger et se composait dans la police
+   du texte au lieu du jeu d'icônes. */
+.card-more{display:inline-flex;align-items:center;gap:3px;color:var(--ember1);font-size:13px;font-weight:600}
+.card-more:hover{text-decoration:underline}
+.card-more svg{flex:none;transition:transform .2s var(--spring)}
+.card-more:hover svg{transform:translateX(3px)}
+@media (prefers-reduced-motion:reduce){.card-more:hover svg{transform:none}}
+/* ═══ INDICATEUR CLÉ ════════════════════════════════════════════════════════════════════════
+   L'ordre de lecture est le sujet. Le libellé passe en SURTITRE — petit, en capitales
+   espacées, comme une légende — et le nombre prend toute la place : c'est lui qu'on vient
+   chercher, il ne doit pas arriver en deuxième.
+   `overflow:hidden` pour que le filet d'accent épouse les coins arrondis. */
+.kpi{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:17px 20px 16px;animation:rise .45s var(--ease) both;
+  transition:transform .2s var(--ease),box-shadow .2s var(--ease),border-color .2s var(--ease)}
+/* Filet teinté sur l'arête haute : c'est ce qui différencie quatre tuiles autrement
+   identiques, à la vitesse du coup d'œil, sans lire un mot. */
+.kpi-accent{position:absolute;top:0;left:0;right:0;height:3px;background:currentColor;opacity:.85}
+.kpi .lbl{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+/* `clamp` : le nombre respire sur grand écran sans déborder d'une colonne étroite. Les
+   chiffres tabulaires empêchent la valeur de danser pendant l'animation de comptage. */
+.kpi .val{font-family:var(--font-d);font-size:clamp(28px,2.6vw,38px);font-weight:600;letter-spacing:-.02em;
+  margin-top:10px;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .sub{font-size:12px;margin-top:7px;color:var(--muted)}
+.kpi-sub{display:flex;align-items:center;gap:4px}
+/* La flèche avance au survol : elle dit « ça mène quelque part » sans coûter une ligne de
+   hauteur, contrairement au « Voir → » qu'elle remplace. */
+.kpi-fleche{flex:none;transition:transform .2s var(--spring)}
+.kpi-lien{display:block;color:inherit;text-decoration:none}
+.kpi-lien:hover{transform:translateY(-3px);box-shadow:var(--shadow-2);border-color:color-mix(in srgb,currentColor 34%,var(--border))}
+.kpi-lien:hover .kpi-fleche{transform:translateX(4px)}
+.kpi-lien:hover .kpi-ic{transform:scale(1.07)}
+.kpi-lien:active{transform:translateY(-1px)}
 .kpi-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
-.kpi-ic{width:34px;height:34px;flex:0 0 34px;border-radius:10px;display:grid;place-items:center;margin-top:-2px;transition:transform .2s var(--ease)}
-.kpi.card.hover:hover .kpi-ic{transform:scale(1.08) rotate(-3deg)}
+.kpi-ic{width:34px;height:34px;flex:0 0 34px;border-radius:10px;display:grid;place-items:center;margin-top:-1px;transition:transform .2s var(--spring)}
+@media (prefers-reduced-motion:reduce){
+  .kpi-lien:hover{transform:none}
+  .kpi-lien:hover .kpi-fleche,.kpi-lien:hover .kpi-ic{transform:none}
+}
+/* Le filet et la bordure de survol lisent la MÊME couleur que la pastille : une seule
+   décision de teinte par tuile, portée par `tone`. */
+.kpi.tone-ember,.kpi-accent.tone-ember{color:var(--ember1)}
+.kpi.tone-blue,.kpi-accent.tone-blue{color:var(--blue)}
+.kpi.tone-green,.kpi-accent.tone-green{color:var(--green)}
+.kpi.tone-orange,.kpi-accent.tone-orange{color:var(--orange)}
+.kpi.tone-gold,.kpi-accent.tone-gold{color:#b8860b}
+/* …mais le TEXTE de la tuile ne doit pas hériter de cette teinte : seuls le filet, la
+   pastille et la bordure de survol s'en servent. */
+.kpi .lbl{color:var(--muted)}
+.kpi .val{color:var(--text)}
+.kpi .sub{color:var(--muted)}
 .kpi-ic.tone-ember{color:var(--ember1);background:var(--rosso-bg)}
 .kpi-ic.tone-blue{color:var(--blue);background:var(--blue-bg)}
 .kpi-ic.tone-green{color:var(--green);background:var(--green-bg)}
