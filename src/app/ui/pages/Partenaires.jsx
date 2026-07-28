@@ -8,6 +8,7 @@ import Badge from "../components/Badge.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import DataTable from "../components/DataTable.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import ApportForm from "../components/PartnerContributions.jsx";
 import { apportType, apportsOfPartner } from "../lib/apports.js";
@@ -152,27 +153,24 @@ function Partenaires() {
             <Card key={p.id}
               title={<span className="card-ttl"><Icon name="handshake" size={15} /> {p.name}</span>}
               more={<span className="sub">Commissions {euro(sumCash(ap))} · Nature {euro(sumKind(ap))}</span>}>
-              <div className="tablewrap" style={{ border: "none" }}>
-                <table>
-                  <thead><tr><th>Date</th><th>Type</th><th>Libellé</th><th className="ta-r">Valeur</th><th></th></tr></thead>
-                  <tbody>
-                    {ap.map((a) => {
-                      const t = apportType(a.type);
-                      return (
-                        <tr key={a.id}>
-                          <td className="tnum" style={{ whiteSpace: "nowrap" }}>{frDate(a.date)}</td>
-                          <td style={{ whiteSpace: "nowrap" }}><Badge tone={t.tone}>{t.label}</Badge>{t.cash && <span className="hint" style={{ marginLeft: 6 }}>→ CA</span>}</td>
-                          <td>{a.label}</td>
-                          <td className="ta-r tnum">{euro(a.value)}</td>
-                          <td style={{ textAlign: "right" }}>
-                            {canEdit && <button className="iconbtn del" title="Supprimer" onClick={() => removeApport(a)}><Icon name="trash" size={15} /></button>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                rows={ap}
+                rowKey={(a) => a.id}
+                cols={[
+                  { k: "date", t: "Date", td: { whiteSpace: "nowrap" }, cell: (a) => <span className="tnum">{frDate(a.date)}</span> },
+                  // Le libellé identifie l'apport bien mieux que sa date : c'est lui qui
+                  // devient le titre de la carte en écran étroit.
+                  { k: "label", t: "Libellé", principal: true, cell: (a) => a.label },
+                  { k: "type", t: "Type", td: { whiteSpace: "nowrap" },
+                    cell: (a) => { const t = apportType(a.type); return <>
+                      <Badge tone={t.tone}>{t.label}</Badge>{t.cash && <span className="hint" style={{ marginLeft: 6 }}>→ CA</span>}
+                    </>; } },
+                  { k: "value", t: "Valeur", th: { className: "ta-r" }, td: { textAlign: "right" },
+                    cell: (a) => <span className="tnum">{euro(a.value)}</span> },
+                  { k: "actions", t: "", actions: true, td: { textAlign: "right" },
+                    cell: (a) => (canEdit ? <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer l'apport ${a.label}`} onClick={() => removeApport(a)}><Icon name="trash" size={15} /></button> : null) },
+                ]}
+              />
             </Card>
           ))}
         </div>

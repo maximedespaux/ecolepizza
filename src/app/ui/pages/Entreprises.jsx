@@ -4,6 +4,7 @@ import { getCompanies, createCompany } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
+import DataTable from "../components/DataTable.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
@@ -46,23 +47,31 @@ export default function Entreprises() {
         {shown.length === 0 ? (
           <EmptyState icon="building">{rows.length === 0 ? "Aucune entreprise. Crée-en une pour inscrire un groupe de stagiaires." : "Aucune entreprise ne correspond à ta recherche."}</EmptyState>
         ) : (
-          <div className="tablewrap" style={{ border: "none" }}>
-            <table>
-              <thead><tr><th>Entreprise</th><th>SIRET</th><th>Ville</th><th>Référent</th><th>Stagiaires</th><th /></tr></thead>
-              <tbody>
-                {shown.map((c) => (
-                  <tr key={c.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/entreprises/${c.id}`)}>
-                    <td><b>{c.name}</b>{c.email && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{c.email}</span>}</td>
-                    <td className="mono" style={{ fontSize: 12 }}>{c.siret || "—"}</td>
-                    <td>{c.town || "—"}</td>
-                    <td>{[c.representative_civ, c.representative_name].filter(Boolean).join(" ") || "—"}</td>
-                    <td><Badge tone={c.learner_count > 0 ? "b" : "n"}>{c.learner_count || 0}</Badge></td>
-                    <td style={{ textAlign: "right" }}><Icon name="chevron-right" size={16} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={shown}
+            rowKey={(c) => c.id}
+            /* La ligne entière ouvre la fiche : `role`/`tabIndex`/Entrée pour que ce soit vrai
+               aussi au clavier — une ligne cliquable à la souris seule est une impasse. */
+            rowProps={(c) => ({
+              style: { cursor: "pointer" },
+              role: "link",
+              tabIndex: 0,
+              "aria-label": `Ouvrir la fiche de ${c.name}`,
+              onClick: () => navigate(`/entreprises/${c.id}`),
+              onKeyDown: (e) => { if (e.key === "Enter") navigate(`/entreprises/${c.id}`); },
+            })}
+            cols={[
+              { k: "name", t: "Entreprise", principal: true,
+                cell: (c) => <><b>{c.name}</b>{c.email && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{c.email}</span>}</> },
+              { k: "siret", t: "SIRET", td: { fontSize: 12 }, cell: (c) => <span className="mono">{c.siret || "—"}</span> },
+              { k: "town", t: "Ville", cell: (c) => c.town || "—" },
+              { k: "ref", t: "Référent", cell: (c) => [c.representative_civ, c.representative_name].filter(Boolean).join(" ") || "—" },
+              { k: "nb", t: "Stagiaires", cell: (c) => <Badge tone={c.learner_count > 0 ? "b" : "n"}>{c.learner_count || 0}</Badge> },
+              // Le chevron ne sert qu'au mode tableau : en carte, c'est la carte entière qui
+              // s'ouvre et une flèche isolée en pied ne désignerait rien.
+              { k: "go", t: "", actions: true, td: { textAlign: "right" }, cell: () => <Icon name="chevron-right" size={16} /> },
+            ]}
+          />
         )}
       </Card>
 
