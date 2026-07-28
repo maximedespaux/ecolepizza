@@ -126,22 +126,24 @@ ailleurs.
 
 ## 4. Chantiers — ESPACE STAGIAIRE (par valeur/effort décroissant)
 
-### 4.1 Trois corrections courtes, effet sur toute l'application
+### 4.1 ✅ Trois corrections courtes — FAIT le 2026-07-28 (commit c6b5df2)
 
-1. **La classe `.hint` n'existe pas dans le CSS.** Utilisée dans **52 fichiers**, des dizaines
-   de fois par page (tous les « Chargement… », tous les textes d'aide). Sans règle, ce texte
-   hérite du corps normal : toute la hiérarchie visuelle secondaire est en réalité absente.
-   → écrire `.hint{color:var(--muted);font-size:13px;line-height:1.5}`. **Une seule règle.**
+1. ✅ **La classe `.hint` n'existait pas dans le CSS.** Comptée à l'exécution : **303 usages
+   dans 53 fichiers**. Règle posée à `app.css:79`, volontairement sans marge (la plupart des
+   appels posent la leur).
 
-2. **`Field.jsx` ne génère aucun `id`/`htmlFor`** (`components/Field.jsx:1-9`). Se propage à
-   toute l'application : `grep htmlFor` ne remonte que **3 occurrences** sur tout le front.
-   → `useId()` dans le composant, puis reporter sur les `className="field"` ad hoc
-   (`ProfileModal`, `Boutique`, les 3 assistants).
+2. ✅ **`Field.jsx` ne générait ni `id` ni `htmlFor`** — `useId()` dans `Field` ET
+   `SelectField`, un `id` passé explicitement l'emporte. **Reste à faire** : reporter sur les
+   `className="field"` ad hoc (`ProfileModal`, `Boutique`, les 3 assistants), qui n'utilisent
+   pas le composant. ⚠️ `Field` n'est employée QUE côté administration : non vérifiable depuis
+   une session stagiaire, relue et passée au lint seulement.
 
-3. **Les cartes de formation ne s'ouvrent pas au clavier** (`MonEspace.jsx:238-245`) :
-   `<div onClick>` sans `role`/`tabIndex`/`onKeyDown`. C'est **le point d'entrée principal** de
-   l'espace stagiaire. Même défaut sur `ConstructorGame.jsx:54-59` (mini-jeu injouable au
-   clavier au-delà du premier remplissage).
+3. ✅ **Cartes de formation et `ConstructorGame` au clavier** — `role`/`tabIndex`/`onKeyDown`
+   (Entrée et Espace, avec `preventDefault` sinon la page défile en même temps). Dans le
+   mini-jeu, une case n'est focalisable que si elle a quelque chose à faire.
+   Corrigé au passage : les dix cartes portaient le **même nom accessible**, et ce nom se
+   décidait sur `locked` au lieu de `openable` — une formation terminée sans inscription
+   rattachée annonçait « voir mes documents » puis ouvrait « Formation non suivie ».
 
 ### 4.2 Branché à moitié / à finir
 
@@ -157,10 +159,21 @@ ailleurs.
    et perdent Fredoka, les coins 22px et le retour tactile. Or `IntroGuide` est **le tout
    premier écran vu par un nouveau stagiaire**.
 
-6. **Cadres exclusifs sans source serveur.** `attribues = []` en dur dans `ProfileModal` : les
-   3 exclusifs s'affichent tous verrouillés. → colonne sur `learner` + écran d'attribution côté
-   admin. Décider aussi si le **choix** de cadre doit être visible des autres (aujourd'hui il
-   vit en `localStorage`, donc les autres voient le cadre de parcours, pas le choix).
+6. **Cadres : le choix n'existe que dans SON navigateur.** ✅ Corrigé le 2026-07-28 (commit
+   774b219) pour l'utilisateur courant : `useCadreChoisi` porte le choix en état React et la
+   Communauté l'applique **en direct** (avant, `CADRE_EVENT` était émis mais personne ne
+   l'écoutait, et la Communauté lisait de toute façon le cadre de parcours).
+   **Reste à faire** : persister le choix côté serveur pour que les AUTRES le voient. Le canal
+   existe déjà tout tracé — l'avatar fait exactement cela (`learner.avatar`,
+   `PUT /api/mon-espace/avatar`, relu par `getMyProfile` et `authorProfile`). Il faut une
+   colonne `learner.cadre` → **migration, donc accord explicite de Maxime**.
+   Séparément : `attribues = []` en dur dans `ProfileModal`, les 3 cadres exclusifs
+   s'affichent donc tous verrouillés → même colonne + écran d'attribution côté admin.
+
+6 bis. **`components/AvatarCadre.jsx` n'est appelé nulle part.** Écrit le 2026-07-28 pour
+   porter le cadre partout, jamais branché. Conséquence visible : l'avatar de l'en-tête
+   (`StudentLayout.jsx:218`) ne porte pas son cadre, alors que le profil promet en toutes
+   lettres « Il entoure ton avatar **partout**, y compris dans la Communauté ».
 
 ### 4.3 Accessibilité et finition
 
@@ -336,6 +349,8 @@ ailleurs.
 
 - **Tables `hs_*`** (maîtrise sanitaire) toujours en base, orphelines. Commande de suppression
   fournie, non exécutée — elles contenaient un relevé qu'il avait saisi.
+- **Colonne `learner.cadre`** — pour que le cadre choisi soit visible des autres stagiaires
+  (§4.2 point 6). Petite migration, sur le modèle exact de `learner.avatar`.
 - **Espace d'échange** : les deux questions du §4.24.
 - **Cadres exclusifs** : qui les attribue, et via quel écran ?
 - **Photos** : ~40 images disponibles sur ecole-pizza.com (autorisation donnée). Une seule
