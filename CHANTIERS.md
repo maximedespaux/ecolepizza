@@ -209,17 +209,29 @@ passée en administration et `/communaute` est une route stagiaire. À regarder 
   intitulé) et `actions` (passe en pied). Le `<thead>` est masqué en `clip-path` et non en
   `display:none`, pour rester lu par un lecteur d'écran.
 
-**CE QUI RESTE — mécanique, et listé :**
+**✅ CONVERSION FAITE — 15 tableaux sur 17.** `Opcos` · `Partenaires` · `Entreprises` ·
+`Equipe` · `Formations` (glisser-déposer préservé) · `Factures` · `Comptabilite` (ligne de
+totaux) · `Dashboard` · `Platform` · `Quiz` · `AccessRoles` ×2 · `StagiaireDetail` ·
+`Modeles` ×2. Tous deviennent des cartes sous 700 px de conteneur.
 
-1. **Convertir les 13 autres pages à tableau** vers `<DataTable>`. `Opcos.jsx` est le MODÈLE à
-   recopier. Les pages : `Stagiaires`, `Sessions`, `Factures`, `Comptabilite`, `Inventaire`,
-   `Partenaires`, `Entreprises`, `Formations`, `Modeles`, `Suivi`, `AccessRoles`, `Equipe`,
-   `Audit` — repérables par `grep -l tablewrap ui/pages`.
-2. **Passer les ~29 pages de `useState([])` à `useState(null)`** et brancher `ListeEtat` ou
-   `<DataTable>`. Tant qu'elles sont à `[]`, elles annoncent « Aucun résultat » pendant tout
-   le chargement. `grep -lE "useState\(\[\]\)" ui/pages/*.jsx`.
-3. Toujours en attente : `pages/FicheRecette.jsx` (1028 lignes, routé nulle part) et les routes
-   serveur des cœurs (`lireCoeurs`, `/quest/hearts`), survivantes du retrait de la mécanique.
+**Les DEUX qui restent, et pourquoi :**
+- `Ventes` — ses lignes se **déplient** sur un détail. `DataTable` fait une ligne par élément ;
+  il faudrait lui ajouter la notion de sous-lignes, ce qui est un chantier à part entière.
+- `Modeles`, le tableau principal — six colonnes dont trois calculées par des fonctions
+  immédiates de vingt lignes. Mécanique, mais le risque d'erreur silencieuse y est réel :
+  à faire seule, en la regardant à l'écran.
+
+**Corrigé pendant les conversions** : le bouton « Envoyer » d'un QCM non envoyable n'était
+qu'atténué à 45 % d'opacité, donc **cliquable** — il partait et l'erreur arrivait après. Et la
+ligne cliquable d'`Entreprises` ne répondait qu'à la souris.
+
+**RESTE par ailleurs :**
+1. **Passer les ~29 pages de `useState([])` à `useState(null)`.** Tant qu'elles sont à `[]`,
+   elles annoncent « Aucun résultat » pendant tout le chargement. `DataTable` affiche déjà le
+   squelette pour `null` — il ne manque que l'initialisation.
+   `grep -lE "useState\(\[\]\)" ui/pages/*.jsx`.
+2. `pages/FicheRecette.jsx` (1028 lignes, routé nulle part) et les routes serveur des cœurs
+   (`lireCoeurs`, `/quest/hearts`), survivantes du retrait de la mécanique.
 
 Un lanceur de migration existe (le client `mysql` n'est pas installé sur la machine) :
 `node <scratchpad>/migrer.js database/migrations/NNN.sql` — il réutilise
