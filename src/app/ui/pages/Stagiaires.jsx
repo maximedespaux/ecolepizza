@@ -141,17 +141,17 @@ function Stagiaires() {
       />
       <StatusMessage status={status} />
 
-      <div className="searchbar">
+      {/* Recherche ET filtres dans un SEUL panneau : ils flottaient jusqu'ici en deux blocs
+          libres entre le titre et la liste, si bien que six contrôles se lisaient comme des
+          éléments épars plutôt que comme un même outil. */}
+      <div className="filtres">
         <input
-          className="inp"
+          className="inp filtres-q"
           aria-label="Rechercher un stagiaire par nom, prénom ou e-mail"
           placeholder="Rechercher un stagiaire (nom, prénom ou email)…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "10px 0 4px" }}>
         <span ref={badgeRef} style={{ position: "relative" }}>
           <button type="button" className="inp" style={{ cursor: "pointer", textAlign: "left", minWidth: 160, maxWidth: 220 }}
             onClick={() => setBadgeOpen((o) => !o)}>
@@ -196,7 +196,7 @@ function Stagiaires() {
           <option value="no">Sans compte</option>
         </select>
         {activeFilters > 0 && (
-          <button type="button" className="btn sm ghost" onClick={clearFilters}><Icon name="x" size={13} /> Effacer les filtres ({activeFilters})</button>
+          <button type="button" className="btn sm ghost filtres-fin" onClick={clearFilters}><Icon name="x" size={13} /> Effacer les filtres ({activeFilters})</button>
         )}
       </div>
 
@@ -216,12 +216,22 @@ function Stagiaires() {
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"} · {l.phone || "—"}</span>
                   </span>
                 </Link>
-                <span style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end", maxWidth: 300 }}>
+                {/* Pastilles de niveau : information SECONDAIRE. Elles s'effacent sous 760 px
+                    au profit du nom et des actions — c'est ce qu'on vient chercher dans une
+                    liste, et la fiche les rappelle de toute façon. */}
+                <span className="niveaux-chips">
                   {(l.levels || "").split(",").map((s) => s.trim()).filter(Boolean).map((lv) => (
                     <span key={lv} className="lvl-chip" title={lv} style={{ background: codeColor(lv) }}>{lv}</span>
                   ))}
                 </span>
-                {l.professional_status && <Badge tone="n">{l.professional_status}</Badge>}
+                {/* `statut-chip` : sans elle, un statut long — « Gérant, Président, en nom
+                    propre » — réclamait toute la largeur qu'il voulait et écrasait la colonne
+                    du NOM à zéro pixel. Le nom se coupait alors caractère par caractère, sur
+                    la seule ligne où la personne dirige une entreprise. Le badge ne grandit
+                    plus, se tronque, et garde son texte entier en infobulle. */}
+                {l.professional_status && (
+                  <Badge tone="n" className="statut-chip" title={l.professional_status}>{l.professional_status}</Badge>
+                )}
                 {l.has_account ? (
                   <>
                     <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" aria-label={`Réinitialiser le mot de passe de ${l.last_name} ${l.first_name}`} onClick={() => resetPassword(l)}><Icon name="key" size={15} /></button>

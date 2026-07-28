@@ -347,6 +347,43 @@ tbody tr:last-child td{border-bottom:none}
 .searchbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
 .searchbar .inp{max-width:320px}
 
+/* ═══ BARRE DE FILTRES ══════════════════════════════════════════════════════════════════════
+   Recherche et filtres flottaient LIBREMENT entre le titre et la liste : cinq contrôles posés
+   côte à côte sans rien qui les relie, qui se lisaient comme des éléments épars plutôt que
+   comme un seul outil. Le panneau les rassemble, et la liste qui suit gagne un début franc.
+   Fond `--bg2` et non `--surface` : la barre est un OUTIL, pas du contenu. Elle doit se lire
+   comme une strate en retrait, sinon elle rivalise avec la carte qui porte les données. */
+.filtres{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:12px 14px;margin-bottom:16px;border-radius:var(--r-sm);
+  background:var(--bg2);border:1px solid var(--border-soft)}
+.filtres .inp,.filtres select{max-width:200px}
+/* La recherche prend la place restante : c'est le contrôle qu'on utilise en premier, et le
+   seul dont la longueur aide vraiment. */
+.filtres .filtres-q{flex:1 1 220px;max-width:none}
+/* Séparateur avant les actions de fin (« Effacer les filtres ») — il évite qu'on prenne un
+   bouton d'action pour un filtre de plus. */
+.filtres .filtres-fin{margin-left:auto}
+
+/* Pastille de statut professionnel dans une liste. Elle ne DEMANDE plus toute la largeur
+   qu'elle voudrait : « Gérant, Président, en nom propre » écrasait sinon la colonne du nom à
+   zéro pixel, et le nom se coupait caractère par caractère — sur la seule ligne où la
+   personne dirige une entreprise. Texte entier conservé en infobulle. */
+/* `.badge.statut-chip` et non `.statut-chip` seule : la règle `.badge` est déclarée PLUS BAS
+   dans cette feuille et, à spécificité égale, c'est l'ordre qui tranche — le `display` du
+   badge écrasait le `display:none` ci-dessous, et la pastille restait large. */
+.badge.statut-chip{flex:none;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.niveaux-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:300px}
+/* Sous 760 px, la ligne portait avatar + nom + jusqu'à six pastilles de niveau + le statut
+   + quatre boutons : le nom, seul élément qu'on cherche réellement, était le premier écrasé.
+   Les deux informations SECONDAIRES s'effacent — la fiche du stagiaire les rappelle. */
+@media(max-width:760px){
+  .niveaux-chips,.badge.statut-chip{display:none}
+}
+@media(max-width:560px){
+  .filtres{padding:10px}
+  .filtres .inp,.filtres select{max-width:none;flex:1 1 100%}
+}
+
 /* Badges ------------------------------------------------------------- */
 .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:99px;border:1px solid transparent}
 .badge.g{color:var(--green);background:var(--green-bg)} .badge.a{color:var(--ember2);background:var(--amber-bg)}
