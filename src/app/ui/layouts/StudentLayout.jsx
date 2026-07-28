@@ -14,7 +14,7 @@ const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 
 // Sections débloquées seulement après avoir franchi le point d'accès (breakpoint) d'une formation.
-const GATED_PATHS = ["/pizza-quest", "/empatements", "/garnitures", "/realisations", "/hygiene", "/communaute", "/notions"];
+const GATED_PATHS = ["/pizza-quest", "/empatements", "/garnitures", "/realisations", "/communaute", "/notions"];
 
 const LOCK_TITLE = "Signez vos documents jusqu'au point d'accès pour débloquer";
 
@@ -30,7 +30,6 @@ const OUTILS = [
   { to: "/empatements", ic: "wheat", label: "Mes empâtements" },
   { to: "/garnitures", ic: "list-checks", label: "Mes garnitures" },
   { to: "/realisations", ic: "pizza", label: "Mes réalisations" },
-  { to: "/hygiene", ic: "shield", label: "Maîtrise sanitaire" },
   { to: "/notions", ic: "book-open", label: "Notions & lexique" },
 ];
 
