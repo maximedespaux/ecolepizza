@@ -229,7 +229,21 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .quick-btn:hover .quick-ic{color:#fff;background:var(--grad-ember)}
 
 /* Table -------------------------------------------------------------- */
-.tablewrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+/* `overflow-x:auto` et NON `overflow:hidden`.
+   Ce conteneur porte la quasi-totalité des tableaux de l'administration. En `hidden`, sur un
+   écran étroit, les dernières colonnes étaient simplement COUPÉES — sans barre, sans ombre,
+   sans rien qui indique qu'il en manque. Ce n'était pas un débordement disgracieux mais une
+   perte d'information silencieuse : on lisait un tableau en croyant le voir en entier.
+   `overflow-y:hidden` conservé pour que les coins arrondis continuent de rogner les angles
+   des lignes. L'ombre de défilement dit qu'il reste quelque chose à droite. */
+.tablewrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  overflow-x:auto;overflow-y:hidden;
+  background-image:linear-gradient(to right,var(--surface),var(--surface)),
+    linear-gradient(to right,rgba(10,12,30,.14),transparent);
+  background-position:right center,right center;
+  background-repeat:no-repeat;
+  background-size:24px 100%,14px 100%;
+  background-attachment:local,scroll}
 table{width:100%;border-collapse:collapse;font-size:14px}
 thead th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border)}
 tbody td{padding:12px 14px;border-bottom:1px solid var(--border-soft)}
@@ -260,11 +274,19 @@ tbody tr:last-child td{border-bottom:none}
 .empty{text-align:center;padding:52px 20px;color:var(--muted)}
 .empty .big{display:grid;place-items:center;width:78px;height:78px;margin:0 auto 16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border-soft);color:var(--dim);font-size:34px}
 .empty .big svg{opacity:.92}
+/* Titre et explication d'un état vide. Le titre dit CE QU'IL N'Y A PAS, le texte dit QUOI
+   FAIRE — sur un écran vide c'est la seule chose à lire, elle mérite une largeur de lecture
+   confortable plutôt que toute la page. */
+.empty-t{margin:0;font:700 15.5px/1.3 var(--font-b);color:var(--text)}
+.empty-x{margin:6px auto 0;max-width:46ch;font-size:13.5px;line-height:1.55;color:var(--muted)}
 
 /* Status message ----------------------------------------------------- */
 .status{border-radius:var(--r-sm);padding:9px 13px;font-size:13.5px;font-weight:500;margin:4px 0}
 .status.err{color:var(--ember1);background:var(--rosso-bg)}
 .status.ok{color:var(--green);background:var(--green-bg)}
+/* Neutre : ni réussite ni échec. « Chargement… » s'affichait jusqu'ici en vert, faute de ce
+   cas — le composant ne connaissait que « erreur » et « le reste ». */
+.status.info{color:var(--muted);background:var(--surface2);border:1px solid var(--border-soft)}
 
 /* Hero (dashboard) --------------------------------------------------- */
 .hero{position:relative;overflow:hidden;border-radius:20px;padding:30px 32px;margin-bottom:22px;color:#fff;background:var(--grad-navy)}

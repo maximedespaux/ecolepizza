@@ -37,7 +37,7 @@ function Opcos() {
 
       <Card title={`OPCO / financeurs (${items.length})`}>
         {items.length === 0 ? (
-          <EmptyState icon="€">Aucun OPCO.</EmptyState>
+          <EmptyState icon="euro">Aucun OPCO.</EmptyState>
         ) : (
           <div className="tablewrap" style={{ border: "none" }}>
             <table>
