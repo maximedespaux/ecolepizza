@@ -96,11 +96,14 @@ export const adjOf = (k) => ADJONCTIONS.find((a) => a.key === k) || {};
 export const adjonctionsPct = (dp) => (dp.adjonctions || []).reduce((s, a) => s + num(a.pct), 0);
 // Eau de compensation (manuel p.30/32) — les farines de substitution et les graines torréfiées
 // assèchent la pâte : on ajoute de l'eau de bassinage pour compenser (en % de la farine).
-export const substWaterG = (dp) => subsOf(dp).reduce((s, x) => s + subOf(x.key).bass10 * (num(x.pct) / 10), 0); // g/kg de farine
+// `subsPlafonnees` et non `subsOf` : l'eau de bassinage compense les farines RÉELLEMENT
+// présentes dans la pâte. Calculée sur les pourcentages bruts, elle ajoutait de l'eau pour
+// des farines que le plafond venait d'écarter.
+export const substWaterG = (dp) => subsPlafonnees(dp).reduce((s, x) => s + subOf(x.key).bass10 * (num(x.pct) / 10), 0); // g/kg de farine
 export const adjWaterPct = (dp) => (dp.adjonctions || []).reduce((s, a) => s + num(a.pct) * (adjOf(a.key).water || 0), 0);
 // Absorption de la farine de base (blé) selon son Type/Tipo, au prorata de sa part.
 export const tipoWaterPct = (dp) => {
-  const blePct = Math.max(0, 100 - Math.min(60, subsOf(dp).reduce((s, x) => s + num(x.pct), 0)));
+  const blePct = Math.max(0, 100 - subsPlafonnees(dp).reduce((s, x) => s + num(x.pct), 0));
   return (tipoOf(dp.tipo)?.water || 0) * (blePct / 100);
 };
 export const compWaterPct = (dp) => +(substWaterG(dp) / 10 + adjWaterPct(dp) + tipoWaterPct(dp)).toFixed(2);
@@ -141,6 +144,30 @@ export const subOf = (k) => SUBSTITUTIONS.find((s) => s.key === k) || { key: k, 
 export const subsOf = (dp) => {
   const arr = Array.isArray(dp.substitutions) ? dp.substitutions : (dp && dp.substitution ? [dp.substitution] : []);
   return arr.filter((s) => s && s.key && num(s.pct) > 0);
+};
+
+/** Plafond de substitution : au-delà, ce n'est plus une pâte à pizza (manuel p.32). */
+export const SUB_MAX = 60;
+
+/**
+ * Les substitutions RAMENÉES SOUS LE PLAFOND, en gardant leurs proportions relatives.
+ *
+ * Le plafond de 60 % n'était appliqué qu'au calcul de la farine de base : les LIGNES, elles,
+ * affichaient les pourcentages bruts. Tipo 1 à 50 % + Tipo 2 à 50 % donnait donc une fiche à
+ * 40 % de blé + 50 % + 50 % — soit 140 % de farine, poids compris. Une fiche technique qui
+ * ne totalise pas 100 % n'est pas seulement inélégante : elle est fausse, et c'est sur elle
+ * qu'un stagiaire pèse.
+ *
+ * On met à l'échelle plutôt que de tronquer la dernière : tronquer dépendrait de l'ordre de
+ * saisie, alors que le stagiaire a exprimé un RAPPORT entre ses farines — moitié-moitié reste
+ * moitié-moitié, à 30/30 au lieu de 50/50.
+ */
+export const subsPlafonnees = (dp) => {
+  const subs = subsOf(dp);
+  const brut = subs.reduce((s, x) => s + num(x.pct), 0);
+  if (brut <= SUB_MAX) return subs;
+  const k = SUB_MAX / brut;
+  return subs.map((x) => ({ ...x, pct: +(num(x.pct) * k).toFixed(2), _plafonne: true }));
 };
 
 // Ratio pâte/farine. Le COULAGE (dp.hydra) reste calé sur le W ; l'absorption des farines/produits
@@ -206,8 +233,10 @@ export function computeBuild(r) {
   const reste = dpMode === "farine" ? totalDough - effNb * patonG : 0;
   const farineG = totalDough / addPct;
   const gOf = { farine: farineG, levure: farineG * num(dp.levure) / 100, sel: farineG * num(dp.sel) / 100, huile: farineG * num(dp.huile) / 100 };
-  const subs = subsOf(dp);
-  const subTotal = Math.min(60, subs.reduce((s, x) => s + num(x.pct), 0));
+  // Les lignes affichées et le total de blé viennent de la MÊME source : c'est ce qui garantit
+  // que la fiche totalise 100 %.
+  const subs = subsPlafonnees(dp);
+  const subTotal = subs.reduce((s, x) => s + num(x.pct), 0);
   const subBassReco = Math.round(substWaterG(dp));
   const compW = compWaterPct(dp); // absorption des farines/produits → part du bassinage
   const totalBass = +(num(dp.bassinage) + compW).toFixed(1);
