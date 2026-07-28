@@ -258,7 +258,7 @@ const listShared = async (req, res) => {
                     `SELECT c.recipe_id, c.user_id, MAX(c.created_at) AS last_at,
                             COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''),
                                      MAX(c.author_name)) AS name,
-                            MAX(l.avatar) AS avatar
+                            MAX(l.avatar) AS avatar, MAX(l.completed_levels) AS lv
                        FROM recipe_comment c
                        LEFT JOIN user u ON u.id = c.user_id
                        LEFT JOIN learner l ON l.user_id = c.user_id
@@ -269,7 +269,11 @@ const listShared = async (req, res) => {
                 );
                 const par = {};
                 for (const x of qui) {
-                    (par[x.recipe_id] ||= []).push({ user_id: x.user_id, name: x.name, avatar: x.avatar });
+                    // `done` = COMPTE des formations terminées, comme pour l'auteur : il porte le
+                    // cadre de la pastille. Jamais la liste des niveaux — le parcours détaillé
+                    // d'un tiers ne regarde personne.
+                    const done = String(x.lv || '').split(',').map((t) => t.trim()).filter(Boolean).length;
+                    (par[x.recipe_id] ||= []).push({ user_id: x.user_id, name: x.name, avatar: x.avatar, done });
                 }
                 rows.forEach((r) => {
                     const tous = par[r.id] || [];

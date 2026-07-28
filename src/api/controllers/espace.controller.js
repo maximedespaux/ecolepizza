@@ -466,6 +466,10 @@ const getMyAccess = async (req, res) => {
         // Au moins une formation TERMINÉE (marquée manuellement OU complétée auto) → débloqué,
         // même sans point d'accès franchi (cas des personnes déjà venues / déjà formées).
         const doneSet = new Set(String(learner.completed_levels || '').split(',').map((s) => s.trim()).filter(Boolean));
+        // Nombre de formations terminées → CADRE porté par l'avatar de l'en-tête. Il est
+        // renvoyé ici plutôt que par un appel dédié : la barre appelle déjà cette route à
+        // chaque page, et le compte est déjà calculé juste au-dessus.
+        const formations_done = doneSet.size;
         let finished = doneSet.size > 0;
         if (!finished && enrollments.length) {
             const steps = await loadOrgSteps(learner.organization_id);
@@ -474,10 +478,10 @@ const getMyAccess = async (req, res) => {
                 if (c.complete) { finished = true; break; }
             }
         }
-        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs, community_news } });
+        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs, community_news, formations_done } });
 
         // AUCUNE formation → verrouillé (rien à débloquer tant qu'il n'est pas inscrit).
-        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs, community_news } });
+        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs, community_news, formations_done } });
         const gating = [];
         for (const e of enrollments) {
             const g = await emargementGate(conn, e, learner.organization_id, agefice);
@@ -485,7 +489,7 @@ const getMyAccess = async (req, res) => {
         }
         // Inscrit : débloqué si aucune formation n'a de point d'accès, ou si au moins un est franchi.
         const quest_unlocked = gating.length === 0 || gating.some((g) => !g.locked);
-        res.json({ data: { quest_unlocked, pending_docs, community_news } });
+        res.json({ data: { quest_unlocked, pending_docs, community_news, formations_done } });
     } catch (err) {
         console.error('Erreur accès stagiaire :', err);
         res.json({ data: { quest_unlocked: true, pending_docs: 0, community_news: 0 } });

@@ -5,8 +5,10 @@ import PageHead from "../components/PageHead.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import DoughBar from "../components/DoughBar.jsx";
-import { euro, colorOf } from "../lib/format.js";
+import AvatarCadre from "../components/AvatarCadre.jsx";
+import { euro, colorOf, initials } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
+import { useCountUp } from "../lib/useCountUp.js";
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
 import { cadreFor, cadrePorteDe, useCadreChoisi } from "../lib/cadres.js";
 import { UserContext } from "../context/UserContext.jsx";
@@ -119,6 +121,40 @@ function Tags({ text }) {
   return <div className="tag-row">{tags.map((t) => <span key={t} className="badge-tag">#{t}</span>)}</div>;
 }
 
+/**
+ * En-tête de publication : QUI parle, avant ce qui est dit.
+ *
+ * La carte annonçait d'abord son titre, l'auteur venait en petit dessous. Or une réponse de
+ * Maestro ne se lit pas comme celle d'un Bronze : l'identité doit arriver en premier, et le
+ * cadre à une taille où il se voit — à 18 px l'anneau dégradé n'était qu'un liseré, invisible
+ * pour la récompense qu'il est censé être.
+ *
+ * `AvatarCadre` est le composant prévu pour ça (il fait suivre l'épaisseur de l'anneau au
+ * diamètre) ; il était écrit et appelé nulle part.
+ */
+function PostHead({ id, name, avatar, cadre, date, onOpen, children }) {
+  const av = avatar ? parseAvatar(avatar) : null;
+  const [prenom = "", nom = ""] = String(name || "Stagiaire").split(" ");
+  const ouvrir = (e) => { e.stopPropagation(); if (id) onOpen(id); };
+  return (
+    <div className="post-head">
+      <AvatarCadre
+        avatar={av}
+        initiales={initials(prenom, nom)}
+        cadre={cadre?.id}
+        size={38}
+        title={`Voir le profil${cadre && cadre.id !== "aucun" ? ` · cadre ${cadre.nom}` : ""}`}
+        onClick={ouvrir}
+      />
+      <span className="post-who">
+        <button className="post-name" onClick={ouvrir}>{name || "Stagiaire"}</button>
+        <span className="post-date">{date}</span>
+      </span>
+      {children}
+    </div>
+  );
+}
+
 // Petite pastille cliquable « auteur » (avatar + nom) → ouvre son profil.
 // Le `cadre` est résolu par le parent (cf. `cadreDe`) : lui seul sait qui est l'utilisateur
 // courant, et lui seul est rerendu quand ce dernier change de cadre.
@@ -149,15 +185,20 @@ function AuthorChip({ id, name, avatar, cadre, onOpen }) {
  * Chaque pastille est cliquable et ouvre le profil, comme l'auteur juste au-dessus : une
  * pastille qui ressemble à l'AuthorChip et ne réagirait pas serait une fausse promesse.
  */
-function Commenters({ gens, total, onOpen }) {
+function Commenters({ gens, total, cadreDe, onOpen }) {
   if (!gens || !gens.length) return null;
   const reste = Math.max(0, (total || gens.length) - gens.length);
   return (
     <span className="comm-faces" title={gens.map((g) => g.name || "Stagiaire").join(", ") + (reste ? ` et ${reste} autre${reste > 1 ? "s" : ""}` : "")}>
       {gens.map((g, i) => {
         const av = g.avatar ? parseAvatar(g.avatar) : null;
+        // Le cadre vaut ici aussi : c'est la seule chose qui distingue, dans la rangée, la
+        // réponse d'un Maestro de celle d'un débutant. Anneau aminci (`sm`) — à 21 px,
+        // l'épaisseur de 3 px des grands avatars mangeait le visage.
+        const c = cadreDe(g.user_id, g.done);
         return (
-          <button key={g.user_id || i} className="comm-face" aria-label={g.name || "Stagiaire"}
+          <button key={g.user_id || i} className={`comm-face${c.id !== "aucun" ? ` cadre cadre-${c.id} sm` : ""}`}
+            aria-label={`${g.name || "Stagiaire"}${c.id !== "aucun" ? ` · cadre ${c.nom}` : ""}`}
             style={{ zIndex: gens.length - i, ...(av ? { background: av.color, color: "#fff" } : null) }}
             onClick={(e) => { e.stopPropagation(); if (g.user_id) onOpen(g.user_id); }}>
             {av ? av.emoji : <Icon name="user" size={10} />}
@@ -172,6 +213,11 @@ function Commenters({ gens, total, onOpen }) {
 // Fenêtre profil de l'auteur : avatar, nom, nombre de fiches partagées, cœurs reçus.
 function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
   const av = profile && profile.avatar ? parseAvatar(profile.avatar) : null;
+  // Les deux compteurs montent de 0 à leur valeur — c'est le seul endroit de la Communauté
+  // où l'on regarde le bilan de quelqu'un, et un nombre qui s'installe se retient mieux qu'un
+  // nombre déjà posé. Le hook respecte prefers-reduced-motion et rend la valeur finale d'emblée.
+  const fiches = useCountUp(profile?.shared_count || 0, { duration: 700 });
+  const coeurs = useCountUp(profile?.likes_received || 0, { duration: 700 });
   return createPortal(
     <div className="overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
@@ -183,9 +229,13 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
           {loading || !profile ? <p className="hint">Chargement…</p> : (
             <>
               {/* Le cadre de parcours entoure le grand avatar : c'est le seul endroit de la
-                  Communauté où on regarde quelqu'un en face, il mérite l'effet complet. */}
-              <span className={`prof-ava ${cadreProfil.id !== "aucun" ? `cadre cadre-${cadreProfil.id}` : ""}`}
-                style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
+                  Communauté où on regarde quelqu'un en face, il mérite l'effet complet —
+                  entrée ressort, et un halo tiré de la couleur de l'avatar. */}
+              <span className={`prof-ava-wrap ${cadreProfil.id !== "aucun" ? "a-cadre" : ""}`}
+                style={{ "--halo": av ? av.color : "var(--ember1)" }}>
+                <span className={`prof-ava ${cadreProfil.id !== "aucun" ? `cadre cadre-${cadreProfil.id}` : ""}`}
+                  style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
+              </span>
               {cadreProfil.id !== "aucun" && (
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginTop: 8 }}>Cadre {cadreProfil.nom}</div>
               )}
@@ -206,9 +256,9 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
                   ))}
                 </div>
               )}
-              <div style={{ display: "flex", justifyContent: "center", gap: 22, marginTop: 16 }}>
-                <span><b style={{ fontSize: 18 }}>{profile.shared_count}</b><br /><span className="hint">fiche{profile.shared_count > 1 ? "s" : ""} partagée{profile.shared_count > 1 ? "s" : ""}</span></span>
-                <span><b style={{ fontSize: 18 }}>♥ {profile.likes_received}</b><br /><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>
+              <div className="prof-stats">
+                <span><b className="tnum">{fiches}</b><span className="hint">fiche{profile.shared_count > 1 ? "s" : ""} partagée{profile.shared_count > 1 ? "s" : ""}</span></span>
+                <span><b className="tnum"><Icon name="heart" size={15} fill="currentColor" /> {coeurs}</b><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>
               </div>
               {(profile.phone || profile.email) && (
                 <div style={{ marginTop: 16, textAlign: "left", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -441,6 +491,8 @@ export default function Communaute() {
                   <CommCard key={s.id} recipe={s}>
                     <div className="comm-card2-body" onClick={() => setOpenId(s.id)} role="button" tabIndex={0}
                       onKeyDown={(e) => { if (e.key === "Enter") setOpenId(s.id); }}>
+                      <PostHead id={s.author_user_id} name={s.author_name} avatar={s.author_avatar}
+                        cadre={cadreDe(s.author_user_id, s.author_done)} date={s.updated_at} onOpen={openProfile} />
                       <span className="comm-kind" style={{ background: `color-mix(in srgb, ${km.color} 15%, var(--surface))`, color: km.color }}>
                         <Icon name={km.icon} size={12} /> {km.label}{s.kind === "RECETTE" && s.type ? ` · ${s.type}` : ""}
                       </span>
@@ -460,10 +512,6 @@ export default function Communaute() {
                           </span>
                         )}
                       </div>
-                      <div className="comm-meta">
-                        <AuthorChip id={s.author_user_id} name={s.author_name} avatar={s.author_avatar} cadre={cadreDe(s.author_user_id, s.author_done)} onOpen={openProfile} />
-                        <span>· {s.updated_at}</span>
-                      </div>
                       <Tags text={s.description} />
                     </div>
                     <div className="comm-foot">
@@ -473,7 +521,7 @@ export default function Communaute() {
                       <button className="btn sm ghost" onClick={() => setOpenId(s.id)} title="Voir &amp; commenter">
                         <Icon name="message-circle" size={13} /> {commentCount(s)}
                       </button>
-                      <Commenters gens={s.commenters} total={s.commenters_total} onOpen={openProfile} />
+                      <Commenters gens={s.commenters} total={s.commenters_total} cadreDe={cadreDe} onOpen={openProfile} />
                       <button className={"btn sm " + (wish.has(s.id) ? "primary" : "ghost") + " comm-save"} onClick={() => toggleWish(s.id)}
                         title={wish.has(s.id) ? "Retirer de ma wishlist" : "Mettre de côté (wishlist)"}>
                         <Icon name="bookmark" size={13} fill={wish.has(s.id) ? "currentColor" : "none"} />
@@ -510,9 +558,11 @@ export default function Communaute() {
                     <button className="x" onClick={() => setOpenId(null)} aria-label="Fermer"><Icon name="x" size={16} /></button>
                   </div>
                   <div className="mbody">
-                    <div className="hint" style={{ marginTop: -2, display: "flex", alignItems: "center", gap: 5 }}>
-                      par <AuthorChip id={detail.author_user_id} name={detail.author_name} avatar={detail.author_avatar} cadre={cadreDe(detail.author_user_id, detail.author_done)} onOpen={openProfile} /> · {detail.updated_at}
-                    </div>
+                    {/* Même en-tête que la carte : ouvrir une fiche ne doit pas faire rétrécir
+                        son auteur en note de bas de page. C'est aussi d'ici qu'on ouvre son
+                        profil, geste attendu quand on lit ce qu'il a publié. */}
+                    <PostHead id={detail.author_user_id} name={detail.author_name} avatar={detail.author_avatar}
+                      cadre={cadreDe(detail.author_user_id, detail.author_done)} date={detail.updated_at} onOpen={openProfile} />
                     {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0 6px" }}>{detail.description}</p>}
                     <Tags text={detail.description} />
 
