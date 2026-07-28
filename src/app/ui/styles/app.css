@@ -430,6 +430,18 @@ tbody tr:last-child td{border-bottom:none}
    Une non-lue se distinguait par un fond `--surface2` et un titre en gras. À onze lignes
    identiques (« Document signé »), c'était trop peu : le fond gris est aussi celui du survol,
    et le gras se perd dans une pile. Un FILET COLORÉ à gauche tranche, lui, sans ambiguïté. */
+/* Activité récente du tableau de bord. La pastille prend le TON de l'action — vert pour ce
+   qui aboutit, rouge pour ce qui supprime — au lieu d'être toujours orange, donc muette. */
+.dash-act{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft);font-size:13px}
+.dash-act:last-child{border-bottom:none}
+.dash-act-dot{width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:var(--muted)}
+.dash-act-dot.tone-g{background:var(--green)}
+.dash-act-dot.tone-b{background:var(--blue)}
+.dash-act-dot.tone-a{background:var(--gold)}
+.dash-act-dot.tone-r{background:var(--ember1)}
+.dash-act-dot.tone-n{background:var(--muted)}
+.dash-act-date{font-size:12px;color:var(--muted);white-space:nowrap;flex:none}
+
 .notif-liste{display:flex;flex-direction:column;gap:2px}
 .notif-ligne{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;
   border-bottom:1px solid var(--border-soft);transition:background .14s var(--ease)}

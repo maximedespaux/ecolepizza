@@ -7,6 +7,7 @@ import DataTable from "../components/DataTable.jsx";
 import Badge from "../components/Badge.jsx";
 import Skeleton from "../components/Skeleton.jsx";
 import { Icon } from "../components/Icon.jsx";
+import { auditLabel } from "../lib/auditLabels.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { scoreBadge, euro, colorOf } from "../lib/format.js";
 
@@ -19,10 +20,9 @@ const QUICK = [
   ["/suivi", "clipboard-check", "Vérifier la conformité Qualiopi"],
 ];
 
-const ACTION_LABEL = {
-  "document.send": "Document envoyé", "document.sign": "Document signé", "document.create": "Document préparé",
-  "sale.create": "Vente enregistrée", "attendance.generate": "Émargement généré", "organization.update": "Organisme modifié",
-};
+// Le dictionnaire d'actions vivait ici EN DOUBLE, avec six entrées quand `lib/auditLabels.js`
+// en compte des dizaines. C'est ce qui faisait diverger le tableau de bord du journal d'audit :
+// deux sources pour la même traduction. Supprimé au profit de la seule qui fait autorité.
 
 function Dashboard() {
   const [stats, setStats] = useState({ stagiaires: 0, formations: 0, sessions: 0, dossiers: 0, ca: 0 });
@@ -191,13 +191,24 @@ function Dashboard() {
             ))
           ) : activity.length === 0 ? (
             <p className="lead" style={{ margin: 0 }}>Aucune activité récente.</p>
-          ) : activity.map((a) => (
-            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border-soft)", fontSize: 13 }}>
-              <span className="dash-act-dot" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--grad-ember)", flex: "0 0 8px" }} />
-              <span style={{ flex: 1 }}>{ACTION_LABEL[a.action] || a.action}</span>
-              <span style={{ fontSize: 12, color: "var(--dim)" }}>{a.created_at}</span>
-            </div>
-          ))}
+          ) : activity.map((a) => {
+            /* `auditLabel` et non `ACTION_LABEL[…]` : le dictionnaire ne couvre que les actions
+               NOMMÉES une à une. Pour les autres — `template.save`, `sale.checkout`… — il
+               renvoyait `undefined` et le repli affichait le CODE BRUT. `auditLabel` sait, lui,
+               composer « Modèle enregistré » à partir du verbe et de l'entité, avec l'accord au
+               féminin. Le journal d'audit l'utilisait déjà ; le tableau de bord, non — même
+               donnée, deux chemins de code, deux rendus. */
+            const { label, tone } = auditLabel(a.action, a.entity);
+            return (
+              <div key={a.id} className="dash-act">
+                {/* La pastille prend le TON de l'action : vert pour ce qui aboutit, rouge pour
+                    ce qui supprime. Elle était toujours orange, donc muette. */}
+                <span className={`dash-act-dot tone-${tone}`} aria-hidden="true" />
+                <span style={{ flex: 1 }}>{label}</span>
+                <span className="dash-act-date">{a.created_at}</span>
+              </div>
+            );
+          })}
         </Card>
       </div>
 
