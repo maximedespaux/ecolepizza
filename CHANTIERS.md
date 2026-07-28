@@ -214,12 +214,28 @@ passée en administration et `/communaute` est une route stagiaire. À regarder 
 totaux) · `Dashboard` · `Platform` · `Quiz` · `AccessRoles` ×2 · `StagiaireDetail` ·
 `Modeles` ×2. Tous deviennent des cartes sous 700 px de conteneur.
 
-**Les DEUX qui restent, et pourquoi :**
-- `Ventes` — ses lignes se **déplient** sur un détail. `DataTable` fait une ligne par élément ;
-  il faudrait lui ajouter la notion de sous-lignes, ce qui est un chantier à part entière.
-- `Modeles`, le tableau principal — six colonnes dont trois calculées par des fonctions
-  immédiates de vingt lignes. Mécanique, mais le risque d'erreur silencieuse y est réel :
-  à faire seule, en la regardant à l'écran.
+**✅ `Modeles` converti aussi.** Ses trois colonnes calculées par des fonctions immédiates sont
+devenues des fonctions NOMMÉES hors du rendu (`cellSignature`, `cellEtat`, `estEmarg`) — c'est
+ce qui rendait la conversion risquée, et accessoirement le tableau illisible.
+
+**Il ne reste qu'un tableau non converti : `Ventes`.** Ses lignes se **déplient** sur un
+détail ; `DataTable` fait une ligne par élément. Lui ajouter la notion de sous-lignes est un
+chantier à part entière, pas un effet de bord de conversion.
+
+**Ce que le mode carte a appris en chemin** — trois marqueurs de colonne, tous nés d'un défaut
+constaté à l'écran et invisible dans le code :
+- `principal` → devient le titre (et la ligne passe en `flex` pour le hisser en tête, sans
+  toucher à l'ordre du tableau : Formations range le code avant l'intitulé, ce qui est juste
+  en colonnes et se lit à l'envers en carte).
+- `actions` → passe en pied.
+- `sansCarte` → disparaît (un chevron « ouvrir » n'apprend rien au pied d'une carte qu'on
+  ouvre en entier).
+- Et une cellule qui renvoie `null` **efface sa ligne** en carte : « VILLE — » sur trois lignes
+  n'apprend rien. Mesuré sur Entreprises : 350 px → 135 px par carte.
+
+⚠️ **Un titre de carte doit TOUJOURS nommer.** Factures affichait « — · 6 dossiers » quand le
+client est inconnu : en colonnes le tiret se lit très bien (la colonne d'à côté porte le
+numéro), en carte il devient le titre. Repli sur le numéro.
 
 **Corrigé pendant les conversions** : le bouton « Envoyer » d'un QCM non envoyable n'était
 qu'atténué à 45 % d'opacité, donc **cliquable** — il partait et l'erreur arrivait après. Et la
