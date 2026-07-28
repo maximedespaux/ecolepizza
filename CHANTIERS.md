@@ -218,9 +218,11 @@ totaux) · `Dashboard` · `Platform` · `Quiz` · `AccessRoles` ×2 · `Stagiair
 devenues des fonctions NOMMÉES hors du rendu (`cellSignature`, `cellEtat`, `estEmarg`) — c'est
 ce qui rendait la conversion risquée, et accessoirement le tableau illisible.
 
-**Il ne reste qu'un tableau non converti : `Ventes`.** Ses lignes se **déplient** sur un
-détail ; `DataTable` fait une ligne par élément. Lui ajouter la notion de sous-lignes est un
-chantier à part entière, pas un effet de bord de conversion.
+**✅ `Ventes` converti — il ne reste AUCUN tableau non converti.** Ses lignes se déplient sur
+leurs articles : `DataTable` a reçu `detail`, qui renvoie le contenu à montrer sous la ligne
+ou `null` quand elle est repliée. **C'est la page qui tient cet état**, jamais le tableau —
+elle seule sait quoi ouvrir. Une `<tr>` sœur (une cellule ne peut pas contenir une rangée),
+recollée sous sa carte en mode étroit par une marge négative.
 
 **Ce que le mode carte a appris en chemin** — trois marqueurs de colonne, tous nés d'un défaut
 constaté à l'écran et invisible dans le code :
