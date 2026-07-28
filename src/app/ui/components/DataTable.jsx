@@ -28,7 +28,7 @@ import { Squelette } from "./Squelette.jsx";
  */
 export default function DataTable({
   rows, cols, vide, rowKey = (r, i) => r.id ?? i, rowProps,
-  pied, className = "", lignesSquelette = 5,
+  detail, pied, className = "", lignesSquelette = 5,
 }) {
   if (rows == null) {
     return (
@@ -77,6 +77,21 @@ export default function DataTable({
                   })}
                 </tr>
               );
+            }).flatMap((tr, i) => {
+              /* LIGNE DÉPLIÉE. `detail` renvoie le contenu à montrer sous la ligne, ou `null`
+                 quand elle est repliée — c'est la PAGE qui tient cet état, pas le tableau :
+                 elle seule sait ce qu'ouvrir et sur quel critère.
+                 Une `<tr>` sœur plutôt qu'une cellule dans la ligne : une cellule ne peut pas
+                 contenir une rangée, et un `<tbody>` imbriqué casserait l'alignement des
+                 colonnes. En mode carte, la CSS la recolle sous sa carte pour qu'elles se
+                 lisent comme un seul bloc. */
+              const d = detail ? detail(rows[i], i) : null;
+              if (!d) return [tr];
+              return [tr, (
+                <tr key={`${rowKey(rows[i], i)}-detail`} className="dt-detail">
+                  <td colSpan={cols.length}>{d}</td>
+                </tr>
+              )];
             })}
           </tbody>
           {/* Ligne de TOTAUX. Dans un `<tfoot>` et non dans le corps : c'est ce qui la fait

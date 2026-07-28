@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
@@ -7,6 +7,7 @@ import {
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
+import DataTable from "../components/DataTable.jsx";
 import { Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -469,43 +470,59 @@ function SalesHistory({ sales, onRemove, onDownload }) {
         {filtered.length === 0 ? (
           <EmptyState icon="cart">{allTime ? "Aucune vente enregistrée." : "Aucune vente sur cette période."}</EmptyState>
         ) : (
-          <div className="tablewrap" style={{ border: "none" }}>
-            <table>
-              <thead><tr><th style={{ width: 34 }}></th><th>Date</th><th>Facture</th><th>Client</th><th>Articles</th><th className="ta-r">Montant HT</th><th></th></tr></thead>
-              <tbody>
-                {groups.map((g) => {
-                  const isOpen = open.has(g.key);
-                  return (
-                    <Fragment key={g.key}>
-                      <tr style={{ cursor: "pointer" }} onClick={() => toggle(g.key)}>
-                        <td><button className="iconbtn" title={isOpen ? "Réduire" : "Voir le détail"} onClick={(e) => { e.stopPropagation(); toggle(g.key); }}><Icon name={isOpen ? "chevron-down" : "chevron-right"} size={15} /></button></td>
-                        <td className="mono">{g.date}</td>
-                        <td>{g.invoice_number ? <b>{g.invoice_number}</b> : <span className="hint">Vente directe</span>}</td>
-                        <td>{g.client}</td>
-                        <td>{g.units} <span className="hint">({g.lines.length} ligne{g.lines.length > 1 ? "s" : ""})</span></td>
-                        <td className="mono tnum" style={{ textAlign: "right" }}>{euro(g.total)}</td>
-                        <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
-                          {g.invoice_id && (
-                            <button className="iconbtn" title="Télécharger la facture (PDF)" onClick={() => onDownload(g.invoice_id, g.invoice_number || "facture")}><Icon name="download" size={15} /></button>
-                          )}
-                        </td>
-                      </tr>
-                      {isOpen && g.lines.map((s) => (
-                        <tr key={s.id} style={{ background: "var(--surface2)" }}>
-                          <td></td>
-                          <td className="mono" style={{ color: "var(--muted)", fontSize: 12 }}>{s.date}</td>
-                          <td colSpan={2}><b>{s.product}</b>{s.category ? <span className="hint"> · {s.category}</span> : null}</td>
-                          <td>{s.quantity}</td>
-                          <td className="mono tnum" style={{ textAlign: "right" }}>{euro(Number(s.amount) * (s.quantity || 1))}</td>
-                          <td style={{ textAlign: "right" }}><button className="iconbtn del" title="Supprimer cette ligne" onClick={() => onRemove(s.id)}><Icon name="trash" size={14} /></button></td>
-                        </tr>
-                      ))}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={groups}
+            rowKey={(g) => g.key}
+            /* La ligne entière déplie — la petite flèche n'était qu'un raccourci. `aria-expanded`
+               dit l'état, que le chevron montre déjà à l'œil. */
+            rowProps={(g) => ({
+              style: { cursor: "pointer" },
+              role: "button",
+              tabIndex: 0,
+              "aria-expanded": open.has(g.key),
+              "aria-label": `${open.has(g.key) ? "Replier" : "Voir"} le détail de ${g.invoice_number || "la vente directe"} du ${g.date}`,
+              onClick: () => toggle(g.key),
+              onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(g.key); } },
+            })}
+            /* Le DÉTAIL d'une vente : ses lignes d'articles. `null` quand la vente est repliée
+               — c'est la page qui tient cet état, le tableau ne fait que l'accueillir. */
+            detail={(g) => (open.has(g.key) ? (
+              <div className="dt-detail-liste">
+                {g.lines.map((s) => (
+                  <div className="dt-detail-ligne" key={s.id}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <b>{s.product}</b>{s.category ? <span className="hint"> · {s.category}</span> : null}
+                    </span>
+                    <span className="qte">×{s.quantity}</span>
+                    <span className="prix mono">{euro(Number(s.amount) * (s.quantity || 1))}</span>
+                    <button className="iconbtn del" title="Supprimer cette ligne"
+                      aria-label={`Supprimer ${s.product}`}
+                      onClick={(e) => { e.stopPropagation(); onRemove(s.id); }}><Icon name="trash" size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            ) : null)}
+            cols={[
+              { k: "plier", t: "", sansCarte: true, th: { width: 34 },
+                cell: (g) => <Icon name={open.has(g.key) ? "chevron-down" : "chevron-right"} size={15} aria-hidden="true" /> },
+              { k: "facture", t: "Facture", principal: true,
+                cell: (g) => (g.invoice_number ? <b>{g.invoice_number}</b> : <span className="hint">Vente directe</span>) },
+              { k: "date", t: "Date", cell: (g) => <span className="mono">{g.date}</span> },
+              { k: "client", t: "Client", cell: (g) => g.client || null },
+              { k: "articles", t: "Articles",
+                // `{" "}` explicite : l'espace entre l'accolade et la balise disparaît à la
+                // compilation, et on lisait « 6(6 lignes) ».
+                cell: (g) => <>{g.units}{" "}<span className="hint">({g.lines.length} ligne{g.lines.length > 1 ? "s" : ""})</span></> },
+              { k: "total", t: "Montant HT", th: { className: "ta-r" }, td: { textAlign: "right" },
+                cell: (g) => <span className="mono tnum">{euro(g.total)}</span> },
+              { k: "actions", t: "", actions: true, td: { textAlign: "right" },
+                cell: (g) => (g.invoice_id ? (
+                  <button className="iconbtn" title="Télécharger la facture (PDF)"
+                    aria-label={`Télécharger la facture ${g.invoice_number || ""}`}
+                    onClick={(e) => { e.stopPropagation(); onDownload(g.invoice_id, g.invoice_number || "facture"); }}><Icon name="download" size={15} /></button>
+                ) : null) },
+            ]}
+          />
         )}
       </Card>
     </>
