@@ -5,6 +5,8 @@ import { useNavigate } from "react-router-dom";
 import { getRevenues, deleteRevenue } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import { Squelette } from "../components/Squelette.jsx";
+import EmptyState from "../components/EmptyState.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
 // Historique des produits divers (commissions, subventions…). La SAISIE se fait
@@ -63,8 +65,14 @@ function ProduitDivers() {
       <StatusMessage status={status} />
 
       <Card title={`Produits divers ${annee}`} more={<b className="tnum" style={{ color: "var(--blue)" }}>{euro(total)}</b>}>
-        {loading ? <p className="lead" style={{ margin: 0 }}>Chargement…</p>
-          : rows.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucun produit divers saisi.</p> : (
+        {/* « Chargement… » en texte ne réserve pas la place : la carte sautait à l'arrivée
+            des données. Le squelette tient la hauteur, et l'état vide devient un vrai
+            EmptyState — c'est le contenu PRINCIPAL de la page, pas un encart. */}
+        {loading ? <Squelette lignes={4} h={44} />
+          : rows.length === 0 ? (
+            <EmptyState icon="coins" title="Aucun produit divers saisi"
+              text="Commissions, apports et recettes hors formation apparaissent ici. Ils se saisissent depuis la page Partenaires." />
+          ) : (
             <div>{rows.map((v) => (
               <div className="list-row" key={v.id}>
                 <div style={{ flex: 1, minWidth: 0 }}>

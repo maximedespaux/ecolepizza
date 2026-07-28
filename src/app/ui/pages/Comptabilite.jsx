@@ -6,6 +6,7 @@ import {
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import EmptyState from "../components/EmptyState.jsx";
 import DataTable from "../components/DataTable.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
@@ -291,14 +292,20 @@ function Comptabilite() {
           {/* Listes dépenses + produits divers */}
           <div className="grid cols-2">
             <Card title={T("receipt", `Dépenses ${annee}`)}>
-              {data.depenses.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucune dépense saisie.</p> : (
+              {data.depenses.length === 0 ? (
+                <EmptyState icon="receipt" title="Aucune dépense saisie"
+                  text="Ajoutez vos factures et charges avec le formulaire ci-dessus : elles alimentent la répartition par poste et le résultat de l'année." />
+              ) : (
                 <div>{data.depenses.map((d) => (
                   <ListRow key={d.id} titre={d.label} sous={`${CATS.find((c) => c.v === d.category)?.label ?? d.category} · ${new Date(d.date).toLocaleDateString("fr-FR")}`} montant={euro(d.amount_ht)} onDel={() => delDep(d)} />
                 ))}</div>
               )}
             </Card>
             <Card title={T("coins", `Produits divers ${annee} · ${euro(data.ca.extra)}`)}>
-              {(!data.revenus || data.revenus.length === 0) ? <p className="lead" style={{ margin: 0 }}>Aucun produit divers. Se saisit sur la page Partenaires.</p> : (
+              {(!data.revenus || data.revenus.length === 0) ? (
+                <EmptyState icon="handshake" title="Aucun produit divers"
+                  text="Les commissions et apports des partenaires se saisissent depuis la page Partenaires ; ils remontent ici automatiquement." />
+              ) : (
                 <div>{data.revenus.map((r) => (
                   <ListRow key={r.id} titre={r.label} sous={`${REV_LABEL[r.category] ?? r.category} · ${new Date(r.date).toLocaleDateString("fr-FR")}`} montant={euro(r.amount)} onDel={() => delRev(r)} />
                 ))}</div>

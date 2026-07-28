@@ -110,9 +110,12 @@ function Factures() {
       <StatusMessage status={status} />
 
       <div className="grid cols-3" style={{ marginBottom: 16 }}>
-        <Kpi label="Émis (factures)" value={euro(totals.emis)} />
-        <Kpi label="Encaissé" value={euro(totals.paye)} />
-        <Kpi label="Reste dû" value={euro(totals.impaye)} />
+        {/* Trois tons distincts : le filet coloré ne sert à rien s'il est le même partout.
+            Bleu pour ce qui est ÉMIS (un fait), vert pour ce qui est ENTRÉ, ambre pour ce qui
+            est ATTENDU — c'est la seule des trois qui appelle une action. */}
+        <Kpi label="Émis (factures)" value={euro(totals.emis)} icon="receipt" tone="blue" />
+        <Kpi label="Encaissé" value={euro(totals.paye)} icon="euro" tone="green" />
+        <Kpi label="Reste dû" value={euro(totals.impaye)} icon="clock" tone="gold" />
       </div>
 
       {showForm && (
@@ -169,7 +172,11 @@ function Factures() {
               { k: "number", t: "Numéro", cell: (i) => <span className="mono">{i.number}</span> },
               { k: "who", t: "Client / dossier", principal: true,
                 cell: (i) => {
-                  const who = i.company_name || (i.last_name ? `${i.last_name} ${i.first_name}` : "—");
+                  /* Repli sur le NUMÉRO quand le client est inconnu. En colonnes, un « — »
+                     se lit très bien : la colonne d'à côté porte le numéro. En carte, ce même
+                     « — » devenait le TITRE — « — · 6 dossiers » — et la carte n'identifiait
+                     plus rien. Un titre doit toujours nommer. */
+                  const who = i.company_name || (i.last_name ? `${i.last_name} ${i.first_name}` : i.number);
                   return `${who}${Number(i.n_lines) > 1 ? ` · ${i.n_lines} dossiers` : i.program_code ? ` · ${i.program_code}` : ""}`;
                 } },
               { k: "type", t: "Type", cell: (i) => i.type },
