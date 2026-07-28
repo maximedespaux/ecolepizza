@@ -207,13 +207,13 @@ function DifficultesCard({ difficulties, run }) {
           setNom(""); setXp(10);
         }}>
         <div className="field" style={{ margin: 0 }}>
-          <label>Intitulé</label>
-          <input className="inp" value={nom} onChange={(e) => setNom(e.target.value)}
+          <label htmlFor="qm-diff-nom">Intitulé</label>
+          <input id="qm-diff-nom" className="inp" value={nom} onChange={(e) => setNom(e.target.value)}
             placeholder="Expert…" style={{ maxWidth: 220 }} />
         </div>
         <div className="field" style={{ margin: 0, width: 110 }}>
-          <label>XP</label>
-          <input className="inp" type="number" min="0" value={xp} onChange={(e) => setXp(e.target.value)} />
+          <label htmlFor="qm-diff-xp">XP</label>
+          <input id="qm-diff-xp" className="inp" type="number" min="0" value={xp} onChange={(e) => setXp(e.target.value)} />
         </div>
         <button type="submit" className="btn sm" disabled={!nom.trim()}><Icon name="plus" size={14} /> Ajouter</button>
       </form>
@@ -235,11 +235,13 @@ function DifficultesCard({ difficulties, run }) {
                       onBlur={(e) => { if (Number(e.target.value) !== d.xp) run(() => updateQuestDifficulty(d.id, { xp: Number(e.target.value) || 0 })); }} />
                   </td>
                   <td>
-                    <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(d.color || "") ? d.color : "#5b6079"}
+                    <input type="color" aria-label={`Couleur du niveau ${d.name}`}
+                      value={/^#[0-9a-fA-F]{6}$/.test(d.color || "") ? d.color : "#5b6079"}
                       onChange={(e) => run(() => updateQuestDifficulty(d.id, { color: e.target.value }))} />
                   </td>
                   <td>
                     <button type="button" className="btn sm ghost danger"
+                      title={`Supprimer ${d.name}`} aria-label={`Supprimer le niveau ${d.name}`}
                       onClick={() => {
                         // Les questions rattachées ne sont PAS supprimées : elles retombent
                         // simplement sur l'XP par défaut.
@@ -299,6 +301,7 @@ function AxeCard({ axe, cats, programs, run }) {
           setNom("");
         }}>
         <input className="inp" value={nom} onChange={(e) => setNom(e.target.value)}
+          aria-label={`Nom du nouveau ${axe.one}`}
           placeholder={`Nouveau ${axe.one}…`} style={{ maxWidth: 280 }} />
         <button type="submit" className="btn sm" disabled={!nom.trim()}><Icon name="plus" size={14} /> Ajouter</button>
       </form>
@@ -360,8 +363,12 @@ function CatRow({ cat, axe, used, run, premier, dernier, onMonter, onDescendre }
       <span style={{ width: 12, height: 12, borderRadius: 4, background: couleur, flex: "0 0 auto" }} />
       <b style={{ flex: 1 }}>{cat.name}</b>
       <span className="hint">{used === 0 ? "aucune formation" : `${used} formation${used > 1 ? "s" : ""}`}</span>
-      <button type="button" className="btn sm ghost" onClick={() => setEdit(true)}><Icon name="pencil" size={13} /></button>
+      {/* Ces deux boutons sont RÉPÉTÉS à chaque ligne et ne portaient qu'une icône : dix
+          boutons sans nom d'affilée dans l'arbre d'accessibilité. Le nom porte la CIBLE. */}
+      <button type="button" className="btn sm ghost" title={`Renommer ${cat.name}`}
+        aria-label={`Renommer ${cat.name}`} onClick={() => setEdit(true)}><Icon name="pencil" size={13} /></button>
       <button type="button" className="btn sm ghost danger"
+        title={`Supprimer ${cat.name}`} aria-label={`Supprimer ${cat.name}`}
         onClick={() => {
           // On prévient du DÉTACHEMENT : la suppression ne touche pas aux formations
           // elles-mêmes, mais elles perdent ce rangement.

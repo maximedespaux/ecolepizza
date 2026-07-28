@@ -278,7 +278,11 @@ function Carte() {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-head"><h3>Répartition par département</h3><span className="sub">{filtered.length} affiché(s) · cliquer pour filtrer</span></div>
+        {/* `h2` et non `h3` : cette section est écrite à la main plutôt qu'avec `<Card title>`,
+            et enchaînait donc `h1` puis `h3` sans niveau intermédiaire — la structure du
+            document annonçait un niveau manquant. `card-h` porte la mise en forme, qui n'est
+            plus attachée à la balise (cf. Card.jsx). */}
+        <div className="card-head"><h2 className="card-h">Répartition par département</h2><span className="sub">{filtered.length} affiché(s) · cliquer pour filtrer</span></div>
         {!data ? <p className="lead" style={{ margin: 0 }}>Chargement…</p>
           : filtered.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucun département ne correspond.</p> : (
             <div className="grid" style={{ gap: 10 }}>
