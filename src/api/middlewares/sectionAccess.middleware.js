@@ -21,7 +21,24 @@ const SECTION_BY_BASE = {
     factures: '/factures', comptabilite: '/comptabilite', carte: '/carte',
     quizzes: '/qcm', templates: '/modeles', suivi: '/suivi', audit: '/audit',
     organisation: '/reglages',
+    // Ces quatre rubriques manquaient : passer un secrétariat en « Lecture » les affichait
+    // bien en lecture seule dans le menu, mais l'API acceptait quand même ses écritures.
+    // Menu fermé, route ouverte — l'écart exact qu'un contrôle par rubrique doit interdire.
+    companies: '/entreprises', opcos: '/opcos', quest: '/pizza-quest-admin', boutique: '/demandes-boutique',
 };
+
+/**
+ * Rubrique d'une requête, à partir de sa base d'URL — avec les exceptions de sous-chemin.
+ *
+ * `comptabilite/revenus*` appartient à /produit-divers, PAS à /comptabilite : c'est la page
+ * du formateur, et lui n'a jamais /comptabilite en écriture. Sans cette distinction, il se
+ * voyait refuser la suppression sur SA page, avec un message désignant en plus la mauvaise
+ * rubrique.
+ */
+function sectionFor(base, reste) {
+    if (base === 'comptabilite' && /^revenus(\/|$)/.test(reste || '')) return '/produit-divers';
+    return SECTION_BY_BASE[base];
+}
 
 function decodeUser(req) {
     const cookieToken = req.cookies?.auth_token;
@@ -55,8 +72,8 @@ async function enforceSectionMode(req, res, next) {
         const user = decodeUser(req);
         if (!user || !CONFIGURABLE_ROLES.includes(user.role)) return next();
 
-        const m = req.path.match(/^\/api\/([^/]+)/);
-        const section = m && SECTION_BY_BASE[m[1]];
+        const m = req.path.match(/^\/api\/([^/]+)\/?(.*)$/);
+        const section = m && sectionFor(m[1], m[2]);
         if (!section) return next(); // rubrique non contrôlée
 
         const [[row]] = await db.promise().query('SELECT nav_access FROM user WHERE id = ?', [user.id]);
