@@ -292,6 +292,24 @@ tbody tr:last-child td{border-bottom:none}
    cas — le composant ne connaissait que « erreur » et « le reste ». */
 .status.info{color:var(--muted);background:var(--surface2);border:1px solid var(--border-soft)}
 
+/* LECTURE SEULE — l'habillage de ce que `blockMutations` intercepte (cf. AppLayout.jsx).
+   ⚠️ Cette liste de sélecteurs doit rester IDENTIQUE à `CONTROLES_MODIFIANTS` côté JS : c'est
+   leur accord qui fait qu'un bouton éteint est bien un bouton bloqué, et réciproquement.
+   Sans cet habillage, le bouton gardait son air cliquable et ne faisait rien — un clic sans
+   effet et sans explication est plus déroutant qu'un bouton visiblement hors service.
+   `pointer-events` reste ACTIF : c'est ce qui laisse l'infobulle s'afficher au survol, et le
+   clic est de toute façon arrêté à la capture. */
+.lecture-seule .btn.primary,
+.lecture-seule .btn.danger,
+.lecture-seule .danger,
+.lecture-seule .iconbtn.del,
+.lecture-seule .icon-btn.danger,
+.lecture-seule [type=submit]{opacity:.42;cursor:not-allowed;filter:saturate(.5)}
+/* L'échappatoire déclarée : ce qui ne modifie rien (exporter, imprimer) reste vivant. */
+.lecture-seule [data-lecture-ok] .btn.primary,
+.lecture-seule [data-lecture-ok] .danger,
+.lecture-seule [data-lecture-ok] [type=submit]{opacity:1;cursor:pointer;filter:none}
+
 /* Hero (dashboard) --------------------------------------------------- */
 .hero{position:relative;overflow:hidden;border-radius:20px;padding:30px 32px;margin-bottom:22px;color:#fff;background:var(--grad-navy)}
 .hero::before{content:"";position:absolute;inset:-40% -12% auto auto;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,rgba(220,62,55,.4),transparent 65%);pointer-events:none}
