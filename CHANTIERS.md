@@ -187,10 +187,24 @@ passée en administration et `/communaute` est une route stagiaire. À regarder 
 - **Plus aucun `window.alert`** (`ea8c99a`). Les gardes `confirm`/`prompt` devant les
   suppressions de masse sont conservées : une garde doit interrompre.
 
-**Admin — trois pertes d'information silencieuses corrigées** (`400486d`) : `EmptyState` qui
-jetait `title`/`text` (7 appels muets), `.tablewrap` en `overflow:hidden` qui coupait
-147 px de colonnes sur `/factures` à 800 px, `StatusMessage` qui affichait « Chargement… »
-en vert. Le reste du §5 est ouvert.
+**Admin — étapes 1 à 3 du plan §5.5 faites.**
+- **§5.2, les bugs** (`400486d`) : `EmptyState` qui jetait `title`/`text` (7 appels muets),
+  `.tablewrap` en `overflow:hidden` qui coupait 147 px de colonnes sur `/factures` à 800 px,
+  `StatusMessage` qui affichait « Chargement… » en vert, icône `€` inexistante dans `Opcos`.
+- **§5.5 étape 3 — lecture seule** (`5d0e06c`) : `blockMutations` ignorait `iconbtn del`, la
+  convention de bouton destructeur de **19 pages**. Le serveur protégeait (pas de faille),
+  mais l'écran annonçait « lecture seule » et laissait cliquer. Les contrôles bloqués sont
+  désormais visiblement éteints, avec une échappatoire déclarée `[data-lecture-ok]`.
+  ⚠️ La liste de sélecteurs est **dupliquée entre `AppLayout.jsx` et `app.css`** — les deux
+  doivent bouger ensemble, chacune porte l'avertissement.
+- **§5.5 étape 2 — chargement/vide/erreur** (`2886789`) : `components/Squelette.jsx`
+  (`Squelette`, `SqueletteTable`, `ListeEtat`). Posé sur les deux pages qui restaient
+  **blanches** (`StagiaireDetail`, `SessionDetail`). En-têtes de tableau collants, survol de
+  ligne avec filet à gauche.
+
+**RESTE au §5.5 : l'étape 4, le composant `<DataTable>` unique** (ou bascule en cartes sous
+700 px) — le plus gros chantier visuel. Et `ListeEtat` n'est branché sur AUCUNE des ~29 autres
+pages qui initialisent à `[]` : le composant existe, la reprise page par page est à faire.
 
 Un lanceur de migration existe (le client `mysql` n'est pas installé sur la machine) :
 `node <scratchpad>/migrer.js database/migrations/NNN.sql` — il réutilise
