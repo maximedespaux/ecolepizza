@@ -453,9 +453,9 @@ function SalesHistory({ sales, onRemove, onDownload }) {
   return (
     <>
       <div className="grid cols-3" style={{ marginBottom: 16 }}>
-        <Kpi label={`Chiffre d'affaires HT${allTime ? "" : " (période)"}`} value={euro(ca)} />
-        <Kpi label="Articles vendus" value={units} />
-        <Kpi label="Ventes / factures" value={groups.length} />
+        <Kpi label={`Chiffre d'affaires HT${allTime ? "" : " (période)"}`} value={euro(ca)} icon="euro" tone="green" />
+        <Kpi label="Articles vendus" value={units} icon="package" tone="blue" countUp />
+        <Kpi label="Ventes / factures" value={groups.length} icon="receipt" tone="blue" countUp />
       </div>
       <Card title="Historique des ventes">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end", marginBottom: 14 }}>

@@ -183,9 +183,13 @@ function Suivi() {
       {tab === "conformite" ? (
         <>
           <div className="grid cols-3" style={{ marginBottom: 16 }}>
-            <Kpi label="Incomplets" value={count("ROUGE")} />
-            <Kpi label="En cours" value={count("ORANGE")} />
-            <Kpi label="Complets" value={count("VERT")} />
+            {/* Les trois indicateurs portaient le même filet rouge — la couleur ne disait donc
+                rien, sur la page où elle a le plus de sens : c'est une ÉCHELLE de conformité,
+                et les dossiers eux-mêmes sont déjà étiquetés ROUGE / ORANGE / VERT juste en
+                dessous. Les tons reprennent exactement les leurs. */}
+            <Kpi label="Incomplets" value={count("ROUGE")} icon="alert-triangle" tone="ember" countUp />
+            <Kpi label="En cours" value={count("ORANGE")} icon="clock" tone="gold" countUp />
+            <Kpi label="Complets" value={count("VERT")} icon="check-circle" tone="green" countUp />
           </div>
 
           <Card title={`Dossiers (${dossiers.length})`}>

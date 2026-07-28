@@ -131,10 +131,13 @@ function Inventaire({ embedded = false }) {
       <StatusMessage status={status} />
 
       <div className="grid cols-4" style={{ marginBottom: 16 }}>
-        <Kpi label="Articles" value={totals.items} />
-        <Kpi label="Unités en stock" value={totals.units} />
-        <Kpi label="Valeur du stock (HT)" value={euro(totals.value)} />
-        <Kpi label="Stock bas / rupture" value={totals.low} />
+        {/* « Stock bas / rupture » est le SEUL des quatre qui appelle une action : il prend le
+            ton d'alerte, les trois autres restent descriptifs. Sans cette distinction, quatre
+            filets identiques laissaient l'œil chercher lequel demandait quelque chose. */}
+        <Kpi label="Articles" value={totals.items} icon="package" tone="blue" countUp />
+        <Kpi label="Unités en stock" value={totals.units} icon="columns" tone="blue" countUp />
+        <Kpi label="Valeur du stock (HT)" value={euro(totals.value)} icon="euro" tone="green" />
+        <Kpi label="Stock bas / rupture" value={totals.low} icon="alert-triangle" tone={totals.low > 0 ? "ember" : "green"} countUp />
       </div>
 
       {showForm && (
