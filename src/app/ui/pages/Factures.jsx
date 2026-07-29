@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getEnrollments, getCompanies, downloadFacturX, downloadInvoiceXml, facturXUrl } from "../api/apiClient.js";
@@ -7,6 +7,7 @@ import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
 import Badge from "../components/Badge.jsx";
 import DataTable from "../components/DataTable.jsx";
+import MenuActions from "../components/MenuActions.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -15,6 +16,11 @@ import { bumpBadges } from "../lib/events.js";
 
 const TYPES = [["DEVIS", "Devis"], ["ACOMPTE", "Acompte"], ["FACTURE", "Facture"], ["AVOIR", "Avoir"]];
 const STATUS = { BROUILLON: ["Brouillon", "n"], EMISE: ["Émise", "b"], PAYEE: ["Payée", "g"], IMPAYEE: ["Impayée", "r"], ANNULEE: ["Annulée", "n"] };
+/* CE QUI DOIT ENCORE ÊTRE PAYÉ REMONTE. La page répond à « qui me doit de l'argent » ; les
+   impayées y étaient mêlées aux payées, dans l'ordre d'émission. Le tri est STABLE (garanti
+   depuis ES2019) : à statut égal, l'ordre d'origine — donc chronologique — est conservé. */
+const RANG_STATUT = { IMPAYEE: 0, EMISE: 1, BROUILLON: 2, PAYEE: 3, ANNULEE: 4 };
+
 const emptyLine = () => ({ enrollment_id: "", description: "", amount_net: "" });
 const makeEmpty = () => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, due_date: "", lines: [emptyLine()] });
 
@@ -42,6 +48,11 @@ function Factures() {
     getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
     getCompanies().then((r) => setCompanies(r.data)).catch(() => {});
   }, []);
+
+  const lignes = useMemo(() => {
+    if (!invoices) return null;
+    return [...invoices].sort((a, b) => (RANG_STATUT[a.status] ?? 9) - (RANG_STATUT[b.status] ?? 9));
+  }, [invoices]);
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
   const setLine = (i, k, v) => setForm((p) => ({ ...p, lines: p.lines.map((l, j) => (j === i ? { ...l, [k]: v } : l)) }));
@@ -164,10 +175,12 @@ function Factures() {
 
       <Card title={`Documents${invoices ? ` (${invoices.length})` : ""}`}>
           <DataTable
-            rows={invoices}
+            rows={lignes}
             vide={<EmptyState icon="receipt" title="Aucun document de facturation"
               text="Devis, acomptes, factures et avoirs apparaîtront ici dès le premier document émis." />}
             rowKey={(i) => i.id}
+            // Une impayée se repère sans lire son statut : c'est la seule ligne qui réclame.
+            rowProps={(i) => (i.status === "IMPAYEE" ? { className: "ln-du" } : null)}
             cols={[
               { k: "number", t: "Numéro", cell: (i) => <span className="mono">{i.number}</span> },
               { k: "who", t: "Client / dossier", principal: true,
@@ -189,17 +202,38 @@ function Factures() {
                 ) },
               { k: "statut", t: "Statut",
                 cell: (i) => { const [label, tone] = STATUS[i.status] || [i.status, "n"]; return <Badge tone={tone}>{label}</Badge>; } },
+              /* UNE action principale, celle que l'état appelle — un brouillon s'émet, une
+                 facture émise s'encaisse, une facture close se relit. Les cinq autres commandes
+                 passent au menu : « encaisser » se fait tous les jours, « exporter le XML »
+                 deux fois par an, et les afficher pareil obligeait à relire six intitulés
+                 avant chaque clic. */
               { k: "actions", t: "", actions: true, td: { textAlign: "right", whiteSpace: "nowrap" },
-                cell: (i) => (
-                  <>
-                    {i.status === "BROUILLON" && <button className="btn sm" title="Émettre" onClick={() => setStatusOf(i.id, "EMISE")}>Émettre</button>}{" "}
-                    {i.status !== "PAYEE" && i.status !== "ANNULEE" && (i.type === "FACTURE" || i.type === "ACOMPTE") && <button className="btn sm" title="Encaisser le solde et marquer payée" onClick={() => pay(i)}>Payer</button>}{" "}
-                    <button className="btn sm" title="Aperçu de la facture" onClick={() => preview(i)}>Aperçu</button>{" "}
-                    <button className="btn sm" title="Télécharger la facture Factur-X (PDF)" onClick={() => dl(downloadFacturX, i)}>Factur-X</button>{" "}
-                    <button className="iconbtn" title="Télécharger le XML" aria-label={`Télécharger le XML de ${i.number}`} onClick={() => dl(downloadInvoiceXml, i)}><Icon name="download" size={16} /></button>{" "}
-                    <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${i.number}`} onClick={() => remove(i.id)}><Icon name="trash" size={15} /></button>
-                  </>
-                ) },
+                cell: (i) => {
+                  const encaissable = i.status !== "PAYEE" && i.status !== "ANNULEE"
+                    && (i.type === "FACTURE" || i.type === "ACOMPTE");
+                  return (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {i.status === "BROUILLON" ? (
+                        <button className="btn sm primary" onClick={() => setStatusOf(i.id, "EMISE")}>Émettre</button>
+                      ) : encaissable ? (
+                        <button className="btn sm primary" title="Encaisser le solde et marquer payée" onClick={() => pay(i)}>Payer</button>
+                      ) : (
+                        <button className="btn sm" onClick={() => preview(i)}>Aperçu</button>
+                      )}
+                      <MenuActions label={`Autres actions pour ${i.number}`}>
+                        {i.status !== "BROUILLON" && !encaissable ? null : (
+                          <button type="button" onClick={() => preview(i)}><Icon name="eye" size={15} /> Aperçu</button>
+                        )}
+                        <button type="button" onClick={() => dl(downloadFacturX, i)}><Icon name="file-text" size={15} /> Factur-X (PDF)</button>
+                        <button type="button" onClick={() => dl(downloadInvoiceXml, i)}><Icon name="download" size={15} /> XML seul</button>
+                        {encaissable && i.status !== "BROUILLON" && (
+                          <button type="button" onClick={() => setStatusOf(i.id, "ANNULEE")}><Icon name="ban" size={15} /> Annuler</button>
+                        )}
+                        <button type="button" className="danger" onClick={() => remove(i.id)}><Icon name="trash" size={15} /> Supprimer</button>
+                      </MenuActions>
+                    </span>
+                  );
+                } },
             ]}
           />
       </Card>

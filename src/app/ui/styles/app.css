@@ -1095,6 +1095,28 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* ————— MENU DES ACTIONS SECONDAIRES —————
+   `position:fixed` et non `absolute` : le menu vit dans une cellule de tableau, et
+   `.tablewrap` défile horizontalement — en `absolute` le panneau serait rogné par ce
+   conteneur. Les coordonnées sont calculées à l'ouverture depuis le bouton (cf. MenuActions). */
+.menuact{position:relative;display:inline-block}
+.menuact-pop{position:fixed;z-index:60;min-width:186px;padding:5px;display:flex;
+  flex-direction:column;gap:2px;text-align:left;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r-sm);box-shadow:var(--shadow-3);
+  animation:hudPose .16s var(--ease) both}
+.menuact-pop button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px;
+  border:none;background:none;cursor:pointer;font:inherit;font-size:13px;color:var(--text);
+  border-radius:7px;text-align:left;white-space:nowrap}
+.menuact-pop button:hover{background:var(--surface2)}
+.menuact-pop button > svg{color:var(--dim);flex-shrink:0}
+.menuact-pop button.danger,.menuact-pop button.danger > svg{color:var(--ember1)}
+.menuact-pop button.danger:hover{background:color-mix(in srgb,var(--ember1) 10%,transparent)}
+@media (prefers-reduced-motion:reduce){.menuact-pop{animation:none}}
+
+/* Une impayée se repère sans lire son statut : c'est la seule ligne qui réclame quelque chose. */
+.dt tr.ln-du{background:color-mix(in srgb,var(--ember1) 7%,transparent)}
+.dt tr.ln-du:hover{background:color-mix(in srgb,var(--ember1) 11%,transparent)}
+
 /* ————— COMPTABILITÉ : UN SEUL CHIFFRE, ET SON CALCUL ÉCRIT —————
    Cinq indicateurs dont trois se déduisaient des autres — sans dépense, ils affichaient la
    même somme trois fois. Le calcul est écrit plutôt que réparti : on lit d'où vient le
