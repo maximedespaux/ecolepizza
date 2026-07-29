@@ -34,13 +34,19 @@ function Opcos() {
       <PageHead
         eyebrow="Configuration"
         title="OPCO / financeurs"
-        lead="Référentiel des OPCO et financeurs (coordonnées nationales), utilisé dans les fiches stagiaires et entreprises. Pré-rempli ; à vérifier et compléter."
+        lead="Coordonnées des financeurs, reprises dans les fiches stagiaires et entreprises."
         actions={<button className="btn primary" onClick={() => setEditing({ _new: true, active: 1, triggers_assiduite: 0 })}>＋ Nouvel OPCO</button>}
       />
       <StatusMessage status={status} />
 
       <Card title={`OPCO / financeurs${items ? ` (${items.length})` : ""}`}>
+        {/* `dt-discret` : ce référentiel est PRÉ-REMPLI et pratiquement jamais modifié — on
+            l'ouvre pour LIRE un numéro ou une adresse. Ses quarante-deux commandes d'édition
+            s'affichaient pourtant en permanence, au même poids que les coordonnées. Elles
+            restent dans le document — donc atteignables au clavier et annoncées aux lecteurs
+            d'écran — mais s'effacent visuellement jusqu'au survol de leur ligne. */}
         <DataTable
+          className="dt-discret"
           rows={items}
           rowKey={(o) => o.id}
           // Un OPCO désactivé reste listé — il figure encore dans d'anciens dossiers — mais

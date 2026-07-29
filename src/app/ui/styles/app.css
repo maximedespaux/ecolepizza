@@ -1095,6 +1095,23 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* ————— TABLEAU DE RÉFÉRENCE : LIRE D'ABORD, ÉDITER ENSUITE —————
+   Un référentiel qu'on consulte cent fois et ne modifie jamais n'a pas à porter ses commandes
+   d'édition en permanence : elles pèsent autant que la donnée qu'on vient lire.
+
+   `opacity` et non `display:none` : le bouton RESTE dans le document, donc atteignable au
+   clavier et annoncé aux lecteurs d'écran. `:focus-within` le rend visible dès qu'on l'atteint
+   par tabulation — sans quoi on déplacerait le focus sur un élément invisible.
+
+   Sous `hover:hover` uniquement : au doigt il n'y a pas de survol, et la commande resterait
+   introuvable. */
+@media (hover: hover) and (pointer: fine) {
+  .dt-discret .dt-actions > *{opacity:.12;transition:opacity .15s var(--ease)}
+  .dt-discret tr:hover .dt-actions > *,
+  .dt-discret tr:focus-within .dt-actions > *{opacity:1}
+}
+@media (prefers-reduced-motion:reduce){.dt-discret .dt-actions > *{transition:none}}
+
 /* ————— FICHE STAGIAIRE : LES DOCUMENTS RANGÉS PAR « QUI A LA BALLE » —————
    Six états côte à côte en liste plate n'apprenaient rien : il fallait lire chaque ligne pour
    savoir où en était le dossier, alors que c'est ce qu'on vient y chercher. */
