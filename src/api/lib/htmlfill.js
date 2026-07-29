@@ -3,7 +3,10 @@
 // (<span data-token="Clé">…</span>) produite par l'éditeur, soit en texte brut
 // {Clé} (modèles convertis depuis les anciens fichiers Word). Les deux formes
 // sont remplacées par la valeur réelle issue du catalogue partagé.
-const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens, paiementRowTokens } = require('./tokens.js');
+// Union des deux branches : `paiementRowTokens` vient de la facturation (gui), `SIG_W`/`SIG_H`
+// du dimensionnement des cadres de signature. Les quatre servent dans ce fichier, et `tokens.js`
+// les exporte tous — n'en garder qu'un jeu casserait l'autre fonctionnalité en silence.
+const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens, paiementRowTokens, SIG_W, SIG_H } = require('./tokens.js');
 const { resolveCustomTokens } = require('./customtokens.js');
 
 function escapeHtml(s) {

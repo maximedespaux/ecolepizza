@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
+import SaveToast from "../components/SaveToast.jsx";
 import WizSteps from "../components/WizSteps.jsx";
 import BuilderHub from "../components/BuilderHub.jsx";
 import { PizzaDisc } from "../components/LivePizza.jsx";
@@ -37,6 +38,8 @@ export default function GarnitureWizard() {
   const [step, setStep] = useState(0);
   const [saved, setSaved] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [enregistre, setEnregistre] = useState(0); // compteur : rejoue la confirmation à chaque succès
+  const [echec, setEchec] = useState(0);
   const [guide, setGuide] = useState(false); // false | "general" | "garniture"
   const closeGuide = () => { if (guide === "general") { try { localStorage.setItem(GUIDE_KEY, "1"); } catch { /* ignore */ } } setGuide(false); };
 
@@ -86,7 +89,11 @@ export default function GarnitureWizard() {
       if (!asNew && r.id) { await updateRecipe(r.id, payload); setR((p) => ({ ...p, ...overrides })); }
       else { const res = await createRecipe({ ...payload, id: undefined }); setR((p) => ({ ...p, ...overrides, id: res.data && res.data.id })); }
       reload();
-    } catch { /* ignore */ } finally { setBusy(false); }
+      setEnregistre((n) => n + 1);
+    } catch {
+      // L'échec doit se voir : sans retour, on reclique et on crée un doublon.
+      setEchec((n) => n + 1);
+    } finally { setBusy(false); }
   }
   const recipeOf = (s) => ({ ...NEW(), ...s, dough_params: { ...parseDP(s.dough_params) } });
   const showDetail = (s) => setDetail(recipeOf(s));
@@ -105,14 +112,17 @@ export default function GarnitureWizard() {
   }
   async function remove(id) { if (!window.confirm("Supprimer cette garniture ?")) return; try { await deleteRecipe(id); if (r.id === id) setR(NEW()); if (detail?.id === id) setDetail(null); reload(); } catch { /* ignore */ } }
   const startCreate = () => { setR(NEW()); setStep(0); setView("create"); };
+  /**
+   * Enregistrement. Plus de `window.prompt` : l'annuler — ou avoir un navigateur qui bloque
+   * les invites — faisait sortir la fonction EN SILENCE, et le clic restait sans effet ni
+   * explication. `persist()` calcule déjà le nom de repli ; on l'inscrit dans le champ pour
+   * que le stagiaire voie sous quel nom sa fiche est rangée.
+   */
   function saveBuild({ asNew = false, ...overrides } = {}) {
-    let name = (overrides.name ?? r.name ?? "").trim();
-    if (!name) {
-      name = (window.prompt("Nom de la garniture :", `Garniture ${baseObj ? baseObj.label.toLowerCase() : ""}`.trim()) || "").trim();
-      if (!name) return;
-      setR((p) => ({ ...p, name }));
-      overrides.name = name;
-    }
+    const nom = (overrides.name ?? r.name ?? "").trim()
+      || `Garniture ${baseObj ? baseObj.label.toLowerCase() : ""}`.trim();
+    overrides.name = nom;
+    setR((p) => ({ ...p, name: nom }));
     persist({ asNew, overrides });
   }
   const shared = r.visibility === "SHARED";
@@ -353,6 +363,8 @@ export default function GarnitureWizard() {
           </div>
         </>
       )}
+      <SaveToast signal={enregistre} label={`Garniture enregistrée : ${r.name || "sans nom"}`} />
+      <SaveToast signal={echec} label="Enregistrement impossible — réessayez" tone="err" />
     </>
   );
 }

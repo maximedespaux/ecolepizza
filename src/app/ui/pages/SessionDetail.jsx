@@ -7,6 +7,7 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
+import { Squelette } from "../components/Squelette.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Emargement from "../components/Emargement.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
@@ -111,10 +112,13 @@ function SessionDetail() {
   }
 
   if (!session) {
+    // Même défaut que la fiche stagiaire : page blanche sous le titre, sans distinction entre
+    // « ça charge », « c'est vide » et « ça a échoué ».
     return (
       <>
         <PageHead eyebrow="Session" title="Session" />
         <StatusMessage status={status} />
+        {!status && <Squelette lignes={3} h={96} />}
       </>
     );
   }

@@ -416,10 +416,15 @@ function TemplateEditor() {
           {/* Recherche : onze groupes et plus de quatre-vingt-dix jetons. Sans elle, trouver
               « SIRET » demande d'ouvrir les groupes un par un — et de savoir dans lequel il
               se range, ce qu'on ignore justement quand on cherche. */}
-          <div className="field" style={{ margin: "0 0 10px" }}>
-            <input className="inp" value={rechJeton} onChange={(e) => setRechJeton(e.target.value)}
-              placeholder="🔍 Rechercher un champ…" />
-          </div>
+          {/* La loupe était DANS le placeholder : elle disparaissait donc à la première
+              frappe, au moment précis où l'on veut encore savoir dans quoi on tape. Posée à
+              côté du champ, elle reste. `gs-search` est le conteneur déjà utilisé pour les
+              autres recherches de l'application. */}
+          <span className="gs-search" style={{ margin: "0 0 10px", width: "100%" }}>
+            <Icon name="search" size={14} aria-hidden="true" />
+            <input aria-label="Rechercher un champ à insérer" value={rechJeton}
+              onChange={(e) => setRechJeton(e.target.value)} placeholder="Rechercher un champ…" />
+          </span>
 
           {catalogFiltre.map((g) => (
             <div key={g.group} className="tok-group" style={{ borderLeft: `3px solid ${categoryAccent(g.group)}` }}>

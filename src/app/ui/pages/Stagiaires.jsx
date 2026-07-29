@@ -9,8 +9,10 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
+import ListePlus from "../components/ListePlus.jsx";
 import { initials } from "../lib/format.js";
 import { colorForLevel, setBadgeColors } from "../lib/levels.js";
+import { useListeBornee } from "../lib/listeBornee.js";
 
 const STATUTS = ["En activité", "Demandeur d'emploi", "Sans activité", "Étudiant", "Retraité", "Autre"];
 
@@ -23,6 +25,7 @@ function Stagiaires() {
   const [formations, setFormations] = useState([]);
   const [filters, setFilters] = useState({ level: [], financing: "", status: "", opco: "", account: "" });
   const [badgeOpen, setBadgeOpen] = useState(false);
+  const [filtresOuverts, setFiltresOuverts] = useState(false);
   const badgeRef = useRef(null);
   useEffect(() => {
     if (!badgeOpen) return;
@@ -68,6 +71,10 @@ function Stagiaires() {
     if (filters.account === "no" && l.has_account) return false;
     return true;
   });
+
+  // La clé rassemble tout ce qui change le RÉSULTAT : une nouvelle recherche comme un nouveau
+  // filtre doivent ramener la liste à ses cinquante premières.
+  const { max, borne, reste, plus } = useListeBornee(filtered.length, query + JSON.stringify(filters));
 
   useEffect(() => { getOpcos().then((r) => setOpcos(r.data || [])).catch(() => {}); }, []);
   const opcoNames = opcos.length ? opcos.filter((o) => o.active).map((o) => o.name) : OPCOS;
@@ -125,6 +132,7 @@ function Stagiaires() {
     return () => clearTimeout(t);
   }, [query]);
 
+
   const openNew = () => setEditId(null);
   const openEdit = (id) => setEditId(id);
   const isOpen = editId !== undefined;
@@ -141,16 +149,38 @@ function Stagiaires() {
       />
       <StatusMessage status={status} />
 
-      <div className="searchbar">
-        <input
-          className="inp"
-          placeholder="Rechercher un stagiaire (nom, prénom ou email)…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+      {/* LA RECHERCHE EST LE SUJET DE LA PAGE. On y vient pour retrouver UNE personne, pas pour
+          parcourir mille fiches — le champ prend donc toute la largeur et reçoit le curseur à
+          l'ouverture : on tape, sans avoir à viser.
+          Les cinq filtres se replient derrière un bouton qui porte leur nombre. Ils servent une
+          fois sur dix, et occupaient en permanence autant de place que la recherche. */}
+      <div className="recherche">
+        <label className="rech-champ">
+          <Icon name="search" size={18} />
+          <input
+            autoFocus
+            aria-label="Rechercher un stagiaire par nom, prénom ou e-mail"
+            placeholder="Rechercher un stagiaire — nom, prénom, e-mail…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query && (
+            <button type="button" className="rech-x" onClick={() => setQuery("")} aria-label="Effacer la recherche">
+              <Icon name="x" size={15} />
+            </button>
+          )}
+        </label>
+        <button type="button" className={"btn rech-filtre" + (activeFilters ? " on" : "")}
+          onClick={() => setFiltresOuverts((v) => !v)} aria-expanded={filtresOuverts}>
+          <Icon name="sliders" size={15} /> Filtrer{activeFilters ? ` (${activeFilters})` : ""}
+        </button>
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "10px 0 4px" }}>
+      {/* Rendu conditionnel et non `hidden` : `.filtres` porte un `display:flex` qui l'emporte
+          sur le `display:none` de l'attribut, si bien que le panneau restait visible replié.
+          Le retirer du document évite au passage d'y laisser cinq listes et leurs options. */}
+      {filtresOuverts && (
+      <div className="filtres">
         <span ref={badgeRef} style={{ position: "relative" }}>
           <button type="button" className="inp" style={{ cursor: "pointer", textAlign: "left", minWidth: 160, maxWidth: 220 }}
             onClick={() => setBadgeOpen((o) => !o)}>
@@ -176,36 +206,38 @@ function Stagiaires() {
             </div>
           )}
         </span>
-        <select className="inp" style={{ maxWidth: 190 }} value={filters.financing} onChange={setFilter("financing")}>
+        <select className="inp" aria-label="Filtrer par financement" style={{ maxWidth: 190 }} value={filters.financing} onChange={setFilter("financing")}>
           <option value="">Tout financement</option>
           <option value="PARTICULIER">Particulier</option>
           <option value="PROFESSIONNEL">Professionnel</option>
         </select>
-        <select className="inp" style={{ maxWidth: 190 }} value={filters.status} onChange={setFilter("status")}>
+        <select className="inp" aria-label="Filtrer par statut" style={{ maxWidth: 190 }} value={filters.status} onChange={setFilter("status")}>
           <option value="">Tout statut</option>
           {STATUTS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <select className="inp" style={{ maxWidth: 190 }} value={filters.opco} onChange={setFilter("opco")}>
+        <select className="inp" aria-label="Filtrer par OPCO" style={{ maxWidth: 190 }} value={filters.opco} onChange={setFilter("opco")}>
           <option value="">Tout OPCO</option>
           {opcoNames.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-        <select className="inp" style={{ maxWidth: 190 }} value={filters.account} onChange={setFilter("account")}>
+        <select className="inp" aria-label="Filtrer par état du compte" style={{ maxWidth: 190 }} value={filters.account} onChange={setFilter("account")}>
           <option value="">Tout compte</option>
           <option value="yes">Avec compte</option>
           <option value="no">Sans compte</option>
         </select>
         {activeFilters > 0 && (
-          <button type="button" className="btn sm ghost" onClick={clearFilters}><Icon name="x" size={13} /> Effacer les filtres ({activeFilters})</button>
+          <button type="button" className="btn sm ghost filtres-fin" onClick={clearFilters}><Icon name="x" size={13} /> Effacer les filtres ({activeFilters})</button>
         )}
       </div>
+      )}
 
 
       <Card title={`Liste (${filtered.length}${activeFilters ? ` / ${learners.length}` : ""})`}>
         {filtered.length === 0 ? (
           <EmptyState>{learners.length === 0 ? "Aucun stagiaire pour le moment." : "Aucun stagiaire ne correspond aux filtres."}</EmptyState>
         ) : (
+          <>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {filtered.map((l) => (
+            {filtered.slice(0, max).map((l) => (
               <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
                 <Link to={`/stagiaires/${l.id}`} className="rowlink" title="Ouvrir le dossier (workflow documents)"
                   style={{ display: "flex", alignItems: "center", gap: 11, flex: 1, minWidth: 0, color: "inherit" }}>
@@ -215,15 +247,25 @@ function Stagiaires() {
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"} · {l.phone || "—"}</span>
                   </span>
                 </Link>
-                <span style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end", maxWidth: 300 }}>
+                {/* Pastilles de niveau : information SECONDAIRE. Elles s'effacent sous 760 px
+                    au profit du nom et des actions — c'est ce qu'on vient chercher dans une
+                    liste, et la fiche les rappelle de toute façon. */}
+                <span className="niveaux-chips">
                   {(l.levels || "").split(",").map((s) => s.trim()).filter(Boolean).map((lv) => (
                     <span key={lv} className="lvl-chip" title={lv} style={{ background: codeColor(lv) }}>{lv}</span>
                   ))}
                 </span>
-                {l.professional_status && <Badge tone="n">{l.professional_status}</Badge>}
+                {/* `statut-chip` : sans elle, un statut long — « Gérant, Président, en nom
+                    propre » — réclamait toute la largeur qu'il voulait et écrasait la colonne
+                    du NOM à zéro pixel. Le nom se coupait alors caractère par caractère, sur
+                    la seule ligne où la personne dirige une entreprise. Le badge ne grandit
+                    plus, se tronque, et garde son texte entier en infobulle. */}
+                {l.professional_status && (
+                  <Badge tone="n" className="statut-chip" title={l.professional_status}>{l.professional_status}</Badge>
+                )}
                 {l.has_account ? (
                   <>
-                    <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" onClick={() => resetPassword(l)}><Icon name="key" size={15} /></button>
+                    <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" aria-label={`Réinitialiser le mot de passe de ${l.last_name} ${l.first_name}`} onClick={() => resetPassword(l)}><Icon name="key" size={15} /></button>
                     <button type="button" className="iconbtn" title="Supprimer le compte de connexion (fiche conservée)"
                       aria-label={`Supprimer le compte de ${l.first_name} ${l.last_name}`} onClick={() => removeAccount(l)}><Icon name="ban" size={16} /></button>
                   </>
@@ -251,6 +293,8 @@ function Stagiaires() {
               </div>
             ))}
           </div>
+          {borne && <ListePlus montres={max} total={filtered.length} reste={reste} onPlus={plus} />}
+          </>
         )}
       </Card>
 

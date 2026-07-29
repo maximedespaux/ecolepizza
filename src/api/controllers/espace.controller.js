@@ -5,7 +5,6 @@ const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
-const { etatCoeurs, retirerCoeur, reglages } = require('../lib/questlives.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 
@@ -466,6 +465,14 @@ const getMyAccess = async (req, res) => {
         // Au moins une formation TERMINÉE (marquée manuellement OU complétée auto) → débloqué,
         // même sans point d'accès franchi (cas des personnes déjà venues / déjà formées).
         const doneSet = new Set(String(learner.completed_levels || '').split(',').map((s) => s.trim()).filter(Boolean));
+        // Nombre de formations terminées → CADRE porté par l'avatar de l'en-tête. Il est
+        // renvoyé ici plutôt que par un appel dédié : la barre appelle déjà cette route à
+        // chaque page, et le compte est déjà calculé juste au-dessus.
+        const formations_done = doneSet.size;
+        // Les cadres exclusifs accordés (migration 113) : l'en-tête en a besoin pour savoir si
+        // le cadre choisi est réellement possédé. `?? ''` et non `||` — une colonne absente
+        // (migration non jouée) donne `undefined`, qui doit donner une liste vide sans lever.
+        const cadres_exclusifs = String(learner.cadres_exclusifs ?? '').split(',').map((x) => x.trim()).filter(Boolean);
         let finished = doneSet.size > 0;
         if (!finished && enrollments.length) {
             const steps = await loadOrgSteps(learner.organization_id);
@@ -474,10 +481,10 @@ const getMyAccess = async (req, res) => {
                 if (c.complete) { finished = true; break; }
             }
         }
-        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs, community_news } });
+        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs, community_news, formations_done, cadres_exclusifs } });
 
         // AUCUNE formation → verrouillé (rien à débloquer tant qu'il n'est pas inscrit).
-        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs, community_news } });
+        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs, community_news, formations_done, cadres_exclusifs } });
         const gating = [];
         for (const e of enrollments) {
             const g = await emargementGate(conn, e, learner.organization_id, agefice);
@@ -485,7 +492,7 @@ const getMyAccess = async (req, res) => {
         }
         // Inscrit : débloqué si aucune formation n'a de point d'accès, ou si au moins un est franchi.
         const quest_unlocked = gating.length === 0 || gating.some((g) => !g.locked);
-        res.json({ data: { quest_unlocked, pending_docs, community_news } });
+        res.json({ data: { quest_unlocked, pending_docs, community_news, formations_done, cadres_exclusifs } });
     } catch (err) {
         console.error('Erreur accès stagiaire :', err);
         res.json({ data: { quest_unlocked: true, pending_docs: 0, community_news: 0 } });
@@ -847,17 +854,25 @@ const getMyProfile = async (req, res) => {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: "Aucune fiche stagiaire liée à ce compte." });
-        let avatar = null, progress = {}, xp = 0, stars = 0;
+        let avatar = null, cadre = null, cadres_exclusifs = [], progress = {}, xp = 0, stars = 0;
         try {
             const [[l]] = await conn.query('SELECT avatar FROM learner WHERE id = ?', [learner.id]);
             avatar = (l && l.avatar) || null;
+            // Cadres : requête SÉPARÉE. Ces colonnes arrivent avec la migration 113 ; dans le
+            // même SELECT que l'avatar, une base où 113 n'est pas jouée aurait fait échouer la
+            // requête entière et emporté l'avatar avec les cadres.
+            try {
+                const [[lc]] = await conn.query('SELECT cadre, cadres_exclusifs FROM learner WHERE id = ?', [learner.id]);
+                cadre = (lc && lc.cadre) || null;
+                cadres_exclusifs = listeCadres(lc && lc.cadres_exclusifs);
+            } catch (e) { if (!isMissingSchema(e)) throw e; }
             const [rows] = await conn.query('SELECT world, step, stars FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
             for (const r of rows) {
                 (progress[r.world] ||= {})[r.step] = r.stars;
                 stars += r.stars; xp += r.stars * 10;
             }
         } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : profil vide
-        res.json({ data: { avatar, progress, xp, stars } });
+        res.json({ data: { avatar, cadre, cadres_exclusifs, progress, xp, stars } });
     } catch (err) {
         console.error('Erreur profil stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -881,6 +896,44 @@ const saveMyAvatar = async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur avatar stagiaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PUT /api/mon-espace/cadre — { cadre }.
+ *
+ * Le cadre PORTÉ, pour que les autres stagiaires le voient : jusqu'ici le choix vivait en
+ * localStorage, donc la Communauté affichait à tous le cadre de parcours et jamais le choix.
+ *
+ * On ne vérifie PAS ici que le stagiaire possède ce cadre. C'est volontaire : la possession se
+ * déduit de `completed_levels` et de `cadres_exclusifs`, deux valeurs qui bougent dans le temps
+ * (une formation validée après coup, un cadre exclusif accordé puis corrigé). La règle est donc
+ * appliquée À LA LECTURE, là où l'on connaît l'état du moment — un cadre choisi puis perdu
+ * cesse simplement d'être affiché, sans qu'il faille repasser sur la base. Un cadre est de
+ * toute façon purement décoratif : il n'ouvre aucun droit.
+ *
+ * On valide en revanche la FORME, sans quoi la colonne accepterait n'importe quelle chaîne.
+ */
+const CADRES_CONNUS = ['aucun', 'bronze', 'argent', 'or', 'braise', 'maestro', 'champion', 'jury', 'fondateur'];
+const listeCadres = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
+
+const saveMyCadre = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        const cadre = req.body && req.body.cadre;
+        // NULL et « aucun » ne disent pas la même chose : NULL = aucun choix exprimé (on
+        // retombe sur le palier), « aucun » = le choix de ne rien porter.
+        if (cadre != null && cadre !== '' && !CADRES_CONNUS.includes(String(cadre))) {
+            return res.status(422).json({ message: 'Cadre inconnu.' });
+        }
+        try { await conn.query('UPDATE learner SET cadre = ? WHERE id = ?', [cadre || null, learner.id]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 113 non jouée
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur cadre stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -1306,123 +1359,13 @@ const getMyShopRequests = async (req, res) => {
     }
 };
 
-/* ---- Cœurs de Pizza Quest ------------------------------------------------------------- */
+/* Les CŒURS de Pizza Quest ont été supprimés (2026-07-28). Ils bloquaient la révision après
+   un échec — punir quelqu'un qui veut réviser est absurde dans une école. Sont partis avec :
+   `lib/questlives.js`, les routes /quest/vies, l'écran d'administration, les colonnes
+   `organization.quest_max_hearts` / `quest_regen_minutes` et la table `learner_quest_life`
+   (migration 115). La progression se lit désormais aux CADRES, gagnés sur les formations
+   terminées. */
 
-/** Réglages de l'organisme (colonnes optionnelles : migration 104 peut ne pas être jouée). */
-async function reglagesCoeurs(conn, orgId) {
-    try {
-        const [[o]] = await conn.query(
-            'SELECT quest_max_hearts, quest_regen_minutes FROM organization WHERE id = ?', [orgId]);
-        return o || {};
-    } catch (e) { if (isMissingSchema(e)) return {}; throw e; }
-}
-
-/**
- * Lit l'état des cœurs et PERSISTE les crédits accordés par le temps écoulé.
- * L'écriture n'a lieu que si des cœurs ont effectivement été gagnés (`changed`) : une simple
- * consultation ne doit pas écrire.
- */
-async function lireCoeurs(conn, learner, orgId) {
-    const org = await reglagesCoeurs(conn, orgId);
-    let row = null;
-    try {
-        const [[r]] = await conn.query(
-            'SELECT hearts, updated_at FROM learner_quest_life WHERE learner_id = ?', [learner.id]);
-        row = r || null;
-    } catch (e) { if (isMissingSchema(e)) return etatCoeurs(null, org); throw e; }
-
-    const etat = etatCoeurs(row, org);
-    if (row && etat.changed) {
-        await conn.query(
-            'UPDATE learner_quest_life SET hearts = ?, updated_at = ? WHERE learner_id = ?',
-            [etat.hearts, etat.updatedAt, learner.id]
-        ).catch(() => {}); // le crédit se recalculera à la prochaine lecture
-    }
-    return etat;
-}
-
-const enveloppe = (e) => ({
-    hearts: e.hearts, max: e.max, regen_minutes: e.delai,
-    next_in_ms: e.nextInMs, full_in_ms: e.fullInMs,
-});
-
-/**
- * DELETE /api/mon-espace/quest/progression — ⚠️ OUTIL DE DÉBOGAGE, À RETIRER.
- *
- * Remet à zéro la progression Pizza Quest du stagiaire CONNECTÉ : chapitres terminés,
- * étoiles, et capital de cœurs (supprimer la ligne suffit, l'état repart au maximum).
- * Sert à rejouer un parcours pendant la mise au point du jeu.
- *
- * Portée volontairement limitée au demandeur : personne ne peut effacer la progression
- * d'un autre. Reste que c'est une destruction de données sans filet — à supprimer, ainsi
- * que le bouton correspondant côté stagiaire, avant la mise en service.
- */
-const resetQuestProgress = async (req, res) => {
-    try {
-        const conn = db.promise();
-        const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
-        let efface = 0;
-        try {
-            const [r] = await conn.query('DELETE FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
-            efface = r.affectedRows || 0;
-        } catch (e) { if (!isMissingSchema(e)) throw e; }
-        try {
-            await conn.query('DELETE FROM learner_quest_life WHERE learner_id = ?', [learner.id]);
-        } catch (e) { if (!isMissingSchema(e)) throw e; }
-        console.warn(`[debug] progression Pizza Quest remise à zéro pour ${learner.id} (${efface} chapitre(s))`);
-        res.json({ success: true, message: `Progression remise à zéro (${efface} chapitre(s)).` });
-    } catch (err) {
-        console.error('Erreur remise à zéro progression :', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
-
-/** GET /api/mon-espace/quest/vies */
-const getQuestLives = async (req, res) => {
-    try {
-        const conn = db.promise();
-        const learner = await learnerForUser(conn, req.user.id);
-        // Pas de fiche stagiaire : on ne bloque pas le jeu, cœurs pleins.
-        if (!learner) return res.json({ data: { hearts: 5, max: 5, regen_minutes: 0, next_in_ms: 0, full_in_ms: 0 } });
-        res.json({ data: enveloppe(await lireCoeurs(conn, learner, learner.organization_id)) });
-    } catch (err) {
-        console.error('Erreur cœurs quest :', err);
-        // Jamais bloquer le jeu sur une erreur de compteur.
-        res.json({ data: { hearts: 5, max: 5, regen_minutes: 0, next_in_ms: 0, full_in_ms: 0 } });
-    }
-};
-
-/**
- * POST /api/mon-espace/quest/vies/perdre — un chapitre échoué ou abandonné.
- * Le décompte est fait ICI et pas côté client : c'est le serveur qui tient le capital.
- */
-const loseQuestLife = async (req, res) => {
-    try {
-        const conn = db.promise();
-        const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.json({ data: { hearts: 5, max: 5, regen_minutes: 0, next_in_ms: 0, full_in_ms: 0 } });
-        const org = await reglagesCoeurs(conn, learner.organization_id);
-        // Régénération neutralisée : rien à retirer, le capital reste plein.
-        if (!reglages(org).delai) return res.json({ data: enveloppe(etatCoeurs(null, org)) });
-
-        const etat = await lireCoeurs(conn, learner, learner.organization_id);
-        const apres = retirerCoeur(etat);
-        try {
-            await conn.query(
-                `INSERT INTO learner_quest_life (learner_id, organization_id, hearts, updated_at)
-                 VALUES (?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE hearts = VALUES(hearts), updated_at = VALUES(updated_at)`,
-                [learner.id, learner.organization_id, apres.hearts, apres.updatedAt]
-            );
-        } catch (e) { if (isMissingSchema(e)) return res.json({ data: enveloppe(etat) }); throw e; }
-
-        res.json({ data: enveloppe(etatCoeurs({ hearts: apres.hearts, updated_at: apres.updatedAt }, org)) });
-    } catch (err) {
-        console.error('Erreur perte de cœur :', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
 
 /**
  * PUT /api/mon-espace/boutique/demande/:id/annuler — le stagiaire annule SA demande.
@@ -1684,5 +1627,6 @@ const updateMyInfos = async (req, res) => {
 };
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
-module.exports = { getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
-    getQuestLives, loseQuestLife, resetQuestProgress };
+module.exports = {
+    saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+};

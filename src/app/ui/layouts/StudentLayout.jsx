@@ -8,13 +8,15 @@ import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
 import { getMyAccess } from "../api/apiClient.js";
 import { getAvatar, AVATAR_EVENT, COMMUNITY_EVENT, hydrateProfile } from "../lib/gamification.js";
+import AvatarCadre from "../components/AvatarCadre.jsx";
+import { cadrePorteDe, useCadreChoisi } from "../lib/cadres.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 
 // Sections débloquées seulement après avoir franchi le point d'accès (breakpoint) d'une formation.
-const GATED_PATHS = ["/pizza-quest", "/empatements", "/garnitures", "/realisations", "/hygiene", "/communaute", "/notions"];
+const GATED_PATHS = ["/pizza-quest", "/empatements", "/garnitures", "/realisations", "/communaute", "/notions"];
 
 const LOCK_TITLE = "Signez vos documents jusqu'au point d'accès pour débloquer";
 
@@ -101,6 +103,9 @@ function StudentLayout() {
   const [unlocked, setUnlocked] = useState(true); // fail-open : débloqué par défaut
   const [pending, setPending] = useState(0);      // documents à signer / QCM à faire
   const [news, setNews] = useState(0);            // commentaires nouveaux dans la Communauté
+  const [done, setDone] = useState(0);            // formations terminées → cadre de l'avatar
+  const choixCadre = useCadreChoisi(user?.id);    // resynchronisé dès qu'il change de cadre
+  const [exclusifs, setExclusifs] = useState([]); // cadres exclusifs accordés par l'école
   const [avatar, setAvatar] = useState(() => getAvatar(user?.id));
   const [menuOpen, setMenuOpen] = useState(false); // tiroir de navigation, sous 900px
   // A-t-il franchi le point d'accès (breakpoint) d'une formation ? Débloque Pizza Quest + Outils.
@@ -113,6 +118,8 @@ function StudentLayout() {
         setUnlocked(r?.data?.quest_unlocked !== false);
         setPending(Number(r?.data?.pending_docs) || 0);
         setNews(Number(r?.data?.community_news) || 0);
+        setDone(Number(r?.data?.formations_done) || 0);
+        setExclusifs(r?.data?.cadres_exclusifs || []);
       })
       .catch(() => setUnlocked(true));
     // Rejoué à chaque changement de page : quitter la Communauté suffit donc à voir la
@@ -167,7 +174,9 @@ function StudentLayout() {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+    // `stu-app` porte toute la couche ludique (police ronde, coins doux, retour tactile,
+    // fond chaud) — cf. styles/app.css. L'application d'administration ne la reçoit jamais.
+    <div className="stu-app" style={{ minHeight: "100vh" }}>
       {/* En-tête ET tiroir dans un même bloc collant : c'est ce bloc qui colle, pas chacun de
           son côté. Le tiroir suit donc la barre sans qu'on ait à lui donner un décalage en
           pixels — un `top` en dur devrait valoir la hauteur exacte de la barre, qui change
@@ -212,10 +221,17 @@ function StudentLayout() {
         <ThemeToggle />
         {/* Le changement de mot de passe vit dans le profil (onglet Compte) : le doubler
             dans la barre en faisait la seconde action la plus visible de l'espace. */}
-        <button className="avatar" title="Mon profil" onClick={() => setProfileOpen(true)}
-          style={{ border: "none", cursor: "pointer", ...(avatar ? { background: avatar.color, fontSize: 18 } : null) }}>
-          {avatar ? avatar.emoji : initials(user?.first_name, user?.last_name)}
-        </button>
+        {/* L'avatar de la barre porte le cadre, comme le promet le profil (« il entoure ton
+            avatar PARTOUT »). C'est le seul endroit visible sur toutes les pages : sans lui,
+            choisir un cadre restait sans effet visible tant qu'on n'ouvrait pas la Communauté. */}
+        <AvatarCadre
+          avatar={avatar}
+          initiales={initials(user?.first_name, user?.last_name)}
+          cadre={cadrePorteDe(choixCadre, done, exclusifs).id}
+          size={38}
+          title="Mon profil"
+          onClick={() => setProfileOpen(true)}
+        />
         <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion"><Icon name="power" size={18} /></button>
         {/* Bouton du tiroir : présent uniquement sous 900px, où la barre ne tient plus.
             La pastille y est reportée — documents ET Communauté —, sinon replier la barre
@@ -245,7 +261,9 @@ function StudentLayout() {
           hauteur de l'en-tête. */}
       {menuOpen && <div className="stu-scrim" onClick={() => setMenuOpen(false)} />}
 
-      <main className="content" style={{ maxWidth: 900 }}>
+      {/* 1060 et non 900 : les cartes de formation sont sur trois colonnes — à 900px elles
+          tombaient sous 280px et le titre du programme passait sur trois lignes. */}
+      <main className="content" style={{ maxWidth: 1060 }}>
         {!unlocked && GATED_PATHS.some((p) => loc.pathname.startsWith(p)) ? (
           <EmptyState icon="lock">
             <b>Section verrouillée.</b><br />Signez d'abord vos documents jusqu'au <b>point d'accès</b> de votre formation pour débloquer Pizza Quest et les outils.

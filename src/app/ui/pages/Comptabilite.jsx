@@ -6,6 +6,8 @@ import {
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
+import EmptyState from "../components/EmptyState.jsx";
+import DataTable from "../components/DataTable.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 
@@ -110,7 +112,9 @@ function Comptabilite() {
       <PageHead
         eyebrow="Gestion · Pilotage"
         title="Comptabilité"
-        lead="Tableau de gestion (pas de comptabilité légale). Le chiffre d'affaires se calcule automatiquement depuis les inscriptions, les ventes de matériel et les produits divers. Chaque poste de dépense est comparé à sa cible."
+        // L'avertissement reste : il empêche de prendre cet écran pour une comptabilité
+        // opposable. Le reste décrivait ce qui est maintenant lisible juste en dessous.
+        lead="Tableau de gestion — ce n'est pas une comptabilité légale."
         actions={
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <MoneyToggle />
@@ -142,29 +146,41 @@ function Comptabilite() {
         <p className="lead">Chargement…</p>
       ) : (
         <div className="grid" style={{ gap: 16 }}>
-          {/* KPIs */}
-          <div className="grid cols-4">
-            <div className="kpi"><div className="kpi-top"><div className="lbl">Chiffre d'affaires</div><span className="kpi-ic tone-blue"><Icon name="euro" size={18} /></span></div><div className="val tnum">{euro(data.ca.total)}</div></div>
-            <div className="kpi"><div className="kpi-top"><div className="lbl">Total des dépenses</div><span className="kpi-ic tone-ember"><Icon name="receipt" size={18} /></span></div><div className="val tnum">{euro(data.totalDepenses)}</div></div>
-            <div className="kpi"><div className="kpi-top"><div className="lbl">Marge ({data.margePct}%)</div><span className="kpi-ic tone-green"><Icon name="target" size={18} /></span></div><div className="val tnum" style={{ color: data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.marge)}</div></div>
-            <div className="kpi"><div className="kpi-top"><div className="lbl">Dividendes réalistes ({data.partRealistePct}%)</div><span className="kpi-ic tone-orange"><Icon name="coins" size={18} /></span></div><div className="val tnum" style={{ color: data.dividendeRealiste > 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.dividendeRealiste)}</div></div>
-          </div>
-
-          {/* Gain du mois — ou de l'année entière si numero === 0. Entrées − sorties sur la
-              période choisie. Distinct de la marge annuelle au-dessus (qui rattache les
-              inscriptions à l'année de session) : ici, tout est daté à l'encaissement. */}
-          {data.mois && (
-            <div className="kpi" style={{ borderLeft: `3px solid ${data.mois.gain >= 0 ? "var(--green)" : "var(--ember1)"}` }}>
-              <div className="kpi-top">
-                <div className="lbl">{data.mois.numero === 0 ? `Gain de l'année ${annee}` : `Gain du mois · ${MOIS[data.mois.numero - 1]} ${annee}`}</div>
-                <span className={"kpi-ic " + (data.mois.gain >= 0 ? "tone-green" : "tone-ember")}><Icon name={data.mois.gain >= 0 ? "arrow-up" : "arrow-down"} size={18} /></span>
-              </div>
-              <div className="val tnum" style={{ color: data.mois.gain >= 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.mois.gain)}</div>
-              <div className="sub" style={{ marginTop: 4 }}>
-                {euro(data.mois.ca)} de recettes − {euro(data.mois.depenses)} de dépenses
-              </div>
+          {/* UN SEUL CHIFFRE DOMINANT : LE RÉSULTAT.
+              Cinq indicateurs se partageaient le premier écran — chiffre d'affaires, dépenses,
+              marge, dividendes, gain du mois — et TROIS D'ENTRE EUX SE DÉDUISENT DES AUTRES.
+              Sans dépense, ils affichaient littéralement la même somme trois fois : « 1 031 € »
+              en CA, en marge, et en gain du mois. Cinq tuiles pour un seul renseignement.
+              Le calcul est désormais ÉCRIT plutôt que réparti : recettes − dépenses = marge.
+              On lit d'où vient le résultat au lieu de le recomposer de tuile en tuile. */}
+          <div className="bilan" style={{ "--ton": data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>
+            <div className="bilan-t">Résultat {annee}</div>
+            <div className="bilan-n tnum" style={{ color: data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>
+              {euro(data.marge)}
             </div>
-          )}
+            <div className="bilan-calc">
+              <span><b className="tnum">{euro(data.ca.total)}</b> de recettes</span>
+              <i aria-hidden="true">−</i>
+              <span><b className="tnum">{euro(data.totalDepenses)}</b> de dépenses</span>
+              <i aria-hidden="true">=</i>
+              <span><b className="tnum">{data.margePct}%</b> de marge</span>
+            </div>
+            <div className="bilan-sat">
+              <span>
+                <b className="tnum">{euro(data.dividendeRealiste)}</b> de dividendes réalistes
+                <i> ({data.partRealistePct}% du CA)</i>
+              </span>
+              {/* Le gain de la période est daté à L'ENCAISSEMENT, quand la marge annuelle
+                  rattache les inscriptions à l'année de leur session : deux chiffres proches
+                  mais pas identiques, d'où la précision. */}
+              {data.mois && (
+                <span>
+                  <b className="tnum">{euro(data.mois.gain)}</b>
+                  {data.mois.numero === 0 ? " encaissés sur l'année" : ` encaissés en ${MOIS[data.mois.numero - 1].toLowerCase()}`}
+                </span>
+              )}
+            </div>
+          </div>
 
           {/* Composition du CA (3 cartes %) */}
           <Card title={T("calculator", "Composition du chiffre d'affaires")}>
@@ -266,18 +282,21 @@ function Comptabilite() {
           {/* Saisies */}
           <div className="grid cols-2">
             <Card title={T("receipt", "Enregistrer une dépense")}>
-              <div className="field"><label>Libellé</label>
-                <input className="inp" value={dep.label} onChange={(e) => setDep({ ...dep, label: e.target.value })} placeholder="Facture farine, loyer avril…" /></div>
+              {/* Les quatre étiquettes de ce formulaire étaient visibles mais non RELIÉES :
+                  cliquer « Montant HT » ne plaçait pas le curseur dans la case, et un lecteur
+                  d'écran annonçait quatre champs anonymes à la suite. */}
+              <div className="field"><label htmlFor="dep-libelle">Libellé</label>
+                <input id="dep-libelle" className="inp" value={dep.label} onChange={(e) => setDep({ ...dep, label: e.target.value })} placeholder="Facture farine, loyer avril…" /></div>
               <div className="row2">
-                <div className="field"><label>Poste</label>
-                  <select value={dep.categorie} onChange={(e) => setDep({ ...dep, categorie: e.target.value })}>
+                <div className="field"><label htmlFor="dep-poste">Poste</label>
+                  <select id="dep-poste" value={dep.categorie} onChange={(e) => setDep({ ...dep, categorie: e.target.value })}>
                     {CATS.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
                   </select></div>
-                <div className="field"><label>Montant HT (€)</label>
-                  <input className="inp" inputMode="decimal" value={dep.montantHT} onChange={(e) => setDep({ ...dep, montantHT: e.target.value })} placeholder="0" /></div>
+                <div className="field"><label htmlFor="dep-montant">Montant HT (€)</label>
+                  <input id="dep-montant" className="inp" inputMode="decimal" value={dep.montantHT} onChange={(e) => setDep({ ...dep, montantHT: e.target.value })} placeholder="0" /></div>
               </div>
-              <div className="field"><label>Date</label>
-                <input className="inp" type="date" value={dep.date} onChange={(e) => setDep({ ...dep, date: e.target.value })} /></div>
+              <div className="field"><label htmlFor="dep-date">Date</label>
+                <input id="dep-date" className="inp" type="date" value={dep.date} onChange={(e) => setDep({ ...dep, date: e.target.value })} /></div>
               <button className="btn primary" style={{ width: "100%" }} disabled={savingDep} onClick={submitDep}>
                 {savingDep ? "Enregistrement…" : "+ Ajouter la dépense"}
               </button>
@@ -287,14 +306,20 @@ function Comptabilite() {
           {/* Listes dépenses + produits divers */}
           <div className="grid cols-2">
             <Card title={T("receipt", `Dépenses ${annee}`)}>
-              {data.depenses.length === 0 ? <p className="lead" style={{ margin: 0 }}>Aucune dépense saisie.</p> : (
+              {data.depenses.length === 0 ? (
+                <EmptyState icon="receipt" title="Aucune dépense saisie"
+                  text="Ajoutez vos factures et charges avec le formulaire ci-dessus : elles alimentent la répartition par poste et le résultat de l'année." />
+              ) : (
                 <div>{data.depenses.map((d) => (
                   <ListRow key={d.id} titre={d.label} sous={`${CATS.find((c) => c.v === d.category)?.label ?? d.category} · ${new Date(d.date).toLocaleDateString("fr-FR")}`} montant={euro(d.amount_ht)} onDel={() => delDep(d)} />
                 ))}</div>
               )}
             </Card>
             <Card title={T("coins", `Produits divers ${annee} · ${euro(data.ca.extra)}`)}>
-              {(!data.revenus || data.revenus.length === 0) ? <p className="lead" style={{ margin: 0 }}>Aucun produit divers. Se saisit sur la page Partenaires.</p> : (
+              {(!data.revenus || data.revenus.length === 0) ? (
+                <EmptyState icon="handshake" title="Aucun produit divers"
+                  text="Les commissions et apports des partenaires se saisissent depuis la page Partenaires ; ils remontent ici automatiquement." />
+              ) : (
                 <div>{data.revenus.map((r) => (
                   <ListRow key={r.id} titre={r.label} sous={`${REV_LABEL[r.category] ?? r.category} · ${new Date(r.date).toLocaleDateString("fr-FR")}`} montant={euro(r.amount)} onDel={() => delRev(r)} />
                 ))}</div>
@@ -512,30 +537,27 @@ function Performance({ annee }) {
         <PerfCard label="Marge" icon="target" tone="green" cur={euro(c.marge)} prev={euro(p.marge)} rc={c.marge} rp={p.marge} an={d.anneePrec} />
       </div>
       <Card title={T("receipt", `Dépenses par poste — ${d.annee} vs ${d.anneePrec}`)}>
-        <div className="tablewrap">
-          <table>
-            <thead><tr><th>Poste</th><th className="ta-r">{d.annee}</th><th className="ta-r">{d.anneePrec}</th><th className="ta-r">Écart</th></tr></thead>
-            <tbody>
-              {d.postesLabels.map((pl) => {
-                const cur = c.postes[pl.categorie] ?? 0, prev = p.postes[pl.categorie] ?? 0;
-                return (
-                  <tr key={pl.categorie}>
-                    <td>{pl.label}</td>
-                    <td className="ta-r tnum">{euro(cur)}</td>
-                    <td className="ta-r tnum" style={{ color: "var(--muted)" }}>{euro(prev)}</td>
-                    <td className="ta-r tnum"><Ecart diff={cur - prev} invert /></td>
-                  </tr>
-                );
-              })}
-              <tr style={{ fontWeight: 700 }}>
-                <td>Total</td>
-                <td className="ta-r tnum">{euro(c.depensesTotal)}</td>
-                <td className="ta-r tnum" style={{ color: "var(--muted)" }}>{euro(p.depensesTotal)}</td>
-                <td className="ta-r tnum"><Ecart diff={c.depensesTotal - p.depensesTotal} invert /></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={d.postesLabels}
+          rowKey={(pl) => pl.categorie}
+          cols={[
+            { k: "poste", t: "Poste", principal: true, cell: (pl) => pl.label },
+            { k: "cur", t: String(d.annee), th: { className: "ta-r" }, td: { textAlign: "right" },
+              cell: (pl) => <span className="tnum">{euro(c.postes[pl.categorie] ?? 0)}</span> },
+            { k: "prev", t: String(d.anneePrec), th: { className: "ta-r" }, td: { textAlign: "right", color: "var(--muted)" },
+              cell: (pl) => <span className="tnum">{euro(p.postes[pl.categorie] ?? 0)}</span> },
+            // `invert` : sur des DÉPENSES, une hausse est une mauvaise nouvelle — l'écart doit
+            // donc se colorer à l'envers d'un chiffre d'affaires.
+            { k: "ecart", t: "Écart", th: { className: "ta-r" }, td: { textAlign: "right" },
+              cell: (pl) => <span className="tnum"><Ecart diff={(c.postes[pl.categorie] ?? 0) - (p.postes[pl.categorie] ?? 0)} invert /></span> },
+          ]}
+          pied={{
+            poste: "Total",
+            cur: <span className="tnum">{euro(c.depensesTotal)}</span>,
+            prev: <span className="tnum">{euro(p.depensesTotal)}</span>,
+            ecart: <span className="tnum"><Ecart diff={c.depensesTotal - p.depensesTotal} invert /></span>,
+          }}
+        />
       </Card>
     </div>
   );

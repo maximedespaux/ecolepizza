@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
 import { initials } from "../lib/format.js";
@@ -37,7 +38,7 @@ const LABEL = {
    Une classe inventée sortirait un badge sans style, et le build n'en dirait rien. */
 const TONE = { NOUVELLE: "r", EN_PREPARATION: "a", PRETE: "g", PAYE: "a", FACTUREE: "n", REMISE: "b", ANNULEE: "n" };
 
-function Demande({ d, onChange }) {
+function Demande({ d, onChange, onErreur }) {
   const [busy, setBusy] = useState(false);
   const idx = FLOW.indexOf(d.status);            // position dans le flux (−1 si ANNULEE)
   const inFlow = idx >= 0;
@@ -75,7 +76,7 @@ function Demande({ d, onChange }) {
     if (!window.confirm(`Supprimer définitivement la demande ${d.ref} de ${d.learner.last_name} ${d.learner.first_name} ?`)) return;
     setBusy(true);
     try { await deleteShopRequest(d.id); onChange(); }
-    catch (e) { window.alert(e.message || "Suppression impossible."); }
+    catch (e) { onErreur(e.message || "Suppression impossible."); }
     finally { setBusy(false); }
   }
 
@@ -183,6 +184,10 @@ function DemandesBoutique() {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("");
   const [purging, setPurging] = useState(false);
+  // Les résultats de suppression passaient par `window.alert` : seul point de cet écran à
+  // sortir de la charte, et un message qu'il fallait congédier d'un clic avant de pouvoir
+  // regarder la liste qu'il commentait.
+  const [statut, setStatut] = useState(null);
   const load = () => getShopRequests(filter || undefined).then((r) => setRows(r.data || [])).catch(() => setRows([]));
   useEffect(() => { setRows(null); load(); /* eslint-disable-next-line */ }, [filter]);
 
@@ -193,8 +198,8 @@ function DemandesBoutique() {
     const t = window.prompt('Pour confirmer, tape « SUPPRIMER » :');
     if (String(t || "").trim().toUpperCase() !== "SUPPRIMER") return;
     setPurging(true);
-    try { const { deleted } = await deleteAllShopRequests(); window.alert(`${deleted} demande(s) supprimée(s).`); load(); }
-    catch (e) { window.alert(e.message || "Suppression impossible."); }
+    try { const { deleted } = await deleteAllShopRequests(); setStatut({ type: "success", message: `${deleted} demande(s) supprimée(s).` }); load(); }
+    catch (e) { setStatut({ type: "error", message: e.message || "Suppression impossible." }); }
     finally { setPurging(false); }
   }
 
@@ -208,6 +213,8 @@ function DemandesBoutique() {
           </button>
         ) : null} />
 
+      <StatusMessage status={statut} />
+
       <div className="rayon-tabs" style={{ marginBottom: 16 }}>
         <button className={"rayon-tab" + (filter === "" ? " on" : "")} onClick={() => setFilter("")}>Toutes</button>
         {FLOW.concat("ANNULEE").map((s) => (
@@ -218,7 +225,7 @@ function DemandesBoutique() {
       {rows === null ? <p className="hint">Chargement…</p>
         : !rows.length ? <EmptyState icon="package" title="Aucune demande"
             text="Quand un stagiaire validera son panier depuis la boutique, sa demande arrivera ici avec son identité et ses articles." />
-        : rows.map((d) => <Demande key={d.id} d={d} onChange={load} />)}
+        : rows.map((d) => <Demande key={d.id} d={d} onChange={load} onErreur={(m) => setStatut({ type: "error", message: m })} />)}
     </>
   );
 }

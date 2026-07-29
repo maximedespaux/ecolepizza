@@ -8,11 +8,27 @@ import { setBadgeColors } from "../lib/levels.js";
 import Sidebar from "../components/Sidebar.jsx";
 import Topbar from "../components/Topbar.jsx";
 
-// Blocage best-effort des actions de modification en mode lecture seule.
-// L'autorité reste le serveur (middleware enforceSectionMode) ; ceci est l'UX.
+/**
+ * Contrôles bloqués en LECTURE SEULE.
+ *
+ * L'autorité reste le SERVEUR (middleware `enforceSectionMode`) : ceci n'est que l'interface.
+ * Mais l'interface mentait — la liste ne couvrait que `.btn.primary`, `.btn.danger`, `.danger`
+ * et `[type=submit]`, alors que la convention de bouton destructeur la plus répandue de
+ * l'application est `iconbtn del`, employée dans DIX-NEUF pages. Ces corbeilles-là passaient
+ * donc au travers : on cliquait, la requête partait, et c'est le serveur qui refusait — avec
+ * un message d'erreur, là où l'écran annonçait « lecture seule » en haut de page.
+ *
+ * Autrement dit, la protection dépendait de la classe CSS que chaque page avait choisie.
+ *
+ * `[data-lecture-ok]` laisse une échappatoire explicite : certains boutons primaires ne
+ * modifient rien (exporter, imprimer, replier un panneau) et doivent continuer de répondre.
+ * Une exception DÉCLARÉE vaut mieux qu'un oubli silencieux.
+ */
+const CONTROLES_MODIFIANTS = ".btn.primary, .btn.danger, .danger, .iconbtn.del, .icon-btn.danger, [type=submit]";
+
 function blockMutations(e) {
-  const el = e.target.closest?.(".btn.primary, .btn.danger, .danger, [type=submit]");
-  if (el) { e.preventDefault(); e.stopPropagation(); }
+  const el = e.target.closest?.(CONTROLES_MODIFIANTS);
+  if (el && !el.closest("[data-lecture-ok]")) { e.preventDefault(); e.stopPropagation(); }
 }
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -61,7 +77,10 @@ function AppLayout() {
   }
 
   return (
-    <div className="app">
+    /* `adm-app` porte l'identité de l'espace d'administration — police de titrage, coins,
+       retour à l'appui. Exactement le pendant de `.stu-app` côté stagiaire : on redéfinit les
+       tokens, on ne réécrit aucun composant. */
+    <div className="app adm-app">
       <Sidebar open={open} />
       <div className={"scrim" + (open ? " show" : "")} onClick={() => setOpen(false)} />
       <div className="main">
@@ -76,7 +95,12 @@ function AppLayout() {
               Lecture seule — vous pouvez consulter cette rubrique mais pas la modifier.
             </div>
           )}
+          {/* `lecture-seule` habille ce que `blockMutations` intercepte : sans elle, un bouton
+              gardait son air cliquable et ne faisait rien — un clic sans effet et sans
+              explication est plus déroutant qu'un bouton visiblement éteint. Les deux
+              lisent la MÊME liste de sélecteurs, dans le JS et dans la CSS. */}
           <div
+            className={readOnly ? "lecture-seule" : undefined}
             onClickCapture={readOnly ? blockMutations : undefined}
             onSubmitCapture={readOnly ? ((e) => { e.preventDefault(); e.stopPropagation(); }) : undefined}
           >

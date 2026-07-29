@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getEnrollments, getCompanies, downloadFacturX, downloadInvoiceXml, facturXUrl } from "../api/apiClient.js";
@@ -6,6 +6,8 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
 import Badge from "../components/Badge.jsx";
+import DataTable from "../components/DataTable.jsx";
+import MenuActions from "../components/MenuActions.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -14,11 +16,18 @@ import { bumpBadges } from "../lib/events.js";
 
 const TYPES = [["DEVIS", "Devis"], ["ACOMPTE", "Acompte"], ["FACTURE", "Facture"], ["AVOIR", "Avoir"]];
 const STATUS = { BROUILLON: ["Brouillon", "n"], EMISE: ["Émise", "b"], PAYEE: ["Payée", "g"], IMPAYEE: ["Impayée", "r"], ANNULEE: ["Annulée", "n"] };
+/* CE QUI DOIT ENCORE ÊTRE PAYÉ REMONTE. La page répond à « qui me doit de l'argent » ; les
+   impayées y étaient mêlées aux payées, dans l'ordre d'émission. Le tri est STABLE (garanti
+   depuis ES2019) : à statut égal, l'ordre d'origine — donc chronologique — est conservé. */
+const RANG_STATUT = { IMPAYEE: 0, EMISE: 1, BROUILLON: 2, PAYEE: 3, ANNULEE: 4 };
+
 const emptyLine = () => ({ enrollment_id: "", description: "", amount_net: "" });
 const makeEmpty = () => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, due_date: "", lines: [emptyLine()] });
 
 function Factures() {
-  const [invoices, setInvoices] = useState([]);
+  // `null` et non `[]` : c'est ce qui distingue « on charge » de « c'est vide ». À `[]`, la
+  // page annonçait « Aucun document de facturation » pendant tout le chargement.
+  const [invoices, setInvoices] = useState(null);
   const [totals, setTotals] = useState({ emis: 0, paye: 0, impaye: 0 });
   const [enrollments, setEnrollments] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -39,6 +48,11 @@ function Factures() {
     getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
     getCompanies().then((r) => setCompanies(r.data)).catch(() => {});
   }, []);
+
+  const lignes = useMemo(() => {
+    if (!invoices) return null;
+    return [...invoices].sort((a, b) => (RANG_STATUT[a.status] ?? 9) - (RANG_STATUT[b.status] ?? 9));
+  }, [invoices]);
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
   const setLine = (i, k, v) => setForm((p) => ({ ...p, lines: p.lines.map((l, j) => (j === i ? { ...l, [k]: v } : l)) }));
@@ -107,9 +121,12 @@ function Factures() {
       <StatusMessage status={status} />
 
       <div className="grid cols-3" style={{ marginBottom: 16 }}>
-        <Kpi label="Émis (factures)" value={euro(totals.emis)} />
-        <Kpi label="Encaissé" value={euro(totals.paye)} />
-        <Kpi label="Reste dû" value={euro(totals.impaye)} />
+        {/* Trois tons distincts : le filet coloré ne sert à rien s'il est le même partout.
+            Bleu pour ce qui est ÉMIS (un fait), vert pour ce qui est ENTRÉ, ambre pour ce qui
+            est ATTENDU — c'est la seule des trois qui appelle une action. */}
+        <Kpi label="Émis (factures)" value={euro(totals.emis)} icon="receipt" tone="blue" />
+        <Kpi label="Encaissé" value={euro(totals.paye)} icon="euro" tone="green" />
+        <Kpi label="Reste dû" value={euro(totals.impaye)} icon="clock" tone="gold" />
       </div>
 
       {showForm && (
@@ -156,39 +173,69 @@ function Factures() {
         </Card>
       )}
 
-      <Card title={`Documents (${invoices.length})`}>
-        {invoices.length === 0 ? (
-          <EmptyState icon="receipt">Aucun document de facturation.</EmptyState>
-        ) : (
-          <div className="tablewrap" style={{ border: "none" }}>
-            <table>
-              <thead><tr><th>Numéro</th><th>Type</th><th>Client / dossier</th><th className="ta-r">Montant</th><th>Statut</th><th></th></tr></thead>
-              <tbody>
-                {invoices.map((i) => {
-                  const [label, tone] = STATUS[i.status] || [i.status, "n"];
-                  const who = i.company_name || (i.last_name ? `${i.last_name} ${i.first_name}` : "—");
+      <Card title={`Documents${invoices ? ` (${invoices.length})` : ""}`}>
+          <DataTable
+            rows={lignes}
+            vide={<EmptyState icon="receipt" title="Aucun document de facturation"
+              text="Devis, acomptes, factures et avoirs apparaîtront ici dès le premier document émis." />}
+            rowKey={(i) => i.id}
+            // Une impayée se repère sans lire son statut : c'est la seule ligne qui réclame.
+            rowProps={(i) => (i.status === "IMPAYEE" ? { className: "ln-du" } : null)}
+            cols={[
+              { k: "number", t: "Numéro", cell: (i) => <span className="mono">{i.number}</span> },
+              { k: "who", t: "Client / dossier", principal: true,
+                cell: (i) => {
+                  /* Repli sur le NUMÉRO quand le client est inconnu. En colonnes, un « — »
+                     se lit très bien : la colonne d'à côté porte le numéro. En carte, ce même
+                     « — » devenait le TITRE — « — · 6 dossiers » — et la carte n'identifiait
+                     plus rien. Un titre doit toujours nommer. */
+                  const who = i.company_name || (i.last_name ? `${i.last_name} ${i.first_name}` : i.number);
+                  return `${who}${Number(i.n_lines) > 1 ? ` · ${i.n_lines} dossiers` : i.program_code ? ` · ${i.program_code}` : ""}`;
+                } },
+              { k: "type", t: "Type", cell: (i) => i.type },
+              { k: "amount", t: "Montant", th: { className: "ta-r" }, td: { textAlign: "right" },
+                cell: (i) => (
+                  <span className="mono tnum">
+                    {euro(i.amount_net)}
+                    {Number(i.paid) > 0 && <span style={{ display: "block", fontSize: 11, color: "var(--green)" }}>payé {euro(i.paid)}</span>}
+                  </span>
+                ) },
+              { k: "statut", t: "Statut",
+                cell: (i) => { const [label, tone] = STATUS[i.status] || [i.status, "n"]; return <Badge tone={tone}>{label}</Badge>; } },
+              /* UNE action principale, celle que l'état appelle — un brouillon s'émet, une
+                 facture émise s'encaisse, une facture close se relit. Les cinq autres commandes
+                 passent au menu : « encaisser » se fait tous les jours, « exporter le XML »
+                 deux fois par an, et les afficher pareil obligeait à relire six intitulés
+                 avant chaque clic. */
+              { k: "actions", t: "", actions: true, td: { textAlign: "right", whiteSpace: "nowrap" },
+                cell: (i) => {
+                  const encaissable = i.status !== "PAYEE" && i.status !== "ANNULEE"
+                    && (i.type === "FACTURE" || i.type === "ACOMPTE");
                   return (
-                    <tr key={i.id}>
-                      <td className="mono">{i.number}</td>
-                      <td>{i.type}</td>
-                      <td>{who}{Number(i.n_lines) > 1 ? ` · ${i.n_lines} dossiers` : i.program_code ? ` · ${i.program_code}` : ""}</td>
-                      <td className="mono tnum" style={{ textAlign: "right" }}>{euro(i.amount_net)}{Number(i.paid) > 0 && <span style={{ display: "block", fontSize: 11, color: "var(--green)" }}>payé {euro(i.paid)}</span>}</td>
-                      <td><Badge tone={tone}>{label}</Badge></td>
-                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                        {i.status === "BROUILLON" && <button className="btn sm" title="Émettre" onClick={() => setStatusOf(i.id, "EMISE")}>Émettre</button>}{" "}
-                        {i.status !== "PAYEE" && i.status !== "ANNULEE" && (i.type === "FACTURE" || i.type === "ACOMPTE") && <button className="btn sm" title="Encaisser le solde et marquer payée" onClick={() => pay(i)}>Payer</button>}{" "}
-                        <button className="btn sm" title="Aperçu de la facture" onClick={() => preview(i)}>Aperçu</button>{" "}
-                        <button className="btn sm" title="Télécharger la facture Factur-X (PDF)" onClick={() => dl(downloadFacturX, i)}>Factur-X</button>{" "}
-                        <button className="iconbtn" title="Télécharger le XML" onClick={() => dl(downloadInvoiceXml, i)}><Icon name="download" size={16} /></button>{" "}
-                        <button className="iconbtn del" title="Supprimer" onClick={() => remove(i.id)}><Icon name="trash" size={15} /></button>
-                      </td>
-                    </tr>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {i.status === "BROUILLON" ? (
+                        <button className="btn sm primary" onClick={() => setStatusOf(i.id, "EMISE")}>Émettre</button>
+                      ) : encaissable ? (
+                        <button className="btn sm primary" title="Encaisser le solde et marquer payée" onClick={() => pay(i)}>Payer</button>
+                      ) : (
+                        <button className="btn sm" onClick={() => preview(i)}>Aperçu</button>
+                      )}
+                      <MenuActions label={`Autres actions pour ${i.number}`}>
+                        {i.status !== "BROUILLON" && !encaissable ? null : (
+                          <button type="button" onClick={() => preview(i)}><Icon name="eye" size={15} /> Aperçu</button>
+                        )}
+                        <button type="button" onClick={() => dl(downloadFacturX, i)}><Icon name="file-text" size={15} /> Factur-X (PDF)</button>
+                        <button type="button" onClick={() => dl(downloadInvoiceXml, i)}><Icon name="download" size={15} /> XML seul</button>
+                        {encaissable && i.status !== "BROUILLON" && (
+                          <button type="button" onClick={() => setStatusOf(i.id, "ANNULEE")}><Icon name="ban" size={15} /> Annuler</button>
+                        )}
+                        <button type="button" className="danger" onClick={() => remove(i.id)}><Icon name="trash" size={15} /> Supprimer</button>
+                      </MenuActions>
+                    </span>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                } },
+            ]}
+          />
       </Card>
     </>
   );

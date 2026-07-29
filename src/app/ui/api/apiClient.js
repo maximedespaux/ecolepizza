@@ -520,7 +520,6 @@ export function getQuestLives() { return request("/mon-espace/quest/vies", { sil
 export function loseQuestLife() { return request("/mon-espace/quest/vies/perdre", { method: "POST", silent: true }); }
 // ⚠️ DÉBOGAGE — remet à zéro SA propre progression Pizza Quest. À retirer avec le bouton
 // correspondant (PizzaQuest.jsx) avant la mise en service.
-export function resetQuestProgress() { return request("/mon-espace/quest/progression", { method: "DELETE" }); }
 
 export function getFormation(id) {
   return request(`/formations/${id}`);
@@ -732,35 +731,34 @@ export function getMercuriale() { return request("/mercuriale", { silent: true }
 export function addMercurialeItem(item) { return request("/mercuriale", { method: "POST", body: JSON.stringify(item) }); }
 export function updateMercurialeItem(id, patch) { return request(`/mercuriale/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
 export function deleteMercurialeItem(id) { return request(`/mercuriale/${id}`, { method: "DELETE" }); }
+// Cadre porté (migration 113) : jusqu'ici le choix ne vivait qu'en localStorage, donc
+// personne d'autre ne pouvait le voir. Best-effort, comme l'avatar.
+export function saveMyCadre(cadre) { return request("/mon-espace/cadre", { method: "PUT", body: JSON.stringify({ cadre }) }); }
 
-// --- Maîtrise sanitaire (HACCP) ---
-export function getHygieneSummary() { return request("/hygiene/summary", { silent: true }); }
-// Référentiel des points de contrôle (chambre froide, four, friteuse…).
-export function getHygieneEquipment(all) { return request(`/hygiene/equipment${all ? "?all=1" : ""}`, { silent: true }); }
-export function addHygieneEquipment(item) { return request("/hygiene/equipment", { method: "POST", body: JSON.stringify(item) }); }
-export function updateHygieneEquipment(id, patch) { return request(`/hygiene/equipment/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
-export function deleteHygieneEquipment(id) { return request(`/hygiene/equipment/${id}`, { method: "DELETE" }); }
-// Plan de nettoyage (modèle des tâches récurrentes).
-export function getHygieneTasks(all) { return request(`/hygiene/cleaning-tasks${all ? "?all=1" : ""}`, { silent: true }); }
-export function addHygieneTask(item) { return request("/hygiene/cleaning-tasks", { method: "POST", body: JSON.stringify(item) }); }
-export function updateHygieneTask(id, patch) { return request(`/hygiene/cleaning-tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
-export function deleteHygieneTask(id) { return request(`/hygiene/cleaning-tasks/${id}`, { method: "DELETE" }); }
-// Préréglages (fournisseurs / produits fréquents) — paramétrage anti-re-saisie.
-export function getHygienePresets(kind, all) {
-  const qs = new URLSearchParams(Object.entries({ kind, all: all ? "1" : "" }).filter(([, v]) => v)).toString();
-  return request(`/hygiene/presets${qs ? `?${qs}` : ""}`, { silent: true });
+// --- Espace d'échange : questions, réponses, photos (migration 114) ---
+export function getPosts() { return request("/community/posts", { silent: true }); }
+export function getPost(id) { return request(`/community/posts/${id}`); }
+export function createPost(p) { return request("/community/posts", { method: "POST", body: JSON.stringify(p) }); }
+export function updatePost(id, patch) { return request(`/community/posts/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export function deletePost(id) { return request(`/community/posts/${id}`, { method: "DELETE" }); }
+export function addAnswer(id, body) { return request(`/community/posts/${id}/answers`, { method: "POST", body: JSON.stringify({ body }) }); }
+export function deleteAnswer(id) { return request(`/community/answers/${id}`, { method: "DELETE" }); }
+/** URL de la photo — servie par une route authentifiée, donc utilisable directement en `src`. */
+export function postImageUrl(id) { return `${API_BASE_URL}/community/posts/${id}/image`; }
+/** Envoi de la photo. Le fichier est DÉJÀ redimensionné et compressé par le navigateur. */
+export async function uploadPostImage(id, blob) {
+  const fd = new FormData();
+  fd.append("image", blob, "photo.webp");
+  startLoading();
+  try {
+    const res = await fetch(`${API_BASE_URL}/community/posts/${id}/image`, { method: "POST", credentials: "include", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Envoi de la photo échoué");
+    return data;
+  } finally {
+    stopLoading();
+  }
 }
-export function addHygienePreset(item) { return request("/hygiene/presets", { method: "POST", body: JSON.stringify(item) }); }
-export function updateHygienePreset(id, patch) { return request(`/hygiene/presets/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
-export function deleteHygienePreset(id) { return request(`/hygiene/presets/${id}`, { method: "DELETE" }); }
-// Journal universel (relevés, livraisons, tâches cochées, étiquettes…).
-export function getHygieneEntries(params = {}) {
-  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "")).toString();
-  return request(`/hygiene/entries${qs ? `?${qs}` : ""}`, { silent: true });
-}
-export function addHygieneEntry(entry) { return request("/hygiene/entries", { method: "POST", body: JSON.stringify(entry) }); }
-export function updateHygieneEntry(id, patch) { return request(`/hygiene/entries/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); }
-export function deleteHygieneEntry(id) { return request(`/hygiene/entries/${id}`, { method: "DELETE" }); }
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }

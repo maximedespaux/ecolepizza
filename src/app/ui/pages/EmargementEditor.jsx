@@ -85,7 +85,7 @@ export default function EmargementEditor() {
     <>
       <PageHead eyebrow="Modèles" title={`Feuille d'émargement — ${name || "…"}`}
         lead="Mise en page du modèle. Les colonnes s'adaptent au nombre de jours ; la feuille tient sur une page."
-        actions={<button className="btn ghost" onClick={() => navigate("/modeles")}>← Retour aux documents</button>} />
+        actions={<button className="btn ghost" onClick={() => navigate("/modeles")}><Icon name="chevron-left" size={14} aria-hidden="true" /> Retour aux documents</button>} />
       <StatusMessage status={status} />
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 380px) 1fr", gap: 16, alignItems: "start" }}>

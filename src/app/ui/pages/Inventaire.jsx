@@ -58,6 +58,17 @@ function Inventaire({ embedded = false }) {
   }
   useEffect(() => { load(); }, []);
 
+  /* La seule question qu'on pose à un inventaire : QU'EST-CE QUI EST BAS ? Elle n'avait aucune
+     réponse visuelle — un compteur annonçait « 1 », à charge d'aller le trouver parmi trente
+     catégories et cent quatre-vingt-sept commandes. Les articles concernés sont maintenant
+     NOMMÉS en tête, le plus bas d'abord, et mènent à leur fiche au clic.
+     Le filtre passe par `stockState`, celui-là même qui étiquette chaque article : deux règles
+     de seuil écrites séparément finiraient par diverger, et la bande contredirait les badges. */
+  const aReappro = useMemo(
+    () => items.filter((it) => stockState(it).tone !== "g").sort((a, b) => a.quantity - b.quantity),
+    [items]
+  );
+
   // Regroupe l'inventaire par (sous-)catégorie ; sections triées alpha.
   const grouped = useMemo(() => {
     const g = {};
@@ -130,11 +141,36 @@ function Inventaire({ embedded = false }) {
       )}
       <StatusMessage status={status} />
 
-      <div className="grid cols-4" style={{ marginBottom: 16 }}>
-        <Kpi label="Articles" value={totals.items} />
-        <Kpi label="Unités en stock" value={totals.units} />
-        <Kpi label="Valeur du stock (HT)" value={euro(totals.value)} />
-        <Kpi label="Stock bas / rupture" value={totals.low} />
+      {/* Un compteur « stock bas : 1 » ne dit pas LEQUEL. C'est pourtant la seule chose qu'on
+          veut savoir : ce qui est bas se commande, ce qui est plein ne demande rien. */}
+      {aReappro.length > 0 ? (
+        <div className="manque">
+          <div className="manque-t">À réapprovisionner</div>
+          <div className="manque-row">
+            {aReappro.map((it) => {
+              const s = stockState(it);
+              return (
+                <button key={it.id} type="button" className="manque-i" style={{ borderLeftColor: s.color }}
+                  onClick={() => document.getElementById(`inv-${it.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" })}>
+                  <b className="tnum" style={{ color: s.color }}>{it.quantity}</b>
+                  <span>{it.name}<i>{s.label}{it.threshold ? ` · seuil ${it.threshold}` : ""}</i></span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : items.length > 0 && (
+        <div className="todo-calme">
+          <Icon name="check-circle" size={17} aria-hidden="true" />
+          Tout est au-dessus de son seuil — rien à réapprovisionner.
+        </div>
+      )}
+
+      {/* Les trois autres compteurs décrivent, ils n'appellent rien : une ligne suffit. */}
+      <div className="compteurs">
+        <span><b className="tnum">{totals.items}</b> article{totals.items > 1 ? "s" : ""}</span><i />
+        <span><b className="tnum">{totals.units}</b> unité{totals.units > 1 ? "s" : ""} en stock</span><i />
+        <span><b className="tnum">{euro(totals.value)}</b> de valeur (HT)</span>
       </div>
 
       {showForm && (
@@ -177,7 +213,7 @@ function Inventaire({ embedded = false }) {
                 const st = stockState(it);
                 const max = Math.max(it.threshold * 2, it.quantity, 10);
                 return (
-                  <div key={it.id} className="card" style={{ borderTop: `3px solid ${st.color}` }}>
+                  <div key={it.id} id={`inv-${it.id}`} className="card" style={{ borderTop: `3px solid ${st.color}` }}>
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ display: "flex", gap: 10, minWidth: 0 }}>
                         <span className="inv-thumb" style={{ color: st.color }}><Icon name={catIcon(it.category)} size={20} /></span>

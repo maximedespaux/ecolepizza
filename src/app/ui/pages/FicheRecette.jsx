@@ -257,7 +257,7 @@ function IngredientSearchModal({ onClose, onAdd, added }) {
         <div className="mbody" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div className="gs-bar">
             <span className="gs-search">
-              <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
+              <Icon name="search" size={14} aria-hidden="true" />
               <input placeholder="Rechercher un ingrédient…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
               {q && <button className="gs-clear" title="Effacer" onClick={() => setQ("")}><Icon name="x" size={13} /></button>}
             </span>
@@ -345,7 +345,7 @@ function ComponentPickerModal({ onClose, onAdd, added, excludeId }) {
         </div>
         <div className="mbody" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <span className="gs-search">
-            <span aria-hidden style={{ fontSize: 13, opacity: 0.6 }}>🔍</span>
+            <Icon name="search" size={14} aria-hidden="true" />
             <input placeholder="Rechercher une pâte ou préparation…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
             {q && <button className="gs-clear" title="Effacer" onClick={() => setQ("")}><Icon name="x" size={13} /></button>}
           </span>
@@ -912,7 +912,7 @@ function FicheRecette({ mode = "realisation" }) {
         {!isPate && (
         <Card className="fr-garniture" title={<span className="card-ttl" style={{ fontSize: 17 }}><Icon name="list-checks" size={18} /> {ingTitle} <span className="hint" style={{ fontWeight: 400 }}>{ingScope}</span></span>}
           more={<span style={{ display: "flex", gap: 8 }}>
-            <button className="btn sm primary" onClick={() => setSearchOpen(true)}><span aria-hidden>🔍</span> Rechercher des ingrédients</button>
+            <button className="btn sm primary" onClick={() => setSearchOpen(true)}><Icon name="search" size={14} aria-hidden="true" /> Rechercher des ingrédients</button>
             {isRecette && <button className="btn sm ghost" onClick={() => setImportOpen(true)}><Icon name="plus" size={14} /> Importer une fiche</button>}
             <button className="btn sm ghost" onClick={addIng}><Icon name="plus" size={14} /> Ligne manuelle</button>
           </span>}>

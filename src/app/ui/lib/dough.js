@@ -4,6 +4,17 @@
 
 export const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
+/**
+ * Température de farine, avec le défaut de 17 °C du manuel.
+ *
+ * Ni `num(v) || 17` ni `num(v) ?? 17` ne conviennent : le premier écrase un **0 °C saisi
+ * exprès** (farine sortie du froid — une valeur parfaitement légale, que le champ accepte),
+ * le second ne se déclenche jamais puisque `num()` renvoie 0 et jamais `null`. Il faut donc
+ * regarder la valeur AVANT conversion : c'est le seul endroit où « vide » et « zéro » se
+ * distinguent encore.
+ */
+export const tempFarine = (v) => (v === null || v === undefined || v === "" ? 17 : num(v));
+
 // Indice de force de la farine (W) — Manuel p.17 (usages) & p.32 (hydratation min + eau/kg).
 // `hydra` = hydratation min. de coulage ; `maxTotal` = hydratation TOTALE max (coulage + bassinage)
 // atteignable pour cette force — progressive : un W faible ne bassine presque pas, un W fort monte
@@ -85,11 +96,14 @@ export const adjOf = (k) => ADJONCTIONS.find((a) => a.key === k) || {};
 export const adjonctionsPct = (dp) => (dp.adjonctions || []).reduce((s, a) => s + num(a.pct), 0);
 // Eau de compensation (manuel p.30/32) — les farines de substitution et les graines torréfiées
 // assèchent la pâte : on ajoute de l'eau de bassinage pour compenser (en % de la farine).
-export const substWaterG = (dp) => subsOf(dp).reduce((s, x) => s + subOf(x.key).bass10 * (num(x.pct) / 10), 0); // g/kg de farine
+// `subsPlafonnees` et non `subsOf` : l'eau de bassinage compense les farines RÉELLEMENT
+// présentes dans la pâte. Calculée sur les pourcentages bruts, elle ajoutait de l'eau pour
+// des farines que le plafond venait d'écarter.
+export const substWaterG = (dp) => subsPlafonnees(dp).reduce((s, x) => s + subOf(x.key).bass10 * (num(x.pct) / 10), 0); // g/kg de farine
 export const adjWaterPct = (dp) => (dp.adjonctions || []).reduce((s, a) => s + num(a.pct) * (adjOf(a.key).water || 0), 0);
 // Absorption de la farine de base (blé) selon son Type/Tipo, au prorata de sa part.
 export const tipoWaterPct = (dp) => {
-  const blePct = Math.max(0, 100 - Math.min(60, subsOf(dp).reduce((s, x) => s + num(x.pct), 0)));
+  const blePct = Math.max(0, 100 - subsPlafonnees(dp).reduce((s, x) => s + num(x.pct), 0));
   return (tipoOf(dp.tipo)?.water || 0) * (blePct / 100);
 };
 export const compWaterPct = (dp) => +(substWaterG(dp) / 10 + adjWaterPct(dp) + tipoWaterPct(dp)).toFixed(2);
@@ -132,6 +146,30 @@ export const subsOf = (dp) => {
   return arr.filter((s) => s && s.key && num(s.pct) > 0);
 };
 
+/** Plafond de substitution : au-delà, ce n'est plus une pâte à pizza (manuel p.32). */
+export const SUB_MAX = 60;
+
+/**
+ * Les substitutions RAMENÉES SOUS LE PLAFOND, en gardant leurs proportions relatives.
+ *
+ * Le plafond de 60 % n'était appliqué qu'au calcul de la farine de base : les LIGNES, elles,
+ * affichaient les pourcentages bruts. Tipo 1 à 50 % + Tipo 2 à 50 % donnait donc une fiche à
+ * 40 % de blé + 50 % + 50 % — soit 140 % de farine, poids compris. Une fiche technique qui
+ * ne totalise pas 100 % n'est pas seulement inélégante : elle est fausse, et c'est sur elle
+ * qu'un stagiaire pèse.
+ *
+ * On met à l'échelle plutôt que de tronquer la dernière : tronquer dépendrait de l'ordre de
+ * saisie, alors que le stagiaire a exprimé un RAPPORT entre ses farines — moitié-moitié reste
+ * moitié-moitié, à 30/30 au lieu de 50/50.
+ */
+export const subsPlafonnees = (dp) => {
+  const subs = subsOf(dp);
+  const brut = subs.reduce((s, x) => s + num(x.pct), 0);
+  if (brut <= SUB_MAX) return subs;
+  const k = SUB_MAX / brut;
+  return subs.map((x) => ({ ...x, pct: +(num(x.pct) * k).toFixed(2), _plafonne: true }));
+};
+
 // Ratio pâte/farine. Le COULAGE (dp.hydra) reste calé sur le W ; l'absorption des farines/produits
 // (compWaterPct) est ajoutée en EAU DE BASSINAGE (manuel p.32 : « +30 g d'eau de bassinage par unité »).
 export const addPctOf = (dp) => 1 + (num(dp.hydra) + num(dp.bassinage) + compWaterPct(dp) + num(dp.sel) + num(dp.huile) + num(dp.levure) + adjonctionsPct(dp)) / 100;
@@ -168,7 +206,7 @@ export const levStorageOf = (k) => LEVURE_STORAGE.find((s) => s.key === k) || LE
 // manuel indexe sa table (p. 19, colonne « Température farine »), et c'est bien `flourTemp`
 // que passent les appelants. Le nom précédent (`localTemp`) laissait croire l'inverse.
 export const recoLevureFull = (flourTemp, type, storageKey) => {
-  const base = recoLevure(num(flourTemp) || 20, type);
+  const base = recoLevure(tempFarine(flourTemp), type);
   return +(base * levStorageOf(storageKey).factor).toFixed(3);
 };
 
@@ -195,8 +233,10 @@ export function computeBuild(r) {
   const reste = dpMode === "farine" ? totalDough - effNb * patonG : 0;
   const farineG = totalDough / addPct;
   const gOf = { farine: farineG, levure: farineG * num(dp.levure) / 100, sel: farineG * num(dp.sel) / 100, huile: farineG * num(dp.huile) / 100 };
-  const subs = subsOf(dp);
-  const subTotal = Math.min(60, subs.reduce((s, x) => s + num(x.pct), 0));
+  // Les lignes affichées et le total de blé viennent de la MÊME source : c'est ce qui garantit
+  // que la fiche totalise 100 %.
+  const subs = subsPlafonnees(dp);
+  const subTotal = subs.reduce((s, x) => s + num(x.pct), 0);
   const subBassReco = Math.round(substWaterG(dp));
   const compW = compWaterPct(dp); // absorption des farines/produits → part du bassinage
   const totalBass = +(num(dp.bassinage) + compW).toFixed(1);
@@ -222,7 +262,7 @@ export function computeBuild(r) {
   const costPerPaton = effNb ? totalCost / effNb : 0;
   const costPerKg = totalDough ? totalCost / (totalDough / 1000) : 0;
   const ferment = [num(dp.ambH) > 0 && `${dp.ambH} h à ${dp.ambT || "~22"} °C (ambiant)`, num(dp.ctrlH) > 0 && `${dp.ctrlH} h à ${dp.ctrlT || "3-4"} °C (contrôlé)`].filter(Boolean);
-  const flourTemp = num(dp.flourTemp) || 17;
+  const flourTemp = tempFarine(dp.flourTemp);
   // Déroulé des étapes (manuel) — adapté à la méthode (pré-ferment / autolyse / direct), aux farines
   // de substitution et aux adjonctions placées à leur moment d'incorporation (p.30).
   const indirect = INDIRECT.includes(dp.method);
