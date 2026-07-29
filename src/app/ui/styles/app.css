@@ -1183,6 +1183,9 @@ tbody tr:last-child td{border-bottom:none}
    rose pâle sur fond sombre. Mêlé à la transparence, il suit la surface qui le porte. */
 .manque-i.on{background:color-mix(in srgb,var(--ember1) 13%,transparent);border-color:var(--ember1)}
 .manque-i b{font-size:16px;font-weight:800;color:var(--ember1);letter-spacing:-.02em}
+/* La puce accepte un sous-titre — l'état du stock et son seuil, sur l'inventaire. */
+.manque-i > span{display:flex;flex-direction:column;gap:1px;line-height:1.25}
+.manque-i i{font-style:normal;font-size:11px;font-weight:400;color:var(--dim)}
 .compteurs > span{display:inline-flex;align-items:baseline;gap:5px}
 @media (prefers-reduced-motion:reduce){
   .manque-i{transition:none}
