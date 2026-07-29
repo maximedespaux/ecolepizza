@@ -13,6 +13,7 @@ import Card from "../components/Card.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import Badge from "../components/Badge.jsx";
 import DataTable from "../components/DataTable.jsx";
+import MenuActions from "../components/MenuActions.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
 // Types proposés à la saisie. La liste n'est qu'une aide : le champ reste libre, un organisme
@@ -198,7 +199,10 @@ function Modeles() {
       <PageHead
         eyebrow="Système"
         title="Modèles & workflow documentaire"
-        lead="Composez le jeu de documents de vos dossiers : intitulé, signature, conditions d'application. Glissez une ligne (poignée ⠿) pour changer l'ordre. Cliquez sur « Éditer » pour construire le document dans l'éditeur intégré et y glisser les champs (nom, prix, dates…) qui se remplissent automatiquement."
+        // Cinq lignes de mode d'emploi devant un tableau dont chaque geste s'annonce lui-même :
+        // la poignée se voit, « Éditer » est écrit sur son bouton. Ne reste que l'ORDRE, qui
+        // est la seule chose que ce tableau signifie sans le dire.
+        lead="Les documents partent dans l'ordre de cette liste — glissez une ligne pour le changer."
         actions={view === "documents"
           ? <button className="btn primary" onClick={() => setEditing({ _new: true, kind: "document", sort_order: Math.max(0, ...allItems.map((i) => i.sort_order || 0)) + 10, applies_when: {} })}>＋ Ajouter un document</button>
           : null}
@@ -254,17 +258,25 @@ function Modeles() {
             { k: "etat", t: "État", cell: (t) => cellEtat(t) },
             { k: "actions", t: "", actions: true,
               cell: (t) => (
+                /* « Éditer » reste seul en avant : c'est le geste de la page. Réglages,
+                   duplication et suppression passent au menu — quatre commandes de même poids
+                   sur vingt-deux lignes font quatre-vingt-seize boutons, et l'œil doit relire
+                   la série entière à chaque ligne avant de viser. */
                 <div className="tpl-actions">
                   <button className="btn sm primary" title={estEmarg(t) ? "Éditer la mise en page" : "Ouvrir l'éditeur de document"}
                     onClick={() => navigate(estEmarg(t) ? `/modeles/emargement/${t.id}` : `/modeles/${t.slug}/editeur`)}>Éditer</button>
-                  <button className="btn sm ghost" title="Réglages" aria-label={`Réglages de ${t.label}`} onClick={() => setEditing({ ...t })}><Icon name="settings" size={15} /></button>
-                  {!estEmarg(t) && (
-                    <button className="btn sm ghost" title="Dupliquer ce modèle" aria-label={`Dupliquer ${t.label}`}
-                      disabled={busy === t.slug} onClick={() => onDuplicate(t)}><Icon name="copy" size={15} /></button>
-                  )}
-                  <button className="btn sm ghost danger" title="Supprimer définitivement" aria-label={`Supprimer ${t.label}`}
-                    disabled={busy === (estEmarg(t) ? t.id : t.slug)}
-                    onClick={() => (estEmarg(t) ? onDeleteEmarg(t) : onDelete(t))}><Icon name="trash" size={15} /></button>
+                  <MenuActions label={`Autres actions pour ${t.label}`}>
+                    <button type="button" onClick={() => setEditing({ ...t })}><Icon name="settings" size={15} /> Réglages</button>
+                    {!estEmarg(t) && (
+                      <button type="button" disabled={busy === t.slug} onClick={() => onDuplicate(t)}>
+                        <Icon name="copy" size={15} /> Dupliquer
+                      </button>
+                    )}
+                    <button type="button" className="danger" disabled={busy === (estEmarg(t) ? t.id : t.slug)}
+                      onClick={() => (estEmarg(t) ? onDeleteEmarg(t) : onDelete(t))}>
+                      <Icon name="trash" size={15} /> Supprimer
+                    </button>
+                  </MenuActions>
                 </div>
               ) },
           ]}
