@@ -1095,6 +1095,27 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* ————— FICHE STAGIAIRE : LES DOCUMENTS RANGÉS PAR « QUI A LA BALLE » —————
+   Six états côte à côte en liste plate n'apprenaient rien : il fallait lire chaque ligne pour
+   savoir où en était le dossier, alors que c'est ce qu'on vient y chercher. */
+.docs-jauge{display:flex;align-items:center;gap:12px;margin-bottom:6px;font-size:13px;color:var(--muted)}
+.docs-barre{flex:1;height:8px;border-radius:99px;background:var(--surface3);overflow:hidden}
+.docs-barre span{display:block;height:100%;border-radius:99px;background:var(--green);
+  transition:width .55s var(--ease)}
+.docs-jauge b{color:var(--text);font-weight:700}
+.docs-grp{margin-top:16px}
+.docs-grp-t{display:flex;align-items:center;gap:8px;padding-bottom:7px;
+  border-bottom:1px solid var(--border);font-size:11px;font-weight:800;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--dim)}
+.docs-grp-t .docs-pt{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.docs-grp-t b{font-size:12.5px;color:var(--text)}
+.docs-grp-t i{font-style:normal;font-weight:400;letter-spacing:0;text-transform:none;
+  font-size:11.5px;margin-left:auto;color:var(--dim)}
+.docs-grp-t.ton-ember .docs-pt{background:var(--ember1)} .docs-grp-t.ton-ember b{color:var(--ember1)}
+.docs-grp-t.ton-gold  .docs-pt{background:var(--gold)}
+.docs-grp-t.ton-green .docs-pt{background:var(--green)} .docs-grp-t.ton-green b{color:var(--green)}
+@media (prefers-reduced-motion:reduce){.docs-barre span{transition:none}}
+
 /* Étapes vides consécutives, repliées en une bande. Repliées et NON masquées : le parcours
    reste une suite, et sauter des étapes sans le dire ferait croire qu'elles n'existent pas. */
 .pipe-plie{flex:0 0 52px;align-self:stretch;min-height:150px;display:flex;flex-direction:column;

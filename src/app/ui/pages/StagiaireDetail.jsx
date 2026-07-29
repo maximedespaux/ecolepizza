@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -19,6 +19,20 @@ import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro } from "../lib/format.js";
 
 const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
+
+/* Les documents ne sont pas les étapes d'un parcours unique — ce sont N pièces indépendantes,
+   chacune dans son état. Six états côte à côte en liste plate n'apprennent donc rien : il fallait
+   lire chaque ligne pour savoir où en était le dossier, alors que c'est précisément ce qu'on
+   vient y chercher.
+   Le regroupement suit QUI A LA BALLE, la seule question que se pose le secrétariat : ce qui
+   est sur mon bureau, ce que j'attends du stagiaire, ce qui est clos. « Préparé » et « Généré »
+   tombent ensemble parce qu'ils appellent le même geste — envoyer ; « Envoyé » et « Consulté »
+   aussi — patienter ou relancer. */
+const GROUPES_DOC = [
+  { cle: "faire",   titre: "À envoyer",         aide: "sur votre bureau",         ton: "ember", etats: ["A_FAIRE", "GENERE"] },
+  { cle: "attente", titre: "Chez le stagiaire", aide: "en attente de signature",  ton: "gold",  etats: ["ENVOYE", "CONSULTE"] },
+  { cle: "fait",    titre: "Signés",            aide: "rien à faire",             ton: "green", etats: ["SIGNE", "ARCHIVE"] },
+];
 
 function Row({ label, value }) {
   if (value === null || value === undefined || value === "" || value === "0.00") return null;
@@ -102,6 +116,19 @@ function StagiaireDetail() {
   const [prep, setPrep] = useState({ slug: "", title: "", enrollment_ids: [] });
   const [blockedRules, setBlockedRules] = useState([]); // règles non respectées pour le modèle+dossiers choisis
   const [viewId, setViewId] = useState(null);
+
+  // Répartition des documents selon qui doit agir (cf. GROUPES_DOC).
+  const parGroupe = useMemo(() => {
+    const m = Object.fromEntries(GROUPES_DOC.map((g) => [g.cle, []]));
+    for (const d of docs) {
+      // Un état inconnu tombe dans « à envoyer » plutôt que de disparaître : mieux vaut un
+      // document rangé au mauvais endroit qu'un document invisible.
+      const g = GROUPES_DOC.find((x) => x.etats.includes(d.status));
+      m[g ? g.cle : "faire"].push(d);
+    }
+    return m;
+  }, [docs]);
+  const signes = parGroupe.fait.length;
   const [editOpen, setEditOpen] = useState(false);
   const [parcoursEnr, setParcoursEnr] = useState(null);
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // force le rechargement du parcours après édition
@@ -441,25 +468,51 @@ function StagiaireDetail() {
         {docs.length === 0 ? (
           <p className="hint" style={{ margin: 0 }}>Aucun document préparé.</p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {docs.map((d) => {
-              const [label, tone] = DOC_STATUS[d.status] || [d.status, "n"];
+          <>
+            {/* L'AVANCEMENT SE VOIT AVANT DE SE LIRE. Une jauge, puis les documents rangés selon
+                qui doit agir — « à envoyer » en tête, parce que c'est le seul groupe qui demande
+                quelque chose. */}
+            <div className="docs-jauge">
+              <div className="docs-barre" role="img"
+                aria-label={`${signes} document(s) signé(s) sur ${docs.length}`}>
+                <span style={{ width: `${docs.length ? Math.round((signes / docs.length) * 100) : 0}%` }} />
+              </div>
+              <span><b className="tnum">{signes}</b> signé{signes > 1 ? "s" : ""} sur <b className="tnum">{docs.length}</b></span>
+            </div>
+
+            {GROUPES_DOC.map((g) => {
+              const items = parGroupe[g.cle];
+              // Un groupe vide ne s'affiche pas : « À envoyer — 0 » trois fois de suite
+              // apprendrait à ignorer la zone, et le jour où il compte on ne le verrait plus.
+              if (!items.length) return null;
               return (
-                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <b>{d.title}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      {d.formations || "—"}{d.sent_at ? ` · envoyé le ${d.sent_at}` : ""}{d.signed_at ? ` · signé le ${d.signed_at}` : ""}
-                    </span>
-                  </span>
-                  <Badge tone={tone}>{label}</Badge>
-                  <button className="iconbtn" title="Aperçu / vérifier" onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
-                  {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer au stagiaire" onClick={() => handleSend(d.id)}><Icon name="send" size={16} /></button>}
-                  <button className="iconbtn del" title="Supprimer" onClick={() => handleDelete(d.id)}><Icon name="trash" size={15} /></button>
+                <div className="docs-grp" key={g.cle}>
+                  <div className={`docs-grp-t ton-${g.ton}`}>
+                    <span className="docs-pt" aria-hidden="true" />
+                    {g.titre} <b className="tnum">{items.length}</b>
+                    <i>{g.aide}</i>
+                  </div>
+                  {items.map((d) => {
+                    const [label, tone] = DOC_STATUS[d.status] || [d.status, "n"];
+                    return (
+                      <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <b>{d.title}</b>
+                          <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                            {d.formations || "—"}{d.sent_at ? ` · envoyé le ${d.sent_at}` : ""}{d.signed_at ? ` · signé le ${d.signed_at}` : ""}
+                          </span>
+                        </span>
+                        <Badge tone={tone}>{label}</Badge>
+                        <button className="iconbtn" title="Aperçu / vérifier" aria-label={`Aperçu de ${d.title}`} onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
+                        {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer au stagiaire" aria-label={`Envoyer ${d.title} au stagiaire`} onClick={() => handleSend(d.id)}><Icon name="send" size={16} /></button>}
+                        <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${d.title}`} onClick={() => handleDelete(d.id)}><Icon name="trash" size={15} /></button>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
-          </div>
+          </>
         )}
       </Card>
 
