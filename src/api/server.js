@@ -144,4 +144,8 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impasto-
 
 app.listen(port, () => {
     console.log(`Impasto API en écoute sur http://localhost:${port}`);
+    // Le pool est PARESSEUX (cf. config/database.js) : sans cet appel, rien ne toucherait la
+    // base avant la première requête d'un utilisateur, et une panne de connexion ne se
+    // découvrirait qu'à ce moment-là. On garde donc le diagnostic au démarrage, en l'assumant.
+    require('./config/database.js').verifierConnexion();
 });

@@ -52,11 +52,23 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test). **~296 tests, 0 échec — garder ce niveau.**
+`cd src/api && npm test` (node:test), **~0,4 s**. État de référence :
+**291 tests — 284 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+
+Les **7 ignorés sont volontaires** : ce sont des défauts connus et non corrigés, chacun en
+`{ skip: "…" }` avec sa raison écrite (`backoffice-invariants`, `finance`). C'est un registre de
+dette, pas un oubli — ne pas les « réparer » en les supprimant.
+
 Un test doit geler un **défaut réel** : on l'écrit, puis on **réintroduit volontairement le
 défaut** pour vérifier qu'il vire au rouge. Les commentaires de test disent *pourquoi* le défaut
 existait. Beaucoup de tests lisent le **source** (regex sur le contrôleur) : renommer une
-variable peut casser un test — c'est voulu, ça signale un contrat.
+variable peut casser un test — c'est voulu, ça signale un contrat. **Corollaire** : ne pas
+déplacer une fonction hors de son contrôleur sans vérifier qui lit ce fichier au `readFileSync`
+— treize fichiers de test le font.
+
+Si `npm test` ne rend plus la main, chercher un `require` qui ouvre une connexion : le pool est
+**paresseux** (cf. `config/database.js`) précisément pour ça, et le redevenir immédiat casserait
+la commande.
 
 ---
 
