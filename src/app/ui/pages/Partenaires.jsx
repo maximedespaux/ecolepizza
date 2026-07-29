@@ -48,7 +48,27 @@ function Partenaires() {
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
-  const filtered = useMemo(() => (cat ? partners.filter((p) => p.category === cat) : partners), [partners, cat]);
+  /* Les partenaires QUI RAPPORTENT passent devant, le reste par ordre alphabétique.
+     Aujourd'hui aucun n'a d'apport enregistré : le tri est donc sans effet, et c'est voulu —
+     il ne FABRIQUE pas une hiérarchie, il la révèle le jour où elle existe. Trier par montant
+     d'office aurait mis en avant des écarts inventés. */
+  const filtered = useMemo(() => {
+    const base = cat ? partners.filter((p) => p.category === cat) : partners;
+    return [...base].sort((a, b) => {
+      const va = sumCash(apportsOfPartner(a)) + sumKind(apportsOfPartner(a));
+      const vb = sumCash(apportsOfPartner(b)) + sumKind(apportsOfPartner(b));
+      if (vb !== va) return vb - va;
+      return String(a.name || "").localeCompare(String(b.name || ""), "fr");
+    });
+  }, [partners, cat]);
+  /* Une fiche sans contact ni offre ne sert à rien : ce répertoire existe pour qu'on sache QUI
+     APPELER. Le dire UNE FOIS en tête, et non sur chacune des vingt-trois cartes — répéter
+     « fiche à compléter » vingt-trois fois est exactement le défaut qu'on vient de corriger en
+     retirant les vingt-trois « 0 € ». */
+  const incompletes = useMemo(() => partners.filter((p) =>
+    !p.offer && !p.contact_name && !p.contact_phone && !p.contact_email && !p.website && !p.town
+  ).length, [partners]);
+
   const withApports = useMemo(
     () => partners.map((p) => ({ p, ap: apportsOfPartner(p) })).filter((x) => x.ap.length > 0),
     [partners]
@@ -65,7 +85,7 @@ function Partenaires() {
       <PageHead
         eyebrow="Réseau · Suivi"
         title="Partenaires"
-        lead="Contacts, ce qu'ils proposent, et ce qu'ils vous apportent — commissions (cash) et contributions en nature (matériel, équipement). Le formateur peut consulter et saisir ; les montants lui restent masqués."
+        lead="Qui contacter, ce qu'ils proposent, et ce qu'ils vous apportent."
         actions={<div style={{ display: "flex", alignItems: "center", gap: 10 }}><MoneyToggle />{canEdit && <button className="btn primary" onClick={() => setEditing({ _new: true, ...EMPTY })}>＋ Ajouter un partenaire</button>}</div>}
       />
       <StatusMessage status={status} />
@@ -86,6 +106,17 @@ function Partenaires() {
             </select>
           </div>
 
+          {incompletes > 0 && (
+            <div className="carte-dette" style={{ marginBottom: 14 }}>
+              <Icon name="info" size={16} />
+              <span>
+                <b className="tnum">{incompletes}</b> fiche{incompletes > 1 ? "s" : ""} sur <b className="tnum">{partners.length}</b>
+                {incompletes > 1 ? " n'ont" : " n'a"} ni contact ni offre — un répertoire ne sert
+                qu'une fois rempli.
+              </span>
+            </div>
+          )}
+
           {filtered.length === 0 ? (
             <Card title="Partenaires"><EmptyState icon="handshake">Aucun partenaire.</EmptyState></Card>
           ) : (
@@ -93,7 +124,14 @@ function Partenaires() {
               {filtered.map((p) => {
                 const ap = apportsOfPartner(p);
                 return (
-                  <Card key={p.id} title={p.name} more={<Badge tone="n">{p.category}</Badge>}>
+                  <Card key={p.id} title={p.name} more={
+                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                      {/* La REMISE est le fait opérationnel de cette page : c'est ce qu'on vérifie
+                          avant de commander. Elle était noyée en dernière ligne des coordonnées. */}
+                      {Number(p.discount_pct) > 0 && <Badge tone="g">−{p.discount_pct}%</Badge>}
+                      <Badge tone="n">{p.category}</Badge>
+                    </span>
+                  }>
                     {p.offer && <p style={{ marginTop: 0, fontSize: 13.5 }}>{p.offer}</p>}
                     <div className="partner-meta">
                       {p.contact_name && <div>{p.contact_name}</div>}
@@ -101,17 +139,21 @@ function Partenaires() {
                       {p.contact_email && <div><a href={`mailto:${p.contact_email}`}>{p.contact_email}</a></div>}
                       {p.website && <div><a href={p.website.startsWith("http") ? p.website : `https://${p.website}`} target="_blank" rel="noreferrer">{p.website}</a></div>}
                       {p.town && <div>{p.town}</div>}
-                      {p.discount_pct != null && <div>Remise {p.discount_pct}%</div>}
                     </div>
 
-                    <div className="partner-totals">
-                      <div><span className="sub">Commissions</span><b className="tnum" style={{ color: "var(--green)" }}>{euro(sumCash(ap))}</b></div>
-                      <div><span className="sub">En nature</span><b className="tnum" style={{ color: "var(--orange)" }}>{euro(sumKind(ap))}</b></div>
-                    </div>
+                    {/* LES TOTAUX NE PARAISSENT QUE S'ILS EXISTENT. Vingt-trois cartes affichaient
+                        « Commissions 0 € · En nature 0 € » puis « Aucun apport pour l'instant » :
+                        la place la plus visible allait à de l'argent qui n'existe pas, sur une page
+                        qu'on ouvre pour trouver un contact et vérifier une remise. L'absence
+                        d'apport se dit très bien en ne disant rien. */}
+                    {ap.length > 0 && (
+                      <div className="partner-totals">
+                        <div><span className="sub">Commissions</span><b className="tnum" style={{ color: "var(--green)" }}>{euro(sumCash(ap))}</b></div>
+                        <div><span className="sub">En nature</span><b className="tnum" style={{ color: "var(--orange)" }}>{euro(sumKind(ap))}</b></div>
+                      </div>
+                    )}
 
-                    {ap.length === 0 ? (
-                      <p className="sub" style={{ margin: "8px 0 0" }}>Aucun apport pour l'instant.</p>
-                    ) : (
+                    {ap.length > 0 && (
                       <div className="apport-list">
                         {ap.slice(0, 4).map((a) => {
                           const t = apportType(a.type);
