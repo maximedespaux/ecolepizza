@@ -1095,6 +1095,39 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* ————— JOURNAL D'AUDIT : GROUPÉ PAR JOUR —————
+   Une liste plate ne disait pas si un événement datait de ce matin ou de trois semaines. Le
+   jour reste collé en haut pendant qu'on descend — sous la barre supérieure, elle-même collante
+   à 63 px : sans ce décalage il passerait dessous. Les marges négatives compensent le padding
+   de la carte, sinon les lignes défileraient visiblement de part et d'autre du bandeau. */
+.aud,.aud-j{display:flex;flex-direction:column}
+.aud-jt{position:sticky;top:63px;z-index:5;display:flex;align-items:baseline;gap:10px;
+  margin:0 -20px;padding:10px 20px 8px;background:var(--surface);border-bottom:1px solid var(--border)}
+.aud-j + .aud-j .aud-jt{margin-top:14px}
+.aud-jt b{font-size:13px;font-weight:800;letter-spacing:-.01em}
+.aud-jt span{font-size:11.5px;color:var(--dim)}
+
+.aud-l{display:flex;align-items:center;gap:11px;padding:8px 0;font-size:13px;
+  border-bottom:1px solid var(--border-soft)}
+.aud-j .aud-l:last-child{border-bottom:none}
+.aud-h{width:40px;flex-shrink:0;font-size:12px;color:var(--dim)}
+.aud-pt{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:var(--muted)}
+.aud-a{font-weight:650;color:var(--text)}
+.aud-e{flex:1;min-width:0;color:var(--muted);font-size:12.5px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aud-q{color:var(--dim);font-size:12.5px;white-space:nowrap;max-width:34%;
+  overflow:hidden;text-overflow:ellipsis}
+/* `color-mix` plutôt qu'un or figé : #fcb900 est illisible en texte sur fond clair, et un or
+   assombri le serait tout autant sur fond sombre. Mêlé au texte courant, il suit le thème. */
+.aud-l.ton-g .aud-pt{background:var(--green)}  .aud-l.ton-g .aud-a{color:var(--green)}
+.aud-l.ton-b .aud-pt{background:var(--blue)}   .aud-l.ton-b .aud-a{color:var(--blue)}
+.aud-l.ton-a .aud-pt{background:var(--gold)}   .aud-l.ton-a .aud-a{color:color-mix(in srgb,var(--gold) 62%,var(--text))}
+.aud-l.ton-r .aud-pt{background:var(--ember1)} .aud-l.ton-r .aud-a{color:var(--ember1)}
+@media (max-width:640px){
+  .aud-e{display:none}
+  .aud-q{max-width:none;flex:1;text-align:right}
+}
+
 /* ————— TABLEAU DE BORD : CE QUI APPELLE UNE ACTION —————
    Quatre compteurs occupaient le premier écran pour répondre à « combien j'en ai », quand la
    question du matin est « qu'est-ce qui m'attend ». Ils descendent en une ligne ; ce qui se
