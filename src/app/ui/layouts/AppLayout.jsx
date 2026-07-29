@@ -77,7 +77,10 @@ function AppLayout() {
   }
 
   return (
-    <div className="app">
+    /* `adm-app` porte l'identité de l'espace d'administration — police de titrage, coins,
+       retour à l'appui. Exactement le pendant de `.stu-app` côté stagiaire : on redéfinit les
+       tokens, on ne réécrit aucun composant. */
+    <div className="app adm-app">
       <Sidebar open={open} />
       <div className={"scrim" + (open ? " show" : "")} onClick={() => setOpen(false)} />
       <div className="main">

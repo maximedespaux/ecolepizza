@@ -3,7 +3,7 @@
    Bleu marine (structure) + rouge tomate (accent), police Mulish.
    Thème clair / sombre via [data-theme] sur <html>.
    ===================================================================== */
-@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,400;1,600&family=Fredoka:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,400;1,600&family=Fredoka:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap");
 
 :root{
   --navy:#2c3371; --navy-dark:#26265e; --navy-2:#3a4291;
@@ -119,6 +119,77 @@ html{scroll-behavior:smooth}
 *::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--muted) 32%,transparent);border-radius:99px;border:3px solid transparent;background-clip:padding-box}
 *::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--muted) 55%,transparent);background-clip:padding-box}
 a:focus-visible,button:focus-visible,[tabindex]:focus-visible,summary:focus-visible{outline:2px solid var(--ember1);outline-offset:2px;border-radius:9px}
+
+/* ═══ COUCHE « ADMINISTRATION » ══════════════════════════════════════════════════════════════
+   Le pendant sobre de `.stu-app`, et il manquait complètement.
+
+   L'espace stagiaire a une IDENTITÉ : Fredoka, coins de 22 px, fond chaud, retour tactile.
+   L'espace d'administration, lui, n'avait rien — `--font-d` et `--font-b` valaient tous les
+   deux Mulish, si bien que les titres et le texte courant étaient la MÊME chose. Une interface
+   sans contraste typographique paraît inachevée quelle que soit la qualité du reste, et c'est
+   exactement ce qu'on lui reprochait.
+
+   POURQUOI SPACE GROTESK. Ce n'est pas un choix d'humeur : la police à chasse fixe du projet
+   est déjà **Space Mono** — références, codes de formation, numéros de facture, montants.
+   Space Grotesk en est la sœur dessinée. Les titres, les nombres et les codes appartiennent
+   donc enfin à la même famille, là où Mulish en titrage n'avait de parenté avec rien.
+   Son dessin serré et ses terminaisons droites disent « instrument de travail » — ce que
+   Fredoka dit « jeu » de l'autre côté.
+
+   MÊME PRINCIPE QUE `.stu-app` : on REDÉFINIT LES TOKENS, on ne réécrit aucun composant. Et
+   comme là-bas, aucune règle de position ni de z-index sur les enfants — c'est ce qui avait
+   cassé les modales du côté stagiaire. */
+.adm-app{
+  --font-d:"Space Grotesk","Mulish",system-ui,sans-serif;
+  /* Coins plus francs que les 22 px du stagiaire : une interface de travail se veut précise,
+     pas douce. 14 px conserve la douceur d'un logiciel moderne sans le côté bonbon. */
+  --r:14px; --r-sm:10px;
+}
+/* Space Grotesk porte des chasses plus larges que Mulish : sans resserrer l'interlettrage, un
+   titre de page paraît distendu. */
+.adm-app h1,.adm-app h2,.adm-app h3,.adm-app h4{letter-spacing:-.025em}
+.adm-app h1{font-weight:700}
+/* Le SURTITRE de page (« CRM », « QUALIOPI ») devient la signature typographique de l'espace :
+   c'est le premier mot lu sur chaque écran. */
+.adm-app .pagehead .eyebrow{font-family:var(--font-d);font-weight:700;letter-spacing:.16em}
+/* Les NOMBRES sont le contenu principal d'un back-office. Ils passent tous à la police de
+   titrage, chiffres tabulaires : une colonne de montants qui ne s'aligne pas ne se compare
+   pas, et c'est bien pour comparer qu'on les met en colonne. */
+.adm-app .tnum,.adm-app .kpi .val{font-family:var(--font-d);font-variant-numeric:tabular-nums}
+/* En-têtes de colonne et libellés de section : même famille que les titres, puisqu'ils
+   TITRENT eux aussi. */
+.adm-app thead th,.adm-app .kpi .lbl,.adm-app .dt td[data-intitule]::before{font-family:var(--font-d)}
+/* Les intertitres de la barre latérale et les titres de carte TITRENT aussi : même famille.
+   C'est ce qui fait qu'un écran se lit comme un tout et non comme des blocs rapportés. */
+.adm-app .menu .grp,.adm-app .card-head h3,.adm-app .card-head .card-h,.adm-app .brand .sub{font-family:var(--font-d)}
+.adm-app .menu .grp{font-weight:700;letter-spacing:.14em}
+.adm-app .card-head .card-h,.adm-app .card-head h3{letter-spacing:-.015em}
+
+/* — La barre latérale — ————————————————————————————————————————————————————————————————
+   C'est l'élément le plus regardé de l'application : il est là sur chaque écran, toute la
+   journée. Il était pourtant le plus plat — une liste de liens et un filet sur l'actif.
+   L'ACTIF prend maintenant le fond de la charte plutôt qu'un simple blanc : on repère où l'on
+   est sans chercher, y compris du coin de l'œil. */
+.adm-app .menu a.on{background:color-mix(in srgb,var(--ember1) 10%,transparent);color:var(--text);font-weight:600}
+.adm-app .menu a.on::before{width:3px;height:18px;background:var(--ember1);border-radius:0 3px 3px 0}
+/* Au survol, l'icône avance légèrement vers son libellé : le lien répond avant qu'on clique,
+   ce qui suffit à faire vivre une colonne autrement immobile. */
+.adm-app .menu a .ic{transition:transform .16s var(--spring)}
+.adm-app .menu a:hover .ic{transform:translateX(2px)}
+.adm-app .menu a:hover:not(.on){background:color-mix(in srgb,var(--text) 5%,transparent)}
+@media (prefers-reduced-motion:reduce){.adm-app .menu a:hover .ic{transform:none}}
+
+/* — Les cartes — ————————————————————————————————————————————————————————————————————————
+   Le titre reçoit un FILET court aux couleurs de la charte. Deux cartes empilées se
+   distinguaient uniquement par leur bordure ; le filet donne à chacune un point de départ
+   franc, et c'est ce qui manquait le plus au rythme de la page. */
+.adm-app .card-head{position:relative;padding-left:11px}
+.adm-app .card-head::before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:3px;
+  border-radius:3px;background:var(--grad-ember)}
+/* Les boutons répondent au doigt et à l'œil, sobrement : pas de rebond, une descente franche.
+   L'équivalent admin du retour tactile du stagiaire. */
+.adm-app .btn,.adm-app .iconbtn,.adm-app .icon-btn{transition:transform .12s var(--ease),background .14s var(--ease),border-color .14s var(--ease),box-shadow .14s var(--ease)}
+.adm-app .btn:active:not(:disabled),.adm-app .iconbtn:active,.adm-app .icon-btn:active{transform:translateY(1px)}
 
 /* Layout ------------------------------------------------------------- */
 .app{display:flex;min-height:100vh}
