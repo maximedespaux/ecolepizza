@@ -8,7 +8,6 @@ import {
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
-import Kpi from "../components/Kpi.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -111,13 +110,38 @@ function Suivi() {
   const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   const count = (score) => dossiers.filter((d) => d.score === score).length;
 
+  /* CE QUI MANQUE, nommé. Devant un auditeur, le taux ne sert à rien : ce qu'on demande, c'est
+     LA PIÈCE ABSENTE. Un « 94 % » rassurant cache précisément les 6 % qu'il faut aller chercher,
+     et la page les enfermait dans des lignes repliées qu'il fallait ouvrir une à une.
+     On agrège donc par TYPE de document : c'est ainsi qu'on traite: on ne relance pas
+     « le dossier Durand », on édite les douze conventions qui manquent. */
+  const [manqueFiltre, setManqueFiltre] = useState(null);
+  const manques = useMemo(() => {
+    const m = new Map();
+    for (const d of dossiers) {
+      for (const doc of (d.documents || [])) {
+        if (docState(doc) === "done") continue;
+        if (!m.has(doc.type)) m.set(doc.type, { type: doc.type, label: doc.label, n: 0 });
+        m.get(doc.type).n++;
+      }
+    }
+    return [...m.values()].sort((a, b) => b.n - a.n);
+  }, [dossiers]);
+
+  // Cliquer un manque filtre la liste : la page se termine par un geste, pas par un constat.
+  const dossiersVus = useMemo(() => {
+    if (!manqueFiltre) return dossiers;
+    return dossiers.filter((d) => (d.documents || [])
+      .some((doc) => doc.type === manqueFiltre && docState(doc) !== "done"));
+  }, [dossiers, manqueFiltre]);
+
   // Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise
   // apparaît sous l'entreprise (complétion agrégée), les autres restent autonomes.
   // On préserve l'ordre de tri du backend (incomplets d'abord).
   const groups = useMemo(() => {
     const byCompany = new Map();
     const out = [];
-    for (const d of dossiers) {
+    for (const d of dossiersVus) {
       if (d.company_id) {
         let g = byCompany.get(d.company_id);
         if (!g) {
@@ -163,7 +187,7 @@ function Suivi() {
       }));
     }
     return out;
-  }, [dossiers]);
+  }, [dossiersVus]);
 
   return (
     <>
@@ -182,19 +206,47 @@ function Suivi() {
 
       {tab === "conformite" ? (
         <>
-          <div className="grid cols-3" style={{ marginBottom: 16 }}>
-            {/* Les trois indicateurs portaient le même filet rouge — la couleur ne disait donc
-                rien, sur la page où elle a le plus de sens : c'est une ÉCHELLE de conformité,
-                et les dossiers eux-mêmes sont déjà étiquetés ROUGE / ORANGE / VERT juste en
-                dessous. Les tons reprennent exactement les leurs. */}
-            <Kpi label="Incomplets" value={count("ROUGE")} icon="alert-triangle" tone="ember" countUp />
-            <Kpi label="En cours" value={count("ORANGE")} icon="clock" tone="gold" countUp />
-            <Kpi label="Complets" value={count("VERT")} icon="check-circle" tone="green" countUp />
+          {/* LES MANQUES PASSENT DEVANT LES TAUX. La page ouvrait sur trois compteurs de
+              dossiers ; on n'y voyait donc jamais CE QU'IL FAUT ALLER CHERCHER, enfermé dans
+              des lignes repliées à ouvrir une à une. Chaque pièce absente est ici nommée,
+              comptée, et filtre la liste au clic. */}
+          {manques.length > 0 ? (
+            <div className="manque">
+              <div className="manque-t">
+                Ce qui manque
+                {manqueFiltre && (
+                  <button type="button" className="btn sm ghost" onClick={() => setManqueFiltre(null)}>
+                    <Icon name="x" size={12} /> Tout voir
+                  </button>
+                )}
+              </div>
+              <div className="manque-row">
+                {manques.map((m) => (
+                  <button key={m.type} type="button" aria-pressed={manqueFiltre === m.type}
+                    className={"manque-i" + (manqueFiltre === m.type ? " on" : "")}
+                    onClick={() => setManqueFiltre((f) => (f === m.type ? null : m.type))}>
+                    <b className="tnum">{m.n}</b><span>{m.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : dossiers.length > 0 && (
+            <div className="todo-calme">
+              <Icon name="check-circle" size={17} aria-hidden="true" />
+              Tous les dossiers sont complets — aucune pièce manquante à produire.
+            </div>
+          )}
+
+          {/* Les compteurs descendent : ils résument, ils ne se traitent pas. */}
+          <div className="compteurs">
+            <span><b className="tnum">{count("ROUGE")}</b> incomplet{count("ROUGE") > 1 ? "s" : ""}</span><i />
+            <span><b className="tnum">{count("ORANGE")}</b> en cours</span><i />
+            <span><b className="tnum">{count("VERT")}</b> complet{count("VERT") > 1 ? "s" : ""}</span>
           </div>
 
-          <Card title={`Dossiers (${dossiers.length})`}>
-            {dossiers.length === 0 ? (
-              <EmptyState icon="clipboard-check">Aucun dossier à suivre.</EmptyState>
+          <Card title={`Dossiers (${dossiersVus.length}${manqueFiltre ? ` sur ${dossiers.length}` : ""})`}>
+            {dossiersVus.length === 0 ? (
+              <EmptyState icon="clipboard-check">{dossiers.length === 0 ? "Aucun dossier à suivre." : "Aucun dossier ne manque cette pièce."}</EmptyState>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {groups.map((g) => {

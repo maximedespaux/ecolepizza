@@ -1095,6 +1095,30 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* ————— SUIVI QUALIOPI : CE QUI MANQUE, NOMMÉ —————
+   Devant un auditeur, le taux ne sert à rien : ce qu'on demande, c'est la pièce absente. Un
+   « 94 % » rassurant cache précisément les 6 % à aller chercher. Chaque manque est donc nommé,
+   compté, et filtre la liste au clic. */
+.manque{margin-bottom:12px}
+.manque-t{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:10.5px;
+  font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--dim)}
+.manque-row{display:flex;flex-wrap:wrap;gap:8px}
+.manque-i{display:inline-flex;align-items:center;gap:9px;padding:8px 13px;cursor:pointer;
+  font:inherit;font-size:13px;text-align:left;color:var(--text);background:var(--surface);
+  border:1px solid var(--border);border-left:3px solid var(--ember1);
+  border-radius:var(--r-sm);box-shadow:var(--shadow-1);
+  transition:transform .14s var(--ease),border-color .14s var(--ease),background .14s var(--ease)}
+.manque-i:hover{transform:translateY(-1px);border-color:var(--ember1)}
+/* `color-mix` et non `--rosso-bg` : ce jeton n'est défini qu'en thème clair et resterait
+   rose pâle sur fond sombre. Mêlé à la transparence, il suit la surface qui le porte. */
+.manque-i.on{background:color-mix(in srgb,var(--ember1) 13%,transparent);border-color:var(--ember1)}
+.manque-i b{font-size:16px;font-weight:800;color:var(--ember1);letter-spacing:-.02em}
+.compteurs > span{display:inline-flex;align-items:baseline;gap:5px}
+@media (prefers-reduced-motion:reduce){
+  .manque-i{transition:none}
+  .manque-i:hover{transform:none}
+}
+
 /* ————— LA RECHERCHE COMME SUJET DE PAGE —————
    Sur une liste de mille fiches, on vient retrouver UNE personne. Le champ prend donc toute la
    largeur et reçoit le curseur à l'ouverture ; les filtres, qui servent une fois sur dix, se
