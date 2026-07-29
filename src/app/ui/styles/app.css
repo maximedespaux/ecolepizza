@@ -1095,6 +1095,32 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* ————— LA RECHERCHE COMME SUJET DE PAGE —————
+   Sur une liste de mille fiches, on vient retrouver UNE personne. Le champ prend donc toute la
+   largeur et reçoit le curseur à l'ouverture ; les filtres, qui servent une fois sur dix, se
+   replient derrière un bouton qui porte leur nombre. */
+.recherche{display:flex;gap:10px;align-items:stretch;margin-bottom:12px}
+.rech-champ{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:0 14px;height:46px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
+  color:var(--dim);box-shadow:var(--shadow-1);
+  transition:border-color .14s var(--ease),box-shadow .14s var(--ease)}
+.rech-champ:focus-within{border-color:var(--navy);
+  box-shadow:var(--shadow-1),0 0 0 3px color-mix(in srgb,var(--navy) 16%,transparent)}
+.rech-champ input{flex:1;min-width:0;border:none;background:none;outline:none;font:inherit;
+  font-size:15px;color:var(--text);padding:0}
+.rech-champ input::placeholder{color:var(--dim)}
+.rech-x{border:none;background:none;color:var(--dim);cursor:pointer;padding:3px;display:flex;
+  border-radius:6px;flex-shrink:0}
+.rech-x:hover{color:var(--ember1);background:var(--surface3)}
+.rech-filtre{display:inline-flex;align-items:center;gap:7px;height:46px;padding:0 16px;flex-shrink:0}
+.rech-filtre.on{border-color:var(--navy);color:var(--navy);font-weight:700}
+
+/* La borne se dit : une liste tronquée en silence se lit comme une liste complète. */
+.liste-plus{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;
+  padding-top:13px;border-top:1px solid var(--border);font-size:13px;color:var(--dim)}
+.liste-plus b{color:var(--text);font-weight:700}
+.liste-plus .btn{margin-left:auto}
+
 /* ————— JOURNAL D'AUDIT : GROUPÉ PAR JOUR —————
    Une liste plate ne disait pas si un événement datait de ce matin ou de trois semaines. Le
    jour reste collé en haut pendant qu'on descend — sous la barre supérieure, elle-même collante
