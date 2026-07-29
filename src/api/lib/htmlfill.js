@@ -55,6 +55,10 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     // Blocs répétés par stagiaire du groupe : {#Stagiaires}…{/Stagiaires} (documents entreprise).
     // Les jetons personnalisés ({custom:…}) y sont recalculés PAR stagiaire.
     out = expandGroupBlocks(out, ctx && ctx.groupStagiaires, ctx && ctx.customTokens, values);
+    // Tableaux « à hauteur réservée » : leurs blocs se développent EN LIGNE (un <br> par article
+    // dans une seule cellule) et non en lignes de tableau. Traités AVANT le cas général, qui
+    // sinon dupliquerait le <tr> — cf. expandInlineTables.
+    out = expandInlineTables(out, ctx);
     // Lignes d'une facture : {#Articles}…{/Articles}. Même mécanisme, autre liste.
     if (ctx && Array.isArray(ctx.articles)) {
         out = expandListBlocks(out, 'Articles', ctx.articles, articleRowTokens);
@@ -116,7 +120,14 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
 
     // 3) Lignes vides : LibreOffice supprime un <p> vide (perte de l'espacement voulu par
     //    l'utilisateur). On y place un espace insécable pour qu'il occupe bien une ligne.
-    out = out.replace(/<p\b([^>]*)>(?:\s|&nbsp;| |<br\s*\/?>)*<\/p>/gi, '<p$1> </p>');
+    //
+    //    UN <p> CONTENANT DÉJÀ DES &nbsp; EST ÉPARGNÉ (d'où leur retrait de la classe). Il n'est
+    //    pas « vide » : il occupe délibérément plusieurs lignes. C'est le cas des cellules d'un
+    //    tableau à hauteur réservée dont la colonne ressort vide — une référence absente, ou une
+    //    facture sans le moindre article : leur contenu est fait de `&nbsp;<br>`, que la règle
+    //    prenait pour du vide et remplaçait par UNE espace. La hauteur réservée s'évaporait donc
+    //    dans le cas même qui la justifie.
+    out = out.replace(/<p\b([^>]*)>(?:\s| |<br\s*\/?>)*<\/p>/gi, '<p$1> </p>');
     // 3b) Blocs « colonnes » de l'éditeur → colonnes FLOTTANTES (côte à côte fiable sous
     //     LibreOffice, y compris quand une colonne contient un tableau). Fait AVANT les bordures.
     out = columnsToFloats(out);
@@ -124,6 +135,42 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     //    le style EN LIGNE sur chaque cellule selon le style choisi (data-border).
     out = applyTableBorders(out);
     return out;
+}
+
+/**
+ * Développe les blocs de liste des tableaux « à hauteur réservée » (data-rows="inline").
+ *
+ * LE BESOIN. Sur une facture, un bloc {#Articles} classique produit UNE LIGNE DE TABLEAU par
+ * article : le tableau grandit et rétrécit avec la commande, et tout ce qui suit — totaux,
+ * mentions légales, cadre de signature — se déplace verticalement d'une facture à l'autre. Ce
+ * mode-ci garde UNE SEULE ligne de tableau et empile les articles dans la cellule, séparés par
+ * les <br> du gabarit ; `data-minlines` réserve une hauteur plancher pour que le bas de page ne
+ * bouge plus tant qu'on ne dépasse pas ce nombre d'articles.
+ *
+ * POURQUOI AVANT LE CAS GÉNÉRAL. `expandListBlocks` essaie d'abord sa forme « ligne de
+ * tableau », dont la regex attrape tout <tr> contenant les deux marqueurs — même réunis dans
+ * une seule cellule. En développant ces tableaux ici, marqueurs consommés, le passage général
+ * qui suit ne trouve plus rien à répéter chez eux.
+ *
+ * Seuls {#Articles} et {#Paiements} sont concernés : {#Stagiaires} relève d'`expandGroupBlocks`,
+ * qui recalcule les jetons personnalisés par stagiaire et n'a pas cette forme « ligne ».
+ */
+function expandInlineTables(html, ctx) {
+    const RE_INLINE = /data-rows\s*=\s*["']?inline/i;
+    if (!RE_INLINE.test(String(html || ''))) return html; // aucun tableau concerné : rien à faire
+    return processTables(html, (attrs, inner) => {
+        if (!RE_INLINE.test(attrs)) return `<table${attrs}>${inner}</table>`;
+        const lm = /data-minlines\s*=\s*["']?(\d+)/i.exec(attrs);
+        const opts = { inline: true, minLines: lm ? parseInt(lm[1], 10) : 0 };
+        let body = inner;
+        if (ctx && Array.isArray(ctx.articles)) {
+            body = expandListBlocks(body, 'Articles', ctx.articles, articleRowTokens, opts);
+        }
+        if (ctx && Array.isArray(ctx.payments)) {
+            body = expandListBlocks(body, 'Paiements', ctx.payments, paiementRowTokens, opts);
+        }
+        return `<table${attrs}>${body}</table>`;
+    });
 }
 
 /**
@@ -183,12 +230,22 @@ function applyTableBorders(html) {
         const bm = /data-border\s*=\s*["']?(solid|dashed|none)/i.exec(attrs);
         const kind = bm ? bm[1].toLowerCase() : 'solid';
         const border = kind === 'none' ? 'none' : kind === 'dashed' ? '1px dashed #999' : '1px solid #999';
-        const cell = `padding:5px 7px;border:${border};`;
+        // Tableau à hauteur réservée : le contenu se cale EN HAUT. Par défaut LibreOffice centre
+        // verticalement, et dans une cellule volontairement plus haute que son contenu le montant
+        // flottait au milieu du vide, en face de rien.
+        //
+        // `valign` EN ATTRIBUT, pas en CSS : comme pour la largeur des tableaux (cf. largeurTables),
+        // LibreOffice ignore `vertical-align` en feuille de style et n'honore que l'attribut HTML.
+        // Constaté au rendu — la première version, en CSS seul, laissait le total centré.
+        const inline = /data-rows\s*=\s*["']?inline/i.test(attrs);
+        const haut = inline ? 'vertical-align:top;' : '';
+        const cell = `padding:5px 7px;border:${border};${haut}`;
         const newInner = inner.replace(/<(td|th)\b([^>]*)>/gi, (cm, tag, cattrs) => {
+            const va = inline && !/\bvalign\s*=/i.test(cattrs) ? ' valign="top"' : '';
             if (/\bstyle\s*=\s*["']/.test(cattrs)) {
-                return `<${tag}${cattrs.replace(/\bstyle\s*=\s*(["'])/i, (sm, q) => `style=${q}${cell}`)}>`;
+                return `<${tag}${cattrs.replace(/\bstyle\s*=\s*(["'])/i, (sm, q) => `style=${q}${cell}`)}${va}>`;
             }
-            return `<${tag}${cattrs} style="${cell}">`;
+            return `<${tag}${cattrs} style="${cell}"${va}>`;
         });
         return `<table${attrs}>${newInner}</table>`;
     });

@@ -53,7 +53,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence :
-**291 tests — 284 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**297 tests — 290 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Les **7 ignorés sont volontaires** : ce sont des défauts connus et non corrigés, chacun en
 `{ skip: "…" }` avec sa raison écrite (`backoffice-invariants`, `finance`). C'est un registre de
@@ -83,7 +83,14 @@ la commande.
   colonne voisine multi-lignes. D'où les colonnes en **`float:left`** (`columnsToFloats`), pas en
   tableau de mise en page ;
 - un `<p>` vide est supprimé → on y met un `&nbsp;` ;
-- saut de page : uniquement sur un `<p>` **non vide** (`p.doc-pagebreak`).
+- saut de page : uniquement sur un `<p>` **non vide** (`p.doc-pagebreak`) ;
+- **hauteur de tableau : AUCUNE forme n'est respectée.** Ni `height` en attribut (sur `<table>`
+  comme sur `<tr>`), ni `height` en CSS (table ou cellule), ni `padding-bottom` en mm. Les six
+  variantes rendues côte à côte sortaient toutes à la hauteur du seul contenu. **Seul le contenu
+  fait la hauteur** → pour réserver de la place, on ajoute des lignes `&nbsp;<br>`
+  (`lignesVides`, cf. tableau à hauteur réservée) ;
+- alignement vertical : **l'attribut** `valign="top"`, **pas** `vertical-align` en CSS (même
+  logique que la largeur — sans l'attribut, le contenu reste centré dans une cellule haute).
 
 **Éditeur (Tiptap/ProseMirror)** : ne conserve que les attributs `data-*` sur les tableaux (d'où
 `data-border` / `data-width`). Un marqueur de bloc (`{#Articles}`) doit vivre **dans une cellule**,
@@ -128,6 +135,36 @@ qu'une fois jouées. D'autres migrations plus anciennes (106→117) peuvent auss
 - **Slug renommable** : `PUT /templates/:slug/rename` renomme **en cascade** (parcours, réglage
   boutique, factures, documents générés, points de rupture, slugs dans le JSON). Socle non
   renommable, collision refusée.
+- **Tableau à hauteur réservée** (`data-rows="inline"` + `data-minlines="N"`) : sur une facture,
+  un bloc `{#Articles}` produit normalement une **ligne de tableau par article**, donc un tableau
+  qui grandit et rétrécit — totaux et signature se déplacent d'une facture à l'autre. Ce mode
+  garde **une seule ligne** et empile les articles dans la cellule avec les `<br>` du gabarit ;
+  `data-minlines` réserve un plancher **en lignes** (pas en mm : LibreOffice ignore toute hauteur,
+  cf. § 3). Bouton `≣` + liste « lignes réservées » dans la barre d'outils, actifs sur un tableau.
+  Côté rendu : `expandInlineTables` (htmlfill) passe **avant** le cas général, sinon la forme
+  « ligne » d'`expandListBlocks` dupliquerait quand même le `<tr>`. Tests :
+  `test/tableau-hauteur-reservee.test.js`.
+
+  **Le bloc ENJAMBE la ligne** dans les vrais modèles : `{#Articles}` ouvre dans la PREMIÈRE
+  cellule et `{/Articles}` ferme dans la DERNIÈRE (`facture-stagiaire` : 7 cellules, marqueurs
+  en 0 et 6). D'où `empilerDansLaLigne`, qui répète le contenu de **chaque cellule sur place**.
+  Répéter naïvement ce qui sépare les marqueurs recopiait les `</td><td>` et la ligne gagnait des
+  **colonnes** au lieu de lignes. Deux pièges à garder en tête si on y retouche : une cellule
+  peut contenir **plusieurs `<p>`** (un vide traîne dans « Taux TVA » / « Taux TTC »), qu'il faut
+  aplatir en un seul, sinon la colonne se désaligne ; et un `<p>` fait de `&nbsp;<br>` ne doit
+  **pas** être pris pour un `<p>` vide par la règle d'`htmlfill` (sinon la hauteur réservée
+  disparaît sur une facture sans article). **Ces trois défauts ne se voyaient qu'à l'aperçu PDF
+  du vrai modèle** — les premiers tests, écrits sur une forme mono-cellule inventée, passaient
+  au vert.
+
+- **Identités d'exemple de l'aperçu** (`lib/echantillons.js`) : une personne fictive est tirée au
+  hasard par aperçu, et **tous** les jetons qui la concernent en découlent (nom, adresse, e-mail,
+  téléphone, plus les `field:learner.*` / `field:company.*`). Avant, les échantillons étaient
+  indépendants — un même aperçu montrait trois identités — et deux d'entre eux portaient le **nom
+  réel de l'utilisateur**, ce qui rendait l'aperçu indiscernable d'une vraie facture. Le groupe
+  **Organisme reste sur les valeurs RÉELLES** de l'école (papier à en-tête fidèle) : c'est voulu.
+  `identiteExemple(graine)` permet un tirage stable si l'on veut comparer deux aperçus sans que
+  le nom change de longueur entre les deux. Tests : `test/apercu-echantillons.test.js`.
 
 **Reste ouvert / idées non faites** : donner un préfixe de numéro distinct à chaque entité
 émettrice (sinon collision de numéros) ; la 2ᵉ entité « Boutique » a encore `legal_name = "d"` ;

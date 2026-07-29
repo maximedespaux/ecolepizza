@@ -158,7 +158,10 @@ const TOKEN_CATALOG = [
             { key: 'Type facture', label: 'Type de pièce', sample: 'Facture' },
             { key: 'Date facture', label: 'Date d’émission', sample: '21/07/2026' },
             { key: 'Échéance facture', label: 'Date d’échéance', sample: '20/08/2026' },
-            { key: 'Acheteur', label: 'Nom de l’acheteur', sample: 'Guillaume DESPAUX' },
+            // Échantillon neutre : il est REMPLACÉ par l'identité fictive tirée à l'aperçu
+            // (cf. lib/echantillons.js). Il portait le nom réel de l'utilisateur, ce qui rendait
+            // l'aperçu indiscernable d'une vraie facture.
+            { key: 'Acheteur', label: 'Nom de l’acheteur', sample: 'Camille BERGER' },
             { key: 'Adresse acheteur', label: 'Adresse de l’acheteur', sample: '12 rue des Fours, 33000 Bordeaux' },
             { key: 'Siret acheteur', label: 'SIRET de l’acheteur', sample: '123 456 789 00012' },
             { key: 'Total HT', label: 'Total hors taxes', sample: '17,82 €' },
@@ -206,7 +209,8 @@ const TOKEN_CATALOG = [
             // majorité extérieure à l'organisme, et aucun membre n'ayant formé le candidat.
             { key: 'Jury président', label: 'Président du jury', sample: 'M. Paul Rossi — pizzaïolo, La Napoli' },
             { key: 'Jury professionnel', label: 'Membre professionnel', sample: 'Mme Léa Fabre — pizzaïola, Le Four' },
-            { key: 'Jury formateur', label: 'Membre formateur', sample: 'M. Guillaume Despaux — formateur' },
+            // Nom fictif comme ses deux voisins : celui-ci portait le nom réel de l'utilisateur.
+            { key: 'Jury formateur', label: 'Membre formateur', sample: 'M. Marc Vidal — formateur' },
             { key: 'Jury mention', label: 'Attestation de composition du jury', sample: 'Deux membres sur trois extérieurs à l\'organisme. Aucun membre n\'a formé les candidats évalués.' },
             // Résultats. {Résultats} est un TABLEAU HTML (bloc par bloc) : cf. RAW_TOKENS.
             { key: 'Blocs présentés', label: 'Blocs présentés', sample: 'BC01, BC02' },
@@ -392,9 +396,14 @@ function articleRowTokens(l, i) {
  * listes, un seul mécanisme — plutôt qu'une seconde fonction qui ferait la même chose à un
  * nom près et divergerait à la première correction.
  */
-function expandListBlocks(html, nom, rows, rowTokens) {
+function expandListBlocks(html, nom, rows, rowTokens, opts = {}) {
     const list = Array.isArray(rows) ? rows : [];
     let out = String(html || '');
+    const enLigne = !!opts.inline;
+    // Nombre de lignes RÉSERVÉES (tableau à hauteur plancher). Les répétitions manquantes sont
+    // comblées par des lignes vides, seul procédé que LibreOffice respecte (cf. `lignesVides`).
+    const mini = Math.max(0, parseInt(opts.minLines, 10) || 0);
+    const comble = (corps, n) => lignesVides(corps, mini - n);
 
     /* FORME TABLEAU, traitée en premier.
      *
@@ -405,10 +414,14 @@ function expandListBlocks(html, nom, rows, rowTokens) {
      *
      * Les marqueurs vivent donc DANS des cellules, ce que la grammaire accepte, et c'est la
      * LIGNE qui les contient qu'on répète. `<tr>` complet à chaque article, marqueurs retirés.
+     *
+     * EN MODE « EN LIGNE » (tableau data-rows="inline"), c'est la même ligne qu'on repère, mais
+     * on la garde UNIQUE et on empile dans chaque cellule — cf. `empilerDansLaLigne`.
      */
     const reLigne = new RegExp(
-        `<tr\\b[^>]*>(?:(?!</tr>)[\\s\\S])*?\\{#\\s*${nom}\\s*\\}[\\s\\S]*?\\{/\\s*${nom}\\s*\\}(?:(?!</tr>)[\\s\\S])*?</tr>`, 'g');
+        `<tr\\b[^>]*>(?:(?!</tr>)[\\s\\S])*?\\{#\\s*${nom}\\s*\\}(?:(?!</tr>)[\\s\\S])*?\\{/\\s*${nom}\\s*\\}(?:(?!</tr>)[\\s\\S])*?</tr>`, 'g');
     out = out.replace(reLigne, (ligne) => {
+        if (enLigne) return empilerDansLaLigne(ligne, nom, list, rowTokens, mini);
         if (!list.length) return '';
         const gabarit = ligne
             .replace(new RegExp(`\\{#\\s*${nom}\\s*\\}`, 'g'), '')
@@ -418,9 +431,109 @@ function expandListBlocks(html, nom, rows, rowTokens) {
 
     const re = new RegExp(`\\{#\\s*${nom}\\s*\\}([\\s\\S]*?)\\{/\\s*${nom}\\s*\\}`, 'g');
     return out.replace(re, (m, tpl) => {
-        if (!list.length) return '';
-        return list.map((r, i) => remplirLigne(tpl, rowTokens(r, i))).join('');
+        // Liste vide : le bloc disparaît — mais un tableau à hauteur réservée garde ses lignes,
+        // sinon une facture sans article ferait remonter les totaux.
+        if (!list.length) return comble('', 0);
+        const corps = list.map((r, i) => remplirLigne(tpl, rowTokens(r, i))).join('');
+        return corps + comble(corps, list.length);
     });
+}
+
+/**
+ * Complète `corps` par `n` lignes vides, pour un tableau à hauteur réservée.
+ *
+ * POURQUOI DU CONTENU ET PAS UNE HAUTEUR CSS. LibreOffice ignore la hauteur d'un tableau sous
+ * TOUTES ses formes — attribut `height` sur <table> comme sur <tr>, `height` CSS sur la table
+ * ou sur la cellule, et même un `padding-bottom` en millimètres. Vérifié en rendant les six
+ * variantes côte à côte : toutes sortaient à la hauteur du seul contenu. Le seul levier que le
+ * moteur respecte, c'est le contenu lui-même — d'où ces lignes vides.
+ *
+ * `&nbsp;` et non une ligne nue : un blanc « vrai » se fait supprimer au même titre qu'un <p>
+ * vide (cf. htmlfill.js), et la ligne réservée s'évaporerait.
+ *
+ * Le saut d'amorce n'est ajouté QUE si le gabarit n'en finit pas déjà un. Un bloc écrit
+ * « …{Montant TTC}<br> » nous laisse en début de ligne neuve : en remettre un décalerait tout
+ * d'une ligne et le tableau dépasserait la hauteur demandée d'un cran.
+ */
+function lignesVides(corps, n) {
+    if (n <= 0) return '';
+    const amorce = corps && !/<br\s*\/?>\s*$/i.test(corps) ? '<br>' : '';
+    return amorce + '&nbsp;<br>'.repeat(n - 1) + '&nbsp;';
+}
+
+/**
+ * Mode « en ligne » : une SEULE ligne de tableau, les articles empilés DANS CHAQUE CELLULE.
+ *
+ * LE PIÈGE QUE ÇA CORRIGE. Dans les vrais modèles, le bloc ENJAMBE la ligne : `{#Articles}`
+ * ouvre dans la première cellule et `{/Articles}` ferme dans la dernière (constaté sur
+ * `facture-stagiaire` : sept cellules, marqueurs en 0 et en 6). Répéter tel quel le contenu
+ * situé entre les marqueurs recopie donc aussi les `</td><td>` intermédiaires : la ligne gagnait
+ * des COLONNES au lieu de gagner des lignes, et la facture sortait avec le deuxième article
+ * étalé à droite du premier. Vu à l'aperçu PDF, pas au test — le test d'origine posait les deux
+ * marqueurs dans UNE cellule, une forme inventée, pas celle des modèles réels.
+ *
+ * On répète donc chaque cellule SUR PLACE, séparateur `<br>`, et on comble chaque cellule
+ * jusqu'à la hauteur réservée. Le `<p>` que ProseMirror pose dans chaque cellule est conservé
+ * UNIQUE et c'est son contenu qu'on répète : sinon un `<p>` par article rouvrirait les marges
+ * de paragraphe et l'empilement respirerait deux fois trop.
+ */
+function empilerDansLaLigne(ligne, nom, list, rowTokens, mini) {
+    const reOuvre = new RegExp(`\\{#\\s*${nom}\\s*\\}`);
+    const reFerme = new RegExp(`\\{/\\s*${nom}\\s*\\}`);
+
+    // Découpe en cellules, en conservant ce qui les sépare (<tr>, blancs, </tr>).
+    const cellules = [];
+    const reCell = /(<(td|th)\b[^>]*>)([\s\S]*?)(<\/\2>)/gi;
+    let fin = 0, m;
+    while ((m = reCell.exec(ligne)) !== null) {
+        cellules.push({ avant: ligne.slice(fin, m.index), ouvrant: m[1], contenu: m[3], fermant: m[4] });
+        fin = m.index + m[0].length;
+    }
+    if (!cellules.length) return ligne;
+    const queue = ligne.slice(fin);
+
+    const iOuvre = cellules.findIndex((c) => reOuvre.test(c.contenu));
+    const iFerme = cellules.findIndex((c) => reFerme.test(c.contenu));
+    if (iOuvre === -1 || iFerme === -1 || iFerme < iOuvre) return ligne; // forme inattendue : intacte
+
+    return cellules.map((c, i) => {
+        // HORS de la portée des marqueurs : cellule laissée telle quelle. C'est ce qui distingue
+        // un bloc qui ENJAMBE la ligne (toutes les cellules se remplissent) d'un bloc tenant dans
+        // UNE cellule (les voisines ne doivent surtout pas être recopiées par article).
+        if (i < iOuvre || i > iFerme) return c.avant + c.ouvrant + c.contenu + c.fermant;
+
+        /* APLATISSEMENT DES PARAGRAPHES. Une cellule peut en contenir PLUSIEURS — dans
+         * `facture-stagiaire`, les colonnes « Taux TVA » et « Taux TTC » en ont deux, dont un
+         * vide resté là du temps où la ligne se répétait (sans conséquence alors). Répéter tel
+         * quel un bloc multi-paragraphes rouvre les marges à chaque article ; et une extraction
+         * naïve du `<p>` capture `A</p><p>B` comme intérieur, produisant une imbrication invalide
+         * que le moteur normalise en saut de ligne PARASITE. Sur l'aperçu, les deux dernières
+         * colonnes flottaient une ligne plus bas que les cinq autres.
+         *
+         * On aplatit donc : frontière de paragraphe → `<br>`, et une seule enveloppe `<p>` en
+         * sortie (ses attributs — un alignement, typiquement — sont repris du premier). */
+        const attrsP = (/<p\b([^>]*)>/i.exec(c.contenu) || ['', ''])[1];
+        const avaitP = /<p\b/i.test(c.contenu);
+        let gabarit = c.contenu
+            .replace(/<\/p>\s*<p\b[^>]*>/gi, '<br>')
+            .replace(/^\s*<p\b[^>]*>/i, '')
+            .replace(/<\/p>\s*$/i, '');
+
+        // Ce qui précède l'ouvrant / suit le fermant est du texte FIXE de la cellule : écrit une
+        // fois, jamais répété.
+        let texteAvant = '', texteApres = '';
+        if (i === iOuvre) { const p = gabarit.split(reOuvre); texteAvant = p[0]; gabarit = p.slice(1).join(''); }
+        if (i === iFerme) { const p = gabarit.split(reFerme); gabarit = p[0]; texteApres = p.slice(1).join(''); }
+
+        // Sauts en tête et en queue du motif : ils se multiplieraient par le nombre d'articles.
+        // C'est exactement le paragraphe vide ci-dessus — anodin en répétition de lignes, il
+        // ajoutait ici une ligne blanche PAR article.
+        gabarit = gabarit.replace(/^(?:\s|<br\s*\/?>)+/i, '').replace(/(?:\s|<br\s*\/?>)+$/i, '');
+
+        const corps = list.map((r, k) => remplirLigne(gabarit, rowTokens(r, k))).join('<br>');
+        const rempli = texteAvant + corps + lignesVides(corps, mini - list.length) + texteApres;
+        return c.avant + c.ouvrant + (avaitP ? `<p${attrsP}>${rempli}</p>` : rempli) + c.fermant;
+    }).join('') + queue;
 }
 
 /** Remplace, dans un gabarit, les jetons d'UNE ligne — puces de l'éditeur comme texte {Clé}. */

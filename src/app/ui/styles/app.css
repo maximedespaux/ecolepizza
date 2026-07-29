@@ -1472,9 +1472,19 @@ tbody tr:last-child td{border-bottom:none}
 .tpl-editor-body{display:grid;grid-template-columns:1fr 260px;gap:14px;align-items:start}
 .tpl-doc{background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:12px;overflow:hidden}
 .tb{display:flex;align-items:center;gap:3px;padding:7px 9px;border-bottom:1px solid var(--line,#e3e3e6);background:var(--surface2,rgba(0,0,0,.02));flex-wrap:wrap}
-.tb-btn{min-width:30px;height:28px;padding:0 8px;border:1px solid transparent;border-radius:6px;background:none;cursor:pointer;color:inherit;font-size:13px}
+/* inline-flex + centrage : la plupart des boutons portent désormais une icône SVG, qui sans cela
+   s'aligne sur la ligne de base du texte et pend de deux ou trois pixels sous le centre. */
+.tb-btn{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:28px;padding:0 8px;border:1px solid transparent;border-radius:6px;background:none;cursor:pointer;color:inherit;font-size:13px}
 .tb-btn:hover{background:var(--hover,rgba(0,0,0,.06))}
 .tb-btn.on{background:var(--ember-soft,#fdeae6);color:var(--ember1,#c0392b)}
+/* Action destructive : neutre au repos, franchement rouge au survol — on la trouve sans la craindre. */
+.tb-danger:hover{background:#fdeae6;color:#c0392b}
+/* Étiquette d'un groupe contextuel (Tableau, Colonnes) : dit à quoi se rapportent les boutons
+   qui viennent d'apparaître. */
+.tb-grp{display:inline-flex;align-items:center;height:28px;padding:0 8px;border-radius:6px;background:var(--surface2,rgba(0,0,0,.05));color:var(--muted,#6b6b70);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+/* Anneau de focus explicite : la navigation au clavier doit rester visible sur un fond clair
+   comme sur le fond teinté d'un bouton actif. */
+.tb-btn:focus-visible,.tb-sel:focus-visible,.tb-swatch-cell:focus-visible,.tb-swatch-clear:focus-visible{outline:2px solid var(--ember1,#c0392b);outline-offset:1px}
 .tb-sep{width:1px;height:20px;background:var(--line,#e3e3e6);margin:0 4px}
 .doc-canvas{min-height:60vh;max-height:74vh;overflow-y:auto;padding:26px 30px;font-size:14px;line-height:1.35;outline:none}
 .doc-canvas:focus{outline:none}
@@ -1522,6 +1532,11 @@ tbody tr:last-child td{border-bottom:none}
 .tpl-editor-sticky{position:sticky;top:56px;z-index:26;background:var(--bg);padding-bottom:6px;box-shadow:0 6px 12px -8px rgba(0,0,0,.25)}
 .tpl-editor-sticky .tpl-editor-head{padding:6px 0}
 .tb-sel{height:28px;border:1px solid var(--line,#e3e3e6);border-radius:6px;background:var(--panel,#fff);color:inherit;font-size:12px;padding:0 4px;cursor:pointer;max-width:92px}
+/* Les listes dont le libellé est une phrase (« Place pour 10 articles ») : les 92 px du cas
+   général les tronqueraient en « Place pou… », ce qui annule l'intérêt d'un intitulé explicite.
+   215 px et non 190 : le plus long libellé en demande 188 sur cette machine, et une police de
+   repli un peu plus large suffirait à le couper. */
+.tb-sel.tb-sel-long{max-width:215px}
 .tb-color{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:28px;border-radius:6px;cursor:pointer;font-weight:700}
 .tb-color:hover{background:var(--hover,rgba(0,0,0,.06))}
 .tb-color input[type=color]{position:absolute;inset:0;opacity:0;cursor:pointer;border:none;padding:0}

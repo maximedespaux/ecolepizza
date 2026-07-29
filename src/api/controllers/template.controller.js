@@ -10,6 +10,7 @@ const { decrypt } = require('../lib/crypto.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
 const { getEnabledFields } = require('../lib/conditions.js');
 const { resolveCustomTokens } = require('../lib/customtokens.js');
+const { identiteExemple } = require('../lib/echantillons.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
@@ -248,10 +249,44 @@ const renameTemplate = async (req, res) => {
 
 // Échantillon d'aperçu RÉALISTE selon le type et le NOM de colonne (pas le libellé, qui
 // afficherait « Intitulé de la formation » au lieu d'une vraie valeur d'exemple).
-function sampleForField(f) {
+/**
+ * Échantillon d'un champ document. `ident` (facultatif) = identité fictive du document, pour que
+ * `field:learner.phone` et le jeton `Téléphone` désignent la MÊME personne dans un aperçu ; sans
+ * elle, on retombe sur les valeurs génériques (palette, hors contexte d'aperçu).
+ */
+function sampleForField(f, ident) {
     if (f.type === 'bool') return 'Oui';
     if (f.type === 'enum') return (f.options && f.options[0] && f.options[0].value) || 'Valeur';
     const c = String(f.column || '').toLowerCase();
+    // `organization` est volontairement EXCLU : ses champs sont écrasés plus loin par les
+    // valeurs RÉELLES de la fiche organisme, et lui prêter le téléphone d'une personne fictive
+    // ferait clignoter un faux numéro sur les modèles où la colonne est vide.
+    const table = String(f.table || '').toLowerCase();
+    if (ident && table !== 'organization') {
+        const estEntreprise = table === 'company';
+        const p = ident.personne, e = ident.entreprise;
+        if (estEntreprise) {
+            if (/(phone|tel|mobile|portable|gsm)/.test(c)) return e.tel;
+            if (/(email|mail|courriel)/.test(c)) return e.email;
+            if (/(address|adresse|rue|voie)/.test(c)) return e.adresse;
+            if (/(city|ville|town|commune)/.test(c)) return e.ville;
+            if (/(zip|postal|cp\b)/.test(c)) return e.cp;
+            if (/siret/.test(c)) return e.siret;
+            if (/(naf|ape)/.test(c)) return e.naf;
+            if (/(legal_status|forme|statut_jur)/.test(c)) return e.statut;
+            if (/(company|entreprise|societe|raison|name|nom)/.test(c)) return e.nom;
+        } else {
+            if (/first_?name|prenom/.test(c)) return p.prenom;
+            if (/last_?name|nom/.test(c)) return p.nom;
+            if (/civilit|gender|sexe/.test(c)) return p.civilite;
+            if (/(email|mail|courriel)/.test(c)) return p.email;
+            if (/(phone|tel|mobile|portable|gsm)/.test(c)) return p.tel;
+            if (/(address|adresse|rue|voie)/.test(c)) return p.adresse;
+            if (/(city|ville|town|commune)/.test(c)) return p.ville;
+            if (/(zip|postal|cp\b)/.test(c)) return p.cp;
+            if (/(birth|naissance)/.test(c)) return p.naissance;
+        }
+    }
     if (f.type === 'number') {
         if (/price|amount|montant|prix|acompte|cpf|reste|total/.test(c)) return '1 500';
         if (/day|jour/.test(c)) return '5';
@@ -300,7 +335,7 @@ const LOCATION_FIELDS = [
 
 // Jetons de la palette = CHAMPS DOCUMENTS activés (colonnes du dossier), regroupés par table.
 // Clé « field:<table.column> », remplie au rendu depuis le dossier réel.
-async function fieldTokenGroups(orgId) {
+async function fieldTokenGroups(orgId, ident) {
     const fields = await getEnabledFields(db.promise(), orgId);
     const by = {};
     for (const f of fields) {
@@ -308,7 +343,7 @@ async function fieldTokenGroups(orgId) {
         // organisme » (image insérée au rendu), pas un simple jeton texte field:….
         const isSig = f.type === 'image' && f.column === 'signature_image';
         const key = isSig ? 'Signature organisme' : `field:${f.key}`;
-        const sample = isSig ? '✍ (image enregistrée)' : sampleForField(f);
+        const sample = isSig ? '✍ (image enregistrée)' : sampleForField(f, ident);
         (by[f.tableLabel] || (by[f.tableLabel] = [])).push({ key, label: f.label, sample });
     }
     return Object.entries(by).map(([group, tokens]) => ({ group, tokens }));
@@ -538,10 +573,36 @@ const getTokens = async (req, res) => {
     }
 };
 
-// Valeurs d'exemple { clé: échantillon } pour l'aperçu (intégrés + champs documents + personnalisés).
-async function sampleTokenValues(orgId) {
+/**
+ * Valeurs d'exemple { clé: échantillon } pour l'aperçu (intégrés + champs documents + persos).
+ *
+ * `graine` (facultatif) fige l'identité fictive tirée : deux aperçus successifs du MÊME modèle
+ * montrent alors la même personne, et une différence de mise en page vient du modèle, pas du
+ * nom qui a changé de longueur entre-temps.
+ */
+async function sampleTokenValues(orgId, graine) {
     const m = {};
     for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || '';
+    // UNE identité fictive pour tout le document : sans elle, un même aperçu montrait l'acheteur,
+    // l'e-mail et l'adresse de trois personnes différentes (cf. lib/echantillons.js).
+    const { personne: p, entreprise: e } = identiteExemple(graine);
+    Object.assign(m, {
+        'Personne': `${p.civilite} ${p.prenom} ${p.nom}`,
+        'Civilité': p.civilite,
+        'Prénom': p.prenom,
+        'Nom': p.nom,
+        'Adresse': `${p.adresse}, ${p.cp} ${p.ville}`,
+        'CP': p.cp,
+        'Ville': p.ville,
+        'Email': p.email,
+        'Téléphone': p.tel,
+        'D_Naissance': p.naissance,
+        'Lieu naissance': p.lieuNaissance,
+        'Acheteur': `${p.prenom} ${p.nom}`,
+        'Adresse acheteur': `${p.adresse}, ${p.cp} ${p.ville}`,
+        'Siret acheteur': e.siret,
+        'Entreprise': e.nom,
+    });
     // {Articles} est un TABLEAU (RAW_TOKENS) : un texte d'exemple s'afficherait tel quel au
     // lieu d'une grille, et on ne pourrait pas juger de sa mise en page — tout l'objet d'un
     // aperçu. On rend donc le vrai tableau, sur deux articles à des taux différents.
@@ -556,7 +617,8 @@ async function sampleTokenValues(orgId) {
         { method: 'Espèces', amount: 20 },
         { method: 'CB', amount: 25.82 },
     ]);
-    try { for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || ''; }
+    // Champs documents remplis avec la MÊME identité que les jetons intégrés ci-dessus.
+    try { for (const g of await fieldTokenGroups(orgId, { personne: p, entreprise: e })) for (const t of g.tokens) m[t.key] = t.sample || ''; }
     catch { /* champs indisponibles : on garde les jetons intégrés */ }
     // Aperçu des champs Organisme : valeurs RÉELLES de la fiche organisme (plutôt qu'un exemple générique).
     try {

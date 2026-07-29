@@ -253,8 +253,14 @@ test('un tableau sans article ne laisse pas d\'en-tête orpheline', () => {
 
 test('l\'aperçu rend {Articles} en tableau, pas en texte d\'exemple', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/template.controller.js'), 'utf8');
-    const bloc = src.slice(src.indexOf('async function sampleTokenValues'));
-    assert.match(bloc.slice(0, 900), /m\['Articles'\] = articlesTable\(/,
+    // Bornée à la FONCTION (son accolade fermante en colonne 0), et non aux 900 premiers
+    // caractères comme avant : `slice(indexOf(…))` court jusqu'à la fin du fichier, il fallait
+    // donc borner — mais une longueur en octets se périme dès que la fonction grandit. Elle a
+    // grandi (identités d'exemple), et le test est passé au rouge alors que le contrat était
+    // intact. La borne suit désormais le code.
+    const debut = src.indexOf('async function sampleTokenValues');
+    const bloc = src.slice(debut, src.indexOf('\n}', debut) + 2);
+    assert.match(bloc, /m\['Articles'\] = articlesTable\(/,
         "sans ça, l'aperçu afficherait le texte d'exemple au lieu d'une grille");
 });
 

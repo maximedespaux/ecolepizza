@@ -31,6 +31,23 @@ const StyledTable = Table.extend({
         parseHTML: (el) => el.getAttribute("data-width") || "full",
         renderHTML: (attrs) => ({ "data-width": attrs.widthMode || "full" }),
       },
+      // Développement des blocs {#Articles}/{#Paiements} contenus dans ce tableau :
+      // « repeat » (défaut) = une LIGNE de tableau par article ; « inline » = une seule ligne,
+      // les articles empilés dans la cellule avec les <br> du gabarit. Sérialisé en data-rows,
+      // lu par expandInlineTables côté rendu.
+      rowsMode: {
+        default: "repeat",
+        parseHTML: (el) => el.getAttribute("data-rows") || "repeat",
+        renderHTML: (attrs) => (attrs.rowsMode === "inline" ? { "data-rows": "inline" } : {}),
+      },
+      // Hauteur RÉSERVÉE, comptée en lignes d'articles (0 = pas de plancher). Les articles
+      // manquants sont comblés par des lignes vides au rendu : LibreOffice ignore toute hauteur
+      // de tableau (attribut comme CSS), seul le contenu fait la hauteur. Cf. lignesVides().
+      minLines: {
+        default: 0,
+        parseHTML: (el) => parseInt(el.getAttribute("data-minlines"), 10) || 0,
+        renderHTML: (attrs) => (attrs.minLines > 0 ? { "data-minlines": String(attrs.minLines) } : {}),
+      },
     };
   },
 });
