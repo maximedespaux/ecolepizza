@@ -1095,6 +1095,48 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* ————— TABLEAU DE BORD : CE QUI APPELLE UNE ACTION —————
+   Quatre compteurs occupaient le premier écran pour répondre à « combien j'en ai », quand la
+   question du matin est « qu'est-ce qui m'attend ». Ils descendent en une ligne ; ce qui se
+   clique prend leur place. */
+.todo{margin-bottom:14px}
+.todo-t{font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--dim);margin-bottom:8px}
+.todo-row{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.todo-i{display:flex;align-items:center;gap:13px;padding:13px 15px;text-decoration:none;
+  color:var(--text);background:var(--surface);border:1px solid var(--border);
+  border-left:3px solid var(--ton);border-radius:var(--r-sm);box-shadow:var(--shadow-1);
+  transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease)}
+.todo-i:hover{transform:translateY(-2px);box-shadow:var(--shadow-2);border-color:var(--ton)}
+.todo-i>b{font-size:26px;line-height:1;font-weight:800;color:var(--ton);letter-spacing:-.03em}
+.todo-l{flex:1;display:flex;flex-direction:column;gap:1px;font-size:14px;font-weight:600;line-height:1.25}
+.todo-l i{font-style:normal;font-size:11.5px;font-weight:400;color:var(--dim)}
+.todo-i>svg{color:var(--dim);flex-shrink:0;transition:transform .16s var(--ease),color .16s var(--ease)}
+.todo-i:hover>svg{transform:translateX(3px);color:var(--ton)}
+.todo-i.tone-ember{--ton:var(--ember1)} .todo-i.tone-orange{--ton:var(--orange)}
+.todo-i.tone-blue{--ton:var(--navy)}    .todo-i.tone-green{--ton:var(--green)}
+
+.todo-calme{display:flex;align-items:center;gap:9px;margin-bottom:14px;padding:11px 15px;
+  border:1px solid var(--border);border-left:3px solid var(--green);border-radius:var(--r-sm);
+  background:var(--surface);font-size:13.5px;color:var(--muted)}
+.todo-calme>svg{color:var(--green);flex-shrink:0}
+
+.compteurs{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;
+  padding:10px 15px;border:1px solid var(--border-soft);border-radius:var(--r-sm);
+  background:var(--surface2);font-size:13px;color:var(--muted)}
+.compteurs a{display:inline-flex;align-items:baseline;gap:5px;text-decoration:none;color:inherit;
+  border-radius:5px;padding:1px 3px;transition:color .14s var(--ease)}
+.compteurs a:hover{color:var(--navy)}
+.compteurs a:hover b{color:var(--navy)}
+.compteurs b{font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.02em}
+.compteurs>i{width:1px;height:14px;background:var(--border);flex-shrink:0}
+@media (max-width:640px){.compteurs>i{display:none}.compteurs{gap:6px 14px}}
+@media (prefers-reduced-motion:reduce){
+  .todo-i,.todo-i>svg{transition:none}
+  .todo-i:hover{transform:none}
+  .todo-i:hover>svg{transform:none}
+}
+
 /* Filtre sans résultat : la carte s'expliquait par le vide, elle le dit maintenant. */
 .carte-rien{position:absolute;z-index:430;left:50%;top:50%;transform:translate(-50%,-50%);
   width:min(340px,calc(100% - 40px));display:flex;flex-direction:column;align-items:center;gap:7px;
