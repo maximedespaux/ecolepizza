@@ -81,6 +81,7 @@ function Carte() {
     }).catch(() => {});
   }, []);
   const [geo, setGeo] = useState(false);     // géocodage en cours
+  const [legende, setLegende] = useState(false); // panneau de légende (replié par défaut)
   const mapDiv = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
@@ -101,7 +102,10 @@ function Carte() {
       catch { return; }
       if (!alive || !mapDiv.current || mapRef.current) { if (alive) setMapReady(true); return; }
       const L = window.L; LRef.current = L;
-      const map = L.map(mapDiv.current, { center: [46.6, 2.4], zoom: 5, scrollWheelZoom: true });
+      // Zoom déplacé en bas à droite : le coin haut-gauche porte désormais la recherche,
+      // et deux commandes superposées au même endroit s'annulent l'une l'autre.
+      const map = L.map(mapDiv.current, { center: [46.6, 2.4], zoom: 5, scrollWheelZoom: true, zoomControl: false });
+      L.control.zoom({ position: "bottomright" }).addTo(map);
       L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
         maxZoom: 19, attribution: "© OpenStreetMap © CARTO",
       }).addTo(map);
@@ -209,61 +213,15 @@ function Carte() {
 
   return (
     <>
+      {/* L'accroche reste courte : la précision sur la confidentialité des adresses a sa place
+          dans la légende, à côté des couleurs qu'elle explique, et non en tête d'une page dont
+          on vient voir la carte. */}
       <PageHead
         eyebrow="Développement · Démarchage"
         title="Carte des stagiaires"
-        lead="Répartition géographique de vos stagiaires. Les particuliers sont localisés à la ville (confidentialité) ; les professionnels à l'adresse de leur entreprise. Cliquez un département pour voir ses stagiaires, colorés par formation."
-        actions={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <input className="inp" style={{ flex: 1, minWidth: 160 }} value={q} onChange={(e) => setQ(e.target.value)}
-              placeholder="Filtrer (département, ville)…" aria-label="Filtrer" />
-            <button className="btn primary" style={{ flexShrink: 0 }} onClick={runGeocode} disabled={geo || pending === 0}
-              title={pending === 0 ? "Tous les stagiaires géolocalisables le sont" : `${pending} à géolocaliser`}>
-              {geo ? "Géolocalisation…" : `Géolocaliser${pending ? ` (${pending})` : ""}`}
-            </button>
-          </div>
-        }
+        lead="Où sont vos stagiaires, et où il reste à démarcher."
       />
       <StatusMessage status={status} />
-
-      <div className="grid cols-4" style={{ marginBottom: 16 }}>
-        <div className="kpi"><div className="lbl">Stagiaires (avec code postal)</div><div className="val tnum">{total}</div></div>
-        <div className="kpi"><div className="lbl">Points précis géolocalisés</div><div className="val tnum" style={{ color: "var(--green)" }}>{geocoded}</div></div>
-        <div className="kpi"><div className="lbl">Départements couverts</div><div className="val tnum">{nbDepts}</div></div>
-        <div className="kpi"><div className="lbl">À géolocaliser / sans CP</div><div className="val tnum" style={{ color: (pending + ungeo) ? "var(--ember1)" : "var(--green)" }}>{pending + ungeo}</div></div>
-      </div>
-
-      {/* Légende des niveaux */}
-      <div className="level-legend">
-        {LEVELS.map((l) => (
-          <span key={l.v} className="lg-item"><i style={{ background: l.color }} /> {l.label}</span>
-        ))}
-        <span className="lg-item"><i style={{ background: "#9aa0b4" }} /> Non défini</span>
-      </div>
-
-      {/* Filtre par formation (cases) : n'affiche que les stagiaires de ces formations */}
-      {formationOptions.length > 0 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "0 0 14px" }}>
-          <span className="sub" style={{ fontSize: 12, color: "var(--muted)" }}>Formations :</span>
-          {formationOptions.map((code) => {
-            const on = forms.includes(code);
-            return (
-              <button key={code} type="button" className="btn sm"
-                onClick={() => setForms((f) => (f.includes(code) ? f.filter((x) => x !== code) : [...f, code]))}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  background: on ? colorForLevel(code) : "transparent",
-                  color: on ? "#fff" : "inherit",
-                  border: `1.5px solid ${on ? colorForLevel(code) : "var(--border-soft)"}`,
-                }}>
-                <i style={{ width: 10, height: 10, borderRadius: "50%", background: colorForLevel(code), display: "inline-block" }} />
-                {code}
-              </button>
-            );
-          })}
-          {forms.length > 0 && <button className="btn sm ghost" onClick={() => setForms([])}><Icon name="x" size={13} /> Toutes</button>}
-        </div>
-      )}
 
       {dept && (
         <div className="dept-banner">
@@ -272,10 +230,106 @@ function Carte() {
         </div>
       )}
 
-      <div className="carte-wrap">
+      {/* LA CARTE EST LA PAGE. Tout ce qui l'accompagnait — compteurs, légende, filtres — passe
+          au-dessus d'elle plutôt qu'avant elle : c'est ce qui la fait commencer en haut de
+          l'écran au lieu de neuf cents pixels plus bas. Filtrer en voyant le résultat bouger
+          vaut mieux que filtrer puis descendre vérifier. */}
+      <div className="carte-wrap carte-scene">
         {!mapReady && <div className="carte-loading">Chargement de la carte…</div>}
         <div ref={mapDiv} className="carte-map" />
+
+        {/* Le filtre par formation ne peut porter que sur les stagiaires SITUÉS : l'agrégat par
+            département arrive sans le détail des formations. Choisir une formation que personne
+            de géolocalisé ne suit vidait donc la carte sans un mot. Elle le dit maintenant, et
+            renvoie vers le seul geste qui y remédie — géolocaliser. */}
+        {forms.length > 0 && shownPoints.length === 0 && (
+          <div className="carte-rien">
+            <Icon name="search" size={20} />
+            <b>Aucun stagiaire situé ne suit {forms.length > 1 ? "ces formations" : `la formation ${forms[0]}`}.</b>
+            <p>Ce filtre ne porte que sur les {geocoded} stagiaires localisés précisément, pas sur
+              les {total} comptés par département.</p>
+            <button className="btn sm" onClick={() => setForms([])}>Retirer le filtre</button>
+          </div>
+        )}
+
+        <div className="carte-hud">
+          <div className="hud-top">
+            <label className="hud-panel hud-search">
+              <Icon name="search" size={15} />
+              <input value={q} onChange={(e) => setQ(e.target.value)}
+                placeholder="Département, ville…" aria-label="Filtrer par département ou ville" />
+              {q && <button className="hud-x" onClick={() => setQ("")} aria-label="Effacer la recherche"><Icon name="x" size={13} /></button>}
+            </label>
+
+            <div className="hud-legende">
+              <button className={"hud-panel hud-btn" + (legende ? " on" : "")}
+                onClick={() => setLegende((v) => !v)} aria-expanded={legende}>
+                <Icon name="info" size={15} /> Légende
+              </button>
+              {legende && (
+                <div className="hud-panel hud-drop">
+                  <div className="hud-drop-t">Couleur des points</div>
+                  {LEVELS.map((l) => (
+                    <span key={l.v} className="lg-item"><i style={{ background: l.color }} /> {l.label}</span>
+                  ))}
+                  <span className="lg-item"><i style={{ background: "#9aa0b4" }} /> Non défini</span>
+                  <p className="hud-note">Les particuliers sont situés à leur ville, jamais à leur
+                    adresse — c'est une donnée personnelle. Les professionnels le sont à l'adresse
+                    de leur entreprise.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="hud-bot">
+            {/* Les compteurs tiennent en une ligne : ils situent, ils ne se consultent pas. */}
+            <div className="hud-panel hud-stats">
+              <b className="tnum">{total}</b> stagiaires
+              <i />
+              <b className="tnum">{nbDepts}</b> départements
+              <i />
+              <b className="tnum">{geocoded}</b> points précis
+            </div>
+
+            {formationOptions.length > 0 && (
+              <div className="hud-panel hud-forms">
+                {formationOptions.map((code) => {
+                  const on = forms.includes(code);
+                  return (
+                    <button key={code} type="button" className={"hud-chip" + (on ? " on" : "")}
+                      aria-pressed={on}
+                      onClick={() => setForms((f) => (f.includes(code) ? f.filter((x) => x !== code) : [...f, code]))}
+                      style={on ? { background: colorForLevel(code), borderColor: colorForLevel(code) } : { borderColor: colorForLevel(code) }}>
+                      <i style={{ background: colorForLevel(code) }} />{code}
+                    </button>
+                  );
+                })}
+                {forms.length > 0 && (
+                  <button className="hud-chip raz" onClick={() => setForms([])}><Icon name="x" size={12} /> Toutes</button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* La dette de géocodage était le PLUS GROS CHIFFRE de la page, en rouge, au-dessus de la
+          carte : on ouvrait une carte et on lisait un bilan de données manquantes. Elle devient
+          une ligne d'action sous la carte — elle se règle en un clic, elle n'a pas à se
+          contempler. Elle disparaît quand il n'y a plus rien à géolocaliser. */}
+      {(pending + ungeo) > 0 && (
+        <div className="carte-dette">
+          <Icon name="target" size={16} />
+          <span><b className="tnum">{pending + ungeo}</b> stagiaire(s) sans point précis — comptés dans leur département, mais pas situés à la ville.</span>
+          {/* Pas de `title` quand le bouton porte déjà le nombre : l'infobulle DEVIENT le nom
+              accessible et remplace l'intitulé lu à voix haute par une phrase qui n'est pas celui
+              affiché à l'écran. Elle ne sert que dans le cas désactivé, qu'elle explique. */}
+          <button className="btn sm" onClick={runGeocode} disabled={geo || pending === 0}
+            title={pending === 0 ? "Les restants n'ont pas de code postal exploitable" : undefined}>
+            {geo ? "Géolocalisation…" : pending ? `Géolocaliser ${pending}` : "Rien à géolocaliser"}
+          </button>
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: 16 }}>
         {/* `h2` et non `h3` : cette section est écrite à la main plutôt qu'avec `<Card title>`,

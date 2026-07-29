@@ -1039,6 +1039,93 @@ tbody tr:last-child td{border-bottom:none}
 .carte-map .leaflet-popup-content{font-family:var(--font-b);font-size:13px}
 .carte-loading{position:absolute;inset:0;z-index:500;display:grid;place-items:center;background:rgba(0,0,0,.04);color:var(--muted);font-size:14px}
 
+/* ————— LA CARTE COMME SCÈNE —————
+   Recherche, légende, compteurs et filtres passent AU-DESSUS de la carte au lieu de la
+   précéder. C'est ce qui la fait commencer en haut de l'écran plutôt que 887 px plus bas,
+   et surtout ce qui permet de filtrer en VOYANT le résultat bouger. Le panneau flouté
+   garde la carte lisible dessous : on ne masque pas, on pose. */
+.carte-scene{margin-bottom:14px}
+.carte-scene .carte-map{height:clamp(420px,64vh,700px)}
+.carte-hud{position:absolute;inset:12px;z-index:420;display:flex;flex-direction:column;gap:10px;
+  pointer-events:none}                       /* la carte reste saisissable entre les panneaux */
+.carte-hud>div{display:flex;gap:10px}
+.carte-hud .hud-panel{pointer-events:auto}
+.hud-top{align-items:flex-start;justify-content:space-between}
+.hud-bot{margin-top:auto;align-items:flex-end;flex-wrap:wrap;padding-right:46px} /* place du zoom */
+
+.hud-panel{background:color-mix(in srgb,var(--surface) 88%,transparent);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border:1px solid var(--border);border-radius:var(--r-sm);box-shadow:var(--shadow-2);
+  animation:hudPose .32s var(--ease) both}
+@keyframes hudPose{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+.hud-search{display:flex;align-items:center;gap:8px;padding:0 10px;height:38px;
+  color:var(--dim);min-width:170px;max-width:280px}
+.hud-search input{border:none;background:none;outline:none;font:inherit;font-size:13.5px;
+  color:var(--text);width:100%;min-width:0;padding:0}
+.hud-search:focus-within{border-color:var(--navy);box-shadow:var(--shadow-2),0 0 0 3px color-mix(in srgb,var(--navy) 18%,transparent)}
+.hud-x{border:none;background:none;color:var(--dim);cursor:pointer;padding:2px;display:flex;border-radius:5px}
+.hud-x:hover{color:var(--ember1);background:var(--surface3)}
+
+.hud-legende{position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+  pointer-events:none}
+.hud-btn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px;cursor:pointer;
+  font:inherit;font-size:13.5px;font-weight:600;color:var(--text)}
+.hud-btn.on{color:var(--navy);border-color:var(--navy)}
+.hud-drop{padding:12px 14px;display:flex;flex-direction:column;gap:7px;width:250px;font-size:12.5px}
+.hud-drop-t{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+.hud-drop .lg-item{display:inline-flex;align-items:center;gap:7px;color:var(--muted)}
+.hud-drop .lg-item i{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.14)}
+.hud-note{margin:4px 0 0;padding-top:8px;border-top:1px solid var(--border-soft);
+  font-size:11.5px;line-height:1.5;color:var(--dim)}
+
+.hud-stats{display:flex;align-items:center;gap:9px;height:34px;padding:0 13px;
+  font-size:12.5px;color:var(--muted);white-space:nowrap}
+.hud-stats b{color:var(--text);font-weight:700}
+.hud-stats i{width:1px;height:13px;background:var(--border);flex-shrink:0}
+
+.hud-forms{display:flex;flex-wrap:wrap;gap:5px;padding:6px;max-width:100%}
+.hud-chip{display:inline-flex;align-items:center;gap:5px;cursor:pointer;font:inherit;
+  font-size:11.5px;font-weight:700;letter-spacing:.02em;padding:4px 9px;border-radius:99px;
+  background:transparent;color:var(--text);border:1.5px solid var(--border);
+  transition:background .14s var(--ease),color .14s var(--ease),transform .14s var(--ease)}
+.hud-chip i{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.hud-chip:hover{transform:translateY(-1px)}
+.hud-chip.on{color:#fff}
+.hud-chip.on i{background:rgba(255,255,255,.9)!important}
+.hud-chip.raz{border-style:dashed;color:var(--dim)}
+
+/* Filtre sans résultat : la carte s'expliquait par le vide, elle le dit maintenant. */
+.carte-rien{position:absolute;z-index:430;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(340px,calc(100% - 40px));display:flex;flex-direction:column;align-items:center;gap:7px;
+  text-align:center;padding:20px 22px;border-radius:var(--r);
+  background:color-mix(in srgb,var(--surface) 94%,transparent);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border:1px solid var(--border);box-shadow:var(--shadow-3);animation:hudPose .32s var(--ease) both}
+.carte-rien>svg{color:var(--dim)}
+.carte-rien b{font-size:14.5px;line-height:1.35;text-wrap:balance}
+.carte-rien p{margin:0;font-size:12.5px;line-height:1.5;color:var(--dim)}
+.carte-rien .btn{margin-top:4px}
+
+/* La dette de géocodage : une ligne d'action sous la carte, plus un indicateur en rouge. */
+.carte-dette{display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:10px 14px;
+  border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--r-sm);
+  background:var(--surface);font-size:13.5px;color:var(--muted);box-shadow:var(--shadow-1)}
+.carte-dette>svg{color:var(--gold);flex-shrink:0}
+.carte-dette b{color:var(--text)}
+.carte-dette .btn{margin-left:auto}
+
+@media (max-width:820px){
+  .carte-scene .carte-map{height:clamp(380px,58vh,520px)}
+  .hud-search{max-width:none;min-width:0;flex:1}
+  .hud-forms{max-height:74px;overflow-y:auto}
+}
+@media (prefers-reduced-motion:reduce){
+  .hud-panel{animation:none}
+  .hud-chip{transition:none}
+  .hud-chip:hover{transform:none}
+}
+
 /* ===== Fenêtres modales (édition, signature, notes…) =================== */
 .overlay{position:fixed;inset:0;background:rgba(15,17,40,.55);backdrop-filter:blur(3px);display:grid;place-items:center;z-index:100;padding:20px}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);width:100%;max-width:560px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 70px -16px rgba(10,12,30,.5);animation:rise .25s var(--ease) both}
