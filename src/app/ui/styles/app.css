@@ -1095,6 +1095,24 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* ————— COMPTABILITÉ : UN SEUL CHIFFRE, ET SON CALCUL ÉCRIT —————
+   Cinq indicateurs dont trois se déduisaient des autres — sans dépense, ils affichaient la
+   même somme trois fois. Le calcul est écrit plutôt que réparti : on lit d'où vient le
+   résultat au lieu de le recomposer de tuile en tuile. */
+.bilan{display:flex;flex-direction:column;gap:5px;padding:18px 22px;
+  background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--ton,var(--green));
+  border-radius:var(--r);box-shadow:var(--shadow-1),var(--relief)}
+.bilan-t{font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--dim)}
+.bilan-n{font-size:clamp(30px,4.2vw,44px);font-weight:800;line-height:1;letter-spacing:-.035em}
+.bilan-calc{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-top:3px;
+  font-size:13.5px;color:var(--muted)}
+.bilan-calc b{color:var(--text);font-weight:700}
+.bilan-calc i{font-style:normal;font-weight:700;color:var(--dim)}
+.bilan-sat{display:flex;gap:20px;flex-wrap:wrap;margin-top:11px;padding-top:12px;
+  border-top:1px solid var(--border-soft);font-size:13px;color:var(--muted)}
+.bilan-sat b{color:var(--text);font-weight:700}
+.bilan-sat i{font-style:normal;color:var(--dim);font-size:11.5px}
+
 /* ————— TABLEAU DE RÉFÉRENCE : LIRE D'ABORD, ÉDITER ENSUITE —————
    Un référentiel qu'on consulte cent fois et ne modifie jamais n'a pas à porter ses commandes
    d'édition en permanence : elles pèsent autant que la donnée qu'on vient lire.

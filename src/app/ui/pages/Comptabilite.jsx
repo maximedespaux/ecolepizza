@@ -112,7 +112,9 @@ function Comptabilite() {
       <PageHead
         eyebrow="Gestion · Pilotage"
         title="Comptabilité"
-        lead="Tableau de gestion (pas de comptabilité légale). Le chiffre d'affaires se calcule automatiquement depuis les inscriptions, les ventes de matériel et les produits divers. Chaque poste de dépense est comparé à sa cible."
+        // L'avertissement reste : il empêche de prendre cet écran pour une comptabilité
+        // opposable. Le reste décrivait ce qui est maintenant lisible juste en dessous.
+        lead="Tableau de gestion — ce n'est pas une comptabilité légale."
         actions={
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <MoneyToggle />
@@ -144,29 +146,41 @@ function Comptabilite() {
         <p className="lead">Chargement…</p>
       ) : (
         <div className="grid" style={{ gap: 16 }}>
-          {/* KPIs */}
-          <div className="grid cols-4">
-            <div className="kpi"><div className="kpi-top"><div className="lbl">Chiffre d'affaires</div><span className="kpi-ic tone-blue"><Icon name="euro" size={18} /></span></div><div className="val tnum">{euro(data.ca.total)}</div></div>
-            <div className="kpi"><div className="kpi-top"><div className="lbl">Total des dépenses</div><span className="kpi-ic tone-ember"><Icon name="receipt" size={18} /></span></div><div className="val tnum">{euro(data.totalDepenses)}</div></div>
-            <div className="kpi"><div className="kpi-top"><div className="lbl">Marge ({data.margePct}%)</div><span className="kpi-ic tone-green"><Icon name="target" size={18} /></span></div><div className="val tnum" style={{ color: data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.marge)}</div></div>
-            <div className="kpi"><div className="kpi-top"><div className="lbl">Dividendes réalistes ({data.partRealistePct}%)</div><span className="kpi-ic tone-orange"><Icon name="coins" size={18} /></span></div><div className="val tnum" style={{ color: data.dividendeRealiste > 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.dividendeRealiste)}</div></div>
-          </div>
-
-          {/* Gain du mois — ou de l'année entière si numero === 0. Entrées − sorties sur la
-              période choisie. Distinct de la marge annuelle au-dessus (qui rattache les
-              inscriptions à l'année de session) : ici, tout est daté à l'encaissement. */}
-          {data.mois && (
-            <div className="kpi" style={{ borderLeft: `3px solid ${data.mois.gain >= 0 ? "var(--green)" : "var(--ember1)"}` }}>
-              <div className="kpi-top">
-                <div className="lbl">{data.mois.numero === 0 ? `Gain de l'année ${annee}` : `Gain du mois · ${MOIS[data.mois.numero - 1]} ${annee}`}</div>
-                <span className={"kpi-ic " + (data.mois.gain >= 0 ? "tone-green" : "tone-ember")}><Icon name={data.mois.gain >= 0 ? "arrow-up" : "arrow-down"} size={18} /></span>
-              </div>
-              <div className="val tnum" style={{ color: data.mois.gain >= 0 ? "var(--green)" : "var(--ember1)" }}>{euro(data.mois.gain)}</div>
-              <div className="sub" style={{ marginTop: 4 }}>
-                {euro(data.mois.ca)} de recettes − {euro(data.mois.depenses)} de dépenses
-              </div>
+          {/* UN SEUL CHIFFRE DOMINANT : LE RÉSULTAT.
+              Cinq indicateurs se partageaient le premier écran — chiffre d'affaires, dépenses,
+              marge, dividendes, gain du mois — et TROIS D'ENTRE EUX SE DÉDUISENT DES AUTRES.
+              Sans dépense, ils affichaient littéralement la même somme trois fois : « 1 031 € »
+              en CA, en marge, et en gain du mois. Cinq tuiles pour un seul renseignement.
+              Le calcul est désormais ÉCRIT plutôt que réparti : recettes − dépenses = marge.
+              On lit d'où vient le résultat au lieu de le recomposer de tuile en tuile. */}
+          <div className="bilan" style={{ "--ton": data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>
+            <div className="bilan-t">Résultat {annee}</div>
+            <div className="bilan-n tnum" style={{ color: data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>
+              {euro(data.marge)}
             </div>
-          )}
+            <div className="bilan-calc">
+              <span><b className="tnum">{euro(data.ca.total)}</b> de recettes</span>
+              <i aria-hidden="true">−</i>
+              <span><b className="tnum">{euro(data.totalDepenses)}</b> de dépenses</span>
+              <i aria-hidden="true">=</i>
+              <span><b className="tnum">{data.margePct}%</b> de marge</span>
+            </div>
+            <div className="bilan-sat">
+              <span>
+                <b className="tnum">{euro(data.dividendeRealiste)}</b> de dividendes réalistes
+                <i> ({data.partRealistePct}% du CA)</i>
+              </span>
+              {/* Le gain de la période est daté à L'ENCAISSEMENT, quand la marge annuelle
+                  rattache les inscriptions à l'année de leur session : deux chiffres proches
+                  mais pas identiques, d'où la précision. */}
+              {data.mois && (
+                <span>
+                  <b className="tnum">{euro(data.mois.gain)}</b>
+                  {data.mois.numero === 0 ? " encaissés sur l'année" : ` encaissés en ${MOIS[data.mois.numero - 1].toLowerCase()}`}
+                </span>
+              )}
+            </div>
+          </div>
 
           {/* Composition du CA (3 cartes %) */}
           <Card title={T("calculator", "Composition du chiffre d'affaires")}>
