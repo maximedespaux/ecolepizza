@@ -1095,6 +1095,20 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* Étapes vides consécutives, repliées en une bande. Repliées et NON masquées : le parcours
+   reste une suite, et sauter des étapes sans le dire ferait croire qu'elles n'existent pas. */
+.pipe-plie{flex:0 0 52px;align-self:stretch;min-height:150px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:10px;padding:16px 0;cursor:pointer;font:inherit;
+  color:var(--dim);background:var(--surface2);border:1px dashed var(--border);
+  border-radius:var(--r);scroll-snap-align:start;
+  transition:background .16s var(--ease),border-color .16s var(--ease),color .16s var(--ease)}
+.pipe-plie:hover{background:var(--surface3);border-color:var(--navy);color:var(--navy)}
+.pipe-plie b{font-size:17px;font-weight:800;color:var(--muted);letter-spacing:-.02em}
+.pipe-plie:hover b{color:var(--navy)}
+.pipe-plie span{writing-mode:vertical-rl;font-size:11.5px;letter-spacing:.04em;
+  text-transform:uppercase;font-weight:700}
+@media (prefers-reduced-motion:reduce){.pipe-plie{transition:none}}
+
 /* ————— SUIVI QUALIOPI : CE QUI MANQUE, NOMMÉ —————
    Devant un auditeur, le taux ne sert à rien : ce qu'on demande, c'est la pièce absente. Un
    « 94 % » rassurant cache précisément les 6 % à aller chercher. Chaque manque est donc nommé,
