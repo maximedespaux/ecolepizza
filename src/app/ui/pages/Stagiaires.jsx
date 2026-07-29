@@ -9,16 +9,12 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
+import ListePlus from "../components/ListePlus.jsx";
 import { initials } from "../lib/format.js";
 import { colorForLevel, setBadgeColors } from "../lib/levels.js";
+import { useListeBornee } from "../lib/listeBornee.js";
 
 const STATUTS = ["En activité", "Demandeur d'emploi", "Sans activité", "Étudiant", "Retraité", "Autre"];
-
-/* La page rendait ses MILLE SOIXANTE-NEUF fiches d'un coup : dix-neuf mille nœuds, soixante-
-   quatorze écrans de défilement, et ce rendu entier refait à chaque lettre tapée dans la
-   recherche — c'est là que se payait la lenteur, pas dans le réseau. Personne ne lit mille
-   fiches : on en cherche une. Cinquante suffisent à voir qu'on a trouvé, ou qu'il faut préciser. */
-const PAS = 50;
 
 function Stagiaires() {
   const [learners, setLearners] = useState([]);
@@ -30,7 +26,6 @@ function Stagiaires() {
   const [filters, setFilters] = useState({ level: [], financing: "", status: "", opco: "", account: "" });
   const [badgeOpen, setBadgeOpen] = useState(false);
   const [filtresOuverts, setFiltresOuverts] = useState(false);
-  const [max, setMax] = useState(PAS); // combien de fiches sont rendues
   const badgeRef = useRef(null);
   useEffect(() => {
     if (!badgeOpen) return;
@@ -76,6 +71,10 @@ function Stagiaires() {
     if (filters.account === "no" && l.has_account) return false;
     return true;
   });
+
+  // La clé rassemble tout ce qui change le RÉSULTAT : une nouvelle recherche comme un nouveau
+  // filtre doivent ramener la liste à ses cinquante premières.
+  const { max, borne, reste, plus } = useListeBornee(filtered.length, query + JSON.stringify(filters));
 
   useEffect(() => { getOpcos().then((r) => setOpcos(r.data || [])).catch(() => {}); }, []);
   const opcoNames = opcos.length ? opcos.filter((o) => o.active).map((o) => o.name) : OPCOS;
@@ -133,10 +132,6 @@ function Stagiaires() {
     return () => clearTimeout(t);
   }, [query]);
 
-  /* Toute nouvelle recherche repart de cinquante. Sans cela, avoir déplié trois fois la liste
-     laissait le seuil à deux cents pour TOUTES les recherches suivantes — on récupérait la
-     lenteur qu'on venait d'éliminer, sans jamais l'avoir demandé. */
-  useEffect(() => { setMax(PAS); }, [query, filters]);
 
   const openNew = () => setEditId(null);
   const openEdit = (id) => setEditId(id);
@@ -298,18 +293,7 @@ function Stagiaires() {
               </div>
             ))}
           </div>
-          {/* La borne se DIT. Une liste tronquée en silence se lit comme une liste complète —
-              on chercherait quelqu'un qui s'y trouve, sans le voir, et sans comprendre pourquoi.
-              Le pied annonce donc ce qui est montré, sur combien, et comment en voir plus. */}
-          {filtered.length > max && (
-            <div className="liste-plus">
-              <span><b className="tnum">{max}</b> affichés sur <b className="tnum">{filtered.length}</b>
-                {" — précisez la recherche pour trouver plus vite."}</span>
-              <button type="button" className="btn sm" onClick={() => setMax((m) => m + PAS)}>
-                Afficher {Math.min(PAS, filtered.length - max)} de plus
-              </button>
-            </div>
-          )}
+          {borne && <ListePlus montres={max} total={filtered.length} reste={reste} onPlus={plus} />}
           </>
         )}
       </Card>
