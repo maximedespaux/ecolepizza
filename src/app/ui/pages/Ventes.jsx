@@ -179,7 +179,10 @@ function Ventes() {
   return (
     <>
       <PageHead eyebrow="Boutique" title="Ventes de Matériels et Inventaire"
-        lead="Point de vente du matériel : composez un panier, appliquez des remises, encaissez — la facture est créée automatiquement. Gérez le stock et les réglages de facturation dans les onglets."
+        // C'est une CAISSE : quelqu'un attend sa monnaie. L'accroche portait quatre lignes de
+        // mode d'emploi devant un écran qu'on ouvre pour encaisser en quinze secondes, et
+        // décrivait des gestes que les onglets et les boutons annoncent déjà eux-mêmes.
+        lead="La facture est créée automatiquement à l'encaissement."
         actions={<MoneyToggle />} />
       <StatusMessage status={status} />
 
@@ -238,7 +241,13 @@ function Ventes() {
               )}
             </Card>
 
-            <Card title={<span className="card-ttl"><Icon name="shopping-cart" size={16} /> Panier ({cart.length})</span>}>
+            {/* LE PANIER RESTE EN VUE pendant qu'on remplit la boutique. Le catalogue est long ;
+                en descendant pour trouver un article, on perdait de vue ce qu'on avait déjà
+                ajouté et le total à annoncer — sur une caisse, devant quelqu'un qui attend.
+                Il se colle sous la barre supérieure (63 px), et se libère dès que la colonne
+                passe sous la boutique en écran étroit : collé sur une pile verticale, il
+                masquerait le catalogue qu'on essaie de parcourir. */}
+            <Card className="panier-colle" title={<span className="card-ttl"><Icon name="shopping-cart" size={16} /> Panier ({cart.length})</span>}>
               {/* Acheteur + moyen de paiement, en tête du panier. */}
               <div className="field">
                 <label>Acheteur</label>

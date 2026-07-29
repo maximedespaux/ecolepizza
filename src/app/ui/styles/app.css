@@ -1095,6 +1095,16 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* ————— CAISSE : LE PANIER RESTE EN VUE —————
+   Le catalogue est long ; en descendant chercher un article, on perdait de vue ce qu'on avait
+   déjà ajouté et le total à annoncer — devant quelqu'un qui attend sa monnaie.
+   `top:63px` : sous la barre supérieure, elle-même collante. Il ne colle QUE tant que la caisse
+   tient sur deux colonnes : empilé sous la boutique en écran étroit, un panier collant
+   masquerait le catalogue qu'on essaie justement de parcourir. */
+@media (min-width:900px){
+  .panier-colle{position:sticky;top:63px;max-height:calc(100vh - 79px);overflow-y:auto}
+}
+
 /* ————— MENU DES ACTIONS SECONDAIRES —————
    `position:fixed` et non `absolute` : le menu vit dans une cellule de tableau, et
    `.tablewrap` défile horizontalement — en `absolute` le panneau serait rogné par ce
