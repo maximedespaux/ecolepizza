@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getMyFormations, getMyProfile, getPlayableChapters, getQuestLives, loseQuestLife, resetQuestProgress } from "../api/apiClient.js";
+import { getMyFormations, getMyProfile, getPlayableChapters } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import SimulateurPizza from "../components/SimulateurPizza.jsx";
 import { colorOf } from "../lib/format.js";
 import { saveQuestProgress } from "../lib/gamification.js";
-import { worldXp, chapterXpEarned, xpOfQuestion } from "../lib/questxp.js";
 
 /**
  * Pizza Quest — entraînement QCM ludique (façon Duolingo × Mario/Royal Match).
@@ -66,13 +65,6 @@ function animerDefilement(boite, arrivee, duree = 800) {
     return () => cancelAnimationFrame(id);
 }
 
-/** « 4 min 05 » / « 45 s » — un compte à rebours se lit, il ne se calcule pas. */
-function msEnClair(ms) {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  if (s < 60) return `${s} s`;
-  return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}`;
-}
-
 const KEY = "pizzaquest.v1";
 const loadProg = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
 // Enregistre en local ET en base (miroir) via gamification.saveQuestProgress.
@@ -89,7 +81,38 @@ function roleOf(w) {
   if (/niveau i|classique/.test(t)) return "niv1";
   return "autre";
 }
-const INGREDIENT = { decouverte: "🍕", niv1: "🌾", niv1pro: "🌾", niv2: "🧫", expert: "🏆", spe: "🔥", autre: "🧑‍🍳" };
+/**
+ * NIVEAU DE DIFFICULTÉ, en étoiles — à la place des emojis-ingrédients (🍕 🌾 🧫 🏆…).
+ *
+ * L'emoji ne disait rien : un épi de blé sur le Niveau I et une boîte de Petri sur le
+ * Niveau II ne se comparent pas, alors que ces formations SE SUIVENT. Trois étoiles dont
+ * une, deux ou trois pleines disent la seule chose qu'on veut savoir avant de choisir :
+ * dans quoi on met les pieds. C'est aussi la règle de la charte — pas d'emoji comme icône.
+ *
+ * Les paliers reprennent ceux du parcours (Débutant · Intermédiaire · Avancé). Les
+ * spécialisations valent 2 : elles ne prolongent pas l'échelle, elles la traversent.
+ */
+const DIFFICULTE = {
+  decouverte: { n: 1, label: "Débutant" },
+  niv1:       { n: 1, label: "Débutant" },
+  niv1pro:    { n: 1, label: "Débutant" },
+  niv2:       { n: 2, label: "Intermédiaire" },
+  spe:        { n: 2, label: "Intermédiaire" },
+  expert:     { n: 3, label: "Avancé" },
+  autre:      { n: 1, label: "Débutant" },
+};
+
+/** Trois étoiles, dont `n` pleines. `aria-label` porte le mot — trois icônes ne se disent pas. */
+function Difficulte({ n, label }) {
+  return (
+    <span className="pq-diff" role="img" aria-label={`Niveau ${label}`} title={`Niveau ${label}`}>
+      {[1, 2, 3].map((i) => (
+        <Icon key={i} name="star" size={11} fill={i <= n ? "currentColor" : "none"}
+          className={i <= n ? "on" : ""} />
+      ))}
+    </span>
+  );
+}
 
 /* Géométrie du chemin. Les décalages verticaux dessinent le sentier ; ECART_X est la
    distance entre deux CENTRES de pastilles.
@@ -107,49 +130,11 @@ function PizzaQuest() {
   const [prog, setProg] = useState(loadProg);
   const [quiz, setQuiz] = useState(null);
   const [mini, setMini] = useState(null); // { key, obj? } du mini-jeu ouvert, ou null
-  // Cœurs : le capital est tenu par le SERVEUR. On n'en garde ici qu'un reflet, et on ne
-  // décrémente jamais localement — sinon un rechargement rendrait les cœurs perdus.
-  const [vies, setVies] = useState(null);
-  const [reste, setReste] = useState(0); // ms avant le prochain cœur (décompte affiché)
-
-  const rafraichirVies = () => getQuestLives()
-    .then((r) => { if (r?.data) { setVies(r.data); setReste(r.data.next_in_ms || 0); } })
-    .catch(() => {});
-  useEffect(() => { rafraichirVies(); }, []);
-
-  // Décompte local, purement visuel : à zéro on redemande au serveur, seul juge du capital.
-  useEffect(() => {
-    if (!reste) return;
-    const t = setInterval(() => {
-      setReste((ms) => {
-        if (ms <= 1000) { rafraichirVies(); return 0; }
-        return ms - 1000;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [reste > 0]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /** Un chapitre échoué ou abandonné coûte un cœur. Le serveur décide, on rafraîchit. */
-  const perdreUnCoeur = () => loseQuestLife()
-    .then((r) => { if (r?.data) { setVies(r.data); setReste(r.data.next_in_ms || 0); } })
-    .catch(() => {});
-
-  // La mécanique des cœurs n'est active que si l'organisme a réglé un délai (0 = désactivée).
-  const coeursActifs = !!vies && vies.regen_minutes > 0;
-  const sansCoeur = coeursActifs && vies.hearts <= 0;
-
-  /* ⚠️ DÉBOGAGE — À RETIRER AVANT LA MISE EN SERVICE (avec resetQuestProgress dans
-     apiClient.js, la route DELETE /quest/progression et son contrôleur).
-     Efface la progression en base ET en local : garder le localStorage la ferait
-     réapparaître au premier enregistrement, puisqu'il est fusionné avec le serveur. */
-  async function reinitialiserProgression() {
-    if (!window.confirm("DEBUG — effacer toute ta progression Pizza Quest (chapitres, étoiles, cœurs) ?")) return;
-    try { await resetQuestProgress(); } catch { /* on vide quand même le local */ }
-    try { localStorage.removeItem(KEY); } catch { /* mode privé */ }
-    setProg({});
-    setActive(null);
-    await rafraichirVies();
-  }
+  /* Les CŒURS et l'XP ont été retirés (2026-07-28) : ils récompensaient le temps passé à
+     cliquer, et le manque de cœur BLOQUAIT la révision — punir quelqu'un qui veut réviser est
+     un contresens pédagogique. La progression se voit désormais aux CADRES, gagnés sur les
+     formations réellement terminées (cf. lib/cadres.js). Les étoiles restent : elles notent la
+     réussite d'un chapitre, elles ne rationnent pas l'accès. */
 
   useEffect(() => {
     getMyFormations().then((r) => {
@@ -210,18 +195,6 @@ function PizzaQuest() {
     }).catch(() => {});
   }, []);
 
-  // XP dérivé des questions réellement jouées (barème de l'organisme), et non plus d'un
-  // forfait par étoile. Les mondes dont on n'a pas la banque retombent sur l'ancien calcul.
-  const xp = useMemo(() => {
-    if (!worlds) return 0;
-    const parCode = new Map(worlds.map((w) => [w.code, chaptersFor(w)]));
-    return Object.entries(prog).reduce((total, [code, steps]) => {
-      const chapters = parCode.get(code);
-      return total + (chapters
-        ? worldXp(chapters, steps)
-        : Object.values(steps).reduce((a, st) => a + st * 10, 0));
-    }, 0);
-  }, [prog, worlds]);
   const totalStars = useMemo(() => Object.values(prog).reduce((s, w) => s + Object.values(w).reduce((a, v) => a + v, 0), 0), [prog]);
 
   function finishChapter(code, chIdx, stars) {
@@ -248,19 +221,9 @@ function PizzaQuest() {
           <p style={{ margin: 0 }}>Entraîne-toi pour le QCM de demain — choisis une formation sur la carte.</p>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <div className="pq-stat"><Icon name="target" size={16} /><b>{xp}</b><span>XP</span></div>
-          <div className="pq-stat"><span style={{ fontSize: 15 }}>⭐</span><b>{totalStars}</b><span>étoiles</span></div>
-          {/* Cœurs : affichés seulement si la mécanique est active (délai > 0 côté organisme). */}
-          {coeursActifs && (
-            <div className="pq-stat" title={vies.hearts >= vies.max ? "Cœurs au complet" : `Prochain cœur dans ${msEnClair(reste)}`}>
-              <span className="pq-hearts">
-                {Array.from({ length: vies.max }, (_, i) => (
-                  <span key={i} className={i < vies.hearts ? "" : "vide"}>{i < vies.hearts ? "❤️" : "🤍"}</span>
-                ))}
-              </span>
-              {vies.hearts < vies.max && <span className="pq-regen">{msEnClair(reste)}</span>}
-            </div>
-          )}
+          {/* Les étoiles restent : elles notent la réussite d'un chapitre. Ce sont l'XP et les
+              cœurs qui ont disparu — ils comptaient le temps passé et rationnaient l'accès. */}
+          <div className="pq-stat"><Icon name="star" size={15} fill="currentColor" aria-hidden="true" /><b>{totalStars}</b><span>étoiles</span></div>
         </div>
       </div>
       <p className="hint" style={{ marginTop: -6 }}>
@@ -269,34 +232,17 @@ function PizzaQuest() {
       </p>
 
       {world
-        ? <WorldView world={world} prog={prog[world.code] || {}} onBack={() => setActive(null)} sansCoeur={sansCoeur}
+        ? <WorldView world={world} prog={prog[world.code] || {}} onBack={() => setActive(null)}
             onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || [] })}
             onGame={(g) => setMini({ key: g.key, obj: g.obj })} />
         : <FormationMap worlds={worlds} prog={prog} onPick={setActive} />}
 
-      {/* Abandon (croix, clic à côté) : le chapitre n'est pas validé et coûte un cœur — sans
-          quoi on quitterait dès la première question difficile pour retenter aussitôt.
-          Fin de chapitre : un cœur perdu seulement si le chapitre est ÉCHOUÉ (0 étoile). */}
+      {/* Quitter un chapitre ne coûte plus rien : les cœurs sont supprimés. On ne demande
+          donc plus confirmation — il n'y a plus rien à perdre. */}
       {quiz && world && (
         <QuizModal world={world} data={quiz}
-          onClose={(abandon) => {
-            // `abandon` = sortie AVANT la fin du chapitre. Fermer l'écran de résultat ne
-            // coûte rien : les questions ont été faites.
-            const coute = abandon && coeursActifs;
-            // On demande confirmation : un clic à côté de la fenêtre ne doit pas coûter
-            // un cœur sans prévenir.
-            if (coute && !window.confirm("Quitter ce chapitre maintenant ? Tu perdras un cœur.")) return;
-            setQuiz(null);
-            if (coute) perdreUnCoeur();
-          }}
-          sansCoeur={sansCoeur} coeursActifs={coeursActifs}
-          // Échec : le chapitre N'EST PAS enregistré — l'inscrire à 0 étoile le compterait
-          // comme acquis et ouvrirait le suivant. Seul le cœur est décompté.
-          onFail={() => { if (coeursActifs) perdreUnCoeur(); }}
-          // Reprise après échec : GRATUITE. Le cœur est déjà pris par l'échec qui précède,
-          // et une tentative ne doit coûter qu'une fois. Facturer aussi le bouton rendait
-          // « Recommencer » plus cher que fermer puis rouvrir le chapitre depuis la carte —
-          // deux chemins pour le même geste, l'un puni, l'autre non.
+          onClose={() => setQuiz(null)}
+          // Reprise après échec : toujours possible et sans contrepartie.
           onRetry={null}
           // Validation : au moins une étoile, garanti par l'écran de résultat.
           onFinish={(stars) => finishChapter(quiz.code, quiz.chIdx, stars)} />
@@ -304,15 +250,6 @@ function PizzaQuest() {
       {mini?.key === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
       {mini?.key === "simulateur" && <SimulateurPizza objectifId={mini.obj} onClose={() => setMini(null)} onFinish={(stars) => finishMini("simulateur", stars)} />}
 
-      {/* ⚠️ BLOC DE DÉBOGAGE — À SUPPRIMER AVANT LA MISE EN SERVICE.
-          Retirer aussi : reinitialiserProgression() ci-dessus, resetQuestProgress dans
-          apiClient.js, la route DELETE /quest/progression et son contrôleur. */}
-      <div className="pq-debug">
-        <span>Outil de test</span>
-        <button type="button" className="btn sm ghost danger" onClick={reinitialiserProgression}>
-          <Icon name="refresh" size={13} /> Effacer ma progression
-        </button>
-      </div>
     </>
   );
 }
@@ -516,7 +453,7 @@ function FCard({ w, prog, onPick }) {
   const done = prog ? Object.keys(prog).length : 0;
   const stars = prog ? Object.values(prog).reduce((a, s) => a + s, 0) : 0;
   const nbCh = chaptersFor(w).length;
-  const ing = INGREDIENT[roleOf(w)];
+  const diff = DIFFICULTE[roleOf(w)] || DIFFICULTE.autre;
   // Pastille « ! » dès que la formation a un prérequis, acquis ou non : elle SIGNALE, et le
   // détail se lit dans le récapitulatif placé sous le groupe où elle apparaît.
   const manque = w.prereqMissing || [];
@@ -529,8 +466,11 @@ function FCard({ w, prog, onPick }) {
     : "Obtiens le badge de ce niveau pour le débloquer";
   return (
     <button
-      className={"pq-fcard" + (w.unlocked ? "" : " locked")}
-      style={w.unlocked ? { background: w.color } : undefined}
+      className={"pq-fcard" + (w.unlocked ? "" : " locked") + (w.unlocked && nbCh > 0 && done >= nbCh ? " fini" : "")}
+      /* La couleur est DÉCIDÉE ici (elle vient de la formation) mais passée en variable, pas
+         en `background` : un fond inline écraserait le dégradé, l'ombre colorée et le filet de
+         lumière qui donnent son relief à la carte. */
+      style={w.unlocked ? { "--pq-c": w.color } : undefined}
       disabled={!w.unlocked}
       onClick={() => onPick(w.code)}
       title={w.unlocked ? (infobulle || w.title) : raison}
@@ -540,7 +480,7 @@ function FCard({ w, prog, onPick }) {
       )}
       <span className="pq-fcard-top">
         <span className="pq-fcard-code">{w.code}</span>
-        <span className="pq-fcard-ing" aria-hidden="true">{w.unlocked ? ing : <Icon name="lock" size={16} />}</span>
+        <span className="pq-fcard-ing">{w.unlocked ? <Difficulte n={diff.n} label={diff.label} /> : <Icon name="lock" size={15} aria-hidden="true" />}</span>
       </span>
       <span className="pq-fcard-title">{w.title}</span>
       <span className="pq-fcard-meta">
@@ -548,14 +488,23 @@ function FCard({ w, prog, onPick }) {
           ? (manque.length ? `Après ${manque.map((m) => m.code).join(" + ")}` : "Non débloqué")
           : chaptersLoading(w) ? "…"
             : nbCh === 0 ? "Questions à venir"
-              : `${done}/${nbCh} chapitres · ${stars} ⭐`}
+              : <>{done}/{nbCh} chapitres · {stars} <Icon name="star" size={11} fill="currentColor" aria-hidden="true" /></>}
       </span>
+      {/* La progression ne se lisait qu'en toutes lettres (« 8/20 chapitres »). Une jauge la
+          donne d'un coup d'œil — et c'est elle qui fait qu'on repère la formation à reprendre
+          sans lire toute la carte. Affichée seulement quand il y a réellement des chapitres :
+          une jauge vide sur une formation sans questions annoncerait un retard imaginaire. */}
+      {w.unlocked && nbCh > 0 && (
+        <span className="pq-fcard-jauge" aria-hidden="true">
+          <span style={{ width: `${Math.round((done / nbCh) * 100)}%` }} />
+        </span>
+      )}
     </button>
   );
 }
 
 // Vue d'un monde : chemin de chapitres façon Duolingo + les défis-jeux de la formation.
-function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
+function WorldView({ world, prog, onBack, onChapter, onGame }) {
   const chapters = chaptersFor(world);
   const doneCount = Object.keys(prog).length;
   // Chapitre en cours = le premier non terminé. `-1` quand tout est fait.
@@ -651,17 +600,6 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
         </p>
       )}
 
-      {/* Plus de cœur : le chemin est grisé, il faut dire pourquoi et pour combien de temps. */}
-      {sansCoeur && (
-        <p className="pq-nohearts">
-          <span style={{ fontSize: 18 }}>💔</span>
-          <span>
-            <b>Plus de cœur.</b> Tu en récupères un régulièrement — reviens dans un moment
-            pour reprendre le chapitre. Les défis ci-dessous restent ouverts.
-          </span>
-        </p>
-      )}
-
       {/* Aucun chapitre : on le dit franchement plutôt que de servir des questions
           génériques. Les défis-jeux, eux, restent disponibles. */}
       {!chaptersLoading(world) && chapters.length === 0 && (
@@ -713,11 +651,9 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
             "--len": `${Math.hypot(ECART_X, dy).toFixed(1)}px`,
             "--ang": `${(Math.atan2(-dy, -ECART_X) * 180 / Math.PI).toFixed(2)}deg`,
           };
-          const titre = parfait ? `${ch.title} — sans faute (3/3 ⭐)`
-            : partiel ? (sansCoeur
-              ? `Plus de cœur — attends d'en récupérer un pour retenter les 3 ⭐`
-              : `${ch.title} — ${stars}/3 ⭐, retente pour les 3`)
-              : encours ? (sansCoeur ? "Plus de cœur — attends d'en récupérer un" : ch.title)
+          const titre = parfait ? `${ch.title} — sans faute (3 étoiles sur 3)`
+            : partiel ? `${ch.title} — ${stars} étoile${stars > 1 ? "s" : ""} sur 3, retente pour les 3`
+              : encours ? ch.title
                 : "Termine les chapitres précédents";
           return (
             <div key={i} className={"pq-node-wrap" + (i > 0 && (i - 1) in prog ? " lien-fait" : "")}
@@ -725,13 +661,15 @@ function WorldView({ world, prog, onBack, onChapter, onGame, sansCoeur }) {
               style={{ top: `${offset}px`, ...lien }}>
               <button className={"pq-node" + (parfait ? " done" : "") + (partiel ? " partiel" : "")
                 + (verrou ? " locked" : "") + (encours ? " on" : "")}
-                style={{ "--c": world.color }} disabled={parfait || verrou || sansCoeur}
+                style={{ "--c": world.color }} disabled={parfait || verrou}
                 onClick={() => onChapter(i, ch)} title={titre}>
                 <Icon name={parfait ? "check" : verrou ? "lock" : ch.ic} size={18} />
               </button>
               <div className="pq-node-label">
                 <b>{ch.title}</b>
-                <span className="pq-stars">{[0, 1, 2].map((s) => <span key={s} style={{ opacity: s < stars ? 1 : 0.25 }}>⭐</span>)}</span>
+                <span className="pq-stars" aria-label={`${stars} étoile${stars > 1 ? "s" : ""} sur 3`}>
+                  {[0, 1, 2].map((s) => <Icon key={s} name="star" size={11} fill={s < stars ? "currentColor" : "none"} className={s < stars ? "on" : ""} />)}
+                </span>
               </div>
             </div>
           );
@@ -753,7 +691,7 @@ function shuffled(arr) {
 
 // Mini-quiz d'un chapitre : une question à la fois, formats variés (QCM / vrai-faux /
 // associations), feedback immédiat, cœurs, résultat étoilé.
-function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur, coeursActifs }) {
+function QuizModal({ world, data, onClose, onFinish, onRetry }) {
   const { chapter, questions } = data;
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState(null);   // QCM : index ; Vrai/Faux : booléen
@@ -761,13 +699,13 @@ function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur,
   const [selLeft, setSelLeft] = useState(null);  // Associations : gauche sélectionnée
   const [wrong, setWrong] = useState(null);      // Associations : droite en erreur (flash)
   const [correct, setCorrect] = useState(0);
-  const [hearts, setHearts] = useState(3);
+
   const [done, setDone] = useState(false);
 
   /** Remet le chapitre à zéro pour une nouvelle tentative (bouton « Recommencer »). */
   function recommencer() {
     setIdx(0); setPicked(null); setMatched({}); setSelLeft(null); setWrong(null);
-    setCorrect(0); setHearts(3); setDone(false);
+    setCorrect(0); setDone(false);
   }
 
   const q = questions[idx];
@@ -786,8 +724,9 @@ function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur,
   function choose(val) {
     if (answered) return;
     setPicked(val);
+    // Une mauvaise réponse ne coûte plus rien : elle affiche son explication, et c'est
+    // exactement là que le chapitre se révise. Le score final se compte sur les bonnes.
     if (val === q.a) setCorrect((c) => c + 1);
-    else setHearts((h) => h - 1);
   }
   function tapRight(r) {
     if (selLeft === null || matched[r.li]) return;
@@ -801,7 +740,7 @@ function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur,
     }
   }
   function next() {
-    if (hearts <= 0 || idx + 1 >= questions.length) { setDone(true); return; }
+    if (idx + 1 >= questions.length) { setDone(true); return; }
     setIdx((i) => i + 1); setPicked(null); setMatched({}); setSelLeft(null);
   }
 
@@ -810,13 +749,6 @@ function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur,
   const echoue = done && stars === 0; // moins de la moitié de bonnes réponses
   const good = type === "assoc" ? assocSolved : picked === q.a;
 
-  /* Un chapitre échoué coûte un cœur DÈS la fin de la tentative, et non au clic sur un
-     bouton : sans validation à donner, il n'y a plus de clic qui marque l'échec. Le garde
-     évite de le décompter deux fois si le composant se re-rend. */
-  const echecSignale = useRef(false);
-  useEffect(() => {
-    if (echoue && !echecSignale.current) { echecSignale.current = true; onFail?.(); }
-  }, [echoue, onFail]);
   const answerLabel = type === "vf" ? (q.a ? "Vrai" : "Faux") : type === "qcm" ? q.c[q.a] : "";
 
   return (
@@ -832,9 +764,13 @@ function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur,
 
         {!done ? (
           <div className="mbody">
+            {/* Les cœurs ont disparu avec l'XP : `setHearts` n'était plus appelé nulle part,
+                si bien que trois ❤️ s'affichaient en permanence sans jamais bouger — une
+                promesse de mécanique de jeu qui n'existait plus. Le compteur de questions
+                dit ce qu'il faut : où l'on en est. */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
               <div className="pq-progress"><span style={{ width: `${(idx / total) * 100}%`, background: world.color }} /></div>
-              <span style={{ whiteSpace: "nowrap", fontSize: 14 }}>{"❤️".repeat(Math.max(0, hearts))}</span>
+              <span className="hint" style={{ whiteSpace: "nowrap" }}>{idx + 1} / {total}</span>
             </div>
             <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px", display: "flex", alignItems: "center", gap: 8 }}>
               <span className={"pq-tag pq-tag-" + type}>{type === "vf" ? "Vrai / Faux" : type === "assoc" ? "Associe" : "QCM"}</span>
@@ -846,7 +782,6 @@ function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur,
               {q.diff && (
                 <span className="badge n" style={q.diff.color ? { color: q.diff.color } : undefined}>{q.diff.name}</span>
               )}
-              <span>{xpOfQuestion(q)} XP</span>
             </p>
 
             {type === "qcm" && (
@@ -919,8 +854,15 @@ function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur,
           </div>
         ) : (
           <div className="mbody" style={{ textAlign: "center", padding: "24px 20px" }}>
-            <div style={{ fontSize: 40, marginBottom: 6 }}>{stars > 0 ? "🍕" : "💪"}</div>
-            <div style={{ fontSize: 26, letterSpacing: 4, marginBottom: 8 }}>{[0, 1, 2].map((s) => <span key={s} style={{ opacity: s < stars ? 1 : 0.25 }}>⭐</span>)}</div>
+            {/* Les trois étoiles DISENT déjà le résultat : l'emoji au-dessus le répétait en
+                plus gros. Elles arrivent l'une après l'autre — c'est le seul moment du jeu
+                où l'on a quelque chose à savourer. */}
+            <div className="pq-fin-stars" aria-label={`${stars} étoile${stars > 1 ? "s" : ""} sur 3`}>
+              {[0, 1, 2].map((s) => (
+                <Icon key={s} name="star" size={38} fill={s < stars ? "currentColor" : "none"}
+                  className={s < stars ? "on" : ""} style={{ animationDelay: `${s * 0.14}s` }} />
+              ))}
+            </div>
             <p style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>{correct}/{total} bonnes réponses</p>
             <p className="hint" style={{ marginTop: 0 }}>
               {stars >= 2 ? "Excellent, prêt pour le QCM !"
@@ -936,16 +878,13 @@ function QuizModal({ world, data, onClose, onFinish, onFail, onRetry, sansCoeur,
                 /* Relancer ne coûte rien : l'échec qui précède a déjà pris son cœur. Ce qui
                    ration la boucle, c'est que chaque tentative ratée en coûte un — pas le
                    fait d'appuyer sur le bouton. */
-                <button className="btn primary" disabled={sansCoeur}
-                  onClick={() => { onRetry?.(); recommencer(); }}
-                  title={sansCoeur ? "Plus de cœur — reviens quand tu en auras récupéré un" : undefined}>
+                <button className="btn primary"
+                  onClick={() => { onRetry?.(); recommencer(); }}>
                   <Icon name="refresh" size={14} /> Recommencer
                 </button>
               ) : (
-                /* XP annoncé = celui qui sera effectivement compté (même formule que le
-                   total en en-tête), pour qu'aucun écart n'apparaisse après validation. */
                 <button className="btn primary" onClick={() => onFinish(stars)}>
-                  Valider (+{chapterXpEarned({ questions }, stars)} XP)
+                  <Icon name="check" size={15} /> Valider
                 </button>
               )}
             </div>

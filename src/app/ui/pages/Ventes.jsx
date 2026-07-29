@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
@@ -7,6 +7,7 @@ import {
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
+import DataTable from "../components/DataTable.jsx";
 import { Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -178,7 +179,10 @@ function Ventes() {
   return (
     <>
       <PageHead eyebrow="Boutique" title="Ventes de Matériels et Inventaire"
-        lead="Point de vente du matériel : composez un panier, appliquez des remises, encaissez — la facture est créée automatiquement. Gérez le stock et les réglages de facturation dans les onglets."
+        // C'est une CAISSE : quelqu'un attend sa monnaie. L'accroche portait quatre lignes de
+        // mode d'emploi devant un écran qu'on ouvre pour encaisser en quinze secondes, et
+        // décrivait des gestes que les onglets et les boutons annoncent déjà eux-mêmes.
+        lead="La facture est créée automatiquement à l'encaissement."
         actions={<MoneyToggle />} />
       <StatusMessage status={status} />
 
@@ -237,7 +241,13 @@ function Ventes() {
               )}
             </Card>
 
-            <Card title={<span className="card-ttl"><Icon name="shopping-cart" size={16} /> Panier ({cart.length})</span>}>
+            {/* LE PANIER RESTE EN VUE pendant qu'on remplit la boutique. Le catalogue est long ;
+                en descendant pour trouver un article, on perdait de vue ce qu'on avait déjà
+                ajouté et le total à annoncer — sur une caisse, devant quelqu'un qui attend.
+                Il se colle sous la barre supérieure (63 px), et se libère dès que la colonne
+                passe sous la boutique en écran étroit : collé sur une pile verticale, il
+                masquerait le catalogue qu'on essaie de parcourir. */}
+            <Card className="panier-colle" title={<span className="card-ttl"><Icon name="shopping-cart" size={16} /> Panier ({cart.length})</span>}>
               {/* Acheteur + moyen de paiement, en tête du panier. */}
               <div className="field">
                 <label>Acheteur</label>
@@ -260,7 +270,7 @@ function Ventes() {
                     </div>
                   ) : (
                     <>
-                      <input className="inp" placeholder="Rechercher un stagiaire… (ou laisser vide = vente comptoir)" value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} />
+                      <input className="inp" aria-label="Rechercher un stagiaire à qui rattacher la vente" placeholder="Rechercher un stagiaire… (ou laisser vide = vente comptoir)" value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} />
                       {matches.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
                           {matches.map((l) => (
@@ -333,8 +343,8 @@ function Ventes() {
                 )}
               </div>
               <div className="row2">
-                <div className="field"><label>Moyen de paiement</label>
-                  <select className="inp" value={payment} onChange={(e) => setPayment(e.target.value)}>
+                <div className="field"><label htmlFor="caisse-paiement">Moyen de paiement</label>
+                  <select id="caisse-paiement" className="inp" value={payment} onChange={(e) => setPayment(e.target.value)}>
                     {payOptions.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
@@ -391,7 +401,7 @@ function Ventes() {
         </>
       )}
 
-      {tab === "historique" && <SalesHistory sales={sales} onRemove={remove} />}
+      {tab === "historique" && <SalesHistory sales={sales} onRemove={remove} onDownload={telechargerFacture} />}
 
       {tab === "inventaire" && <Inventaire embedded />}
 
@@ -403,7 +413,10 @@ function Ventes() {
 }
 
 // Historique des ventes : chiffre d'affaires + sélection de période (dates / raccourcis).
-function SalesHistory({ sales, onRemove }) {
+/* `onDownload` vient du parent : `telechargerFacture` y est défini avec sa gestion
+   d'erreur (setStatus). Il était appelé ici sans être dans la portée — le bouton
+   « Télécharger la facture » levait donc une ReferenceError au clic. */
+function SalesHistory({ sales, onRemove, onDownload }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [open, setOpen] = useState(() => new Set()); // factures dépliées
@@ -450,14 +463,14 @@ function SalesHistory({ sales, onRemove }) {
   return (
     <>
       <div className="grid cols-3" style={{ marginBottom: 16 }}>
-        <Kpi label={`Chiffre d'affaires HT${allTime ? "" : " (période)"}`} value={euro(ca)} />
-        <Kpi label="Articles vendus" value={units} />
-        <Kpi label="Ventes / factures" value={groups.length} />
+        <Kpi label={`Chiffre d'affaires HT${allTime ? "" : " (période)"}`} value={euro(ca)} icon="euro" tone="green" />
+        <Kpi label="Articles vendus" value={units} icon="package" tone="blue" countUp />
+        <Kpi label="Ventes / factures" value={groups.length} icon="receipt" tone="blue" countUp />
       </div>
       <Card title="Historique des ventes">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end", marginBottom: 14 }}>
-          <div className="field" style={{ margin: 0 }}><label>Du</label><input className="inp" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-          <div className="field" style={{ margin: 0 }}><label>Au</label><input className="inp" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+          <div className="field" style={{ margin: 0 }}><label htmlFor="ventes-du">Du</label><input id="ventes-du" className="inp" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+          <div className="field" style={{ margin: 0 }}><label htmlFor="ventes-au">Au</label><input id="ventes-au" className="inp" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
           <button className="btn sm ghost" onClick={thisMonth}>Ce mois</button>
           <button className="btn sm ghost" onClick={last30}>30 jours</button>
           <button className="btn sm ghost" onClick={thisYear}>Cette année</button>
@@ -466,43 +479,59 @@ function SalesHistory({ sales, onRemove }) {
         {filtered.length === 0 ? (
           <EmptyState icon="cart">{allTime ? "Aucune vente enregistrée." : "Aucune vente sur cette période."}</EmptyState>
         ) : (
-          <div className="tablewrap" style={{ border: "none" }}>
-            <table>
-              <thead><tr><th style={{ width: 34 }}></th><th>Date</th><th>Facture</th><th>Client</th><th>Articles</th><th className="ta-r">Montant HT</th><th></th></tr></thead>
-              <tbody>
-                {groups.map((g) => {
-                  const isOpen = open.has(g.key);
-                  return (
-                    <Fragment key={g.key}>
-                      <tr style={{ cursor: "pointer" }} onClick={() => toggle(g.key)}>
-                        <td><button className="iconbtn" title={isOpen ? "Réduire" : "Voir le détail"} onClick={(e) => { e.stopPropagation(); toggle(g.key); }}><Icon name={isOpen ? "chevron-down" : "chevron-right"} size={15} /></button></td>
-                        <td className="mono">{g.date}</td>
-                        <td>{g.invoice_number ? <b>{g.invoice_number}</b> : <span className="hint">Vente directe</span>}</td>
-                        <td>{g.client}</td>
-                        <td>{g.units} <span className="hint">({g.lines.length} ligne{g.lines.length > 1 ? "s" : ""})</span></td>
-                        <td className="mono tnum" style={{ textAlign: "right" }}>{euro(g.total)}</td>
-                        <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
-                          {g.invoice_id && (
-                            <button className="iconbtn" title="Télécharger la facture (PDF)" onClick={() => telechargerFacture(g.invoice_id, g.invoice_number || "facture")}><Icon name="download" size={15} /></button>
-                          )}
-                        </td>
-                      </tr>
-                      {isOpen && g.lines.map((s) => (
-                        <tr key={s.id} style={{ background: "var(--surface2)" }}>
-                          <td></td>
-                          <td className="mono" style={{ color: "var(--muted)", fontSize: 12 }}>{s.date}</td>
-                          <td colSpan={2}><b>{s.product}</b>{s.category ? <span className="hint"> · {s.category}</span> : null}</td>
-                          <td>{s.quantity}</td>
-                          <td className="mono tnum" style={{ textAlign: "right" }}>{euro(Number(s.amount) * (s.quantity || 1))}</td>
-                          <td style={{ textAlign: "right" }}><button className="iconbtn del" title="Supprimer cette ligne" onClick={() => onRemove(s.id)}><Icon name="trash" size={14} /></button></td>
-                        </tr>
-                      ))}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={groups}
+            rowKey={(g) => g.key}
+            /* La ligne entière déplie — la petite flèche n'était qu'un raccourci. `aria-expanded`
+               dit l'état, que le chevron montre déjà à l'œil. */
+            rowProps={(g) => ({
+              style: { cursor: "pointer" },
+              role: "button",
+              tabIndex: 0,
+              "aria-expanded": open.has(g.key),
+              "aria-label": `${open.has(g.key) ? "Replier" : "Voir"} le détail de ${g.invoice_number || "la vente directe"} du ${g.date}`,
+              onClick: () => toggle(g.key),
+              onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(g.key); } },
+            })}
+            /* Le DÉTAIL d'une vente : ses lignes d'articles. `null` quand la vente est repliée
+               — c'est la page qui tient cet état, le tableau ne fait que l'accueillir. */
+            detail={(g) => (open.has(g.key) ? (
+              <div className="dt-detail-liste">
+                {g.lines.map((s) => (
+                  <div className="dt-detail-ligne" key={s.id}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <b>{s.product}</b>{s.category ? <span className="hint"> · {s.category}</span> : null}
+                    </span>
+                    <span className="qte">×{s.quantity}</span>
+                    <span className="prix mono">{euro(Number(s.amount) * (s.quantity || 1))}</span>
+                    <button className="iconbtn del" title="Supprimer cette ligne"
+                      aria-label={`Supprimer ${s.product}`}
+                      onClick={(e) => { e.stopPropagation(); onRemove(s.id); }}><Icon name="trash" size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            ) : null)}
+            cols={[
+              { k: "plier", t: "", sansCarte: true, th: { width: 34 },
+                cell: (g) => <Icon name={open.has(g.key) ? "chevron-down" : "chevron-right"} size={15} aria-hidden="true" /> },
+              { k: "facture", t: "Facture", principal: true,
+                cell: (g) => (g.invoice_number ? <b>{g.invoice_number}</b> : <span className="hint">Vente directe</span>) },
+              { k: "date", t: "Date", cell: (g) => <span className="mono">{g.date}</span> },
+              { k: "client", t: "Client", cell: (g) => g.client || null },
+              { k: "articles", t: "Articles",
+                // `{" "}` explicite : l'espace entre l'accolade et la balise disparaît à la
+                // compilation, et on lisait « 6(6 lignes) ».
+                cell: (g) => <>{g.units}{" "}<span className="hint">({g.lines.length} ligne{g.lines.length > 1 ? "s" : ""})</span></> },
+              { k: "total", t: "Montant HT", th: { className: "ta-r" }, td: { textAlign: "right" },
+                cell: (g) => <span className="mono tnum">{euro(g.total)}</span> },
+              { k: "actions", t: "", actions: true, td: { textAlign: "right" },
+                cell: (g) => (g.invoice_id ? (
+                  <button className="iconbtn" title="Télécharger la facture (PDF)"
+                    aria-label={`Télécharger la facture ${g.invoice_number || ""}`}
+                    onClick={(e) => { e.stopPropagation(); onDownload(g.invoice_id, g.invoice_number || "facture"); }}><Icon name="download" size={15} /></button>
+                ) : null) },
+            ]}
+          />
         )}
       </Card>
     </>
@@ -538,14 +567,14 @@ function ShopSettings({ settings, onSaved, onError }) {
   return (
     <Card title="Réglages de facturation">
       <div className="row2">
-        <div className="field"><label>Préfixe de numéro</label>
-          <input className="inp" value={form.invoice_prefix} onChange={set("invoice_prefix")} placeholder="F" /></div>
-        <div className="field"><label>Prochain numéro</label>
-          <input className="inp" type="number" min="1" value={form.next_number} onChange={set("next_number")} /></div>
+        <div className="field"><label htmlFor="fact-prefixe">Préfixe de numéro</label>
+          <input id="fact-prefixe" className="inp" value={form.invoice_prefix} onChange={set("invoice_prefix")} placeholder="F" /></div>
+        <div className="field"><label htmlFor="fact-numero">Prochain numéro</label>
+          <input id="fact-numero" className="inp" type="number" min="1" value={form.next_number} onChange={set("next_number")} /></div>
       </div>
       <p className="sub" style={{ marginTop: 0 }}>Exemple de numéro : <span className="mono">{form.invoice_prefix}-{new Date().getFullYear()}-{String(form.next_number).padStart(4, "0")}</span></p>
-      <div className="field"><label>Moyens de paiement (séparés par des virgules)</label>
-        <input className="inp" value={form.payment_methods} onChange={set("payment_methods")} placeholder="Espèces,CB,Virement,Chèque" /></div>
+      <div className="field"><label htmlFor="fact-paiements">Moyens de paiement (séparés par des virgules)</label>
+        <input id="fact-paiements" className="inp" value={form.payment_methods} onChange={set("payment_methods")} placeholder="Espèces,CB,Virement,Chèque" /></div>
       <label className="field" style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <input type="checkbox" checked={form.tva_applies} onChange={(e) => setForm((p) => ({ ...p, tva_applies: e.target.checked }))} />
         Appliquer la TVA (décochez pour une facturation exonérée)
@@ -558,8 +587,8 @@ function ShopSettings({ settings, onSaved, onError }) {
           plusieurs modèles FACTURE qui ne se distinguent pas par une condition — facture de
           formation et facture de boutique, par exemple. Le choix serait alors décidé par un
           ordre d'affichage que personne ne pense à regarder. */}
-      <div className="field"><label>Modèle de facture</label>
-        <select className="inp" value={form.invoice_template_slug}
+      <div className="field"><label htmlFor="fact-modele">Modèle de facture</label>
+        <select id="fact-modele" className="inp" value={form.invoice_template_slug}
           onChange={(e) => setForm((p) => ({ ...p, invoice_template_slug: e.target.value }))}>
           <option value="">— Aucun —</option>
           {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.slug}</option>)}

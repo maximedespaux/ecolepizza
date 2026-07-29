@@ -173,7 +173,6 @@ export default function Notions() {
         <button className={"seg-btn" + (tab === "manuel" ? " on" : "")} onClick={() => setTab("manuel")}><Icon name="book-open" size={13} /> Le manuel</button>
         <button className={"seg-btn" + (tab === "gestion" ? " on" : "")} onClick={() => setTab("gestion")}><Icon name="coins" size={13} /> Gestion</button>
         <button className={"seg-btn" + (tab === "lexique" ? " on" : "")} onClick={() => setTab("lexique")}><Icon name="list-checks" size={13} /> Lexique</button>
-        <button className={"seg-btn" + (tab === "valider" ? " on" : "")} onClick={() => setTab("valider")}><Icon name="star" size={13} /> À valider <span className="badge n" style={{ marginLeft: 5, fontSize: 10, background: "var(--ember1)", color: "#fff", borderColor: "transparent" }}>{A_VALIDER.length}</span></button>
       </span>
 
       {tab === "manuel" && (
@@ -211,17 +210,6 @@ export default function Notions() {
           </Card>
           <FicheNav list={GESTION} sel={selG} setSel={setSelG} />
           {fichesG.map((f) => <Fiche key={f.key} f={f} />)}
-        </>
-      )}
-
-      {tab === "valider" && (
-        <>
-          <Card style={{ marginBottom: 16, background: "var(--surface2)", borderLeft: "3px solid var(--ember1)" }}>
-            <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--muted)" }}>
-              <b style={{ color: "var(--text)" }}>Rien de tout ça n'est appliqué.</b> Ce sont des éléments trouvés en ligne qui <b style={{ color: "var(--text)" }}>complètent ou contredisent</b> ce que la page affiche aujourd'hui. Tu lis, tu tranches, et je corrige — c'est ta pédagogie qui fait foi, pas Internet.
-            </p>
-          </Card>
-          {A_VALIDER.map((v) => <ValiderCard key={v.key} v={v} />)}
         </>
       )}
 

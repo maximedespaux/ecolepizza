@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { useEchap } from "../lib/useEchap.js";
 import { Icon } from "./Icon.jsx";
 
 /**
@@ -49,9 +50,14 @@ const TOOL = {
 };
 
 export default function IntroGuide({ open, onClose, page }) {
+  useEchap(onClose, open);
   if (!open) return null;
   const tool = page ? TOOL[page] : null;
   return createPortal(
+    /* `stu-app` : le portail sort de StudentLayout et perdrait sinon Fredoka, les coins 22 px
+       et le retour tactile — sur le TOUT PREMIER écran d'un nouveau stagiaire. `stu-app-nu`
+       coupe le halo, qui serait sinon peint une seconde fois par-dessus le voile. */
+    <div className="stu-app stu-app-nu">
     <div className="overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
@@ -103,6 +109,7 @@ export default function IntroGuide({ open, onClose, page }) {
           </div>
         </div>
       </div>
+    </div>
     </div>,
     document.body
   );

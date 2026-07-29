@@ -123,6 +123,26 @@ const VERBE = {
     CREATE: ['créé', G], UPDATE: ['modifié', A], DELETE: ['supprimé', R],
 };
 
+/**
+ * Verbes reconnus dans un code de la forme `entité.verbe`.
+ *
+ * `VERBE` ci-dessus n'est indexé que sur des actions NUES (« CREATE », « UPDATE »…), jamais
+ * sur la forme composée que produit la majeure partie du journal. Résultat : tout code non
+ * nommé un à un dans ACTION_LABEL retombait sur son écriture brute — on lisait
+ * « template.rename » dans l'activité récente du tableau de bord.
+ *
+ * Ce dernier repli travaille sur le SUFFIXE, ce qui rend lisible tout code ajouté demain sans
+ * qu'il faille penser à l'inscrire quelque part.
+ */
+const SUFFIXE = {
+    create: ['créé', G], add: ['ajouté', G], save: ['enregistré', G], update: ['modifié', A],
+    edit: ['modifié', A], rename: ['renommé', A], duplicate: ['dupliqué', B], copy: ['dupliqué', B],
+    delete: ['supprimé', R], remove: ['retiré', R], purge: ['purgé', R],
+    send: ['envoyé', B], download: ['téléchargé', B], export: ['exporté', B], import: ['importé', B],
+    sign: ['signé', G], cancel: ['annulé', R], restore: ['restauré', G],
+    open: ['ouvert', N], close: ['clôturé', N], read: ['consulté', N],
+};
+
 /** entité technique → nom lisible, et son genre (pour accorder le participe). */
 const ENTITY_LABEL = {
     Invoice: ['Facture', 'f'],
@@ -172,6 +192,17 @@ function auditLabel(action, entity) {
         const [nomEntite, genre] = ENTITY_LABEL[entity] || [entity || 'Élément', 'm'];
         const [participe, ton] = v;
         // Accord du participe au féminin : « créé » → « créée ».
+        const accorde = genre === 'f' ? `${participe}e` : participe;
+        return { label: `${nomEntite} ${accorde}`, tone: ton };
+    }
+
+    // Dernier repli : décomposer `entité.verbe`. C'est ce qui manquait — sans lui, tout code
+    // non listé un à un s'affichait tel quel à l'écran.
+    const pt = String(action || '').split('.');
+    const suf = SUFFIXE[pt[pt.length - 1]];
+    if (suf) {
+        const [nomEntite, genre] = ENTITY_LABEL[entity] || ENTITY_LABEL[pt[0]] || [pt[0] || 'Élément', 'm'];
+        const [participe, ton] = suf;
         const accorde = genre === 'f' ? `${participe}e` : participe;
         return { label: `${nomEntite} ${accorde}`, tone: ton };
     }

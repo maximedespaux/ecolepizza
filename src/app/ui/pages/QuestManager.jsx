@@ -10,7 +10,6 @@ import {
   getQuestStructure, createQuestCategory, updateQuestCategory, deleteQuestCategory,
   setProgramQuestCategories, addQuestPrerequisite, deleteQuestPrerequisite,
   getQuestContent, createQuestDifficulty, updateQuestDifficulty, deleteQuestDifficulty,
-  getOrganisation, updateOrganisation,
 } from "../api/apiClient.js";
 
 /**
@@ -81,13 +80,10 @@ export default function QuestManager() {
           Prérequis{prerequisites.length ? ` (${prerequisites.length})` : ""}
         </button>
         <button type="button" className={"seg-btn" + (tab === "difficultes" ? " on" : "")} onClick={() => setTab("difficultes")}>
-          Difficultés &amp; XP{difficulties.length ? ` (${difficulties.length})` : ""}
+          Difficultés{difficulties.length ? ` (${difficulties.length})` : ""}
         </button>
         <button type="button" className={"seg-btn" + (tab === "questions" ? " on" : "")} onClick={() => setTab("questions")}>
           Questions
-        </button>
-        <button type="button" className={"seg-btn" + (tab === "vies" ? " on" : "")} onClick={() => setTab("vies")}>
-          Cœurs
         </button>
       </div>
 
@@ -109,82 +105,15 @@ export default function QuestManager() {
         <QuestBankEditor programs={programs} difficulties={difficulties} onStatus={setStatus} />
       )}
 
-      {tab === "vies" && <CoeursCard onStatus={setStatus} />}
     </>
   );
 }
 
-/* ---- Cœurs ----------------------------------------------------------------------------- */
-
-/**
- * Capital de cœurs et vitesse de reconstitution.
- *
- * Ce réglage décide du rythme : rater un chapitre coûte un cœur, en récupérer un demande
- * d'attendre. C'est ce qui empêche de relancer un chapitre en boucle jusqu'à tomber sur les
- * bonnes cases — mais trop serré, il transforme l'entraînement en punition.
- */
-function CoeursCard({ onStatus }) {
-  const [max, setMax] = useState(5);
-  const [delai, setDelai] = useState(5);
-  const [charge, setCharge] = useState(false);
-
-  useEffect(() => {
-    getOrganisation()
-      .then((r) => {
-        const o = r.data || {};
-        if (o.quest_max_hearts != null) setMax(Number(o.quest_max_hearts));
-        if (o.quest_regen_minutes != null) setDelai(Number(o.quest_regen_minutes));
-        setCharge(true);
-      })
-      .catch(() => setCharge(true));
-  }, []);
-
-  async function enregistrer(e) {
-    e.preventDefault();
-    onStatus(null);
-    try {
-      await updateOrganisation({ quest_max_hearts: Number(max), quest_regen_minutes: Number(delai) });
-      onStatus({ type: "success", message: "Réglages des cœurs enregistrés." });
-    } catch (err) {
-      onStatus({ type: "error", message: err.message || "Enregistrement impossible." });
-    }
-  }
-
-  if (!charge) return <p className="hint">Chargement…</p>;
-  const pleinMin = Number(delai) * Number(max);
-
-  return (
-    <Card title={<span className="card-ttl">❤️ Cœurs &amp; reconstitution</span>}>
-      <p className="hint" style={{ marginTop: 0 }}>
-        Un stagiaire perd un cœur lorsqu'il <b>échoue</b> un chapitre ou qu'il l'<b>abandonne</b>
-        en cours. À court de cœurs, il ne peut plus lancer de chapitre tant qu'il n'en a pas
-        récupéré un. Les cœurs sont communs à toutes ses formations.
-      </p>
-
-      <form onSubmit={enregistrer} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <div className="field" style={{ margin: 0, width: 150 }}>
-          <label>Nombre de cœurs</label>
-          <input className="inp" type="number" min="1" max="50" value={max}
-            onChange={(e) => setMax(e.target.value)} />
-        </div>
-        <div className="field" style={{ margin: 0, width: 190 }}>
-          <label>Un cœur toutes les… <span className="field-opt">minutes</span></label>
-          <input className="inp" type="number" min="0" max="1440" value={delai}
-            onChange={(e) => setDelai(e.target.value)} />
-        </div>
-        <button type="submit" className="btn primary">Enregistrer</button>
-      </form>
-
-      <p className="hint" style={{ marginTop: 10 }}>
-        {Number(delai) === 0
-          ? <>À <b>0 minute</b>, la mécanique est neutralisée : les cœurs restent pleins et rien
-              ne limite les tentatives.</>
-          : <>Un stagiaire à court de cœurs attend <b>{delai} min</b> pour en récupérer un, et{" "}
-              <b>{pleinMin} min</b> pour retrouver ses {max} cœurs.</>}
-      </p>
-    </Card>
-  );
-}
+/* Les CŒURS ont été supprimés (2026-07-28). Ils bloquaient la révision après un échec, et
+   punir quelqu'un qui veut réviser n'a pas de sens dans une école. Sont partis avec :
+   `api/lib/questlives.js`, les routes /quest/vies, les colonnes `quest_max_hearts` /
+   `quest_regen_minutes` et la table `learner_quest_life` (migration 115).
+   La progression se lit désormais aux CADRES, gagnés sur les formations terminées. */
 
 /* ---- Difficultés & XP ----------------------------------------------------------------- */
 
@@ -192,12 +121,20 @@ function DifficultesCard({ difficulties, run }) {
   const [nom, setNom] = useState("");
   const [xp, setXp] = useState(10);
   return (
-    <Card title={<span className="card-ttl"><Icon name="target" size={16} /> Difficultés &amp; XP</span>}>
+    <Card title={<span className="card-ttl"><Icon name="target" size={16} /> Difficultés</span>}>
+      {/* Contrairement aux cœurs, cet onglet n'est PAS mort : le NOM et la COULEUR d'une
+          difficulté servent toujours — le QCM affiche « Facile » sous chaque question. Seule
+          la colonne XP est devenue inerte, l'XP ayant été retirée du jeu le 2026-07-28. On ne
+          retire donc pas l'écran, on dit lesquelles de ses valeurs comptent encore. */}
       <p className="hint" style={{ marginTop: 0 }}>
-        Chaque difficulté porte l'XP gagné par question. Régler « Difficile » à 20 requalifie
-        d'un coup toutes les questions de ce niveau — inutile de les rouvrir une à une. Une
-        question peut malgré tout fixer son propre XP, qui l'emporte alors.
+        Le <b>nom</b> et la <b>couleur</b> d'une difficulté s'affichent sous chaque question du
+        QCM : c'est ce qui dit au stagiaire dans quoi il met les pieds.
       </p>
+      <div className="status info">
+        <b>La colonne XP ne sert plus.</b> L'XP a été retirée de Pizza Quest — la progression
+        se lit maintenant aux <b>cadres</b>, gagnés sur les formations terminées. La valeur
+        reste enregistrée, elle n'est simplement plus lue.
+      </div>
 
       <form style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14, flexWrap: "wrap" }}
         onSubmit={(e) => {
@@ -207,13 +144,13 @@ function DifficultesCard({ difficulties, run }) {
           setNom(""); setXp(10);
         }}>
         <div className="field" style={{ margin: 0 }}>
-          <label>Intitulé</label>
-          <input className="inp" value={nom} onChange={(e) => setNom(e.target.value)}
+          <label htmlFor="qm-diff-nom">Intitulé</label>
+          <input id="qm-diff-nom" className="inp" value={nom} onChange={(e) => setNom(e.target.value)}
             placeholder="Expert…" style={{ maxWidth: 220 }} />
         </div>
         <div className="field" style={{ margin: 0, width: 110 }}>
-          <label>XP</label>
-          <input className="inp" type="number" min="0" value={xp} onChange={(e) => setXp(e.target.value)} />
+          <label htmlFor="qm-diff-xp">XP</label>
+          <input id="qm-diff-xp" className="inp" type="number" min="0" value={xp} onChange={(e) => setXp(e.target.value)} />
         </div>
         <button type="submit" className="btn sm" disabled={!nom.trim()}><Icon name="plus" size={14} /> Ajouter</button>
       </form>
@@ -235,11 +172,13 @@ function DifficultesCard({ difficulties, run }) {
                       onBlur={(e) => { if (Number(e.target.value) !== d.xp) run(() => updateQuestDifficulty(d.id, { xp: Number(e.target.value) || 0 })); }} />
                   </td>
                   <td>
-                    <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(d.color || "") ? d.color : "#5b6079"}
+                    <input type="color" aria-label={`Couleur du niveau ${d.name}`}
+                      value={/^#[0-9a-fA-F]{6}$/.test(d.color || "") ? d.color : "#5b6079"}
                       onChange={(e) => run(() => updateQuestDifficulty(d.id, { color: e.target.value }))} />
                   </td>
                   <td>
                     <button type="button" className="btn sm ghost danger"
+                      title={`Supprimer ${d.name}`} aria-label={`Supprimer le niveau ${d.name}`}
                       onClick={() => {
                         // Les questions rattachées ne sont PAS supprimées : elles retombent
                         // simplement sur l'XP par défaut.
@@ -299,6 +238,7 @@ function AxeCard({ axe, cats, programs, run }) {
           setNom("");
         }}>
         <input className="inp" value={nom} onChange={(e) => setNom(e.target.value)}
+          aria-label={`Nom du nouveau ${axe.one}`}
           placeholder={`Nouveau ${axe.one}…`} style={{ maxWidth: 280 }} />
         <button type="submit" className="btn sm" disabled={!nom.trim()}><Icon name="plus" size={14} /> Ajouter</button>
       </form>
@@ -360,8 +300,12 @@ function CatRow({ cat, axe, used, run, premier, dernier, onMonter, onDescendre }
       <span style={{ width: 12, height: 12, borderRadius: 4, background: couleur, flex: "0 0 auto" }} />
       <b style={{ flex: 1 }}>{cat.name}</b>
       <span className="hint">{used === 0 ? "aucune formation" : `${used} formation${used > 1 ? "s" : ""}`}</span>
-      <button type="button" className="btn sm ghost" onClick={() => setEdit(true)}><Icon name="pencil" size={13} /></button>
+      {/* Ces deux boutons sont RÉPÉTÉS à chaque ligne et ne portaient qu'une icône : dix
+          boutons sans nom d'affilée dans l'arbre d'accessibilité. Le nom porte la CIBLE. */}
+      <button type="button" className="btn sm ghost" title={`Renommer ${cat.name}`}
+        aria-label={`Renommer ${cat.name}`} onClick={() => setEdit(true)}><Icon name="pencil" size={13} /></button>
       <button type="button" className="btn sm ghost danger"
+        title={`Supprimer ${cat.name}`} aria-label={`Supprimer ${cat.name}`}
         onClick={() => {
           // On prévient du DÉTACHEMENT : la suppression ne touche pas aux formations
           // elles-mêmes, mais elles perdent ce rangement.

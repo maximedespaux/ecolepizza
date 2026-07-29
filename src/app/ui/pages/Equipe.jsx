@@ -6,6 +6,8 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import Badge from "../components/Badge.jsx";
+import DataTable from "../components/DataTable.jsx";
+import EmptyState from "../components/EmptyState.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 
 // Libellés + teintes de pastille par rôle.
@@ -57,7 +59,7 @@ function fmtDate(v) {
 
 function Equipe() {
   const { user } = useContext(UserContext);
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(null); // `null` = on charge, `[]` = aucun membre
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(null);
   const [editing, setEditing] = useState(null); // membre en édition, ou { _new: true }
@@ -121,62 +123,51 @@ function Equipe() {
         </Card>
       )}
 
-      <Card title={`Membres (${items.length})`}>
-        <div className="tablewrap" style={{ border: "none" }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Membre</th>
-                <th>Rôle</th>
-                <th>Statut</th>
-                <th>Dernière connexion</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((m) => {
-                const meta = ROLE_META[m.role] || { label: m.role, tone: "n" };
-                return (
-                  <tr key={m.id} style={{ opacity: m.active ? 1 : 0.55 }}>
-                    <td>
-                      <b>{[m.first_name, m.last_name].filter(Boolean).join(" ") || "—"}{m.is_self && <span style={{ color: "var(--dim)", fontWeight: 400 }}> (vous)</span>}</b>
-                      <span style={{ display: "block", fontSize: 12, color: "var(--dim)" }} className="mono">{m.email}</span>
-                    </td>
-                    <td><Badge tone={meta.tone}>{meta.label}</Badge></td>
-                    <td style={{ fontSize: 13 }}>
-                      {m.active
-                        ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--green)" }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: "currentColor", flex: "0 0 8px" }} /> Actif</span>
-                        : <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--dim)" }}><span style={{ width: 8, height: 8, borderRadius: "50%", border: "1.5px solid currentColor", flex: "0 0 8px" }} /> Désactivé</span>}
-                    </td>
-                    <td style={{ fontSize: 13, color: "var(--muted)" }}>{fmtDate(m.last_login_at)}</td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      {canManageRow(m) && (
-                        <>
-                          <button className="btn sm ghost" title="Modifier" onClick={() => setEditing({ ...m })}><Icon name="pencil" size={15} /></button>{" "}
-                          {isSuperAdmin && !m.is_self && m.role !== "SUPER_ADMIN" && (
-                            <button className="btn sm ghost" title="Configurer l'accès et les capacités"
-                              onClick={() => setNavEditing(m)}><Icon name="compass" size={15} /></button>
-                          )}{" "}
-                          {!m.is_self && (
-                            <button className="btn sm ghost" title={m.active ? "Désactiver l'accès" : "Réactiver l'accès"}
-                              disabled={busy === m.id} onClick={() => toggleActive(m)}>{m.active ? <Icon name="pause" size={14} /> : <Icon name="play" size={14} />}</button>
-                          )}{" "}
-                          {!m.is_self && (
-                            <button className="btn sm ghost danger" title="Supprimer"
-                              disabled={busy === m.id} onClick={() => onDelete(m)}><Icon name="trash" size={15} /></button>
-                          )}
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {items.length === 0 && (
-                <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--dim)", padding: 20 }}>Aucun membre.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      <Card title={`Membres${items ? ` (${items.length})` : ""}`}>
+        <DataTable
+          rows={items}
+          rowKey={(m) => m.id}
+          /* Un membre désactivé reste listé — son historique compte — mais en retrait. */
+          rowProps={(m) => ({ style: { opacity: m.active ? 1 : 0.55 } })}
+          vide={<EmptyState icon="team" title="Aucun membre"
+            text="Personne d'autre que toi n'a encore de compte sur cet organisme." />}
+          cols={[
+            { k: "membre", t: "Membre", principal: true,
+              cell: (m) => (
+                <>
+                  <b>{[m.first_name, m.last_name].filter(Boolean).join(" ") || "—"}{m.is_self && <span style={{ color: "var(--muted)", fontWeight: 400 }}> (vous)</span>}</b>
+                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }} className="mono">{m.email}</span>
+                </>
+              ) },
+            { k: "role", t: "Rôle",
+              cell: (m) => { const meta = ROLE_META[m.role] || { label: m.role, tone: "n" }; return <Badge tone={meta.tone}>{meta.label}</Badge>; } },
+            { k: "statut", t: "Statut", td: { fontSize: 13 },
+              cell: (m) => (m.active
+                ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--green)" }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: "currentColor", flex: "0 0 8px" }} /> Actif</span>
+                : <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--muted)" }}><span style={{ width: 8, height: 8, borderRadius: "50%", border: "1.5px solid currentColor", flex: "0 0 8px" }} /> Désactivé</span>) },
+            { k: "last", t: "Dernière connexion", td: { fontSize: 13, color: "var(--muted)" },
+              cell: (m) => fmtDate(m.last_login_at) },
+            { k: "actions", t: "", actions: true, td: { textAlign: "right", whiteSpace: "nowrap" },
+              cell: (m) => (canManageRow(m) ? (
+                <>
+                  <button className="btn sm ghost" title="Modifier" aria-label={`Modifier ${m.email}`} onClick={() => setEditing({ ...m })}><Icon name="pencil" size={15} /></button>{" "}
+                  {isSuperAdmin && !m.is_self && m.role !== "SUPER_ADMIN" && (
+                    <button className="btn sm ghost" title="Configurer l'accès et les capacités" aria-label={`Configurer l'accès de ${m.email}`}
+                      onClick={() => setNavEditing(m)}><Icon name="compass" size={15} /></button>
+                  )}{" "}
+                  {!m.is_self && (
+                    <button className="btn sm ghost" title={m.active ? "Désactiver l'accès" : "Réactiver l'accès"}
+                      aria-label={`${m.active ? "Désactiver" : "Réactiver"} l'accès de ${m.email}`}
+                      disabled={busy === m.id} onClick={() => toggleActive(m)}>{m.active ? <Icon name="pause" size={14} /> : <Icon name="play" size={14} />}</button>
+                  )}{" "}
+                  {!m.is_self && (
+                    <button className="btn sm ghost danger" title="Supprimer" aria-label={`Supprimer ${m.email}`}
+                      disabled={busy === m.id} onClick={() => onDelete(m)}><Icon name="trash" size={15} /></button>
+                  )}
+                </>
+              ) : null) },
+          ]}
+        />
       </Card>
 
       {editing && (

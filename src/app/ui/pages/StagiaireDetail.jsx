@@ -1,14 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions,
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, updateStagiaire,
 } from "../api/apiClient.js";
+import { CADRES, cadreClass } from "../lib/cadres.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
+import DataTable from "../components/DataTable.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
+import { Squelette } from "../components/Squelette.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
@@ -16,6 +19,20 @@ import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro } from "../lib/format.js";
 
 const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
+
+/* Les documents ne sont pas les étapes d'un parcours unique — ce sont N pièces indépendantes,
+   chacune dans son état. Six états côte à côte en liste plate n'apprennent donc rien : il fallait
+   lire chaque ligne pour savoir où en était le dossier, alors que c'est précisément ce qu'on
+   vient y chercher.
+   Le regroupement suit QUI A LA BALLE, la seule question que se pose le secrétariat : ce qui
+   est sur mon bureau, ce que j'attends du stagiaire, ce qui est clos. « Préparé » et « Généré »
+   tombent ensemble parce qu'ils appellent le même geste — envoyer ; « Envoyé » et « Consulté »
+   aussi — patienter ou relancer. */
+const GROUPES_DOC = [
+  { cle: "faire",   titre: "À envoyer",         aide: "sur votre bureau",         ton: "ember", etats: ["A_FAIRE", "GENERE"] },
+  { cle: "attente", titre: "Chez le stagiaire", aide: "en attente de signature",  ton: "gold",  etats: ["ENVOYE", "CONSULTE"] },
+  { cle: "fait",    titre: "Signés",            aide: "rien à faire",             ton: "green", etats: ["SIGNE", "ARCHIVE"] },
+];
 
 function Row({ label, value }) {
   if (value === null || value === undefined || value === "" || value === "0.00") return null;
@@ -34,6 +51,60 @@ const T = (icon, text) => (
   <span className="card-ttl"><Icon name={icon} size={16} /> {text}</span>
 );
 
+/**
+ * Cadres exclusifs — les trois distinctions que l'ÉCOLE accorde.
+ *
+ * Les cadres de parcours (Bronze → Maestro) se déduisent seuls des formations terminées et
+ * n'ont donc rien à faire ici. Champion, Jury et Fondateur, eux, ne s'obtiennent pas en
+ * cumulant : ils se reçoivent. Sans cet écran ils restaient verrouillés pour tout le monde,
+ * affichés au stagiaire comme un objectif inaccessible.
+ *
+ * Registre SOBRE, pas la couche ludique : on est dans l'espace d'administration. La
+ * récompense est visible côté stagiaire, ici on ne fait que la décerner.
+ *
+ * L'écriture passe par PATCH /learners/:id, donc par `authorizeRoles(...ADMIN_ROLES)` : un
+ * formateur ne peut pas s'accorder un Champion. Elle entre aussi au journal d'audit.
+ */
+function CadresExclusifs({ learner, onSaved, onError }) {
+  const accordes = String(learner.cadres_exclusifs || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const [busy, setBusy] = useState(false);
+
+  function basculer(id) {
+    const suivant = accordes.includes(id) ? accordes.filter((x) => x !== id) : [...accordes, id];
+    setBusy(true);
+    // Chaîne vide et non `null` : la colonne accepte les deux, mais une chaîne vide se relit
+    // sans distinction de cas côté front (`split` d'une chaîne vide donne une liste vide).
+    updateStagiaire(learner.id, { cadres_exclusifs: suivant.join(",") })
+      .then(() => { onSaved(); onError({ type: "ok", message: "Cadres mis à jour." }); })
+      .catch((err) => onError({ type: "error", message: err.message }))
+      .finally(() => setBusy(false));
+  }
+
+  return (
+    <Card title={T("star", "Cadres exclusifs")}>
+      <p className="hint" style={{ marginTop: 0 }}>
+        Distinctions accordées par l'école. Les cadres de parcours (Bronze à Maestro) se
+        gagnent seuls, aux formations terminées — ils n'apparaissent pas ici.
+      </p>
+      <div className="cadres-attrib">
+        {CADRES.filter((c) => c.exclusif).map((c) => {
+          const on = accordes.includes(c.id);
+          return (
+            <label key={c.id} className={"cadre-attrib" + (on ? " on" : "")}>
+              <input type="checkbox" checked={on} disabled={busy} onChange={() => basculer(c.id)} />
+              <span className={"cadre-attrib-rond " + cadreClass(c.id)} aria-hidden="true" />
+              <span className="cadre-attrib-txt">
+                <b>{c.nom}</b>
+                <span className="hint">{c.condition}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function StagiaireDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -45,6 +116,19 @@ function StagiaireDetail() {
   const [prep, setPrep] = useState({ slug: "", title: "", enrollment_ids: [] });
   const [blockedRules, setBlockedRules] = useState([]); // règles non respectées pour le modèle+dossiers choisis
   const [viewId, setViewId] = useState(null);
+
+  // Répartition des documents selon qui doit agir (cf. GROUPES_DOC).
+  const parGroupe = useMemo(() => {
+    const m = Object.fromEntries(GROUPES_DOC.map((g) => [g.cle, []]));
+    for (const d of docs) {
+      // Un état inconnu tombe dans « à envoyer » plutôt que de disparaître : mieux vaut un
+      // document rangé au mauvais endroit qu'un document invisible.
+      const g = GROUPES_DOC.find((x) => x.etats.includes(d.status));
+      m[g ? g.cle : "faire"].push(d);
+    }
+    return m;
+  }, [docs]);
+  const signes = parGroupe.fait.length;
   const [editOpen, setEditOpen] = useState(false);
   const [parcoursEnr, setParcoursEnr] = useState(null);
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // force le rechargement du parcours après édition
@@ -181,10 +265,14 @@ function StagiaireDetail() {
   }
 
   if (!l) {
+    // La page restait BLANCHE sous son titre le temps du chargement : rien ne distinguait
+    // « ça arrive » de « il n'y a rien », ni d'ailleurs d'une erreur avalée. Le squelette
+    // réserve en plus la place, donc la page ne saute pas quand la fiche arrive.
     return (
       <>
         <PageHead eyebrow="Stagiaire" title="Fiche stagiaire" />
         <StatusMessage status={status} />
+        {!status && <Squelette lignes={4} h={92} />}
       </>
     );
   }
@@ -270,6 +358,8 @@ function StagiaireDetail() {
           {projects ? <p style={{ margin: 0 }}>{projects}</p> : <p className="hint" style={{ margin: 0 }}>Aucun projet renseigné.</p>}
         </Card>
 
+        <CadresExclusifs learner={l} onSaved={loadLearner} onError={setStatus} />
+
         {c && (
           <Card title={T("building", "Entreprise")} className="cols-2" >
             <Row label="Nom" value={c.name} />
@@ -326,38 +416,37 @@ function StagiaireDetail() {
             {enrollments.length === 0 ? (
               <p className="hint" style={{ margin: 0 }}>Ce stagiaire n'est inscrit à aucune formation. Inscrivez-le depuis une session.</p>
             ) : (
-              <div className="tablewrap" style={{ border: "none" }}>
-                <table className="enroll-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 34 }}></th>
-                      <th>Code</th>
-                      <th>Formation</th>
-                      <th>Semaine</th>
-                      <th>Dates</th>
-                      <th>Type</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {enrollments.map((e) => {
+              <DataTable
+                className="enroll-table"
+                rows={enrollments}
+                rowKey={(e) => e.id}
+                /* La ligne entière coche le dossier — la case seule serait une cible de 17 px.
+                   `aria-pressed` dit l'état à la navigation vocale, que la case porte déjà
+                   visuellement. */
+                rowProps={(e) => ({
+                  className: prep.enrollment_ids.includes(e.id) ? "on" : "",
+                  style: { cursor: "pointer" },
+                  onClick: () => toggleEnroll(e.id),
+                })}
+                cols={[
+                  { k: "coche", t: "", th: { width: 34 }, td: { textAlign: "center" },
+                    cell: (e) => (
+                      <input type="checkbox" checked={prep.enrollment_ids.includes(e.id)}
+                        aria-label={`Inclure le dossier ${e.program_code}`}
+                        onChange={() => toggleEnroll(e.id)} onClick={(ev) => ev.stopPropagation()} />
+                    ) },
+                  { k: "code", t: "Code", cell: (e) => <span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span> },
+                  { k: "titre", t: "Formation", principal: true, cell: (e) => e.program_title },
+                  { k: "semaine", t: "Semaine", cell: (e) => <span className="tnum">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "—"}</span> },
+                  { k: "dates", t: "Dates", td: { fontSize: 12.5, whiteSpace: "nowrap" },
+                    cell: (e) => {
                       const fr = (v) => (v ? new Date(v).toLocaleDateString("fr-FR") : "");
-                      const checked = prep.enrollment_ids.includes(e.id);
-                      return (
-                        <tr key={e.id} className={checked ? "on" : ""} onClick={() => toggleEnroll(e.id)} style={{ cursor: "pointer" }}>
-                          <td style={{ textAlign: "center" }}>
-                            <input type="checkbox" checked={checked} onChange={() => toggleEnroll(e.id)} onClick={(ev) => ev.stopPropagation()} />
-                          </td>
-                          <td><span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span></td>
-                          <td>{e.program_title}</td>
-                          <td className="tnum">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "—"}</td>
-                          <td style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>{e.start_date ? `${fr(e.start_date)}${e.end_date ? ` → ${fr(e.end_date)}` : ""}` : "—"}</td>
-                          <td style={{ fontSize: 12.5 }}>{e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      return e.start_date ? `${fr(e.start_date)}${e.end_date ? ` → ${fr(e.end_date)}` : ""}` : "—";
+                    } },
+                  { k: "type", t: "Type", td: { fontSize: 12.5 },
+                    cell: (e) => (e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier") },
+                ]}
+              />
             )}
           </div>
           {blockedRules.length > 0 && (
@@ -379,25 +468,51 @@ function StagiaireDetail() {
         {docs.length === 0 ? (
           <p className="hint" style={{ margin: 0 }}>Aucun document préparé.</p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {docs.map((d) => {
-              const [label, tone] = DOC_STATUS[d.status] || [d.status, "n"];
+          <>
+            {/* L'AVANCEMENT SE VOIT AVANT DE SE LIRE. Une jauge, puis les documents rangés selon
+                qui doit agir — « à envoyer » en tête, parce que c'est le seul groupe qui demande
+                quelque chose. */}
+            <div className="docs-jauge">
+              <div className="docs-barre" role="img"
+                aria-label={`${signes} document(s) signé(s) sur ${docs.length}`}>
+                <span style={{ width: `${docs.length ? Math.round((signes / docs.length) * 100) : 0}%` }} />
+              </div>
+              <span><b className="tnum">{signes}</b> signé{signes > 1 ? "s" : ""} sur <b className="tnum">{docs.length}</b></span>
+            </div>
+
+            {GROUPES_DOC.map((g) => {
+              const items = parGroupe[g.cle];
+              // Un groupe vide ne s'affiche pas : « À envoyer — 0 » trois fois de suite
+              // apprendrait à ignorer la zone, et le jour où il compte on ne le verrait plus.
+              if (!items.length) return null;
               return (
-                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <b>{d.title}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      {d.formations || "—"}{d.sent_at ? ` · envoyé le ${d.sent_at}` : ""}{d.signed_at ? ` · signé le ${d.signed_at}` : ""}
-                    </span>
-                  </span>
-                  <Badge tone={tone}>{label}</Badge>
-                  <button className="iconbtn" title="Aperçu / vérifier" onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
-                  {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer au stagiaire" onClick={() => handleSend(d.id)}><Icon name="send" size={16} /></button>}
-                  <button className="iconbtn del" title="Supprimer" onClick={() => handleDelete(d.id)}><Icon name="trash" size={15} /></button>
+                <div className="docs-grp" key={g.cle}>
+                  <div className={`docs-grp-t ton-${g.ton}`}>
+                    <span className="docs-pt" aria-hidden="true" />
+                    {g.titre} <b className="tnum">{items.length}</b>
+                    <i>{g.aide}</i>
+                  </div>
+                  {items.map((d) => {
+                    const [label, tone] = DOC_STATUS[d.status] || [d.status, "n"];
+                    return (
+                      <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <b>{d.title}</b>
+                          <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                            {d.formations || "—"}{d.sent_at ? ` · envoyé le ${d.sent_at}` : ""}{d.signed_at ? ` · signé le ${d.signed_at}` : ""}
+                          </span>
+                        </span>
+                        <Badge tone={tone}>{label}</Badge>
+                        <button className="iconbtn" title="Aperçu / vérifier" aria-label={`Aperçu de ${d.title}`} onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
+                        {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer au stagiaire" aria-label={`Envoyer ${d.title} au stagiaire`} onClick={() => handleSend(d.id)}><Icon name="send" size={16} /></button>}
+                        <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${d.title}`} onClick={() => handleDelete(d.id)}><Icon name="trash" size={15} /></button>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
-          </div>
+          </>
         )}
       </Card>
 

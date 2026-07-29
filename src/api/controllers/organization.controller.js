@@ -35,9 +35,9 @@ const updateOrganization = async (req, res) => {
     const allowed = ['legal_name', 'short_name', 'code', 'manager', 'siret', 'vat_number', 'nda', 'naf_ape',
         'address', 'zip_code', 'town', 'phone', 'email', 'iban', 'bic', 'bank_name', 'signature_image',
         'logo_image', 'emargement_config', 'qualiopi', 'vat_rate',
-        'quest_max_hearts', 'quest_regen_minutes'];
+    ];
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie sans elles.
-    const OPTIONAL = new Set(['vat_rate', 'quest_max_hearts', 'quest_regen_minutes']);
+    const OPTIONAL = new Set(['vat_rate']);
 
     const cols = [];
     const valOf = {};
@@ -48,8 +48,6 @@ const updateOrganization = async (req, res) => {
         else if (f === 'vat_rate') v = Math.max(0, Math.min(100, Number(v) || 0));
         // Cœurs : bornés ici comme à la lecture (cf. lib/questlives). 0 minute est une
         // VALEUR — régénération immédiate — d'où le test explicite plutôt qu'un `|| 5`.
-        else if (f === 'quest_max_hearts') v = Math.max(1, Math.min(50, Number(v) || 5));
-        else if (f === 'quest_regen_minutes') v = Math.max(0, Math.min(1440, Number(v) || 0));
         else if (f === 'code') v = String(v).trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 24) || null;
         else if (f === 'signature_image') v = encrypt(v || null);
         else if (f === 'emargement_config') v = JSON.stringify(mergeEmargConfig(v));

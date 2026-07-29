@@ -67,6 +67,47 @@ export const NAV = [
   },
 ];
 
+/**
+ * Le TON de chaque rubrique de la navigation.
+ *
+ * Trente pages qui se ressemblent toutes se confondent : au bout de trois clics, on ne sait
+ * plus dans quelle partie de l'application on se trouve. Une couleur par DOMAINE — et non par
+ * page — donne un repère qu'on lit sans le chercher, en gardant la charte : ce sont les
+ * quatre couleurs de l'école, plus le navy de base.
+ *
+ * Le ton est attaché à la rubrique, jamais à l'écran : deux pages du même domaine se
+ * ressemblent VOLONTAIREMENT, c'est ce qui fait qu'on les range ensemble.
+ */
+const TON_RUBRIQUE = {
+  "Pilotage": "blue",
+  "Formation": "orange",
+  "Commercial": "gold",
+  "Ventes & Finance": "green",
+  "Qualité & conformité": "blue",
+  "Configuration": "ember",
+};
+
+/**
+ * La rubrique d'un chemin : son groupe, son icône, son ton.
+ *
+ * Cherche l'entrée de nav la PLUS LONGUE qui préfixe le chemin — sans quoi « /stagiaires/42 »
+ * ne trouverait rien, et une fiche de détail perdrait la couleur de sa rubrique en plein
+ * milieu du parcours.
+ */
+export function sectionDe(pathname) {
+  let trouve = null;
+  for (const g of NAV) {
+    for (const it of g.items) {
+      if ((pathname === it.to || pathname.startsWith(it.to + "/")) &&
+          (!trouve || it.to.length > trouve.item.to.length)) {
+        trouve = { grp: g.grp, item: it };
+      }
+    }
+  }
+  if (!trouve) return null;
+  return { grp: trouve.grp, ic: trouve.item.ic, label: trouve.item.label, ton: TON_RUBRIQUE[trouve.grp] || "blue" };
+}
+
 /** Libellé de page (fil d'Ariane). */
 export const PAGE_TITLES = {
   "/dashboard": "Tableau de bord",

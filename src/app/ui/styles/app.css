@@ -3,7 +3,7 @@
    Bleu marine (structure) + rouge tomate (accent), police Mulish.
    Thème clair / sombre via [data-theme] sur <html>.
    ===================================================================== */
-@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,400;1,600&family=Space+Mono:wght@400;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,400;1,600&family=Fredoka:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap");
 
 :root{
   --navy:#2c3371; --navy-dark:#26265e; --navy-2:#3a4291;
@@ -14,6 +14,7 @@
   --r:16px; --r-sm:11px; --ease:cubic-bezier(.22,.61,.36,1);
   --shadow-glow:0 8px 30px -8px rgba(220,62,55,.4);
   /* Échelle d'élévation cohérente (cartes → panneaux → modales) */
+  --relief:none;   /* en clair, c'est l'ombre qui porte l'élévation — cf. le thème sombre */
   --shadow-1:0 1px 2px rgba(31,33,64,.05), 0 1px 3px rgba(31,33,64,.05);
   --shadow-2:0 4px 12px -4px rgba(31,33,64,.12), 0 2px 6px -2px rgba(31,33,64,.06);
   --shadow-3:0 18px 44px -16px rgba(31,33,64,.28), 0 6px 16px -8px rgba(31,33,64,.14);
@@ -26,7 +27,14 @@
   color-scheme:light; /* contrôles natifs (cases à cocher, radios…) rendus en clair, jamais le widget sombre de l'OS */
   --bg:#f5f6fb; --bg2:#eef0f8; --surface:#ffffff; --surface2:#f5f6fb; --surface3:#eaecf5;
   --glass:rgba(255,255,255,.82); --border:#e3e6f1; --border-soft:#eef0f7;
-  --text:#1e2140; --muted:#5b6079; --dim:#9aa0bb;
+  /* `--dim` valait #9aa0bb : 2,4:1 sur --surface2, soit près de DEUX FOIS moins que le seuil
+     AA de 4,5:1. Or il sert de couleur de TEXTE à 94 endroits (47 en styles inline, 47 dans
+     cette feuille) — libellés de sections, sous-titres, compteurs, dates. Le corriger ici
+     plutôt qu'aux 94 sites : c'est un token, il doit porter la règle.
+     #686f8c donne 4,59:1 sur --surface2 (le fond le plus clair, donc le pire cas) et 4,95:1
+     sur le blanc. Il reste NETTEMENT plus discret que --muted (5,73:1) : la hiérarchie entre
+     les deux est conservée, elle passe seulement au-dessus du seuil de lisibilité. */
+  --text:#1e2140; --muted:#5b6079; --dim:#686f8c;
   --green:#2f9e6f; --green-bg:#e6f5ee; --blue:#2c3371; --blue-bg:#e9eaf5;
   --amber-bg:#fdeede; --rosso-bg:#fdeaea;
   --orange-bg:#fff0e0; --gold-bg:#fff7db;
@@ -39,7 +47,24 @@
   color-scheme:dark; /* contrôles natifs rendus en sombre, cohérents avec le thème */
   --bg:#12142a; --bg2:#171a34; --surface:#1d2040; --surface2:#242848; --surface3:#2d3159;
   --glass:rgba(18,20,42,.72); --border:#343a63; --border-soft:#2a2f52;
-  --text:#eef0fb; --muted:#a7add0; --dim:#727aa3;
+  /* Même correction en sombre : #727aa3 tombait à 3,42:1 sur --surface2. #8a92bd donne
+     4,71:1, contre 6,47:1 pour --muted — l'écart reste lisible comme une hiérarchie. */
+  --text:#eef0fb; --muted:#a7add0; --dim:#8a92bd;
+  /* OMBRES PROPRES AU THÈME SOMBRE.
+     Elles n'étaient définies qu'une fois, en navy `rgba(31,33,64,.05)` — pensées pour du
+     blanc. Posées sur une surface `#1d2040`, elles sont tout simplement INVISIBLES : chaque
+     carte de l'espace d'administration était donc parfaitement plate en sombre, distinguée du
+     fond par son seul filet de 1 px. C'est ce qui donnait l'impression que rien n'avait été
+     travaillé.
+     En sombre, l'élévation se joue en NOIR franc et non en teinte du thème : une ombre
+     colorée s'y lit comme un halo, pas comme une ombre. */
+  --shadow-1:0 1px 2px rgba(0,0,0,.32), 0 1px 3px rgba(0,0,0,.24);
+  --shadow-2:0 6px 18px -6px rgba(0,0,0,.55), 0 2px 6px -2px rgba(0,0,0,.38);
+  --shadow-3:0 24px 54px -18px rgba(0,0,0,.7), 0 8px 20px -10px rgba(0,0,0,.5);
+  /* Et le second signal d'élévation propre au sombre : un filet de lumière sur l'ARÊTE HAUTE.
+     C'est lui qui fait qu'une surface paraît posée devant le fond plutôt que découpée dedans —
+     une ombre seule n'y suffit pas, faute de contraste avec ce qu'il y a dessous. */
+  --relief:inset 0 1px 0 rgba(255,255,255,.055);
   --green:#5fc08e; --green-bg:rgba(95,192,142,.14); --blue:#8ea2e0; --blue-bg:rgba(142,162,224,.16);
   --amber-bg:rgba(240,164,60,.14); --rosso-bg:rgba(220,62,55,.16);
   --orange-bg:rgba(255,105,0,.15); --gold-bg:rgba(252,185,0,.15);
@@ -76,6 +101,12 @@ input,select,textarea{font-family:inherit;font-size:14px;color:var(--text)}
 /* Cases à cocher / radios : teinte de la charte (coché), rendu propre au thème (décoché). */
 input[type=checkbox],input[type=radio]{accent-color:var(--ember1);cursor:pointer}
 .mono{font-family:var(--font-m)} .tnum{font-variant-numeric:tabular-nums}
+/* Texte secondaire : « Chargement… », aides sous un champ, compteurs, précisions.
+   Employée 303 fois dans 53 fichiers, cette classe n'avait AUCUNE règle — tous ces
+   textes héritaient donc du corps (15px, --text) et pesaient autant que le contenu
+   principal. Toute la hiérarchie secondaire de l'application tient dans ces trois
+   déclarations. Volontairement sans marge : la plupart des appels posent la leur. */
+.hint{color:var(--muted);font-size:13px;line-height:1.5}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 /* Rendu global : scrollbars, sélection, focus clavier, défilement doux --- */
@@ -88,6 +119,77 @@ html{scroll-behavior:smooth}
 *::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--muted) 32%,transparent);border-radius:99px;border:3px solid transparent;background-clip:padding-box}
 *::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--muted) 55%,transparent);background-clip:padding-box}
 a:focus-visible,button:focus-visible,[tabindex]:focus-visible,summary:focus-visible{outline:2px solid var(--ember1);outline-offset:2px;border-radius:9px}
+
+/* ═══ COUCHE « ADMINISTRATION » ══════════════════════════════════════════════════════════════
+   Le pendant sobre de `.stu-app`, et il manquait complètement.
+
+   L'espace stagiaire a une IDENTITÉ : Fredoka, coins de 22 px, fond chaud, retour tactile.
+   L'espace d'administration, lui, n'avait rien — `--font-d` et `--font-b` valaient tous les
+   deux Mulish, si bien que les titres et le texte courant étaient la MÊME chose. Une interface
+   sans contraste typographique paraît inachevée quelle que soit la qualité du reste, et c'est
+   exactement ce qu'on lui reprochait.
+
+   POURQUOI SPACE GROTESK. Ce n'est pas un choix d'humeur : la police à chasse fixe du projet
+   est déjà **Space Mono** — références, codes de formation, numéros de facture, montants.
+   Space Grotesk en est la sœur dessinée. Les titres, les nombres et les codes appartiennent
+   donc enfin à la même famille, là où Mulish en titrage n'avait de parenté avec rien.
+   Son dessin serré et ses terminaisons droites disent « instrument de travail » — ce que
+   Fredoka dit « jeu » de l'autre côté.
+
+   MÊME PRINCIPE QUE `.stu-app` : on REDÉFINIT LES TOKENS, on ne réécrit aucun composant. Et
+   comme là-bas, aucune règle de position ni de z-index sur les enfants — c'est ce qui avait
+   cassé les modales du côté stagiaire. */
+.adm-app{
+  --font-d:"Space Grotesk","Mulish",system-ui,sans-serif;
+  /* Coins plus francs que les 22 px du stagiaire : une interface de travail se veut précise,
+     pas douce. 14 px conserve la douceur d'un logiciel moderne sans le côté bonbon. */
+  --r:14px; --r-sm:10px;
+}
+/* Space Grotesk porte des chasses plus larges que Mulish : sans resserrer l'interlettrage, un
+   titre de page paraît distendu. */
+.adm-app h1,.adm-app h2,.adm-app h3,.adm-app h4{letter-spacing:-.025em}
+.adm-app h1{font-weight:700}
+/* Le SURTITRE de page (« CRM », « QUALIOPI ») devient la signature typographique de l'espace :
+   c'est le premier mot lu sur chaque écran. */
+.adm-app .pagehead .eyebrow{font-family:var(--font-d);font-weight:700;letter-spacing:.16em}
+/* Les NOMBRES sont le contenu principal d'un back-office. Ils passent tous à la police de
+   titrage, chiffres tabulaires : une colonne de montants qui ne s'aligne pas ne se compare
+   pas, et c'est bien pour comparer qu'on les met en colonne. */
+.adm-app .tnum,.adm-app .kpi .val{font-family:var(--font-d);font-variant-numeric:tabular-nums}
+/* En-têtes de colonne et libellés de section : même famille que les titres, puisqu'ils
+   TITRENT eux aussi. */
+.adm-app thead th,.adm-app .kpi .lbl,.adm-app .dt td[data-intitule]::before{font-family:var(--font-d)}
+/* Les intertitres de la barre latérale et les titres de carte TITRENT aussi : même famille.
+   C'est ce qui fait qu'un écran se lit comme un tout et non comme des blocs rapportés. */
+.adm-app .menu .grp,.adm-app .card-head h3,.adm-app .card-head .card-h,.adm-app .brand .sub{font-family:var(--font-d)}
+.adm-app .menu .grp{font-weight:700;letter-spacing:.14em}
+.adm-app .card-head .card-h,.adm-app .card-head h3{letter-spacing:-.015em}
+
+/* — La barre latérale — ————————————————————————————————————————————————————————————————
+   C'est l'élément le plus regardé de l'application : il est là sur chaque écran, toute la
+   journée. Il était pourtant le plus plat — une liste de liens et un filet sur l'actif.
+   L'ACTIF prend maintenant le fond de la charte plutôt qu'un simple blanc : on repère où l'on
+   est sans chercher, y compris du coin de l'œil. */
+.adm-app .menu a.on{background:color-mix(in srgb,var(--ember1) 10%,transparent);color:var(--text);font-weight:600}
+.adm-app .menu a.on::before{width:3px;height:18px;background:var(--ember1);border-radius:0 3px 3px 0}
+/* Au survol, l'icône avance légèrement vers son libellé : le lien répond avant qu'on clique,
+   ce qui suffit à faire vivre une colonne autrement immobile. */
+.adm-app .menu a .ic{transition:transform .16s var(--spring)}
+.adm-app .menu a:hover .ic{transform:translateX(2px)}
+.adm-app .menu a:hover:not(.on){background:color-mix(in srgb,var(--text) 5%,transparent)}
+@media (prefers-reduced-motion:reduce){.adm-app .menu a:hover .ic{transform:none}}
+
+/* — Les cartes — ————————————————————————————————————————————————————————————————————————
+   Le titre reçoit un FILET court aux couleurs de la charte. Deux cartes empilées se
+   distinguaient uniquement par leur bordure ; le filet donne à chacune un point de départ
+   franc, et c'est ce qui manquait le plus au rythme de la page. */
+.adm-app .card-head{position:relative;padding-left:11px}
+.adm-app .card-head::before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:3px;
+  border-radius:3px;background:var(--grad-ember)}
+/* Les boutons répondent au doigt et à l'œil, sobrement : pas de rebond, une descente franche.
+   L'équivalent admin du retour tactile du stagiaire. */
+.adm-app .btn,.adm-app .iconbtn,.adm-app .icon-btn{transition:transform .12s var(--ease),background .14s var(--ease),border-color .14s var(--ease),box-shadow .14s var(--ease)}
+.adm-app .btn:active:not(:disabled),.adm-app .iconbtn:active,.adm-app .icon-btn:active{transform:translateY(1px)}
 
 /* Layout ------------------------------------------------------------- */
 .app{display:flex;min-height:100vh}
@@ -149,8 +251,36 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .content{padding:26px 32px 70px;max-width:1240px;width:100%;margin:0 auto}
 
 /* Page header -------------------------------------------------------- */
-.pagehead{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:30px;padding-bottom:26px;border-bottom:1px solid var(--border-soft);flex-wrap:wrap}
-.pagehead::after{content:"";position:absolute;left:0;bottom:-2px;width:96px;height:4px;background:var(--grad-ember);border-radius:3px}
+/* En-tête de page. `align-items:flex-start` et non `flex-end` : l'icône doit s'aligner sur le
+   SURTITRE, en haut, pas flotter au niveau de la dernière ligne d'accroche. */
+.pagehead{position:relative;display:flex;align-items:flex-start;gap:16px;margin-bottom:30px;padding-bottom:26px;border-bottom:1px solid var(--border-soft);flex-wrap:wrap}
+.pagehead-txt{flex:1 1 320px;min-width:0}
+.pagehead-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
+/* Le filet sous le titre prend la couleur de la RUBRIQUE : c'est le repère qu'on lit sans le
+   chercher quand on navigue d'une partie de l'application à l'autre. */
+.pagehead::after{content:"";position:absolute;left:0;bottom:-2px;width:96px;height:4px;
+  background:currentColor;border-radius:3px;opacity:.9}
+/* L'icône de la page, dans un jeton teinté — la même que celle du menu, pour qu'on retrouve
+   à l'écran ce sur quoi on vient de cliquer. */
+.pagehead-ic{display:grid;place-items:center;width:46px;height:46px;flex:none;border-radius:14px;
+  margin-top:2px;background:color-mix(in srgb,currentColor 13%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,currentColor 22%,transparent)}
+/* Le ton porte la COULEUR DU CONTENEUR, jamais celle du texte : sans quoi le titre et
+   l'accroche viraient au vert ou à l'or, et la page deviendrait illisible. */
+.pagehead.tone-blue{color:var(--blue)}
+.pagehead.tone-orange{color:var(--orange)}
+.pagehead.tone-gold{color:#b8860b}
+.pagehead.tone-green{color:var(--green)}
+.pagehead.tone-ember{color:var(--ember1)}
+.pagehead h1,.pagehead .lead{color:var(--text)}
+.pagehead .lead{color:var(--muted)}
+.pagehead .eyebrow{color:currentColor}
+/* L'icône arrive un souffle après le texte : le mouvement dessine l'ordre de lecture au lieu
+   de tout poser d'un bloc. */
+.pagehead-ic{animation:pheadPop .42s var(--spring) .06s both}
+@keyframes pheadPop{from{opacity:0;transform:scale(.78) rotate(-6deg)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.pagehead-ic{animation:none}}
+@media(max-width:640px){.pagehead-ic{width:38px;height:38px;border-radius:11px}}
 .eyebrow{font-size:12.5px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;color:var(--ember1);margin-bottom:10px}
 /* Dégradé « clippé » uniquement si le navigateur le supporte : sinon couleur pleine (jamais transparent → jamais de texte invisible/blanc). */
 @supports ((-webkit-background-clip:text) or (background-clip:text)){
@@ -187,23 +317,69 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 
 /* Cards / grid ------------------------------------------------------- */
 .grid{display:grid;gap:16px}.cols-2{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:repeat(3,1fr)}.cols-4{grid-template-columns:repeat(4,1fr)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-1);transition:box-shadow .2s var(--ease),transform .2s var(--ease),border-color .2s var(--ease);animation:rise .45s var(--ease) both}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-1),var(--relief);transition:box-shadow .2s var(--ease),transform .2s var(--ease),border-color .2s var(--ease);animation:rise .45s var(--ease) both}
 .card.hover{cursor:pointer}
 .card.hover:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
 .card h3{font-size:17px}
 .card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
-.card-head h3{font-size:16px;color:var(--blue)}
+/* `.card-h` ET `h3` : le composant Card produit désormais un `h2` porteur de la classe (le
+   niveau est devenu paramétrable, cf. Card.jsx), mais plusieurs écrans posent encore un `h3`
+   à la main dans un `.card-head`. Les deux doivent se ressembler. */
+.card-head h3,.card-head .card-h{font-size:16px;color:var(--blue)}
 .card-ttl{display:inline-flex;align-items:center;gap:8px}
-.card-more{color:var(--ember1);font-size:13px;font-weight:600}.card-more:hover{text-decoration:underline}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;animation:rise .45s var(--ease) both}
-.kpi .lbl{font-size:12.5px;color:var(--muted)}
-.kpi .val{font-family:var(--font-d);font-size:32px;font-weight:600;margin-top:8px;line-height:1;font-variant-numeric:tabular-nums}
-.kpi .sub{font-size:12px;margin-top:6px;color:var(--muted)}
-.kpi.card.hover:hover{transform:translateY(-3px)}
-.kpi.card.hover:hover .val{color:var(--ember1)}
+/* Lien « voir plus » d'un en-tête de carte. La flèche avance au survol, comme sur les tuiles
+   d'indicateur : un seul geste pour tous les « ça mène ailleurs » de l'application. Elle
+   remplace le « → » écrit à la main, qui ne pouvait pas bouger et se composait dans la police
+   du texte au lieu du jeu d'icônes. */
+.card-more{display:inline-flex;align-items:center;gap:3px;color:var(--ember1);font-size:13px;font-weight:600}
+.card-more:hover{text-decoration:underline}
+.card-more svg{flex:none;transition:transform .2s var(--spring)}
+.card-more:hover svg{transform:translateX(3px)}
+@media (prefers-reduced-motion:reduce){.card-more:hover svg{transform:none}}
+/* ═══ INDICATEUR CLÉ ════════════════════════════════════════════════════════════════════════
+   L'ordre de lecture est le sujet. Le libellé passe en SURTITRE — petit, en capitales
+   espacées, comme une légende — et le nombre prend toute la place : c'est lui qu'on vient
+   chercher, il ne doit pas arriver en deuxième.
+   `overflow:hidden` pour que le filet d'accent épouse les coins arrondis. */
+.kpi{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:17px 20px 16px;animation:rise .45s var(--ease) both;box-shadow:var(--shadow-1),var(--relief);
+  transition:transform .2s var(--ease),box-shadow .2s var(--ease),border-color .2s var(--ease)}
+/* Filet teinté sur l'arête haute : c'est ce qui différencie quatre tuiles autrement
+   identiques, à la vitesse du coup d'œil, sans lire un mot. */
+.kpi-accent{position:absolute;top:0;left:0;right:0;height:3px;background:currentColor;opacity:.85}
+.kpi .lbl{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+/* `clamp` : le nombre respire sur grand écran sans déborder d'une colonne étroite. Les
+   chiffres tabulaires empêchent la valeur de danser pendant l'animation de comptage. */
+.kpi .val{font-family:var(--font-d);font-size:clamp(28px,2.6vw,38px);font-weight:600;letter-spacing:-.02em;
+  margin-top:10px;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .sub{font-size:12px;margin-top:7px;color:var(--muted)}
+.kpi-sub{display:flex;align-items:center;gap:4px}
+/* La flèche avance au survol : elle dit « ça mène quelque part » sans coûter une ligne de
+   hauteur, contrairement au « Voir → » qu'elle remplace. */
+.kpi-fleche{flex:none;transition:transform .2s var(--spring)}
+.kpi-lien{display:block;color:inherit;text-decoration:none}
+.kpi-lien:hover{transform:translateY(-3px);box-shadow:var(--shadow-2),var(--relief);border-color:color-mix(in srgb,currentColor 34%,var(--border))}
+.kpi-lien:hover .kpi-fleche{transform:translateX(4px)}
+.kpi-lien:hover .kpi-ic{transform:scale(1.07)}
+.kpi-lien:active{transform:translateY(-1px)}
 .kpi-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
-.kpi-ic{width:34px;height:34px;flex:0 0 34px;border-radius:10px;display:grid;place-items:center;margin-top:-2px;transition:transform .2s var(--ease)}
-.kpi.card.hover:hover .kpi-ic{transform:scale(1.08) rotate(-3deg)}
+.kpi-ic{width:34px;height:34px;flex:0 0 34px;border-radius:10px;display:grid;place-items:center;margin-top:-1px;transition:transform .2s var(--spring)}
+@media (prefers-reduced-motion:reduce){
+  .kpi-lien:hover{transform:none}
+  .kpi-lien:hover .kpi-fleche,.kpi-lien:hover .kpi-ic{transform:none}
+}
+/* Le filet et la bordure de survol lisent la MÊME couleur que la pastille : une seule
+   décision de teinte par tuile, portée par `tone`. */
+.kpi.tone-ember,.kpi-accent.tone-ember{color:var(--ember1)}
+.kpi.tone-blue,.kpi-accent.tone-blue{color:var(--blue)}
+.kpi.tone-green,.kpi-accent.tone-green{color:var(--green)}
+.kpi.tone-orange,.kpi-accent.tone-orange{color:var(--orange)}
+.kpi.tone-gold,.kpi-accent.tone-gold{color:#b8860b}
+/* …mais le TEXTE de la tuile ne doit pas hériter de cette teinte : seuls le filet, la
+   pastille et la bordure de survol s'en servent. */
+.kpi .lbl{color:var(--muted)}
+.kpi .val{color:var(--text)}
+.kpi .sub{color:var(--muted)}
 .kpi-ic.tone-ember{color:var(--ember1);background:var(--rosso-bg)}
 .kpi-ic.tone-blue{color:var(--blue);background:var(--blue-bg)}
 .kpi-ic.tone-green{color:var(--green);background:var(--green-bg)}
@@ -223,15 +399,41 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .quick-btn:hover .quick-ic{color:#fff;background:var(--grad-ember)}
 
 /* Table -------------------------------------------------------------- */
-.tablewrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+/* `overflow-x:auto` et NON `overflow:hidden`.
+   Ce conteneur porte la quasi-totalité des tableaux de l'administration. En `hidden`, sur un
+   écran étroit, les dernières colonnes étaient simplement COUPÉES — sans barre, sans ombre,
+   sans rien qui indique qu'il en manque. Ce n'était pas un débordement disgracieux mais une
+   perte d'information silencieuse : on lisait un tableau en croyant le voir en entier.
+   `overflow-y:hidden` conservé pour que les coins arrondis continuent de rogner les angles
+   des lignes. L'ombre de défilement dit qu'il reste quelque chose à droite. */
+.tablewrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  overflow-x:auto;overflow-y:hidden;
+  background-image:linear-gradient(to right,var(--surface),var(--surface)),
+    linear-gradient(to right,rgba(10,12,30,.14),transparent);
+  background-position:right center,right center;
+  background-repeat:no-repeat;
+  background-size:24px 100%,14px 100%;
+  background-attachment:local,scroll}
 table{width:100%;border-collapse:collapse;font-size:14px}
-thead th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border)}
+/* En-tête COLLANT : sur une liste de 1069 stagiaires, on perd le nom des colonnes au bout de
+   trois lignes de défilement et on relit la page en devinant. `z-index:2` le place au-dessus
+   des lignes sans le sortir de la carte. Le fond est opaque, sinon les lignes défilantes
+   transparaissent à travers.
+   `--muted` et non `--dim` : sur du 10,5 px en capitales — le pire cas de l'application —
+   `--dim` tombe très en dessous du seuil AA. */
+thead th{position:sticky;top:0;z-index:2;background:var(--surface);
+  text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--border)}
 tbody td{padding:12px 14px;border-bottom:1px solid var(--border-soft)}
 /* La propriété est NOMMÉE, et ce n'est pas cosmétique : en raccourci, ce `transition` valait
    `all`, donc il retardait aussi tout `transform` ou `opacity` posé plus tard sur une ligne.
    Or certaines lignes sont deplaçables (.drag-row) — un transform différé sur un élément
    `draggable` décale l'image fantôme du navigateur et fausse la cible de dépôt. */
-tbody tr{transition:background .12s var(--ease)}tbody tr:hover{background:var(--surface2)}
+/* Le survol change le fond ET pose un filet coloré à gauche : sur un tableau large, un simple
+   changement de fond se perd hors du champ de vision quand l'œil est à droite de la ligne.
+   `box-shadow` en encart plutôt qu'une bordure — une bordure décalerait les cellules d'un
+   pixel au survol, et toute la ligne tressauterait. */
+tbody tr{transition:background .12s var(--ease),box-shadow .12s var(--ease)}
+tbody tr:hover{background:var(--surface2);box-shadow:inset 3px 0 0 0 color-mix(in srgb,var(--blue) 45%,transparent)}
 tbody tr:last-child td{border-bottom:none}
 
 /* Forms -------------------------------------------------------------- */
@@ -244,6 +446,43 @@ tbody tr:last-child td{border-bottom:none}
 .searchbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
 .searchbar .inp{max-width:320px}
 
+/* ═══ BARRE DE FILTRES ══════════════════════════════════════════════════════════════════════
+   Recherche et filtres flottaient LIBREMENT entre le titre et la liste : cinq contrôles posés
+   côte à côte sans rien qui les relie, qui se lisaient comme des éléments épars plutôt que
+   comme un seul outil. Le panneau les rassemble, et la liste qui suit gagne un début franc.
+   Fond `--bg2` et non `--surface` : la barre est un OUTIL, pas du contenu. Elle doit se lire
+   comme une strate en retrait, sinon elle rivalise avec la carte qui porte les données. */
+.filtres{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:12px 14px;margin-bottom:16px;border-radius:var(--r-sm);
+  background:var(--bg2);border:1px solid var(--border-soft)}
+.filtres .inp,.filtres select{max-width:200px}
+/* La recherche prend la place restante : c'est le contrôle qu'on utilise en premier, et le
+   seul dont la longueur aide vraiment. */
+.filtres .filtres-q{flex:1 1 220px;max-width:none}
+/* Séparateur avant les actions de fin (« Effacer les filtres ») — il évite qu'on prenne un
+   bouton d'action pour un filtre de plus. */
+.filtres .filtres-fin{margin-left:auto}
+
+/* Pastille de statut professionnel dans une liste. Elle ne DEMANDE plus toute la largeur
+   qu'elle voudrait : « Gérant, Président, en nom propre » écrasait sinon la colonne du nom à
+   zéro pixel, et le nom se coupait caractère par caractère — sur la seule ligne où la
+   personne dirige une entreprise. Texte entier conservé en infobulle. */
+/* `.badge.statut-chip` et non `.statut-chip` seule : la règle `.badge` est déclarée PLUS BAS
+   dans cette feuille et, à spécificité égale, c'est l'ordre qui tranche — le `display` du
+   badge écrasait le `display:none` ci-dessous, et la pastille restait large. */
+.badge.statut-chip{flex:none;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.niveaux-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:300px}
+/* Sous 760 px, la ligne portait avatar + nom + jusqu'à six pastilles de niveau + le statut
+   + quatre boutons : le nom, seul élément qu'on cherche réellement, était le premier écrasé.
+   Les deux informations SECONDAIRES s'effacent — la fiche du stagiaire les rappelle. */
+@media(max-width:760px){
+  .niveaux-chips,.badge.statut-chip{display:none}
+}
+@media(max-width:560px){
+  .filtres{padding:10px}
+  .filtres .inp,.filtres select{max-width:none;flex:1 1 100%}
+}
+
 /* Badges ------------------------------------------------------------- */
 .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:99px;border:1px solid transparent}
 .badge.g{color:var(--green);background:var(--green-bg)} .badge.a{color:var(--ember2);background:var(--amber-bg)}
@@ -254,11 +493,148 @@ tbody tr:last-child td{border-bottom:none}
 .empty{text-align:center;padding:52px 20px;color:var(--muted)}
 .empty .big{display:grid;place-items:center;width:78px;height:78px;margin:0 auto 16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border-soft);color:var(--dim);font-size:34px}
 .empty .big svg{opacity:.92}
+/* Titre et explication d'un état vide. Le titre dit CE QU'IL N'Y A PAS, le texte dit QUOI
+   FAIRE — sur un écran vide c'est la seule chose à lire, elle mérite une largeur de lecture
+   confortable plutôt que toute la page. */
+.empty-t{margin:0;font:700 15.5px/1.3 var(--font-b);color:var(--text)}
+
+.empty-x{margin:6px auto 0;max-width:46ch;font-size:13.5px;line-height:1.55;color:var(--muted)}
 
 /* Status message ----------------------------------------------------- */
 .status{border-radius:var(--r-sm);padding:9px 13px;font-size:13.5px;font-weight:500;margin:4px 0}
 .status.err{color:var(--ember1);background:var(--rosso-bg)}
 .status.ok{color:var(--green);background:var(--green-bg)}
+/* Neutre : ni réussite ni échec. « Chargement… » s'affichait jusqu'ici en vert, faute de ce
+   cas — le composant ne connaissait que « erreur » et « le reste ». */
+.status.info{color:var(--muted);background:var(--surface2);border:1px solid var(--border-soft)}
+
+/* ═══ SQUELETTES DE CHARGEMENT ══════════════════════════════════════════════════════════════
+   Un balayage lent, pas une pulsation : la pulsation attire l'œil et le retient, alors que
+   ce bloc est justement ce qu'on ne regarde pas — il occupe la place le temps que le contenu
+   arrive. `background-size` à 200 % : le dégradé est deux fois plus large que le bloc, c'est
+   ce qui lui permet de le traverser entièrement. */
+/* ═══ DATATABLE ═════════════════════════════════════════════════════════════════════════════
+   Un tableau qui devient des CARTES quand la place manque (cf. components/DataTable.jsx).
+
+   La bascule est une REQUÊTE DE CONTENEUR et non une media query : le même tableau peut vivre
+   pleine page ou dans une colonne étroite à côté d'un panneau. C'est sa place réelle qui doit
+   décider, pas la taille de l'écran — une media query rendrait la version large dans une
+   colonne de 300 px sur un grand écran, ce qui est exactement le cas qu'on veut éviter. */
+.dt-wrap{container-type:inline-size}
+/* Ligne de totaux : elle se distingue par le POIDS et un filet plus marqué, pas par une
+   couleur — un total surligné se lit comme une alerte. */
+.dt tfoot .dt-total td{font-weight:700;border-top:2px solid var(--border);border-bottom:none;background:var(--surface2)}
+/* Ligne dépliée : un fond en retrait dit qu'elle DÉPEND de la ligne au-dessus et n'est pas
+   un élément de plus dans la liste. */
+.dt tr.dt-detail > td{background:var(--surface2);padding:0}
+.dt-detail-liste{display:flex;flex-direction:column}
+.dt-detail-ligne{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid var(--border-soft);font-size:13px}
+.dt-detail-ligne .qte{flex:none;min-width:34px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dt-detail-ligne .prix{margin-left:auto;flex:none;font-variant-numeric:tabular-nums}
+
+@container (max-width: 700px){
+  /* `display:block` sur les éléments de tableau : c'est ce qui désactive la mise en page
+     tabulaire. L'en-tête est retiré en `clip` et non en `display:none` — il reste ainsi lisible
+     par un lecteur d'écran, qui continue d'annoncer la colonne de chaque cellule. */
+  .dt,.dt tbody,.dt tr,.dt td{display:block;width:auto}
+  .dt thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  /* `flex` sur la ligne pour pouvoir RÉORDONNER : dans un tableau, la colonne qui identifie
+     n'est pas forcément la première (Formations met le code avant l'intitulé, ce qui est juste
+     en colonnes). En carte, le titre doit ouvrir — une carte qui commence par « CODE RS7404 »
+     puis donne son nom se lit à l'envers. `order` le hisse sans toucher à l'ordre du tableau. */
+  .dt tr{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);
+    padding:13px 14px;margin-bottom:10px;transition:border-color .14s var(--ease),box-shadow .14s var(--ease)}
+  .dt td.dt-principal{order:-2}
+  .dt td.dt-actions{order:10}
+  /* Le filet de survol du mode tableau deviendrait une barre le long d'une carte : ici c'est
+     la bordure entière qui répond. */
+  .dt tr:hover{background:var(--surface);box-shadow:var(--shadow-2);border-color:var(--muted)}
+  .dt td{border:none;padding:3px 0;text-align:left!important}
+  /* Chaque valeur reçoit son intitulé, puisque l'en-tête a disparu. Deux colonnes : l'intitulé
+     tient une largeur fixe pour que les valeurs s'alignent d'une ligne à l'autre — une carte
+     dont les valeurs zigzaguent se lit moins vite qu'un tableau. */
+  .dt td[data-intitule]::before{content:attr(data-intitule);display:inline-block;width:38%;
+    min-width:88px;padding-right:10px;vertical-align:top;
+    font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .dt td[data-intitule]{display:flex;gap:0;align-items:baseline}
+  /* La colonne qui identifie la ligne devient le TITRE de la carte : elle perd son intitulé
+     (« Nom : Dupont » en tête d'une carte n'apprend rien) et prend le poids d'un titre. */
+  .dt td.dt-principal{display:block;font-size:15px;margin-bottom:6px;padding-bottom:6px;
+    border-bottom:1px solid var(--border-soft)}
+  .dt td.dt-principal::before{display:none}
+  /* Les actions passent en pied, détachées du contenu et alignées à gauche — en carte, un
+     bouton collé au bord droit devient une cible qu'on rate. */
+  .dt td.dt-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;
+    border-top:1px solid var(--border-soft)}
+  .dt td.dt-actions::before{display:none}
+  /* Colonnes qui n'ont de sens qu'en tableau (chevron « ouvrir »…) : elles disparaissent. */
+  .dt td.dt-sans-carte{display:none}
+  /* Valeur absente : la ligne s'efface. En tableau elle garde sa place pour l'alignement. */
+  .dt td.dt-vide{display:none}
+  /* Plus de défilement latéral à provoquer : la carte tient dans la largeur. */
+  .dt-wrap .tablewrap{overflow:visible;background:none;background-image:none}
+  /* La ligne de totaux devient une carte à part, détachée de la liste — elle résume, elle
+     n'est pas un élément de plus. */
+  .dt tfoot{display:block}
+  .dt tfoot tr{border:none;background:var(--surface2);margin-top:4px}
+  /* La ligne dépliée se RECOLLE sous sa carte : sans ça, elle en formerait une seconde,
+     détachée, et plus rien ne dirait de quelle vente elle donne le détail. */
+  .dt tr.dt-detail{margin-top:-11px;padding:0;border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);overflow:hidden}
+  .dt tr.dt-detail > td{padding:0}
+}
+
+/* ═══ NOTIFICATIONS ═════════════════════════════════════════════════════════════════════════
+   Une non-lue se distinguait par un fond `--surface2` et un titre en gras. À onze lignes
+   identiques (« Document signé »), c'était trop peu : le fond gris est aussi celui du survol,
+   et le gras se perd dans une pile. Un FILET COLORÉ à gauche tranche, lui, sans ambiguïté. */
+/* Activité récente du tableau de bord. La pastille prend le TON de l'action — vert pour ce
+   qui aboutit, rouge pour ce qui supprime — au lieu d'être toujours orange, donc muette. */
+.dash-act{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft);font-size:13px}
+.dash-act:last-child{border-bottom:none}
+.dash-act-dot{width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:var(--muted)}
+.dash-act-dot.tone-g{background:var(--green)}
+.dash-act-dot.tone-b{background:var(--blue)}
+.dash-act-dot.tone-a{background:var(--gold)}
+.dash-act-dot.tone-r{background:var(--ember1)}
+.dash-act-dot.tone-n{background:var(--muted)}
+.dash-act-date{font-size:12px;color:var(--muted);white-space:nowrap;flex:none}
+
+.notif-liste{display:flex;flex-direction:column;gap:2px}
+.notif-ligne{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;
+  border-bottom:1px solid var(--border-soft);transition:background .14s var(--ease)}
+.notif-ligne[role=button]{cursor:pointer}
+.notif-ligne[role=button]:hover{background:var(--surface2)}
+.notif-ligne.neuf{background:var(--surface2);box-shadow:inset 3px 0 0 0 var(--ember1)}
+.notif-ligne.neuf b{font-weight:700}
+.notif-ligne b{font-weight:500}
+.notif-corps{display:block;font-size:12.5px;color:var(--muted);line-height:1.4}
+.notif-date{font-size:12px;color:var(--muted);white-space:nowrap;flex:none}
+.notif-point{width:8px;height:8px;flex:none;border-radius:50%;background:var(--ember1)}
+
+.skel{display:block;border-radius:10px;background:var(--surface2);position:relative;overflow:hidden}
+.skel::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--border) 55%,transparent),transparent);
+  background-size:200% 100%;animation:skelBalayage 1.35s ease-in-out infinite}
+@keyframes skelBalayage{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.skel::after{animation:none;opacity:.5}}
+
+/* LECTURE SEULE — l'habillage de ce que `blockMutations` intercepte (cf. AppLayout.jsx).
+   ⚠️ Cette liste de sélecteurs doit rester IDENTIQUE à `CONTROLES_MODIFIANTS` côté JS : c'est
+   leur accord qui fait qu'un bouton éteint est bien un bouton bloqué, et réciproquement.
+   Sans cet habillage, le bouton gardait son air cliquable et ne faisait rien — un clic sans
+   effet et sans explication est plus déroutant qu'un bouton visiblement hors service.
+   `pointer-events` reste ACTIF : c'est ce qui laisse l'infobulle s'afficher au survol, et le
+   clic est de toute façon arrêté à la capture. */
+.lecture-seule .btn.primary,
+.lecture-seule .btn.danger,
+.lecture-seule .danger,
+.lecture-seule .iconbtn.del,
+.lecture-seule .icon-btn.danger,
+.lecture-seule [type=submit]{opacity:.42;cursor:not-allowed;filter:saturate(.5)}
+/* L'échappatoire déclarée : ce qui ne modifie rien (exporter, imprimer) reste vivant. */
+.lecture-seule [data-lecture-ok] .btn.primary,
+.lecture-seule [data-lecture-ok] .danger,
+.lecture-seule [data-lecture-ok] [type=submit]{opacity:1;cursor:pointer;filter:none}
 
 /* Hero (dashboard) --------------------------------------------------- */
 .hero{position:relative;overflow:hidden;border-radius:20px;padding:30px 32px;margin-bottom:22px;color:#fff;background:var(--grad-navy)}
@@ -315,7 +691,7 @@ tbody tr:last-child td{border-bottom:none}
 .login-card{width:100%;max-width:410px;animation:loginRise .55s var(--ease) .05s both}
 .login-card h1{font-size:28px;margin:2px 0 6px;letter-spacing:-.01em}
 .login-sub{font-size:14px;color:var(--muted);margin:0 0 22px}
-.field-opt{font-weight:500;color:var(--dim)}
+.field-opt{font-weight:500;color:var(--muted)}
 
 /* Champ avec icône de tête + bouton de fin optionnel */
 .inp-wrap{position:relative;display:flex;align-items:center}
@@ -475,11 +851,22 @@ tbody tr:last-child td{border-bottom:none}
 /* Responsive --------------------------------------------------------- */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;z-index:35}.scrim.show{display:block}
 @media(max-width:980px){
-  .cols-4{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:1fr}.cols-2{grid-template-columns:1fr}
+  /* `.cols-3` tombait directement à UNE colonne : trois indicateurs — trois nombres — se
+     retrouvaient empilés sur trois cartes de 200 px de haut, soit un demi-écran de téléphone
+     pour lire « 1 · 0 · 0 ». Deux colonnes tiennent parfaitement à cette largeur ; la colonne
+     unique est réservée aux écrans réellement étroits, plus bas. */
+  .cols-4{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:1fr 1fr}.cols-2{grid-template-columns:1fr}
   .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:.24s var(--ease)}.sidebar.open{transform:none}
   .topbar .menu-btn{display:block}.content{padding:18px 14px 70px}
 }
-@media(max-width:560px){.cols-4{grid-template-columns:1fr}.row3,.row2{grid-template-columns:1fr}}
+@media(max-width:560px){.cols-4{grid-template-columns:1fr}.cols-3{grid-template-columns:1fr}.row3,.row2{grid-template-columns:1fr}}
+/* Un indicateur resserré quand la place manque : c'est un NOMBRE, il n'a pas besoin d'autant
+   d'air qu'une carte de contenu. Sans cela, la ligne d'indicateurs mangeait l'écran avant
+   qu'on ait vu la moindre donnée. */
+@media(max-width:980px){
+  .kpi{padding:13px 15px}
+  .kpi .val{font-size:26px;margin-top:5px}
+}
 
 /* ===== Comptabilité ===================================================== */
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border-soft);margin:4px 0 18px}
@@ -562,9 +949,25 @@ tbody tr:last-child td{border-bottom:none}
 .stack-bar > span:last-child{border-right:none}
 
 /* ===== Pipeline CRM ===================================================== */
-.pipe{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}
+/* Le tableau défile latéralement : un dégradé sur le bord droit dit qu'il reste des colonnes.
+   Sans lui, la dernière colonne est coupée net et rien n'indique qu'il y en a d'autres —
+   c'est le même défaut que `.tablewrap` avait, à l'échelle du tableau de bord. */
+.pipe{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;align-items:flex-start;
+  scroll-snap-type:x proximity;
+  background:linear-gradient(to right,var(--bg),var(--bg)) right center / 22px 100% no-repeat,
+             linear-gradient(to right,rgba(10,12,30,.16),transparent) right center / 13px 100% no-repeat;
+  background-attachment:local,scroll}
+.pipe-col{scroll-snap-align:start}
+/* Deux lignes maximum, puis points de suspension : trois lignes de titre poussaient les
+   cartes hors du champ et rendaient les colonnes inégales. */
+.pipe-head-t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  min-width:0;line-height:1.3}
+/* Le compteur ne doit jamais être compressé par un titre long. */
+.pipe-n{flex:none;min-width:20px;text-align:right;color:var(--muted)}
+.pipe-vide{margin:0;padding:14px 6px;text-align:center;font-size:12px;color:var(--muted);
+  border:1px dashed var(--border);border-radius:var(--r-sm)}
 .pipe-col{flex:0 0 240px;background:var(--bg2);border:1px solid var(--border-soft);border-radius:var(--r);display:flex;flex-direction:column;max-height:calc(100vh - 220px)}
-.pipe-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;font:600 13px/1 var(--font-b);color:var(--text);border-bottom:1px solid var(--border-soft)}
+.pipe-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:10px 12px;font:600 13px/1.3 var(--font-b);color:var(--text);border-bottom:1px solid var(--border-soft)}
 .pipe-body{padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
 .pipe-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px;box-shadow:0 1px 2px rgba(20,24,60,.05)}
 .pipe-name{display:block;font-weight:600;color:var(--blue);text-decoration:none;font-size:13.5px}
@@ -592,7 +995,7 @@ tbody tr:last-child td{border-bottom:none}
 .dough-seg-tip{position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%) translateY(4px) scale(.96);background:#fff;color:var(--navy);padding:5px 10px;border-radius:9px;font:600 11.5px/1.2 var(--font-d);white-space:nowrap;opacity:0;pointer-events:none;transition:.15s var(--ease);z-index:20;box-shadow:0 8px 22px -6px rgba(15,17,40,.4);border:1px solid rgba(15,17,40,.06)}
 .dough-seg-tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#fff}
 .dough-seg:hover .dough-seg-tip,.dough-seg:focus-visible .dough-seg-tip{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
-.ate-lbl{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.ate-lbl{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
 .ate-num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--ember1) 14%,var(--surface));color:var(--ember1);font-size:11px;font-weight:800;flex:none}
 .ate-step{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.15);display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
 /* Curseur d'hydratation — repère du minimum recommandé (manuel) */
@@ -635,6 +1038,323 @@ tbody tr:last-child td{border-bottom:none}
 .carte-map{height:560px;width:100%}
 .carte-map .leaflet-popup-content{font-family:var(--font-b);font-size:13px}
 .carte-loading{position:absolute;inset:0;z-index:500;display:grid;place-items:center;background:rgba(0,0,0,.04);color:var(--muted);font-size:14px}
+
+/* ————— LA CARTE COMME SCÈNE —————
+   Recherche, légende, compteurs et filtres passent AU-DESSUS de la carte au lieu de la
+   précéder. C'est ce qui la fait commencer en haut de l'écran plutôt que 887 px plus bas,
+   et surtout ce qui permet de filtrer en VOYANT le résultat bouger. Le panneau flouté
+   garde la carte lisible dessous : on ne masque pas, on pose. */
+.carte-scene{margin-bottom:14px}
+.carte-scene .carte-map{height:clamp(420px,64vh,700px)}
+.carte-hud{position:absolute;inset:12px;z-index:420;display:flex;flex-direction:column;gap:10px;
+  pointer-events:none}                       /* la carte reste saisissable entre les panneaux */
+.carte-hud>div{display:flex;gap:10px}
+.carte-hud .hud-panel{pointer-events:auto}
+.hud-top{align-items:flex-start;justify-content:space-between}
+.hud-bot{margin-top:auto;align-items:flex-end;flex-wrap:wrap;padding-right:46px} /* place du zoom */
+
+.hud-panel{background:color-mix(in srgb,var(--surface) 88%,transparent);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border:1px solid var(--border);border-radius:var(--r-sm);box-shadow:var(--shadow-2);
+  animation:hudPose .32s var(--ease) both}
+@keyframes hudPose{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+.hud-search{display:flex;align-items:center;gap:8px;padding:0 10px;height:38px;
+  color:var(--dim);min-width:170px;max-width:280px}
+.hud-search input{border:none;background:none;outline:none;font:inherit;font-size:13.5px;
+  color:var(--text);width:100%;min-width:0;padding:0}
+.hud-search:focus-within{border-color:var(--navy);box-shadow:var(--shadow-2),0 0 0 3px color-mix(in srgb,var(--navy) 18%,transparent)}
+.hud-x{border:none;background:none;color:var(--dim);cursor:pointer;padding:2px;display:flex;border-radius:5px}
+.hud-x:hover{color:var(--ember1);background:var(--surface3)}
+
+.hud-legende{position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+  pointer-events:none}
+.hud-btn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px;cursor:pointer;
+  font:inherit;font-size:13.5px;font-weight:600;color:var(--text)}
+.hud-btn.on{color:var(--navy);border-color:var(--navy)}
+.hud-drop{padding:12px 14px;display:flex;flex-direction:column;gap:7px;width:250px;font-size:12.5px}
+.hud-drop-t{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+.hud-drop .lg-item{display:inline-flex;align-items:center;gap:7px;color:var(--muted)}
+.hud-drop .lg-item i{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.14)}
+.hud-note{margin:4px 0 0;padding-top:8px;border-top:1px solid var(--border-soft);
+  font-size:11.5px;line-height:1.5;color:var(--dim)}
+
+.hud-stats{display:flex;align-items:center;gap:9px;height:34px;padding:0 13px;
+  font-size:12.5px;color:var(--muted);white-space:nowrap}
+.hud-stats b{color:var(--text);font-weight:700}
+.hud-stats i{width:1px;height:13px;background:var(--border);flex-shrink:0}
+
+.hud-forms{display:flex;flex-wrap:wrap;gap:5px;padding:6px;max-width:100%}
+.hud-chip{display:inline-flex;align-items:center;gap:5px;cursor:pointer;font:inherit;
+  font-size:11.5px;font-weight:700;letter-spacing:.02em;padding:4px 9px;border-radius:99px;
+  background:transparent;color:var(--text);border:1.5px solid var(--border);
+  transition:background .14s var(--ease),color .14s var(--ease),transform .14s var(--ease)}
+.hud-chip i{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.hud-chip:hover{transform:translateY(-1px)}
+.hud-chip.on{color:#fff}
+.hud-chip.on i{background:rgba(255,255,255,.9)!important}
+.hud-chip.raz{border-style:dashed;color:var(--dim)}
+
+/* ————— CAISSE : LE PANIER RESTE EN VUE —————
+   Le catalogue est long ; en descendant chercher un article, on perdait de vue ce qu'on avait
+   déjà ajouté et le total à annoncer — devant quelqu'un qui attend sa monnaie.
+   `top:63px` : sous la barre supérieure, elle-même collante. Il ne colle QUE tant que la caisse
+   tient sur deux colonnes : empilé sous la boutique en écran étroit, un panier collant
+   masquerait le catalogue qu'on essaie justement de parcourir. */
+@media (min-width:900px){
+  .panier-colle{position:sticky;top:63px;max-height:calc(100vh - 79px);overflow-y:auto}
+}
+
+/* ————— MENU DES ACTIONS SECONDAIRES —————
+   `position:fixed` et non `absolute` : le menu vit dans une cellule de tableau, et
+   `.tablewrap` défile horizontalement — en `absolute` le panneau serait rogné par ce
+   conteneur. Les coordonnées sont calculées à l'ouverture depuis le bouton (cf. MenuActions). */
+.menuact{position:relative;display:inline-block}
+.menuact-pop{position:fixed;z-index:60;min-width:186px;padding:5px;display:flex;
+  flex-direction:column;gap:2px;text-align:left;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r-sm);box-shadow:var(--shadow-3);
+  animation:hudPose .16s var(--ease) both}
+.menuact-pop button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px;
+  border:none;background:none;cursor:pointer;font:inherit;font-size:13px;color:var(--text);
+  border-radius:7px;text-align:left;white-space:nowrap}
+.menuact-pop button:hover{background:var(--surface2)}
+.menuact-pop button > svg{color:var(--dim);flex-shrink:0}
+.menuact-pop button.danger,.menuact-pop button.danger > svg{color:var(--ember1)}
+.menuact-pop button.danger:hover{background:color-mix(in srgb,var(--ember1) 10%,transparent)}
+@media (prefers-reduced-motion:reduce){.menuact-pop{animation:none}}
+
+/* Une impayée se repère sans lire son statut : c'est la seule ligne qui réclame quelque chose. */
+.dt tr.ln-du{background:color-mix(in srgb,var(--ember1) 7%,transparent)}
+.dt tr.ln-du:hover{background:color-mix(in srgb,var(--ember1) 11%,transparent)}
+
+/* ————— COMPTABILITÉ : UN SEUL CHIFFRE, ET SON CALCUL ÉCRIT —————
+   Cinq indicateurs dont trois se déduisaient des autres — sans dépense, ils affichaient la
+   même somme trois fois. Le calcul est écrit plutôt que réparti : on lit d'où vient le
+   résultat au lieu de le recomposer de tuile en tuile. */
+.bilan{display:flex;flex-direction:column;gap:5px;padding:18px 22px;
+  background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--ton,var(--green));
+  border-radius:var(--r);box-shadow:var(--shadow-1),var(--relief)}
+.bilan-t{font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--dim)}
+.bilan-n{font-size:clamp(30px,4.2vw,44px);font-weight:800;line-height:1;letter-spacing:-.035em}
+.bilan-calc{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-top:3px;
+  font-size:13.5px;color:var(--muted)}
+.bilan-calc b{color:var(--text);font-weight:700}
+.bilan-calc i{font-style:normal;font-weight:700;color:var(--dim)}
+.bilan-sat{display:flex;gap:20px;flex-wrap:wrap;margin-top:11px;padding-top:12px;
+  border-top:1px solid var(--border-soft);font-size:13px;color:var(--muted)}
+.bilan-sat b{color:var(--text);font-weight:700}
+.bilan-sat i{font-style:normal;color:var(--dim);font-size:11.5px}
+
+/* ————— TABLEAU DE RÉFÉRENCE : LIRE D'ABORD, ÉDITER ENSUITE —————
+   Un référentiel qu'on consulte cent fois et ne modifie jamais n'a pas à porter ses commandes
+   d'édition en permanence : elles pèsent autant que la donnée qu'on vient lire.
+
+   `opacity` et non `display:none` : le bouton RESTE dans le document, donc atteignable au
+   clavier et annoncé aux lecteurs d'écran. `:focus-within` le rend visible dès qu'on l'atteint
+   par tabulation — sans quoi on déplacerait le focus sur un élément invisible.
+
+   Sous `hover:hover` uniquement : au doigt il n'y a pas de survol, et la commande resterait
+   introuvable. */
+@media (hover: hover) and (pointer: fine) {
+  .dt-discret .dt-actions > *{opacity:.12;transition:opacity .15s var(--ease)}
+  .dt-discret tr:hover .dt-actions > *,
+  .dt-discret tr:focus-within .dt-actions > *{opacity:1}
+}
+@media (prefers-reduced-motion:reduce){.dt-discret .dt-actions > *{transition:none}}
+
+/* ————— FICHE STAGIAIRE : LES DOCUMENTS RANGÉS PAR « QUI A LA BALLE » —————
+   Six états côte à côte en liste plate n'apprenaient rien : il fallait lire chaque ligne pour
+   savoir où en était le dossier, alors que c'est ce qu'on vient y chercher. */
+.docs-jauge{display:flex;align-items:center;gap:12px;margin-bottom:6px;font-size:13px;color:var(--muted)}
+.docs-barre{flex:1;height:8px;border-radius:99px;background:var(--surface3);overflow:hidden}
+.docs-barre span{display:block;height:100%;border-radius:99px;background:var(--green);
+  transition:width .55s var(--ease)}
+.docs-jauge b{color:var(--text);font-weight:700}
+.docs-grp{margin-top:16px}
+.docs-grp-t{display:flex;align-items:center;gap:8px;padding-bottom:7px;
+  border-bottom:1px solid var(--border);font-size:11px;font-weight:800;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--dim)}
+.docs-grp-t .docs-pt{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.docs-grp-t b{font-size:12.5px;color:var(--text)}
+.docs-grp-t i{font-style:normal;font-weight:400;letter-spacing:0;text-transform:none;
+  font-size:11.5px;margin-left:auto;color:var(--dim)}
+.docs-grp-t.ton-ember .docs-pt{background:var(--ember1)} .docs-grp-t.ton-ember b{color:var(--ember1)}
+.docs-grp-t.ton-gold  .docs-pt{background:var(--gold)}
+.docs-grp-t.ton-green .docs-pt{background:var(--green)} .docs-grp-t.ton-green b{color:var(--green)}
+@media (prefers-reduced-motion:reduce){.docs-barre span{transition:none}}
+
+/* Étapes vides consécutives, repliées en une bande. Repliées et NON masquées : le parcours
+   reste une suite, et sauter des étapes sans le dire ferait croire qu'elles n'existent pas. */
+.pipe-plie{flex:0 0 52px;align-self:stretch;min-height:150px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:10px;padding:16px 0;cursor:pointer;font:inherit;
+  color:var(--dim);background:var(--surface2);border:1px dashed var(--border);
+  border-radius:var(--r);scroll-snap-align:start;
+  transition:background .16s var(--ease),border-color .16s var(--ease),color .16s var(--ease)}
+.pipe-plie:hover{background:var(--surface3);border-color:var(--navy);color:var(--navy)}
+.pipe-plie b{font-size:17px;font-weight:800;color:var(--muted);letter-spacing:-.02em}
+.pipe-plie:hover b{color:var(--navy)}
+.pipe-plie span{writing-mode:vertical-rl;font-size:11.5px;letter-spacing:.04em;
+  text-transform:uppercase;font-weight:700}
+@media (prefers-reduced-motion:reduce){.pipe-plie{transition:none}}
+
+/* ————— SUIVI QUALIOPI : CE QUI MANQUE, NOMMÉ —————
+   Devant un auditeur, le taux ne sert à rien : ce qu'on demande, c'est la pièce absente. Un
+   « 94 % » rassurant cache précisément les 6 % à aller chercher. Chaque manque est donc nommé,
+   compté, et filtre la liste au clic. */
+.manque{margin-bottom:12px}
+.manque-t{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:10.5px;
+  font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--dim)}
+.manque-row{display:flex;flex-wrap:wrap;gap:8px}
+.manque-i{display:inline-flex;align-items:center;gap:9px;padding:8px 13px;cursor:pointer;
+  font:inherit;font-size:13px;text-align:left;color:var(--text);background:var(--surface);
+  border:1px solid var(--border);border-left:3px solid var(--ember1);
+  border-radius:var(--r-sm);box-shadow:var(--shadow-1);
+  transition:transform .14s var(--ease),border-color .14s var(--ease),background .14s var(--ease)}
+.manque-i:hover{transform:translateY(-1px);border-color:var(--ember1)}
+/* `color-mix` et non `--rosso-bg` : ce jeton n'est défini qu'en thème clair et resterait
+   rose pâle sur fond sombre. Mêlé à la transparence, il suit la surface qui le porte. */
+.manque-i.on{background:color-mix(in srgb,var(--ember1) 13%,transparent);border-color:var(--ember1)}
+.manque-i b{font-size:16px;font-weight:800;color:var(--ember1);letter-spacing:-.02em}
+/* La puce accepte un sous-titre — l'état du stock et son seuil, sur l'inventaire. */
+.manque-i > span{display:flex;flex-direction:column;gap:1px;line-height:1.25}
+.manque-i i{font-style:normal;font-size:11px;font-weight:400;color:var(--dim)}
+.compteurs > span{display:inline-flex;align-items:baseline;gap:5px}
+@media (prefers-reduced-motion:reduce){
+  .manque-i{transition:none}
+  .manque-i:hover{transform:none}
+}
+
+/* ————— LA RECHERCHE COMME SUJET DE PAGE —————
+   Sur une liste de mille fiches, on vient retrouver UNE personne. Le champ prend donc toute la
+   largeur et reçoit le curseur à l'ouverture ; les filtres, qui servent une fois sur dix, se
+   replient derrière un bouton qui porte leur nombre. */
+.recherche{display:flex;gap:10px;align-items:stretch;margin-bottom:12px}
+.rech-champ{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:0 14px;height:46px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
+  color:var(--dim);box-shadow:var(--shadow-1);
+  transition:border-color .14s var(--ease),box-shadow .14s var(--ease)}
+.rech-champ:focus-within{border-color:var(--navy);
+  box-shadow:var(--shadow-1),0 0 0 3px color-mix(in srgb,var(--navy) 16%,transparent)}
+.rech-champ input{flex:1;min-width:0;border:none;background:none;outline:none;font:inherit;
+  font-size:15px;color:var(--text);padding:0}
+.rech-champ input::placeholder{color:var(--dim)}
+.rech-x{border:none;background:none;color:var(--dim);cursor:pointer;padding:3px;display:flex;
+  border-radius:6px;flex-shrink:0}
+.rech-x:hover{color:var(--ember1);background:var(--surface3)}
+.rech-filtre{display:inline-flex;align-items:center;gap:7px;height:46px;padding:0 16px;flex-shrink:0}
+.rech-filtre.on{border-color:var(--navy);color:var(--navy);font-weight:700}
+
+/* La borne se dit : une liste tronquée en silence se lit comme une liste complète. */
+.liste-plus{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;
+  padding-top:13px;border-top:1px solid var(--border);font-size:13px;color:var(--dim)}
+.liste-plus b{color:var(--text);font-weight:700}
+.liste-plus .btn{margin-left:auto}
+
+/* ————— JOURNAL D'AUDIT : GROUPÉ PAR JOUR —————
+   Une liste plate ne disait pas si un événement datait de ce matin ou de trois semaines. Le
+   jour reste collé en haut pendant qu'on descend — sous la barre supérieure, elle-même collante
+   à 63 px : sans ce décalage il passerait dessous. Les marges négatives compensent le padding
+   de la carte, sinon les lignes défileraient visiblement de part et d'autre du bandeau. */
+.aud,.aud-j{display:flex;flex-direction:column}
+.aud-jt{position:sticky;top:63px;z-index:5;display:flex;align-items:baseline;gap:10px;
+  margin:0 -20px;padding:10px 20px 8px;background:var(--surface);border-bottom:1px solid var(--border)}
+.aud-j + .aud-j .aud-jt{margin-top:14px}
+.aud-jt b{font-size:13px;font-weight:800;letter-spacing:-.01em}
+.aud-jt span{font-size:11.5px;color:var(--dim)}
+
+.aud-l{display:flex;align-items:center;gap:11px;padding:8px 0;font-size:13px;
+  border-bottom:1px solid var(--border-soft)}
+.aud-j .aud-l:last-child{border-bottom:none}
+.aud-h{width:40px;flex-shrink:0;font-size:12px;color:var(--dim)}
+.aud-pt{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:var(--muted)}
+.aud-a{font-weight:650;color:var(--text)}
+.aud-e{flex:1;min-width:0;color:var(--muted);font-size:12.5px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aud-q{color:var(--dim);font-size:12.5px;white-space:nowrap;max-width:34%;
+  overflow:hidden;text-overflow:ellipsis}
+/* `color-mix` plutôt qu'un or figé : #fcb900 est illisible en texte sur fond clair, et un or
+   assombri le serait tout autant sur fond sombre. Mêlé au texte courant, il suit le thème. */
+.aud-l.ton-g .aud-pt{background:var(--green)}  .aud-l.ton-g .aud-a{color:var(--green)}
+.aud-l.ton-b .aud-pt{background:var(--blue)}   .aud-l.ton-b .aud-a{color:var(--blue)}
+.aud-l.ton-a .aud-pt{background:var(--gold)}   .aud-l.ton-a .aud-a{color:color-mix(in srgb,var(--gold) 62%,var(--text))}
+.aud-l.ton-r .aud-pt{background:var(--ember1)} .aud-l.ton-r .aud-a{color:var(--ember1)}
+@media (max-width:640px){
+  .aud-e{display:none}
+  .aud-q{max-width:none;flex:1;text-align:right}
+}
+
+/* ————— TABLEAU DE BORD : CE QUI APPELLE UNE ACTION —————
+   Quatre compteurs occupaient le premier écran pour répondre à « combien j'en ai », quand la
+   question du matin est « qu'est-ce qui m'attend ». Ils descendent en une ligne ; ce qui se
+   clique prend leur place. */
+.todo{margin-bottom:14px}
+.todo-t{font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--dim);margin-bottom:8px}
+.todo-row{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.todo-i{display:flex;align-items:center;gap:13px;padding:13px 15px;text-decoration:none;
+  color:var(--text);background:var(--surface);border:1px solid var(--border);
+  border-left:3px solid var(--ton);border-radius:var(--r-sm);box-shadow:var(--shadow-1);
+  transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease)}
+.todo-i:hover{transform:translateY(-2px);box-shadow:var(--shadow-2);border-color:var(--ton)}
+.todo-i>b{font-size:26px;line-height:1;font-weight:800;color:var(--ton);letter-spacing:-.03em}
+.todo-l{flex:1;display:flex;flex-direction:column;gap:1px;font-size:14px;font-weight:600;line-height:1.25}
+.todo-l i{font-style:normal;font-size:11.5px;font-weight:400;color:var(--dim)}
+.todo-i>svg{color:var(--dim);flex-shrink:0;transition:transform .16s var(--ease),color .16s var(--ease)}
+.todo-i:hover>svg{transform:translateX(3px);color:var(--ton)}
+.todo-i.tone-ember{--ton:var(--ember1)} .todo-i.tone-orange{--ton:var(--orange)}
+.todo-i.tone-blue{--ton:var(--navy)}    .todo-i.tone-green{--ton:var(--green)}
+
+.todo-calme{display:flex;align-items:center;gap:9px;margin-bottom:14px;padding:11px 15px;
+  border:1px solid var(--border);border-left:3px solid var(--green);border-radius:var(--r-sm);
+  background:var(--surface);font-size:13.5px;color:var(--muted)}
+.todo-calme>svg{color:var(--green);flex-shrink:0}
+
+.compteurs{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;
+  padding:10px 15px;border:1px solid var(--border-soft);border-radius:var(--r-sm);
+  background:var(--surface2);font-size:13px;color:var(--muted)}
+.compteurs a{display:inline-flex;align-items:baseline;gap:5px;text-decoration:none;color:inherit;
+  border-radius:5px;padding:1px 3px;transition:color .14s var(--ease)}
+.compteurs a:hover{color:var(--navy)}
+.compteurs a:hover b{color:var(--navy)}
+.compteurs b{font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.02em}
+.compteurs>i{width:1px;height:14px;background:var(--border);flex-shrink:0}
+@media (max-width:640px){.compteurs>i{display:none}.compteurs{gap:6px 14px}}
+@media (prefers-reduced-motion:reduce){
+  .todo-i,.todo-i>svg{transition:none}
+  .todo-i:hover{transform:none}
+  .todo-i:hover>svg{transform:none}
+}
+
+/* Filtre sans résultat : la carte s'expliquait par le vide, elle le dit maintenant. */
+.carte-rien{position:absolute;z-index:430;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(340px,calc(100% - 40px));display:flex;flex-direction:column;align-items:center;gap:7px;
+  text-align:center;padding:20px 22px;border-radius:var(--r);
+  background:color-mix(in srgb,var(--surface) 94%,transparent);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border:1px solid var(--border);box-shadow:var(--shadow-3);animation:hudPose .32s var(--ease) both}
+.carte-rien>svg{color:var(--dim)}
+.carte-rien b{font-size:14.5px;line-height:1.35;text-wrap:balance}
+.carte-rien p{margin:0;font-size:12.5px;line-height:1.5;color:var(--dim)}
+.carte-rien .btn{margin-top:4px}
+
+/* La dette de géocodage : une ligne d'action sous la carte, plus un indicateur en rouge. */
+.carte-dette{display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:10px 14px;
+  border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--r-sm);
+  background:var(--surface);font-size:13.5px;color:var(--muted);box-shadow:var(--shadow-1)}
+.carte-dette>svg{color:var(--gold);flex-shrink:0}
+.carte-dette b{color:var(--text)}
+.carte-dette .btn{margin-left:auto}
+
+@media (max-width:820px){
+  .carte-scene .carte-map{height:clamp(380px,58vh,520px)}
+  .hud-search{max-width:none;min-width:0;flex:1}
+  .hud-forms{max-height:74px;overflow-y:auto}
+}
+@media (prefers-reduced-motion:reduce){
+  .hud-panel{animation:none}
+  .hud-chip{transition:none}
+  .hud-chip:hover{transform:none}
+}
 
 /* ===== Fenêtres modales (édition, signature, notes…) =================== */
 .overlay{position:fixed;inset:0;background:rgba(15,17,40,.55);backdrop-filter:blur(3px);display:grid;place-items:center;z-index:100;padding:20px}
@@ -861,16 +1581,6 @@ tbody tr:last-child td{border-bottom:none}
   border:1px dashed var(--border);border-radius:10px;opacity:.7}
 .pq-debug span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-weight:700}
 
-/* Cœurs dans l'en-tête. Les cœurs vides restent VISIBLES (🤍) : c'est le contraste plein
-   vs vide qui dit combien il en manque, un simple nombre ne le montre pas. */
-.pq-hearts{display:inline-flex;gap:1px;font-size:13px;line-height:1}
-.pq-hearts .vide{opacity:.5}
-.pq-regen{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
-/* Plus de cœur : on l'annonce, avec l'attente restante — un chemin grisé sans explication
-   se lit comme une panne. */
-.pq-nohearts{display:flex;align-items:center;gap:10px;margin:10px 0 4px;padding:10px 14px;border-radius:12px;
-  border:1px solid var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,transparent);
-  color:var(--ember1);font-size:13px;line-height:1.4}
 
 /* Flèches de bord : elles ne paraissent que du côté où il reste du chemin. Un chemin coupé
    net au bord de l'écran se lit comme un chemin fini — c'est ce malentendu qu'elles lèvent.
@@ -948,13 +1658,41 @@ tbody tr:last-child td{border-bottom:none}
 @media(prefers-reduced-motion:reduce){.pq-node.on::after{animation:none}}
 .pq-node-label{text-align:center;font-size:11.5px;line-height:1.25;width:100%}
 .pq-node-label b{display:block}
-.pq-stars{font-size:10px;letter-spacing:1px}
-.pq-progress{flex:1;height:10px;background:var(--surface2);border-radius:99px;overflow:hidden}
-.pq-progress span{display:block;height:100%;border-radius:99px;transition:width .2s var(--ease)}
-.pq-choice{text-align:left;padding:12px 14px;border:2px solid var(--border);border-radius:12px;background:var(--surface);font-size:14px;font-weight:600;color:var(--text);cursor:pointer;transition:.1s var(--ease)}
-.pq-choice:hover:not(:disabled){border-color:var(--navy);background:var(--surface2)}
-.pq-choice.ok{border-color:var(--green);background:color-mix(in srgb,var(--green) 14%,var(--surface));color:var(--green)}
-.pq-choice.ko{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 12%,var(--surface));color:var(--ember1)}
+/* Étoiles d'un chapitre : pleines = acquises, contour très atténué = à gagner. Le
+   contraste entre les deux porte l'information — pas leur nombre, toujours de trois. */
+.pq-stars{display:inline-flex;align-items:center;gap:1px;line-height:0;color:var(--gold)}
+.pq-stars > svg{opacity:.3}
+.pq-stars > svg.on{opacity:1}
+/* Écran de fin : les étoiles gagnées tombent l'une après l'autre. C'est le seul instant du
+   jeu où il y a quelque chose à savourer — les vides, elles, sont posées d'emblée. */
+.pq-fin-stars{display:flex;justify-content:center;gap:8px;margin-bottom:10px;color:var(--gold)}
+.pq-fin-stars > svg{opacity:.22}
+.pq-fin-stars > svg.on{opacity:1;animation:pqEtoile .5s var(--spring) both}
+@keyframes pqEtoile{from{opacity:0;transform:scale(.3) rotate(-25deg)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.pq-fin-stars > svg.on{animation:none}}
+.pq-progress{flex:1;height:10px;background:var(--surface2);border-radius:99px;overflow:hidden;
+  box-shadow:inset 0 1px 2px rgba(10,12,30,.12)}
+.pq-progress span{display:block;height:100%;border-radius:99px;transition:width .35s var(--spring);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+/* Réponses : même grammaire que les touches du parcours — une tranche sous le bouton, et un
+   appui qui l'enfonce d'exactement ce que la tranche perd. C'est ce qui donne au QCM la même
+   matière que le reste du jeu, au lieu de champs de formulaire posés dans une modale. */
+.pq-choice{position:relative;text-align:left;padding:12px 14px;border:2px solid var(--border);border-radius:14px;background:var(--surface);font-size:14px;font-weight:600;color:var(--text);cursor:pointer;
+  box-shadow:0 3px 0 0 var(--border);
+  transition:transform .12s var(--spring),box-shadow .12s var(--ease),border-color .12s var(--ease),background .12s var(--ease)}
+.pq-choice:hover:not(:disabled){border-color:var(--navy);background:var(--surface2);
+  transform:translateY(-1px);box-shadow:0 4px 0 0 color-mix(in srgb,var(--navy) 30%,var(--border))}
+.pq-choice:active:not(:disabled){transform:translateY(3px);box-shadow:0 0 0 0 var(--border)}
+/* Une réponse écartée s'efface au lieu de rester au même niveau que la bonne : après coup,
+   seules comptent celle qu'on a donnée et celle qu'il fallait donner. */
+.pq-choice:disabled{opacity:.5;box-shadow:none}
+.pq-choice.ok,.pq-choice.ko{opacity:1}
+.pq-choice.ok{border-color:var(--green);background:color-mix(in srgb,var(--green) 14%,var(--surface));color:var(--green);
+  box-shadow:0 3px 0 0 color-mix(in srgb,var(--green) 45%,transparent);animation:pqBonne .42s var(--spring)}
+.pq-choice.ko{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 12%,var(--surface));color:var(--ember1);
+  box-shadow:0 3px 0 0 color-mix(in srgb,var(--ember1) 45%,transparent);animation:pqShake .35s}
+@keyframes pqBonne{0%{transform:scale(1)}38%{transform:scale(1.035)}100%{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.pq-choice.ok,.pq-choice.ko{animation:none}}
 /* Étiquette de format de question */
 .pq-tag{display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:99px;border:1px solid transparent}
 .pq-tag-qcm{background:color-mix(in srgb,var(--blue) 14%,var(--surface));color:var(--blue)}
@@ -988,33 +1726,113 @@ tbody tr:last-child td{border-bottom:none}
 
 /* Titre de la rangée de défis-jeux dans un monde. */
 .pq-games-t{font-size:13px;font-weight:700;color:var(--text);margin:20px 0 10px;text-align:center}
-.pq-tier-label{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:center;margin:6px 0 12px}
+/* Titre de palier, tenu par deux filets : centré et seul, il flottait au milieu de la page
+   sans rien séparer. `--dim` en couleur de texte plafonne à ~2,6:1 en clair — sous le seuil
+   AA de 4,5:1 — d'où `--muted`, exactement le remplacement déjà arbitré ailleurs. */
+.pq-tier-label{display:flex;align-items:center;gap:12px;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:6px 0 14px}
+.pq-tier-label::before,.pq-tier-label::after{content:"";flex:1;height:2px;border-radius:2px;background:var(--border)}
 .pq-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
-.pq-fcard{position:relative;flex:1 1 230px;max-width:300px;min-height:88px;border:none;border-radius:14px;padding:14px 16px;color:#fff;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;box-shadow:0 4px 0 0 rgba(0,0,0,.18);transition:transform .1s var(--ease)}
-.pq-fcard:hover:not(:disabled){transform:translateY(-2px)}
-.pq-fcard:active:not(:disabled){transform:translateY(2px);box-shadow:0 2px 0 0 rgba(0,0,0,.18)}
-.pq-fcard.locked{background:var(--surface);color:var(--muted);box-shadow:none;cursor:not-allowed;border:1px solid var(--border)}
+/* Largeur de base FIXE (et non `1 1 230px`) : en s'étirant, la dernière carte d'une rangée
+   incomplète devenait deux fois plus large que ses voisines — le parcours se lisait alors
+   comme une suite de blocs de tailles arbitraires au lieu d'une progression régulière. */
+/* PAS d'`overflow:hidden` ici : la pastille « ! » de prérequis est posée en `top/left:-9px`,
+   elle déborde volontairement de la carte et se ferait rogner. La jauge porte son propre
+   `overflow`, elle n'a pas besoin que le parent découpe. */
+.pq-fcard{position:relative;flex:0 1 252px;min-height:96px;border:none;border-radius:18px;padding:13px 15px 15px;color:#fff;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;
+  /* Relief « pâte à modeler » : un dégradé qui éclaire le haut et assombrit le bas donne son
+     volume à la touche, là où l'aplat uni la laissait plate. */
+  background:linear-gradient(180deg,
+    color-mix(in srgb,var(--pq-c,var(--navy)) 84%,#fff) 0%,
+    var(--pq-c,var(--navy)) 46%,
+    color-mix(in srgb,var(--pq-c,var(--navy)) 86%,#000) 100%);
+  /* Trois couches, chacune son rôle : la TRANCHE (teintée de la couleur de la carte et non en
+     noir — un noir plat salit toutes les teintes), l'OMBRE PORTÉE qui la décolle du fond, et
+     le FILET DE LUMIÈRE sur l'arête haute, qui est ce qui la fait paraître bombée. */
+  box-shadow:0 5px 0 0 color-mix(in srgb,var(--pq-c,var(--navy)) 58%,#000),
+             0 12px 22px -14px rgba(10,12,30,.55),
+             inset 0 1px 0 rgba(255,255,255,.3);
+  transition:transform .16s var(--spring),box-shadow .16s var(--ease),filter .16s var(--ease)}
+.pq-fcard:hover:not(:disabled){transform:translateY(-3px);filter:brightness(1.05) saturate(1.04);
+  box-shadow:0 8px 0 0 color-mix(in srgb,var(--pq-c,var(--navy)) 58%,#000),
+             0 18px 30px -16px rgba(10,12,30,.6),
+             inset 0 1px 0 rgba(255,255,255,.34)}
+/* À l'appui, la touche s'enfonce : elle descend exactement de ce que sa tranche perd. Sans
+   cette égalité, le bas de la carte bougerait — le geste ne se lirait plus comme un appui. */
+.pq-fcard:active:not(:disabled){transform:translateY(4px);
+  box-shadow:0 1px 0 0 color-mix(in srgb,var(--pq-c,var(--navy)) 58%,#000),
+             0 6px 12px -10px rgba(10,12,30,.5),
+             inset 0 1px 0 rgba(255,255,255,.24)}
+/* Le code de formation en pastille, l'ingrédient en jeton : deux repères posés, au lieu de
+   deux éléments flottant sur l'aplat. */
+.pq-fcard-code{align-self:flex-start;padding:2px 8px;border-radius:99px;background:rgba(0,0,0,.2)}
+/* Le jeton n'accueille plus un emoji mais trois étoiles : il s'allonge en pastille. */
+.pq-fcard-ing{display:inline-flex;align-items:center;justify-content:center;gap:1px;flex:none;
+  min-height:24px;padding:0 8px;border-radius:99px;
+  background:rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+/* Étoiles de difficulté : les pleines à fond, les vides en simple contour très atténué —
+   le CONTRASTE entre les deux est ce qui porte l'information, pas leur nombre. */
+.pq-diff{display:inline-flex;align-items:center;gap:1px;line-height:0;color:#fff}
+.pq-diff > svg{opacity:.42}
+.pq-diff > svg.on{opacity:1}
+.pq-fcard.locked .pq-fcard-ing{background:var(--surface2);box-shadow:none;padding:0;width:24px}
+/* Terminée : un liseré d'or et une lueur douce. La jauge pleine dit déjà « 6/6 » — l'or dit
+   « et c'est fini », qui n'est pas la même information au milieu d'un parcours. */
+.pq-fcard.fini{box-shadow:0 5px 0 0 color-mix(in srgb,var(--pq-c,var(--navy)) 58%,#000),
+             0 12px 26px -14px rgba(252,185,0,.55),
+             inset 0 0 0 2px var(--gold),
+             inset 0 1px 0 rgba(255,255,255,.3)}
+/* Verrouillée : un aplat uni la faisait disparaître du parcours alors qu'elle en fait partie
+   — c'est l'objectif suivant, il doit rester visible. Hachures très douces : présente sans
+   prétendre être jouable. */
+.pq-fcard.locked{color:var(--muted);box-shadow:none;cursor:not-allowed;border:1px solid var(--border);
+  background:repeating-linear-gradient(135deg,var(--surface) 0 10px,var(--surface2) 10px 20px)}
+/* Jauge de progression : la seule lecture immédiate de « où j'en suis ». Fond en blanc
+   translucide pour tenir sur les six couleurs de formation sans en fixer aucune. */
+.pq-fcard-jauge{margin-top:auto;height:6px;border-radius:99px;background:rgba(255,255,255,.28);overflow:hidden}
+.pq-fcard-jauge > span{display:block;height:100%;border-radius:99px;background:#fff;
+  transition:width .5s var(--ease)}
+/* Arrivée en cascade des cartes : le décalage fait lire la rangée dans l'ordre du parcours,
+   de gauche à droite, au lieu de la faire apparaître d'un bloc. Cinq crans suffisent — au-delà
+   la dernière carte se ferait attendre. Ressort court, sans rebond marqué. */
+.pq-row > *{animation:pqPose .38s var(--spring) both}
+.pq-row > *:nth-child(2){animation-delay:.06s}
+.pq-row > *:nth-child(3){animation-delay:.12s}
+.pq-row > *:nth-child(4){animation-delay:.18s}
+.pq-row > *:nth-child(n+5){animation-delay:.24s}
+@keyframes pqPose{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.pq-row > *{animation:none}}
 .pq-fcard-top{display:flex;align-items:center;justify-content:space-between}
-.pq-fcard-code{font-size:11px;font-weight:800;letter-spacing:.06em;opacity:.92}
-.pq-fcard-ing{font-size:20px;line-height:1}
+.pq-fcard-code{font-size:10.5px;font-weight:800;letter-spacing:.06em;opacity:.95}
+.pq-fcard-ing{font-size:17px;line-height:1}
 .pq-fcard-title{font-size:15px;font-weight:800;line-height:1.15}
 .pq-fcard-meta{font-size:11px;opacity:.92;margin-top:4px}
 .pq-prereq{position:absolute;top:-9px;left:-9px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2c00;display:grid;place-items:center;font-weight:900;font-size:15px;border:2px solid var(--surface2);cursor:help}
 /* Légende de la pastille, répétée sous CHAQUE groupe qui en contient une — et non une seule
    fois en pied de page : sur une carte à plusieurs rangées, le sens du « ! » doit se lire
    à côté du « ! ». */
-.pq-legend{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;border-radius:10px;padding:6px 12px 6px 8px;font-weight:700;font-size:12px}
+/* Légende, pas bouton : l'aplat vert plein la faisait passer pour une action cliquable au
+   milieu du parcours, alors qu'elle ne fait qu'expliquer le « ! ». */
+.pq-legend{display:inline-flex;align-items:center;gap:8px;background:var(--surface);color:var(--muted);
+  border:1px solid var(--border);border-radius:99px;padding:4px 12px 4px 5px;font-weight:600;font-size:11.5px}
 /* La pastille de la légende n'est pas celle d'une carte : ni positionnée en absolu, ni
    bordée (le liseré couleur « surface » n'a rien à faire sur l'aplat vert). Taille et
    interlignage remis à l'échelle du pastillon, sinon un « ! » de 15 px dans un cercle de
    20 px (16 px utiles après bordure) déborde et paraît décentré. */
-.pq-legend .pq-prereq{position:static;width:20px;height:20px;border:none;font-size:12px;line-height:1}
+.pq-legend .pq-prereq{position:static;width:19px;height:19px;border:none;font-size:12px;line-height:1}
 /* Rappel des prérequis en tête d'un monde, avec leur état. */
 .pq-prereq-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px;font-size:12.5px}
 .pq-prereq-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-weight:700;
   border:1px solid var(--border);background:var(--surface2);color:var(--muted)}
 .pq-prereq-chip.ok{border-color:color-mix(in srgb,var(--green) 45%,transparent);background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green)}
-.pq-connect{display:flex;justify-content:center;gap:70px;color:var(--dim);margin:4px 0}
+/* Liaison entre paliers : les chevrons seuls flottaient. Un trait vertical les traverse —
+   c'est lui qui fait du tableau un CHEMIN, et les chevrons ne font plus qu'indiquer le sens. */
+.pq-connect{position:relative;display:flex;justify-content:center;gap:70px;color:var(--muted);margin:10px 0;padding:2px 0}
+.pq-connect::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;
+  background:linear-gradient(var(--border),color-mix(in srgb,var(--ember1) 45%,transparent));border-radius:2px}
+.pq-connect > svg{position:relative;animation:pqDescend 2.2s var(--ease) infinite}
+.pq-connect > svg:nth-child(2){animation-delay:.28s}
+@keyframes pqDescend{0%,100%{transform:translateY(-2px);opacity:.45}50%{transform:translateY(3px);opacity:1}}
+@media (prefers-reduced-motion:reduce){.pq-connect > svg{animation:none;opacity:.8}}
 .pq-divider{height:2px;background:var(--border);border-radius:2px;margin:22px auto;max-width:520px}
 /* Palier à l'intérieur d'un thème (classement de l'organisme) : plus discret que le titre
    de section, sinon les deux niveaux de titre se disputent la lecture. */
@@ -1184,6 +2002,25 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .author-chip:hover{text-decoration:underline}
 .author-ava{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:999px;background:var(--surface2);color:var(--muted)}
 .prof-ava{display:inline-grid;place-items:center;width:72px;height:72px;border-radius:999px;font-size:34px;color:#fff;box-shadow:0 6px 18px -8px rgba(0,0,0,.4)}
+/* Entrée du grand avatar : ressort court (`--spring` = back.out(1.4)), avec un halo tiré de
+   la couleur de l'avatar lui-même. Le halo est un `::before` DERRIÈRE (z-index:-1) : posé en
+   box-shadow sur `.prof-ava`, il aurait recouvert l'anneau de cadre.
+   ⚠️ `position:relative` obligatoire — l'anneau de cadre est un `::before` absolu, sans ancêtre
+   positionné il s'accroche à la modale et dessine une ellipse sur toute la fenêtre. */
+.prof-ava-wrap{position:relative;display:inline-grid;place-items:center;animation:profPop .42s var(--spring) both}
+.prof-ava-wrap::before{content:"";position:absolute;inset:-14px;border-radius:50%;z-index:-1;pointer-events:none;
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--halo) 42%,transparent),transparent);
+  opacity:0;animation:profHalo .5s var(--ease) .12s forwards}
+@keyframes profPop{from{opacity:0;transform:scale(.72)}to{opacity:1;transform:none}}
+@keyframes profHalo{to{opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  .prof-ava-wrap{animation:none}
+  .prof-ava-wrap::before{animation:none;opacity:1}
+}
+/* Bilan du profil : deux nombres qui montent, posés sur une même ligne de base. */
+.prof-stats{display:flex;justify-content:center;gap:26px;margin-top:16px}
+.prof-stats > span{display:flex;flex-direction:column;align-items:center;gap:1px}
+.prof-stats b{display:inline-flex;align-items:center;gap:5px;font-size:19px;line-height:1.15}
 /* Barre de filtres communauté (recherche + type de fiche) */
 .comm-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
 /* Contrôle segmenté (tri Récentes / Populaires) */
@@ -1206,6 +2043,50 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .comm-card2:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 12px 28px -16px rgba(0,0,0,.4)}
 .comm-card2-body{flex:1;display:flex;flex-direction:column;gap:8px;padding:15px 16px 13px;cursor:pointer}
 .comm-kind{align-self:flex-start;display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+/* En-tête de publication — l'auteur AVANT le titre.
+   La nature de la fiche garde sa propre ligne : logée dans l'en-tête, elle tronquait les noms
+   dès la largeur de colonne minimale (« Guillaume DESPA… »), et c'est précisément la personne
+   qu'on veut lire en premier. `min-width:0` malgré tout sur la colonne du nom — sans lui, un
+   nom très long élargirait la carte au lieu de se tronquer. */
+.post-head{display:flex;align-items:center;gap:10px}
+.post-who{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.post-name{border:0;background:none;padding:0;text-align:left;font:800 13.5px/1.25 var(--font-b);color:var(--text);cursor:pointer;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .16s var(--ease)}
+.post-name:hover{color:var(--ember1)}
+.post-date{font-size:11.5px;color:var(--dim)}
+
+/* ═══ ESPACE D'ÉCHANGE ══════════════════════════════════════════════════════════════════════
+   Les questions vivent dans le MÊME fil que les fiches : elles reprennent donc `.comm-card2`
+   et ne s'en écartent que par ce qui doit se distinguer d'un coup d'œil — la nature, la photo,
+   et l'état « résolue ». Une carte trop différente sortirait du fil au lieu d'y prendre place. */
+.comm-kind.k-question{background:color-mix(in srgb,var(--blue) 15%,var(--surface));color:var(--blue)}
+.comm-kind.k-annonce{background:color-mix(in srgb,var(--ember1) 15%,var(--surface));color:var(--ember1)}
+/* Résolue : liseré vert. Une question résolue ne demande plus d'aide, elle en APPORTE — c'est
+   elle qu'on veut relire, elle mérite de se repérer dans le fil. */
+.q-card.resolue{border-color:color-mix(in srgb,var(--green) 45%,var(--border))}
+.q-card.annonce{border-color:color-mix(in srgb,var(--ember1) 40%,var(--border))}
+/* Extrait de l'énoncé : trois lignes, pas plus. Au-delà la carte devient un mur et le fil ne
+   se parcourt plus — c'est la modale qui porte le texte entier. */
+.q-extrait{margin:0;font-size:13px;line-height:1.5;color:var(--muted);
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.q-vignette{width:100%;height:150px;object-fit:cover;border-radius:12px;margin-top:4px;background:var(--surface2)}
+.q-pied{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.q-resolue{display:inline-flex;align-items:center;gap:4px;margin-left:auto;font-size:12px;font-weight:700;color:var(--green)}
+
+/* — Détail d'une question — */
+.q-corps{font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;margin:10px 0}
+.q-photo{width:100%;max-height:380px;object-fit:contain;border-radius:14px;background:var(--surface2);margin:8px 0}
+.q-reponses{margin-top:16px;border-top:1px solid var(--border-soft);padding-top:14px}
+.q-reponses-t{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;margin-bottom:10px}
+.q-reponse{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;
+  background:var(--surface2);margin-bottom:8px}
+/* La réponse retenue est mise en avant, pas déplacée en tête : elle garde sa place dans la
+   conversation — ce qui l'a précédée explique souvent pourquoi elle a aidé. */
+.q-reponse.retenue{background:color-mix(in srgb,var(--green) 10%,var(--surface));
+  box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--green) 42%,transparent)}
+.q-badge-aide{display:inline-flex;align-items:center;gap:3px;margin-left:7px;padding:1px 7px;border-radius:99px;
+  background:var(--green);color:#fff;font-size:10px;font-weight:800;letter-spacing:.02em;vertical-align:1px}
+.q-reponse .iconbtn.on{color:var(--green);border-color:color-mix(in srgb,var(--green) 45%,transparent)}
 .comm-title{font-size:16px;font-weight:800;line-height:1.22;color:var(--text)}
 .comm-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .comm-foot{display:flex;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--border-soft);background:var(--surface2)}
@@ -1413,7 +2294,10 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .cart-row:last-of-type{border-bottom:none}
 .cart-lbl{flex:1;min-width:0;font-size:13px;line-height:1.35}
 .cart-qty{display:inline-flex;align-items:center;gap:4px;flex:none}
-.cart-qty .iconbtn{width:30px;height:30px}
+/* 40 px et non 30 : sous 40, le doigt vise à côté — c'est le raisonnement déjà écrit
+   quelques lignes plus haut pour `.shop-add`. Ces deux boutons servent à corriger une
+   quantité au panier, geste qu'on répète et qu'on fait souvent au téléphone. */
+.cart-qty .iconbtn{width:40px;height:40px}
 .cart-qty b{min-width:22px;text-align:center;font-size:13.5px}
 .cart-sum{width:82px;text-align:right;flex:none;font-size:13.5px}
 /* Taille / coupe : des boutons, pas un <select>. 6 options tiennent à l'écran, et un menu
@@ -1917,9 +2801,17 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
    demi et se lit comme un groupe. Le liseré de la couleur de la carte détache chaque pastille
    de sa voisine — sans lui, des avatars de teintes proches formeraient une tache. */
 .comm-faces{display:inline-flex;align-items:center;margin-left:2px}
-.comm-face{width:21px;height:21px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+.comm-face{position:relative;width:21px;height:21px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
   margin-left:-6px;border:2px solid var(--surface);background:var(--surface2);color:var(--muted);
   font-size:11px;line-height:1;padding:0;cursor:pointer;transition:transform .14s var(--ease)}
+/* `position:relative` ci-dessus n'est PAS décoratif : l'anneau de cadre est un `::before`
+   absolu — sans ancêtre positionné il s'accrocherait au premier au-dessus et dessinerait une
+   ellipse par-dessus la carte (le bug déjà payé sur `.pf-cadre-ex`).
+   Variante fine : à 21 px, les 3 px des grands avatars mangeaient le visage. Le chevauchement
+   se desserre aussi, sinon deux anneaux voisins se touchent et forment une chaîne. */
+.comm-face.sm::before{inset:-2px;padding:1.5px}
+.comm-face.cadre{margin-left:-4px}
+.comm-face.cadre:first-child{margin-left:0}
 .comm-face:first-child{margin-left:0}
 /* Au survol la pastille passe devant ses voisines, sinon le nom au survol désigne un visage
    à moitié caché. */
@@ -2074,186 +2966,382 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 /* --- Calendrier : la case ajoutable ne signalait rien avant le clic. */
 .cal-cell.addable{transition:background .14s var(--ease),border-color .14s var(--ease)}
 
-/* ═══ Maîtrise sanitaire (HACCP) ═══ mobile d'abord ══════════════════════════════════════════ */
-.muted{color:var(--muted)}
-.icon-btn.danger:hover{color:var(--ember1);border-color:var(--ember1)}
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   ESPACE STAGIAIRE — couche ludique
+   ═══════════════════════════════════════════════════════════════════════════════════════════
+   Direction : « ludique côté élève, sobre côté admin ». TOUT est ici sous `.stu-app` (posé par
+   StudentLayout) : l'application d'administration ne voit rien de ce fichier.
 
-/* — Hub : bandeau d'alertes — */
-.hs-alerts{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
-.hs-alert{display:flex;align-items:center;gap:11px;padding:12px 15px;border-radius:var(--r-sm);border:1px solid var(--border);font-size:14px;font-weight:600;color:var(--text);background:var(--surface);transition:.15s var(--ease)}
-.hs-alert span{flex:1}
-.hs-alert b{font-size:16px}
-.hs-alert.wait{border-color:var(--blue);background:var(--blue-bg)}
-.hs-alert.warn{border-color:var(--gold);background:var(--amber-bg)}
-.hs-alert.bad{border-color:var(--ember1);background:var(--rosso-bg);color:var(--ember1)}
-a.hs-alert:hover{transform:translateX(2px)}
-
-/* — Hub : trois colonnes façon logiciel HACCP — */
-.hs-cols{display:grid;grid-template-columns:1fr;gap:18px;margin-bottom:22px}
-.hs-col{--a:var(--navy)}
-.hs-col-head{font:800 13px/1 var(--font-d);text-transform:uppercase;letter-spacing:.06em;color:var(--a);padding:0 0 10px 2px;margin:0 0 12px;border-bottom:2px solid color-mix(in srgb,var(--a) 30%,transparent)}
-.hs-col-tiles{display:flex;flex-direction:column;gap:10px}
-.hs-mod{--a:var(--navy);display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--a);border-radius:var(--r-sm);transition:.15s var(--ease)}
-.hs-mod:hover{transform:translateX(2px);box-shadow:var(--shadow-2);border-color:var(--a)}
-.hs-mod-ic{flex:none;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--a);background:color-mix(in srgb,var(--a) 13%,transparent)}
-.hs-mod-t{flex:1;min-width:0;font:700 14.5px/1.2 var(--font-b);color:var(--text)}
-.hs-chip{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:52px;padding:5px 8px;border-radius:10px;line-height:1}
-.hs-chip-top{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;opacity:.85;margin-bottom:2px;white-space:nowrap}
-.hs-chip-n{font:800 18px/1 var(--font-d)}
-.hs-chip.wait{background:var(--blue-bg);color:var(--blue)}
-.hs-chip.bad{background:var(--rosso-bg);color:var(--ember1)}
-.hs-chip.ok{background:var(--green-bg);color:var(--green)}
-.hs-chip.done{background:color-mix(in srgb,var(--a) 14%,transparent);color:var(--a)}
-.hs-chip.idle{background:var(--surface2);color:var(--dim)}
-
-.hs-foot-link{display:flex;gap:13px;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-size:13px;line-height:1.5;transition:.15s var(--ease)}
-.hs-foot-link:hover{border-color:var(--green);transform:translateY(-1px);box-shadow:var(--shadow-2)}
-.hs-foot-link>svg:first-child{flex:none;color:var(--green)}
-.hs-foot-link>svg:last-child{flex:none;color:var(--dim)}
-.hs-foot-link b{color:var(--text)}
-
-/* — Page registre — */
-.hs-back{display:inline-flex;align-items:center;gap:3px;color:var(--ember1);font-weight:700}
-.hs-config-cta{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border-left:4px solid var(--gold)}
-.hs-form-card{margin-bottom:16px}
-.hs-form{display:flex;flex-direction:column;gap:2px}
-.hs-form-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
-.hs-form-actions .btn.primary{margin-left:auto}
-.hs-num{position:relative;display:flex;align-items:center}
-.hs-num .inp{padding-right:44px}
-.hs-unit{position:absolute;right:12px;font-size:13px;font-weight:700;color:var(--dim);pointer-events:none}
-.hs-check label{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;cursor:pointer}
-.hs-check input{width:auto}
-.hs-help{font-size:12px;color:var(--dim);margin-top:5px;line-height:1.4}
-.hs-preview{display:inline-flex;align-items:center;gap:6px;margin-top:7px;padding:5px 10px;border-radius:8px;font-size:12.5px;font-weight:700}
-.hs-preview.ok{color:var(--green);background:var(--green-bg)}
-.hs-preview.bad{color:var(--ember1);background:var(--rosso-bg)}
-
-/* — Journal — */
-.hs-log{display:flex;flex-direction:column;gap:0}
-.hs-log-row{display:flex;gap:12px;align-items:flex-start;padding:13px 2px;border-bottom:1px solid var(--border-soft)}
-.hs-log-row:last-child{border-bottom:none}
-.hs-log-main{flex:1;min-width:0}
-.hs-log-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.hs-log-top b{font:700 15px/1.2 var(--font-b)}
-.hs-log-val{font:800 15px/1 var(--font-m);color:var(--navy)}
-.hs-badge{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.01em}
-.hs-badge.ok{color:var(--green);background:var(--green-bg)}
-.hs-badge.bad{color:var(--ember1);background:var(--rosso-bg)}
-.hs-badge.warn{color:#a9760a;background:var(--amber-bg)}
-.hs-badge.muted{color:var(--dim);background:var(--surface2)}
-.hs-log-sub{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:4px}
-.hs-due.soon{color:var(--ember1);font-weight:700}
-.hs-log-corr{display:flex;gap:6px;align-items:flex-start;margin-top:6px;font-size:12.5px;color:var(--muted)}
-.hs-log-corr svg{flex:none;margin-top:2px;color:var(--green)}
-.hs-log-note{margin-top:5px;font-size:12.5px;color:var(--muted);font-style:italic}
-.hs-log-actions{display:flex;gap:2px;flex:none}
-.hs-log-actions .icon-btn{width:34px;height:34px;border-radius:9px}
-
-/* — Panneau référentiel — */
-.hs-ref-empty{text-align:center;padding:14px 0 4px;color:var(--muted)}
-.hs-ref-empty p{margin:0 0 10px}
-.hs-ref-list{display:flex;flex-direction:column;gap:0;margin:0 0 14px}
-.hs-ref-list li{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--border-soft)}
-.hs-ref-list li.off{opacity:.5}
-.hs-ref-main{flex:1;min-width:0;display:flex;flex-direction:column}
-.hs-ref-main b{font-size:14px}
-.hs-ref-sub{font-size:12px;color:var(--muted)}
-.hs-ref-form{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px dashed var(--border)}
-.hs-ref-row{display:flex;gap:8px}
-.hs-ref-row>*{flex:1;min-width:0}
-.hs-ref-form .btn{align-self:flex-start}
-
-/* — Historique unifié : filtres + journal — */
-.hs-filters{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}
-.hs-filters.sub{margin-bottom:16px}
-.hs-filters .seg-btn{border:1px solid var(--border);background:var(--surface);color:var(--muted);padding:6px 12px;border-radius:999px}
-.hs-filters .seg-btn.on{background:var(--grad-ember);color:#fff;border-color:transparent}
-.hs-filters-sep{width:1px;height:22px;background:var(--border);margin:0 2px}
-.chip-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border-soft);background:var(--surface2);color:var(--muted);padding:5px 10px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;transition:.14s var(--ease)}
-.chip-btn.on{background:var(--blue-bg);color:var(--blue);border-color:var(--blue)}
-.hs-hist-day{margin-bottom:4px}
-.hs-hist-date{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);padding:12px 2px 6px;position:sticky;top:0;background:var(--surface);z-index:1}
-.hs-hist-list{display:flex;flex-direction:column;gap:0}
-.hs-hist-row{display:flex;gap:11px;align-items:flex-start;padding:10px 2px;border-bottom:1px solid var(--border-soft)}
-.hs-hist-row:last-child{border-bottom:none}
-.hs-hist-ic{--a:var(--navy);flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--a);background:color-mix(in srgb,var(--a) 13%,transparent)}
-.hs-hist-main{flex:1;min-width:0}
-.hs-hist-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.hs-hist-top b{font:700 14px/1.2 var(--font-b)}
-.hs-hist-sub{display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:3px}
-.hs-hist-reg{font-weight:700;color:var(--dim)}
-
-/* Listes de la maîtrise sanitaire : pas de puces natives. */
-.hs-round-list,.hs-clean-list,.hs-log,.hs-hist-list,.hs-ref-list{list-style:none;margin:0;padding:0}
-.hs-clean-list{margin-bottom:6px}
-
-/* — Saisie éclair : tournée des températures — */
-.hs-round-head,.hs-clean .hs-round-head{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.35}
-.hs-round-head svg{flex:none;color:var(--blue)}
-.hs-round-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
-.hs-round-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);transition:.14s var(--ease)}
-.hs-round-row.conforme{border-color:var(--green);background:var(--green-bg)}
-.hs-round-row.non_conforme{border-color:var(--ember1);background:var(--rosso-bg)}
-.hs-round-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-.hs-round-name b{font-size:14.5px}
-.hs-round-seuil{font-size:11.5px;color:var(--muted)}
-.hs-round-field{flex:none;display:flex;align-items:center;gap:7px;color:var(--dim)}
-.hs-round-row.conforme .hs-round-field{color:var(--green)}
-.hs-round-row.non_conforme .hs-round-field{color:var(--ember1)}
-.hs-round-input{width:82px;text-align:right;font:800 18px/1 var(--font-m);padding:9px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text)}
-.hs-round-input:focus{outline:none;border-color:var(--blue)}
-.hs-round-unit{font-size:13px;font-weight:700;color:var(--dim)}
-.hs-round-save{width:100%;justify-content:center}
-
-/* — Saisie éclair : checklist nettoyage — */
-.hs-clean-list{display:flex;flex-direction:column;gap:8px}
-.hs-task-btn{width:100%;display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);cursor:pointer;text-align:left;transition:.14s var(--ease)}
-.hs-task-btn:hover{border-color:var(--teal,#0e9aa7)}
-.hs-task.done .hs-task-btn{border-color:var(--green);background:var(--green-bg)}
-.hs-task-box{flex:none;width:26px;height:26px;border-radius:8px;border:2px solid var(--border);display:grid;place-items:center;color:#fff;transition:.14s var(--ease)}
-.hs-task.done .hs-task-box{background:var(--green);border-color:var(--green)}
-.hs-task-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-.hs-task-main b{font-size:14.5px}
-.hs-task-sub{font-size:12px;color:var(--muted)}
-.hs-task-tag{flex:none;font-size:12px;font-weight:700;color:var(--green);white-space:nowrap}
-.hs-task-go{flex:none;font-size:12px;font-weight:600;color:var(--dim)}
-
-/* — Hub : onboarding illustré « comment ça marche » — */
-.hs-onboard{padding:18px;margin-bottom:20px;border:1px solid var(--border);background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow-1)}
-.hs-onboard-head{margin-bottom:16px}
-.hs-onboard-head b{display:block;font:800 17px/1.2 var(--font-d)}
-.hs-onboard-head span{font-size:13px;color:var(--muted)}
-.hs-steps{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:16px}
-.hs-step{--a:var(--navy);display:flex;flex-direction:column;gap:4px;padding:16px;border-radius:var(--r-sm);background:var(--surface2);border:1px solid var(--border-soft)}
-.hs-step>svg{color:var(--a);margin-bottom:6px}
-.hs-step b{font:700 14px/1.2 var(--font-b)}
-.hs-step span{font-size:12.5px;color:var(--muted);line-height:1.4}
-.hs-onboard-actions{display:flex;gap:10px;flex-wrap:wrap}
-
-/* — Page Paramétrage : sections — */
-.hs-reglage-t{display:inline-flex;align-items:center;gap:9px}
-.hs-reglage-ic{--a:var(--navy);flex:none;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--a);background:color-mix(in srgb,var(--a) 13%,transparent)}
-.hs-reglage-hint{font-size:12.5px;color:var(--muted);line-height:1.45;margin:0 0 14px}
-
-/* — Historique : recherche produit / lot — */
-.hs-search{display:flex;align-items:center;gap:8px;padding:2px 10px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);margin-bottom:12px}
-.hs-search svg{flex:none;color:var(--dim)}
-.hs-search .inp{border:none;background:none;padding:9px 0}
-.hs-search .inp:focus{outline:none}
-.hs-search .icon-btn{flex:none;width:30px;height:30px;border:none;background:none}
-.hs-search-hint{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin:-4px 0 12px 2px}
-.hs-search-hint svg{flex:none;color:var(--blue)}
-
-/* Accents par domaine/module — déclarés APRÈS les composants (.hs-col/.hs-mod/.hs-hist-ic posent
-   un --a par défaut) pour que la couleur du module l'emporte, à spécificité égale, par l'ordre. */
-.accent-blue{--a:#2c3371}.accent-amber{--a:#e8730c}.accent-teal{--a:#0e9aa7}.accent-violet{--a:#6b4fbb}
-.accent-gold{--a:#c9960a}.accent-rosso{--a:var(--ember1)}.accent-green{--a:#2f9e6f}.accent-navy{--a:#2c3371}
-
-@media(min-width:720px){
-  .hs-cols{grid-template-columns:1fr 1fr 1fr;align-items:start;gap:16px}
-  .hs-steps{grid-template-columns:1fr 1fr 1fr}
+   Le levier : on ne réécrit pas les composants, on REDÉFINIT LEURS TOKENS. `--font-d` et `--r`
+   sont déjà consommés par `h1..h4`, `.card`, `.btn`… — les redéclarer ici suffit à rendre
+   l'ensemble de l'espace stagiaire rond et ludique, sans toucher une seule page.        */
+.stu-app{
+  --font-d:"Fredoka","Mulish",system-ui,sans-serif;  /* titres ronds, façon appli d'apprentissage */
+  --r:22px; --r-sm:15px;                             /* coins nettement plus doux */
+  --spring:cubic-bezier(.34,1.56,.64,1);             /* équivalent CSS de back.out(1.4) */
+  position:relative;
 }
-@media(max-width:719px) and (min-width:520px){
-  .hs-cols{grid-template-columns:1fr 1fr}
+
+/* Fond chaud « bouche de four » : deux halos fixes très diffus. Fixes et non scrollés — la
+   chaleur appartient à la pièce, pas au contenu qui défile. */
+.stu-app::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(60vw 40vw at 12% -8%, rgba(255,105,0,.10), transparent 60%),
+    radial-gradient(50vw 36vw at 92% 4%, rgba(220,62,55,.09), transparent 62%),
+    radial-gradient(44vw 30vw at 50% 108%, rgba(252,185,0,.07), transparent 60%);
 }
+[data-theme=dark] .stu-app::before{
+  background:
+    radial-gradient(60vw 40vw at 12% -8%, rgba(255,105,0,.14), transparent 60%),
+    radial-gradient(50vw 36vw at 92% 4%, rgba(220,62,55,.12), transparent 62%),
+    radial-gradient(44vw 30vw at 50% 108%, rgba(252,185,0,.08), transparent 60%);
+}
+/* Variante pour les PORTAILS. `createPortal(…, document.body)` sort la modale de l'arbre de
+   `StudentLayout` : elle perdait Fredoka, les coins 22 px et le retour tactile, et s'affichait
+   donc en registre « administration » au milieu de l'espace stagiaire — y compris IntroGuide,
+   le tout premier écran d'un nouveau stagiaire.
+   Le conteneur du portail reprend `.stu-app` pour retrouver les tokens, PLUS cette classe qui
+   coupe le halo : deux `::before` en `position:fixed;inset:0` peindraient la chaleur en
+   double sur tout l'écran, par-dessus le voile de la modale.
+   `position:relative` (hérité de `.stu-app`) ne crée PAS de bloc conteneur pour un enfant en
+   `position:fixed` — le voile continue donc de couvrir la fenêtre entière. */
+.stu-app-nu::before{display:none}
+
+/* Aucune règle de positionnement sur les enfants — deux régressions sont nées d'ici :
+   `> *` cassait le `position:fixed` de la modale de profil, et le viser plus finement
+   cassait le `sticky`/`z-index:30` de l'en-tête, qui repassait alors SOUS le voile du
+   tiroir (z-index 29, `backdrop-filter:blur`) — le menu s'affichait flou.
+   Le halo est simplement posé en `z-index:-1`, derrière tout, et le fond vient du body. */
+
+/* Titres : Fredoka respire mieux avec un interlettrage neutre (le -.01em global la tasse). */
+.stu-app h1,.stu-app h2,.stu-app h3{letter-spacing:0;font-weight:600}
+.stu-app h1{font-weight:700}
+
+/* — Retour tactile (style « deformable UI ») ————————————————————————————————————
+   Un appui doit s'enfoncer puis rebondir : c'est ce qui donne l'impression de matière.
+   `transform` uniquement (jamais width/height) pour rester sur le compositeur.          */
+.stu-app .btn,.stu-app .icon-btn,.stu-app .seg-btn,.stu-app .stu-drawer-item{
+  transition:transform .18s var(--spring),box-shadow .18s var(--ease),background .16s var(--ease),color .16s var(--ease),border-color .16s var(--ease);
+}
+.stu-app .btn:active:not(:disabled),.stu-app .icon-btn:active,.stu-app .seg-btn:active{transform:scale(.94)}
+.stu-app .btn.primary:hover:not(:disabled){transform:translateY(-1px)}
+.stu-app .card.hover{transition:transform .2s var(--spring),box-shadow .2s var(--ease),border-color .2s var(--ease)}
+.stu-app .card.hover:hover{transform:translateY(-3px)}
+.stu-app .card.hover:active{transform:scale(.985)}
+
+/* Entrée des cartes : léger dépassement d'échelle (le « pop » d'une appli ludique) plutôt que
+   la montée sobre de l'admin. */
+@keyframes stuPop{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+.stu-app .card{animation:stuPop .42s var(--spring) both}
+
+/* — Hero stagiaire ————————————————————————————————————————————————————————————————
+   L'admin garde le hero navy (sérieux, institutionnel) ; l'élève reçoit la braise du four.  */
+.stu-app .hero{background:linear-gradient(135deg,#2c3371 0%,#7a2f4a 52%,#dc3e37 100%);padding:34px 34px 30px}
+.stu-app .hero::before{background:radial-gradient(circle,rgba(255,169,0,.42),transparent 62%)}
+.stu-app .hero::after{background:radial-gradient(circle,rgba(252,185,0,.18),transparent 65%)}
+.stu-app .hero h1{font-size:36px;line-height:1.06}
+.stu-app .hero .pill{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);color:#fff;font-weight:700}
+
+/* Salutation : le prénom sur une ligne mise en avant, comme un « Bonjour » d'accueil. */
+.stu-hi{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.stu-hi-av{flex:none;width:52px;height:52px;border-radius:16px;display:grid;place-items:center;
+  font-size:26px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(6px)}
+
+/* — Anneau de progression ————————————————————————————————————————————————————————
+   Remplace la barre plate sur les cartes formation : un anneau se lit d'un coup d'œil et
+   supporte le pourcentage en son centre. Purement CSS (conic-gradient), aucun SVG à charger. */
+.stu-ring{--p:0;--c:var(--ember1);--ring-c:var(--c);flex:none;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;
+  background:conic-gradient(var(--ring-c) calc(var(--p)*1%),var(--surface3) 0);transition:background .5s var(--ease)}
+/* Sur fond sombre, une couleur de programme foncée (le navy, par exemple) disparaissait
+   dans la carte : on l'éclaircit. `--ring-c` sert d'intermédiaire — `--c` est posé en style
+   inline par la carte, une variable ne peut pas se redéfinir à partir d'elle-même. */
+[data-theme=dark] .stu-ring{--ring-c:color-mix(in srgb,var(--c) 62%,#fff)}
+.stu-ring::after{content:"";position:absolute;width:34px;height:34px;border-radius:50%;background:var(--surface)}
+.stu-ring{position:relative}
+.stu-ring span{position:relative;z-index:1;font:800 12px/1 var(--font-m);color:var(--text)}
+/* `.done` ne peut pas porter la couleur : le style inline de la carte l’emporterait.
+   La décision est prise côté JSX (voir MonEspace) ; ici on ne colore que le libellé. */
+.stu-ring.done span{color:var(--green)}
+
+/* — Ligne de document (À faire / Mes documents) ————————————————————————————————— */
+.stu-app .stu-row{border-radius:var(--r-sm);transition:transform .16s var(--spring),background .16s var(--ease)}
+.stu-app .stu-row:active{transform:scale(.99)}
+
+/* — Onglets segmentés : plus généreux au doigt ————————————————————————————————— */
+.stu-app .seg{padding:4px;border-radius:999px}
+.stu-app .seg-btn{padding:8px 16px;font-size:13.5px;min-height:38px}
+
+/* Cible tactile confortable partout dans l'espace stagiaire (44px = seuil Apple/Material). */
+.stu-app .btn.sm{min-height:38px}
+.stu-app .icon-btn{width:40px;height:40px}
+
+/* Respect de « animations réduites » : on garde la lisibilité, on retire le mouvement. */
+@media (prefers-reduced-motion:reduce){
+  .stu-app .card{animation:none}
+  .stu-app .btn:active:not(:disabled),.stu-app .icon-btn:active,.stu-app .seg-btn:active,
+  .stu-app .card.hover:hover,.stu-app .card.hover:active,.stu-app .stu-row:active{transform:none}
+}
+
+/* — Hero photographié ————————————————————————————————————————————————————————————
+   Vraies photos de l'école (four Marana Forni du labo, salle de cours), récupérées du site.
+   Elles passent SOUS le dégradé de braise à forte opacité : on ne cherche pas à montrer la
+   photo, on cherche à ce que l'écran ait l'odeur du lieu. C'est aussi ce qui autorise une
+   compression agressive — les artefacts n'atteignent jamais l'œil.
+   `background-attachment:scroll` explicite : `fixed` provoque des à-coups de rendu sur iOS. */
+.stu-app .hero.photo{
+  background-image:
+    linear-gradient(135deg,rgba(44,51,113,.93) 0%,rgba(122,47,74,.88) 52%,rgba(220,62,55,.84) 100%),
+    var(--photo);
+  background-size:cover,cover;
+  background-position:center,center;
+  background-attachment:scroll;
+}
+[data-theme=dark] .stu-app .hero.photo{
+  background-image:
+    linear-gradient(135deg,rgba(30,34,80,.95) 0%,rgba(96,36,58,.92) 52%,rgba(180,48,42,.88) 100%),
+    var(--photo);
+}
+
+/* — Coque : l'en-tête appartient au monde de l'élève ———————————————————————————— */
+.stu-app .topbar{background:color-mix(in srgb,var(--glass) 92%,#ff6900)}
+.stu-app .avatar{box-shadow:0 0 0 2px var(--surface),0 0 0 4px color-mix(in srgb,var(--ember1) 45%,transparent);
+  transition:transform .18s var(--spring)}
+.stu-app .avatar:hover{transform:scale(1.06)}
+.stu-app .avatar:active{transform:scale(.94)}
+
+
+/* — Confirmation d'enregistrement ————————————————————————————————————————————————
+   Flottante en bas d'écran : le bouton « Enregistrer » peut se trouver n'importe où dans un
+   assistant qui défile, la confirmation doit être vue sans avoir à chercher.
+   z-index 900 = au-dessus des modales (300) ; on confirme parfois depuis une fiche ouverte. */
+.save-toast{position:fixed;left:50%;bottom:24px;z-index:900;transform:translateX(-50%);
+  display:inline-flex;align-items:center;gap:10px;padding:12px 20px 12px 14px;border-radius:999px;
+  font:700 14.5px/1 var(--font-b);color:#fff;background:var(--green);
+  box-shadow:0 12px 32px -8px rgba(20,80,50,.45);animation:toastIn .34s cubic-bezier(.34,1.56,.64,1)}
+.save-toast.err{background:var(--ember1);box-shadow:0 12px 32px -8px rgba(180,40,35,.45)}
+.save-toast-ic{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;
+  background:rgba(255,255,255,.22);flex:none}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,18px) scale(.9)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@media (prefers-reduced-motion:reduce){.save-toast{animation:none}}
+
+/* — Jauge de force W ————————————————————————————————————————————————————————————
+   Bande d'usages sous le curseur : W est un choix de méthode avant d'être un nombre. */
+.wg{margin-top:6px}
+.wg-band{position:relative;height:22px;border-radius:7px;overflow:hidden;background:var(--surface3)}
+.wg-zone{position:absolute;top:0;height:100%;display:grid;place-items:center;opacity:.82}
+.wg-zone em{font:700 9.5px/1 var(--font-b);font-style:normal;color:#fff;text-transform:uppercase;
+  letter-spacing:.02em;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+/* Seuil des indirects : trait blanc tireté, lisible sur toutes les zones. */
+.wg-seuil{position:absolute;top:0;height:100%;width:0;border-left:2px dashed rgba(255,255,255,.85)}
+/* Curseur : pastille claire cerclée — repérable quelle que soit la couleur de zone dessous. */
+.wg-curseur{position:absolute;top:16px;width:0;height:0;margin-left:-6px;
+  border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:7px solid var(--text);
+  filter:drop-shadow(0 -1px 1px rgba(255,255,255,.6));transition:left .16s var(--ease)}
+.wg-ticks{position:relative;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;min-height:15px}
+.wg-tick-seuil{position:absolute;transform:translateX(-50%);font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
+@media(max-width:520px){.wg-tick-seuil{display:none}}
+
+/* — Curseurs (range) de l'espace stagiaire ————————————————————————————————————————
+   Ils étaient nus : rail gris du système, poignée par défaut, hauteur variable d'un
+   navigateur à l'autre. Une seule règle les aligne tous — pas de jauge sur chacun, ce
+   serait trop : seul le W, qui décide d'une méthode, en méritait une.
+   Les deux moteurs (WebKit/Blink et Gecko) exigent des sélecteurs séparés ; les regrouper
+   invaliderait toute la règle pour les deux. */
+.stu-app input[type=range]{-webkit-appearance:none;appearance:none;height:22px;background:none;cursor:pointer}
+.stu-app input[type=range]::-webkit-slider-runnable-track{height:7px;border-radius:99px;background:var(--surface3)}
+.stu-app input[type=range]::-moz-range-track{height:7px;border-radius:99px;background:var(--surface3)}
+.stu-app input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:19px;height:19px;margin-top:-6px;
+  border-radius:50%;background:var(--ember1);border:2.5px solid var(--surface);box-shadow:0 2px 6px -1px rgba(0,0,0,.35);
+  transition:transform .16s var(--spring)}
+.stu-app input[type=range]::-moz-range-thumb{width:19px;height:19px;border-radius:50%;background:var(--ember1);
+  border:2.5px solid var(--surface);box-shadow:0 2px 6px -1px rgba(0,0,0,.35)}
+.stu-app input[type=range]:active::-webkit-slider-thumb{transform:scale(1.18)}
+.stu-app input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--blue);outline-offset:2px}
+.stu-app input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--blue);outline-offset:2px}
+
+/* — Barre de rang (dans le hero) ————————————————————————————————————————————————
+   Le système de grades vivait dans la modale de profil. Une progression invisible ne
+   motive personne : elle est désormais la première chose lue en arrivant. */
+.stu-rank{margin-top:16px;max-width:440px}
+.stu-rank-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px}
+.stu-rank-grade{font:700 15px/1.1 var(--font-d);color:#fff}
+.stu-rank-pts{font:700 12px/1 var(--font-m);color:rgba(255,255,255,.78);white-space:nowrap}
+.stu-rank-bar{height:9px;border-radius:99px;background:rgba(255,255,255,.22);overflow:hidden}
+.stu-rank-bar > span{display:block;height:100%;border-radius:99px;background:var(--grad-warm);transition:width .8s var(--ease)}
+.stu-rank-foot{display:flex;align-items:center;gap:10px;margin-top:7px;font-size:12.5px;color:rgba(255,255,255,.82)}
+.stu-rank-foot b{color:#fff}
+.stu-rank-stars{margin-left:auto;font-weight:700;color:#fff;white-space:nowrap}
+
+/* — Carte « prochaine étape » ————————————————————————————————————————————————————
+   UNE action, la plus urgente. Bloc pleine largeur et cliquable en entier : c'est la
+   cible principale de la page, elle ne se cherche pas. */
+.stu-next{display:flex;align-items:center;gap:14px;width:100%;margin:-8px 0 18px;padding:16px 18px;
+  border-radius:var(--r);border:1px solid var(--border);background:var(--surface);text-align:left;
+  box-shadow:var(--shadow-2);cursor:pointer;transition:transform .18s var(--spring),box-shadow .18s var(--ease)}
+.stu-next:hover{transform:translateY(-2px);box-shadow:var(--shadow-3)}
+.stu-next:active{transform:scale(.99)}
+.stu-next.urgent{border-color:var(--ember1);background:linear-gradient(180deg,var(--rosso-bg),var(--surface) 70%)}
+.stu-next.jeu{border-color:var(--gold);background:linear-gradient(180deg,var(--amber-bg),var(--surface) 70%)}
+.stu-next.ok{cursor:default;box-shadow:var(--shadow-1)}
+.stu-next.ok:hover{transform:none;box-shadow:var(--shadow-1)}
+.stu-next-ic{flex:none;width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:var(--surface2);color:var(--ember1)}
+.stu-next.jeu .stu-next-ic{color:var(--orange)}
+.stu-next.ok .stu-next-ic{color:var(--green)}
+.stu-next-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.stu-next-lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.stu-next-txt b{font:700 16px/1.2 var(--font-d);color:var(--text)}
+.stu-next-txt span:not(.stu-next-lbl){font-size:13px;color:var(--muted)}
+.stu-next-go{flex:none;display:inline-flex;align-items:center;gap:5px;padding:9px 15px;border-radius:99px;
+  background:var(--grad-ember);color:#fff;font-size:13.5px;font-weight:700;white-space:nowrap;box-shadow:var(--shadow-glow)}
+@media(max-width:600px){
+  /* En colonne sous 600px : côte à côte, le libellé d'action tronquait le titre. */
+  .stu-next{flex-wrap:wrap}
+  .stu-next-go{width:100%;justify-content:center}
+}
+
+/* ═══ CADRES D'AVATAR ═══════════════════════════════════════════════════════════════════════
+   Récompense cosmétique liée aux formations TERMINÉES (cf. lib/cadres.js) — elle remplace
+   l'XP et les cœurs, qui récompensaient le temps passé dans le jeu.
+   Le cadre est un anneau posé en `::before` : il n'agrandit pas l'avatar et ne décale donc
+   aucune mise en page existante. Les deux derniers paliers sont animés. */
+.av-wrap{--av:44px;position:relative;display:inline-grid;place-items:center;width:var(--av);height:var(--av);
+  flex:none;border:0;background:none;padding:0;cursor:inherit}
+.av-face{width:100%;height:100%;border-radius:50%;display:grid;place-items:center;overflow:hidden;
+  background:var(--surface3);color:var(--text);font:800 calc(var(--av)*.36)/1 var(--font-b)}
+.av-face > span{font-size:calc(var(--av)*.44);line-height:1}
+button.av-wrap{cursor:pointer;transition:transform .18s var(--spring)}
+button.av-wrap:hover{transform:scale(1.06)}
+button.av-wrap:active{transform:scale(.94)}
+
+/* L'anneau déborde de 3 px : posé à l'intérieur, il rognerait l'emoji. */
+.cadre::before{content:"";position:absolute;inset:-3px;border-radius:50%;pointer-events:none;
+  padding:3px;background:var(--cadre-bg);
+  /* Anneau creux : le dégradé n'est peint que sur la bordure. `mask-composite` diffère entre
+     les moteurs — les deux écritures sont nécessaires, pas redondantes. */
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask-composite:exclude}
+
+.cadre-bronze{--cadre-bg:linear-gradient(135deg,#b87333,#e8b98a,#8c5a24)}
+.cadre-argent{--cadre-bg:linear-gradient(135deg,#9aa3ad,#e9eef3,#7d8791)}
+.cadre-or{--cadre-bg:linear-gradient(135deg,#c9960a,#ffe08a,#a97c00)}
+
+/* — Paliers animés —
+   Les deux derniers paliers ne se contentent pas d'un anneau : ils portent une couche
+   d'effet en `::after`. Cette couche est DÉCOUPÉE AU MASQUE (anneau creux) plutôt que
+   glissée derrière avec un `z-index:-1` — un enfant en z-index négatif passe sous le fond
+   de son parent, donc sous l'avatar, et l'effet disparaîtrait sur tout avatar coloré.
+   Le masque, lui, ne dépend d'aucun contexte d'empilement. */
+
+/* Braise : des flammes. Une couronne de langues orange, floutée, qui TOURNE, et dont la
+   luminosité VACILLE sur une période volontairement non multiple de la rotation (3,1 s
+   contre 1,7 s) : c'est ce décalage qui empêche l'œil de reconnaître une boucle. La rotation
+   passe par `transform`, le vacillement par la propriété `scale` — deux propriétés
+   distinctes, donc deux animations simultanées sans conflit. */
+.cadre-braise{--cadre-bg:linear-gradient(135deg,#dc3e37,#ff6900,#fcb900)}
+.cadre-braise::after{content:"";position:absolute;inset:-7px;border-radius:50%;pointer-events:none;
+  background:conic-gradient(from 0deg,
+    transparent 0 4%,  #ff6900 8%,  #fcb900 12%, transparent 18%,
+    transparent 26%,   #dc3e37 31%, #ff6900 36%, transparent 42%,
+    transparent 50%,   #fcb900 55%, #ff6900 60%, transparent 66%,
+    transparent 74%,   #ff6900 79%, #dc3e37 84%, transparent 90%, transparent 100%);
+  filter:blur(4px);
+  -webkit-mask:radial-gradient(closest-side,transparent 58%,#000 74%);
+  mask:radial-gradient(closest-side,transparent 58%,#000 74%);
+  animation:cadreFlamme 3.1s linear infinite,cadreVacille 1.7s var(--ease) infinite}
+@keyframes cadreFlamme{to{transform:rotate(360deg)}}
+@keyframes cadreVacille{0%,100%{opacity:.5;scale:1}42%{opacity:.95;scale:1.07}68%{opacity:.68;scale:.99}}
+
+/* Maestro : l'anneau tourne, et des étincelles tournent EN SENS INVERSE. `@property` permet
+   d'animer un angle de dégradé, qu'une transition CSS ordinaire ne sait pas interpoler ; les
+   navigateurs sans support gardent un anneau fixe — dégradation silencieuse et acceptable.
+   Le contre-sens est ce qui distingue Maestro de Braise au premier coup d'œil : deux
+   mouvements opposés se remarquent là où deux mouvements parallèles se confondent. */
+@property --cadre-a{syntax:"<angle>";inherits:false;initial-value:0deg}
+.cadre-maestro{--cadre-a:0deg;--cadre-bg:conic-gradient(from var(--cadre-a),#fcb900,#dc3e37,#6b4fbb,#0e9aa7,#fcb900);
+  animation:cadreTourne 5s linear infinite}
+.cadre-maestro::after{content:"";position:absolute;inset:-8px;border-radius:50%;pointer-events:none;
+  background:
+    radial-gradient(closest-side at 50% 3%,  #fff8dc, rgba(252,185,0,.55) 42%, transparent 72%),
+    radial-gradient(closest-side at 93% 34%, #ffe9a8, transparent 66%),
+    radial-gradient(closest-side at 68% 95%, #fff3c4, transparent 66%),
+    radial-gradient(closest-side at 12% 72%, #ffe08a, transparent 66%),
+    radial-gradient(closest-side at 20% 18%, #fff8dc, transparent 62%);
+  filter:blur(1.6px) drop-shadow(0 0 5px rgba(252,185,0,.6));
+  -webkit-mask:radial-gradient(closest-side,transparent 56%,#000 70%);
+  mask:radial-gradient(closest-side,transparent 56%,#000 70%);
+  animation:cadreEtincelles 6.5s linear infinite,cadreScintille 2.3s var(--ease) infinite}
+@keyframes cadreTourne{to{--cadre-a:360deg}}
+@keyframes cadreEtincelles{to{transform:rotate(-360deg)}}
+@keyframes cadreScintille{0%,100%{opacity:.55}38%{opacity:1}72%{opacity:.72}}
+
+/* Sur les pastilles de 21 px, la couche d'effet devient une tache : l'anneau seul suffit. */
+.comm-face.sm::after{display:none}
+
+@media (prefers-reduced-motion:reduce){
+  .cadre-braise::after{animation:none;opacity:.8;scale:1}
+  .cadre-maestro{animation:none}
+  .cadre-maestro::after{animation:none;opacity:.85}
+}
+
+/* Pastille de cadre dans la barre de parcours (hero) : un aperçu, sans avatar dedans. */
+.stu-rank-cadre{position:relative;display:inline-block;width:16px;height:16px;border-radius:50%;
+  background:rgba(255,255,255,.28);vertical-align:-3px;margin-right:7px}
+.stu-rank-cadre.cadre::before{inset:-2px;padding:2px}
+
+/* — Sélecteur de cadres (profil) ————————————————————————————————————————————————
+   ⚠️ Ces pastilles DOIVENT porter une taille et `position:relative` : l'anneau est un
+   `::before` en `position:absolute`, il se rattache sinon au premier ancêtre positionné —
+   la modale — et dessine une ellipse géante par-dessus toute la page. C'est exactement le
+   bug qu'a eu `.pf-cadre-ex`, déclarée en JSX sans jamais recevoir de CSS. */
+.pf-cadre-ex{position:relative;display:inline-block;width:26px;height:26px;border-radius:50%;
+  background:var(--surface3);flex:none}
+
+/* Attribution des cadres exclusifs (fiche stagiaire, espace ADMIN).
+   Registre sobre : ni relief, ni ressort — on décerne une distinction, on ne joue pas.
+   ⚠️ La pastille d'aperçu porte `position:relative` et des dimensions : l'anneau de cadre est
+   un `::before` absolu qui, sans ancêtre positionné, s'accroche à la carte entière. */
+.cadres-attrib{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.cadre-attrib{display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--border);
+  border-radius:var(--r-sm);background:var(--surface);cursor:pointer;transition:.14s var(--ease)}
+.cadre-attrib:hover{border-color:var(--muted)}
+.cadre-attrib.on{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 9%,var(--surface))}
+.cadre-attrib input{width:17px;height:17px;flex:none;cursor:pointer}
+.cadre-attrib-rond{position:relative;width:26px;height:26px;flex:none;border-radius:50%;background:var(--surface2)}
+.cadre-attrib-txt{display:flex;flex-direction:column;gap:1px;min-width:0}
+.cadre-attrib-txt b{font-size:13.5px}
+
+.pf-cadres{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:10px}
+.pf-cadre{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border-radius:14px;
+  border:1.5px solid var(--border);background:var(--surface);cursor:pointer;transition:.16s var(--ease)}
+.pf-cadre:hover:not(:disabled){border-color:var(--ember1);transform:translateY(-2px)}
+.pf-cadre:active:not(:disabled){transform:scale(.96)}
+.pf-cadre.on{border-color:var(--ember1);background:var(--rosso-bg);box-shadow:0 0 0 3px rgba(220,62,55,.14)}
+.pf-cadre:disabled{cursor:not-allowed;opacity:.55}
+.pf-cadre-apercu{position:relative;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  background:var(--surface2);font-size:18px}
+.pf-cadre-nom{font-size:11.5px;font-weight:700;line-height:1.2;text-align:center}
+.pf-cadre-cond{font-size:9.5px;color:var(--dim);line-height:1.25;text-align:center}
+.pf-cadre .pf-lock{position:absolute;right:-2px;bottom:-2px;width:16px;height:16px;border-radius:50%;
+  background:var(--surface);display:grid;place-items:center;color:var(--dim);box-shadow:0 0 0 1.5px var(--border)}
+/* Un exclusif se signale même verrouillé : c'est un objectif, pas un trou dans la grille. */
+.pf-cadre.exclusif{border-style:dashed}
+.pf-cadre.exclusif.on{border-style:solid}
+
+/* Cadres exclusifs — attribués par l'école, jamais atteints en cumulant des formations. */
+.cadre-champion{--cadre-a:0deg;--cadre-bg:conic-gradient(from var(--cadre-a),#fcb900,#fff3c4,#c9960a,#fcb900);
+  animation:cadreTourne 4s linear infinite}
+.cadre-champion::after{content:"";position:absolute;inset:-3px;border-radius:50%;pointer-events:none;
+  box-shadow:0 0 12px -2px rgba(252,185,0,.85)}
+.cadre-jury{--cadre-bg:linear-gradient(135deg,#2c3371,#6b4fbb,#2c3371)}
+.cadre-fondateur{--cadre-bg:linear-gradient(135deg,#0e9aa7,#7fe3d6,#0e9aa7)}
+@media (prefers-reduced-motion:reduce){.cadre-champion{animation:none}}
+
+/* Cadres dans la Communauté. `.author-ava` et `.prof-ava` reçoivent l'anneau : elles doivent
+   donc être positionnées, sinon le `::before` absolu s'accroche à la modale (cf. .pf-cadre-ex). */
+.author-ava{position:relative}
+.prof-ava{position:relative;display:inline-grid;place-items:center}
+/* Le grand avatar du profil mérite un anneau proportionné : 3 px sur 88 px se voit à peine. */
+.prof-ava.cadre::before{inset:-5px;padding:5px}
+.prof-ava.cadre-braise::after,.prof-ava.cadre-maestro::after,.prof-ava.cadre-champion::after{inset:-5px}

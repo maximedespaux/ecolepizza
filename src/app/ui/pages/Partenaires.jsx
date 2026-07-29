@@ -8,6 +8,7 @@ import Badge from "../components/Badge.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import DataTable from "../components/DataTable.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import ApportForm from "../components/PartnerContributions.jsx";
 import { apportType, apportsOfPartner } from "../lib/apports.js";
@@ -47,7 +48,27 @@ function Partenaires() {
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
-  const filtered = useMemo(() => (cat ? partners.filter((p) => p.category === cat) : partners), [partners, cat]);
+  /* Les partenaires QUI RAPPORTENT passent devant, le reste par ordre alphabétique.
+     Aujourd'hui aucun n'a d'apport enregistré : le tri est donc sans effet, et c'est voulu —
+     il ne FABRIQUE pas une hiérarchie, il la révèle le jour où elle existe. Trier par montant
+     d'office aurait mis en avant des écarts inventés. */
+  const filtered = useMemo(() => {
+    const base = cat ? partners.filter((p) => p.category === cat) : partners;
+    return [...base].sort((a, b) => {
+      const va = sumCash(apportsOfPartner(a)) + sumKind(apportsOfPartner(a));
+      const vb = sumCash(apportsOfPartner(b)) + sumKind(apportsOfPartner(b));
+      if (vb !== va) return vb - va;
+      return String(a.name || "").localeCompare(String(b.name || ""), "fr");
+    });
+  }, [partners, cat]);
+  /* Une fiche sans contact ni offre ne sert à rien : ce répertoire existe pour qu'on sache QUI
+     APPELER. Le dire UNE FOIS en tête, et non sur chacune des vingt-trois cartes — répéter
+     « fiche à compléter » vingt-trois fois est exactement le défaut qu'on vient de corriger en
+     retirant les vingt-trois « 0 € ». */
+  const incompletes = useMemo(() => partners.filter((p) =>
+    !p.offer && !p.contact_name && !p.contact_phone && !p.contact_email && !p.website && !p.town
+  ).length, [partners]);
+
   const withApports = useMemo(
     () => partners.map((p) => ({ p, ap: apportsOfPartner(p) })).filter((x) => x.ap.length > 0),
     [partners]
@@ -64,7 +85,7 @@ function Partenaires() {
       <PageHead
         eyebrow="Réseau · Suivi"
         title="Partenaires"
-        lead="Contacts, ce qu'ils proposent, et ce qu'ils vous apportent — commissions (cash) et contributions en nature (matériel, équipement). Le formateur peut consulter et saisir ; les montants lui restent masqués."
+        lead="Qui contacter, ce qu'ils proposent, et ce qu'ils vous apportent."
         actions={<div style={{ display: "flex", alignItems: "center", gap: 10 }}><MoneyToggle />{canEdit && <button className="btn primary" onClick={() => setEditing({ _new: true, ...EMPTY })}>＋ Ajouter un partenaire</button>}</div>}
       />
       <StatusMessage status={status} />
@@ -78,12 +99,23 @@ function Partenaires() {
 
       {tab === "partenaires" ? (
         <>
-          <div className="searchbar" style={{ marginBottom: 12 }}>
-            <select className="inp" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 240 }}>
+          <div className="filtres">
+            <select className="inp" aria-label="Filtrer par catégorie de partenaire" value={cat} onChange={(e) => setCat(e.target.value)} style={{ maxWidth: 240 }}>
               <option value="">Toutes les catégories</option>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
+
+          {incompletes > 0 && (
+            <div className="carte-dette" style={{ marginBottom: 14 }}>
+              <Icon name="info" size={16} />
+              <span>
+                <b className="tnum">{incompletes}</b> fiche{incompletes > 1 ? "s" : ""} sur <b className="tnum">{partners.length}</b>
+                {incompletes > 1 ? " n'ont" : " n'a"} ni contact ni offre — un répertoire ne sert
+                qu'une fois rempli.
+              </span>
+            </div>
+          )}
 
           {filtered.length === 0 ? (
             <Card title="Partenaires"><EmptyState icon="handshake">Aucun partenaire.</EmptyState></Card>
@@ -92,7 +124,14 @@ function Partenaires() {
               {filtered.map((p) => {
                 const ap = apportsOfPartner(p);
                 return (
-                  <Card key={p.id} title={p.name} more={<Badge tone="n">{p.category}</Badge>}>
+                  <Card key={p.id} title={p.name} more={
+                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                      {/* La REMISE est le fait opérationnel de cette page : c'est ce qu'on vérifie
+                          avant de commander. Elle était noyée en dernière ligne des coordonnées. */}
+                      {Number(p.discount_pct) > 0 && <Badge tone="g">−{p.discount_pct}%</Badge>}
+                      <Badge tone="n">{p.category}</Badge>
+                    </span>
+                  }>
                     {p.offer && <p style={{ marginTop: 0, fontSize: 13.5 }}>{p.offer}</p>}
                     <div className="partner-meta">
                       {p.contact_name && <div>{p.contact_name}</div>}
@@ -100,17 +139,21 @@ function Partenaires() {
                       {p.contact_email && <div><a href={`mailto:${p.contact_email}`}>{p.contact_email}</a></div>}
                       {p.website && <div><a href={p.website.startsWith("http") ? p.website : `https://${p.website}`} target="_blank" rel="noreferrer">{p.website}</a></div>}
                       {p.town && <div>{p.town}</div>}
-                      {p.discount_pct != null && <div>Remise {p.discount_pct}%</div>}
                     </div>
 
-                    <div className="partner-totals">
-                      <div><span className="sub">Commissions</span><b className="tnum" style={{ color: "var(--green)" }}>{euro(sumCash(ap))}</b></div>
-                      <div><span className="sub">En nature</span><b className="tnum" style={{ color: "var(--orange)" }}>{euro(sumKind(ap))}</b></div>
-                    </div>
+                    {/* LES TOTAUX NE PARAISSENT QUE S'ILS EXISTENT. Vingt-trois cartes affichaient
+                        « Commissions 0 € · En nature 0 € » puis « Aucun apport pour l'instant » :
+                        la place la plus visible allait à de l'argent qui n'existe pas, sur une page
+                        qu'on ouvre pour trouver un contact et vérifier une remise. L'absence
+                        d'apport se dit très bien en ne disant rien. */}
+                    {ap.length > 0 && (
+                      <div className="partner-totals">
+                        <div><span className="sub">Commissions</span><b className="tnum" style={{ color: "var(--green)" }}>{euro(sumCash(ap))}</b></div>
+                        <div><span className="sub">En nature</span><b className="tnum" style={{ color: "var(--orange)" }}>{euro(sumKind(ap))}</b></div>
+                      </div>
+                    )}
 
-                    {ap.length === 0 ? (
-                      <p className="sub" style={{ margin: "8px 0 0" }}>Aucun apport pour l'instant.</p>
-                    ) : (
+                    {ap.length > 0 && (
                       <div className="apport-list">
                         {ap.slice(0, 4).map((a) => {
                           const t = apportType(a.type);
@@ -135,7 +178,7 @@ function Partenaires() {
                     {canEdit && (
                       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                         <button className="btn sm ghost" onClick={() => setEditing({ ...p })}>Modifier</button>
-                        <button className="btn sm ghost danger" onClick={() => onDelete(p)}><Icon name="trash" size={15} /></button>
+                        <button className="btn sm ghost danger" title={`Supprimer ${p.name}`} aria-label={`Supprimer le partenaire ${p.name}`} onClick={() => onDelete(p)}><Icon name="trash" size={15} /></button>
                       </div>
                     )}
                   </Card>
@@ -152,27 +195,24 @@ function Partenaires() {
             <Card key={p.id}
               title={<span className="card-ttl"><Icon name="handshake" size={15} /> {p.name}</span>}
               more={<span className="sub">Commissions {euro(sumCash(ap))} · Nature {euro(sumKind(ap))}</span>}>
-              <div className="tablewrap" style={{ border: "none" }}>
-                <table>
-                  <thead><tr><th>Date</th><th>Type</th><th>Libellé</th><th className="ta-r">Valeur</th><th></th></tr></thead>
-                  <tbody>
-                    {ap.map((a) => {
-                      const t = apportType(a.type);
-                      return (
-                        <tr key={a.id}>
-                          <td className="tnum" style={{ whiteSpace: "nowrap" }}>{frDate(a.date)}</td>
-                          <td style={{ whiteSpace: "nowrap" }}><Badge tone={t.tone}>{t.label}</Badge>{t.cash && <span className="hint" style={{ marginLeft: 6 }}>→ CA</span>}</td>
-                          <td>{a.label}</td>
-                          <td className="ta-r tnum">{euro(a.value)}</td>
-                          <td style={{ textAlign: "right" }}>
-                            {canEdit && <button className="iconbtn del" title="Supprimer" onClick={() => removeApport(a)}><Icon name="trash" size={15} /></button>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                rows={ap}
+                rowKey={(a) => a.id}
+                cols={[
+                  { k: "date", t: "Date", td: { whiteSpace: "nowrap" }, cell: (a) => <span className="tnum">{frDate(a.date)}</span> },
+                  // Le libellé identifie l'apport bien mieux que sa date : c'est lui qui
+                  // devient le titre de la carte en écran étroit.
+                  { k: "label", t: "Libellé", principal: true, cell: (a) => a.label },
+                  { k: "type", t: "Type", td: { whiteSpace: "nowrap" },
+                    cell: (a) => { const t = apportType(a.type); return <>
+                      <Badge tone={t.tone}>{t.label}</Badge>{t.cash && <span className="hint" style={{ marginLeft: 6 }}>→ CA</span>}
+                    </>; } },
+                  { k: "value", t: "Valeur", th: { className: "ta-r" }, td: { textAlign: "right" },
+                    cell: (a) => <span className="tnum">{euro(a.value)}</span> },
+                  { k: "actions", t: "", actions: true, td: { textAlign: "right" },
+                    cell: (a) => (canEdit ? <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer l'apport ${a.label}`} onClick={() => removeApport(a)}><Icon name="trash" size={15} /></button> : null) },
+                ]}
+              />
             </Card>
           ))}
         </div>

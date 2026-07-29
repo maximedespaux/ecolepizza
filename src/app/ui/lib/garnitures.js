@@ -159,7 +159,7 @@ export function garnitureItems(garn) {
       ...base,
       qty: num(garn.baseQty ?? base.qty),
       price: usingProduct ? num(bp.price) : num(garn.basePrice ?? base.price),
-      label: usingProduct ? bp.name : (garn.baseLabel || base.label),
+      label: usingProduct ? bp.label : (garn.baseLabel || base.label),
       unit: usingProduct ? (bp.unit || "Kg") : "Kg",
       brand: usingProduct ? bp.brand : undefined,
     });

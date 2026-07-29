@@ -1,13 +1,15 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser } from "../api/apiClient.js";
+import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser, getMyProfile } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import { initials, colorOf } from "../lib/format.js";
-import { AVATARS, getAvatar, setAvatar, GRADES, gradeFor, readGameStats, scoreOf } from "../lib/gamification.js";
+import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
+import { CADRES, cadreFor, cadrePossede, cadrePorte, getCadreChoisi, setCadreChoisi } from "../lib/cadres.js";
+import { useEchap } from "../lib/useEchap.js";
 
 /**
  * Profil stagiaire, en trois onglets :
- *  • Profil  : avatar (picker pizza), grade & progression.
+ *  • Profil  : avatar (picker pizza), cadre & progression.
  *  • Mes infos : coordonnées personnelles — modifiables et synchronisées côté organisme.
  *  • Compte  : changement d'e-mail et de mot de passe.
  */
@@ -16,6 +18,7 @@ const CIVILITIES = ["", "M.", "Mme"];
 const PALETTE = ["#dc3e37", "#ff6900", "#fcb900", "#2f9e6f", "#3aa0e0", "#2c3371", "#7b3f9e", "#8a5a2b", "#e0533e", "#111827"];
 
 export default function ProfileModal({ onClose }) {
+  useEchap(onClose);
   const { user, setUser } = useContext(UserContext);
   const uid = user?.id;
   const [tab, setTab] = useState("profil");
@@ -24,7 +27,6 @@ export default function ProfileModal({ onClose }) {
 
   useEffect(() => { getMyFormations().then((r) => setFormations(r.data || [])).catch(() => {}); }, []);
 
-  const { xp, stars } = useMemo(() => readGameStats(), []);
   // Niveaux attribués = les BADGES du stagiaire (mêmes que ceux qui débloquent Pizza Quest),
   // avec repli sur les formations suivies.
   const access = formations.filter((f) => f.finished || ((f.has_badge || f.enrolled) && !f.revoked));
@@ -32,9 +34,21 @@ export default function ProfileModal({ onClose }) {
   const done = access.filter((f) => f.finished).length;
   const enrolled = access.length; // dénominateur = formations attribuées
   const roleLabel = user?.role === "INTERVENANT" ? "Intervenant" : "Stagiaire";
-  const score = scoreOf({ xp, formationsDone: done });
-  const { grade, next } = gradeFor(score);
-  const pct = next ? Math.min(100, Math.round(((score - grade.min) / (next.min - grade.min)) * 100)) : 100;
+  // L'XP et les cœurs ont disparu : la progression se lit aux CADRES, gagnés sur les
+  // formations réellement terminées (cf. lib/cadres.js).
+  const { cadre: palier, suivant } = cadreFor(done);
+  // `attribues` : les cadres exclusifs accordés par l'école (migration 113). Tant qu'aucun
+  // n'est accordé la liste reste vide et ils s'affichent verrouillés AVEC leur condition —
+  // un objectif visible vaut mieux qu'une case cachée.
+  const [attribues, setAttribues] = useState([]);
+  useEffect(() => {
+    getMyProfile().then((r) => setAttribues(r?.data?.cadres_exclusifs || [])).catch(() => {});
+  }, []);
+  const [choisi, setChoisi] = useState(() => getCadreChoisi(uid));
+  const cadre = cadrePorte(uid, done, attribues);
+  const choisirCadre = (id) => { setCadreChoisi(uid, id); setChoisi(id); };
+  const haut = suivant ? suivant.min : palier.min;
+  const pct = suivant ? Math.min(100, Math.round(((done - palier.min) / (haut - palier.min)) * 100)) : 100;
 
   function choose(a) { const c = avatar?.color; setAvatar(uid, a.id, c); setAv({ ...a, color: c || a.color }); }
   function chooseColor(c) { const base = avatar || AVATARS[0]; setAvatar(uid, base.id, c); setAv({ ...base, color: c }); }
@@ -60,7 +74,10 @@ export default function ProfileModal({ onClose }) {
             <div style={{ flex: "1 1 170px", minWidth: 0 }}>
               <div style={{ fontSize: 17, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{who}</div>
               <div style={{ fontSize: 13, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.email}</div>
-              <div style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginTop: 2 }}>{grade.emoji} {grade.name}</div>
+              <div style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                <span className={"stu-rank-cadre " + (cadre.id !== "aucun" ? `cadre cadre-${cadre.id}` : "")} aria-hidden="true" />
+                {cadre.id === "aucun" ? "Aucun cadre" : `Cadre ${cadre.nom}`}
+              </div>
             </div>
             <div style={{ flex: "1 1 150px", textAlign: "right" }}>
               <div className="hint" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 800, marginBottom: 3 }}>Mes accès</div>
@@ -87,7 +104,7 @@ export default function ProfileModal({ onClose }) {
           </span>
 
           {tab === "profil" && (
-            <ProfilTab avatar={avatar} choose={choose} chooseColor={chooseColor} grade={grade} next={next} score={score} pct={pct} xp={xp} stars={stars} done={done} enrolled={enrolled} />
+            <ProfilTab avatar={avatar} choose={choose} chooseColor={chooseColor} cadre={cadre} palier={palier} suivant={suivant} pct={pct} done={done} enrolled={enrolled} attribues={attribues} choisirCadre={choisirCadre} />
           )}
           {tab === "infos" && <InfosTab onSaved={refreshUser} />}
           {tab === "visibilite" && <VisibiliteTab who={who} />}
@@ -101,33 +118,47 @@ export default function ProfileModal({ onClose }) {
   );
 }
 
-function ProfilTab({ avatar, choose, chooseColor, grade, next, score, pct, xp, stars, done, enrolled }) {
+function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, done, enrolled, attribues, choisirCadre }) {
   return (
     <>
       <div className="pf-grade">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-          <b style={{ fontSize: 14 }}>{grade.emoji} {grade.name}</b>
-          <span className="hint">{next ? `${score} / ${next.min} pts` : `${score} pts · grade max 👑`}</span>
+          <b style={{ fontSize: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
+            <span className={"stu-rank-cadre " + (cadre.id !== "aucun" ? `cadre cadre-${cadre.id}` : "")} aria-hidden="true" />
+            {palier.id === "aucun" ? "Aucun cadre" : `Cadre ${palier.nom}`}
+          </b>
+          <span className="hint">{done}/{enrolled} formation(s) terminée(s)</span>
         </div>
         <div className="pq-progress" style={{ height: 12 }}><span style={{ width: `${pct}%`, background: "var(--gold)" }} /></div>
-        {next && <div className="hint" style={{ marginTop: 5 }}>Encore <b>{next.min - score} pts</b> pour <b>{next.emoji} {next.name}</b></div>}
-        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-          <span className="pf-chip"><Icon name="target" size={13} /> {xp} XP</span>
-          <span className="pf-chip">⭐ {stars} étoiles</span>
-          <span className="pf-chip"><Icon name="graduation" size={13} /> {done}/{enrolled} formation(s) terminée(s)</span>
-        </div>
+        {suivant && <div className="hint" style={{ marginTop: 5 }}>Encore <b>{suivant.min - done} formation(s)</b> pour le cadre <b>{suivant.nom}</b></div>}
       </div>
 
-      <div className="pf-ladder">
-        {GRADES.map((g) => {
-          const reached = score >= g.min;
-          return (
-            <div key={g.name} className={"pf-rank" + (g.name === grade.name ? " on" : "")} title={`${g.name} · ${g.min} pts`}>
-              <span style={{ fontSize: 18, opacity: reached ? 1 : 0.35 }}>{g.emoji}</span>
-              <span style={{ fontSize: 10, color: reached ? "var(--text)" : "var(--dim)" }}>{g.name.split(" ")[0]}</span>
-            </div>
-          );
-        })}
+      {/* Sélecteur : on choisit CE QU'ON PORTE parmi ce qu'on possède. Le dernier cadre
+          obtenu n'est pas forcément celui qu'on veut montrer. Les exclusifs restent
+          affichés, verrouillés, avec leur condition — ils existent comme objectif. */}
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Choisis ton cadre</div>
+        <p className="hint" style={{ margin: 0 }}>Il entoure ton avatar partout, y compris dans la Communauté.</p>
+        <div className="pf-cadres">
+          {CADRES.map((c) => {
+            const possede = cadrePossede(c, done, attribues);
+            const actif = cadre.id === c.id;
+            return (
+              <button key={c.id} type="button"
+                className={`pf-cadre${actif ? " on" : ""}${c.exclusif ? " exclusif" : ""}`}
+                disabled={!possede}
+                onClick={() => choisirCadre(c.id)}
+                title={possede ? c.desc || c.nom : (c.condition || c.desc)}>
+                <span className={`pf-cadre-apercu ${possede && c.id !== "aucun" ? `cadre cadre-${c.id}` : ""}`}>
+                  <span aria-hidden="true">{avatar ? avatar.emoji : "🍕"}</span>
+                  {!possede && <span className="pf-lock"><Icon name="lock" size={9} /></span>}
+                </span>
+                <span className="pf-cadre-nom">{c.nom}</span>
+                {!possede && <span className="pf-cadre-cond">{c.condition || c.desc}</span>}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div style={{ marginTop: 18 }}>
@@ -161,7 +192,7 @@ function ProfilTab({ avatar, choose, chooseColor, grade, next, score, pct, xp, s
             </button>
           ))}
         </div>
-        <p className="hint" style={{ marginTop: 8 }}>Ton avatar, sa couleur et ton grade sont visibles par les autres stagiaires dans la communauté.</p>
+        <p className="hint" style={{ marginTop: 8 }}>Ton avatar, sa couleur et ton cadre sont visibles par les autres stagiaires dans la communauté.</p>
       </div>
     </>
   );
@@ -245,7 +276,7 @@ function VisibiliteTab({ who }) {
 
   return (
     <div>
-      <p className="hint" style={{ margin: "0 0 12px" }}>Choisis ce que les autres stagiaires voient sur ton profil dans la communauté. Ton nom, ton avatar, ton grade et tes fiches partagées restent toujours visibles.</p>
+      <p className="hint" style={{ margin: "0 0 12px" }}>Choisis ce que les autres stagiaires voient sur ton profil dans la communauté. Ton nom, ton avatar, ton cadre et tes fiches partagées restent toujours visibles.</p>
       <div className="vis-list">
         <Row k="company" label="Entreprise" value={f.company} />
         <Row k="phone" label="Téléphone" value={f.phone} />

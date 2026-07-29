@@ -4,6 +4,8 @@ import { getFormations, createFormation, updateFormation, deleteFormation, reord
 import PageHead from "../components/PageHead.jsx";
 import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
 import Badge from "../components/Badge.jsx";
+import DataTable from "../components/DataTable.jsx";
+import EmptyState from "../components/EmptyState.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import HelpDot from "../components/HelpDot.jsx";
 import { euro, colorOf } from "../lib/format.js";
@@ -65,48 +67,42 @@ function Formations() {
       />
       <StatusMessage status={status} />
 
-      <div className="tablewrap">
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 30 }}></th>
-              <th>Code</th>
-              <th>Intitulé</th>
-              <th>Jours</th>
-              <th>Heures</th>
-              <th>Prix</th>
-              <th></th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {programs.map((p, i) => (
-              <tr key={p.id}
-                className={"drag-row" + (drag === i ? " dragging" : "")}
-                draggable
-                onDragStart={() => setDrag(i)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => onDrop(i)}
-                onDragEnd={() => setDrag(null)}
-              >
-                <td className="drag-handle" title="Glisser pour réorganiser">⠿</td>
-                <td>
-                  <span className="badge n mono" style={{ color: "#fff", background: p.color || colorOf(p.code), borderColor: "transparent" }}>{p.code}</span>
-                </td>
-                <td><b>{p.title}</b></td>
-                <td>{p.days}</td>
-                <td>{p.hours}</td>
-                <td className="mono">{euro(p.price)}</td>
-                <td>{p.rs_code ? <Badge tone="b">Certifiante</Badge> : p.hygiene ? <Badge tone="a">Hygiène</Badge> : null}</td>
-                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  <button className="btn sm ghost" onClick={() => setEditing(p)}>Modifier</button>{" "}
-                  <button className="btn sm ghost danger" title="Supprimer la formation" onClick={() => onDelete(p)}><Icon name="trash" size={15} /></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        rows={programs}
+        rowKey={(p) => p.id}
+        /* Le glisser-déposer de réordonnancement est porté par la LIGNE : `rowProps` le rend
+           au `<tr>` tel quel. En mode carte la ligne devient une carte — et reste donc
+           déplaçable, ce qui est le comportement attendu. */
+        rowProps={(p, i) => ({
+          className: "drag-row" + (drag === i ? " dragging" : ""),
+          draggable: true,
+          onDragStart: () => setDrag(i),
+          onDragOver: (e) => e.preventDefault(),
+          onDrop: () => onDrop(i),
+          onDragEnd: () => setDrag(null),
+        })}
+        vide={<EmptyState icon="graduation" title="Aucune formation"
+          text="Crée tes formations : elles servent de base aux sessions, aux dossiers et aux mondes de Pizza Quest." />}
+        cols={[
+          { k: "poignee", t: "", sansCarte: true, th: { width: 30 },
+            cell: () => <span className="drag-handle" title="Glisser pour réorganiser" aria-hidden="true">⠿</span> },
+          { k: "code", t: "Code",
+            cell: (p) => <span className="badge n mono" style={{ color: "#fff", background: p.color || colorOf(p.code), borderColor: "transparent" }}>{p.code}</span> },
+          { k: "title", t: "Intitulé", principal: true, cell: (p) => <b>{p.title}</b> },
+          { k: "days", t: "Jours", cell: (p) => p.days },
+          { k: "hours", t: "Heures", cell: (p) => p.hours },
+          { k: "price", t: "Prix", cell: (p) => <span className="mono">{euro(p.price)}</span> },
+          { k: "nature", t: "Nature",
+            cell: (p) => (p.rs_code ? <Badge tone="b">Certifiante</Badge> : p.hygiene ? <Badge tone="a">Hygiène</Badge> : null) },
+          { k: "actions", t: "", actions: true, td: { textAlign: "right", whiteSpace: "nowrap" },
+            cell: (p) => (
+              <>
+                <button className="btn sm ghost" onClick={() => setEditing(p)}>Modifier</button>{" "}
+                <button className="btn sm ghost danger" title="Supprimer la formation" aria-label={`Supprimer ${p.title}`} onClick={() => onDelete(p)}><Icon name="trash" size={15} /></button>
+              </>
+            ) },
+        ]}
+      />
 
       {editing && (
         <FormationModal
