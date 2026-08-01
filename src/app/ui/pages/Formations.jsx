@@ -88,7 +88,23 @@ function Formations() {
             cell: () => <span className="drag-handle" title="Glisser pour réorganiser" aria-hidden="true">⠿</span> },
           { k: "code", t: "Code",
             cell: (p) => <span className="badge n mono" style={{ color: "#fff", background: p.color || colorOf(p.code), borderColor: "transparent" }}>{p.code}</span> },
-          { k: "title", t: "Intitulé", principal: true, cell: (p) => <b>{p.title}</b> },
+          { k: "title", t: "Intitulé", principal: true,
+            cell: (p) => (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                <b>{p.title}</b>
+                {/* Un choix « OU » mal conditionné ne se voyait qu'en tentant d'y toucher. Il
+                    produit pourtant le mauvais document, ou aucun, en silence — le genre de
+                    défaut qu'on découvre le jour où un stagiaire reçoit le devis d'un autre.
+                    La pastille dit QU'IL Y EN A ; le détail est dans le parcours, là où on le
+                    corrige. */}
+                {p.alertes_conditions > 0 && (
+                  <span className="pastille-alerte"
+                    title={`${p.alertes_conditions} choix « OU » mal conditionné${p.alertes_conditions > 1 ? "s" : ""} — ouvrez « Parcours documentaire »`}>
+                    ! {p.alertes_conditions > 1 ? p.alertes_conditions : ""}
+                  </span>
+                )}
+              </span>
+            ) },
           { k: "days", t: "Jours", cell: (p) => p.days },
           { k: "hours", t: "Heures", cell: (p) => p.hours },
           { k: "price", t: "Prix", cell: (p) => <span className="mono">{euro(p.price)}</span> },
@@ -472,8 +488,31 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
     onReorder([...ng.flatMap((g) => g.steps), ...rest]); // ordre inclus + reste (groupe/inactifs) conservé
   }
 
+  /* Les alertes de conditions, RÉUNIES EN TÊTE du parcours. Elles pourraient tenir dans une
+     info-bulle sur chaque jalon, mais une info-bulle ne se lit que si on la cherche — et
+     personne ne survole un jalon qu'il croit correct. Le texte est donc posé là où on ouvre le
+     parcours, avec le repère « ! » sur le jalon concerné pour faire le lien. */
+  const alertes = [];
+  const vus = new Set();
+  for (const g of groups) {
+    for (const st of g.steps) {
+      if (st.alerte && !vus.has(st.alerte.groupe)) { vus.add(st.alerte.groupe); alertes.push({ ...st.alerte, jalon: g.steps[0].label }); }
+    }
+  }
+
   return (
     <div className="parcours compact" ref={addRef}>
+      {alertes.length > 0 && (
+        <div className="alerte-conditions">
+          <div className="alerte-conditions-t">
+            <Icon name="alert-triangle" size={15} />
+            {alertes.length === 1 ? "Un choix « OU » mal conditionné" : `${alertes.length} choix « OU » mal conditionnés`}
+          </div>
+          {alertes.map((a, i) => (
+            <p key={i}><b>{a.jalon}</b> — {a.texte}</p>
+          ))}
+        </div>
+      )}
       <div className="parcours-flow">
         {groups.map((g, i) => {
           // Slug de rupture porté par ce jalon = dernière étape du groupe.
@@ -486,6 +525,9 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
               draggable onDragStart={() => setGdrag(i)} onDragOver={(e) => e.preventDefault()}
               onDrop={() => drop(i)} onDragEnd={() => setGdrag(null)}>
               <span className="pf-grip" title="Glisser pour réordonner le jalon">⠿</span>
+              {g.steps.some((st) => st.alerte) && (
+                <span className="pastille-alerte pf-alerte" title={g.steps.find((st) => st.alerte).alerte.texte}>!</span>
+              )}
               {g.steps.map((s, j) => (
                 <div key={s.slug}>
                   {j > 0 && <div className="pf-or">OU</div>}

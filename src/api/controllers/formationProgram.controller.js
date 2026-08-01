@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { matchFormation, matchStep, stepSigners } = require('../lib/documents.js');
 const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
-const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
+const { loadEquivalences, equivalenceMap, alertesParSlug } = require('../lib/equivalence.js');
 const { loadOrgSteps } = require('./template.controller.js');
 
 /**
@@ -174,7 +174,51 @@ async function enrollmentSteps(conn, orgId, program, ctx, condById, eqMap) {
 /**
  * GET /api/formations — catalogue des formations de l'organisme.
  */
-const getPrograms = (req, res) => {
+/**
+ * GET /api/formations — la liste, AVEC le nombre de choix « OU » mal conditionnés.
+ *
+ * Le diagnostic est fait UNE fois pour tout l'organisme : un groupe cassé l'est indépendamment
+ * de la formation. Ce qui varie, c'est de savoir QUELLES formations l'utilisent réellement —
+ * d'où une seule requête sur les étapes actives, et non une par formation.
+ *
+ * Toute cette partie est en try/catch : un diagnostic est un CONFORT. S'il échoue, la liste des
+ * formations doit sortir quand même — l'inverse ferait disparaître la page pour un badge.
+ */
+const getPrograms = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [progs] = await conn.query(
+            `SELECT id, organization_id, code, level, color, title, days, hours, price, audience,
+                    objectives, objective_general, duration_detail, program_detail,
+                    rs_code, hygiene, active, sort_order, created_at
+             FROM training_program WHERE organization_id = ? ORDER BY sort_order, code`, [orgId]);
+        try {
+            const bySlug = new Map((await loadOrgSteps(orgId)).map((x) => [x.slug, x]));
+            const alertes = alertesParSlug(await loadEquivalences(conn, orgId), bySlug);
+            if (alertes.size) {
+                const [actives] = await conn.query(
+                    'SELECT program_id, slug FROM program_step WHERE organization_id = ? AND active = 1', [orgId]);
+                const parProg = new Map();
+                for (const a of actives) {
+                    if (!alertes.has(a.slug)) continue;
+                    // Un même groupe cassé touche plusieurs slugs : on compte les GROUPES, pas
+                    // les étapes, sinon un « OU » à deux variantes s'annoncerait comme deux
+                    // problèmes distincts.
+                    (parProg.get(a.program_id) || parProg.set(a.program_id, new Set()).get(a.program_id))
+                        .add(alertes.get(a.slug).groupe);
+                }
+                progs.forEach((p) => { p.alertes_conditions = (parProg.get(p.id)?.size) || 0; });
+            }
+        } catch (e) { console.error('Diagnostic conditions (non bloquant) :', e.message); }
+        return res.json({ data: progs });
+    } catch (err) {
+        console.error('Erreur récupération formations :', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+const getProgramsLegacy = (req, res) => {
     db.query(
         `SELECT id, organization_id, code, level, color, title, days, hours, price, audience,
                 objectives, objective_general, duration_detail, program_detail,
@@ -387,7 +431,13 @@ const getFormationSteps = async (req, res) => {
             [req.params.id, req.user.organization_id]
         );
         if (!program) return res.status(404).json({ message: 'Formation introuvable' });
-        res.json({ data: await formationSteps(conn, req.user.organization_id, program) });
+        const steps = await formationSteps(conn, req.user.organization_id, program);
+        /* Les groupes « OU » mal conditionnés, marqués SUR l'étape concernée. Le diagnostic est
+         * porté par la donnée plutôt que recalculé à l'écran : la liste des formations pose la
+         * même question, et deux calculs auraient divergé. */
+        const bySlug = new Map(steps.map((x) => [x.slug, x]));
+        const alertes = alertesParSlug(await loadEquivalences(conn, req.user.organization_id), bySlug);
+        res.json({ data: steps.map((x) => (alertes.has(x.slug) ? { ...x, alerte: alertes.get(x.slug) } : x)) });
     } catch (err) {
         console.error('Erreur étapes formation :', err);
         res.status(500).json({ error: 'Internal Server Error' });

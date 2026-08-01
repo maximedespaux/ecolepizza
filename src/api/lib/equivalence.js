@@ -105,4 +105,66 @@ function validateMembers(members, stepsBySlug) {
     return { ok: true, value: list, retires };
 }
 
-module.exports = { DEFAULT_EQUIVALENCES, loadEquivalences, equivalenceMap, sameEquivalence, validateMembers, mergeSteps, conditionEnClair };
+/**
+ * LES GROUPES « OU » MAL CONDITIONNÉS, repérés AVANT qu'on ne bute dessus.
+ *
+ * Jusqu'ici le problème ne se manifestait qu'au moment d'ajouter une variante : on cliquait, on
+ * recevait un refus. Or un groupe déjà cassé le reste en silence — et il produit alors le mauvais
+ * document, ou aucun, sans que rien ne l'annonce. C'est exactement le genre de défaut qu'on
+ * découvre le jour où un stagiaire reçoit un devis qui n'est pas le sien.
+ *
+ * DEUX DÉFAUTS, et seulement ceux-là : ils se démontrent, contrairement à « il manque peut-être
+ * un cas ».
+ *   · CONDITIONS IDENTIQUES — deux variantes s'appliquent au même cas. Rien ne permet de choisir
+ *     au moment de produire : l'une des deux sortira, arbitrairement.
+ *   · GROUPE À UNE SEULE VARIANTE — un « OU » qui n'offre plus de choix. Arrive quand un membre
+ *     a été supprimé ou renommé. Si la variante restante porte une condition restrictive, le
+ *     jalon ne produit RIEN pour tous les autres cas.
+ *
+ * @param membres  slugs du groupe
+ * @param bySlug   Map slug -> étape fusionnée (label, applies_when)
+ * @returns null si le groupe est sain, sinon { type, texte }
+ */
+function diagnostiquerGroupe(membres, bySlug) {
+    const vivants = [...new Set((membres || []).filter((x) => bySlug.get(x)))];
+    const nom = (x) => (bySlug.get(x)?.label || x);
+    if (vivants.length < 2) {
+        const perdus = (membres || []).filter((x) => !bySlug.get(x));
+        return {
+            type: 'groupe-incomplet',
+            texte: perdus.length
+                ? `Ce choix « OU » n'a plus qu'une variante : ${perdus.map((x) => `« ${x} »`).join(', ')} n'existe plus. `
+                  + 'Si la variante restante porte une condition, aucun document ne sera produit dans les autres cas.'
+                : 'Ce choix « OU » n\'a qu\'une seule variante : il ne propose donc aucun choix.',
+        };
+    }
+    const parCondition = new Map();
+    for (const slug of vivants) {
+        const sig = JSON.stringify(parseApplies(bySlug.get(slug).applies_when) || {});
+        if (parCondition.has(sig)) {
+            const autre = parCondition.get(sig);
+            return {
+                type: 'conditions-identiques',
+                texte: `« ${nom(autre)} » et « ${nom(slug)} » s'appliquent au même cas `
+                    + `(${conditionEnClair(bySlug.get(slug).applies_when)}) : rien ne permet de choisir entre les deux `
+                    + 'au moment de produire le document — l\'un des deux sortira au hasard. '
+                    + 'Donnez-leur des conditions différentes dans Modèles de documents.',
+            };
+        }
+        parCondition.set(sig, slug);
+    }
+    return null;
+}
+
+/** Les groupes cassés de l'organisme, indexés par slug de membre (pour marquer un jalon). */
+function alertesParSlug(equivalences, bySlug) {
+    const out = new Map();
+    for (const eq of equivalences || []) {
+        const pb = diagnostiquerGroupe(eq.members, bySlug);
+        if (!pb) continue;
+        for (const m of eq.members || []) out.set(m, { ...pb, groupe: eq.label || eq.key });
+    }
+    return out;
+}
+
+module.exports = { DEFAULT_EQUIVALENCES, loadEquivalences, equivalenceMap, sameEquivalence, validateMembers, mergeSteps, conditionEnClair, diagnostiquerGroupe, alertesParSlug };

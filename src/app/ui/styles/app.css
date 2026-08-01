@@ -915,6 +915,28 @@ tbody tr:last-child td{border-bottom:none}
 /* Panneau des étapes disponibles — dans le flux normal (pas d'overlay clippé) */
 .pf-add-panel{margin-top:8px;padding:12px 14px;border:1px solid var(--line,#e3e3e6);border-radius:12px;
   background:var(--surface2,rgba(0,0,0,.02))}
+/* PASTILLE « ! » — un choix « OU » mal conditionné. Ambre et non rouge : ce n'est pas une
+   erreur bloquante, c'est un réglage qui produira le mauvais document un jour. Le rouge est
+   réservé à ce qui casse tout de suite ; l'ambre à ce qui casse plus tard.
+   Ronde et compacte, elle tient à côté d'un titre sans le déformer. */
+.pastille-alerte{display:inline-flex;align-items:center;justify-content:center;gap:3px;
+  min-width:20px;height:20px;padding:0 6px;border-radius:999px;flex:none;
+  font:800 12px/1 var(--font-b);color:var(--ember2);
+  background:var(--amber-bg);border:1px solid color-mix(in srgb,var(--ember2) 34%,transparent);cursor:help}
+/* Sur un jalon du parcours, elle se pose EN HAUT À DROITE : la carte est étroite, et l'insérer
+   dans le flux du texte ferait sauter la hauteur de toute la rangée. */
+.pf-alerte{position:absolute;top:-8px;right:-8px;z-index:2;box-shadow:0 2px 6px -2px rgba(0,0,0,.3)}
+
+/* Le détail, en tête du parcours. Une info-bulle ne se lit que si on la cherche, et personne
+   ne survole un jalon qu'il croit correct : le texte doit être là à l'ouverture. */
+.alerte-conditions{margin-bottom:12px;padding:11px 13px;border-radius:12px;
+  border:1px solid color-mix(in srgb,var(--ember2) 30%,var(--border));
+  background:color-mix(in srgb,var(--ember2) 7%,var(--surface))}
+.alerte-conditions-t{display:flex;align-items:center;gap:7px;margin-bottom:6px;
+  font:800 13px/1.3 var(--font-b);color:var(--ember2)}
+.alerte-conditions p{margin:0 0 4px;font-size:13px;line-height:1.5;color:var(--text)}
+.alerte-conditions p:last-child{margin-bottom:0}
+
 /* En-tête du panneau de choix : son titre dit LEQUEL des deux gestes est en cours (ajouter une
    étape, ou une variante « OU » de tel jalon), et une croix pour en sortir — le panneau prend
    toute la largeur, on doit pouvoir le refermer sans chercher. */
