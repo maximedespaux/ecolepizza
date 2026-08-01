@@ -56,8 +56,10 @@ test('les rôles « bureau » de la communauté existent vraiment', () => {
 test('la page déclare la MÊME liste que le serveur', () => {
     // Deux listes qui divergent donneraient un bouton visible que le serveur refuserait — ou
     // l'inverse, une capacite reelle que rien ne propose.
+    // La liste vivait dans l'attribut JSX ; elle est devenue une constante nommée le jour où le
+    // BANDEAU des annonces s'en est servi lui aussi. Le contrat, lui, n'a pas bougé.
     const ctrl = [...(/const STAFF = \[([^\]]+)\]/.exec(srcCtrl)[1]).matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]);
-    const page = [...(/peutAnnoncer=\{\[([^\]]+)\]/.exec(srcPage)[1]).matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]);
+    const page = [...(/const peutAnnoncer = \[([^\]]+)\]/.exec(srcPage)[1]).matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]);
     assert.deepStrictEqual(page, ctrl, 'la page et le serveur doivent s\'accorder sur qui est « le bureau »');
 });
 

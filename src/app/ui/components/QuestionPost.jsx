@@ -74,6 +74,46 @@ export function QuestionCard({ post, cadre, onOpen, onProfil }) {
 }
 
 /**
+ * Une ANNONCE, dans le bandeau de l'école — pas une carte du fil.
+ *
+ * POURQUOI ELLE EN SORT. Une annonce n'est pas une publication de plus : elle vient de
+ * l'école, elle s'adresse à tout le monde, et elle a une date de péremption (« la session de
+ * mardi est décalée »). Mélangée aux fiches, elle se classait par « Populaires » ou par date
+ * comme le reste, et une question très commentée pouvait la pousser hors du premier écran.
+ * Elle vit donc dans son propre bandeau, en tête, avant les filtres — qui ne la concernent pas.
+ *
+ * La forme est volontairement LARGE et non une carte : une annonce se lit, elle ne se
+ * parcourt pas du regard au milieu de vignettes.
+ */
+export function AnnonceCard({ post, peutEpingler, onOpen, onEpingler }) {
+  return (
+    <div className={"annonce-row" + (post.pinned ? " epinglee" : "")}>
+      <span className="annonce-ic" aria-hidden="true"><Icon name={post.pinned ? "pin" : "bell"} size={15} /></span>
+      <button className="annonce-corps" onClick={() => onOpen(post.id)}>
+        <span className="annonce-t">
+          {post.title}
+          {post.pinned > 0 && <span className="annonce-pin-badge"><Icon name="pin" size={10} /> Épinglée</span>}
+        </span>
+        {post.body && <span className="annonce-x">{post.body}</span>}
+        <span className="annonce-meta">
+          {post.author_name} · {post.created_at}
+          {post.answers > 0 && <> · <Icon name="message-circle" size={11} /> {post.answers} réponse{post.answers > 1 ? "s" : ""}</>}
+        </span>
+      </button>
+      {/* L'épingle EXISTAIT côté serveur (createPost, updatePost) sans qu'aucun écran ne
+          l'expose : on pouvait publier une annonce, jamais la faire remonter. */}
+      {peutEpingler && (
+        <button className={"iconbtn" + (post.pinned ? " on" : "")} onClick={() => onEpingler(post)}
+          title={post.pinned ? "Ne plus épingler" : "Épingler en tête"}
+          aria-label={post.pinned ? `Ne plus épingler « ${post.title} »` : `Épingler « ${post.title} » en tête`}>
+          <Icon name="pin" size={14} fill={post.pinned ? "currentColor" : "none"} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
  * Détail d'une question : l'énoncé, la photo, et le fil des réponses.
  *
  * L'auteur — et lui seul — peut marquer UNE réponse « ça m'a aidé ». Pas de vote collectif :
@@ -203,15 +243,19 @@ export function QuestionModal({ id, moi, cadreDe, onClose, onProfil, onChange })
  * du billet. Si l'envoi de la photo échoue, la question existe quand même — on le dit, plutôt
  * que de perdre un texte que la personne vient d'écrire.
  */
-export function QuestionForm({ onClose, onCreated, peutAnnoncer }) {
+export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "QUESTION" }) {
   const [titre, setTitre] = useState("");
   const [corps, setCorps] = useState("");
-  const [kind, setKind] = useState("QUESTION");
+  // `kindInitial` : « Créer une annonce » ouvre DÉJÀ du bon côté. Faire cliquer sur le bouton
+  // puis sur l'onglet pour la même intention, c'est demander deux fois la même chose.
+  const [kind, setKind] = useState(kindInitial);
+  const [epingler, setEpingler] = useState(false);
   const [photo, setPhoto] = useState(null);     // Blob réduit, prêt à l'envoi
   const [apercu, setApercu] = useState(null);   // URL objet, pour l'aperçu
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState(null);
   const fichierRef = useRef(null);
+  const annonce = kind === "ANNONCE";
   useEchap(onClose);
 
   // Libère l'URL d'aperçu : sans ça, chaque photo choisie laisse un blob en mémoire.
@@ -234,10 +278,10 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer }) {
     if (!t) return;
     setBusy(true); setErreur(null);
     try {
-      const r = await createPost({ title: t, body: corps.trim(), kind });
+      const r = await createPost({ title: t, body: corps.trim(), kind, pinned: annonce && epingler });
       if (photo) {
         try { await uploadPostImage(r.data.id, photo); }
-        catch (e) { setErreur(`Question publiée, mais la photo n'est pas passée : ${e.message}`); }
+        catch (e) { setErreur(`${annonce ? "Annonce" : "Question"} publiée, mais la photo n'est pas passée : ${e.message}`); }
       }
       onCreated();
       if (!photo) onClose();
@@ -250,31 +294,52 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer }) {
       <div className="overlay" onClick={onClose}>
         <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
           <div className="mhead">
-            <h3 style={{ fontSize: 16 }}>Poser une question</h3>
+            <h3 style={{ fontSize: 16 }}>{annonce ? "Publier une annonce de l'école" : "Poser une question"}</h3>
             <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
           </div>
           <div className="mbody">
             {peutAnnoncer && (
               <span className="seg" style={{ marginBottom: 12 }}>
                 <button className={"seg-btn" + (kind === "QUESTION" ? " on" : "")} onClick={() => setKind("QUESTION")}>Question</button>
-                <button className={"seg-btn" + (kind === "ANNONCE" ? " on" : "")} onClick={() => setKind("ANNONCE")}>Annonce de l'école</button>
+                <button className={"seg-btn" + (annonce ? " on" : "")} onClick={() => setKind("ANNONCE")}>Annonce de l'école</button>
               </span>
             )}
             <div className="field">
-              <label htmlFor="q-titre">Ta question, en une phrase</label>
+              {/* Une annonce n'est pas une question : elle ne se formule pas de la même façon,
+                  et le vouvoiement change de sens quand c'est l'école qui parle. */}
+              <label htmlFor="q-titre">{annonce ? "L'annonce, en une phrase" : "Ta question, en une phrase"}</label>
               <input id="q-titre" className="inp" value={titre} maxLength={200} onChange={(e) => setTitre(e.target.value)}
-                placeholder="Ex. : ma pâte colle au façonnage, qu'est-ce que je rate ?" />
+                placeholder={annonce
+                  ? "Ex. : la session du 12 mars est décalée au 19"
+                  : "Ex. : ma pâte colle au façonnage, qu'est-ce que je rate ?"} />
             </div>
             <div className="field">
               <label htmlFor="q-corps">Le détail (facultatif)</label>
               <textarea id="q-corps" className="inp" rows={4} value={corps} onChange={(e) => setCorps(e.target.value)}
-                placeholder="Farine, hydratation, temps de pointage, température… Plus tu en dis, mieux on te répond." />
+                placeholder={annonce
+                  ? "Ce qui change, à partir de quand, et ce que les stagiaires ont à faire."
+                  : "Farine, hydratation, temps de pointage, température… Plus tu en dis, mieux on te répond."} />
             </div>
+            {annonce && (
+              <div className="field">
+                {/* Épingler tient l'annonce en tête du bandeau. Réservé aux vraies urgences :
+                    trois annonces épinglées, c'est plus aucune qui l'est. */}
+                <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer", fontSize: 14 }}>
+                  <input type="checkbox" checked={epingler} onChange={(e) => setEpingler(e.target.checked)} />
+                  <Icon name="pin" size={14} /> Épingler en tête du bandeau
+                </label>
+                <p className="hint" style={{ marginTop: 4 }}>
+                  Une annonce épinglée passe devant les autres, quel que soit son âge. À garder
+                  pour ce qui doit être vu tout de suite.
+                </p>
+              </div>
+            )}
             <div className="field">
               <label>Une photo (facultatif)</label>
               <p className="hint" style={{ marginTop: 0 }}>
-                C'est un métier qui se voit. Une croûte trop pâle ou une alvéole serrée se
-                montrent mieux qu'elles ne se décrivent.
+                {annonce
+                  ? "Un plan, une affiche, une photo du lieu — ce qui évite d'avoir à le décrire."
+                  : "C'est un métier qui se voit. Une croûte trop pâle ou une alvéole serrée se montrent mieux qu'elles ne se décrivent."}
               </p>
               {apercu && <img className="q-photo" src={apercu} alt="Aperçu de la photo choisie" />}
               <input ref={fichierRef} type="file" accept="image/*" hidden onChange={choisirPhoto} />

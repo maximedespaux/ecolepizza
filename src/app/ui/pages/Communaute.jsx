@@ -10,12 +10,12 @@ import { euro, colorOf, initials } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { useCountUp } from "../lib/useCountUp.js";
 import { useEchap } from "../lib/useEchap.js";
-import { QuestionCard, QuestionModal, QuestionForm } from "../components/QuestionPost.jsx";
+import { QuestionCard, QuestionModal, QuestionForm, AnnonceCard } from "../components/QuestionPost.jsx";
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
 import { cadreFor, cadrePorteDe, useCadreChoisi } from "../lib/cadres.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
-import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts } from "../api/apiClient.js";
+import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost } from "../api/apiClient.js";
 
 /**
  * Temps de présence à l'écran avant qu'un halo « j'aime » s'éteigne.
@@ -356,7 +356,10 @@ export default function Communaute() {
   const [profileId, setProfileId] = useState(null);  // à qui appartient le profil ouvert
   const [posts, setPosts] = useState([]);           // questions et annonces (espace d'échange)
   const [openPost, setOpenPost] = useState(null);   // publication ouverte en détail
-  const [composer, setComposer] = useState(false);  // formulaire « poser une question »
+  // `composer` ne dit plus seulement « ouvert » mais QUOI ouvrir : « Créer une annonce »
+  // doit tomber directement du bon côté du formulaire (null | "QUESTION" | "ANNONCE").
+  const [composer, setComposer] = useState(null);
+  const [deplie, setDeplie] = useState(false);      // bandeau : voir les annonces précédentes
   const toggleWish = (id) => setWish((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); writeWish(n); return n; });
   const navigate = useNavigate();
 
@@ -368,6 +371,9 @@ export default function Communaute() {
   // Qui arrive par le menu de l'école — même liste que `STAFF` dans nav.js. STAGIAIRE et
   // INTERVENANT entrent par l'espace stagiaire : même page, autre lecteur (cf. l'accroche).
   const duBureau = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"].includes(user?.role);
+  // Qui parle AU NOM DE L'ÉCOLE — même liste que `STAFF` dans community.controller. Le
+  // formateur en est exclu : il est en salle avec eux, il n'engage pas l'organisme.
+  const peutAnnoncer = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
   // Le choix de cadre vit dans le navigateur de chacun : on ne le connaît donc QUE pour
   // l'utilisateur courant. Pour les autres, on retombe sur leur cadre de parcours, seule
   // information dont le serveur dispose aujourd'hui (cf. CHANTIERS.md §4.2 point 6).
@@ -418,6 +424,14 @@ export default function Communaute() {
   // vider l'autre — c'est aussi ce qui fait que la page reste utile si la migration 114 n'est
   // pas jouée (l'API répond alors une liste vide).
   const chargerPosts = () => getPosts().then((r) => setPosts(r.data || [])).catch(() => {});
+
+  /* Épingler / dépingler une annonce. On recharge au lieu de retoucher l'état local : c'est le
+     SERVEUR qui décide de l'ordre (pinned DESC, puis date), et le reproduire ici serait un
+     second classement à tenir d'accord avec le premier. Le PATCH est déjà réservé au bureau. */
+  async function basculerEpingle(a) {
+    try { await updatePost(a.id, { pinned: !a.pinned }); await chargerPosts(); }
+    catch { /* le serveur a le dernier mot : en cas de refus, l'affichage reste tel quel */ }
+  }
   useEffect(() => {
     if (!openId) { setDetail(null); return; }
     setDetail(null);
@@ -483,11 +497,17 @@ export default function Communaute() {
   /* LE FIL UNIQUE.
      Deux sources — les fiches partagées et les publications d'entraide — fusionnées en un seul
      flux. Chaque élément est étiqueté `_post` pour que le rendu sache quoi dessiner ; le tri
-     et la recherche, eux, travaillent sur des champs communs normalisés (`_date`, `_texte`).
-     Les annonces épinglées passent devant, quel que soit le tri : c'est leur raison d'être. */
+     et la recherche, eux, travaillent sur des champs communs normalisés (`_date`, `_texte`). */
   const q = query.trim().toLowerCase();
+  /* LES ANNONCES SORTENT DU FIL. Elles viennent de l'école, s'adressent à tout le monde et
+     périment vite ; laissées dans le flux, elles se classaient comme le reste — une question
+     très commentée pouvait pousser « la session de mardi est décalée » hors du premier écran.
+     Elles ont donc leur bandeau, en tête, avant les filtres (qui ne les concernent pas). Le
+     serveur les rend déjà `pinned` d'abord, puis de la plus récente à la plus ancienne. */
+  const annonces = posts.filter((p) => p.kind === "ANNONCE");
   const fiches = list.map((x) => ({ ...x, _post: false, _date: x.updated_at, _texte: [x.name, x.description, x.type, x.author_name] }));
-  const echanges = posts.map((x) => ({ ...x, _post: true, _date: x.created_at, _texte: [x.title, x.body, x.author_name] }));
+  const echanges = posts.filter((p) => p.kind !== "ANNONCE")
+    .map((x) => ({ ...x, _post: true, _date: x.created_at, _texte: [x.title, x.body, x.author_name] }));
 
   const shown = [...fiches, ...echanges].filter((s) => {
     // La wishlist ne concerne que les fiches : on ne met pas une question « de côté », on y répond.
@@ -497,7 +517,8 @@ export default function Communaute() {
     if (!q) return true;
     return s._texte.some((f) => String(f || "").toLowerCase().includes(q));
   }).sort((a, b) => {
-    if (a.pinned !== b.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+    // Plus de tri par `pinned` ici : seule une ANNONCE s'épingle (cf. createPost côté serveur),
+    // et les annonces ont quitté le fil pour leur bandeau.
     if (sort === "liked") {
       // « Populaires » n'a pas de sens pour une question : elle se classe à ses RÉPONSES, qui
       // sont son équivalent d'engagement. Sans ça les questions tomberaient toutes en fin de fil.
@@ -518,10 +539,54 @@ export default function Communaute() {
           ? "Le fil des stagiaires : questions d'entraide, empâtements, garnitures et réalisations. Vous pouvez y répondre, épingler ce qui compte, et publier une annonce de l'école."
           : "Les fiches partagées par les autres stagiaires : empâtements, garnitures et réalisations. Aime, commente, mets de côté (wishlist), ou enregistre-en une dans tes fiches pour l'adapter."} />
 
-      {list.length === 0 && posts.length === 0 ? (
+      {/* LE BANDEAU DE L'ÉCOLE. Avant la barre d'outils, donc avant tout filtre : une annonce
+          ne se cherche pas, elle s'impose. Il ne s'affiche que s'il a quelque chose à dire —
+          sauf pour le bureau, à qui il faut bien un endroit d'où en publier une. */}
+      {(annonces.length > 0 || peutAnnoncer) && (
+        <section className="comm-annonces">
+          <div className="comm-annonces-t">
+            <Icon name="bell" size={15} />
+            <b>Annonces de l'école</b>
+            {annonces.length > 0 && <span className="hint">· {annonces.length}</span>}
+            {peutAnnoncer && (
+              <button className="btn sm primary" style={{ marginLeft: "auto" }}
+                onClick={() => setComposer("ANNONCE")}>
+                <Icon name="bell" size={13} /> Créer une annonce
+              </button>
+            )}
+          </div>
+          {annonces.length === 0 ? (
+            <p className="hint" style={{ margin: 0 }}>
+              Aucune annonce en ce moment. Ce qui est publié ici est vu par tous les stagiaires,
+              en tête de leur communauté.
+            </p>
+          ) : (
+            <>
+              {(deplie ? annonces : annonces.slice(0, 2)).map((a) => (
+                <AnnonceCard key={a.id} post={a} peutEpingler={peutAnnoncer}
+                  onOpen={setOpenPost} onEpingler={basculerEpingle} />
+              ))}
+              {/* Au-delà de deux, les anciennes se replient : le bandeau doit rester un
+                  bandeau, pas devenir un second fil au-dessus du fil. */}
+              {annonces.length > 2 && (
+                <button className="btn sm ghost" onClick={() => setDeplie((d) => !d)} style={{ alignSelf: "flex-start" }}>
+                  <Icon name={deplie ? "chevron-up" : "chevron-down"} size={13} />
+                  {/* « Voir les 1 annonce précédente » : au singulier, c'est l'article qui change,
+                      pas seulement le pluriel des mots. */}
+                  {deplie ? "Replier"
+                    : annonces.length - 2 === 1 ? "Voir l'annonce précédente"
+                      : `Voir les ${annonces.length - 2} annonces précédentes`}
+                </button>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {list.length === 0 && echanges.length === 0 ? (
         <EmptyState icon="users" title="La communauté est encore vide"
           text="Sois le premier : partage une fiche depuis le calculateur de pâte, ou pose une question — c'est souvent par là que ça commence.">
-          <button className="btn primary" onClick={() => setComposer(true)} style={{ marginTop: 14 }}>
+          <button className="btn primary" onClick={() => setComposer("QUESTION")} style={{ marginTop: 14 }}>
             <Icon name="help" size={14} /> Poser une question
           </button>
         </EmptyState>
@@ -548,7 +613,7 @@ export default function Communaute() {
             </button>
             {/* Poser une question est une ACTION, pas un filtre : elle est en primaire et à
                 part, sinon elle se perdrait au milieu des segments de tri. */}
-            <button className="btn sm primary" onClick={() => setComposer(true)}>
+            <button className="btn sm primary" onClick={() => setComposer("QUESTION")}>
               <Icon name="help" size={13} /> Poser une question
             </button>
           </div>
@@ -774,8 +839,8 @@ export default function Communaute() {
         // mauvaise manière de le dire. La liste doit rester la MÊME que `STAFF` dans
         // community.controller : 'ADMIN' n'existe pas (le rôle réel est ADMIN_ORGANISME), et
         // INTERVENANT est du côté des stagiaires — il ne parle pas au nom de l'école.
-        <QuestionForm onClose={() => setComposer(false)} onCreated={chargerPosts}
-          peutAnnoncer={["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role)} />
+        <QuestionForm onClose={() => setComposer(null)} onCreated={chargerPosts} kindInitial={composer}
+          peutAnnoncer={peutAnnoncer} />
       )}
     </>
   );
