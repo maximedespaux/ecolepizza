@@ -218,24 +218,6 @@ const getPrograms = async (req, res) => {
     }
 };
 
-const getProgramsLegacy = (req, res) => {
-    db.query(
-        `SELECT id, organization_id, code, level, color, title, days, hours, price, audience,
-                objectives, objective_general, duration_detail, program_detail,
-                rs_code, hygiene, active, sort_order, created_at
-         FROM training_program
-         WHERE organization_id = ?
-         ORDER BY sort_order, code`,
-        [req.user.organization_id],
-        (err, results) => {
-            if (err) {
-                console.error('Erreur récupération formations :', err);
-                return res.status(500).json({ error: 'Internal Server Error' });
-            }
-            res.json({ data: results });
-        }
-    );
-};
 
 /**
  * GET /api/formations/:id
