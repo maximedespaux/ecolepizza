@@ -1,4 +1,4 @@
-import { cadreClass } from "../lib/cadres.js";
+import { cadreClass, cadreStyle } from "../lib/cadres.js";
 
 /**
  * Avatar entouré de son cadre de parcours.
@@ -17,7 +17,8 @@ export default function AvatarCadre({ avatar, initiales, cadre, size = 44, title
     <Balise
       type={onClick ? "button" : undefined}
       className={`av-wrap ${cls}`}
-      style={{ "--av": `${size}px` }}
+      // La teinte d'un cadre de quête vient de la formation : elle ne peut pas vivre en CSS.
+      style={{ "--av": `${size}px`, ...cadreStyle(cadre) }}
       title={title}
       onClick={onClick}
     >

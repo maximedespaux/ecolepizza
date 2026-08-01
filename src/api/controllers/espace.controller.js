@@ -5,6 +5,7 @@ const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
+const { cadresQuest, possedeCadreQuest, parseCadre: parseCadreQuest, PALIER_IDS } = require('../lib/cadresQuest.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
@@ -866,6 +867,39 @@ const LEGACY_AVATAR_IDS = new Set(['bread','chef2','chef3','burger','fries','pas
     'shrimp','sushi','taco','hotdog','sandwich','croissant','pretzel','avocado','pepper','corn','grapes','lemon','icecream','coffee']);
 const isKnownAvatar = (id) => AVATAR_IDS.has(id) || LEGACY_AVATAR_IDS.has(id);
 
+/**
+ * Les cadres de Pizza Quest possédés par un stagiaire.
+ *
+ * DÉRIVÉ, jamais stocké : la règle (moitié / bouclé / sans faute) porte sur le NOMBRE DE
+ * CHAPITRES ACTIFS, qui bouge dès que l'école enrichit sa banque. Cf. lib/cadresQuest.js.
+ *
+ * `world` dans `learner_quest_progress` est le CODE de la formation (c'est ce que le jeu
+ * enregistre) : c'est donc sur le code qu'on rapproche les deux, pas sur l'id.
+ *
+ * Dégradation silencieuse : ni `quest_chapter` (migration 102) ni la progression (070) ne sont
+ * garanties. Sans elles la liste est vide — le stagiaire ne voit pas ces cadres, et rien d'autre
+ * ne casse. Une exception ici ferait tomber tout le profil, avatar compris.
+ */
+async function cadresQuestDuStagiaire(conn, learner, progress) {
+    if (!progress || !Object.keys(progress).length) return [];
+    try {
+        const [rows] = await conn.query(
+            `SELECT p.code, p.title, p.color, COUNT(c.id) AS chapitres
+               FROM training_program p
+               LEFT JOIN quest_chapter c ON c.program_id = p.id AND c.active = 1
+              WHERE p.organization_id = ? AND p.active = 1
+              GROUP BY p.id, p.code, p.title, p.color`,
+            [learner.organization_id]
+        );
+        return cadresQuest(progress, rows.map((r) => ({
+            code: r.code, title: r.title, color: r.color, chapitres: Number(r.chapitres) || 0,
+        })));
+    } catch (e) {
+        if (isMissingSchema(e)) return [];
+        throw e;
+    }
+}
+
 /** GET /api/mon-espace/profile — avatar + progression { world: { step: stars } } + XP. */
 const getMyProfile = async (req, res) => {
     try {
@@ -890,7 +924,13 @@ const getMyProfile = async (req, res) => {
                 stars += r.stars; xp += r.stars * 10;
             }
         } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : profil vide
-        res.json({ data: { avatar, cadre, cadres_exclusifs, progress, xp, stars } });
+        /* Cadres de PIZZA QUEST, dérivés et jamais stockés (cf. lib/cadresQuest.js). Les
+           recalculer à chaque lecture coûte deux requêtes et garantit qu'ils suivent la banque de
+           questions : un chapitre ajouté par l'école DÉFAIT un « Monde bouclé », et c'est
+           volontaire — le cadre dit « j'ai tout fait », il doit redevenir faux quand ce n'est plus
+           vrai. Une liste figée en base aurait menti dès le premier chapitre ajouté. */
+        const quest_cadres = await cadresQuestDuStagiaire(conn, learner, progress);
+        res.json({ data: { avatar, cadre, cadres_exclusifs, progress, xp, stars, quest_cadres } });
     } catch (err) {
         console.error('Erreur profil stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -963,9 +1003,25 @@ const saveMyCadre = async (req, res) => {
                 return res.status(403).json({ message: 'Les cadres de parcours récompensent des formations terminées.' });
             }
         }
-        // NULL et « aucun » ne disent pas la même chose : NULL = aucun choix exprimé (on
-        // retombe sur le palier), « aucun » = le choix de ne rien porter.
-        if (cadre != null && cadre !== '' && !CADRES_CONNUS.includes(String(cadre))) {
+        /* CADRE DE QUÊTE : « palier|#rrggbb ». Celui-là se vérifie VRAIMENT, contrairement aux
+           autres — et la raison tient à la couleur. Un palier sans couleur ne dit rien de faux ;
+           un « Sans faute » teinté d'une formation qu'on n'a jamais ouverte, si. La possession se
+           calcule ici, à l'écriture, parce qu'elle dépend de la banque de questions du moment. */
+        const q = parseCadreQuest(cadre);
+        if (q.id && PALIER_IDS.includes(q.id)) {
+            if (!learner) return res.status(403).json({ message: 'Les cadres de Pizza Quest récompensent la progression d\'un stagiaire.' });
+            const progress = {};
+            try {
+                const [rows] = await conn.query('SELECT world, step, stars FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
+                for (const r of rows) (progress[r.world] ||= {})[r.step] = r.stars;
+            } catch (e) { if (!isMissingSchema(e)) throw e; }
+            const possedes = await cadresQuestDuStagiaire(conn, learner, progress);
+            if (!possedeCadreQuest(cadre, possedes)) {
+                return res.status(403).json({ message: 'Ce cadre de Pizza Quest n\'est pas encore débloqué.' });
+            }
+        } else if (cadre != null && cadre !== '' && !CADRES_CONNUS.includes(String(cadre))) {
+            // NULL et « aucun » ne disent pas la même chose : NULL = aucun choix exprimé (on
+            // retombe sur le palier), « aucun » = le choix de ne rien porter.
             return res.status(422).json({ message: 'Cadre inconnu.' });
         }
         const [tbl, ref] = learner ? ['learner', learner.id] : ['user', req.user.id];

@@ -12,7 +12,7 @@ import { useCountUp } from "../lib/useCountUp.js";
 import { useEchap } from "../lib/useEchap.js";
 import { QuestionCard, QuestionModal, QuestionForm, AnnonceCard } from "../components/QuestionPost.jsx";
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
-import { cadreFor, cadrePorteDe, useCadreChoisi } from "../lib/cadres.js";
+import { cadreFor, cadrePorteDe, cadreClass, cadreStyle, cadreValeur, useCadreChoisi } from "../lib/cadres.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
 import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost, unshareRecipe } from "../api/apiClient.js";
@@ -148,7 +148,7 @@ function PostHead({ id, name, avatar, cadre, date, onOpen, children }) {
       <AvatarCadre
         avatar={av}
         initiales={initials(prenom, nom)}
-        cadre={cadre?.id}
+        cadre={cadreValeur(cadre)}
         size={38}
         title={`Voir le profil${cadre && cadre.id !== "aucun" ? ` · cadre ${cadre.nom}` : ""}`}
         onClick={ouvrir}
@@ -170,8 +170,8 @@ function AuthorChip({ id, name, avatar, cadre, onOpen }) {
   return (
     <button className="author-chip" title={`Voir le profil${cadre.id !== "aucun" ? ` · cadre ${cadre.nom}` : ""}`}
       onClick={(e) => { e.stopPropagation(); if (id) onOpen(id); }}>
-      <span className={`author-ava ${cadre.id !== "aucun" ? `cadre cadre-${cadre.id}` : ""}`}
-        style={av ? { background: av.color, color: "#fff", fontSize: 11 } : null}>
+      <span className={`author-ava ${cadreClass(cadre.valeur || cadre.id)}`}
+        style={{ ...cadreStyle(cadre.valeur), ...(av ? { background: av.color, color: "#fff", fontSize: 11 } : null) }}>
         {av ? av.emoji : <Icon name="user" size={11} />}
       </span>{name || "Stagiaire"}
     </button>
@@ -204,9 +204,9 @@ function Commenters({ gens, total, cadreDe, onOpen }) {
         // l'épaisseur de 3 px des grands avatars mangeait le visage.
         const c = cadreDe(g.user_id, g.done, g.cadre, g.cadres_ex);
         return (
-          <button key={g.user_id || i} className={`comm-face${c.id !== "aucun" ? ` cadre cadre-${c.id} sm` : ""}`}
+          <button key={g.user_id || i} className={`comm-face${c.id !== "aucun" ? ` ${cadreClass(c.valeur || c.id)} sm` : ""}`}
             aria-label={`${g.name || "Stagiaire"}${c.id !== "aucun" ? ` · cadre ${c.nom}` : ""}`}
-            style={{ zIndex: gens.length - i, ...(av ? { background: av.color, color: "#fff" } : null) }}
+            style={{ zIndex: gens.length - i, ...cadreStyle(c.valeur), ...(av ? { background: av.color, color: "#fff" } : null) }}
             onClick={(e) => { e.stopPropagation(); if (g.user_id) onOpen(g.user_id); }}>
             {av ? av.emoji : <Icon name="user" size={10} />}
           </button>
@@ -245,7 +245,8 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
                   entrée ressort, et un halo tiré de la couleur de l'avatar. */}
               <span className={`prof-ava-wrap ${cadreProfil.id !== "aucun" ? "a-cadre" : ""}`}
                 style={{ "--halo": av ? av.color : "var(--ember1)" }}>
-                <span className={`prof-ava ${cadreProfil.id !== "aucun" ? `cadre cadre-${cadreProfil.id}` : ""}`}
+                <span className={`prof-ava ${cadreClass(cadreProfil.valeur || cadreProfil.id)}`}
+                  style={cadreStyle(cadreProfil.valeur)}
                   style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
               </span>
               {cadreProfil.id !== "aucun" && (
@@ -314,7 +315,7 @@ function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onS
               cadre — et que les pastilles « qui a commenté » en montrent déjà, juste à côté. */}
           <AvatarCadre avatar={c.author_avatar ? parseAvatar(c.author_avatar) : null}
             initiales={initials(...String(c.author_name || "Stagiaire").split(" ").slice(0, 2))}
-            cadre={cadreDe(c.user_id, c.author_done, c.author_cadre, c.author_cadres_ex)?.id}
+            cadre={cadreValeur(cadreDe(c.user_id, c.author_done, c.author_cadre, c.author_cadres_ex))}
             size={30} title={c.author_name}
             onClick={c.user_id ? () => onProfil(c.user_id) : undefined} />
           <div style={{ flex: 1, minWidth: 0 }}>

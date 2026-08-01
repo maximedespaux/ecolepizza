@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Icon } from "./Icon.jsx";
 import AvatarCadre from "./AvatarCadre.jsx";
 import { initials, dateHeure } from "../lib/format.js";
+import { cadreValeur } from "../lib/cadres.js";
 import { parseAvatar } from "../lib/gamification.js";
 import { useEchap } from "../lib/useEchap.js";
 import { reduireImage, PHOTO_MAX_KO, PHOTO_MAX_PX } from "../lib/image.js";
@@ -59,7 +60,7 @@ function TetePost({ id, name, avatar, cadre, date, onOpen }) {
   const ouvrir = (e) => { e.stopPropagation(); if (id) onOpen(id); };
   return (
     <div className="post-head">
-      <AvatarCadre avatar={av} initiales={initiales(name)} cadre={cadre?.id} size={38}
+      <AvatarCadre avatar={av} initiales={initiales(name)} cadre={cadreValeur(cadre)} size={38}
         title={`Voir le profil${cadre && cadre.id !== "aucun" ? ` · cadre ${cadre.nom}` : ""}`} onClick={ouvrir} />
       <span className="post-who">
         <button className="post-name" onClick={ouvrir}>{name || "Stagiaire"}</button>
@@ -232,7 +233,7 @@ export function QuestionModal({ id, moi, cadreDe, onClose, onProfil, onChange })
                           réponse de Maestro ne se lit pas comme celle d'un Bronze. */}
                       <AvatarCadre avatar={a.author_avatar ? parseAvatar(a.author_avatar) : null}
                         initiales={initiales(a.author_name)}
-                        cadre={cadreDe(a.user_id, a.author_done, a.author_cadre, a.author_cadres_ex)?.id}
+                        cadre={cadreValeur(cadreDe(a.user_id, a.author_done, a.author_cadre, a.author_cadres_ex))}
                         size={30} title={a.author_name}
                         onClick={a.user_id ? () => onProfil(a.user_id) : undefined} />
                       <div style={{ flex: 1, minWidth: 0 }}>

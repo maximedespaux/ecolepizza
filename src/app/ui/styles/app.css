@@ -1804,6 +1804,54 @@ tbody tr:last-child td{border-bottom:none}
 .pq-fin-stars > svg.on{opacity:1;animation:pqEtoile .5s var(--spring) both}
 @keyframes pqEtoile{from{opacity:0;transform:scale(.3) rotate(-25deg)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.pq-fin-stars > svg.on{animation:none}}
+
+/* — FÊTE D'UN PALIER —
+   Elle prend la couleur de la formation (`--fc`), la même que le cadre qu'elle annonce : la
+   récompense et son annonce doivent se reconnaître, sinon l'anneau qui apparaîtra plus tard sur
+   l'avatar semblera venir d'ailleurs. */
+.pq-fete-fond{backdrop-filter:blur(2px)}
+.pq-fete{border-top:3px solid var(--fc);animation:pqFeteEntre .42s var(--spring) both}
+@keyframes pqFeteEntre{from{opacity:0;transform:scale(.86) translateY(14px)}to{opacity:1;transform:none}}
+
+/* Le halo est un carré fixe : c'est LUI qui ancre les éclats, qui sont en `position:absolute`.
+   Sans hauteur explicite il se réduirait au cadre, et les éclats — hors flux — partiraient
+   d'un point sans rapport avec l'anneau. */
+.pq-fete-halo{position:relative;width:150px;height:150px;margin:0 auto 14px;display:grid;place-items:center}
+.pq-fete-cadre{position:relative;width:74px;height:74px;border-radius:50%;
+  background:var(--surface2);animation:pqFetePulse 2.4s var(--ease) infinite}
+@keyframes pqFetePulse{0%,100%{transform:scale(1)}45%{transform:scale(1.06)}}
+
+/* HUIT ÉCLATS, un par huitième de tour. `--i` porte le rang : l'angle et le retard s'en
+   déduisent, ce qui évite huit règles quasi identiques. Ils partent du centre, filent vers
+   l'extérieur et s'éteignent — le geste dit « ça éclate », pas « ça tourne ». */
+.pq-fete-eclat{position:absolute;width:7px;height:7px;border-radius:2px;background:var(--fc);
+  transform:rotate(calc(var(--i)*45deg)) translateY(-30px);opacity:0;
+  animation:pqEclat 1.5s var(--ease) calc(var(--i)*.055s) 2 both}
+@keyframes pqEclat{
+  0%{opacity:0;transform:rotate(calc(var(--i)*45deg)) translateY(-26px) scale(.4)}
+  22%{opacity:1}
+  100%{opacity:0;transform:rotate(calc(var(--i)*45deg)) translateY(-68px) scale(.85)}}
+
+/* LA COULEUR DE LA FORMATION NE DÉCIDE PAS DE LA LISIBILITÉ. Mesuré à l'écran : le jaune d'une
+   formation réelle (#f0ef08) donnait un titre presque illisible sur fond clair. L'organisme
+   choisit ses couleurs librement — n'importe laquelle peut tomber trop claire, ou trop sombre en
+   thème nuit. On garde donc la TEINTE en la ramenant vers la couleur de texte du thème : la
+   formation reste reconnaissable, et le contraste tient dans les deux thèmes.
+   La couleur pure est réservée à ce qui décore — l'anneau, le liseré, les éclats. */
+.pq-fete-titre{font-size:23px;margin:0 0 6px;color:color-mix(in srgb,var(--fc) 45%,var(--text))}
+.pq-fete-texte{margin:0 0 14px;font-size:14.5px;color:var(--text)}
+.pq-fete-gain{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;
+  font-size:13px;margin:0 0 18px;padding:9px 12px;border-radius:10px;
+  background:color-mix(in srgb,var(--fc) 12%,var(--surface2));color:var(--text)}
+.pq-fete-gain > svg{color:color-mix(in srgb,var(--fc) 60%,var(--text));flex:none}
+
+/* Mouvement réduit : la fête reste, elle cesse de bouger. Les éclats disparaissent au lieu de
+   se figer à mi-course — un éclat immobile n'est plus qu'un carré posé de travers. */
+@media(prefers-reduced-motion:reduce){
+  .pq-fete{animation:none}
+  .pq-fete-cadre{animation:none}
+  .pq-fete-eclat{display:none}
+}
 .pq-progress{flex:1;height:10px;background:var(--surface2);border-radius:99px;overflow:hidden;
   box-shadow:inset 0 1px 2px rgba(10,12,30,.12)}
 .pq-progress span{display:block;height:100%;border-radius:99px;transition:width .35s var(--spring);
@@ -3489,6 +3537,53 @@ button.av-wrap:active{transform:scale(.94)}
 @keyframes cadreTourne{to{--cadre-a:360deg}}
 @keyframes cadreEtincelles{to{transform:rotate(-360deg)}}
 @keyframes cadreScintille{0%,100%{opacity:.55}38%{opacity:1}72%{opacity:.72}}
+
+/* — CADRES DE PIZZA QUEST —
+   Trois paliers, UNE SEULE teinte : celle de la formation, passée en `--cadre-c` (cf.
+   cadreStyle). L'organisme choisit librement la couleur de ses formations — écrire une règle
+   par formation est impossible, d'où la variable. `color-mix` en dérive un clair et un foncé,
+   ce qui donne un anneau qui a du relief sans qu'on ait à fournir trois couleurs.
+
+   Le repli `#dc3e37` n'est pas décoratif : sans lui, une formation sans couleur produirait un
+   anneau transparent — un cadre invisible, donc une récompense qui n'existe pas à l'écran. */
+.cadre-qdemi,.cadre-qfini,.cadre-qparfait{--cadre-c:#dc3e37;
+  --cadre-clair:color-mix(in srgb,var(--cadre-c) 45%,#fff);
+  --cadre-fonce:color-mix(in srgb,var(--cadre-c) 72%,#000)}
+
+/* SUR LA VOIE — l'anneau n'est peint qu'à MOITIÉ, et c'est tout le propos : le palier dit
+   « la moitié du chemin », la forme le dit aussi. Un dégradé qui s'éteint vaut mieux qu'un
+   anneau plein plus pâle, qu'on prendrait pour un cadre raté. */
+.cadre-qdemi{--cadre-bg:conic-gradient(from -90deg,var(--cadre-clair) 0deg,var(--cadre-c) 150deg,
+  transparent 182deg,transparent 360deg)}
+
+/* MONDE BOUCLÉ — l'anneau se referme. Même couleur, cercle complet : la lecture est immédiate
+   à côté du précédent, sans avoir à comparer des teintes. */
+.cadre-qfini{--cadre-bg:conic-gradient(from -90deg,var(--cadre-clair),var(--cadre-c) 120deg,
+  var(--cadre-fonce) 240deg,var(--cadre-clair))}
+
+/* SANS FAUTE — l'anneau tourne, et une couronne d'éclats tourne EN SENS INVERSE. Le contre-sens
+   est le même signal que sur Maestro : deux mouvements opposés se remarquent là où deux
+   mouvements parallèles se confondent. C'est le palier le plus rare (tous les chapitres à 3
+   étoiles, soit 90 % de bonnes réponses partout), il a droit au traitement du haut de gamme. */
+.cadre-qparfait{--cadre-a:0deg;
+  --cadre-bg:conic-gradient(from var(--cadre-a),var(--cadre-clair),var(--cadre-c) 90deg,
+    var(--cadre-fonce) 180deg,var(--cadre-c) 270deg,var(--cadre-clair));
+  animation:cadreTourne 4.2s linear infinite}
+.cadre-qparfait::after{content:"";position:absolute;inset:-7px;border-radius:50%;pointer-events:none;
+  background:
+    radial-gradient(closest-side at 50% 4%,  var(--cadre-clair), transparent 70%),
+    radial-gradient(closest-side at 90% 40%, var(--cadre-c), transparent 68%),
+    radial-gradient(closest-side at 62% 96%, var(--cadre-clair), transparent 68%),
+    radial-gradient(closest-side at 8% 66%,  var(--cadre-c), transparent 68%);
+  filter:blur(2px) drop-shadow(0 0 4px var(--cadre-c));
+  -webkit-mask:radial-gradient(closest-side,transparent 57%,#000 72%);
+  mask:radial-gradient(closest-side,transparent 57%,#000 72%);
+  animation:cadreEtincelles 7.5s linear infinite,cadreScintille 2.6s var(--ease) infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .cadre-qparfait{animation:none}
+  .cadre-qparfait::after{animation:none;opacity:.85}
+}
 
 /* Sur les pastilles de 21 px, la couche d'effet devient une tache : l'anneau seul suffit. */
 .comm-face.sm::after{display:none}

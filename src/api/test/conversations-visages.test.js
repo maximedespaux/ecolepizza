@@ -88,12 +88,16 @@ test('la résolution tient debout AVANT les migrations, et couvre le personnel',
 test('réponses et commentaires portent un avatar', () => {
     assert.match(srcPost, /<AvatarCadre avatar=\{a\.author_avatar \? parseAvatar\(a\.author_avatar\) : null\}/,
         'la reponse a une question doit montrer son auteur');
-    assert.match(srcPost, /cadre=\{cadreDe\(a\.user_id, a\.author_done, a\.author_cadre, a\.author_cadres_ex\)\?\.id\}/,
-        'avec son cadre');
+    /* `cadreValeur(...)` et non `....id` : un cadre de PIZZA QUEST porte sa teinte dans sa valeur
+       (« qparfait|#eab308 », à la couleur de la formation). Prendre le seul identifiant jetait la
+       couleur en route, et tous ces cadres sortaient dans la teinte de repli — donc tous
+       identiques, ce qui vide de son sens un cadre censé dire DE QUELLE formation il vient. */
+    assert.match(srcPost, /cadre=\{cadreValeur\(cadreDe\(a\.user_id, a\.author_done, a\.author_cadre, a\.author_cadres_ex\)\)\}/,
+        'avec son cadre, TEINTE COMPRISE');
     assert.match(srcPage, /<AvatarCadre avatar=\{c\.author_avatar \? parseAvatar\(c\.author_avatar\) : null\}/,
         'le commentaire d\'une fiche aussi');
-    assert.match(srcPage, /cadre=\{cadreDe\(c\.user_id, c\.author_done, c\.author_cadre, c\.author_cadres_ex\)\?\.id\}/,
-        'avec son cadre');
+    assert.match(srcPage, /cadre=\{cadreValeur\(cadreDe\(c\.user_id, c\.author_done, c\.author_cadre, c\.author_cadres_ex\)\)\}/,
+        'avec son cadre, TEINTE COMPRISE');
 });
 
 test('la modération RETIRE un commentaire, elle ne le réécrit pas', () => {

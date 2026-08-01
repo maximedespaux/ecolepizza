@@ -141,6 +141,7 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 | 125 | `inventory_item.learner_discount_pct` + `learner_discount_eur` + remise figée sur la ligne — **remise stagiaire en % ou en €**, visible seulement dans leur boutique. **À REJOUER** : la colonne « euros » a été ajoutée après coup (fichier entièrement rejouable) |
 | 126 | `user.avatar` + `user.cadre` — **avatar et cadre du PERSONNEL** de l'organisme (il n'a pas de fiche `learner`). Sans elle, l'école reste anonyme dans la Communauté chez les AUTRES |
 | 127 | `piece_type` + `piece_depot` + `piece_fichier` + `program_step.piece_id` — **pièces justificatives fournies par le stagiaire** (identité recto/verso…). **Porte une question RGPD non tranchée, cf. le bloc en tête de ce fichier** |
+| 128 | `learner.cadre` élargie à 32 caractères — les **cadres de Pizza Quest** s'enregistrent en `palier|#rrggbb` (couleur de la formation). Le plus long tient dans les 16 actuels *au caractère près* : la migration écarte le mur, le code marche avant comme après |
 
 Le code fonctionne sans elles (colonnes optionnelles), mais la fonctionnalité n'est complète
 qu'une fois jouées. D'autres migrations plus anciennes (106→117) peuvent aussi être en attente —

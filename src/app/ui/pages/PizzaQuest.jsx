@@ -5,6 +5,7 @@ import ConstructorGame from "../components/ConstructorGame.jsx";
 import SimulateurPizza from "../components/SimulateurPizza.jsx";
 import { colorOf } from "../lib/format.js";
 import { saveQuestProgress } from "../lib/gamification.js";
+import { FETES, paliersFranchis, marquerFete } from "../lib/questPaliers.js";
 
 /**
  * Pizza Quest — entraînement QCM ludique (façon Duolingo × Mario/Royal Match).
@@ -130,6 +131,7 @@ function PizzaQuest() {
   const [prog, setProg] = useState(loadProg);
   const [quiz, setQuiz] = useState(null);
   const [mini, setMini] = useState(null); // { key, obj? } du mini-jeu ouvert, ou null
+  const [fete, setFete] = useState(null); // { palier, monde } — palier tout juste franchi
   /* Les CŒURS et l'XP ont été retirés (2026-07-28) : ils récompensaient le temps passé à
      cliquer, et le manque de cœur BLOQUAIT la révision — punir quelqu'un qui veut réviser est
      un contresens pédagogique. La progression se voit désormais aux CADRES, gagnés sur les
@@ -199,8 +201,19 @@ function PizzaQuest() {
 
   function finishChapter(code, chIdx, stars) {
     setProg((p) => {
-      const next = { ...p, [code]: { ...(p[code] || {}), [chIdx]: Math.max(stars, (p[code] || {})[chIdx] || 0) } };
-      saveProg(next); return next;
+      const avant = p[code] || {};
+      const apres = { ...avant, [chIdx]: Math.max(stars, avant[chIdx] || 0) };
+      const next = { ...p, [code]: apres };
+      saveProg(next);
+      /* LE PALIER SE FÊTE ICI, entre l'avant et l'après — le seul endroit où l'on connaît les
+         deux. Regarder la progression seule ferait refêter le palier à chaque chapitre suivant.
+         Le calcul est local et synchrone : passer par le serveur ferait arriver la fête après
+         que le stagiaire a refermé la fenêtre. */
+      const monde = worlds?.find((w) => w.code === code);
+      const nb = chaptersFor(monde).length;
+      const palier = paliersFranchis(code, avant, apres, nb);
+      if (palier) { marquerFete(code, palier); setFete({ palier, monde }); }
+      return next;
     });
     setQuiz(null);
   }
@@ -250,7 +263,56 @@ function PizzaQuest() {
       {mini?.key === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
       {mini?.key === "simulateur" && <SimulateurPizza objectifId={mini.obj} onClose={() => setMini(null)} onFinish={(stars) => finishMini("simulateur", stars)} />}
 
+      {fete && <FetePalier palier={fete.palier} monde={fete.monde} onClose={() => setFete(null)} />}
     </>
+  );
+}
+
+/**
+ * La fête d'un palier — le seul moment du jeu qui mérite qu'on s'arrête.
+ *
+ * ELLE PORTE LA COULEUR DE LA FORMATION, comme le cadre qu'elle annonce : la fête et la
+ * récompense doivent se reconnaître l'une l'autre, sinon l'anneau qui apparaîtra sur l'avatar
+ * semblera venir d'ailleurs.
+ *
+ * L'APERÇU DU CADRE EST LE VRAI CADRE — les mêmes classes que sur l'avatar, teintées par la
+ * même variable. Un dessin approchant aurait fini par diverger du cadre réel au premier
+ * changement de style, et la promesse ne correspondrait plus à ce qu'on reçoit.
+ */
+function FetePalier({ palier, monde, onClose }) {
+  const f = FETES[palier];
+  const couleur = monde?.color || "#dc3e37";
+  // Échap ferme, comme partout. Une fête sans sortie au clavier est une fête qui enferme.
+  useEffect(() => {
+    const t = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", t);
+    return () => window.removeEventListener("keydown", t);
+  }, [onClose]);
+  if (!f) return null;
+  return (
+    <div className="overlay pq-fete-fond" onClick={onClose}>
+      <div className="modal pq-fete" style={{ maxWidth: 400, "--fc": couleur }} onClick={(e) => e.stopPropagation()}>
+        <div className="mbody" style={{ textAlign: "center", padding: "30px 24px 24px" }}>
+          {/* Les éclats partent DE DERRIÈRE le cadre : ils sont posés avant lui dans le flux et
+              en `position:absolute`, de sorte que l'anneau reste net au premier plan. */}
+          <div className="pq-fete-halo" aria-hidden="true">
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <span key={i} className="pq-fete-eclat" style={{ "--i": i }} />
+            ))}
+            <span className={`pq-fete-cadre cadre cadre-${palier}`} style={{ "--cadre-c": couleur }} />
+          </div>
+          <h3 className="pq-fete-titre">{f.titre}</h3>
+          <p className="pq-fete-texte">{f.texte(monde?.title || monde?.code || "cette formation")}</p>
+          {/* Ce que ça RAPPORTE, dit en toutes lettres : un cadre qui apparaît sans explication
+              se découvre par hasard dans le profil, des semaines plus tard. */}
+          <p className="pq-fete-gain">
+            <Icon name="star" size={14} fill="currentColor" /> Cadre débloqué : <b>{f.cadre}</b>
+            <span className="hint"> — à porter depuis ton profil</span>
+          </p>
+          <button className="btn primary" onClick={onClose} autoFocus>Continuer</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
