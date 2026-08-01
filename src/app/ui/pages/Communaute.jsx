@@ -365,6 +365,9 @@ export default function Communaute() {
   useEchap(() => setOpenId(null), !!openId);
   const { user } = useContext(UserContext);
   const moi = user?.id;
+  // Qui arrive par le menu de l'école — même liste que `STAFF` dans nav.js. STAGIAIRE et
+  // INTERVENANT entrent par l'espace stagiaire : même page, autre lecteur (cf. l'accroche).
+  const duBureau = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"].includes(user?.role);
   // Le choix de cadre vit dans le navigateur de chacun : on ne le connaît donc QUE pour
   // l'utilisateur courant. Pour les autres, on retombe sur leur cadre de parcours, seule
   // information dont le serveur dispose aujourd'hui (cf. CHANTIERS.md §4.2 point 6).
@@ -507,8 +510,13 @@ export default function Communaute() {
 
   return (
     <>
-      <PageHead eyebrow="Outils · communauté" title="Communauté"
-        lead="Les fiches partagées par les autres stagiaires : empâtements, garnitures et réalisations. Aime, commente, mets de côté (wishlist), ou enregistre-en une dans tes fiches pour l'adapter." />
+      {/* MÊME page des deux côtés, mais pas le même lecteur. Le texte d'origine tutoie et dit
+          « les AUTRES stagiaires » : lu depuis le bureau, il prend l'école pour une stagiaire.
+          Seule l'accroche change — le fil, lui, reste le même (cadré sur l'organisme). */}
+      <PageHead eyebrow={duBureau ? "Formation · communauté" : "Outils · communauté"} title="Communauté"
+        lead={duBureau
+          ? "Le fil des stagiaires : questions d'entraide, empâtements, garnitures et réalisations. Vous pouvez y répondre, épingler ce qui compte, et publier une annonce de l'école."
+          : "Les fiches partagées par les autres stagiaires : empâtements, garnitures et réalisations. Aime, commente, mets de côté (wishlist), ou enregistre-en une dans tes fiches pour l'adapter."} />
 
       {list.length === 0 && posts.length === 0 ? (
         <EmptyState icon="users" title="La communauté est encore vide"
@@ -763,9 +771,11 @@ export default function Communaute() {
       {composer && (
         // `peutAnnoncer` : une ANNONCE engage l'école, seul le bureau peut en publier. Le
         // serveur refuse de toute façon, mais proposer un choix qui sera rejeté est une
-        // mauvaise manière de le dire.
+        // mauvaise manière de le dire. La liste doit rester la MÊME que `STAFF` dans
+        // community.controller : 'ADMIN' n'existe pas (le rôle réel est ADMIN_ORGANISME), et
+        // INTERVENANT est du côté des stagiaires — il ne parle pas au nom de l'école.
         <QuestionForm onClose={() => setComposer(false)} onCreated={chargerPosts}
-          peutAnnoncer={["SUPER_ADMIN", "ADMIN", "SECRETARIAT", "INTERVENANT"].includes(user?.role)} />
+          peutAnnoncer={["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role)} />
       )}
     </>
   );

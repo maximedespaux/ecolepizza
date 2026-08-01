@@ -26,6 +26,13 @@ export const NAV = [
       { to: "/entreprises", ic: "building", label: "Entreprises", roles: ADMIN },
       { to: "/sessions", ic: "calendar", label: "Sessions", roles: STAFF },
       { to: "/formations", ic: "graduation", label: "Formations", roles: STAFF },
+      /* Le fil de la communauté, le MÊME que celui des stagiaires (l'API cadre sur
+         l'organisme, pas sur le stagiaire). L'école y publiait déjà des annonces — la page
+         prévoit `peutAnnoncer` pour le personnel — mais aucun chemin ne l'y menait : il fallait
+         un compte stagiaire pour voir ce qu'on y disait, et pour y répondre.
+         Rangé en « Formation » : c'est la vie du groupe pendant le stage, pas de la relation
+         commerciale. Ouvert au formateur, qui est en salle avec eux. */
+      { to: "/communaute", ic: "message-circle", label: "Communauté", roles: STAFF },
     ],
   },
   {
@@ -123,6 +130,7 @@ export const PAGE_TITLES = {
   "/produit-divers": "Produit divers",
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
+  "/communaute": "Communauté",
   "/inventaire": "Inventaire",
   "/ventes": "Ventes de Matériels et Inventaire",
   "/demandes-boutique": "Demandes boutique",
@@ -184,6 +192,7 @@ export function navMode(user, path) {
 const SECTION_OF = {
   "/stagiaires": "/stagiaires", "/entreprises": "/entreprises", "/sessions": "/sessions", "/formations": "/formations",
   "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
+  "/communaute": "/communaute",
   "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",

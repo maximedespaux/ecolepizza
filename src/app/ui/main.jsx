@@ -195,6 +195,10 @@ function AppRoutes() {
           <Route path="pizza-quest-admin" element={<Guard nav="/pizza-quest-admin" roles={ADMIN}><QuestManager /></Guard>} />
           <Route path="opcos" element={<Guard nav="/opcos" roles={ADMIN}><Opcos /></Guard>} />
           <Route path="partenaires" element={<Guard nav="/partenaires" roles={STAFF}><Partenaires /></Guard>} />
+          {/* Le MÊME fil que côté stagiaire — l'API cadre sur l'organisme. Le composant est
+              partagé : il sait déjà distinguer le personnel (qui peut publier une annonce) du
+              stagiaire. Deux chemins, une seule page. */}
+          <Route path="communaute" element={<Guard nav="/communaute" roles={STAFF}><Communaute /></Guard>} />
           <Route path="ventes" element={<Guard nav="/ventes" roles={ADMIN}><Ventes /></Guard>} />
           <Route path="inventaire" element={<Guard nav="/ventes" roles={ADMIN}><Inventaire /></Guard>} />
           <Route path="demandes-boutique" element={<Guard nav="/demandes-boutique" roles={ADMIN}><DemandesBoutique /></Guard>} />

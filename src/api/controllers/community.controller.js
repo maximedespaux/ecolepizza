@@ -19,7 +19,19 @@ const nomDe = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim(
 
 // L'école parle au nom de l'école : seul le bureau peut publier une ANNONCE, et elle seule
 // peut être épinglée. Un stagiaire qui pourrait épingler passerait devant tout le monde.
-const STAFF = ['SUPER_ADMIN', 'ADMIN', 'SECRETARIAT', 'INTERVENANT'];
+/* DEUX CORRECTIONS SUR CETTE LISTE.
+ *
+ * 'ADMIN_ORGANISME' et non 'ADMIN' : ce role n'existe pas. La valeur reelle est ADMIN_ORGANISME
+ * (cf. auth.middleware, ROLE_LABELS) — un administrateur d'organisme etait donc traite comme un
+ * simple stagiaire par les QUATRE controles que `estStaff` commande : publier une annonce,
+ * epingler, modifier ou supprimer la publication d'un autre. Le defaut passait inapercu tant que
+ * seul l'espace stagiaire ouvrait cette page ; il devient bloquant des que l'ecole y accede.
+ *
+ * INTERVENANT RETIRE. Il est du cote des STAGIAIRES, pas du bureau — il entre d'ailleurs par le
+ * meme layout (cf. main.jsx : `isStudent || isIntervenant`). Le laisser ici lui donnait le droit
+ * de parler AU NOM DE L'ECOLE, d'epingler devant tout le monde, et de modifier ou supprimer la
+ * publication de n'importe qui. Il participe au fil comme les autres. */
+const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'];
 const estStaff = (u) => STAFF.includes(u.role);
 
 /**
