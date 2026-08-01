@@ -35,6 +35,7 @@ const srcCadres = fs.readFileSync(path.join(APP, 'ui/lib/cadres.js'), 'utf8');
 const srcPost = fs.readFileSync(path.join(APP, 'ui/components/QuestionPost.jsx'), 'utf8');
 const srcSide = fs.readFileSync(path.join(APP, 'ui/components/Sidebar.jsx'), 'utf8');
 const srcProfil = fs.readFileSync(path.join(APP, 'ui/components/ProfilPersonnel.jsx'), 'utf8');
+const srcCss = fs.readFileSync(path.join(APP, 'ui/styles/app.css'), 'utf8');
 
 test('modérer et parler au nom de l\'école ne sont plus la même chose', () => {
     // Ce qui ENGAGE l'école reste au bureau…
@@ -97,6 +98,43 @@ test('l\'avatar du personnel vit sur `user`, sans fiche stagiaire fantôme', () 
         'l\'avatar du personnel s\'ecrit sur `user`');
     assert.match(srcComm, /SELECT id, avatar, cadre FROM user WHERE id IN \(\?\)/,
         'le fil doit aller chercher l\'avatar du personnel');
+});
+
+test('l\'anneau du cadre tient sur son avatar', () => {
+    /* DEUX DÉFAUTS D'AFFICHAGE, invisibles au build, trouvés en REGARDANT.
+     * 1. `.cadre::before` est `position:absolute` ; `.pf-avatar` et `.side-foot .avatar` étaient
+     *    `position:static`. Le pseudo-élément se calait donc sur le premier ancêtre positionné —
+     *    la MODALE — et l'anneau sortait en ellipse géante en travers de l'écran.
+     * 2. `.pf-avatar` est un carré arrondi de 18px, pas un cercle : la règle générique à 50 % ne
+     *    suivait pas son contour. Le rayon de l'anneau vaut celui de l'avatar PLUS son débord. */
+    assert.match(srcCss, /\.pf-avatar\.cadre,\.side-foot \.avatar\.cadre\{position:relative\}/,
+        'sans conteneur positionne, l\'anneau se cale sur la modale');
+    assert.match(srcCss, /\.pf-avatar\.cadre::before\{border-radius:21px\}/,
+        'anneau = rayon de l\'avatar (18px) + son debord (3px)');
+    assert.match(srcCss, /\.cadre::before\{[^}]*inset:-3px/, 'le debord de 3px est l\'hypothese du 21px');
+});
+
+test('les étoiles du cadre « École » suivent la taille de l\'avatar', () => {
+    assert.match(srcCss, /\.cadre-ecole::after\{content:"⭐"/, 'le cadre du personnel porte des etoiles');
+    assert.match(srcCss, /@keyframes etoile-ecole\{/, 'l\'animation doit exister');
+    // La taille se prend sur le DIAMÈTRE (`--av`), pas sur la taille de texte du parent : celle-ci
+    // varie sans rapport avec l'avatar (mesuré 30px dans la modale contre 13px dans le fil, pour
+    // des avatars de 64 et 38px — l'étoile faisait 18px ici et 8px là).
+    assert.match(srcCss, /font-size:calc\(var\(--av,[^)]*\) \* \.3\)/,
+        'la taille de l\'etoile doit suivre le diametre de l\'avatar');
+    assert.doesNotMatch(srcCss, /\.cadre-ecole::after\{[^}]*font-size:\.6em/, 'plus de taille prise sur le texte');
+    /* Trois éclats à des endroits DISTINCTS : c'est ce qui fait lire « des étoiles » plutôt
+       qu'« une étoile qui se déplace ». Mesuré dans le navigateur : (14,-32) haut-droite,
+       (-36,8) bas-gauche, (-30,-34) haut-gauche.
+       Le bloc est isolé avant d'être compté : cherché dans TOUT le fichier, `71%{opacity:1`
+       tombait aussi sur d'autres animations — le test comptait 4 éclats pour 3. */
+    const bloc = /@keyframes etoile-ecole\{([\s\S]*?)\n\}/.exec(srcCss);
+    assert.ok(bloc, 'bloc @keyframes etoile-ecole introuvable');
+    const pics = [...bloc[1].matchAll(/\{opacity:1;/g)].length;
+    assert.strictEqual(pics, 3, 'trois eclats visibles attendus');
+    // Et à des endroits différents : trois fois le même point ne serait qu'un clignotement.
+    const points = new Set([...bloc[1].matchAll(/\{opacity:1;[^}]*translate\((-?[\d.]+em,-?[\d.]+em)\)/g)].map((m) => m[1]));
+    assert.strictEqual(points.size, 3, 'les trois eclats doivent jaillir d\'endroits differents');
 });
 
 test('la modale de la barre latérale sort du contexte d\'empilement', () => {

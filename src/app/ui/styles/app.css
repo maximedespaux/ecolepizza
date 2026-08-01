@@ -3477,10 +3477,48 @@ button.av-wrap:active{transform:scale(.94)}
   box-shadow:0 0 12px -2px rgba(252,185,0,.85)}
 .cadre-jury{--cadre-bg:linear-gradient(135deg,#2c3371,#6b4fbb,#2c3371)}
 .cadre-fondateur{--cadre-bg:linear-gradient(135deg,#0e9aa7,#7fe3d6,#0e9aa7)}
-/* Personnel de l'organisme — les deux rouges de la charte, ceux du logo. Volontairement SANS
-   métal ni animation : c'est un cadre d'appartenance, pas une récompense. Il doit se distinguer
-   des paliers d'un coup d'œil sans avoir l'air d'en être un de plus. */
+/* Personnel de l'organisme — les deux rouges de la charte, ceux du logo. Pas de métal : les
+   paliers en ont déjà, et il ne doit pas passer pour l'un d'eux. Ce qui le distingue, ce sont
+   ses ÉTOILES. */
 .cadre-ecole{--cadre-bg:linear-gradient(135deg,#dc3e37,#ff6900,#dc3e37)}
+/* Les étoiles jaillissent puis retombent, en boucle.
+   UN SEUL pseudo-élément, promené entre trois points autour de l'anneau, invisible entre deux
+   apparitions : à cette cadence l'œil lit « des étoiles », pas « une étoile qui se déplace ».
+   Un vrai système de particules demanderait du JS et un nœud par étincelle — sur un avatar qui
+   apparaît des dizaines de fois dans un fil, ce serait payer très cher un effet décoratif.
+   Les distances sont en `em` de l'étoile elle-même : l'effet suit la taille de l'avatar sans
+   qu'on ait à le régler à chaque emplacement (pied de menu 34 px, modale 64 px, fil 38 px).
+   `prefers-reduced-motion` est déjà couvert globalement (voir la règle en tête de fichier). */
+.cadre-ecole::after{content:"⭐";position:absolute;top:50%;left:50%;pointer-events:none;z-index:2;
+  /* Taille prise sur le DIAMÈTRE de l'avatar (`--av`) quand il est connu, pas sur la taille de
+     texte du parent : celle-ci varie sans rapport avec l'avatar — mesuré 30 px dans la modale
+     contre 13 px dans le fil, ce qui donnait une étoile de 18 px ici et de 8 px là, pour des
+     avatars de 64 et 38 px. Le repli couvre les emplacements sans `--av` (`.pf-avatar`). */
+  font-size:calc(var(--av,2.2em) * .3);line-height:1;opacity:0;will-change:transform,opacity;
+  animation:etoile-ecole 4.2s ease-out infinite}
+@keyframes etoile-ecole{
+  /* 1 — en haut à droite */
+  0%   {opacity:0;transform:translate(-50%,-50%) translate(1.1em,-1em)   scale(.2)  rotate(-30deg)}
+  4%   {opacity:1;transform:translate(-50%,-50%) translate(1.2em,-1.1em) scale(1.1) rotate(0deg)}
+  14%  {opacity:0;transform:translate(-50%,-50%) translate(1.6em,-1.6em) scale(.5)  rotate(25deg)}
+  33%  {opacity:0;transform:translate(-50%,-50%) translate(-1.2em,.8em)  scale(.2)  rotate(-20deg)}
+  /* 2 — en bas à gauche */
+  38%  {opacity:1;transform:translate(-50%,-50%) translate(-1.3em,.9em)  scale(1)   rotate(0deg)}
+  48%  {opacity:0;transform:translate(-50%,-50%) translate(-1.7em,1.4em) scale(.45) rotate(-25deg)}
+  66%  {opacity:0;transform:translate(-50%,-50%) translate(-.9em,-1.1em) scale(.2)  rotate(15deg)}
+  /* 3 — en haut à gauche */
+  71%  {opacity:1;transform:translate(-50%,-50%) translate(-1em,-1.2em)  scale(.95) rotate(0deg)}
+  81%  {opacity:0;transform:translate(-50%,-50%) translate(-1.3em,-1.7em) scale(.4) rotate(20deg)}
+  100% {opacity:0;transform:translate(-50%,-50%) translate(1.1em,-1em)   scale(.2)  rotate(-30deg)}
+}
+/* DEUX DÉFAUTS SUR LE MÊME ANNEAU, aucun des deux visible au build.
+   1. `.cadre::before` est `position:absolute` : sans ancêtre positionné il se cale sur le
+      premier qui l'est — ici la MODALE. L'anneau sortait en ELLIPSE GÉANTE en travers de
+      l'écran ; on ne le lisait même pas comme un anneau. Mesuré dans le navigateur, pas deviné.
+   2. `.pf-avatar` est un carré arrondi de 18 px, pas un cercle : un anneau à 50 % ne suit pas
+      son contour. Le rayon de l'anneau vaut celui de l'avatar PLUS son débord de 3 px. */
+.pf-avatar.cadre,.side-foot .avatar.cadre{position:relative}
+.pf-avatar.cadre::before{border-radius:21px}
 @media (prefers-reduced-motion:reduce){.cadre-champion{animation:none}}
 
 /* Cadres dans la Communauté. `.author-ava` et `.prof-ava` reçoivent l'anneau : elles doivent
