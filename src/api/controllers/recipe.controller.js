@@ -195,28 +195,17 @@ const listShared = async (req, res) => {
             // `completed_levels` est une liste de niveaux séparés par des virgules : on la
             // compte ici plutôt que de l'envoyer brute — le front n'a besoin que du nombre,
             // et transmettre les niveaux d'un tiers exposerait son parcours détaillé.
-            try {
-                const [avs] = await conn.query(
-                    'SELECT r.id AS rid, l.avatar AS av, l.completed_levels AS lv FROM recipe r JOIN learner l ON l.user_id = r.author_user_id WHERE r.id IN (?)',
-                    [ids]);
-                const am = Object.fromEntries(avs.map((x) => [x.rid, x.av]));
-                const nbNiveaux = (v) => String(v || '').split(',').map((t) => t.trim()).filter(Boolean).length;
-                const dm = Object.fromEntries(avs.map((x) => [x.rid, nbNiveaux(x.lv)]));
-                rows.forEach((r) => { r.author_avatar = am[r.id] || null; r.author_done = dm[r.id] || 0; });
-            } catch (e) { /* migration 070 non jouée : pas d'avatar */ }
-            /* Le cadre CHOISI par l'auteur, et les exclusifs qu'on lui a accordés.
-               REQUÊTE SÉPARÉE, et c'est délibéré : ces deux colonnes arrivent avec la migration
-               113. Ajoutées au SELECT ci-dessus, une base où 113 n'est pas jouée aurait fait
-               échouer TOUTE la requête — et le catch aurait emporté les avatars et le nombre
-               de formations avec les cadres. Isolées, seuls les cadres manquent. */
-            try {
-                const [cds] = await conn.query(
-                    'SELECT r.id AS rid, l.cadre AS cd, l.cadres_exclusifs AS cx FROM recipe r JOIN learner l ON l.user_id = r.author_user_id WHERE r.id IN (?)',
-                    [ids]);
-                const cm = Object.fromEntries(cds.map((x) => [x.rid, x.cd || null]));
-                const xm = Object.fromEntries(cds.map((x) => [x.rid, listeCadres(x.cx)]));
-                rows.forEach((r) => { r.author_cadre = cm[r.id] || null; r.author_cadres_ex = xm[r.id] || []; });
-            } catch (e) { if (!noTable(e)) throw e; } // migration 113 non jouée : cadre de parcours
+            /* Avatar, cadre et parcours de l'auteur — MÊME résolution que partout ailleurs.
+             *
+             * Deux requêtes vivaient ici, chacune en `JOIN learner` : un auteur SANS fiche
+             * stagiaire — le personnel de l'organisme — en était donc exclu par la jointure
+             * elle-même. Sa fiche partagée sortait sans avatar ni cadre, alors que sa
+             * publication d'entraide, juste à côté dans le MÊME fil, en avait un. C'est
+             * exactement la divergence que `lib/auteurs.js` existe pour empêcher.
+             *
+             * L'isolement des deux requêtes (migrations 070 / 113 séparées) est conservé : il
+             * vit désormais dans le fichier commun, pour toutes les listes à la fois. */
+            await enrichirAuteurs(conn, rows);
             try {
                 const [likes] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_like WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
                 const [coms] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_comment WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
@@ -274,43 +263,27 @@ const listShared = async (req, res) => {
                 const [qui] = await conn.query(
                     `SELECT c.recipe_id, c.user_id, MAX(c.created_at) AS last_at,
                             COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''),
-                                     MAX(c.author_name)) AS name,
-                            MAX(l.avatar) AS avatar, MAX(l.completed_levels) AS lv
+                                     MAX(c.author_name)) AS name
                        FROM recipe_comment c
                        LEFT JOIN user u ON u.id = c.user_id
-                       LEFT JOIN learner l ON l.user_id = c.user_id
                       WHERE c.recipe_id IN (?)
                       GROUP BY c.recipe_id, c.user_id, u.first_name, u.last_name
                       ORDER BY last_at DESC`,
                     [ids]
                 );
                 const par = {};
-                for (const x of qui) {
-                    // `done` = COMPTE des formations terminées, comme pour l'auteur : il porte le
-                    // cadre de la pastille. Jamais la liste des niveaux — le parcours détaillé
-                    // d'un tiers ne regarde personne.
-                    const done = String(x.lv || '').split(',').map((t) => t.trim()).filter(Boolean).length;
-                    (par[x.recipe_id] ||= []).push({ user_id: x.user_id, name: x.name, avatar: x.avatar, done });
-                }
+                for (const x of qui) (par[x.recipe_id] ||= []).push({ user_id: x.user_id, name: x.name });
                 rows.forEach((r) => {
                     const tous = par[r.id] || [];
                     r.commenters = tous.slice(0, 4);
                     r.commenters_total = tous.length; // distinctes, pour le « +N »
                 });
-                // Cadres des commentateurs — requête séparée, même raison que pour l'auteur :
-                // la migration 113 peut ne pas être jouée, et les visages doivent survivre.
-                try {
-                    const uids = [...new Set(qui.map((x) => x.user_id).filter(Boolean))];
-                    if (uids.length) {
-                        const [cds] = await conn.query('SELECT user_id, cadre, cadres_exclusifs FROM learner WHERE user_id IN (?)', [uids]);
-                        const par2 = Object.fromEntries(cds.map((x) => [x.user_id, x]));
-                        rows.forEach((r) => (r.commenters || []).forEach((g) => {
-                            const l = par2[g.user_id];
-                            g.cadre = (l && l.cadre) || null;
-                            g.cadres_ex = listeCadres(l && l.cadres_exclusifs);
-                        }));
-                    }
-                } catch (e) { if (!noTable(e)) throw e; }
+                /* Visage des commentateurs — MÊME résolution que les auteurs, sans préfixe.
+                 * La jointure `LEFT JOIN learner` qui vivait ici laissait le personnel de
+                 * l'organisme sans avatar ni cadre : sa pastille sortait en rond gris à côté de
+                 * celles des stagiaires. `done` reste un COMPTE, jamais la liste des niveaux —
+                 * le parcours détaillé d'un tiers ne regarde personne. */
+                await enrichirAuteurs(conn, rows.flatMap((r) => r.commenters || []), 'user_id', '');
             } catch (e) {
                 if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e;
                 rows.forEach((r) => { r.commenters = []; r.commenters_total = 0; });

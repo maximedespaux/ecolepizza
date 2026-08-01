@@ -31,8 +31,13 @@ const CADRE_PERSONNEL = 'ecole';
  * @param conn        connexion `db.promise()`
  * @param lignes      les lignes à compléter (modifiées sur place)
  * @param champId     nom du champ portant l'identifiant utilisateur (défaut `author_user_id`)
+ * @param prefixe     préfixe des champs écrits (défaut `author_`). Les pastilles « qui a
+ *                    commenté » les nomment sans préfixe (`avatar`, `cadre`…) : un second
+ *                    fichier pour cette seule différence aurait redonné deux copies à tenir.
  */
-async function enrichirAuteurs(conn, lignes, champId = 'author_user_id') {
+async function enrichirAuteurs(conn, lignes, champId = 'author_user_id', prefixe = 'author_') {
+    const AV = `${prefixe}avatar`, DONE = `${prefixe}done`;
+    const CADRE = `${prefixe}cadre`, EX = `${prefixe}cadres_ex`;
     const uids = [...new Set((lignes || []).map((r) => r[champId]).filter(Boolean))];
     if (!uids.length) return lignes;
 
@@ -43,10 +48,10 @@ async function enrichirAuteurs(conn, lignes, champId = 'author_user_id') {
         const par = Object.fromEntries(ls.map((x) => [x.user_id, x]));
         lignes.forEach((r) => {
             const l = par[r[champId]];
-            r.author_avatar = (l && l.avatar) || null;
-            r.author_done = liste(l && l.completed_levels).length;
-            r.author_cadre = (l && l.cadre) || null;
-            r.author_cadres_ex = liste(l && l.cadres_exclusifs);
+            r[AV] = (l && l.avatar) || null;
+            r[DONE] = liste(l && l.completed_levels).length;
+            r[CADRE] = (l && l.cadre) || null;
+            r[EX] = liste(l && l.cadres_exclusifs);
         });
     } catch (e) { if (!noSchema(e)) throw e; }
 
@@ -56,9 +61,9 @@ async function enrichirAuteurs(conn, lignes, champId = 'author_user_id') {
         lignes.forEach((r) => {
             const u = par[r[champId]];
             if (!u) return;
-            if (!r.author_avatar) r.author_avatar = u.avatar || null;
-            if (!r.author_cadre) r.author_cadre = u.cadre || null;
-            if (u.cadre === CADRE_PERSONNEL) r.author_cadres_ex = [...(r.author_cadres_ex || []), CADRE_PERSONNEL];
+            if (!r[AV]) r[AV] = u.avatar || null;
+            if (!r[CADRE]) r[CADRE] = u.cadre || null;
+            if (u.cadre === CADRE_PERSONNEL) r[EX] = [...(r[EX] || []), CADRE_PERSONNEL];
         });
     } catch (e) { if (!noSchema(e)) throw e; } // migration 126 non jouée
 

@@ -30,16 +30,29 @@ const srcRecipe = fs.readFileSync(path.join(API, 'controllers/recipe.controller.
 const srcPost = fs.readFileSync(path.join(APP, 'ui/components/QuestionPost.jsx'), 'utf8');
 const srcPage = fs.readFileSync(path.join(APP, 'ui/pages/Communaute.jsx'), 'utf8');
 
-test('les TROIS listes résolvent l\'auteur par le même chemin', () => {
-    // Le fil, les réponses d'une question, les commentaires d'une fiche.
-    assert.match(srcComm, /await enrichirAuteurs\(conn, rows\)/, 'le fil');
+test('les CINQ listes résolvent l\'auteur par le même chemin', () => {
+    /* Il y en avait trois au départ, puis cinq. Les deux dernières — la liste des FICHES et les
+     * pastilles « qui a commenté » — ont été trouvées parce que le cadre « École » n'apparaissait
+     * sur aucune carte : elles résolvaient l'auteur par un `JOIN learner`, et la jointure
+     * elle-même excluait un compte SANS fiche stagiaire. Le personnel sortait donc en rond gris
+     * sur une carte, à côté d'une publication d'entraide où il avait un visage — MÊME fil. */
+    assert.match(srcComm, /await enrichirAuteurs\(conn, rows\)/, 'le fil d\'entraide');
     assert.match(srcComm, /await enrichirAuteurs\(conn, answers, 'user_id'\)/, 'les reponses');
     assert.match(srcRecipe, /await enrichirAuteurs\(conn, comments, 'user_id'\)/, 'les commentaires');
-    // Et il n'en reste AUCUNE copie dans les contrôleurs : c'est tout l'objet du fichier commun.
+    assert.match(srcRecipe, /await enrichirAuteurs\(conn, rows\)/, 'la liste des fiches');
+    assert.match(srcRecipe, /await enrichirAuteurs\(conn, rows\.flatMap\(\(r\) => r\.commenters \|\| \[\]\), 'user_id', ''\)/,
+        'les pastilles « qui a commente »');
+    // Et il n'en reste AUCUNE copie : c'est tout l'objet du fichier commun.
     for (const [nom, src] of [['community', srcComm], ['recipe', srcRecipe]]) {
         assert.doesNotMatch(src, /SELECT user_id, avatar, completed_levels, cadre, cadres_exclusifs/,
             `copie residuelle de la resolution d'auteur dans ${nom}.controller`);
     }
+    /* AUCUNE jointure `learner` ne doit plus servir à résoudre un visage : c'est la forme même
+       du défaut — elle exclut silencieusement qui n'a pas de fiche stagiaire. */
+    assert.doesNotMatch(srcRecipe, /JOIN learner l ON l\.user_id = r\.author_user_id/,
+        'la jointure excluait le personnel de l\'organisme');
+    assert.doesNotMatch(srcRecipe, /LEFT JOIN learner l ON l\.user_id = c\.user_id/,
+        'idem pour les pastilles de commentateurs');
 });
 
 test('la résolution tient debout AVANT les migrations, et couvre le personnel', () => {
@@ -52,7 +65,9 @@ test('la résolution tient debout AVANT les migrations, et couvre le personnel',
         'chaque source doit degrader independamment');
     // Le cadre « École » n'est adossé à aucune formation : sans être déclaré possédé, l'écran le
     // rejette (`cadrePorteDe`) et l'école réapparaît sans cadre chez les AUTRES.
-    assert.match(srcAuteurs, /r\.author_cadres_ex = \[\.\.\.\(r\.author_cadres_ex \|\| \[\]\), CADRE_PERSONNEL\]/,
+    // Les noms de champs sont devenus paramétrables (préfixe) le jour où les pastilles
+    // « qui a commenté » ont voulu la même résolution sous d'autres noms.
+    assert.match(srcAuteurs, /if \(u\.cadre === CADRE_PERSONNEL\) r\[EX\] = \[\.\.\.\(r\[EX\] \|\| \[\]\), CADRE_PERSONNEL\]/,
         'le cadre du personnel doit etre declare possede');
     // Une requête par SOURCE, jamais une par ligne.
     assert.strictEqual((srcAuteurs.match(/conn\.query\(/g) || []).length, 2, 'deux requetes, pas une par auteur');
