@@ -265,16 +265,32 @@ export const EXTRA_ACCESS = [
     ic: "eye",
     defaultRoles: ["SUPER_ADMIN"],
   },
-  {
-    // Modérer ≠ parler au nom de l'école. Publier une ANNONCE et épingler restent au bureau
-    // (cf. `estStaff` dans community.controller) ; l'entretien du fil s'accorde nominativement.
-    to: "cap:moderate-community",
-    label: "Modérer la communauté",
-    hint: "Communauté — supprimer ou corriger la publication et les réponses d'un autre.",
-    ic: "shield",
+];
+
+/**
+ * Capacité attachée à UNE PAGE — elle se règle sur sa ligne, pas dans une liste à part.
+ *
+ * POURQUOI. « Lecture / Modifier » n'a aucun sens sur un FIL où tout le monde participe : la
+ * Communauté n'a pas de version « consultation », et surtout, la question qui se pose vraiment
+ * n'est pas celle-là. Quelqu'un du bureau qui publie sans pouvoir retirer un message est un
+ * problème, pas un réglage. Ce qui varie, c'est ADMINISTRER ou non.
+ *
+ * La capacité vivait dans « Accès supplémentaires », tout en bas de la fenêtre, sans rapport
+ * visible avec la ligne « Communauté » située plus haut : on pouvait accorder la page en
+ * croyant avoir tout donné. Elle est maintenant sur la ligne même.
+ *
+ * `defaultRoles` = ceux qui l'ont d'office par leur rôle (case allumée et verrouillée). Sans
+ * cela l'écran mentirait : `peutModerer` répond oui au bureau quoi qu'affiche la fenêtre.
+ * La liste DOIT rester celle de `STAFF` dans lib/moderation.js — un test le vérifie.
+ */
+export const PAGE_CAPS = {
+  "/communaute": {
+    cap: "cap:moderate-community",
+    label: "Administrer",
+    hint: "Retirer ou corriger la publication, la réponse ou le commentaire d'un autre. Publier une annonce et épingler restent au bureau.",
     defaultRoles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"],
   },
-];
+};
 
 // Rôles « système » (intégrés) : servent de modèles d'accès réutilisables.
 export const BUILTIN_ROLES = [

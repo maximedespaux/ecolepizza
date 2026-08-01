@@ -55,6 +55,18 @@ test('les CINQ listes résolvent l\'auteur par le même chemin', () => {
         'idem pour les pastilles de commentateurs');
 });
 
+test('le DÉTAIL d\'une publication et d\'une fiche porte aussi son auteur', () => {
+    /* SIGNALÉ TEL QUEL : « sur la publication de l'admin, la photo n'apparaît pas mais le cadre
+     * si ». Les deux détails viennent d'un `SELECT *` qui ne connaît ni avatar ni cadre : leur
+     * en-tête retombait sur les initiales, alors que la CARTE du fil — juste avant le clic —
+     * montrait le visage. Le cadre, lui, s'affichait quand même, parce qu'il se résout côté
+     * écran pour l'utilisateur courant : d'où un symptôme dissocié, avatar absent / cadre
+     * présent, qui ne pointait pas vers sa cause.
+     * Les listes avaient été traitées, pas les fiches unitaires. */
+    assert.match(srcComm, /await enrichirAuteurs\(conn, \[p\]\)/, 'le detail d\'une publication');
+    assert.match(srcRecipe, /await enrichirAuteurs\(conn, \[r\]\)/, 'le detail d\'une fiche');
+});
+
 test('la résolution tient debout AVANT les migrations, et couvre le personnel', () => {
     // Deux sources, dans cet ordre : la fiche stagiaire, puis le compte (personnel de l'organisme).
     assert.match(srcAuteurs, /FROM learner WHERE user_id IN \(\?\)/, 'source stagiaire');

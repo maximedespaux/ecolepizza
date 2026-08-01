@@ -91,6 +91,12 @@ const getPost = async (req, res) => {
          * porte un visage, la conversation qui suit repassait à des lignes anonymes — et on ne
          * voyait pas qui répond, alors que c'est là que se joue l'entraide. */
         await enrichirAuteurs(conn, answers, 'user_id');
+        /* ET LA PUBLICATION ELLE-MÊME. Elle vient d'un `SELECT p.*` qui ne connaît ni avatar ni
+         * cadre : l'en-tête du détail retombait donc sur les initiales, alors que la CARTE du
+         * fil, juste avant le clic, montrait le visage. Le cadre, lui, s'affichait quand même —
+         * il se résout côté écran pour l'utilisateur courant — d'où un défaut qui se lisait
+         * « le cadre oui, la photo non ». */
+        await enrichirAuteurs(conn, [p]);
         const [[img]] = await conn.query('SELECT id FROM community_image WHERE post_id = ? LIMIT 1', [req.params.id]);
         /* `can_moderate` manquait, et c'est ce qui rendait toute la modération INVISIBLE : le
          * serveur autorisait depuis toujours le bureau à supprimer la publication d'un autre,

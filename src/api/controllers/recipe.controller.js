@@ -352,6 +352,8 @@ const getRecipe = async (req, res) => {
             // Même visage que partout ailleurs — cf. lib/auteurs.js. Le fil de commentaires
             // était la dernière liste de la Communauté à n'afficher que des noms.
             await enrichirAuteurs(conn, comments, 'user_id');
+            // Et l'auteur de la fiche : même oubli, même symptôme que sur une publication.
+            await enrichirAuteurs(conn, [r]);
         } catch (e) { if (!noTable(e)) throw e; }
         /* `can_moderate` : sans lui, le bouton de suppression ne s'affichait que sur `mine` et
          * l'école n'avait aucun moyen de retirer le commentaire d'un tiers — sinon supprimer la

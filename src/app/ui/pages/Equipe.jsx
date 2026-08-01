@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { getTeam, createMember, updateMember, deleteMember, getAccessProfiles, createAccessProfile } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
-import { GRANTABLE_NAV, EXTRA_ACCESS, canAccess, OWNER_ROLES, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
+import { GRANTABLE_NAV, EXTRA_ACCESS, PAGE_CAPS, canAccess, OWNER_ROLES, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
@@ -235,13 +235,20 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
   const granted = (to) => Object.prototype.hasOwnProperty.call(modes, to);
   const toggle = (to) => setModes((p) => {
     const n = { ...p };
-    if (granted(to)) delete n[to]; else n[to] = "write";
+    if (granted(to)) {
+      delete n[to];
+      // Retirer une page retire SA capacité. Sans cela elle survivrait à l'écran qu'elle sert,
+      // et `peutModerer` ne regarde QUE la capacité : la personne modérerait encore par l'API.
+      if (PAGE_CAPS[to]) delete n[PAGE_CAPS[to].cap];
+    } else n[to] = "write";
     return n;
   });
   const setMode = (to, mode) => setModes((p) => ({ ...p, [to]: mode }));
   const setAll = (on) => {
     if (!on) { setModes({}); return; }
-    const o = {};
+    // Les capacités sont CONSERVÉES : « Tout cocher » les effaçait, alors qu'il ne parle que
+    // des pages. On perdait « Administrer » sans que rien ne le dise.
+    const o = Object.fromEntries(Object.entries(modes).filter(([k]) => k.startsWith("cap:")));
     for (const g of GRANTABLE_NAV) for (const it of g.items) o[it.to] = modes[it.to] || "write";
     setModes(o);
   };
@@ -302,20 +309,36 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
                 {g.items.map((it) => {
                   const on = granted(it.to);
                   const mode = modes[it.to];
+                  /* Une page peut porter une CAPACITÉ plutôt qu'un mode. Sur la Communauté,
+                     « Lecture / Modifier » n'a pas de sens — c'est un fil, on y participe ou
+                     on n'y est pas — et la vraie question est ailleurs : administre-t-on ?
+                     Quelqu'un qui publie sans pouvoir retirer un message est un problème, pas
+                     un réglage. Le bouton remplace donc la paire, sur la ligne même : la
+                     capacité vivait tout en bas de la fenêtre, sans rapport visible avec la
+                     ligne à laquelle elle s'applique. */
+                  const pc = PAGE_CAPS[it.to];
+                  const capOffice = !!pc && pc.defaultRoles.includes(member.role);
+                  const capOn = !!pc && (capOffice || granted(pc.cap));
                   return (
                     <div key={it.to} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
                       <label style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: "pointer" }}>
                         <input type="checkbox" checked={on} onChange={() => toggle(it.to)} />
                         <span style={{ width: 20, display: "inline-grid", placeItems: "center" }}><Icon name={it.ic} size={16} /></span> {it.label}
                       </label>
-                      {on && (
+                      {on && (pc ? (
+                        <button type="button" className={"btn sm " + (capOn ? "primary" : "ghost")}
+                          disabled={capOffice} onClick={() => toggle(pc.cap)}
+                          title={capOffice ? "Accordé d'office à ce rôle." : pc.hint}>
+                          <Icon name="shield" size={13} /> {pc.label}{capOn ? " : oui" : " : non"}
+                        </button>
+                      ) : (
                         <div style={{ display: "flex", gap: 4 }}>
                           <button type="button" className={"btn sm " + (mode !== "read" ? "primary" : "ghost")}
                             onClick={() => setMode(it.to, "write")}>Modifier</button>
                           <button type="button" className={"btn sm " + (mode === "read" ? "primary" : "ghost")}
                             onClick={() => setMode(it.to, "read")}>Lecture</button>
                         </div>
-                      )}
+                      ))}
                     </div>
                   );
                 })}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAccessProfiles, createAccessProfile, updateAccessProfile, deleteAccessProfile, upsertSystemRole } from "../api/apiClient.js";
-import { GRANTABLE_NAV, EXTRA_ACCESS, BUILTIN_ROLES, builtinRoleAccess, ROLE_COLORS } from "../lib/nav.js";
+import { GRANTABLE_NAV, EXTRA_ACCESS, PAGE_CAPS, BUILTIN_ROLES, builtinRoleAccess, ROLE_COLORS } from "../lib/nav.js";
 
 const Dot = ({ color }) => <span style={{ width: 12, height: 12, borderRadius: 3, background: color || "#999", display: "inline-block", marginRight: 8, verticalAlign: "middle" }} />;
 import PageHead from "../components/PageHead.jsx";
@@ -116,7 +116,14 @@ function RoleModal({ role, onClose, onSaved, onError }) {
   const [saving, setSaving] = useState(false);
 
   const granted = (to) => Object.prototype.hasOwnProperty.call(modes, to);
-  const toggle = (to) => setModes((p) => { const n = { ...p }; if (granted(to)) delete n[to]; else n[to] = "write"; return n; });
+  // Retirer une page retire SA capacité — même raison que dans Équipe & accès : elle
+  // survivrait à l'écran qu'elle sert, et `peutModerer` ne regarde QUE la capacité.
+  const toggle = (to) => setModes((p) => {
+    const n = { ...p };
+    if (granted(to)) { delete n[to]; if (PAGE_CAPS[to]) delete n[PAGE_CAPS[to].cap]; }
+    else n[to] = "write";
+    return n;
+  });
   const setMode = (to, mode) => setModes((p) => ({ ...p, [to]: mode }));
 
   async function save() {
@@ -160,19 +167,33 @@ function RoleModal({ role, onClose, onSaved, onError }) {
               <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "var(--dim)", marginBottom: 4 }}>{g.grp}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {g.items.map((it) => {
-                  const on = granted(it.to); const mode = modes[it.to];
+                  const on = granted(it.to);
+                  const mode = modes[it.to];
+                  // Même règle que dans Équipe & accès : une page peut porter une CAPACITÉ au
+                  // lieu d'un mode. Voir `PAGE_CAPS` — le pourquoi y est écrit une seule fois.
+                  const pc = PAGE_CAPS[it.to];
+                  const capOffice = !!pc && pc.defaultRoles.includes(role._system);
+                  const capOn = !!pc && (capOffice || granted(pc.cap));
                   return (
                     <div key={it.to} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
                       <label style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: "pointer" }}>
                         <input type="checkbox" checked={on} onChange={() => toggle(it.to)} />
                         <span style={{ width: 20, display: "inline-grid", placeItems: "center" }}><Icon name={it.ic} size={16} /></span> {it.label}
                       </label>
-                      {on && (
+                      {on && (pc ? (
+                        <button type="button" className={"btn sm " + (capOn ? "primary" : "ghost")}
+                          disabled={capOffice} onClick={() => toggle(pc.cap)}
+                          title={capOffice ? "Accordé d'office à ce rôle." : pc.hint}>
+                          <Icon name="shield" size={13} /> {pc.label}{capOn ? " : oui" : " : non"}
+                        </button>
+                      ) : (
                         <div style={{ display: "flex", gap: 4 }}>
-                          <button type="button" className={"btn sm " + (mode !== "read" ? "primary" : "ghost")} onClick={() => setMode(it.to, "write")}>Modifier</button>
-                          <button type="button" className={"btn sm " + (mode === "read" ? "primary" : "ghost")} onClick={() => setMode(it.to, "read")}>Lecture</button>
+                          <button type="button" className={"btn sm " + (mode !== "read" ? "primary" : "ghost")}
+                            onClick={() => setMode(it.to, "write")}>Modifier</button>
+                          <button type="button" className={"btn sm " + (mode === "read" ? "primary" : "ghost")}
+                            onClick={() => setMode(it.to, "read")}>Lecture</button>
                         </div>
-                      )}
+                      ))}
                     </div>
                   );
                 })}

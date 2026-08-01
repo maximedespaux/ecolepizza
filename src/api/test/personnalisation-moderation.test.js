@@ -58,12 +58,28 @@ test('la capacité est relue EN BASE, jamais prise dans le jeton', () => {
     assert.match(srcModer, /SELECT nav_access FROM user WHERE id = \?/,
         'peutModerer doit relire nav_access en base');
     assert.match(srcModer, /const CAP_MODERER = 'cap:moderate-community'/, 'la capacite doit etre nommee');
-    assert.match(srcNav, /to: "cap:moderate-community"/, 'elle doit etre proposee par le bouton boussole');
+    /* La capacité a QUITTÉ « Accès supplémentaires » pour la ligne « Communauté » elle-même :
+       « Lecture / Modifier » n'a pas de sens sur un fil, et la vraie question — administre-t-on ?
+       — se posait tout en bas de la fenêtre, sans rapport visible avec la ligne concernée. */
+    assert.match(srcNav, /export const PAGE_CAPS = \{/, 'la capacite doit etre attachee a sa page');
+    assert.match(srcNav, /"\/communaute": \{\s*\n\s*cap: "cap:moderate-community"/,
+        'elle doit se regler sur la ligne « Communaute »');
+    // Le bloc est ISOLÉ avant d'être inspecté : cherché dans tout le fichier, le `[\s\S]*?`
+    // débordait jusque dans `PAGE_CAPS` et y retrouvait la chaîne qu'il devait ne pas voir.
+    const extra = /export const EXTRA_ACCESS = \[([\s\S]*?)\n\];/.exec(srcNav);
+    assert.ok(extra, 'bloc EXTRA_ACCESS introuvable');
+    assert.doesNotMatch(extra[1], /cap:moderate-community/,
+        'elle ne doit plus figurer AUSSI dans les acces supplementaires — deux endroits pour un droit');
     // Le front et le serveur doivent désigner LA MÊME chaîne : une faute de frappe donnerait une
     // case à cocher sans effet, et rien ne le signalerait.
     const cote = /const CAP_MODERER = '([^']+)'/.exec(srcModer)[1];
-    const face = /to: "(cap:[a-z-]+)",\n\s*label: "Modérer/.exec(srcNav)[1];
-    assert.strictEqual(face, cote, 'la capacite du menu et celle du serveur doivent porter le meme nom');
+    const face = /cap: "(cap:[a-z-]+)"/.exec(srcNav)[1];
+    assert.strictEqual(face, cote, 'la capacite de l\'ecran et celle du serveur doivent porter le meme nom');
+    /* Et les rôles qui l'ont D'OFFICE doivent être exactement `STAFF` : l'écran afficherait
+       sinon « Administrer : non » à quelqu'un que `peutModerer` autorise quand même. */
+    const office = [...(/defaultRoles: \[([^\]]+)\]/.exec(/"\/communaute": \{[\s\S]*?\}/.exec(srcNav)[0])[1]).matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]);
+    const staff = [...(/const STAFF = \[([^\]]+)\]/.exec(srcModer)[1]).matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]);
+    assert.deepStrictEqual(office, staff, 'l\'ecran doit dire vrai sur qui modere d\'office');
 });
 
 test('la modération est enfin VISIBLE — trois gardes serveur sans aucun bouton', () => {
