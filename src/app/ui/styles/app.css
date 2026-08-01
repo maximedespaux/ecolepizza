@@ -2178,6 +2178,17 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .annonce-x{font-size:13px;line-height:1.5;color:var(--muted);
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .annonce-meta{display:flex;align-items:center;gap:4px;font-size:11.5px;color:var(--dim)}
+/* Un hashtag d'annonce se lit DANS la phrase — mis en avant sur place, pas extrait en pastilles
+   au-dessous comme sur une fiche : « la session est décalée » et « #niveau2 » ne se lisent bien
+   qu'ensemble. Fond très léger et pas de bordure : il doit accrocher l'œil sans casser la ligne
+   ni la hauteur du texte, sur deux lignes d'extrait déjà serrées. */
+.annonce-tag{font-weight:800;color:var(--ember1);
+  background:color-mix(in srgb,var(--ember1) 13%,transparent);
+  border-radius:5px;padding:0 3px;margin:0 1px}
+/* MÊME forme dans le détail. La pastille pleine y avait été essayée — le texte y respire — mais
+   ses 8 px de rembourrage ouvraient un blanc avant la ponctuation qui suit : « salle #A . ».
+   Un tag vit au milieu d'une phrase ; il doit l'accompagner, pas l'écarter. */
+.q-corps .annonce-tag{font-size:.96em}
 /* Épinglée : le bouton prend la couleur de l'annonce, comme la réponse retenue prend le vert
    (.q-reponse .iconbtn.on). `.iconbtn.on` n'est stylé NULLE PART ailleurs : sans cette règle,
    la punaise pleine restait grise — un état allumé qui ne se voyait pas. */

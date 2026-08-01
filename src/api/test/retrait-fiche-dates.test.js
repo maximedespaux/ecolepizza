@@ -104,3 +104,38 @@ test('le formateur de date tient debout sur les entrées douteuses', () => {
     assert.match(srcFormat, /\(\?:\[T \]/, 'ISO avec `T` ou espace, les deux formes circulent');
     assert.match(srcFormat, /\+ \(h \? ` \$\{h\}:\$\{mi\}` : ""\)/, 'l\'heure reste facultative');
 });
+
+test('les hashtags d\'une annonce se voient DANS la phrase', () => {
+    /* Une annonce se termine souvent par ce qu'elle concerne — « report de la session #niveau2 ».
+     * En texte brut, ce mot se noie alors que c'est lui qu'on cherche du regard en parcourant le
+     * bandeau. Les fiches ont leurs tags en pastilles depuis toujours ; l'annonce était le seul
+     * endroit où un `#` restait de la ponctuation.
+     *
+     * Mis en valeur SUR PLACE et non extraits au-dessous : « la session est décalée » et
+     * « #niveau2 » ne se lisent bien qu'ensemble. */
+    assert.match(srcPost, /function CorpsAvecTags\(\{ texte \}\)/, 'le corps doit passer par le decoupage');
+    assert.match(srcPost, /<span className="annonce-x"><CorpsAvecTags texte=\{post\.body\} \/><\/span>/, 'bandeau');
+    assert.match(srcPost, /p\.kind === "ANNONCE" \? <CorpsAvecTags texte=\{p\.body\} \/> : p\.body/,
+        'le detail montre le MEME texte : un tag qui ressort ici et pas la ferait croire a deux contenus');
+
+    /* LE PIÈGE, gelé : `test()` sur une regex `/g` est À ÉTAT. Son `lastIndex` persiste d'un
+     * appel au suivant, si bien qu'un même morceau ressort vrai puis faux une fois sur deux —
+     * un tag sur deux serait passé en texte brut, au hasard de l'ordre de rendu. D'où une
+     * SECONDE expression, ancrée et sans `g`, pour décider morceau par morceau. */
+    assert.match(srcPost, /const EST_TAG = \/\^#\[\\p\{L\}\\p\{N\}_-\]\+\$\/u;/,
+        'l\'expression de decision doit etre ancree et SANS `g`');
+    assert.match(srcPost, /EST_TAG\.test\(bout\)/, 'c\'est elle qui decide, pas la globale');
+    assert.doesNotMatch(srcPost, /TAG_ANNONCE\.test\(/, 'jamais `test\\(\\)` sur la regex globale');
+});
+
+test('le détail d\'une publication nomme son auteur comme la liste', () => {
+    /* `p.*` rend la colonne `author_name` FIGÉE à la publication — souvent l'e-mail, pour un
+     * compte créé sans prénom ni nom. La carte du fil affichait « Admin École Pizza » et son
+     * détail « admin@ecole-pizza.com » : deux identités pour une personne, à un clic d'écart.
+     * Même famille que l'avatar manquant — le détail était plus pauvre que la liste. */
+    const detail = /const getPost = async \(req, res\) => \{[\s\S]*?\n\};/.exec(srcComm);
+    assert.ok(detail, 'getPost introuvable');
+    assert.match(detail[0], /COALESCE\(NULLIF\(TRIM\(CONCAT\(COALESCE\(u\.first_name/,
+        'le nom doit se recalculer, pas sortir de la colonne figee');
+    assert.match(detail[0], /LEFT JOIN user u ON u\.id = p\.author_user_id/, 'la jointure qui le permet');
+});

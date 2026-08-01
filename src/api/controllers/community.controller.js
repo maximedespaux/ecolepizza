@@ -79,9 +79,17 @@ const listPosts = async (req, res) => {
 const getPost = async (req, res) => {
     try {
         const conn = db.promise();
+        /* Le NOM de l'auteur se recalcule ici comme dans la liste. `p.*` rend la colonne
+         * `author_name` FIGÉE à la publication — souvent l'e-mail, pour un compte créé sans
+         * prénom ni nom. La carte du fil affichait donc « Admin École Pizza » et son détail
+         * « admin@ecole-pizza.com » : deux identités pour une seule personne, à un clic d'écart.
+         * Même famille que l'avatar manquant : le détail était plus pauvre que la liste. */
         const [[p]] = await conn.query(
-            `SELECT p.*, DATE_FORMAT(p.created_at, '%Y-%m-%d %H:%i') AS created_at
-               FROM community_post p WHERE p.id = ? AND p.organization_id = ?`,
+            `SELECT p.*, DATE_FORMAT(p.created_at, '%Y-%m-%d %H:%i') AS created_at,
+                    COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''), p.author_name) AS author_name
+               FROM community_post p
+               LEFT JOIN user u ON u.id = p.author_user_id
+              WHERE p.id = ? AND p.organization_id = ?`,
             [req.params.id, req.user.organization_id]);
         if (!p) return res.status(404).json({ message: 'Publication introuvable.' });
         const [answers] = await conn.query(
@@ -152,6 +160,11 @@ const createPost = async (req, res) => {
 const updatePost = async (req, res) => {
     try {
         const conn = db.promise();
+        /* Le NOM de l'auteur se recalcule ici comme dans la liste. `p.*` rend la colonne
+         * `author_name` FIGÉE à la publication — souvent l'e-mail, pour un compte créé sans
+         * prénom ni nom. La carte du fil affichait donc « Admin École Pizza » et son détail
+         * « admin@ecole-pizza.com » : deux identités pour une seule personne, à un clic d'écart.
+         * Même famille que l'avatar manquant : le détail était plus pauvre que la liste. */
         const [[p]] = await conn.query(
             'SELECT author_user_id FROM community_post WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
@@ -185,6 +198,11 @@ const updatePost = async (req, res) => {
 const deletePost = async (req, res) => {
     try {
         const conn = db.promise();
+        /* Le NOM de l'auteur se recalcule ici comme dans la liste. `p.*` rend la colonne
+         * `author_name` FIGÉE à la publication — souvent l'e-mail, pour un compte créé sans
+         * prénom ni nom. La carte du fil affichait donc « Admin École Pizza » et son détail
+         * « admin@ecole-pizza.com » : deux identités pour une seule personne, à un clic d'écart.
+         * Même famille que l'avatar manquant : le détail était plus pauvre que la liste. */
         const [[p]] = await conn.query(
             'SELECT author_user_id FROM community_post WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
@@ -265,6 +283,11 @@ const savePostImage = async (req, res) => {
             return res.status(415).json({ message: 'Format accepté : WebP, JPEG ou PNG.' });
         }
         const conn = db.promise();
+        /* Le NOM de l'auteur se recalcule ici comme dans la liste. `p.*` rend la colonne
+         * `author_name` FIGÉE à la publication — souvent l'e-mail, pour un compte créé sans
+         * prénom ni nom. La carte du fil affichait donc « Admin École Pizza » et son détail
+         * « admin@ecole-pizza.com » : deux identités pour une seule personne, à un clic d'écart.
+         * Même famille que l'avatar manquant : le détail était plus pauvre que la liste. */
         const [[p]] = await conn.query(
             'SELECT author_user_id FROM community_post WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);

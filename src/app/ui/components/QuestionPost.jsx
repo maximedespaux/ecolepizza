@@ -20,6 +20,34 @@ import { getPost, createPost, deletePost, addAnswer, deleteAnswer, updatePost, p
  * l'utilisateur courant, et lui seul est rerendu quand celui-ci change de cadre.
  */
 
+/**
+ * Le corps d'une annonce, ses hashtags MIS EN AVANT.
+ *
+ * Une annonce se termine souvent par ce qu'elle concerne — « …report de la session #niveau2 ».
+ * En texte brut, ce mot se noie dans la phrase alors que c'est lui qu'on cherche du regard en
+ * parcourant le bandeau. Les fiches, elles, ont leurs tags en pastilles depuis toujours
+ * (`.badge-tag`) : l'annonce était le seul endroit où un `#` restait de la ponctuation.
+ *
+ * Mis en valeur SUR PLACE, dans la phrase, et non extraits en pastilles au-dessous : une
+ * annonce est une phrase à lire, pas une fiche à indexer. Déplacer ses tags à la fin la
+ * couperait de son sens — « la session est décalée » et « #niveau2 » ne se lisent bien
+ * qu'ensemble.
+ *
+ * Le découpage garde les séparateurs (`split` avec un groupe capturant) : le texte ressort
+ * intact, ponctuation comprise.
+ */
+const TAG_ANNONCE = /(#[\p{L}\p{N}_-]+)/gu;
+/* Deux expressions, et ce n'est pas un doublon : `test()` sur une regex `/g` est À ÉTAT — son
+   `lastIndex` persiste d'un appel au suivant, si bien qu'un même morceau ressort vrai puis faux
+   une fois sur deux. Un tag sur deux serait passé en texte brut, au hasard de l'ordre de rendu.
+   La seconde est ancrée et sans `g` : elle ne décide que d'un morceau à la fois. */
+const EST_TAG = /^#[\p{L}\p{N}_-]+$/u;
+function CorpsAvecTags({ texte }) {
+  return String(texte || "").split(TAG_ANNONCE).map((bout, i) => (
+    EST_TAG.test(bout) ? <b key={i} className="annonce-tag">{bout}</b> : <span key={i}>{bout}</span>
+  ));
+}
+
 /* Même découpe que dans `TetePost` : « Prénom Nom » → « PN ». Un nom en un seul mot ne doit
    pas produire « undefined » — d'où le second défaut. */
 const initiales = (nom) => { const [p = "", n = ""] = String(nom || "Stagiaire").split(" "); return initials(p, n); };
@@ -97,7 +125,7 @@ export function AnnonceCard({ post, peutEpingler, onOpen, onEpingler }) {
           {post.title}
           {post.pinned > 0 && <span className="annonce-pin-badge"><Icon name="pin" size={10} /> Épinglée</span>}
         </span>
-        {post.body && <span className="annonce-x">{post.body}</span>}
+        {post.body && <span className="annonce-x"><CorpsAvecTags texte={post.body} /></span>}
         <span className="annonce-meta">
           {post.author_name} · {dateHeure(post.created_at)}
           {post.answers > 0 && <> · <Icon name="message-circle" size={11} /> {post.answers} réponse{post.answers > 1 ? "s" : ""}</>}
@@ -178,7 +206,13 @@ export function QuestionModal({ id, moi, cadreDe, onClose, onProfil, onChange })
               <TetePost id={p.author_user_id} name={p.author_name} avatar={p.author_avatar}
                 cadre={cadreDe(p.author_user_id, p.author_done, p.author_cadre, p.author_cadres_ex)}
                 date={p.created_at} onOpen={onProfil} />
-              {p.body && <p className="q-corps">{p.body}</p>}
+              {p.body && (
+                <p className="q-corps">
+                  {/* Même texte que dans le bandeau : si le tag y ressort et pas ici, on croit
+                      avoir affaire à deux contenus différents. */}
+                  {p.kind === "ANNONCE" ? <CorpsAvecTags texte={p.body} /> : p.body}
+                </p>
+              )}
               {p.has_image > 0 && <img className="q-photo" src={postImageUrl(p.id)} alt="Photo jointe à la publication" />}
               {erreur && <div className="status err">{erreur}</div>}
 
