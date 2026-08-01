@@ -3569,24 +3569,12 @@ button.av-wrap:active{transform:scale(.94)}
   --cadre-bg:conic-gradient(from var(--cadre-a),var(--cadre-clair),var(--cadre-c) 90deg,
     var(--cadre-fonce) 180deg,var(--cadre-c) 270deg,var(--cadre-clair));
   animation:cadreTourne 4.2s linear infinite}
-.cadre-qparfait::after{content:"";position:absolute;inset:-7px;border-radius:50%;pointer-events:none;
-  background:
-    radial-gradient(closest-side at 50% 4%,  var(--cadre-clair), transparent 70%),
-    radial-gradient(closest-side at 90% 40%, var(--cadre-c), transparent 68%),
-    radial-gradient(closest-side at 62% 96%, var(--cadre-clair), transparent 68%),
-    radial-gradient(closest-side at 8% 66%,  var(--cadre-c), transparent 68%);
-  filter:blur(2px) drop-shadow(0 0 4px var(--cadre-c));
-  -webkit-mask:radial-gradient(closest-side,transparent 57%,#000 72%);
-  mask:radial-gradient(closest-side,transparent 57%,#000 72%);
-  animation:cadreEtincelles 7.5s linear infinite,cadreScintille 2.6s var(--ease) infinite}
+.cadre-qparfait::after{content:"✨"}
 
 @media (prefers-reduced-motion:reduce){
   .cadre-qparfait{animation:none}
-  .cadre-qparfait::after{animation:none;opacity:.85}
 }
 
-/* Sur les pastilles de 21 px, la couche d'effet devient une tache : l'anneau seul suffit. */
-.comm-face.sm::after{display:none}
 
 @media (prefers-reduced-motion:reduce){
   .cadre-braise::after{animation:none;opacity:.8;scale:1}
@@ -3597,14 +3585,15 @@ button.av-wrap:active{transform:scale(.94)}
      présente. Autant la retirer franchement que laisser un nœud fantôme. */
   .cadre-ecole{animation:none}
   .cadre-ecole::after{display:none}
-  /* Exclusifs et exploits : on coupe le mouvement, on GARDE l'anneau et son halo. Le dégradé
-     conique s'arrête simplement à son angle initial, ce qui reste un cadre parfaitement lisible ;
-     les couches en `::after` sont figées à une opacité pleine plutôt que masquées, sinon un
-     cadre rare deviendrait le plus terne de tous pour qui a désactivé les animations. */
+  /* Exclusifs et exploits : on coupe le mouvement, on GARDE l'anneau et son médaillon. Le
+     dégradé conique s'arrête simplement à son angle initial, ce qui reste un cadre parfaitement
+     lisible ; l'emoji cesse de battre mais reste POSÉ — le masquer ferait du cadre le plus rare
+     le plus terne de tous, pour qui a justement désactivé les animations. */
   .cadre-champion,.cadre-qintouch,.cadre-qlegende,.cadre-qchelem{animation:none}
   .cadre-jury::before{animation:none;background-position:50% 50%}
-  .cadre-champion::after,.cadre-fondateur::after,.cadre-qcent::after,
-  .cadre-qlegende::after,.cadre-qchelem::after{animation:none;opacity:.9;scale:1}
+  .cadre-champion::after,.cadre-jury::after,.cadre-fondateur::after,.cadre-qparfait::after,
+  .cadre-qcent::after,.cadre-qintouch::after,.cadre-qlegende::after,
+  .cadre-qchelem::after{animation:none;transform:none}
 }
 
 /* Pastille de cadre dans la barre de parcours (hero) : un aperçu, sans avatar dedans. */
@@ -3655,6 +3644,40 @@ button.av-wrap:active{transform:scale(.94)}
 .pf-cadre.exclusif{border-style:dashed}
 .pf-cadre.exclusif.on{border-style:solid}
 
+/* — LE MÉDAILLON : un emoji à la place du halo —
+ *
+ * POURQUOI ON A CHANGÉ. Les cadres rares se signalaient par un HALO — une couche en `::after`
+ * posée à `inset:-7px`, avec un `box-shadow` de 16 px de flou par-dessus. Mesuré dans le fil de
+ * la Communauté : sur un avatar de 38 px, la lueur débordait d'une vingtaine de pixels de chaque
+ * côté et mordait sur le nom de l'auteur et la carte voisine. Une lueur ne s'arrête pas à la
+ * boîte de son élément — c'est exactement ce qu'on lui demande — donc aucun réglage d'`inset` ne
+ * pouvait la faire tenir en place.
+ *
+ * L'EMOJI, LUI, A UNE TAILLE. Il se pose en médaillon dans le coin bas-droit, DANS l'emprise de
+ * l'avatar, et ne déborde jamais que de deux pixels. Il dit aussi la même chose plus vite qu'un
+ * halo : un trophée se reconnaît, une lueur dorée doit s'interpréter.
+ *
+ * TAILLE PROPORTIONNELLE à `--av`, la variable que pose `AvatarCadre`. Le repli à 38 px couvre
+ * les emplacements qui n'en posent pas (`.pf-avatar` du profil, `.pf-cadre-apercu` du sélecteur) :
+ * sans lui, l'emoji sortirait à la taille du texte hérité, énorme sur une pastille.
+ *
+ * `drop-shadow` blanc plutôt qu'un fond : sur un avatar sombre comme sur un fond clair, un emoji
+ * nu se perd. Le liseré le détache des deux côtés sans lui coller une pastille.
+ */
+.cadre-champion::after,.cadre-jury::after,.cadre-fondateur::after,.cadre-qparfait::after,
+.cadre-qcent::after,.cadre-qintouch::after,.cadre-qlegende::after,.cadre-qchelem::after{
+  position:absolute;right:-2px;bottom:-2px;pointer-events:none;z-index:2;line-height:1;
+  font-size:calc(var(--av,38px)*.4);
+  filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 1px 1px rgba(10,12,30,.45));
+  animation:cadreMedaillon 3.6s var(--ease) infinite}
+/* Il RESPIRE légèrement — sans bouger de place. Un médaillon parfaitement immobile passe pour
+   une icône d'interface ; ce battement discret le rattache au cadre qu'il décore. */
+@keyframes cadreMedaillon{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
+
+/* Sous 26 px (les pastilles « qui a commenté »), le médaillon couvrirait le visage : l'anneau
+   seul suffit, comme pour les couches d'effet avant lui. */
+.comm-face.sm::after,.stu-rank-cadre::after{display:none}
+
 /* — CADRES EXCLUSIFS —
    Attribués par l'école, jamais atteints en cumulant des formations. Ce sont les plus RARES du
    jeu, et ils ne le montraient pas : Jury et Fondateur n'étaient qu'un dégradé figé, exactement
@@ -3668,16 +3691,7 @@ button.av-wrap:active{transform:scale(.94)}
    il a droit au clinquant. */
 .cadre-champion{--cadre-a:0deg;--cadre-bg:conic-gradient(from var(--cadre-a),#fcb900,#fff3c4,#c9960a,#fff3c4,#fcb900);
   animation:cadreTourne 3.2s linear infinite}
-.cadre-champion::after{content:"";position:absolute;inset:-6px;border-radius:50%;pointer-events:none;
-  background:
-    radial-gradient(closest-side at 50% 2%,  #fff8dc, transparent 62%),
-    radial-gradient(closest-side at 95% 30%, #ffe9a8, transparent 60%),
-    radial-gradient(closest-side at 70% 97%, #fff3c4, transparent 60%),
-    radial-gradient(closest-side at 6% 68%,  #ffe08a, transparent 60%);
-  filter:blur(1.4px) drop-shadow(0 0 7px rgba(252,185,0,.9));
-  -webkit-mask:radial-gradient(closest-side,transparent 58%,#000 72%);
-  mask:radial-gradient(closest-side,transparent 58%,#000 72%);
-  animation:cadreEtincelles 5s linear infinite,cadreScintille 1.6s var(--ease) infinite}
+.cadre-champion::after{content:"🏆"}
 
 /* JURY — un BALAYAGE, pas une rotation : un reflet violet passe sur l'anneau, revient, repart.
    Le geste évoque le regard qui parcourt, ce que fait un jury. Le dégradé reste linéaire (c'est
@@ -3686,8 +3700,7 @@ button.av-wrap:active{transform:scale(.94)}
 /* Le dégradé est peint sur le `::before` (l'anneau creux) : c'est LUI qu'il faut faire glisser.
    Poser `background-size` sur l'hôte n'aurait rien fait — son fond à lui est l'avatar. */
 .cadre-jury::before{background-size:300% 100%;animation:cadreBalaie 3.4s var(--ease) infinite}
-.cadre-jury::after{content:"";position:absolute;inset:-5px;border-radius:50%;pointer-events:none;
-  box-shadow:0 0 10px -3px rgba(107,79,187,.9)}
+.cadre-jury::after{content:"⚖️"}
 @keyframes cadreBalaie{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
 
 /* FONDATEUR — il RESPIRE : le halo turquoise enfle et se retire, lentement. La première
@@ -3695,9 +3708,7 @@ button.av-wrap:active{transform:scale(.94)}
    `scale` et `opacity` seulement — deux propriétés composées par le GPU, sur un cadre qui peut
    apparaître vingt fois dans un fil. */
 .cadre-fondateur{--cadre-bg:conic-gradient(from -40deg,#0e9aa7,#7fe3d6,#d7fff8,#7fe3d6,#0e9aa7)}
-.cadre-fondateur::after{content:"";position:absolute;inset:-7px;border-radius:50%;pointer-events:none;
-  box-shadow:0 0 0 2px rgba(127,227,214,.55),0 0 16px -2px rgba(14,154,167,.8);
-  animation:cadreRespire 3.8s var(--ease) infinite}
+.cadre-fondateur::after{content:"🌱"}
 @keyframes cadreRespire{0%,100%{opacity:.35;scale:.97}50%{opacity:.95;scale:1.05}}
 
 /* — EXPLOITS DE PIZZA QUEST —
@@ -3711,25 +3722,21 @@ button.av-wrap:active{transform:scale(.94)}
 
 /* CENTURION — cent étoiles. Un liseré de bronze patiné, et un halo qui pulse doucement. */
 .cadre-qcent{--cadre-bg:linear-gradient(135deg,#a8631f,#f0c48a,#7a4413)}
-.cadre-qcent::after{content:"";position:absolute;inset:-5px;border-radius:50%;pointer-events:none;
-  box-shadow:0 0 10px -3px rgba(168,99,31,.9);animation:cadreRespire 3.2s var(--ease) infinite}
+.cadre-qcent::after{content:"💯"}
 
 /* INTOUCHABLE — trois formations sans une faute. L'anneau tourne, sobre et rapide : pas de
    paillettes, c'est un cadre de précision. */
 .cadre-qintouch{--cadre-a:0deg;
   --cadre-bg:conic-gradient(from var(--cadre-a),#111827,#4b5563,#e5e7eb,#4b5563,#111827);
   animation:cadreTourne 3.6s linear infinite}
-.cadre-qintouch::after{content:"";position:absolute;inset:-4px;border-radius:50%;pointer-events:none;
-  box-shadow:0 0 9px -3px rgba(229,231,235,.95)}
+.cadre-qintouch::after{content:"🎯"}
 
 /* LÉGENDE — deux cent cinquante étoiles. Anneau tournant ET halo qui respire en contretemps
    (3,1 s contre 4,3 s) : le décalage empêche l'œil de reconnaître une boucle. */
 .cadre-qlegende{--cadre-a:0deg;
   --cadre-bg:conic-gradient(from var(--cadre-a),#6b4fbb,#c9b6ff,#fff3c4,#c9b6ff,#6b4fbb);
   animation:cadreTourne 3.1s linear infinite}
-.cadre-qlegende::after{content:"";position:absolute;inset:-7px;border-radius:50%;pointer-events:none;
-  box-shadow:0 0 0 2px rgba(201,182,255,.5),0 0 18px -2px rgba(107,79,187,.9);
-  animation:cadreRespire 4.3s var(--ease) infinite}
+.cadre-qlegende::after{content:"👑"}
 
 /* GRAND CHELEM — le plus rare du jeu : toutes les formations jouables, sans faute. Il cumule
    tout ce que les autres ont séparément — l'anneau tourne, les éclats tournent à l'envers, et
@@ -3739,16 +3746,7 @@ button.av-wrap:active{transform:scale(.94)}
   --cadre-bg:conic-gradient(from var(--cadre-a),
     #dc3e37,#ff6900,#fcb900,#fff3c4,#2f9e6f,#0e9aa7,#6b4fbb,#dc3e37);
   animation:cadreTourne 2.8s linear infinite}
-.cadre-qchelem::after{content:"";position:absolute;inset:-8px;border-radius:50%;pointer-events:none;
-  background:
-    radial-gradient(closest-side at 50% 2%,  #fff8dc, transparent 60%),
-    radial-gradient(closest-side at 92% 32%, #7fe3d6, transparent 58%),
-    radial-gradient(closest-side at 66% 96%, #ffd0c4, transparent 58%),
-    radial-gradient(closest-side at 8% 64%,  #c9b6ff, transparent 58%);
-  filter:blur(1.6px) drop-shadow(0 0 8px rgba(252,185,0,.75));
-  -webkit-mask:radial-gradient(closest-side,transparent 56%,#000 71%);
-  mask:radial-gradient(closest-side,transparent 56%,#000 71%);
-  animation:cadreEtincelles 6s linear infinite,cadreRespire 2.4s var(--ease) infinite}
+.cadre-qchelem::after{content:"🍕"}
 /* Personnel de l'organisme — le cadre le plus riche du jeu, et c'est voulu : il ne se gagne pas,
    il DÉSIGNE. Toute la charte y passe, du rouge sombre au reflet crème, en dégradé CONIQUE qui
    tourne — même mécanique que Champion et Maestro (`@property --cadre-a`, plus haut), parce que
@@ -3837,4 +3835,4 @@ button.av-wrap:active{transform:scale(.94)}
 .prof-ava{position:relative;display:inline-grid;place-items:center}
 /* Le grand avatar du profil mérite un anneau proportionné : 3 px sur 88 px se voit à peine. */
 .prof-ava.cadre::before{inset:-5px;padding:5px}
-.prof-ava.cadre-braise::after,.prof-ava.cadre-maestro::after,.prof-ava.cadre-champion::after{inset:-5px}
+.prof-ava.cadre-braise::after,.prof-ava.cadre-maestro::after{inset:-5px}

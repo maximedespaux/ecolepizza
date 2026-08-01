@@ -102,18 +102,44 @@ test('un exploit s\'enregistre SANS couleur, et se vérifie quand même', () => 
     for (const id of EXPLOIT_IDS) assert.match(srcCss, new RegExp(`\\.cadre-${id}[,{:]`), `.cadre-${id} manquant`);
 });
 
-test('les cadres RARES se voient rares', () => {
-    /* Jury et Fondateur n'étaient qu'un dégradé figé — exactement comme Bronze, qu'on obtient en
-       venant deux fois. Leur rareté ne se lisait que dans le texte de la condition, donc nulle
-       part sur un avatar de 38 px dans un fil. Chacun a maintenant SON mouvement. */
-    assert.match(srcCss, /\.cadre-jury::before\{background-size:300% 100%;animation:cadreBalaie/, 'le jury balaie');
-    assert.match(srcCss, /\.cadre-fondateur::after\{[\s\S]*?animation:cadreRespire/, 'le fondateur respire');
-    assert.match(srcCss, /\.cadre-champion::after\{[\s\S]*?animation:cadreEtincelles[^;]*,cadreScintille/, 'le champion scintille');
-    /* Mouvement réduit : on coupe l'animation SANS effacer l'anneau. Masquer les couches ferait
-       du cadre le plus rare le plus terne, pour qui a désactivé les animations. */
-    assert.match(srcCss, /\.cadre-champion,\.cadre-qintouch,\.cadre-qlegende,\.cadre-qchelem\{animation:none\}/);
+test('les cadres RARES se voient rares — sans déborder', () => {
+    /* DEUX DÉFAUTS, ET LE SECOND EST NÉ DU PREMIER.
+     *
+     * 1. Jury et Fondateur n'étaient qu'un dégradé figé, exactement comme Bronze qu'on obtient en
+     *    venant deux fois : leur rareté ne se lisait que dans le texte de la condition, donc nulle
+     *    part sur un avatar de 38 px dans un fil.
+     * 2. On leur a donc donné un HALO — une couche à `inset:-7px` avec 16 px de flou par-dessus.
+     *    Mesuré dans la Communauté : la lueur débordait d'une vingtaine de pixels de chaque côté
+     *    d'un avatar de 38 et mordait sur le nom de l'auteur. Une lueur ne s'arrête pas à la boîte
+     *    de son élément — c'est précisément ce qu'on lui demande — donc aucun réglage d'`inset` ne
+     *    pouvait la faire tenir en place.
+     *
+     * LE MÉDAILLON règle les deux : un emoji A UNE TAILLE. Il se pose dans le coin, dans l'emprise
+     * de l'avatar, et dit ce que le halo faisait deviner — un trophée se reconnaît, une lueur
+     * dorée s'interprète. */
+    for (const [cadre, emoji] of [['champion', '🏆'], ['jury', '⚖️'], ['fondateur', '🌱'],
+        ['qparfait', '✨'], ['qcent', '💯'], ['qintouch', '🎯'], ['qlegende', '👑'], ['qchelem', '🍕']]) {
+        assert.match(srcCss, new RegExp(`\\.cadre-${cadre}::after\\{content:"${emoji}"\\}`), `${cadre} doit porter son medaillon`);
+    }
+    /* AUCUN DÉBORDEMENT : deux pixels de coin, et plus un `box-shadow` ni un `blur` sur ces
+       couches — c'est cela qui mordait sur le fil.
+       On ancre sur le DERNIER sélecteur de la liste : le même groupe réapparaît plus haut dans le
+       bloc « mouvement réduit », et `right:-2px;bottom:-2px` seul attrape `.pf-lock`, le cadenas
+       des cadres verrouillés, posé exactement au même endroit. Un test qui lit le mauvais bloc ne
+       vérifie rien. */
+    const medaillon = /\.cadre-qchelem::after\{\n\s+position:absolute;right:-2px;bottom:-2px;[\s\S]*?\}/.exec(srcCss);
+    assert.ok(medaillon, 'le medaillon doit se poser dans le coin, dans l\'emprise de l\'avatar');
+    assert.doesNotMatch(medaillon[0], /box-shadow|blur\(/, 'plus aucune lueur : c\'est elle qui debordait');
+    // La taille suit le diamètre, sinon l'emoji sort à la taille du texte hérité sur une pastille.
+    assert.match(srcCss, /font-size:calc\(var\(--av,38px\)\*\.4\)/, 'proportionnel, avec un repli');
+    // Sous 26 px, le médaillon couvrirait le visage : l'anneau seul.
+    assert.match(srcCss, /\.comm-face\.sm::after,\.stu-rank-cadre::after\{display:none\}/);
+    // Le jury garde son balayage : c'est un mouvement DANS l'anneau, il ne déborde pas.
+    assert.match(srcCss, /\.cadre-jury::before\{background-size:300% 100%;animation:cadreBalaie/);
+    /* Mouvement réduit : le médaillon cesse de battre mais reste POSÉ. Le masquer ferait du cadre
+       le plus rare le plus terne, pour qui a justement désactivé les animations. */
+    assert.match(srcCss, /\.cadre-qchelem::after\{animation:none;transform:none\}/);
 });
-
 test('la moitié s\'arrondit VERS LE HAUT', () => {
     // Sur 5 chapitres, la moitié c'est 3. Fêter à 2 annoncerait un palier non franchi — et le
     // mot « moitié » perdrait son sens à la première vérification du stagiaire.
