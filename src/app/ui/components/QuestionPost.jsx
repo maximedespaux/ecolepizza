@@ -5,7 +5,7 @@ import AvatarCadre from "./AvatarCadre.jsx";
 import { initials, dateHeure } from "../lib/format.js";
 import { parseAvatar } from "../lib/gamification.js";
 import { useEchap } from "../lib/useEchap.js";
-import { reduireImage } from "../lib/image.js";
+import { reduireImage, PHOTO_MAX_KO, PHOTO_MAX_PX } from "../lib/image.js";
 import { getPost, createPost, deletePost, addAnswer, deleteAnswer, updatePost, postImageUrl, uploadPostImage } from "../api/apiClient.js";
 
 /**
@@ -395,9 +395,22 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
               </p>
               {apercu && <img className="q-photo" src={apercu} alt="Aperçu de la photo choisie" />}
               <input ref={fichierRef} type="file" accept="image/*" hidden onChange={choisirPhoto} />
-              <button className="btn sm ghost" onClick={() => fichierRef.current?.click()}>
-                <Icon name="image" size={14} /> {photo ? "Changer la photo" : "Choisir une photo"}
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <button className="btn sm ghost" onClick={() => fichierRef.current?.click()}>
+                  <Icon name="image" size={14} /> {photo ? "Changer la photo" : "Choisir une photo"}
+                </button>
+                {/* La limite, ANNONCÉE — mais sans laisser croire qu'il faut la respecter soi-même :
+                    toute photo est réduite avant l'envoi (une photo de téléphone pèse 3 à 8 Mo et
+                    passe très bien). Dire « 550 Ko maximum » tout court aurait fait renoncer des
+                    gens dont la photo serait passée sans problème.
+                    Une fois choisie, on montre son poids RÉEL : c'est la seule façon de savoir
+                    que la réduction a bien eu lieu, et ce que pèse vraiment ce qu'on publie. */}
+                <span className="hint" style={{ margin: 0 }}>
+                  {photo
+                    ? <>Réduite à <b>{Math.round(photo.size / 1024)} Ko</b> · maximum {PHOTO_MAX_KO} Ko</>
+                    : <>Réduite automatiquement · {PHOTO_MAX_KO} Ko et {PHOTO_MAX_PX} px maximum</>}
+                </span>
+              </div>
             </div>
             {erreur && <div className="status err">{erreur}</div>}
           </div>
