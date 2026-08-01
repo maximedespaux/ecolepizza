@@ -1421,7 +1421,24 @@ tbody tr:last-child td{border-bottom:none}
   .partner-grid{grid-template-columns:1fr}
 }
 .partner-meta{display:flex;flex-direction:column;gap:3px;font-size:13px;margin:6px 0}
-.partner-meta a{color:#1d6fb8}
+/* LIENS DE CONTENU — téléphone, e-mail, site. Ils doivent se voir COMME des liens.
+   Le sélecteur global neutralise `a` (couleur héritée, pas de soulignement), et c'est juste :
+   la plupart des `<a>` de l'application sont des entrées de menu. Mais dans un tableau ou une
+   fiche, un numéro cliquable qui ressemble à du texte inerte n'est jamais cliqué — mesuré ici :
+   la couleur du lien et celle du texte voisin étaient identiques au pixel près.
+
+   `var(--blue)` et non un bleu écrit en dur : le `#1d6fb8` qui vivait ici tombait à 3,01:1 sur
+   le fond sombre — SOUS le seuil AA de 4,5:1 — parce qu'une couleur fixe ne peut pas convenir
+   aux deux thèmes. Le jeton, lui, bascule : 11,54:1 en clair, 6,30:1 en sombre. Mesuré, pas
+   supposé.
+
+   Soulignement au SURVOL et au focus seulement : sur vingt-trois liens empilés dans un tableau,
+   souligner en permanence fait un rideau de traits. La couleur suffit à les désigner, le
+   soulignement confirme la cible qu'on vise. */
+.partner-meta a,
+.dt a{color:var(--blue)}
+.partner-meta a:hover,.partner-meta a:focus-visible,
+.dt a:hover,.dt a:focus-visible{text-decoration:underline}
 .partner-commission{display:flex;align-items:baseline;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line,#eee)}
 .partner-commission b{color:var(--green,#2e9e5b);font-size:16px}
 .partner-commission .sub{margin-left:auto;font-size:11px;color:var(--dim)}
