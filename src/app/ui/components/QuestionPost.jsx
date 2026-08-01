@@ -6,6 +6,7 @@ import { initials, dateHeure } from "../lib/format.js";
 import { parseAvatar } from "../lib/gamification.js";
 import { useEchap } from "../lib/useEchap.js";
 import { reduireImage, PHOTO_MAX_KO, PHOTO_MAX_PX } from "../lib/image.js";
+import PriseDePhoto from "./PriseDePhoto.jsx";
 import { getPost, createPost, deletePost, addAnswer, deleteAnswer, updatePost, postImageUrl, uploadPostImage } from "../api/apiClient.js";
 
 /**
@@ -308,26 +309,30 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
   const [erreur, setErreur] = useState(null);
   const fichierRef = useRef(null);
   const appareilRef = useRef(null);
-  /* « Prendre une photo » n'apparaît QUE sur un appareil tactile, et c'est une limite du web,
-     pas un choix esthétique : l'attribut `capture` ouvre l'appareil photo sur téléphone et est
-     purement IGNORÉ sur ordinateur. Le bouton y rouvrirait donc le sélecteur de fichiers — deux
-     boutons identiques côte à côte, dont l'un ment sur ce qu'il fait.
-     `pointer: coarse` est le meilleur signal disponible (doigt plutôt que souris) ; une caméra
-     branchée sur un poste fixe ne dit rien, elle, de ce que `capture` fera.
-     Lu UNE FOIS au montage : la modale ne survit pas à une rotation d'écran, et `matchMedia`
-     n'existe pas côté serveur ni dans les très vieux navigateurs — d'où la garde. */
-  const [surTactile] = useState(() =>
-    typeof window !== "undefined" && window.matchMedia
-      ? window.matchMedia("(pointer: coarse)").matches
-      : false);
+  const [appareilOuvert, setAppareilOuvert] = useState(false);
+  /* DEUX CHEMINS pour « prendre une photo », et le premier couvre tout le monde.
+     · `getUserMedia` — aperçu en direct dans la page, sur ordinateur COMME sur téléphone. Exige
+       un contexte sécurisé (HTTPS ou localhost) ; sinon `navigator.mediaDevices` n'existe pas.
+     · à défaut, l'`<input capture>` : l'appareil photo natif du téléphone. Sur ordinateur il est
+       purement IGNORÉ et rouvrirait le sélecteur de fichiers — un bouton qui ment sur ce qu'il
+       fait — d'où la condition sur le pointeur pour ce repli-là seulement.
+     Le premier essai n'offrait QUE le repli : le bouton disparaissait donc sur poste fixe, alors
+     qu'un formateur devant son écran a une webcam et veut s'en servir. */
+  const [camera] = useState(() => (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia
+    ? "flux"
+    : (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? "capture" : null)));
   const annonce = kind === "ANNONCE";
   useEchap(onClose);
 
   // Libère l'URL d'aperçu : sans ça, chaque photo choisie laisse un blob en mémoire.
   useEffect(() => () => { if (apercu) URL.revokeObjectURL(apercu); }, [apercu]);
 
-  async function choisirPhoto(e) {
-    const f = e.target.files?.[0];
+  const choisirPhoto = (e) => accepterPhoto(e.target.files?.[0]);
+
+  /* Un seul chemin pour les TROIS origines — fichier choisi, appareil natif, capture en direct.
+     C'est ce qui garantit que le cliché passe par `reduireImage` : une photo de webcam ou de
+     téléphone pèse plusieurs mégaoctets et serait refusée par le serveur telle quelle. */
+  async function accepterPhoto(f) {
     if (!f) return;
     setErreur(null);
     try {
@@ -417,8 +422,9 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
                 <button className="btn sm ghost" onClick={() => fichierRef.current?.click()}>
                   <Icon name="image" size={14} /> {photo ? "Changer la photo" : "Choisir une photo"}
                 </button>
-                {surTactile && (
-                  <button className="btn sm ghost" onClick={() => appareilRef.current?.click()}>
+                {camera && (
+                  <button className="btn sm ghost"
+                    onClick={() => (camera === "flux" ? setAppareilOuvert(true) : appareilRef.current?.click())}>
                     <Icon name="camera" size={14} /> Prendre une photo
                   </button>
                 )}
@@ -436,6 +442,10 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
               </div>
             </div>
             {erreur && <div className="status err">{erreur}</div>}
+            {appareilOuvert && (
+              <PriseDePhoto onClose={() => setAppareilOuvert(false)}
+                onPhoto={(f) => { setAppareilOuvert(false); accepterPhoto(f); }} />
+            )}
           </div>
           <div className="mfoot">
             <button className="btn ghost" onClick={onClose}>Annuler</button>

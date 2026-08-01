@@ -65,15 +65,54 @@ test('la mention dit que la réduction est AUTOMATIQUE avant d\'annoncer un plaf
         'le poids reel doit s\'afficher apres le choix');
 });
 
+const srcCam = fs.readFileSync(path.join(APP, 'ui/components/PriseDePhoto.jsx'), 'utf8');
+
+test('« Prendre une photo » marche des DEUX côtés, pas seulement sur téléphone', () => {
+    /* PREMIER ESSAI, INSUFFISANT : seul l'attribut `capture` d'un `<input>`. Il ouvre l'appareil
+     * photo sur téléphone et est PUREMENT IGNORÉ sur ordinateur, où le bouton rouvrait le
+     * sélecteur de fichiers — il mentait sur ce qu'il fait. On l'avait donc masqué sur poste
+     * fixe, ce qui revenait à ne pas rendre le service : un formateur devant son écran a une
+     * webcam et veut s'en servir.
+     * `getUserMedia` marche partout. L'`<input capture>` ne reste que comme REPLI, pour le cas
+     * d'un contexte non sécurisé (HTTP nu sur une IP de réseau local). */
+    assert.match(srcPost, /navigator\.mediaDevices\?\.getUserMedia/, 'le flux en direct doit etre le chemin PRINCIPAL');
+    assert.match(srcPost, /\? "flux"/, 'et etre choisi en premier');
+    assert.match(srcPost, /\? "capture" : null/, 'l\'input `capture` ne reste qu\'en repli');
+    assert.match(srcPost, /\{camera && \(/, 'le bouton suit le chemin disponible, plus le seul pointeur');
+});
+
+test('la caméra est TOUJOURS éteinte quand la fenêtre se ferme', () => {
+    /* CE QUI SE PAIE CHER SI ON L'OUBLIE : un flux laissé ouvert garde la caméra allumée, voyant
+     * compris, bien après la fermeture. Vérifié dans le navigateur sur un flux synthétique :
+     * après capture, les pistes passent à « ended ».
+     * QUATRE chemins mènent à l'arrêt, et il en manquerait forcément un sans y penser : la
+     * fermeture, le démontage, la capture, et la course où l'on ferme PENDANT que l'utilisateur
+     * répond à la demande d'autorisation — le flux arrive alors qu'il n'y a plus de fenêtre. */
+    assert.match(srcCam, /fluxRef\.current\?\.getTracks\(\)\.forEach\(\(t\) => t\.stop\(\)\)/, 'un arret idempotent');
+    assert.match(srcCam, /return \(\) => \{ annule = true; arreter\(\); \};/, 'au demontage');
+    assert.match(srcCam, /const fermer = \(\) => \{ arreter\(\); onClose\(\); \};/, 'a la fermeture');
+    assert.match(srcCam, /if \(annule\) \{ flux\.getTracks\(\)\.forEach\(\(t\) => t\.stop\(\)\); return; \}/,
+        'et dans la course fermeture / autorisation');
+});
+
+test('la capture prend la taille du FLUX, pas celle affichée', () => {
+    // L'aperçu est mis à l'échelle par le CSS : capturer sa taille à l'écran donnerait une photo
+    // au rabais, dépendante de la largeur de la fenêtre.
+    assert.match(srcCam, /canvas\.width = v\.videoWidth;/, 'largeur intrinseque');
+    assert.match(srcCam, /canvas\.height = v\.videoHeight;/, 'hauteur intrinseque');
+    /* `ideal` et non `exact` : sur téléphone on veut la caméra arrière (on photographie une
+       pâte), sur ordinateur il n'y en a qu'une — `exact` y ferait ÉCHOUER la demande. */
+    assert.match(srcCam, /facingMode: \{ ideal: "environment" \}/, 'camera arriere souhaitee, pas exigee');
+    // Et le refus d'autorisation se dit en français, pas en « NotAllowedError ».
+    assert.match(srcCam, /e\?\.name === "NotAllowedError" \? "Accès à la caméra refusé/, 'message lisible');
+});
+
 test('« Prendre une photo » n\'apparaît que là où elle fait quelque chose', () => {
     /* LIMITE DU WEB, pas choix esthétique : l'attribut `capture` ouvre l'appareil photo sur
      * téléphone et est purement IGNORÉ sur ordinateur. Un bouton visible partout y rouvrirait le
      * sélecteur de fichiers — deux boutons identiques côte à côte, dont l'un ment sur ce qu'il
      * fait. `pointer: coarse` (le doigt plutôt que la souris) est le meilleur signal disponible ;
      * une webcam branchée sur un poste fixe ne dit rien, elle, de ce que `capture` fera. */
-    assert.match(srcPost, /window\.matchMedia\("\(pointer: coarse\)"\)\.matches/,
-        'la detection doit porter sur le pointeur, pas sur la largeur d\'ecran');
-    assert.match(srcPost, /\{surTactile && \(/, 'le bouton doit etre conditionne');
 
     /* DEUX ENTRÉES SÉPARÉES, et non un attribut qu'on bascule : poser `capture` puis le retirer
        sur le même `<input>` laisse certains navigateurs sur leur première décision. */
@@ -88,4 +127,10 @@ test('« Prendre une photo » n\'apparaît que là où elle fait quelque chose',
     const avecCapture = /<input ref=\{appareilRef\}[^>]*onChange=\{(\w+)\}/.exec(srcPost);
     assert.ok(avecCapture, 'gestionnaire de l\'appareil introuvable');
     assert.strictEqual(avecCapture[1], 'choisirPhoto', 'la photo prise doit etre reduite comme les autres');
+    /* Les TROIS origines — fichier choisi, appareil natif, capture en direct — convergent vers
+       `accepterPhoto`. C'est ce qui garantit la réduction : un cliché de webcam ou de téléphone
+       pèse plusieurs mégaoctets et serait refusé par le serveur tel quel. */
+    assert.match(srcPost, /const choisirPhoto = \(e\) => accepterPhoto\(e\.target\.files\?\.\[0\]\);/, 'les deux inputs');
+    assert.match(srcPost, /onPhoto=\{\(f\) => \{ setAppareilOuvert\(false\); accepterPhoto\(f\); \}\}/, 'la capture en direct');
+    assert.match(srcPost, /async function accepterPhoto\(f\) \{/, 'un seul point d\'entree');
 });

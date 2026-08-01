@@ -2198,6 +2198,10 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* — Détail d'une question — */
 .q-corps{font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;margin:10px 0}
 .q-photo{width:100%;max-height:380px;object-fit:contain;border-radius:14px;background:var(--surface2);margin:8px 0}
+/* Aperçu de la caméra. `contain` et non `cover` : rogner l'image montrerait un cadrage que la
+   photo capturée n'aura pas — on cadre ce qu'on prend, pas autre chose. Fond sombre pour que le
+   letterbox ne ressemble pas à un bogue d'affichage. */
+.prise-video{width:100%;max-height:52vh;object-fit:contain;border-radius:14px;background:#111827;display:block}
 .q-reponses{margin-top:16px;border-top:1px solid var(--border-soft);padding-top:14px}
 .q-reponses-t{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;margin-bottom:10px}
 .q-reponse{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;
