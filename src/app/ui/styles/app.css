@@ -3477,6 +3477,10 @@ button.av-wrap:active{transform:scale(.94)}
   box-shadow:0 0 12px -2px rgba(252,185,0,.85)}
 .cadre-jury{--cadre-bg:linear-gradient(135deg,#2c3371,#6b4fbb,#2c3371)}
 .cadre-fondateur{--cadre-bg:linear-gradient(135deg,#0e9aa7,#7fe3d6,#0e9aa7)}
+/* Personnel de l'organisme — les deux rouges de la charte, ceux du logo. Volontairement SANS
+   métal ni animation : c'est un cadre d'appartenance, pas une récompense. Il doit se distinguer
+   des paliers d'un coup d'œil sans avoir l'air d'en être un de plus. */
+.cadre-ecole{--cadre-bg:linear-gradient(135deg,#dc3e37,#ff6900,#dc3e37)}
 @media (prefers-reduced-motion:reduce){.cadre-champion{animation:none}}
 
 /* Cadres dans la Communauté. `.author-ava` et `.prof-ava` reçoivent l'anneau : elles doivent

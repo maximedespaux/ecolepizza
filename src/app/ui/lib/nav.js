@@ -265,6 +265,15 @@ export const EXTRA_ACCESS = [
     ic: "eye",
     defaultRoles: ["SUPER_ADMIN"],
   },
+  {
+    // Modérer ≠ parler au nom de l'école. Publier une ANNONCE et épingler restent au bureau
+    // (cf. `estStaff` dans community.controller) ; l'entretien du fil s'accorde nominativement.
+    to: "cap:moderate-community",
+    label: "Modérer la communauté",
+    hint: "Communauté — supprimer ou corriger la publication et les réponses d'un autre.",
+    ic: "shield",
+    defaultRoles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"],
+  },
 ];
 
 // Rôles « système » (intégrés) : servent de modèles d'accès réutilisables.

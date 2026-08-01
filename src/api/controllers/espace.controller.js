@@ -902,15 +902,18 @@ const saveMyAvatar = async (req, res) => {
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        // Le personnel n'a pas de fiche stagiaire — en creer une pour lui polluerait les
+        // effectifs, Qualiopi et les listes de session. Son avatar vit sur `user` (migration 126).
+        if (!learner && !estPersonnel(req.user)) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
         const avatar = req.body && req.body.avatar;
         if (avatar != null && avatar !== '') {
             const [id, color] = String(avatar).split('|'); // "id" ou "id|#rrggbb"
             if (!isKnownAvatar(id)) return res.status(422).json({ message: 'Avatar inconnu.' });
             if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) return res.status(422).json({ message: 'Couleur invalide.' });
         }
-        try { await conn.query('UPDATE learner SET avatar = ? WHERE id = ?', [avatar || null, learner.id]); }
-        catch (e) { if (!isMissingSchema(e)) throw e; }
+        const [table, cible] = learner ? ['learner', learner.id] : ['user', req.user.id];
+        try { await conn.query(`UPDATE ${table} SET avatar = ? WHERE id = ?`, [avatar || null, cible]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 126 non jouee (personnel)
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur avatar stagiaire :', err);
@@ -933,22 +936,41 @@ const saveMyAvatar = async (req, res) => {
  *
  * On valide en revanche la FORME, sans quoi la colonne accepterait n'importe quelle chaîne.
  */
-const CADRES_CONNUS = ['aucun', 'bronze', 'argent', 'or', 'braise', 'maestro', 'champion', 'jury', 'fondateur'];
+const CADRES_CONNUS = ['aucun', 'bronze', 'argent', 'or', 'braise', 'maestro', 'champion', 'jury', 'fondateur', 'ecole'];
+/* Le cadre « ecole » est le SEUL que le personnel porte, et le seul qu'un stagiaire ne peut
+ * pas porter. Les cadres de parcours annoncent un nombre de formations terminees : un
+ * secretariat en « Maestro » se lirait comme un stagiaire chevronne, et l'inverse — un
+ * stagiaire en « ecole » — le ferait passer pour le bureau dans la Communaute. */
+const CADRE_PERSONNEL = 'ecole';
+const ROLES_PERSONNEL = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'];
+const estPersonnel = (u) => ROLES_PERSONNEL.includes(u?.role);
 const listeCadres = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
 
 const saveMyCadre = async (req, res) => {
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        if (!learner && !estPersonnel(req.user)) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
         const cadre = req.body && req.body.cadre;
+        // Le controle vaut DANS LES DEUX SENS : le front propose la bonne liste, mais la route
+        // est ouverte a tout compte authentifie — une requete a la main contournerait l'ecran.
+        if (cadre && cadre !== 'aucun') {
+            const perso = String(cadre) === CADRE_PERSONNEL;
+            if (perso && !estPersonnel(req.user)) {
+                return res.status(403).json({ message: 'Le cadre « École » est réservé au personnel de l\'organisme.' });
+            }
+            if (!perso && estPersonnel(req.user)) {
+                return res.status(403).json({ message: 'Les cadres de parcours récompensent des formations terminées.' });
+            }
+        }
         // NULL et « aucun » ne disent pas la même chose : NULL = aucun choix exprimé (on
         // retombe sur le palier), « aucun » = le choix de ne rien porter.
         if (cadre != null && cadre !== '' && !CADRES_CONNUS.includes(String(cadre))) {
             return res.status(422).json({ message: 'Cadre inconnu.' });
         }
-        try { await conn.query('UPDATE learner SET cadre = ? WHERE id = ?', [cadre || null, learner.id]); }
-        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 113 non jouée
+        const [tbl, ref] = learner ? ['learner', learner.id] : ['user', req.user.id];
+        try { await conn.query(`UPDATE ${tbl} SET cadre = ? WHERE id = ?`, [cadre || null, ref]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 113 (stagiaire) / 126 (personnel) non jouée
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur cadre stagiaire :', err);

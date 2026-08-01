@@ -38,7 +38,17 @@ export const CADRES = [
     condition: "Avoir siégé au jury d'un concours" },
   { id: "fondateur", nom: "Fondateur", exclusif: true,
     condition: "Première promotion de l'école" },
+
+  /* — Personnel de l'organisme. Le SEUL cadre que l'équipe porte, et le seul qu'un stagiaire ne
+       peut pas porter. Les cadres de parcours annoncent un nombre de formations terminées : un
+       secrétariat en « Maestro » se lirait comme un stagiaire chevronné, et l'inverse ferait
+       passer un stagiaire pour le bureau. Le serveur refuse les deux (cf. saveMyCadre). */
+  { id: "ecole", nom: "École", personnel: true,
+    desc: "Vous faites partie de l'organisme", condition: "Réservé au personnel de l'organisme" },
 ];
+
+/** Les cadres proposés au personnel de l'organisme : « Sans cadre » et le sien. */
+export const CADRES_PERSONNEL = CADRES.filter((c) => c.id === "aucun" || c.personnel);
 
 export const cadreById = (id) => CADRES.find((c) => c.id === id) || CADRES[0];
 
@@ -58,6 +68,10 @@ export function cadreFor(formationsDone = 0) {
  */
 export function cadrePossede(c, formationsDone = 0, attribues = []) {
   if (c.id === "aucun") return true;
+  // Le cadre du personnel ne s'atteint pas en cumulant : le serveur le pose dans `attribues`
+  // (cf. listPosts), exactement comme un exclusif. Sans ça `cadrePorteDe` le rejetterait et
+  // l'école réapparaîtrait sans cadre chez les AUTRES, alors qu'elle en porte un chez elle.
+  if (c.personnel) return attribues.includes(c.id);
   return c.exclusif ? attribues.includes(c.id) : formationsDone >= c.min;
 }
 

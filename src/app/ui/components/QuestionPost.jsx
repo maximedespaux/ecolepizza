@@ -201,8 +201,9 @@ export function QuestionModal({ id, moi, cadreDe, onClose, onProfil, onChange })
                             <Icon name="check-circle" size={14} fill={retenue ? "currentColor" : "none"} />
                           </button>
                         )}
-                        {(a.mine || p.mine) && (
-                          <button className="iconbtn del" onClick={() => retirer(a.id)} title="Supprimer" aria-label="Supprimer la réponse">
+                        {(a.mine || p.mine || p.can_moderate) && (
+                          <button className="iconbtn del" onClick={() => retirer(a.id)}
+                            title={a.mine || p.mine ? "Supprimer" : "Supprimer (modération)"} aria-label="Supprimer la réponse">
                             <Icon name="trash" size={13} />
                           </button>
                         )}
@@ -216,9 +217,14 @@ export function QuestionModal({ id, moi, cadreDe, onClose, onProfil, onChange })
                   <button className="btn sm primary" disabled={busy || !reponse.trim()} onClick={repondre}>
                     <Icon name="send" size={13} /> Répondre
                   </button>
-                  {(p.mine || moi === p.author_user_id) && (
+                  {/* MODÉRATION. Le serveur autorise depuis toujours le bureau à supprimer la
+                      publication d'un autre — mais le bouton n'apparaissait que sur `mine` :
+                      personne n'a jamais pu modérer quoi que ce soit depuis un écran. Le droit
+                      vient maintenant du serveur (`can_moderate`), qui tient compte de la
+                      capacité accordée dans Équipe & accès, et pas seulement du rôle. */}
+                  {(p.mine || moi === p.author_user_id || p.can_moderate) && (
                     <button className="btn sm ghost danger" onClick={supprimer} style={{ marginLeft: "auto" }}>
-                      <Icon name="trash" size={13} /> Supprimer la publication
+                      <Icon name="trash" size={13} /> Supprimer {p.mine ? "la publication" : "(modération)"}
                     </button>
                   )}
                 </div>
