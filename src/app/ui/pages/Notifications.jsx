@@ -10,7 +10,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { Icon } from "../components/Icon.jsx";
 
-const TONE = { SIGNATURE: "g", PAIEMENT: "a", RELANCE: "r", QUALIOPI: "b", INFO: "n", SYSTEME: "n" };
+const TONE = { SIGNATURE: "g", PAIEMENT: "a", RELANCE: "r", QUALIOPI: "b", BOUTIQUE: "b", INFO: "n", SYSTEME: "n" };
 
 function Notifications() {
   const navigate = useNavigate();

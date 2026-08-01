@@ -7,6 +7,7 @@ const { regenEmargement } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
+const { notify } = require('./notification.controller.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -1314,6 +1315,29 @@ const createShopRequest = async (req, res) => {
                 [created.id, r.source, r.item, r.pprod, r.label, r.qty, r.price, r.tax, r.perso, r.variant, i]
             );
         }
+        // Prévient le secrétariat : sans cela, une commande n'existait QUE dans l'écran
+        // « Demandes boutique », qu'il fallait penser à ouvrir. La pastille du menu comptait
+        // bien les demandes en cours, mais rien ne signalait l'arrivée d'une nouvelle — un
+        // stagiaire pouvait commander le vendredi soir et attendre le mardi qu'on la remarque.
+        // `user_id` nul : visible par tout l'organisme, comme les autres notifications de suivi.
+        const nomStagiaire = [learner.first_name, learner.last_name].filter(Boolean).join(' ').trim();
+        const nbArticles = resolved.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+        const totalTTC = resolved.reduce(
+            (s, r) => s + (Number(r.price) || 0) * (Number(r.qty) || 0) * (1 + (Number(r.tax) || 0) / 100), 0);
+        const quand = pickup
+            ? ` · retrait le ${String(pickup).slice(0, 10).split('-').reverse().join('/')}`
+            : '';
+        // ATTENDUE avant de répondre : la réponse déclenche la diffusion SSE, et les postes
+        // rechargent aussitôt. Sans cette attente, la notification peut n'être pas encore
+        // enregistrée à ce moment — le son et la cloche arriveraient au sondage suivant.
+        await notify(learner.organization_id, {
+            type: 'BOUTIQUE',
+            title: 'Nouvelle commande boutique',
+            body: `${nomStagiaire || 'Un stagiaire'} · ${nbArticles} article${nbArticles > 1 ? 's' : ''}`
+                + ` · ${totalTTC.toFixed(2).replace('.', ',')} € TTC · réf ${ref}${quand}`,
+            link: '/demandes-boutique',
+        });
+
         res.status(201).json({ success: true, ref, id: created.id });
     } catch (err) {
         if (isMissingSchema(err)) return res.status(503).json({ message: 'Migration 096 non jouée : boutique indisponible.' });
