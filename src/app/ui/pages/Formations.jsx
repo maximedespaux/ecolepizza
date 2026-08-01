@@ -435,7 +435,8 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
   const groups = groupMilestones(included, eqMap);
   const [gdrag, setGdrag] = useState(null);
   const [adding, setAdding] = useState(false);
-  const [ouFor, setOuFor] = useState(null); // slug de tête du jalon dont le menu « ＋ OU » est ouvert
+  const [ouFor, setOuFor] = useState(null); // slug de tête du jalon dont on ajoute une variante
+  const [chercheDoc, setChercheDoc] = useState("");
   const addRef = useRef(null);
 
   useEffect(() => {
@@ -478,26 +479,18 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                   </div>
                 </div>
               ))}
-              {/* Ajouter une variante « OU » à ce jalon (regroupe via équivalence). */}
-              {typeof onAddOu === "function" && !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT" && (() => {
-                const head = g.steps[0].slug;
-                const cand = steps.filter((s) => !s.quiz_id && !s.company_level && s.doc_type !== "EMARGEMENT" && !g.steps.some((x) => x.slug === s.slug));
-                return (
-                  <div style={{ position: "relative", marginTop: 6 }}>
-                    <button type="button" className="pf-or-add" onClick={() => setOuFor(ouFor === head ? null : head)} title="Ajouter une variante « OU » (choisie par condition)">＋ OU</button>
-                    {ouFor === head && (
-                      <div className="cat-pop" style={{ position: "absolute", left: 0, top: "100%", zIndex: 6, marginTop: 4, minWidth: 200, maxHeight: 220, overflowY: "auto" }}>
-                        {cand.length === 0 ? <div className="pf-add-empty" style={{ padding: 8 }}>Aucun autre document.</div>
-                          : cand.map((s) => (
-                            <button key={s.slug} type="button" className="cat-opt" onClick={() => { onAddOu(g.steps.map((x) => x.slug), s.slug); setOuFor(null); }}>
-                              <b>{s.label}</b>{s.doc_type && <span className="hint"> · {s.doc_type}</span>}
-                            </button>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+              {/* Ajouter une variante « OU » à ce jalon (regroupe via équivalence).
+                  LE MENU FLOTTANT A ÉTÉ RETIRÉ : il vivait dans `.parcours-flow`, qui défile en
+                  `overflow:auto`. Mesuré — il s'arrêtait pile au bord du conteneur (708 px des
+                  deux côtés), donc rogné, et il partait sur le côté dès qu'on faisait défiler le
+                  parcours. Dix-huit documents tenaient dans une boîte de 220 px, sans recherche.
+                  Le bouton ouvre désormais LE MÊME panneau que « Ajouter une étape », posé sous
+                  le flux : même geste, même endroit où regarder, et toute la largeur disponible. */}
+              {typeof onAddOu === "function" && !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT" && (
+                <button type="button" className={"pf-or-add" + (ouFor === g.steps[0].slug ? " on" : "")}
+                  onClick={() => { setAdding(false); setChercheDoc(""); setOuFor(ouFor === g.steps[0].slug ? null : g.steps[0].slug); }}
+                  title="Ajouter une variante « OU » (choisie par condition)">＋ OU</button>
+              )}
             </div>
             {canBreak ? (
               <button type="button" className={"pf-brk" + (brkHere ? " on" : "")}
@@ -512,46 +505,87 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
           </div>
           );
         })}
-        <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
+        <button type="button" className={"pf-add" + (adding ? " on" : "")}
+          onClick={() => { setOuFor(null); setChercheDoc(""); setAdding((a) => !a); }}>
           ＋ Ajouter une étape
         </button>
       </div>
 
-      {/* Les variantes « OU » sont regroupées automatiquement selon les Équivalences. */}
-      {adding && (
-        <div className="pf-add-panel">
-          {available.length === 0 ? (
-            <>
-              <div className="pf-add-title">Étapes disponibles</div>
-              <div className="pf-add-empty">Toutes les étapes disponibles sont déjà dans le parcours.</div>
-            </>
-          ) : (
-            (() => {
-              const isQuiz = (s) => s.doc_type === "QCM" || !!s.quiz_id;
-              const docs = available.filter((s) => !isQuiz(s));
-              const quizzes = available.filter(isQuiz);
-              const renderItem = (s) => (
-                <button type="button" key={s.slug} className="pf-add-item" onClick={() => { onToggle(s.slug); setAdding(false); }}>
-                  <span className="pf-label">{s.label}</span>
-                  {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
-                </button>
-              );
-              return (
-                <>
-                  <div className="pf-add-title">Documents{docs.length ? ` (${docs.length})` : ""}</div>
-                  {docs.length === 0
-                    ? <div className="pf-add-empty">Aucun document disponible.</div>
-                    : <div className="pf-add-grid">{docs.map(renderItem)}</div>}
-                  <div className="pf-add-title" style={{ marginTop: 12 }}>QCM{quizzes.length ? ` (${quizzes.length})` : ""}</div>
-                  {quizzes.length === 0
-                    ? <div className="pf-add-empty">Aucun QCM disponible.</div>
-                    : <div className="pf-add-grid">{quizzes.map(renderItem)}</div>}
-                </>
-              );
-            })()
-          )}
-        </div>
-      )}
+      {/* UN SEUL PANNEAU pour les deux gestes — ajouter une étape, ou une variante « OU ».
+          Ils choisissent la même chose dans la même liste ; deux surfaces différentes obligeaient
+          à apprendre deux fois. Le titre dit lequel des deux est en cours. */}
+      {(adding || ouFor) && (() => {
+        const jalon = ouFor ? groups.find((g) => g.steps[0].slug === ouFor) : null;
+        // « OU » se choisit parmi TOUT le référentiel (hors QCM, émargement et docs déjà dans
+        // le jalon) ; « Ajouter » ne propose que ce qui n'est pas encore dans le parcours.
+        const pool = jalon
+          ? steps.filter((s) => !s.quiz_id && !s.company_level && s.doc_type !== "EMARGEMENT"
+              && !jalon.steps.some((x) => x.slug === s.slug))
+          : available;
+        const t = chercheDoc.trim().toLowerCase();
+        const filtre = (l) => (!t ? l : l.filter((s) =>
+          [s.label, s.doc_type, s.slug].some((v) => String(v || "").toLowerCase().includes(t))));
+        const isQuiz = (s) => s.doc_type === "QCM" || !!s.quiz_id;
+        const docs = filtre(pool.filter((s) => !isQuiz(s)));
+        const quizzes = filtre(pool.filter(isQuiz));
+        const choisir = (s) => {
+          if (jalon) onAddOu(jalon.steps.map((x) => x.slug), s.slug); else onToggle(s.slug);
+          setAdding(false); setOuFor(null); setChercheDoc("");
+        };
+        const item = (s) => (
+          <button type="button" key={s.slug} className="pf-add-item" onClick={() => choisir(s)}>
+            <span className="pf-label">{s.label}</span>
+            {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
+          </button>
+        );
+        return (
+          <div className="pf-add-panel">
+            <div className="pf-add-head">
+              <div className="pf-add-title" style={{ margin: 0 }}>
+                {jalon ? <>Variante « OU » de <b style={{ textTransform: "none" }}>{jalon.steps[0].label}</b></> : "Ajouter une étape"}
+              </div>
+              <button type="button" className="iconbtn" aria-label="Fermer"
+                onClick={() => { setAdding(false); setOuFor(null); setChercheDoc(""); }}><Icon name="x" size={14} /></button>
+            </div>
+            {/* Le référentiel compte vingt-deux documents : sans recherche, on parcourt une
+                liste. Même champ que partout ailleurs dans l'application. */}
+            {pool.length > 6 && (
+              <span className="gs-search" style={{ margin: "0 0 10px" }}>
+                <Icon name="search" size={14} />
+                <input value={chercheDoc} onChange={(e) => setChercheDoc(e.target.value)} autoFocus
+                  aria-label="Rechercher un document" placeholder="Rechercher un document…" />
+                {chercheDoc && <button className="gs-clear" aria-label="Effacer" onClick={() => setChercheDoc("")}><Icon name="x" size={13} /></button>}
+              </span>
+            )}
+            {pool.length === 0 ? (
+              <div className="pf-add-empty">
+                {jalon ? "Aucun autre document à proposer en variante." : "Toutes les étapes disponibles sont déjà dans le parcours."}
+              </div>
+            ) : docs.length === 0 && quizzes.length === 0 ? (
+              // Pas une impasse : on dit ce qui a été cherché, et comment en sortir.
+              <div className="pf-add-empty">Aucun document ne correspond à « {chercheDoc.trim()} ».{" "}
+                <button type="button" className="lien-nu" onClick={() => setChercheDoc("")}>Tout afficher</button></div>
+            ) : (
+              <>
+                <div className="pf-add-title">Documents{docs.length ? ` (${docs.length})` : ""}</div>
+                {docs.length === 0
+                  ? <div className="pf-add-empty">Aucun document.</div>
+                  : <div className="pf-add-grid">{docs.map(item)}</div>}
+                {/* Un QCM ne peut pas être une variante « OU » d'un document : la liste ne le
+                    propose donc pas dans ce mode, plutôt que de l'afficher et le refuser. */}
+                {!jalon && (
+                  <>
+                    <div className="pf-add-title" style={{ marginTop: 12 }}>QCM{quizzes.length ? ` (${quizzes.length})` : ""}</div>
+                    {quizzes.length === 0
+                      ? <div className="pf-add-empty">Aucun QCM disponible.</div>
+                      : <div className="pf-add-grid">{quizzes.map(item)}</div>}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -647,7 +681,8 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
             )}
           </div>
         ))}
-        <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
+        <button type="button" className={"pf-add" + (adding ? " on" : "")}
+          onClick={() => { setOuFor(null); setChercheDoc(""); setAdding((a) => !a); }}>
           ＋ Ajouter une étape
         </button>
       </div>

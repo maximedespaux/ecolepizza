@@ -915,6 +915,13 @@ tbody tr:last-child td{border-bottom:none}
 /* Panneau des étapes disponibles — dans le flux normal (pas d'overlay clippé) */
 .pf-add-panel{margin-top:8px;padding:12px 14px;border:1px solid var(--line,#e3e3e6);border-radius:12px;
   background:var(--surface2,rgba(0,0,0,.02))}
+/* En-tête du panneau de choix : son titre dit LEQUEL des deux gestes est en cours (ajouter une
+   étape, ou une variante « OU » de tel jalon), et une croix pour en sortir — le panneau prend
+   toute la largeur, on doit pouvoir le refermer sans chercher. */
+.pf-add-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+/* Une sortie d'impasse écrite comme un lien : « Tout afficher » après une recherche infructueuse.
+   Un bouton plein y aurait le poids d'une action principale, qu'il n'est pas. */
+.lien-nu{border:0;background:none;padding:0;font:inherit;color:var(--blue);cursor:pointer;text-decoration:underline}
 .pf-add-title{font-size:12px;font-weight:700;color:var(--muted,#666);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px}
 .pf-add-grid{display:flex;flex-wrap:wrap;gap:8px}
 .pf-add-item{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-soft,#e3e3e6);
