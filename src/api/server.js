@@ -69,6 +69,16 @@ app.use(cors({
 }));
 
 // En-têtes de sécurité de base (sans dépendance).
+/* QUI EST LE CLIENT. `req.ip` n'honore `x-forwarded-for` que si on le lui dit ici — et par
+   défaut on ne lui dit pas. C'est ce qui rend le limiteur anti-force brute inviolable : sans
+   proxy déclaré, l'adresse vient de la SOCKET, que le client ne choisit pas. L'en-tête, lui,
+   est fourni par l'appelant : le lire sans condition permettait d'obtenir une identité neuve
+   à chaque requête, donc de ne jamais atteindre aucun plafond.
+   Derrière un reverse proxy (nginx, Traefik…), régler TRUST_PROXY — « 1 » pour un seul saut,
+   ou une liste d'adresses. Ne l'activer QUE si un proxy réécrit vraiment l'en-tête, sinon on
+   rouvre exactement le trou qu'on vient de fermer. */
+app.set('trust proxy', process.env.TRUST_PROXY || false);
+
 app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('X-Frame-Options', 'DENY');
