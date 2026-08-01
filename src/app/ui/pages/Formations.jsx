@@ -181,8 +181,11 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   useEffect(() => { reloadEq(); }, []);
 
   // Ajoute un document comme variante « OU » à un jalon (crée/étend l'équivalence).
+  const [refusOu, setRefusOu] = useState(null); // pourquoi une variante « OU » a été refusée
+
   async function addOuVariant(jalonSlugs, addSlug) {
     if (!addSlug || jalonSlugs.includes(addSlug)) return;
+    setRefusOu(null);
     try {
       const g = eqMap.get(jalonSlugs[0]);
       const eq = g ? equivs.find((e) => e.key === g.group) : null;
@@ -194,7 +197,16 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       }
       setSteps((ss) => ss.map((s) => (s.slug === addSlug ? { ...s, active: true } : s))); // activer la variante ajoutée
       await reloadEq();
-    } catch (e) { onError(e.message); }
+      return true;
+    } catch (e) {
+      /* LE REFUS S'AFFICHE DANS LE PANNEAU, pas seulement en haut de la fenêtre. Le clic a lieu
+         tout en bas d'une modale qui défile : un message posé en tête passait inaperçu, et
+         l'utilisateur concluait que « rien ne se passe ». Il reste AUSSI en haut — c'est là que
+         se lisent les autres statuts de cette page. */
+      setRefusOu(e.message);
+      onError(e.message);
+      return false;
+    }
   }
 
   // Activer / retirer une étape (le « OU » est déterminé par les équivalences).
@@ -332,7 +344,8 @@ function FormationModal({ program, onClose, onSaved, onError }) {
                 <p className="hint">Aucun document candidat.</p>
               ) : (
                 <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
-                  breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant} />
+                  breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant}
+                  refusOu={refusOu} onEffacerRefus={() => setRefusOu(null)} />
               )}
             </>
           ) : (
@@ -428,7 +441,7 @@ function stepBadge(s) {
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
-function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu }) {
+function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu, refusOu, onEffacerRefus }) {
   // Les documents de GROUPE (🏢 company_level) ne font PAS partie du parcours du
   // dossier : ils se gèrent uniquement dans « À l'arrivée via une entreprise ».
   const included = steps.filter((s) => s.active && !s.company_level);
@@ -492,7 +505,7 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                   le flux : même geste, même endroit où regarder, et toute la largeur disponible. */}
               {typeof onAddOu === "function" && !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT" && (
                 <button type="button" className={"pf-or-add" + (ouFor === g.steps[0].slug ? " on" : "")}
-                  onClick={() => { setAdding(false); setChercheDoc(""); setOuFor(ouFor === g.steps[0].slug ? null : g.steps[0].slug); }}
+                  onClick={() => { setAdding(false); setChercheDoc(""); onEffacerRefus?.(); setOuFor(ouFor === g.steps[0].slug ? null : g.steps[0].slug); }}
                   title="Ajouter une variante « OU » (choisie par condition)">＋ OU</button>
               )}
             </div>
@@ -537,9 +550,14 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
         const docs = filtre(pool.filter((s) => !isQuiz(s) && !isPiece(s)));
         const quizzes = filtre(pool.filter(isQuiz));
         const pieces = filtre(pool.filter(isPiece));
-        const choisir = (s) => {
-          if (jalon) onAddOu(jalon.steps.map((x) => x.slug), s.slug); else onToggle(s.slug);
-          setAdding(false); setOuFor(null); setChercheDoc("");
+        /* Le panneau ne se referme QUE si l'ajout a abouti. Il se fermait d'office, si bien
+           qu'un refus faisait disparaître la surface où le motif devait s'afficher : on voyait
+           le panneau se fermer et rien d'autre — d'où « je ne peux pas, sans savoir pourquoi ».
+           Une activation d'étape, elle, ne peut pas échouer : on ferme aussitôt. */
+        const choisir = async (s) => {
+          if (!jalon) { onToggle(s.slug); setAdding(false); setOuFor(null); setChercheDoc(""); return; }
+          const ok = await onAddOu(jalon.steps.map((x) => x.slug), s.slug);
+          if (ok) { setAdding(false); setOuFor(null); setChercheDoc(""); }
         };
         const item = (s) => (
           <button type="button" key={s.slug} className="pf-add-item" onClick={() => choisir(s)}>
@@ -565,6 +583,12 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                   aria-label="Rechercher un document" placeholder="Rechercher un document…" />
                 {chercheDoc && <button className="gs-clear" aria-label="Effacer" onClick={() => setChercheDoc("")}><Icon name="x" size={13} /></button>}
               </span>
+            )}
+            {/* Le refus, à hauteur du clic. Il nomme les deux documents et la condition qu'ils
+                partagent : « rien ne permettrait de choisir entre les deux au moment de produire
+                le document » est une raison, « échec » n'en est pas une. */}
+            {refusOu && (
+              <div className="status err" style={{ margin: "0 0 10px" }}>{refusOu}</div>
             )}
             {pool.length === 0 ? (
               <div className="pf-add-empty">

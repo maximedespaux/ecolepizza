@@ -56,7 +56,11 @@ const champsType = (b) => ({
     code: String(b?.code || '').trim().toUpperCase().slice(0, 60),
     label: String(b?.label || '').trim().slice(0, 160),
     consigne: b?.consigne ? String(b.consigne).slice(0, 400) : null,
-    fichiers_attendus: Math.min(9, Math.max(1, Number(b?.fichiers_attendus) || 1)),
+    /* PLAFOND, et non simple indication. Une pièce d'identité tient en UN fichier — on
+       photographie souvent recto et verso sur la même image — alors qu'un justificatif peut en
+       demander six. Sans plafond appliqué, le champ n'était qu'un texte : rien n'empêchait d'en
+       envoyer quinze, et la vérification devenait un dépouillement. */
+    fichiers_attendus: Math.min(12, Math.max(1, Number(b?.fichiers_attendus) || 1)),
     active: b?.active === false || b?.active === 0 ? 0 : 1,
 });
 
@@ -226,6 +230,20 @@ const deposer = async (req, res) => {
         const [[d]] = await conn.query(
             'SELECT id FROM piece_depot WHERE enrollment_id = ? AND piece_type_id = ?',
             [req.params.enrollmentId, req.params.pieceTypeId]);
+        /* LE PLAFOND EST APPLIQUÉ ICI, pas seulement affiché. Le refus nomme le nombre attendu :
+         * « 1 fichier au maximum » se comprend, « trop de fichiers » oblige à deviner. Il dit
+         * aussi comment s'en sortir — retirer avant d'ajouter — parce que c'est le geste que
+         * personne ne trouve seul. */
+        const [[dejaN]] = await conn.query('SELECT COUNT(*) AS n FROM piece_fichier WHERE depot_id = ?', [d.id]);
+        const [[pt]] = await conn.query('SELECT label, fichiers_attendus FROM piece_type WHERE id = ? AND organization_id = ?',
+            [req.params.pieceTypeId, req.user.organization_id]);
+        const max = Math.max(1, Number(pt?.fichiers_attendus) || 1);
+        if (dejaN.n >= max) {
+            return res.status(409).json({
+                message: `« ${pt?.label || 'Cette pièce'} » accepte ${max} fichier${max > 1 ? 's' : ''} au maximum. `
+                    + 'Retirez-en un avant d\'en ajouter un autre.',
+            });
+        }
         const [[n]] = await conn.query('SELECT COALESCE(MAX(sort_order), 0) AS m FROM piece_fichier WHERE depot_id = ?', [d.id]);
         await conn.query(
             'INSERT INTO piece_fichier (id, depot_id, sort_order, nom, mime, bytes, taille) VALUES (?, ?, ?, ?, ?, ?, ?)',

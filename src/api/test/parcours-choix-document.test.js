@@ -39,10 +39,13 @@ test('plus de menu flottant piégé dans un conteneur qui défile', () => {
 
 test('ouvrir un panneau referme l\'autre', () => {
     // Deux panneaux ouverts en même temps donneraient deux listes concurrentes sous le flux.
-    assert.match(srcPage, /onClick=\{\(\) => \{ setAdding\(false\); setChercheDoc\(""\); setOuFor\(/,
-        '« OU » doit fermer « Ajouter une etape »');
-    assert.match(srcPage, /onClick=\{\(\) => \{ setOuFor\(null\); setChercheDoc\(""\); setAdding\(/,
-        'et reciproquement');
+    /* On vérifie les EFFETS, pas leur ordre exact : la liste s'est allongée d'un
+       `onEffacerRefus()` sans que la règle change. Un contrat trop littéral se casse à chaque
+       ajout et finit par être « corrigé » en le supprimant. */
+    const ou = /onClick=\{\(\) => \{([^}]*)setOuFor\(ouFor === g\.steps\[0\]\.slug/.exec(srcPage);
+    assert.ok(ou && /setAdding\(false\)/.test(ou[1]), '« OU » doit fermer « Ajouter une etape »');
+    const ajout = /onClick=\{\(\) => \{([^}]*)setAdding\(\(a\) => !a\)/.exec(srcPage);
+    assert.ok(ajout && /setOuFor\(null\)/.test(ajout[1]), 'et reciproquement');
     // Le titre dit lequel des deux est en cours, sinon le panneau est ambigu.
     assert.match(srcPage, /jalon \? <>Variante « OU » de <b[^>]*>\{jalon\.steps\[0\]\.label\}<\/b><\/> : "Ajouter une étape"/,
         'le titre doit nommer le geste, et le jalon concerne');
