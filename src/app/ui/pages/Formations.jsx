@@ -385,7 +385,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
                   breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant}
                   refusOu={refusOu} onEffacerRefus={() => setRefusOu(null)}
                   eqDe={(slug) => { const g = eqMap.get(slug); return g ? equivs.find((e) => e.key === g.group) : null; }}
-                  onRetirerOu={removeOuVariant} steps={steps} />
+                  onRetirerOu={removeOuVariant} />
               )}
             </>
           ) : (
