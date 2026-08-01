@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
+const { parcoursManquant } = require('../lib/parcoursRequis.js');
 const { generatePassword } = require('../lib/crypto.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
@@ -189,6 +190,13 @@ const registerCompanyStagiaires = async (req, res) => {
             );
             if (!sess) return res.status(404).json({ message: 'Session introuvable.' });
             badge = sess.badge || null;
+
+            /* CETTE VOIE PASSE TOUJOURS PAR UNE ENTREPRISE : les deux parcours sont donc exigés,
+             * celui du dossier ET celui de l'arrivée via une entreprise. Le contrôle est fait
+             * ICI, avant la boucle : refuser au dixième stagiaire d'une liste de vingt laisserait
+             * neuf dossiers créés et onze non — un état que personne ne peut rattraper à la main. */
+            const refus = await parcoursManquant(conn, orgId, sessionId, true);
+            if (refus) return res.status(422).json({ error: refus });
         }
 
         // Inscrit un stagiaire (existant) à la session, sans doublon ; ajoute le badge.
