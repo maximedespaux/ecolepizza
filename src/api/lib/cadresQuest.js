@@ -89,6 +89,44 @@ const PALIERS = [
 ];
 const PALIER_IDS = PALIERS.map((p) => p.id);
 
+/**
+ * LES EXPLOITS — sept cadres qui ne tiennent PAS à une formation, mais à l'ensemble du jeu.
+ *
+ * POURQUOI EN AJOUTER. Les trois paliers récompensent une formation à la fois : on les gagne
+ * vite, puis plus rien ne bouge tant qu'on n'attaque pas un autre monde. Ceux-ci récompensent
+ * ce que les premiers ignorent — la LARGEUR (avoir touché à plusieurs mondes) et la DURÉE
+ * (le total d'étoiles, qui ne cesse jamais de monter). Il y a donc toujours un objectif devant,
+ * y compris pour qui a déjà bouclé sa formation.
+ *
+ * PAS DE COULEUR DE FORMATION : ils n'appartiennent à aucune. Leur valeur enregistrée est donc
+ * leur seul identifiant, sans le `|#rrggbb` des paliers — et ils tiennent largement dans la
+ * colonne.
+ *
+ * `test(bilan)` reçoit le bilan de TOUS les mondes : total d'étoiles, mondes touchés, bouclés,
+ * sans faute, et le nombre de mondes qui ont des chapitres. Les seuils sont volontairement
+ * espacés : deux cadres qui tombent le même jour n'en font qu'un.
+ */
+const EXPLOITS = [
+    { id: 'qpas', nom: 'Premier pas', desc: 'Un premier chapitre terminé',
+        test: (b) => b.chapitresFaits >= 1 },
+    { id: 'qtouche', nom: 'Touche-à-tout', desc: 'Joué dans 3 formations différentes',
+        test: (b) => b.mondesTouches >= 3 },
+    { id: 'qcent', nom: 'Centurion', desc: '100 étoiles récoltées',
+        test: (b) => b.etoiles >= 100 },
+    { id: 'qcollec', nom: 'Collectionneur', desc: '3 formations entièrement terminées',
+        test: (b) => b.mondesBoucles >= 3 },
+    { id: 'qlegende', nom: 'Légende', desc: '250 étoiles récoltées',
+        test: (b) => b.etoiles >= 250 },
+    { id: 'qintouch', nom: 'Intouchable', desc: '3 formations sans la moindre faute',
+        test: (b) => b.mondesParfaits >= 3 },
+    /* LE GRAND CHELEM demande AU MOINS DEUX MONDES : sans ce garde-fou, un organisme n'ayant
+       écrit les questions que d'une seule formation le distribuerait en même temps que « Monde
+       bouclé » — le cadre le plus rare du jeu, gagné sans rien de plus. */
+    { id: 'qchelem', nom: 'Grand Chelem', desc: 'Toutes les formations jouables, sans faute',
+        test: (b) => b.mondesJouables >= 2 && b.mondesParfaits >= b.mondesJouables },
+];
+const EXPLOIT_IDS = EXPLOITS.map((e) => e.id);
+
 /** Une valeur de cadre enregistrée : « qparfait|#dc3e37 » -> { id, couleur }. */
 function parseCadre(valeur) {
     const [id, couleur] = String(valeur || '').split('|');
@@ -125,9 +163,29 @@ function palierDuMonde(etoiles = {}, nbChapitres = 0) {
  */
 function cadresQuest(progression = {}, mondes = []) {
     const out = [];
+    /* Le bilan de TOUS les mondes, pour les exploits. Il se construit dans la même boucle : le
+       recalculer ailleurs, à partir des mêmes données, ferait deux règles à tenir d'accord. */
+    const bilan = { etoiles: 0, chapitresFaits: 0, mondesTouches: 0, mondesBoucles: 0, mondesParfaits: 0, mondesJouables: 0 };
     for (const m of mondes) {
-        const palier = palierDuMonde(progression[m.code] || {}, m.chapitres || 0);
+        const etoiles = progression[m.code] || {};
+        const nb = m.chapitres || 0;
+        /* UN MONDE SANS CHAPITRE NE COMPTE POUR RIEN, bilan compris. La règle vaut déjà pour les
+           paliers ; l'oublier ici laissait une progression ORPHELINE — celle d'une formation dont
+           l'école a depuis vidé la banque — décrocher « Premier pas ». Un exploit doit se rejouer :
+           s'il tient à des chapitres qui n'existent plus, personne ne peut plus l'obtenir. */
+        if (!nb) continue;
+        bilan.mondesJouables += 1;
+        for (const v of Object.values(etoiles)) {
+            const n = Number(v) || 0;
+            bilan.etoiles += n;
+            if (n > 0) bilan.chapitresFaits += 1;
+        }
+        if (Object.values(etoiles).some((v) => Number(v) > 0)) bilan.mondesTouches += 1;
+
+        const palier = palierDuMonde(etoiles, nb);
         if (!palier) continue;
+        if (palier === 'qfini' || palier === 'qparfait') bilan.mondesBoucles += 1;
+        if (palier === 'qparfait') bilan.mondesParfaits += 1;
         const p = PALIERS.find((x) => x.id === palier);
         // La couleur du MONDE, exactement celle qu'affiche le jeu : sa colonne si l'école l'a
         // choisie, sinon la teinte stable de son code (cf. couleurFormation ci-dessus).
@@ -135,17 +193,26 @@ function cadresQuest(progression = {}, mondes = []) {
         out.push({ id: palier, valeur: `${palier}|${color}`, palier, nom: p.nom, desc: p.desc,
             code: m.code, title: m.title || m.code, color });
     }
+    for (const e of EXPLOITS) {
+        if (!e.test(bilan)) continue;
+        out.push({ id: e.id, valeur: e.id, palier: e.id, nom: e.nom, desc: e.desc, global: true });
+    }
     return out;
 }
 
-/** Le stagiaire possède-t-il ce cadre de quête, tel qu'il l'a choisi (palier ET couleur) ? */
+/**
+ * Le stagiaire possède-t-il ce cadre de quête ?
+ *
+ * On compare la VALEUR ENTIÈRE, pas le seul palier — et pour les paliers la valeur contient la
+ * couleur. Sans cela, un stagiaire « Sans faute » sur la formation bleue pourrait porter le rouge
+ * d'une formation qu'il n'a jamais jouée : le cadre affirmerait quelque chose de faux, ce qui est
+ * pire que de ne rien dire. Les exploits, eux, n'ont pas de couleur — leur valeur est leur id.
+ */
 function possedeCadreQuest(valeur, cadres = []) {
-    const { id, couleur } = parseCadre(valeur);
-    if (!PALIER_IDS.includes(id)) return false;
-    /* La COULEUR fait partie de la possession : sans elle, un stagiaire « Sans faute » sur la
-       formation bleue pourrait porter le rouge d'une formation qu'il n'a jamais jouée. Le cadre
-       dirait alors quelque chose de faux, ce qui est pire que de ne rien dire. */
-    return cadres.some((c) => c.palier === id && c.color.toLowerCase() === String(couleur).toLowerCase());
+    const v = String(valeur || '').toLowerCase();
+    const { id } = parseCadre(valeur);
+    if (!PALIER_IDS.includes(id) && !EXPLOIT_IDS.includes(id)) return false;
+    return cadres.some((c) => String(c.valeur).toLowerCase() === v);
 }
 
-module.exports = { PALIERS, PALIER_IDS, PALETTE, parseCadre, palierDuMonde, cadresQuest, possedeCadreQuest, couleurFormation };
+module.exports = { PALIERS, PALIER_IDS, EXPLOITS, EXPLOIT_IDS, PALETTE, parseCadre, palierDuMonde, cadresQuest, possedeCadreQuest, couleurFormation };

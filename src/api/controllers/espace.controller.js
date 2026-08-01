@@ -5,7 +5,7 @@ const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
-const { cadresQuest, possedeCadreQuest, parseCadre: parseCadreQuest, PALIER_IDS } = require('../lib/cadresQuest.js');
+const { cadresQuest, possedeCadreQuest, parseCadre: parseCadreQuest, PALIER_IDS, EXPLOIT_IDS } = require('../lib/cadresQuest.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
@@ -1008,7 +1008,7 @@ const saveMyCadre = async (req, res) => {
            un « Sans faute » teinté d'une formation qu'on n'a jamais ouverte, si. La possession se
            calcule ici, à l'écriture, parce qu'elle dépend de la banque de questions du moment. */
         const q = parseCadreQuest(cadre);
-        if (q.id && PALIER_IDS.includes(q.id)) {
+        if (q.id && (PALIER_IDS.includes(q.id) || EXPLOIT_IDS.includes(q.id))) {
             if (!learner) return res.status(403).json({ message: 'Les cadres de Pizza Quest récompensent la progression d\'un stagiaire.' });
             const progress = {};
             try {

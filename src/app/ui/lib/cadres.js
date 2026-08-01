@@ -63,10 +63,40 @@ export const cadreById = (id) => CADRES.find((c) => c.id === id) || CADRES[0];
    autorité : c'est le serveur qui dit ce que le stagiaire possède, et lui qui refuse un cadre
    non gagné. Ce qui est écrit ici ne sert qu'à l'affichage — le libellé, et la fête au moment
    où le palier tombe (PizzaQuest.jsx). */
-export const PALIERS_QUEST = {
+const PALIERS_PAR_MONDE = {
   qdemi: { nom: "Sur la voie", desc: "La moitié des chapitres terminés" },
   qfini: { nom: "Monde bouclé", desc: "Tous les chapitres terminés" },
   qparfait: { nom: "Sans faute", desc: "Tous les chapitres à 3 étoiles" },
+};
+
+/**
+ * LES EXPLOITS — ils ne tiennent à aucune formation, donc n'en portent pas la couleur : leur
+ * valeur enregistrée est leur seul identifiant.
+ *
+ * LISTÉS ICI ET PAS SEULEMENT REÇUS DU SERVEUR, contrairement aux paliers. Le serveur ne renvoie
+ * que ce qui est GAGNÉ ; un exploit non gagné n'apparaîtrait donc nulle part, alors que c'est
+ * précisément ce qu'on veut montrer — cet écran affiche déjà les exclusifs verrouillés avec leur
+ * condition, parce qu'un objectif visible vaut mieux qu'une case cachée.
+ * Les paliers, eux, restent réservés aux gagnés : trois paliers × chaque formation noieraient la
+ * liste sous des cases grises. Un exploit est unique, il tient sa place.
+ *
+ * L'ordre est celui de la rareté croissante — il se retrouve dans le classement visuel (feuille
+ * de style) : les premiers sont fixes, les derniers bougent.
+ */
+export const EXPLOITS_QUEST = [
+  { id: "qpas", nom: "Premier pas", condition: "Terminer un premier chapitre" },
+  { id: "qtouche", nom: "Touche-à-tout", condition: "Jouer dans 3 formations différentes" },
+  { id: "qcent", nom: "Centurion", condition: "Récolter 100 étoiles" },
+  { id: "qcollec", nom: "Collectionneur", condition: "Terminer entièrement 3 formations" },
+  { id: "qlegende", nom: "Légende", condition: "Récolter 250 étoiles" },
+  { id: "qintouch", nom: "Intouchable", condition: "3 formations sans la moindre faute" },
+  { id: "qchelem", nom: "Grand Chelem", condition: "Toutes les formations jouables, sans faute" },
+];
+
+/** Paliers et exploits confondus — pour retrouver un libellé à partir d'un identifiant. */
+export const PALIERS_QUEST = {
+  ...PALIERS_PAR_MONDE,
+  ...Object.fromEntries(EXPLOITS_QUEST.map((e) => [e.id, { nom: e.nom, desc: e.condition }])),
 };
 export const estCadreQuest = (id) => Object.prototype.hasOwnProperty.call(PALIERS_QUEST, id || "");
 
@@ -141,9 +171,13 @@ export function cadreDeQuest(q) {
   const p = PALIERS_QUEST[q.palier] || {};
   return {
     id: q.palier, valeur: q.valeur, couleur: q.color, quest: true,
-    // Le nom PORTE la formation : « Sans faute » seul ne dit pas sans faute sur quoi, et deux
-    // cadres du même palier sur deux formations seraient indiscernables dans la liste.
-    nom: `${p.nom || q.palier} — ${q.title}`, desc: p.desc || "",
+    /* LE CODE, PAS LE TITRE. Le nom doit dire de quelle formation vient le cadre — « Sans faute »
+       seul ne dit pas sans faute sur quoi, et deux cadres du même palier seraient indiscernables.
+       Mais le titre complet fait quatre lignes dans une tuile (« Pizzaïolo Niveau II –
+       Empâtements Indirects « Poolish - Biga » »), et écrase le nom du cadre qu'on est venu lire.
+       Le code tient en cinq caractères et suffit à distinguer. Le titre reste en info-bulle. */
+    nom: p.nom || q.palier, formation: q.code, titre: q.title,
+    desc: p.desc || "", global: !!q.global,
   };
 }
 
