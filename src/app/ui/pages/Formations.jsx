@@ -410,6 +410,10 @@ function dayTag(day) {
 // Petit badge de condition affiché sur une variante.
 function stepBadge(s) {
   if (s.doc_type === "QCM" || s.quiz_id) return s.day != null && s.day !== "" ? dayTag(s.day) : "QCM";
+  /* Une pièce à fournir ne se SIGNE pas, elle se dépose : les badges de signature n'auraient
+     aucun sens ici. Le badge dit combien de fichiers sont attendus — c'est l'information qui
+     manque le plus au stagiaire (« recto ET verso » se lit dans « 2 fichiers »). */
+  if (s.doc_type === "PIECE") return s.fichiers_attendus > 1 ? `${s.fichiers_attendus} fichiers` : "à fournir";
   const a = s.applies_when || {};
   if (a.financing) return a.financing === "PROFESSIONNEL" ? "Pro" : "Particulier";
   if (a.rs === true) return "Certifiante";
@@ -520,14 +524,19 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
         // le jalon) ; « Ajouter » ne propose que ce qui n'est pas encore dans le parcours.
         const pool = jalon
           ? steps.filter((s) => !s.quiz_id && !s.company_level && s.doc_type !== "EMARGEMENT"
-              && !jalon.steps.some((x) => x.slug === s.slug))
+              && s.doc_type !== "PIECE" && !jalon.steps.some((x) => x.slug === s.slug))
           : available;
         const t = chercheDoc.trim().toLowerCase();
         const filtre = (l) => (!t ? l : l.filter((s) =>
           [s.label, s.doc_type, s.slug].some((v) => String(v || "").toLowerCase().includes(t))));
         const isQuiz = (s) => s.doc_type === "QCM" || !!s.quiz_id;
-        const docs = filtre(pool.filter((s) => !isQuiz(s)));
+        // TROIS natures d'étape, donc trois groupes. Ranger une pièce à fournir parmi les
+        // « Documents » tromperait : ceux-là, l'école les produit ; celle-ci, le stagiaire
+        // l'envoie. C'est le sens qui change, pas seulement l'étiquette.
+        const isPiece = (s) => s.doc_type === "PIECE";
+        const docs = filtre(pool.filter((s) => !isQuiz(s) && !isPiece(s)));
         const quizzes = filtre(pool.filter(isQuiz));
+        const pieces = filtre(pool.filter(isPiece));
         const choisir = (s) => {
           if (jalon) onAddOu(jalon.steps.map((x) => x.slug), s.slug); else onToggle(s.slug);
           setAdding(false); setOuFor(null); setChercheDoc("");
@@ -571,10 +580,17 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                 {docs.length === 0
                   ? <div className="pf-add-empty">Aucun document.</div>
                   : <div className="pf-add-grid">{docs.map(item)}</div>}
-                {/* Un QCM ne peut pas être une variante « OU » d'un document : la liste ne le
-                    propose donc pas dans ce mode, plutôt que de l'afficher et le refuser. */}
+                {/* Ni un QCM ni une pièce ne peuvent être la variante « OU » d'un document : la
+                    liste ne les propose donc pas dans ce mode, plutôt que de les afficher et de
+                    les refuser ensuite. */}
                 {!jalon && (
                   <>
+                    <div className="pf-add-title" style={{ marginTop: 12 }}>
+                      Pièces à fournir par le stagiaire{pieces.length ? ` (${pieces.length})` : ""}
+                    </div>
+                    {pieces.length === 0
+                      ? <div className="pf-add-empty">Aucune pièce au référentiel. Elles se créent dans Paramètres → Pièces justificatives.</div>
+                      : <div className="pf-add-grid">{pieces.map(item)}</div>}
                     <div className="pf-add-title" style={{ marginTop: 12 }}>QCM{quizzes.length ? ` (${quizzes.length})` : ""}</div>
                     {quizzes.length === 0
                       ? <div className="pf-add-empty">Aucun QCM disponible.</div>

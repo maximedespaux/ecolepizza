@@ -39,6 +39,33 @@ async function formationSteps(conn, orgId, program) {
         };
     });
 
+    /* PIÈCES À FOURNIR (slug « piece:<id> ») — la troisième nature d'étape, à côté des
+     * documents et des QCM. Le sens est inversé : ce n'est pas l'école qui produit, c'est le
+     * stagiaire qui envoie (copie de pièce d'identité recto/verso…). Elles sont proposées ici
+     * pour que le POINT DE RUPTURE joue aussi sur elles : « pas d'accès à l'émargement tant
+     * que l'identité n'est pas validée » se règle alors sans écrire une ligne.
+     * Requête à part et try/catch : la table arrive avec la migration 127, et le parcours doit
+     * rester utilisable sans elle. */
+    let pieceSteps = [];
+    try {
+        const [pieces] = await conn.query(
+            'SELECT id, label, consigne, fichiers_attendus FROM piece_type WHERE organization_id = ? AND active = 1 ORDER BY label',
+            [orgId]);
+        pieceSteps = pieces.map((pc) => {
+            const slug = `piece:${pc.id}`;
+            const o = overlay.get(slug);
+            return {
+                slug, label: pc.label, doc_type: 'PIECE', quiz_id: null, piece_id: pc.id,
+                consigne: pc.consigne, fichiers_attendus: pc.fichiers_attendus, day: null,
+                // Une pièce ne se signe pas : elle se DÉPOSE puis se vérifie. Les badges de
+                // signature n'ont donc aucun sens ici, et les afficher tromperait.
+                signable: false, stagiaire_sign: false, company_sign: false, company_level: false,
+                sort_order: o ? o.sort_order : 15, // tôt dans le parcours : c'est un préalable
+                active: o ? !!o.active : false,    // jamais imposée d'office à toutes les formations
+            };
+        });
+    } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
+
     // QCM ajoutables comme étapes (slug « quiz:<id> ») : ceux rattachés à cette
     // formation, ET ceux non rattachés (program_id NULL) — pour qu'un QCM nouvellement
     // créé soit proposé dans le parcours de n'importe quelle formation.
@@ -92,7 +119,7 @@ async function formationSteps(conn, orgId, program) {
         });
     } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
 
-    return [...docSteps, ...quizSteps, ...emargSteps].sort((a, b) => a.sort_order - b.sort_order);
+    return [...docSteps, ...quizSteps, ...pieceSteps, ...emargSteps].sort((a, b) => a.sort_order - b.sort_order);
 }
 
 /**
@@ -420,6 +447,10 @@ const saveFormationSteps = async (req, res) => {
         let hasOrGroup = true;
         try { await conn.query('SELECT or_group FROM program_step LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasOrGroup = false; else throw e; }
+        // Colonne piece_id disponible ? (migration 127) — même sonde, même raison.
+        let hasPiece = true;
+        try { await conn.query('SELECT piece_id FROM program_step LIMIT 1'); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasPiece = false; else throw e; }
         for (let i = 0; i < steps.length; i++) {
             const slug = String(steps[i].slug || '').trim().toLowerCase();
             if (!slug) continue;
@@ -434,6 +465,14 @@ const saveFormationSteps = async (req, res) => {
                     'INSERT INTO program_step (id, organization_id, program_id, slug, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)',
                     [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, steps[i].active ? 1 : 0]
                 );
+            }
+            /* Une pièce à fournir porte son identifiant DANS SA COLONNE, pas seulement dans le
+             * slug : c'est `piece_id` que joignent les requêtes de dépôt, et lire un préfixe de
+             * chaîne dans un JOIN serait à la fois lent et fragile. Le slug reste la clé du
+             * parcours, la colonne est la clé étrangère. */
+            if (hasPiece && slug.startsWith('piece:')) {
+                await conn.query('UPDATE program_step SET piece_id = ? WHERE program_id = ? AND slug = ?',
+                    [slug.slice(6), req.params.id, slug]).catch(() => {});
             }
             // QCM ajouté au parcours et non encore rattaché : on le lie à cette formation.
             if (steps[i].active && slug.startsWith('quiz:')) {
