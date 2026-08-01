@@ -20,14 +20,17 @@ import { getPost, createPost, deletePost, addAnswer, deleteAnswer, updatePost, p
  * l'utilisateur courant, et lui seul est rerendu quand celui-ci change de cadre.
  */
 
+/* Même découpe que dans `TetePost` : « Prénom Nom » → « PN ». Un nom en un seul mot ne doit
+   pas produire « undefined » — d'où le second défaut. */
+const initiales = (nom) => { const [p = "", n = ""] = String(nom || "Stagiaire").split(" "); return initials(p, n); };
+
 /** En-tête d'auteur — même forme que sur une fiche : qui parle, avant ce qui est dit. */
 function TetePost({ id, name, avatar, cadre, date, onOpen }) {
   const av = avatar ? parseAvatar(avatar) : null;
-  const [prenom = "", nom = ""] = String(name || "Stagiaire").split(" ");
   const ouvrir = (e) => { e.stopPropagation(); if (id) onOpen(id); };
   return (
     <div className="post-head">
-      <AvatarCadre avatar={av} initiales={initials(prenom, nom)} cadre={cadre?.id} size={38}
+      <AvatarCadre avatar={av} initiales={initiales(name)} cadre={cadre?.id} size={38}
         title={`Voir le profil${cadre && cadre.id !== "aucun" ? ` · cadre ${cadre.nom}` : ""}`} onClick={ouvrir} />
       <span className="post-who">
         <button className="post-name" onClick={ouvrir}>{name || "Stagiaire"}</button>
@@ -188,6 +191,15 @@ export function QuestionModal({ id, moi, cadreDe, onClose, onProfil, onChange })
                   const retenue = p.resolved_answer_id === a.id;
                   return (
                     <div key={a.id} className={"q-reponse" + (retenue ? " retenue" : "")}>
+                      {/* Le VISAGE de qui répond. La conversation n'avait que des noms, alors
+                          que la publication au-dessus porte un avatar et son cadre : on ne
+                          voyait pas qui répond, or c'est là que se joue l'entraide — et une
+                          réponse de Maestro ne se lit pas comme celle d'un Bronze. */}
+                      <AvatarCadre avatar={a.author_avatar ? parseAvatar(a.author_avatar) : null}
+                        initiales={initiales(a.author_name)}
+                        cadre={cadreDe(a.user_id, a.author_done, a.author_cadre, a.author_cadres_ex)?.id}
+                        size={30} title={a.author_name}
+                        onClick={a.user_id ? () => onProfil(a.user_id) : undefined} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ fontSize: 12 }}><b>{a.author_name}</b> <span className="hint">· {a.created_at}</span></span>
                         {retenue && <span className="q-badge-aide"><Icon name="check-circle" size={11} /> Ça m'a aidé</span>}

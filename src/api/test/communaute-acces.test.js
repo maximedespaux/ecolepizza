@@ -27,6 +27,9 @@ const path = require('path');
 const API = path.join(__dirname, '..');
 const APP = path.join(API, '..', 'app');
 const srcCtrl = fs.readFileSync(path.join(API, 'controllers/community.controller.js'), 'utf8');
+// `STAFF` est sorti du contrôleur le jour où `recipe.controller` a eu besoin de la même
+// règle pour les commentaires de fiche. Le contrat, lui, n'a pas bougé.
+const srcModer = fs.readFileSync(path.join(API, 'lib/moderation.js'), 'utf8');
 const srcAuth = fs.readFileSync(path.join(API, 'middlewares/auth.middleware.js'), 'utf8');
 const srcPage = fs.readFileSync(path.join(APP, 'ui/pages/Communaute.jsx'), 'utf8');
 const srcNav = fs.readFileSync(path.join(APP, 'ui/lib/nav.js'), 'utf8');
@@ -41,7 +44,7 @@ function rolesReels() {
 
 test('les rôles « bureau » de la communauté existent vraiment', () => {
     const reels = rolesReels();
-    const m = /const STAFF = \[([^\]]+)\]/.exec(srcCtrl);
+    const m = /const STAFF = \[([^\]]+)\]/.exec(srcModer);
     const declares = [...m[1].matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]);
     const inconnus = declares.filter((r) => !reels.has(r));
     assert.deepStrictEqual(inconnus, [],
@@ -58,7 +61,7 @@ test('la page déclare la MÊME liste que le serveur', () => {
     // l'inverse, une capacite reelle que rien ne propose.
     // La liste vivait dans l'attribut JSX ; elle est devenue une constante nommée le jour où le
     // BANDEAU des annonces s'en est servi lui aussi. Le contrat, lui, n'a pas bougé.
-    const ctrl = [...(/const STAFF = \[([^\]]+)\]/.exec(srcCtrl)[1]).matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]);
+    const ctrl = [...(/const STAFF = \[([^\]]+)\]/.exec(srcModer)[1]).matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]);
     const page = [...(/const peutAnnoncer = \[([^\]]+)\]/.exec(srcPage)[1]).matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]);
     assert.deepStrictEqual(page, ctrl, 'la page et le serveur doivent s\'accorder sur qui est « le bureau »');
 });

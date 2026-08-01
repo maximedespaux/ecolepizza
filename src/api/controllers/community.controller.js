@@ -11,63 +11,26 @@
  */
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { enrichirAuteurs } = require('../lib/auteurs.js');
 
 // Migration 114 non jouée : les tables n'existent pas encore. Même garde que partout ailleurs.
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const listeCadres = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
 const nomDe = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
 
-// L'école parle au nom de l'école : seul le bureau peut publier une ANNONCE, et elle seule
-// peut être épinglée. Un stagiaire qui pourrait épingler passerait devant tout le monde.
-/* DEUX CORRECTIONS SUR CETTE LISTE.
- *
- * 'ADMIN_ORGANISME' et non 'ADMIN' : ce role n'existe pas. La valeur reelle est ADMIN_ORGANISME
- * (cf. auth.middleware, ROLE_LABELS) — un administrateur d'organisme etait donc traite comme un
- * simple stagiaire par les QUATRE controles que `estStaff` commande : publier une annonce,
- * epingler, modifier ou supprimer la publication d'un autre. Le defaut passait inapercu tant que
- * seul l'espace stagiaire ouvrait cette page ; il devient bloquant des que l'ecole y accede.
- *
- * INTERVENANT RETIRE. Il est du cote des STAGIAIRES, pas du bureau — il entre d'ailleurs par le
- * meme layout (cf. main.jsx : `isStudent || isIntervenant`). Le laisser ici lui donnait le droit
- * de parler AU NOM DE L'ECOLE, d'epingler devant tout le monde, et de modifier ou supprimer la
- * publication de n'importe qui. Il participe au fil comme les autres.
- *
- * DEPUIS, `estStaff` ne commande plus que les DEUX gestes qui engagent l'ecole : publier une
- * ANNONCE et epingler. Modifier ou supprimer la publication d'un autre releve de `peutModerer`,
- * qui s'accorde nominativement (voir plus bas). */
-const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'];
-const estStaff = (u) => STAFF.includes(u.role);
+/* Les deux règles vivent dans `lib/moderation.js` : `estStaff` pour ce qui ENGAGE l'école —
+   publier une ANNONCE, épingler — et `peutModerer` pour l'entretien du fil, qui s'accorde
+   nominativement (`cap:moderate-community`, bouton boussole d'Équipe & accès).
 
-/**
- * MODÉRER n'est plus réservé au bureau.
- *
- * `estStaff` commandait quatre gestes très différents sous une seule condition : parler au nom
- * de l'école (ANNONCE), épingler, corriger le texte d'un autre, et supprimer. Les deux premiers
- * ENGAGENT l'école ; les deux derniers sont de l'entretien de fil, que quelqu'un doit pouvoir
- * faire au quotidien sans pour autant s'exprimer au nom de l'organisme.
- *
- * D'où la capacité `cap:moderate-community`, accordée nominativement dans Équipe & accès (le
- * bouton boussole) — même mécanique que `cap:reveal-money`, stockée dans `user.nav_access`.
- *
- * On la relit EN BASE à chaque appel, sans la mettre dans le jeton : c'est déjà le choix fait
- * par `sectionAccess.middleware`, et pour la même raison — retirer la capacité à quelqu'un doit
- * prendre effet tout de suite, pas à l'expiration de son jeton (jusqu'à 7 jours).
- */
-const CAP_MODERER = 'cap:moderate-community';
-const aLaCapacite = (navAccess, cap) => {
-    if (!navAccess) return false;
-    let map = navAccess;
-    if (typeof map === 'string') { try { map = JSON.parse(map); } catch { return false; } }
-    if (Array.isArray(map)) return map.includes(cap);              // ancien format = tout accordé
-    return !!map && typeof map === 'object' && Object.prototype.hasOwnProperty.call(map, cap);
-};
-const peutModerer = async (user) => {
-    if (estStaff(user)) return true;
-    try {
-        const [[row]] = await db.promise().query('SELECT nav_access FROM user WHERE id = ?', [user.id]);
-        return aLaCapacite(row && row.nav_access, CAP_MODERER);
-    } catch { return false; } // en cas de doute, on ne modère pas : refuser est réversible
-};
+   Elles ont quitté ce contrôleur le jour où `recipe.controller` en a eu besoin pour les
+   COMMENTAIRES de fiche : c'est le même fil public, et deux copies d'un droit de suppression
+   divergent sans qu'on le voie.
+
+   L'histoire de cette liste, à ne pas re-découvrir : elle a d'abord contenu 'ADMIN', un rôle
+   QUI N'EXISTE PAS (le vrai est ADMIN_ORGANISME), ce qui traitait un administrateur d'organisme
+   comme un simple stagiaire ; puis INTERVENANT, qui est du côté des STAGIAIRES — même layout —
+   et à qui elle donnait le droit de parler au nom de l'école. */
+const { estStaff, peutModerer } = require('../lib/moderation.js');
 
 /**
  * GET /api/community/posts — le fil.
@@ -92,42 +55,11 @@ const listPosts = async (req, res) => {
               ORDER BY p.pinned DESC, p.created_at DESC`,
             [req.user.organization_id]
         );
-        // Avatar, cadre et parcours des auteurs — une seule requête pour tout le fil plutôt
-        // qu'une jointure par ligne. Séparée du SELECT principal pour la même raison qu'ailleurs :
-        // ces colonnes dépendent de migrations (070, 113) qui peuvent ne pas être jouées.
-        const uids = [...new Set(rows.map((r) => r.author_user_id).filter(Boolean))];
-        if (uids.length) {
-            try {
-                const [ls] = await conn.query(
-                    'SELECT user_id, avatar, completed_levels, cadre, cadres_exclusifs FROM learner WHERE user_id IN (?)',
-                    [uids]);
-                const par = Object.fromEntries(ls.map((x) => [x.user_id, x]));
-                rows.forEach((r) => {
-                    const l = par[r.author_user_id];
-                    r.author_avatar = (l && l.avatar) || null;
-                    r.author_done = listeCadres(l && l.completed_levels).length;
-                    r.author_cadre = (l && l.cadre) || null;
-                    r.author_cadres_ex = listeCadres(l && l.cadres_exclusifs);
-                });
-            } catch (e) { if (!noTable(e)) throw e; }
-            /* Le PERSONNEL n'a pas de fiche `learner` : ses annonces s'affichaient avec un rond
-             * gris et des initiales, seule silhouette anonyme d'un fil où chacun a sa pizza.
-             * Son avatar vit sur `user` (migration 126). Requête séparée et try/catch : le code
-             * doit marcher avant comme après. */
-            try {
-                const [us] = await conn.query('SELECT id, avatar, cadre FROM user WHERE id IN (?)', [uids]);
-                const parU = Object.fromEntries(us.map((x) => [x.id, x]));
-                rows.forEach((r) => {
-                    const u = parU[r.author_user_id];
-                    if (!u) return;
-                    if (!r.author_avatar) r.author_avatar = u.avatar || null;
-                    if (!r.author_cadre) r.author_cadre = u.cadre || null;
-                    // Le cadre « école » n'est adossé à aucune formation : il faut le déclarer
-                    // « possédé », sinon `cadrePorteDe` le rejetterait et retomberait sur rien.
-                    if (u.cadre === 'ecole') r.author_cadres_ex = [...(r.author_cadres_ex || []), 'ecole'];
-                });
-            } catch (e) { if (!noTable(e)) throw e; } // migration 126 non jouée
-        }
+        /* Avatar, cadre et parcours des auteurs. La résolution vit dans `lib/auteurs.js` : les
+         * réponses d'une question et les commentaires d'une fiche en ont besoin à l'identique,
+         * et trois copies auraient divergé au premier changement — il y en a déjà eu un, le
+         * personnel de l'organisme, qui n'a pas de fiche `learner` (migration 126). */
+        await enrichirAuteurs(conn, rows);
         res.json({ data: rows });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] }); // migration 114 non jouée
@@ -155,6 +87,10 @@ const getPost = async (req, res) => {
         // `mine` évite au front de comparer des identifiants : la même information, décidée
         // là où l'utilisateur courant est connu de source sûre.
         answers.forEach((a) => { a.mine = a.user_id === req.user.id; });
+        /* Les réponses n'avaient QUE le nom de leur auteur. Dans un fil où chaque publication
+         * porte un visage, la conversation qui suit repassait à des lignes anonymes — et on ne
+         * voyait pas qui répond, alors que c'est là que se joue l'entraide. */
+        await enrichirAuteurs(conn, answers, 'user_id');
         const [[img]] = await conn.query('SELECT id FROM community_image WHERE post_id = ? LIMIT 1', [req.params.id]);
         /* `can_moderate` manquait, et c'est ce qui rendait toute la modération INVISIBLE : le
          * serveur autorisait depuis toujours le bureau à supprimer la publication d'un autre,

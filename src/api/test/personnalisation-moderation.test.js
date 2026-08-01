@@ -36,6 +36,11 @@ const srcPost = fs.readFileSync(path.join(APP, 'ui/components/QuestionPost.jsx')
 const srcSide = fs.readFileSync(path.join(APP, 'ui/components/Sidebar.jsx'), 'utf8');
 const srcProfil = fs.readFileSync(path.join(APP, 'ui/components/ProfilPersonnel.jsx'), 'utf8');
 const srcCss = fs.readFileSync(path.join(APP, 'ui/styles/app.css'), 'utf8');
+/* Deux règles ont quitté le contrôleur quand une SECONDE liste en a eu besoin : la
+ * modération (commentaires de fiche) et la résolution d'auteur (réponses, commentaires).
+ * Une copie de chaque aurait divergé — sur un droit de suppression, sans qu'on le voie. */
+const srcModer = fs.readFileSync(path.join(API, 'lib/moderation.js'), 'utf8');
+const srcAuteurs = fs.readFileSync(path.join(API, 'lib/auteurs.js'), 'utf8');
 
 test('modérer et parler au nom de l\'école ne sont plus la même chose', () => {
     // Ce qui ENGAGE l'école reste au bureau…
@@ -50,13 +55,13 @@ test('modérer et parler au nom de l\'école ne sont plus la même chose', () =>
 test('la capacité est relue EN BASE, jamais prise dans le jeton', () => {
     // Le jeton ne porte que id/email/role/organization_id, et vit jusqu'à 7 jours : une capacité
     // retirée n'y disparaîtrait pas. Même choix que sectionAccess.middleware, pour la même raison.
-    assert.match(srcComm, /SELECT nav_access FROM user WHERE id = \?/,
+    assert.match(srcModer, /SELECT nav_access FROM user WHERE id = \?/,
         'peutModerer doit relire nav_access en base');
-    assert.match(srcComm, /const CAP_MODERER = 'cap:moderate-community'/, 'la capacite doit etre nommee');
+    assert.match(srcModer, /const CAP_MODERER = 'cap:moderate-community'/, 'la capacite doit etre nommee');
     assert.match(srcNav, /to: "cap:moderate-community"/, 'elle doit etre proposee par le bouton boussole');
     // Le front et le serveur doivent désigner LA MÊME chaîne : une faute de frappe donnerait une
     // case à cocher sans effet, et rien ne le signalerait.
-    const cote = /const CAP_MODERER = '([^']+)'/.exec(srcComm)[1];
+    const cote = /const CAP_MODERER = '([^']+)'/.exec(srcModer)[1];
     const face = /to: "(cap:[a-z-]+)",\n\s*label: "Modérer/.exec(srcNav)[1];
     assert.strictEqual(face, cote, 'la capacite du menu et celle du serveur doivent porter le meme nom');
 });
@@ -96,8 +101,8 @@ test('l\'avatar du personnel vit sur `user`, sans fiche stagiaire fantôme', () 
         'le personnel ne doit plus se voir refuser « Aucune fiche stagiaire »');
     assert.match(srcEspace, /const \[table, cible\] = learner \? \['learner', learner\.id\] : \['user', req\.user\.id\]/,
         'l\'avatar du personnel s\'ecrit sur `user`');
-    assert.match(srcComm, /SELECT id, avatar, cadre FROM user WHERE id IN \(\?\)/,
-        'le fil doit aller chercher l\'avatar du personnel');
+    assert.match(srcAuteurs, /SELECT id, avatar, cadre FROM user WHERE id IN \(\?\)/,
+        'la resolution d\'auteur doit aller chercher l\'avatar du personnel');
 });
 
 test('l\'anneau du cadre tient sur son avatar', () => {

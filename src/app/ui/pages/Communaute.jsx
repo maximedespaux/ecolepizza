@@ -301,7 +301,7 @@ function costs(d) {
 // Fil de commentaires — défini AU NIVEAU MODULE (hors de Communaute). S'il était défini dans
 // le composant, il serait recréé à chaque frappe et le <textarea> perdrait le focus (une lettre
 // puis sortie du champ). Les états/handlers sont passés en props.
-function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onSubmit, onSaveEdit, onDelete }) {
+function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onSubmit, onSaveEdit, onDelete, cadreDe, onProfil, peutModerer }) {
   const cs = comments[id];
   return (
     <div className="comm-thread">
@@ -309,6 +309,14 @@ function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onS
         <p className="hint" style={{ margin: 0 }}>Sois le premier à commenter cette fiche.</p>
       ) : cs.map((c) => (
         <div key={c.id} className="comm-c">
+          {/* Le VISAGE du commentateur. Ce fil était la dernière liste de la Communauté à
+              n'afficher que des noms, alors que la fiche au-dessus porte un avatar et son
+              cadre — et que les pastilles « qui a commenté » en montrent déjà, juste à côté. */}
+          <AvatarCadre avatar={c.author_avatar ? parseAvatar(c.author_avatar) : null}
+            initiales={initials(...String(c.author_name || "Stagiaire").split(" ").slice(0, 2))}
+            cadre={cadreDe(c.user_id, c.author_done, c.author_cadre, c.author_cadres_ex)?.id}
+            size={30} title={c.author_name}
+            onClick={c.user_id ? () => onProfil(c.user_id) : undefined} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <span style={{ fontSize: 12 }}><b>{c.author_name || "Stagiaire"}</b> <span className="hint">· {c.created_at || "à l'instant"}</span></span>
             {editing[c.id] != null ? (
@@ -323,10 +331,15 @@ function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onS
               <span style={{ display: "block", fontSize: 13.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</span>
             )}
           </div>
-          {c.mine && editing[c.id] == null && (
+          {(c.mine || peutModerer) && editing[c.id] == null && (
             <span style={{ display: "flex", gap: 2 }}>
-              <button className="iconbtn" title="Modifier" onClick={() => setEditing((m) => ({ ...m, [c.id]: c.body }))}><Icon name="pencil" size={13} /></button>
-              <button className="iconbtn del" title="Supprimer" onClick={() => onDelete(id, c.id)}><Icon name="trash" size={13} /></button>
+              {/* MODIFIER reste à l'auteur : corriger les mots de quelqu'un d'autre, c'est les
+                  lui faire dire. La modération RETIRE, elle ne réécrit pas. */}
+              {c.mine && (
+                <button className="iconbtn" title="Modifier" onClick={() => setEditing((m) => ({ ...m, [c.id]: c.body }))}><Icon name="pencil" size={13} /></button>
+              )}
+              <button className="iconbtn del" title={c.mine ? "Supprimer" : "Supprimer (modération)"}
+                onClick={() => onDelete(id, c.id)}><Icon name="trash" size={13} /></button>
             </span>
           )}
         </div>
@@ -393,10 +406,17 @@ export default function Communaute() {
    * perdu (donnée corrigée par l'école) cesse d'être affiché sans qu'il faille repasser sur
    * la base.
    */
-  const cadreDe = (id, done = 0, choixServeur = null, exclusifs = []) =>
-    (id && id === moi
-      ? cadrePorteDe(monChoix, done, exclusifs)
-      : cadrePorteDe(choixServeur, done, exclusifs));
+  const cadreDe = (id, done = 0, choixServeur = null, exclusifs = []) => {
+    /* LE CADRE « ÉCOLE » TIENT AU RÔLE, pas à une formation ni à une attribution. La possession
+       étant revérifiée ici, il était REJETÉ : la liste des cadres possédés vient du serveur, et
+       le serveur ne la connaît qu'une fois la migration 126 jouée. On voyait donc son avatar
+       changer tout de suite (localStorage) mais son cadre disparaître dans le fil — pour soi,
+       alors que la page sait parfaitement qu'on est du bureau. Pour les AUTRES, c'est bien le
+       serveur qui tranche : `enrichirAuteurs` pose « ecole » dans les cadres possédés. */
+    const aMoi = id && id === moi;
+    const possedes = aMoi && duBureau ? [...exclusifs, "ecole"] : exclusifs;
+    return cadrePorteDe(aMoi ? monChoix : choixServeur, done, possedes);
+  };
 
   function openProfile(userId) {
     setProfile(null); setProfileId(userId); setProfileOpen(true);
@@ -671,7 +691,13 @@ export default function Communaute() {
                         title={wish.has(s.id) ? "Retirer de ma wishlist" : "Mettre de côté (wishlist)"}>
                         <Icon name="bookmark" size={13} fill={wish.has(s.id) ? "currentColor" : "none"} />
                       </button>
-                      <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /></button>
+                      {/* « Enregistrer dans mes fiches » n'a de sens que pour un STAGIAIRE : il
+                          copie la fiche dans SES empâtements puis y navigue — des routes de
+                          l'espace stagiaire, que le bureau ne peut pas ouvrir. Le bouton menait
+                          donc à une redirection sèche, après avoir tout de même créé la copie. */}
+                      {!duBureau && (
+                        <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /></button>
+                      )}
                     </div>
                   </CommCard>
                 );
@@ -808,13 +834,15 @@ export default function Communaute() {
                       <button className={"btn sm " + (wish.has(detail.id) ? "primary" : "ghost")} onClick={() => toggleWish(detail.id)} title={wish.has(detail.id) ? "Retirer de ma wishlist" : "Mettre de côté"}>
                         <Icon name="bookmark" size={14} fill={wish.has(detail.id) ? "currentColor" : "none"} /> {wish.has(detail.id) ? "Mise de côté" : "Wishlist"}
                       </button>
-                      <button className="btn sm primary comm-save" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /> Enregistrer</button>
+                      {!duBureau && (
+                        <button className="btn sm primary comm-save" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /> Enregistrer</button>
+                      )}
                     </div>
 
                     {/* Commentaires */}
                     <div style={{ marginTop: 18, borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
                       <div className="card-ttl" style={{ fontSize: 14, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}><Icon name="message-circle" size={15} /> Commentaires ({(comments[detail.id] || []).length})</div>
-                      <CommentThread id={detail.id} comments={comments} editing={editing} setEditing={setEditing}
+                      <CommentThread id={detail.id} comments={comments} cadreDe={cadreDe} onProfil={openProfile} peutModerer={!!detail.can_moderate} editing={editing} setEditing={setEditing}
                         draft={draft} setDraft={setDraft} onSubmit={submitComment} onSaveEdit={saveEdit} onDelete={delComment} />
                     </div>
                   </div>

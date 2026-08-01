@@ -3,6 +3,8 @@
 // communauté (autres stagiaires du même organisme).
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { enrichirAuteurs, CADRE_PERSONNEL } = require('../lib/auteurs.js');
+const { peutModerer } = require('../lib/moderation.js');
 
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const authorName = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
@@ -374,8 +376,15 @@ const getRecipe = async (req, res) => {
                  FROM recipe_comment c LEFT JOIN user u ON u.id = c.user_id
                  WHERE c.recipe_id = ? ORDER BY c.created_at`, [req.params.id]);
             comments = cs.map((c) => ({ ...c, mine: c.user_id === req.user.id }));
+            // Même visage que partout ailleurs — cf. lib/auteurs.js. Le fil de commentaires
+            // était la dernière liste de la Communauté à n'afficher que des noms.
+            await enrichirAuteurs(conn, comments, 'user_id');
         } catch (e) { if (!noTable(e)) throw e; }
-        res.json({ data: { ...r, mine, ingredients: ings, like_count: likeCount, liked, comments } });
+        /* `can_moderate` : sans lui, le bouton de suppression ne s'affichait que sur `mine` et
+         * l'école n'avait aucun moyen de retirer le commentaire d'un tiers — sinon supprimer la
+         * fiche entière, ce qui punit son auteur pour le message d'un autre. */
+        res.json({ data: { ...r, mine, ingredients: ings, like_count: likeCount, liked, comments,
+            can_moderate: await peutModerer(req.user) } });
     } catch (err) {
         if (noTable(err)) return res.status(404).json({ message: 'Espace recettes non initialisé (migration 071).' });
         console.error('Erreur lecture recette :', err);
@@ -523,6 +532,18 @@ const authorProfile = async (req, res) => {
             const [[lc]] = await conn.query('SELECT cadre, cadres_exclusifs FROM learner WHERE user_id = ? LIMIT 1', [uid]);
             if (lc) { cadre = lc.cadre || null; cadres_ex = listeCadres(lc.cadres_exclusifs); }
         } catch (e) { if (!noTable(e)) throw e; }
+        /* Le PERSONNEL de l'organisme n'a pas de fiche `learner` : sa fenêtre de profil sortait
+         * donc sans avatar ni cadre, alors qu'il en porte partout ailleurs depuis la migration
+         * 126. Le cadre « École » est en outre déclaré POSSÉDÉ — il tient au rôle, pas à une
+         * formation, et sans cela l'écran le rejette à la lecture (`cadrePorteDe`). */
+        try {
+            const [[uc]] = await conn.query('SELECT avatar, cadre FROM user WHERE id = ? LIMIT 1', [uid]);
+            if (uc) {
+                if (!avatar) avatar = uc.avatar || null;
+                if (!cadre) cadre = uc.cadre || null;
+                if (uc.cadre === CADRE_PERSONNEL) cadres_ex = [...cadres_ex, CADRE_PERSONNEL];
+            }
+        } catch (e) { if (!noTable(e)) throw e; } // migration 126 non jouée
         const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Stagiaire';
         res.json({ data: { id: uid, name, avatar, done, cadre, cadres_ex, shared_count: sc.n, likes_received: likes, company, phone, email, badges } });
     } catch (err) {
@@ -590,13 +611,23 @@ const updateComment = async (req, res) => {
     }
 };
 
-/** DELETE /api/recipes/:id/comments/:cid — supprime son propre commentaire. */
+/**
+ * DELETE /api/recipes/:id/comments/:cid — son propre commentaire, ou celui d'un autre en
+ * MODÉRATION.
+ *
+ * La modération s'arrêtait aux publications d'entraide : le fil de commentaires d'une fiche,
+ * lui, n'était retirable que par son auteur. Or c'est exactement le même fil public, avec les
+ * mêmes dérapages possibles, et l'école n'avait aucun moyen d'y retirer quoi que ce soit —
+ * sinon supprimer la fiche entière, ce qui punit son auteur pour le commentaire d'un tiers.
+ */
 const deleteComment = async (req, res) => {
     try {
         const conn = db.promise();
         const [[c]] = await conn.query('SELECT user_id FROM recipe_comment WHERE id = ? AND recipe_id = ?', [req.params.cid, req.params.id]);
         if (!c) return res.status(404).json({ message: 'Commentaire introuvable.' });
-        if (c.user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut supprimer.' });
+        if (c.user_id !== req.user.id && !await peutModerer(req.user)) {
+            return res.status(403).json({ message: 'Seul l\'auteur, ou la modération, peut supprimer.' });
+        }
         await conn.query('DELETE FROM recipe_comment WHERE id = ?', [req.params.cid]);
         res.json({ success: true });
     } catch (err) {
