@@ -36,7 +36,6 @@ import Ventes from "./pages/Ventes.jsx";
 import Inventaire from "./pages/Inventaire.jsx";
 import Factures from "./pages/Factures.jsx";
 import Comptabilite from "./pages/Comptabilite.jsx";
-import ProduitDivers from "./pages/ProduitDivers.jsx";
 import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import FacturationReglages from "./pages/FacturationReglages.jsx";
@@ -204,7 +203,6 @@ function AppRoutes() {
           <Route path="demandes-boutique" element={<Guard nav="/demandes-boutique" roles={ADMIN}><DemandesBoutique /></Guard>} />
           <Route path="factures" element={<Guard nav="/factures" roles={ADMIN}><Factures /></Guard>} />
           <Route path="comptabilite" element={<Guard nav="/comptabilite" roles={ADMIN}><Comptabilite /></Guard>} />
-          <Route path="produit-divers" element={<Guard nav="/produit-divers" roles={STAFF}><ProduitDivers /></Guard>} />
           <Route path="carte" element={<Guard nav="/carte" roles={ADMIN}><Carte /></Guard>} />
           <Route path="reglages" element={<Guard nav="/reglages" roles={ADMIN}><Reglages /></Guard>} />
           <Route path="reglages-facturation" element={<Guard nav="/reglages-facturation" roles={ADMIN}><FacturationReglages /></Guard>} />

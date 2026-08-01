@@ -4,7 +4,7 @@
  * Trois niveaux d'accès internes :
  *  · ADMIN     — bureau (super admin, admin organisme, secrétariat) : accès complet.
  *  · FORMATEUR — accès pédagogique restreint (sessions/émargement, formations,
- *                consultation des stagiaires, saisie d'un produit divers).
+ *                consultation des stagiaires, annuaire des partenaires).
  *  · AUDITEUR  — consultation (suivi Qualiopi, journal d'audit).
  */
 const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
@@ -48,7 +48,6 @@ export const NAV = [
     items: [
       { to: "/ventes", ic: "cart", label: "Ventes & Inventaire", roles: ADMIN },
       { to: "/demandes-boutique", ic: "package", label: "Demandes boutique", roles: ADMIN },
-      { to: "/produit-divers", ic: "coins", label: "Produit divers", roles: ["FORMATEUR"] },
       { to: "/factures", ic: "receipt", label: "Facturation", roles: ADMIN },
       { to: "/comptabilite", ic: "calculator", label: "Comptabilité", roles: ADMIN },
     ],
@@ -127,7 +126,6 @@ export const PAGE_TITLES = {
   "/formations": "Formations",
   "/qcm": "Modèles de QCM",
   "/pizza-quest-admin": "Pizza Quest",
-  "/produit-divers": "Produit divers",
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
   "/communaute": "Communauté",
@@ -195,7 +193,7 @@ const SECTION_OF = {
   "/communaute": "/communaute",
   "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
-  "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",
+  "/comptabilite": "/comptabilite", "/carte": "/carte",
   "/reglages": "/reglages", "/reglages-facturation": "/reglages-facturation", "/modeles": "/modeles", "/equipe": "/equipe",
   "/audit": "/audit", "/suivi": "/suivi", "/dashboard": "/dashboard",
 };

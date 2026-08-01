@@ -28,9 +28,15 @@ const getPartners = async (req, res) => {
         sql += ' GROUP BY p.id ORDER BY p.name';
         const [results] = await conn.query(sql, params);
 
-        // Détail des commissions par partenaire (libellé, date, montant).
+        /* Détail des commissions par partenaire (libellé, date, montant, NATURE).
+         *
+         * `category` manquait. Un produit divers peut être une COMMISSION, une SUBVENTION ou un
+         * AUTRE produit (cf. REVENU_CATEGORIES) ; sans la colonne, la page les affichait TOUS
+         * comme des commissions. Anodin tant qu'on ne faisait que lire — mais dès qu'on peut
+         * modifier une ligne, le formulaire se serait ouvert sur « Commission » pour une
+         * subvention, et l'aurait convertie en la réenregistrant. */
         const [lines] = await conn.query(
-            `SELECT re.id, re.partner_id, re.label, re.amount, DATE_FORMAT(re.date, '%Y-%m-%d') AS date
+            `SELECT re.id, re.partner_id, re.label, re.amount, re.category, DATE_FORMAT(re.date, '%Y-%m-%d') AS date
              FROM revenue_extra re JOIN partner p ON p.id = re.partner_id
              WHERE p.organization_id = ? ORDER BY re.date DESC, re.created_at DESC`,
             [req.user.organization_id]

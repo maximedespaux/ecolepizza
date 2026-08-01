@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
-import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, deleteRevenue, deleteContribution } from "../api/apiClient.js";
+import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, updateRevenue, deleteRevenue, deleteContribution } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -12,7 +12,7 @@ import DataTable from "../components/DataTable.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import ApportForm from "../components/PartnerContributions.jsx";
 import PartnerProduits from "../components/PartnerProduits.jsx";
-import { apportType, apportsOfPartner } from "../lib/apports.js";
+import { APPORT_TYPES, apportType, apportsOfPartner } from "../lib/apports.js";
 import { euro } from "../lib/format.js";
 
 const CATEGORIES = ["FARINE", "MATERIEL", "FOUR", "CHARCUTERIE", "FROMAGE", "CONSERVE", "DISTRIBUTION", "AUTRE"];
@@ -31,6 +31,7 @@ function Partenaires() {
   const [partners, setPartners] = useState([]);
   const [status, setStatus] = useState(null);
   const [editing, setEditing] = useState(null);   // partenaire édité ou { _new: true }
+  const [editApport, setEditApport] = useState(null); // commission corrigée (revenue_extra)
   const [cat, setCat] = useState("");
   const [tab, setTab] = useState("partenaires");   // partenaires | historique
 
@@ -217,12 +218,30 @@ function Partenaires() {
                   { k: "value", t: "Valeur", th: { className: "ta-r" }, td: { textAlign: "right" },
                     cell: (a) => <span className="tnum">{euro(a.value)}</span> },
                   { k: "actions", t: "", actions: true, td: { textAlign: "right" },
-                    cell: (a) => (canEdit ? <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer l'apport ${a.label}`} onClick={() => removeApport(a)}><Icon name="trash" size={15} /></button> : null) },
+                    cell: (a) => (canEdit ? (
+                      <span style={{ display: "inline-flex", gap: 4 }}>
+                        {/* Modifier ne vaut QUE pour une commission (revenue_extra) : les
+                            contributions en nature n'ont pas de route de mise à jour, seulement
+                            création et suppression. Proposer le bouton partout donnerait un
+                            formulaire qui ne peut pas enregistrer. */}
+                        {a.src === "revenue" && (
+                          <button className="iconbtn" title="Modifier" aria-label={`Modifier l'apport ${a.label}`}
+                            onClick={() => setEditApport({ ...a, partner_id: p.id })}><Icon name="pencil" size={15} /></button>
+                        )}
+                        <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer l'apport ${a.label}`} onClick={() => removeApport(a)}><Icon name="trash" size={15} /></button>
+                      </span>
+                    ) : null) },
                 ]}
               />
             </Card>
           ))}
         </div>
+      )}
+
+      {editApport && (
+        <ApportModal apport={editApport} partners={partners} onClose={() => setEditApport(null)}
+          onSaved={() => { setEditApport(null); setStatus({ type: "success", message: "Apport corrigé." }); load(); }}
+          onError={(m) => setStatus({ type: "error", message: m })} />
       )}
 
       {editing && (
@@ -284,6 +303,77 @@ function PartnerModal({ partner, onClose, onSaved, onError }) {
           </div>
           <div className="field"><label>Notes de suivi</label>
             <textarea className="inp" rows={3} value={form.notes} onChange={set("notes")} /></div>
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={onClose}>Annuler</button>
+          <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Corriger une commission déjà enregistrée.
+ *
+ * `PATCH /comptabilite/revenus/:id` existait — validé, journalisé à l'audit — et n'avait AUCUN
+ * appelant : un apport ne pouvait que se supprimer et se ressaisir. Or il porte une date, et
+ * une suppression/ressaisie fait perdre l'original en même temps qu'elle corrige la faute de
+ * frappe. Un montant faux dans le chiffre d'affaires n'attend pas une seconde saisie.
+ *
+ * Le TYPE reste dans les natures « cash » : passer une commission en « Matériel » la ferait
+ * changer de table (partner_contribution), ce que cette route ne sait pas faire. Le partenaire,
+ * lui, se change — une commission portée au mauvais nom est une erreur courante, et c'était
+ * jusqu'ici la plus coûteuse à réparer.
+ */
+function ApportModal({ apport, partners, onClose, onSaved, onError }) {
+  const [form, setForm] = useState(() => ({
+    partner_id: apport.partner_id || "",
+    type: apportType(apport.type).cash ? apport.type : "COMMISSION",
+    label: apport.label || "",
+    value: String(apport.value ?? ""),
+    date: apport.date || "",
+  }));
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  async function save() {
+    if (!form.partner_id) return onError("Choisissez le partenaire.");
+    if (!form.label.trim()) return onError("Libellé requis.");
+    if (form.value === "" || Number.isNaN(Number(form.value))) return onError("Montant invalide.");
+    setSaving(true);
+    try {
+      await updateRevenue(apport.srcId, {
+        label: form.label, categorie: form.type, montant: form.value,
+        date: form.date, partner_id: form.partner_id,
+      });
+      onSaved();
+    } catch (e) { onError(e.message || "Enregistrement impossible."); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="mhead"><h3>Modifier l'apport</h3>
+          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button></div>
+        <div className="mbody">
+          <div className="row2">
+            <SelectField label="Partenaire" value={form.partner_id} onChange={set("partner_id")} required>
+              {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </SelectField>
+            <SelectField label="Type" value={form.type} onChange={set("type")}>
+              {APPORT_TYPES.filter((t) => t.cash).map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
+            </SelectField>
+          </div>
+          <Field label="Libellé" value={form.label} onChange={set("label")} required />
+          <div className="row2">
+            <Field label="Montant (€)" value={form.value} onChange={set("value")} inputMode="decimal" required />
+            <Field label="Date" type="date" value={form.date} onChange={set("date")} />
+          </div>
+          <p className="hint" style={{ marginBottom: 0 }}>
+            Cette somme entre dans le chiffre d'affaires : la corriger ici corrige la Comptabilité.
+          </p>
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>
