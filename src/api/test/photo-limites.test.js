@@ -64,3 +64,28 @@ test('la mention dit que la réduction est AUTOMATIQUE avant d\'annoncer un plaf
     assert.match(srcPost, /Réduite à <b>\{Math\.round\(photo\.size \/ 1024\)\} Ko<\/b>/,
         'le poids reel doit s\'afficher apres le choix');
 });
+
+test('« Prendre une photo » n\'apparaît que là où elle fait quelque chose', () => {
+    /* LIMITE DU WEB, pas choix esthétique : l'attribut `capture` ouvre l'appareil photo sur
+     * téléphone et est purement IGNORÉ sur ordinateur. Un bouton visible partout y rouvrirait le
+     * sélecteur de fichiers — deux boutons identiques côte à côte, dont l'un ment sur ce qu'il
+     * fait. `pointer: coarse` (le doigt plutôt que la souris) est le meilleur signal disponible ;
+     * une webcam branchée sur un poste fixe ne dit rien, elle, de ce que `capture` fera. */
+    assert.match(srcPost, /window\.matchMedia\("\(pointer: coarse\)"\)\.matches/,
+        'la detection doit porter sur le pointeur, pas sur la largeur d\'ecran');
+    assert.match(srcPost, /\{surTactile && \(/, 'le bouton doit etre conditionne');
+
+    /* DEUX ENTRÉES SÉPARÉES, et non un attribut qu'on bascule : poser `capture` puis le retirer
+       sur le même `<input>` laisse certains navigateurs sur leur première décision. */
+    const entrees = [...srcPost.matchAll(/<input ref=\{(fichierRef|appareilRef)\} type="file"[^>]*/g)].map((m) => m[0]);
+    assert.strictEqual(entrees.length, 2, 'une entree pour le fichier, une pour l\'appareil');
+    assert.ok(!/capture/.test(entrees.find((e) => /fichierRef/.test(e))), 'celle du fichier NE doit PAS capturer');
+    assert.match(entrees.find((e) => /appareilRef/.test(e)), /capture="environment"/,
+        'camera ARRIERE : on photographie une pate, pas son visage');
+
+    /* Et surtout : la photo prise passe par LE MÊME `choisirPhoto`. Un cliché de téléphone pèse
+       3 à 8 Mo — sans la réduction, il serait refusé par le serveur. */
+    const avecCapture = /<input ref=\{appareilRef\}[^>]*onChange=\{(\w+)\}/.exec(srcPost);
+    assert.ok(avecCapture, 'gestionnaire de l\'appareil introuvable');
+    assert.strictEqual(avecCapture[1], 'choisirPhoto', 'la photo prise doit etre reduite comme les autres');
+});

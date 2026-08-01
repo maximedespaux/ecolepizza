@@ -198,6 +198,14 @@ const PATHS = {
       <path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33" />
     </>
   ),
+  /* Appareil photo — « prendre une photo », à côté de « choisir ». Même jeu que le reste
+     (24×24, contour, jointures rondes) : dessiné à part, il jurerait. */
+  "camera": (
+    <>
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z" />
+      <circle cx="12" cy="13" r="3" />
+    </>
+  ),
   /* Punaise — une annonce de l'école tenue en tête du fil. Le trait suit le même jeu que le
      reste (24×24, contour, jointures rondes) : dessinée à part, elle jurerait. */
   "pin": (

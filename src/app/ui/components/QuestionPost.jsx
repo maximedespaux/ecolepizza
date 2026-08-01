@@ -307,6 +307,19 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState(null);
   const fichierRef = useRef(null);
+  const appareilRef = useRef(null);
+  /* « Prendre une photo » n'apparaît QUE sur un appareil tactile, et c'est une limite du web,
+     pas un choix esthétique : l'attribut `capture` ouvre l'appareil photo sur téléphone et est
+     purement IGNORÉ sur ordinateur. Le bouton y rouvrirait donc le sélecteur de fichiers — deux
+     boutons identiques côte à côte, dont l'un ment sur ce qu'il fait.
+     `pointer: coarse` est le meilleur signal disponible (doigt plutôt que souris) ; une caméra
+     branchée sur un poste fixe ne dit rien, elle, de ce que `capture` fera.
+     Lu UNE FOIS au montage : la modale ne survit pas à une rotation d'écran, et `matchMedia`
+     n'existe pas côté serveur ni dans les très vieux navigateurs — d'où la garde. */
+  const [surTactile] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia
+      ? window.matchMedia("(pointer: coarse)").matches
+      : false);
   const annonce = kind === "ANNONCE";
   useEchap(onClose);
 
@@ -395,10 +408,20 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
               </p>
               {apercu && <img className="q-photo" src={apercu} alt="Aperçu de la photo choisie" />}
               <input ref={fichierRef} type="file" accept="image/*" hidden onChange={choisirPhoto} />
+              {/* Deux entrées SÉPARÉES, et non un attribut qu'on bascule : poser `capture` puis
+                  le retirer sur le même `<input>` laisse certains navigateurs sur leur première
+                  décision. Deux éléments, deux comportements, aucun état à synchroniser.
+                  `environment` = la caméra ARRIÈRE : on photographie une pâte, pas son visage. */}
+              <input ref={appareilRef} type="file" accept="image/*" capture="environment" hidden onChange={choisirPhoto} />
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <button className="btn sm ghost" onClick={() => fichierRef.current?.click()}>
                   <Icon name="image" size={14} /> {photo ? "Changer la photo" : "Choisir une photo"}
                 </button>
+                {surTactile && (
+                  <button className="btn sm ghost" onClick={() => appareilRef.current?.click()}>
+                    <Icon name="camera" size={14} /> Prendre une photo
+                  </button>
+                )}
                 {/* La limite, ANNONCÉE — mais sans laisser croire qu'il faut la respecter soi-même :
                     toute photo est réduite avant l'envoi (une photo de téléphone pèse 3 à 8 Mo et
                     passe très bien). Dire « 550 Ko maximum » tout court aurait fait renoncer des
