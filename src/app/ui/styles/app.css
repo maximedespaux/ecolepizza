@@ -3494,10 +3494,16 @@ button.av-wrap:active{transform:scale(.94)}
   --cadre-bg:conic-gradient(from var(--cadre-a),
     #8f1d18,#dc3e37,#ff6900,#fcb900,#fff3c4,#fcb900,#ff6900,#dc3e37,#8f1d18);
   animation:cadreTourne 7s linear infinite;
-  /* Le halo est porté par l'AVATAR, pas par l'anneau : `.cadre::before` est masqué (anneau
-     creux), et le masque s'applique APRÈS le filtre — un `drop-shadow` y serait découpé avec
-     le reste. Sur l'avatar, le halo suit son `border-radius`, cercle ou carré arrondi. */
-  box-shadow:0 0 13px -3px color-mix(in srgb,#ff6900 72%,transparent)}
+  /* LE HALO SUIT LA FORME RÉELLEMENT PEINTE, et il a fallu deux essais pour y arriver.
+     · Pas sur `.cadre::before` : l'anneau y est creusé au masque, et le masque s'applique APRÈS
+       le filtre — un `drop-shadow` y aurait été découpé avec le reste.
+     · Pas en `box-shadow` sur l'élément : un box-shadow suit le `border-radius` DE L'ÉLÉMENT, or
+       `.av-wrap` (le porteur dans le fil) est un carré sans rayon — le halo sortait donc en
+       CARRÉ autour d'un avatar rond. Visible dans la Communauté, invisible dans la modale, où
+       `.pf-avatar` a bien un rayon : d'où un défaut qui ne se montrait qu'à un seul endroit.
+     `drop-shadow` trace le contour ALPHA de ce qui est peint — le cercle ici, le carré arrondi
+     là — sans rien savoir de la géométrie de son hôte. Une seule règle pour tous les porteurs. */
+  filter:drop-shadow(0 0 5px color-mix(in srgb,#ff6900 62%,transparent))}
 /* Les étoiles jaillissent puis retombent, en boucle.
    UN SEUL pseudo-élément, promené entre trois points autour de l'anneau, invisible entre deux
    apparitions : à cette cadence l'œil lit « des étoiles », pas « une étoile qui se déplace ».

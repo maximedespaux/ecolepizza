@@ -128,9 +128,18 @@ test('le cadre « École » est le plus riche du jeu — il désigne, il ne se g
     assert.match(srcCss, /\.cadre-ecole\{[^}]*animation:cadreTourne/, 'il doit reutiliser la rotation existante');
     assert.match(srcCss, /@property --cadre-a\{syntax:"<angle>"/,
         'sans `@property`, l\'angle ne s\'interpole pas et l\'anneau reste fixe');
-    /* Le halo est porté par l'AVATAR, pas par l'anneau : `.cadre::before` est masqué (anneau
-       creux) et le masque s'applique APRÈS le filtre — un `drop-shadow` y serait découpé. */
-    assert.match(srcCss, /\.cadre-ecole\{[^}]*box-shadow:0 0 13px -3px/, 'le halo vit sur l\'avatar');
+    /* LE HALO SUIT LA FORME PEINTE — deux essais ratés avant d'y arriver, gelés ici.
+     * · Pas sur `.cadre::before` : l'anneau y est creusé au masque, et le masque s'applique
+     *   APRÈS le filtre — un `drop-shadow` y serait découpé avec le reste.
+     * · Pas en `box-shadow` sur l'élément : un box-shadow suit le `border-radius` DE L'ÉLÉMENT,
+     *   or `.av-wrap` — le porteur dans le fil — est un carré SANS rayon. Le halo sortait donc
+     *   en CARRÉ autour d'un avatar rond, visible dans la Communauté et nulle part ailleurs :
+     *   `.pf-avatar`, lui, a bien un rayon. Un défaut qui ne se montrait qu'à un seul endroit.
+     * `drop-shadow` trace le contour ALPHA de ce qui est peint, sans rien savoir de son hôte. */
+    assert.match(srcCss, /\.cadre-ecole\{[^}]*filter:drop-shadow\(/, 'le halo doit suivre la forme peinte');
+    assert.doesNotMatch(srcCss, /\.cadre-ecole\{[^}]*box-shadow:/,
+        'un box-shadow suivrait le rayon de l\'hote — carre sur `.av-wrap`');
+    assert.match(srcCss, /\.av-wrap\{[^}]*position:relative/, 'l\'hote du fil, celui qui n\'a pas de rayon');
     // Plus lent que Maestro : ce cadre apparaît sur CHAQUE publication de l'école, là où un
     // exclusif est rare. Répété dix fois dans un fil, un mouvement rapide devient du bruit.
     const ecole = Number(/\.cadre-ecole\{[^}]*animation:cadreTourne ([\d.]+)s/.exec(srcCss)[1]);
