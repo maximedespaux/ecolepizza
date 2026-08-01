@@ -216,7 +216,6 @@ const checkout = async (req, res) => {
         return res.status(422).json({ error: 'Panier vide' });
     }
     const globalDisc = Math.min(100, Math.max(0, Number(req.body.discount) || 0)); // % remise globale
-    const factor = 1 - globalDisc / 100;
     const status = req.body.status === 'IMPAYEE' ? 'IMPAYEE' : 'PAYEE';
     try {
         const conn = db.promise();
@@ -273,9 +272,34 @@ const checkout = async (req, res) => {
             ln._disc = Math.min(100, Math.max(0, Number(ln.discount_pct) || 0)); // remise ligne
         }
 
+        /* REMISE LIGNE ET REMISE GLOBALE S'EXCLUENT.
+         *
+         * Elles se CUMULAIENT : 10 % sur la ligne et 5 % sur la vente faisaient 14,5 %, parce que
+         * les deux facteurs se multipliaient. Personne ne lit une facture ainsi — on y voit un
+         * taux à côté d'un prix et on s'attend à ce que l'un donne l'autre. Un « 10 % » affiché
+         * en face d'un prix qui en reflète 14,5 rend le document invérifiable par le client.
+         *
+         * Désormais : soit on remise ligne par ligne, soit on pose un taux unique pour toute la
+         * vente. La caisse désactive l'un dès que l'autre est saisi, mais on REFUSE ici aussi :
+         * un front en cache ou une requête postée à la main passerait outre, et la vente
+         * s'enregistrerait à un montant que personne n'a voulu. Refuser plutôt qu'arbitrer en
+         * silence — même règle que pour la ventilation des règlements plus bas. */
+        const remiseDeLigne = lines.some((l) => l._disc > 0);
+        if (remiseDeLigne && globalDisc > 0) {
+            return res.status(422).json({
+                message: 'Remise par article ET remise globale : il faut choisir. '
+                    + 'Retire la remise globale, ou celles des articles.',
+            });
+        }
+        // Le taux qui s'applique RÉELLEMENT à une ligne : le sien en mode ligne, sinon le global.
+        const tauxDe = (ln) => (remiseDeLigne ? ln._disc : globalDisc);
+
         // Facture liée : identifiant + numéro générés AVANT les lignes, pour que chaque
         // vente (material_sale) référence sa facture → regroupement de l'historique.
         const hasInvLink = await saleHasInvoiceLink(conn);
+        // Sondée ICI et pas plus bas : le libellé de ligne s'écrit avant l'insertion, et il doit
+        // savoir s'il garde le suffixe « (remise 10%) » ou si la colonne s'en charge.
+        const hasLineDiscount = await hasColumn(conn, 'invoice_line', 'discount_pct');
         const hasSaleCompany = await hasColumn(conn, 'material_sale', 'company_id');
         const hasInvEmitter = await hasColumn(conn, 'invoice', 'billing_profile_id');
         const invoiceId = crypto.randomUUID();
@@ -311,7 +335,12 @@ const checkout = async (req, res) => {
             //
             // Arrondir le prix UNITAIRE d'abord est aussi ce que le client peut vérifier : le
             // ticket affiche un prix unitaire, il doit pouvoir le multiplier lui-même.
-            const unitNet = Number((Number(it.unit_price || 0) * (1 - ln._disc / 100) * factor).toFixed(2));
+            // Un SEUL taux s'applique (cf. l'exclusion plus haut) : plus de multiplication de
+            // deux facteurs. Le brut est figé à côté du net — c'est lui qui fera les euros de
+            // remise, par soustraction de deux montants déjà arrondis (cf. migration 122).
+            const taux = tauxDe(ln);
+            const unitGross = Number(Number(it.unit_price || 0).toFixed(2));
+            const unitNet = Number((unitGross * (1 - taux / 100)).toFixed(2));
             const rate = tvaApplies ? Number(it.tax_rate || 0) : 0;
             const lineHT = Number((unitNet * ln._qty).toFixed(2));
             const note = payMethod ? `Paiement : ${payMethod}` : null;
@@ -332,8 +361,14 @@ const checkout = async (req, res) => {
             // Désignation PROPRE (juste le nom) : la quantité et la remise ont leurs colonnes sur
             // la facture. La référence (SKU) est figée à part. L'ancien libellé « nom × qté
             // (remise) » doublonnait la colonne Qté.
-            const label = `${it.name}${ln._disc ? ` (remise ${ln._disc}%)` : ''}`;
-            invLines.push({ description: label.slice(0, 255), amount_net: lineHT, rate, qty: ln._qty, unit: unitNet, reference: it.sku || null });
+            // La remise n'a plus à s'écrire dans le libellé : elle a sa colonne (migration 122),
+            // et le jeton {Remise} la place où le modèle veut. On garde le suffixe tant que la
+            // colonne n'existe pas, sinon la remise disparaîtrait de la facture entre-temps.
+            const label = `${it.name}${taux && !hasLineDiscount ? ` (remise ${taux}%)` : ''}`;
+            invLines.push({
+                description: label.slice(0, 255), amount_net: lineHT, rate, qty: ln._qty,
+                unit: unitNet, gross: unitGross, discount: taux, reference: it.sku || null,
+            });
             productNames.push(`${it.name} x${ln._qty}`);
         }
         const totalTVA = invLines.reduce((s, l) => s + l.amount_net * l.rate / 100, 0);
@@ -413,6 +448,10 @@ const checkout = async (req, res) => {
                 lv.push(invLines[i].rate, invLines[i].qty, invLines[i].unit);
             }
             if (hasLineRef) { lc.push('reference'); lv.push(invLines[i].reference); }
+            if (hasLineDiscount) {
+                lc.push('discount_pct', 'unit_price_gross_ht');
+                lv.push(invLines[i].discount || 0, invLines[i].gross);
+            }
             await conn.query(
                 `INSERT INTO invoice_line (${lc.join(', ')}) VALUES (${lc.map(() => '?').join(', ')})`, lv);
         }

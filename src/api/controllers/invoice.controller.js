@@ -5,6 +5,7 @@ const { logAudit } = require('../lib/audit.js');
 const { buildCII, attacherFacturX, ventilerTva, manquantsFacturX } = require('../lib/facturx.js');
 const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
 const { renderTemplateHtml } = require('../lib/htmlfill.js');
+const { findMissingTokens } = require('../lib/tokens.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
 const { loadEmitter, resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
 
@@ -117,6 +118,7 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
              LEFT JOIN learner l ON l.id = e.learner_id
              WHERE il.invoice_id = ? ORDER BY il.sort_order, il.id`;
     const niveaux = [
+        'il.description, il.amount_net, il.tax_rate, il.qty, il.unit_price_ht, il.reference, il.discount_pct, il.unit_price_gross_ht,',
         'il.description, il.amount_net, il.tax_rate, il.qty, il.unit_price_ht, il.reference,',
         'il.description, il.amount_net, il.tax_rate, il.qty, il.unit_price_ht,',
         'il.description, il.amount_net,',
@@ -141,6 +143,11 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
             qty: r.qty != null ? Number(r.qty) : null,
             unit_price_ht: r.unit_price_ht != null ? Number(r.unit_price_ht) : null,
             reference: r.reference || null,
+            // Remise : `null` quand l'information n'existe pas (facture émise avant la 122) —
+            // à distinguer de `0`, qui veut dire « vendu sans remise ». Le jeton affiche « — »
+            // dans les deux cas, mais le total en euros ne doit compter que ce qu'il sait.
+            discount_pct: r.discount_pct != null ? Number(r.discount_pct) : null,
+            unit_price_gross_ht: r.unit_price_gross_ht != null ? Number(r.unit_price_gross_ht) : null,
         }))
         : [{ name: inv.description || inv.program_title || 'Prestation de formation', amount: Number(inv.amount_net) }];
 
@@ -393,9 +400,11 @@ const deleteInvoice = (req, res) => {
  */
 function avertirConformite(res, data) {
     const manque = manquantsFacturX(data);
-    if (!manque.length) return;
+    if (!manque.length) return null;
+    // Trace serveur conservée : elle sert au diagnostic quand on relit les journaux.
     console.warn(`Facture ${data.number} : non conforme XP Z12-012, il manque ${manque.join(', ')}`);
     res.set('X-Facturx-Manquants', encodeURIComponent(manque.join(' | ')));
+    return manque;
 }
 
 /**
@@ -552,7 +561,20 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
     // bandeau avec l'identité de l'organisme. Un modèle de facture qui porte DÉJÀ cette identité
     // dans son corps (les deux encadrés vendeur/acheteur) se retrouve alors avec le nom en double,
     // tout en haut. Le modèle peut donc le désactiver (layout.noLetterhead) — voir l'éditeur.
-    const html = renderTemplateHtml(content.html, invoiceCtx(identite, data), {
+    /* Jetons du MODÈLE non résolus : même contrôle que pour les documents (document.controller),
+     * qui manquait ici. Une facture partait donc avec des trous là où le modèle attendait une
+     * adresse ou un numéro de TVA — et un blanc sur une pièce comptable ne se remarque qu'après
+     * l'envoi. Le refus porte `missing`, dans la forme que l'interface sait déjà afficher. */
+    const ctxFacture = invoiceCtx(identite, data);
+    const jetonsVides = findMissingTokens([content.html, content.header, content.footer], ctxFacture);
+    if (jetonsVides.length) {
+        throw Object.assign(new Error('Informations manquantes'), {
+            motif: `Facture non générée : ${jetonsVides.length} information(s) attendue(s) par le modèle sont vides.`,
+            missing: jetonsVides,
+        });
+    }
+
+    const html = renderTemplateHtml(content.html, ctxFacture, {
         title: `${data.typeLabel} ${data.number}`,
         headerHtml: content.header,
         footerHtml: content.footer,
@@ -666,14 +688,44 @@ const getInvoiceFacturX = async (req, res) => {
         const data = await loadInvoiceData(conn, req.user.organization_id, req.params.id);
         if (!data) return res.status(404).json({ message: 'Facture introuvable' });
         const xml = buildCII(data);
-        avertirConformite(res, data);
+
+        /* CONTRÔLE BLOQUANT AVANT ÉMISSION.
+         *
+         * Ces manques ne partaient qu'en `console.warn` côté serveur, plus un en-tête de réponse
+         * que personne ne lit : le document sortait quand même, incomplet, et le défaut ne se
+         * découvrait qu'au rejet par la plateforme de facturation, des jours plus tard et loin
+         * de l'écran où il se corrige.
+         *
+         * On refuse donc, et on dit quoi compléter. Le point d'arrêt est le bon : cette route est
+         * le TÉLÉCHARGEMENT du Factur-X, pas l'encaissement — la vente est déjà enregistrée, la
+         * facture existe, on ne bloque aucune caisse. Il suffit de compléter la fiche et de
+         * retélécharger.
+         *
+         * `?force=1` laisse passer : un organisme peut avoir besoin du PDF tout de suite pour un
+         * client sans e-mail, quitte à ce qu'il ne soit pas conforme. Refuser sans porte de
+         * sortie déplacerait le blocage sans le résoudre. */
+        const manque = avertirConformite(res, data);
+        const force = req.query.force === '1' || req.query.force === 'true';
+        if (manque && !force) {
+            return res.status(422).json({
+                error: 'Informations manquantes',
+                message: `Facture non générée : ${manque.length} information(s) à compléter.`,
+                // Même forme que le contrôle des documents (label/group), pour que l'interface
+                // les affiche avec le composant qui sait déjà le faire.
+                missing: manque.map((libelle) => ({ key: libelle, label: libelle, group: 'Facturation' })),
+                forcable: true,
+            });
+        }
+
         let pdfBytes;
         try {
             pdfBytes = await buildInvoicePdf(conn, req.user.organization_id, data, xml);
         } catch (e) {
             // Un refus de configuration n'est pas une panne : il se corrige en deux clics, à
             // condition de dire lesquels. Un 500 muet enverrait chercher dans les journaux.
-            if (e && e.motif) return res.status(422).json({ message: e.motif });
+            // `missing` accompagne le motif quand le refus vient de jetons vides : l'interface
+            // liste alors ce qu'il faut compléter au lieu d'afficher une phrase seule.
+            if (e && e.motif) return res.status(422).json({ message: e.motif, ...(e.missing ? { error: 'Informations manquantes', missing: e.missing } : {}) });
             throw e;
         }
         logAudit(req, 'invoice.facturx', 'Invoice', req.params.id);

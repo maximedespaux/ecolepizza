@@ -408,6 +408,7 @@ function acheteurFactureGroup() {
             t('field:company.email', 'E-mail (entreprise)', 'Entreprise', 'contact@napoli.fr', "Adresse e-mail de l'acheteur lorsque c'est une ENTREPRISE. Se remplit avec l'e-mail de la fiche entreprise de l'acheteur."),
             t('field:company.phone', 'Téléphone (entreprise)', 'Entreprise', '05 56 11 22 33', "Téléphone de l'acheteur ENTREPRISE (depuis sa fiche)."),
             t('field:company.address', 'Adresse (entreprise)', 'Entreprise', '5 av. de la Gare', "Adresse postale de l'acheteur ENTREPRISE."),
+            t('field:company.vat_number', 'N° TVA (entreprise)', 'Entreprise', 'FR76123456789', "Numéro de TVA intracommunautaire de l'acheteur ENTREPRISE. Mention attendue dès qu'on facture une société, et obligatoire sur une opération intracommunautaire. Se remplit depuis sa fiche entreprise (migration 123)."),
             t('field:company.naf_ape', 'NAF/APE (entreprise)', 'Entreprise', '5610C', "Code NAF/APE de l'acheteur ENTREPRISE."),
             t('field:company.legal_status', 'Forme juridique (entreprise)', 'Entreprise', 'SARL', "Forme juridique de l'acheteur ENTREPRISE (SARL, SAS…)."),
             // Acheteur PARTICULIER / STAGIAIRE (facture particulier)
@@ -432,6 +433,7 @@ function articleTokensGroup() {
             t('Désignation', 'Désignation de l’article', 'Biberon valve 455 ml'),
             t('Quantité', 'Quantité', '2'),
             t('Prix unitaire HT', 'Prix unitaire HT', '8,91 €'),
+            t('Remise', 'Remise appliquée à l’article', '10 %'),
             t('Montant HT', 'Montant HT de la ligne', '17,82 €'),
             t('Taux TVA', 'Taux de TVA de la ligne', '20,00 %'),
             t('Montant TVA', 'Montant de TVA de la ligne', '3,56 €'),

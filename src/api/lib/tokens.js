@@ -167,6 +167,10 @@ const TOKEN_CATALOG = [
             { key: 'Total HT', label: 'Total hors taxes', sample: '17,82 €' },
             { key: 'Total TVA', label: 'Total TVA', sample: '3,56 €' },
             { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21,38 €' },
+            { key: 'Total remise', label: 'Total des remises', sample: '4,20 €',
+              desc: 'Somme des remises accordées sur la facture, en euros. Affiche « 0,00 € » '
+                  + 'quand il n’y a aucune remise. Vaut 0 sur les factures émises avant que la '
+                  + 'remise ne soit enregistrée (migration 122).' },
             { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20,00 % sur 17,82 € : 3,56 €' },
             { key: 'Règlement', label: 'Moyen(s) de paiement', sample: 'Espèces + CB' },
             { key: 'Détail règlement', label: 'Moyens et montants réglés', sample: 'Espèces : 300,00 € · CB : 700,00 €' },
@@ -250,7 +254,12 @@ function articlesTable(list) {
     if (!rows.length) return '';
     const taux = new Set(rows.map((l) => Number(l.taxRate ?? 20)));
     const mixte = taux.size > 1;
-    const head = '<tr><th>Désignation</th><th>Qté</th><th>P.U. HT</th><th>Montant HT</th>'
+    // Colonne Remise : même règle que la colonne TVA — elle n'apparaît QUE si elle a quelque
+    // chose à dire. Sur une facture sans aucune remise, une colonne de tirets vole de la largeur
+    // à la désignation, seul champ de longueur variable.
+    const remise = rows.some((l) => Number(l && l.discount_pct) > 0);
+    const head = '<tr><th>Désignation</th><th>Qté</th><th>P.U. HT</th>'
+        + (remise ? '<th>Remise</th>' : '') + '<th>Montant HT</th>'
         + (mixte ? '<th>TVA</th>' : '') + '<th>Total TTC</th></tr>';
 
     // LARGEURS DE COLONNES EXPLICITES. Sans elles, LibreOffice répartit à parts égales : la
@@ -258,20 +267,24 @@ function articlesTable(list) {
     // caractères — occupait autant de place, au point de se couper en « Q / té ». La
     // désignation est le seul champ de longueur variable ; elle prend ce que les autres, de
     // largeur connue, n'utilisent pas.
+    // Chaque combinaison somme à 100 : la désignation absorbe ce que les colonnes de largeur
+    // connue laissent. Les quatre cas sont écrits en clair plutôt que calculés — on les lit.
     const cols = mixte
-        ? [46, 7, 13, 13, 8, 13]
-        : [50, 8, 14, 14, 14];
+        ? (remise ? [40, 7, 12, 9, 12, 8, 12] : [46, 7, 13, 13, 8, 13])
+        : (remise ? [44, 8, 13, 9, 13, 13] : [50, 8, 14, 14, 14]);
     const colgroup = `<colgroup>${cols.map((w) => `<col width="${w}%">`).join('')}</colgroup>`;
     const cellules = rows.map((l, i) => articleRowTokens(l, i));
     const body = cellules.map((c) => (
         `<tr><td>${escCell(c['Désignation'])}</td><td>${escCell(c['Quantité'])}</td>`
-        + `<td>${escCell(c['Prix unitaire HT'])}</td><td>${escCell(c['Montant HT'])}</td>`
+        + `<td>${escCell(c['Prix unitaire HT'])}</td>`
+        + (remise ? `<td>${escCell(c['Remise'])}</td>` : '')
+        + `<td>${escCell(c['Montant HT'])}</td>`
         + (mixte ? `<td>${escCell(c['Taux TVA'])}</td>` : '')
         + `<td>${escCell(c['Montant TTC'])}</td></tr>`
     )).join('');
 
     // `width="100%"` : LibreOffice ignore la largeur CSS sur un tableau (cf. largeurTables).
-    return `<table width="100%">${colgroup}<tbody>${head}${body}${totalRow(cellules, mixte)}</tbody></table>`;
+    return `<table width="100%">${colgroup}<tbody>${head}${body}${totalRow(cellules, mixte, remise)}</tbody></table>`;
 }
 
 /**
@@ -293,7 +306,7 @@ function articlesTable(list) {
  * LA QUANTITÉ N'EST TOTALISÉE QUE SI ELLE EXISTE. Une facture de formation n'a pas de
  * quantités ; un « 0 » y ressemblerait à une donnée alors que c'est une absence.
  */
-function totalRow(cellules, mixte) {
+function totalRow(cellules, mixte, remise) {
     const nombre = (s) => Number(String(s || '').replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
     const eur = (n) => `${n.toFixed(2)} €`;
 
@@ -303,7 +316,10 @@ function totalRow(cellules, mixte) {
     const totalTtc = cellules.reduce((s, c) => s + nombre(c['Montant TTC']), 0);
 
     const g = (v) => `<td><strong>${escCell(v)}</strong></td>`;
-    return `<tr><td><strong>Total</strong></td>${g(totalQte)}<td></td>${g(eur(totalHt))}`
+    // La colonne Remise reste VIDE au total, pour la même raison que la colonne TVA : additionner
+    // des pourcentages ne veut rien dire. Le montant cumulé des remises a son jeton, {Total remise}.
+    return `<tr><td><strong>Total</strong></td>${g(totalQte)}<td></td>`
+        + (remise ? '<td></td>' : '') + `${g(eur(totalHt))}`
         + (mixte ? '<td></td>' : '') + `${g(eur(totalTtc))}</tr>`;
 }
 
@@ -370,6 +386,50 @@ function stagiaireRowTokens(s, i) {
  * restent accessibles dans le bloc — c'est `expandBlocks` qui ne remplace que les jetons de
  * ligne, laissant les autres au remplacement normal.
  */
+/** Tiret cadratin : ce que porte une case « sans remise ». Une case VIDE se lit comme une
+ *  colonne oubliée ; le tiret dit « on a regardé, il n'y en a pas ». */
+const SANS_REMISE = '—';
+
+/**
+ * Taux de remise d'une ligne, prêt à afficher : « 10 % », ou « — ».
+ *
+ * `null` (facture émise avant la migration 122, remise jamais enregistrée) et `0` (vendu sans
+ * remise) donnent le même affichage — dans les deux cas il n'y a rien à annoncer au client.
+ * Ils diffèrent en revanche pour le TOTAL en euros, qui ne doit sommer que du connu.
+ */
+function remiseTaux(l) {
+    const p = l && l.discount_pct;
+    if (p == null || !(Number(p) > 0)) return SANS_REMISE;
+    // 10 et non 10,00 : un taux entier s'écrit sans décimales sur une facture.
+    const n = Number(p);
+    return `${Number.isInteger(n) ? n : n.toFixed(2).replace('.', ',')} %`;
+}
+
+/**
+ * Remise d'une ligne EN EUROS : (brut − net) × quantité.
+ *
+ * Deux montants déjà arrondis au centime, soustraits puis multipliés — le résultat tombe juste
+ * et se raccroche au total facture. Repasser par le taux (net ÷ (1 − taux)) rendrait une
+ * troisième décimale et ferait diverger le total des remises de la somme des lignes, exactement
+ * la dérive que sale.controller.js documente avoir déjà payée.
+ *
+ * 0 si l'information manque : une facture d'avant la 122 ne doit pas inventer de remise.
+ */
+function remiseEuros(l) {
+    if (!l) return 0;
+    const brut = Number(l.unit_price_gross_ht);
+    const net = Number(l.unit_price_ht);
+    if (!Number.isFinite(brut) || !Number.isFinite(net) || brut <= net) return 0;
+    const qte = Number(l.qty || 0) || 0;
+    return Number(((brut - net) * qte).toFixed(2));
+}
+
+/** Somme des remises d'une facture, en euros. */
+function remiseTotale(list) {
+    const rows = Array.isArray(list) ? list : [];
+    return Number(rows.reduce((s, l) => s + remiseEuros(l), 0).toFixed(2));
+}
+
 function articleRowTokens(l, i) {
     const eur = (n) => (n == null || n === '' ? '' : `${Number(n).toFixed(2)} €`);
     const qte = Number(l.qty || 0) || null;
@@ -383,6 +443,7 @@ function articleRowTokens(l, i) {
         'Quantité': qte != null ? String(qte) : '',
         'Prix unitaire HT': eur(pu),
         'Montant HT': eur(ht),
+        'Remise': remiseTaux(l),
         'Taux TVA': `${taux.toFixed(2)} %`,
         'Montant TVA': eur(Math.round(ht * taux) / 100),
         'Montant TTC': eur(ht + Math.round(ht * taux) / 100),
@@ -705,6 +766,11 @@ function invoiceTokens(inv = {}) {
         'Total HT': inv.totalHt || '',
         'Total TVA': inv.totalTva || '',
         'Total TTC': inv.totalTtc || '',
+        // Remise consentie sur l'ensemble de la facture. Formaté comme les totaux voisins
+        // (deux décimales, toujours) et NON avec euro(), qui rend une chaîne VIDE sur zéro et
+        // laisse tomber les décimales d'un montant rond : un modèle qui réserve une ligne
+        // « Remise » doit afficher « 0.00 € », pas un trou, et s'aligner sur Total HT / Total TTC.
+        'Total remise': `${remiseTotale(inv.articles).toFixed(2)} €`,
         'Détail TVA': inv.detailTva || '',
         // Règlement : le moyen (résumé) et le détail moyen+montant. {Règlements} en fait un tableau.
         'Règlement': inv.reglement || '',

@@ -172,17 +172,26 @@ function Ventes() {
   }, [payOptions]);
 
   const tvaApplies = selectedEmitter ? !!selectedEmitter.tva_applies : (settings ? !!settings.tva_applies : true);
+  // Une remise de ligne exclut la remise globale, et réciproquement (cf. sale.controller.js) :
+  // les deux se cumulaient, et 10 % sur l'article plus 5 % sur la vente faisaient 14,5 %.
+  const remiseDeLigne = useMemo(() => cart.some((l) => Number(l.disc) > 0), [cart]);
+  const remiseGlobale = Math.min(100, Math.max(0, Number(discount) || 0));
+
   const totals = useMemo(() => {
-    const d = Math.min(100, Math.max(0, Number(discount) || 0));
-    const factor = 1 - d / 100;
     let ht = 0, tva = 0;
     for (const l of cart) {
-      const lineHT = l.unit_price * l.quantity * (1 - (Number(l.disc) || 0) / 100) * factor;
+      // Le taux qui s'applique vraiment : celui de la ligne en mode ligne, sinon le global.
+      const taux = remiseDeLigne ? (Number(l.disc) || 0) : remiseGlobale;
+      // MÊME ARRONDI QUE LE SERVEUR : prix unitaire arrondi d'abord, puis multiplié. La caisse
+      // arrondissait après la multiplication et pouvait donc afficher un centime de moins que
+      // la facture émise — un ticket qui ne tombe pas sur le montant encaissé.
+      const unitNet = Number((l.unit_price * (1 - taux / 100)).toFixed(2));
+      const lineHT = Number((unitNet * l.quantity).toFixed(2));
       ht += lineHT;
       if (tvaApplies) tva += lineHT * l.tax_rate / 100;
     }
-    return { ht, tva, ttc: ht + tva, discount: d };
-  }, [cart, discount, tvaApplies]);
+    return { ht, tva, ttc: ht + tva, discount: remiseDeLigne ? 0 : remiseGlobale };
+  }, [cart, remiseDeLigne, remiseGlobale, tvaApplies]);
 
   async function validate() {
     if (cart.length === 0) return;
@@ -201,7 +210,11 @@ function Ventes() {
         ...buyerFields,
         billing_profile_id: emitterId || null,
         invoice_template_slug: factureSlug,
-        discount: Number(discount) || 0,
+        // Une remise de ligne annule la globale — le champ est désactivé, mais son ANCIENNE
+        // valeur reste en état si on remise un article après coup. L'envoyer ferait refuser la
+        // vente par le serveur (les deux ne se cumulent plus) pour une saisie que l'opérateur
+        // ne voit même plus à l'écran.
+        discount: remiseDeLigne ? 0 : remiseGlobale,
         due_date: dueDate || null,
         payment_method: parts[0]?.method || null,   // rétro-compat : moyen principal
         payments: parts,
@@ -447,17 +460,37 @@ function Ventes() {
                         <input type="number" min="1" max={l.stock} value={l.quantity} title={`Quantité (max ${l.stock} en stock)`}
                           onChange={(e) => setLine(l.item_id, { quantity: Math.min(Number(l.stock) || 1, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
                           className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} />
-                        <input type="number" min="0" max="100" value={l.disc} title="Remise %"
+                        <input type="number" min="0" max="100" value={l.disc}
+                          disabled={remiseGlobale > 0}
+                          title={remiseGlobale > 0
+                            ? "Une remise globale est saisie : les deux ne se cumulent pas."
+                            : "Remise %"}
                           onChange={(e) => { const v = e.target.value; setLine(l.item_id, { disc: v === "" ? "" : Math.min(100, Math.max(0, Number(v) || 0)) }); }}
                           className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} placeholder="%" />
-                        <span className="mono" style={{ width: 74, textAlign: "right" }}>{euro(ttc(l.unit_price * l.quantity * (1 - (l.disc || 0) / 100), tvaApplies ? l.tax_rate : 0))}</span>
+                        {/* Le montant de ligne suit le MÊME arrondi que le serveur (prix unitaire
+                            d'abord), sinon le ticket ne tombe pas sur ce qui est facturé. */}
+                        <span className="mono" style={{ width: 74, textAlign: "right" }}>
+                          {euro(ttc(
+                            Number((l.unit_price * (1 - (remiseDeLigne ? (Number(l.disc) || 0) : remiseGlobale) / 100)).toFixed(2)) * l.quantity,
+                            tvaApplies ? l.tax_rate : 0))}
+                        </span>
                         <button className="iconbtn del" title="Retirer" onClick={() => removeLine(l.item_id)}><Icon name="trash" size={15} /></button>
                       </div>
                     ))}
                   </div>
                   <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
                     <label>Remise globale (%)</label>
-                    <input className="inp" type="number" min="0" max="100" step="0.1" placeholder="0" value={discount} onChange={(e) => setDiscount(e.target.value)} style={{ maxWidth: 140 }} />
+                    <input className="inp" type="number" min="0" max="100" step="0.1" placeholder="0"
+                      value={remiseDeLigne ? "" : discount}
+                      disabled={remiseDeLigne}
+                      title={remiseDeLigne ? "Un article porte déjà une remise : les deux ne se cumulent pas." : undefined}
+                      onChange={(e) => setDiscount(e.target.value)} style={{ maxWidth: 140 }} />
+                    {remiseDeLigne && (
+                      <p className="hint" style={{ margin: "6px 0 0" }}>
+                        Un article porte une remise : la remise globale ne s'applique pas en plus.
+                        Retire les remises des articles pour remiser toute la vente d'un coup.
+                      </p>
+                    )}
                   </div>
                   <div style={{ marginTop: 12, fontSize: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}><span>Total HT{totals.discount > 0 ? ` (remise ${totals.discount}%)` : ""}</span><span className="mono">{euro(totals.ht)}</span></div>

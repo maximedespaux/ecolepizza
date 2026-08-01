@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import { Icon } from "../components/Icon.jsx";
+import InfosManquantes from "../components/InfosManquantes.jsx";
 import { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getEnrollments, getCompanies, downloadFacturX, downloadInvoiceXml, facturXUrl } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -33,6 +34,8 @@ function Factures() {
   const [companies, setCompanies] = useState([]);
   const [form, setForm] = useState(makeEmpty);
   const [status, setStatus] = useState(null);
+  // Informations à compléter renvoyées par un refus d'émission (422), + de quoi forcer.
+  const [manques, setManques] = useState(null);
   const [showForm, setShowForm] = useState(false);
 
   async function load() {
@@ -94,19 +97,28 @@ function Factures() {
     if (!window.confirm("Supprimer ce document ?")) return;
     try { await deleteInvoice(id); load(); } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
-  async function dl(fn, i) {
-    setStatus(null);
-    try { await fn(i.id, i.number); } catch (err) { setStatus({ type: "error", message: err.message }); }
+  /* Le serveur refuse en 422 avec la LISTE de ce qu'il faut compléter (`missing`). Les deux
+   * poignées ne gardaient que `err.message` : l'écran annonçait « 2 information(s) à compléter »
+   * sans jamais dire lesquelles. On retient donc la liste, et de quoi réessayer en forçant —
+   * `forcable` vient du serveur, qui accepte `?force=1` pour les manques de conformité. */
+  async function dl(fn, i, force) {
+    setStatus(null); setManques(null);
+    try { await fn(i.id, i.number, force); }
+    catch (err) {
+      setStatus({ type: "error", message: err.message });
+      if (err.missing) setManques({ liste: err.missing, forcable: !!err.forcable, refaire: () => dl(fn, i, true) });
+    }
   }
-  async function preview(i) {
-    setStatus(null);
+  async function preview(i, force) {
+    setStatus(null); setManques(null);
     const w = window.open("", "_blank"); // ouvert dans le geste utilisateur (anti-popup)
     try {
-      const url = await facturXUrl(i.id);
+      const url = await facturXUrl(i.id, force);
       if (w) w.location.href = url; else window.open(url, "_blank");
     } catch (err) {
       if (w) w.close();
       setStatus({ type: "error", message: err.message });
+      if (err.missing) setManques({ liste: err.missing, forcable: !!err.forcable, refaire: () => preview(i, true) });
     }
   }
 
@@ -119,6 +131,22 @@ function Factures() {
         actions={<div style={{ display: "flex", alignItems: "center", gap: 10 }}><MoneyToggle /><button className="btn primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ Fermer" : "＋ Nouveau document"}</button></div>}
       />
       <StatusMessage status={status} />
+      {manques && (
+        <div style={{ marginBottom: 14 }}>
+          <InfosManquantes missing={manques.liste} titre="Facture non générée">
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <button type="button" className="btn sm ghost" onClick={() => setManques(null)}>Fermer</button>
+              {manques.forcable && (
+                <button type="button" className="btn sm ghost danger"
+                  title="Émet le document malgré les informations manquantes : il ne sera pas conforme."
+                  onClick={() => manques.refaire()}>
+                  Générer quand même
+                </button>
+              )}
+            </div>
+          </InfosManquantes>
+        </div>
+      )}
 
       <div className="grid cols-3" style={{ marginBottom: 16 }}>
         {/* Trois tons distincts : le filet coloré ne sert à rien s'il est le même partout.

@@ -217,6 +217,7 @@ async function download(path, filename) {
     const err = new Error(d.message || d.error || "Téléchargement échoué");
     err.status = res.status;
     if (d.missing) err.missing = d.missing;
+    if (d.forcable) err.forcable = true; // le serveur accepte ?force=1 malgré les manques
     throw err;
   }
   const blob = await res.blob();
@@ -229,21 +230,28 @@ async function download(path, filename) {
   a.remove();
   URL.revokeObjectURL(url);
 }
-export function downloadFacturX(id, number) {
-  return download(`/factures/${id}/facturx`, `${number}.pdf`);
+// `force` : émet malgré les informations manquantes (cf. avertirConformite, côté serveur).
+export function downloadFacturX(id, number, force) {
+  return download(`/factures/${id}/facturx${force ? "?force=1" : ""}`, `${number}.pdf`);
 }
 // Renvoie une URL blob du PDF (pour l'aperçu dans un onglet).
-export async function facturXUrl(id) {
+export async function facturXUrl(id, force) {
   startLoading();
   let res;
   try {
-    res = await fetch(`${API_BASE_URL}/factures/${id}/facturx`, { credentials: "include" });
+    res = await fetch(`${API_BASE_URL}/factures/${id}/facturx${force ? "?force=1" : ""}`, { credentials: "include" });
   } finally {
     stopLoading();
   }
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
-    throw new Error(d.message || d.error || "Aperçu impossible");
+    // `missing` était PERDU ici : l'aperçu ne rendait qu'une phrase, alors que le serveur
+    // envoyait déjà la liste de ce qu'il faut compléter. Le téléchargement, lui, la propageait.
+    const err = new Error(d.message || d.error || "Aperçu impossible");
+    err.status = res.status;
+    if (d.missing) err.missing = d.missing;
+    if (d.forcable) err.forcable = true;
+    throw err;
   }
   return URL.createObjectURL(await res.blob());
 }
