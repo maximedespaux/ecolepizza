@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { NAV, canOpen, SETTINGS_PATHS } from "../lib/nav.js";
+import { NAV, canOpen, SETTINGS_PATHS, badgesParRubrique } from "../lib/nav.js";
 import { getBadges } from "../api/apiClient.js";
 import { onBadgesRefresh } from "../lib/events.js";
 import { initials } from "../lib/format.js";
@@ -36,7 +36,8 @@ function Sidebar({ open }) {
 
   useEffect(() => {
     let active = true;
-    const load = () => getBadges().then((r) => { if (active) setBadges(r.data || {}); }).catch(() => {});
+    // Les pastilles arrivent par PAGE ; on les remonte sur la rubrique qui les portera.
+    const load = () => getBadges().then((r) => { if (active) setBadges(badgesParRubrique(r.data)); }).catch(() => {});
     load();
     const t = setInterval(load, 60000);
     const off = onBadgesRefresh(load); // rafraîchit après une action (suppression, paiement…)

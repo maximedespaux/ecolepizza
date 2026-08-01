@@ -191,6 +191,29 @@ const SECTION_OF = {
   "/audit": "/audit", "/suivi": "/suivi", "/dashboard": "/dashboard",
 };
 
+/**
+ * Regroupe les pastilles par RUBRIQUE de menu.
+ *
+ * Le serveur compte les pastilles par PAGE, ce qui est la bonne unité de sens : les articles
+ * sous seuil concernent l'inventaire, pas « les ventes ». Mais toutes les pages n'ont pas leur
+ * entrée de menu — `/inventaire` est une sous-page de `/ventes` — et la barre latérale ne sait
+ * afficher une pastille que sur une entrée. Le compte des articles sous seuil était donc calculé
+ * à chaque appel puis jeté, faute d'entrée pour le porter : la pastille n'est jamais apparue.
+ *
+ * On remonte donc chaque pastille sur sa rubrique, en SOMMANT — deux sous-pages d'une même
+ * rubrique doivent additionner leurs alertes, pas s'écraser l'une l'autre. Un chemin absent de
+ * `SECTION_OF` reste sur lui-même : les rubriques qui sont déjà leur propre page ne bougent pas.
+ */
+export function badgesParRubrique(badges) {
+  const out = {};
+  for (const [chemin, n] of Object.entries(badges || {})) {
+    if (!n) continue;
+    const rubrique = SECTION_OF[chemin] || chemin;
+    out[rubrique] = (out[rubrique] || 0) + n;
+  }
+  return out;
+}
+
 /** Mode d'accès pour l'URL courante (rubrique déduite du 1er segment). */
 export function modeForPath(user, pathname) {
   const seg = "/" + (pathname || "").split("/").filter(Boolean)[0];
