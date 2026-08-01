@@ -3,6 +3,7 @@ import { Icon } from "./Icon.jsx";
 import { getFieldSettings, saveFieldSettings } from "../api/apiClient.js";
 import Card from "./Card.jsx";
 import StatusMessage from "./StatusMessage.jsx";
+import { categoryAccent } from "../lib/categoryColors.js";
 
 const TYPE_LABEL = { text: "Texte", number: "Nombre", bool: "Oui / Non", enum: "Liste", image: "Image / signature" };
 
@@ -67,10 +68,12 @@ const FieldSettingsPanel = forwardRef(function FieldSettingsPanel({ onStatus }, 
         const isOpen = q.trim() ? true : !!open[tableLabel]; // recherche = tout ouvert ; sinon replié par défaut
         const en = list.filter((f) => f.enabled_token || f.enabled_condition).length;
         return (
-          <div key={tableLabel} className="card" style={{ marginBottom: 10, padding: 0, overflow: "hidden" }}>
+          <div key={tableLabel} className="card" style={{ marginBottom: 10, padding: 0, overflow: "hidden", borderLeft: `3px solid ${categoryAccent(tableLabel)}` }}>
             <button type="button" onClick={() => setOpen((p) => ({ ...p, [tableLabel]: !isOpen }))}
               style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "10px 14px", background: "none", border: "none", cursor: "pointer", font: "inherit", textAlign: "left" }}>
-              <span style={{ fontWeight: 700 }}>{tableLabel} <span className="hint" style={{ fontWeight: 400 }}>· {en}/{list.length} activé(s)</span></span>
+              <span style={{ fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 7 }}>
+                <span aria-hidden style={{ width: 9, height: 9, borderRadius: "50%", background: categoryAccent(tableLabel), flex: "0 0 auto" }} />
+                {tableLabel} <span className="hint" style={{ fontWeight: 400 }}>· {en}/{list.length} activé(s)</span></span>
               <span className="chev"><Icon name="chevron-down" size={14} style={{ transform: isOpen ? "none" : "rotate(-90deg)", transition: "transform .15s var(--ease)" }} /></span>
             </button>
             {isOpen && (

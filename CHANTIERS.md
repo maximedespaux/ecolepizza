@@ -488,3 +488,33 @@ Un lanceur de migration existe (le client `mysql` n'est pas installé sur la mac
 - **Cadres exclusifs** : qui les attribue, et via quel écran ?
 - **Photos** : ~40 images disponibles sur ecole-pizza.com (autorisation donnée). Une seule
   utilisée. `moyens-techniques3-min-2.jpg` et `fond-aliments*.jpg` non exploitées.
+
+---
+
+## 7. Dépendances npm — état de `npm audit` (2026-07-29)
+
+**API (`src/api`) : 0 vulnérabilité.**
+
+**Front (`src/app`) : 2 alertes « high » restantes, volontairement non corrigées.**
+
+`react-router` 7.12 → 8.2 est signalé par [GHSA-qwww-vcr4-c8h2](https://github.com/advisories/GHSA-qwww-vcr4-c8h2)
+(« RSC Mode CSRF Bypass »). **On reste en 7.18 sciemment**, pour trois raisons :
+
+1. L'avis dit lui-même : *« This only affects your application if you are using the unstable RSC
+   APIs. »* Impasto est une SPA Vite — `BrowserRouter`, `Routes`, `Link`, `useNavigate`,
+   `useParams`, `Outlet`. Aucun RSC, aucun `loader`/`action`, aucun rendu serveur. **La faille
+   n'est pas atteignable ici.**
+2. Il n'existe **aucun correctif en 7.x** : la seule version corrigée est `react-router@8.3.0`.
+3. `react-router-dom` **n'existe plus en 8.x** (fusionné dans `react-router`). Corriger imposerait
+   donc de réécrire les imports de **34 fichiers** + de monter le plancher de `react` à `^19.2.7`,
+   pour zéro gain de sécurité réel.
+
+→ `npm audit` affichera donc 2 « high » tant qu'on ne migre pas en v8. **C'est attendu.** À
+revoir le jour où l'on migrera react-router pour d'autres raisons (et pas avant).
+
+**Ce qui a été corrigé** : la chaîne `eslint` 9 → 10 (`@eslint/js`, `eslint-plugin-react-hooks`
+5 → 7, `eslint-plugin-react-refresh` 0.4 → 0.5), qui traînait un `brace-expansion` 1.1.16
+vulnérable (DoS) via `minimatch@3` — 5 alertes supprimées. Aucun impact runtime : ce sont des
+`devDependencies`, jamais embarquées dans le bundle. À noter d'ailleurs qu'**il n'y a pas de
+fichier `eslint.config.js`** dans le projet : le script `npm run lint` ne peut pas s'exécuter en
+l'état (cf. CLAUDE.md § 2.4, « pas d'ESLint dans le projet »).

@@ -8,6 +8,7 @@ import { getTokenCatalog, getTemplateBody, saveTemplateBody, templatePreviewPdfU
 import StatusMessage from "../components/StatusMessage.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import CustomTokenManager from "../components/CustomTokenManager.jsx";
+import { categoryChipStyle, categoryAccent, registerTokenGroups } from "../lib/categoryColors.js";
 
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
@@ -28,12 +29,23 @@ const clean = (html) => (EMPTY.test(html || "") ? "" : html);
  * article. C'est l'erreur classique de ce genre de gabarit, et la raison pour laquelle on
  * l'insère déjà monté plutôt que de laisser l'écrire à la main.
  */
+// Puce de jeton, telle que l'éditeur la sérialise (cf. TokenNode) : au rendu, le moteur la
+// remplace par la valeur — dans un bloc {#Articles}/{#Stagiaires}, ligne par ligne. On insère
+// donc des PUCES nommées, jamais du {Clé} brut (qui s'affiche « {Clé} » dans l'éditeur et, hors
+// bloc, resterait tel quel au rendu).
+const pill = (key, label) => `<span data-token="${key}" data-label="${label || key}">${label || key}</span>`;
+
 const BLOC_ARTICLES = '<table><tbody><tr>'
   + '<th>Désignation</th><th>Qté</th><th>P.U. HT</th><th>Montant HT</th><th>TVA</th><th>Total TTC</th>'
   + '</tr><tr>'
-  + '<td>{#Articles}{Désignation}</td><td>{Quantité}</td><td>{Prix unitaire HT}</td>'
-  + '<td>{Montant HT}</td><td>{Taux TVA}</td><td>{Montant TTC}{/Articles}</td>'
+  + `<td>{#Articles}${pill('Désignation')}</td><td>${pill('Quantité', 'Qté')}</td><td>${pill('Prix unitaire HT', 'P.U. HT')}</td>`
+  + `<td>${pill('Montant HT')}</td><td>${pill('Taux TVA', 'TVA')}</td><td>${pill('Montant TTC', 'Total TTC')}{/Articles}</td>`
   + '</tr></tbody></table>';
+
+// Bloc « par stagiaire » prêt à l'emploi : les jetons par stagiaire sont des PUCES, remplies
+// ligne par ligne par le moteur (expandGroupBlocks). Les marqueurs {#Stagiaires}/{/Stagiaires}
+// restent en texte : ils délimitent le bloc.
+const BLOC_STAGIAIRES = `{#Stagiaires}${pill('N°')}. ${pill('Personne')} — ${pill('OPCO')}<br>{/Stagiaires}`;
 
 // Jetons résolus PAR STAGIAIRE à l'intérieur d'un bloc {#Stagiaires}…{/Stagiaires}
 // (documents de groupe / entreprise). Insérés en TEXTE brut.
@@ -71,6 +83,9 @@ function TemplateEditor() {
   const [pdfErr, setPdfErr] = useState(null);
   const [bleed, setBleed] = useState({ header: false, body: false, footer: false }); // « bord à bord » par zone
   const toggleBleed = (k) => setBleed((p) => ({ ...p, [k]: !p[k] }));
+  // Papier à en-tête automatique : ON par défaut. Un modèle qui met déjà l'identité dans son
+  // corps (facture…) peut le couper pour ne pas avoir le nom de l'organisme en double, tout en haut.
+  const [noLetterhead, setNoLetterhead] = useState(false);
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
@@ -78,6 +93,24 @@ function TemplateEditor() {
   const [showCustom, setShowCustom] = useState(false); // modale « Jetons personnalisés »
   const fieldsRef = useRef(null);
   const [, force] = useState(0);
+
+  // Info-bulle GÉNÉREUSE au survol d'une puce : le libellé reste court, l'explication complète
+  // (à quoi sert le jeton, un exemple, sa clé) s'affiche en grand. Positionnée en `fixed` pour
+  // ne pas être rognée par le défilement de la palette.
+  const [tip, setTip] = useState(null); // { text, x, y }
+  const texteTip = (t, group) => {
+    const l = [t.desc || t.label];
+    if (group === "Ligne de facture") l.push("À placer DANS le tableau des articles.");
+    else if (group === "Ligne de règlement") l.push("À placer DANS le bloc des règlements.");
+    if (t.sample) l.push("Exemple : " + t.sample);
+    l.push("Jeton : {" + t.key + "}");
+    return l.join("\n");
+  };
+  const montrerTip = (e, t, group) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setTip({ text: texteTip(t, group), x: r.left + r.width / 2, y: r.top });
+  };
+  const cacherTip = () => setTip(null);
 
   const opts = (cls) => ({
     extensions: buildExtensions(),
@@ -98,6 +131,9 @@ function TemplateEditor() {
         const [cat, res] = await Promise.all([getTokenCatalog(slug), getTemplateBody(slug)]);
         if (!alive) return;
         setCatalog(cat.data || []);
+        // Enregistre clé→catégorie AVANT d'insérer le contenu : les puces se colorent alors
+        // par catégorie dès leur premier rendu (cf. TokenView / categoryColors).
+        registerTokenGroups(cat.data || []);
         setOpenGroups(Object.fromEntries((cat.data || []).map((g, i) => [g.group, i === 0])));
         const d = res.data || {};
         if (body) body.commands.setContent(d.body_html || "<p></p>");
@@ -105,6 +141,7 @@ function TemplateEditor() {
         if (footer) footer.commands.setContent(d.footer_html || "");
         const bl = (d.layout && d.layout.bleed) || {};
         setBleed({ header: !!bl.header, body: !!bl.body, footer: !!bl.footer });
+        setNoLetterhead(!!(d.layout && d.layout.noLetterhead));
       } catch (e) { if (alive) setStatus({ type: "error", message: e.message }); }
     })();
     return () => { alive = false; };
@@ -120,14 +157,14 @@ function TemplateEditor() {
       body_html: body?.getHTML() || "<p></p>",
       header_html: clean(header?.getHTML()),
       footer_html: clean(footer?.getHTML()),
-      layout: { bleed },
+      layout: { bleed, noLetterhead },
     })
       .then((url) => { if (!alive) { URL.revokeObjectURL(url); return; } created = url; setPdfUrl(url); })
       .catch((e) => { if (alive) setPdfErr(e.message); })
       .finally(() => { if (alive) setPdfLoading(false); });
     return () => { alive = false; if (created) URL.revokeObjectURL(created); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPreview, bleed]);
+  }, [showPreview, bleed, noLetterhead]);
 
   const target = active || body;
 
@@ -275,7 +312,7 @@ function TemplateEditor() {
         body_html: body.getHTML(),
         header_html: clean(header?.getHTML()),
         footer_html: clean(footer?.getHTML()),
-        layout: { bleed },
+        layout: { bleed, noLetterhead },
       });
       setStatus({ type: "success", message: "Modèle enregistré." });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
@@ -316,7 +353,10 @@ function TemplateEditor() {
         ) : (
           <div className="tpl-doc">
             <div className="hf-zone">
-              <div className="hf-label">En-tête <span>· laissé vide = papier à en-tête automatique</span>
+              <div className="hf-label">En-tête <span>· {noLetterhead ? "aucun en-tête automatique" : "laissé vide = papier à en-tête automatique"}</span>
+                <label className="bleed-tog" title="Ajoute automatiquement l'identité de l'organisme en haut quand l'en-tête est vide. À décocher si le corps porte déjà l'identité (facture…).">
+                  <input type="checkbox" checked={!noLetterhead} onChange={() => setNoLetterhead((v) => !v)} /> papier à en-tête auto
+                </label>
                 <BleedToggle on={bleed.header} onChange={() => toggleBleed("header")} />
               </div>
               <div onDrop={onDrop(header)} onDragOver={(e) => e.preventDefault()}><EditorContent editor={header} /></div>
@@ -387,28 +427,24 @@ function TemplateEditor() {
           </span>
 
           {catalogFiltre.map((g) => (
-            <div key={g.group} className="tok-group">
+            <div key={g.group} className="tok-group" style={{ borderLeft: `3px solid ${categoryAccent(g.group)}` }}>
               <button className="tok-group-hd" onClick={() => setOpenGroups((p) => ({ ...p, [g.group]: !p[g.group] }))}>
-                <span>{g.group}</span><span className="chev"><Icon name="chevron-down" size={14} style={{ transform: openGroups[g.group] ? "none" : "rotate(-90deg)", transition: "transform .15s var(--ease)" }} /></span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: categoryAccent(g.group), flex: "0 0 auto" }} />
+                  {g.group}
+                </span>
+                <span className="chev"><Icon name="chevron-down" size={14} style={{ transform: openGroups[g.group] ? "none" : "rotate(-90deg)", transition: "transform .15s var(--ease)" }} /></span>
               </button>
               {(rechJeton.trim() || openGroups[g.group]) && (
                 <div className="tok-list">
                   {g.tokens.map((t) => (
-                    g.group === "Ligne de facture" ? (
-                      <button key={t.key} className="tok-chip" title={`{${t.key}} — à placer DANS le tableau des articles`}
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", "{" + t.key + "}")}
-                        onClick={() => insertRaw("{" + t.key + "}")}>
-                        {t.label}
-                      </button>
-                    ) : (
-                      <button key={t.key} className="tok-chip" title={`{${t.key}} — ex. ${t.sample || ""}`}
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
-                        onClick={() => insertToken(t)}>
-                        {t.label}
-                      </button>
-                    )
+                    <button key={t.key} className="tok-chip" style={categoryChipStyle(t.origin || g.group)}
+                      onMouseEnter={(e) => montrerTip(e, t, g.group)} onMouseLeave={cacherTip} onFocus={(e) => montrerTip(e, t, g.group)} onBlur={cacherTip}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
+                      onClick={() => insertToken(t)}>
+                      {t.label}
+                    </button>
                   ))}
                   {/* Ligne de facture : ces jetons n'ont de sens QUE dans un bloc
                       {#Articles}…{/Articles}. Sans un moyen de créer ce bloc, les proposer était
@@ -423,7 +459,7 @@ function TemplateEditor() {
                         Ces champs-ci servent à composer un tableau <b>sur mesure</b>. Insérez d'abord la
                         trame ci-dessous, puis placez-les dans ses cellules.
                       </p>
-                      <button className="tok-chip" title="Insère une trame de tableau à personnaliser"
+                      <button className="tok-chip" style={categoryChipStyle(g.group)} title="Insère une trame de tableau à personnaliser"
                         draggable
                         onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", BLOC_ARTICLES)}
                         onClick={() => insertRaw(BLOC_ARTICLES)}>
@@ -437,18 +473,19 @@ function TemplateEditor() {
                       <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
                         <b>Bloc par stagiaire</b> : jetons à placer <b>entre</b> les marqueurs.
                       </p>
-                      <button className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple"
+                      <button className="tok-chip" style={categoryChipStyle(g.group)} title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple"
                         draggable
-                        onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", "{#Stagiaires}{N°}. {Personne} — {OPCO}<br>{/Stagiaires}")}
-                        onClick={() => insertRaw("{#Stagiaires}{N°}. {Personne} — {OPCO}<br>{/Stagiaires}")}>
+                        onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", BLOC_STAGIAIRES)}
+                        onClick={() => insertRaw(BLOC_STAGIAIRES)}>
                         <Icon name="plus" size={13} /> Bloc « par stagiaire »
                       </button>
                       <div style={{ height: 6 }} />
                       {GROUP_ROW_TOKENS.map((t) => (
-                        <button key={t.key} className="tok-chip" title={`{${t.key}} — à placer dans un bloc {#Stagiaires}…{/Stagiaires}`}
+                        <button key={t.key} className="tok-chip" style={categoryChipStyle(g.group)}
+                          onMouseEnter={(e) => montrerTip(e, { ...t, desc: `${t.label} — à placer dans un bloc « par stagiaire ».` }, g.group)} onMouseLeave={cacherTip}
                           draggable
-                          onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", "{" + t.key + "}")}
-                          onClick={() => insertRaw("{" + t.key + "}")}>{t.label}</button>
+                          onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
+                          onClick={() => insertToken(t)}>{t.label}</button>
                       ))}
                     </div>
                   )}
@@ -482,6 +519,16 @@ function TemplateEditor() {
             </div>
           </div>
         </div>
+      )}
+
+      {tip && (
+        <div style={{
+          position: "fixed", left: tip.x, top: tip.y - 10, transform: "translate(-50%, -100%)",
+          maxWidth: 300, whiteSpace: "pre-line", background: "#1f2430", color: "#f4f5fa",
+          border: "1px solid #3a3f4b", borderRadius: 8, padding: "9px 12px",
+          fontSize: 13.5, lineHeight: 1.45, fontWeight: 500, textAlign: "left",
+          boxShadow: "0 8px 24px rgba(0,0,0,.32)", zIndex: 1000, pointerEvents: "none",
+        }}>{tip.text}</div>
       )}
     </div>
   );

@@ -5,11 +5,22 @@ const db = require('../config/database.js');
  * Crée une notification (best-effort). user_id null = visible par tout l'organisme.
  */
 function notify(orgId, { userId = null, type = 'INFO', title, body = null, link = null }) {
-    db.query(
-        `INSERT INTO notification (id, organization_id, user_id, type, title, body, link) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [crypto.randomUUID(), orgId, userId, type, title, body, link],
-        (err) => { if (err) console.error('notification:', err.message); }
-    );
+    /* Renvoie une PROMESSE, pour que l'appelant puisse attendre l'insertion avant de répondre.
+     *
+     * Pourquoi ça compte : toute réponse réussie déclenche une diffusion SSE `refresh` à
+     * l'organisme (broadcastMutations), et chaque poste recharge alors ses notifications dans la
+     * seconde. Si l'insertion n'est pas encore validée sur la base DISTANTE à ce moment-là, le
+     * compteur n'a pas bougé — donc pas de son, pas de cloche : il faut attendre le sondage de
+     * secours, jusqu'à vingt-cinq secondes plus tard. Une course qu'on gagne le plus souvent,
+     * mais pas toujours, ce qui donne une alerte tantôt immédiate tantôt tardive.
+     *
+     * Reste au mieux : l'erreur est journalisée et avalée. Une notification manquée ne doit
+     * jamais faire échouer l'action qu'elle accompagne. */
+    return db.promise()
+        .query(
+            `INSERT INTO notification (id, organization_id, user_id, type, title, body, link) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [crypto.randomUUID(), orgId, userId, type, title, body, link])
+        .catch((err) => { console.error('notification:', err.message); });
 }
 
 /**

@@ -160,9 +160,12 @@ test('le XMP est bien écrit, pas seulement écrivable', () => {
 test('une vente conserve la référence du stagiaire, pas seulement son nom', () => {
     // L'acheteur était aplati en « Prénom Nom » et le lien vers sa fiche perdu au moment même
     // où on l'avait : son adresse e-mail, obligatoire (BT-49), restait inatteignable.
+    // L'insert de facture est désormais construit par colonnes (learner_id, billing_profile_id
+    // ajoutés quand ils existent), plutôt qu'en variantes de requête : on vérifie que learner_id
+    // en fait partie, et qu'il reste conditionné à l'existence de la colonne (repli migration 111).
     const src = lire('controllers/sale.controller.js');
-    assert.match(src, /INSERT INTO invoice[\s\S]{0,220}learner_id/, 'la vente n\'écrit pas learner_id');
-    assert.match(src, /ER_BAD_FIELD_ERROR/, 'aucun repli si la migration 111 n\'est pas jouée');
+    assert.match(src, /iCol\.push\('learner_id'\)/, 'la vente n\'écrit pas learner_id sur la facture');
+    assert.match(src, /hasColumn\(conn, 'invoice', 'learner_id'\)/, 'aucun repli si la migration 111 n\'est pas jouée');
 });
 
 test('le stagiaire écrit sur une facture est vérifié comme appartenant à l\'organisme', () => {

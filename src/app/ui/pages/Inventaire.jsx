@@ -20,7 +20,8 @@ const CATEGORIES = [
   "Thermomètre", "Louche", "Biberon", "Textile",
 ];
 const TVA_RATES = ["20", "10", "5.5", "2.1", "0"];
-const EMPTY = { name: "", category: "", sku: "", quantity: 0, unit_price: "", tax_rate: "20", threshold: 0 };
+const EMPTY = { name: "", category: "", sku: "", quantity: 0, unit_price: "", tax_rate: "20", threshold: 0,
+  remiseValeur: "", remiseUnite: "%" };
 
 // Icône par (sous-)catégorie — vignette visuelle à défaut de photo produit.
 const CAT_ICON = {
@@ -84,11 +85,24 @@ function Inventaire({ embedded = false }) {
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
 
+  /* La remise se saisit en UNE valeur + une unité, mais se stocke en DEUX colonnes. La
+   * conversion vit ici, à un seul endroit : l'unité non retenue part à "" pour être EFFACÉE
+   * côté serveur — sinon basculer de 10 % à 5 € laisserait les deux en base, et c'est le
+   * montant qui gagnerait sans qu'on comprenne pourquoi. */
+  const versColonnes = ({ remiseValeur, remiseUnite, ...reste }) => {
+    const v = String(remiseValeur ?? "").trim();
+    return {
+      ...reste,
+      learner_discount_pct: v && remiseUnite === "%" ? v : "",
+      learner_discount_eur: v && remiseUnite === "€" ? v : "",
+    };
+  };
+
   async function add(e) {
     e.preventDefault();
     setStatus(null);
     try {
-      await createItem(form);
+      await createItem(versColonnes(form));
       setForm(EMPTY);
       setShowForm(false);
       load();
@@ -110,6 +124,11 @@ function Inventaire({ embedded = false }) {
     setEditing({
       id: item.id, name: item.name, category: item.category || "", sku: item.sku || "",
       quantity: item.quantity, unit_price: item.unit_price ?? "", tax_rate: item.tax_rate ?? "20", threshold: item.threshold,
+      // Une SEULE valeur + son unité à l'écran : deux champs séparés laisseraient poser 10 %
+      // ET 5 €, sans qu'on sache lequel s'applique.
+      remiseValeur: item.learner_discount_eur ? String(item.learner_discount_eur)
+        : (item.learner_discount_pct ? String(item.learner_discount_pct) : ""),
+      remiseUnite: item.learner_discount_eur ? "€" : "%",
     });
   }
   const setEdit = (f) => (e) => setEditing((p) => ({ ...p, [f]: e.target.value }));
@@ -118,7 +137,7 @@ function Inventaire({ embedded = false }) {
     setStatus(null);
     try {
       const { id, ...fields } = editing;
-      await updateItem(id, fields);
+      await updateItem(id, versColonnes(fields));
       setEditing(null);
       setStatus({ type: "success", message: "Article mis à jour." });
       load();
@@ -191,8 +210,25 @@ function Inventaire({ embedded = false }) {
                 {TVA_RATES.map((r) => <option key={r} value={r}>{r} %</option>)}
               </SelectField>
             </div>
-            <div className="row2">
+            {/* row3 : trois colonnes (seuil · remise · TTC estimé), cf. la modale d'édition. */}
+            <div className="row3">
               <Field label="Seuil d'alerte" type="number" min="0" value={form.threshold} onChange={set("threshold")} />
+              {/* Remise réservée aux stagiaires : appliquée UNIQUEMENT dans leur boutique.
+                  La caisse garde le prix catalogue — elle sert aussi des clients de passage,
+                  et l'opérateur y remise au cas par cas.
+                  Vide = aucune remise. En % elle suit le prix, en € elle reste fixe. */}
+              <div className="field">
+                <label>Remise stagiaire</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input className="inp" type="number" min="0" step="0.5" placeholder="aucune"
+                    value={form.remiseValeur} onChange={set("remiseValeur")} style={{ flex: 1 }} />
+                  <select className="inp" value={form.remiseUnite} onChange={set("remiseUnite")}
+                    style={{ width: 78, flex: "0 0 auto" }} aria-label="Unité de la remise">
+                    <option value="%">%</option>
+                    <option value="€">€</option>
+                  </select>
+                </div>
+              </div>
               <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 10, fontSize: 13, color: "var(--muted)" }}>
                 {form.unit_price ? <span>TTC estimé : <b style={{ color: "var(--text)" }}>{euro(ttc(form.unit_price, form.tax_rate))}</b></span> : null}
               </div>
@@ -225,6 +261,25 @@ function Inventaire({ embedded = false }) {
                           {it.unit_price != null && (
                             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
                               <span className="tnum">{euro(it.unit_price)}</span> HT · TVA {Number(it.tax_rate)}% · <b style={{ color: "var(--text)" }}><span className="tnum">{euro(ttc(it.unit_price, it.tax_rate))}</span> TTC</b>
+                            </div>
+                          )}
+                          {/* Effet de la remise stagiaire, calculé par le serveur (lib/remise.js) :
+                              prix d'origine barré, taux consenti, prix final. Sans cette ligne,
+                              l'école réglait une remise sans jamais voir ce que l'article coûte
+                              dans la boutique — il fallait ouvrir l'espace stagiaire pour le savoir. */}
+                          {it.remise_libelle && it.unit_price != null && (
+                            <div style={{ fontSize: 12, marginTop: 3, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 5px" }}>
+                              {/* Resserré : la colonne ne fait que ~110px (icône à gauche, badge de
+                                  stock à droite). « TTC » n'est pas répété — la ligne juste au-dessus
+                                  le dit déjà — et le libellé tient sur un mot. */}
+                              <span className="hint" style={{ fontWeight: 400, width: "100%" }}>Prix stagiaire</span>
+                              <span className="tnum" style={{ textDecoration: "line-through", color: "var(--muted)" }}>
+                                {euro(ttc(it.unit_price, it.tax_rate))}
+                              </span>
+                              <Badge tone="g">{it.remise_libelle}</Badge>
+                              <b className="tnum" style={{ color: "var(--text)" }}>
+                                {euro(ttc(it.prix_stagiaire_ht, it.tax_rate))}
+                              </b>
                             </div>
                           )}
                         </div>
@@ -282,8 +337,26 @@ function Inventaire({ embedded = false }) {
                     {TVA_RATES.map((r) => <option key={r} value={r}>{r} %</option>)}
                   </SelectField>
                 </div>
-                <div className="row2">
+                {/* row3 et non row2 : cette rangée porte TROIS colonnes (seuil · remise · TTC).
+                    En row2 le troisième enfant retombait sur une ligne à lui, et les deux champs
+                    s'élargissaient à 253 px au lieu des 165 px des rangées du dessus — la grille
+                    se décalait à partir de là. */}
+                <div className="row3">
                   <Field label="Seuil d'alerte" type="number" min="0" value={editing.threshold} onChange={setEdit("threshold")} />
+                  {/* Même contrôle qu'à la création. Il manquait ici : on pouvait poser une
+                      remise en créant l'article, mais plus jamais la revoir ni la changer. */}
+                  <div className="field">
+                    <label>Remise stagiaire</label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input className="inp" type="number" min="0" step="0.5" placeholder="aucune"
+                        value={editing.remiseValeur} onChange={setEdit("remiseValeur")} style={{ flex: 1 }} />
+                      <select className="inp" value={editing.remiseUnite} onChange={setEdit("remiseUnite")}
+                        style={{ width: 78, flex: "0 0 auto" }} aria-label="Unité de la remise">
+                        <option value="%">%</option>
+                        <option value="€">€</option>
+                      </select>
+                    </div>
+                  </div>
                   <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 10, fontSize: 13, color: "var(--muted)" }}>
                     {editing.unit_price ? <span>TTC : <b style={{ color: "var(--text)" }}>{euro(ttc(editing.unit_price, editing.tax_rate))}</b></span> : null}
                   </div>

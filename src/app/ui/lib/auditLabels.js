@@ -55,6 +55,7 @@ const ACTION_LABEL = {
     'template.save': ['Modèle enregistré', A],
     'template.upload': ['Modèle importé', G],
     'template.duplicate': ['Modèle dupliqué', G],
+    'template.rename': ['Identifiant de modèle renommé', A],
     'template.reorder': ['Modèles réordonnés', A],
     'template.delete': ['Modèle supprimé', R],
     'template.customTokens': ['Jetons personnalisés modifiés', A],
@@ -93,6 +94,11 @@ const ACTION_LABEL = {
     'partner.delete': ['Partenaire supprimé', R],
     'partner.contribution.create': ['Financement enregistré', G],
     'partner.contribution.delete': ['Financement supprimé', R],
+    // Catalogue vendu par un partenaire, visible des stagiaires : ces prix les engagent, donc
+    // leurs modifications se tracent comme le reste.
+    'partner.product.create': ['Produit partenaire ajouté', G],
+    'partner.product.update': ['Produit partenaire modifié', A],
+    'partner.product.delete': ['Produit partenaire retiré', R],
     'opco.create': ['OPCO créé', G],
 
     // Quiz
@@ -108,6 +114,12 @@ const ACTION_LABEL = {
     'accessprofile.create': ['Profil d\'accès créé', G],
     'accessprofile.system': ['Profil d\'accès système modifié', A],
     'platform.org.create': ['Organisme créé (plateforme)', G],
+
+    // Entités émettrices (identités de facturation)
+    'billing_profile.create': ['Entité émettrice créée', G],
+    'billing_profile.update': ['Entité émettrice modifiée', A],
+    'billing_profile.default': ['Entité émettrice par défaut modifiée', A],
+    'billing_profile.delete': ['Entité émettrice supprimée', R],
 
     // Archives
     'archive.bulk_delete': ['Archives supprimées en lot', R],
@@ -162,9 +174,11 @@ const ENTITY_LABEL = {
     AccountingSettings: ['Réglages comptables', 'm'],
     Partner: ['Partenaire', 'm'],
     PartnerContribution: ['Financement', 'm'],
+    PartnerProduct: ['Produit partenaire', 'm'],
     Opco: ['OPCO', 'm'],
     Organization: ['Organisme', 'm'],
     AccessProfile: ['Profil d\'accès', 'm'],
+    BillingProfile: ['Entité émettrice', 'f'],
     Archive: ['Archive', 'f'],
     User: ['Membre', 'm'],
     quest_category: ['Catégorie (Pizza Quest)', 'f'],

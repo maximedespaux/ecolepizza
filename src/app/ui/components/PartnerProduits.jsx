@@ -1,0 +1,175 @@
+import { useEffect, useState } from "react";
+import { Icon } from "./Icon.jsx";
+import Badge from "./Badge.jsx";
+import { euro } from "../lib/format.js";
+import {
+  getPartenaireProduits, createPartenaireProduit, updatePartenaireProduit, deletePartenaireProduit,
+} from "../api/apiClient.js";
+
+/**
+ * Catalogue d'un partenaire — ce que le stagiaire verra dans « Offres partenaires ».
+ *
+ * LE CHAÎNON QUI MANQUAIT. La table `partner_product` existait, et l'espace stagiaire l'affichait
+ * déjà ; mais AUCUNE route ni aucun écran ne l'écrivait. Un produit ne pouvait donc apparaître
+ * dans la boutique que si quelqu'un l'insérait à la main en SQL.
+ *
+ * SUR UNE LIGNE PARTENAIRE, L'ÉCOLE NE VEND PAS : elle met en relation. D'où deux prix — le tarif
+ * catalogue du partenaire et le tarif négocié pour les stagiaires — et aucun stock : ce n'est pas
+ * l'inventaire de l'école. C'est aussi pourquoi ces lignes ne sont jamais facturées par l'école
+ * (cf. invoiceShopRequest, qui ne retient que les lignes ECOLE).
+ *
+ * EN REPLI INLINE, PAS EN MODALE. Une modale rendue dans une carte se retrouve enfermée dedans :
+ * `.card` porte un `transform`, et tout `transform` autre que `none` devient le bloc conteneur
+ * d'un enfant `position:fixed` — le voile ne couvre plus la fenêtre et le pied sort de l'écran.
+ * Le repli évite le problème plutôt que d'avoir à le contourner par un portail.
+ */
+
+const VIDE = { name: "", category: "", reference: "", price_public: "", price_school: "", url: "", note: "" };
+
+function PartnerProduits({ partnerId, onErreur }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [rows, setRows] = useState(null);      // null = pas encore chargé
+  const [form, setForm] = useState(VIDE);
+  const [edite, setEdite] = useState(null);    // id du produit en cours de modification
+  const [busy, setBusy] = useState(false);
+
+  // Chargé À L'OUVERTURE seulement : une page de vingt-trois partenaires ne doit pas déclencher
+  // vingt-trois requêtes pour des catalogues que personne ne regarde.
+  useEffect(() => {
+    if (!ouvert || rows !== null) return;
+    getPartenaireProduits(partnerId).then((r) => setRows(r.data || [])).catch((e) => {
+      setRows([]); onErreur?.(e.message || "Chargement des produits impossible.");
+    });
+  }, [ouvert, rows, partnerId, onErreur]);
+
+  const recharger = () => getPartenaireProduits(partnerId).then((r) => setRows(r.data || [])).catch(() => {});
+
+  async function enregistrer(e) {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    setBusy(true);
+    try {
+      if (edite) await updatePartenaireProduit(edite, form);
+      else await createPartenaireProduit(partnerId, form);
+      setForm(VIDE); setEdite(null);
+      await recharger();
+    } catch (err) { onErreur?.(err.message || "Enregistrement impossible."); }
+    finally { setBusy(false); }
+  }
+
+  async function basculer(p) {
+    // L'inactivation plutôt que la suppression : un produit retiré de la boutique reste
+    // consultable, et la commande passée qui le référence garde son libellé.
+    try { await updatePartenaireProduit(p.id, { active: p.active ? 0 : 1 }); await recharger(); }
+    catch (err) { onErreur?.(err.message || "Modification impossible."); }
+  }
+
+  async function supprimer(p) {
+    if (!window.confirm(`Retirer « ${p.name} » du catalogue de ce partenaire ?`)) return;
+    try { await deletePartenaireProduit(p.id); await recharger(); }
+    catch (err) { onErreur?.(err.message || "Suppression impossible."); }
+  }
+
+  const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
+  const nb = rows?.length ?? null;
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
+      <button type="button" className="card-more" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+        onClick={() => setOuvert((v) => !v)} aria-expanded={ouvert}>
+        <Icon name={ouvert ? "chevron-down" : "chevron-right"} size={14} style={{ verticalAlign: "-2px" }} />
+        {" "}Produits en boutique{nb != null ? ` (${nb})` : ""}
+      </button>
+
+      {ouvert && (
+        <div style={{ marginTop: 10 }}>
+          {rows === null ? <p className="hint" style={{ margin: 0 }}>Chargement…</p>
+            : rows.length === 0 ? (
+              <p className="hint" style={{ margin: "0 0 10px" }}>
+                Aucun produit. Ceux que vous ajoutez ici apparaissent dans l'onglet
+                « Offres partenaires » de la boutique stagiaire.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+                {rows.map((p) => (
+                  <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0",
+                    borderBottom: "1px solid var(--border-soft)", opacity: p.active ? 1 : 0.5 }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <b style={{ fontSize: 13 }}>{p.name}</b>
+                      {p.category ? <span className="hint" style={{ marginLeft: 6 }}>{p.category}</span> : null}
+                      {!p.active ? <Badge tone="n">masqué</Badge> : null}
+                    </span>
+                    {/* Le tarif ÉCOLE est celui que le stagiaire paie : c'est lui qu'on met en
+                        avant, le prix public servant de repère pour mesurer la négociation. */}
+                    <span className="tnum" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                      {p.price_public != null && p.price_school != null && Number(p.price_public) > Number(p.price_school) ? (
+                        <span className="hint" style={{ textDecoration: "line-through", marginRight: 5 }}>{euro(p.price_public)}</span>
+                      ) : null}
+                      {p.price_school != null ? <b>{euro(p.price_school)}</b>
+                        : p.price_public != null ? euro(p.price_public)
+                          : <span className="hint">tarif sur demande</span>}
+                    </span>
+                    <button type="button" className="iconbtn" title={p.active ? "Masquer de la boutique" : "Afficher dans la boutique"}
+                      onClick={() => basculer(p)}><Icon name={p.active ? "eye" : "eye-off"} size={14} /></button>
+                    <button type="button" className="iconbtn" title="Modifier"
+                      onClick={() => { setEdite(p.id); setForm({ ...VIDE, ...Object.fromEntries(Object.keys(VIDE).map((k) => [k, p[k] ?? ""])) }); }}>
+                      <Icon name="pencil" size={14} /></button>
+                    <button type="button" className="iconbtn del" title="Retirer" onClick={() => supprimer(p)}>
+                      <Icon name="trash" size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+          <form onSubmit={enregistrer} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="row3" style={{ gap: 8 }}>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Produit</label>
+                <input className="inp" value={form.name} onChange={set("name")} placeholder="Four à bois 100 cm" />
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Catégorie</label>
+                <input className="inp" value={form.category} onChange={set("category")} placeholder="Four" />
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Référence</label>
+                <input className="inp" value={form.reference} onChange={set("reference")} placeholder="A-32RF/60" />
+              </div>
+            </div>
+            <div className="row3" style={{ gap: 8 }}>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Prix public (€)</label>
+                <input className="inp" type="number" min="0" step="0.01" value={form.price_public} onChange={set("price_public")} />
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Tarif école (€)</label>
+                <input className="inp" type="number" min="0" step="0.01" value={form.price_school} onChange={set("price_school")}
+                  placeholder="négocié" />
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Fiche produit (lien)</label>
+                <input className="inp" value={form.url} onChange={set("url")} placeholder="https://…" />
+              </div>
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Ce qu'on en dit au stagiaire <span className="hint" style={{ fontWeight: 400 }}>(facultatif)</span></label>
+              <input className="inp" value={form.note} onChange={set("note")} placeholder="Bon rapport qualité/prix pour démarrer." />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn sm primary" disabled={busy || !form.name.trim()}>
+                <Icon name={edite ? "check" : "plus"} size={14} /> {edite ? "Enregistrer" : "Ajouter au catalogue"}
+              </button>
+              {edite && (
+                <button type="button" className="btn sm ghost" onClick={() => { setEdite(null); setForm(VIDE); }}>
+                  Annuler
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default PartnerProduits;

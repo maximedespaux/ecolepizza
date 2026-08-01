@@ -46,8 +46,6 @@ const updateOrganization = async (req, res) => {
         let v = req.body[f];
         if (f === 'qualiopi') v = v ? 1 : 0;
         else if (f === 'vat_rate') v = Math.max(0, Math.min(100, Number(v) || 0));
-        // Cœurs : bornés ici comme à la lecture (cf. lib/questlives). 0 minute est une
-        // VALEUR — régénération immédiate — d'où le test explicite plutôt qu'un `|| 5`.
         else if (f === 'code') v = String(v).trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 24) || null;
         else if (f === 'signature_image') v = encrypt(v || null);
         else if (f === 'emargement_config') v = JSON.stringify(mergeEmargConfig(v));

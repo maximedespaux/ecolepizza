@@ -35,7 +35,10 @@
      sur le blanc. Il reste NETTEMENT plus discret que --muted (5,73:1) : la hiérarchie entre
      les deux est conservée, elle passe seulement au-dessus du seuil de lisibilité. */
   --text:#1e2140; --muted:#5b6079; --dim:#686f8c;
-  --green:#2f9e6f; --green-bg:#e6f5ee; --blue:#2c3371; --blue-bg:#e9eaf5;
+  /* #2f9e6f donnait 2,99:1 sur --green-bg : sous le seuil AA (4,5:1) pour du texte de 11,5px,
+     et c'est justement la couleur du badge de remise — l'information la plus utile de la carte
+     était la moins lisible. #1b6e4a : 5,53:1 sur le badge, 6,22:1 sur blanc. */
+  --green:#1b6e4a; --green-bg:#e6f5ee; --blue:#2c3371; --blue-bg:#e9eaf5;
   --amber-bg:#fdeede; --rosso-bg:#fdeaea;
   --orange-bg:#fff0e0; --gold-bg:#fff7db;
   /* Palette catégorielle validée daltonisme (Okabe-Ito) — comptabilité (thème clair) */
@@ -1095,6 +1098,45 @@ tbody tr:last-child td{border-bottom:none}
 .hud-chip.on i{background:rgba(255,255,255,.9)!important}
 .hud-chip.raz{border-style:dashed;color:var(--dim)}
 
+/* ————— SIGNATURE DE L'INTERVENANT : LE CHOIX EST LE SUJET —————
+   Tant qu'aucune signature n'existe, la page n'a rien d'autre à montrer : le choix mérite donc
+   la place, pas deux boutons fantômes de la taille d'un lien à côté d'un cadre marqué
+   « Aucune ». Deux tuiles qui disent ce qu'elles font ET pour qui — le cachet pour une société,
+   le tracé pour une personne. */
+.sig-intro{margin:0 0 14px;font-size:14.5px;color:var(--muted);max-width:62ch}
+.sig-choix{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.sig-choix button{display:flex;flex-direction:column;align-items:flex-start;gap:5px;
+  padding:18px 20px;cursor:pointer;font:inherit;text-align:left;color:var(--text);
+  background:var(--surface);border:1.5px dashed var(--border);border-radius:var(--r);
+  transition:transform .16s var(--ease),border-color .16s var(--ease),box-shadow .16s var(--ease),background .16s var(--ease)}
+.sig-choix button:hover{transform:translateY(-2px);border-style:solid;border-color:var(--ember1);
+  box-shadow:var(--shadow-2);background:var(--surface)}
+.sig-choix button:focus-visible{outline:3px solid color-mix(in srgb,var(--ember1) 45%,transparent);outline-offset:2px}
+.sig-choix b{font-family:var(--font-d);font-size:17px;letter-spacing:-.01em}
+.sig-choix i{font-style:normal;font-size:12.5px;line-height:1.45;color:var(--dim)}
+.sig-ic{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;margin-bottom:4px;
+  background:var(--orange-bg);color:var(--orange);transition:transform .16s var(--ease)}
+.sig-choix button:hover .sig-ic{transform:scale(1.06) rotate(-3deg)}
+.sig-choix button:last-child .sig-ic{background:var(--rosso-bg);color:var(--ember1)}
+
+/* Une fois enregistrée, elle se MONTRE : c'est ce qui sera apposé sur les feuilles. */
+.sig-ok{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.sig-cadre{flex:0 0 auto;width:210px;height:88px;display:grid;place-items:center;padding:8px;
+  background:#fff;border:1px solid var(--border);border-radius:var(--r-sm);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),var(--shadow-1)}
+.sig-cadre img{max-width:100%;max-height:100%;object-fit:contain}
+.sig-ok-txt{flex:1;min-width:180px;display:flex;flex-direction:column;gap:3px}
+.sig-ok-txt b{display:inline-flex;align-items:center;gap:7px;font-family:var(--font-d);
+  font-size:15.5px;color:var(--green)}
+.sig-ok-txt span{font-size:13px;color:var(--muted)}
+.sig-ok-act{display:flex;gap:8px;flex-wrap:wrap}
+.sig-ok-act .btn{display:inline-flex;align-items:center;gap:6px}
+@media (prefers-reduced-motion:reduce){
+  .sig-choix button,.sig-ic{transition:none}
+  .sig-choix button:hover{transform:none}
+  .sig-choix button:hover .sig-ic{transform:none}
+}
+
 /* ————— CAISSE : LE PANIER RESTE EN VUE —————
    Le catalogue est long ; en descendant chercher un article, on perdait de vue ce qu'on avait
    déjà ajouté et le total à annoncer — devant quelqu'un qui attend sa monnaie.
@@ -1369,7 +1411,15 @@ tbody tr:last-child td{border-bottom:none}
 .mbody textarea.inp{width:100%;resize:vertical;line-height:1.45}
 
 /* Partenaires : grille de fiches de suivi */
-.partner-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+/* DEUX colonnes plutôt que trois. À 280px de plancher une troisième entrait, et chaque fiche
+   tombait à 323px : depuis que la carte porte le catalogue du partenaire (produit · catégorie ·
+   référence, puis prix public · tarif école · lien), ce formulaire à trois colonnes n'y tenait
+   plus — les champs descendaient à ~90px et les libellés passaient sur deux lignes.
+   `auto-fill` reste : la grille rendra trois colonnes sur un écran vraiment large. */
+.partner-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:14px}
+@media(max-width:940px){
+  .partner-grid{grid-template-columns:1fr}
+}
 .partner-meta{display:flex;flex-direction:column;gap:3px;font-size:13px;margin:6px 0}
 .partner-meta a{color:#1d6fb8}
 .partner-commission{display:flex;align-items:baseline;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line,#eee)}
@@ -1433,9 +1483,19 @@ tbody tr:last-child td{border-bottom:none}
 .tpl-editor-body{display:grid;grid-template-columns:1fr 260px;gap:14px;align-items:start}
 .tpl-doc{background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:12px;overflow:hidden}
 .tb{display:flex;align-items:center;gap:3px;padding:7px 9px;border-bottom:1px solid var(--line,#e3e3e6);background:var(--surface2,rgba(0,0,0,.02));flex-wrap:wrap}
-.tb-btn{min-width:30px;height:28px;padding:0 8px;border:1px solid transparent;border-radius:6px;background:none;cursor:pointer;color:inherit;font-size:13px}
+/* inline-flex + centrage : la plupart des boutons portent désormais une icône SVG, qui sans cela
+   s'aligne sur la ligne de base du texte et pend de deux ou trois pixels sous le centre. */
+.tb-btn{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:28px;padding:0 8px;border:1px solid transparent;border-radius:6px;background:none;cursor:pointer;color:inherit;font-size:13px}
 .tb-btn:hover{background:var(--hover,rgba(0,0,0,.06))}
 .tb-btn.on{background:var(--ember-soft,#fdeae6);color:var(--ember1,#c0392b)}
+/* Action destructive : neutre au repos, franchement rouge au survol — on la trouve sans la craindre. */
+.tb-danger:hover{background:#fdeae6;color:#c0392b}
+/* Étiquette d'un groupe contextuel (Tableau, Colonnes) : dit à quoi se rapportent les boutons
+   qui viennent d'apparaître. */
+.tb-grp{display:inline-flex;align-items:center;height:28px;padding:0 8px;border-radius:6px;background:var(--surface2,rgba(0,0,0,.05));color:var(--muted,#6b6b70);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+/* Anneau de focus explicite : la navigation au clavier doit rester visible sur un fond clair
+   comme sur le fond teinté d'un bouton actif. */
+.tb-btn:focus-visible,.tb-sel:focus-visible,.tb-swatch-cell:focus-visible,.tb-swatch-clear:focus-visible{outline:2px solid var(--ember1,#c0392b);outline-offset:1px}
 .tb-sep{width:1px;height:20px;background:var(--line,#e3e3e6);margin:0 4px}
 .doc-canvas{min-height:60vh;max-height:74vh;overflow-y:auto;padding:26px 30px;font-size:14px;line-height:1.35;outline:none}
 .doc-canvas:focus{outline:none}
@@ -1446,6 +1506,17 @@ tbody tr:last-child td{border-bottom:none}
 /* Style de bordure du tableau (choisi dans la barre d'outils). */
 .doc-canvas table.tbl-b-dashed th,.doc-canvas table.tbl-b-dashed td{border:1px dashed var(--line,#999)}
 .doc-canvas table.tbl-b-none th,.doc-canvas table.tbl-b-none td{border:1px dotted #e2e2e6} /* repère léger dans l'éditeur ; aucune bordure au PDF */
+/* Bloc « deux colonnes » : reflète FIDÈLEMENT le tableau de mise en page du PDF (cellules
+   alignées en haut, largeurs en %, tableau interne pleine largeur de sa colonne). Le padding
+   5px 7px reprend celui injecté sur les cellules du tableau de mise en page au rendu, pour que
+   la place occupée dans l'éditeur soit celle du document final. */
+.doc-canvas .doc-cols{display:flex;width:100%;margin:8px 0;align-items:flex-start}
+.doc-canvas .doc-col{flex:1 1 0;min-width:0;padding:5px 7px;border:1px dashed #dcdce2;border-radius:4px}
+.doc-canvas .doc-col+.doc-col{margin-left:-1px} /* filets mitoyens confondus, comme une gouttière */
+.doc-canvas .doc-cols:focus-within .doc-col,.doc-canvas .doc-col:hover{border-color:#c6c6cf}
+.doc-canvas .doc-col>:first-child{margin-top:0}
+.doc-canvas .doc-col>:last-child{margin-bottom:0}
+.doc-canvas .doc-col table{margin:2px 0} /* le tableau remplit la colonne (width:100% hérité) */
 /* Les images ne débordent pas la colonne page (comme au rendu PDF, borné à la largeur utile). */
 .doc-canvas img{max-width:100%;height:auto}
 .doc-canvas.preview .prev-val{background:#eef6ee;border-radius:4px;padding:0 3px}
@@ -1472,6 +1543,11 @@ tbody tr:last-child td{border-bottom:none}
 .tpl-editor-sticky{position:sticky;top:56px;z-index:26;background:var(--bg);padding-bottom:6px;box-shadow:0 6px 12px -8px rgba(0,0,0,.25)}
 .tpl-editor-sticky .tpl-editor-head{padding:6px 0}
 .tb-sel{height:28px;border:1px solid var(--line,#e3e3e6);border-radius:6px;background:var(--panel,#fff);color:inherit;font-size:12px;padding:0 4px;cursor:pointer;max-width:92px}
+/* Les listes dont le libellé est une phrase (« Place pour 10 articles ») : les 92 px du cas
+   général les tronqueraient en « Place pou… », ce qui annule l'intérêt d'un intitulé explicite.
+   215 px et non 190 : le plus long libellé en demande 188 sur cette machine, et une police de
+   repli un peu plus large suffirait à le couper. */
+.tb-sel.tb-sel-long{max-width:215px}
 .tb-color{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:28px;border-radius:6px;cursor:pointer;font-weight:700}
 .tb-color:hover{background:var(--hover,rgba(0,0,0,.06))}
 .tb-color input[type=color]{position:absolute;inset:0;opacity:0;cursor:pointer;border:none;padding:0}
@@ -2221,7 +2297,10 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Boutique stagiaire — grille de produits. auto-fill + minmax : la grille se remplit toute
    seule du téléphone au grand écran, sans media query à maintenir. */
 /* Boutique : panier persistant à gauche + catalogue à droite. */
-.shop-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
+/* Panier plus étroit et repoussé à droite (gap plus large) : le catalogue occupe clairement la
+   majorité, les produits respirent. Le panier reste lisible à 280px — au-dessous, la liste
+   d'articles et les pas de quantité se serrent trop. Cf. la remontée du point de bascule. */
+.shop-layout{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:28px;align-items:start}
 .shop-layout.no-cart{grid-template-columns:1fr} /* panier masqué : le catalogue occupe toute la largeur */
 .shop-aside{position:sticky;top:70px}
 .shop-main{min-width:0}
@@ -2230,7 +2309,11 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .cart-mini-lbl{flex:1;min-width:0;font-size:12.5px;line-height:1.25;overflow:hidden}
 .cart-mini-qty{display:inline-flex;align-items:center;gap:5px;flex:none}
 .cart-mini-qty .iconbtn{padding:2px}
-@media(max-width:760px){
+/* Bascule remontée de 760 à 980px : entre les deux, le catalogue est coincé à deux colonnes
+   pendant que le panier prend presque la moitié (la nav latérale rogne encore la largeur utile).
+   Au-dessous de 980px, le catalogue passe pleine largeur et le panier glisse dessous — toujours
+   accessible, mais sans étouffer les produits. */
+@media(max-width:980px){
   .shop-layout{grid-template-columns:1fr}
   .shop-aside{position:static;margin-top:18px}
 }
@@ -2246,7 +2329,18 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .cmd-step.on .cmd-dot{border-color:var(--ember1,#c0392b);color:var(--ember1,#c0392b)}
 .cmd-step-lbl{font-size:11px;color:var(--muted);line-height:1.2}
 .cmd-step.on .cmd-step-lbl{color:var(--text);font-weight:700}
-.shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
+/* TROIS colonnes plutôt que quatre sur un écran large. À 158px de plancher, une quatrième
+   colonne entrait et chaque carte tombait à 165px : la ligne de prix (barré · net · TTC · badge)
+   n'y tenait plus, et un nom d'article un peu long passait sur trois lignes. 215px laisse la
+   ligne de prix respirer, tout en gardant le catalogue entier sans défilement infini.
+   `auto-fill` conserve l'adaptation : la grille rend 4 colonnes si l'écran le permet vraiment,
+   3 sur un portable, 2 sur mobile (cf. la règle sous 560px). */
+.shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px}
+/* Sur mobile, 215px ne rentrerait qu'une fois : on force deux colonnes, un catalogue à une
+   colonne obligeant à faire défiler deux fois plus pour la même chose. */
+@media(max-width:560px){
+  .shop-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+}
 .shop-card{display:flex;flex-direction:column;gap:5px;padding:14px 12px;border:1px solid var(--border);
   border-radius:14px;background:var(--surface);transition:border-color .14s var(--ease),transform .14s var(--ease)}
 .shop-card:hover{border-color:var(--gold);transform:translateY(-2px)}
@@ -2265,12 +2359,18 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
    qu'à celui qui appellera le partenaire pour la commander — d'où le gris discret. */
 .shop-ref{font-size:10.5px;color:var(--muted)}
 .shop-price{margin-top:auto;padding-top:6px;display:flex;flex-direction:column;gap:1px}
-.shop-price b{font-size:15px;white-space:nowrap}
+/* La ligne de prix porte jusqu'à QUATRE morceaux : prix barré, prix net, « TTC », badge de
+   remise. En `nowrap` seul, tout tenait sur une ligne unique et débordait de 34px hors d'une
+   carte de 165px — la carte étant en `overflow:visible`, le badge sortait sur sa voisine.
+   `flex-wrap` laisse le badge passer à la ligne quand il ne rentre plus ; `white-space:nowrap`
+   reste utile SUR LES ENFANTS, pour qu'un montant ne se coupe jamais en son milieu. */
+.shop-price b{font-size:15px;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;white-space:nowrap}
 .shop-unit{font-size:10.5px;font-weight:600;color:var(--muted)}
 /* --muted et pas --dim : mesuré, --dim tombe à 2.59:1 en clair et 3.77:1 en sombre sur le fond
    des cartes — sous le minimum de 4.5:1. Le prix HT n'est pas de la décoration : c'est le chiffre
    que lit un stagiaire qui monte sa pizzeria et récupère la TVA. */
-.shop-ht{font-size:11px;color:var(--muted);white-space:nowrap}
+/* 12px et non 11 : plancher de lisibilité pour du texte courant. */
+.shop-ht{font-size:12px;color:var(--muted);white-space:nowrap}
 /* Barré, mais pas décoratif : c'est en lisant ce prix que le stagiaire voit ce que le tarif
    école lui fait gagner. Donc lisible — cf. .shop-ht sur le choix de --muted. */
 .shop-old{font-size:11.5px;color:var(--muted);text-decoration:line-through}
@@ -2284,7 +2384,13 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* 44px : c'est LA cible du doigt sur cette page, et .btn.sm ne fait que 30px de haut. On ne
    touche pas à .btn.sm globalement (42 écrans l'utilisent) — on l'agrandit ici, là où le
    stagiaire tape trente fois d'affilée sur son téléphone. */
-.shop-add{min-height:44px;justify-content:center;transition:background .14s var(--ease),color .14s var(--ease),border-color .14s var(--ease)}
+/* `.stu-app .btn.sm.shop-add` : quatre classes, pour passer DEVANT `.stu-app .btn.sm` (trois
+   classes, déclarée plus bas dans le fichier). Le `min-height:44px` vivait ici depuis toujours
+   sur `.shop-add` seul — une seule classe — et n'a donc JAMAIS pris effet : le bouton restait à
+   38px, sous le minimum tactile. Un premier correctif à trois classes n'a rien changé non plus,
+   spécificité égale et déclaré avant. Mesuré à l'écran, deux fois. */
+.stu-app .btn.sm.shop-add{min-height:44px}
+.shop-add{justify-content:center;transition:background .14s var(--ease),color .14s var(--ease),border-color .14s var(--ease)}
 .shop-card:hover .shop-add:not(.ok){background:var(--grad-ember);color:#fff;border-color:transparent}
 .shop-add.ok{background:var(--green);color:#fff;border-color:transparent}
 
@@ -2404,7 +2510,7 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .ok-banner span{flex:1;min-width:0}
 
 .rayon-tabs{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:2px}
-.rayon-tab{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:background .12s var(--ease),border-color .12s var(--ease),color .12s var(--ease)}
+.rayon-tab{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;min-height:44px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:background .12s var(--ease),border-color .12s var(--ease),color .12s var(--ease)}
 .rayon-tab:hover{border-color:var(--gold)}
 .rayon-tab.on{background:var(--grad-ember);color:#fff;border-color:transparent}
 .cat-results{display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto;margin-top:9px;padding-right:2px}

@@ -29,9 +29,11 @@ test('le checkout accepte et vérifie une entreprise acheteuse', () => {
 });
 
 test('la facture d\'une vente reçoit company_id', () => {
+    // L'insert de facture est construit par colonnes ; company_id est une colonne de base,
+    // toujours présente dans la liste (contrairement à learner_id / billing_profile_id, ajoutés
+    // sous condition).
     const src = net('controllers/sale.controller.js');
-    const bloc = src.slice(src.indexOf('INSERT INTO invoice'));
-    assert.match(bloc.slice(0, 400), /company_id/, 'invoice.company_id n\'est pas écrit');
+    assert.match(src, /const iCol = \[[^\]]*'company_id'/, 'invoice.company_id n\'est pas écrit');
 });
 
 test('la vente comptable reçoit company_id quand la colonne existe', () => {

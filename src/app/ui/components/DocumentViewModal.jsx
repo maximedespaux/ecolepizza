@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon.jsx";
+import InfosManquantes from "./InfosManquantes.jsx";
 import { getDocument, signDocument, downloadDocumentPdf, documentPdfUrl, documentPreviewHtml, createSignLink } from "../api/apiClient.js";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
@@ -67,28 +68,10 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
   }
   const dl = (fn) => fn.catch((e) => { setStatus({ type: "error", message: e.message }); if (e.missing) setMissing(e.missing); });
 
-  // Panneau des informations manquantes (regroupées par table d'origine).
+  // Panneau partagé avec l'écran Facturation (même forme `missing` renvoyée par le serveur).
   function MissingPanel() {
     if (!missing || !missing.length) return null;
-    const groups = {};
-    for (const m of missing) (groups[m.group || "Autres"] ||= []).push(m.label);
-    return (
-      <div style={{ padding: "16px 18px" }}>
-        <div className="status err" style={{ marginBottom: 12 }}>
-          <b>Document non généré :</b> {missing.length} information(s) manquante(s). Complétez la fiche puis réessayez.
-        </div>
-        <div className="doc-sheet" style={{ padding: 16 }}>
-          {Object.entries(groups).map(([g, labels]) => (
-            <div key={g} style={{ marginBottom: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ember1)", marginBottom: 4 }}>{g}</div>
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {labels.map((l) => <li key={l} style={{ fontSize: 13 }}>{l}</li>)}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+    return <div style={{ padding: "16px 18px" }}><InfosManquantes missing={missing} /></div>;
   }
 
   return (

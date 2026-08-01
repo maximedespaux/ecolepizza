@@ -3,6 +3,7 @@ const db = require('../config/database.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
+const { resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
 
 // La table material_sale porte-t-elle le lien vers la facture (migration 069) ?
 // Permet un fonctionnement dégradé tant que la migration n'est pas appliquée.
@@ -215,13 +216,36 @@ const checkout = async (req, res) => {
         return res.status(422).json({ error: 'Panier vide' });
     }
     const globalDisc = Math.min(100, Math.max(0, Number(req.body.discount) || 0)); // % remise globale
-    const factor = 1 - globalDisc / 100;
     const status = req.body.status === 'IMPAYEE' ? 'IMPAYEE' : 'PAYEE';
     try {
         const conn = db.promise();
         const settings = await loadSettings(conn, orgId);
-        const tvaApplies = !!settings.tva_applies;
-        const payMethod = (req.body.payment_method || '').toString().slice(0, 30) || null;
+        // ÉMETTRICE résolue tôt : c'est elle qui dit l'assujettissement à la TVA (une société
+        // peut être exonérée quand une autre ne l'est pas). Sans émettrice, on garde le réglage
+        // global de la boutique.
+        const emetteur = await resolveEmitter(conn, orgId, req.body.billing_profile_id);
+        const tvaApplies = emetteur ? !!emetteur.tva_applies : !!settings.tva_applies;
+
+        // VENTILATION DU RÈGLEMENT : un client peut payer en plusieurs moyens (300 € espèces +
+        // 700 € carte). On ne retient que les parts valides — un moyen nommé, un montant positif.
+        // Le résumé (moyen unique, ou « A + B ») sert à l'affichage et à la note ; le détail chiffré
+        // part dans payment_split. La SOMME est vérifiée plus bas, une fois le total connu.
+        const estCheque = (m) => /ch[eè]que/i.test(String(m || ''));
+        const parts = (Array.isArray(req.body.payments) ? req.body.payments : [])
+            .map((p) => {
+                const part = { method: String(p && p.method || '').trim().slice(0, 40), amount: Number(p && p.amount) };
+                // Infos du chèque (banque, numéro) : conservées pour le rapprochement et le suivi
+                // de l'encaissement. Seulement pour un chèque, et seulement si renseignées.
+                if (estCheque(part.method)) {
+                    if (p && String(p.bank || '').trim()) part.bank = String(p.bank).trim().slice(0, 120);
+                    if (p && String(p.cheque_number || '').trim()) part.cheque_number = String(p.cheque_number).trim().slice(0, 40);
+                }
+                return part;
+            })
+            .filter((p) => p.method && Number.isFinite(p.amount) && p.amount > 0);
+        const payMethod = parts.length
+            ? parts.map((p) => p.method).join(' + ').slice(0, 30)
+            : ((req.body.payment_method || '').toString().slice(0, 30) || null);
 
         // Stagiaire comme entreprise sont ÉCRITS sur la facture, plus seulement lus pour en
         // tirer un nom : il faut vérifier qu'ils appartiennent à l'organisme. Un identifiant
@@ -237,7 +261,7 @@ const checkout = async (req, res) => {
         // Vérifie les articles + le stock avant d'appliquer.
         for (const ln of lines) {
             const [rows] = await conn.query(
-                'SELECT name, category, quantity, unit_price, tax_rate FROM inventory_item WHERE id = ? AND organization_id = ?',
+                'SELECT name, sku, category, quantity, unit_price, tax_rate FROM inventory_item WHERE id = ? AND organization_id = ?',
                 [ln.item_id, orgId]
             );
             if (rows.length === 0) return res.status(404).json({ message: 'Article introuvable' });
@@ -248,15 +272,49 @@ const checkout = async (req, res) => {
             ln._disc = Math.min(100, Math.max(0, Number(ln.discount_pct) || 0)); // remise ligne
         }
 
+        /* REMISE LIGNE ET REMISE GLOBALE S'EXCLUENT.
+         *
+         * Elles se CUMULAIENT : 10 % sur la ligne et 5 % sur la vente faisaient 14,5 %, parce que
+         * les deux facteurs se multipliaient. Personne ne lit une facture ainsi — on y voit un
+         * taux à côté d'un prix et on s'attend à ce que l'un donne l'autre. Un « 10 % » affiché
+         * en face d'un prix qui en reflète 14,5 rend le document invérifiable par le client.
+         *
+         * Désormais : soit on remise ligne par ligne, soit on pose un taux unique pour toute la
+         * vente. La caisse désactive l'un dès que l'autre est saisi, mais on REFUSE ici aussi :
+         * un front en cache ou une requête postée à la main passerait outre, et la vente
+         * s'enregistrerait à un montant que personne n'a voulu. Refuser plutôt qu'arbitrer en
+         * silence — même règle que pour la ventilation des règlements plus bas. */
+        const remiseDeLigne = lines.some((l) => l._disc > 0);
+        if (remiseDeLigne && globalDisc > 0) {
+            return res.status(422).json({
+                message: 'Remise par article ET remise globale : il faut choisir. '
+                    + 'Retire la remise globale, ou celles des articles.',
+            });
+        }
+        // Le taux qui s'applique RÉELLEMENT à une ligne : le sien en mode ligne, sinon le global.
+        const tauxDe = (ln) => (remiseDeLigne ? ln._disc : globalDisc);
+
         // Facture liée : identifiant + numéro générés AVANT les lignes, pour que chaque
         // vente (material_sale) référence sa facture → regroupement de l'historique.
         const hasInvLink = await saleHasInvoiceLink(conn);
+        // Sondée ICI et pas plus bas : le libellé de ligne s'écrit avant l'insertion, et il doit
+        // savoir s'il garde le suffixe « (remise 10%) » ou si la colonne s'en charge.
+        const hasLineDiscount = await hasColumn(conn, 'invoice_line', 'discount_pct');
         const hasSaleCompany = await hasColumn(conn, 'material_sale', 'company_id');
+        const hasInvEmitter = await hasColumn(conn, 'invoice', 'billing_profile_id');
         const invoiceId = crypto.randomUUID();
         const year = new Date().getFullYear();
-        const num = settings.next_number || 1;
-        const number = `${settings.invoice_prefix || 'F'}-${year}-${String(num).padStart(4, '0')}`;
-        await conn.query('UPDATE shop_settings SET next_number = ? WHERE organization_id = ?', [num + 1, orgId]);
+
+        // Numéro : avec une émettrice, il vient de SA séquence continue et de SON gabarit ; sans
+        // elle, on garde le compteur de la boutique (shop_settings), comportement d'avant.
+        let number;
+        if (emetteur) {
+            number = await nextNumberForEmitter(conn, emetteur);
+        } else {
+            const num = settings.next_number || 1;
+            number = `${settings.invoice_prefix || 'F'}-${year}-${String(num).padStart(4, '0')}`;
+            await conn.query('UPDATE shop_settings SET next_number = ? WHERE organization_id = ?', [num + 1, orgId]);
+        }
 
         // Applique : décrément stock + vente par ligne (remise ligne puis globale).
         // On construit aussi les lignes de facture (invoice_line) → facture détaillée + PDF.
@@ -277,7 +335,12 @@ const checkout = async (req, res) => {
             //
             // Arrondir le prix UNITAIRE d'abord est aussi ce que le client peut vérifier : le
             // ticket affiche un prix unitaire, il doit pouvoir le multiplier lui-même.
-            const unitNet = Number((Number(it.unit_price || 0) * (1 - ln._disc / 100) * factor).toFixed(2));
+            // Un SEUL taux s'applique (cf. l'exclusion plus haut) : plus de multiplication de
+            // deux facteurs. Le brut est figé à côté du net — c'est lui qui fera les euros de
+            // remise, par soustraction de deux montants déjà arrondis (cf. migration 122).
+            const taux = tauxDe(ln);
+            const unitGross = Number(Number(it.unit_price || 0).toFixed(2));
+            const unitNet = Number((unitGross * (1 - taux / 100)).toFixed(2));
             const rate = tvaApplies ? Number(it.tax_rate || 0) : 0;
             const lineHT = Number((unitNet * ln._qty).toFixed(2));
             const note = payMethod ? `Paiement : ${payMethod}` : null;
@@ -295,12 +358,39 @@ const checkout = async (req, res) => {
             await conn.query(
                 `INSERT INTO material_sale (${col.join(', ')}) VALUES (${ph.join(', ')})`, args);
             totalHT += lineHT;
-            const label = `${it.name}${ln._qty > 1 ? ` × ${ln._qty}` : ''}${ln._disc ? ` (remise ${ln._disc}%)` : ''}`;
-            invLines.push({ description: label.slice(0, 255), amount_net: lineHT, rate, qty: ln._qty, unit: unitNet });
+            // Désignation PROPRE (juste le nom) : la quantité et la remise ont leurs colonnes sur
+            // la facture. La référence (SKU) est figée à part. L'ancien libellé « nom × qté
+            // (remise) » doublonnait la colonne Qté.
+            // La remise n'a plus à s'écrire dans le libellé : elle a sa colonne (migration 122),
+            // et le jeton {Remise} la place où le modèle veut. On garde le suffixe tant que la
+            // colonne n'existe pas, sinon la remise disparaîtrait de la facture entre-temps.
+            const label = `${it.name}${taux && !hasLineDiscount ? ` (remise ${taux}%)` : ''}`;
+            invLines.push({
+                description: label.slice(0, 255), amount_net: lineHT, rate, qty: ln._qty,
+                unit: unitNet, gross: unitGross, discount: taux, reference: it.sku || null,
+            });
             productNames.push(`${it.name} x${ln._qty}`);
         }
         const totalTVA = invLines.reduce((s, l) => s + l.amount_net * l.rate / 100, 0);
         totalHT = Number(totalHT.toFixed(2));
+
+        // La somme des paiements doit tomber sur le total à régler (TTC). Sinon, la caisse ne
+        // boucle pas — mieux vaut refuser que d'enregistrer une vente dont la répartition ment.
+        // Vérifié seulement si un règlement est saisi ET que la vente est marquée payée.
+        const ttc = Number((totalHT + totalTVA).toFixed(2));
+        let paymentSplit = null;
+        if (status === 'PAYEE' && parts.length) {
+            const somme = Number(parts.reduce((s, p) => s + p.amount, 0).toFixed(2));
+            if (Math.abs(somme - ttc) > 0.01) {
+                return res.status(422).json({
+                    message: `La répartition des paiements (${somme.toFixed(2)} €) ne correspond pas au total à régler (${ttc.toFixed(2)} €).`,
+                });
+            }
+            // On garde le détail dès qu'il y a plus d'un moyen, OU des infos de chèque à conserver
+            // (un chèque unique porte sa banque et son numéro, qui seraient sinon perdus).
+            const aDuDetail = parts.some((p) => p.bank || p.cheque_number);
+            if (parts.length > 1 || aDuDetail) paymentSplit = JSON.stringify(parts);
+        }
 
         // Nom imprimé sur la facture. Priorité : nom libre saisi > entreprise > stagiaire >
         // comptoir. L'entreprise passe AVANT le stagiaire parce que, quand les deux sont là,
@@ -323,42 +413,47 @@ const checkout = async (req, res) => {
         // inatteignables depuis la facture. Le nom reste écrit à côté — c'est lui qui a été
         // imprimé, et renommer une fiche ne doit pas récrire une pièce déjà émise.
         //
-        // `invoice.company_id` est une colonne de base : toujours écrite. `learner_id` (migration
-        // 111) est optionnelle — si elle manque, on réémet sans elle et la vente se comporte
-        // comme avant plutôt que d'échouer.
-        const champs = [invoiceId, orgId, company_id || null, name, description, number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status];
-        try {
-            await conn.query(
-                `INSERT INTO invoice (id, organization_id, company_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status, learner_id)
-                 VALUES (?, ?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?, ?)`,
-                [...champs, learner_id || null]
-            );
-        } catch (e) {
-            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
-            await conn.query(
-                `INSERT INTO invoice (id, organization_id, company_id, buyer_name, description, type, number, amount_net, tva_exoneree, payment_method, status)
-                 VALUES (?, ?, ?, ?, ?, 'FACTURE', ?, ?, ?, ?, ?)`,
-                champs
-            );
-        }
-        // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X.
+        // `invoice.company_id` est une colonne de base : toujours écrite. `learner_id` (111) et
+        // `billing_profile_id` (113) sont optionnelles — on les ajoute quand la colonne existe,
+        // sinon la vente sort comme avant plutôt que d'échouer. Colonnes construites plutôt que
+        // quatre variantes de requête : chaque combinaison oubliée serait un chemin non testé.
+        const hasInvLearner = await hasColumn(conn, 'invoice', 'learner_id');
+        const hasInvSplit = await hasColumn(conn, 'invoice', 'payment_split');
+        // Modèle de facture CHOISI dans le panier (obligatoire côté caisse). Figé sur la facture.
+        const hasInvTemplate = await hasColumn(conn, 'invoice', 'template_slug');
+        const templateSlug = String(req.body.invoice_template_slug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') || null;
+        // Échéance : date de règlement (YYYY-MM-DD) saisie en caisse, ou rien. `due_date` est une
+        // colonne de base — on l'écrit toujours ; NULL = paiement à réception, comportement actuel.
+        const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.due_date || '')) ? req.body.due_date : null;
+        const iCol = ['id', 'organization_id', 'company_id', 'buyer_name', 'description', 'type',
+            'number', 'amount_net', 'tva_exoneree', 'payment_method', 'status', 'due_date'];
+        const iVal = [invoiceId, orgId, company_id || null, name, description, 'FACTURE',
+            number, totalHT.toFixed(2), tvaApplies ? 0 : 1, payMethod, status, dueDate];
+        if (hasInvLearner) { iCol.push('learner_id'); iVal.push(learner_id || null); }
+        if (hasInvEmitter) { iCol.push('billing_profile_id'); iVal.push(emetteur ? emetteur.id : null); }
+        if (hasInvSplit) { iCol.push('payment_split'); iVal.push(paymentSplit); }
+        if (hasInvTemplate) { iCol.push('template_slug'); iVal.push(templateSlug); }
+        await conn.query(
+            `INSERT INTO invoice (${iCol.join(', ')}) VALUES (${iCol.map(() => '?').join(', ')})`, iVal);
+        // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X. Colonnes
+        // construites selon les migrations présentes : taux/qté/prix (108, 110) et référence
+        // (118) sont ajoutés quand ils existent, sinon la ligne sort sans eux.
+        const hasLineDetail = await hasColumn(conn, 'invoice_line', 'tax_rate');
+        const hasLineRef = await hasColumn(conn, 'invoice_line', 'reference');
         for (let i = 0; i < invLines.length; i++) {
-            // Le taux réel de l'article accompagne la ligne : sans lui, Factur-X retombait sur
-            // 20 % en dur et facturait une farine à 5,5 % comme une pelle à 20 %.
-            try {
-                await conn.query(
-                    `INSERT INTO invoice_line (id, invoice_id, enrollment_id, description, amount_net, tax_rate, qty, unit_price_ht, sort_order)
-                     VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
-                    [crypto.randomUUID(), invoiceId, invLines[i].description, invLines[i].amount_net,
-                     invLines[i].rate, invLines[i].qty, invLines[i].unit, i]
-                );
-            } catch (e) {
-                if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
-                await conn.query(
-                    'INSERT INTO invoice_line (id, invoice_id, enrollment_id, description, amount_net, sort_order) VALUES (?, ?, NULL, ?, ?, ?)',
-                    [crypto.randomUUID(), invoiceId, invLines[i].description, invLines[i].amount_net, i]
-                );
+            const lc = ['id', 'invoice_id', 'enrollment_id', 'description', 'amount_net', 'sort_order'];
+            const lv = [crypto.randomUUID(), invoiceId, null, invLines[i].description, invLines[i].amount_net, i];
+            if (hasLineDetail) {
+                lc.push('tax_rate', 'qty', 'unit_price_ht');
+                lv.push(invLines[i].rate, invLines[i].qty, invLines[i].unit);
             }
+            if (hasLineRef) { lc.push('reference'); lv.push(invLines[i].reference); }
+            if (hasLineDiscount) {
+                lc.push('discount_pct', 'unit_price_gross_ht');
+                lv.push(invLines[i].discount || 0, invLines[i].gross);
+            }
+            await conn.query(
+                `INSERT INTO invoice_line (${lc.join(', ')}) VALUES (${lc.map(() => '?').join(', ')})`, lv);
         }
         logAudit(req, 'sale.checkout', 'Invoice', invoiceId);
         res.status(201).json({

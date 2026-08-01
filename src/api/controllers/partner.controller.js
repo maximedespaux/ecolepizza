@@ -169,4 +169,123 @@ const deleteContribution = (req, res) => {
     );
 };
 
-module.exports = { getPartners, createPartner, updatePartner, deletePartner, createContribution, deleteContribution };
+
+/* ---------------------------------------------------------------------------------------------
+ * PRODUITS D'UN PARTENAIRE
+ *
+ * La table `partner_product` existait, l'espace stagiaire l'AFFICHAIT déjà (onglet « Offres
+ * partenaires »)… et RIEN ne l'écrivait : aucune route, aucun écran. Les produits ne pouvaient
+ * donc apparaître dans la boutique que si on les insérait à la main en SQL. C'est ce chaînon
+ * manquant que voici.
+ *
+ * Sur une ligne partenaire, l'école NE VEND PAS : elle met en relation. D'où deux prix distincts
+ * — `price_public` (le tarif catalogue du partenaire) et `price_school` (le tarif négocié pour
+ * les stagiaires) — et aucun stock : ce n'est pas l'inventaire de l'école.
+ * ------------------------------------------------------------------------------------------- */
+
+const PRODUCT_FIELDS = ['name', 'category', 'reference', 'price_public', 'price_school',
+    'url', 'image_url', 'note', 'active', 'sort_order'];
+
+/** Normalise une valeur de produit : bornes numériques, longueurs, drapeaux. */
+function cleanProduct(champ, brut) {
+    if (brut === '' || brut === null || brut === undefined) return null;
+    if (champ === 'active') return brut ? 1 : 0;
+    if (champ === 'sort_order') return Math.max(0, parseInt(brut, 10) || 0);
+    if (champ === 'price_public' || champ === 'price_school') {
+        const n = Number(brut);
+        // Un prix négatif ou délirant vient d'une faute de frappe, pas d'une intention.
+        return Number.isFinite(n) && n >= 0 && n <= 1e6 ? Number(n.toFixed(2)) : null;
+    }
+    const max = { name: 255, category: 120, reference: 80, url: 500, image_url: 500, note: 500 }[champ] || 255;
+    return String(brut).trim().slice(0, max) || null;
+}
+
+/** GET /api/partners/:id/produits — les produits d'un partenaire (actifs ET inactifs). */
+const getPartnerProducts = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[p]] = await conn.query(
+            'SELECT id FROM partner WHERE id = ? AND organization_id = ? LIMIT 1',
+            [req.params.id, req.user.organization_id]);
+        if (!p) return res.status(404).json({ message: 'Partenaire introuvable.' });
+        const [rows] = await conn.query(
+            `SELECT id, name, category, reference, price_public, price_school, url, image_url,
+                    note, active, sort_order
+             FROM partner_product WHERE partner_id = ? AND organization_id = ?
+             ORDER BY sort_order, name`,
+            [req.params.id, req.user.organization_id]);
+        res.json({ data: rows });
+    } catch (err) {
+        console.error('Erreur produits partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** POST /api/partners/:id/produits — ajoute un produit au catalogue du partenaire. */
+const createPartnerProduct = async (req, res) => {
+    const b = req.body || {};
+    if (!b.name || !String(b.name).trim()) return res.status(422).json({ message: 'Nom du produit requis.' });
+    try {
+        const conn = db.promise();
+        // Le partenaire doit appartenir à l'organisme : un identifiant venu d'ailleurs créerait
+        // un produit rattaché à un partenaire qu'on ne voit pas.
+        const [[p]] = await conn.query(
+            'SELECT id FROM partner WHERE id = ? AND organization_id = ? LIMIT 1',
+            [req.params.id, req.user.organization_id]);
+        if (!p) return res.status(404).json({ message: 'Partenaire introuvable.' });
+
+        const cols = ['id', 'organization_id', 'partner_id'];
+        const vals = [crypto.randomUUID(), req.user.organization_id, req.params.id];
+        for (const f of PRODUCT_FIELDS) {
+            if (b[f] === undefined) continue;
+            cols.push(f); vals.push(cleanProduct(f, b[f]));
+        }
+        await conn.query(
+            `INSERT INTO partner_product (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
+        logAudit(req, 'partner.product.create', 'PartnerProduct', req.params.id);
+        res.status(201).json({ message: 'Produit ajouté' });
+    } catch (err) {
+        console.error('Erreur création produit partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PATCH /api/partners/produits/:pid — modifie un produit. */
+const updatePartnerProduct = async (req, res) => {
+    const b = req.body || {};
+    const sets = [], vals = [];
+    for (const f of PRODUCT_FIELDS) {
+        if (b[f] === undefined) continue;
+        sets.push(`${f} = ?`); vals.push(cleanProduct(f, b[f]));
+    }
+    if (!sets.length) return res.status(422).json({ message: 'Rien à modifier.' });
+    try {
+        vals.push(req.params.pid, req.user.organization_id);
+        const [r] = await db.promise().query(
+            `UPDATE partner_product SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Produit introuvable.' });
+        logAudit(req, 'partner.product.update', 'PartnerProduct', req.params.pid);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur maj produit partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** DELETE /api/partners/produits/:pid — retire un produit du catalogue. */
+const deletePartnerProduct = async (req, res) => {
+    try {
+        const [r] = await db.promise().query(
+            'DELETE FROM partner_product WHERE id = ? AND organization_id = ?',
+            [req.params.pid, req.user.organization_id]);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Produit introuvable.' });
+        logAudit(req, 'partner.product.delete', 'PartnerProduct', req.params.pid);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur suppression produit partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getPartners, createPartner, updatePartner, deletePartner, createContribution, deleteContribution,
+    getPartnerProducts, createPartnerProduct, updatePartnerProduct, deletePartnerProduct };

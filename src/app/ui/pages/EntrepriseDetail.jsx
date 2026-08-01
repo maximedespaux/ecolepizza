@@ -16,6 +16,9 @@ const REP_ROLES = ["Gérant(e)", "Président(e)", "Directeur / Directrice", "Dir
 const CFIELDS = [
   { k: "name", label: "Nom de l'entreprise", full: true },
   { k: "siret", label: "SIRET" },
+  // Mention attendue dès qu'on facture une société, obligatoire en intracommunautaire.
+  // Le serveur ignore ce champ tant que la migration 123 n'est pas jouée.
+  { k: "vat_number", label: "N° TVA intracommunautaire", placeholder: "FR76123456789" },
   { k: "naf_ape", label: "Code NAF / APE" },
   { k: "legal_status", label: "Forme juridique", type: "select", options: LEGAL_STATUSES },
   { k: "opco", label: "OPCO / financeur", type: "select", dyn: "opco" },
@@ -328,7 +331,7 @@ export default function EntrepriseDetail() {
           {/* Coordonnées de l'entreprise */}
           <Card title={<span className="card-ttl"><Icon name="building" size={16} /> Coordonnées</span>}>
             <div className="grid cols-2" style={{ gap: 12 }}>
-              {CFIELDS.map(({ k, label, full, type, options, dyn }) => {
+              {CFIELDS.map(({ k, label, full, type, options, dyn, placeholder }) => {
                 const opts = dyn === "opco" ? opcoNames : (options || []);
                 const cur = form[k];
                 const allOpts = cur && !opts.includes(cur) ? [cur, ...opts] : opts;
@@ -340,7 +343,7 @@ export default function EntrepriseDetail() {
                         <option value="">—</option>
                         {allOpts.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
-                    : <input className="inp" value={cur || ""} onChange={set(k)} />}
+                    : <input className="inp" value={cur || ""} onChange={set(k)} placeholder={placeholder || ""} />}
                 </div>
                 );
               })}

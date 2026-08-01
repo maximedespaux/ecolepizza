@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const {
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate, duplicateTemplate,
-    getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
+    renameTemplate, getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
     getCustomTokens, saveCustomTokens,
 } = require('../controllers/template.controller.js');
 const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
@@ -25,6 +25,7 @@ router.post('/:slug/page-metrics', pageMetrics);         // marges réservées (
 router.get('/:slug/file', downloadTemplate);
 router.put('/:slug', saveTemplate);                       // métadonnées (étape) + corps builder
 router.post('/:slug/duplicate', duplicateTemplate);       // dupliquer un modèle
+router.put('/:slug/rename', renameTemplate);              // renommer l'identifiant (slug) + cascade
 router.post('/:slug', upload.single('file'), uploadTemplate); // fichier .docx
 router.delete('/:slug', resetTemplate);
 

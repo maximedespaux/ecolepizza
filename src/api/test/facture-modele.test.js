@@ -110,9 +110,10 @@ test('les jetons de facture sont proposés dans la PALETTE de l\'éditeur', () =
         'le groupe Facture n\'est pas ajouté à la palette');
     assert.match(src, /groups\.push\(articleTokensGroup\(\)\)/,
         'le groupe Ligne de facture n\'est pas ajouté à la palette');
-    // Et leur place dans l'ordre des groupes, sinon ils tombent en fin de liste.
-    assert.match(src, /'Organisme', 'Facture', 'Ligne de facture'/,
-        'les groupes de facture doivent être rangés après Organisme');
+    // Et leur place dans l'ordre des groupes, sinon ils tombent en fin de liste. « Acheteur
+    // (facture) » — les coordonnées de l'acheteur regroupées — s'insère entre les deux.
+    assert.match(src, /'Facture', 'Acheteur \(facture\)', 'Ligne de facture'/,
+        'les groupes de facture doivent être rangés ensemble, après l\'organisme');
 });
 
 test('les jetons de ligne proposés correspondent à ceux que le bloc remplit', () => {
@@ -149,6 +150,36 @@ test('le bloc survit à la grammaire de l\'éditeur (marqueurs dans des cellules
     assert.doesNotMatch(out, /\{[#/]Articles\}/, 'les marqueurs doivent disparaître du rendu');
     assert.ok(out.includes('Biberon') && out.includes('Farine'), 'les deux articles doivent sortir');
     assert.ok(out.includes('21.38 €') && out.includes('25.32 €'), 'chaque ligne garde SON taux');
+});
+
+test('les jetons de ligne fonctionnent AUSSI en PUCE (et non plus seulement en {Clé} brut)', () => {
+    // DÉFAUT SIGNALÉ : les jetons « Ligne de facture » / « par stagiaire » s'inséraient en TEXTE
+    // {Clé}, qui s'affiche « {Clé} » dans l'éditeur et, hors bloc, reste tel quel au rendu. Ils
+    // s'insèrent désormais comme des PUCES nommées ; le bloc doit donc remplir les puces, ligne
+    // par ligne, exactement comme le {Clé} brut.
+    const pill = (k, l) => `<span data-token="${k}" data-label="${l || k}">${l || k}</span>`;
+    const html = '<table><tbody><tr><th>Article</th><th>Qté</th></tr>'
+        + `<tr><td>{#Articles}${pill('Désignation')}</td><td>${pill('Quantité', 'Qté')}{/Articles}</td></tr></tbody></table>`;
+    const out = expandListBlocks(html, 'Articles', [
+        { name: 'Biberon', qty: 2, amount: 17.82, taxRate: 20 },
+        { name: 'Farine', qty: 1, amount: 24, taxRate: 5.5 },
+    ], articleRowTokens);
+    assert.ok(out.includes('Biberon') && out.includes('Farine'), 'les puces de désignation doivent être remplies');
+    assert.doesNotMatch(out, /data-token=|\{[#/]?Articles\}/, 'aucune puce ni marqueur ne doit subsister');
+    assert.doesNotMatch(out, /\{Désignation\}|\{Quantité\}/, 'aucun {Clé} littéral ne doit rester');
+});
+
+test('un bloc {#Stagiaires} en PUCES se remplit stagiaire par stagiaire', () => {
+    const { fillHtml } = require('../lib/htmlfill.js');
+    const pill = (k, l) => `<span data-token="${k}" data-label="${l || k}">${l || k}</span>`;
+    const tpl = `<p>{#Stagiaires}${pill('Personne')} — ${pill('OPCO')}<br>{/Stagiaires}</p>`;
+    const out = fillHtml(tpl, { org: {}, groupStagiaires: [
+        { civility: 'M.', first_name: 'Jean', last_name: 'Dupont', opco: 'AKTO' },
+        { civility: 'Mme', first_name: 'Marie', last_name: 'Martin', opco: 'OCAPIAT' },
+    ] });
+    assert.ok(/Jean Dupont/.test(out) && /Marie Martin/.test(out), 'chaque stagiaire doit sortir');
+    assert.ok(/AKTO/.test(out) && /OCAPIAT/.test(out), 'l\'OPCO doit être résolu PAR stagiaire, pas globalement');
+    assert.doesNotMatch(out, /data-token=|\{Personne\}/, 'ni puce ni {Clé} ne doit subsister');
 });
 
 test('l\'en-tête du tableau ne se répète pas', () => {
@@ -222,8 +253,14 @@ test('un tableau sans article ne laisse pas d\'en-tête orpheline', () => {
 
 test('l\'aperçu rend {Articles} en tableau, pas en texte d\'exemple', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/template.controller.js'), 'utf8');
-    const bloc = src.slice(src.indexOf('async function sampleTokenValues'));
-    assert.match(bloc.slice(0, 900), /m\['Articles'\] = articlesTable\(/,
+    // Bornée à la FONCTION (son accolade fermante en colonne 0), et non aux 900 premiers
+    // caractères comme avant : `slice(indexOf(…))` court jusqu'à la fin du fichier, il fallait
+    // donc borner — mais une longueur en octets se périme dès que la fonction grandit. Elle a
+    // grandi (identités d'exemple), et le test est passé au rouge alors que le contrat était
+    // intact. La borne suit désormais le code.
+    const debut = src.indexOf('async function sampleTokenValues');
+    const bloc = src.slice(debut, src.indexOf('\n}', debut) + 2);
+    assert.match(bloc, /m\['Articles'\] = articlesTable\(/,
         "sans ça, l'aperçu afficherait le texte d'exemple au lieu d'une grille");
 });
 
@@ -372,4 +409,91 @@ test('la ligne de totaux a autant de cellules que l\'en-tête', () => {
         assert.strictEqual(compte(lignes[lignes.length - 1]), compte(lignes[0]),
             'la ligne de totaux n\'a pas le même nombre de colonnes que l\'en-tête');
     }
+});
+
+// --- La référence produit sur la ligne ------------------------------------------------------
+
+test('la ligne d\'article expose sa référence (SKU)', () => {
+    const { articleRowTokens } = require('../lib/tokens.js');
+    const c = articleRowTokens({ reference: 'P0008', name: 'Biberon', qty: 1, unit_price_ht: 8.91, amount: 8.91, taxRate: 20 }, 0);
+    assert.strictEqual(c['Référence'], 'P0008');
+    // Une ligne sans référence (formation, ancien article) rend une chaîne vide, pas undefined.
+    assert.strictEqual(articleRowTokens({ name: 'Formation', amount: 850, taxRate: 0 }, 0)['Référence'], '');
+});
+
+test('la vente fige la référence de l\'article et une désignation propre', () => {
+    // Le SKU vient d'inventory_item ; il est figé sur la ligne. La désignation ne doit plus
+    // porter « × qté » (la quantité a sa colonne) — sinon la facture itemisée doublonne.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/sale.controller.js'), 'utf8');
+    assert.match(src, /SELECT name, sku, category/, 'le SKU n\'est pas lu depuis l\'article');
+    assert.match(src, /reference: it\.sku \|\| null/, 'la référence n\'est pas figée sur la ligne');
+    assert.doesNotMatch(src, /\$\{it\.name\}\$\{ln\._qty > 1 \? ` × \$\{ln\._qty\}`/, 'la désignation porte encore « × qté »');
+    assert.match(src, /if \(hasLineRef\) \{ lc\.push\('reference'\)/, 'la référence n\'est pas conditionnée à la colonne (118)');
+});
+
+test('la palette propose {Référence} et le rendu la remplit — pas de jeton orphelin', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/template.controller.js'), 'utf8');
+    assert.match(src, /t\('Référence', 'Référence \/ SKU/, '{Référence} n\'est pas dans la palette');
+    const remplis = Object.keys(require('../lib/tokens.js').articleRowTokens({ reference: 'x', name: 'y', amount: 1, taxRate: 20 }, 0));
+    assert.ok(remplis.includes('Référence'), '{Référence} est proposé mais jamais rempli');
+});
+
+// --- Largeur des tableaux : pleine largeur vs ajusté au contenu ------------------------------
+
+test('un tableau « auto » s\'ajuste au contenu sans couper le texte', () => {
+    // data-width="auto" : la largeur 100% est retirée, les largeurs de colonnes fixes neutralisées,
+    // et les cellules passent en white-space:nowrap — c'est ce qui empêche « Quantité » d'être
+    // coupé en « Quanti / té » dans le PDF (LibreOffice ne suit pas table-layout).
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const t = '<table data-width="auto" width="100%"><colgroup><col width="20%"></colgroup>'
+        + '<tbody><tr><th>Quantité</th></tr></tbody></table>';
+    const out = renderTemplateHtml(t, { org: {} }, { letterhead: false });
+    assert.doesNotMatch(out, /<table[^>]*\bwidth="100%"/, 'la pleine largeur n\'a pas été retirée');
+    assert.match(out, /white-space:nowrap/, 'les cellules ne sont pas en nowrap');
+    assert.match(out, /<col>/, 'les largeurs de colonnes fixes ne sont pas neutralisées');
+});
+
+test('un tableau « pleine largeur » (défaut) occupe toute la largeur', () => {
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const out = renderTemplateHtml('<table><tbody><tr><td>x</td></tr></tbody></table>', { org: {} }, { letterhead: false });
+    assert.match(out, /<table[^>]*\bwidth="100%"/, 'le défaut n\'est pas pleine largeur');
+    assert.doesNotMatch(out, /white-space:nowrap/, 'le défaut ne doit pas forcer le nowrap');
+});
+
+test('pleine largeur : les colonnes en pixels de l\'éditeur sont converties en % et la table s\'étire', () => {
+    // BUG SIGNALÉ : un tableau « pleine largeur » ne prenait pas toute la largeur, parce que
+    // ProseMirror fige des largeurs de colonnes en PIXELS qui bloquent l'étirement. On les
+    // convertit en pourcentages (proportions gardées) et on force width="100%".
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const t = '<table data-border="solid"><colgroup><col style="width:90px"><col style="width:30px"></colgroup>'
+        + '<tbody><tr><td>a</td><td>b</td></tr></tbody></table>';
+    const out = renderTemplateHtml(t, { org: {} }, { letterhead: false });
+    assert.match(out, /<table[^>]*\bwidth="100%"/, 'la table ne s\'étire pas à 100%');
+    assert.match(out, /<col width="75%">/, 'la colonne de 90px n\'est pas convertie en 75%');
+    assert.match(out, /<col width="25%">/, 'la colonne de 30px n\'est pas convertie en 25%');
+    assert.doesNotMatch(out, /width:\s*90px/, 'la largeur en pixels subsiste');
+});
+
+test('mode « half » : tableau compact aligné à droite (totaux)', () => {
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const t = '<table data-border="solid" data-width="half"><tbody><tr><td>Total TTC</td><td>17,40 €</td></tr></tbody></table>';
+    const out = renderTemplateHtml(t, { org: {} }, { letterhead: false });
+    assert.match(out, /<table[^>]*align="right"/, 'le tableau half n\'est pas aligné à droite');
+    assert.match(out, /<table[^>]*\bwidth="45%"/, 'le tableau half n\'est pas compact');
+});
+
+test('la facture peut désactiver le papier à en-tête automatique (identité déjà dans le corps)', () => {
+    // BUG SIGNALÉ : l'organisme apparaissait tout en haut de la facture alors que l'en-tête du
+    // modèle est vide — c'est le « papier à en-tête automatique », qui doublonne l'identité déjà
+    // présente dans le corps (encadré vendeur). Le modèle peut le couper via layout.noLetterhead.
+    const { renderTemplateHtml } = require('../lib/htmlfill.js');
+    const org = { legal_name: 'BAROUSSE', address: '95 rue', town: 'LANNEMEZAN', siret: '123' };
+    const avec = renderTemplateHtml('<p>x</p>', { org }, { headerHtml: '', letterhead: true });
+    const sans = renderTemplateHtml('<p>x</p>', { org }, { headerHtml: '', letterhead: false });
+    assert.match(avec, /BAROUSSE/, 'par défaut, le papier à en-tête reste actif');
+    assert.doesNotMatch(sans, /BAROUSSE/, 'letterhead:false ne doit pas ajouter l\'identité de l\'organisme en haut');
+    // Et le contrôleur lit le drapeau du modèle.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/invoice.controller.js'), 'utf8');
+    assert.match(src, /letterhead: !\(content\.layout && content\.layout\.noLetterhead\)/,
+        'la facture ne respecte pas le réglage « en-tête automatique » du modèle');
 });

@@ -100,6 +100,23 @@ export function saveShopSettings(payload) {
   return request("/ventes/settings", { method: "PUT", body: JSON.stringify(payload) });
 }
 
+// --- Entités émettrices (identités de facturation) ---
+export function getEmitters() {
+  return request("/emetteurs");
+}
+export function createEmitter(payload) {
+  return request("/emetteurs", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateEmitter(id, payload) {
+  return request(`/emetteurs/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function setDefaultEmitter(id) {
+  return request(`/emetteurs/${id}/defaut`, { method: "PUT" });
+}
+export function deleteEmitter(id) {
+  return request(`/emetteurs/${id}`, { method: "DELETE" });
+}
+
 // --- Émargement ---
 export function getAttendance(sessionId) {
   return request(`/attendance/${sessionId}`);
@@ -200,6 +217,7 @@ async function download(path, filename) {
     const err = new Error(d.message || d.error || "Téléchargement échoué");
     err.status = res.status;
     if (d.missing) err.missing = d.missing;
+    if (d.forcable) err.forcable = true; // le serveur accepte ?force=1 malgré les manques
     throw err;
   }
   const blob = await res.blob();
@@ -212,21 +230,28 @@ async function download(path, filename) {
   a.remove();
   URL.revokeObjectURL(url);
 }
-export function downloadFacturX(id, number) {
-  return download(`/factures/${id}/facturx`, `${number}.pdf`);
+// `force` : émet malgré les informations manquantes (cf. avertirConformite, côté serveur).
+export function downloadFacturX(id, number, force) {
+  return download(`/factures/${id}/facturx${force ? "?force=1" : ""}`, `${number}.pdf`);
 }
 // Renvoie une URL blob du PDF (pour l'aperçu dans un onglet).
-export async function facturXUrl(id) {
+export async function facturXUrl(id, force) {
   startLoading();
   let res;
   try {
-    res = await fetch(`${API_BASE_URL}/factures/${id}/facturx`, { credentials: "include" });
+    res = await fetch(`${API_BASE_URL}/factures/${id}/facturx${force ? "?force=1" : ""}`, { credentials: "include" });
   } finally {
     stopLoading();
   }
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
-    throw new Error(d.message || d.error || "Aperçu impossible");
+    // `missing` était PERDU ici : l'aperçu ne rendait qu'une phrase, alors que le serveur
+    // envoyait déjà la liste de ce qu'il faut compléter. Le téléchargement, lui, la propageait.
+    const err = new Error(d.message || d.error || "Aperçu impossible");
+    err.status = res.status;
+    if (d.missing) err.missing = d.missing;
+    if (d.forcable) err.forcable = true;
+    throw err;
   }
   return URL.createObjectURL(await res.blob());
 }
@@ -685,8 +710,10 @@ export function getShopRequests(status) {
 export function updateShopRequest(id, patch) {
   return request(`/boutique/demandes/${id}`, { method: "PUT", body: JSON.stringify(patch) });
 }
-export function invoiceShopRequest(id) {
-  return request(`/boutique/demandes/${id}/facture`, { method: "POST" });
+// `choix` (facultatif) : { bill_to, billing_profile_id, template_slug }. Sans lui, la facture
+// reprend ce qui a été figé à la commande — comportement d'avant.
+export function invoiceShopRequest(id, choix) {
+  return request(`/boutique/demandes/${id}/facture`, { method: "POST", body: JSON.stringify(choix || {}) });
 }
 export function deleteShopRequest(id) {
   return request(`/boutique/demandes/${id}`, { method: "DELETE" });
@@ -883,6 +910,10 @@ export function deleteTemplate(slug) {
 export function duplicateTemplate(slug) {
   return request(`/templates/${slug}/duplicate`, { method: "POST" });
 }
+// Renomme l'identifiant (slug) d'un modèle, en répercutant partout où il est référencé.
+export function renameTemplate(slug, newSlug) {
+  return request(`/templates/${slug}/rename`, { method: "PUT", body: JSON.stringify({ new_slug: newSlug }) });
+}
 // Réordonne les modèles (glisser-déposer).
 export function reorderTemplates(orders) {
   // orders : [{ slug, sort_order }] (position globale) ; rétro-compat : tableau de slugs.
@@ -957,6 +988,21 @@ export function deleteMember(id) {
 }
 
 // --- Partenaires ---
+/* Produits d'un partenaire — le catalogue montré aux stagiaires (« Offres partenaires »).
+   La table existait et l'espace stagiaire l'affichait déjà ; rien ne permettait de la remplir. */
+export function getPartenaireProduits(id) {
+  return request(`/partenaires/${id}/produits`);
+}
+export function createPartenaireProduit(id, payload) {
+  return request(`/partenaires/${id}/produits`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function updatePartenaireProduit(pid, payload) {
+  return request(`/partenaires/produits/${pid}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deletePartenaireProduit(pid) {
+  return request(`/partenaires/produits/${pid}`, { method: "DELETE" });
+}
+
 export function getPartenaires(category = "") {
   const query = category ? `?category=${encodeURIComponent(category)}` : "";
   return request(`/partenaires${query}`);

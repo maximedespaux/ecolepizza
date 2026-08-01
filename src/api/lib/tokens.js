@@ -139,6 +139,11 @@ const TOKEN_CATALOG = [
             { key: 'NDA', label: 'N° déclaration d’activité', sample: '75330000000' },
             { key: 'Adresse organisme', label: 'Adresse', sample: '1 rue du Four, 33000 Bordeaux' },
             { key: 'Ville organisme', label: 'Ville', sample: 'Bordeaux' },
+            { key: 'Code postal organisme', label: 'Code postal', sample: '33000' },
+            { key: 'Forme juridique organisme', label: 'Forme juridique', sample: 'S.A.S.' },
+            { key: 'Capital organisme', label: 'Capital social', sample: '2000 euros' },
+            { key: 'RCS organisme', label: 'RCS + ville', sample: 'RCS Tarbes 879 955 136' },
+            { key: 'NAF organisme', label: 'Code NAF/APE', sample: '8559A' },
             { key: 'Téléphone organisme', label: 'Téléphone', sample: '05 56 00 00 00' },
             { key: 'Email organisme', label: 'E-mail', sample: 'contact@ecole-pizza.fr' },
             { key: 'IBAN', label: 'IBAN (RIB)', sample: 'FR76 3000 4000 0100 0001 2345 678' },
@@ -153,13 +158,23 @@ const TOKEN_CATALOG = [
             { key: 'Type facture', label: 'Type de pièce', sample: 'Facture' },
             { key: 'Date facture', label: 'Date d’émission', sample: '21/07/2026' },
             { key: 'Échéance facture', label: 'Date d’échéance', sample: '20/08/2026' },
-            { key: 'Acheteur', label: 'Nom de l’acheteur', sample: 'Guillaume DESPAUX' },
+            // Échantillon neutre : il est REMPLACÉ par l'identité fictive tirée à l'aperçu
+            // (cf. lib/echantillons.js). Il portait le nom réel de l'utilisateur, ce qui rendait
+            // l'aperçu indiscernable d'une vraie facture.
+            { key: 'Acheteur', label: 'Nom de l’acheteur', sample: 'Camille BERGER' },
             { key: 'Adresse acheteur', label: 'Adresse de l’acheteur', sample: '12 rue des Fours, 33000 Bordeaux' },
             { key: 'Siret acheteur', label: 'SIRET de l’acheteur', sample: '123 456 789 00012' },
             { key: 'Total HT', label: 'Total hors taxes', sample: '17,82 €' },
             { key: 'Total TVA', label: 'Total TVA', sample: '3,56 €' },
             { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21,38 €' },
+            { key: 'Total remise', label: 'Total des remises', sample: '4,20 €',
+              desc: 'Somme des remises accordées sur la facture, en euros. Affiche « 0,00 € » '
+                  + 'quand il n’y a aucune remise. Vaut 0 sur les factures émises avant que la '
+                  + 'remise ne soit enregistrée (migration 122).' },
             { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20,00 % sur 17,82 € : 3,56 €' },
+            { key: 'Règlement', label: 'Moyen(s) de paiement', sample: 'Espèces + CB' },
+            { key: 'Détail règlement', label: 'Moyens et montants réglés', sample: 'Espèces : 300,00 € · CB : 700,00 €' },
+            { key: 'Règlements', label: 'Tableau des règlements', sample: '(tableau moyen / montant)' },
             { key: 'Articles', label: 'Tableau des articles', sample: '(tableau désignation / qté / prix / total)' },
         ],
     },
@@ -198,7 +213,8 @@ const TOKEN_CATALOG = [
             // majorité extérieure à l'organisme, et aucun membre n'ayant formé le candidat.
             { key: 'Jury président', label: 'Président du jury', sample: 'M. Paul Rossi — pizzaïolo, La Napoli' },
             { key: 'Jury professionnel', label: 'Membre professionnel', sample: 'Mme Léa Fabre — pizzaïola, Le Four' },
-            { key: 'Jury formateur', label: 'Membre formateur', sample: 'M. Guillaume Despaux — formateur' },
+            // Nom fictif comme ses deux voisins : celui-ci portait le nom réel de l'utilisateur.
+            { key: 'Jury formateur', label: 'Membre formateur', sample: 'M. Marc Vidal — formateur' },
             { key: 'Jury mention', label: 'Attestation de composition du jury', sample: 'Deux membres sur trois extérieurs à l\'organisme. Aucun membre n\'a formé les candidats évalués.' },
             // Résultats. {Résultats} est un TABLEAU HTML (bloc par bloc) : cf. RAW_TOKENS.
             { key: 'Blocs présentés', label: 'Blocs présentés', sample: 'BC01, BC02' },
@@ -211,7 +227,7 @@ const TOKEN_CATALOG = [
 ];
 
 // Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles']);
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles', 'Règlements']);
 
 // Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
 const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -238,7 +254,12 @@ function articlesTable(list) {
     if (!rows.length) return '';
     const taux = new Set(rows.map((l) => Number(l.taxRate ?? 20)));
     const mixte = taux.size > 1;
-    const head = '<tr><th>Désignation</th><th>Qté</th><th>P.U. HT</th><th>Montant HT</th>'
+    // Colonne Remise : même règle que la colonne TVA — elle n'apparaît QUE si elle a quelque
+    // chose à dire. Sur une facture sans aucune remise, une colonne de tirets vole de la largeur
+    // à la désignation, seul champ de longueur variable.
+    const remise = rows.some((l) => Number(l && l.discount_pct) > 0);
+    const head = '<tr><th>Désignation</th><th>Qté</th><th>P.U. HT</th>'
+        + (remise ? '<th>Remise</th>' : '') + '<th>Montant HT</th>'
         + (mixte ? '<th>TVA</th>' : '') + '<th>Total TTC</th></tr>';
 
     // LARGEURS DE COLONNES EXPLICITES. Sans elles, LibreOffice répartit à parts égales : la
@@ -246,20 +267,24 @@ function articlesTable(list) {
     // caractères — occupait autant de place, au point de se couper en « Q / té ». La
     // désignation est le seul champ de longueur variable ; elle prend ce que les autres, de
     // largeur connue, n'utilisent pas.
+    // Chaque combinaison somme à 100 : la désignation absorbe ce que les colonnes de largeur
+    // connue laissent. Les quatre cas sont écrits en clair plutôt que calculés — on les lit.
     const cols = mixte
-        ? [46, 7, 13, 13, 8, 13]
-        : [50, 8, 14, 14, 14];
+        ? (remise ? [40, 7, 12, 9, 12, 8, 12] : [46, 7, 13, 13, 8, 13])
+        : (remise ? [44, 8, 13, 9, 13, 13] : [50, 8, 14, 14, 14]);
     const colgroup = `<colgroup>${cols.map((w) => `<col width="${w}%">`).join('')}</colgroup>`;
     const cellules = rows.map((l, i) => articleRowTokens(l, i));
     const body = cellules.map((c) => (
         `<tr><td>${escCell(c['Désignation'])}</td><td>${escCell(c['Quantité'])}</td>`
-        + `<td>${escCell(c['Prix unitaire HT'])}</td><td>${escCell(c['Montant HT'])}</td>`
+        + `<td>${escCell(c['Prix unitaire HT'])}</td>`
+        + (remise ? `<td>${escCell(c['Remise'])}</td>` : '')
+        + `<td>${escCell(c['Montant HT'])}</td>`
         + (mixte ? `<td>${escCell(c['Taux TVA'])}</td>` : '')
         + `<td>${escCell(c['Montant TTC'])}</td></tr>`
     )).join('');
 
     // `width="100%"` : LibreOffice ignore la largeur CSS sur un tableau (cf. largeurTables).
-    return `<table width="100%">${colgroup}<tbody>${head}${body}${totalRow(cellules, mixte)}</tbody></table>`;
+    return `<table width="100%">${colgroup}<tbody>${head}${body}${totalRow(cellules, mixte, remise)}</tbody></table>`;
 }
 
 /**
@@ -281,7 +306,7 @@ function articlesTable(list) {
  * LA QUANTITÉ N'EST TOTALISÉE QUE SI ELLE EXISTE. Une facture de formation n'a pas de
  * quantités ; un « 0 » y ressemblerait à une donnée alors que c'est une absence.
  */
-function totalRow(cellules, mixte) {
+function totalRow(cellules, mixte, remise) {
     const nombre = (s) => Number(String(s || '').replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
     const eur = (n) => `${n.toFixed(2)} €`;
 
@@ -291,7 +316,10 @@ function totalRow(cellules, mixte) {
     const totalTtc = cellules.reduce((s, c) => s + nombre(c['Montant TTC']), 0);
 
     const g = (v) => `<td><strong>${escCell(v)}</strong></td>`;
-    return `<tr><td><strong>Total</strong></td>${g(totalQte)}<td></td>${g(eur(totalHt))}`
+    // La colonne Remise reste VIDE au total, pour la même raison que la colonne TVA : additionner
+    // des pourcentages ne veut rien dire. Le montant cumulé des remises a son jeton, {Total remise}.
+    return `<tr><td><strong>Total</strong></td>${g(totalQte)}<td></td>`
+        + (remise ? '<td></td>' : '') + `${g(eur(totalHt))}`
         + (mixte ? '<td></td>' : '') + `${g(eur(totalTtc))}</tr>`;
 }
 
@@ -358,6 +386,50 @@ function stagiaireRowTokens(s, i) {
  * restent accessibles dans le bloc — c'est `expandBlocks` qui ne remplace que les jetons de
  * ligne, laissant les autres au remplacement normal.
  */
+/** Tiret cadratin : ce que porte une case « sans remise ». Une case VIDE se lit comme une
+ *  colonne oubliée ; le tiret dit « on a regardé, il n'y en a pas ». */
+const SANS_REMISE = '—';
+
+/**
+ * Taux de remise d'une ligne, prêt à afficher : « 10 % », ou « — ».
+ *
+ * `null` (facture émise avant la migration 122, remise jamais enregistrée) et `0` (vendu sans
+ * remise) donnent le même affichage — dans les deux cas il n'y a rien à annoncer au client.
+ * Ils diffèrent en revanche pour le TOTAL en euros, qui ne doit sommer que du connu.
+ */
+function remiseTaux(l) {
+    const p = l && l.discount_pct;
+    if (p == null || !(Number(p) > 0)) return SANS_REMISE;
+    // 10 et non 10,00 : un taux entier s'écrit sans décimales sur une facture.
+    const n = Number(p);
+    return `${Number.isInteger(n) ? n : n.toFixed(2).replace('.', ',')} %`;
+}
+
+/**
+ * Remise d'une ligne EN EUROS : (brut − net) × quantité.
+ *
+ * Deux montants déjà arrondis au centime, soustraits puis multipliés — le résultat tombe juste
+ * et se raccroche au total facture. Repasser par le taux (net ÷ (1 − taux)) rendrait une
+ * troisième décimale et ferait diverger le total des remises de la somme des lignes, exactement
+ * la dérive que sale.controller.js documente avoir déjà payée.
+ *
+ * 0 si l'information manque : une facture d'avant la 122 ne doit pas inventer de remise.
+ */
+function remiseEuros(l) {
+    if (!l) return 0;
+    const brut = Number(l.unit_price_gross_ht);
+    const net = Number(l.unit_price_ht);
+    if (!Number.isFinite(brut) || !Number.isFinite(net) || brut <= net) return 0;
+    const qte = Number(l.qty || 0) || 0;
+    return Number(((brut - net) * qte).toFixed(2));
+}
+
+/** Somme des remises d'une facture, en euros. */
+function remiseTotale(list) {
+    const rows = Array.isArray(list) ? list : [];
+    return Number(rows.reduce((s, l) => s + remiseEuros(l), 0).toFixed(2));
+}
+
 function articleRowTokens(l, i) {
     const eur = (n) => (n == null || n === '' ? '' : `${Number(n).toFixed(2)} €`);
     const qte = Number(l.qty || 0) || null;
@@ -366,10 +438,12 @@ function articleRowTokens(l, i) {
     const ht = Number(l.amount || 0);
     return {
         'N°': String(i + 1),
+        'Référence': l.reference || '',
         'Désignation': l.name || '',
         'Quantité': qte != null ? String(qte) : '',
         'Prix unitaire HT': eur(pu),
         'Montant HT': eur(ht),
+        'Remise': remiseTaux(l),
         'Taux TVA': `${taux.toFixed(2)} %`,
         'Montant TVA': eur(Math.round(ht * taux) / 100),
         'Montant TTC': eur(ht + Math.round(ht * taux) / 100),
@@ -383,9 +457,14 @@ function articleRowTokens(l, i) {
  * listes, un seul mécanisme — plutôt qu'une seconde fonction qui ferait la même chose à un
  * nom près et divergerait à la première correction.
  */
-function expandListBlocks(html, nom, rows, rowTokens) {
+function expandListBlocks(html, nom, rows, rowTokens, opts = {}) {
     const list = Array.isArray(rows) ? rows : [];
     let out = String(html || '');
+    const enLigne = !!opts.inline;
+    // Nombre de lignes RÉSERVÉES (tableau à hauteur plancher). Les répétitions manquantes sont
+    // comblées par des lignes vides, seul procédé que LibreOffice respecte (cf. `lignesVides`).
+    const mini = Math.max(0, parseInt(opts.minLines, 10) || 0);
+    const comble = (corps, n) => lignesVides(corps, mini - n);
 
     /* FORME TABLEAU, traitée en premier.
      *
@@ -396,10 +475,14 @@ function expandListBlocks(html, nom, rows, rowTokens) {
      *
      * Les marqueurs vivent donc DANS des cellules, ce que la grammaire accepte, et c'est la
      * LIGNE qui les contient qu'on répète. `<tr>` complet à chaque article, marqueurs retirés.
+     *
+     * EN MODE « EN LIGNE » (tableau data-rows="inline"), c'est la même ligne qu'on repère, mais
+     * on la garde UNIQUE et on empile dans chaque cellule — cf. `empilerDansLaLigne`.
      */
     const reLigne = new RegExp(
-        `<tr\\b[^>]*>(?:(?!</tr>)[\\s\\S])*?\\{#\\s*${nom}\\s*\\}[\\s\\S]*?\\{/\\s*${nom}\\s*\\}(?:(?!</tr>)[\\s\\S])*?</tr>`, 'g');
+        `<tr\\b[^>]*>(?:(?!</tr>)[\\s\\S])*?\\{#\\s*${nom}\\s*\\}(?:(?!</tr>)[\\s\\S])*?\\{/\\s*${nom}\\s*\\}(?:(?!</tr>)[\\s\\S])*?</tr>`, 'g');
     out = out.replace(reLigne, (ligne) => {
+        if (enLigne) return empilerDansLaLigne(ligne, nom, list, rowTokens, mini);
         if (!list.length) return '';
         const gabarit = ligne
             .replace(new RegExp(`\\{#\\s*${nom}\\s*\\}`, 'g'), '')
@@ -409,9 +492,109 @@ function expandListBlocks(html, nom, rows, rowTokens) {
 
     const re = new RegExp(`\\{#\\s*${nom}\\s*\\}([\\s\\S]*?)\\{/\\s*${nom}\\s*\\}`, 'g');
     return out.replace(re, (m, tpl) => {
-        if (!list.length) return '';
-        return list.map((r, i) => remplirLigne(tpl, rowTokens(r, i))).join('');
+        // Liste vide : le bloc disparaît — mais un tableau à hauteur réservée garde ses lignes,
+        // sinon une facture sans article ferait remonter les totaux.
+        if (!list.length) return comble('', 0);
+        const corps = list.map((r, i) => remplirLigne(tpl, rowTokens(r, i))).join('');
+        return corps + comble(corps, list.length);
     });
+}
+
+/**
+ * Complète `corps` par `n` lignes vides, pour un tableau à hauteur réservée.
+ *
+ * POURQUOI DU CONTENU ET PAS UNE HAUTEUR CSS. LibreOffice ignore la hauteur d'un tableau sous
+ * TOUTES ses formes — attribut `height` sur <table> comme sur <tr>, `height` CSS sur la table
+ * ou sur la cellule, et même un `padding-bottom` en millimètres. Vérifié en rendant les six
+ * variantes côte à côte : toutes sortaient à la hauteur du seul contenu. Le seul levier que le
+ * moteur respecte, c'est le contenu lui-même — d'où ces lignes vides.
+ *
+ * `&nbsp;` et non une ligne nue : un blanc « vrai » se fait supprimer au même titre qu'un <p>
+ * vide (cf. htmlfill.js), et la ligne réservée s'évaporerait.
+ *
+ * Le saut d'amorce n'est ajouté QUE si le gabarit n'en finit pas déjà un. Un bloc écrit
+ * « …{Montant TTC}<br> » nous laisse en début de ligne neuve : en remettre un décalerait tout
+ * d'une ligne et le tableau dépasserait la hauteur demandée d'un cran.
+ */
+function lignesVides(corps, n) {
+    if (n <= 0) return '';
+    const amorce = corps && !/<br\s*\/?>\s*$/i.test(corps) ? '<br>' : '';
+    return amorce + '&nbsp;<br>'.repeat(n - 1) + '&nbsp;';
+}
+
+/**
+ * Mode « en ligne » : une SEULE ligne de tableau, les articles empilés DANS CHAQUE CELLULE.
+ *
+ * LE PIÈGE QUE ÇA CORRIGE. Dans les vrais modèles, le bloc ENJAMBE la ligne : `{#Articles}`
+ * ouvre dans la première cellule et `{/Articles}` ferme dans la dernière (constaté sur
+ * `facture-stagiaire` : sept cellules, marqueurs en 0 et en 6). Répéter tel quel le contenu
+ * situé entre les marqueurs recopie donc aussi les `</td><td>` intermédiaires : la ligne gagnait
+ * des COLONNES au lieu de gagner des lignes, et la facture sortait avec le deuxième article
+ * étalé à droite du premier. Vu à l'aperçu PDF, pas au test — le test d'origine posait les deux
+ * marqueurs dans UNE cellule, une forme inventée, pas celle des modèles réels.
+ *
+ * On répète donc chaque cellule SUR PLACE, séparateur `<br>`, et on comble chaque cellule
+ * jusqu'à la hauteur réservée. Le `<p>` que ProseMirror pose dans chaque cellule est conservé
+ * UNIQUE et c'est son contenu qu'on répète : sinon un `<p>` par article rouvrirait les marges
+ * de paragraphe et l'empilement respirerait deux fois trop.
+ */
+function empilerDansLaLigne(ligne, nom, list, rowTokens, mini) {
+    const reOuvre = new RegExp(`\\{#\\s*${nom}\\s*\\}`);
+    const reFerme = new RegExp(`\\{/\\s*${nom}\\s*\\}`);
+
+    // Découpe en cellules, en conservant ce qui les sépare (<tr>, blancs, </tr>).
+    const cellules = [];
+    const reCell = /(<(td|th)\b[^>]*>)([\s\S]*?)(<\/\2>)/gi;
+    let fin = 0, m;
+    while ((m = reCell.exec(ligne)) !== null) {
+        cellules.push({ avant: ligne.slice(fin, m.index), ouvrant: m[1], contenu: m[3], fermant: m[4] });
+        fin = m.index + m[0].length;
+    }
+    if (!cellules.length) return ligne;
+    const queue = ligne.slice(fin);
+
+    const iOuvre = cellules.findIndex((c) => reOuvre.test(c.contenu));
+    const iFerme = cellules.findIndex((c) => reFerme.test(c.contenu));
+    if (iOuvre === -1 || iFerme === -1 || iFerme < iOuvre) return ligne; // forme inattendue : intacte
+
+    return cellules.map((c, i) => {
+        // HORS de la portée des marqueurs : cellule laissée telle quelle. C'est ce qui distingue
+        // un bloc qui ENJAMBE la ligne (toutes les cellules se remplissent) d'un bloc tenant dans
+        // UNE cellule (les voisines ne doivent surtout pas être recopiées par article).
+        if (i < iOuvre || i > iFerme) return c.avant + c.ouvrant + c.contenu + c.fermant;
+
+        /* APLATISSEMENT DES PARAGRAPHES. Une cellule peut en contenir PLUSIEURS — dans
+         * `facture-stagiaire`, les colonnes « Taux TVA » et « Taux TTC » en ont deux, dont un
+         * vide resté là du temps où la ligne se répétait (sans conséquence alors). Répéter tel
+         * quel un bloc multi-paragraphes rouvre les marges à chaque article ; et une extraction
+         * naïve du `<p>` capture `A</p><p>B` comme intérieur, produisant une imbrication invalide
+         * que le moteur normalise en saut de ligne PARASITE. Sur l'aperçu, les deux dernières
+         * colonnes flottaient une ligne plus bas que les cinq autres.
+         *
+         * On aplatit donc : frontière de paragraphe → `<br>`, et une seule enveloppe `<p>` en
+         * sortie (ses attributs — un alignement, typiquement — sont repris du premier). */
+        const attrsP = (/<p\b([^>]*)>/i.exec(c.contenu) || ['', ''])[1];
+        const avaitP = /<p\b/i.test(c.contenu);
+        let gabarit = c.contenu
+            .replace(/<\/p>\s*<p\b[^>]*>/gi, '<br>')
+            .replace(/^\s*<p\b[^>]*>/i, '')
+            .replace(/<\/p>\s*$/i, '');
+
+        // Ce qui précède l'ouvrant / suit le fermant est du texte FIXE de la cellule : écrit une
+        // fois, jamais répété.
+        let texteAvant = '', texteApres = '';
+        if (i === iOuvre) { const p = gabarit.split(reOuvre); texteAvant = p[0]; gabarit = p.slice(1).join(''); }
+        if (i === iFerme) { const p = gabarit.split(reFerme); gabarit = p[0]; texteApres = p.slice(1).join(''); }
+
+        // Sauts en tête et en queue du motif : ils se multiplieraient par le nombre d'articles.
+        // C'est exactement le paragraphe vide ci-dessus — anodin en répétition de lignes, il
+        // ajoutait ici une ligne blanche PAR article.
+        gabarit = gabarit.replace(/^(?:\s|<br\s*\/?>)+/i, '').replace(/(?:\s|<br\s*\/?>)+$/i, '');
+
+        const corps = list.map((r, k) => remplirLigne(gabarit, rowTokens(r, k))).join('<br>');
+        const rempli = texteAvant + corps + lignesVides(corps, mini - list.length) + texteApres;
+        return c.avant + c.ouvrant + (avaitP ? `<p${attrsP}>${rempli}</p>` : rempli) + c.fermant;
+    }).join('') + queue;
 }
 
 /** Remplace, dans un gabarit, les jetons d'UNE ligne — puces de l'éditeur comme texte {Clé}. */
@@ -446,7 +629,18 @@ function expandGroupBlocks(html, list, customDefs, globalValues) {
             const repl = { ...row, ...custom };
             // On ne remplace QUE les jetons par stagiaire / personnalisés ; les jetons
             // purement globaux sont laissés au remplacement global (fillHtml).
-            return String(tpl).replace(/\{\s*([^{}|]+?)\s*(?:\|\s*([+-]?\d+)\s*)?\}/g, (mm, ref, off) => {
+            let out = String(tpl);
+            // 1) Puces (jetons cliqués dans la palette) : <span data-token="Clé">…</span>.
+            //    Les jetons par stagiaire s'insèrent désormais comme puces propres (et non plus
+            //    en {Clé} brut) — il faut donc les remplir ICI, par stagiaire, sinon la puce
+            //    « Prénom » retomberait sur le remplacement GLOBAL (le stagiaire du dossier).
+            for (const [k, val] of Object.entries(repl)) {
+                const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'),
+                    escCell(val == null ? '' : String(val)));
+            }
+            // 2) Forme texte {Clé} (modèles hérités, décalage de date {Jour1|+2}).
+            return out.replace(/\{\s*([^{}|]+?)\s*(?:\|\s*([+-]?\d+)\s*)?\}/g, (mm, ref, off) => {
                 if (!(ref in repl)) return mm;
                 let v = repl[ref] == null ? '' : String(repl[ref]);
                 if (off) v = shiftDate(v, parseInt(off, 10));
@@ -572,11 +766,49 @@ function invoiceTokens(inv = {}) {
         'Total HT': inv.totalHt || '',
         'Total TVA': inv.totalTva || '',
         'Total TTC': inv.totalTtc || '',
+        // Remise consentie sur l'ensemble de la facture. Formaté comme les totaux voisins
+        // (deux décimales, toujours) et NON avec euro(), qui rend une chaîne VIDE sur zéro et
+        // laisse tomber les décimales d'un montant rond : un modèle qui réserve une ligne
+        // « Remise » doit afficher « 0.00 € », pas un trou, et s'aligner sur Total HT / Total TTC.
+        'Total remise': `${remiseTotale(inv.articles).toFixed(2)} €`,
         'Détail TVA': inv.detailTva || '',
+        // Règlement : le moyen (résumé) et le détail moyen+montant. {Règlements} en fait un tableau.
+        'Règlement': inv.reglement || '',
+        'Détail règlement': inv.detailReglement || '',
+        'Règlements': paiementsTable(inv.payments),
         // Tableau complet, comme {Résultats}. Le bloc {#Articles}…{/Articles} reste possible
         // pour qui veut choisir ses colonnes ; ce jeton-ci est le chemin normal.
         'Articles': articlesTable(inv.articles),
     };
+}
+
+/**
+ * Jetons d'UNE ligne de règlement, dans un bloc {#Paiements}…{/Paiements}.
+ * Le montant réglé par ce moyen, plus banque et numéro pour un chèque.
+ */
+function paiementRowTokens(p, i) {
+    const eur = (n) => (n == null || n === '' ? '' : `${Number(n).toFixed(2)} €`);
+    return {
+        'N°': String(i + 1),
+        'Moyen': p.method || '',
+        'Montant réglé': eur(p.amount),
+        'Banque': p.bank || '',
+        'N° chèque': p.cheque_number || '',
+    };
+}
+
+/** Petit tableau des règlements (moyen | montant), colonne chèque si un chèque est détaillé. */
+function paiementsTable(list) {
+    const rows = Array.isArray(list) ? list : [];
+    if (!rows.length) return '';
+    const cheque = rows.some((p) => p.cheque_number || p.bank);
+    const head = `<tr><th>Moyen</th>${cheque ? '<th>Banque / n° chèque</th>' : ''}<th>Montant</th></tr>`;
+    const body = rows.map((p, i) => {
+        const c = paiementRowTokens(p, i);
+        const ref = [c['Banque'], c['N° chèque'] && `n° ${c['N° chèque']}`].filter(Boolean).join(' · ');
+        return `<tr><td>${escCell(c['Moyen'])}</td>${cheque ? `<td>${escCell(ref)}</td>` : ''}<td style="text-align:right">${escCell(c['Montant réglé'])}</td></tr>`;
+    }).join('');
+    return `<table width="100%">${head}${body}</table>`;
 }
 
 function resolveTokens(ctx = {}) {
@@ -690,8 +922,12 @@ function resolveTokens(ctx = {}) {
         // Organisme
         Organisme: o.legal_name || '', 'Organisme court': o.short_name || '', Responsable: o.manager || '',
         'Siret organisme': o.siret || '', 'TVA organisme': o.vat_number || '', NDA: o.nda || '',
-        'Adresse organisme': orgAddress, 'Ville organisme': o.town || '',
+        'Adresse organisme': orgAddress, 'Ville organisme': o.town || '', 'Code postal organisme': o.zip_code || '',
         'Téléphone organisme': o.phone || '', 'Email organisme': o.email || '',
+        // Identité de société — portées par l'entité émettrice sur une facture (l'organisme
+        // n'a pas ces colonnes ; elles restent vides hors facture).
+        'Forme juridique organisme': o.legal_status || '', 'Capital organisme': o.capital || '',
+        'RCS organisme': o.rcs || '', 'NAF organisme': o.naf_ape || '',
         IBAN: o.iban || '', BIC: o.bic || '', Banque: o.bank_name || '',
         // Examen de certification (procès-verbal de session)
         Certification: ex.certification || '', 'Code RNCP': ex.rncp_code || '',
@@ -724,4 +960,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };

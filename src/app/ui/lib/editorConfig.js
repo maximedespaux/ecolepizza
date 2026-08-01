@@ -23,13 +23,38 @@ const StyledTable = Table.extend({
           return { "data-border": b, class: `tbl-b-${b}` };
         },
       },
+      // Largeur du tableau : « full » = pleine largeur (défaut), « auto » = ajusté au contenu
+      // (les colonnes prennent la place de leur texte, sans le couper). Sérialisé en data-width ;
+      // le rendu PDF l'interprète (LibreOffice ne suit pas table-layout de façon fiable).
+      widthMode: {
+        default: "full",
+        parseHTML: (el) => el.getAttribute("data-width") || "full",
+        renderHTML: (attrs) => ({ "data-width": attrs.widthMode || "full" }),
+      },
+      // Développement des blocs {#Articles}/{#Paiements} contenus dans ce tableau :
+      // « repeat » (défaut) = une LIGNE de tableau par article ; « inline » = une seule ligne,
+      // les articles empilés dans la cellule avec les <br> du gabarit. Sérialisé en data-rows,
+      // lu par expandInlineTables côté rendu.
+      rowsMode: {
+        default: "repeat",
+        parseHTML: (el) => el.getAttribute("data-rows") || "repeat",
+        renderHTML: (attrs) => (attrs.rowsMode === "inline" ? { "data-rows": "inline" } : {}),
+      },
+      // Hauteur RÉSERVÉE, comptée en lignes d'articles (0 = pas de plancher). Les articles
+      // manquants sont comblés par des lignes vides au rendu : LibreOffice ignore toute hauteur
+      // de tableau (attribut comme CSS), seul le contenu fait la hauteur. Cf. lignesVides().
+      minLines: {
+        default: 0,
+        parseHTML: (el) => parseInt(el.getAttribute("data-minlines"), 10) || 0,
+        renderHTML: (attrs) => (attrs.minLines > 0 ? { "data-minlines": String(attrs.minLines) } : {}),
+      },
     };
   },
 });
 import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
-import { FontSize, LineHeight, PageBreak } from "./tiptapExtensions.js";
+import { FontSize, LineHeight, PageBreak, Columns, Column } from "./tiptapExtensions.js";
 import { TokenNode } from "./TokenNode.js";
 
 /** Jeu d'extensions partagé par les éditeurs (corps, en-tête, pied de page). */
@@ -51,6 +76,8 @@ export function buildExtensions({ tokens = true } = {}) {
     TableRow,
     TableHeader,
     TableCell,
+    Columns,
+    Column,
   ];
   if (tokens) ext.push(TokenNode);
   return ext;
