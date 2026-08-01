@@ -250,7 +250,20 @@ function EcoleTab() {
             <b className="shop-name">{p.name}</b>
             {p.personalizable ? <span className="shop-brod"><Icon name="edit" size={11} /> Brodé à ton nom</span> : null}
             <span className="shop-price">
-              <b className="tnum">{euro(p.price_ttc)} <span className="shop-unit">TTC</span></b>
+              {/* Remise stagiaire : prix catalogue barré + badge. Une remise qu'on ne voit pas
+                  ne fait plaisir à personne — et sans le prix barré, le stagiaire ne peut pas
+                  savoir qu'il paie moins cher que le tarif affiché ailleurs. */}
+              <b className="tnum">
+                {p.remise_pct ? (
+                  <span className="hint" style={{ textDecoration: "line-through", fontWeight: 400 }}>
+                    {euro(p.price_ttc_avant)}
+                  </span>
+                ) : null}
+                {euro(p.price_ttc)} <span className="shop-unit">TTC</span>
+                {/* Le libellé porte la forme SAISIE (« −5,00 € » ou « −10 % ») : annoncer
+                    « −12,53 % » là où l'école a promis 5 € serait exact et incompréhensible. */}
+                {p.remise_label ? <span className="badge g">{p.remise_label}</span> : null}
+              </b>
               <span className="shop-ht tnum">{euro(p.price_ht)} HT</span>
             </span>
             {/* Disponibilité réelle (stock − demandes en cours). On affiche le NOMBRE, mais

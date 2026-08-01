@@ -8,6 +8,7 @@ const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
+const { prixStagiaire } = require('../lib/remise.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -79,6 +80,22 @@ async function releaseAutoQuizzes(conn, learner) {
 }
 
 // Retrouve le stagiaire (learner) lié au compte connecté.
+/* Colonnes de `inventory_item` arrivées par la 125 : sondées avant usage, sinon la requête
+ * échouerait et la commande deviendrait impossible pour une remise facultative. */
+
+async function colLigneDemande(conn, colonne) { return colTable(conn, 'shop_request_line', colonne); }
+async function colInventaire(conn, colonne) { return colTable(conn, 'inventory_item', colonne); }
+
+async function colTable(conn, table, colonne) {
+    try {
+        const [r] = await conn.query(
+            `SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ? LIMIT 1`,
+            [table, colonne]);
+        return r.length > 0;
+    } catch { return false; }
+}
+
 async function learnerForUser(conn, userId) {
     const [rows] = await conn.query('SELECT * FROM learner WHERE user_id = ? LIMIT 1', [userId]);
     return rows[0] || null;
@@ -1016,12 +1033,21 @@ const getBoutique = async (req, res) => {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
-        const [rows] = await conn.query(
-            `SELECT id, name, category, unit_price, tax_rate, quantity
+        // `learner_discount_pct` arrive par la 125 : sans elle, la cascade retombe sur la
+        // requête d'avant et la boutique affiche le prix catalogue, comme aujourd'hui.
+        let rows;
+        for (const remise of ['learner_discount_pct, learner_discount_eur',
+                              'NULL AS learner_discount_pct, NULL AS learner_discount_eur']) {
+          try {
+            [rows] = await conn.query(
+              `SELECT id, name, category, unit_price, tax_rate, quantity, ${remise}
              FROM inventory_item WHERE organization_id = ? AND unit_price IS NOT NULL
              ORDER BY category, name`,
-            [learner.organization_id]
-        );
+              [learner.organization_id]
+            );
+            break;
+          } catch (e) { if (!isMissingSchema(e)) throw e; }
+        }
         // Stock DISPONIBLE = stock physique − ce qui est déjà réservé par des demandes en
         // cours. Une demande ne décrémente pas l'inventaire (seule la caisse le fait, à la
         // vente) : sans cette déduction, trois stagiaires peuvent commander le même dernier
@@ -1031,10 +1057,26 @@ const getBoutique = async (req, res) => {
         const reserved = await reservedByPendingRequests(conn, learner.organization_id);
         const data = rows.map((r) => {
             const dispo = Math.max(0, Number(r.quantity) - (reserved.get(r.id) || 0));
+            /* REMISE STAGIAIRE (migration 125). Le prix montré ici est le prix REMISÉ : c'est
+             * celui que le stagiaire paiera, donc celui qui doit s'afficher. On renvoie aussi le
+             * prix barré et le taux, pour que la boutique puisse montrer l'économie — une remise
+             * qu'on ne voit pas ne fait plaisir à personne.
+             * Arrondi au centime AVANT multiplication, comme partout ailleurs (cf. sale.controller). */
+            const { brut: brutHt, net: netHt, taux, libelle } = prixStagiaire(r);
             return {
                 id: r.id, name: cleanName(r.name), category: r.category,
-                price_ht: Number(r.unit_price), tax_rate: Number(r.tax_rate),
-                price_ttc: +(Number(r.unit_price) * (1 + Number(r.tax_rate) / 100)).toFixed(2),
+                price_ht: netHt, tax_rate: Number(r.tax_rate),
+                price_ttc: +(netHt * (1 + Number(r.tax_rate) / 100)).toFixed(2),
+                // Prix catalogue + taux : présents SEULEMENT s'il y a une remise, pour que le
+                // front n'ait pas à comparer deux nombres pour savoir s'il doit barrer un prix.
+                ...(taux > 0 ? {
+                    // `remise_label` porte la forme SAISIE (« −5,00 € » ou « −10 % »), pas le
+                    // taux effectif : annoncer « −12,53 % » là où l'école a promis 5 € serait
+                    // exact et incompréhensible.
+                    remise_label: libelle,
+                    remise_pct: taux,
+                    price_ttc_avant: +(brutHt * (1 + Number(r.tax_rate) / 100)).toFixed(2),
+                } : {}),
                 stock: dispo,            // ce qu'il reste réellement à prendre
                 in_stock: dispo > 0,
                 personalizable: isPersonalizable(r.category),
@@ -1227,7 +1269,7 @@ const createShopRequest = async (req, res) => {
                     price: price == null ? null : Number(price), tax: 20, perso: null, variant: null, brodable: false });
             } else {
                 const [[it]] = await conn.query(
-                    'SELECT id, name, category, unit_price, tax_rate FROM inventory_item WHERE id = ? AND organization_id = ?',
+                    `SELECT id, name, category, unit_price, tax_rate, ${await colInventaire(conn, 'learner_discount_eur') ? 'learner_discount_pct, learner_discount_eur' : 'NULL AS learner_discount_pct, NULL AS learner_discount_eur'} FROM inventory_item WHERE id = ? AND organization_id = ?`,
                     [l.id, learner.organization_id]
                 );
                 if (!it || it.unit_price == null) continue;
@@ -1246,8 +1288,14 @@ const createShopRequest = async (req, res) => {
                     if (!perso) return res.status(422).json({ message: `« ${cleanName(it.name)} » est brodé : indique le nom et le prénom.` });
                     if (!variant) return res.status(422).json({ message: `« ${cleanName(it.name)} » : choisis la taille et la coupe.` });
                 }
+                /* REMISE STAGIAIRE (125), APPLIQUÉE ICI ET PAS SEULEMENT À L'AFFICHAGE. Le prix
+                 * retenu vient de la base, jamais du panier — un panier trafiqué ne peut donc pas
+                 * imposer son prix. On fige aussi le taux et le prix catalogue sur la ligne : le
+                 * stagiaire a vu un prix, c'est celui-là qui l'engage même si l'école change sa
+                 * remise le lendemain. Le brut sert ensuite à la colonne « Remise » de la facture. */
+                const { brut, net, taux: tauxStag } = prixStagiaire(it);
                 resolved.push({ source: 'ECOLE', pprod: null, item: it.id, label: cleanName(it.name), qty,
-                    price: Number(it.unit_price), tax: Number(it.tax_rate), perso: perso || null, variant, brodable });
+                    price: net, brut, remise: tauxStag, tax: Number(it.tax_rate), perso: perso || null, variant, brodable });
             }
         }
         if (!resolved.length) return res.status(422).json({ message: 'Aucun article valide dans la demande.' });
@@ -1300,6 +1348,11 @@ const createShopRequest = async (req, res) => {
             }
         }
 
+        /* PAS DE CHOIX DE DESTINATAIRE ICI. Le stagiaire commande, il ne décide pas qui sera
+         * facturé : c'est l'école qui sait si l'employeur prend en charge, et elle le tranche à
+         * l'émission (cf. shopRequest.controller, modale de facturation). Lui poser la question
+         * au panier l'obligerait à connaître un accord commercial qui ne le regarde pas, et
+         * l'école devrait de toute façon revérifier derrière. */
         const ref = await nextShopRef(conn, learner.organization_id);
         await conn.query(
             'INSERT INTO shop_request (id, organization_id, learner_id, ref, note, pickup_at) VALUES (uuid(), ?, ?, ?, ?, ?)',
@@ -1309,10 +1362,18 @@ const createShopRequest = async (req, res) => {
         const [[created]] = await conn.query('SELECT id FROM shop_request WHERE ref = ? LIMIT 1', [ref]);
         for (let i = 0; i < resolved.length; i++) {
             const r = resolved[i];
+            // Taux et prix catalogue figés SUR LA LIGNE quand la 125 est jouée : c'est ce qui
+            // permettra à la facture d'afficher la remise consentie plutôt qu'un prix nu.
+            const lc = ['id', 'request_id', 'source', 'inventory_item_id', 'partner_product_id', 'label',
+                'qty', 'unit_price_ht', 'tax_rate', 'personalization', 'variant', 'sort_order'];
+            const lv = [created.id, r.source, r.item, r.pprod, r.label, r.qty, r.price, r.tax, r.perso, r.variant, i];
+            if (r.remise > 0 && await colLigneDemande(conn, 'discount_pct')) {
+                lc.push('discount_pct', 'unit_price_gross_ht');
+                lv.push(r.remise, r.brut);
+            }
             await conn.query(
-                `INSERT INTO shop_request_line (id, request_id, source, inventory_item_id, partner_product_id, label, qty, unit_price_ht, tax_rate, personalization, variant, sort_order)
-                 VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [created.id, r.source, r.item, r.pprod, r.label, r.qty, r.price, r.tax, r.perso, r.variant, i]
+                `INSERT INTO shop_request_line (${lc.join(', ')}) VALUES (uuid(), ${lc.slice(1).map(() => '?').join(', ')})`,
+                lv
             );
         }
         // Prévient le secrétariat : sans cela, une commande n'existait QUE dans l'écran

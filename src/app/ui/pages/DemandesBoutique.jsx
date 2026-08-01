@@ -131,6 +131,23 @@ function Demande({ d, onChange, onErreur }) {
                 : euro(l.unit_price_ht * l.qty * (1 + l.tax_rate / 100))}
             </b>
           </div>
+          {/* Remise stagiaire consentie sur cette ligne, telle qu'elle a été FIGÉE à la commande.
+              Sans elle, l'école voyait un total sans savoir d'où venait l'écart avec le prix
+              catalogue — et ne pouvait pas répondre à un stagiaire qui conteste son montant.
+              Placée SOUS la ligne, comme la broderie : la ligne principale est déjà dense. */}
+          {l.discount_pct > 0 && l.unit_price_gross_ht != null ? (
+            <div className="cart-perso" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 8px" }}>
+              <label style={{ margin: 0 }}>Remise stagiaire</label>
+              <span className="tnum" style={{ textDecoration: "line-through", color: "var(--muted)" }}>
+                {euro(l.unit_price_gross_ht * l.qty * (1 + l.tax_rate / 100))}
+              </span>
+              <span className="badge g">−{Number.isInteger(l.discount_pct) ? l.discount_pct : l.discount_pct.toFixed(2).replace(".", ",")} %</span>
+              <b className="tnum">{euro(l.unit_price_ht * l.qty * (1 + l.tax_rate / 100))}</b>
+              <span className="hint">
+                soit {euro((l.unit_price_gross_ht - l.unit_price_ht) * l.qty * (1 + l.tax_rate / 100))} d'économie
+              </span>
+            </div>
+          ) : null}
           {/* Ce qu'il faut broder. C'est l'info la plus critique de la demande : sans elle,
               la veste part chez le brodeur sans nom. Elle doit sauter aux yeux. */}
           {l.personalization ? (
