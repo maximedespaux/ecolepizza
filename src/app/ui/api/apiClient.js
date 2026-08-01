@@ -988,6 +988,21 @@ export function deleteMember(id) {
 }
 
 // --- Partenaires ---
+/* Produits d'un partenaire — le catalogue montré aux stagiaires (« Offres partenaires »).
+   La table existait et l'espace stagiaire l'affichait déjà ; rien ne permettait de la remplir. */
+export function getPartenaireProduits(id) {
+  return request(`/partenaires/${id}/produits`);
+}
+export function createPartenaireProduit(id, payload) {
+  return request(`/partenaires/${id}/produits`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function updatePartenaireProduit(pid, payload) {
+  return request(`/partenaires/produits/${pid}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deletePartenaireProduit(pid) {
+  return request(`/partenaires/produits/${pid}`, { method: "DELETE" });
+}
+
 export function getPartenaires(category = "") {
   const query = category ? `?category=${encodeURIComponent(category)}` : "";
   return request(`/partenaires${query}`);

@@ -94,6 +94,11 @@ const ACTION_LABEL = {
     'partner.delete': ['Partenaire supprimé', R],
     'partner.contribution.create': ['Financement enregistré', G],
     'partner.contribution.delete': ['Financement supprimé', R],
+    // Catalogue vendu par un partenaire, visible des stagiaires : ces prix les engagent, donc
+    // leurs modifications se tracent comme le reste.
+    'partner.product.create': ['Produit partenaire ajouté', G],
+    'partner.product.update': ['Produit partenaire modifié', A],
+    'partner.product.delete': ['Produit partenaire retiré', R],
     'opco.create': ['OPCO créé', G],
 
     // Quiz
@@ -169,6 +174,7 @@ const ENTITY_LABEL = {
     AccountingSettings: ['Réglages comptables', 'm'],
     Partner: ['Partenaire', 'm'],
     PartnerContribution: ['Financement', 'm'],
+    PartnerProduct: ['Produit partenaire', 'm'],
     Opco: ['OPCO', 'm'],
     Organization: ['Organisme', 'm'],
     AccessProfile: ['Profil d\'accès', 'm'],

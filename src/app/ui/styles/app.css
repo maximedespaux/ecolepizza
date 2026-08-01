@@ -1411,7 +1411,15 @@ tbody tr:last-child td{border-bottom:none}
 .mbody textarea.inp{width:100%;resize:vertical;line-height:1.45}
 
 /* Partenaires : grille de fiches de suivi */
-.partner-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+/* DEUX colonnes plutôt que trois. À 280px de plancher une troisième entrait, et chaque fiche
+   tombait à 323px : depuis que la carte porte le catalogue du partenaire (produit · catégorie ·
+   référence, puis prix public · tarif école · lien), ce formulaire à trois colonnes n'y tenait
+   plus — les champs descendaient à ~90px et les libellés passaient sur deux lignes.
+   `auto-fill` reste : la grille rendra trois colonnes sur un écran vraiment large. */
+.partner-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:14px}
+@media(max-width:940px){
+  .partner-grid{grid-template-columns:1fr}
+}
 .partner-meta{display:flex;flex-direction:column;gap:3px;font-size:13px;margin:6px 0}
 .partner-meta a{color:#1d6fb8}
 .partner-commission{display:flex;align-items:baseline;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line,#eee)}

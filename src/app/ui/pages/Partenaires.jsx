@@ -11,6 +11,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import DataTable from "../components/DataTable.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import ApportForm from "../components/PartnerContributions.jsx";
+import PartnerProduits from "../components/PartnerProduits.jsx";
 import { apportType, apportsOfPartner } from "../lib/apports.js";
 import { euro } from "../lib/format.js";
 
@@ -175,6 +176,12 @@ function Partenaires() {
                     )}
 
                     {p.notes && <p className="sub" style={{ marginBottom: 0 }}>{p.notes}</p>}
+
+                    {/* Catalogue vendu par CE partenaire — ce que le stagiaire voit dans l'onglet
+                        « Offres partenaires ». Replié par défaut : la page sert d'abord à trouver
+                        un contact et vérifier une remise, le catalogue est un second temps. */}
+                    <PartnerProduits partnerId={p.id} onErreur={(m) => setStatus({ type: "error", message: m })} />
+
                     {canEdit && (
                       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                         <button className="btn sm ghost" onClick={() => setEditing({ ...p })}>Modifier</button>
