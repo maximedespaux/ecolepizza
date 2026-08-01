@@ -915,6 +915,18 @@ tbody tr:last-child td{border-bottom:none}
 /* Panneau des étapes disponibles — dans le flux normal (pas d'overlay clippé) */
 .pf-add-panel{margin-top:8px;padding:12px 14px;border:1px solid var(--line,#e3e3e6);border-radius:12px;
   background:var(--surface2,rgba(0,0,0,.02))}
+/* La composition réelle d'un choix « OU », dans le panneau d'ajout. Elle n'existait nulle part :
+   le jalon n'affiche que ses variantes visibles dans le flux, et un document de groupe en est
+   membre sans jamais s'y montrer. */
+.pf-membres{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
+.pf-membre{display:inline-flex;align-items:center;gap:5px;padding:3px 5px 3px 10px;border-radius:999px;
+  font-size:12.5px;background:var(--surface2);border:1px solid var(--border-soft)}
+/* Un membre mort se distingue : c'est lui qui bloque, il ne doit pas se lire comme les autres. */
+.pf-membre.absent{background:var(--amber-bg);border-color:color-mix(in srgb,var(--ember2) 32%,transparent);color:var(--ember2)}
+.pf-membre-x{display:grid;place-items:center;width:18px;height:18px;border:0;border-radius:999px;
+  background:none;color:var(--muted);cursor:pointer}
+.pf-membre-x:hover{background:var(--ember1);color:#fff}
+
 /* PASTILLE « ! » — un choix « OU » mal conditionné. Ambre et non rouge : ce n'est pas une
    erreur bloquante, c'est un réglage qui produira le mauvais document un jour. Le rouge est
    réservé à ce qui casse tout de suite ; l'ambre à ce qui casse plus tard.

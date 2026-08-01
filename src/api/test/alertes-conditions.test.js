@@ -30,11 +30,37 @@ const srcPage = fs.readFileSync(path.join(APP, 'ui/pages/Formations.jsx'), 'utf8
 const srcCss = fs.readFileSync(path.join(APP, 'ui/styles/app.css'), 'utf8');
 const srcCtrl = fs.readFileSync(path.join(__dirname, '..', 'controllers/formationProgram.controller.js'), 'utf8');
 
+const { validateMembers } = require('../lib/equivalence.js');
+
 const bySlug = new Map([
-    ['part', { label: 'Devis particulier', applies_when: { financing: 'PARTICULIER' } }],
+    ['part', { label: 'Devis particulier', applies_when: { conditions: ['financeur-particulier'] } }],
     ['pro', { label: 'Devis professionnel', applies_when: { conditions: ['financeur-professionnel'] } }],
-    ['ent', { label: 'Devis entreprise', applies_when: { conditions: ['financeur-professionnel'] } }],
+    // Document de GROUPE : il ne s'affiche jamais dans le flux du parcours, il vit dans l'onglet
+    // « À l'arrivée via une entreprise ». C'est ce qui rendait le refus incompréhensible.
+    ['ent', { label: 'Devis entreprise', company_level: true, applies_when: { conditions: ['financeur-professionnel'] } }],
 ]);
+
+test('le refus SITUE le document qu\'on ne voit pas', () => {
+    /* LE CAS RÉEL, et il a fallu lire la base pour le comprendre. Le groupe « OU » du jalon
+     * « Devis particulier » contenait aussi « Devis entreprise » — un document de GROUPE, donc
+     * affiché dans un AUTRE onglet, invisible depuis le parcours du dossier. Ajouter « Devis
+     * professionnel » était refusé à cause de lui, et le message le nommait sans dire ni qu'il
+     * était déjà là, ni où le trouver. On concluait, à juste titre, que « les conditions ne sont
+     * pourtant pas les mêmes » — en comparant particulier et professionnel, qui diffèrent bien. */
+    const r = validateMembers(['part', 'ent', 'pro'], bySlug, 'pro');
+    assert.strictEqual(r.ok, false);
+    assert.match(r.error, /est DÉJÀ dans ce choix/, 'dire lequel etait deja la');
+    assert.match(r.error, /onglet « À l'arrivée via une entreprise »/, 'et OU le trouver');
+    assert.match(r.error, /Retirez « Devis entreprise » de ce choix/, 'le geste de sortie nomme la bonne cible');
+});
+
+test('sans indication d\'ajout, le message reste symétrique', () => {
+    // Les autres appelants ne passent pas `ajoute` : le message doit rester correct sans lui.
+    const r = validateMembers(['ent', 'pro'], bySlug);
+    assert.strictEqual(r.ok, false);
+    // La situation du document contient elle-même des guillemets : le motif ne peut pas les exclure.
+    assert.match(r.error, /« Devis entreprise »[\s\S]*?et « Devis professionnel »/);
+});
 
 test('un groupe sain ne déclenche rien', () => {
     // Une alerte qui se déclenche à tort apprend à ignorer les alertes.
@@ -84,4 +110,28 @@ test('la pastille dit qu\'il y en a, le texte dit lequel', () => {
     /* Ambre et non rouge : ce n'est pas une erreur bloquante, c'est un réglage qui produira le
        mauvais document un jour. Le rouge est réservé à ce qui casse tout de suite. */
     assert.match(srcCss, /\.pastille-alerte\{[^}]*color:var\(--ember2\)/, 'ambre, pas rouge');
+});
+
+test('la composition réelle d\'un choix « OU » est visible, et modifiable', () => {
+    /* LE CŒUR DU MALENTENDU, et il aura fallu lire la base pour le voir. On voulait grouper
+     * « Devis particulier » et « Devis professionnel » — deux conditions bien distinctes — et le
+     * refus parlait d'un troisième document. Ce troisième, « Devis entreprise », est un document
+     * de GROUPE : membre à part entière du choix, mais filtré du flux du parcours, donc affiché
+     * NULLE PART depuis cet écran. Et un quatrième membre, mort après un renommage, s'y cachait
+     * aussi.
+     *
+     * On ne pouvait qu'AJOUTER à un groupe, jamais en retirer : la composition n'était ni visible
+     * ni modifiable. Le panneau la montre désormais — chaque membre situé (document de groupe,
+     * membre disparu) et retirable. */
+    const srcPageNow = fs.readFileSync(path.join(APP, 'ui/pages/Formations.jsx'), 'utf8');
+    assert.match(srcPageNow, /Déjà dans ce choix :/, 'la composition doit etre affichee');
+    assert.match(srcPageNow, /\{m\.company_level && <span className="hint"> · document de groupe<\/span>\}/,
+        'un document de groupe doit etre SITUE : il ne s\'affiche pas dans le flux');
+    assert.match(srcPageNow, /\{m\._absent && <span className="hint"> · n'existe plus<\/span>\}/,
+        'un membre mort doit se voir, c\'est lui qui bloque');
+    assert.match(srcPageNow, /onClick=\{\(\) => onRetirerOu\?\.\(m\.slug\)\}/, 'et chacun doit pouvoir sortir');
+    /* Un « OU » à moins de deux membres n'a plus d'objet : on dissout le groupe plutôt que de
+       laisser un choix qui n'en est pas un. */
+    assert.match(srcPageNow, /if \(restants\.length < 2\) await deleteEquivalence\(eq\.id\);/,
+        'un groupe reduit a un membre doit etre dissous');
 });

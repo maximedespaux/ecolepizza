@@ -41,6 +41,14 @@ function sameEquivalence(map, slugA, slugB) {
    s'appliquent tous les deux au financement PARTICULIER » se comprend, « même signature JSON »
    non. Une condition vide se dit « sans condition » — c'est le cas le plus fréquent, et celui
    qu'on cherche à nommer. */
+/* OÙ VIT UN DOCUMENT. Un document de GROUPE (`company_level`) ne s'affiche jamais dans le flux
+   du parcours : il est géré dans l'onglet « À l'arrivée via une entreprise ». Le nommer sans le
+   situer opposait à l'utilisateur un document qu'il ne pouvait pas voir depuis l'écran où il se
+   trouvait — c'est exactement ce qui s'est produit : « Devis entreprise » bloquait un « OU » du
+   parcours du dossier, sans apparaître nulle part dans ce parcours. */
+const situationDe = (s) => (s && s.company_level
+    ? " (document de groupe, onglet « À l'arrivée via une entreprise »)" : '');
+
 function conditionEnClair(applies) {
     const a = parseApplies(applies) || {};
     const bouts = [];
@@ -79,7 +87,7 @@ function conditionEnClair(applies) {
  *    de générer. Le message NOMME les deux documents et la condition qu'ils partagent, au lieu
  *    d'annoncer un problème sans dire lequel.
  */
-function validateMembers(members, stepsBySlug) {
+function validateMembers(members, stepsBySlug, ajoute = null) {
     const brut = Array.isArray(members) ? [...new Set(members.filter(Boolean))] : [];
     const retires = brut.filter((slug) => !stepsBySlug.get(slug));
     const list = brut.filter((slug) => stepsBySlug.get(slug));
@@ -95,10 +103,21 @@ function validateMembers(members, stepsBySlug) {
         if (parCondition.has(sig)) {
             const autre = parCondition.get(sig);
             const nom = (x) => (stepsBySlug.get(x)?.label || x);
+            /* QUI EST DÉJÀ LÀ, QUI ARRIVE. Sans cette distinction, le message opposait deux
+             * documents sans dire lequel l'utilisateur venait de choisir — et surtout sans dire
+             * que l'autre était DÉJÀ dans le groupe. On lisait « Devis entreprise et Devis
+             * professionnel s'appliquent au même cas » en croyant avoir cliqué de travers, alors
+             * que le conflit venait d'un membre invisible depuis cet écran. */
+            const dejaLa = ajoute && slug === ajoute ? autre : (ajoute && autre === ajoute ? slug : autre);
+            const nouveau = dejaLa === autre ? slug : autre;
+            const suite = ajoute
+                ? `« ${nom(dejaLa)} »${situationDe(stepsBySlug.get(dejaLa))} est DÉJÀ dans ce choix « OU », `
+                  + `et s'applique au même cas que « ${nom(nouveau)} » (${conditionEnClair(s.applies_when)})`
+                : `« ${nom(autre)} »${situationDe(stepsBySlug.get(autre))} et « ${nom(slug)} »${situationDe(s)} `
+                  + `s'appliquent au même cas (${conditionEnClair(s.applies_when)})`;
             return { ok: false, error:
-                `« ${nom(autre)} » et « ${nom(slug)} » s'appliquent au même cas (${conditionEnClair(s.applies_when)}) : `
-                + 'rien ne permettrait de choisir entre les deux au moment de produire le document. '
-                + 'Donnez-leur des conditions différentes dans Modèles de documents, ou choisissez une autre variante.' };
+                suite + ' : rien ne permettrait de choisir entre les deux au moment de produire le document. '
+                + `Retirez « ${nom(dejaLa)} » de ce choix, ou donnez-leur des conditions différentes dans Modèles de documents.` };
         }
         parCondition.set(sig, slug);
     }
@@ -145,7 +164,7 @@ function diagnostiquerGroupe(membres, bySlug) {
             const autre = parCondition.get(sig);
             return {
                 type: 'conditions-identiques',
-                texte: `« ${nom(autre)} » et « ${nom(slug)} » s'appliquent au même cas `
+                texte: `« ${nom(autre)} »${situationDe(bySlug.get(autre))} et « ${nom(slug)} »${situationDe(bySlug.get(slug))} s'appliquent au même cas `
                     + `(${conditionEnClair(bySlug.get(slug).applies_when)}) : rien ne permet de choisir entre les deux `
                     + 'au moment de produire le document — l\'un des deux sortira au hasard. '
                     + 'Donnez-leur des conditions différentes dans Modèles de documents.',

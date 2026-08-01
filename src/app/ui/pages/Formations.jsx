@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
-import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences, createEquivalence, updateEquivalence } from "../api/apiClient.js";
+import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
 import Badge from "../components/Badge.jsx";
@@ -199,6 +199,26 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   // Ajoute un document comme variante « OU » à un jalon (crée/étend l'équivalence).
   const [refusOu, setRefusOu] = useState(null); // pourquoi une variante « OU » a été refusée
 
+  /* RETIRER une variante du groupe. Il n'y avait aucun moyen de le faire : on pouvait ajouter,
+     jamais enlever. Or un groupe hérité peut contenir un document qu'on ne veut plus — voire
+     qu'on ne VOIT pas, comme un document de groupe (`company_level`), filtré du flux du parcours
+     et pourtant membre à part entière. Il bloquait alors l'ajout d'une variante légitime, sans
+     qu'on puisse ni le constater ni le retirer. */
+  async function removeOuVariant(slug) {
+    setRefusOu(null);
+    try {
+      const g = eqMap.get(slug);
+      const eq = g ? equivs.find((e) => e.key === g.group) : null;
+      if (!eq || !eq.id) return false;
+      const restants = (eq.members || []).filter((m) => m !== slug);
+      // Un groupe « OU » à moins de deux membres n'a plus d'objet : on le dissout.
+      if (restants.length < 2) await deleteEquivalence(eq.id);
+      else await updateEquivalence(eq.id, { members: restants });
+      await reloadEq();
+      return true;
+    } catch (e) { setRefusOu(e.message); onError(e.message); return false; }
+  }
+
   async function addOuVariant(jalonSlugs, addSlug) {
     if (!addSlug || jalonSlugs.includes(addSlug)) return;
     setRefusOu(null);
@@ -207,9 +227,11 @@ function FormationModal({ program, onClose, onSaved, onError }) {
       const eq = g ? equivs.find((e) => e.key === g.group) : null;
       if (eq && !eq.is_default && String(eq.id)) {
         const members = [...new Set([...(eq.members || jalonSlugs), addSlug])];
-        await updateEquivalence(eq.id, { members });
+        // `ajoute` : le serveur peut alors dire lequel était DÉJÀ dans le groupe et lequel on
+        // vient de choisir. Sans lui, le refus opposait deux documents sans dire qui était qui.
+        await updateEquivalence(eq.id, { members, ajoute: addSlug });
       } else {
-        await createEquivalence({ members: [...new Set([...jalonSlugs, addSlug])] });
+        await createEquivalence({ members: [...new Set([...jalonSlugs, addSlug])], ajoute: addSlug });
       }
       setSteps((ss) => ss.map((s) => (s.slug === addSlug ? { ...s, active: true } : s))); // activer la variante ajoutée
       await reloadEq();
@@ -361,7 +383,9 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               ) : (
                 <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
                   breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant}
-                  refusOu={refusOu} onEffacerRefus={() => setRefusOu(null)} />
+                  refusOu={refusOu} onEffacerRefus={() => setRefusOu(null)}
+                  eqDe={(slug) => { const g = eqMap.get(slug); return g ? equivs.find((e) => e.key === g.group) : null; }}
+                  onRetirerOu={removeOuVariant} steps={steps} />
               )}
             </>
           ) : (
@@ -457,7 +481,7 @@ function stepBadge(s) {
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
-function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu, refusOu, onEffacerRefus }) {
+function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu, refusOu, onEffacerRefus, eqDe, onRetirerOu }) {
   // Les documents de GROUPE (🏢 company_level) ne font PAS partie du parcours du
   // dossier : ils se gèrent uniquement dans « À l'arrivée via une entreprise ».
   const included = steps.filter((s) => s.active && !s.company_level);
@@ -626,6 +650,32 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                 {chercheDoc && <button className="gs-clear" aria-label="Effacer" onClick={() => setChercheDoc("")}><Icon name="x" size={13} /></button>}
               </span>
             )}
+            {/* CE QUI EST DÉJÀ DANS LE CHOIX. Un jalon n'affiche que ses variantes visibles dans
+                le flux : un document de GROUPE en fait partie sans jamais s'y montrer, et on
+                pouvait donc se voir refuser un ajout à cause d'un membre qu'aucun écran ne
+                nommait. La composition réelle est ici, et chaque membre peut en sortir. */}
+            {jalon && (() => {
+              const eq = eqDe?.(jalon.steps[0].slug);
+              const membres = (eq?.members || jalon.steps.map((x) => x.slug))
+                .map((sl) => steps.find((x) => x.slug === sl) || { slug: sl, label: sl, _absent: true });
+              if (membres.length < 2) return null;
+              return (
+                <div className="pf-membres">
+                  <span className="hint" style={{ marginRight: 4 }}>Déjà dans ce choix :</span>
+                  {membres.map((m) => (
+                    <span key={m.slug} className={"pf-membre" + (m._absent ? " absent" : "")}>
+                      {m.label}
+                      {m.company_level && <span className="hint"> · document de groupe</span>}
+                      {m._absent && <span className="hint"> · n'existe plus</span>}
+                      <button type="button" className="pf-membre-x" title={`Retirer « ${m.label} » de ce choix`}
+                        aria-label={`Retirer ${m.label} de ce choix`}
+                        onClick={() => onRetirerOu?.(m.slug)}><Icon name="x" size={11} /></button>
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
+
             {/* Le refus, à hauteur du clic. Il nomme les deux documents et la condition qu'ils
                 partagent : « rien ne permettrait de choisir entre les deux au moment de produire
                 le document » est une raison, « échec » n'en est pas une. */}
