@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
-import { getTemplates, saveTemplate, deleteTemplate, duplicateTemplate, renameTemplate, reorderTemplates,
+import { getTemplates, saveTemplate, deleteTemplate, resetTemplate, duplicateTemplate, renameTemplate, reorderTemplates,
   getConditionCatalog, getConditions, createCondition, updateCondition, deleteCondition, getFieldValues,
   getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
@@ -154,8 +154,13 @@ function Modeles() {
   }
 
 
-  // Supprime DÉFINITIVEMENT le document (étape ajoutée = ligne effacée ;
-  // étape du socle = masquée par un « tombstone »). Irréversible.
+  /* Supprime DÉFINITIVEMENT le document, et sans retour possible dans les deux cas : étape
+     AJOUTÉE, la ligne est effacée ; étape DU SOCLE (définie en code, donc ineffaçable), elle est
+     masquée par un « tombstone » et quitte la liste pour de bon.
+     Une bande « rétablir » a été essayée puis retirée : un document supprimé est supprimé, et une
+     liste de regrets en pied d'écran ne fait qu'entretenir ce dont on a décidé de se passer.
+     Reste « Revenir à l'origine » pour le cas voisin mais distinct : défaire une personnalisation
+     sans perdre le document. */
   async function onDelete(t) {
     const socle = t.is_default
       ? "\n\nCe document fait partie du socle : il sera masqué définitivement (vous pourrez le recréer manuellement)."
@@ -165,6 +170,26 @@ function Modeles() {
     try {
       await deleteTemplate(t.slug);
       setStatus({ type: "success", message: "Document supprimé définitivement." });
+      await load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setBusy(null); }
+  }
+
+  /* REVENIR AU MODÈLE D'ORIGINE. La route existait depuis toujours et aucun écran ne l'ouvrait :
+     on pouvait personnaliser un document du socle, jamais défaire. La seule issue offerte était
+     « Supprimer définitivement », qui pose un tombstone — le document disparaît au lieu de
+     revenir à sa version livrée. Deux gestes très différents derrière un seul bouton.
+
+     Réservé aux documents DU SOCLE (`is_default`) : un modèle créé de toutes pièces n'a pas de
+     version d'origine où revenir, et « réinitialiser » y voudrait dire « supprimer ». */
+  async function onReset(t) {
+    if (!window.confirm(`Revenir à la version d'origine de « ${t.label} » ?\n\n`
+      + 'Vos modifications de contenu et de réglages seront perdues. Le document reste dans la '
+      + 'liste — c\'est « Supprimer » qui le retire.')) return;
+    setBusy(t.slug);
+    try {
+      await resetTemplate(t.slug);
+      setStatus({ type: "success", message: "Modèle revenu à sa version d'origine." });
       await load();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setBusy(null); }
@@ -270,6 +295,11 @@ function Modeles() {
                     {!estEmarg(t) && (
                       <button type="button" disabled={busy === t.slug} onClick={() => onDuplicate(t)}>
                         <Icon name="copy" size={15} /> Dupliquer
+                      </button>
+                    )}
+                    {!estEmarg(t) && t.is_default && (
+                      <button type="button" disabled={busy === t.slug} onClick={() => onReset(t)}>
+                        <Icon name="history" size={15} /> Revenir à l'origine
                       </button>
                     )}
                     <button type="button" className="danger" disabled={busy === (estEmarg(t) ? t.id : t.slug)}

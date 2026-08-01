@@ -58,6 +58,7 @@ const ACTION_LABEL = {
     'template.rename': ['Identifiant de modèle renommé', A],
     'template.reorder': ['Modèles réordonnés', A],
     'template.delete': ['Modèle supprimé', R],
+    'template.reset': ['Modèle revenu à sa version d\'origine', A],
     'template.customTokens': ['Jetons personnalisés modifiés', A],
 
     // Conditions et champs de document
@@ -121,6 +122,14 @@ const ACTION_LABEL = {
     'piece.refusee': ['Pièce refusée', R],
     'piece.fichier_supprime': ['Fichier de pièce supprimé', R],
 
+    /* Communauté — modération. Ces trois codes ne sont posés que quand on agit sur le message
+       d'UN AUTRE : supprimer sa propre publication ne regarde personne. Rouge pour les deux
+       suppressions — irréversibles, les réponses et l'image partent par cascade ; ambre pour la
+       correction, qui met des mots dans la bouche de quelqu'un sans rien détruire. */
+    'community.post_supprime': ['Publication supprimée (modération)', R],
+    'community.reponse_supprimee': ['Réponse supprimée (modération)', R],
+    'community.post_modifie': ['Publication corrigée (modération)', A],
+
     /* Communauté — modération. Retirer la publication de quelqu'un doit laisser une trace
        lisible : « fiche retirée » et non un code, sinon le journal ne sert qu'à qui l'a écrit.
        Le ton est ROUGE comme les suppressions, sans en être une : la fiche redevient privée,
@@ -176,6 +185,8 @@ const SUFFIXE = {
 
 /** entité technique → nom lisible, et son genre (pour accorder le participe). */
 const ENTITY_LABEL = {
+    CommunityPost: ['Publication', 'f'],
+    CommunityAnswer: ['Réponse', 'f'],
     PieceType: ['Pièce justificative', 'f'],
     PieceDepot: ['Dépôt de pièce', 'm'],
     Recipe: ['Fiche technique', 'f'],

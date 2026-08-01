@@ -96,9 +96,12 @@ export function checkoutSale(payload) {
 export function getShopSettings() {
   return request("/ventes/settings");
 }
-export function saveShopSettings(payload) {
-  return request("/ventes/settings", { method: "PUT", body: JSON.stringify(payload) });
-}
+/* `saveShopSettings` a été retiré : les ENTITÉS ÉMETTRICES ont supplanté `shop_settings`.
+   Préfixe de numéro, prochain numéro, moyens de paiement et TVA s'éditent désormais par entité
+   (cf. BillingProfiles) ; `shop_settings` ne sert plus que de repli quand aucune entité n'est
+   choisie — cas qui ne se produit pas, l'entité « organisme » étant semée et par défaut.
+   La route serveur reste : elle est la dernière à écrire cette table, et la supprimer
+   demanderait de décider du sort de la table elle-même. */
 
 // --- Entités émettrices (identités de facturation) ---
 export function getEmitters() {
@@ -110,9 +113,10 @@ export function createEmitter(payload) {
 export function updateEmitter(id, payload) {
   return request(`/emetteurs/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
-export function setDefaultEmitter(id) {
-  return request(`/emetteurs/${id}/defaut`, { method: "PUT" });
-}
+/* `setDefaultEmitter` a été retiré : le bouton « Par défaut » a été ôté de l'écran Facturation
+   (décision consignée dans CLAUDE.md §5 — l'entité « organisme » est semée et reste le défaut).
+   La fonction survivait à son bouton. La route serveur reste, `is_default` pilotant toujours le
+   choix de l'entité : c'est l'ÉCRAN qui ne le change plus, pas le concept qui a disparu. */
 export function deleteEmitter(id) {
   return request(`/emetteurs/${id}`, { method: "DELETE" });
 }
@@ -524,8 +528,10 @@ export function getPlayableChapters(programId) {
   return request(`/mon-espace/quest/${programId}/chapitres`, { silent: true });
 }
 // Cœurs : le capital est tenu par le serveur, jamais calculé côté client.
-export function getQuestLives() { return request("/mon-espace/quest/vies", { silent: true }); }
-export function loseQuestLife() { return request("/mon-espace/quest/vies/perdre", { method: "POST", silent: true }); }
+/* Les VIES de Pizza Quest n'existent plus — la mécanique d'XP et de cœurs a été remplacée par
+   les cadres. Ces deux fonctions pointaient vers `/mon-espace/quest/vies`, une route qui n'existe
+   dans AUCUN fichier de routes : elles auraient renvoyé une 404 si quelqu'un les avait appelées.
+   Du code mort qui désigne du vide. */
 // ⚠️ DÉBOGAGE — remet à zéro SA propre progression Pizza Quest. À retirer avec le bouton
 // correspondant (PizzaQuest.jsx) avant la mise en service.
 

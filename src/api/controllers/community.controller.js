@@ -31,6 +31,7 @@ const nomDe = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim(
    comme un simple stagiaire ; puis INTERVENANT, qui est du côté des STAGIAIRES — même layout —
    et à qui elle donnait le droit de parler au nom de l'école. */
 const { estStaff, peutModerer } = require('../lib/moderation.js');
+const { logAudit } = require('../lib/audit.js');
 
 /**
  * GET /api/community/posts — le fil.
@@ -181,6 +182,8 @@ const updatePost = async (req, res) => {
         if (req.body?.body !== undefined) { champs.push('body = ?'); vals.push(String(req.body.body).trim() || null); }
         if (req.body?.pinned !== undefined && estStaff(req.user)) { champs.push('pinned = ?'); vals.push(req.body.pinned ? 1 : 0); }
         if (champs.length) await conn.query(`UPDATE community_post SET ${champs.join(', ')} WHERE id = ?`, [...vals, req.params.id]);
+        // Corriger le TEXTE d'un autre se trace aussi : c'est mettre des mots dans sa bouche.
+        if (!auteur && champs.length) logAudit(req, 'community.post_modifie', 'CommunityPost', req.params.id);
         res.json({ success: true });
     } catch (err) {
         if (noTable(err)) return res.status(503).json({ message: 'Migration 114 non jouée.' });
@@ -202,6 +205,12 @@ const deletePost = async (req, res) => {
         }
         // Réponses et image partent avec, par ON DELETE CASCADE (migration 114).
         await conn.query('DELETE FROM community_post WHERE id = ?', [req.params.id]);
+        /* TRACER LA MODÉRATION, et elle seule. Supprimer SA propre publication ne regarde
+         * personne ; supprimer celle d'un AUTRE est l'acte le plus lourd de la Communauté, et le
+         * seul irréversible — les réponses et l'image partent avec, par cascade.
+         * Le journal était muet là-dessus, alors qu'il enregistrait déjà le retrait d'une fiche
+         * du fil, qui se défait. La trace manquait exactement là où elle compte. */
+        if (p.author_user_id !== req.user.id) logAudit(req, 'community.post_supprime', 'CommunityPost', req.params.id);
         res.json({ success: true });
     } catch (err) {
         if (noTable(err)) return res.status(503).json({ message: 'Migration 114 non jouée.' });
@@ -245,6 +254,7 @@ const deleteAnswer = async (req, res) => {
         // `resolved_answer_id` passe à NULL tout seul (ON DELETE SET NULL) : supprimer la
         // réponse retenue ne doit pas emporter la question.
         await conn.query('DELETE FROM community_answer WHERE id = ?', [req.params.id]);
+        if (a.user_id !== req.user.id) logAudit(req, 'community.reponse_supprimee', 'CommunityAnswer', req.params.id);
         res.json({ success: true });
     } catch (err) {
         if (noTable(err)) return res.status(503).json({ message: 'Migration 114 non jouée.' });
