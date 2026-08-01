@@ -69,8 +69,12 @@ test('on ne propose pas ce qui sera refusé', () => {
     /* Un QCM ne peut pas être la variante « OU » d'un document. L'ancien menu les excluait déjà
        du calcul ; le panneau, lui, doit aussi masquer la SECTION — un intitulé « QCM » suivi de
        rien laisse croire à un défaut de chargement. */
-    assert.match(srcPage, /\{!jalon && \(\s*\n\s*<>\s*\n\s*<div className="pf-add-title" style=\{\{ marginTop: 12 \}\}>QCM/,
-        'la section QCM ne s\'affiche pas en mode variante');
-    assert.match(srcPage, /!s\.quiz_id && !s\.company_level && s\.doc_type !== "EMARGEMENT"/,
-        'ni QCM, ni document de groupe, ni emargement en variante');
+    assert.match(srcPage, /\{!jalon && \(\s*\n\s*<>\s*\n\s*<div className="pf-add-title"[\s\S]{0,120}Pièces à fournir/,
+        'les sections « pieces » et « QCM » ne s\'affichent pas en mode variante');
+    assert.match(srcPage, /!s\.quiz_id && !s\.company_level && s\.doc_type !== "EMARGEMENT"\s*\n\s*&& s\.doc_type !== "PIECE"/,
+        'ni QCM, ni piece, ni document de groupe, ni emargement en variante');
+    /* TROIS groupes, pas deux : ranger une pièce à fournir parmi les « Documents » tromperait —
+       ceux-là, l'école les produit ; celle-ci, le stagiaire l'envoie. C'est le sens qui change. */
+    assert.match(srcPage, /const isPiece = \(s\) => s\.doc_type === "PIECE";/, 'la troisieme nature');
+    assert.match(srcPage, /Pièces à fournir par le stagiaire\{pieces\.length/, 'son propre groupe, nomme sans ambiguite');
 });

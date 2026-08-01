@@ -108,6 +108,19 @@ const ACTION_LABEL = {
     'quiz.submit': ['Quiz passé', N],
     'quiz.send': ['Quiz envoyé', B],
 
+    /* Pièces justificatives fournies par le STAGIAIRE — le sens inverse du reste. Le dépôt et
+       la vérification se tracent : ce sont des copies de pièces d'identité, et « qui a vu quoi,
+       quand » est précisément ce qu'un contrôle demandera. La suppression d'un fichier est en
+       ROUGE et non en neutre : tant que la règle de conservation n'est pas tranchée, c'est la
+       seule purge existante — elle doit se repérer d'un coup d'œil dans le journal. */
+    'piecetype.create': ['Pièce justificative créée', G],
+    'piecetype.update': ['Pièce justificative modifiée', A],
+    'piecetype.delete': ['Pièce justificative supprimée', R],
+    'piece.depot': ['Pièce déposée', B],
+    'piece.validee': ['Pièce validée', G],
+    'piece.refusee': ['Pièce refusée', R],
+    'piece.fichier_supprime': ['Fichier de pièce supprimé', R],
+
     /* Communauté — modération. Retirer la publication de quelqu'un doit laisser une trace
        lisible : « fiche retirée » et non un code, sinon le journal ne sert qu'à qui l'a écrit.
        Le ton est ROUGE comme les suppressions, sans en être une : la fiche redevient privée,
@@ -163,6 +176,8 @@ const SUFFIXE = {
 
 /** entité technique → nom lisible, et son genre (pour accorder le participe). */
 const ENTITY_LABEL = {
+    PieceType: ['Pièce justificative', 'f'],
+    PieceDepot: ['Dépôt de pièce', 'm'],
     Recipe: ['Fiche technique', 'f'],
     Invoice: ['Facture', 'f'],
     MaterialSale: ['Vente de matériel', 'f'],
