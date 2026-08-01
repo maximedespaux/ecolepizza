@@ -7,6 +7,32 @@ l'**état de reprise**. Pour le détail (audits, dette, plan de refonte), lire `
 
 ---
 
+## ⚠️ QUESTION OUVERTE — À TRANCHER, ET À REPOSER TANT QU'ELLE NE L'EST PAS
+
+> ### Combien de temps garde-t-on la copie d'une pièce d'identité ?
+>
+> Les **pièces justificatives déposées par les stagiaires** (migration 127) contiennent des
+> copies de cartes d'identité : une **donnée personnelle sensible**, soumise au RGPD.
+>
+> **État actuel : suppression MANUELLE uniquement.** C'est un choix d'attente, explicitement
+> provisoire, pris le 2026-08-01 faute de décision. Il signifie qu'un scan de carte d'identité
+> reste en base indéfiniment tant que personne ne clique sur « Supprimer ».
+>
+> **Ce que dit le principe de minimisation** : la copie sert à VÉRIFIER une identité, pas à
+> l'archiver. Le contrôle Qualiopi porte sur la trace de vérification (« vérifiée le 12/03 par
+> X »), pas sur le scan lui-même. Les deux autres options écartées pour l'instant étaient
+> l'effacement automatique **à la validation**, et **à la clôture de la session**.
+>
+> **Ce qu'il reste à décider** : la durée, et ce qui déclenche l'effacement. Tant que ce n'est
+> pas tranché, l'organisme accumule des copies de pièces d'identité sans limite de durée — ce
+> qui est exactement ce que le RGPD interdit.
+>
+> **CONSIGNE EXPLICITE DE L'UTILISATEUR** : reposer la question à chaque occasion jusqu'à ce
+> qu'elle soit tranchée. Ne pas la laisser s'enterrer. Quand la réponse arrive, remplacer ce
+> bloc par la règle retenue et écrire la purge correspondante.
+
+---
+
 ## 1. Le projet
 
 **Impasto** — gestion de l'École Pizza (Jean-Jacques Despaux, Lannemezan) : stagiaires,
@@ -113,6 +139,8 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 | 122 | `invoice_line.discount_pct` + `unit_price_gross_ht` — **la remise, conservée comme donnée** (jetons `{Remise}` / `{Total remise}`) |
 | 123 | `company.vat_number` — **n° de TVA du client** (jeton `field:company.vat_number`) |
 | 125 | `inventory_item.learner_discount_pct` + `learner_discount_eur` + remise figée sur la ligne — **remise stagiaire en % ou en €**, visible seulement dans leur boutique. **À REJOUER** : la colonne « euros » a été ajoutée après coup (fichier entièrement rejouable) |
+| 126 | `user.avatar` + `user.cadre` — **avatar et cadre du PERSONNEL** de l'organisme (il n'a pas de fiche `learner`). Sans elle, l'école reste anonyme dans la Communauté chez les AUTRES |
+| 127 | `piece_type` + `piece_depot` + `piece_fichier` + `program_step.piece_id` — **pièces justificatives fournies par le stagiaire** (identité recto/verso…). **Porte une question RGPD non tranchée, cf. le bloc en tête de ce fichier** |
 
 Le code fonctionne sans elles (colonnes optionnelles), mais la fonctionnalité n'est complète
 qu'une fois jouées. D'autres migrations plus anciennes (106→117) peuvent aussi être en attente —
