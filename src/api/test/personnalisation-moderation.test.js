@@ -114,6 +114,25 @@ test('l\'anneau du cadre tient sur son avatar', () => {
     assert.match(srcCss, /\.cadre::before\{[^}]*inset:-3px/, 'le debord de 3px est l\'hypothese du 21px');
 });
 
+test('le cadre « École » est le plus riche du jeu — il désigne, il ne se gagne pas', () => {
+    /* Un dégradé LINÉAIRE figé n'avait que deux couleurs et l'air d'un palier de plus. Le
+     * conique animé est la forme que « prestige » prend déjà ici (Champion, Maestro), et il
+     * réutilise leur `@property --cadre-a` / `cadreTourne` — pas une seconde mécanique. */
+    assert.match(srcCss, /\.cadre-ecole\{[^}]*conic-gradient\(from var\(--cadre-a\)/,
+        'le cadre du personnel doit porter un degrade conique anime');
+    assert.match(srcCss, /\.cadre-ecole\{[^}]*animation:cadreTourne/, 'il doit reutiliser la rotation existante');
+    assert.match(srcCss, /@property --cadre-a\{syntax:"<angle>"/,
+        'sans `@property`, l\'angle ne s\'interpole pas et l\'anneau reste fixe');
+    /* Le halo est porté par l'AVATAR, pas par l'anneau : `.cadre::before` est masqué (anneau
+       creux) et le masque s'applique APRÈS le filtre — un `drop-shadow` y serait découpé. */
+    assert.match(srcCss, /\.cadre-ecole\{[^}]*box-shadow:0 0 13px -3px/, 'le halo vit sur l\'avatar');
+    // Plus lent que Maestro : ce cadre apparaît sur CHAQUE publication de l'école, là où un
+    // exclusif est rare. Répété dix fois dans un fil, un mouvement rapide devient du bruit.
+    const ecole = Number(/\.cadre-ecole\{[^}]*animation:cadreTourne ([\d.]+)s/.exec(srcCss)[1]);
+    const maestro = Number(/\.cadre-maestro\{[^}]*animation:cadreTourne ([\d.]+)s/.exec(srcCss)[1]);
+    assert.ok(ecole > maestro, 'la rotation du cadre « École » doit rester plus posee que celle de Maestro');
+});
+
 test('les étoiles du cadre « École » suivent la taille de l\'avatar', () => {
     assert.match(srcCss, /\.cadre-ecole::after\{content:"⭐"/, 'le cadre du personnel porte des etoiles');
     assert.match(srcCss, /@keyframes etoile-ecole\{/, 'l\'animation doit exister');
@@ -123,18 +142,22 @@ test('les étoiles du cadre « École » suivent la taille de l\'avatar', () => 
     assert.match(srcCss, /font-size:calc\(var\(--av,[^)]*\) \* \.3\)/,
         'la taille de l\'etoile doit suivre le diametre de l\'avatar');
     assert.doesNotMatch(srcCss, /\.cadre-ecole::after\{[^}]*font-size:\.6em/, 'plus de taille prise sur le texte');
-    /* Trois éclats à des endroits DISTINCTS : c'est ce qui fait lire « des étoiles » plutôt
-       qu'« une étoile qui se déplace ». Mesuré dans le navigateur : (14,-32) haut-droite,
-       (-36,8) bas-gauche, (-30,-34) haut-gauche.
+    /* SIX éclats à des endroits DISTINCTS, un toutes les 0,6 s : c'est ce qui fait lire « un
+       cadre qui pétille » plutôt qu'« une étoile de temps en temps ». À trois éclats sur 4,2 s
+       l'avatar restait éteint plus d'une seconde entre deux.
        Le bloc est isolé avant d'être compté : cherché dans TOUT le fichier, `71%{opacity:1`
        tombait aussi sur d'autres animations — le test comptait 4 éclats pour 3. */
     const bloc = /@keyframes etoile-ecole\{([\s\S]*?)\n\}/.exec(srcCss);
     assert.ok(bloc, 'bloc @keyframes etoile-ecole introuvable');
     const pics = [...bloc[1].matchAll(/\{opacity:1;/g)].length;
-    assert.strictEqual(pics, 3, 'trois eclats visibles attendus');
-    // Et à des endroits différents : trois fois le même point ne serait qu'un clignotement.
+    assert.strictEqual(pics, 6, 'six eclats visibles attendus');
+    // Et à des endroits différents : six fois le même point ne serait qu'un clignotement.
     const points = new Set([...bloc[1].matchAll(/\{opacity:1;[^}]*translate\((-?[\d.]+em,-?[\d.]+em)\)/g)].map((m) => m[1]));
-    assert.strictEqual(points.size, 3, 'les trois eclats doivent jaillir d\'endroits differents');
+    assert.strictEqual(points.size, 6, 'les six eclats doivent jaillir d\'endroits differents');
+    // La cadence fait l'effet : un tour trop long laisse l'avatar éteint entre deux éclats.
+    const duree = /animation:etoile-ecole ([\d.]+)s/.exec(srcCss);
+    assert.ok(duree && Number(duree[1]) / 6 <= 0.7,
+        'un eclat toutes les 0,7 s au plus, sinon le cadre parait eteint');
 });
 
 test('la modale de la barre latérale sort du contexte d\'empilement', () => {

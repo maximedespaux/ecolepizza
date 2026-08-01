@@ -3424,6 +3424,11 @@ button.av-wrap:active{transform:scale(.94)}
   .cadre-braise::after{animation:none;opacity:.8;scale:1}
   .cadre-maestro{animation:none}
   .cadre-maestro::after{animation:none;opacity:.85}
+  /* L'anneau figé garde ses couleurs (le conique s'arrête à 0deg) ; l'étoile, elle, disparaît
+     entièrement — animation coupée, elle resterait bloquée à `opacity:0`, invisible mais
+     présente. Autant la retirer franchement que laisser un nœud fantôme. */
+  .cadre-ecole{animation:none}
+  .cadre-ecole::after{display:none}
 }
 
 /* Pastille de cadre dans la barre de parcours (hero) : un aperçu, sans avatar dedans. */
@@ -3477,10 +3482,22 @@ button.av-wrap:active{transform:scale(.94)}
   box-shadow:0 0 12px -2px rgba(252,185,0,.85)}
 .cadre-jury{--cadre-bg:linear-gradient(135deg,#2c3371,#6b4fbb,#2c3371)}
 .cadre-fondateur{--cadre-bg:linear-gradient(135deg,#0e9aa7,#7fe3d6,#0e9aa7)}
-/* Personnel de l'organisme — les deux rouges de la charte, ceux du logo. Pas de métal : les
-   paliers en ont déjà, et il ne doit pas passer pour l'un d'eux. Ce qui le distingue, ce sont
-   ses ÉTOILES. */
-.cadre-ecole{--cadre-bg:linear-gradient(135deg,#dc3e37,#ff6900,#dc3e37)}
+/* Personnel de l'organisme — le cadre le plus riche du jeu, et c'est voulu : il ne se gagne pas,
+   il DÉSIGNE. Toute la charte y passe, du rouge sombre au reflet crème, en dégradé CONIQUE qui
+   tourne — même mécanique que Champion et Maestro (`@property --cadre-a`, plus haut), parce que
+   c'est la forme que « prestige » prend déjà dans ce fichier. Un dégradé linéaire figé, lui,
+   avait deux couleurs et l'air d'un palier de plus.
+   Sept secondes, contre cinq pour Maestro : plus lent se lit comme plus posé, et surtout ce
+   cadre apparaît sur CHAQUE publication de l'école, là où un exclusif est rare. Un mouvement
+   rapide répété dix fois dans un fil devient du bruit. */
+.cadre-ecole{--cadre-a:0deg;
+  --cadre-bg:conic-gradient(from var(--cadre-a),
+    #8f1d18,#dc3e37,#ff6900,#fcb900,#fff3c4,#fcb900,#ff6900,#dc3e37,#8f1d18);
+  animation:cadreTourne 7s linear infinite;
+  /* Le halo est porté par l'AVATAR, pas par l'anneau : `.cadre::before` est masqué (anneau
+     creux), et le masque s'applique APRÈS le filtre — un `drop-shadow` y serait découpé avec
+     le reste. Sur l'avatar, le halo suit son `border-radius`, cercle ou carré arrondi. */
+  box-shadow:0 0 13px -3px color-mix(in srgb,#ff6900 72%,transparent)}
 /* Les étoiles jaillissent puis retombent, en boucle.
    UN SEUL pseudo-élément, promené entre trois points autour de l'anneau, invisible entre deux
    apparitions : à cette cadence l'œil lit « des étoiles », pas « une étoile qui se déplace ».
@@ -3495,21 +3512,41 @@ button.av-wrap:active{transform:scale(.94)}
      contre 13 px dans le fil, ce qui donnait une étoile de 18 px ici et de 8 px là, pour des
      avatars de 64 et 38 px. Le repli couvre les emplacements sans `--av` (`.pf-avatar`). */
   font-size:calc(var(--av,2.2em) * .3);line-height:1;opacity:0;will-change:transform,opacity;
-  animation:etoile-ecole 4.2s ease-out infinite}
+  animation:etoile-ecole 3.6s ease-out infinite}
+/* SIX éclats par tour, un toutes les 0,6 s, répartis sur les six heures du cadran. À trois
+   éclats sur 4,2 s l'avatar restait éteint plus d'une seconde entre deux — on voyait « une
+   étoile de temps en temps », pas un cadre qui pétille. Chaque éclat naît petit, éclate, puis
+   dérive vers l'extérieur en s'effaçant ; entre deux, l'étoile reste à `opacity:0` pendant
+   qu'elle rejoint le point suivant, et ce trajet ne se voit donc jamais.
+   La dérive est BORNÉE : `.comm-card2` est en `overflow:hidden`, et à 2,1em du centre l'éclat
+   arrivait pile sur le bord de la carte dans le fil (mesuré : 0 px de marge). S'éteindre un peu
+   plus près ne se voit pas ; se faire rogner, si. */
 @keyframes etoile-ecole{
-  /* 1 — en haut à droite */
-  0%   {opacity:0;transform:translate(-50%,-50%) translate(1.1em,-1em)   scale(.2)  rotate(-30deg)}
-  4%   {opacity:1;transform:translate(-50%,-50%) translate(1.2em,-1.1em) scale(1.1) rotate(0deg)}
-  14%  {opacity:0;transform:translate(-50%,-50%) translate(1.6em,-1.6em) scale(.5)  rotate(25deg)}
-  33%  {opacity:0;transform:translate(-50%,-50%) translate(-1.2em,.8em)  scale(.2)  rotate(-20deg)}
-  /* 2 — en bas à gauche */
-  38%  {opacity:1;transform:translate(-50%,-50%) translate(-1.3em,.9em)  scale(1)   rotate(0deg)}
-  48%  {opacity:0;transform:translate(-50%,-50%) translate(-1.7em,1.4em) scale(.45) rotate(-25deg)}
-  66%  {opacity:0;transform:translate(-50%,-50%) translate(-.9em,-1.1em) scale(.2)  rotate(15deg)}
-  /* 3 — en haut à gauche */
-  71%  {opacity:1;transform:translate(-50%,-50%) translate(-1em,-1.2em)  scale(.95) rotate(0deg)}
-  81%  {opacity:0;transform:translate(-50%,-50%) translate(-1.3em,-1.7em) scale(.4) rotate(20deg)}
-  100% {opacity:0;transform:translate(-50%,-50%) translate(1.1em,-1em)   scale(.2)  rotate(-30deg)}
+  /* 1 — haut-droite */
+  0%   {opacity:0;transform:translate(-50%,-50%) translate(1.2em,-.9em)   scale(.2)  rotate(-30deg)}
+  2.5% {opacity:1;transform:translate(-50%,-50%) translate(1.3em,-1em)    scale(1.1) rotate(0deg)}
+  11%  {opacity:0;transform:translate(-50%,-50%) translate(1.55em,-1.25em)  scale(.45) rotate(25deg)}
+  /* 2 — haut */
+  16%  {opacity:0;transform:translate(-50%,-50%) translate(.2em,-1.5em)   scale(.2)  rotate(20deg)}
+  18.5%{opacity:1;transform:translate(-50%,-50%) translate(.25em,-1.6em)  scale(.95) rotate(0deg)}
+  27%  {opacity:0;transform:translate(-50%,-50%) translate(.3em,-1.85em)   scale(.4)  rotate(-20deg)}
+  /* 3 — haut-gauche */
+  32%  {opacity:0;transform:translate(-50%,-50%) translate(-1em,-1.2em)   scale(.2)  rotate(15deg)}
+  34.5%{opacity:1;transform:translate(-50%,-50%) translate(-1.1em,-1.3em) scale(1.05) rotate(0deg)}
+  43%  {opacity:0;transform:translate(-50%,-50%) translate(-1.35em,-1.5em) scale(.4)  rotate(20deg)}
+  /* 4 — gauche */
+  48%  {opacity:0;transform:translate(-50%,-50%) translate(-1.5em,.1em)   scale(.2)  rotate(-25deg)}
+  50.5%{opacity:1;transform:translate(-50%,-50%) translate(-1.6em,.15em)  scale(.9)  rotate(0deg)}
+  59%  {opacity:0;transform:translate(-50%,-50%) translate(-1.85em,.2em)   scale(.45) rotate(25deg)}
+  /* 5 — bas-gauche */
+  64%  {opacity:0;transform:translate(-50%,-50%) translate(-.9em,1.2em)   scale(.2)  rotate(20deg)}
+  66.5%{opacity:1;transform:translate(-50%,-50%) translate(-1em,1.3em)    scale(1)   rotate(0deg)}
+  75%  {opacity:0;transform:translate(-50%,-50%) translate(-1.3em,1.5em)  scale(.4)  rotate(-20deg)}
+  /* 6 — bas-droite */
+  80%  {opacity:0;transform:translate(-50%,-50%) translate(1em,1.1em)     scale(.2)  rotate(-15deg)}
+  82.5%{opacity:1;transform:translate(-50%,-50%) translate(1.1em,1.2em)   scale(1.05) rotate(0deg)}
+  91%  {opacity:0;transform:translate(-50%,-50%) translate(1.4em,1.45em)   scale(.4)  rotate(25deg)}
+  100% {opacity:0;transform:translate(-50%,-50%) translate(1.2em,-.9em)   scale(.2)  rotate(-30deg)}
 }
 /* DEUX DÉFAUTS SUR LE MÊME ANNEAU, aucun des deux visible au build.
    1. `.cadre::before` est `position:absolute` : sans ancêtre positionné il se cale sur le
