@@ -53,7 +53,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence :
-**297 tests — 290 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**373 tests — 366 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Les **7 ignorés sont volontaires** : ce sont des défauts connus et non corrigés, chacun en
 `{ skip: "…" }` avec sa raison écrite (`backoffice-invariants`, `finance`). C'est un registre de
@@ -110,10 +110,19 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 | 119 | `document_template.buyer_audience` — destinataire d'un modèle de facture (repli serveur) |
 | 120 | DROP `billing_profile.default_template_slug` |
 | 121 | `invoice.template_slug` — **modèle de facture choisi à la vente** |
+| 122 | `invoice_line.discount_pct` + `unit_price_gross_ht` — **la remise, conservée comme donnée** (jetons `{Remise}` / `{Total remise}`) |
+| 123 | `company.vat_number` — **n° de TVA du client** (jeton `field:company.vat_number`) |
+| 125 | `inventory_item.learner_discount_pct` + `learner_discount_eur` + remise figée sur la ligne — **remise stagiaire en % ou en €**, visible seulement dans leur boutique. **À REJOUER** : la colonne « euros » a été ajoutée après coup (fichier entièrement rejouable) |
 
 Le code fonctionne sans elles (colonnes optionnelles), mais la fonctionnalité n'est complète
 qu'une fois jouées. D'autres migrations plus anciennes (106→117) peuvent aussi être en attente —
 **demander confirmation** avant de supposer qu'une colonne existe.
+
+**124 : ABANDONNÉE, à reverter si elle a été jouée.** Elle stockait sur `shop_request` le
+destinataire de la facture choisi par le stagiaire au panier. Le choix est revenu à l'école, qui
+le fait à l'émission — elle seule connaît l'accord de prise en charge. Son fichier **aller a été
+supprimé** (aucune base neuve ne doit la jouer) ; seul `124_revert_…` subsiste, pour les bases qui
+l'ont déjà reçue. Sans risque à ne pas jouer : quatre colonnes inertes.
 
 ---
 
@@ -135,6 +144,15 @@ qu'une fois jouées. D'autres migrations plus anciennes (106→117) peuvent auss
 - **Slug renommable** : `PUT /templates/:slug/rename` renomme **en cascade** (parcours, réglage
   boutique, factures, documents générés, points de rupture, slugs dans le JSON). Socle non
   renommable, collision refusée.
+- **Remise (migration 122)** : elle n'était écrite **nulle part** — fondue dans le prix net, sa
+  seule trace étant du texte dans le libellé (« Biberon valve (remise 10%) »). Deux colonnes sur
+  `invoice_line` : le **taux** (affichage fidèle à la saisie) et le **prix brut** (les euros, par
+  soustraction de deux montants déjà arrondis). Repasser par le taux pour retrouver les euros
+  fait dériver d'un centime — cf. le test `remise.test.js`, qui le démontre sur 9,99 € × 9.
+  Jetons : `{Remise}` dans le bloc `{#Articles}` (« 10 % » ou « — »), `{Total remise}` en global.
+  **Les deux remises s'excluent désormais** (ligne OU globale) : elles se cumulaient, et 10 % +
+  5 % faisaient 14,5 %, ce qui rendait la facture invérifiable par le client. La caisse désactive
+  l'une dès que l'autre est saisie, et le serveur **refuse** le cumul (422).
 - **Tableau à hauteur réservée** (`data-rows="inline"` + `data-minlines="N"`) : sur une facture,
   un bloc `{#Articles}` produit normalement une **ligne de tableau par article**, donc un tableau
   qui grandit et rétrécit — totaux et signature se déplacent d'une facture à l'autre. Ce mode
