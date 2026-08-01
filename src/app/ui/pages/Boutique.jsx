@@ -39,7 +39,9 @@ const STATUS_LABEL = {
   PAYE: "Payé", FACTUREE: "Facturé", REMISE: "Remis", ANNULEE: "Annulée",
 };
 // Étapes visibles par le stagiaire (progression de sa demande).
-const DEMANDE_FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "FACTUREE", "PAYE", "REMISE"];
+// On encaisse AVANT de facturer : la facture constate un paiement reçu, elle ne le
+// précède pas. C'est aussi l'ordre que le serveur déclare (STATUSES).
+const DEMANDE_FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "PAYE", "FACTUREE", "REMISE"];
 
 function DemandeSteps({ status }) {
   const idx = DEMANDE_FLOW.indexOf(status);

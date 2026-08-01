@@ -710,8 +710,10 @@ export function getShopRequests(status) {
 export function updateShopRequest(id, patch) {
   return request(`/boutique/demandes/${id}`, { method: "PUT", body: JSON.stringify(patch) });
 }
-export function invoiceShopRequest(id) {
-  return request(`/boutique/demandes/${id}/facture`, { method: "POST" });
+// `choix` (facultatif) : { bill_to, billing_profile_id, template_slug }. Sans lui, la facture
+// reprend ce qui a été figé à la commande — comportement d'avant.
+export function invoiceShopRequest(id, choix) {
+  return request(`/boutique/demandes/${id}/facture`, { method: "POST", body: JSON.stringify(choix || {}) });
 }
 export function deleteShopRequest(id) {
   return request(`/boutique/demandes/${id}`, { method: "DELETE" });

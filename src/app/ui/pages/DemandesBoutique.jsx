@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
+import PaiementSplit, { resolvePayments } from "../components/PaiementSplit.jsx";
 import { euro } from "../lib/format.js";
 import { initials } from "../lib/format.js";
-import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, deleteAllShopRequests } from "../api/apiClient.js";
+import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, deleteAllShopRequests, getEmitters, getTemplates, getShopSettings } from "../api/apiClient.js";
 
 // Créneau de retrait en clair (« lundi 27 juillet »), comme côté stagiaire : une date
 // ISO nue se relit mal quand on prépare les commandes de la journée.
@@ -29,7 +31,9 @@ function labelJour(iso) {
  * pas, elle met en relation — la facturer reviendrait à encaisser la vente d'un autre.
  */
 
-const FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "FACTUREE", "PAYE", "REMISE"];
+// On encaisse AVANT de facturer : la facture constate un paiement reçu, elle ne le
+// précède pas. C'est aussi l'ordre que le serveur déclare (STATUSES).
+const FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "PAYE", "FACTUREE", "REMISE"];
 const LABEL = {
   NOUVELLE: "Reçue", EN_PREPARATION: "En préparation", PRETE: "Prête à retirer",
   PAYE: "Payé", FACTUREE: "Facturé", REMISE: "Remis", ANNULEE: "Annulée",
@@ -40,6 +44,7 @@ const TONE = { NOUVELLE: "r", EN_PREPARATION: "a", PRETE: "g", PAYE: "a", FACTUR
 
 function Demande({ d, onChange, onErreur }) {
   const [busy, setBusy] = useState(false);
+  const [factureOuverte, setFactureOuverte] = useState(false);
   const idx = FLOW.indexOf(d.status);            // position dans le flux (−1 si ANNULEE)
   const inFlow = idx >= 0;
   const hasInvoice = !!d.invoice_id;
@@ -60,15 +65,21 @@ function Demande({ d, onChange, onErreur }) {
     setBusy(true);
     try { await updateShopRequest(d.id, { status }); onChange(); } finally { setBusy(false); }
   }
-  async function facturer() {
+  /* Facturer ouvre d'abord un choix : QUI facture (entité émettrice) et sous QUELLE présentation
+   * (modèle). Ces deux-là étaient subis — la facture naissait sans émettrice, donc avec un numéro
+   * BQ hors des séquences officielles, et son modèle était deviné au moment du PDF. On confirme
+   * aussi le destinataire choisi par le stagiaire, qui a pu se tromper. */
+  async function facturer(choix) {
     setBusy(true);
-    try { await invoiceShopRequest(d.id); onChange(); } finally { setBusy(false); }
+    try { await invoiceShopRequest(d.id, choix); onChange(); }
+    catch (e) { onErreur(e.message || "Facturation impossible."); }
+    finally { setBusy(false); }
   }
   // Étape suivante : crée la facture si on passe à « Facturé » (et que c'est facturable),
   // sinon avance simplement le statut.
   async function goNext() {
     if (!next) return;
-    if (nextIsFacture) return facturer();
+    if (nextIsFacture) return setFactureOuverte(true);
     setBusy(true);
     try { await updateShopRequest(d.id, { status: next }); onChange(); } finally { setBusy(false); }
   }
@@ -176,7 +187,154 @@ function Demande({ d, onChange, onErreur }) {
           : !isLast ? <button className="btn sm ghost" onClick={() => setStatus("ANNULEE")} disabled={busy}>Annuler</button> : null}
         {!d.invoice_id ? <button className="btn sm ghost danger" onClick={supprimer} disabled={busy} title="Supprimer la demande"><Icon name="trash" size={14} /></button> : null}
       </div>
+      {factureOuverte && (
+        <FacturerModal d={d} busy={busy}
+          onClose={() => setFactureOuverte(false)}
+          onValider={(choix) => { setFactureOuverte(false); facturer(choix); }} />
+      )}
     </Card>
+  );
+}
+
+/**
+ * Choix avant émission : destinataire, entité émettrice, modèle.
+ *
+ * Les trois se décident ICI, et pas au panier du stagiaire : lui demander qui paie l'obligerait à
+ * connaître un accord commercial entre son employeur et l'école, qu'il ne connaît pas forcément —
+ * et l'école devrait de toute façon revérifier derrière.
+ *
+ * Les trois étaient SUBIS. L'acheteur était le stagiaire en dur, même quand son employeur payait.
+ * Aucune émettrice n'était posée, donc la facture prenait un numéro BQ-AAAA-NNNN à part, hors des
+ * séquences officielles. Et le modèle était deviné au moment du PDF par `pickInvoiceTemplate` :
+ * on découvrait la présentation retenue en ouvrant le document.
+ */
+function FacturerModal({ d, busy, onClose, onValider }) {
+  const [emetteurs, setEmetteurs] = useState([]);
+  const [modeles, setModeles] = useState([]);
+  const [emetteurId, setEmetteurId] = useState("");
+  const [slug, setSlug] = useState("");
+  const [moyens, setMoyens] = useState([]);
+  const [paiements, setPaiements] = useState([{ method: "", amount: "" }]);
+  // Total TTC des seules lignes ÉCOLE : c'est ce que l'école encaisse (une ligne partenaire
+  // est vendue par le partenaire, cf. invoiceShopRequest).
+  const totalTtc = (d.lines || [])
+    .filter((l) => l.source === "ECOLE" && l.unit_price_ht != null)
+    .reduce((s2, l) => s2 + l.unit_price_ht * l.qty * (1 + l.tax_rate / 100), 0);
+  /* Échéance au JOUR MÊME par défaut : à ce stade le paiement a déjà eu lieu (« Payé » précède
+   * « Facturé »), la facture ne fait que le constater — rien n'est dû plus tard. Modifiable pour
+   * le cas où l'on facture une entreprise qui règlera à réception. */
+  const [echeance, setEcheance] = useState(() => new Date().toISOString().slice(0, 10));
+  // L'entreprise n'est proposée que si le stagiaire a un employeur. Le stagiaire n'a rien choisi
+  // au panier : c'est l'école qui sait s'il y a prise en charge, et elle le décide ici.
+  // Par défaut on facture le stagiaire — la prise en charge est l'exception, pas la règle.
+  const aEntreprise = !!d.company_id;
+  const [billTo, setBillTo] = useState("STAGIAIRE");
+
+  useEffect(() => {
+    getEmitters().then((r) => {
+      const l = r.data || [];
+      setEmetteurs(l);
+      setEmetteurId((l.find((e) => e.is_default) || {}).id || "");
+    }).catch(() => {});
+    getShopSettings().then((r) => {
+      const l = String(r.data?.payment_methods || "").split(",").map((x) => x.trim()).filter(Boolean);
+      setMoyens(l);
+      if (l.length) setPaiements([{ method: l[0], amount: "" }]);
+    }).catch(() => {});
+    getTemplates().then((r) => {
+      const l = (r.data || []).filter((t) => String(t.doc_type || "").toUpperCase() === "FACTURE"
+        && t.active !== false && t.active !== 0);
+      setModeles(l);
+      if (l.length === 1) setSlug(l[0].slug); // un seul modèle : rien à choisir
+    }).catch(() => {});
+  }, []);
+
+  /* PORTAIL OBLIGATOIRE. La modale était rendue DANS la carte de la demande, et `.card` porte un
+   * `transform` (l'animation `rise` le laisse en matrice identité au repos). Or tout `transform`
+   * autre que `none` fait de l'élément le BLOC CONTENEUR d'un enfant `position:fixed` : le voile
+   * ne couvrait plus la fenêtre mais la carte — 435px — et la modale, centrée là-dedans,
+   * descendait sous le bord de l'écran. Le pied, donc « Créer la facture », devenait
+   * inatteignable : rien ne défilait, ni la page ni la modale.
+   * `document.body` n'a aucun ancêtre transformé : le `fixed` retrouve la fenêtre. */
+  return createPortal(
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <h3>Facturer la demande {d.ref}</h3>
+          <button className="x" onClick={onClose} aria-label="Fermer">×</button>
+        </div>
+        <div className="mbody">
+          <div className="field">
+            <label>Facturer à</label>
+            {aEntreprise ? (
+              <select className="inp" value={billTo} onChange={(e) => setBillTo(e.target.value)}>
+                <option value="STAGIAIRE">{d.learner.last_name} {d.learner.first_name} (le stagiaire)</option>
+                <option value="ENTREPRISE">{d.company_name || "Son entreprise"}</option>
+              </select>
+            ) : (
+              <p className="hint" style={{ margin: 0 }}>
+                {d.learner.last_name} {d.learner.first_name} — ce stagiaire n'est rattaché à aucune entreprise.
+              </p>
+            )}
+          </div>
+          <div className="field">
+            <label>Entité émettrice</label>
+            <select className="inp" value={emetteurId} onChange={(e) => setEmetteurId(e.target.value)}>
+              <option value="">— Aucune (numéro BQ séparé) —</option>
+              {emetteurs.map((e) => <option key={e.id} value={e.id}>{e.legal_name || e.name}</option>)}
+            </select>
+            <p className="hint" style={{ margin: "6px 0 0" }}>
+              Elle donne le numéro de facture et l'identité imprimée en en-tête.
+            </p>
+          </div>
+          <div className="grid cols-2" style={{ gap: 12 }}>
+            <div className="field">
+              <label>Date d'échéance</label>
+              <input className="inp" type="date" value={echeance} onChange={(e) => setEcheance(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Total encaissé</label>
+              <div className="inp" style={{ display: "flex", alignItems: "center", background: "var(--surface2)" }}>
+                <b className="mono">{euro(totalTtc)}</b>
+              </div>
+            </div>
+          </div>
+          {/* Règlement ventilé — MÊME composant que la caisse : un stagiaire peut payer
+              30 € en espèces et le reste en carte. Le champ unique d'avant obligeait à
+              choisir un moyen et à taire l'autre. */}
+          <div className="field">
+            <label>Règlement</label>
+            <PaiementSplit options={moyens} total={totalTtc} rows={paiements} onChange={setPaiements} />
+          </div>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>Modèle de facture</label>
+            <select className="inp" value={slug} onChange={(e) => setSlug(e.target.value)}>
+              <option value="">— Choisir automatiquement —</option>
+              {modeles.map((t) => <option key={t.slug} value={t.slug}>{t.title || t.slug}</option>)}
+            </select>
+            {!modeles.length && (
+              <p className="hint" style={{ margin: "6px 0 0", color: "var(--ember1)" }}>
+                Aucun modèle de type FACTURE actif : la facture ne pourra pas être éditée en PDF.
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={onClose}>Annuler</button>
+          <button className="btn primary" disabled={busy}
+            onClick={() => onValider({
+              bill_to: billTo,
+              billing_profile_id: emetteurId || null,
+              template_slug: slug || null,
+              payments: resolvePayments(paiements, totalTtc).parts,
+              due_date: echeance || null,
+            })}>
+            {busy ? "Création…" : "Créer la facture"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
