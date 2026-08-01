@@ -42,11 +42,18 @@ const { estStaff, peutModerer } = require('../lib/moderation.js');
 const listPosts = async (req, res) => {
     try {
         const conn = db.promise();
+        /* L'HEURE, pas seulement le jour : sur un fil d'entraide, trois questions du même jour
+         * s'affichaient toutes « 2026-08-01 » — on ne savait plus laquelle venait d'arriver.
+         * Le format reste ISO : le fil TRIE sur cette valeur en comparant des chaînes, et en
+         * jj-mm-aaaa le tri se ferait sur le JOUR d'abord. C'est l'écran qui met en français
+         * (cf. `dateHeure` dans lib/format.js) — le format est affaire d'affichage, pas de
+         * transport. Un commentaire de ce genre ne peut PAS vivre dans le littéral SQL juste
+         * en dessous : ses backticks y fermeraient la chaîne. */
         const [rows] = await conn.query(
             `SELECT p.id, p.kind, p.title, p.body, p.pinned, p.author_user_id, p.resolved_answer_id,
                     COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''), p.author_name) AS author_name,
-                    DATE_FORMAT(p.created_at, '%Y-%m-%d') AS created_at,
-                    DATE_FORMAT(p.updated_at, '%Y-%m-%d') AS updated_at,
+                    DATE_FORMAT(p.created_at, '%Y-%m-%d %H:%i') AS created_at,
+                    DATE_FORMAT(p.updated_at, '%Y-%m-%d %H:%i') AS updated_at,
                     (SELECT COUNT(*) FROM community_answer a WHERE a.post_id = p.id) AS answers,
                     (SELECT COUNT(*) FROM community_image i WHERE i.post_id = p.id) AS has_image
                FROM community_post p
@@ -73,7 +80,7 @@ const getPost = async (req, res) => {
     try {
         const conn = db.promise();
         const [[p]] = await conn.query(
-            `SELECT p.*, DATE_FORMAT(p.created_at, '%Y-%m-%d') AS created_at
+            `SELECT p.*, DATE_FORMAT(p.created_at, '%Y-%m-%d %H:%i') AS created_at
                FROM community_post p WHERE p.id = ? AND p.organization_id = ?`,
             [req.params.id, req.user.organization_id]);
         if (!p) return res.status(404).json({ message: 'Publication introuvable.' });

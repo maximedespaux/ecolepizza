@@ -6,7 +6,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import DoughBar from "../components/DoughBar.jsx";
 import AvatarCadre from "../components/AvatarCadre.jsx";
-import { euro, colorOf, initials } from "../lib/format.js";
+import { euro, colorOf, initials, dateHeure } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { useCountUp } from "../lib/useCountUp.js";
 import { useEchap } from "../lib/useEchap.js";
@@ -15,7 +15,7 @@ import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } f
 import { cadreFor, cadrePorteDe, useCadreChoisi } from "../lib/cadres.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
-import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost } from "../api/apiClient.js";
+import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost, unshareRecipe } from "../api/apiClient.js";
 
 /**
  * Temps de présence à l'écran avant qu'un halo « j'aime » s'éteigne.
@@ -155,7 +155,7 @@ function PostHead({ id, name, avatar, cadre, date, onOpen, children }) {
       />
       <span className="post-who">
         <button className="post-name" onClick={ouvrir}>{name || "Stagiaire"}</button>
-        <span className="post-date">{date}</span>
+        <span className="post-date">{dateHeure(date)}</span>
       </span>
       {children}
     </div>
@@ -318,7 +318,7 @@ function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onS
             size={30} title={c.author_name}
             onClick={c.user_id ? () => onProfil(c.user_id) : undefined} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 12 }}><b>{c.author_name || "Stagiaire"}</b> <span className="hint">· {c.created_at || "à l'instant"}</span></span>
+            <span style={{ fontSize: 12 }}><b>{c.author_name || "Stagiaire"}</b> <span className="hint">· {c.created_at ? dateHeure(c.created_at) : "à l'instant"}</span></span>
             {editing[c.id] != null ? (
               <div style={{ marginTop: 4 }}>
                 <textarea className="inp" rows={2} value={editing[c.id]} onChange={(e) => setEditing((m) => ({ ...m, [c.id]: e.target.value }))} style={{ width: "100%" }} />
@@ -503,6 +503,21 @@ export default function Communaute() {
       setComments((m) => ({ ...m, [id]: (m[id] || []).filter((c) => c.id !== cid) }));
       bumpList(id, (x) => ({ comment_count: Math.max(0, (x.comment_count || 0) - 1) }));
     } catch { /* ignore */ }
+  }
+
+  /* Retirer une fiche du fil — modération. Elle repasse en PRIVÉE : l'auteur la garde dans ses
+     empâtements ou ses garnitures, souvent le travail d'une session. Le libellé le dit en toutes
+     lettres dans la confirmation : « retirer » et « supprimer » ne doivent pas se confondre au
+     moment où l'on clique. */
+  async function retirerDuFil(d) {
+    if (!window.confirm(`Retirer « ${d.name} » de la communauté ?\n\nLa fiche redevient privée : elle disparaît du fil, mais ${d.author_name || "son auteur"} la garde dans ses propres fiches.`)) return;
+    setBusy(true);
+    try {
+      await unshareRecipe(d.id);
+      setOpenId(null);
+      setList((p) => p.filter((x) => x.id !== d.id));
+    } catch (e) { window.alert(e.message || "Retrait impossible."); }
+    finally { setBusy(false); }
   }
 
   async function copyToMine(d) {
@@ -836,6 +851,16 @@ export default function Communaute() {
                       </button>
                       {!duBureau && (
                         <button className="btn sm primary comm-save" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /> Enregistrer</button>
+                      )}
+                      {/* La modération pouvait retirer un commentaire, mais pas la fiche qui le
+                          portait : il ne restait qu'à supprimer la fiche entière — ce que la
+                          route refuse à quiconque n'en est pas l'auteur. Retirer du fil suffit,
+                          et se défait : l'auteur peut repartager. */}
+                      {detail.can_moderate && !detail.mine && (
+                        <button className="btn sm ghost danger" disabled={busy} style={{ marginLeft: "auto" }}
+                          onClick={() => retirerDuFil(detail)} title="Retirer cette fiche de la communauté (elle redevient privée)">
+                          <Icon name="shield" size={14} /> Retirer du fil
+                        </button>
                       )}
                     </div>
 

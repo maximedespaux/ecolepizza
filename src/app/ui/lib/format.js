@@ -18,3 +18,22 @@ export function euro(value) {
 export function scoreBadge(score) {
   return { VERT: "g", ORANGE: "a", ROUGE: "r" }[score] || "n";
 }
+
+/**
+ * Date et heure d'une publication, au format français : « 01-08-2026 14:32 ».
+ *
+ * LE SERVEUR CONTINUE D'ENVOYER DE L'ISO (`2026-08-01 14:32`), et c'est délibéré : le fil TRIE
+ * sur cette valeur par comparaison de chaînes (`localeCompare`). En `jj-mm-aaaa`, le tri se
+ * ferait sur le JOUR d'abord — le 31 janvier passerait devant le 1er décembre. Le format est
+ * donc affaire d'affichage, jamais de transport.
+ *
+ * Tolérant à l'entrée : ISO avec ou sans heure, avec `T` ou espace. Une valeur vide rend une
+ * chaîne vide plutôt qu'un « Invalid Date » — une date manquante ne doit pas crier.
+ */
+export function dateHeure(v) {
+  if (!v) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(String(v));
+  if (!m) return String(v);
+  const [, a, mo, j, h, mi] = m;
+  return `${j}-${mo}-${a}` + (h ? ` ${h}:${mi}` : "");
+}

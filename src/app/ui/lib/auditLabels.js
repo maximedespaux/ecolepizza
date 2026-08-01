@@ -108,6 +108,12 @@ const ACTION_LABEL = {
     'quiz.submit': ['Quiz passé', N],
     'quiz.send': ['Quiz envoyé', B],
 
+    /* Communauté — modération. Retirer la publication de quelqu'un doit laisser une trace
+       lisible : « fiche retirée » et non un code, sinon le journal ne sert qu'à qui l'a écrit.
+       Le ton est ROUGE comme les suppressions, sans en être une : la fiche redevient privée,
+       son auteur la garde. C'est bien un retrait de la vue de tous. */
+    'recipe.unshare': ['Fiche retirée de la communauté', R],
+
     // Organisme et accès
     'organization.update': ['Organisme modifié', A],
     'organization.locations': ['Lieux de formation modifiés', A],
@@ -157,6 +163,7 @@ const SUFFIXE = {
 
 /** entité technique → nom lisible, et son genre (pour accorder le participe). */
 const ENTITY_LABEL = {
+    Recipe: ['Fiche technique', 'f'],
     Invoice: ['Facture', 'f'],
     MaterialSale: ['Vente de matériel', 'f'],
     InventoryItem: ['Article d\'inventaire', 'm'],

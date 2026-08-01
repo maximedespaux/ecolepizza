@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./Icon.jsx";
 import AvatarCadre from "./AvatarCadre.jsx";
-import { initials } from "../lib/format.js";
+import { initials, dateHeure } from "../lib/format.js";
 import { parseAvatar } from "../lib/gamification.js";
 import { useEchap } from "../lib/useEchap.js";
 import { reduireImage } from "../lib/image.js";
@@ -34,7 +34,7 @@ function TetePost({ id, name, avatar, cadre, date, onOpen }) {
         title={`Voir le profil${cadre && cadre.id !== "aucun" ? ` · cadre ${cadre.nom}` : ""}`} onClick={ouvrir} />
       <span className="post-who">
         <button className="post-name" onClick={ouvrir}>{name || "Stagiaire"}</button>
-        <span className="post-date">{date}</span>
+        <span className="post-date">{dateHeure(date)}</span>
       </span>
     </div>
   );
@@ -99,7 +99,7 @@ export function AnnonceCard({ post, peutEpingler, onOpen, onEpingler }) {
         </span>
         {post.body && <span className="annonce-x">{post.body}</span>}
         <span className="annonce-meta">
-          {post.author_name} · {post.created_at}
+          {post.author_name} · {dateHeure(post.created_at)}
           {post.answers > 0 && <> · <Icon name="message-circle" size={11} /> {post.answers} réponse{post.answers > 1 ? "s" : ""}</>}
         </span>
       </button>
@@ -201,7 +201,7 @@ export function QuestionModal({ id, moi, cadreDe, onClose, onProfil, onChange })
                         size={30} title={a.author_name}
                         onClick={a.user_id ? () => onProfil(a.user_id) : undefined} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 12 }}><b>{a.author_name}</b> <span className="hint">· {a.created_at}</span></span>
+                        <span style={{ fontSize: 12 }}><b>{a.author_name}</b> <span className="hint">· {dateHeure(a.created_at)}</span></span>
                         {retenue && <span className="q-badge-aide"><Icon name="check-circle" size={11} /> Ça m'a aidé</span>}
                         <span style={{ display: "block", fontSize: 13.5, whiteSpace: "pre-wrap", wordBreak: "break-word", marginTop: 2 }}>{a.body}</span>
                       </div>

@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { enrichirAuteurs, CADRE_PERSONNEL } = require('../lib/auteurs.js');
 const { peutModerer } = require('../lib/moderation.js');
+const { logAudit } = require('../lib/audit.js');
 
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const authorName = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
@@ -92,7 +93,7 @@ const catalogBrands = async (req, res) => {
 
 // Résumé d'une fiche (sans ingrédients).
 const RECIPE_COLS = `id, kind, author_user_id, author_name, name, type, description, servings, paton_g,
-    flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d') AS updated_at`;
+    flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at`;
 
 // Ratio pâte/farine (pourcentage boulanger). Depuis les réglages du calculateur si présents,
 // sinon 1.68 par défaut (≈ 60 % hydratation).
@@ -454,6 +455,41 @@ const deleteRecipe = async (req, res) => {
     }
 };
 
+/**
+ * POST /api/recipes/:id/retirer — retirer une fiche du fil de la Communauté.
+ *
+ * ELLE REPASSE EN PRIVÉE, elle n'est PAS supprimée. Une fiche partagée appartient aussi à son
+ * auteur : elle vit dans ses empâtements, ses garnitures, ses réalisations, et c'est souvent le
+ * travail d'une session. Détruire sa fiche parce que sa publication dérange dans le fil punit
+ * la personne pour le geste — et sans recours. Dépublier suffit à la modération, et se défait :
+ * l'auteur peut repartager, l'école re-retirer.
+ *
+ * D'où une route SÉPARÉE de `updateRecipe` : un modérateur n'a rien à faire dans le contenu
+ * d'une fiche qui n'est pas la sienne. Il peut la retirer du fil, un point.
+ *
+ * Journalisé : retirer la publication de quelqu'un doit laisser une trace, comme toute action
+ * de modération — le Journal d'audit existe pour ça.
+ */
+const unshareRecipe = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[cur]] = await conn.query(
+            'SELECT author_user_id, name, visibility FROM recipe WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        if (!cur) return res.status(404).json({ message: 'Recette introuvable.' });
+        if (cur.author_user_id !== req.user.id && !await peutModerer(req.user)) {
+            return res.status(403).json({ message: 'Seul l\'auteur, ou la modération, peut retirer cette fiche.' });
+        }
+        if (cur.visibility !== 'SHARED') return res.json({ success: true, message: 'Déjà retirée du fil.' });
+        await conn.query('UPDATE recipe SET visibility = ? WHERE id = ?', ['PRIVATE', req.params.id]);
+        logAudit(req, 'recipe.unshare', 'Recipe', req.params.id);
+        res.json({ success: true, message: 'Fiche retirée de la communauté.' });
+    } catch (err) {
+        console.error('Erreur retrait fiche :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** GET /api/recipes/author/:userId — profil public d'un auteur (même organisme, ayant partagé). */
 const authorProfile = async (req, res) => {
     try {
@@ -639,4 +675,4 @@ const markRecipeRead = async (req, res) => {
     }
 };
 
-module.exports = { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment };
+module.exports = { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, unshareRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment };

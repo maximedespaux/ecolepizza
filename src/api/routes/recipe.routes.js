@@ -1,5 +1,5 @@
 const express = require('express');
-const { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment } = require('../controllers/recipe.controller.js');
+const { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, unshareRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment } = require('../controllers/recipe.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -15,6 +15,9 @@ router.get('/:id', authenticateToken, getRecipe);
 router.post('/', authenticateToken, createRecipe);
 router.put('/:id', authenticateToken, updateRecipe);
 router.delete('/:id', authenticateToken, deleteRecipe);
+// Dépublier n'est PAS supprimer : route à part, pour que la modération ne puisse que
+// retirer du fil — jamais toucher au contenu d'une fiche qui n'est pas la sienne.
+router.post('/:id/retirer', authenticateToken, unshareRecipe);
 // Marque la fiche lue : eteint son halo « nouveaux commentaires ».
 router.post('/:id/read', authenticateToken, markRecipeRead);
 router.post('/:id/like', authenticateToken, toggleLike);
