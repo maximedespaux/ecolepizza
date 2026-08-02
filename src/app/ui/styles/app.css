@@ -1996,6 +1996,71 @@ tbody tr:last-child td{border-bottom:none}
   .cp-carte li{padding:2px 5px;font-size:11px;line-height:1.25}
   .cp-carte li b{font-size:11.5px}
   .cp-carte > .hint{margin-top:6px}
+  /* — LE JUSTE PRIX, sur téléphone —
+     L'AIDE-MÉMOIRE DISPARAÎT. Sur grand écran il comble un vide réel (154 px de colonne face à un
+     classeur de 406) ; ici la mise en page est EMPILÉE, il n'y a plus de vide à combler et ses
+     75 px poussent la carte hors de l'écran. Mesuré avant de le retirer : 14 questions sur 16
+     débordaient, jusqu'à 754 px pour 632 disponibles. La formule ne se perd pas — le rappel sous
+     la carte la porte déjà.
+     ET LE VERDICT SE RESSERRE : c'est lui qui fait tout bouger. L'énoncé tient en 61 px, son
+     explication monte à près de 200 — et c'est précisément à ce moment-là qu'on veut encore voir
+     la composition dont on parle. */
+  .cp-expl{font-size:12px;line-height:1.35}
+  .cp-carte li{line-height:1.2}
+  .cp-carte > .hint{font-size:10.5px;line-height:1.3}
+
+}
+
+/* — LE JUSTE PRIX —
+   Même forme que « La commande piège », donc mêmes classes `cp-*` : bandeau chrono, énoncé, trois
+   réponses, classeur à droite. Cette feuille-là a été réglée pour tenir sans défilement sur un
+   téléphone ; la dupliquer sous un autre nom aurait dupliqué ce réglage.
+   Ce qui suit lui est propre : la carte du gérant porte DEUX CHIFFRES par pizza (prix affiché,
+   coût matière), alignés à droite face au texte. `baseline` les cale sur la première ligne de la
+   composition quand elle passe à la ligne, et `flex-shrink:0` empêche « 12,50 € » de se couper en
+   deux quand un nom de pizza est long. */
+.jp-l{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.jp-ing{min-width:0}
+.jp-p,.jp-c{flex:none;font-variant-numeric:tabular-nums}
+/* Le prix passe par-dessus `.cp-carte li span{color:var(--muted)}` : c'est le chiffre qu'on lit
+   en premier, il ne peut pas être plus pâle que le nom de la pizza. */
+.jp-p{color:var(--text);font-weight:800}
+.jp-c{font-size:11px}
+/* L'aide-mémoire sous les réponses : discret, il ne doit jamais concurrencer l'énoncé du regard.
+   Fond de surface et pas de bordure — encadré, il se lirait comme une quatrième réponse, juste
+   sous trois boutons qu'on clique au chrono. */
+.jp-aide{display:flex;flex-direction:column;gap:4px;margin-top:16px;padding:10px 12px;
+  border-radius:10px;background:var(--surface2);font-size:11.5px;line-height:1.35;color:var(--muted)}
+.jp-aide b{color:var(--text);font-weight:800}
+.jp-aide i{font-style:normal;opacity:.75}
+
+/* — LE JUSTE PRIX SUR TÉLÉPHONE —
+   CE BLOC EST APRÈS LES RÈGLES DE BASE, ET C'EST LA RAISON D'ÊTRE DE SA POSITION. Les mêmes deux
+   règles avaient d'abord été écrites dans le `@media` commun, deux cents lignes plus haut : à
+   spécificité égale, c'est la DERNIÈRE déclaration qui gagne, donc `.jp-aide{display:flex}` écrasait
+   le `display:none` censé s'appliquer. Mesuré à 375 px de large, media query active : l'aide-mémoire
+   restait affiché. Une media query ne l'emporte pas sur ce qui la suit.
+
+   L'AIDE-MÉMOIRE DISPARAÎT. Sur grand écran il comble un vide réel (154 px de colonne face à un
+   classeur de 406) ; ici la mise en page est EMPILÉE, il n'y a plus de vide et ses 75 px poussent
+   la carte hors de l'écran. La formule ne se perd pas : le rappel sous la carte la porte.
+
+   LA COMPOSITION TIENT SUR UNE LIGNE, et c'est le bon sacrifice. Dans ce jeu-ci elle ne sert JAMAIS
+   à répondre — on calcule sur le prix et le coût, qui restent entiers. Elle donne le contexte (voir
+   « crevettes, burrata » en face de 3,20 € apprend ce qui coûte cher), et sur un téléphone ce
+   contexte vaut moins que de garder les six lignes visibles. */
+@media (max-width:640px){
+  .jp-aide{display:none}
+  /* LE PIÈGE DE L'ELLIPSE. `nowrap` ne tronque rien tout seul : il donne au texte une largeur
+     min-content égale à la ligne ENTIÈRE, et une grille refuse de descendre sous le min-content de
+     son contenu. Résultat mesuré à 375 px de large : la carte réclamait 415 px, la modale s'ouvrait
+     à 457, et cinquante éléments sortaient de l'écran — le troisième bouton de réponse finissait à
+     456 px. Rien ne le signalait, `documentElement.scrollWidth` valant toujours 375 : la modale est
+     en `position:fixed`, donc le document ne la compte pas et le débordement se voit à l'œil sans
+     apparaître dans la mesure. Il faut autoriser CHAQUE conteneur de la chaîne à descendre sous son
+     contenu — d'où ce `min-width:0`, sans lequel l'ellipse ne se déclenche jamais. */
+  .cp-carte,.cp-carte ul,.cp-carte li{min-width:0}
+  .jp-ing{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 
 /* — LA PISTE DES CADRES, sous le chemin des chapitres —

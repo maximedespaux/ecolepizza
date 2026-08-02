@@ -14,6 +14,18 @@ export function euro(value) {
   return `${Number(value || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} €`;
 }
 
+/**
+ * Prix affiché À LA FRANÇAISE SUR UNE CARTE : toujours deux décimales.
+ *
+ * `euro()` supprime les décimales inutiles, ce qui est le bon choix pour un total de facture mais
+ * pas pour une colonne de prix : une carte qui aligne « 5,5 € », « 9 € » et « 12,50 € » se lit
+ * comme une erreur de saisie. Ici les chiffres se comparent verticalement, donc ils doivent avoir
+ * la même forme.
+ */
+export function euroFixe(value) {
+  return `${Number(value || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+}
+
 /** Classe de badge pour un score de conformité Qualiopi. */
 export function scoreBadge(score) {
   return { VERT: "g", ORANGE: "a", ROUGE: "r" }[score] || "n";
