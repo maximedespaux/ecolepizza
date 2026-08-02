@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { logAudit } = require('../lib/audit.js');
 const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigners } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
