@@ -21,7 +21,10 @@ export const apportType = (v) => APPORT_TYPES.find((t) => t.v === v) || APPORT_T
 export function apportsOfPartner(p) {
   const commissions = (p?.commissions || []).map((c) => ({
     id: `re:${c.id}`, srcId: c.id, src: "revenue", real: true,
-    type: "COMMISSION", label: c.label, value: Number(c.amount) || 0, date: c.date,
+    // `type` venait d'être écrit en dur à "COMMISSION" : une subvention ou un autre produit
+    // s'affichait donc comme une commission. Repli sur COMMISSION seulement si le serveur ne
+    // dit rien — une base d'avant l'ajout de `category` à la requête.
+    type: c.category || "COMMISSION", label: c.label, value: Number(c.amount) || 0, date: c.date,
   }));
   const contributions = (p?.contributions || []).map((c) => ({
     id: `pc:${c.id}`, srcId: c.id, src: "contribution", real: true,

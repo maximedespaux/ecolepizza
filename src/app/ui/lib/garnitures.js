@@ -7,6 +7,8 @@
 export const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
 export const GARN_BASES = [
+  { key: "moutarde_miel", label: "Sauce moutarde-miel", emoji: "🍯", qty: 60, price: 7, pairs: ["poulet", "oignon", "emmental"] },
+  { key: "satay", label: "Sauce satay", emoji: "🥜", qty: 60, price: 9, pairs: ["poulet", "oignon_rouge", "sesame"] },
   { key: "tomate", label: "Sauce tomate", emoji: "🍅", qty: 80, price: 3, pairs: ["mozzarella", "basilic", "origan", "olives", "anchois", "chorizo"] },
   { key: "creme", label: "Crème", emoji: "🥛", qty: 70, price: 4, pairs: ["lardons", "oignon", "champignon", "chevre", "pomme_de_terre"] },
   { key: "creme_chorizo", label: "Crème chorizo", emoji: "🌶️", qty: 70, price: 6, pairs: ["mozzarella", "poivron", "miel", "chevre", "oignon_rouge"] },
@@ -18,6 +20,59 @@ export const GARN_BASES = [
 ];
 
 export const GARN_PRODUITS = [
+  /* — ÉLARGISSEMENT DU CATALOGUE (2026-08) —
+     Le catalogue s'arrêtait à 25 garnitures, ce qui suffisait pour composer une carte mais pas
+     pour couvrir les 14 allergènes : cinq seulement étaient atteignables. Les produits ci-dessous
+     ouvrent les crustacés, les mollusques, le sésame, les arachides et les fruits à coque — et
+     donnent au passage de quoi varier une carte sans la répéter.
+     `lib/allergenes.js` dit ce que chacun porte ; ici on ne décrit que le produit. */
+  // Mer — chacun ouvre un allergène que la catégorie « poisson » ne couvre pas.
+  { key: "crevettes", label: "Crevettes", cat: "Mer", emoji: "🍤", qty: 60, price: 22, fragile: true, pairs: ["ail", "persil", "creme", "citron"] },
+  { key: "moules", label: "Moules", cat: "Mer", emoji: "🦪", qty: 60, price: 14, fragile: true, pairs: ["ail", "persil", "creme"] },
+  { key: "calamars", label: "Calamars", cat: "Mer", emoji: "🦑", qty: 60, price: 18, fragile: true, pairs: ["ail", "persil", "piment"] },
+  { key: "sardine", label: "Sardines", cat: "Mer", emoji: "🐟", qty: 45, price: 11, pairs: ["tomate", "oignon", "olives"] },
+  // Charcuterie et viandes
+  { key: "boeuf_hache", label: "Bœuf haché", cat: "Charcuterie", emoji: "🥩", qty: 60, price: 12, pairs: ["oignon", "poivron", "cheddar"] },
+  { key: "merguez", label: "Merguez", cat: "Charcuterie", emoji: "🌭", qty: 50, price: 11, pairs: ["poivron", "oignon", "harissa"] },
+  { key: "saucisse", label: "Saucisse italienne", cat: "Charcuterie", emoji: "🌭", qty: 50, price: 12, pairs: ["fenouil", "oignon", "mozzarella"] },
+  { key: "coppa", label: "Coppa", cat: "Charcuterie", emoji: "🥓", qty: 35, price: 24, pairs: ["roquette", "parmesan", "burrata"] },
+  { key: "speck", label: "Speck", cat: "Charcuterie", emoji: "🥓", qty: 35, price: 26, pairs: ["roquette", "champignon", "scamorza"] },
+  // La mortadelle porte SOUVENT des pistaches : c'est un piège de service à part entière.
+  { key: "mortadelle", label: "Mortadelle", cat: "Charcuterie", emoji: "🥓", qty: 40, price: 14, pairs: ["stracciatella", "pistache", "roquette"] },
+  { key: "canard", label: "Magret fumé", cat: "Charcuterie", emoji: "🦆", qty: 40, price: 32, pairs: ["figue", "miel", "chevre"] },
+  // Légumes
+  { key: "courgette", label: "Courgette", cat: "Légumes", emoji: "🥒", qty: 45, price: 3, pairs: ["chevre", "menthe", "aubergine"] },
+  { key: "epinard", label: "Épinards", cat: "Légumes", emoji: "🥬", qty: 40, price: 6, pairs: ["ricotta", "oeuf", "ail"] },
+  { key: "artichaut", label: "Artichauts", cat: "Légumes", emoji: "🌿", qty: 45, price: 9, pairs: ["jambon", "olives", "champignon"] },
+  { key: "brocoli", label: "Brocoli", cat: "Légumes", emoji: "🥦", qty: 45, price: 5, pairs: ["saucisse", "ail", "piment"] },
+  { key: "poireau", label: "Poireau", cat: "Légumes", emoji: "🥬", qty: 45, price: 4, pairs: ["creme", "lardons", "reblochon"] },
+  { key: "carotte", label: "Carotte", cat: "Légumes", emoji: "🥕", qty: 40, price: 2, pairs: ["cumin", "chevre", "miel"] },
+  { key: "patate_douce", label: "Patate douce", cat: "Légumes", emoji: "🍠", qty: 55, price: 4, pairs: ["chevre", "romarin", "miel"] },
+  { key: "betterave", label: "Betterave", cat: "Légumes", emoji: "🫒", qty: 40, price: 4, pairs: ["chevre", "noix", "roquette"] },
+  { key: "chou_fleur", label: "Chou-fleur", cat: "Légumes", emoji: "🥦", qty: 45, price: 4, pairs: ["parmesan", "ail", "piment"] },
+  { key: "tomate_sechee", label: "Tomates séchées", cat: "Légumes", emoji: "🍅", qty: 30, price: 14, pairs: ["burrata", "basilic", "roquette"] },
+  { key: "capres", label: "Câpres", cat: "Légumes", emoji: "🫒", qty: 15, price: 16, pairs: ["anchois", "olives", "origan"] },
+  { key: "poivron_grille", label: "Poivrons grillés", cat: "Légumes", emoji: "🫑", qty: 45, price: 7, pairs: ["chorizo", "feta", "oignon_rouge"] },
+  // Fruits — la pizza sucrée-salée est une carte à part entière, et ils diversifient les tirages.
+  { key: "ananas", label: "Ananas", cat: "Douceurs", emoji: "🍍", qty: 45, price: 4, pairs: ["jambon", "mozzarella"] },
+  { key: "pomme", label: "Pomme", cat: "Douceurs", emoji: "🍏", qty: 45, price: 3, pairs: ["chevre", "miel", "canard"] },
+  { key: "poire", label: "Poire", cat: "Douceurs", emoji: "🍐", qty: 45, price: 4, pairs: ["gorgonzola", "noix", "miel"] },
+  { key: "raisin", label: "Raisin", cat: "Douceurs", emoji: "🍇", qty: 40, price: 5, pairs: ["gorgonzola", "noix"] },
+  { key: "abricot_sec", label: "Abricots secs", cat: "Douceurs", emoji: "🍑", qty: 30, price: 12, pairs: ["chevre", "canard", "amande"] },
+  // Fruits à coque et graines — ils portent des allergènes majeurs, et n'étaient représentés que
+  // par les noix.
+  { key: "pignons", label: "Pignons de pin", cat: "Douceurs", emoji: "🌰", qty: 12, price: 48, pairs: ["basilic", "epinard", "parmesan"] },
+  { key: "amande", label: "Amandes effilées", cat: "Douceurs", emoji: "🌰", qty: 12, price: 22, pairs: ["chevre", "miel", "abricot_sec"] },
+  { key: "pistache", label: "Pistaches", cat: "Douceurs", emoji: "🌰", qty: 12, price: 38, pairs: ["mortadelle", "stracciatella"] },
+  { key: "sesame", label: "Graines de sésame", cat: "Aromates", emoji: "🌰", qty: 8, price: 14, pairs: ["poulet", "soja_sauce"] },
+  // Aromates
+  { key: "persil", label: "Persil", cat: "Aromates", emoji: "🌿", qty: 8, price: 14, fragile: true, pairs: ["ail", "crevettes", "calamars"] },
+  { key: "menthe", label: "Menthe", cat: "Aromates", emoji: "🌿", qty: 6, price: 18, fragile: true, pairs: ["courgette", "feta"] },
+  { key: "romarin", label: "Romarin", cat: "Aromates", emoji: "🌿", qty: 5, price: 16, pairs: ["pomme_de_terre", "patate_douce"] },
+  { key: "thym", label: "Thym", cat: "Aromates", emoji: "🌿", qty: 5, price: 16, pairs: ["champignon", "chevre"] },
+  { key: "ail", label: "Ail", cat: "Aromates", emoji: "🧄", qty: 10, price: 6, pairs: ["persil", "crevettes", "epinard"] },
+  { key: "piment", label: "Piment", cat: "Aromates", emoji: "🌶️", qty: 5, price: 20, pairs: ["chorizo", "calamars", "brocoli"] },
+  { key: "citron", label: "Zeste de citron", cat: "Aromates", emoji: "🍋", qty: 5, price: 8, fragile: true, pairs: ["crevettes", "ricotta"] },
   // Charcuterie
   { key: "chorizo", label: "Chorizo", cat: "Charcuterie", emoji: "🌶️", qty: 40, price: 12, pairs: ["miel", "chevre", "poivron", "mozzarella", "oignon_rouge"] },
   { key: "jambon", label: "Jambon", cat: "Charcuterie", emoji: "🍖", qty: 40, price: 9, pairs: ["champignon", "mozzarella", "olives"] },
@@ -50,6 +105,13 @@ export const GARN_PRODUITS = [
 ];
 
 export const GARN_DAIRY = [
+  { key: "emmental", label: "Emmental", emoji: "🧀", qty: 80, price: 9 },
+  { key: "comte", label: "Comté", emoji: "🧀", qty: 70, price: 15 },
+  { key: "raclette", label: "Raclette", emoji: "🧀", qty: 80, price: 12 },
+  { key: "brie", label: "Brie", emoji: "🧀", qty: 70, price: 11 },
+  { key: "bleu", label: "Bleu d'Auvergne", emoji: "🧀", qty: 55, price: 13 },
+  { key: "cheddar", label: "Cheddar", emoji: "🧀", qty: 70, price: 10 },
+  { key: "mascarpone", label: "Mascarpone", emoji: "🧀", qty: 50, price: 12, fragile: true },
   { key: "mozzarella", label: "Mozzarella", emoji: "🧀", qty: 80, price: 8 },
   { key: "mozza_bufala", label: "Mozzarella di bufala", emoji: "🧀", qty: 80, price: 16, fragile: true },
   { key: "stracciatella", label: "Stracciatella", emoji: "🧀", qty: 60, price: 18, fragile: true },

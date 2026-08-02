@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getMyFormations, getMyProfile, getPlayableChapters } from "../api/apiClient.js";
+import { getMyFormations, getMyProfile, getPlayableChapters, resetMyQuest } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import SimulateurPizza from "../components/SimulateurPizza.jsx";
+import CommandePiege from "../components/CommandePiege.jsx";
+import JustePrix from "../components/JustePrix.jsx";
 import { colorOf } from "../lib/format.js";
 import { saveQuestProgress } from "../lib/gamification.js";
+import { FETES, paliersFranchis, marquerFete, palierDuMonde } from "../lib/questPaliers.js";
 
 /**
  * Pizza Quest — entraînement QCM ludique (façon Duolingo × Mario/Royal Match).
@@ -130,6 +133,7 @@ function PizzaQuest() {
   const [prog, setProg] = useState(loadProg);
   const [quiz, setQuiz] = useState(null);
   const [mini, setMini] = useState(null); // { key, obj? } du mini-jeu ouvert, ou null
+  const [fete, setFete] = useState(null); // { palier, monde } — palier tout juste franchi
   /* Les CŒURS et l'XP ont été retirés (2026-07-28) : ils récompensaient le temps passé à
      cliquer, et le manque de cœur BLOQUAIT la révision — punir quelqu'un qui veut réviser est
      un contresens pédagogique. La progression se voit désormais aux CADRES, gagnés sur les
@@ -195,12 +199,52 @@ function PizzaQuest() {
     }).catch(() => {});
   }, []);
 
+  /**
+   * REMISE À ZÉRO — DÉVELOPPEMENT SEULEMENT.
+   *
+   * `import.meta.env.DEV` est évalué à la compilation : en production, Vite remplace la constante
+   * par `false` et le bloc entier disparaît du bundle. Ce n'est pas un bouton caché derrière un
+   * rôle — c'est un bouton qui N'EXISTE PAS chez le stagiaire. Sur une action qui détruit une
+   * progression et les cadres qui en découlent, c'est la seule garantie qui vaille.
+   *
+   * TROIS ENDROITS À EFFACER, et en oublier un donne un état incohérent :
+   *   · la base (`learner_quest_progress`), sinon tout revient au prochain chargement ;
+   *   · le localStorage, sinon la fusion au montage le réécrit en base — `saveMyQuest` n'écrit
+   *     qu'à la hausse, mais une progression locale intacte suffit à tout restaurer ;
+   *   · la mémoire des fêtes, sinon les paliers déjà franchis ne se refêteraient jamais et on ne
+   *     pourrait plus tester l'animation qu'on vient d'écrire.
+   */
+  async function remiseAZero() {
+    if (!window.confirm("DEBUG — effacer TOUTE ta progression Pizza Quest ?\n\n"
+      + "Chapitres, étoiles des mini-jeux et cadres de quête. Irréversible.")) return;
+    try {
+      await resetMyQuest();
+      try {
+        localStorage.removeItem(KEY);
+        localStorage.removeItem("impasto.quest.fetes");
+      } catch { /* navigation privée : la base est déjà vide, c'est l'essentiel */ }
+      setProg({});
+      setActive(null);
+    } catch (e) { window.alert("Échec de la remise à zéro : " + e.message); }
+  }
+
   const totalStars = useMemo(() => Object.values(prog).reduce((s, w) => s + Object.values(w).reduce((a, v) => a + v, 0), 0), [prog]);
 
   function finishChapter(code, chIdx, stars) {
     setProg((p) => {
-      const next = { ...p, [code]: { ...(p[code] || {}), [chIdx]: Math.max(stars, (p[code] || {})[chIdx] || 0) } };
-      saveProg(next); return next;
+      const avant = p[code] || {};
+      const apres = { ...avant, [chIdx]: Math.max(stars, avant[chIdx] || 0) };
+      const next = { ...p, [code]: apres };
+      saveProg(next);
+      /* LE PALIER SE FÊTE ICI, entre l'avant et l'après — le seul endroit où l'on connaît les
+         deux. Regarder la progression seule ferait refêter le palier à chaque chapitre suivant.
+         Le calcul est local et synchrone : passer par le serveur ferait arriver la fête après
+         que le stagiaire a refermé la fenêtre. */
+      const monde = worlds?.find((w) => w.code === code);
+      const nb = chaptersFor(monde).length;
+      const palier = paliersFranchis(code, avant, apres, nb);
+      if (palier) { marquerFete(code, palier); setFete({ palier, monde }); }
+      return next;
     });
     setQuiz(null);
   }
@@ -224,6 +268,12 @@ function PizzaQuest() {
           {/* Les étoiles restent : elles notent la réussite d'un chapitre. Ce sont l'XP et les
               cœurs qui ont disparu — ils comptaient le temps passé et rationnaient l'accès. */}
           <div className="pq-stat"><Icon name="star" size={15} fill="currentColor" aria-hidden="true" /><b>{totalStars}</b><span>étoiles</span></div>
+          {import.meta.env.DEV && (
+            <button type="button" className="pq-debug" onClick={remiseAZero}
+              title="Développement seulement — ce bouton n'existe pas en production">
+              <Icon name="trash" size={13} /> Debug : tout effacer
+            </button>
+          )}
         </div>
       </div>
       <p className="hint" style={{ marginTop: -6 }}>
@@ -233,9 +283,11 @@ function PizzaQuest() {
 
       {world
         ? <WorldView world={world} prog={prog[world.code] || {}} onBack={() => setActive(null)}
-            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || [] })}
-            onGame={(g) => setMini({ key: g.key, obj: g.obj })} />
-        : <FormationMap worlds={worlds} prog={prog} onPick={setActive} />}
+            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || [] })} />
+        : <>
+            <Arcade prog={prog} onGame={(g) => setMini({ key: g.key, obj: g.obj })} />
+            <FormationMap worlds={worlds} prog={prog} onPick={setActive} />
+          </>}
 
       {/* Quitter un chapitre ne coûte plus rien : les cœurs sont supprimés. On ne demande
           donc plus confirmation — il n'y a plus rien à perdre. */}
@@ -249,8 +301,59 @@ function PizzaQuest() {
       )}
       {mini?.key === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
       {mini?.key === "simulateur" && <SimulateurPizza objectifId={mini.obj} onClose={() => setMini(null)} onFinish={(stars) => finishMini("simulateur", stars)} />}
+      {mini?.key === "piege" && <CommandePiege onClose={() => setMini(null)} onFinish={(stars) => finishMini("piege", stars)} />}
+      {mini?.key === "prix" && <JustePrix onClose={() => setMini(null)} onFinish={(stars) => finishMini("prix", stars)} />}
 
+      {fete && <FetePalier palier={fete.palier} monde={fete.monde} onClose={() => setFete(null)} />}
     </>
+  );
+}
+
+/**
+ * La fête d'un palier — le seul moment du jeu qui mérite qu'on s'arrête.
+ *
+ * ELLE PORTE LA COULEUR DE LA FORMATION, comme le cadre qu'elle annonce : la fête et la
+ * récompense doivent se reconnaître l'une l'autre, sinon l'anneau qui apparaîtra sur l'avatar
+ * semblera venir d'ailleurs.
+ *
+ * L'APERÇU DU CADRE EST LE VRAI CADRE — les mêmes classes que sur l'avatar, teintées par la
+ * même variable. Un dessin approchant aurait fini par diverger du cadre réel au premier
+ * changement de style, et la promesse ne correspondrait plus à ce qu'on reçoit.
+ */
+function FetePalier({ palier, monde, onClose }) {
+  const f = FETES[palier];
+  const couleur = monde?.color || "#dc3e37";
+  // Échap ferme, comme partout. Une fête sans sortie au clavier est une fête qui enferme.
+  useEffect(() => {
+    const t = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", t);
+    return () => window.removeEventListener("keydown", t);
+  }, [onClose]);
+  if (!f) return null;
+  return (
+    <div className="overlay pq-fete-fond" onClick={onClose}>
+      <div className="modal pq-fete" style={{ maxWidth: 400, "--fc": couleur }} onClick={(e) => e.stopPropagation()}>
+        <div className="mbody" style={{ textAlign: "center", padding: "30px 24px 24px" }}>
+          {/* Les éclats partent DE DERRIÈRE le cadre : ils sont posés avant lui dans le flux et
+              en `position:absolute`, de sorte que l'anneau reste net au premier plan. */}
+          <div className="pq-fete-halo" aria-hidden="true">
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <span key={i} className="pq-fete-eclat" style={{ "--i": i }} />
+            ))}
+            <span className={`pq-fete-cadre cadre cadre-${palier}`} style={{ "--cadre-c": couleur }} />
+          </div>
+          <h3 className="pq-fete-titre">{f.titre}</h3>
+          <p className="pq-fete-texte">{f.texte(monde?.title || monde?.code || "cette formation")}</p>
+          {/* Ce que ça RAPPORTE, dit en toutes lettres : un cadre qui apparaît sans explication
+              se découvre par hasard dans le profil, des semaines plus tard. */}
+          <p className="pq-fete-gain">
+            <Icon name="star" size={14} fill="currentColor" /> Cadre débloqué : <b>{f.cadre}</b>
+            <span className="hint"> — à porter depuis ton profil</span>
+          </p>
+          <button className="btn primary" onClick={onClose} autoFocus>Continuer</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -408,43 +511,71 @@ function CarteRangee({ worlds, card }) {
   );
 }
 
-// Les défis-jeux propres à chaque formation. DIFFÉRENTS selon le rôle : le Constructeur
-// (ordonner la recette) sur les formations « process », « Fais ta pizza » sur celles qui
-// travaillent les paramètres — et il s'ouvre directement sur le style visé (obj). Un jeu
-// « Bientôt » par formation garde la promesse sans mentir sur ce qui existe.
-const GAME_SIM = (obj, sub) => ({ key: "simulateur", obj, ic: "flame", tint: "var(--orange)", label: "Fais ta pizza", sub });
-const GAME_CONS = { key: "constructeur", ic: "pizza", tint: "var(--ember1)", label: "Le Constructeur", sub: "Ordonne la recette" };
-const GAME_SOON = { key: null, ic: "clock", tint: "var(--dim)", label: "Chrono Rush", sub: "Bientôt", soon: true };
-const GAMES_BY_ROLE = {
-  decouverte: [GAME_CONS, GAME_SOON],
-  niv1: [GAME_CONS, GAME_SIM("classique", "Réussis une classique"), GAME_SOON],
-  niv1pro: [GAME_CONS, GAME_SOON],
-  niv2: [GAME_SIM("contemporaine", "Réussis une contemporaine"), GAME_CONS, GAME_SOON],
-  expert: [GAME_SIM(null, "Tous les styles"), GAME_CONS, GAME_SOON],
-  spe: [GAME_SIM(null, "Réussis ta spécialité"), GAME_SOON],
-  autre: [GAME_CONS, GAME_SOON],
-};
+/**
+ * L'ARCADE — les défis, en tête de Pizza Quest et non plus dans chaque formation.
+ *
+ * POURQUOI ILS EN SORTENT. Ils y étaient rangés par formation, mais l'attribution était en
+ * trompe-l'œil : sur les sept groupes, le Constructeur apparaissait dans SIX et « Chrono Rush »
+ * dans les SEPT. On répétait deux jeux identiques sept fois pour trois variantes réellement
+ * différentes — les trois objectifs du Simulateur.
+ *
+ * ET LE MODÈLE DE DONNÉES ÉTAIT DÉJÀ D'ACCORD : `finishMini` enregistre sous `prog["constructeur"]`,
+ * une clé plate, JAMAIS sous le monde. Jouer depuis Niveau I ou depuis Napolitaine écrivait au
+ * même endroit. Seul l'affichage prétendait que ces jeux appartenaient à une formation.
+ *
+ * Ils se découvrent donc en haut, avant la carte, au lieu d'attendre sous le chemin de chapitres
+ * d'un monde qu'il faut d'abord ouvrir.
+ *
+ * LE SIMULATEUR GARDE SES STYLES, mais c'est LUI qui les propose : ouvert sans objectif, il
+ * affiche son choix de pizzas (cf. SimulateurPizza). Le seul lien réel avec les formations est
+ * préservé, sans les six répétitions.
+ */
+const GAME_CONS = { key: "constructeur", ic: "pizza", tint: "var(--ember1)",
+  label: "Le Constructeur", sub: "Ordonne la recette" };
+const GAME_SIM = { key: "simulateur", obj: null, ic: "flame", tint: "var(--orange)",
+  label: "Fais ta pizza", sub: "Farine, hydratation, four" };
+const GAME_PIEGE = { key: "piege", ic: "shield", tint: "var(--red)",
+  label: "La commande piège", sub: "Allergènes et bon réflexe" };
+const GAME_PRIX = { key: "prix", ic: "coins", tint: "var(--gold, #e0ac48)",
+  label: "Le juste prix", sub: "Coût matière et marge" };
+const GAME_SOON = { key: null, ic: "clock", tint: "var(--dim)",
+  label: "Chrono Rush", sub: "Bientôt", soon: true };
+const ARCADE = [GAME_CONS, GAME_SIM, GAME_PIEGE, GAME_PRIX, GAME_SOON];
 
-// Les défis d'un monde, rendus sous le chemin de chapitres.
-function WorldGames({ world, onGame }) {
-  const games = GAMES_BY_ROLE[roleOf(world)] || [GAME_CONS];
+function Arcade({ prog, onGame }) {
   return (
-    <>
-      <div className="pq-games-t">Les défis de cette formation</div>
+    <div className="pq-arcade">
+      <div className="pq-games-t">L'arcade — les défis de l'école</div>
       <div className="pq-minis">
-        {games.map((g, i) => g.soon ? (
-          <div key={i} className="pq-mini soon">
-            <span className="pq-mini-e" style={{ color: g.tint }}><Icon name={g.ic} size={24} /></span>
-            <span className="pq-mini-txt"><b>{g.label}</b><span className="pq-mini-sub">{g.sub}</span></span>
-          </div>
-        ) : (
-          <button key={i} className="pq-mini" onClick={() => onGame(g)}>
-            <span className="pq-mini-e" style={{ color: g.tint }}><Icon name={g.ic} size={24} /></span>
-            <span className="pq-mini-txt"><b>{g.label}</b><span className="pq-mini-sub">{g.sub}</span></span>
-          </button>
-        ))}
+        {ARCADE.map((g, i) => {
+          /* LE RECORD PERSONNEL, et lui seul. Un classement nominatif entre stagiaires ferait,
+             dans une promotion de vingt, dix-sept personnes installées à demeure dans la moitié
+             basse — et ce sont précisément celles qu'on veut faire revenir. Sur une session de
+             trois, il serait carrément déprimant. Le record qu'on bat, c'est le sien. */
+          const record = g.key ? (prog[g.key] || {})[0] || 0 : 0;
+          const Balise = g.soon ? "div" : "button";
+          return (
+            <Balise key={i} className={"pq-mini" + (g.soon ? " soon" : "")}
+              onClick={g.soon ? undefined : () => onGame(g)}>
+              <span className="pq-mini-e" style={{ color: g.tint }}><Icon name={g.ic} size={24} /></span>
+              <span className="pq-mini-txt">
+                <b>{g.label}</b>
+                <span className="pq-mini-sub">{g.sub}</span>
+                {!g.soon && (
+                  <span className="pq-mini-record" aria-label={`Ton record : ${record} étoile${record > 1 ? "s" : ""} sur 3`}>
+                    {[0, 1, 2].map((n) => (
+                      <Icon key={n} name="star" size={11} fill={n < record ? "currentColor" : "none"}
+                        className={n < record ? "on" : ""} />
+                    ))}
+                    <span className="hint">{record ? "ton record" : "jamais joué"}</span>
+                  </span>
+                )}
+              </span>
+            </Balise>
+          );
+        })}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -504,7 +635,7 @@ function FCard({ w, prog, onPick }) {
 }
 
 // Vue d'un monde : chemin de chapitres façon Duolingo + les défis-jeux de la formation.
-function WorldView({ world, prog, onBack, onChapter, onGame }) {
+function WorldView({ world, prog, onBack, onChapter }) {
   const chapters = chaptersFor(world);
   const doneCount = Object.keys(prog).length;
   // Chapitre en cours = le premier non terminé. `-1` quand tout est fait.
@@ -677,7 +808,81 @@ function WorldView({ world, prog, onBack, onChapter, onGame }) {
       </div>
       </div>
       <p className="hint" style={{ textAlign: "center", marginTop: 8 }}>{doneCount}/{chapters.length} chapitres terminés</p>
-      <WorldGames world={world} onGame={onGame} />
+      <PisteDesCadres world={world} prog={prog} nbChapitres={chapters.length} />
+    </div>
+  );
+}
+
+/**
+ * LA PISTE DES CADRES — ce que cette formation rapporte, et où l'on en est.
+ *
+ * CE QUI MANQUAIT. Les trois cadres d'une formation s'obtenaient sans qu'on ait jamais su
+ * qu'ils existaient : la fête tombait au franchissement, et c'était la PREMIÈRE fois qu'on en
+ * entendait parler. Un stagiaire à 9 chapitres sur 20 n'avait aucun moyen de savoir qu'il en
+ * restait un à faire pour décrocher le premier — donc aucune raison de le faire.
+ *
+ * Trois jalons sur une ligne, sous le chemin des chapitres : acquis, en cours, verrouillés. Le
+ * segment se remplit à la proportion du chemin restant, ce qui répond à la seule question qui
+ * compte devant un objectif — « combien encore ? ».
+ *
+ * LES JALONS SONT LES VRAIS CADRES, mêmes classes et même teinte de formation : ce qu'on voit
+ * ici est exactement ce qu'on portera. Verrouillé, `--cadre-c` passe au gris — l'anneau ET son
+ * jeton grisent ensemble, sans qu'on ait à prévoir un dessin « éteint » pour chacun.
+ */
+/* Chaque jalon porte SON compteur et SON point de départ, au lieu de les déduire du jalon
+   précédent. La déduction était fausse pour « Sans faute » : il partage son seuil avec « Monde
+   bouclé » (tous les chapitres) mais se compte sur une AUTRE échelle — les chapitres à trois
+   étoiles. Le segment partait donc de 20 sur une échelle qui n'allait qu'à 8, et se remplissait
+   à 0 % alors qu'on en était à 40 %. */
+const JALONS = [
+  { id: "qdemi", nom: "Sur la voie", compteur: "faits", de: () => 0, a: (n) => Math.ceil(n / 2) },
+  { id: "qfini", nom: "Monde bouclé", compteur: "faits", de: () => 0, a: (n) => n },
+  { id: "qparfait", nom: "Sans faute", compteur: "parfaits", de: () => 0, a: (n) => n },
+];
+
+function PisteDesCadres({ world, prog, nbChapitres }) {
+  // Sans chapitre, aucun palier n'est atteignable : afficher une piste morte serait pire que
+  // ne rien afficher — elle promettrait trois cadres que la banque ne permet pas de gagner.
+  if (!nbChapitres) return null;
+  const faits = Object.values(prog).filter((v) => Number(v) > 0).length;
+  const parfaits = Object.values(prog).filter((v) => Number(v) >= 3).length;
+  const atteint = palierDuMonde(prog, nbChapitres);
+  const rang = JALONS.findIndex((j) => j.id === atteint); // -1 si aucun palier encore
+
+  return (
+    <div className="pq-piste">
+      <div className="pq-piste-t">Les cadres de cette formation</div>
+      <div className="pq-piste-rail">
+        {JALONS.map((j, i) => {
+          const acquis = i <= rang;
+          const encours = i === rang + 1;
+          const compte = j.compteur === "parfaits" ? parfaits : faits;
+          const cible = j.a(nbChapitres);
+          const reste = Math.max(0, cible - compte);
+          const depart = j.de(nbChapitres);
+          /* CHAQUE BARRE PART DE ZÉRO, sur son échelle. Mesurer « depuis le jalon précédent » donnait
+     un résultat exact mais illisible : à 10 chapitres sur 20, « Monde bouclé » affichait 0 %
+     (rien depuis la moitié) pendant que « Sans faute » affichait 40 % — le dernier paraissait
+     plus avancé que celui d'avant. Chaque barre répond maintenant à la seule question qu'on se
+     pose devant un objectif : quelle part du chemin VERS LUI est faite. */
+          const part = acquis ? 1 : Math.max(0, Math.min(1, (compte - depart) / Math.max(1, cible - depart)));
+          return (
+            <div key={j.id} className={"pq-jalon" + (acquis ? " ok" : "") + (encours ? " ici" : "")}>
+              {/* Le premier jalon a lui aussi son segment, depuis le bord gauche : sans lui la
+                  piste commençait par un rond flottant, et ne se lisait plus comme une ligne. */}
+              <span className={"pq-jalon-lien" + (i === 0 ? " debut" : "")}>
+                <span style={{ width: `${part * 100}%` }} /></span>
+              <span className={`pq-jalon-rond cadre cadre-${j.id}`}
+                style={{ "--cadre-c": acquis || encours ? world.color : "var(--dim)" }} aria-hidden="true" />
+              <b>{j.nom}</b>
+              <span className="hint">
+                {acquis ? "obtenu"
+                  : `encore ${reste} chapitre${reste > 1 ? "s" : ""}${j.compteur === "parfaits" ? " à 3 étoiles" : ""}`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

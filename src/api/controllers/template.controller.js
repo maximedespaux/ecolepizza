@@ -239,6 +239,17 @@ const renameTemplate = async (req, res) => {
             await upd(`UPDATE training_program SET ${col} = REPLACE(${col}, ?, ?) WHERE organization_id = ? AND ${col} LIKE ?`,
                 [`"${oldSlug}"`, `"${newSlug}"`, orgId, `%"${oldSlug}"%`]);
         }
+        /* LES ÉQUIVALENCES MANQUAIENT À CETTE LISTE, et c'est la cible la plus punitive de toutes.
+         * `document_equivalence.members` est un tableau JSON de slugs, comme les trois colonnes
+         * ci-dessus. Oublié ici, un renommage laissait le VIEUX slug dans le groupe « OU » — un
+         * membre qui ne désigne plus rien. Or la validation d'une équivalence exige que tous ses
+         * membres existent : le groupe devenait donc IMPOSSIBLE À MODIFIER par l'écran, avec un
+         * message citant un identifiant que l'utilisateur n'avait jamais tapé.
+         * Constaté sur le parcours RS7404 après un renommage `devis-particulier-copie` →
+         * `devis-professionnel` : plus aucune variante ajoutable au jalon « Devis particulier ».
+         * Même remplacement borné par les guillemets que plus haut. */
+        await upd('UPDATE document_equivalence SET members = REPLACE(members, ?, ?) WHERE organization_id = ? AND members LIKE ?',
+            [`"${oldSlug}"`, `"${newSlug}"`, orgId, `%"${oldSlug}"%`]);
         logAudit(req, 'template.rename', 'DocumentTemplate', newSlug);
         res.json({ slug: newSlug, message: 'Identifiant mis à jour.' });
     } catch (e) {

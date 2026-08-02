@@ -1,10 +1,12 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { logAudit } = require('../lib/audit.js');
 const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigners } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
+const { cadresQuest, possedeCadreQuest, parseCadre: parseCadreQuest, PALIER_IDS, EXPLOIT_IDS } = require('../lib/cadresQuest.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
@@ -866,6 +868,39 @@ const LEGACY_AVATAR_IDS = new Set(['bread','chef2','chef3','burger','fries','pas
     'shrimp','sushi','taco','hotdog','sandwich','croissant','pretzel','avocado','pepper','corn','grapes','lemon','icecream','coffee']);
 const isKnownAvatar = (id) => AVATAR_IDS.has(id) || LEGACY_AVATAR_IDS.has(id);
 
+/**
+ * Les cadres de Pizza Quest possédés par un stagiaire.
+ *
+ * DÉRIVÉ, jamais stocké : la règle (moitié / bouclé / sans faute) porte sur le NOMBRE DE
+ * CHAPITRES ACTIFS, qui bouge dès que l'école enrichit sa banque. Cf. lib/cadresQuest.js.
+ *
+ * `world` dans `learner_quest_progress` est le CODE de la formation (c'est ce que le jeu
+ * enregistre) : c'est donc sur le code qu'on rapproche les deux, pas sur l'id.
+ *
+ * Dégradation silencieuse : ni `quest_chapter` (migration 102) ni la progression (070) ne sont
+ * garanties. Sans elles la liste est vide — le stagiaire ne voit pas ces cadres, et rien d'autre
+ * ne casse. Une exception ici ferait tomber tout le profil, avatar compris.
+ */
+async function cadresQuestDuStagiaire(conn, learner, progress) {
+    if (!progress || !Object.keys(progress).length) return [];
+    try {
+        const [rows] = await conn.query(
+            `SELECT p.code, p.title, p.color, COUNT(c.id) AS chapitres
+               FROM training_program p
+               LEFT JOIN quest_chapter c ON c.program_id = p.id AND c.active = 1
+              WHERE p.organization_id = ? AND p.active = 1
+              GROUP BY p.id, p.code, p.title, p.color`,
+            [learner.organization_id]
+        );
+        return cadresQuest(progress, rows.map((r) => ({
+            code: r.code, title: r.title, color: r.color, chapitres: Number(r.chapitres) || 0,
+        })));
+    } catch (e) {
+        if (isMissingSchema(e)) return [];
+        throw e;
+    }
+}
+
 /** GET /api/mon-espace/profile — avatar + progression { world: { step: stars } } + XP. */
 const getMyProfile = async (req, res) => {
     try {
@@ -890,7 +925,13 @@ const getMyProfile = async (req, res) => {
                 stars += r.stars; xp += r.stars * 10;
             }
         } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : profil vide
-        res.json({ data: { avatar, cadre, cadres_exclusifs, progress, xp, stars } });
+        /* Cadres de PIZZA QUEST, dérivés et jamais stockés (cf. lib/cadresQuest.js). Les
+           recalculer à chaque lecture coûte deux requêtes et garantit qu'ils suivent la banque de
+           questions : un chapitre ajouté par l'école DÉFAIT un « Monde bouclé », et c'est
+           volontaire — le cadre dit « j'ai tout fait », il doit redevenir faux quand ce n'est plus
+           vrai. Une liste figée en base aurait menti dès le premier chapitre ajouté. */
+        const quest_cadres = await cadresQuestDuStagiaire(conn, learner, progress);
+        res.json({ data: { avatar, cadre, cadres_exclusifs, progress, xp, stars, quest_cadres } });
     } catch (err) {
         console.error('Erreur profil stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -902,15 +943,18 @@ const saveMyAvatar = async (req, res) => {
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        // Le personnel n'a pas de fiche stagiaire — en creer une pour lui polluerait les
+        // effectifs, Qualiopi et les listes de session. Son avatar vit sur `user` (migration 126).
+        if (!learner && !estPersonnel(req.user)) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
         const avatar = req.body && req.body.avatar;
         if (avatar != null && avatar !== '') {
             const [id, color] = String(avatar).split('|'); // "id" ou "id|#rrggbb"
             if (!isKnownAvatar(id)) return res.status(422).json({ message: 'Avatar inconnu.' });
             if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) return res.status(422).json({ message: 'Couleur invalide.' });
         }
-        try { await conn.query('UPDATE learner SET avatar = ? WHERE id = ?', [avatar || null, learner.id]); }
-        catch (e) { if (!isMissingSchema(e)) throw e; }
+        const [table, cible] = learner ? ['learner', learner.id] : ['user', req.user.id];
+        try { await conn.query(`UPDATE ${table} SET avatar = ? WHERE id = ?`, [avatar || null, cible]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 126 non jouee (personnel)
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur avatar stagiaire :', err);
@@ -933,22 +977,60 @@ const saveMyAvatar = async (req, res) => {
  *
  * On valide en revanche la FORME, sans quoi la colonne accepterait n'importe quelle chaîne.
  */
-const CADRES_CONNUS = ['aucun', 'bronze', 'argent', 'or', 'braise', 'maestro', 'champion', 'jury', 'fondateur'];
+const CADRES_CONNUS = ['aucun', 'bronze', 'argent', 'or', 'braise', 'maestro',
+    // Résultats de concours, du plus haut au plus spécifique. « Champion » les couvrait tous,
+    // ce qui donnait le même cadre au vainqueur et au troisième.
+    'champion', 'categorie', 'podium', 'prix', 'jury', 'fondateur', 'ecole'];
+/* Le cadre « ecole » est le SEUL que le personnel porte, et le seul qu'un stagiaire ne peut
+ * pas porter. Les cadres de parcours annoncent un nombre de formations terminees : un
+ * secretariat en « Maestro » se lirait comme un stagiaire chevronne, et l'inverse — un
+ * stagiaire en « ecole » — le ferait passer pour le bureau dans la Communaute. */
+const CADRE_PERSONNEL = 'ecole';
+const ROLES_PERSONNEL = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'];
+const estPersonnel = (u) => ROLES_PERSONNEL.includes(u?.role);
 const listeCadres = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
 
 const saveMyCadre = async (req, res) => {
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        if (!learner && !estPersonnel(req.user)) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
         const cadre = req.body && req.body.cadre;
-        // NULL et « aucun » ne disent pas la même chose : NULL = aucun choix exprimé (on
-        // retombe sur le palier), « aucun » = le choix de ne rien porter.
-        if (cadre != null && cadre !== '' && !CADRES_CONNUS.includes(String(cadre))) {
+        // Le controle vaut DANS LES DEUX SENS : le front propose la bonne liste, mais la route
+        // est ouverte a tout compte authentifie — une requete a la main contournerait l'ecran.
+        if (cadre && cadre !== 'aucun') {
+            const perso = String(cadre) === CADRE_PERSONNEL;
+            if (perso && !estPersonnel(req.user)) {
+                return res.status(403).json({ message: 'Le cadre « École » est réservé au personnel de l\'organisme.' });
+            }
+            if (!perso && estPersonnel(req.user)) {
+                return res.status(403).json({ message: 'Les cadres de parcours récompensent des formations terminées.' });
+            }
+        }
+        /* CADRE DE QUÊTE : « palier|#rrggbb ». Celui-là se vérifie VRAIMENT, contrairement aux
+           autres — et la raison tient à la couleur. Un palier sans couleur ne dit rien de faux ;
+           un « Sans faute » teinté d'une formation qu'on n'a jamais ouverte, si. La possession se
+           calcule ici, à l'écriture, parce qu'elle dépend de la banque de questions du moment. */
+        const q = parseCadreQuest(cadre);
+        if (q.id && (PALIER_IDS.includes(q.id) || EXPLOIT_IDS.includes(q.id))) {
+            if (!learner) return res.status(403).json({ message: 'Les cadres de Pizza Quest récompensent la progression d\'un stagiaire.' });
+            const progress = {};
+            try {
+                const [rows] = await conn.query('SELECT world, step, stars FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
+                for (const r of rows) (progress[r.world] ||= {})[r.step] = r.stars;
+            } catch (e) { if (!isMissingSchema(e)) throw e; }
+            const possedes = await cadresQuestDuStagiaire(conn, learner, progress);
+            if (!possedeCadreQuest(cadre, possedes)) {
+                return res.status(403).json({ message: 'Ce cadre de Pizza Quest n\'est pas encore débloqué.' });
+            }
+        } else if (cadre != null && cadre !== '' && !CADRES_CONNUS.includes(String(cadre))) {
+            // NULL et « aucun » ne disent pas la même chose : NULL = aucun choix exprimé (on
+            // retombe sur le palier), « aucun » = le choix de ne rien porter.
             return res.status(422).json({ message: 'Cadre inconnu.' });
         }
-        try { await conn.query('UPDATE learner SET cadre = ? WHERE id = ?', [cadre || null, learner.id]); }
-        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 113 non jouée
+        const [tbl, ref] = learner ? ['learner', learner.id] : ['user', req.user.id];
+        try { await conn.query(`UPDATE ${tbl} SET cadre = ? WHERE id = ?`, [cadre || null, ref]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 113 (stagiaire) / 126 (personnel) non jouée
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur cadre stagiaire :', err);
@@ -1579,6 +1661,47 @@ const deleteMyAvatarImage = async (req, res) => {
 };
 
 /** PUT /api/mon-espace/quest — { progress: { world: { step: stars } } } (upsert, meilleur score). */
+/**
+ * DELETE /api/mon-espace/quest — efface TOUTE la progression Pizza Quest du stagiaire.
+ *
+ * POURQUOI CETTE ROUTE EXISTE. `saveMyQuest` écrit avec `GREATEST(stars, VALUES(stars))` : une
+ * étoile ne redescend jamais, c'est voulu — on ne perd pas un acquis en rejouant moins bien. Il
+ * n'y avait donc AUCUN moyen de remettre à zéro, ni pour tester, ni pour un stagiaire qui veut
+ * reprendre son entraînement à blanc.
+ *
+ * ELLE N'EFFACE QUE SES PROPRES LIGNES : `learner_id` vient du compte connecté, jamais du corps
+ * de la requête. Personne ne peut remettre à zéro quelqu'un d'autre, même en forgeant l'appel.
+ *
+ * LE CADRE PORTÉ TOMBE AVEC. Les cadres de quête se déduisent de la progression : sans elle ils
+ * ne sont plus possédés, et le serveur refuserait de les réenregistrer. Le laisser en base
+ * afficherait un « Sans faute » que plus rien ne justifie — la possession n'étant revérifiée
+ * qu'à l'écriture, il resterait visible dans la Communauté.
+ */
+const resetMyQuest = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        try {
+            await conn.query('DELETE FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
+        } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : rien à effacer
+        // Le cadre n'est remis à zéro QUE s'il venait de la quête : un Bronze ou un Fondateur ne
+        // doit rien à Pizza Quest, et les effacer serait un dégât collatéral.
+        try {
+            const [[l]] = await conn.query('SELECT cadre FROM learner WHERE id = ?', [learner.id]);
+            const { id } = parseCadreQuest(l && l.cadre);
+            if (PALIER_IDS.includes(id) || EXPLOIT_IDS.includes(id)) {
+                await conn.query('UPDATE learner SET cadre = NULL WHERE id = ?', [learner.id]);
+            }
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        logAudit(req, 'quest.reset', 'Learner', learner.id);
+        res.json({ success: true, message: 'Progression Pizza Quest effacée.' });
+    } catch (err) {
+        console.error('Erreur remise à zéro Pizza Quest :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 const saveMyQuest = async (req, res) => {
     try {
         const conn = db.promise();
@@ -1713,5 +1836,5 @@ const updateMyInfos = async (req, res) => {
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
 module.exports = {
-    saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+    saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
 };

@@ -734,7 +734,19 @@ function Boutique() {
   return (
     <>
       <PageHead eyebrow="Espace stagiaire · boutique" title="La boutique"
-        lead="Le matériel de l'école, à retirer sur place — et les offres négociées chez nos partenaires." />
+        lead={<>
+          Le matériel de l'école, à retirer sur place — et les offres négociées chez nos partenaires.
+          {/* La réserve est dite UNE FOIS, en arrivant, plutôt que répétée sur chaque carte
+              remisée. Formulée pour rester vraie même quand aucune remise n'est en cours :
+              c'est toute la boutique qui est réservée aux stagiaires, pas seulement les remises.
+              On ne CONDITIONNE pas l'accès à un badge : `learner.levels` est posé dès
+              l'INSCRIPTION, il ne dit donc pas qu'une formation a été suivie — et la colonne qui
+              le dirait (`completed_levels`) se remplit à la main, presque jamais renseignée.
+              L'accès est de toute façon déjà limité aux comptes stagiaires. */}
+          <span style={{ display: "block", marginTop: 4 }}>
+            Les tarifs affichés ici, remises comprises, sont réservés aux stagiaires de l'école.
+          </span>
+        </>} />
 
       {sent ? (
         <div className="ok-banner">

@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Icon } from "./Icon.jsx";
-import { CADRES, cadreFor } from "../lib/cadres.js";
+import { CADRES, cadreFor, cadreClass, cadreStyle } from "../lib/cadres.js";
 
 /**
  * Le parcours du stagiaire, en tête de son espace.
@@ -66,7 +66,8 @@ export function RankBar({ formationsDone = 0 }) {
     <div className="stu-rank">
       <div className="stu-rank-top">
         <span className="stu-rank-grade">
-          <span className={"stu-rank-cadre " + (cadre.id !== "aucun" ? `cadre cadre-${cadre.id}` : "")} aria-hidden="true" />
+          <span className={"stu-rank-cadre " + cadreClass(cadre.valeur || cadre.id)}
+                  style={cadreStyle(cadre.valeur)} aria-hidden="true" />
           {cadre.id === "aucun" ? "Aucun cadre" : `Cadre ${cadre.nom}`}
         </span>
         <span className="stu-rank-pts">

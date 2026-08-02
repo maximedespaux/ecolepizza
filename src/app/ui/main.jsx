@@ -36,7 +36,6 @@ import Ventes from "./pages/Ventes.jsx";
 import Inventaire from "./pages/Inventaire.jsx";
 import Factures from "./pages/Factures.jsx";
 import Comptabilite from "./pages/Comptabilite.jsx";
-import ProduitDivers from "./pages/ProduitDivers.jsx";
 import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import FacturationReglages from "./pages/FacturationReglages.jsx";
@@ -195,12 +194,15 @@ function AppRoutes() {
           <Route path="pizza-quest-admin" element={<Guard nav="/pizza-quest-admin" roles={ADMIN}><QuestManager /></Guard>} />
           <Route path="opcos" element={<Guard nav="/opcos" roles={ADMIN}><Opcos /></Guard>} />
           <Route path="partenaires" element={<Guard nav="/partenaires" roles={STAFF}><Partenaires /></Guard>} />
+          {/* Le MÊME fil que côté stagiaire — l'API cadre sur l'organisme. Le composant est
+              partagé : il sait déjà distinguer le personnel (qui peut publier une annonce) du
+              stagiaire. Deux chemins, une seule page. */}
+          <Route path="communaute" element={<Guard nav="/communaute" roles={STAFF}><Communaute /></Guard>} />
           <Route path="ventes" element={<Guard nav="/ventes" roles={ADMIN}><Ventes /></Guard>} />
           <Route path="inventaire" element={<Guard nav="/ventes" roles={ADMIN}><Inventaire /></Guard>} />
           <Route path="demandes-boutique" element={<Guard nav="/demandes-boutique" roles={ADMIN}><DemandesBoutique /></Guard>} />
           <Route path="factures" element={<Guard nav="/factures" roles={ADMIN}><Factures /></Guard>} />
           <Route path="comptabilite" element={<Guard nav="/comptabilite" roles={ADMIN}><Comptabilite /></Guard>} />
-          <Route path="produit-divers" element={<Guard nav="/produit-divers" roles={STAFF}><ProduitDivers /></Guard>} />
           <Route path="carte" element={<Guard nav="/carte" roles={ADMIN}><Carte /></Guard>} />
           <Route path="reglages" element={<Guard nav="/reglages" roles={ADMIN}><Reglages /></Guard>} />
           <Route path="reglages-facturation" element={<Guard nav="/reglages-facturation" roles={ADMIN}><FacturationReglages /></Guard>} />

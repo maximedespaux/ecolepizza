@@ -96,9 +96,12 @@ export function checkoutSale(payload) {
 export function getShopSettings() {
   return request("/ventes/settings");
 }
-export function saveShopSettings(payload) {
-  return request("/ventes/settings", { method: "PUT", body: JSON.stringify(payload) });
-}
+/* `saveShopSettings` a été retiré : les ENTITÉS ÉMETTRICES ont supplanté `shop_settings`.
+   Préfixe de numéro, prochain numéro, moyens de paiement et TVA s'éditent désormais par entité
+   (cf. BillingProfiles) ; `shop_settings` ne sert plus que de repli quand aucune entité n'est
+   choisie — cas qui ne se produit pas, l'entité « organisme » étant semée et par défaut.
+   La route serveur reste : elle est la dernière à écrire cette table, et la supprimer
+   demanderait de décider du sort de la table elle-même. */
 
 // --- Entités émettrices (identités de facturation) ---
 export function getEmitters() {
@@ -110,9 +113,10 @@ export function createEmitter(payload) {
 export function updateEmitter(id, payload) {
   return request(`/emetteurs/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
-export function setDefaultEmitter(id) {
-  return request(`/emetteurs/${id}/defaut`, { method: "PUT" });
-}
+/* `setDefaultEmitter` a été retiré : le bouton « Par défaut » a été ôté de l'écran Facturation
+   (décision consignée dans CLAUDE.md §5 — l'entité « organisme » est semée et reste le défaut).
+   La fonction survivait à son bouton. La route serveur reste, `is_default` pilotant toujours le
+   choix de l'entité : c'est l'ÉCRAN qui ne le change plus, pas le concept qui a disparu. */
 export function deleteEmitter(id) {
   return request(`/emetteurs/${id}`, { method: "DELETE" });
 }
@@ -284,11 +288,11 @@ export function createExpense(payload) {
 export function deleteExpense(id) {
   return request(`/comptabilite/depenses/${id}`, { method: "DELETE" });
 }
-export function getRevenues(annee) {
-  return request(`/comptabilite/revenus?annee=${annee}`);
-}
 export function createRevenue(payload) {
   return request("/comptabilite/revenus", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateRevenue(id, payload) {
+  return request(`/comptabilite/revenus/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 export function deleteRevenue(id) {
   return request(`/comptabilite/revenus/${id}`, { method: "DELETE" });
@@ -524,8 +528,10 @@ export function getPlayableChapters(programId) {
   return request(`/mon-espace/quest/${programId}/chapitres`, { silent: true });
 }
 // Cœurs : le capital est tenu par le serveur, jamais calculé côté client.
-export function getQuestLives() { return request("/mon-espace/quest/vies", { silent: true }); }
-export function loseQuestLife() { return request("/mon-espace/quest/vies/perdre", { method: "POST", silent: true }); }
+/* Les VIES de Pizza Quest n'existent plus — la mécanique d'XP et de cœurs a été remplacée par
+   les cadres. Ces deux fonctions pointaient vers `/mon-espace/quest/vies`, une route qui n'existe
+   dans AUCUN fichier de routes : elles auraient renvoyé une 404 si quelqu'un les avait appelées.
+   Du code mort qui désigne du vide. */
 // ⚠️ DÉBOGAGE — remet à zéro SA propre progression Pizza Quest. À retirer avec le bouton
 // correspondant (PizzaQuest.jsx) avant la mise en service.
 
@@ -671,6 +677,12 @@ export function getMyProfile() {
 export function saveMyAvatar(avatar) {
   return request("/mon-espace/avatar", { method: "PUT", body: JSON.stringify({ avatar }), silent: true });
 }
+/* Efface TOUTE la progression Pizza Quest — la sienne, jamais celle d'un autre : le serveur
+   prend l'identité du compte connecté et ignore ce qu'on lui passerait.  n'écrit
+   qu'à la hausse, il n'existait donc aucun chemin de retour. */
+export function resetMyQuest() {
+  return request("/mon-espace/quest", { method: "DELETE" });
+}
 export function saveMyQuest(progress) {
   return request("/mon-espace/quest", { method: "PUT", body: JSON.stringify({ progress }), silent: true });
 }
@@ -772,6 +784,8 @@ export async function uploadPostImage(id, blob) {
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }
+// Dépublier une fiche : elle quitte le fil, son auteur la garde. Voir `unshareRecipe`.
+export function unshareRecipe(id) { return request(`/recipes/${id}/retirer`, { method: "POST" }); }
 export function getAuthorProfile(userId) { return request(`/recipes/author/${userId}`, { silent: true }); }
 export function likeRecipe(id) { return request(`/recipes/${id}/like`, { method: "POST" }); }
 export function addRecipeComment(id, body) { return request(`/recipes/${id}/comments`, { method: "POST", body: JSON.stringify({ body }) }); }
@@ -1016,6 +1030,21 @@ export function updatePartenaire(id, payload) {
 }
 export function deletePartenaire(id) {
   return request(`/partenaires/${id}`, { method: "DELETE" });
+}
+/* Catégories de partenaires (migration 129). Elles étaient écrites en dur dans l'écran ; le
+   serveur renvoie la liste de l'organisme, ou la liste d'origine tant que la migration n'est pas
+   jouée — auquel cas les entrées n'ont pas d'`id` et ne sont donc pas modifiables. */
+export function getPartenaireCategories() {
+  return request("/partenaires/categories");
+}
+export function createPartenaireCategorie(payload) {
+  return request("/partenaires/categories", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updatePartenaireCategorie(cid, payload) {
+  return request(`/partenaires/categories/${cid}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deletePartenaireCategorie(cid) {
+  return request(`/partenaires/categories/${cid}`, { method: "DELETE" });
 }
 // Apports en nature (matériel/équipement) — distincts des commissions cash.
 export function createContribution(payload) {

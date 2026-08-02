@@ -6,6 +6,9 @@ import { getBadges } from "../api/apiClient.js";
 import { onBadgesRefresh } from "../lib/events.js";
 import { initials } from "../lib/format.js";
 import ChangePasswordModal from "./ChangePasswordModal.jsx";
+import ProfilPersonnel from "./ProfilPersonnel.jsx";
+import { parseAvatar, getAvatar, AVATAR_EVENT } from "../lib/gamification.js";
+import { useCadreChoisi, cadreClass } from "../lib/cadres.js";
 import { Icon } from "./Icon.jsx";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -32,6 +35,20 @@ function Sidebar({ open }) {
   const [badges, setBadges] = useState({});
   const [menuOpen, setMenuOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [profilOpen, setProfilOpen] = useState(false);
+  /* L'avatar du pied, resynchronisé À CHAUD. Sans l'écoute de l'évènement, choisir sa pizza
+     dans la modale ne se voyait qu'après un rechargement : la modale se ferme sur un pied
+     inchangé, et on recommence en croyant que ça n'a pas marché. Même défaut que celui déjà
+     corrigé sur les cadres (cf. `useCadreChoisi`). La base fait foi, le navigateur prend le
+     relais tant que la migration 126 n'est pas jouée. */
+  const cadreChoisi = useCadreChoisi(user?.id) || user?.cadre || null;
+  const [monAvatar, setMonAvatar] = useState(() => parseAvatar(user?.avatar) || getAvatar(user?.id));
+  useEffect(() => {
+    const sync = () => setMonAvatar(getAvatar(user?.id) || parseAvatar(user?.avatar));
+    sync();
+    window.addEventListener(AVATAR_EVENT, sync);
+    return () => window.removeEventListener(AVATAR_EVENT, sync);
+  }, [user?.id, user?.avatar]);
   const footRef = useRef(null);
 
   useEffect(() => {
@@ -85,6 +102,12 @@ function Sidebar({ open }) {
       <div className="side-foot-wrap" ref={footRef}>
         {menuOpen && (
           <div className="profile-menu" role="menu">
+            {/* « Personnalisation » d'abord : c'est MON compte, avant les réglages de l'organisme.
+                L'intervenant n'y a pas accès — il n'entre jamais par cette barre latérale, il
+                passe par l'espace stagiaire, qui a déjà son propre profil. */}
+            <button role="menuitem" onClick={() => { setMenuOpen(false); setProfilOpen(true); }}>
+              <span className="ic"><Icon name="user" size={16} /></span> Personnalisation
+            </button>
             {hasParams && (
               <button role="menuitem" onClick={() => { setMenuOpen(false); navigate("/parametres"); }}>
                 <span className="ic"><Icon name="settings" size={16} /></span> Paramètres
@@ -106,7 +129,9 @@ function Sidebar({ open }) {
           aria-expanded={menuOpen}
           title="Mon profil"
         >
-          <div className="avatar">{initials(user?.first_name, user?.last_name)}</div>
+          <div className={"avatar " + cadreClass(cadreChoisi)} style={monAvatar ? { background: monAvatar.color } : undefined}>
+            {monAvatar ? monAvatar.emoji : initials(user?.first_name, user?.last_name)}
+          </div>
           <div>
             <div className="who">{user ? `${user.first_name} ${user.last_name}` : "—"}</div>
             <div className="role">{ROLE_LABELS[role] || ""}</div>
@@ -115,6 +140,7 @@ function Sidebar({ open }) {
         </button>
       </div>
 
+      {profilOpen && <ProfilPersonnel onClose={() => setProfilOpen(false)} />}
       {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
     </aside>
   );

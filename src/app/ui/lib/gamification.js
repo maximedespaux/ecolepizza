@@ -4,6 +4,7 @@
 // hydrateProfile() (appelé à l'entrée de l'espace) fusionne serveur ↔ local ; les
 // écritures (setAvatar / progression) sont poussées vers l'API.
 import { getMyProfile, saveMyAvatar, saveMyQuest } from "../api/apiClient.js";
+import { adopterCadreServeur } from "./cadres.js";
 
 const QUEST_KEY = "pizzaquest.v1";
 
@@ -106,6 +107,10 @@ export async function hydrateProfile(uid) {
   try { ({ data } = await getMyProfile()); } catch { return; } // hors-ligne / non stagiaire : on garde le local
   if (!data) return;
   if (data.avatar) { try { localStorage.setItem(AVATAR_KEY(uid), data.avatar); } catch { /* ignore */ } }
+  /* LE CADRE AUSSI, et il manquait ici. L'avatar traversait les navigateurs, le cadre non : il
+     était écrit en base à chaque choix mais jamais relu, si bien que chaque poste gardait le
+     sien. Deux lignes voisines, un seul des deux réglages suivait l'utilisateur. */
+  adopterCadreServeur(uid, data.cadre);
   let local = {};
   try { local = JSON.parse(localStorage.getItem(QUEST_KEY)) || {}; } catch { /* ignore */ }
   const merged = mergeProgress(local, data.progress || {});

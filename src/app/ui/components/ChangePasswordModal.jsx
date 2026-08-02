@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { changeMyPassword } from "../api/apiClient.js";
 
 /** Modale « Changer mon mot de passe » (vérifie le mot de passe actuel). */
@@ -23,7 +24,11 @@ function ChangePasswordModal({ onClose }) {
     } finally { setSaving(false); }
   }
 
-  return (
+  /* La barre latérale est `position:sticky; z-index:40` : elle crée un contexte
+     d'empilement, dans lequel le `z-index:100` de l'overlay reste ENFERMÉ — le contenu
+     principal passait devant, et la modale apparaissait comme un simple voile gris.
+     `createPortal` la sort au niveau du body, seul endroit où son z-index compte. */
+  return createPortal(
     <div className="overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
@@ -46,6 +51,8 @@ function ChangePasswordModal({ onClose }) {
         </div>
       </div>
     </div>
+    ,
+    document.body
   );
 }
 

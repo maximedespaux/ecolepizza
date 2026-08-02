@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import { Icon } from "./Icon.jsx";
+import Coeurs from "./Coeurs.jsx";
+import { encoreEnVie } from "../lib/coeurs.js";
 import { Paton, doughLook } from "./LivePizza.jsx";
+// Échap : ce jeu était la modale qui l'avait oublié (cf. lib/useEchap.js).
+import { useEchap } from "../lib/useEchap.js";
 
 /**
  * « Fais ta pizza » — simulateur-jeu. On tire un objectif (napolitaine, classique…), un briefing
@@ -88,6 +92,22 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
   const [hydra, setHydra] = useState(62);
   const [temp, setTemp] = useState(400);
   const [verdict, setVerdict] = useState(null);
+  /* TROIS FOURNÉES, ET ON GARDE LA MEILLEURE. « Réessayer » existait déjà, mais gratuit et sans
+     fin : on pouvait enfourner au hasard jusqu'à tomber juste, et les axes en rouge disaient
+     eux-mêmes dans quel sens corriger. Un cœur par fournée ratée redonne du poids au réglage —
+     c'est-à-dire au seul moment où l'on réfléchit. Rien ne persiste : fermer et rouvrir rend les
+     trois cœurs (cf. `lib/coeurs.js`). */
+  const [perdus, setPerdus] = useState(0);
+  const [meilleur, setMeilleur] = useState(0);
+  const fournees = () => { setPerdus(0); setMeilleur(0); };
+
+  /* Dès qu'un score existe, TOUTES les sorties le valident — la croix, le voile et Échap.
+     Elles appelaient `onClose`, qui referme sans rien enregistrer : l'écran affichait les étoiles
+     obtenues et fermer par la croix les jetait. C'est le geste le plus naturel devant un
+     résultat, et c'était le seul qui perdait le score. Avant la première vérification il n'y a
+     rien à garder : la croix abandonne, comme avant. */
+  const fermer = meilleur > 0 ? () => onFinish(meilleur) : onClose;
+  useEchap(fermer);
 
   // La couleur/le grain du pâton suivent le TYPE choisi (Tipo 00 clair → complète foncée).
   const look = useMemo(() => doughLook(TYPES[type].water, [], []), [type]);
@@ -102,14 +122,16 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
     const total = axes.reduce((s, a) => s + a.note, 0);          // sur 8
     const stars = total >= 8 ? 3 : total >= 6 ? 2 : total >= 3 ? 1 : 0;
     setVerdict({ axes, total, stars });
+    setMeilleur((m) => Math.max(m, stars));
+    if (stars < 3) setPerdus((p) => p + 1);
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay" onClick={fermer}>
       <div className="modal sim" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
           <h3><Icon name="pizza" size={18} /> Fais ta pizza</h3>
-          <button className="x" onClick={onClose} aria-label="Fermer">×</button>
+          <button className="x" onClick={fermer} aria-label="Fermer">×</button>
         </div>
 
         {!obj ? (
@@ -117,7 +139,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
             <p className="hint" style={{ marginTop: 0 }}>Choisis ta pizza à réussir. Tu régleras la farine, sa force, l'eau et le four — comme en vrai.</p>
             <div className="sim-objs">
               {OBJECTIFS.map((o) => (
-                <button key={o.id} className="sim-obj" onClick={() => { setObj(o); setVerdict(null); }}>
+                <button key={o.id} className="sim-obj" onClick={() => { setObj(o); setVerdict(null); fournees(); }}>
                   <span className="sim-obj-e" aria-hidden="true">{o.emoji}</span>
                   <b>{o.nom}</b>
                   <span className="sim-obj-d">{o.intro}</span>
@@ -128,11 +150,15 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
         ) : verdict ? (
           <>
             <div className="mbody sim-result">
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 6 }}>
+                <Coeurs perdus={perdus} />
+              </div>
               <div className="sim-stars" aria-label={`${verdict.stars} étoiles sur 3`}>
                 {[0, 1, 2].map((i) => <span key={i} className={i < verdict.stars ? "on" : ""}>★</span>)}
               </div>
               <p className="sim-verdict-t">
                 {verdict.stars === 3 ? "Parfait — c'est une vraie " + obj.nom + " !"
+                  : !encoreEnVie(perdus) ? `Plus de cœur — on garde ta meilleure fournée (${meilleur} ★).`
                   : verdict.stars === 2 ? "Bien joué, presque parfait."
                   : verdict.stars === 1 ? "Ça part, mais revois les points en rouge."
                   : "Raté — mais regarde pourquoi, c'est là qu'on apprend."}
@@ -151,19 +177,30 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
               </ul>
             </div>
             <div className="mfoot">
-              <button className="btn ghost" onClick={() => { setObj(null); setVerdict(null); }}>Autre pizza</button>
-              <button className="btn" onClick={() => setVerdict(null)}>Réessayer</button>
-              <button className="btn primary" onClick={() => onFinish(verdict.stars)}>
-                <Icon name="check" size={15} /> Valider ({verdict.stars} ★)
+              <button className="btn ghost" onClick={() => { setObj(null); setVerdict(null); fournees(); }}>Autre pizza</button>
+              {/* « Réessayer » disparaît quand la pizza est parfaite (il n'y a plus rien à
+                  chercher) ou qu'il ne reste plus de cœur — sinon le bouton promettrait un essai
+                  qui n'existe pas. */}
+              {verdict.stars < 3 && encoreEnVie(perdus) && (
+                <button className="btn" onClick={() => setVerdict(null)}>Réessayer</button>
+              )}
+              <button className="btn primary" onClick={() => onFinish(meilleur)}>
+                <Icon name="check" size={15} /> Valider ({meilleur} ★)
               </button>
             </div>
           </>
         ) : (
           <>
             <div className="mbody sim-play">
+              {/* LES CŒURS SE LISENT PENDANT LE RÉGLAGE, et pas seulement après la fournée. Ils
+                  n'apparaissaient qu'avec le verdict : on réglait sa farine sans savoir s'il
+                  restait deux essais ou un seul, alors que c'est exactement ce qui décide entre
+                  tenter un coup et sécuriser. Une information qui arrive après la décision
+                  n'informe rien. */}
               <div className="sim-goal">
                 <span className="sim-obj-e" aria-hidden="true">{obj.emoji}</span>
-                <span>Objectif : <b>{obj.nom}</b> — {obj.intro}</span>
+                <span style={{ flex: 1 }}>Objectif : <b>{obj.nom}</b> — {obj.intro}</span>
+                <Coeurs perdus={perdus} />
               </div>
 
               {/* Instructions : ce qu'il faut viser, en mots. Ça guide sans donner les chiffres —

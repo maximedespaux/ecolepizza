@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
-import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences, createEquivalence, updateEquivalence } from "../api/apiClient.js";
+import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
 import Badge from "../components/Badge.jsx";
@@ -88,7 +88,23 @@ function Formations() {
             cell: () => <span className="drag-handle" title="Glisser pour réorganiser" aria-hidden="true">⠿</span> },
           { k: "code", t: "Code",
             cell: (p) => <span className="badge n mono" style={{ color: "#fff", background: p.color || colorOf(p.code), borderColor: "transparent" }}>{p.code}</span> },
-          { k: "title", t: "Intitulé", principal: true, cell: (p) => <b>{p.title}</b> },
+          { k: "title", t: "Intitulé", principal: true,
+            cell: (p) => (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                <b>{p.title}</b>
+                {/* Un choix « OU » mal conditionné ne se voyait qu'en tentant d'y toucher. Il
+                    produit pourtant le mauvais document, ou aucun, en silence — le genre de
+                    défaut qu'on découvre le jour où un stagiaire reçoit le devis d'un autre.
+                    La pastille dit QU'IL Y EN A ; le détail est dans le parcours, là où on le
+                    corrige. */}
+                {p.alertes_conditions > 0 && (
+                  <span className="pastille-alerte"
+                    title={`${p.alertes_conditions} choix « OU » mal conditionné${p.alertes_conditions > 1 ? "s" : ""} — ouvrez « Parcours documentaire »`}>
+                    ! {p.alertes_conditions > 1 ? p.alertes_conditions : ""}
+                  </span>
+                )}
+              </span>
+            ) },
           { k: "days", t: "Jours", cell: (p) => p.days },
           { k: "hours", t: "Heures", cell: (p) => p.hours },
           { k: "price", t: "Prix", cell: (p) => <span className="mono">{euro(p.price)}</span> },
@@ -181,20 +197,54 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   useEffect(() => { reloadEq(); }, []);
 
   // Ajoute un document comme variante « OU » à un jalon (crée/étend l'équivalence).
+  const [refusOu, setRefusOu] = useState(null); // pourquoi une variante « OU » a été refusée
+
+  /* RETIRER une variante du groupe. Il n'y avait aucun moyen de le faire : on pouvait ajouter,
+     jamais enlever. Or un groupe hérité peut contenir un document qu'on ne veut plus — voire
+     qu'on ne VOIT pas, comme un document de groupe (`company_level`), filtré du flux du parcours
+     et pourtant membre à part entière. Il bloquait alors l'ajout d'une variante légitime, sans
+     qu'on puisse ni le constater ni le retirer. */
+  async function removeOuVariant(slug) {
+    setRefusOu(null);
+    try {
+      const g = eqMap.get(slug);
+      const eq = g ? equivs.find((e) => e.key === g.group) : null;
+      if (!eq || !eq.id) return false;
+      const restants = (eq.members || []).filter((m) => m !== slug);
+      // Un groupe « OU » à moins de deux membres n'a plus d'objet : on le dissout.
+      if (restants.length < 2) await deleteEquivalence(eq.id);
+      else await updateEquivalence(eq.id, { members: restants });
+      await reloadEq();
+      return true;
+    } catch (e) { setRefusOu(e.message); onError(e.message); return false; }
+  }
+
   async function addOuVariant(jalonSlugs, addSlug) {
     if (!addSlug || jalonSlugs.includes(addSlug)) return;
+    setRefusOu(null);
     try {
       const g = eqMap.get(jalonSlugs[0]);
       const eq = g ? equivs.find((e) => e.key === g.group) : null;
       if (eq && !eq.is_default && String(eq.id)) {
         const members = [...new Set([...(eq.members || jalonSlugs), addSlug])];
-        await updateEquivalence(eq.id, { members });
+        // `ajoute` : le serveur peut alors dire lequel était DÉJÀ dans le groupe et lequel on
+        // vient de choisir. Sans lui, le refus opposait deux documents sans dire qui était qui.
+        await updateEquivalence(eq.id, { members, ajoute: addSlug });
       } else {
-        await createEquivalence({ members: [...new Set([...jalonSlugs, addSlug])] });
+        await createEquivalence({ members: [...new Set([...jalonSlugs, addSlug])], ajoute: addSlug });
       }
       setSteps((ss) => ss.map((s) => (s.slug === addSlug ? { ...s, active: true } : s))); // activer la variante ajoutée
       await reloadEq();
-    } catch (e) { onError(e.message); }
+      return true;
+    } catch (e) {
+      /* LE REFUS S'AFFICHE DANS LE PANNEAU, pas seulement en haut de la fenêtre. Le clic a lieu
+         tout en bas d'une modale qui défile : un message posé en tête passait inaperçu, et
+         l'utilisateur concluait que « rien ne se passe ». Il reste AUSSI en haut — c'est là que
+         se lisent les autres statuts de cette page. */
+      setRefusOu(e.message);
+      onError(e.message);
+      return false;
+    }
   }
 
   // Activer / retirer une étape (le « OU » est déterminé par les équivalences).
@@ -332,7 +382,10 @@ function FormationModal({ program, onClose, onSaved, onError }) {
                 <p className="hint">Aucun document candidat.</p>
               ) : (
                 <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
-                  breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant} />
+                  breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant}
+                  refusOu={refusOu} onEffacerRefus={() => setRefusOu(null)}
+                  eqDe={(slug) => { const g = eqMap.get(slug); return g ? equivs.find((e) => e.key === g.group) : null; }}
+                  onRetirerOu={removeOuVariant} />
               )}
             </>
           ) : (
@@ -410,6 +463,10 @@ function dayTag(day) {
 // Petit badge de condition affiché sur une variante.
 function stepBadge(s) {
   if (s.doc_type === "QCM" || s.quiz_id) return s.day != null && s.day !== "" ? dayTag(s.day) : "QCM";
+  /* Une pièce à fournir ne se SIGNE pas, elle se dépose : les badges de signature n'auraient
+     aucun sens ici. Le badge dit combien de fichiers sont attendus — c'est l'information qui
+     manque le plus au stagiaire (« recto ET verso » se lit dans « 2 fichiers »). */
+  if (s.doc_type === "PIECE") return s.fichiers_attendus > 1 ? `${s.fichiers_attendus} fichiers` : "à fournir";
   const a = s.applies_when || {};
   if (a.financing) return a.financing === "PROFESSIONNEL" ? "Pro" : "Particulier";
   if (a.rs === true) return "Certifiante";
@@ -424,7 +481,7 @@ function stepBadge(s) {
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
-function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu }) {
+function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu, refusOu, onEffacerRefus, eqDe, onRetirerOu }) {
   // Les documents de GROUPE (🏢 company_level) ne font PAS partie du parcours du
   // dossier : ils se gèrent uniquement dans « À l'arrivée via une entreprise ».
   const included = steps.filter((s) => s.active && !s.company_level);
@@ -435,7 +492,8 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
   const groups = groupMilestones(included, eqMap);
   const [gdrag, setGdrag] = useState(null);
   const [adding, setAdding] = useState(false);
-  const [ouFor, setOuFor] = useState(null); // slug de tête du jalon dont le menu « ＋ OU » est ouvert
+  const [ouFor, setOuFor] = useState(null); // slug de tête du jalon dont on ajoute une variante
+  const [chercheDoc, setChercheDoc] = useState("");
   const addRef = useRef(null);
 
   useEffect(() => {
@@ -454,8 +512,31 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
     onReorder([...ng.flatMap((g) => g.steps), ...rest]); // ordre inclus + reste (groupe/inactifs) conservé
   }
 
+  /* Les alertes de conditions, RÉUNIES EN TÊTE du parcours. Elles pourraient tenir dans une
+     info-bulle sur chaque jalon, mais une info-bulle ne se lit que si on la cherche — et
+     personne ne survole un jalon qu'il croit correct. Le texte est donc posé là où on ouvre le
+     parcours, avec le repère « ! » sur le jalon concerné pour faire le lien. */
+  const alertes = [];
+  const vus = new Set();
+  for (const g of groups) {
+    for (const st of g.steps) {
+      if (st.alerte && !vus.has(st.alerte.groupe)) { vus.add(st.alerte.groupe); alertes.push({ ...st.alerte, jalon: g.steps[0].label }); }
+    }
+  }
+
   return (
     <div className="parcours compact" ref={addRef}>
+      {alertes.length > 0 && (
+        <div className="alerte-conditions">
+          <div className="alerte-conditions-t">
+            <Icon name="alert-triangle" size={15} />
+            {alertes.length === 1 ? "Un choix « OU » mal conditionné" : `${alertes.length} choix « OU » mal conditionnés`}
+          </div>
+          {alertes.map((a, i) => (
+            <p key={i}><b>{a.jalon}</b> — {a.texte}</p>
+          ))}
+        </div>
+      )}
       <div className="parcours-flow">
         {groups.map((g, i) => {
           // Slug de rupture porté par ce jalon = dernière étape du groupe.
@@ -468,6 +549,9 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
               draggable onDragStart={() => setGdrag(i)} onDragOver={(e) => e.preventDefault()}
               onDrop={() => drop(i)} onDragEnd={() => setGdrag(null)}>
               <span className="pf-grip" title="Glisser pour réordonner le jalon">⠿</span>
+              {g.steps.some((st) => st.alerte) && (
+                <span className="pastille-alerte pf-alerte" title={g.steps.find((st) => st.alerte).alerte.texte}>!</span>
+              )}
               {g.steps.map((s, j) => (
                 <div key={s.slug}>
                   {j > 0 && <div className="pf-or">OU</div>}
@@ -478,26 +562,18 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                   </div>
                 </div>
               ))}
-              {/* Ajouter une variante « OU » à ce jalon (regroupe via équivalence). */}
-              {typeof onAddOu === "function" && !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT" && (() => {
-                const head = g.steps[0].slug;
-                const cand = steps.filter((s) => !s.quiz_id && !s.company_level && s.doc_type !== "EMARGEMENT" && !g.steps.some((x) => x.slug === s.slug));
-                return (
-                  <div style={{ position: "relative", marginTop: 6 }}>
-                    <button type="button" className="pf-or-add" onClick={() => setOuFor(ouFor === head ? null : head)} title="Ajouter une variante « OU » (choisie par condition)">＋ OU</button>
-                    {ouFor === head && (
-                      <div className="cat-pop" style={{ position: "absolute", left: 0, top: "100%", zIndex: 6, marginTop: 4, minWidth: 200, maxHeight: 220, overflowY: "auto" }}>
-                        {cand.length === 0 ? <div className="pf-add-empty" style={{ padding: 8 }}>Aucun autre document.</div>
-                          : cand.map((s) => (
-                            <button key={s.slug} type="button" className="cat-opt" onClick={() => { onAddOu(g.steps.map((x) => x.slug), s.slug); setOuFor(null); }}>
-                              <b>{s.label}</b>{s.doc_type && <span className="hint"> · {s.doc_type}</span>}
-                            </button>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+              {/* Ajouter une variante « OU » à ce jalon (regroupe via équivalence).
+                  LE MENU FLOTTANT A ÉTÉ RETIRÉ : il vivait dans `.parcours-flow`, qui défile en
+                  `overflow:auto`. Mesuré — il s'arrêtait pile au bord du conteneur (708 px des
+                  deux côtés), donc rogné, et il partait sur le côté dès qu'on faisait défiler le
+                  parcours. Dix-huit documents tenaient dans une boîte de 220 px, sans recherche.
+                  Le bouton ouvre désormais LE MÊME panneau que « Ajouter une étape », posé sous
+                  le flux : même geste, même endroit où regarder, et toute la largeur disponible. */}
+              {typeof onAddOu === "function" && !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT" && (
+                <button type="button" className={"pf-or-add" + (ouFor === g.steps[0].slug ? " on" : "")}
+                  onClick={() => { setAdding(false); setChercheDoc(""); onEffacerRefus?.(); setOuFor(ouFor === g.steps[0].slug ? null : g.steps[0].slug); }}
+                  title="Ajouter une variante « OU » (choisie par condition)">＋ OU</button>
+              )}
             </div>
             {canBreak ? (
               <button type="button" className={"pf-brk" + (brkHere ? " on" : "")}
@@ -512,46 +588,136 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
           </div>
           );
         })}
-        <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
+        <button type="button" className={"pf-add" + (adding ? " on" : "")}
+          onClick={() => { setOuFor(null); setChercheDoc(""); setAdding((a) => !a); }}>
           ＋ Ajouter une étape
         </button>
       </div>
 
-      {/* Les variantes « OU » sont regroupées automatiquement selon les Équivalences. */}
-      {adding && (
-        <div className="pf-add-panel">
-          {available.length === 0 ? (
-            <>
-              <div className="pf-add-title">Étapes disponibles</div>
-              <div className="pf-add-empty">Toutes les étapes disponibles sont déjà dans le parcours.</div>
-            </>
-          ) : (
-            (() => {
-              const isQuiz = (s) => s.doc_type === "QCM" || !!s.quiz_id;
-              const docs = available.filter((s) => !isQuiz(s));
-              const quizzes = available.filter(isQuiz);
-              const renderItem = (s) => (
-                <button type="button" key={s.slug} className="pf-add-item" onClick={() => { onToggle(s.slug); setAdding(false); }}>
-                  <span className="pf-label">{s.label}</span>
-                  {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
-                </button>
-              );
+      {/* UN SEUL PANNEAU pour les deux gestes — ajouter une étape, ou une variante « OU ».
+          Ils choisissent la même chose dans la même liste ; deux surfaces différentes obligeaient
+          à apprendre deux fois. Le titre dit lequel des deux est en cours. */}
+      {(adding || ouFor) && (() => {
+        const jalon = ouFor ? groups.find((g) => g.steps[0].slug === ouFor) : null;
+        // « OU » se choisit parmi TOUT le référentiel (hors QCM, émargement et docs déjà dans
+        // le jalon) ; « Ajouter » ne propose que ce qui n'est pas encore dans le parcours.
+        const pool = jalon
+          ? steps.filter((s) => !s.quiz_id && !s.company_level && s.doc_type !== "EMARGEMENT"
+              && s.doc_type !== "PIECE" && !jalon.steps.some((x) => x.slug === s.slug))
+          : available;
+        const t = chercheDoc.trim().toLowerCase();
+        const filtre = (l) => (!t ? l : l.filter((s) =>
+          [s.label, s.doc_type, s.slug].some((v) => String(v || "").toLowerCase().includes(t))));
+        const isQuiz = (s) => s.doc_type === "QCM" || !!s.quiz_id;
+        // TROIS natures d'étape, donc trois groupes. Ranger une pièce à fournir parmi les
+        // « Documents » tromperait : ceux-là, l'école les produit ; celle-ci, le stagiaire
+        // l'envoie. C'est le sens qui change, pas seulement l'étiquette.
+        const isPiece = (s) => s.doc_type === "PIECE";
+        const docs = filtre(pool.filter((s) => !isQuiz(s) && !isPiece(s)));
+        const quizzes = filtre(pool.filter(isQuiz));
+        const pieces = filtre(pool.filter(isPiece));
+        /* Le panneau ne se referme QUE si l'ajout a abouti. Il se fermait d'office, si bien
+           qu'un refus faisait disparaître la surface où le motif devait s'afficher : on voyait
+           le panneau se fermer et rien d'autre — d'où « je ne peux pas, sans savoir pourquoi ».
+           Une activation d'étape, elle, ne peut pas échouer : on ferme aussitôt. */
+        const choisir = async (s) => {
+          if (!jalon) { onToggle(s.slug); setAdding(false); setOuFor(null); setChercheDoc(""); return; }
+          const ok = await onAddOu(jalon.steps.map((x) => x.slug), s.slug);
+          if (ok) { setAdding(false); setOuFor(null); setChercheDoc(""); }
+        };
+        const item = (s) => (
+          <button type="button" key={s.slug} className="pf-add-item" onClick={() => choisir(s)}>
+            <span className="pf-label">{s.label}</span>
+            {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
+          </button>
+        );
+        return (
+          <div className="pf-add-panel">
+            <div className="pf-add-head">
+              <div className="pf-add-title" style={{ margin: 0 }}>
+                {jalon ? <>Variante « OU » de <b style={{ textTransform: "none" }}>{jalon.steps[0].label}</b></> : "Ajouter une étape"}
+              </div>
+              <button type="button" className="iconbtn" aria-label="Fermer"
+                onClick={() => { setAdding(false); setOuFor(null); setChercheDoc(""); }}><Icon name="x" size={14} /></button>
+            </div>
+            {/* Le référentiel compte vingt-deux documents : sans recherche, on parcourt une
+                liste. Même champ que partout ailleurs dans l'application. */}
+            {pool.length > 6 && (
+              <span className="gs-search" style={{ margin: "0 0 10px" }}>
+                <Icon name="search" size={14} />
+                <input value={chercheDoc} onChange={(e) => setChercheDoc(e.target.value)} autoFocus
+                  aria-label="Rechercher un document" placeholder="Rechercher un document…" />
+                {chercheDoc && <button className="gs-clear" aria-label="Effacer" onClick={() => setChercheDoc("")}><Icon name="x" size={13} /></button>}
+              </span>
+            )}
+            {/* CE QUI EST DÉJÀ DANS LE CHOIX. Un jalon n'affiche que ses variantes visibles dans
+                le flux : un document de GROUPE en fait partie sans jamais s'y montrer, et on
+                pouvait donc se voir refuser un ajout à cause d'un membre qu'aucun écran ne
+                nommait. La composition réelle est ici, et chaque membre peut en sortir. */}
+            {jalon && (() => {
+              const eq = eqDe?.(jalon.steps[0].slug);
+              const membres = (eq?.members || jalon.steps.map((x) => x.slug))
+                .map((sl) => steps.find((x) => x.slug === sl) || { slug: sl, label: sl, _absent: true });
+              if (membres.length < 2) return null;
               return (
-                <>
-                  <div className="pf-add-title">Documents{docs.length ? ` (${docs.length})` : ""}</div>
-                  {docs.length === 0
-                    ? <div className="pf-add-empty">Aucun document disponible.</div>
-                    : <div className="pf-add-grid">{docs.map(renderItem)}</div>}
-                  <div className="pf-add-title" style={{ marginTop: 12 }}>QCM{quizzes.length ? ` (${quizzes.length})` : ""}</div>
-                  {quizzes.length === 0
-                    ? <div className="pf-add-empty">Aucun QCM disponible.</div>
-                    : <div className="pf-add-grid">{quizzes.map(renderItem)}</div>}
-                </>
+                <div className="pf-membres">
+                  <span className="hint" style={{ marginRight: 4 }}>Déjà dans ce choix :</span>
+                  {membres.map((m) => (
+                    <span key={m.slug} className={"pf-membre" + (m._absent ? " absent" : "")}>
+                      {m.label}
+                      {m.company_level && <span className="hint"> · document de groupe</span>}
+                      {m._absent && <span className="hint"> · n'existe plus</span>}
+                      <button type="button" className="pf-membre-x" title={`Retirer « ${m.label} » de ce choix`}
+                        aria-label={`Retirer ${m.label} de ce choix`}
+                        onClick={() => onRetirerOu?.(m.slug)}><Icon name="x" size={11} /></button>
+                    </span>
+                  ))}
+                </div>
               );
-            })()
-          )}
-        </div>
-      )}
+            })()}
+
+            {/* Le refus, à hauteur du clic. Il nomme les deux documents et la condition qu'ils
+                partagent : « rien ne permettrait de choisir entre les deux au moment de produire
+                le document » est une raison, « échec » n'en est pas une. */}
+            {refusOu && (
+              <div className="status err" style={{ margin: "0 0 10px" }}>{refusOu}</div>
+            )}
+            {pool.length === 0 ? (
+              <div className="pf-add-empty">
+                {jalon ? "Aucun autre document à proposer en variante." : "Toutes les étapes disponibles sont déjà dans le parcours."}
+              </div>
+            ) : docs.length === 0 && quizzes.length === 0 ? (
+              // Pas une impasse : on dit ce qui a été cherché, et comment en sortir.
+              <div className="pf-add-empty">Aucun document ne correspond à « {chercheDoc.trim()} ».{" "}
+                <button type="button" className="lien-nu" onClick={() => setChercheDoc("")}>Tout afficher</button></div>
+            ) : (
+              <>
+                <div className="pf-add-title">Documents{docs.length ? ` (${docs.length})` : ""}</div>
+                {docs.length === 0
+                  ? <div className="pf-add-empty">Aucun document.</div>
+                  : <div className="pf-add-grid">{docs.map(item)}</div>}
+                {/* Ni un QCM ni une pièce ne peuvent être la variante « OU » d'un document : la
+                    liste ne les propose donc pas dans ce mode, plutôt que de les afficher et de
+                    les refuser ensuite. */}
+                {!jalon && (
+                  <>
+                    <div className="pf-add-title" style={{ marginTop: 12 }}>
+                      Pièces à fournir par le stagiaire{pieces.length ? ` (${pieces.length})` : ""}
+                    </div>
+                    {pieces.length === 0
+                      ? <div className="pf-add-empty">Aucune pièce au référentiel. Elles se créent dans Paramètres → Pièces justificatives.</div>
+                      : <div className="pf-add-grid">{pieces.map(item)}</div>}
+                    <div className="pf-add-title" style={{ marginTop: 12 }}>QCM{quizzes.length ? ` (${quizzes.length})` : ""}</div>
+                    {quizzes.length === 0
+                      ? <div className="pf-add-empty">Aucun QCM disponible.</div>
+                      : <div className="pf-add-grid">{quizzes.map(item)}</div>}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -647,7 +813,8 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
             )}
           </div>
         ))}
-        <button type="button" className={"pf-add" + (adding ? " on" : "")} onClick={() => setAdding((a) => !a)}>
+        <button type="button" className={"pf-add" + (adding ? " on" : "")}
+          onClick={() => { setOuFor(null); setChercheDoc(""); setAdding((a) => !a); }}>
           ＋ Ajouter une étape
         </button>
       </div>

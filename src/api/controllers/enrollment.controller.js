@@ -1,4 +1,5 @@
 const db = require('../config/database.js');
+const { parcoursManquant } = require('../lib/parcoursRequis.js');
 const { computeDocParcours, companyParcours } = require('../lib/parcours.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
@@ -183,6 +184,15 @@ const createEnrollment = async (req, res) => {
         if (!await belongsToOrg(conn, 'company', company_id, orgId)) {
             return res.status(422).json({ error: 'Entreprise inconnue.' });
         }
+
+        /* PAS DE PARCOURS, PAS D'INSCRIPTION. Une formation au parcours vide acceptait le
+         * dossier : le stagiaire apparaissait dans la session, et il n'y avait RIEN à lui
+         * envoyer — ni devis, ni contrat, ni convention. Le pipeline l'affichait « à 0 % »
+         * comme n'importe quel début de parcours, donc personne ne le voyait.
+         * Le contrôle porte AUSSI sur le parcours entreprise quand le dossier en a une :
+         * c'est elle qui paie, et c'est elle qui n'aurait pas de convention. */
+        const refus = await parcoursManquant(conn, orgId, session_id, !!company_id);
+        if (refus) return res.status(422).json({ error: refus });
 
         // Le financement (type de devis) suit celui du stagiaire s'il n'est pas fourni.
         let financing = req.body.financing;

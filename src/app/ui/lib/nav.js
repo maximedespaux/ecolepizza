@@ -4,7 +4,7 @@
  * Trois niveaux d'accès internes :
  *  · ADMIN     — bureau (super admin, admin organisme, secrétariat) : accès complet.
  *  · FORMATEUR — accès pédagogique restreint (sessions/émargement, formations,
- *                consultation des stagiaires, saisie d'un produit divers).
+ *                consultation des stagiaires, annuaire des partenaires).
  *  · AUDITEUR  — consultation (suivi Qualiopi, journal d'audit).
  */
 const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
@@ -26,6 +26,13 @@ export const NAV = [
       { to: "/entreprises", ic: "building", label: "Entreprises", roles: ADMIN },
       { to: "/sessions", ic: "calendar", label: "Sessions", roles: STAFF },
       { to: "/formations", ic: "graduation", label: "Formations", roles: STAFF },
+      /* Le fil de la communauté, le MÊME que celui des stagiaires (l'API cadre sur
+         l'organisme, pas sur le stagiaire). L'école y publiait déjà des annonces — la page
+         prévoit `peutAnnoncer` pour le personnel — mais aucun chemin ne l'y menait : il fallait
+         un compte stagiaire pour voir ce qu'on y disait, et pour y répondre.
+         Rangé en « Formation » : c'est la vie du groupe pendant le stage, pas de la relation
+         commerciale. Ouvert au formateur, qui est en salle avec eux. */
+      { to: "/communaute", ic: "message-circle", label: "Communauté", roles: STAFF },
     ],
   },
   {
@@ -41,7 +48,6 @@ export const NAV = [
     items: [
       { to: "/ventes", ic: "cart", label: "Ventes & Inventaire", roles: ADMIN },
       { to: "/demandes-boutique", ic: "package", label: "Demandes boutique", roles: ADMIN },
-      { to: "/produit-divers", ic: "coins", label: "Produit divers", roles: ["FORMATEUR"] },
       { to: "/factures", ic: "receipt", label: "Facturation", roles: ADMIN },
       { to: "/comptabilite", ic: "calculator", label: "Comptabilité", roles: ADMIN },
     ],
@@ -120,9 +126,9 @@ export const PAGE_TITLES = {
   "/formations": "Formations",
   "/qcm": "Modèles de QCM",
   "/pizza-quest-admin": "Pizza Quest",
-  "/produit-divers": "Produit divers",
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
+  "/communaute": "Communauté",
   "/inventaire": "Inventaire",
   "/ventes": "Ventes de Matériels et Inventaire",
   "/demandes-boutique": "Demandes boutique",
@@ -184,9 +190,10 @@ export function navMode(user, path) {
 const SECTION_OF = {
   "/stagiaires": "/stagiaires", "/entreprises": "/entreprises", "/sessions": "/sessions", "/formations": "/formations",
   "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
+  "/communaute": "/communaute",
   "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
-  "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",
+  "/comptabilite": "/comptabilite", "/carte": "/carte",
   "/reglages": "/reglages", "/reglages-facturation": "/reglages-facturation", "/modeles": "/modeles", "/equipe": "/equipe",
   "/audit": "/audit", "/suivi": "/suivi", "/dashboard": "/dashboard",
 };
@@ -259,6 +266,31 @@ export const EXTRA_ACCESS = [
     defaultRoles: ["SUPER_ADMIN"],
   },
 ];
+
+/**
+ * Capacité attachée à UNE PAGE — elle se règle sur sa ligne, pas dans une liste à part.
+ *
+ * POURQUOI. « Lecture / Modifier » n'a aucun sens sur un FIL où tout le monde participe : la
+ * Communauté n'a pas de version « consultation », et surtout, la question qui se pose vraiment
+ * n'est pas celle-là. Quelqu'un du bureau qui publie sans pouvoir retirer un message est un
+ * problème, pas un réglage. Ce qui varie, c'est ADMINISTRER ou non.
+ *
+ * La capacité vivait dans « Accès supplémentaires », tout en bas de la fenêtre, sans rapport
+ * visible avec la ligne « Communauté » située plus haut : on pouvait accorder la page en
+ * croyant avoir tout donné. Elle est maintenant sur la ligne même.
+ *
+ * `defaultRoles` = ceux qui l'ont d'office par leur rôle (case allumée et verrouillée). Sans
+ * cela l'écran mentirait : `peutModerer` répond oui au bureau quoi qu'affiche la fenêtre.
+ * La liste DOIT rester celle de `STAFF` dans lib/moderation.js — un test le vérifie.
+ */
+export const PAGE_CAPS = {
+  "/communaute": {
+    cap: "cap:moderate-community",
+    label: "Administrer",
+    hint: "Retirer ou corriger la publication, la réponse ou le commentaire d'un autre. Publier une annonce et épingler restent au bureau.",
+    defaultRoles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"],
+  },
+};
 
 // Rôles « système » (intégrés) : servent de modèles d'accès réutilisables.
 export const BUILTIN_ROLES = [

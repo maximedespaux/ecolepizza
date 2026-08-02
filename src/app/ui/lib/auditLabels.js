@@ -58,7 +58,14 @@ const ACTION_LABEL = {
     'template.rename': ['Identifiant de modèle renommé', A],
     'template.reorder': ['Modèles réordonnés', A],
     'template.delete': ['Modèle supprimé', R],
+    'template.reset': ['Modèle revenu à sa version d\'origine', A],
     'template.customTokens': ['Jetons personnalisés modifiés', A],
+
+    /* Remise à zéro de la progression Pizza Quest. ROUGE : elle détruit les étoiles ET les
+       cadres qui en découlent, sans retour possible. Elle ne peut viser que soi — le serveur
+       prend l'identité du compte connecté — mais elle mérite une trace : c'est la seule
+       opération de l'espace stagiaire qui efface un acquis. */
+    'quest.reset': ['Progression Pizza Quest effacée', R],
 
     // Conditions et champs de document
     'condition.create': ['Condition créée', G],
@@ -107,6 +114,33 @@ const ACTION_LABEL = {
     'quiz.duplicate': ['Quiz dupliqué', G],
     'quiz.submit': ['Quiz passé', N],
     'quiz.send': ['Quiz envoyé', B],
+
+    /* Pièces justificatives fournies par le STAGIAIRE — le sens inverse du reste. Le dépôt et
+       la vérification se tracent : ce sont des copies de pièces d'identité, et « qui a vu quoi,
+       quand » est précisément ce qu'un contrôle demandera. La suppression d'un fichier est en
+       ROUGE et non en neutre : tant que la règle de conservation n'est pas tranchée, c'est la
+       seule purge existante — elle doit se repérer d'un coup d'œil dans le journal. */
+    'piecetype.create': ['Pièce justificative créée', G],
+    'piecetype.update': ['Pièce justificative modifiée', A],
+    'piecetype.delete': ['Pièce justificative supprimée', R],
+    'piece.depot': ['Pièce déposée', B],
+    'piece.validee': ['Pièce validée', G],
+    'piece.refusee': ['Pièce refusée', R],
+    'piece.fichier_supprime': ['Fichier de pièce supprimé', R],
+
+    /* Communauté — modération. Ces trois codes ne sont posés que quand on agit sur le message
+       d'UN AUTRE : supprimer sa propre publication ne regarde personne. Rouge pour les deux
+       suppressions — irréversibles, les réponses et l'image partent par cascade ; ambre pour la
+       correction, qui met des mots dans la bouche de quelqu'un sans rien détruire. */
+    'community.post_supprime': ['Publication supprimée (modération)', R],
+    'community.reponse_supprimee': ['Réponse supprimée (modération)', R],
+    'community.post_modifie': ['Publication corrigée (modération)', A],
+
+    /* Communauté — modération. Retirer la publication de quelqu'un doit laisser une trace
+       lisible : « fiche retirée » et non un code, sinon le journal ne sert qu'à qui l'a écrit.
+       Le ton est ROUGE comme les suppressions, sans en être une : la fiche redevient privée,
+       son auteur la garde. C'est bien un retrait de la vue de tous. */
+    'recipe.unshare': ['Fiche retirée de la communauté', R],
 
     // Organisme et accès
     'organization.update': ['Organisme modifié', A],
@@ -157,6 +191,14 @@ const SUFFIXE = {
 
 /** entité technique → nom lisible, et son genre (pour accorder le participe). */
 const ENTITY_LABEL = {
+    // La remise à zéro de Pizza Quest vise le STAGIAIRE lui-même : c'est sa progression qui
+    // disparaît, pas un objet qu'il possède.
+    Learner: ['Stagiaire', 'm'],
+    CommunityPost: ['Publication', 'f'],
+    CommunityAnswer: ['Réponse', 'f'],
+    PieceType: ['Pièce justificative', 'f'],
+    PieceDepot: ['Dépôt de pièce', 'm'],
+    Recipe: ['Fiche technique', 'f'],
     Invoice: ['Facture', 'f'],
     MaterialSale: ['Vente de matériel', 'f'],
     InventoryItem: ['Article d\'inventaire', 'm'],

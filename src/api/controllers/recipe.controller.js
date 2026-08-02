@@ -3,6 +3,9 @@
 // communauté (autres stagiaires du même organisme).
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { enrichirAuteurs, CADRE_PERSONNEL } = require('../lib/auteurs.js');
+const { peutModerer } = require('../lib/moderation.js');
+const { logAudit } = require('../lib/audit.js');
 
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const authorName = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
@@ -90,7 +93,7 @@ const catalogBrands = async (req, res) => {
 
 // Résumé d'une fiche (sans ingrédients).
 const RECIPE_COLS = `id, kind, author_user_id, author_name, name, type, description, servings, paton_g,
-    flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d') AS updated_at`;
+    flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at`;
 
 // Ratio pâte/farine (pourcentage boulanger). Depuis les réglages du calculateur si présents,
 // sinon 1.68 par défaut (≈ 60 % hydratation).
@@ -193,28 +196,17 @@ const listShared = async (req, res) => {
             // `completed_levels` est une liste de niveaux séparés par des virgules : on la
             // compte ici plutôt que de l'envoyer brute — le front n'a besoin que du nombre,
             // et transmettre les niveaux d'un tiers exposerait son parcours détaillé.
-            try {
-                const [avs] = await conn.query(
-                    'SELECT r.id AS rid, l.avatar AS av, l.completed_levels AS lv FROM recipe r JOIN learner l ON l.user_id = r.author_user_id WHERE r.id IN (?)',
-                    [ids]);
-                const am = Object.fromEntries(avs.map((x) => [x.rid, x.av]));
-                const nbNiveaux = (v) => String(v || '').split(',').map((t) => t.trim()).filter(Boolean).length;
-                const dm = Object.fromEntries(avs.map((x) => [x.rid, nbNiveaux(x.lv)]));
-                rows.forEach((r) => { r.author_avatar = am[r.id] || null; r.author_done = dm[r.id] || 0; });
-            } catch (e) { /* migration 070 non jouée : pas d'avatar */ }
-            /* Le cadre CHOISI par l'auteur, et les exclusifs qu'on lui a accordés.
-               REQUÊTE SÉPARÉE, et c'est délibéré : ces deux colonnes arrivent avec la migration
-               113. Ajoutées au SELECT ci-dessus, une base où 113 n'est pas jouée aurait fait
-               échouer TOUTE la requête — et le catch aurait emporté les avatars et le nombre
-               de formations avec les cadres. Isolées, seuls les cadres manquent. */
-            try {
-                const [cds] = await conn.query(
-                    'SELECT r.id AS rid, l.cadre AS cd, l.cadres_exclusifs AS cx FROM recipe r JOIN learner l ON l.user_id = r.author_user_id WHERE r.id IN (?)',
-                    [ids]);
-                const cm = Object.fromEntries(cds.map((x) => [x.rid, x.cd || null]));
-                const xm = Object.fromEntries(cds.map((x) => [x.rid, listeCadres(x.cx)]));
-                rows.forEach((r) => { r.author_cadre = cm[r.id] || null; r.author_cadres_ex = xm[r.id] || []; });
-            } catch (e) { if (!noTable(e)) throw e; } // migration 113 non jouée : cadre de parcours
+            /* Avatar, cadre et parcours de l'auteur — MÊME résolution que partout ailleurs.
+             *
+             * Deux requêtes vivaient ici, chacune en `JOIN learner` : un auteur SANS fiche
+             * stagiaire — le personnel de l'organisme — en était donc exclu par la jointure
+             * elle-même. Sa fiche partagée sortait sans avatar ni cadre, alors que sa
+             * publication d'entraide, juste à côté dans le MÊME fil, en avait un. C'est
+             * exactement la divergence que `lib/auteurs.js` existe pour empêcher.
+             *
+             * L'isolement des deux requêtes (migrations 070 / 113 séparées) est conservé : il
+             * vit désormais dans le fichier commun, pour toutes les listes à la fois. */
+            await enrichirAuteurs(conn, rows);
             try {
                 const [likes] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_like WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
                 const [coms] = await conn.query('SELECT recipe_id, COUNT(*) AS n FROM recipe_comment WHERE recipe_id IN (?) GROUP BY recipe_id', [ids]);
@@ -272,43 +264,27 @@ const listShared = async (req, res) => {
                 const [qui] = await conn.query(
                     `SELECT c.recipe_id, c.user_id, MAX(c.created_at) AS last_at,
                             COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''),
-                                     MAX(c.author_name)) AS name,
-                            MAX(l.avatar) AS avatar, MAX(l.completed_levels) AS lv
+                                     MAX(c.author_name)) AS name
                        FROM recipe_comment c
                        LEFT JOIN user u ON u.id = c.user_id
-                       LEFT JOIN learner l ON l.user_id = c.user_id
                       WHERE c.recipe_id IN (?)
                       GROUP BY c.recipe_id, c.user_id, u.first_name, u.last_name
                       ORDER BY last_at DESC`,
                     [ids]
                 );
                 const par = {};
-                for (const x of qui) {
-                    // `done` = COMPTE des formations terminées, comme pour l'auteur : il porte le
-                    // cadre de la pastille. Jamais la liste des niveaux — le parcours détaillé
-                    // d'un tiers ne regarde personne.
-                    const done = String(x.lv || '').split(',').map((t) => t.trim()).filter(Boolean).length;
-                    (par[x.recipe_id] ||= []).push({ user_id: x.user_id, name: x.name, avatar: x.avatar, done });
-                }
+                for (const x of qui) (par[x.recipe_id] ||= []).push({ user_id: x.user_id, name: x.name });
                 rows.forEach((r) => {
                     const tous = par[r.id] || [];
                     r.commenters = tous.slice(0, 4);
                     r.commenters_total = tous.length; // distinctes, pour le « +N »
                 });
-                // Cadres des commentateurs — requête séparée, même raison que pour l'auteur :
-                // la migration 113 peut ne pas être jouée, et les visages doivent survivre.
-                try {
-                    const uids = [...new Set(qui.map((x) => x.user_id).filter(Boolean))];
-                    if (uids.length) {
-                        const [cds] = await conn.query('SELECT user_id, cadre, cadres_exclusifs FROM learner WHERE user_id IN (?)', [uids]);
-                        const par2 = Object.fromEntries(cds.map((x) => [x.user_id, x]));
-                        rows.forEach((r) => (r.commenters || []).forEach((g) => {
-                            const l = par2[g.user_id];
-                            g.cadre = (l && l.cadre) || null;
-                            g.cadres_ex = listeCadres(l && l.cadres_exclusifs);
-                        }));
-                    }
-                } catch (e) { if (!noTable(e)) throw e; }
+                /* Visage des commentateurs — MÊME résolution que les auteurs, sans préfixe.
+                 * La jointure `LEFT JOIN learner` qui vivait ici laissait le personnel de
+                 * l'organisme sans avatar ni cadre : sa pastille sortait en rond gris à côté de
+                 * celles des stagiaires. `done` reste un COMPTE, jamais la liste des niveaux —
+                 * le parcours détaillé d'un tiers ne regarde personne. */
+                await enrichirAuteurs(conn, rows.flatMap((r) => r.commenters || []), 'user_id', '');
             } catch (e) {
                 if (!noTable(e) && e?.code !== 'ER_BAD_FIELD_ERROR') throw e;
                 rows.forEach((r) => { r.commenters = []; r.commenters_total = 0; });
@@ -374,8 +350,17 @@ const getRecipe = async (req, res) => {
                  FROM recipe_comment c LEFT JOIN user u ON u.id = c.user_id
                  WHERE c.recipe_id = ? ORDER BY c.created_at`, [req.params.id]);
             comments = cs.map((c) => ({ ...c, mine: c.user_id === req.user.id }));
+            // Même visage que partout ailleurs — cf. lib/auteurs.js. Le fil de commentaires
+            // était la dernière liste de la Communauté à n'afficher que des noms.
+            await enrichirAuteurs(conn, comments, 'user_id');
+            // Et l'auteur de la fiche : même oubli, même symptôme que sur une publication.
+            await enrichirAuteurs(conn, [r]);
         } catch (e) { if (!noTable(e)) throw e; }
-        res.json({ data: { ...r, mine, ingredients: ings, like_count: likeCount, liked, comments } });
+        /* `can_moderate` : sans lui, le bouton de suppression ne s'affichait que sur `mine` et
+         * l'école n'avait aucun moyen de retirer le commentaire d'un tiers — sinon supprimer la
+         * fiche entière, ce qui punit son auteur pour le message d'un autre. */
+        res.json({ data: { ...r, mine, ingredients: ings, like_count: likeCount, liked, comments,
+            can_moderate: await peutModerer(req.user) } });
     } catch (err) {
         if (noTable(err)) return res.status(404).json({ message: 'Espace recettes non initialisé (migration 071).' });
         console.error('Erreur lecture recette :', err);
@@ -470,6 +455,41 @@ const deleteRecipe = async (req, res) => {
     }
 };
 
+/**
+ * POST /api/recipes/:id/retirer — retirer une fiche du fil de la Communauté.
+ *
+ * ELLE REPASSE EN PRIVÉE, elle n'est PAS supprimée. Une fiche partagée appartient aussi à son
+ * auteur : elle vit dans ses empâtements, ses garnitures, ses réalisations, et c'est souvent le
+ * travail d'une session. Détruire sa fiche parce que sa publication dérange dans le fil punit
+ * la personne pour le geste — et sans recours. Dépublier suffit à la modération, et se défait :
+ * l'auteur peut repartager, l'école re-retirer.
+ *
+ * D'où une route SÉPARÉE de `updateRecipe` : un modérateur n'a rien à faire dans le contenu
+ * d'une fiche qui n'est pas la sienne. Il peut la retirer du fil, un point.
+ *
+ * Journalisé : retirer la publication de quelqu'un doit laisser une trace, comme toute action
+ * de modération — le Journal d'audit existe pour ça.
+ */
+const unshareRecipe = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[cur]] = await conn.query(
+            'SELECT author_user_id, name, visibility FROM recipe WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        if (!cur) return res.status(404).json({ message: 'Recette introuvable.' });
+        if (cur.author_user_id !== req.user.id && !await peutModerer(req.user)) {
+            return res.status(403).json({ message: 'Seul l\'auteur, ou la modération, peut retirer cette fiche.' });
+        }
+        if (cur.visibility !== 'SHARED') return res.json({ success: true, message: 'Déjà retirée du fil.' });
+        await conn.query('UPDATE recipe SET visibility = ? WHERE id = ?', ['PRIVATE', req.params.id]);
+        logAudit(req, 'recipe.unshare', 'Recipe', req.params.id);
+        res.json({ success: true, message: 'Fiche retirée de la communauté.' });
+    } catch (err) {
+        console.error('Erreur retrait fiche :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** GET /api/recipes/author/:userId — profil public d'un auteur (même organisme, ayant partagé). */
 const authorProfile = async (req, res) => {
     try {
@@ -523,6 +543,18 @@ const authorProfile = async (req, res) => {
             const [[lc]] = await conn.query('SELECT cadre, cadres_exclusifs FROM learner WHERE user_id = ? LIMIT 1', [uid]);
             if (lc) { cadre = lc.cadre || null; cadres_ex = listeCadres(lc.cadres_exclusifs); }
         } catch (e) { if (!noTable(e)) throw e; }
+        /* Le PERSONNEL de l'organisme n'a pas de fiche `learner` : sa fenêtre de profil sortait
+         * donc sans avatar ni cadre, alors qu'il en porte partout ailleurs depuis la migration
+         * 126. Le cadre « École » est en outre déclaré POSSÉDÉ — il tient au rôle, pas à une
+         * formation, et sans cela l'écran le rejette à la lecture (`cadrePorteDe`). */
+        try {
+            const [[uc]] = await conn.query('SELECT avatar, cadre FROM user WHERE id = ? LIMIT 1', [uid]);
+            if (uc) {
+                if (!avatar) avatar = uc.avatar || null;
+                if (!cadre) cadre = uc.cadre || null;
+                if (uc.cadre === CADRE_PERSONNEL) cadres_ex = [...cadres_ex, CADRE_PERSONNEL];
+            }
+        } catch (e) { if (!noTable(e)) throw e; } // migration 126 non jouée
         const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Stagiaire';
         res.json({ data: { id: uid, name, avatar, done, cadre, cadres_ex, shared_count: sc.n, likes_received: likes, company, phone, email, badges } });
     } catch (err) {
@@ -590,13 +622,23 @@ const updateComment = async (req, res) => {
     }
 };
 
-/** DELETE /api/recipes/:id/comments/:cid — supprime son propre commentaire. */
+/**
+ * DELETE /api/recipes/:id/comments/:cid — son propre commentaire, ou celui d'un autre en
+ * MODÉRATION.
+ *
+ * La modération s'arrêtait aux publications d'entraide : le fil de commentaires d'une fiche,
+ * lui, n'était retirable que par son auteur. Or c'est exactement le même fil public, avec les
+ * mêmes dérapages possibles, et l'école n'avait aucun moyen d'y retirer quoi que ce soit —
+ * sinon supprimer la fiche entière, ce qui punit son auteur pour le commentaire d'un tiers.
+ */
 const deleteComment = async (req, res) => {
     try {
         const conn = db.promise();
         const [[c]] = await conn.query('SELECT user_id FROM recipe_comment WHERE id = ? AND recipe_id = ?', [req.params.cid, req.params.id]);
         if (!c) return res.status(404).json({ message: 'Commentaire introuvable.' });
-        if (c.user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut supprimer.' });
+        if (c.user_id !== req.user.id && !await peutModerer(req.user)) {
+            return res.status(403).json({ message: 'Seul l\'auteur, ou la modération, peut supprimer.' });
+        }
         await conn.query('DELETE FROM recipe_comment WHERE id = ?', [req.params.cid]);
         res.json({ success: true });
     } catch (err) {
@@ -633,4 +675,4 @@ const markRecipeRead = async (req, res) => {
     }
 };
 
-module.exports = { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment };
+module.exports = { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, unshareRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment };
