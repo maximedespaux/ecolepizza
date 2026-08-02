@@ -1907,6 +1907,16 @@ tbody tr:last-child td{border-bottom:none}
 .pq-expl em{font-style:normal;color:var(--muted)}
 
 /* Titre de la rangée de défis-jeux dans un monde. */
+/* L'ARCADE — les défis, en tête de Pizza Quest. Elle se lit comme une étagère posée AVANT la
+   carte : c'est la première chose qu'on croise, alors qu'auparavant il fallait ouvrir une
+   formation et défiler sous son chemin de chapitres pour la trouver. */
+.pq-arcade{margin:2px 0 22px}
+/* Le record personnel, sous le sous-titre. Trois étoiles éteintes disent « jamais joué » sans
+   avoir à l'écrire deux fois — le mot qui suit lève juste l'ambiguïté. */
+.pq-mini-record{display:flex;align-items:center;gap:3px;margin-top:5px;color:var(--gold)}
+.pq-mini-record > svg{opacity:.28}
+.pq-mini-record > svg.on{opacity:1}
+.pq-mini-record .hint{margin-left:4px;font-size:10.5px}
 .pq-games-t{font-size:13px;font-weight:700;color:var(--text);margin:20px 0 10px;text-align:center}
 /* Titre de palier, tenu par deux filets : centré et seul, il flottait au milieu de la page
    sans rien séparer. `--dim` en couleur de texte plafonne à ~2,6:1 en clair — sous le seuil

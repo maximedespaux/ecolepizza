@@ -246,9 +246,11 @@ function PizzaQuest() {
 
       {world
         ? <WorldView world={world} prog={prog[world.code] || {}} onBack={() => setActive(null)}
-            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || [] })}
-            onGame={(g) => setMini({ key: g.key, obj: g.obj })} />
-        : <FormationMap worlds={worlds} prog={prog} onPick={setActive} />}
+            onChapter={(chIdx, chapter) => setQuiz({ code: world.code, chIdx, chapter, questions: chapter.questions || [] })} />
+        : <>
+            <Arcade prog={prog} onGame={(g) => setMini({ key: g.key, obj: g.obj })} />
+            <FormationMap worlds={worlds} prog={prog} onPick={setActive} />
+          </>}
 
       {/* Quitter un chapitre ne coûte plus rien : les cœurs sont supprimés. On ne demande
           donc plus confirmation — il n'y a plus rien à perdre. */}
@@ -470,43 +472,67 @@ function CarteRangee({ worlds, card }) {
   );
 }
 
-// Les défis-jeux propres à chaque formation. DIFFÉRENTS selon le rôle : le Constructeur
-// (ordonner la recette) sur les formations « process », « Fais ta pizza » sur celles qui
-// travaillent les paramètres — et il s'ouvre directement sur le style visé (obj). Un jeu
-// « Bientôt » par formation garde la promesse sans mentir sur ce qui existe.
-const GAME_SIM = (obj, sub) => ({ key: "simulateur", obj, ic: "flame", tint: "var(--orange)", label: "Fais ta pizza", sub });
-const GAME_CONS = { key: "constructeur", ic: "pizza", tint: "var(--ember1)", label: "Le Constructeur", sub: "Ordonne la recette" };
-const GAME_SOON = { key: null, ic: "clock", tint: "var(--dim)", label: "Chrono Rush", sub: "Bientôt", soon: true };
-const GAMES_BY_ROLE = {
-  decouverte: [GAME_CONS, GAME_SOON],
-  niv1: [GAME_CONS, GAME_SIM("classique", "Réussis une classique"), GAME_SOON],
-  niv1pro: [GAME_CONS, GAME_SOON],
-  niv2: [GAME_SIM("contemporaine", "Réussis une contemporaine"), GAME_CONS, GAME_SOON],
-  expert: [GAME_SIM(null, "Tous les styles"), GAME_CONS, GAME_SOON],
-  spe: [GAME_SIM(null, "Réussis ta spécialité"), GAME_SOON],
-  autre: [GAME_CONS, GAME_SOON],
-};
+/**
+ * L'ARCADE — les défis, en tête de Pizza Quest et non plus dans chaque formation.
+ *
+ * POURQUOI ILS EN SORTENT. Ils y étaient rangés par formation, mais l'attribution était en
+ * trompe-l'œil : sur les sept groupes, le Constructeur apparaissait dans SIX et « Chrono Rush »
+ * dans les SEPT. On répétait deux jeux identiques sept fois pour trois variantes réellement
+ * différentes — les trois objectifs du Simulateur.
+ *
+ * ET LE MODÈLE DE DONNÉES ÉTAIT DÉJÀ D'ACCORD : `finishMini` enregistre sous `prog["constructeur"]`,
+ * une clé plate, JAMAIS sous le monde. Jouer depuis Niveau I ou depuis Napolitaine écrivait au
+ * même endroit. Seul l'affichage prétendait que ces jeux appartenaient à une formation.
+ *
+ * Ils se découvrent donc en haut, avant la carte, au lieu d'attendre sous le chemin de chapitres
+ * d'un monde qu'il faut d'abord ouvrir.
+ *
+ * LE SIMULATEUR GARDE SES STYLES, mais c'est LUI qui les propose : ouvert sans objectif, il
+ * affiche son choix de pizzas (cf. SimulateurPizza). Le seul lien réel avec les formations est
+ * préservé, sans les six répétitions.
+ */
+const GAME_CONS = { key: "constructeur", ic: "pizza", tint: "var(--ember1)",
+  label: "Le Constructeur", sub: "Ordonne la recette" };
+const GAME_SIM = { key: "simulateur", obj: null, ic: "flame", tint: "var(--orange)",
+  label: "Fais ta pizza", sub: "Farine, hydratation, four" };
+const GAME_SOON = { key: null, ic: "clock", tint: "var(--dim)",
+  label: "Chrono Rush", sub: "Bientôt", soon: true };
+const ARCADE = [GAME_CONS, GAME_SIM, GAME_SOON];
 
-// Les défis d'un monde, rendus sous le chemin de chapitres.
-function WorldGames({ world, onGame }) {
-  const games = GAMES_BY_ROLE[roleOf(world)] || [GAME_CONS];
+function Arcade({ prog, onGame }) {
   return (
-    <>
-      <div className="pq-games-t">Les défis de cette formation</div>
+    <div className="pq-arcade">
+      <div className="pq-games-t">L'arcade — les défis de l'école</div>
       <div className="pq-minis">
-        {games.map((g, i) => g.soon ? (
-          <div key={i} className="pq-mini soon">
-            <span className="pq-mini-e" style={{ color: g.tint }}><Icon name={g.ic} size={24} /></span>
-            <span className="pq-mini-txt"><b>{g.label}</b><span className="pq-mini-sub">{g.sub}</span></span>
-          </div>
-        ) : (
-          <button key={i} className="pq-mini" onClick={() => onGame(g)}>
-            <span className="pq-mini-e" style={{ color: g.tint }}><Icon name={g.ic} size={24} /></span>
-            <span className="pq-mini-txt"><b>{g.label}</b><span className="pq-mini-sub">{g.sub}</span></span>
-          </button>
-        ))}
+        {ARCADE.map((g, i) => {
+          /* LE RECORD PERSONNEL, et lui seul. Un classement nominatif entre stagiaires ferait,
+             dans une promotion de vingt, dix-sept personnes installées à demeure dans la moitié
+             basse — et ce sont précisément celles qu'on veut faire revenir. Sur une session de
+             trois, il serait carrément déprimant. Le record qu'on bat, c'est le sien. */
+          const record = g.key ? (prog[g.key] || {})[0] || 0 : 0;
+          const Balise = g.soon ? "div" : "button";
+          return (
+            <Balise key={i} className={"pq-mini" + (g.soon ? " soon" : "")}
+              onClick={g.soon ? undefined : () => onGame(g)}>
+              <span className="pq-mini-e" style={{ color: g.tint }}><Icon name={g.ic} size={24} /></span>
+              <span className="pq-mini-txt">
+                <b>{g.label}</b>
+                <span className="pq-mini-sub">{g.sub}</span>
+                {!g.soon && (
+                  <span className="pq-mini-record" aria-label={`Ton record : ${record} étoile${record > 1 ? "s" : ""} sur 3`}>
+                    {[0, 1, 2].map((n) => (
+                      <Icon key={n} name="star" size={11} fill={n < record ? "currentColor" : "none"}
+                        className={n < record ? "on" : ""} />
+                    ))}
+                    <span className="hint">{record ? "ton record" : "jamais joué"}</span>
+                  </span>
+                )}
+              </span>
+            </Balise>
+          );
+        })}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -566,7 +592,7 @@ function FCard({ w, prog, onPick }) {
 }
 
 // Vue d'un monde : chemin de chapitres façon Duolingo + les défis-jeux de la formation.
-function WorldView({ world, prog, onBack, onChapter, onGame }) {
+function WorldView({ world, prog, onBack, onChapter }) {
   const chapters = chaptersFor(world);
   const doneCount = Object.keys(prog).length;
   // Chapitre en cours = le premier non terminé. `-1` quand tout est fait.
@@ -739,7 +765,6 @@ function WorldView({ world, prog, onBack, onChapter, onGame }) {
       </div>
       </div>
       <p className="hint" style={{ textAlign: "center", marginTop: 8 }}>{doneCount}/{chapters.length} chapitres terminés</p>
-      <WorldGames world={world} onGame={onGame} />
     </div>
   );
 }

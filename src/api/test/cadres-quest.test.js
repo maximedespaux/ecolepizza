@@ -494,3 +494,41 @@ test('les résultats de concours ne se confondent plus', () => {
     assert.match(srcCss, /\.cadre-fondateur::after\{[^}]*transform-origin:50% 85%\}/);
     assert.match(srcCss, /\.cadre-prix::after\{[^}]*transform-origin:50% 28%\}/);
 });
+
+test('l\'arcade est en tête, et une seule fois', () => {
+    /* LES JEUX ÉTAIENT RANGÉS PAR FORMATION, mais l'attribution était en trompe-l'œil : sur les
+       sept groupes, le Constructeur apparaissait dans SIX et « Chrono Rush » dans les SEPT. On
+       répétait deux jeux identiques sept fois pour trois variantes réellement différentes — les
+       trois objectifs du Simulateur.
+
+       ET LE MODÈLE DE DONNÉES ÉTAIT DÉJÀ D'ACCORD, c'est ce qui a tranché : `finishMini`
+       enregistre sous `prog["constructeur"]`, une clé PLATE, jamais sous le monde. Jouer depuis
+       Niveau I ou depuis Napolitaine écrivait au même endroit. Seul l'affichage prétendait que
+       ces jeux appartenaient à une formation. */
+    assert.match(srcQuest, /const next = \{ \.\.\.p, \[key\]: \{ 0: Math\.max\(stars, \(p\[key\] \|\| \{\}\)\[0\] \|\| 0\) \} \};/,
+        'le score des jeux est global, et l\'etait deja');
+    assert.doesNotMatch(srcQuest, /GAMES_BY_ROLE/, 'plus de catalogue par role');
+    assert.doesNotMatch(srcQuest, /<WorldGames/, 'plus d\'etagere dans un monde');
+    // L'arcade est rendue AVANT la carte, dans la branche « accueil ».
+    assert.match(srcQuest, /<Arcade prog=\{prog\} onGame=\{\(g\) => setMini\(\{ key: g\.key, obj: g\.obj \}\)\} \/>\s*\n\s*<FormationMap/,
+        'l\'arcade doit preceder la carte des formations');
+    /* Le Simulateur garde ses styles, mais c'est LUI qui les propose : ouvert sans objectif, il
+       affiche son choix de pizzas. Le seul lien réel avec les formations survit sans les six
+       répétitions. */
+    assert.match(srcQuest, /const GAME_SIM = \{ key: "simulateur", obj: null,/);
+    const srcSim = fs.readFileSync(path.join(APP, 'ui/components/SimulateurPizza.jsx'), 'utf8');
+    assert.match(srcSim, /\{!obj \? \(/, 'sans objectif, le simulateur ouvre son choix');
+
+    /* LE RECORD EST PERSONNEL, ET SEULEMENT LUI. Un classement nominatif installerait, dans une
+       promotion de vingt, dix-sept personnes à demeure dans la moitié basse — celles-là mêmes
+       qu'on veut faire revenir. Et sur une session de trois, il serait franchement triste. */
+    assert.match(srcQuest, /const record = g\.key \? \(prog\[g\.key\] \|\| \{\}\)\[0\] \|\| 0 : 0;/);
+    assert.match(srcQuest, /\{record \? "ton record" : "jamais joué"\}/);
+    /* Et rien ne va CHERCHER le score des autres : un motif sur les mots interdits attraperait
+       ce commentaire-ci. On vérifie ce qui compte — aucun appel réseau autre que les trois
+       lectures du profil et des chapitres. */
+    const importees = /import \{([^}]*)\} from "\.\.\/api\/apiClient\.js";/.exec(srcQuest)[1]
+        .split(',').map((x) => x.trim()).filter(Boolean).sort();
+    assert.deepStrictEqual(importees, ['getMyFormations', 'getMyProfile', 'getPlayableChapters'],
+        'aucune lecture du score des autres stagiaires');
+});
