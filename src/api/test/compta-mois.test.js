@@ -1,10 +1,32 @@
 /**
- * Le gain du mois, dans le tableau de gestion.
+ * LE MOIS, DANS LE TABLEAU DE GESTION.
  *
- * Un « gain du mois » n'est pas une marge annuelle rognée à un douzième : c'est ce qui est entré
- * moins ce qui est sorti SUR LE MOIS. Ces tests portent sur le code réel du contrôleur — ils
- * attrapent une requête mensuelle qui aurait perdu son filtre de mois, ou l'inscription rattachée
- * à la mauvaise date, deux erreurs qui produisent un chiffre plausible et faux.
+ * CE QUI A CHANGÉ, ET POURQUOI CES TESTS ONT ÉTÉ RÉÉCRITS. Ils gelaient l'architecture
+ * précédente — une fonction `computeMonth` à part, dont le résultat n'alimentait qu'UNE tuile
+ * pendant que le reste de la page restait annuel. Ils sont passés au rouge le jour où cette
+ * séparation a disparu : c'est exactement leur travail, et la version qui suit gèle le nouveau
+ * contrat plutôt que de rafistoler l'ancien.
+ *
+ * LE DÉFAUT CORRIGÉ, tel qu'il se voyait : un sélecteur de mois trônait en tête d'écran, à côté
+ * du sélecteur d'année, et changer de mois ne modifiait qu'un chiffre sur une quinzaine. Le
+ * résultat, les recettes, les dépenses, la marge, les camemberts et les listes restaient sur le
+ * total de l'année. Un filtre qui ne filtre pas se lit, à juste titre, comme cassé.
+ *
+ * LA CAUSE ÉTAIT PROFONDE : DEUX RÈGLES D'ATTRIBUTION sur la même page. Le tableau annuel datait
+ * le CA des inscriptions à l'ANNÉE DE LA SESSION (`training_session.year`) ; le gain du mois le
+ * datait à l'ENCAISSEMENT (`enrollment.created_at`). Les douze mois ne s'additionnaient donc pas
+ * en l'année, et rien ne pouvait relier les deux vues — d'où une seule tuile mensuelle.
+ *
+ * LA RÈGLE RETENUE, une seule pour tout l'écran : L'ENCAISSEMENT. Une inscription compte le mois
+ * où elle a été ENREGISTRÉE. C'est la seule qui ait un sens à l'échelle du mois — un mois n'a pas
+ * d'année de session — et c'est celle qui répond à la question posée à cet écran : combien est
+ * entré, combien est sorti. Conséquence assumée : une inscription saisie en décembre pour une
+ * session de l'an prochain compte en décembre.
+ *
+ * L'INVARIANT QUI COMPTE : les douze mois somment EXACTEMENT en l'année. Il ne tient qu'à une
+ * chose — que ce soit la même fonction, avec la même règle, à qui l'on ajoute ou retire un filtre
+ * de mois. Toute duplication de ce calcul le casse en silence. Vérifié en base sur l'année en
+ * cours : 1 031,33 € en juillet + 198,30 € en août = 1 229,63 €, soit le total annuel au centime.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -15,65 +37,85 @@ const DIR = path.join(__dirname, '..');
 const net = (f) => fs.readFileSync(path.join(DIR, f), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
 const SRC = net('controllers/comptabilite.controller.js');
+const PAGE = fs.readFileSync(path.join(DIR, '..', 'app', 'ui', 'pages', 'Comptabilite.jsx'), 'utf8');
 
-test('le gain du mois se calcule sur un vrai mois, pas sur l\'année entière', () => {
-    // Chaque source du mois doit filtrer sur MONTH(...), sinon on additionne toute l'année et
-    // on l'appelle « gain du mois » — le pire, un chiffre qui a l'air juste.
-    const bloc = SRC.slice(SRC.indexOf('async function computeMonth'), SRC.indexOf('async function loadSettings'));
-    // Le filtre de mois est factorisé : `parMois` l'ajoute à chaque requête quand le mois est
-    // réel, le retire pour l'année entière. Les quatre sources doivent l'appliquer.
-    assert.match(bloc, /AND MONTH\(\$\{col\}\) = \?/, 'le filtre de mois factorisé a disparu');
+const PERIODE = () => SRC.slice(SRC.indexOf('async function computePeriode'), SRC.indexOf('async function loadSettings'));
+
+test('un seul calcul sert le mois ET l\'année', () => {
+    /* `computeMonth` a disparu : deux fonctions, c'était deux règles, et deux règles c'était des
+       mois qui ne somment pas en l'année. */
+    assert.doesNotMatch(SRC, /async function computeMonth/,
+        'Un second calcul mensuel rouvrirait la porte à deux règles divergentes.');
+    assert.doesNotMatch(SRC, /async function computeYear/, 'idem pour un calcul annuel séparé');
+    assert.match(SRC, /async function computePeriode\(conn, orgId, annee, mois = 0\)/,
+        'Une seule fonction, paramétrée par le mois — 0 valant l\'année entière.');
+});
+
+test('le CA des inscriptions est daté à l\'encaissement, sur le mois comme sur l\'année', () => {
+    const bloc = PERIODE();
+    const inscr = bloc.slice(bloc.indexOf('FROM enrollment'), bloc.indexOf('FROM enrollment') + 220);
+    assert.match(inscr, /YEAR\(e\.created_at\) = \?/,
+        "L'encaissement est la seule règle qui ait un sens à l'échelle du mois.");
+    assert.match(inscr, /parMois\('e\.created_at'\)/, 'et le filtre de mois porte sur la même colonne');
+    /* LA JOINTURE SUR LA SESSION A DISPARU. Tant qu'elle était là, le CA annuel suivait l'année de
+       session et ne pouvait pas se découper en mois. */
+    assert.doesNotMatch(inscr, /training_session/,
+        "La règle « année de session » ne doit pas revenir : elle est indécoupable en mois.");
+});
+
+test('le filtre de mois est factorisé, et couvre toutes les sources', () => {
+    const bloc = PERIODE();
+    assert.match(bloc, /const parMois = \(col\) => \(mois \? [^;]*: ''\)/,
+        "À 0 le filtre disparaît, il ne devient pas une condition toujours vraie.");
+    /* QUATRE SOURCES : inscriptions, matériel, produits divers, dépenses. Il en manque une et
+       cette source-là reste annuelle au milieu de chiffres mensuels — l'erreur la plus dure à
+       voir, parce que le total reste plausible. */
     const applique = (bloc.match(/\$\{parMois\(/g) || []).length;
     assert.ok(applique >= 4, `parMois n'est appliqué qu'à ${applique} sources sur 4`);
-    assert.match(bloc, /gain: ca - depenses/, 'le gain n\'est pas recettes − dépenses');
 });
 
-test('l\'inscription du mois est rattachée à sa date d\'enregistrement, pas à l\'année de session', () => {
-    // LA DÉCISION À ASSUMER. Le tableau ANNUEL rattache le CA d'inscription à `session.year`. Un
-    // mois n'a pas d'année de session ; on prend `enrollment.created_at`, quand l'argent est
-    // entré. Rattacher au mois via une jointure sur session.year donnerait un gain mensuel qui
-    // ne correspond à aucune entrée réelle.
-    const bloc = SRC.slice(SRC.indexOf('async function computeMonth'), SRC.indexOf('async function loadSettings'));
-    const inscr = bloc.slice(bloc.indexOf('FROM enrollment'), bloc.indexOf('FROM enrollment') + 200);
-    assert.match(inscr, /YEAR\(created_at\) = \?/, 'l\'inscription mensuelle doit filtrer sur created_at');
-    assert.match(inscr, /parMois\('created_at'\)/, 'le filtre de mois de l\'inscription doit porter sur created_at');
-    assert.doesNotMatch(inscr, /training_session/, 'le mois ne doit pas dépendre de l\'année de session');
+test('les sessions restent annuelles — elles ne sont pas un encaissement', () => {
+    /* Une session a lieu à sa date. Rapporter le nombre de sessions au mois donnerait un
+       « stagiaires par session » qui divise des inscriptions encaissées en mars par des sessions
+       tenues en mars : deux populations sans rapport. */
+    const bloc = PERIODE();
+    const sess = bloc.slice(bloc.indexOf('FROM training_session'), bloc.indexOf('FROM training_session') + 140);
+    assert.doesNotMatch(sess, /MONTH\(/, 'le comptage des sessions ne doit pas suivre le mois');
 });
 
-test('l\'année entière retire le filtre de mois, pour que les mois y somment', () => {
-    // MOIS = 0 → total de l'année, calculé par la MÊME règle que les mois (parMois disparaît des
-    // quatre requêtes). On ne bascule pas sur la marge annuelle : elle rattache les inscriptions
-    // à l'année de session, et un « gain de l'année » qui ne serait pas la somme de ses mois
-    // trahirait le sélecteur.
-    const bloc = SRC.slice(SRC.indexOf('async function computeMonth'), SRC.indexOf('async function loadSettings'));
-    assert.match(bloc, /const parMois = \(col\) => \(mois \? [^;]*: ''\)/,
-        'à 0, le filtre de mois doit disparaître, pas rester');
-    // Et l'entrée du contrôleur doit reconnaître 0 / vide comme « année entière ».
-    assert.match(SRC, /rawMois === '' \|\| Number\(rawMois\) === 0\) mois = 0/,
-        'la valeur 0 (ou vide) doit signifier l\'année entière');
+test('les listes suivent le mois, comme les totaux', () => {
+    /* Elles restaient annuelles quand les totaux passaient au mois : on lisait « 2 300 € de
+       dépenses en mars » au-dessus d'une liste couvrant toute l'année, sans moyen de retrouver
+       les lignes qui font le chiffre. Une liste qui ne justifie pas son total est pire qu'absente. */
+    assert.match(SRC, /FROM expense WHERE organization_id = \? AND YEAR\(date\) = \?\$\{parMois\('date'\)\}/);
+    assert.match(SRC, /FROM revenue_extra WHERE organization_id = \? AND YEAR\(date\) = \?\$\{parMois\('date'\)\}/);
 });
 
-test('le mois réel reste borné, le défaut est le mois courant', () => {
-    // ?mois=13 produirait une requête qui ne ramène rien. Une valeur hors [1,12] — mais non
-    // nulle — est ramenée dans l'intervalle ; l'absence de paramètre prend le mois courant.
-    assert.match(SRC, /Math\.min\(12, Math\.max\(1, Number\(rawMois\)\)\)/, 'le mois réel n\'est pas borné');
-    assert.match(SRC, /rawMois === undefined\) mois = new Date\(\)\.getMonth\(\) \+ 1/,
-        'le mois par défaut n\'est pas le mois courant');
+test('le mois réel reste borné, le défaut est le mois courant, 0 vaut l\'année', () => {
+    assert.match(SRC, /Math\.min\(12, Math\.max\(1, Number\(rawMois\)\)\)/,
+        "?mois=13 produirait une requête vide en silence.");
+    assert.match(SRC, /rawMois === undefined\) mois = new Date\(\)\.getMonth\(\) \+ 1/);
+    assert.match(SRC, /rawMois === '' \|\| Number\(rawMois\) === 0\) mois = 0/);
 });
 
-test('la réponse expose le gain du mois et sa décomposition', () => {
-    // Un gain sans son « d'où il vient » (recettes − dépenses) n'est pas vérifiable d'un coup
-    // d'œil : on renvoie les deux.
-    const bloc = SRC.slice(SRC.indexOf('mois: {'), SRC.indexOf('mois: {') + 260);
-    for (const champ of ['numero', 'gain', 'ca', 'depenses']) {
-        assert.match(bloc, new RegExp(`\\b${champ}:`), `le champ ${champ} manque à la réponse`);
-    }
+test("l'onglet Performance compare deux ANNÉES, pas deux mois", () => {
+    /* Il met 2026 en face de 2025 : lui passer le mois transformerait la comparaison en
+       « mars contre mars » sans que rien ne le dise à l'écran. L'appel omet donc le paramètre,
+       et le défaut de `computePeriode` (0) vaut l'année entière. */
+    const perf = SRC.slice(SRC.indexOf('computePeriode(conn, orgId, annee),'));
+    assert.match(perf.slice(0, 140), /computePeriode\(conn, orgId, annee - 1\)/);
+    assert.doesNotMatch(perf.slice(0, 140), /annee, mois/, 'la comparaison annuelle ne doit pas suivre le mois');
 });
 
-test('le mois ne contamine pas les chiffres annuels', () => {
-    // computeYear (le CA annuel) ne doit PAS gagner de filtre de mois : la page reste annuelle
-    // sauf le gain du mois. Une régression fréquente serait de filtrer computeYear par mois « en
-    // passant ».
-    const year = SRC.slice(SRC.indexOf('async function computeYear'), SRC.indexOf('async function computeMonth'));
-    assert.doesNotMatch(year, /MONTH\(/, 'computeYear a été filtré par mois : la page annuelle serait faussée');
+test("l'écran nomme la période au lieu d'annoncer l'année", () => {
+    /* Chaque titre portait l'ANNÉE en dur (« Résultat 2026 », « Dépenses 2026 ») : au-dessus d'un
+       total devenu mensuel, un intitulé qui annonce l'année est pire qu'un intitulé absent. */
+    assert.match(PAGE, /const periode = mois === 0 \? String\(annee\) : `\$\{MOIS\[mois - 1\]\.toLowerCase\(\)\} \$\{annee\}`/);
+    assert.match(PAGE, /Résultat \{periode\}/);
+    assert.match(PAGE, /Dépenses \$\{periode\}/);
+    // Et le sélecteur ne s'annonce plus comme ne pilotant qu'une tuile.
+    assert.doesNotMatch(PAGE, /aria-label="Mois \(gain du mois\)"/);
+    /* La ligne « X € encaissés en mars » a disparu : elle n'existait que parce qu'elle était le
+       seul chiffre mensuel de la page. Elle répéterait maintenant le résultat juste au-dessus. */
+    assert.doesNotMatch(PAGE, /data\.mois\.gain/);
 });
