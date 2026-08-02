@@ -1031,6 +1031,21 @@ export function updatePartenaire(id, payload) {
 export function deletePartenaire(id) {
   return request(`/partenaires/${id}`, { method: "DELETE" });
 }
+/* Catégories de partenaires (migration 129). Elles étaient écrites en dur dans l'écran ; le
+   serveur renvoie la liste de l'organisme, ou la liste d'origine tant que la migration n'est pas
+   jouée — auquel cas les entrées n'ont pas d'`id` et ne sont donc pas modifiables. */
+export function getPartenaireCategories() {
+  return request("/partenaires/categories");
+}
+export function createPartenaireCategorie(payload) {
+  return request("/partenaires/categories", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updatePartenaireCategorie(cid, payload) {
+  return request(`/partenaires/categories/${cid}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deletePartenaireCategorie(cid) {
+  return request(`/partenaires/categories/${cid}`, { method: "DELETE" });
+}
 // Apports en nature (matériel/équipement) — distincts des commissions cash.
 export function createContribution(payload) {
   return request("/partenaires/contributions", { method: "POST", body: JSON.stringify(payload) });

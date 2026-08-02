@@ -1,6 +1,8 @@
 const express = require('express');
 const { getPartners, createPartner, updatePartner, deletePartner, createContribution, deleteContribution,
-    getPartnerProducts, createPartnerProduct, updatePartnerProduct, deletePartnerProduct } = require('../controllers/partner.controller.js');
+    getPartnerProducts, createPartnerProduct, updatePartnerProduct, deletePartnerProduct,
+    getPartnerCategories, createPartnerCategory, updatePartnerCategory,
+    deletePartnerCategory } = require('../controllers/partner.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -12,6 +14,17 @@ router.get('/', authorizeRoles(...STAFF_ROLES), getPartners);
 // Contributions en nature : saisie par tout le personnel (dont formateur) ; suppression bureau.
 router.post('/contributions', authorizeRoles(...STAFF_ROLES), createContribution);
 router.delete('/contributions/:id', authorizeRoles(...ADMIN_ROLES), deleteContribution);
+
+/* Catégories de partenaires (migration 129) — DÉCLARÉES AVANT `/:id`.
+ * Aucune des routes ci-dessous n'entre réellement en conflit (`/categories/:cid` a deux segments
+ * là où `/:id` n'en a qu'un, et il n'existe ni GET ni POST sur `/:id`), mais l'ordre le garantit
+ * quoi qu'on ajoute plus tard : le jour où quelqu'un écrit `router.delete('/:id')` au-dessus,
+ * `DELETE /categories` partirait supprimer un partenaire nommé « categories ».
+ * Lecture ouverte au personnel comme le reste de l'annuaire ; écriture au bureau. */
+router.get('/categories', authorizeRoles(...STAFF_ROLES), getPartnerCategories);
+router.post('/categories', authorizeRoles(...ADMIN_ROLES), createPartnerCategory);
+router.patch('/categories/:cid', authorizeRoles(...ADMIN_ROLES), updatePartnerCategory);
+router.delete('/categories/:cid', authorizeRoles(...ADMIN_ROLES), deletePartnerCategory);
 
 // Gestion des partenaires : bureau uniquement.
 router.post('/', authorizeRoles(...ADMIN_ROLES), createPartner);

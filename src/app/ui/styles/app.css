@@ -4319,3 +4319,32 @@ button.av-wrap:active{transform:scale(.94)}
 /* Le grand avatar du profil mérite un anneau proportionné : 3 px sur 88 px se voit à peine. */
 .prof-ava.cadre{--anneau:5px} /* avatar de profil : pas de `--av`, on fixe la valeur */
 .prof-ava.cadre-braise::after,.prof-ava.cadre-maestro::after{inset:-5px}
+
+
+/* — CATÉGORIES DE PARTENAIRES (migration 129) —
+   Une ligne par catégorie : rang, intitulé, couleur, code, nombre de partenaires, suppression.
+   L'intitulé prend toute la place restante (`flex:1`) parce que c'est le seul champ qu'on écrit ;
+   le reste est de largeur fixe et ne doit jamais se comprimer, sinon la pastille de couleur et
+   la corbeille deviennent des cibles trop petites pour être visées. */
+.cat-liste{list-style:none;margin:0 0 14px;padding:0;display:flex;flex-direction:column;gap:6px}
+.cat-liste li{display:flex;align-items:center;gap:8px}
+.cat-liste .inp{flex:1;min-width:0}
+.cat-rang{display:inline-flex;flex-direction:column;gap:2px;flex:none}
+.cat-rang .iconbtn{padding:1px 4px;line-height:1}
+/* Le CODE est une information de second plan : il explique pourquoi une catégorie renommée
+   retrouve ses partenaires, mais on ne le lit pas à chaque ligne. */
+.cat-code{flex:none;font-size:10.5px;color:var(--muted);background:var(--surface2);
+  padding:2px 6px;border-radius:6px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat-couleur{flex:none;width:30px;height:30px;padding:0;border:1px solid var(--border);
+  border-radius:8px;background:none;cursor:pointer}
+/* En haut de la fenêtre : c'est le geste, la liste en dessous est l'état. Le trait est donc
+   SOUS lui et non au-dessus. */
+.cat-ajout{display:flex;align-items:center;gap:8px;padding-bottom:12px;margin-bottom:12px;
+  border-bottom:1px solid var(--border)}
+.cat-ajout .inp{flex:1;min-width:0}
+@media (max-width:640px){
+  /* Sur téléphone la ligne ne tient plus : le code passe à la trappe (il est consultable au
+     survol du champ) et les flèches de rang se mettent côte à côte. */
+  .cat-code{display:none}
+  .cat-rang{flex-direction:row}
+}
