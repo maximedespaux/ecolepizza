@@ -115,3 +115,26 @@ test('la migration libère `partner.category` et sème les huit valeurs', () => 
     assert.doesNotMatch(revert, /MODIFY COLUMN category ENUM/);
     assert.match(revert, /DROP TABLE IF EXISTS partner_category/);
 });
+
+test('le nombre de produits se lit sans déplier la fiche', () => {
+    /* LE DÉFAUT : la section « Produits en boutique » ne charge son catalogue qu'à l'ouverture —
+       et c'est le bon choix, vingt-trois partenaires ne doivent pas déclencher vingt-trois
+       requêtes. Mais le COMPTE affiché à côté du titre venait de ce même chargement (`rows?.length`,
+       `rows` valant `null` tant qu'on n'a pas ouvert). Il fallait donc déplier les vingt-trois
+       sections une par une pour savoir lesquelles ont un catalogue. Une sous-requête sur une
+       requête qui tourne déjà coûte infiniment moins que ça. */
+    assert.match(CTRL, /\(SELECT COUNT\(\*\) FROM partner_product pp WHERE pp\.partner_id = p\.id\) AS products/,
+        'La liste des partenaires doit porter le compte.');
+    /* ET LA PAGE NE DOIT PAS CASSER SANS LA TABLE : `partner_product` arrive avec la migration 095.
+       On rend la liste sans le compte plutôt que de perdre l'écran entier pour une colonne
+       d'appoint. */
+    const bloc = CTRL.slice(CTRL.indexOf('const getPartners'), CTRL.indexOf('const createPartner'));
+    assert.match(bloc, /if \(!isMissingSchema\(e\)\) throw e;/);
+    assert.match(bloc, /colonnes\(false\)/, 'un repli sans la sous-requête');
+
+    const comp = fs.readFileSync(path.join(UI, 'components/PartnerProduits.jsx'), 'utf8');
+    assert.match(comp, /const nb = rows\?\.length \?\? \(nbInitial != null \? Number\(nbInitial\) : null\);/,
+        "Le compte de la liste sert AVANT l'ouverture ; une fois ouvert, `rows` reprend la main — "
+        + "sinon un ajout ou un retrait ne se verrait pas dans le titre.");
+    assert.match(PAGE, /nbInitial=\{p\.products\}/, 'et la page le transmet');
+});

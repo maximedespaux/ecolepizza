@@ -26,7 +26,7 @@ import {
 
 const VIDE = { name: "", category: "", reference: "", price_public: "", price_school: "", url: "", note: "" };
 
-function PartnerProduits({ partnerId, onErreur }) {
+function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
   const [ouvert, setOuvert] = useState(false);
   const [rows, setRows] = useState(null);      // null = pas encore chargé
   const [form, setForm] = useState(VIDE);
@@ -71,7 +71,11 @@ function PartnerProduits({ partnerId, onErreur }) {
   }
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
-  const nb = rows?.length ?? null;
+  /* LE COMPTE VIENT DE LA LISTE TANT QU'ON N'A PAS OUVERT. Il ne venait que de `rows`, chargé à
+     l'ouverture : la fiche affichait donc « Produits en boutique » sans nombre, et il fallait
+     déplier chaque partenaire pour savoir lequel a un catalogue. Une fois ouvert, c'est `rows`
+     qui reprend la main — sinon un ajout ou un retrait ne se verrait pas dans le titre. */
+  const nb = rows?.length ?? (nbInitial != null ? Number(nbInitial) : null);
 
   return (
     <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>

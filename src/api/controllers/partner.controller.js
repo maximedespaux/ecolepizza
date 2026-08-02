@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 
+const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
+
 const PARTNER_FIELDS = [
     'name', 'category', 'contact_name', 'contact_email', 'contact_phone',
     'website', 'town', 'discount_pct', 'offer', 'notes',
@@ -15,18 +17,35 @@ const getPartners = async (req, res) => {
     try {
         const conn = db.promise();
         const params = [req.user.organization_id];
-        let sql = `
+        /* LE NOMBRE DE PRODUITS EST DANS LA LISTE, et pas seulement dans le détail.
+           La section « Produits en boutique » de chaque fiche ne chargeait son catalogue qu'à
+           l'ouverture — ce qui est le bon choix, vingt-trois partenaires ne doivent pas déclencher
+           vingt-trois requêtes. Mais le COMPTE affiché à côté du titre venait de ce même
+           chargement : il restait donc invisible tant qu'on n'avait pas déplié, et il fallait
+           ouvrir les vingt-trois sections une par une pour savoir lesquelles ont un catalogue.
+           Une sous-requête sur une requête qui tourne déjà coûte infiniment moins que ça. */
+        const colonnes = (avecProduits) => `
             SELECT p.id, p.name, p.category, p.contact_name, p.contact_email, p.contact_phone,
                    p.website, p.town, p.discount_pct, p.offer, p.notes, p.created_at,
                    COALESCE(SUM(re.amount), 0) AS commissions_total,
                    COUNT(re.id) AS commissions_count,
-                   DATE_FORMAT(MAX(re.date), '%Y-%m-%d') AS last_commission
+                   DATE_FORMAT(MAX(re.date), '%Y-%m-%d') AS last_commission${avecProduits ? `,
+                   (SELECT COUNT(*) FROM partner_product pp WHERE pp.partner_id = p.id) AS products` : ''}
               FROM partner p
               LEFT JOIN revenue_extra re ON re.partner_id = p.id
              WHERE p.organization_id = ?`;
-        if (req.query.category) { sql += ' AND p.category = ?'; params.push(req.query.category); }
-        sql += ' GROUP BY p.id ORDER BY p.name';
-        const [results] = await conn.query(sql, params);
+        const filtre = req.query.category ? ' AND p.category = ?' : '';
+        if (req.query.category) params.push(req.query.category);
+        const fin = ' GROUP BY p.id ORDER BY p.name';
+        let results;
+        try {
+            [results] = await conn.query(colonnes(true) + filtre + fin, params);
+        } catch (e) {
+            // `partner_product` arrive avec la migration 095 : sans elle, on rend la liste sans
+            // le compte plutôt que de casser toute la page pour une colonne d'appoint.
+            if (!isMissingSchema(e)) throw e;
+            [results] = await conn.query(colonnes(false) + filtre + fin, params);
+        }
 
         /* Détail des commissions par partenaire (libellé, date, montant, NATURE).
          *
@@ -306,8 +325,6 @@ const deletePartnerProduct = async (req, res) => {
  * AUCUNE ligne de partenaire — et c'est pour ça que le code n'est jamais modifiable après coup :
  * le changer orphelinerait tous les partenaires qui le portent.
  */
-
-const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 
 /* Le repli quand la migration 129 n'est pas jouée : la liste d'origine, telle qu'elle était
    écrite dans l'écran. Le code marche donc AVANT comme APRÈS, et l'écran ne se vide jamais. */

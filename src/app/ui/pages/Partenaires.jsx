@@ -216,7 +216,8 @@ function Partenaires() {
                     {/* Catalogue vendu par CE partenaire — ce que le stagiaire voit dans l'onglet
                         « Offres partenaires ». Replié par défaut : la page sert d'abord à trouver
                         un contact et vérifier une remise, le catalogue est un second temps. */}
-                    <PartnerProduits partnerId={p.id} onErreur={(m) => setStatus({ type: "error", message: m })} />
+                    <PartnerProduits partnerId={p.id} nbInitial={p.products}
+                      onErreur={(m) => setStatus({ type: "error", message: m })} />
 
                     {canEdit && (
                       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
