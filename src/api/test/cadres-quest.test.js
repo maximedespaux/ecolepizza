@@ -577,6 +577,8 @@ test('« La commande piège » n\'affirme QUE ce que le manuel dit', () => {
            éviction, et les sulfites « SOUVENT » dans les charcuteries.
        Tout le reste est « à vérifier ». */
     const srcJeu = fs.readFileSync(path.join(APP, 'ui/components/CommandePiege.jsx'), 'utf8');
+    const CARTE_MAX = [...srcJeu.matchAll(/\{ nom: "[^"]+", ing: \[([^\]]*)\] \}/g)]
+        .map((m) => m[1].split(',').length);
     assert.strictEqual(fs.readFileSync(path.join(APP, 'ui/lib/garnitures.js'), 'utf8').match(/allerg/i), null,
         'si garnitures.js declare un jour ses allergenes, ce test doit etre revu — et le jeu enrichi');
 
@@ -597,11 +599,21 @@ test('« La commande piège » n\'affirme QUE ce que le manuel dit', () => {
     assert.ok(pieges >= 5, `au moins cinq pieges de service, ${pieges} trouves`);
     assert.strictEqual((srcJeu.match(/source: "Manuel/g) || []).length, pieges, 'une source de MANUEL par piege');
 
-    /* LE CHRONO NE S'ARRÊTE PAS pendant la consultation de la carte, et c'est tout l'intérêt :
-       vérifier coûte du temps, comme aller chercher le classeur derrière le comptoir. Ce qu'on
-       apprend n'est pas à éviter de vérifier — c'est à savoir quand c'est nécessaire. */
+    /* LA CARTE TIENT ENTIÈRE, SANS DÉFILEMENT — y compris sur un téléphone. Deux mesures l'ont
+       imposé, et aucune ne se devine en lisant le code :
+         · dix compositions à six garnitures se repliaient sur trois lignes ; il faudrait faire
+           défiler pendant que le chrono tourne, et chercher deviendrait plus coûteux que
+           deviner. D'où quatre ingrédients au plus, plafond appliqué aux données ;
+         · le verdict AJOUTÉ sous les réponses poussait la carte hors de l'écran — relevé à
+           689 px de contenu pour 664 visibles sur un 375×812. Il prend donc LA PLACE de
+           l'énoncé, dans la même boîte : la hauteur ne bouge plus entre question et réponse, et
+           rien n'est perdu puisqu'on vient de répondre. */
     assert.match(srcJeu, /const DUREE = 60;/);
-    assert.match(srcJeu, /onClick=\{\(\) => setCarte\(\(c\) => !c\)\}/, 'la carte se consulte, elle ne s\'affiche pas');
+    assert.ok(!/max-height/.test(srcCss.slice(srcCss.indexOf('.cp-carte{'), srcCss.indexOf('.cp-carte-t'))),
+        'la carte ne doit pas defiler');
+    assert.match(srcJeu, /className=\{"cp-client cp-expl" \+ \(flash\.juste \? " ok" : ""\)\}/,
+        'le verdict prend la place de l\'enonce, il ne s\'ajoute pas dessous');
+    for (const p of CARTE_MAX) assert.ok(p <= 4, `au plus quatre ingredients par pizza, une en a ${p}`);
     /* Une erreur coûte du TEMPS, pas des points : se tromper vite sur un allergène est pire que
        répondre lentement, et c'est la seule pénalité qui enseigne quelque chose. */
     assert.match(srcJeu, /const MALUS = 4;/);

@@ -10,12 +10,13 @@ import { useEchap } from "../lib/useEchap.js";
  * sort du four. Entre les deux il y a un RÉFLEXE : lire une composition et trancher tout de suite.
  * C'est ce réflexe qui manque quand ça arrive pour de vrai, pas la liste des quatorze.
  *
- * LA CARTE SE CONSULTE, ELLE NE S'AFFICHE PAS. Posée en permanence, elle transformait le jeu en
- * exercice de lecture : la réponse était toujours sous les yeux, il n'y avait plus rien à savoir.
- * Derrière un bouton, elle recrée l'arbitrage réel du comptoir — je me souviens, ou je vérifie ?
- * ET LE CHRONO NE S'ARRÊTE PAS pendant la consultation. C'est tout l'intérêt : vérifier coûte du
- * temps, exactement comme aller chercher le classeur derrière le comptoir. Ce qu'on apprend, ce
- * n'est pas à éviter de vérifier — c'est à savoir QUAND c'est nécessaire.
+ * LA CARTE EST AFFICHÉE EN PERMANENCE, à droite. C'est le classeur ouvert sur le comptoir, et ce
+ * n'est pas ce qui rend le jeu facile : le chrono passe, et surtout LA CARTE NE RÉPOND PAS À
+ * TOUT. Les pièges de service — la planche qui a servi au saumon, la pâte à la châtaigne prise
+ * pour une pâte sans gluten, l'extra qui prend seul une commande — ne s'y lisent nulle part. Et
+ * les sulfites n'y sont pas non plus : « souvent » n'est pas une composition, c'est une question
+ * à poser au fournisseur. Ce qui se lit sur la carte, on le lit ; le reste, on le sait ou on le
+ * vérifie.
  *
  * TROIS RÉPONSES, ET LA TROISIÈME EST LA PLUS IMPORTANTE. « À vérifier » n'est pas une échappatoire :
  * c'est la bonne réponse chaque fois que l'allergène dépend du FOURNISSEUR — le manuel écrit
@@ -79,17 +80,23 @@ const INGREDIENTS = {
    ligne noierait ce qui distingue une pizza d'une autre. Le gluten est donc TOUJOURS présent, et
    c'est précisément ce que la première question apprend. */
 const CARTE = [
-  { nom: "Marinara", ing: ["tomate", "ail", "origan", "huile"] },
+  { nom: "Marinara", ing: ["tomate", "ail", "origan"] },
   { nom: "Margherita", ing: ["tomate", "mozzarella", "basilic"] },
   { nom: "Reine", ing: ["tomate", "mozzarella", "jambon", "champignon"] },
-  { nom: "Napolitaine", ing: ["tomate", "mozzarella", "anchois", "olives", "origan"] },
+  { nom: "Napolitaine", ing: ["tomate", "mozzarella", "anchois", "olives"] },
   { nom: "Quatre fromages", ing: ["mozzarella", "gorgonzola", "chevre", "parmesan"] },
-  { nom: "Végétarienne", ing: ["tomate", "mozzarella", "poivron", "aubergine", "courgette", "oignon"] },
+  { nom: "Végétarienne", ing: ["tomate", "mozzarella", "poivron", "courgette"] },
   { nom: "Chèvre-miel", ing: ["creme", "chevre", "miel", "roquette"] },
-  { nom: "Pescatore", ing: ["tomate", "thon", "oignon", "olives", "ail"] },
+  { nom: "Pescatore", ing: ["tomate", "thon", "oignon", "olives"] },
   { nom: "Diavola", ing: ["tomate", "mozzarella", "chorizo", "poivron"] },
-  { nom: "Bella", ing: ["tomate", "burrata", "jambon_cru", "roquette", "pesto", "balsamique"] },
+  { nom: "Bella", ing: ["burrata", "jambon_cru", "pesto", "balsamique"] },
 ];
+/* QUATRE INGRÉDIENTS AU PLUS, ET C'EST UNE CONTRAINTE D'AFFICHAGE ASSUMÉE. La carte doit tenir
+   ENTIÈRE sous les yeux, sans défilement, y compris sur un téléphone : dix lignes qui se
+   replient sur deux ou trois obligeraient à faire défiler pendant que le chrono tourne, et
+   chercher deviendrait plus coûteux que deviner — exactement ce qu'on ne veut pas enseigner.
+   Les compositions restent véridiques, seulement resserrées ; celles qui débordaient (six
+   garnitures) perdent ce qui ne porte aucun allergène. */
 
 /* Les contraintes qu'un client peut poser. `mot` sert à formuler la question, `cle` à interroger
    la composition. Le gluten n'est pas dans la liste des tirages « pizza » : la réponse serait
@@ -186,7 +193,6 @@ export default function CommandePiege({ onClose, onFinish }) {
   const [reste, setReste] = useState(DUREE);
   const [q, setQ] = useState(null);
   const [flash, setFlash] = useState(null);     // { juste, pourquoi, source } — retour bref
-  const [carte, setCarte] = useState(false);    // la carte est-elle ouverte ?
   const [justes, setJustes] = useState(0);
   const [rates, setRates] = useState([]);       // les erreurs, pour le débriefing final
   const tic = useRef(null);
@@ -199,7 +205,7 @@ export default function CommandePiege({ onClose, onFinish }) {
     return () => clearInterval(tic.current);
   }, [phase]);
 
-  function demarrer() { setJustes(0); setRates([]); setReste(DUREE); setQ(tirer()); setFlash(null); setCarte(false); setPhase("jeu"); }
+  function demarrer() { setJustes(0); setRates([]); setReste(DUREE); setQ(tirer()); setFlash(null); setPhase("jeu"); }
 
   function repondre(v) {
     if (!q || flash) return;
@@ -233,8 +239,8 @@ export default function CommandePiege({ onClose, onFinish }) {
           <div className="mbody" style={{ textAlign: "center", padding: "22px 20px" }}>
             <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px" }}>Soixante secondes au comptoir.</p>
             <p className="hint" style={{ margin: "0 0 4px" }}>
-              Un client annonce sa contrainte, tu réponds. La carte est consultable à tout moment —
-              mais le chrono ne s'arrête pas pendant que tu la lis.
+              Un client annonce sa contrainte, tu réponds. La carte reste ouverte à côté — mais elle
+              ne répond pas à tout : la contamination croisée et les sulfites ne s'y lisent pas.
             </p>
             <p className="hint" style={{ margin: "0 0 18px" }}>
               Une erreur coûte <b>{MALUS} secondes</b>. « À vérifier » est la bonne réponse quand
@@ -247,14 +253,28 @@ export default function CommandePiege({ onClose, onFinish }) {
         )}
 
         {phase === "jeu" && q && (
-          <div className="mbody">
+          <div className="mbody cp-jeu">
+            <div className="cp-col">
             <div className="cp-bandeau">
               <div className="pq-progress"><span style={{ width: `${(reste / DUREE) * 100}%`, background: reste <= 10 ? "var(--red)" : "var(--ember1)" }} /></div>
               <span className={"cp-chrono" + (reste <= 10 ? " urgent" : "")}>{reste}s</span>
               <span className="cp-score"><Icon name="check" size={13} /> {justes}</span>
             </div>
 
-            <p className="cp-client">{q.q}</p>
+            {/* LE VERDICT PREND LA PLACE DE LA QUESTION, il ne s'ajoute pas dessous. Ajouté, il
+                poussait la carte hors de l'écran sur un téléphone — mesuré : 689 px de contenu
+                pour 664 visibles, donc un défilement au pire moment, celui où le chrono tourne.
+                Et il ne se perd rien : on vient de répondre, l'énoncé a fait son travail. */}
+            {flash ? (
+              <div className={"cp-client cp-expl" + (flash.juste ? " ok" : "")}>
+                <span>
+                  <b>{flash.juste ? "Exact." : "Non."}</b> {flash.pourquoi}
+                  <span className="cp-src"><Icon name="book-open" size={12} /> {flash.source}</span>
+                </span>
+              </div>
+            ) : (
+              <p className="cp-client">{q.q}</p>
+            )}
 
             <div className="cp-reponses">
               {REPONSES.map((r) => (
@@ -264,35 +284,23 @@ export default function CommandePiege({ onClose, onFinish }) {
               ))}
             </div>
 
-            {flash && (
-              <div className={"cp-expl" + (flash.juste ? " ok" : "")}>
-                <b>{flash.juste ? "Exact." : "Non."}</b> {flash.pourquoi}
-                <span className="cp-src"><Icon name="book-open" size={12} /> {flash.source}</span>
-              </div>
-            )}
+            </div>
 
-            {/* LA CARTE SE CONSULTE. Le chrono continue de tourner pendant ce temps — vérifier
-                coûte, comme aller chercher le classeur derrière le comptoir. La pizza demandée est
-                mise en avant : on cherche une composition, pas une ligne dans une liste. */}
-            <button type="button" className="cp-consulter" onClick={() => setCarte((c) => !c)}
-              aria-expanded={carte}>
-              <Icon name={carte ? "chevron-down" : "book-open"} size={14} />
-              {carte ? "Refermer la carte" : "Consulter la carte"}
-              <span className="hint">{carte ? "le chrono tourne toujours" : "si tu ne te souviens plus"}</span>
-            </button>
-            {carte && (
-              <div className="cp-carte">
-                <ul>
-                  {CARTE.map((p) => (
-                    <li key={p.nom} className={q.type === "carte" && q.pizza.nom === p.nom ? "on" : ""}>
-                      <b>{p.nom}</b>
-                      <span>{p.ing.map((k) => INGREDIENTS[k]?.nom || k).join(", ")}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="hint">Toutes les pâtes contiennent du gluten.</p>
-              </div>
-            )}
+            {/* LA CARTE, À DROITE ET TOUJOURS OUVERTE — le classeur posé sur le comptoir. La pizza
+                demandée est mise en avant : on cherche une COMPOSITION, pas une ligne dans une
+                liste, et à dix entrées la retrouver coûterait déjà du temps. */}
+            <aside className="cp-carte">
+              <div className="cp-carte-t"><Icon name="book-open" size={12} /> La carte</div>
+              <ul>
+                {CARTE.map((p) => (
+                  <li key={p.nom} className={q.type === "carte" && q.pizza.nom === p.nom ? "on" : ""}>
+                    <b>{p.nom}</b>
+                    <span>{p.ing.map((k) => INGREDIENTS[k]?.nom || k).join(", ")}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="hint">Toutes les pâtes contiennent du gluten.</p>
+            </aside>
           </div>
         )}
 

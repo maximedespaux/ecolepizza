@@ -1910,7 +1910,12 @@ tbody tr:last-child td{border-bottom:none}
 /* — LA COMMANDE PIÈGE —
    Soixante secondes au comptoir : chrono, question, trois réponses, et la carte en dessous —
    consultable, pas affichée. */
-.cp-modal{max-width:540px}
+/* Deux colonnes : le service à gauche, la carte à droite. Elle est plus étroite — on y lit des
+   compositions, pas des paragraphes — et `align-items:start` l'empêche de s'étirer à la hauteur
+   de la colonne voisine quand une explication apparaît. */
+.cp-modal{max-width:760px}
+.cp-jeu{display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start}
+.cp-col{min-width:0}
 .cp-bandeau{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .cp-chrono{font:800 15px/1 var(--font-b);font-variant-numeric:tabular-nums;color:var(--muted);
   min-width:38px;text-align:right}
@@ -1929,11 +1934,16 @@ tbody tr:last-child td{border-bottom:none}
 .cp-reponses{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .cp-rep{text-align:center;font-weight:700}
 
-/* Le retour est BREF : le chrono tourne. Le détail vient au débriefing. */
-.cp-expl{margin-top:12px;padding:11px 13px;border-radius:12px;font-size:13px;line-height:1.45;
-  background:color-mix(in srgb,var(--red) 8%,var(--surface2));border-left:3px solid var(--red)}
+/* Le retour est BREF : le chrono tourne. Le détail vient au débriefing. Il occupe LA MÊME BOÎTE
+   que l'énoncé (`.cp-client`), donc la hauteur ne bouge pas entre la question et le verdict —
+   c'est ce qui évite de pousser la carte hors de l'écran sur un téléphone. */
+.cp-expl{font-size:13px;line-height:1.45;font-weight:400;
+  background:color-mix(in srgb,var(--red) 8%,var(--surface2));border-left-color:var(--red)}
 .cp-expl.ok{background:color-mix(in srgb,var(--green,#2f9e6f) 9%,var(--surface2));
   border-left-color:var(--green,#2f9e6f)}
+/* La source reste dans le flux du texte : en bloc séparé elle rajoutait une ligne, donc de la
+   hauteur — exactement ce qu'on cherche à ne pas faire varier. */
+.cp-expl .cp-src{display:inline-flex;margin-top:0;margin-left:6px;vertical-align:baseline}
 /* La source SUR SA PROPRE LIGNE : c'est elle qui distingue une affirmation du manuel d'une
    opinion, et on doit pouvoir aller la vérifier. */
 .cp-src{display:flex;align-items:center;gap:5px;margin-top:7px;font-size:11.5px;color:var(--muted)}
@@ -1945,13 +1955,18 @@ tbody tr:last-child td{border-bottom:none}
 .cp-consulter:hover{border-color:var(--muted);background:var(--surface2)}
 .cp-consulter .hint{margin-left:auto;font-weight:600}
 
-.cp-carte{margin-top:8px;padding:10px 12px;border-radius:12px;background:var(--surface2);
-  max-height:210px;overflow:auto}
-.cp-carte-t{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.045em;
-  color:var(--muted);margin-bottom:7px}
-.cp-carte ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
-.cp-carte li{display:flex;gap:8px;font-size:12px;line-height:1.35;padding:3px 6px;border-radius:7px}
-.cp-carte li b{flex:none;min-width:104px}
+/* AUCUN DÉFILEMENT : les dix lignes doivent tenir ensemble, sinon on fait défiler pendant que le
+   chrono tourne et chercher devient plus coûteux que deviner. D'où pas de `max-height` ici, et
+   des compositions plafonnées à quatre ingrédients côté données. */
+.cp-carte{padding:10px 12px;border-radius:12px;background:var(--surface2)}
+.cp-carte-t{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800;
+  text-transform:uppercase;letter-spacing:.045em;color:var(--muted);margin-bottom:7px}
+.cp-carte ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+/* En colonne : le nom au-dessus, la composition dessous. Côte à côte, un nom long réduisait la
+   composition à une bande de trois mots qui se repliait sur trois lignes. */
+.cp-carte li{display:flex;flex-direction:column;gap:0;font-size:11.5px;line-height:1.3;
+  padding:3px 6px;border-radius:7px}
+.cp-carte li b{font-size:12px}
 .cp-carte li span{color:var(--muted)}
 /* La pizza demandée est mise en avant : on cherche une COMPOSITION, pas une ligne dans une liste. */
 .cp-carte li.on{background:color-mix(in srgb,var(--ember1) 14%,transparent)}
@@ -1966,10 +1981,21 @@ tbody tr:last-child td{border-bottom:none}
 .cp-rate b{font-size:13px}
 .cp-rate-r{color:var(--red);font-weight:600}
 
-@media (max-width:480px){
-  .cp-reponses{grid-template-columns:1fr}
-  .cp-carte li{flex-direction:column;gap:1px}
-  .cp-carte li b{min-width:0}
+/* Sur téléphone la carte passe SOUS le service, et tout doit encore tenir sans défiler : les
+   trois réponses restent sur une ligne (leurs libellés sont courts), l'énoncé perd sa hauteur
+   minimale, et la carte se resserre. Les trois réponses empilées auraient à elles seules mangé
+   la place de six lignes de carte. */
+@media (max-width:640px){
+  .cp-modal{max-width:100%}
+  .cp-jeu{grid-template-columns:1fr;gap:12px}
+  .cp-client{min-height:0;font-size:14px;padding:10px 12px;margin-bottom:10px}
+  .cp-reponses{gap:6px}
+  .cp-rep{padding:9px 4px;font-size:12.5px}
+  .cp-carte{padding:8px 10px}
+  .cp-carte ul{gap:1px}
+  .cp-carte li{padding:2px 5px;font-size:11px;line-height:1.25}
+  .cp-carte li b{font-size:11.5px}
+  .cp-carte > .hint{margin-top:6px}
 }
 
 /* — LA PISTE DES CADRES, sous le chemin des chapitres —
