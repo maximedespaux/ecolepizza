@@ -130,9 +130,14 @@ test('l\'anneau du cadre tient sur son avatar', () => {
      *    suivait pas son contour. Le rayon de l'anneau vaut celui de l'avatar PLUS son débord. */
     assert.match(srcCss, /\.pf-avatar\.cadre,\.side-foot \.avatar\.cadre\{position:relative\}/,
         'sans conteneur positionne, l\'anneau se cale sur la modale');
-    assert.match(srcCss, /\.pf-avatar\.cadre::before\{border-radius:21px\}/,
-        'anneau = rayon de l\'avatar (18px) + son debord (3px)');
-    assert.match(srcCss, /\.cadre::before\{[^}]*inset:-3px/, 'le debord de 3px est l\'hypothese du 21px');
+    /* Le rayon vaut celui de l'avatar PLUS son débord. Il était écrit en dur — 21px, soit 18 + 3
+       — ce qui tenait tant que l'épaisseur de l'anneau valait 3px partout. Depuis qu'elle suit le
+       diamètre (`--anneau`), la valeur en dur redeviendrait fausse au premier réglage, et sur le
+       SEUL avatar carré de l'app : un défaut qui ne se verrait nulle part ailleurs. */
+    assert.match(srcCss, /\.pf-avatar\.cadre::before\{border-radius:calc\(18px \+ var\(--anneau\)\)\}/,
+        'le rayon doit se deduire du debord, pas le supposer');
+    assert.match(srcCss, /\.cadre::before\{[\s\S]*?inset:calc\(var\(--anneau\)\*-1\)/,
+        'et le debord vient de la meme grandeur');
 });
 
 test('le cadre « École » est le plus riche du jeu — il désigne, il ne se gagne pas', () => {

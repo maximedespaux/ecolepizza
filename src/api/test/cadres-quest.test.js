@@ -270,7 +270,8 @@ test('le cadre entoure la PHOTO, pas la légende', () => {
     assert.match(srcModale, /\.\.\.cadreStyle\(cadre\.valeur\)/, 'et prendre la teinte du cadre de quete');
     /* `.pf-avatar` est un carré arrondi de 18 px, pas un cercle : l'anneau doit suivre cette
        forme, sinon il déborde en ellipse (le défaut avait déjà été payé une fois). */
-    assert.match(srcCss, /\.pf-avatar\.cadre::before\{border-radius:21px\}/, 'le rayon de l\'anneau suit celui de la photo');
+    assert.match(srcCss, /\.pf-avatar\.cadre::before\{border-radius:calc\(18px \+ var\(--anneau\)\)\}/,
+        'le rayon de l\'anneau suit celui de la photo, et se deduit du debord');
     // Le nom du cadre reste écrit, mais SANS sa pastille : deux anneaux à dix pixels d'écart
     // posaient la question de savoir lequel est le vrai.
     assert.doesNotMatch(srcModale, /stu-rank-cadre " \+ cadreClass\(cadre\.valeur/, 'plus de pastille detachee');
@@ -285,4 +286,39 @@ test('le nom du cadre tient dans une tuile', () => {
     assert.match(srcModale, /\{c\.formation && <span className="pf-cadre-code">\{c\.formation\}<\/span>\}/);
     assert.match(srcModale, /title=\{\[c\.titre, possede \? c\.desc \|\| c\.nom : \(c\.condition \|\| c\.desc\)\]/,
         'le titre complet doit rester accessible au survol');
+});
+
+test('l\'anneau suit le diamètre, et le métal a du relief', () => {
+    /* DEUX DÉFAUTS TROUVÉS EN POSANT LES CADRES CÔTE À CÔTE, à 38, 64 et 96 px.
+     *
+     * 1. L'ÉPAISSEUR ÉTAIT FIGÉE à 3 px. `AvatarCadre` le promet pourtant depuis toujours dans son
+     *    commentaire — « l'épaisseur du cadre doit suivre le diamètre » — mais la feuille de style
+     *    ne l'a jamais fait. À 38 px l'anneau est juste ; à 64 il devient un fil, et le relief n'a
+     *    plus la place de se voir.
+     * 2. BRONZE, ARGENT ET OR ÉTAIENT DES RUBANS. Un dégradé linéaire à trois arrêts en diagonale
+     *    ne ressemble pas à du métal : sur une bordure de 3 px, les trois paliers ne se
+     *    distinguaient plus que par leur teinte. La progression, qui se mérite, ne se lisait donc
+     *    pas — il fallait connaître le code couleur.
+     *
+     * Ce qui fait le métal, c'est le SPÉCULAIRE : une bande brillante à un endroit précis, un creux
+     * sombre à l'opposé, une transition franche. Un dégradé conique le donne sur un anneau — la
+     * lumière tourne avec la forme, comme sur une médaille qu'on incline. */
+    assert.match(srcCss, /\.cadre\{--anneau:clamp\(2px,calc\(var\(--av,38px\)\*\.085\),5px\)\}/,
+        'l\'epaisseur doit se calculer sur le diametre');
+    assert.match(srcCss, /\.cadre::before\{[\s\S]*?inset:calc\(var\(--anneau\)\*-1\);[\s\S]*?padding:var\(--anneau\)/,
+        'et piloter inset ET padding, sinon l\'anneau se decentre');
+    /* Les deux réglages manuels passent par la MÊME grandeur. Laisser un `inset` en dur ailleurs
+       ferait repartir cet emplacement-là à l'ancienne épaisseur au prochain changement. */
+    assert.doesNotMatch(srcCss, /\.cadre::before\{inset:-\d/, 'aucune epaisseur en dur ailleurs');
+    assert.match(srcCss, /\.stu-rank-cadre\.cadre\{--anneau:2px\}/);
+    assert.match(srcCss, /\.prof-ava\.cadre\{--anneau:5px\}/);
+
+    // Les métaux : un conique, pas un ruban linéaire.
+    for (const m of ['bronze', 'argent', 'or', 'qpas', 'qcollec', 'qcent']) {
+        assert.match(srcCss, new RegExp(`\\.cadre-${m}\\{--cadre-bg:conic-gradient\\(from 210deg`),
+            `${m} doit porter un speculaire`);
+    }
+    /* « Touche-à-tout » garde son arc-en-ciel : c'est SON sujet — plusieurs formations à la fois.
+       Un spéculaire par-dessus brouillerait les teintes qu'il est censé énumérer. */
+    assert.match(srcCss, /\.cadre-qtouche\{--cadre-bg:conic-gradient\(from -90deg,#dc3e37/);
 });

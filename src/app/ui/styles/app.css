@@ -3476,18 +3476,56 @@ button.av-wrap{cursor:pointer;transition:transform .18s var(--spring)}
 button.av-wrap:hover{transform:scale(1.06)}
 button.av-wrap:active{transform:scale(.94)}
 
-/* L'anneau déborde de 3 px : posé à l'intérieur, il rognerait l'emoji. */
-.cadre::before{content:"";position:absolute;inset:-3px;border-radius:50%;pointer-events:none;
-  padding:3px;background:var(--cadre-bg);
+/* L'ÉPAISSEUR SUIT LE DIAMÈTRE — ce que `AvatarCadre` promet depuis toujours dans son
+ * commentaire (« l'épaisseur du cadre doit suivre le diamètre »), sans que le CSS ne l'ait jamais
+ * fait : elle valait 3 px partout. Mesuré côte à côte, le défaut est net — à 38 px l'anneau est
+ * juste, à 64 px il devient un fil, et le relief des métaux n'a plus la place de se voir.
+ *
+ * `clamp` aux deux bouts, et les bornes ne sont pas décoratives : en dessous de 2 px l'anneau
+ * disparaît sur un écran non-Retina, au-delà de 5 px il mange l'emoji sur les grands avatars.
+ * 8,5 % du diamètre donne 3,2 px à 38 et 5 px à 64 — soit exactement l'épaisseur d'avant là où
+ * elle était bonne, et une vraie bordure là où elle était trop fine.
+ *
+ * L'anneau déborde vers l'EXTÉRIEUR (`inset` négatif) : posé à l'intérieur, il rognerait l'emoji.
+ */
+.cadre{--anneau:clamp(2px,calc(var(--av,38px)*.085),5px)}
+.cadre::before{content:"";position:absolute;inset:calc(var(--anneau)*-1);border-radius:50%;
+  pointer-events:none;padding:var(--anneau);background:var(--cadre-bg);
   /* Anneau creux : le dégradé n'est peint que sur la bordure. `mask-composite` diffère entre
      les moteurs — les deux écritures sont nécessaires, pas redondantes. */
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
   -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
   mask-composite:exclude}
 
-.cadre-bronze{--cadre-bg:linear-gradient(135deg,#b87333,#e8b98a,#8c5a24)}
-.cadre-argent{--cadre-bg:linear-gradient(135deg,#9aa3ad,#e9eef3,#7d8791)}
-.cadre-or{--cadre-bg:linear-gradient(135deg,#c9960a,#ffe08a,#a97c00)}
+/* — LES MÉTAUX —
+ *
+ * CE QUI N'ALLAIT PAS. Bronze, Argent et Or étaient un dégradé linéaire à trois arrêts, en
+ * diagonale : un ruban de couleur qui passe du foncé au clair puis au foncé. Ça ne ressemble pas
+ * à du métal, ça ressemble à un ruban — et sur un anneau de 3 px, les trois paliers ne se
+ * distinguaient plus que par leur TEINTE. La progression Bronze → Argent → Or, qui est censée se
+ * mériter, ne se lisait donc pas : il fallait connaître le code couleur.
+ *
+ * CE QUI FAIT LE MÉTAL, c'est le SPÉCULAIRE : une bande brillante à un endroit précis, un creux
+ * sombre à l'opposé, et une transition franche entre les deux. Un dégradé conique le donne
+ * naturellement sur un anneau — la lumière tourne avec la forme, exactement comme sur une
+ * médaille qu'on incline. Deux points chauds (vers 2 h et 8 h) et deux creux : c'est le minimum
+ * pour que l'œil lise un volume plutôt qu'un aplat.
+ *
+ * Aucune animation, aucun flou, aucune couche supplémentaire : le relief est DANS le dégradé.
+ * Ces trois cadres sont les plus portés de l'app — ils apparaissent sur presque chaque avatar du
+ * fil — et n'ont pas à coûter une image composée de plus.
+ *
+ * Direction artistique « 3D / Sculptural » (relief, matière, ombres) appliquée à la seule échelle
+ * disponible ici : trois pixels de bordure. */
+.cadre-bronze{--cadre-bg:conic-gradient(from 210deg,
+  #6d4318 0deg,#b87333 42deg,#f0cfa4 78deg,#c98442 112deg,#7a4a1c 168deg,
+  #a56a2c 210deg,#e8b98a 250deg,#b87333 284deg,#5f3a14 330deg,#6d4318 360deg)}
+.cadre-argent{--cadre-bg:conic-gradient(from 210deg,
+  #6f7883 0deg,#9aa3ad 42deg,#ffffff 78deg,#b8c1cb 112deg,#69727d 168deg,
+  #8d97a2 210deg,#e9eef3 250deg,#9aa3ad 284deg,#5d666f 330deg,#6f7883 360deg)}
+.cadre-or{--cadre-bg:conic-gradient(from 210deg,
+  #8a6400 0deg,#c9960a 42deg,#fff4cf 78deg,#e0ac1e 112deg,#8f6a05 168deg,
+  #bd8d08 210deg,#ffe08a 250deg,#c9960a 284deg,#7a5800 330deg,#8a6400 360deg)}
 
 /* — Paliers animés —
    Les deux derniers paliers ne se contentent pas d'un anneau : ils portent une couche
@@ -3599,7 +3637,7 @@ button.av-wrap:active{transform:scale(.94)}
 /* Pastille de cadre dans la barre de parcours (hero) : un aperçu, sans avatar dedans. */
 .stu-rank-cadre{position:relative;display:inline-block;width:16px;height:16px;border-radius:50%;
   background:rgba(255,255,255,.28);vertical-align:-3px;margin-right:7px}
-.stu-rank-cadre.cadre::before{inset:-2px;padding:2px}
+.stu-rank-cadre.cadre{--anneau:2px} /* pastille de 16 px : le calcul y donnerait 1,4 px */
 
 /* — Sélecteur de cadres (profil) ————————————————————————————————————————————————
    ⚠️ Ces pastilles DOIVENT porter une taille et `position:relative` : l'anneau est un
@@ -3716,12 +3754,22 @@ button.av-wrap:active{transform:scale(.94)}
    chacun a sa couleur propre. Ils sont classés du plus courant au plus rare, et l'ANIMATION
    suit ce classement — les trois premiers sont fixes, les suivants bougent de plus en plus.
    C'est ce qui permet de lire la rareté sans lire l'étiquette. */
-.cadre-qpas{--cadre-bg:linear-gradient(135deg,#8aa4c8,#dfe8f4,#8aa4c8)}
+/* Même traitement spéculaire que les métaux : ces trois-là n'ont aucune animation, tout leur
+   relief tient dans le dégradé. « Touche-à-tout » fait exception et garde son arc-en-ciel — c'est
+   son sujet, plusieurs formations à la fois ; un spéculaire par-dessus brouillerait les teintes
+   qu'il est censé énumérer. */
+.cadre-qpas{--cadre-bg:conic-gradient(from 210deg,
+  #5f7391 0deg,#8aa4c8 42deg,#f2f7ff 78deg,#a6bcd9 112deg,#5a6d89 168deg,
+  #7e97ba 210deg,#dfe8f4 250deg,#8aa4c8 284deg,#4f6280 330deg,#5f7391 360deg)}
 .cadre-qtouche{--cadre-bg:conic-gradient(from -90deg,#dc3e37,#ff6900,#fcb900,#2f9e6f,#0e9aa7,#6b4fbb,#dc3e37)}
-.cadre-qcollec{--cadre-bg:linear-gradient(135deg,#2f9e6f,#a8e6c9,#1d6b4a)}
+.cadre-qcollec{--cadre-bg:conic-gradient(from 210deg,
+  #17553a 0deg,#2f9e6f 42deg,#d6f5e6 78deg,#4fb98a 112deg,#1d6b4a 168deg,
+  #2a8f64 210deg,#a8e6c9 250deg,#2f9e6f 284deg,#134730 330deg,#17553a 360deg)}
 
-/* CENTURION — cent étoiles. Un liseré de bronze patiné, et un halo qui pulse doucement. */
-.cadre-qcent{--cadre-bg:linear-gradient(135deg,#a8631f,#f0c48a,#7a4413)}
+/* CENTURION — cent étoiles. Bronze patiné, spéculaire comme les métaux du parcours. */
+.cadre-qcent{--cadre-bg:conic-gradient(from 210deg,
+  #5c3210 0deg,#a8631f 42deg,#f7dcb8 78deg,#c07c34 112deg,#6b3d14 168deg,
+  #96581b 210deg,#f0c48a 250deg,#a8631f 284deg,#4d2a0d 330deg,#5c3210 360deg)}
 .cadre-qcent::after{content:"💯"}
 
 /* INTOUCHABLE — trois formations sans une faute. L'anneau tourne, sobre et rapide : pas de
@@ -3826,7 +3874,11 @@ button.av-wrap:active{transform:scale(.94)}
    2. `.pf-avatar` est un carré arrondi de 18 px, pas un cercle : un anneau à 50 % ne suit pas
       son contour. Le rayon de l'anneau vaut celui de l'avatar PLUS son débord de 3 px. */
 .pf-avatar.cadre,.side-foot .avatar.cadre{position:relative}
-.pf-avatar.cadre::before{border-radius:21px}
+/* Le rayon de l'anneau vaut celui de l'avatar PLUS son débord — sinon il coupe les coins.
+   Il se CALCULE depuis `--anneau` depuis que l'épaisseur suit le diamètre : écrit en dur (21px,
+   soit 18 + 3), il redeviendrait faux au premier changement d'épaisseur, et le défaut ne se
+   verrait qu'à cet endroit précis — le seul avatar carré de l'app. */
+.pf-avatar.cadre::before{border-radius:calc(18px + var(--anneau))}
 @media (prefers-reduced-motion:reduce){.cadre-champion{animation:none}}
 
 /* Cadres dans la Communauté. `.author-ava` et `.prof-ava` reçoivent l'anneau : elles doivent
@@ -3834,5 +3886,5 @@ button.av-wrap:active{transform:scale(.94)}
 .author-ava{position:relative}
 .prof-ava{position:relative;display:inline-grid;place-items:center}
 /* Le grand avatar du profil mérite un anneau proportionné : 3 px sur 88 px se voit à peine. */
-.prof-ava.cadre::before{inset:-5px;padding:5px}
+.prof-ava.cadre{--anneau:5px} /* avatar de profil : pas de `--av`, on fixe la valeur */
 .prof-ava.cadre-braise::after,.prof-ava.cadre-maestro::after{inset:-5px}
