@@ -141,12 +141,20 @@ test('les cadres RARES se voient rares — sans déborder', () => {
        bloc « mouvement réduit », et `right:-2px;bottom:-2px` seul attrape `.pf-lock`, le cadenas
        des cadres verrouillés, posé exactement au même endroit. Un test qui lit le mauvais bloc ne
        vérifie rien. */
-    const medaillon = /\.cadre-qchelem::after\{\n\s+content:"";position:absolute;right:-2px;bottom:-2px;[\s\S]*?\}/.exec(srcCss);
+    const medaillon = /\.cadre-qchelem::after\{\n\s+content:"";position:absolute;right:-2px;bottom:-2px;[\s\S]*?\n\s+animation:[^}]*\}/.exec(srcCss);
     assert.ok(medaillon, 'le medaillon doit se poser dans le coin, dans l\'emprise de l\'avatar');
     assert.doesNotMatch(medaillon[0], /box-shadow|blur\(/, 'plus aucune lueur : c\'est elle qui debordait');
     // La taille suit le diamètre, sinon l'emoji sort à la taille du texte hérité sur une pastille.
-    assert.match(srcCss, /width:calc\(var\(--av,38px\)\*\.42\);height:calc\(var\(--av,38px\)\*\.42\)/,
+    /* DEUX MONTAGES, DEUX DIAMÈTRES, et cela se voyait dans le sélecteur où les deux familles se
+       suivent. Un jeton de distinction embarque son disque ET son liseré dans le SVG : le liseré
+       interne mange 15 % de la boîte. Un jeton de palier tire le disque du fond CSS : il occupe
+       100 %. À boîte égale, une distinction paraissait plus petite.
+       On compense la BOÎTE (.42/.85 ≈ .494) plutôt que d'unifier les montages — l'unification a
+       été essayée : le glyphe y tombait à 58 % du disque, deux fois trop petit à 15 px. */
+    assert.match(srcCss, /width:calc\(var\(--av,38px\)\*var\(--jeton-t,\.494\)\)/,
         'proportionnel au diametre, avec un repli pour les emplacements sans `--av`');
+    assert.match(srcCss, /\.cadre-qdemi::after,\.cadre-qfini::after,\.cadre-qparfait::after\{--jeton-t:\.42;/,
+        'les paliers, dont le disque occupe toute la boite, gardent la boite plus petite');
     // Sous 26 px, le médaillon couvrirait le visage : l'anneau seul.
     assert.match(srcCss, /\.comm-face\.sm::after,\.stu-rank-cadre::after\{display:none\}/);
     // Le jury garde son balayage : c'est un mouvement DANS l'anneau, il ne déborde pas.
@@ -351,7 +359,7 @@ test('les trois paliers portent la couleur de LEUR formation', () => {
        dans l'absolu, il est « sur la voie » SUR une formation et en porte la teinte. D'où le
        montage inverse des huit autres — le disque vient du fond CSS (`--cadre-c`), le glyphe est
        un SVG posé par-dessus. La forme dit le palier, la couleur dit la formation. */
-    assert.match(srcCss, /\.cadre-qdemi::after,\.cadre-qfini::after,\.cadre-qparfait::after\{\n\s+background:var\(--jeton\) center\/58% no-repeat,var\(--cadre-c,#dc3e37\)/,
+    assert.match(srcCss, /\.cadre-qdemi::after,\.cadre-qfini::after,\.cadre-qparfait::after\{--jeton-t:\.42;\n\s+background:var\(--jeton\) center\/58% no-repeat,var\(--cadre-c,#dc3e37\)/,
         'le disque doit prendre la couleur de la formation');
     for (const p of ['qdemi', 'qfini', 'qparfait']) {
         assert.match(srcCss, new RegExp(`\\.cadre-${p}::after\\{--jeton:url\\('data:image/svg\\+xml,`), `${p} doit avoir son glyphe`);
@@ -452,4 +460,37 @@ test('l\'anneau ne laisse pas de couture avec l\'avatar', () => {
        la fixent, eux aussi, par `--anneau`. Un `padding` en dur ailleurs manquerait le
        recouvrement, et la couture reviendrait à cet endroit-là seulement. */
     assert.doesNotMatch(srcCss, /cadre::before\{[^}]*padding:\d/, 'aucune epaisseur en dur');
+});
+
+test('les résultats de concours ne se confondent plus', () => {
+    /* « CHAMPION » COUVRAIT SEUL TOUS LES PODIUMS, ce qui revenait à donner le même cadre au
+       vainqueur et au troisième — un organisme qui remet des prix ne peut pas les confondre.
+       Trois s'y ajoutent, et chacun se distingue par sa MATIÈRE autant que par son jeton :
+       l'or reste au sommet, le laurier prend une catégorie, l'argent une place de podium, et le
+       prix spécial sort de l'échelle avec une couleur que rien d'autre ne porte. */
+    const srcCadres2 = fs.readFileSync(path.join(APP, 'ui/lib/cadres.js'), 'utf8');
+    for (const [id, nom] of [['categorie', 'Champion de catégorie'], ['podium', 'Podium'], ['prix', 'Prix spécial']]) {
+        // Les déclarations sont alignées à la main : l'espacement varie d'une ligne à l'autre.
+        assert.match(srcCadres2, new RegExp(`id: "${id}",\\s+nom: "${nom}",\\s+exclusif: true`), `${id} doit exister`);
+        assert.match(srcCss, new RegExp(`\\.cadre-${id}\\{--cadre-[ab]`), `${id} doit avoir son anneau`);
+        assert.match(srcCss, new RegExp(`\\.cadre-${id}::after\\{--jeton:url\\('data:image/svg\\+xml,`), `${id} doit avoir son jeton`);
+        // Et surtout figurer dans la règle PARTAGÉE : elle pose `content`, la taille et le fond.
+        // Sans elle, le cadre a un jeton et un geste, mais aucune boîte pour les porter — rien
+        // ne s'affiche, et le build n'en dit pas un mot. C'est arrivé aux trois d'un coup.
+        assert.match(srcCss, new RegExp(`\\.cadre-${id}::after,[\\s\\S]{0,300}?content:""`), `${id} doit avoir sa boite`);
+    }
+    // Le serveur doit les accepter, sinon le choix est refusé en 422 après avoir été proposé.
+    assert.match(srcEspace, /'champion', 'categorie', 'podium', 'prix', 'jury', 'fondateur', 'ecole'\]/);
+
+    /* Chaque distinction a SON geste, choisi pour dire ce qu'elle récompense : on brandit une
+       coupe, une balance penche, une pousse grandit, on monte d'une marche, un ruban ondule.
+       Avant, les six partageaient le même battement — pour des récompenses sans rapport. */
+    for (const [id, geste] of [['champion', 'jetonBrandit'], ['categorie', 'jetonBrandit'],
+        ['podium', 'jetonMarche'], ['prix', 'jetonRuban'], ['jury', 'jetonPese'], ['fondateur', 'jetonPousse']]) {
+        assert.match(srcCss, new RegExp(`\\.cadre-${id}::after\\{animation:${geste} `), `${id} : ${geste}`);
+    }
+    /* La pousse et le ruban PIVOTENT ailleurs qu'au centre : une graine grandit par le haut, un
+       ruban est épinglé en haut du disque. Au centre, l'une gonfle et l'autre tourne sur place. */
+    assert.match(srcCss, /\.cadre-fondateur::after\{[^}]*transform-origin:50% 85%\}/);
+    assert.match(srcCss, /\.cadre-prix::after\{[^}]*transform-origin:50% 28%\}/);
 });

@@ -976,7 +976,10 @@ const saveMyAvatar = async (req, res) => {
  *
  * On valide en revanche la FORME, sans quoi la colonne accepterait n'importe quelle chaîne.
  */
-const CADRES_CONNUS = ['aucun', 'bronze', 'argent', 'or', 'braise', 'maestro', 'champion', 'jury', 'fondateur', 'ecole'];
+const CADRES_CONNUS = ['aucun', 'bronze', 'argent', 'or', 'braise', 'maestro',
+    // Résultats de concours, du plus haut au plus spécifique. « Champion » les couvrait tous,
+    // ce qui donnait le même cadre au vainqueur et au troisième.
+    'champion', 'categorie', 'podium', 'prix', 'jury', 'fondateur', 'ecole'];
 /* Le cadre « ecole » est le SEUL que le personnel porte, et le seul qu'un stagiaire ne peut
  * pas porter. Les cadres de parcours annoncent un nombre de formations terminees : un
  * secretariat en « Maestro » se lirait comme un stagiaire chevronne, et l'inverse — un

@@ -38,8 +38,17 @@ export const CADRES = [
   { min: 8, id: "maestro", nom: "Maestro",    desc: "8 formations terminées", anime: true },
 
   // — Exclusifs : attribués par l'école, jamais atteints en cumulant des formations. —
+  /* LES RÉSULTATS DE CONCOURS, du plus haut au plus spécifique. « Champion » couvrait tout
+     seul l'ensemble des podiums, ce qui revenait à donner le même cadre au vainqueur et au
+     troisième — un organisme qui remet des prix ne peut pas les confondre. */
   { id: "champion", nom: "Champion",  exclusif: true, anime: true,
-    condition: "Podium du Championnat de France de la pizza" },
+    condition: "Vainqueur du Championnat de France de la pizza" },
+  { id: "categorie", nom: "Champion de catégorie", exclusif: true, anime: true,
+    condition: "Premier d'une catégorie (Teglia, Napolitaine, Classique…)" },
+  { id: "podium",   nom: "Podium",    exclusif: true, anime: true,
+    condition: "2ᵉ ou 3ᵉ place d'un concours" },
+  { id: "prix",     nom: "Prix spécial", exclusif: true, anime: true,
+    condition: "Prix spécial décerné par un jury" },
   { id: "jury",     nom: "Jury",      exclusif: true,
     condition: "Avoir siégé au jury d'un concours" },
   { id: "fondateur", nom: "Fondateur", exclusif: true,

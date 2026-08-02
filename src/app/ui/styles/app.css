@@ -3639,11 +3639,12 @@ button.av-wrap:active{transform:scale(.94)}
      dégradé conique s'arrête simplement à son angle initial, ce qui reste un cadre parfaitement
      lisible ; l'emoji cesse de battre mais reste POSÉ — le masquer ferait du cadre le plus rare
      le plus terne de tous, pour qui a justement désactivé les animations. */
-  .cadre-champion,.cadre-qintouch,.cadre-qlegende,.cadre-qchelem{animation:none}
+  .cadre-champion,.cadre-categorie,.cadre-qintouch,.cadre-qlegende,.cadre-qchelem{animation:none}
   .cadre-jury::before{animation:none;background-position:50% 50%}
-  .cadre-champion::after,.cadre-jury::after,.cadre-fondateur::after,.cadre-qdemi::after,
-  .cadre-qfini::after,.cadre-qparfait::after,.cadre-qcent::after,.cadre-qintouch::after,
-  .cadre-qlegende::after,.cadre-qchelem::after{animation:none;transform:none}
+  .cadre-champion::after,.cadre-categorie::after,.cadre-podium::after,.cadre-prix::after,
+  .cadre-jury::after,.cadre-fondateur::after,.cadre-qdemi::after,.cadre-qfini::after,
+  .cadre-qparfait::after,.cadre-qcent::after,.cadre-qintouch::after,.cadre-qlegende::after,
+  .cadre-qchelem::after{animation:none;transform:none}
   /* Le feu d'artifice éteint, ses étincelles resteraient FIGÉES là où l'animation s'est arrêtée
      — six points posés au hasard autour du jeton. On rétablit donc le seul `box-shadow` qui a un
      sens hors animation : le liseré blanc des trois paliers. */
@@ -3729,11 +3730,20 @@ button.av-wrap:active{transform:scale(.94)}
  * Vectoriel, donc net à toute taille — ce qu'un emoji, rendu par la police, cesse d'être au-delà
  * de sa taille native.
  */
-.cadre-champion::after,.cadre-jury::after,.cadre-fondateur::after,.cadre-qdemi::after,
-.cadre-qfini::after,.cadre-qparfait::after,.cadre-qcent::after,.cadre-qintouch::after,
-.cadre-qlegende::after,.cadre-qchelem::after{
+.cadre-champion::after,.cadre-categorie::after,.cadre-podium::after,.cadre-prix::after,
+.cadre-jury::after,.cadre-fondateur::after,.cadre-qdemi::after,.cadre-qfini::after,
+.cadre-qparfait::after,.cadre-qcent::after,.cadre-qintouch::after,.cadre-qlegende::after,
+.cadre-qchelem::after{
   content:"";position:absolute;right:-2px;bottom:-2px;pointer-events:none;z-index:2;
-  width:calc(var(--av,38px)*.42);height:calc(var(--av,38px)*.42);
+  /* DEUX MONTAGES, DEUX DIAMÈTRES — et c'est ce qui se voyait dans le sélecteur, où les deux
+     familles se suivent. Les jetons des distinctions et des exploits embarquent leur disque ET
+     leur liseré DANS le SVG : le liseré interne mange 15 % de la boîte, il ne reste que 85 % de
+     couleur. Ceux des paliers tirent le disque du fond CSS et le liseré d'une ombre portée : le
+     disque occupe 100 % de la boîte. À boîte égale, une distinction paraissait donc plus petite.
+     On ne change pas les montages — un glyphe blanc posé à 58 % du disque tombait deux fois trop
+     petit, essayé et retiré — on compense la BOÎTE : .42/.85 ≈ .494. Les disques colorés font
+     alors le même diamètre, et les liserés extérieurs se répondent à un demi-pixel près. */
+  width:calc(var(--av,38px)*var(--jeton-t,.494));height:calc(var(--av,38px)*var(--jeton-t,.494));
   background:var(--jeton) center/contain no-repeat;
   filter:drop-shadow(0 1px 1.5px rgba(10,12,30,.4));
   animation:cadreMedaillon 3.6s var(--ease) infinite}
@@ -3741,6 +3751,69 @@ button.av-wrap:active{transform:scale(.94)}
    icône d'interface ; ce battement discret le rattache au cadre qu'il décore. */
 @keyframes cadreMedaillon{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
 
+
+/* — LES AUTRES RÉSULTATS DE CONCOURS —
+   « Champion » couvrait seul l'ensemble des podiums, ce qui revenait à donner le même cadre au
+   vainqueur et au troisième — un organisme qui remet des prix ne peut pas les confondre. Trois
+   s'y ajoutent, distingués par leur MATIÈRE autant que par leur jeton : l'or reste au sommet,
+   le laurier prend une catégorie, l'argent une place de podium, et le prix spécial sort de
+   l'échelle avec une couleur que rien d'autre ne porte. */
+
+/* CHAMPION DE CATÉGORIE — l'or de Champion, mais posé : il tourne deux fois moins vite. */
+.cadre-categorie{--cadre-a:0deg;
+  --cadre-bg:conic-gradient(from var(--cadre-a),#8a6400,#b8860b,#ffe9a8,#c9960a,#8a6400);
+  animation:cadreTourne 6.4s linear infinite}
+
+/* PODIUM — l'ARGENT, spéculaire comme les métaux du parcours, et sans rotation : une deuxième
+   place ne brille pas comme une première, et c'est exactement ce qu'elle dit. */
+.cadre-podium{--cadre-bg:conic-gradient(from 210deg,
+  #6f7883 0deg,#9aa3ad 42deg,#f2f6fa 78deg,#b8c1cb 112deg,#69727d 168deg,
+  #8d97a2 210deg,#e9eef3 250deg,#9aa3ad 284deg,#5d666f 330deg,#6f7883 360deg)}
+
+/* PRIX SPÉCIAL — hors échelle, donc hors métal : un rose profond, seul de son espèce. */
+.cadre-prix{--cadre-bg:conic-gradient(from -60deg,#7a1f49,#b5316f,#f0a5c8,#b5316f,#7a1f49)}
+.cadre-categorie::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23b8860b" stroke="%23fff" stroke-width="1.8"/><path d="M8.6 4.6c-3.1 2-4.3 5.2-2.8 8.8.7 1.6 1.9 3 3.5 4l1-1.7c-1.3-.8-2.2-1.9-2.7-3.1-1.1-2.7-.3-5 2.2-6.6z" fill="%23fff"/><path d="M15.4 4.6c3.1 2 4.3 5.2 2.8 8.8-.7 1.6-1.9 3-3.5 4l-1-1.7c1.3-.8 2.2-1.9 2.7-3.1 1.1-2.7.3-5-2.2-6.6z" fill="%23fff"/><path d="M12 10.4 13.4 14h3.8l-3.1 2.3 1.2 3.7-3.3-2.3-3.3 2.3 1.2-3.7L6.8 14h3.8z" fill="%23fff"/></svg>')}
+.cadre-podium::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%237d8791" stroke="%23fff" stroke-width="1.8"/><path d="M3.6 12h5.6v7.8H3.6z" fill="%23fff"/><path d="M9.5 7.4h5v12.4h-5z" fill="%23fff"/><path d="M14.8 13.8h5.6v6h-5.6z" fill="%23fff"/></svg>')}
+.cadre-prix::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23b5316f" stroke="%23fff" stroke-width="1.8"/><path d="M8.8 13.2 6.2 21l5.8-3.1 5.8 3.1-2.6-7.8z" fill="%23fff"/><path d="M12 2.8a5.9 5.9 0 1 1 0 11.8 5.9 5.9 0 0 1 0-11.8z" fill="%23fff"/><path d="M12 5.2 13.2 7.8h2.8l-2.3 1.9.9 2.8L12 10.9 9.4 12.5l.9-2.8L8 7.8h2.8z" fill="%23b5316f"/></svg>')}
+
+/* — LE GESTE DE CHAQUE DISTINCTION —
+   Les cadres attribués par l'école partageaient le frémissement commun à tous les jetons : un
+   même battement pour des récompenses qui n'ont rien à voir. Chacun a maintenant son geste,
+   choisi pour dire CE QU'IL RÉCOMPENSE — même idée que pour les trois paliers, où l'immobile, le
+   battement et la gerbe séparent la moitié du chemin de la perfection.
+   Ils restent brefs et sur `transform` seul : ces jetons apparaissent sur chaque publication de
+   leur porteur, et un mouvement large répété vingt fois dans un fil devient du bruit. */
+
+/* CHAMPION — on BRANDIT la coupe : elle se lève, oscille, retombe. */
+.cadre-champion::after{animation:jetonBrandit 3.2s var(--ease) infinite}
+.cadre-categorie::after{animation:jetonBrandit 3.8s var(--ease) infinite}
+@keyframes jetonBrandit{
+  0%,60%,100%{transform:translateY(0) rotate(0)}
+  70%{transform:translateY(-2px) rotate(-9deg)}
+  80%{transform:translateY(-2px) rotate(7deg)}
+  90%{transform:translateY(0) rotate(0)}}
+
+/* JURY — la balance PENCHE d'un côté puis de l'autre et revient à l'équilibre. C'est le geste
+   même de l'objet : rien ne dit « on pèse » aussi vite. */
+.cadre-jury::after{animation:jetonPese 4s var(--ease) infinite}
+@keyframes jetonPese{
+  0%,100%{transform:rotate(0)}30%{transform:rotate(-11deg)}
+  60%{transform:rotate(9deg)}85%{transform:rotate(-2deg)}}
+
+/* FONDATEUR — la pousse GRANDIT, lentement. L'ancienneté ne scintille pas, elle pousse.
+   `transform-origin` en bas : une graine grandit par le haut, pas depuis son centre — sans cela
+   le jeton gonfle au lieu de croître. */
+.cadre-fondateur::after{animation:jetonPousse 4.4s var(--ease) infinite;transform-origin:50% 85%}
+@keyframes jetonPousse{0%,100%{transform:scale(.94)}50%{transform:scale(1.1)}}
+
+/* PODIUM — le jeton MONTE d'une marche, puis redescend : le geste de celui qui prend sa place. */
+.cadre-podium::after{animation:jetonMarche 3.6s var(--ease) infinite}
+@keyframes jetonMarche{0%,55%,100%{transform:translateY(0)}70%,85%{transform:translateY(-2.5px)}}
+
+/* PRIX SPÉCIAL — le ruban de la rosette ONDULE. Pivot vers le haut du disque, là où un vrai
+   ruban est épinglé. */
+.cadre-prix::after{animation:jetonRuban 4.2s var(--ease) infinite;transform-origin:50% 28%}
+@keyframes jetonRuban{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
 
 /* — LES TROIS PALIERS DE FORMATION — leur jeton prend LA COULEUR DE LA FORMATION.
  *
@@ -3757,7 +3830,7 @@ button.av-wrap:active{transform:scale(.94)}
  *
  * La forme dit le palier, la couleur dit la formation : un demi-disque, une coche, une étincelle.
  */
-.cadre-qdemi::after,.cadre-qfini::after,.cadre-qparfait::after{
+.cadre-qdemi::after,.cadre-qfini::after,.cadre-qparfait::after{--jeton-t:.42;
   background:var(--jeton) center/58% no-repeat,var(--cadre-c,#dc3e37);
   border-radius:50%;box-shadow:0 0 0 1.6px #fff}
 
