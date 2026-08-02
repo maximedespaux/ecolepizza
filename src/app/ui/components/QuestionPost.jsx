@@ -369,12 +369,22 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
     setBusy(true); setErreur(null);
     try {
       const r = await createPost({ title: t, body: corps.trim(), kind, pinned: annonce && epingler });
+      /* LA FERMETURE SUIT L'ÉCHEC, PAS LA PRÉSENCE D'UNE PHOTO. C'était `if (!photo) onClose()` :
+         publier AVEC une photo laissait le formulaire ouvert même quand tout s'était bien passé.
+         On voyait la publication apparaître derrière et le formulaire rester là — on cliquait
+         « Publier » une seconde fois, et on publiait en double. Et le cas touchait surtout les
+         ANNONCES, puisque c'est à elles qu'on joint une affiche.
+         L'intention d'origine était bonne : rester ouvert pour montrer que la photo n'est pas
+         passée, la publication étant déjà créée et non annulable. Seule la condition était
+         fausse — c'est l'ÉCHEC qui doit retenir le formulaire. */
+      let echecPhoto = null;
       if (photo) {
         try { await uploadPostImage(r.data.id, photo); }
-        catch (e) { setErreur(`${annonce ? "Annonce" : "Question"} publiée, mais la photo n'est pas passée : ${e.message}`); }
+        catch (e) { echecPhoto = e.message; }
       }
       onCreated();
-      if (!photo) onClose();
+      if (echecPhoto) setErreur(`${annonce ? "Annonce" : "Question"} publiée, mais la photo n'est pas passée : ${echecPhoto}`);
+      else onClose();
     } catch (e) { setErreur(e.message); }
     finally { setBusy(false); }
   }

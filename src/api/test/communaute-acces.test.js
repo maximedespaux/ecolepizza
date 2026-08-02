@@ -130,3 +130,30 @@ test('le serveur renvoie `has_image` sur la liste des publications', () => {
         'Sans ce drapeau sur la LISTE, le fil devrait charger chaque image pour savoir si elle '
         + 'existe — ou ne rien afficher, ce qui était le cas.');
 });
+
+test('publier ferme le formulaire — même avec une photo', () => {
+    /* LE DÉFAUT : `onCreated(); if (!photo) onClose();`. La fermeture suivait la PRÉSENCE d'une
+       photo, pas l'échec de son envoi. Publier avec une photo laissait donc le formulaire ouvert
+       alors que tout s'était bien passé : la publication apparaissait derrière, le formulaire
+       restait là, et on cliquait « Publier » une seconde fois — donc on publiait en double.
+       Le cas touchait surtout les ANNONCES, puisque c'est à elles qu'on joint une affiche.
+
+       L'intention d'origine était bonne et elle est conservée : rester ouvert quand la photo n'est
+       PAS passée, la publication étant déjà créée et non annulable. Seule la condition était
+       fausse. */
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/components/QuestionPost.jsx'), 'utf8');
+    /* La borne de fin se cherche À PARTIR du début de la fonction : `createPortal` apparaît aussi
+       dans `QuestionModal`, plus haut dans le fichier, et un `indexOf` global renvoyait un index
+       ANTÉRIEUR au début — donc une tranche vide, et des assertions qui passent sur du néant. */
+    const debut = src.indexOf('async function publier');
+    const brut = src.slice(debut, src.indexOf('return createPortal', debut));
+    /* ON RETIRE LES COMMENTAIRES AVANT DE VÉRIFIER. Celui qui explique le correctif CITE l'ancien
+       code (« C'était `if (!photo) onClose()` ») : sans ce nettoyage, l'assertion tombait sur la
+       prose et déclarait le défaut toujours présent. Un test qui lit du source doit lire du code. */
+    const corps = brut.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    assert.doesNotMatch(corps, /if \(!photo\) onClose\(\)/,
+        'La fermeture ne doit plus dépendre de la présence d\'une photo.');
+    assert.match(corps, /let echecPhoto = null;/, "L'échec d'envoi est retenu explicitement…");
+    assert.match(corps, /if \(echecPhoto\) setErreur\(/, '…il retient le formulaire pour être lu…');
+    assert.match(corps, /else onClose\(\);/, '…et dans tous les autres cas on ferme.');
+});
