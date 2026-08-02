@@ -532,3 +532,34 @@ test('l\'arcade est en tête, et une seule fois', () => {
     assert.deepStrictEqual(importees, ['getMyFormations', 'getMyProfile', 'getPlayableChapters'],
         'aucune lecture du score des autres stagiaires');
 });
+
+test('la piste montre ce que la formation rapporte, et où on en est', () => {
+    /* CE QUI MANQUAIT. Les trois cadres d'une formation s'obtenaient sans qu'on ait jamais su
+       qu'ils existaient : la fête tombait au franchissement, et c'était la PREMIÈRE fois qu'on en
+       entendait parler. Un stagiaire à 9 chapitres sur 20 n'avait aucun moyen de savoir qu'il en
+       restait UN à faire pour décrocher le premier — donc aucune raison de le faire. */
+    assert.match(srcQuest, /<PisteDesCadres world=\{world\} prog=\{prog\} nbChapitres=\{chapters\.length\} \/>/,
+        'sous le chemin des chapitres');
+    // Sans chapitre, pas de piste : elle promettrait trois cadres que la banque ne permet pas.
+    assert.match(srcQuest, /if \(!nbChapitres\) return null;/);
+
+    /* CHAQUE BARRE PART DE ZÉRO, SUR SON ÉCHELLE. Mesurer « depuis le jalon précédent » donnait
+       un résultat exact mais illisible, et c'est le navigateur qui l'a montré : à 10 chapitres sur
+       20, « Monde bouclé » affichait 0 % (rien depuis la moitié) pendant que « Sans faute »
+       affichait 40 % — le dernier paraissait plus avancé que celui d'avant. Pire, « Sans faute »
+       partageait le seuil de « Monde bouclé » tout en se comptant sur une AUTRE échelle, celle des
+       chapitres à trois étoiles : son segment partait de 20 sur une échelle qui n'allait qu'à 8. */
+    assert.match(srcQuest, /\{ id: "qfini", nom: "Monde bouclé", compteur: "faits", de: \(\) => 0, a: \(n\) => n \}/);
+    assert.match(srcQuest, /\{ id: "qparfait", nom: "Sans faute", compteur: "parfaits", de: \(\) => 0, a: \(n\) => n \}/);
+    assert.match(srcQuest, /const compte = j\.compteur === "parfaits" \? parfaits : faits;/,
+        'chaque jalon porte SON compteur, au lieu de le deduire du precedent');
+
+    /* LES JALONS SONT LES VRAIS CADRES, mêmes classes et même teinte : ce qu'on voit est ce qu'on
+       portera. Verrouillé, `--cadre-c` passe au gris — l'anneau ET son jeton grisent ensemble,
+       sans qu'il faille dessiner une version éteinte de chacun. */
+    assert.match(srcQuest, /className=\{`pq-jalon-rond cadre cadre-\$\{j\.id\}`\}/);
+    assert.match(srcQuest, /"--cadre-c": acquis \|\| encours \? world\.color : "var\(--dim\)"/);
+    // Le premier jalon a son segment lui aussi, sinon la piste commence par un rond flottant.
+    assert.match(srcQuest, /\(i === 0 \? " debut" : ""\)/);
+    assert.match(srcCss, /\.pq-jalon-lien\.debut\{left:0;margin-left:0\}/);
+});

@@ -5,7 +5,7 @@ import ConstructorGame from "../components/ConstructorGame.jsx";
 import SimulateurPizza from "../components/SimulateurPizza.jsx";
 import { colorOf } from "../lib/format.js";
 import { saveQuestProgress } from "../lib/gamification.js";
-import { FETES, paliersFranchis, marquerFete } from "../lib/questPaliers.js";
+import { FETES, paliersFranchis, marquerFete, palierDuMonde } from "../lib/questPaliers.js";
 
 /**
  * Pizza Quest — entraînement QCM ludique (façon Duolingo × Mario/Royal Match).
@@ -765,6 +765,81 @@ function WorldView({ world, prog, onBack, onChapter }) {
       </div>
       </div>
       <p className="hint" style={{ textAlign: "center", marginTop: 8 }}>{doneCount}/{chapters.length} chapitres terminés</p>
+      <PisteDesCadres world={world} prog={prog} nbChapitres={chapters.length} />
+    </div>
+  );
+}
+
+/**
+ * LA PISTE DES CADRES — ce que cette formation rapporte, et où l'on en est.
+ *
+ * CE QUI MANQUAIT. Les trois cadres d'une formation s'obtenaient sans qu'on ait jamais su
+ * qu'ils existaient : la fête tombait au franchissement, et c'était la PREMIÈRE fois qu'on en
+ * entendait parler. Un stagiaire à 9 chapitres sur 20 n'avait aucun moyen de savoir qu'il en
+ * restait un à faire pour décrocher le premier — donc aucune raison de le faire.
+ *
+ * Trois jalons sur une ligne, sous le chemin des chapitres : acquis, en cours, verrouillés. Le
+ * segment se remplit à la proportion du chemin restant, ce qui répond à la seule question qui
+ * compte devant un objectif — « combien encore ? ».
+ *
+ * LES JALONS SONT LES VRAIS CADRES, mêmes classes et même teinte de formation : ce qu'on voit
+ * ici est exactement ce qu'on portera. Verrouillé, `--cadre-c` passe au gris — l'anneau ET son
+ * jeton grisent ensemble, sans qu'on ait à prévoir un dessin « éteint » pour chacun.
+ */
+/* Chaque jalon porte SON compteur et SON point de départ, au lieu de les déduire du jalon
+   précédent. La déduction était fausse pour « Sans faute » : il partage son seuil avec « Monde
+   bouclé » (tous les chapitres) mais se compte sur une AUTRE échelle — les chapitres à trois
+   étoiles. Le segment partait donc de 20 sur une échelle qui n'allait qu'à 8, et se remplissait
+   à 0 % alors qu'on en était à 40 %. */
+const JALONS = [
+  { id: "qdemi", nom: "Sur la voie", compteur: "faits", de: () => 0, a: (n) => Math.ceil(n / 2) },
+  { id: "qfini", nom: "Monde bouclé", compteur: "faits", de: () => 0, a: (n) => n },
+  { id: "qparfait", nom: "Sans faute", compteur: "parfaits", de: () => 0, a: (n) => n },
+];
+
+function PisteDesCadres({ world, prog, nbChapitres }) {
+  // Sans chapitre, aucun palier n'est atteignable : afficher une piste morte serait pire que
+  // ne rien afficher — elle promettrait trois cadres que la banque ne permet pas de gagner.
+  if (!nbChapitres) return null;
+  const faits = Object.values(prog).filter((v) => Number(v) > 0).length;
+  const parfaits = Object.values(prog).filter((v) => Number(v) >= 3).length;
+  const atteint = palierDuMonde(prog, nbChapitres);
+  const rang = JALONS.findIndex((j) => j.id === atteint); // -1 si aucun palier encore
+
+  return (
+    <div className="pq-piste">
+      <div className="pq-piste-t">Les cadres de cette formation</div>
+      <div className="pq-piste-rail">
+        {JALONS.map((j, i) => {
+          const acquis = i <= rang;
+          const encours = i === rang + 1;
+          const compte = j.compteur === "parfaits" ? parfaits : faits;
+          const cible = j.a(nbChapitres);
+          const reste = Math.max(0, cible - compte);
+          const depart = j.de(nbChapitres);
+          /* CHAQUE BARRE PART DE ZÉRO, sur son échelle. Mesurer « depuis le jalon précédent » donnait
+     un résultat exact mais illisible : à 10 chapitres sur 20, « Monde bouclé » affichait 0 %
+     (rien depuis la moitié) pendant que « Sans faute » affichait 40 % — le dernier paraissait
+     plus avancé que celui d'avant. Chaque barre répond maintenant à la seule question qu'on se
+     pose devant un objectif : quelle part du chemin VERS LUI est faite. */
+          const part = acquis ? 1 : Math.max(0, Math.min(1, (compte - depart) / Math.max(1, cible - depart)));
+          return (
+            <div key={j.id} className={"pq-jalon" + (acquis ? " ok" : "") + (encours ? " ici" : "")}>
+              {/* Le premier jalon a lui aussi son segment, depuis le bord gauche : sans lui la
+                  piste commençait par un rond flottant, et ne se lisait plus comme une ligne. */}
+              <span className={"pq-jalon-lien" + (i === 0 ? " debut" : "")}>
+                <span style={{ width: `${part * 100}%` }} /></span>
+              <span className={`pq-jalon-rond cadre cadre-${j.id}`}
+                style={{ "--cadre-c": acquis || encours ? world.color : "var(--dim)" }} aria-hidden="true" />
+              <b>{j.nom}</b>
+              <span className="hint">
+                {acquis ? "obtenu"
+                  : `encore ${reste} chapitre${reste > 1 ? "s" : ""}${j.compteur === "parfaits" ? " à 3 étoiles" : ""}`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

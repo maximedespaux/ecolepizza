@@ -1907,6 +1907,40 @@ tbody tr:last-child td{border-bottom:none}
 .pq-expl em{font-style:normal;color:var(--muted)}
 
 /* Titre de la rangée de défis-jeux dans un monde. */
+/* — LA PISTE DES CADRES, sous le chemin des chapitres —
+   Trois jalons sur une ligne. Le segment qui MÈNE à un jalon se remplit à la proportion du
+   chemin parcouru : c'est ce qui répond à « combien encore ? » sans avoir à lire le compte.
+   Le rond est le VRAI cadre, mêmes classes et même teinte — ce qu'on voit est ce qu'on portera.
+   Verrouillé, `--cadre-c` passe au gris : l'anneau et son jeton grisent ensemble, sans qu'il
+   faille dessiner une version éteinte de chacun. */
+.pq-piste{margin:18px auto 4px;max-width:560px}
+.pq-piste-t{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.045em;
+  color:var(--muted);text-align:center;margin-bottom:14px}
+.pq-piste-rail{display:flex;align-items:flex-start}
+.pq-jalon{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;position:relative;
+  text-align:center;min-width:0}
+.pq-jalon b{font-size:12px;line-height:1.2}
+.pq-jalon .hint{font-size:10.5px;line-height:1.25}
+/* Le rond porte `--av` : c'est lui qui règle l'épaisseur de l'anneau et la taille du jeton. */
+.pq-jalon-rond{--av:30px;position:relative;width:30px;height:30px;border-radius:50%;
+  background:var(--surface2);flex:none;margin-bottom:2px}
+/* Le lien part du rond PRÉCÉDENT et s'arrête au bord de celui-ci. Posé en absolu et tracé vers
+   la gauche : dans le flux, il aurait poussé les jalons et cassé leur répartition égale. */
+.pq-jalon-lien{position:absolute;top:15px;right:50%;left:-50%;height:3px;border-radius:99px;
+  background:var(--surface3);margin-right:19px;margin-left:19px;overflow:hidden}
+/* Le premier segment part du bord gauche du rail, pas de la moitié d'une case qui
+   n'existe pas : sinon il déborderait hors du conteneur. */
+.pq-jalon-lien.debut{left:0;margin-left:0}
+.pq-jalon-lien > span{display:block;height:100%;border-radius:99px;background:var(--gold);
+  transition:width .5s var(--spring)}
+/* Le jalon EN COURS se distingue sans clignoter : son libellé passe en couleur d'accent. */
+.pq-jalon.ici b{color:var(--ember2)}
+.pq-jalon.ok .hint{color:var(--green,#2f9e6f);font-weight:700}
+@media (max-width:520px){
+  .pq-jalon b{font-size:11px}
+  .pq-jalon .hint{font-size:9.5px}
+}
+
 /* L'ARCADE — les défis, en tête de Pizza Quest. Elle se lit comme une étagère posée AVANT la
    carte : c'est la première chose qu'on croise, alors qu'auparavant il fallait ouvrir une
    formation et défiler sous son chemin de chapitres pour la trouver. */
