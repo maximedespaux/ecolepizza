@@ -3607,7 +3607,6 @@ button.av-wrap:active{transform:scale(.94)}
   --cadre-bg:conic-gradient(from var(--cadre-a),var(--cadre-clair),var(--cadre-c) 90deg,
     var(--cadre-fonce) 180deg,var(--cadre-c) 270deg,var(--cadre-clair));
   animation:cadreTourne 4.2s linear infinite}
-.cadre-qparfait::after{content:"✨"}
 
 @media (prefers-reduced-motion:reduce){
   .cadre-qparfait{animation:none}
@@ -3682,35 +3681,49 @@ button.av-wrap:active{transform:scale(.94)}
 .pf-cadre.exclusif{border-style:dashed}
 .pf-cadre.exclusif.on{border-style:solid}
 
-/* — LE MÉDAILLON : un emoji à la place du halo —
+/* — LE JETON : un médaillon dessiné, à la place de l'emoji —
  *
- * POURQUOI ON A CHANGÉ. Les cadres rares se signalaient par un HALO — une couche en `::after`
- * posée à `inset:-7px`, avec un `box-shadow` de 16 px de flou par-dessus. Mesuré dans le fil de
- * la Communauté : sur un avatar de 38 px, la lueur débordait d'une vingtaine de pixels de chaque
- * côté et mordait sur le nom de l'auteur et la carte voisine. Une lueur ne s'arrête pas à la
- * boîte de son élément — c'est exactement ce qu'on lui demande — donc aucun réglage d'`inset` ne
- * pouvait la faire tenir en place.
+ * POURQUOI ON ABANDONNE L'EMOJI. C'est un anti-patron nommé, et par deux sources qui se
+ * rejoignent : la charte du projet (« pas d'emoji comme icône », cf. PizzaQuest.jsx) et la grille
+ * UI/UX consultée, qui range « Emoji as icons » parmi les choses à éviter en priorité 4. Les
+ * raisons sont concrètes :
+ *   · un emoji est rendu par LA POLICE DU SYSTÈME — 🏆 n'a ni le même dessin, ni la même palette,
+ *     ni le même cadrage sur macOS, Windows et Android. Une récompense qui change de visage selon
+ *     la machine n'est pas une identité ;
+ *   · ⚖️ et 🌱 sortent en couleurs vives qui n'appartiennent à aucune charte, et se cognaient à
+ *     l'anneau qu'elles décorent ;
+ *   · ils ne se teintent pas, ne s'alignent sur aucune grille, et leur chasse varie.
  *
- * L'EMOJI, LUI, A UNE TAILLE. Il se pose en médaillon dans le coin bas-droit, DANS l'emprise de
- * l'avatar, et ne déborde jamais que de deux pixels. Il dit aussi la même chose plus vite qu'un
- * halo : un trophée se reconnaît, une lueur dorée doit s'interpréter.
+ * LE JETON EST DESSINÉ ICI, en SVG embarqué : un disque de couleur, un liseré blanc, une
+ * silhouette PLEINE. Pleine, et non au trait comme le reste du jeu d'icônes (`Icon.jsx`) : à
+ * 15 px, un trait de 2 px sur une grille de 24 se referme et devient une tache. La géométrie
+ * reste celle de la maison — mêmes formes simples, même grille de 24.
  *
- * TAILLE PROPORTIONNELLE à `--av`, la variable que pose `AvatarCadre`. Le repli à 38 px couvre
- * les emplacements qui n'en posent pas (`.pf-avatar` du profil, `.pf-cadre-apercu` du sélecteur) :
- * sans lui, l'emoji sortirait à la taille du texte hérité, énorme sur une pastille.
+ * Et le plus rare de tous porte LA PART DE PIZZA, le motif de l'école : le Grand Chelem ne
+ * pouvait pas se contenter d'un symbole de podium interchangeable.
  *
- * `drop-shadow` blanc plutôt qu'un fond : sur un avatar sombre comme sur un fond clair, un emoji
- * nu se perd. Le liseré le détache des deux côtés sans lui coller une pastille.
+ * Vectoriel, donc net à toute taille — ce qu'un emoji, rendu par la police, cesse d'être au-delà
+ * de sa taille native.
  */
 .cadre-champion::after,.cadre-jury::after,.cadre-fondateur::after,.cadre-qparfait::after,
 .cadre-qcent::after,.cadre-qintouch::after,.cadre-qlegende::after,.cadre-qchelem::after{
-  position:absolute;right:-2px;bottom:-2px;pointer-events:none;z-index:2;line-height:1;
-  font-size:calc(var(--av,38px)*.4);
-  filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 1px 1px rgba(10,12,30,.45));
+  content:"";position:absolute;right:-2px;bottom:-2px;pointer-events:none;z-index:2;
+  width:calc(var(--av,38px)*.42);height:calc(var(--av,38px)*.42);
+  background:var(--jeton) center/contain no-repeat;
+  filter:drop-shadow(0 1px 1.5px rgba(10,12,30,.4));
   animation:cadreMedaillon 3.6s var(--ease) infinite}
-/* Il RESPIRE légèrement — sans bouger de place. Un médaillon parfaitement immobile passe pour
-   une icône d'interface ; ce battement discret le rattache au cadre qu'il décore. */
-@keyframes cadreMedaillon{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
+/* Il RESPIRE légèrement — sans bouger de place. Un jeton parfaitement immobile passe pour une
+   icône d'interface ; ce battement discret le rattache au cadre qu'il décore. */
+@keyframes cadreMedaillon{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+
+.cadre-champion::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23c9960a" stroke="%23fff" stroke-width="1.8"/><path d="M7.6 5.6h8.8v4a4.4 4.4 0 0 1-8.8 0z" fill="%23fff"/><path d="M11 13.4h2v3h-2z" fill="%23fff"/><path d="M8.6 16.4h6.8v2H8.6z" fill="%23fff"/></svg>')}
+.cadre-jury::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%236b4fbb" stroke="%23fff" stroke-width="1.8"/><path d="M11.4 5.4h1.2v13h-1.2z" fill="%23fff"/><path d="M5.8 7.8h12.4v1.3H5.8z" fill="%23fff"/><path d="M6.6 9.6 4.2 13.9h4.8z" fill="%23fff"/><path d="M17.4 9.6 15 13.9h4.8z" fill="%23fff"/><path d="M8.4 18h7.2v1.4H8.4z" fill="%23fff"/></svg>')}
+.cadre-fondateur::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%230e9aa7" stroke="%23fff" stroke-width="1.8"/><path d="M11.4 19v-6.2h1.2V19z" fill="%23fff"/><path d="M11.4 13.2c-3.4 0-5-1.9-5-4.6 3.4 0 5 1.9 5 4.6z" fill="%23fff"/><path d="M12.6 12.4c0-2.7 1.6-4.6 5-4.6 0 2.7-1.6 4.6-5 4.6z" fill="%23fff"/></svg>')}
+.cadre-qparfait::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23d4a017" stroke="%23fff" stroke-width="1.8"/><path d="M12 4.4c.9 4.5 2.2 5.8 6.7 6.7-4.5.9-5.8 2.2-6.7 6.7-.9-4.5-2.2-5.8-6.7-6.7 4.5-.9 5.8-2.2 6.7-6.7z" fill="%23fff"/></svg>')}
+.cadre-qcent::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23a8631f" stroke="%23fff" stroke-width="1.8"/><path d="M12 4.2 18.7 6.7v4.9c0 3.7-2.7 6.5-6.7 8-4-1.5-6.7-4.3-6.7-8V6.7z" fill="%23fff"/><path d="M12 8.2 12.9 10.5 15.4 10.7 13.5 12.3 14.1 14.7 12 13.4 9.9 14.7 10.5 12.3 8.6 10.7 11.1 10.5Z" fill="%23a8631f"/></svg>')}
+.cadre-qintouch::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23374151" stroke="%23fff" stroke-width="1.8"/><path d="M12 4.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15z" fill="%23fff"/><path d="M12 7.1a4.9 4.9 0 1 1 0 9.8 4.9 4.9 0 0 1 0-9.8z" fill="%23374151"/></svg>')}
+.cadre-qlegende::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%237b3f9e" stroke="%23fff" stroke-width="1.8"/><path d="M5.6 16.4 4 7.3l4.5 3.3L12 5l3.5 5.6L20 7.3l-1.6 9.1z" fill="%23fff"/><path d="M5.9 17.6h12.2v1.7H5.9z" fill="%23fff"/></svg>')}
+.cadre-qchelem::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23dc3e37" stroke="%23fff" stroke-width="1.8"/><path d="M12 4.3c.4 0 .8.2 1 .6l6.6 12.6c.4.8-.1 1.7-1 1.8a24 24 0 0 1-13.2 0c-.9-.1-1.4-1-1-1.8L11 4.9c.2-.4.6-.6 1-.6z" fill="%23fff"/><path d="M12 9.4a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z" fill="%23dc3e37"/><path d="M9.4 14a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z" fill="%23dc3e37"/><path d="M14.6 14a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z" fill="%23dc3e37"/></svg>')}
 
 /* Sous 26 px (les pastilles « qui a commenté »), le médaillon couvrirait le visage : l'anneau
    seul suffit, comme pour les couches d'effet avant lui. */
@@ -3729,7 +3742,6 @@ button.av-wrap:active{transform:scale(.94)}
    il a droit au clinquant. */
 .cadre-champion{--cadre-a:0deg;--cadre-bg:conic-gradient(from var(--cadre-a),#fcb900,#fff3c4,#c9960a,#fff3c4,#fcb900);
   animation:cadreTourne 3.2s linear infinite}
-.cadre-champion::after{content:"🏆"}
 
 /* JURY — un BALAYAGE, pas une rotation : un reflet violet passe sur l'anneau, revient, repart.
    Le geste évoque le regard qui parcourt, ce que fait un jury. Le dégradé reste linéaire (c'est
@@ -3738,7 +3750,6 @@ button.av-wrap:active{transform:scale(.94)}
 /* Le dégradé est peint sur le `::before` (l'anneau creux) : c'est LUI qu'il faut faire glisser.
    Poser `background-size` sur l'hôte n'aurait rien fait — son fond à lui est l'avatar. */
 .cadre-jury::before{background-size:300% 100%;animation:cadreBalaie 3.4s var(--ease) infinite}
-.cadre-jury::after{content:"⚖️"}
 @keyframes cadreBalaie{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
 
 /* FONDATEUR — il RESPIRE : le halo turquoise enfle et se retire, lentement. La première
@@ -3746,7 +3757,6 @@ button.av-wrap:active{transform:scale(.94)}
    `scale` et `opacity` seulement — deux propriétés composées par le GPU, sur un cadre qui peut
    apparaître vingt fois dans un fil. */
 .cadre-fondateur{--cadre-bg:conic-gradient(from -40deg,#0e9aa7,#7fe3d6,#d7fff8,#7fe3d6,#0e9aa7)}
-.cadre-fondateur::after{content:"🌱"}
 @keyframes cadreRespire{0%,100%{opacity:.35;scale:.97}50%{opacity:.95;scale:1.05}}
 
 /* — EXPLOITS DE PIZZA QUEST —
@@ -3770,21 +3780,18 @@ button.av-wrap:active{transform:scale(.94)}
 .cadre-qcent{--cadre-bg:conic-gradient(from 210deg,
   #5c3210 0deg,#a8631f 42deg,#f7dcb8 78deg,#c07c34 112deg,#6b3d14 168deg,
   #96581b 210deg,#f0c48a 250deg,#a8631f 284deg,#4d2a0d 330deg,#5c3210 360deg)}
-.cadre-qcent::after{content:"💯"}
 
 /* INTOUCHABLE — trois formations sans une faute. L'anneau tourne, sobre et rapide : pas de
    paillettes, c'est un cadre de précision. */
 .cadre-qintouch{--cadre-a:0deg;
   --cadre-bg:conic-gradient(from var(--cadre-a),#111827,#4b5563,#e5e7eb,#4b5563,#111827);
   animation:cadreTourne 3.6s linear infinite}
-.cadre-qintouch::after{content:"🎯"}
 
 /* LÉGENDE — deux cent cinquante étoiles. Anneau tournant ET halo qui respire en contretemps
    (3,1 s contre 4,3 s) : le décalage empêche l'œil de reconnaître une boucle. */
 .cadre-qlegende{--cadre-a:0deg;
   --cadre-bg:conic-gradient(from var(--cadre-a),#6b4fbb,#c9b6ff,#fff3c4,#c9b6ff,#6b4fbb);
   animation:cadreTourne 3.1s linear infinite}
-.cadre-qlegende::after{content:"👑"}
 
 /* GRAND CHELEM — le plus rare du jeu : toutes les formations jouables, sans faute. Il cumule
    tout ce que les autres ont séparément — l'anneau tourne, les éclats tournent à l'envers, et
@@ -3794,7 +3801,6 @@ button.av-wrap:active{transform:scale(.94)}
   --cadre-bg:conic-gradient(from var(--cadre-a),
     #dc3e37,#ff6900,#fcb900,#fff3c4,#2f9e6f,#0e9aa7,#6b4fbb,#dc3e37);
   animation:cadreTourne 2.8s linear infinite}
-.cadre-qchelem::after{content:"🍕"}
 /* Personnel de l'organisme — le cadre le plus riche du jeu, et c'est voulu : il ne se gagne pas,
    il DÉSIGNE. Toute la charte y passe, du rouge sombre au reflet crème, en dégradé CONIQUE qui
    tourne — même mécanique que Champion et Maestro (`@property --cadre-a`, plus haut), parce que

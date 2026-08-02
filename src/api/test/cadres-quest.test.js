@@ -117,21 +117,36 @@ test('les cadres RARES se voient rares — sans déborder', () => {
      * LE MÉDAILLON règle les deux : un emoji A UNE TAILLE. Il se pose dans le coin, dans l'emprise
      * de l'avatar, et dit ce que le halo faisait deviner — un trophée se reconnaît, une lueur
      * dorée s'interprète. */
-    for (const [cadre, emoji] of [['champion', '🏆'], ['jury', '⚖️'], ['fondateur', '🌱'],
-        ['qparfait', '✨'], ['qcent', '💯'], ['qintouch', '🎯'], ['qlegende', '👑'], ['qchelem', '🍕']]) {
-        assert.match(srcCss, new RegExp(`\\.cadre-${cadre}::after\\{content:"${emoji}"\\}`), `${cadre} doit porter son medaillon`);
+    /* DES JETONS DESSINÉS, PAS DES EMOJI — l'emoji était l'étape intermédiaire, et c'est un
+       anti-patron nommé par la charte du projet comme par la grille UI/UX consultée. Il est rendu
+       par LA POLICE DU SYSTÈME : 🏆 n'a ni le même dessin, ni la même palette, ni le même cadrage
+       sur macOS, Windows et Android — une récompense qui change de visage selon la machine n'est
+       pas une identité. Chaque jeton est maintenant un SVG embarqué : disque de couleur, liseré
+       blanc, silhouette pleine, même grille de 24 que le reste du jeu d'icônes. */
+    for (const cadre of ['champion', 'jury', 'fondateur', 'qparfait', 'qcent', 'qintouch', 'qlegende', 'qchelem']) {
+        assert.match(srcCss, new RegExp(`\\.cadre-${cadre}::after\\{--jeton:url\\('data:image/svg\\+xml,`),
+            `${cadre} doit porter un jeton dessine`);
+        assert.doesNotMatch(srcCss, new RegExp(`\\.cadre-${cadre}::after\\{content:"[^"]`), `${cadre} ne doit plus etre un emoji`);
     }
+    /* PLEINES et non au trait, contrairement au reste du jeu d'icônes : à 15 px, un trait de 2 px
+       sur une grille de 24 se referme et devient une tache. */
+    assert.doesNotMatch(srcCss, /--jeton:url\('data:image\/svg\+xml,[^']*stroke-width="2"/, 'silhouettes pleines');
+    /* Le plus rare porte LA PART DE PIZZA, le motif de l'école : le Grand Chelem ne pouvait pas se
+       contenter d'un symbole de podium interchangeable. Sa pointe et ses trois garnitures. */
+    const chelem = /\.cadre-qchelem::after\{--jeton:url\('[^']*'\)\}/.exec(srcCss)[0];
+    assert.ok((chelem.match(/1\.2 1\.2 0 1 1 0 2\.4/g) || []).length === 3, 'trois garnitures sur la part');
     /* AUCUN DÉBORDEMENT : deux pixels de coin, et plus un `box-shadow` ni un `blur` sur ces
        couches — c'est cela qui mordait sur le fil.
        On ancre sur le DERNIER sélecteur de la liste : le même groupe réapparaît plus haut dans le
        bloc « mouvement réduit », et `right:-2px;bottom:-2px` seul attrape `.pf-lock`, le cadenas
        des cadres verrouillés, posé exactement au même endroit. Un test qui lit le mauvais bloc ne
        vérifie rien. */
-    const medaillon = /\.cadre-qchelem::after\{\n\s+position:absolute;right:-2px;bottom:-2px;[\s\S]*?\}/.exec(srcCss);
+    const medaillon = /\.cadre-qchelem::after\{\n\s+content:"";position:absolute;right:-2px;bottom:-2px;[\s\S]*?\}/.exec(srcCss);
     assert.ok(medaillon, 'le medaillon doit se poser dans le coin, dans l\'emprise de l\'avatar');
     assert.doesNotMatch(medaillon[0], /box-shadow|blur\(/, 'plus aucune lueur : c\'est elle qui debordait');
     // La taille suit le diamètre, sinon l'emoji sort à la taille du texte hérité sur une pastille.
-    assert.match(srcCss, /font-size:calc\(var\(--av,38px\)\*\.4\)/, 'proportionnel, avec un repli');
+    assert.match(srcCss, /width:calc\(var\(--av,38px\)\*\.42\);height:calc\(var\(--av,38px\)\*\.42\)/,
+        'proportionnel au diametre, avec un repli pour les emplacements sans `--av`');
     // Sous 26 px, le médaillon couvrirait le visage : l'anneau seul.
     assert.match(srcCss, /\.comm-face\.sm::after,\.stu-rank-cadre::after\{display:none\}/);
     // Le jury garde son balayage : c'est un mouvement DANS l'anneau, il ne déborde pas.
