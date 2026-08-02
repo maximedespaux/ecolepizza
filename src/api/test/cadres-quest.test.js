@@ -367,3 +367,38 @@ test('les trois paliers portent la couleur de LEUR formation', () => {
         assert.match(jeton, /stroke="%231b1f3a"/, `${p} : contour navy pour les fonds clairs`);
     }
 });
+
+test('le mouvement dit le palier — immobile, battement, feu', () => {
+    /* Troisième lecture du même objet : la FORME dit lequel des trois paliers, la COULEUR dit sur
+       quelle formation, le MOUVEMENT dit combien il coûte. À mi-chemin il n'y a rien à fêter —
+       et c'est cette immobilité qui donne sa valeur au reste : si tout bouge, plus rien ne se
+       remarque. */
+    assert.match(srcCss, /\.cadre-qdemi::after\{animation:none\}/, 'a mi-chemin, rien ne bouge');
+    assert.match(srcCss, /\.cadre-qfini::after\{animation:cadreCoche 2\.2s var\(--ease\) infinite\}/);
+    assert.match(srcCss, /@keyframes cadreCoche\{0%,100%\{transform:scale\(1\)\}45%\{transform:scale\(1\.3\)\}\}/,
+        'un battement franc, plus ample que le fremissement des exploits');
+    assert.match(srcCss, /\.cadre-qparfait::after\{animation:cadreEclat [^,]+,cadreFeu /, 'l\'a-coup ET la gerbe');
+
+    /* LA GERBE EST PROPORTIONNELLE AU DIAMÈTRE, et ce n'est pas de l'élégance : le jeton mesure
+       42 % du diamètre, donc tout ce qui reste à moins de 21 % du centre est CACHÉ DERRIÈRE LUI.
+       Les deux premières versions faisaient exactement cela — une gerbe invisible, mesurée à
+       l'écran avant d'être corrigée. Les étincelles naissent donc au bord du jeton (31 %). */
+    const feu = /@keyframes cadreFeu\{[\s\S]*?\n\}/.exec(srcCss)[0];
+    assert.match(feu, /calc\(var\(--av,38px\)\*0\.3\d+\)/, 'les etincelles naissent au bord du jeton');
+    assert.ok(!/0 0 0 -\d+px var\(--cadre-c/.test(feu), 'aucune etincelle a rayon nul : elle serait invisible');
+    // Six directions, une par 60° — et le liseré blanc en tête de CHAQUE image-clé.
+    for (const pct of ['0%,54%', '61%', '76%', '100%']) {
+        const cle = new RegExp(`${pct.replace(/[%,]/g, m => '\\' + m)}\\{box-shadow:([^}]*)\\}`).exec(feu);
+        assert.ok(cle, `image-cle ${pct} attendue`);
+        // Six étincelles + le liseré = sept couches. Compter les virgules HORS parenthèses : les
+        // `calc(var(--av,38px)*…)` en contiennent, et un découpage naïf en comptait le double.
+        const couches = cle[1].split(/,(?![^(]*\))/);
+        assert.strictEqual(couches.length, 7, `${pct} : six etincelles plus le lisere`);
+        assert.match(cle[1], /^0 0 0 1\.6px #fff,/,
+            'le lisere blanc est LUI AUSSI un box-shadow, et une image-cle remplace la liste entiere : '
+            + 'l\'omettre le faisait disparaitre pendant toute l\'animation');
+    }
+    /* Mouvement réduit : la gerbe s'éteint, mais le liseré revient — sans lui, les étincelles
+       resteraient figées là où l'animation s'est arrêtée, six points posés au hasard. */
+    assert.match(srcCss, /\.cadre-qparfait::after\{box-shadow:0 0 0 1\.6px #fff\}/);
+});

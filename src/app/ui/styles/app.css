@@ -3634,9 +3634,13 @@ button.av-wrap:active{transform:scale(.94)}
      le plus terne de tous, pour qui a justement désactivé les animations. */
   .cadre-champion,.cadre-qintouch,.cadre-qlegende,.cadre-qchelem{animation:none}
   .cadre-jury::before{animation:none;background-position:50% 50%}
-  .cadre-champion::after,.cadre-jury::after,.cadre-fondateur::after,.cadre-qparfait::after,
-  .cadre-qcent::after,.cadre-qintouch::after,.cadre-qlegende::after,
-  .cadre-qchelem::after{animation:none;transform:none}
+  .cadre-champion::after,.cadre-jury::after,.cadre-fondateur::after,.cadre-qdemi::after,
+  .cadre-qfini::after,.cadre-qparfait::after,.cadre-qcent::after,.cadre-qintouch::after,
+  .cadre-qlegende::after,.cadre-qchelem::after{animation:none;transform:none}
+  /* Le feu d'artifice éteint, ses étincelles resteraient FIGÉES là où l'animation s'est arrêtée
+     — six points posés au hasard autour du jeton. On rétablit donc le seul `box-shadow` qui a un
+     sens hors animation : le liseré blanc des trois paliers. */
+  .cadre-qparfait::after{box-shadow:0 0 0 1.6px #fff}
 }
 
 /* Pastille de cadre dans la barre de parcours (hero) : un aperçu, sans avatar dedans. */
@@ -3742,6 +3746,45 @@ button.av-wrap:active{transform:scale(.94)}
 .cadre-qdemi::after,.cadre-qfini::after,.cadre-qparfait::after{
   background:var(--jeton) center/58% no-repeat,var(--cadre-c,#dc3e37);
   border-radius:50%;box-shadow:0 0 0 1.6px #fff}
+
+/* — LE MOUVEMENT DIT LE PALIER, comme la forme et la couleur le disaient déjà —
+ *
+ * Trois paliers, trois régimes, du plus calme au plus démonstratif. C'est la troisième lecture
+ * du même objet : la FORME dit lequel, la COULEUR dit sur quelle formation, le MOUVEMENT dit
+ * combien il coûte.
+ *
+ * SUR LA VOIE — IMMOBILE. À mi-chemin, il n'y a rien à fêter : le demi-disque se contente
+ * d'être là. C'est aussi ce qui donne sa valeur au mouvement des deux autres — si tout bouge,
+ * plus rien ne se remarque.
+ */
+.cadre-qdemi::after{animation:none}
+
+/* MONDE BOUCLÉ — un battement franc. Le jeton enfle et se retire, plus ample que le frémissement
+   commun aux exploits : on a fini quelque chose, ça se voit d'un coup d'œil dans un fil. */
+.cadre-qfini::after{animation:cadreCoche 2.2s var(--ease) infinite}
+@keyframes cadreCoche{0%,100%{transform:scale(1)}45%{transform:scale(1.3)}}
+
+/* SANS FAUTE — LE FEU D'ARTIFICE. Six étincelles jaillissent du jeton, à la couleur de la
+   formation, puis s'éteignent ; le jeton lui-même donne le coup d'envoi par un à-coup.
+ *
+ * EN `box-shadow`, ET C'EST LE POINT DÉLICAT. Une ombre portée déborde de la boîte de son
+ * élément — c'est exactement ce qui nous avait obligés à retirer les halos, qui mordaient sur le
+ * fil de la Communauté. Ici le débord est BORNÉ À 13 px et ne dure qu'une fraction de la boucle :
+ * les étincelles sont transparentes 55 % du temps, et l'espace qu'elles traversent est celui du
+ * coin de l'avatar, pas celui du texte voisin. Un halo permanent de 25 px et six points fugaces
+ * de 13 ne se comportent pas pareil dans une liste.
+ *
+ * Les six directions sont CALCULÉES (une par 60°) plutôt que recopiées : douze coordonnées
+ * écrites à la main, c'est douze occasions de se tromper d'un signe.
+ */
+.cadre-qparfait::after{animation:cadreEclat 2.8s var(--ease) infinite,cadreFeu 2.8s var(--ease) infinite}
+@keyframes cadreEclat{0%,52%,100%{transform:scale(1)}60%{transform:scale(1.45)}72%{transform:scale(.94)}}
+@keyframes cadreFeu{
+  0%,54%{box-shadow:0 0 0 1.6px #fff,0 calc(var(--av,38px)*-0.2200) 0 -8px transparent,calc(var(--av,38px)*0.1905) calc(var(--av,38px)*-0.1100) 0 -8px transparent,calc(var(--av,38px)*0.1905) calc(var(--av,38px)*0.1100) 0 -8px transparent,0 calc(var(--av,38px)*0.2200) 0 -8px transparent,calc(var(--av,38px)*-0.1905) calc(var(--av,38px)*0.1100) 0 -8px transparent,calc(var(--av,38px)*-0.1905) calc(var(--av,38px)*-0.1100) 0 -8px transparent}
+  61%{box-shadow:0 0 0 1.6px #fff,0 calc(var(--av,38px)*-0.3100) 0 -5px var(--cadre-c,#dc3e37),calc(var(--av,38px)*0.2685) calc(var(--av,38px)*-0.1550) 0 -5px var(--cadre-c,#dc3e37),calc(var(--av,38px)*0.2685) calc(var(--av,38px)*0.1550) 0 -5px var(--cadre-c,#dc3e37),0 calc(var(--av,38px)*0.3100) 0 -5px var(--cadre-c,#dc3e37),calc(var(--av,38px)*-0.2685) calc(var(--av,38px)*0.1550) 0 -5px var(--cadre-c,#dc3e37),calc(var(--av,38px)*-0.2685) calc(var(--av,38px)*-0.1550) 0 -5px var(--cadre-c,#dc3e37)}
+  76%{box-shadow:0 0 0 1.6px #fff,0 calc(var(--av,38px)*-0.4300) 0 -5.5px var(--cadre-c,#dc3e37),calc(var(--av,38px)*0.3724) calc(var(--av,38px)*-0.2150) 0 -5.5px var(--cadre-c,#dc3e37),calc(var(--av,38px)*0.3724) calc(var(--av,38px)*0.2150) 0 -5.5px var(--cadre-c,#dc3e37),0 calc(var(--av,38px)*0.4300) 0 -5.5px var(--cadre-c,#dc3e37),calc(var(--av,38px)*-0.3724) calc(var(--av,38px)*0.2150) 0 -5.5px var(--cadre-c,#dc3e37),calc(var(--av,38px)*-0.3724) calc(var(--av,38px)*-0.2150) 0 -5.5px var(--cadre-c,#dc3e37)}
+  100%{box-shadow:0 0 0 1.6px #fff,0 calc(var(--av,38px)*-0.5200) 0 -8px transparent,calc(var(--av,38px)*0.4503) calc(var(--av,38px)*-0.2600) 0 -8px transparent,calc(var(--av,38px)*0.4503) calc(var(--av,38px)*0.2600) 0 -8px transparent,0 calc(var(--av,38px)*0.5200) 0 -8px transparent,calc(var(--av,38px)*-0.4503) calc(var(--av,38px)*0.2600) 0 -8px transparent,calc(var(--av,38px)*-0.4503) calc(var(--av,38px)*-0.2600) 0 -8px transparent}
+}
 .cadre-qdemi::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 4.8a7.2 7.2 0 0 1 0 14.4z" fill="%23fff" stroke="%231b1f3a" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>')}
 .cadre-qfini::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.9 16.6 5.6 12.3l1.7-1.7 2.6 2.6 6.8-6.8 1.7 1.7z" fill="%23fff" stroke="%231b1f3a" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>')}
 .cadre-qparfait::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 4.4c.9 4.5 2.2 5.8 6.7 6.7-4.5.9-5.8 2.2-6.7 6.7-.9-4.5-2.2-5.8-6.7-6.7 4.5-.9 5.8-2.2 6.7-6.7z" fill="%23fff" stroke="%231b1f3a" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>')}
