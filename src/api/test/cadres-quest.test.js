@@ -321,7 +321,9 @@ test('l\'anneau suit le diamètre, et le métal a du relief', () => {
      * lumière tourne avec la forme, comme sur une médaille qu'on incline. */
     assert.match(srcCss, /\.cadre\{--anneau:clamp\(2px,calc\(var\(--av,38px\)\*\.085\),5px\)\}/,
         'l\'epaisseur doit se calculer sur le diametre');
-    assert.match(srcCss, /\.cadre::before\{[\s\S]*?inset:calc\(var\(--anneau\)\*-1\);[\s\S]*?padding:var\(--anneau\)/,
+    /* `inset` ET `padding` viennent de la MÊME grandeur, sinon l'anneau se décentre. Le padding
+       porte en plus un demi-pixel de recouvrement — cf. le test de la couture, plus bas. */
+    assert.match(srcCss, /\.cadre::before\{[\s\S]*?inset:calc\(var\(--anneau\)\*-1\);[\s\S]*?padding:calc\(var\(--anneau\)/,
         'et piloter inset ET padding, sinon l\'anneau se decentre');
     /* Les deux réglages manuels passent par la MÊME grandeur. Laisser un `inset` en dur ailleurs
        ferait repartir cet emplacement-là à l'ancienne épaisseur au prochain changement. */
@@ -431,4 +433,23 @@ test('le sélecteur est rangé par ce qu\'il faut FAIRE pour l\'avoir', () => {
        l'impression d'un chargement raté, alors qu'il signifie qu'on n'a pas encore joué. */
     assert.match(ordre, /\.filter\(\(g\) => g\.cadres\.length\)/, 'pas de section vide');
     assert.match(srcModale, /<div className="pf-cadres-titre">\{g\.titre\}<span className="hint">\{g\.quoi\}<\/span><\/div>/);
+});
+
+test('l\'anneau ne laisse pas de couture avec l\'avatar', () => {
+    /* LE DÉFAUT SIGNALÉ, et la géométrie était pourtant JUSTE : le bord intérieur de l'anneau
+       tombait exactement sur le bord de l'avatar, au centième de pixel près (relevé : boîte de
+       38 px, `inset:-3.23px`, `padding:3.23px`). C'est le RENDU qui ne suivait pas — deux cercles
+       antialiasés qui se touchent sans se chevaucher ont chacun une couverture partielle sur le
+       même pixel, et la somme ne fait pas un. Il restait une ligne claire sur toute la
+       circonférence, qu'on lit comme un cadre mal posé.
+
+       Un demi-pixel de recouvrement suffit à la faire disparaître. Il passe par le PADDING, pas
+       par l'`inset` : le bord extérieur ne doit pas bouger, sinon l'anneau maigrit de la même
+       quantité qu'il mord — on aurait déplacé le problème au lieu de le résoudre. */
+    assert.match(srcCss, /\.cadre::before\{[\s\S]*?inset:calc\(var\(--anneau\)\*-1\);/, 'le bord exterieur ne bouge pas');
+    assert.match(srcCss, /padding:calc\(var\(--anneau\) \+ \.5px\)/, 'et le bord interieur mord d\'un demi-pixel');
+    /* Une seule grandeur pilote l'anneau partout : les deux emplacements qui la fixent à la main
+       la fixent, eux aussi, par `--anneau`. Un `padding` en dur ailleurs manquerait le
+       recouvrement, et la couture reviendrait à cet endroit-là seulement. */
+    assert.doesNotMatch(srcCss, /cadre::before\{[^}]*padding:\d/, 'aucune epaisseur en dur');
 });

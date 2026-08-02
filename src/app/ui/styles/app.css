@@ -3496,7 +3496,14 @@ button.av-wrap:active{transform:scale(.94)}
  */
 .cadre{--anneau:clamp(2px,calc(var(--av,38px)*.085),5px)}
 .cadre::before{content:"";position:absolute;inset:calc(var(--anneau)*-1);border-radius:50%;
-  pointer-events:none;padding:var(--anneau);background:var(--cadre-bg);
+  /* LE DEMI-PIXEL DE RECOUVREMENT, et il répare une COUTURE. Le bord intérieur de l'anneau
+     tombait EXACTEMENT sur le bord de l'avatar : deux cercles antialiasés qui se touchent sans se
+     chevaucher, chacun avec sa couverture partielle, laissent une ligne claire d'un pixel entre
+     les deux. Elle se voyait sur toute la circonférence, et donnait l'impression d'un cadre mal
+     posé. La géométrie était pourtant juste — c'est le rendu qui ne l'était pas.
+     On glisse donc le bord intérieur d'un demi-pixel SOUS l'avatar. Le bord extérieur ne bouge
+     pas (`inset` inchangé) : l'anneau ne grossit pas, il mord juste sur ce qu'il entoure. */
+  pointer-events:none;padding:calc(var(--anneau) + .5px);background:var(--cadre-bg);
   /* Anneau creux : le dégradé n'est peint que sur la bordure. `mask-composite` diffère entre
      les moteurs — les deux écritures sont nécessaires, pas redondantes. */
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
