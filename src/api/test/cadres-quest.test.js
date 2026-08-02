@@ -402,3 +402,33 @@ test('le mouvement dit le palier — immobile, battement, feu', () => {
        resteraient figées là où l'animation s'est arrêtée, six points posés au hasard. */
     assert.match(srcCss, /\.cadre-qparfait::after\{box-shadow:0 0 0 1\.6px #fff\}/);
 });
+
+test('le sélecteur est rangé par ce qu\'il faut FAIRE pour l\'avoir', () => {
+    /* CE QUI N'ALLAIT PAS. Dix-neuf cadres se suivaient à plat, dans l'ordre où les trois familles
+       avaient été écrites. « Sans cadre » — le choix neutre, celui qu'on cherche précisément quand
+       on veut TOUT retirer — arrivait en DIXIÈME position, coincé entre le Grand Chelem et Bronze.
+       Et rien ne disait pourquoi « Premier pas » suivait « Sans faute » : deux familles
+       différentes, aucune séparation.
+
+       Quatre familles nommées, plus le choix neutre, rangées par ce qu'il faut faire pour les
+       avoir : jouer sur une formation, jouer partout, venir se former, être distingué par
+       l'école. L'intitulé porte le COMMENT — sans lui, « Exploits » et « Parcours » se
+       ressemblent assez pour qu'on cherche la différence dans les tuiles. */
+    const ordre = /const groupes = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[quest, exploits\]\);/.exec(srcModale)[0];
+    const titres = [...ordre.matchAll(/titre: "([^"]+)"/g)].map((m) => m[1]);
+    assert.deepStrictEqual(titres, ['Aucun', 'Mes formations', 'Exploits', 'Parcours', 'Distinctions'],
+        '« Aucun » d\'abord : c\'est le seul choix qu\'on cherche pour retirer, pas pour montrer');
+    for (const m of ordre.matchAll(/quoi: "([^"]+)"/g)) assert.ok(m[1].length > 8, 'chaque famille dit COMMENT on la gagne');
+
+    /* Les cadres d'une même formation restent ENSEMBLE et dans l'ordre où on les décroche : trié
+       par palier seul, les trois « Sur la voie » de trois formations se seraient suivis, et on
+       aurait cherché où est passée la suite de la première. */
+    assert.match(ordre, /const ordrePalier = \{ qdemi: 0, qfini: 1, qparfait: 2 \};/);
+    assert.match(ordre, /\.sort\(\(a, b\) => \(a\.formation \|\| ""\)\.localeCompare\(b\.formation \|\| ""\)\s*\n\s*\|\| ordrePalier\[a\.id\] - ordrePalier\[b\.id\]\)/,
+        'par formation, PUIS par palier');
+
+    /* Un groupe VIDE ne s'affiche pas : un intitulé « Mes formations » suivi de rien donnerait
+       l'impression d'un chargement raté, alors qu'il signifie qu'on n'a pas encore joué. */
+    assert.match(ordre, /\.filter\(\(g\) => g\.cadres\.length\)/, 'pas de section vide');
+    assert.match(srcModale, /<div className="pf-cadres-titre">\{g\.titre\}<span className="hint">\{g\.quoi\}<\/span><\/div>/);
+});

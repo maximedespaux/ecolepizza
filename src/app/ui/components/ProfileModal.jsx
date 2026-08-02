@@ -157,6 +157,35 @@ export default function ProfileModal({ onClose }) {
 }
 
 function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, done, enrolled, attribues, quest, exploits, choisirCadre }) {
+  /* L'ORDRE DE LA LISTE, ET IL N'ÉTAIT PAS TENABLE. Dix-neuf cadres se suivaient à plat, dans
+     l'ordre où les trois familles avaient été écrites : « Sans cadre » — le choix neutre, celui
+     qu'on cherche quand on veut TOUT retirer — arrivait en dixième position, coincé entre le
+     Grand Chelem et Bronze. Et rien ne disait pourquoi « Premier pas » suivait « Sans faute ».
+
+     Quatre familles, chacune avec son intitulé, rangées par CE QU'IL FAUT FAIRE pour les avoir :
+     jouer sur une formation, jouer partout, venir se former, être distingué par l'école. À
+     l'intérieur, du plus accessible au plus rare — l'ordre où on les gagnera.
+
+     Un groupe VIDE ne s'affiche pas : un intitulé « Mes formations » suivi de rien donnerait
+     l'impression d'un chargement raté, alors qu'il signifie seulement qu'on n'a pas encore joué. */
+  const groupes = useMemo(() => {
+    const ordrePalier = { qdemi: 0, qfini: 1, qparfait: 2 };
+    const formations = quest.filter((q) => !q.global).map(cadreDeQuest)
+      // Par formation, puis par palier : les trois cadres d'une même formation restent ensemble,
+      // dans l'ordre où on les décroche.
+      .sort((a, b) => (a.formation || "").localeCompare(b.formation || "")
+        || ordrePalier[a.id] - ordrePalier[b.id]);
+    const parcours = CADRES.filter((c) => !c.exclusif && !c.personnel && c.id !== "aucun");
+    const distinctions = CADRES.filter((c) => c.exclusif || c.personnel);
+    return [
+      { titre: "Aucun", quoi: "ton avatar seul", cadres: CADRES.filter((c) => c.id === "aucun") },
+      { titre: "Mes formations", quoi: "gagnés en jouant, à la couleur de la formation", cadres: formations },
+      { titre: "Exploits", quoi: "sur l'ensemble de Pizza Quest", cadres: exploits },
+      { titre: "Parcours", quoi: "au nombre de formations terminées", cadres: parcours },
+      { titre: "Distinctions", quoi: "attribuées par l'école", cadres: distinctions },
+    ].filter((g) => g.cadres.length);
+  }, [quest, exploits]);
+
   return (
     <>
       <div className="pf-grade">
@@ -180,12 +209,11 @@ function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, d
       <div style={{ marginTop: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Choisis ton cadre</div>
         <p className="hint" style={{ margin: 0 }}>Il entoure ton avatar partout, y compris dans la Communauté.</p>
+        {groupes.map((g) => (
+        <div key={g.titre}>
+          <div className="pf-cadres-titre">{g.titre}<span className="hint">{g.quoi}</span></div>
         <div className="pf-cadres">
-          {/* Les cadres de quête viennent EN TÊTE : ils bougent à la semaine, alors que les
-              cadres de parcours se comptent en formations terminées, donc en mois. Ce qui a
-              changé récemment se cherche en premier. Ils ne sont listés que s'il y en a —
-              une section « Pizza Quest » vide donnerait l'impression d'un chargement raté. */}
-          {[...quest.filter((q) => !q.global).map(cadreDeQuest), ...exploits, ...CADRES].map((c) => {
+          {g.cadres.map((c) => {
             // Un cadre de quête porte une VALEUR (palier + couleur) ; les autres, leur seul id.
             const cle = c.valeur || c.id;
             // Un exploit non gagné se voit et se lit, mais ne se choisit pas.
@@ -211,6 +239,8 @@ function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, d
             );
           })}
         </div>
+        </div>
+        ))}
       </div>
 
       <div style={{ marginTop: 18 }}>

@@ -3670,7 +3670,14 @@ button.av-wrap:active{transform:scale(.94)}
 .cadre-attrib-txt{display:flex;flex-direction:column;gap:1px;min-width:0}
 .cadre-attrib-txt b{font-size:13.5px}
 
-.pf-cadres{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:10px}
+/* Intitulé de famille dans le sélecteur de cadres. Reprend la forme des autres en-têtes de
+   section de l'app (capitales étroites, `.pf-add-title`) : c'est le même objet, il doit se
+   reconnaître. Le complément en gris dit COMMENT on gagne cette famille — sans lui, « Exploits »
+   et « Parcours » se ressemblent assez pour qu'on cherche la différence dans les tuiles. */
+.pf-cadres-titre{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;margin-top:14px;
+  font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.045em;color:var(--muted)}
+.pf-cadres-titre .hint{font-size:10.5px;font-weight:600;text-transform:none;letter-spacing:0}
+.pf-cadres{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:8px}
 .pf-cadre{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border-radius:14px;
   border:1.5px solid var(--border);background:var(--surface);cursor:pointer;transition:.16s var(--ease)}
 .pf-cadre:hover:not(:disabled){border-color:var(--ember1);transform:translateY(-2px)}
