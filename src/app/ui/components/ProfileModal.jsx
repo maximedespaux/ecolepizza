@@ -1,10 +1,10 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser, getMyProfile } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import { initials, colorOf } from "../lib/format.js";
 import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
-import { CADRES, cadreFor, cadrePossede, cadrePorte, cadreDeQuest, EXPLOITS_QUEST, cadreClass, cadreStyle, cadreValeur, parseCadre, estCadreQuest, getCadreChoisi, setCadreChoisi } from "../lib/cadres.js";
+import { CADRES, cadreFor, cadrePossede, cadrePorte, cadreDeQuest, EXPLOITS_QUEST, adopterCadreServeur, cadreClass, cadreStyle, cadreValeur, parseCadre, estCadreQuest, getCadreChoisi, setCadreChoisi } from "../lib/cadres.js";
 import { useEchap } from "../lib/useEchap.js";
 
 /**
@@ -45,8 +45,17 @@ export default function ProfileModal({ onClose }) {
      dans `CADRES` — ils n'existent qu'une fois la formation connue — et c'est le serveur qui
      dit lesquels sont acquis (il recalcule sur la banque de questions du moment). */
   const [quest, setQuest] = useState([]);
+  const auMontage = useRef(getCadreChoisi(uid)); // témoin : a-t-on cliqué pendant le chargement ?
   useEffect(() => {
     getMyProfile().then((r) => {
+      /* Le choix enregistré en base fait foi au chargement : sans cette ligne, la modale
+         affichait le cadre du NAVIGATEUR alors que la Communauté montrait celui de la base.
+         SAUF SI ON A CLIQUÉ DEPUIS : la modale est utilisable avant que cette requête revienne,
+         et une réponse en retard annulerait le choix qu'on vient de faire — l'utilisateur
+         verrait son cadre revenir tout seul au précédent. Le serveur ne gagne qu'au repos. */
+      if (r?.data?.cadre && getCadreChoisi(uid) === auMontage.current) {
+        adopterCadreServeur(uid, r.data.cadre); setChoisi(r.data.cadre);
+      }
       setAttribues(r?.data?.cadres_exclusifs || []);
       const q = r?.data?.quest_cadres || [];
       setQuest(q);

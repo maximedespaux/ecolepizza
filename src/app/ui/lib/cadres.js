@@ -222,6 +222,33 @@ export function useCadreChoisi(uid) {
   }, [uid]);
   return choisi;
 }
+/**
+ * ADOPTE LE CHOIX ENREGISTRÉ EN BASE, sans le renvoyer au serveur.
+ *
+ * LE DÉFAUT QU'ELLE RÉPARE : la valeur était ÉCRITE en base et jamais RELUE par son
+ * propriétaire. `cadrePorte` ne lit que le `localStorage`, si bien qu'un cadre choisi sur un
+ * ordinateur restait invisible sur l'autre — chaque navigateur gardait le sien, et la base, elle,
+ * disait autre chose que les deux écrans. Relevé : base « or », local « champion », écran
+ * « champion ».
+ *
+ * LE SERVEUR GAGNE AU CHARGEMENT, le local gagne au clic. C'est le seul arbitrage cohérent :
+ * la base est ce que les AUTRES voient dans la Communauté, donc un écran qui la contredit a
+ * tort. Au clic, à l'inverse, l'affichage doit répondre tout de suite — d'où l'écriture locale
+ * immédiate suivie d'un envoi.
+ *
+ * Elle n'appelle PAS l'API, contrairement à `setCadreChoisi` : on vient de recevoir cette valeur
+ * du serveur, la lui réexpédier serait au mieux inutile, au pire un aller-retour qui écrase un
+ * choix fait entre-temps sur un autre appareil.
+ */
+export function adopterCadreServeur(uid, cadre) {
+  if (!cadre) return; // aucun choix enregistré : on garde ce que le navigateur connaît
+  try {
+    if (localStorage.getItem(CLE(uid)) === cadre) return; // déjà à jour, pas d'événement inutile
+    localStorage.setItem(CLE(uid), cadre);
+    window.dispatchEvent(new CustomEvent(CADRE_EVENT));
+  } catch { /* navigation privée : l'affichage reste sur le repli, sans casser */ }
+}
+
 export function setCadreChoisi(uid, id) {
   try {
     if (id) localStorage.setItem(CLE(uid), id); else localStorage.removeItem(CLE(uid));
