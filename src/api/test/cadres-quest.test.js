@@ -570,28 +570,43 @@ test('« La commande piège » n\'affirme QUE ce que le manuel dit', () => {
        `garnitures.js` NE DÉCLARE AUCUN ALLERGÈNE — la table produit → allergène n'existe nulle
        part dans le projet, et elle dépend du fournisseur du mois.
 
-       On ne l'a donc pas inventée. Les seuls allergènes nommés par produit sont ceux que le
-       manuel donne lui-même — « Une Reine : gluten (la pâte), lait (la mozzarella), et souvent
-       des sulfites (le jambon) » — et les situations portent sur la CONDUITE À TENIR : vérifier,
-       informer, refuser, prévenir la contamination croisée. Une correspondance approximative
-       enseignée avec l'autorité de l'école serait pire que pas de jeu du tout. */
+       Ce qui est affirmé reste donc dans deux catégories, et deux seulement :
+         · ce qui découle de la COMPOSITION AFFICHÉE — la mozzarella porte le lait, l'anchois le
+           poisson. Le joueur peut le vérifier en lisant la ligne ;
+         · ce que le MANUEL nomme lui-même — les 14, la contamination croisée, substitution ≠
+           éviction, et les sulfites « SOUVENT » dans les charcuteries.
+       Tout le reste est « à vérifier ». */
     const srcJeu = fs.readFileSync(path.join(APP, 'ui/components/CommandePiege.jsx'), 'utf8');
-    const srcNotions = fs.readFileSync(path.join(APP, 'ui/lib/notions.js'), 'utf8');
-    assert.strictEqual((srcNotions.match(/allerg/gi) || []).length > 0, true, 'la fiche du manuel existe');
     assert.strictEqual(fs.readFileSync(path.join(APP, 'ui/lib/garnitures.js'), 'utf8').match(/allerg/i), null,
         'si garnitures.js declare un jour ses allergenes, ce test doit etre revu — et le jeu enrichi');
 
-    // CHAQUE situation porte son explication ET sa source : c'est la règle que PizzaQuest s'est
-    // donnée dans son en-tête — « se tromper doit apprendre quelque chose ».
-    const situations = [...srcJeu.matchAll(/\{\s*\n\s+client:/g)].length;
-    assert.ok(situations >= 8, `au moins huit situations, ${situations} trouvees`);
-    assert.strictEqual((srcJeu.match(/pourquoi:/g) || []).length, situations, 'une explication par situation');
-    assert.strictEqual((srcJeu.match(/source: "Manuel/g) || []).length, situations, 'une source de MANUEL par situation');
+    /* LES SULFITES SONT « À VÉRIFIER », JAMAIS « NON ». Le manuel écrit « souvent des sulfites (le
+       jambon) » : répondre non avec aplomb sur une charcuterie est faux même quand on tombe
+       juste. C'est l'erreur que le jeu doit apprendre à ne pas faire. */
+    for (const produit of ['jambon', 'chorizo', 'jambon_cru', 'balsamique']) {
+        assert.match(srcJeu, new RegExp(`${produit}: \\{ nom: "[^"]+", verifier: \\["sulfites"\\] \\}`),
+            `${produit} : sulfites a VERIFIER, pas affirmes`);
+    }
+    /* Un allergène certain l'emporte sur un « à vérifier » : sinon la Bella (pesto ET jambon cru)
+       renverrait « à vérifier » à quelqu'un d'allergique aux fruits à coque. */
+    assert.match(srcJeu, /if \(certain\.length\) return \{ rep: "non"/);
+    assert.match(srcJeu, /if \(douteux\.length\) return \{ rep: "verifier"/);
 
-    /* Toutes les situations sont jouées, seul l'ORDRE est tiré : en retirer au hasard ferait deux
-       parties incomparables, et la note n'aurait plus de sens d'une fois sur l'autre. */
-    assert.match(srcJeu, /const s = SITUATIONS\[ordre\[idx\]\];/);
-    assert.match(srcJeu, /const total = SITUATIONS\.length;/);
+    // Chaque piège de service porte son explication ET sa source de manuel.
+    const pieges = (srcJeu.match(/\{ q: "/g) || []).length;
+    assert.ok(pieges >= 5, `au moins cinq pieges de service, ${pieges} trouves`);
+    assert.strictEqual((srcJeu.match(/source: "Manuel/g) || []).length, pieges, 'une source de MANUEL par piege');
+
+    /* LE CHRONO NE S'ARRÊTE PAS pendant la consultation de la carte, et c'est tout l'intérêt :
+       vérifier coûte du temps, comme aller chercher le classeur derrière le comptoir. Ce qu'on
+       apprend n'est pas à éviter de vérifier — c'est à savoir quand c'est nécessaire. */
+    assert.match(srcJeu, /const DUREE = 60;/);
+    assert.match(srcJeu, /onClick=\{\(\) => setCarte\(\(c\) => !c\)\}/, 'la carte se consulte, elle ne s\'affiche pas');
+    /* Une erreur coûte du TEMPS, pas des points : se tromper vite sur un allergène est pire que
+       répondre lentement, et c'est la seule pénalité qui enseigne quelque chose. */
+    assert.match(srcJeu, /const MALUS = 4;/);
+    assert.match(srcJeu, /setReste\(\(r\) => Math\.max\(0, r - MALUS\)\);/);
+
     // Et le jeu est dans l'arcade, avec les autres.
     assert.match(srcQuest, /const GAME_PIEGE = \{ key: "piege"/);
     assert.match(srcQuest, /mini\?\.key === "piege" && <CommandePiege/);

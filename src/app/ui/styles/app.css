@@ -1908,18 +1908,69 @@ tbody tr:last-child td{border-bottom:none}
 
 /* Titre de la rangée de défis-jeux dans un monde. */
 /* — LA COMMANDE PIÈGE —
-   La réplique du client est mise en avant : c'est l'énoncé, et il doit se lire comme une phrase
-   entendue au comptoir, pas comme une consigne d'exercice. */
-.cp-client{font-size:15px;font-weight:600;line-height:1.45;margin:0 0 14px;padding:12px 14px;
-  border-radius:12px;background:var(--surface2);border-left:3px solid var(--red)}
-/* L'explication est le cœur du jeu : sans elle on retient qu'on s'est trompé, pas pourquoi. */
-.cp-expl{margin-top:14px;padding:12px 14px;border-radius:12px;font-size:13.5px;line-height:1.5;
+   Soixante secondes au comptoir : chrono, question, trois réponses, et la carte en dessous —
+   consultable, pas affichée. */
+.cp-modal{max-width:540px}
+.cp-bandeau{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.cp-chrono{font:800 15px/1 var(--font-b);font-variant-numeric:tabular-nums;color:var(--muted);
+  min-width:38px;text-align:right}
+/* Sous dix secondes, le chrono passe au rouge ET grossit : la couleur seule ne suffit pas —
+   c'est la règle d'accessibilité, une information ne doit jamais tenir à la teinte seule. */
+.cp-chrono.urgent{color:var(--red);font-size:17px}
+.cp-score{display:inline-flex;align-items:center;gap:4px;font:800 13px/1 var(--font-b);
+  color:var(--green,#2f9e6f);font-variant-numeric:tabular-nums}
+
+/* La réplique du client est l'énoncé : elle doit se lire comme une phrase entendue au comptoir,
+   pas comme une consigne d'exercice. Hauteur minimale — sans elle, une question courte suivie
+   d'une longue faisait sauter les boutons d'une ligne entre deux tours. */
+.cp-client{font-size:15px;font-weight:600;line-height:1.45;margin:0 0 12px;padding:12px 14px;
+  border-radius:12px;background:var(--surface2);border-left:3px solid var(--red);min-height:66px;
+  display:flex;align-items:center}
+.cp-reponses{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cp-rep{text-align:center;font-weight:700}
+
+/* Le retour est BREF : le chrono tourne. Le détail vient au débriefing. */
+.cp-expl{margin-top:12px;padding:11px 13px;border-radius:12px;font-size:13px;line-height:1.45;
   background:color-mix(in srgb,var(--red) 8%,var(--surface2));border-left:3px solid var(--red)}
 .cp-expl.ok{background:color-mix(in srgb,var(--green,#2f9e6f) 9%,var(--surface2));
   border-left-color:var(--green,#2f9e6f)}
 /* La source SUR SA PROPRE LIGNE : c'est elle qui distingue une affirmation du manuel d'une
    opinion, et on doit pouvoir aller la vérifier. */
-.cp-src{display:flex;align-items:center;gap:5px;margin-top:8px;font-size:11.5px;color:var(--muted)}
+.cp-src{display:flex;align-items:center;gap:5px;margin-top:7px;font-size:11.5px;color:var(--muted)}
+
+/* Consulter la carte est un CHOIX, et il coûte : le bouton le dit, le chrono ne s'arrête pas. */
+.cp-consulter{display:flex;align-items:center;gap:7px;width:100%;margin-top:12px;padding:9px 12px;
+  border:1px dashed var(--border);border-radius:10px;background:none;cursor:pointer;
+  font:700 12.5px/1 var(--font-b);color:var(--text)}
+.cp-consulter:hover{border-color:var(--muted);background:var(--surface2)}
+.cp-consulter .hint{margin-left:auto;font-weight:600}
+
+.cp-carte{margin-top:8px;padding:10px 12px;border-radius:12px;background:var(--surface2);
+  max-height:210px;overflow:auto}
+.cp-carte-t{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.045em;
+  color:var(--muted);margin-bottom:7px}
+.cp-carte ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.cp-carte li{display:flex;gap:8px;font-size:12px;line-height:1.35;padding:3px 6px;border-radius:7px}
+.cp-carte li b{flex:none;min-width:104px}
+.cp-carte li span{color:var(--muted)}
+/* La pizza demandée est mise en avant : on cherche une COMPOSITION, pas une ligne dans une liste. */
+.cp-carte li.on{background:color-mix(in srgb,var(--ember1) 14%,transparent)}
+.cp-carte li.on span{color:var(--text)}
+.cp-carte > .hint{margin:8px 0 0;font-size:11px}
+
+/* Le débriefing est le vrai cours : pendant la partie le retour est bref, ici on reprend chaque
+   erreur avec sa source. */
+.cp-debrief{margin-top:16px;text-align:left}
+.cp-rate{display:flex;flex-direction:column;gap:3px;padding:10px 12px;margin-bottom:8px;
+  border-radius:11px;background:var(--surface2);font-size:12.5px;line-height:1.45}
+.cp-rate b{font-size:13px}
+.cp-rate-r{color:var(--red);font-weight:600}
+
+@media (max-width:480px){
+  .cp-reponses{grid-template-columns:1fr}
+  .cp-carte li{flex-direction:column;gap:1px}
+  .cp-carte li b{min-width:0}
+}
 
 /* — LA PISTE DES CADRES, sous le chemin des chapitres —
    Trois jalons sur une ligne. Le segment qui MÈNE à un jalon se remplit à la proportion du
