@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getMyFormations, getMyProfile, getPlayableChapters } from "../api/apiClient.js";
+import { getMyFormations, getMyProfile, getPlayableChapters, resetMyQuest } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import SimulateurPizza from "../components/SimulateurPizza.jsx";
@@ -198,6 +198,35 @@ function PizzaQuest() {
     }).catch(() => {});
   }, []);
 
+  /**
+   * REMISE À ZÉRO — DÉVELOPPEMENT SEULEMENT.
+   *
+   * `import.meta.env.DEV` est évalué à la compilation : en production, Vite remplace la constante
+   * par `false` et le bloc entier disparaît du bundle. Ce n'est pas un bouton caché derrière un
+   * rôle — c'est un bouton qui N'EXISTE PAS chez le stagiaire. Sur une action qui détruit une
+   * progression et les cadres qui en découlent, c'est la seule garantie qui vaille.
+   *
+   * TROIS ENDROITS À EFFACER, et en oublier un donne un état incohérent :
+   *   · la base (`learner_quest_progress`), sinon tout revient au prochain chargement ;
+   *   · le localStorage, sinon la fusion au montage le réécrit en base — `saveMyQuest` n'écrit
+   *     qu'à la hausse, mais une progression locale intacte suffit à tout restaurer ;
+   *   · la mémoire des fêtes, sinon les paliers déjà franchis ne se refêteraient jamais et on ne
+   *     pourrait plus tester l'animation qu'on vient d'écrire.
+   */
+  async function remiseAZero() {
+    if (!window.confirm("DEBUG — effacer TOUTE ta progression Pizza Quest ?\n\n"
+      + "Chapitres, étoiles des mini-jeux et cadres de quête. Irréversible.")) return;
+    try {
+      await resetMyQuest();
+      try {
+        localStorage.removeItem(KEY);
+        localStorage.removeItem("impasto.quest.fetes");
+      } catch { /* navigation privée : la base est déjà vide, c'est l'essentiel */ }
+      setProg({});
+      setActive(null);
+    } catch (e) { window.alert("Échec de la remise à zéro : " + e.message); }
+  }
+
   const totalStars = useMemo(() => Object.values(prog).reduce((s, w) => s + Object.values(w).reduce((a, v) => a + v, 0), 0), [prog]);
 
   function finishChapter(code, chIdx, stars) {
@@ -238,6 +267,12 @@ function PizzaQuest() {
           {/* Les étoiles restent : elles notent la réussite d'un chapitre. Ce sont l'XP et les
               cœurs qui ont disparu — ils comptaient le temps passé et rationnaient l'accès. */}
           <div className="pq-stat"><Icon name="star" size={15} fill="currentColor" aria-hidden="true" /><b>{totalStars}</b><span>étoiles</span></div>
+          {import.meta.env.DEV && (
+            <button type="button" className="pq-debug" onClick={remiseAZero}
+              title="Développement seulement — ce bouton n'existe pas en production">
+              <Icon name="trash" size={13} /> Debug : tout effacer
+            </button>
+          )}
         </div>
       </div>
       <p className="hint" style={{ marginTop: -6 }}>

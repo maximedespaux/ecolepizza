@@ -61,6 +61,12 @@ const ACTION_LABEL = {
     'template.reset': ['Modèle revenu à sa version d\'origine', A],
     'template.customTokens': ['Jetons personnalisés modifiés', A],
 
+    /* Remise à zéro de la progression Pizza Quest. ROUGE : elle détruit les étoiles ET les
+       cadres qui en découlent, sans retour possible. Elle ne peut viser que soi — le serveur
+       prend l'identité du compte connecté — mais elle mérite une trace : c'est la seule
+       opération de l'espace stagiaire qui efface un acquis. */
+    'quest.reset': ['Progression Pizza Quest effacée', R],
+
     // Conditions et champs de document
     'condition.create': ['Condition créée', G],
     'condition.update': ['Condition modifiée', A],
@@ -185,6 +191,9 @@ const SUFFIXE = {
 
 /** entité technique → nom lisible, et son genre (pour accorder le participe). */
 const ENTITY_LABEL = {
+    // La remise à zéro de Pizza Quest vise le STAGIAIRE lui-même : c'est sa progression qui
+    // disparaît, pas un objet qu'il possède.
+    Learner: ['Stagiaire', 'm'],
     CommunityPost: ['Publication', 'f'],
     CommunityAnswer: ['Réponse', 'f'],
     PieceType: ['Pièce justificative', 'f'],

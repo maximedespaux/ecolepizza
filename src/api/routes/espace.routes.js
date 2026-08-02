@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 // Union des deux branches : getMyAccess + le bloc boutique/avatar. `multer` reste (upload avatar).
-const { saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+const { saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
 } = require('../controllers/espace.controller.js');
 const { getPlayableChapters } = require('../controllers/questContent.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
@@ -43,5 +43,8 @@ router.get('/boutique/mes-demandes', authenticateToken, getMyShopRequests);
 // Annulation par le stagiaire — possible tant que la demande est « Reçue » (contrôlé dans le WHERE).
 router.put('/boutique/demande/:id/annuler', authenticateToken, cancelMyShopRequest);
 router.put('/quest', authenticateToken, saveMyQuest);
+/* Remise à zéro de SA PROPRE progression. `saveMyQuest` n'écrit qu'à la hausse (`GREATEST`), il
+   n'existait donc aucun chemin pour redescendre — ni pour tester, ni pour repartir à blanc. */
+router.delete('/quest', authenticateToken, resetMyQuest);
 
 module.exports = router;

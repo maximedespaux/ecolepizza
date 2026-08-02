@@ -1660,6 +1660,47 @@ const deleteMyAvatarImage = async (req, res) => {
 };
 
 /** PUT /api/mon-espace/quest — { progress: { world: { step: stars } } } (upsert, meilleur score). */
+/**
+ * DELETE /api/mon-espace/quest — efface TOUTE la progression Pizza Quest du stagiaire.
+ *
+ * POURQUOI CETTE ROUTE EXISTE. `saveMyQuest` écrit avec `GREATEST(stars, VALUES(stars))` : une
+ * étoile ne redescend jamais, c'est voulu — on ne perd pas un acquis en rejouant moins bien. Il
+ * n'y avait donc AUCUN moyen de remettre à zéro, ni pour tester, ni pour un stagiaire qui veut
+ * reprendre son entraînement à blanc.
+ *
+ * ELLE N'EFFACE QUE SES PROPRES LIGNES : `learner_id` vient du compte connecté, jamais du corps
+ * de la requête. Personne ne peut remettre à zéro quelqu'un d'autre, même en forgeant l'appel.
+ *
+ * LE CADRE PORTÉ TOMBE AVEC. Les cadres de quête se déduisent de la progression : sans elle ils
+ * ne sont plus possédés, et le serveur refuserait de les réenregistrer. Le laisser en base
+ * afficherait un « Sans faute » que plus rien ne justifie — la possession n'étant revérifiée
+ * qu'à l'écriture, il resterait visible dans la Communauté.
+ */
+const resetMyQuest = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        try {
+            await conn.query('DELETE FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
+        } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : rien à effacer
+        // Le cadre n'est remis à zéro QUE s'il venait de la quête : un Bronze ou un Fondateur ne
+        // doit rien à Pizza Quest, et les effacer serait un dégât collatéral.
+        try {
+            const [[l]] = await conn.query('SELECT cadre FROM learner WHERE id = ?', [learner.id]);
+            const { id } = parseCadreQuest(l && l.cadre);
+            if (PALIER_IDS.includes(id) || EXPLOIT_IDS.includes(id)) {
+                await conn.query('UPDATE learner SET cadre = NULL WHERE id = ?', [learner.id]);
+            }
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        logAudit(req, 'quest.reset', 'Learner', learner.id);
+        res.json({ success: true, message: 'Progression Pizza Quest effacée.' });
+    } catch (err) {
+        console.error('Erreur remise à zéro Pizza Quest :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 const saveMyQuest = async (req, res) => {
     try {
         const conn = db.promise();
@@ -1794,5 +1835,5 @@ const updateMyInfos = async (req, res) => {
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
 module.exports = {
-    saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+    saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
 };

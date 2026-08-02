@@ -2037,6 +2037,15 @@ tbody tr:last-child td{border-bottom:none}
   .pq-jalon .hint{font-size:9.5px}
 }
 
+/* Bouton de DÉVELOPPEMENT. Écrit pour ne ressembler à rien de l'app — hachures et rouge franc :
+   personne ne doit le confondre avec une action ordinaire, et si jamais il apparaissait en
+   production, il se verrait tout de suite. */
+.pq-debug{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;
+  border:1px dashed var(--red);background:repeating-linear-gradient(45deg,
+    transparent 0 6px,color-mix(in srgb,var(--red) 12%%,transparent) 6px 12px);
+  color:var(--red);font:800 11.5px/1 var(--font-b);cursor:pointer}
+.pq-debug:hover{background:color-mix(in srgb,var(--red) 18%%,transparent)}
+
 /* L'ARCADE — les défis, en tête de Pizza Quest. Elle se lit comme une étagère posée AVANT la
    carte : c'est la première chose qu'on croise, alors qu'auparavant il fallait ouvrir une
    formation et défiler sous son chemin de chapitres pour la trouver. */

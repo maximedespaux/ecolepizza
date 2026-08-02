@@ -529,8 +529,13 @@ test('l\'arcade est en tête, et une seule fois', () => {
        lectures du profil et des chapitres. */
     const importees = /import \{([^}]*)\} from "\.\.\/api\/apiClient\.js";/.exec(srcQuest)[1]
         .split(',').map((x) => x.trim()).filter(Boolean).sort();
-    assert.deepStrictEqual(importees, ['getMyFormations', 'getMyProfile', 'getPlayableChapters'],
+    assert.deepStrictEqual(importees,
+        ['getMyFormations', 'getMyProfile', 'getPlayableChapters', 'resetMyQuest'],
         'aucune lecture du score des autres stagiaires');
+    /* Les quatre commencent par `My` ou `Playable` : tout ce que la page touche est SIEN.
+       `resetMyQuest` écrit — elle efface sa propre progression — mais ne lit personne. */
+    assert.ok(importees.every((f) => /^(get|reset)My|^getPlayable/.test(f)),
+        'la page ne touche que les donnees du compte connecte');
 });
 
 test('la piste montre ce que la formation rapporte, et où on en est', () => {
@@ -673,4 +678,37 @@ test('« La commande piège » : le référentiel d\'allergènes tient debout', 
     // Et le jeu est dans l'arcade, avec les autres.
     assert.match(srcQuest, /const GAME_PIEGE = \{ key: "piege"/);
     assert.match(srcQuest, /mini\?\.key === "piege" && <CommandePiege/);
+});
+test('la remise à zéro n\'existe qu\'en développement, et ne vise que soi', () => {
+    /* UNE ACTION QUI DÉTRUIT UN ACQUIS : les étoiles, mais aussi les cadres qui s'en déduisent.
+       Elle est donc gardée par `import.meta.env.DEV`, que Vite remplace par `false` à la
+       compilation — en production le bloc entier DISPARAÎT du bundle. Ce n'est pas un bouton
+       caché derrière un rôle, c'est un bouton qui n'existe pas chez le stagiaire. Sur ce genre
+       d'action, c'est la seule garantie qui vaille. */
+    assert.match(srcQuest, /\{import\.meta\.env\.DEV && \(/, 'le bouton ne doit pas exister en production');
+
+    /* TROIS ENDROITS À EFFACER, et en oublier un donne un état incohérent :
+         · la base, sinon tout revient au prochain chargement ;
+         · le localStorage, sinon la fusion au montage le RÉÉCRIT en base — `saveMyQuest` n'écrit
+           qu'à la hausse, mais une progression locale intacte suffit à tout restaurer ;
+         · la mémoire des fêtes, sinon les paliers déjà franchis ne se refêteraient jamais et
+           l'animation deviendrait intestable. */
+    assert.match(srcQuest, /await resetMyQuest\(\);/);
+    assert.match(srcQuest, /localStorage\.removeItem\(KEY\);/);
+    assert.match(srcQuest, /localStorage\.removeItem\("impasto\.quest\.fetes"\);/);
+
+    /* CÔTÉ SERVEUR : `learner_id` vient du COMPTE CONNECTÉ, jamais du corps de la requête —
+       personne ne peut remettre à zéro quelqu'un d'autre, même en forgeant l'appel. */
+    assert.match(srcEspace, /const resetMyQuest = async \(req, res\) => \{/);
+    assert.match(srcEspace, /DELETE FROM learner_quest_progress WHERE learner_id = \?', \[learner\.id\]/);
+    assert.doesNotMatch(srcEspace.slice(srcEspace.indexOf('const resetMyQuest'), srcEspace.indexOf('const saveMyQuest')),
+        /req\.body/, 'la cible ne vient jamais du corps de la requete');
+
+    /* LE CADRE PORTÉ TOMBE AVEC — mais SEULEMENT s'il venait de la quête. Les cadres de quête se
+       déduisent de la progression : sans elle ils ne sont plus possédés, et la possession n'étant
+       revérifiée qu'à l'écriture, un « Sans faute » resterait visible dans la Communauté sans que
+       rien ne le justifie. Un Bronze ou un Fondateur, eux, ne doivent rien à Pizza Quest. */
+    assert.match(srcEspace, /if \(PALIER_IDS\.includes\(id\) \|\| EXPLOIT_IDS\.includes\(id\)\) \{\s*\n\s*await conn\.query\('UPDATE learner SET cadre = NULL/);
+    // Et l'acte laisse une trace : c'est la seule opération de l'espace stagiaire qui efface.
+    assert.match(srcEspace, /logAudit\(req, 'quest\.reset', 'Learner', learner\.id\);/);
 });

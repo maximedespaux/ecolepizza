@@ -677,6 +677,12 @@ export function getMyProfile() {
 export function saveMyAvatar(avatar) {
   return request("/mon-espace/avatar", { method: "PUT", body: JSON.stringify({ avatar }), silent: true });
 }
+/* Efface TOUTE la progression Pizza Quest — la sienne, jamais celle d'un autre : le serveur
+   prend l'identité du compte connecté et ignore ce qu'on lui passerait.  n'écrit
+   qu'à la hausse, il n'existait donc aucun chemin de retour. */
+export function resetMyQuest() {
+  return request("/mon-espace/quest", { method: "DELETE" });
+}
 export function saveMyQuest(progress) {
   return request("/mon-espace/quest", { method: "PUT", body: JSON.stringify({ progress }), silent: true });
 }
