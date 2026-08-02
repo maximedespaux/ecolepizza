@@ -2521,9 +2521,32 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
    forme textuelle est un choix assumé — une annonce se lit. Ici on signale seulement qu'il y a
    quelque chose à voir. `flex:none` pour qu'elle ne se comprime jamais : c'est le TEXTE qui doit
    céder, une vignette écrasée n'annonce plus rien. */
-.annonce-vignette{flex:none;width:46px;height:46px;object-fit:cover;border-radius:9px;
-  background:var(--surface2);cursor:pointer;transition:transform .12s var(--ease)}
+/* LA HAUTEUR EST FIXE, LA LARGEUR SUIT L'IMAGE. Le carré de 46×46 en `cover` recadrait au
+   centre : une affiche de 1349×250 — exactement ce qu'on joint à une annonce — n'en montrait
+   qu'un fragment blanc de 46 px de côté, illisible et sans intérêt. Or c'est le format NATUREL
+   d'une pièce jointe d'annonce : une affiche, un plan, un bandeau.
+   `object-fit:contain` ne sert que pour les cas extrêmes, quand `max-width` borne la largeur :
+   l'image est alors posée entière dans la boîte au lieu d'être étirée. En deçà, `width:auto` la
+   dimensionne exactement à son ratio et `contain` n'a rien à faire.
+   Le plafond existe parce qu'un panorama prendrait sinon la moitié de la ligne et écraserait le
+   titre — c'est une vignette, pas l'illustration. Il est à 260 et non 220 : mesuré sur les
+   affiches réelles du fil (1349×250, ratio 5,4), il faut 248 px pour tenir les 46 px de haut, et
+   à 220 l'image restait entière mais rétrécie de 12 %.
+   PAS DE FOND : avec `contain`, tout fond se voit dans les marges quand l'image est bornée. Un
+   liseré gris autour d'une affiche se lit comme un défaut de cadrage. */
+.annonce-vignette{flex:none;height:46px;width:auto;max-width:260px;object-fit:contain;
+  border-radius:9px;cursor:pointer;transition:transform .12s var(--ease)}
 .annonce-vignette:hover{transform:scale(1.06)}
+/* CE BLOC EST APRÈS LA RÈGLE DE BASE, ET C'EST TOUTE SA RAISON D'ÊTRE — deuxième fois que ce
+   piège se referme dans cette feuille. Écrit deux cents lignes plus haut avec les autres media
+   queries, il était ignoré : à spécificité égale, c'est la DERNIÈRE déclaration qui gagne, donc
+   `max-width:260px` l'emportait. Mesuré à 375 px : l'affiche sortait quand même à 248 px de
+   large, la colonne de texte tombait à ZÉRO, cinq titres se tronquaient et la page débordait
+   horizontalement. Une media query ne l'emporte pas sur ce qui la suit. */
+@media (max-width:640px){
+  /* La ligne fait environ 300 px sur un téléphone : au-delà de 110, le titre n'a plus de place. */
+  .annonce-vignette{max-width:110px}
+}
 .annonce-ic{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:9px;
   background:color-mix(in srgb,var(--ember1) 15%,var(--surface));color:var(--ember1)}
 /* Le corps entier est cliquable — un titre de 4 mots fait une cible dérisoire, alors que la

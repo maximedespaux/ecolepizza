@@ -108,9 +108,20 @@ test("la photo d'une annonce se voit dans le fil, pas seulement à l'ouverture",
         'la vignette d\'annonce est un carré à elle, pas l\'image pleine largeur des questions.');
 
     const css = fs.readFileSync(path.join(ui, 'styles/app.css'), 'utf8');
-    assert.match(css, /\.annonce-vignette\{flex:none;width:46px;height:46px/,
-        "Carrée, petite, et `flex:none` : c'est le TEXTE qui doit céder à l'étroit, une vignette "
-        + "écrasée n'annonce plus rien.");
+    /* HAUTEUR FIXE, LARGEUR LIBRE. Le carré de 46×46 en `cover` recadrait au centre : une affiche
+       de 1349×250 — le format naturel d'une pièce jointe d'annonce — n'en montrait qu'un fragment
+       blanc, illisible. Ici la hauteur tient la ligne et la largeur suit le ratio : mesuré,
+       248×46 pour l'affiche et 61×46 pour une photo 4:3, ratio conservé dans les deux cas. */
+    assert.match(css, /\.annonce-vignette\{flex:none;height:46px;width:auto;max-width:260px;object-fit:contain/,
+        'La hauteur est fixe et la largeur suit le ratio — sinon les affiches larges se recadrent '
+        + 'en un carré vide.');
+    /* ET LE PLAFOND MOBILE DOIT ÊTRE DÉCLARÉ APRÈS LA RÈGLE DE BASE. Écrit plus haut avec les
+       autres media queries il était ignoré — à spécificité égale c'est la dernière déclaration qui
+       gagne. Mesuré à 375 px : l'affiche sortait à 248 px, la colonne de texte tombait à ZÉRO et
+       la page débordait horizontalement. */
+    const base = css.indexOf('.annonce-vignette{flex:none');
+    const mobile = css.indexOf('.annonce-vignette{max-width:110px}');
+    assert.ok(mobile > base, 'le plafond mobile doit venir APRÈS la règle de base, sinon il est écrasé');
 });
 
 test('le serveur renvoie `has_image` sur la liste des publications', () => {
