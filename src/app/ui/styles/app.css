@@ -2516,6 +2516,14 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Épinglée : le fond se teinte au lieu de la déplacer d'un cran — c'est déjà la première, la
    redire par la position ne dirait rien de plus. */
 .annonce-row.epinglee{background:color-mix(in srgb,var(--ember1) 11%,var(--surface))}
+/* La vignette d'annonce : un CARRÉ, et petit. La grande image des cartes-questions
+   (`.q-vignette`, 150 px de haut, pleine largeur) transformerait la ligne en carte, alors que sa
+   forme textuelle est un choix assumé — une annonce se lit. Ici on signale seulement qu'il y a
+   quelque chose à voir. `flex:none` pour qu'elle ne se comprime jamais : c'est le TEXTE qui doit
+   céder, une vignette écrasée n'annonce plus rien. */
+.annonce-vignette{flex:none;width:46px;height:46px;object-fit:cover;border-radius:9px;
+  background:var(--surface2);cursor:pointer;transition:transform .12s var(--ease)}
+.annonce-vignette:hover{transform:scale(1.06)}
 .annonce-ic{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:9px;
   background:color-mix(in srgb,var(--ember1) 15%,var(--surface));color:var(--ember1)}
 /* Le corps entier est cliquable — un titre de 4 mots fait une cible dérisoire, alors que la

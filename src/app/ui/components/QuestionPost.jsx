@@ -133,6 +133,25 @@ export function AnnonceCard({ post, peutEpingler, onOpen, onEpingler }) {
           {post.answers > 0 && <> · <Icon name="message-circle" size={11} /> {post.answers} réponse{post.answers > 1 ? "s" : ""}</>}
         </span>
       </button>
+      {/* LA PHOTO NE SE VOYAIT NULLE PART DANS LE FIL. Elle était bien envoyée (le formulaire la
+          propose explicitement pour une annonce — « un plan, une affiche, une photo du lieu »),
+          bien stockée, et bien affichée à l'OUVERTURE de l'annonce. Mais la ligne du bandeau
+          n'en disait rien : relevé sur le fil réel, six annonces sur neuf portaient une photo et
+          aucune ne le montrait. Une pièce jointe que rien n'annonce n'est pas consultée.
+
+          UNE VIGNETTE CARRÉE, pas la grande image des cartes-questions. La forme large et
+          textuelle de l'annonce est un choix assumé — « une annonce se lit, elle ne se parcourt
+          pas du regard au milieu de vignettes » — et une image de 150 px de haut en pleine
+          largeur la transformerait en carte. Un carré de 46 px suffit à dire qu'il y a quelque
+          chose à voir, ce qui est tout ce qu'on lui demande.
+
+          Cliquable comme le reste de la ligne, mais hors du parcours clavier : le bouton voisin
+          ouvre déjà la même annonce et porte son intitulé. Deux arrêts de tabulation pour la
+          même action n'ajouteraient que du bruit. */}
+      {post.has_image > 0 && (
+        <img className="annonce-vignette" src={postImageUrl(post.id)} alt="" aria-hidden="true"
+          loading="lazy" onClick={() => onOpen(post.id)} />
+      )}
       {/* L'épingle EXISTAIT côté serveur (createPost, updatePost) sans qu'aucun écran ne
           l'expose : on pouvait publier une annonce, jamais la faire remonter. */}
       {peutEpingler && (

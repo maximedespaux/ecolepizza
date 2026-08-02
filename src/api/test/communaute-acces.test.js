@@ -82,3 +82,40 @@ test('les deux cotes partagent UNE page, pas deux copies', () => {
     assert.match(srcCtrl, /WHERE p\.organization_id = \?/,
         'le fil doit etre cadre sur l\'organisme, sinon les deux vues divergeraient');
 });
+
+test("la photo d'une annonce se voit dans le fil, pas seulement à l'ouverture", () => {
+    /* UNE CAPACITÉ SANS PORTE, dans son état le plus trompeur : tout marchait SAUF la dernière
+       marche. Le formulaire propose explicitement une photo pour une annonce (« un plan, une
+       affiche, une photo du lieu »), la route la stocke, `QuestionModal` l'affiche en grand à
+       l'ouverture — mais la ligne du bandeau n'en disait rien. Relevé sur le fil réel : SEPT
+       annonces sur neuf portaient une photo, et aucune ne le montrait. Une pièce jointe que rien
+       n'annonce n'est pas consultée, donc autant ne pas l'avoir demandée.
+
+       La carte-question, elle, affichait bien sa vignette depuis toujours : c'est ce qui rendait
+       l'oubli invisible — on voyait DES photos dans la Communauté, juste jamais celles des
+       annonces. */
+    const ui = path.join(__dirname, '..', '..', 'app', 'ui');
+    const src = fs.readFileSync(path.join(ui, 'components/QuestionPost.jsx'), 'utf8');
+    const carte = src.slice(src.indexOf('export function AnnonceCard'), src.indexOf('export function QuestionModal'));
+    assert.match(carte, /post\.has_image > 0/,
+        "AnnonceCard doit tester `has_image` — le serveur le renvoie déjà sur la liste.");
+    assert.match(carte, /className="annonce-vignette"/,
+        'et rendre une vignette, sinon la photo reste invisible tant qu\'on n\'ouvre pas.');
+    /* PAS la grande image des cartes-questions : la forme textuelle de l'annonce est un choix
+       assumé (« une annonce se lit, elle ne se parcourt pas du regard au milieu de vignettes »).
+       Réutiliser `.q-vignette`, c'est 150 px de haut en pleine largeur — une carte, pas une ligne. */
+    assert.doesNotMatch(carte, /q-vignette/,
+        'la vignette d\'annonce est un carré à elle, pas l\'image pleine largeur des questions.');
+
+    const css = fs.readFileSync(path.join(ui, 'styles/app.css'), 'utf8');
+    assert.match(css, /\.annonce-vignette\{flex:none;width:46px;height:46px/,
+        "Carrée, petite, et `flex:none` : c'est le TEXTE qui doit céder à l'étroit, une vignette "
+        + "écrasée n'annonce plus rien.");
+});
+
+test('le serveur renvoie `has_image` sur la liste des publications', () => {
+    const ctrl = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'community.controller.js'), 'utf8');
+    assert.match(ctrl, /FROM community_image i WHERE i\.post_id = p\.id\) AS has_image/,
+        'Sans ce drapeau sur la LISTE, le fil devrait charger chaque image pour savoir si elle '
+        + 'existe — ou ne rien afficher, ce qui était le cas.');
+});
