@@ -1922,12 +1922,17 @@ tbody tr:last-child td{border-bottom:none}
 .pq-jalon b{font-size:12px;line-height:1.2}
 .pq-jalon .hint{font-size:10.5px;line-height:1.25}
 /* Le rond porte `--av` : c'est lui qui règle l'épaisseur de l'anneau et la taille du jeton. */
-.pq-jalon-rond{--av:30px;position:relative;width:30px;height:30px;border-radius:50%;
-  background:var(--surface2);flex:none;margin-bottom:2px}
+/* 42 px et non 30 : c'est un APERÇU de ce qu'on va porter, pas une puce de liste. À 30 px le
+   jeton tombait à 15 — sa silhouette se refermait, et on ne distinguait plus le demi-disque de
+   la coche. `--av` pilote tout le reste (épaisseur de l'anneau, taille du jeton). */
+.pq-jalon-rond{--av:42px;position:relative;width:42px;height:42px;border-radius:50%;
+  background:var(--surface2);flex:none;margin-bottom:4px}
 /* Le lien part du rond PRÉCÉDENT et s'arrête au bord de celui-ci. Posé en absolu et tracé vers
    la gauche : dans le flux, il aurait poussé les jalons et cassé leur répartition égale. */
-.pq-jalon-lien{position:absolute;top:15px;right:50%;left:-50%;height:3px;border-radius:99px;
-  background:var(--surface3);margin-right:19px;margin-left:19px;overflow:hidden}
+/* Le trait passe au CENTRE du rond (21 px de rayon, moins la demi-épaisseur du trait) et
+   s'arrête à sa périphérie ANNEAU COMPRIS — 21 + 3,6 d'anneau, plus deux pixels de jour. */
+.pq-jalon-lien{position:absolute;top:20px;right:50%;left:-50%;height:3px;border-radius:99px;
+  background:var(--surface3);margin-right:27px;margin-left:27px;overflow:hidden}
 /* Le premier segment part du bord gauche du rail, pas de la moitié d'une case qui
    n'existe pas : sinon il déborderait hors du conteneur. */
 .pq-jalon-lien.debut{left:0;margin-left:0}
