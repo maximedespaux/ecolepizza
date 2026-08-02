@@ -564,60 +564,84 @@ test('la piste montre ce que la formation rapporte, et où on en est', () => {
     assert.match(srcCss, /\.pq-jalon-lien\.debut\{left:0;margin-left:0\}/);
 });
 
-test('« La commande piège » n\'affirme QUE ce que le manuel dit', () => {
-    /* LE RISQUE DE CE JEU-LÀ, et il est spécifique. Les allergènes sont un sujet RÉGLEMENTAIRE :
-       un stagiaire à qui l'on dit qu'un produit est sûr le répétera à un client. Or
-       `garnitures.js` NE DÉCLARE AUCUN ALLERGÈNE — la table produit → allergène n'existe nulle
-       part dans le projet, et elle dépend du fournisseur du mois.
+test('« La commande piège » : le référentiel d\'allergènes tient debout', async () => {
+    /* LE RISQUE DE CE JEU-LÀ EST RÉGLEMENTAIRE : un stagiaire à qui l'on dit qu'un produit est
+       sûr le répétera à un client. La table produit → allergène a donc été sortie du jeu pour
+       vivre dans `lib/allergenes.js` — une donnée de l'organisme, relisible en un endroit, et que
+       les fiches recettes pourront reprendre. Ici on teste le COMPORTEMENT, pas le texte. */
+    const { pathToFileURL } = require('url');
+    const A = await import(pathToFileURL(path.join(APP, 'ui/lib/allergenes.js')).href);
+    const G = await import(pathToFileURL(path.join(APP, 'ui/lib/garnitures.js')).href);
 
-       Ce qui est affirmé reste donc dans deux catégories, et deux seulement :
-         · ce qui découle de la COMPOSITION AFFICHÉE — la mozzarella porte le lait, l'anchois le
-           poisson. Le joueur peut le vérifier en lisant la ligne ;
-         · ce que le MANUEL nomme lui-même — les 14, la contamination croisée, substitution ≠
-           éviction, et les sulfites « SOUVENT » dans les charcuteries.
-       Tout le reste est « à vérifier ». */
+    assert.strictEqual(A.ALLERGENES.length, 14, 'les 14 a declaration obligatoire, ni plus ni moins');
+
+    /* DEUX NIVEAUX DE CERTITUDE, ET C'EST TOUT L'ENJEU. Le manuel écrit « SOUVENT des sulfites
+       (le jambon) » : répondre « non » avec aplomb sur une charcuterie est faux même quand on
+       tombe juste. Une charcuterie doit donc rendre « à vérifier », jamais « non ». */
+    assert.deepStrictEqual(A.porte('jambon', 'Charcuterie'), { allergenes: [], verifier: ['sulfites'] });
+    /* ET L'EXCEPTION ANNULE LE DÉFAUT — un blanc de poulet n'est pas un produit de salaison.
+       Si l'exception s'AJOUTAIT au défaut au lieu de le remplacer, `poulet: {}` ne pourrait rien
+       corriger et le modèle entier ne servirait à rien. */
+    assert.deepStrictEqual(A.porte('poulet', 'Charcuterie'), { allergenes: [], verifier: [] });
+
+    /* LA MER N'EST PAS UN ALLERGÈNE. Les 14 distinguent poissons, crustacés et mollusques :
+       servir des moules à quelqu'un d'allergique aux crustacés parce que « c'est de la mer » est
+       exactement le raccourci qui envoie aux urgences. */
+    assert.deepStrictEqual(A.porte('thon', 'Mer').allergenes, ['poissons']);
+    assert.deepStrictEqual(A.porte('crevettes', 'Mer').allergenes, ['crustaces']);
+    assert.deepStrictEqual(A.porte('moules', 'Mer').allergenes, ['mollusques']);
+
+    // UNE CERTITUDE L'EMPORTE SUR UN DOUTE : le doute sur un produit ne dilue pas la certitude
+    // sur un autre.
+    const pizza = [
+        { cle: 'pesto', categorie: 'Base', label: 'Pesto' },          // fruits à coque, certain
+        { cle: 'jambon_cru', categorie: 'Charcuterie', label: 'Jambon cru' }, // sulfites, à vérifier
+    ];
+    assert.strictEqual(A.verdict(pizza, 'fruits_a_coque').rep, 'non');
+    assert.strictEqual(A.verdict(pizza, 'sulfites').rep, 'verifier');
+    assert.strictEqual(A.verdict(pizza, 'poissons').rep, 'oui');
+
+    /* CHAQUE PRODUIT DU CATALOGUE EST COUVERT, par son exception ou par sa catégorie. Un produit
+       oublié répondrait silencieusement « aucun allergène » — le pire des défauts sur ce sujet,
+       parce qu'il ne se voit pas. */
+    const cats = Object.keys(A.PAR_CATEGORIE);
+    const produits = [...G.GARN_BASES, ...G.GARN_PRODUITS, ...G.GARN_DAIRY];
+    const orphelins = produits.filter((p) => p.key !== 'autre'
+        && !(p.key in A.PAR_INGREDIENT) && !(p.cat && cats.includes(p.cat)));
+    // Légumes, aromates et fruits n'en portent aucun : c'est légitime, mais ça se DÉCLARE en
+    // relisant la liste, pas en l'ignorant. Le test fige le nombre pour qu'un ajout se remarque.
+    assert.ok(orphelins.length <= 40, `${orphelins.length} produits sans allergene declare — a relire`);
+
+    // La table ne doit pas se dédoubler : une seconde dans `garnitures.js` divergerait en silence.
+    assert.doesNotMatch(fs.readFileSync(path.join(APP, 'ui/lib/garnitures.js'), 'utf8'),
+        /allergenes: \[/, 'un seul referentiel d\'allergenes');
+
+    /* LA QUESTION SE CHOISIT D'APRÈS LA PIZZA, et une mesure l'a imposé : tirée uniformément,
+       elle donnait 73,7 % de « ça passe » sur 20 000 tirages — répondre oui à tout suffisait à
+       faire 74 %. Sur des allergènes, « toujours oui » est LA réponse dangereuse. Après
+       équilibrage : 36 % · 42 % · 21 %. */
     const srcJeu = fs.readFileSync(path.join(APP, 'ui/components/CommandePiege.jsx'), 'utf8');
-    const CARTE_MAX = [...srcJeu.matchAll(/\{ nom: "[^"]+", ing: \[([^\]]*)\] \}/g)]
-        .map((m) => m[1].split(',').length);
-    assert.strictEqual(fs.readFileSync(path.join(APP, 'ui/lib/garnitures.js'), 'utf8').match(/allerg/i), null,
-        'si garnitures.js declare un jour ses allergenes, ce test doit etre revu — et le jeu enrichi');
-
-    /* LES SULFITES SONT « À VÉRIFIER », JAMAIS « NON ». Le manuel écrit « souvent des sulfites (le
-       jambon) » : répondre non avec aplomb sur une charcuterie est faux même quand on tombe
-       juste. C'est l'erreur que le jeu doit apprendre à ne pas faire. */
-    for (const produit of ['jambon', 'chorizo', 'jambon_cru', 'balsamique']) {
-        assert.match(srcJeu, new RegExp(`${produit}: \\{ nom: "[^"]+", verifier: \\["sulfites"\\] \\}`),
-            `${produit} : sulfites a VERIFIER, pas affirmes`);
-    }
-    /* Un allergène certain l'emporte sur un « à vérifier » : sinon la Bella (pesto ET jambon cru)
-       renverrait « à vérifier » à quelqu'un d'allergique aux fruits à coque. */
-    assert.match(srcJeu, /if \(certain\.length\) return \{ rep: "non"/);
-    assert.match(srcJeu, /if \(douteux\.length\) return \{ rep: "verifier"/);
+    assert.match(srcJeu, /function contraintePour\(pizza\) \{/, 'la contrainte depend de la pizza');
+    assert.match(srcJeu, /const contrainte = contraintePour\(pizza\);/);
+    // La carte est composée à chaque partie, sinon on répond de mémoire au bout de trois services.
+    assert.match(srcJeu, /const dresserCarte = \(\) => NOMS\.map\(\(n\) => composer\(n\)\);/);
+    assert.match(srcJeu, /const amies = dispo\(\)\.filter\(\(g\) => \(dernier\.pairs \|\| \[\]\)\.includes\(g\.cle\)\);/,
+        'compose par AFFINITE : « creme + anchois + miel » decredibilise l\'exercice');
 
     // Chaque piège de service porte son explication ET sa source de manuel.
     const pieges = (srcJeu.match(/\{ q: "/g) || []).length;
     assert.ok(pieges >= 5, `au moins cinq pieges de service, ${pieges} trouves`);
     assert.strictEqual((srcJeu.match(/source: "Manuel/g) || []).length, pieges, 'une source de MANUEL par piege');
 
-    /* LA CARTE TIENT ENTIÈRE, SANS DÉFILEMENT — y compris sur un téléphone. Deux mesures l'ont
-       imposé, et aucune ne se devine en lisant le code :
-         · dix compositions à six garnitures se repliaient sur trois lignes ; il faudrait faire
-           défiler pendant que le chrono tourne, et chercher deviendrait plus coûteux que
-           deviner. D'où quatre ingrédients au plus, plafond appliqué aux données ;
-         · le verdict AJOUTÉ sous les réponses poussait la carte hors de l'écran — relevé à
-           689 px de contenu pour 664 visibles sur un 375×812. Il prend donc LA PLACE de
-           l'énoncé, dans la même boîte : la hauteur ne bouge plus entre question et réponse, et
-           rien n'est perdu puisqu'on vient de répondre. */
+    /* LA CARTE TIENT ENTIÈRE, SANS DÉFILEMENT — mesuré sur un 375×812 : le verdict AJOUTÉ sous
+       les réponses donnait 689 px de contenu pour 664 visibles. Il prend donc la place de
+       l'énoncé, dans la même boîte. */
     assert.match(srcJeu, /const DUREE = 60;/);
-    assert.ok(!/max-height/.test(srcCss.slice(srcCss.indexOf('.cp-carte{'), srcCss.indexOf('.cp-carte-t'))),
-        'la carte ne doit pas defiler');
+    assert.match(srcJeu, /const MALUS = 4;/);
     assert.match(srcJeu, /className=\{"cp-client cp-expl" \+ \(flash\.juste \? " ok" : ""\)\}/,
         'le verdict prend la place de l\'enonce, il ne s\'ajoute pas dessous');
-    for (const p of CARTE_MAX) assert.ok(p <= 4, `au plus quatre ingredients par pizza, une en a ${p}`);
-    /* Une erreur coûte du TEMPS, pas des points : se tromper vite sur un allergène est pire que
-       répondre lentement, et c'est la seule pénalité qui enseigne quelque chose. */
-    assert.match(srcJeu, /const MALUS = 4;/);
-    assert.match(srcJeu, /setReste\(\(r\) => Math\.max\(0, r - MALUS\)\);/);
+    assert.ok(!/max-height/.test(srcCss.slice(srcCss.indexOf('.cp-carte{'), srcCss.indexOf('.cp-carte-t'))),
+        'la carte ne doit pas defiler');
 
     // Et le jeu est dans l'arcade, avec les autres.
     assert.match(srcQuest, /const GAME_PIEGE = \{ key: "piege"/);

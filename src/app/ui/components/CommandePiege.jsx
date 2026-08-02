@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import { useEchap } from "../lib/useEchap.js";
+import { GARN_BASES, GARN_PRODUITS, GARN_DAIRY } from "../lib/garnitures.js";
+import { ALLERGENES, nomAllergene, verdict } from "../lib/allergenes.js";
 
 /**
  * LA COMMANDE PIÈGE — soixante secondes au comptoir, les allergènes en pleine bourre.
@@ -26,111 +28,76 @@ import { useEchap } from "../lib/useEchap.js";
  * UNE ERREUR COÛTE DU TEMPS (−4 s) plutôt que des points : sur un allergène, se tromper vite est
  * pire que répondre lentement. C'est la seule pénalité qui enseigne quelque chose.
  *
- * ⚠️ LA CARTE EST UNE CARTE DE JEU. Les dix pizzas et leurs compositions sont écrites ici, pas
- * tirées d'un référentiel de l'école — `garnitures.js` ne déclare aucun allergène, la table
- * produit → allergène n'existe nulle part dans le projet. Ce qui est affirmé reste donc dans deux
- * catégories seulement :
- *   · ce qui découle de la COMPOSITION affichée (la pâte porte le gluten, la mozzarella le lait,
- *     l'anchois le poisson) — vérifiable en lisant la ligne ;
- *   · ce que le manuel nomme lui-même (les 14, les sulfites « souvent » dans les charcuteries et
- *     le balsamique, la contamination croisée, substitution ≠ éviction).
- * Tout le reste est « à vérifier ». Le jour où l'école publie sa vraie carte et sa table
- * d'allergènes, elles remplacent celles-ci sans toucher au reste du jeu.
+ * LA CARTE EST TIRÉE AU SORT À CHAQUE PARTIE, sur les 44 produits de `garnitures.js` — ceux de
+ * l'organisme, pas une liste inventée pour le jeu. Dix pizzas neuves à chaque service : on
+ * n'apprend plus « la Reine contient du jambon » par cœur, on apprend à LIRE une composition.
+ * C'était la limite de la version précédente, dont les dix pizzas étaient figées : au bout de
+ * trois parties, on répondait de mémoire.
+ *
+ * LES ALLERGÈNES VIENNENT DE `lib/allergenes.js`, une donnée de l'organisme et non du jeu — la
+ * même question se pose aux fiches recettes et à la carte. Deux niveaux y sont distingués : ce
+ * qui est CERTAIN par composition (un chèvre est un fromage) et ce qui DÉPEND DU FOURNISSEUR
+ * (« souvent des sulfites », dit le manuel). C'est ce second cas qui fait exister « à vérifier ».
  */
 
-/* Les ingrédients qui PORTENT un allergène de façon certaine, par lecture de la composition.
-   `verifier` = l'allergène dépend du fournisseur : la bonne réponse devient « à vérifier ». */
-const INGREDIENTS = {
-  pate: { nom: "pâte", allergenes: ["gluten"] },
-  tomate: { nom: "sauce tomate", allergenes: [] },
-  creme: { nom: "crème", allergenes: ["lait"] },
-  mozzarella: { nom: "mozzarella", allergenes: ["lait"] },
-  chevre: { nom: "chèvre", allergenes: ["lait"] },
-  gorgonzola: { nom: "gorgonzola", allergenes: ["lait"] },
-  parmesan: { nom: "parmesan", allergenes: ["lait"] },
-  burrata: { nom: "burrata", allergenes: ["lait"] },
-  anchois: { nom: "anchois", allergenes: ["poisson"] },
-  thon: { nom: "thon", allergenes: ["poisson"] },
-  saumon: { nom: "saumon", allergenes: ["poisson"] },
-  oeuf: { nom: "œuf", allergenes: ["oeufs"] },
-  pignons: { nom: "pignons de pin", allergenes: ["fruits a coque"] },
-  pesto: { nom: "pesto", allergenes: ["fruits a coque", "lait"] },
-  // Charcuteries et balsamique : le manuel écrit « SOUVENT des sulfites ». Donc à vérifier.
-  jambon: { nom: "jambon", verifier: ["sulfites"] },
-  chorizo: { nom: "chorizo", verifier: ["sulfites"] },
-  jambon_cru: { nom: "jambon cru", verifier: ["sulfites"] },
-  balsamique: { nom: "vinaigre balsamique", verifier: ["sulfites"] },
-  champignon: { nom: "champignons", allergenes: [] },
-  olives: { nom: "olives", allergenes: [] },
-  basilic: { nom: "basilic", allergenes: [] },
-  roquette: { nom: "roquette", allergenes: [] },
-  origan: { nom: "origan", allergenes: [] },
-  ail: { nom: "ail", allergenes: [] },
-  huile: { nom: "huile d'olive", allergenes: [] },
-  oignon: { nom: "oignon", allergenes: [] },
-  poivron: { nom: "poivron", allergenes: [] },
-  aubergine: { nom: "aubergine", allergenes: [] },
-  courgette: { nom: "courgette", allergenes: [] },
-  miel: { nom: "miel", allergenes: [] },
-  pomme_de_terre: { nom: "pomme de terre", allergenes: [] },
-  artichaut: { nom: "artichaut", allergenes: [] },
-};
-
-/* LA CARTE — dix pizzas. `pate` n'est pas listée : elle est sous toutes, et l'ajouter à chaque
-   ligne noierait ce qui distingue une pizza d'une autre. Le gluten est donc TOUJOURS présent, et
-   c'est précisément ce que la première question apprend. */
-const CARTE = [
-  { nom: "Marinara", ing: ["tomate", "ail", "origan"] },
-  { nom: "Margherita", ing: ["tomate", "mozzarella", "basilic"] },
-  { nom: "Reine", ing: ["tomate", "mozzarella", "jambon", "champignon"] },
-  { nom: "Napolitaine", ing: ["tomate", "mozzarella", "anchois", "olives"] },
-  { nom: "Quatre fromages", ing: ["mozzarella", "gorgonzola", "chevre", "parmesan"] },
-  { nom: "Végétarienne", ing: ["tomate", "mozzarella", "poivron", "courgette"] },
-  { nom: "Chèvre-miel", ing: ["creme", "chevre", "miel", "roquette"] },
-  { nom: "Pescatore", ing: ["tomate", "thon", "oignon", "olives"] },
-  { nom: "Diavola", ing: ["tomate", "mozzarella", "chorizo", "poivron"] },
-  { nom: "Bella", ing: ["burrata", "jambon_cru", "pesto", "balsamique"] },
+/* Les produits utilisables, à plat, avec leur catégorie — c'est elle qui porte le défaut
+   d'allergène (cf. `lib/allergenes.js`). Les bases et les fromages n'ont pas de `cat` dans
+   `garnitures.js` : on la leur donne ici, sinon leur défaut serait introuvable. */
+const BASES = GARN_BASES.filter((b) => b.key !== "autre")
+  .map((b) => ({ cle: b.key, label: b.label, categorie: "Base", pairs: b.pairs || [] }));
+const GARNITURES = [
+  ...GARN_PRODUITS.map((p) => ({ cle: p.key, label: p.label, categorie: p.cat, pairs: p.pairs || [] })),
+  ...GARN_DAIRY.map((f) => ({ cle: f.key, label: f.label, categorie: "Fromage", pairs: f.pairs || [] })),
 ];
-/* QUATRE INGRÉDIENTS AU PLUS, ET C'EST UNE CONTRAINTE D'AFFICHAGE ASSUMÉE. La carte doit tenir
-   ENTIÈRE sous les yeux, sans défilement, y compris sur un téléphone : dix lignes qui se
-   replient sur deux ou trois obligeraient à faire défiler pendant que le chrono tourne, et
-   chercher deviendrait plus coûteux que deviner — exactement ce qu'on ne veut pas enseigner.
-   Les compositions restent véridiques, seulement resserrées ; celles qui débordaient (six
-   garnitures) perdent ce qui ne porte aucun allergène. */
 
-/* Les contraintes qu'un client peut poser. `mot` sert à formuler la question, `cle` à interroger
-   la composition. Le gluten n'est pas dans la liste des tirages « pizza » : la réponse serait
-   toujours « non », et une question dont on connaît la réponse d'avance n'apprend rien — il a sa
-   propre situation, une seule fois, en ouverture. */
-const CONTRAINTES = [
-  { cle: "lait", mot: "allergie au lait" },
-  { cle: "poisson", mot: "allergie au poisson" },
-  { cle: "fruits a coque", mot: "allergie aux fruits à coque" },
-  { cle: "oeufs", mot: "allergie aux œufs" },
-  { cle: "sulfites", mot: "intolérance aux sulfites" },
-];
+const alea = (n) => Math.floor(Math.random() * n);
+const tireDans = (l) => l[alea(l.length)];
+
+/**
+ * Compose une pizza plausible : une base, puis deux ou trois garnitures TIRÉES PAR AFFINITÉ.
+ *
+ * Le tirage purement aléatoire donnait « crème + anchois + miel » — une carte absurde décrédibilise
+ * l'exercice avant même la première question, et un stagiaire cesse d'y chercher un vrai réflexe.
+ * `garnitures.js` porte déjà une table d'affinités curée (`pairs`) : on s'en sert pour choisir la
+ * suite, et on ne retombe au hasard que lorsqu'elle ne propose rien de disponible.
+ */
+function composer(nom) {
+  const base = tireDans(BASES);
+  const choisies = [];
+  const dispo = () => GARNITURES.filter((g) => !choisies.some((c) => c.cle === g.cle));
+  const combien = 2 + alea(2);
+  for (let i = 0; i < combien; i++) {
+    const dernier = choisies[choisies.length - 1] || base;
+    const amies = dispo().filter((g) => (dernier.pairs || []).includes(g.cle));
+    choisies.push(amies.length ? tireDans(amies) : tireDans(dispo()));
+  }
+  return { nom, ing: [base, ...choisies] };
+}
+
+/* Dix noms de maison, et AUCUN ne nomme un ingrédient ou un style. « La Marine » tirée au sort
+   sans poisson, ou « La Napolitaine » avec du cheddar, se lisent comme un défaut de génération
+   plutôt que comme une leçon — et la leçon se perd. Ces noms-là ne promettent rien : c'est à la
+   composition de parler, et c'est exactement le réflexe qu'on entraîne. */
+const NOMS = ["La Maison", "L'Ardente", "La Dorée", "La Généreuse", "La Rustique",
+  "La Complice", "La Bella", "La Nera", "La Fumée", "La Signature"];
+
+/* Les contraintes tirables : celles qui peuvent se lire sur une composition. Le gluten en est
+   exclu — la pâte en porte toujours, la réponse serait connue d'avance et n'apprendrait rien. Il
+   a sa propre situation, une fois, parmi les pièges de service. */
+const CONTRAINTES = ALLERGENES
+  .filter((a) => ["lait", "poissons", "fruits_a_coque", "oeufs", "sulfites", "moutarde", "soja"].includes(a.cle))
+  .map((a) => ({ cle: a.cle, mot: a.cle === "sulfites" ? "intolérance aux sulfites" : `allergie ${motDe(a.cle)}` }));
+
+function motDe(cle) {
+  return { lait: "au lait", poissons: "au poisson", fruits_a_coque: "aux fruits à coque",
+    oeufs: "aux œufs", moutarde: "à la moutarde", soja: "au soja" }[cle] || `à « ${nomAllergene(cle)} »`;
+}
 
 const REPONSES = [
   { v: "oui", label: "Ça passe" },
   { v: "non", label: "Non" },
   { v: "verifier", label: "À vérifier" },
 ];
-
-/**
- * La bonne réponse pour une pizza et une contrainte, DÉDUITE de la composition affichée.
- *
- * L'ordre compte : un allergène certain l'emporte sur un « à vérifier ». Une Bella porte du pesto
- * (fruits à coque, certain) ET du jambon cru (sulfites, à vérifier) — sur une allergie aux fruits
- * à coque, la réponse est « non », sans discussion.
- */
-function attendu(pizza, contrainte) {
-  const ing = pizza.ing.map((k) => INGREDIENTS[k]).filter(Boolean);
-  const certain = ing.filter((i) => (i.allergenes || []).includes(contrainte.cle));
-  if (certain.length) return { rep: "non", cause: certain.map((i) => i.nom).join(", ") };
-  const douteux = ing.filter((i) => (i.verifier || []).includes(contrainte.cle));
-  if (douteux.length) return { rep: "verifier", cause: douteux.map((i) => i.nom).join(", ") };
-  return { rep: "oui", cause: null };
-}
 
 /* LES PIÈGES DE SERVICE — ils ne se lisent pas sur la carte, et c'est pour cela qu'ils comptent.
    Même grammaire à trois réponses, tirés dans le même flux. Chacun porte sa source de manuel. */
@@ -163,24 +130,49 @@ const PIEGES = [
 
 const DUREE = 60;          // secondes
 const MALUS = 4;           // secondes perdues sur une erreur
-const alea = (n) => Math.floor(Math.random() * n);
+
+/** Une carte de dix pizzas, composée pour ce service. */
+const dresserCarte = () => NOMS.map((n) => composer(n));
+
+/**
+ * LA CONTRAINTE SE CHOISIT D'APRÈS LA PIZZA, et c'est une mesure qui l'a imposé.
+ *
+ * Tirée uniformément parmi les allergènes, elle donnait 73,7 % de « ça passe » sur 20 000
+ * tirages — répondre oui à tout aurait suffi à faire 74 %. Sur des allergènes, « toujours oui »
+ * est précisément la réponse dangereuse : le jeu aurait entraîné le contraire de ce qu'il vise.
+ * Deux allergènes étaient par ailleurs quasi inutiles (œufs : 99 % de oui, un seul produit en
+ * porte).
+ *
+ * On répartit donc les trois verdicts à parts comparables. Le verdict reste DÉDUIT de la
+ * composition — on ne truque pas la réponse, on choisit la question.
+ */
+function contraintePour(pizza) {
+  const parVerdict = { non: [], verifier: [], oui: [] };
+  for (const c of CONTRAINTES) parVerdict[verdict(pizza.ing, c.cle).rep].push(c);
+  // Ordre de préférence tiré au sort, puis on prend la première classe non vide : sur une pizza
+  // sans aucun allergène, « non » et « à vérifier » n'existent pas, et il faut bien poser une
+  // question.
+  const ordre = alea(100) < 35 ? ["non", "verifier", "oui"]
+    : alea(100) < 46 ? ["verifier", "non", "oui"] : ["oui", "non", "verifier"];
+  for (const v of ordre) if (parVerdict[v].length) return tireDans(parVerdict[v]);
+  return tireDans(CONTRAINTES);
+}
 
 /** Tire la question suivante : une lecture de carte trois fois sur quatre, un piège sinon. */
-function tirer() {
-  if (alea(4) === 0) {
-    const p = PIEGES[alea(PIEGES.length)];
-    return { type: "piege", ...p };
-  }
-  const pizza = CARTE[alea(CARTE.length)];
-  const contrainte = CONTRAINTES[alea(CONTRAINTES.length)];
-  const { rep, cause } = attendu(pizza, contrainte);
+function tirer(carte) {
+  if (alea(4) === 0) return { type: "piege", ...PIEGES[alea(PIEGES.length)] };
+  const pizza = tireDans(carte);
+  const contrainte = contraintePour(pizza);
+  const { rep, causes } = verdict(pizza.ing, contrainte.cle);
+  const cause = causes.join(", ").toLowerCase();
   return {
     type: "carte", pizza, contrainte, rep,
-    q: `« ${contrainte.mot[0].toUpperCase()}${contrainte.mot.slice(1)}. » La ${pizza.nom}, ça passe ?`,
-    pourquoi: rep === "non" ? `La ${pizza.nom} porte ${cause}.`
-      : rep === "verifier" ? `${cause[0].toUpperCase()}${cause.slice(1)} : le manuel écrit « SOUVENT des sulfites ». `
-        + "Ça dépend du fournisseur — on vérifie la fiche avant de répondre."
-        : `Rien dans la ${pizza.nom} ne porte cet allergène — la composition est sous tes yeux.`,
+    q: `« ${contrainte.mot[0].toUpperCase()}${contrainte.mot.slice(1)}. » ${pizza.nom}, ça passe ?`,
+    pourquoi: rep === "non" ? `${pizza.nom} porte ${cause}.`
+      : rep === "verifier"
+        ? `${cause[0].toUpperCase()}${cause.slice(1)} : ça dépend du fournisseur. Le manuel écrit `
+          + "« SOUVENT des sulfites » — on vérifie la fiche avant de répondre."
+        : `Rien dans ${pizza.nom} ne porte cet allergène — la composition est sous tes yeux.`,
     source: rep === "verifier" ? "Manuel — Les 14 allergènes (sulfites)" : "Composition de la carte",
   };
 }
@@ -191,6 +183,7 @@ export default function CommandePiege({ onClose, onFinish }) {
   useEchap(onClose);
   const [phase, setPhase] = useState("pret");   // pret | jeu | fin
   const [reste, setReste] = useState(DUREE);
+  const [carte, setCarte] = useState(dresserCarte);
   const [q, setQ] = useState(null);
   const [flash, setFlash] = useState(null);     // { juste, pourquoi, source } — retour bref
   const [justes, setJustes] = useState(0);
@@ -205,7 +198,11 @@ export default function CommandePiege({ onClose, onFinish }) {
     return () => clearInterval(tic.current);
   }, [phase]);
 
-  function demarrer() { setJustes(0); setRates([]); setReste(DUREE); setQ(tirer()); setFlash(null); setPhase("jeu"); }
+  function demarrer() {
+    // Une carte NEUVE à chaque partie : figée, on finit par répondre de mémoire au lieu de lire.
+    const c = dresserCarte();
+    setCarte(c); setJustes(0); setRates([]); setReste(DUREE); setQ(tirer(c)); setFlash(null); setPhase("jeu");
+  }
 
   function repondre(v) {
     if (!q || flash) return;
@@ -220,7 +217,7 @@ export default function CommandePiege({ onClose, onFinish }) {
     setFlash({ juste, pourquoi: q.pourquoi, source: q.source });
     // Le retour est BREF : le chrono tourne, et une explication qui bloque la partie casserait le
     // rythme qu'on cherche justement à entraîner. Le détail vient au débriefing.
-    setTimeout(() => { setFlash(null); setQ(tirer()); }, juste ? 550 : 1500);
+    setTimeout(() => { setFlash(null); setQ(tirer(carte)); }, juste ? 550 : 1500);
   }
 
   const stars = NOTE(justes);
@@ -292,10 +289,10 @@ export default function CommandePiege({ onClose, onFinish }) {
             <aside className="cp-carte">
               <div className="cp-carte-t"><Icon name="book-open" size={12} /> La carte</div>
               <ul>
-                {CARTE.map((p) => (
+                {carte.map((p) => (
                   <li key={p.nom} className={q.type === "carte" && q.pizza.nom === p.nom ? "on" : ""}>
                     <b>{p.nom}</b>
-                    <span>{p.ing.map((k) => INGREDIENTS[k]?.nom || k).join(", ")}</span>
+                    <span>{p.ing.map((i) => i.label).join(", ")}</span>
                   </li>
                 ))}
               </ul>
