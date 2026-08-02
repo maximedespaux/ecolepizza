@@ -630,14 +630,37 @@ test('« La commande piège » : le référentiel d\'allergènes tient debout', 
 
     // Chaque piège de service porte son explication ET sa source de manuel.
     const pieges = (srcJeu.match(/\{ q: "/g) || []).length;
-    assert.ok(pieges >= 5, `au moins cinq pieges de service, ${pieges} trouves`);
+    assert.ok(pieges >= 8, `au moins huit pieges de service, ${pieges} trouves`);
     assert.strictEqual((srcJeu.match(/source: "Manuel/g) || []).length, pieges, 'une source de MANUEL par piege');
 
     /* LA CARTE TIENT ENTIÈRE, SANS DÉFILEMENT — mesuré sur un 375×812 : le verdict AJOUTÉ sous
        les réponses donnait 689 px de contenu pour 664 visibles. Il prend donc la place de
        l'énoncé, dans la même boîte. */
-    assert.match(srcJeu, /const DUREE = 60;/);
+    assert.match(srcJeu, /const DUREE = 120;/);
     assert.match(srcJeu, /const MALUS = 4;/);
+    /* Les paliers d'étoiles SUIVENT la durée. À 60 s ils valaient 6/12/18 ; gardés tels quels sur
+       deux minutes, ils auraient donné trois étoiles à qui répond mollement — un seuil qui ne
+       suit pas la règle du jeu la vide de son sens sans que rien ne le signale. */
+    assert.match(srcJeu, /const NOTE = \(justes\) => \(justes >= 36 \? 3 : justes >= 24 \? 2 : justes >= 12 \? 1 : 0\);/);
+
+    /* QUATRE FORMES DE QUESTION, et elles n'entraînent pas le même geste : valider une pizza
+       qu'on vous désigne, en recommander une parmi deux, juger un RETRAIT, et les pièges de
+       service qui ne se lisent nulle part sur la carte. Une seule forme répétée deux minutes
+       durant s'apprend par cœur au lieu de se comprendre. */
+    assert.match(srcJeu, /function questionRetrait\(carte\) \{/);
+    assert.match(srcJeu, /function questionComparaison\(carte\) \{/);
+    /* Le retrait est LA question du comptoir — « sans la burrata, ça passe ? » — et sa leçon est
+       qu'un second ingrédient porte souvent le même allergène. Le verdict se recalcule donc sur
+       la composition PRIVÉE de l'ingrédient, jamais sur une règle approchée. */
+    assert.match(srcJeu, /const restant = pizza\.ing\.filter\(\(i\) => i\.label !== retire\);/);
+    assert.match(srcJeu, /const apres = verdict\(restant, c\.cle\);/);
+    // « Ni l'une ni l'autre » reste possible : sans elle on apprend à toujours proposer quelque chose.
+    assert.match(srcJeu, /\{ v: "aucune", label: "Ni l'une ni l'autre" \}/);
+    // Deux pizzas également sûres ne posent aucune question : ce tirage est écarté.
+    assert.match(srcJeu, /if \(sure\(va\) && sure\(vb\)\) return null;/);
+    // Les réponses viennent de la QUESTION quand elle en porte : la comparaison n'a pas les trois
+    // libellés standard, et le débriefing doit savoir les nommer.
+    assert.match(srcJeu, /\{\(q\.choix \|\| REPONSES\)\.map\(\(r\) => \(/);
     assert.match(srcJeu, /className=\{"cp-client cp-expl" \+ \(flash\.juste \? " ok" : ""\)\}/,
         'le verdict prend la place de l\'enonce, il ne s\'ajoute pas dessous');
     assert.ok(!/max-height/.test(srcCss.slice(srcCss.indexOf('.cp-carte{'), srcCss.indexOf('.cp-carte-t'))),

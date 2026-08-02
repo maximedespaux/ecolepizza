@@ -5,7 +5,7 @@ import { GARN_BASES, GARN_PRODUITS, GARN_DAIRY } from "../lib/garnitures.js";
 import { ALLERGENES, nomAllergene, verdict } from "../lib/allergenes.js";
 
 /**
- * LA COMMANDE PIÈGE — soixante secondes au comptoir, les allergènes en pleine bourre.
+ * LA COMMANDE PIÈGE — deux minutes au comptoir, les allergènes en pleine bourre.
  *
  * CE QU'IL ENTRAÎNE. Le QCM demande « quels sont les 14 allergènes ». Le comptoir demande
  * « allergie au lait, la Margherita ça passe ? » — et il le demande pendant qu'une autre commande
@@ -126,9 +126,24 @@ const PIEGES = [
     pourquoi: "« Formation des équipes » et « personnel formé » sont deux points distincts du manuel. "
       + "Une liste ne remplace pas quelqu'un qui sait la lire — on reprend la commande, et on forme.",
     source: "Manuel — Les allergènes · Bonnes pratiques" },
+  { q: "Ton fournisseur de mozzarella a changé le mois dernier. Ta fiche allergènes date de l'an passé.", rep: "non",
+    pourquoi: "« Vérification des fournisseurs » et « mise à jour régulière » sont deux bonnes "
+      + "pratiques du manuel, et elles vont ensemble : une fiche juste l'an dernier peut être fausse "
+      + "aujourd'hui. Une information périmée est pire qu'absente — on s'y fie.",
+    source: "Manuel — Les allergènes · Bonnes pratiques" },
+  { q: "Ta fiche allergènes couvre les pizzas. Le client commande un tiramisu maison.", rep: "non",
+    pourquoi: "« Tous les plats concernés », dit le manuel. Desserts, entrées, sauces et boissons "
+      + "comprises : un dessert maison porte typiquement œufs, lait et gluten, et l'oublier parce "
+      + "que ce n'est pas une pizza est l'angle mort classique.",
+    source: "Manuel — Les allergènes · Points de vigilance" },
+  { q: "« C'est bon, je tolère un peu de lait. » Il te demande la pizza aux quatre fromages.", rep: "verifier",
+    pourquoi: "Ce n'est pas au professionnel d'évaluer le seuil de tolérance de quelqu'un — mais ce "
+      + "n'est pas non plus à lui de refuser une commande que le client assume. On l'informe "
+      + "précisément de ce que contient le plat, et il décide en connaissance de cause.",
+    source: "Manuel — Les allergènes · Modalités d'affichage (information du client)" },
 ];
 
-const DUREE = 60;          // secondes
+const DUREE = 120;         // secondes — deux minutes de service
 const MALUS = 4;           // secondes perdues sur une erreur
 
 /** Une carte de dix pizzas, composée pour ce service. */
@@ -158,9 +173,82 @@ function contraintePour(pizza) {
   return tireDans(CONTRAINTES);
 }
 
-/** Tire la question suivante : une lecture de carte trois fois sur quatre, un piège sinon. */
+/**
+ * « ET SI ON RETIRE ? » — la question qu'on pose vraiment au comptoir.
+ *
+ * « Sans la burrata, ça passe ? » : parfois oui, souvent non, parce qu'un DEUXIÈME ingrédient
+ * porte le même allergène — une crème sous le fromage, un pesto sous les pignons. Retirer une
+ * garniture visible en laissant la base est l'erreur qu'on voit tous les jours, et une réponse
+ * en oui/non ne l'attrape pas : il faut avoir relu la composition entière.
+ */
+function questionRetrait(carte) {
+  // On cherche une pizza où un allergène est CERTAIN : sans lui, il n'y a rien à retirer.
+  const candidats = [];
+  for (const pizza of carte) {
+    for (const c of CONTRAINTES) {
+      const { rep, causes } = verdict(pizza.ing, c.cle);
+      if (rep === "non" && causes.length) candidats.push({ pizza, c, causes });
+    }
+  }
+  if (!candidats.length) return null;
+  const { pizza, c, causes } = tireDans(candidats);
+  const retire = tireDans(causes);                       // l'ingrédient qu'on propose d'ôter
+  const restant = pizza.ing.filter((i) => i.label !== retire);
+  const apres = verdict(restant, c.cle);
+  return {
+    type: "retrait", pizza, contrainte: c, rep: apres.rep,
+    q: `« ${c.mot[0].toUpperCase()}${c.mot.slice(1)}. » ${pizza.nom} SANS ${retire.toLowerCase()}, ça passe ?`,
+    pourquoi: apres.rep === "oui"
+      ? `Oui : ${retire.toLowerCase()} était le seul à en porter dans ${pizza.nom}.`
+      : apres.rep === "non"
+        ? `Non — il reste ${apres.causes.join(", ").toLowerCase()}. Retirer ce qu'on voit ne suffit `
+          + "pas : c'est la composition entière qu'il faut relire, base comprise."
+        : `Il reste ${apres.causes.join(", ").toLowerCase()}, dont ça dépend du fournisseur.`,
+    source: "Composition de la carte",
+  };
+}
+
+/**
+ * « LAQUELLE DES DEUX ? » — on ne vérifie plus une pizza, on en compare deux.
+ *
+ * C'est l'autre geste du comptoir : le client annonce sa contrainte AVANT de choisir, et il
+ * attend une recommandation. Scanner deux compositions et trancher n'est pas la même chose que
+ * valider celle qu'on vous désigne — et « ni l'une ni l'autre » doit rester une réponse possible,
+ * sinon on apprend à toujours en proposer une.
+ */
+function questionComparaison(carte) {
+  const c = tireDans(CONTRAINTES);
+  const a = tireDans(carte);
+  const b = tireDans(carte.filter((p) => p.nom !== a.nom));
+  const va = verdict(a.ing, c.cle).rep, vb = verdict(b.ing, c.cle).rep;
+  const sure = (v) => v === "oui";
+  // Deux pizzas également sûres ne posent pas de question : on retire ce tirage.
+  if (sure(va) && sure(vb)) return null;
+  const rep = sure(va) ? "a" : sure(vb) ? "b" : "aucune";
+  return {
+    type: "comparaison", rep,
+    choix: [{ v: "a", label: a.nom }, { v: "b", label: b.nom }, { v: "aucune", label: "Ni l'une ni l'autre" }],
+    q: `« ${c.mot[0].toUpperCase()}${c.mot.slice(1)}. » Tu proposes laquelle ?`,
+    pourquoi: rep === "aucune"
+      ? `Aucune des deux : ${a.nom} porte ${verdict(a.ing, c.cle).causes.join(", ").toLowerCase()}, `
+        + `${b.nom} porte ${verdict(b.ing, c.cle).causes.join(", ").toLowerCase()}.`
+      : `${rep === "a" ? a.nom : b.nom} — l'autre porte `
+        + `${verdict(rep === "a" ? b.ing : a.ing, c.cle).causes.join(", ").toLowerCase()}.`,
+    source: "Composition de la carte",
+  };
+}
+
+/**
+ * Tire la question suivante. QUATRE FORMES, et elles n'entraînent pas le même geste : valider une
+ * pizza qu'on vous désigne, en recommander une parmi deux, juger un retrait, et les pièges de
+ * service qui ne se lisent nulle part sur la carte. Une seule forme répétée deux minutes durant
+ * s'apprend par cœur au lieu de se comprendre.
+ */
 function tirer(carte) {
-  if (alea(4) === 0) return { type: "piege", ...PIEGES[alea(PIEGES.length)] };
+  const d = alea(100);
+  if (d < 20) return { type: "piege", ...PIEGES[alea(PIEGES.length)] };
+  if (d < 40) { const q = questionRetrait(carte); if (q) return q; }
+  if (d < 58) { const q = questionComparaison(carte); if (q) return q; }
   const pizza = tireDans(carte);
   const contrainte = contraintePour(pizza);
   const { rep, causes } = verdict(pizza.ing, contrainte.cle);
@@ -177,7 +265,10 @@ function tirer(carte) {
   };
 }
 
-const NOTE = (justes) => (justes >= 18 ? 3 : justes >= 12 ? 2 : justes >= 6 ? 1 : 0);
+/* Les paliers suivent la DURÉE : à 60 s ils valaient 6/12/18, et les garder tels quels sur deux
+   minutes aurait donné trois étoiles à qui répond mollement. Doublés, ils demandent le même
+   rythme. */
+const NOTE = (justes) => (justes >= 36 ? 3 : justes >= 24 ? 2 : justes >= 12 ? 1 : 0);
 
 export default function CommandePiege({ onClose, onFinish }) {
   useEchap(onClose);
@@ -212,7 +303,9 @@ export default function CommandePiege({ onClose, onFinish }) {
       // L'erreur coûte du TEMPS, pas des points : se tromper vite sur un allergène est pire que
       // répondre lentement, et c'est la seule pénalité qui enseigne quelque chose.
       setReste((r) => Math.max(0, r - MALUS));
-      setRates((l) => (l.length >= 8 ? l : [...l, { q: q.q, pourquoi: q.pourquoi, source: q.source, donne: v, rep: q.rep }]));
+      const noms = Object.fromEntries((q.choix || REPONSES).map((r) => [r.v, r.label]));
+      setRates((l) => (l.length >= 8 ? l : [...l, { q: q.q, pourquoi: q.pourquoi, source: q.source,
+        donne: noms[v], rep: noms[q.rep] }]));
     }
     setFlash({ juste, pourquoi: q.pourquoi, source: q.source });
     // Le retour est BREF : le chrono tourne, et une explication qui bloque la partie casserait le
@@ -234,7 +327,7 @@ export default function CommandePiege({ onClose, onFinish }) {
 
         {phase === "pret" && (
           <div className="mbody" style={{ textAlign: "center", padding: "22px 20px" }}>
-            <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px" }}>Soixante secondes au comptoir.</p>
+            <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px" }}>Deux minutes au comptoir.</p>
             <p className="hint" style={{ margin: "0 0 4px" }}>
               Un client annonce sa contrainte, tu réponds. La carte reste ouverte à côté — mais elle
               ne répond pas à tout : la contamination croisée et les sulfites ne s'y lisent pas.
@@ -274,7 +367,7 @@ export default function CommandePiege({ onClose, onFinish }) {
             )}
 
             <div className="cp-reponses">
-              {REPONSES.map((r) => (
+              {(q.choix || REPONSES).map((r) => (
                 <button key={r.v} className="pq-choice cp-rep" onClick={() => repondre(r.v)} disabled={!!flash}>
                   {r.label}
                 </button>
@@ -290,7 +383,8 @@ export default function CommandePiege({ onClose, onFinish }) {
               <div className="cp-carte-t"><Icon name="book-open" size={12} /> La carte</div>
               <ul>
                 {carte.map((p) => (
-                  <li key={p.nom} className={q.type === "carte" && q.pizza.nom === p.nom ? "on" : ""}>
+                  <li key={p.nom} className={(q.choix || []).some((c) => c.label === p.nom)
+                    || (q.pizza && q.pizza.nom === p.nom) ? "on" : ""}>
                     <b>{p.nom}</b>
                     <span>{p.ing.map((i) => i.label).join(", ")}</span>
                   </li>
@@ -325,8 +419,7 @@ export default function CommandePiege({ onClose, onFinish }) {
                   <div key={i} className="cp-rate">
                     <b>{r.q}</b>
                     <span className="cp-rate-r">
-                      Tu as répondu « {REPONSES.find((x) => x.v === r.donne)?.label} », la réponse est
-                      « {REPONSES.find((x) => x.v === r.rep)?.label} ».
+                      Tu as répondu « {r.donne} », la réponse est « {r.rep} ».
                     </span>
                     <span>{r.pourquoi}</span>
                     <span className="cp-src"><Icon name="book-open" size={12} /> {r.source}</span>
