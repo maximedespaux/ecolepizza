@@ -638,10 +638,14 @@ test('« La commande piège » : le référentiel d\'allergènes tient debout', 
        l'énoncé, dans la même boîte. */
     assert.match(srcJeu, /const DUREE = 120;/);
     assert.match(srcJeu, /const MALUS = 4;/);
-    /* Les paliers d'étoiles SUIVENT la durée. À 60 s ils valaient 6/12/18 ; gardés tels quels sur
-       deux minutes, ils auraient donné trois étoiles à qui répond mollement — un seuil qui ne
-       suit pas la règle du jeu la vide de son sens sans que rien ne le signale. */
-    assert.match(srcJeu, /const NOTE = \(justes\) => \(justes >= 36 \? 3 : justes >= 24 \? 2 : justes >= 12 \? 1 : 0\);/);
+    /* LES SEUILS SUIVENT CE QUE LE JEU DEMANDE VRAIMENT, et le premier calcul était faux. Il
+       transposait les paliers d'un jeu qu'on apprend par cœur : sur une carte figée, on finit par
+       savoir que la Reine porte du jambon, et enchaîner devient possible. Ici la carte est
+       RECOMPOSÉE À CHAQUE PARTIE — aucune question ne se répond de mémoire, chacune demande de
+       retrouver une ligne et de la lire, et une comparaison en demande deux.
+       36 bonnes réponses en 120 s laissaient 2,8 s par question, retour compris : le rythme d'une
+       reconnaissance, pas d'une lecture. Quinze en laissent huit. */
+    assert.match(srcJeu, /const NOTE = \(justes\) => \(justes >= 15 \? 3 : justes >= 10 \? 2 : justes >= 5 \? 1 : 0\);/);
 
     /* QUATRE FORMES DE QUESTION, et elles n'entraînent pas le même geste : valider une pizza
        qu'on vous désigne, en recommander une parmi deux, juger un RETRAIT, et les pièges de

@@ -265,10 +265,17 @@ function tirer(carte) {
   };
 }
 
-/* Les paliers suivent la DURÉE : à 60 s ils valaient 6/12/18, et les garder tels quels sur deux
-   minutes aurait donné trois étoiles à qui répond mollement. Doublés, ils demandent le même
-   rythme. */
-const NOTE = (justes) => (justes >= 36 ? 3 : justes >= 24 ? 2 : justes >= 12 ? 1 : 0);
+/* CINQ, DIX, QUINZE — et le raisonnement qui avait mené à 12/24/36 était faux.
+ *
+ * Il transposait les seuils d'un jeu qu'on apprend par cœur : sur une carte FIGÉE, on finit par
+ * savoir que la Reine porte du jambon, et enchaîner devient possible. Ici la carte est RECOMPOSÉE
+ * À CHAQUE PARTIE — aucune question ne se répond de mémoire, chacune demande de retrouver une
+ * ligne et de la lire. Une comparaison en demande deux.
+ *
+ * 36 bonnes réponses en 120 s laissaient 2,8 s par question, retour compris : le rythme d'une
+ * reconnaissance, pas d'une lecture. Quinze en laissent huit — le temps de chercher la pizza,
+ * lire sa composition et répondre, c'est-à-dire le temps du geste qu'on entraîne. */
+const NOTE = (justes) => (justes >= 15 ? 3 : justes >= 10 ? 2 : justes >= 5 ? 1 : 0);
 
 export default function CommandePiege({ onClose, onFinish }) {
   useEchap(onClose);
