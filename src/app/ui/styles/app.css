@@ -3705,8 +3705,9 @@ button.av-wrap:active{transform:scale(.94)}
  * Vectoriel, donc net à toute taille — ce qu'un emoji, rendu par la police, cesse d'être au-delà
  * de sa taille native.
  */
-.cadre-champion::after,.cadre-jury::after,.cadre-fondateur::after,.cadre-qparfait::after,
-.cadre-qcent::after,.cadre-qintouch::after,.cadre-qlegende::after,.cadre-qchelem::after{
+.cadre-champion::after,.cadre-jury::after,.cadre-fondateur::after,.cadre-qdemi::after,
+.cadre-qfini::after,.cadre-qparfait::after,.cadre-qcent::after,.cadre-qintouch::after,
+.cadre-qlegende::after,.cadre-qchelem::after{
   content:"";position:absolute;right:-2px;bottom:-2px;pointer-events:none;z-index:2;
   width:calc(var(--av,38px)*.42);height:calc(var(--av,38px)*.42);
   background:var(--jeton) center/contain no-repeat;
@@ -3716,10 +3717,31 @@ button.av-wrap:active{transform:scale(.94)}
    icône d'interface ; ce battement discret le rattache au cadre qu'il décore. */
 @keyframes cadreMedaillon{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
 
+
+/* — LES TROIS PALIERS DE FORMATION — leur jeton prend LA COULEUR DE LA FORMATION.
+ *
+ * Il n'y avait de jeton que sur « Sans faute » : les deux autres paliers, donc la plupart des
+ * cadres de formation, restaient un anneau nu là où chaque exploit portait son emblème. Le
+ * système avait l'air inachevé exactement là où il est le plus porté.
+ *
+ * ET LE DESSIN NE PEUT PAS ÊTRE FIGÉ ICI. Un cadre de formation n'existe pas dans l'absolu : il
+ * est « sur la voie » SUR une formation, et il en porte la teinte. Un SVG à couleur baguée dans
+ * le fichier ne pourrait pas la suivre — d'où le montage inverse des huit autres : le disque
+ * vient du fond CSS (`--cadre-c`, posé par `cadreStyle`), le glyphe est un SVG BLANC posé
+ * par-dessus, et le liseré est une ombre portée sans flou. Trois couches, une seule teinte à
+ * connaître.
+ *
+ * La forme dit le palier, la couleur dit la formation : un demi-disque, une coche, une étincelle.
+ */
+.cadre-qdemi::after,.cadre-qfini::after,.cadre-qparfait::after{
+  background:var(--jeton) center/58% no-repeat,var(--cadre-c,#dc3e37);
+  border-radius:50%;box-shadow:0 0 0 1.6px #fff}
+.cadre-qdemi::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 4.8a7.2 7.2 0 0 1 0 14.4z" fill="%23fff" stroke="%231b1f3a" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>')}
+.cadre-qfini::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.9 16.6 5.6 12.3l1.7-1.7 2.6 2.6 6.8-6.8 1.7 1.7z" fill="%23fff" stroke="%231b1f3a" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>')}
+.cadre-qparfait::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 4.4c.9 4.5 2.2 5.8 6.7 6.7-4.5.9-5.8 2.2-6.7 6.7-.9-4.5-2.2-5.8-6.7-6.7 4.5-.9 5.8-2.2 6.7-6.7z" fill="%23fff" stroke="%231b1f3a" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>')}
 .cadre-champion::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23c9960a" stroke="%23fff" stroke-width="1.8"/><path d="M7.6 5.6h8.8v4a4.4 4.4 0 0 1-8.8 0z" fill="%23fff"/><path d="M11 13.4h2v3h-2z" fill="%23fff"/><path d="M8.6 16.4h6.8v2H8.6z" fill="%23fff"/></svg>')}
 .cadre-jury::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%236b4fbb" stroke="%23fff" stroke-width="1.8"/><path d="M11.4 5.4h1.2v13h-1.2z" fill="%23fff"/><path d="M5.8 7.8h12.4v1.3H5.8z" fill="%23fff"/><path d="M6.6 9.6 4.2 13.9h4.8z" fill="%23fff"/><path d="M17.4 9.6 15 13.9h4.8z" fill="%23fff"/><path d="M8.4 18h7.2v1.4H8.4z" fill="%23fff"/></svg>')}
 .cadre-fondateur::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%230e9aa7" stroke="%23fff" stroke-width="1.8"/><path d="M11.4 19v-6.2h1.2V19z" fill="%23fff"/><path d="M11.4 13.2c-3.4 0-5-1.9-5-4.6 3.4 0 5 1.9 5 4.6z" fill="%23fff"/><path d="M12.6 12.4c0-2.7 1.6-4.6 5-4.6 0 2.7-1.6 4.6-5 4.6z" fill="%23fff"/></svg>')}
-.cadre-qparfait::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23d4a017" stroke="%23fff" stroke-width="1.8"/><path d="M12 4.4c.9 4.5 2.2 5.8 6.7 6.7-4.5.9-5.8 2.2-6.7 6.7-.9-4.5-2.2-5.8-6.7-6.7 4.5-.9 5.8-2.2 6.7-6.7z" fill="%23fff"/></svg>')}
 .cadre-qcent::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23a8631f" stroke="%23fff" stroke-width="1.8"/><path d="M12 4.2 18.7 6.7v4.9c0 3.7-2.7 6.5-6.7 8-4-1.5-6.7-4.3-6.7-8V6.7z" fill="%23fff"/><path d="M12 8.2 12.9 10.5 15.4 10.7 13.5 12.3 14.1 14.7 12 13.4 9.9 14.7 10.5 12.3 8.6 10.7 11.1 10.5Z" fill="%23a8631f"/></svg>')}
 .cadre-qintouch::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%23374151" stroke="%23fff" stroke-width="1.8"/><path d="M12 4.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15z" fill="%23fff"/><path d="M12 7.1a4.9 4.9 0 1 1 0 9.8 4.9 4.9 0 0 1 0-9.8z" fill="%23374151"/></svg>')}
 .cadre-qlegende::after{--jeton:url('data:image/svg+xml,<svg xmlns="http%3A//www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11.1" fill="%237b3f9e" stroke="%23fff" stroke-width="1.8"/><path d="M5.6 16.4 4 7.3l4.5 3.3L12 5l3.5 5.6L20 7.3l-1.6 9.1z" fill="%23fff"/><path d="M5.9 17.6h12.2v1.7H5.9z" fill="%23fff"/></svg>')}

@@ -337,3 +337,32 @@ test('l\'anneau suit le diamètre, et le métal a du relief', () => {
        Un spéculaire par-dessus brouillerait les teintes qu'il est censé énumérer. */
     assert.match(srcCss, /\.cadre-qtouche\{--cadre-bg:conic-gradient\(from -90deg,#dc3e37/);
 });
+
+test('les trois paliers portent la couleur de LEUR formation', () => {
+    /* CE QUI MANQUAIT, et c'est l'utilisateur qui l'a vu : seul « Sans faute » avait un jeton. Les
+       deux autres paliers — donc la plupart des cadres de formation — restaient un anneau nu là
+       où chaque exploit portait son emblème. Le système avait l'air inachevé exactement là où il
+       est le plus porté.
+
+       Et leur dessin NE PEUT PAS être figé dans le fichier : un cadre de formation n'existe pas
+       dans l'absolu, il est « sur la voie » SUR une formation et en porte la teinte. D'où le
+       montage inverse des huit autres — le disque vient du fond CSS (`--cadre-c`), le glyphe est
+       un SVG posé par-dessus. La forme dit le palier, la couleur dit la formation. */
+    assert.match(srcCss, /\.cadre-qdemi::after,\.cadre-qfini::after,\.cadre-qparfait::after\{\n\s+background:var\(--jeton\) center\/58% no-repeat,var\(--cadre-c,#dc3e37\)/,
+        'le disque doit prendre la couleur de la formation');
+    for (const p of ['qdemi', 'qfini', 'qparfait']) {
+        assert.match(srcCss, new RegExp(`\\.cadre-${p}::after\\{--jeton:url\\('data:image/svg\\+xml,`), `${p} doit avoir son glyphe`);
+    }
+
+    /* BLANC CERNÉ DE NAVY, ET C'EST MESURÉ. Sur les couleurs réelles de l'école, aucune teinte
+       unique ne passe partout : le blanc tombe à 1,23:1 sur le jaune de NIV2, le navy à 1,44:1 sur
+       le bleu de NIV1. Cernée, la silhouette est portée par son remplissage sur les teintes
+       sombres et par son contour sur les claires — 11:1 d'un côté, 13:1 de l'autre.
+       C'est la règle de contraste (priorité 1) appliquée à une couleur qu'on ne connaît pas à
+       l'avance : l'organisme choisit librement celle de ses formations. */
+    for (const p of ['qdemi', 'qfini', 'qparfait']) {
+        const jeton = new RegExp(`\\.cadre-${p}::after\\{--jeton:url\\('[^']*'\\)\\}`).exec(srcCss)[0];
+        assert.match(jeton, /fill="%23fff"/, `${p} : remplissage blanc pour les fonds sombres`);
+        assert.match(jeton, /stroke="%231b1f3a"/, `${p} : contour navy pour les fonds clairs`);
+    }
+});
