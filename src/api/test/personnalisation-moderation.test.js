@@ -130,14 +130,14 @@ test('l\'anneau du cadre tient sur son avatar', () => {
      *    suivait pas son contour. Le rayon de l'anneau vaut celui de l'avatar PLUS son débord. */
     assert.match(srcCss, /\.pf-avatar\.cadre,\.side-foot \.avatar\.cadre\{position:relative\}/,
         'sans conteneur positionne, l\'anneau se cale sur la modale');
-    /* Le rayon vaut celui de l'avatar PLUS son débord. Il était écrit en dur — 21px, soit 18 + 3
-       — ce qui tenait tant que l'épaisseur de l'anneau valait 3px partout. Depuis qu'elle suit le
-       diamètre (`--anneau`), la valeur en dur redeviendrait fausse au premier réglage, et sur le
-       SEUL avatar carré de l'app : un défaut qui ne se verrait nulle part ailleurs. */
-    assert.match(srcCss, /\.pf-avatar\.cadre::before\{border-radius:calc\(18px \+ var\(--anneau\)\)\}/,
-        'le rayon doit se deduire du debord, pas le supposer');
-    assert.match(srcCss, /\.cadre::before\{[\s\S]*?inset:calc\(var\(--anneau\)\*-1\)/,
-        'et le debord vient de la meme grandeur');
+    /* LE SECOND DÉFAUT A DISPARU AVEC SON MOTIF. `.pf-avatar` était un carré arrondi de 18 px —
+       le SEUL avatar carré de l'app, partout ailleurs ce sont des disques — et cette exception
+       obligeait son anneau à recalculer son rayon d'angle. La photo de profil est ronde
+       désormais : la règle générique à 50 % la couvre, et il n'y a plus de rayon à tenir
+       d'accord avec l'épaisseur de l'anneau. */
+    assert.match(srcCss, /\.pf-avatar\{width:64px;height:64px;border-radius:50%/,
+        'la photo de profil doit etre ronde, comme tous les autres avatars');
+    assert.doesNotMatch(srcCss, /\.pf-avatar\.cadre::before\{border-radius/, 'plus d\'exception a maintenir');
 });
 
 test('le cadre « École » est le plus riche du jeu — il désigne, il ne se gagne pas', () => {

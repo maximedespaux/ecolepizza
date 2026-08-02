@@ -2021,7 +2021,13 @@ tbody tr:last-child td{border-bottom:none}
 .pq-sub-label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center;margin:0 0 8px}
 
 /* Profil stagiaire — avatar picker + grade */
-.pf-avatar{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;color:#fff;font-size:30px;font-weight:800;flex:none}
+/* ROND, comme partout ailleurs. C'était le SEUL avatar carré de l'application : dans la barre,
+   dans la Communauté, dans le fil, sur les pastilles de commentaires, tous sont des disques —
+   celui de « Mon profil » était un carré arrondi de 18 px. La différence ne saute pas aux yeux
+   tant qu'on ne les voit pas ensemble, et elle coûtait cher : c'est cette exception, et elle
+   seule, qui obligeait l'anneau à recalculer son rayon d'angle. Ronde, la règle générique à 50 %
+   suffit — une exception en moins, et un défaut de moins à re-payer. */
+.pf-avatar{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:30px;font-weight:800;flex:none}
 .pf-grade{background:var(--surface2);border:1px solid var(--border-soft);border-radius:12px;padding:14px}
 .pf-chip{display:inline-flex;align-items:center;gap:5px;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:4px 10px;font-size:12px;font-weight:600}
 .pf-ladder{display:flex;justify-content:space-between;gap:4px;margin-top:12px}
@@ -3895,18 +3901,13 @@ button.av-wrap:active{transform:scale(.94)}
   91%  {opacity:0;transform:translate(-50%,-50%) translate(1.4em,1.45em)   scale(.4)  rotate(25deg)}
   100% {opacity:0;transform:translate(-50%,-50%) translate(1.2em,-.9em)   scale(.2)  rotate(-30deg)}
 }
-/* DEUX DÉFAUTS SUR LE MÊME ANNEAU, aucun des deux visible au build.
-   1. `.cadre::before` est `position:absolute` : sans ancêtre positionné il se cale sur le
-      premier qui l'est — ici la MODALE. L'anneau sortait en ELLIPSE GÉANTE en travers de
-      l'écran ; on ne le lisait même pas comme un anneau. Mesuré dans le navigateur, pas deviné.
-   2. `.pf-avatar` est un carré arrondi de 18 px, pas un cercle : un anneau à 50 % ne suit pas
-      son contour. Le rayon de l'anneau vaut celui de l'avatar PLUS son débord de 3 px. */
+/* `.cadre::before` est `position:absolute` : sans ancêtre positionné il se cale sur le premier
+   qui l'est — ici la MODALE. L'anneau sortait en ELLIPSE GÉANTE en travers de l'écran ; on ne le
+   lisait même pas comme un anneau. Mesuré dans le navigateur, pas deviné.
+   Le second défaut qui vivait ici a DISPARU AVEC SON MOTIF : `.pf-avatar` était un carré arrondi,
+   seul de son espèce, et son anneau devait donc recalculer son rayon d'angle (18 px + le débord).
+   Il est rond désormais, comme tous les autres — la règle générique à 50 % le couvre. */
 .pf-avatar.cadre,.side-foot .avatar.cadre{position:relative}
-/* Le rayon de l'anneau vaut celui de l'avatar PLUS son débord — sinon il coupe les coins.
-   Il se CALCULE depuis `--anneau` depuis que l'épaisseur suit le diamètre : écrit en dur (21px,
-   soit 18 + 3), il redeviendrait faux au premier changement d'épaisseur, et le défaut ne se
-   verrait qu'à cet endroit précis — le seul avatar carré de l'app. */
-.pf-avatar.cadre::before{border-radius:calc(18px + var(--anneau))}
 @media (prefers-reduced-motion:reduce){.cadre-champion{animation:none}}
 
 /* Cadres dans la Communauté. `.author-ava` et `.prof-ava` reçoivent l'anneau : elles doivent

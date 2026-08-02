@@ -283,10 +283,11 @@ test('le cadre entoure la PHOTO, pas la légende', () => {
     assert.match(srcModale, /<span className=\{`pf-avatar \$\{cadreClass\(cadreValeur\(cadre\)\)\}`\}/,
         'l\'anneau doit etre porte par la photo de profil');
     assert.match(srcModale, /\.\.\.cadreStyle\(cadre\.valeur\)/, 'et prendre la teinte du cadre de quete');
-    /* `.pf-avatar` est un carré arrondi de 18 px, pas un cercle : l'anneau doit suivre cette
-       forme, sinon il déborde en ellipse (le défaut avait déjà été payé une fois). */
-    assert.match(srcCss, /\.pf-avatar\.cadre::before\{border-radius:calc\(18px \+ var\(--anneau\)\)\}/,
-        'le rayon de l\'anneau suit celui de la photo, et se deduit du debord');
+    /* LA PHOTO EST RONDE, comme tous les autres avatars de l'app. C'était le seul carré arrondi,
+       et cette exception à elle seule obligeait l'anneau à recalculer son rayon d'angle. La règle
+       spéciale a disparu AVEC son motif : la générique à 50 % suffit désormais. */
+    assert.match(srcCss, /\.pf-avatar\{width:64px;height:64px;border-radius:50%/, 'ronde comme les autres');
+    assert.doesNotMatch(srcCss, /\.pf-avatar\.cadre::before\{border-radius/, 'plus de rayon d\'exception a tenir');
     // Le nom du cadre reste écrit, mais SANS sa pastille : deux anneaux à dix pixels d'écart
     // posaient la question de savoir lequel est le vrai.
     assert.doesNotMatch(srcModale, /stu-rank-cadre " \+ cadreClass\(cadre\.valeur/, 'plus de pastille detachee');

@@ -152,12 +152,17 @@ export function cadrePorteDe(choisi, formationsDone = 0, attribues = [], quest =
        à l'écriture, par le serveur (cf. saveMyCadre). Refuser ici un cadre qu'on ne sait pas
        revérifier ferait disparaître, dans le fil, un cadre légitimement gagné. */
     const { id, couleur } = parseCadre(choisi);
-    if (estCadreQuest(id) && couleur) {
+    if (estCadreQuest(id)) {
       // Le titre de la formation n'est connu que pour SOI (liste du serveur) : ailleurs, le
       // palier seul. La couleur, elle, dit déjà de quelle formation il s'agit.
       const q = quest.find((x) => x.valeur === choisi);
-      return q ? cadreDeQuest(q)
-        : { id, valeur: choisi, couleur, quest: true, nom: PALIERS_QUEST[id].nom, desc: PALIERS_QUEST[id].desc };
+      if (q) return cadreDeQuest(q);
+      /* LA CONDITION EXIGEAIT UNE COULEUR — et un EXPLOIT n'en a pas : il n'appartient à aucune
+         formation. Choisir « Premier pas » enregistrait donc bien `qpas`, mais l'affichage
+         retombait sur le palier de parcours, c'est-à-dire Braise. Le cadre choisi n'était pas
+         celui qui apparaissait, et la faute n'était visible NULLE PART ailleurs qu'à l'écran. */
+      return { id, valeur: choisi, quest: true, ...(couleur ? { couleur } : {}),
+        nom: PALIERS_QUEST[id].nom, desc: PALIERS_QUEST[id].desc };
     }
     const c = CADRES.find((x) => x.id === choisi);
     // Un cadre choisi puis perdu (donnée corrigée côté école) ne doit pas rester affiché.
