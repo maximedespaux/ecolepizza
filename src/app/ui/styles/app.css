@@ -1907,6 +1907,20 @@ tbody tr:last-child td{border-bottom:none}
 .pq-expl em{font-style:normal;color:var(--muted)}
 
 /* Titre de la rangée de défis-jeux dans un monde. */
+/* — LA COMMANDE PIÈGE —
+   La réplique du client est mise en avant : c'est l'énoncé, et il doit se lire comme une phrase
+   entendue au comptoir, pas comme une consigne d'exercice. */
+.cp-client{font-size:15px;font-weight:600;line-height:1.45;margin:0 0 14px;padding:12px 14px;
+  border-radius:12px;background:var(--surface2);border-left:3px solid var(--red)}
+/* L'explication est le cœur du jeu : sans elle on retient qu'on s'est trompé, pas pourquoi. */
+.cp-expl{margin-top:14px;padding:12px 14px;border-radius:12px;font-size:13.5px;line-height:1.5;
+  background:color-mix(in srgb,var(--red) 8%,var(--surface2));border-left:3px solid var(--red)}
+.cp-expl.ok{background:color-mix(in srgb,var(--green,#2f9e6f) 9%,var(--surface2));
+  border-left-color:var(--green,#2f9e6f)}
+/* La source SUR SA PROPRE LIGNE : c'est elle qui distingue une affirmation du manuel d'une
+   opinion, et on doit pouvoir aller la vérifier. */
+.cp-src{display:flex;align-items:center;gap:5px;margin-top:8px;font-size:11.5px;color:var(--muted)}
+
 /* — LA PISTE DES CADRES, sous le chemin des chapitres —
    Trois jalons sur une ligne. Le segment qui MÈNE à un jalon se remplit à la proportion du
    chemin parcouru : c'est ce qui répond à « combien encore ? » sans avoir à lire le compte.

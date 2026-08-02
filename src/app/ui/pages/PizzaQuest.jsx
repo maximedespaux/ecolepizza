@@ -3,6 +3,7 @@ import { getMyFormations, getMyProfile, getPlayableChapters } from "../api/apiCl
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import SimulateurPizza from "../components/SimulateurPizza.jsx";
+import CommandePiege from "../components/CommandePiege.jsx";
 import { colorOf } from "../lib/format.js";
 import { saveQuestProgress } from "../lib/gamification.js";
 import { FETES, paliersFranchis, marquerFete, palierDuMonde } from "../lib/questPaliers.js";
@@ -264,6 +265,7 @@ function PizzaQuest() {
       )}
       {mini?.key === "constructeur" && <ConstructorGame onClose={() => setMini(null)} onFinish={(stars) => finishMini("constructeur", stars)} />}
       {mini?.key === "simulateur" && <SimulateurPizza objectifId={mini.obj} onClose={() => setMini(null)} onFinish={(stars) => finishMini("simulateur", stars)} />}
+      {mini?.key === "piege" && <CommandePiege onClose={() => setMini(null)} onFinish={(stars) => finishMini("piege", stars)} />}
 
       {fete && <FetePalier palier={fete.palier} monde={fete.monde} onClose={() => setFete(null)} />}
     </>
@@ -495,9 +497,11 @@ const GAME_CONS = { key: "constructeur", ic: "pizza", tint: "var(--ember1)",
   label: "Le Constructeur", sub: "Ordonne la recette" };
 const GAME_SIM = { key: "simulateur", obj: null, ic: "flame", tint: "var(--orange)",
   label: "Fais ta pizza", sub: "Farine, hydratation, four" };
+const GAME_PIEGE = { key: "piege", ic: "shield", tint: "var(--red)",
+  label: "La commande piège", sub: "Allergènes et bon réflexe" };
 const GAME_SOON = { key: null, ic: "clock", tint: "var(--dim)",
   label: "Chrono Rush", sub: "Bientôt", soon: true };
-const ARCADE = [GAME_CONS, GAME_SIM, GAME_SOON];
+const ARCADE = [GAME_CONS, GAME_SIM, GAME_PIEGE, GAME_SOON];
 
 function Arcade({ prog, onGame }) {
   return (

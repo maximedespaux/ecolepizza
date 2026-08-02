@@ -563,3 +563,36 @@ test('la piste montre ce que la formation rapporte, et où on en est', () => {
     assert.match(srcQuest, /\(i === 0 \? " debut" : ""\)/);
     assert.match(srcCss, /\.pq-jalon-lien\.debut\{left:0;margin-left:0\}/);
 });
+
+test('« La commande piège » n\'affirme QUE ce que le manuel dit', () => {
+    /* LE RISQUE DE CE JEU-LÀ, et il est spécifique. Les allergènes sont un sujet RÉGLEMENTAIRE :
+       un stagiaire à qui l'on dit qu'un produit est sûr le répétera à un client. Or
+       `garnitures.js` NE DÉCLARE AUCUN ALLERGÈNE — la table produit → allergène n'existe nulle
+       part dans le projet, et elle dépend du fournisseur du mois.
+
+       On ne l'a donc pas inventée. Les seuls allergènes nommés par produit sont ceux que le
+       manuel donne lui-même — « Une Reine : gluten (la pâte), lait (la mozzarella), et souvent
+       des sulfites (le jambon) » — et les situations portent sur la CONDUITE À TENIR : vérifier,
+       informer, refuser, prévenir la contamination croisée. Une correspondance approximative
+       enseignée avec l'autorité de l'école serait pire que pas de jeu du tout. */
+    const srcJeu = fs.readFileSync(path.join(APP, 'ui/components/CommandePiege.jsx'), 'utf8');
+    const srcNotions = fs.readFileSync(path.join(APP, 'ui/lib/notions.js'), 'utf8');
+    assert.strictEqual((srcNotions.match(/allerg/gi) || []).length > 0, true, 'la fiche du manuel existe');
+    assert.strictEqual(fs.readFileSync(path.join(APP, 'ui/lib/garnitures.js'), 'utf8').match(/allerg/i), null,
+        'si garnitures.js declare un jour ses allergenes, ce test doit etre revu — et le jeu enrichi');
+
+    // CHAQUE situation porte son explication ET sa source : c'est la règle que PizzaQuest s'est
+    // donnée dans son en-tête — « se tromper doit apprendre quelque chose ».
+    const situations = [...srcJeu.matchAll(/\{\s*\n\s+client:/g)].length;
+    assert.ok(situations >= 8, `au moins huit situations, ${situations} trouvees`);
+    assert.strictEqual((srcJeu.match(/pourquoi:/g) || []).length, situations, 'une explication par situation');
+    assert.strictEqual((srcJeu.match(/source: "Manuel/g) || []).length, situations, 'une source de MANUEL par situation');
+
+    /* Toutes les situations sont jouées, seul l'ORDRE est tiré : en retirer au hasard ferait deux
+       parties incomparables, et la note n'aurait plus de sens d'une fois sur l'autre. */
+    assert.match(srcJeu, /const s = SITUATIONS\[ordre\[idx\]\];/);
+    assert.match(srcJeu, /const total = SITUATIONS\.length;/);
+    // Et le jeu est dans l'arcade, avec les autres.
+    assert.match(srcQuest, /const GAME_PIEGE = \{ key: "piege"/);
+    assert.match(srcQuest, /mini\?\.key === "piege" && <CommandePiege/);
+});
