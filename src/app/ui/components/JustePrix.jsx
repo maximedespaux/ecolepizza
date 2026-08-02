@@ -434,7 +434,6 @@ const DUREE = 120;
 const NOTE = (justes) => (justes >= 12 ? 3 : justes >= 8 ? 2 : justes >= 4 ? 1 : 0);
 
 export default function JustePrix({ onClose, onFinish }) {
-  useEchap(onClose);
   const [phase, setPhase] = useState("pret");   // pret | jeu | fin
   const [reste, setReste] = useState(DUREE);
   const [carte, setCarte] = useState(dresserCarte);
@@ -497,18 +496,27 @@ export default function JustePrix({ onClose, onFinish }) {
   }
 
   const stars = NOTE(justes);
+
+  /* UNE FOIS LA PARTIE FINIE, TOUTES LES SORTIES VALIDENT — la croix, le voile et Échap.
+     Elles appelaient `onClose`, qui referme sans rien enregistrer : on venait de jouer deux
+     minutes, l'écran affichait les étoiles obtenues, et fermer par la croix les jetait. C'est le
+     geste le plus naturel devant un écran de résultat, et c'était le seul qui perdait le score.
+     Il n'y a aucune raison de proposer « abandonner ce que je viens de gagner » : tant que la
+     partie n'est pas finie, la croix abandonne comme avant ; ensuite, elle valide. */
+  const fermer = phase === "fin" ? () => onFinish(stars) : onClose;
+  useEchap(fermer);
   // La pizza dont on parle : mise en avant dans la carte, comme au comptoir.
   const enJeu = (p) => (q?.pizza && q.pizza.nom === p.nom)
     || (q?.choix || []).some((c) => c.label === p.nom);
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay" onClick={fermer}>
       <div className="modal cp-modal" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
           <h3 style={{ fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
             <Icon name="coins" size={17} /> Le juste prix
           </h3>
-          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
+          <button className="x" onClick={fermer} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
 
         {phase === "pret" && (

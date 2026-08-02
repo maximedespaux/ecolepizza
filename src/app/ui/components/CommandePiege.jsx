@@ -101,10 +101,18 @@ function motDe(cle) {
     oeufs: "aux œufs", moutarde: "à la moutarde", soja: "au soja" }[cle] || `à « ${nomAllergene(cle)} »`;
 }
 
+/* TROIS RÉPONSES, ET CHACUNE SON PICTOGRAMME. « Ça passe » disait la même chose que « Oui » en
+   plus long et en plus mou : au comptoir on répond oui ou non. Le pictogramme fait le reste du
+   travail — à deux minutes de chrono, on reconnaît une coche, une croix et une loupe avant
+   d'avoir lu le mot, et c'est la loupe qui compte : « à vérifier » est la réponse qu'on oublie,
+   elle a désormais une forme à elle.
+
+   `ic` n'existe que sur CES trois réponses. Les questions de comparaison portent leur propre
+   `choix` — des noms de pizzas — et une coche devant « La Nera » ne voudrait rien dire. */
 const REPONSES = [
-  { v: "oui", label: "Ça passe" },
-  { v: "non", label: "Non" },
-  { v: "verifier", label: "À vérifier" },
+  { v: "oui", label: "Oui", ic: "check" },
+  { v: "non", label: "Non", ic: "x" },
+  { v: "verifier", label: "À vérifier", ic: "search" },
 ];
 
 /* LES PIÈGES DE SERVICE — ils ne se lisent pas sur la carte, et c'est pour cela qu'ils comptent.
@@ -285,7 +293,6 @@ function tirer(carte) {
 const NOTE = (justes) => (justes >= 15 ? 3 : justes >= 10 ? 2 : justes >= 5 ? 1 : 0);
 
 export default function CommandePiege({ onClose, onFinish }) {
-  useEchap(onClose);
   const [phase, setPhase] = useState("pret");   // pret | jeu | fin
   const [reste, setReste] = useState(DUREE);
   const [carte, setCarte] = useState(dresserCarte);
@@ -342,14 +349,23 @@ export default function CommandePiege({ onClose, onFinish }) {
 
   const stars = NOTE(justes);
 
+  /* UNE FOIS LA PARTIE FINIE, TOUTES LES SORTIES VALIDENT — la croix, le voile et Échap.
+     Elles appelaient `onClose`, qui referme sans rien enregistrer : on venait de jouer deux
+     minutes, l'écran affichait les étoiles obtenues, et fermer par la croix les jetait. C'est le
+     geste le plus naturel devant un écran de résultat, et c'était le seul qui perdait le score.
+     Il n'y a aucune raison de proposer « abandonner ce que je viens de gagner » : tant que la
+     partie n'est pas finie, la croix abandonne comme avant ; ensuite, elle valide. */
+  const fermer = phase === "fin" ? () => onFinish(stars) : onClose;
+  useEchap(fermer);
+
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay" onClick={fermer}>
       <div className="modal cp-modal" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
           <h3 style={{ fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
             <Icon name="shield" size={17} /> La commande piège
           </h3>
-          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
+          <button className="x" onClick={fermer} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
 
         {phase === "pret" && (
@@ -397,7 +413,7 @@ export default function CommandePiege({ onClose, onFinish }) {
             <div className="cp-reponses">
               {(q.choix || REPONSES).map((r) => (
                 <button key={r.v} className="pq-choice cp-rep" onClick={() => repondre(r.v)} disabled={!!flash}>
-                  {r.label}
+                  {r.ic && <Icon name={r.ic} size={15} />}{r.label}
                 </button>
               ))}
             </div>

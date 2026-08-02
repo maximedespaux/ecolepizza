@@ -721,3 +721,57 @@ test('la remise à zéro n\'existe qu\'en développement, et ne vise que soi', (
     // Et l'acte laisse une trace : c'est la seule opération de l'espace stagiaire qui efface.
     assert.match(srcEspace, /logAudit\(req, 'quest\.reset', 'Learner', learner\.id\);/);
 });
+
+test('les jeux de l\'arcade ne jettent plus les étoiles gagnées', () => {
+    /* LE DÉFAUT : la croix, le voile et Échap appelaient `onClose`, qui referme sans rien
+       enregistrer. On venait de jouer deux minutes, l'écran affichait les étoiles obtenues, et
+       fermer par la croix les jetait — c'est pourtant le geste le plus naturel devant un écran de
+       résultat, et c'était le seul qui perdait le score. Sans risque de dégrader un record : la
+       page fait `Math.max(stars, record)`. */
+    const APP_UI = path.join(APP, 'ui');
+    const attendus = {
+        'components/CommandePiege.jsx': /const fermer = phase === "fin" \? \(\) => onFinish\(stars\) : onClose;/,
+        'components/JustePrix.jsx': /const fermer = phase === "fin" \? \(\) => onFinish\(stars\) : onClose;/,
+        'components/ConstructorGame.jsx': /const fermer = checked \? \(\) => onFinish\(meilleur\) : onClose;/,
+        'components/SimulateurPizza.jsx': /const fermer = meilleur > 0 \? \(\) => onFinish\(meilleur\) : onClose;/,
+    };
+    for (const [f, re] of Object.entries(attendus)) {
+        const src = fs.readFileSync(path.join(APP_UI, f), 'utf8');
+        assert.match(src, re, `${f} : la sortie doit valider une fois qu'un score existe`);
+        // Les TROIS sorties, pas seulement la croix : le voile et Échap ferment aussi.
+        assert.match(src, /className="overlay" onClick=\{fermer\}/, `${f} : le voile aussi`);
+        assert.match(src, /className="x" onClick=\{fermer\}/, `${f} : la croix aussi`);
+        assert.match(src, /useEchap\(fermer\)/, `${f} : Échap aussi`);
+        /* ET LE HOOK DOIT ÊTRE IMPORTÉ. Le simulateur ne l'avait jamais eu : ajouter l'appel sans
+           l'import passait le build sans broncher (cf. CLAUDE.md §2.4) et cassait l'écran. */
+        assert.match(src, /import \{ useEchap \} from "\.\.\/lib\/useEchap\.js"/, `${f} : useEchap importé`);
+    }
+});
+
+test('« La commande piège » : trois réponses, chacune son pictogramme', () => {
+    const src = fs.readFileSync(path.join(APP, 'ui/components/CommandePiege.jsx'), 'utf8');
+    // « Ça passe » disait la même chose que « Oui » en plus long : au comptoir on répond oui ou non.
+    assert.match(src, /\{ v: "oui", label: "Oui", ic: "check" \}/);
+    assert.match(src, /\{ v: "non", label: "Non", ic: "x" \}/);
+    assert.match(src, /\{ v: "verifier", label: "À vérifier", ic: "search" \}/);
+    /* Portée limitée au bloc REPONSES, et c'est important : « ça passe ? » reste dans l'ÉNONCÉ
+       (« Allergie au lait. La Complice, ça passe ? »), où c'est la formule juste — c'est ainsi
+       qu'un client demande. Ce qui devait changer, c'est la RÉPONSE : on répond oui ou non. */
+    const bloc = src.slice(src.indexOf('const REPONSES = ['), src.indexOf('];', src.indexOf('const REPONSES = [')));
+    assert.doesNotMatch(bloc, /Ça passe/, "l'ancien libellé de réponse ne doit pas revenir");
+    // L'icône n'est rendue QUE si la réponse en porte une : les questions de comparaison ont leur
+    // propre `choix` (des noms de pizzas), et une coche devant « La Nera » ne voudrait rien dire.
+    assert.match(src, /\{r\.ic && <Icon name=\{r\.ic\} size=\{15\} \/>\}/);
+});
+
+test('`--red` est déclaré — douze règles en dépendaient', () => {
+    /* Une déclaration qui référence une variable inconnue est INVALIDE : elle est ignorée et la
+       couleur héritée prend sa place. Rien ne le signalait — un chrono qui n'alarme plus ressemble
+       à un chrono, et les cœurs sortaient en navy. Mesuré à l'écran : rgb(30,33,64) au lieu du
+       rouge tomate. */
+    const css = fs.readFileSync(path.join(APP, 'ui/styles/app.css'), 'utf8');
+    assert.match(css, /--red:#dc3e37;/, '`--red` doit être déclaré au niveau racine');
+    assert.ok(css.includes('var(--red)'), 'et rester utilisé');
+    // `%%` est un reste de chaîne à la printf : en CSS la déclaration entière saute.
+    assert.doesNotMatch(css, /%%/, 'aucun « %% » : ce n\'est pas du CSS valide');
+});

@@ -8,6 +8,14 @@
 :root{
   --navy:#2c3371; --navy-dark:#26265e; --navy-2:#3a4291;
   --ember1:#dc3e37; --ember2:#f0564f;                 /* rouge tomate */
+  /* `--red` N'ÉTAIT DÉCLARÉ NULLE PART, et douze règles s'en servaient : chrono sous les dix
+     secondes, bandeau d'erreur, ligne « tu as répondu », bouton de remise à zéro, cœurs de
+     l'arcade. Une déclaration qui référence une variable inconnue est INVALIDE — elle est
+     simplement ignorée, et la couleur héritée prend sa place. Rien ne le signalait : le rouge
+     manquant se lisait comme du texte normal, et un chrono qui n'alarme plus ressemble à un
+     chrono. On l'alias sur le rouge tomate de la charte plutôt que de réécrire douze usages qui
+     voulaient tous exactement ça. */
+  --red:#dc3e37;                                      /* alias de --ember1, cf. ci-dessus */
   --grad-ember:linear-gradient(135deg,#dc3e37,#ef6a4f);
   --grad-navy:linear-gradient(135deg,#2c3371,#26265e);
   --font-d:"Mulish",system-ui,sans-serif; --font-b:"Mulish",system-ui,sans-serif; --font-m:"Space Mono",ui-monospace,monospace;
@@ -1932,7 +1940,11 @@ tbody tr:last-child td{border-bottom:none}
   border-radius:12px;background:var(--surface2);border-left:3px solid var(--red);min-height:66px;
   display:flex;align-items:center}
 .cp-reponses{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.cp-rep{text-align:center;font-weight:700}
+/* Le pictogramme et le mot sur une ligne, centrés ensemble. L'icône ne se comprime pas : à
+   375 px les trois boutons se partagent la largeur, et c'est le TEXTE qui doit se serrer — une
+   coche écrasée ne se reconnaît plus, or c'est précisément ce qu'on lit en premier. */
+.cp-rep{display:flex;align-items:center;justify-content:center;gap:6px;text-align:center;font-weight:700}
+.cp-rep svg{flex:none}
 
 /* Le retour est BREF : le chrono tourne. Le détail vient au débriefing. Il occupe LA MÊME BOÎTE
    que l'énoncé (`.cp-client`), donc la hauteur ne bouge pas entre la question et le verdict —
@@ -2122,9 +2134,9 @@ tbody tr:last-child td{border-bottom:none}
    production, il se verrait tout de suite. */
 .pq-debug{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;
   border:1px dashed var(--red);background:repeating-linear-gradient(45deg,
-    transparent 0 6px,color-mix(in srgb,var(--red) 12%%,transparent) 6px 12px);
+    transparent 0 6px,color-mix(in srgb,var(--red) 12%,transparent) 6px 12px);
   color:var(--red);font:800 11.5px/1 var(--font-b);cursor:pointer}
-.pq-debug:hover{background:color-mix(in srgb,var(--red) 18%%,transparent)}
+.pq-debug:hover{background:color-mix(in srgb,var(--red) 18%,transparent)}
 
 /* L'ARCADE — les défis, en tête de Pizza Quest. Elle se lit comme une étagère posée AVANT la
    carte : c'est la première chose qu'on croise, alors qu'auparavant il fallait ouvrir une

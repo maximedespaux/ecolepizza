@@ -35,7 +35,6 @@ const RECIPE = [
 const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
 export default function ConstructorGame({ onClose, onFinish }) {
-  useEchap(onClose);
   const order = useMemo(() => shuffle(RECIPE.map((_, i) => i)), []);   // ordre d'affichage du vivier
   const [placed, setPlaced] = useState([]);                            // indices posés, dans l'ordre du joueur
   const [checked, setChecked] = useState(false);
@@ -58,11 +57,19 @@ export default function ConstructorGame({ onClose, onFinish }) {
     if (correct !== N) setPerdus((p) => p + 1);
   }
 
+  /* Dès qu'un score existe, TOUTES les sorties le valident — la croix, le voile et Échap.
+     Elles appelaient `onClose`, qui referme sans rien enregistrer : l'écran affichait les étoiles
+     obtenues et fermer par la croix les jetait. C'est le geste le plus naturel devant un
+     résultat, et c'était le seul qui perdait le score. Avant la première vérification il n'y a
+     rien à garder : la croix abandonne, comme avant. */
+  const fermer = checked ? () => onFinish(meilleur) : onClose;
+  useEchap(fermer);
+
   const place = (i) => { if (!checked) setPlaced((p) => [...p, i]); };
   const unplace = (i) => { if (!checked) setPlaced((p) => p.filter((x) => x !== i)); };
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay" onClick={fermer}>
       <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>🍕 Le Constructeur de pizza</h3>
@@ -70,7 +77,7 @@ export default function ConstructorGame({ onClose, onFinish }) {
               coûtait une hauteur de plus à un écran qui défile déjà (neuf cases plus neuf
               étiquettes). Ici elle occupe une place qui existait. */}
           <Coeurs perdus={perdus} />
-          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
+          <button className="x" onClick={fermer} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
         <div className="mbody">
           <p className="sub" style={{ marginTop: 0 }}>Remets les étapes dans le bon ordre — de l'empâtement à la cuisson.</p>
@@ -139,7 +146,10 @@ export default function ConstructorGame({ onClose, onFinish }) {
           )}
         </div>
         <div className="mfoot">
-          <button className="btn ghost" onClick={onClose}>Fermer</button>
+          {/* « Fermer » disparaît dès qu'un score existe : le bouton principal dit alors
+              « Valider (n ★) », et deux boutons au même effet sous deux libellés différents ne
+              s'expliquent à personne. */}
+          {!checked && <button className="btn ghost" onClick={onClose}>Fermer</button>}
           {/* « Valider » et non « Valider (+90 XP) » : l'XP a été retirée du jeu, ce bouton
               promettait une monnaie qui n'existe plus. Ce sont les ÉTOILES qui comptent, et
               elles sont affichées juste au-dessus. */}

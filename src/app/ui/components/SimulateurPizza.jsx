@@ -3,6 +3,8 @@ import { Icon } from "./Icon.jsx";
 import Coeurs from "./Coeurs.jsx";
 import { encoreEnVie } from "../lib/coeurs.js";
 import { Paton, doughLook } from "./LivePizza.jsx";
+// Échap : ce jeu était la modale qui l'avait oublié (cf. lib/useEchap.js).
+import { useEchap } from "../lib/useEchap.js";
 
 /**
  * « Fais ta pizza » — simulateur-jeu. On tire un objectif (napolitaine, classique…), un briefing
@@ -99,6 +101,14 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
   const [meilleur, setMeilleur] = useState(0);
   const fournees = () => { setPerdus(0); setMeilleur(0); };
 
+  /* Dès qu'un score existe, TOUTES les sorties le valident — la croix, le voile et Échap.
+     Elles appelaient `onClose`, qui referme sans rien enregistrer : l'écran affichait les étoiles
+     obtenues et fermer par la croix les jetait. C'est le geste le plus naturel devant un
+     résultat, et c'était le seul qui perdait le score. Avant la première vérification il n'y a
+     rien à garder : la croix abandonne, comme avant. */
+  const fermer = meilleur > 0 ? () => onFinish(meilleur) : onClose;
+  useEchap(fermer);
+
   // La couleur/le grain du pâton suivent le TYPE choisi (Tipo 00 clair → complète foncée).
   const look = useMemo(() => doughLook(TYPES[type].water, [], []), [type]);
 
@@ -117,11 +127,11 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay" onClick={fermer}>
       <div className="modal sim" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
           <h3><Icon name="pizza" size={18} /> Fais ta pizza</h3>
-          <button className="x" onClick={onClose} aria-label="Fermer">×</button>
+          <button className="x" onClick={fermer} aria-label="Fermer">×</button>
         </div>
 
         {!obj ? (
