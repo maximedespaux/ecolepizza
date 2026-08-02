@@ -30,13 +30,19 @@ const SECTION_BY_BASE = {
 /**
  * Rubrique d'une requête, à partir de sa base d'URL — avec les exceptions de sous-chemin.
  *
- * `comptabilite/revenus*` appartient à /produit-divers, PAS à /comptabilite : c'est la page
- * du formateur, et lui n'a jamais /comptabilite en écriture. Sans cette distinction, il se
- * voyait refuser la suppression sur SA page, avec un message désignant en plus la mauvaise
- * rubrique.
+ * `comptabilite/revenus*` n'appartient PAS à /comptabilite. L'exception visait /produit-divers,
+ * la page du formateur : lui n'a jamais /comptabilite en écriture, et se voyait donc refuser la
+ * suppression sur SA page, avec en prime un message désignant la mauvaise rubrique.
+ *
+ * Cette page a été supprimée — elle ne montrait plus qu'un sous-ensemble de Comptabilité, la
+ * saisie étant passée sur Partenaires. L'exception, elle, RESTE INDISPENSABLE, et pointe
+ * désormais là où le geste se fait : un secrétariat ayant /partenaires en écriture doit pouvoir
+ * enregistrer une commission. La laisser sur /produit-divers l'aurait rattachée à une rubrique
+ * qui n'existe plus dans le menu — donc introuvable dans `nav_access`, donc 403 pour tous les
+ * rôles configurables.
  */
 function sectionFor(base, reste) {
-    if (base === 'comptabilite' && /^revenus(\/|$)/.test(reste || '')) return '/produit-divers';
+    if (base === 'comptabilite' && /^revenus(\/|$)/.test(reste || '')) return '/partenaires';
     return SECTION_BY_BASE[base];
 }
 

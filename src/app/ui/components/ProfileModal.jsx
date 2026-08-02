@@ -1,10 +1,10 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser, getMyProfile } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import { initials, colorOf } from "../lib/format.js";
 import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
-import { CADRES, cadreFor, cadrePossede, cadrePorte, getCadreChoisi, setCadreChoisi } from "../lib/cadres.js";
+import { CADRES, cadreFor, cadrePossede, cadrePorte, cadreDeQuest, EXPLOITS_QUEST, adopterCadreServeur, cadreClass, cadreStyle, cadreValeur, parseCadre, estCadreQuest, getCadreChoisi, setCadreChoisi } from "../lib/cadres.js";
 import { useEchap } from "../lib/useEchap.js";
 
 /**
@@ -41,11 +41,53 @@ export default function ProfileModal({ onClose }) {
   // n'est accordé la liste reste vide et ils s'affichent verrouillés AVEC leur condition —
   // un objectif visible vaut mieux qu'une case cachée.
   const [attribues, setAttribues] = useState([]);
+  /* Cadres de PIZZA QUEST : gagnés en jouant, un par formation, à SA couleur. Ils ne sont pas
+     dans `CADRES` — ils n'existent qu'une fois la formation connue — et c'est le serveur qui
+     dit lesquels sont acquis (il recalcule sur la banque de questions du moment). */
+  const [quest, setQuest] = useState([]);
+  const auMontage = useRef(getCadreChoisi(uid)); // témoin : a-t-on cliqué pendant le chargement ?
   useEffect(() => {
-    getMyProfile().then((r) => setAttribues(r?.data?.cadres_exclusifs || [])).catch(() => {});
+    getMyProfile().then((r) => {
+      /* Le choix enregistré en base fait foi au chargement : sans cette ligne, la modale
+         affichait le cadre du NAVIGATEUR alors que la Communauté montrait celui de la base.
+         SAUF SI ON A CLIQUÉ DEPUIS : la modale est utilisable avant que cette requête revienne,
+         et une réponse en retard annulerait le choix qu'on vient de faire — l'utilisateur
+         verrait son cadre revenir tout seul au précédent. Le serveur ne gagne qu'au repos. */
+      if (r?.data?.cadre && getCadreChoisi(uid) === auMontage.current) {
+        adopterCadreServeur(uid, r.data.cadre); setChoisi(r.data.cadre);
+      }
+      setAttribues(r?.data?.cadres_exclusifs || []);
+      const q = r?.data?.quest_cadres || [];
+      setQuest(q);
+      recolorerSiBesoin(q);
+    }).catch(() => {});
   }, []);
+
   const [choisi, setChoisi] = useState(() => getCadreChoisi(uid));
-  const cadre = cadrePorte(uid, done, attribues);
+  /* QUAND L'ÉCOLE RECOLORE UNE FORMATION, le cadre porté garde l'ancienne teinte — et la teinte
+     fait partie de la possession (sinon on porterait la couleur d'une formation jamais jouée).
+     Le cadre devenait donc orphelin : plus surligné dans la liste, et refusé par le serveur à la
+     prochaine écriture. Observé pour de vrai, une formation venant d'être recolorée.
+     On réaligne quand il n'y a AUCUN doute : un seul cadre possédé sur ce palier. À plusieurs, on
+     ne devine pas — deviner reviendrait à repeindre le cadre d'une autre formation. */
+  function recolorerSiBesoin(possedes) {
+    const actuel = getCadreChoisi(uid);
+    const { id } = parseCadre(actuel);
+    if (!estCadreQuest(id) || possedes.some((c) => c.valeur === actuel)) return;
+    const memePalier = possedes.filter((c) => c.palier === id);
+    if (memePalier.length !== 1) return;
+    setCadreChoisi(uid, memePalier[0].valeur);
+    setChoisi(memePalier[0].valeur);
+  }
+  const cadre = cadrePorte(uid, done, attribues, quest);
+  /* LES EXPLOITS, TOUS LISTÉS — gagnés ou non. Le serveur ne renvoie que ce qui est acquis ; s'en
+     tenir à sa liste ferait disparaître les six autres, alors que ce sont eux qui donnent envie
+     de rejouer. Même parti pris que les cadres exclusifs, affichés verrouillés avec leur
+     condition depuis toujours. */
+  const exploits = useMemo(() => {
+    const acquis = new Set(quest.filter((q) => q.global).map((q) => q.valeur));
+    return EXPLOITS_QUEST.map((e) => ({ ...e, valeur: e.id, quest: acquis.has(e.id), exclusif: !acquis.has(e.id) }));
+  }, [quest]);
   const choisirCadre = (id) => { setCadreChoisi(uid, id); setChoisi(id); };
   const haut = suivant ? suivant.min : palier.min;
   const pct = suivant ? Math.min(100, Math.round(((done - palier.min) / (haut - palier.min)) * 100)) : 100;
@@ -68,14 +110,19 @@ export default function ProfileModal({ onClose }) {
               « Mes accès » avait une largeur fixe de 150px qu'elle ne rendait jamais, si bien
               que sur un téléphone le nom héritait de 80px et s'affichait « Guilla… ». */}
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-            <span className="pf-avatar" style={{ background: avatar ? avatar.color : "var(--navy)", flex: "none" }}>
+            {/* LE CADRE VA SUR LA PHOTO, pas à côté du texte. Il était rendu en pastille de 14 px
+                dans la ligne de légende, à dix pixels de l'avatar : on voyait bien un anneau, mais
+                détaché de ce qu'il est censé entourer — alors que c'est exactement là qu'on vient
+                vérifier de quoi on a l'air. La photo de profil est le seul endroit de cet écran
+                où il veut dire quelque chose. */}
+            <span className={`pf-avatar ${cadreClass(cadreValeur(cadre))}`}
+              style={{ background: avatar ? avatar.color : "var(--navy)", flex: "none", ...cadreStyle(cadre.valeur) }}>
               {avatar ? avatar.emoji : initials(user?.first_name, user?.last_name)}
             </span>
             <div style={{ flex: "1 1 170px", minWidth: 0 }}>
               <div style={{ fontSize: 17, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{who}</div>
               <div style={{ fontSize: 13, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.email}</div>
-              <div style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
-                <span className={"stu-rank-cadre " + (cadre.id !== "aucun" ? `cadre cadre-${cadre.id}` : "")} aria-hidden="true" />
+              <div style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginTop: 2 }}>
                 {cadre.id === "aucun" ? "Aucun cadre" : `Cadre ${cadre.nom}`}
               </div>
             </div>
@@ -104,7 +151,7 @@ export default function ProfileModal({ onClose }) {
           </span>
 
           {tab === "profil" && (
-            <ProfilTab avatar={avatar} choose={choose} chooseColor={chooseColor} cadre={cadre} palier={palier} suivant={suivant} pct={pct} done={done} enrolled={enrolled} attribues={attribues} choisirCadre={choisirCadre} />
+            <ProfilTab avatar={avatar} choose={choose} chooseColor={chooseColor} cadre={cadre} palier={palier} suivant={suivant} pct={pct} done={done} enrolled={enrolled} attribues={attribues} quest={quest} exploits={exploits} choisirCadre={choisirCadre} />
           )}
           {tab === "infos" && <InfosTab onSaved={refreshUser} />}
           {tab === "visibilite" && <VisibiliteTab who={who} />}
@@ -118,13 +165,45 @@ export default function ProfileModal({ onClose }) {
   );
 }
 
-function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, done, enrolled, attribues, choisirCadre }) {
+function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, done, enrolled, attribues, quest, exploits, choisirCadre }) {
+  /* L'ORDRE DE LA LISTE, ET IL N'ÉTAIT PAS TENABLE. Dix-neuf cadres se suivaient à plat, dans
+     l'ordre où les trois familles avaient été écrites : « Sans cadre » — le choix neutre, celui
+     qu'on cherche quand on veut TOUT retirer — arrivait en dixième position, coincé entre le
+     Grand Chelem et Bronze. Et rien ne disait pourquoi « Premier pas » suivait « Sans faute ».
+
+     Quatre familles, chacune avec son intitulé, rangées par CE QU'IL FAUT FAIRE pour les avoir :
+     jouer sur une formation, jouer partout, venir se former, être distingué par l'école. À
+     l'intérieur, du plus accessible au plus rare — l'ordre où on les gagnera.
+
+     Un groupe VIDE ne s'affiche pas : un intitulé « Mes formations » suivi de rien donnerait
+     l'impression d'un chargement raté, alors qu'il signifie seulement qu'on n'a pas encore joué. */
+  const groupes = useMemo(() => {
+    const ordrePalier = { qdemi: 0, qfini: 1, qparfait: 2 };
+    const formations = quest.filter((q) => !q.global).map(cadreDeQuest)
+      // Par formation, puis par palier : les trois cadres d'une même formation restent ensemble,
+      // dans l'ordre où on les décroche.
+      .sort((a, b) => (a.formation || "").localeCompare(b.formation || "")
+        || ordrePalier[a.id] - ordrePalier[b.id]);
+    const parcours = CADRES.filter((c) => !c.exclusif && !c.personnel && c.id !== "aucun");
+    const distinctions = CADRES.filter((c) => c.exclusif || c.personnel);
+    return [
+      { titre: "Aucun", quoi: "ton avatar seul", cadres: CADRES.filter((c) => c.id === "aucun") },
+      { titre: "Mes formations", quoi: "gagnés en jouant, à la couleur de la formation", cadres: formations },
+      { titre: "Exploits", quoi: "sur l'ensemble de Pizza Quest", cadres: exploits },
+      { titre: "Parcours", quoi: "au nombre de formations terminées", cadres: parcours },
+      { titre: "Distinctions", quoi: "attribuées par l'école", cadres: distinctions },
+    ].filter((g) => g.cadres.length);
+  }, [quest, exploits]);
+
   return (
     <>
       <div className="pf-grade">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
           <b style={{ fontSize: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
-            <span className={"stu-rank-cadre " + (cadre.id !== "aucun" ? `cadre cadre-${cadre.id}` : "")} aria-hidden="true" />
+            {/* L'anneau du PALIER, pas celui qu'on porte : ce bloc parle de la progression en
+                formations (x/y, palier suivant). Les mêler affichait un anneau « Sans faute »
+                jaune sous la légende « Cadre Braise ». */}
+            <span className={"stu-rank-cadre " + cadreClass(palier.id)} aria-hidden="true" />
             {palier.id === "aucun" ? "Aucun cadre" : `Cadre ${palier.nom}`}
           </b>
           <span className="hint">{done}/{enrolled} formation(s) terminée(s)</span>
@@ -139,26 +218,38 @@ function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, d
       <div style={{ marginTop: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Choisis ton cadre</div>
         <p className="hint" style={{ margin: 0 }}>Il entoure ton avatar partout, y compris dans la Communauté.</p>
+        {groupes.map((g) => (
+        <div key={g.titre}>
+          <div className="pf-cadres-titre">{g.titre}<span className="hint">{g.quoi}</span></div>
         <div className="pf-cadres">
-          {CADRES.map((c) => {
-            const possede = cadrePossede(c, done, attribues);
-            const actif = cadre.id === c.id;
+          {g.cadres.map((c) => {
+            // Un cadre de quête porte une VALEUR (palier + couleur) ; les autres, leur seul id.
+            const cle = c.valeur || c.id;
+            // Un exploit non gagné se voit et se lit, mais ne se choisit pas.
+            const possede = c.quest === true || (c.quest === undefined && cadrePossede(c, done, attribues, quest));
+            const actif = (cadre.valeur || cadre.id) === cle;
             return (
-              <button key={c.id} type="button"
+              <button key={cle} type="button"
                 className={`pf-cadre${actif ? " on" : ""}${c.exclusif ? " exclusif" : ""}`}
                 disabled={!possede}
-                onClick={() => choisirCadre(c.id)}
-                title={possede ? c.desc || c.nom : (c.condition || c.desc)}>
-                <span className={`pf-cadre-apercu ${possede && c.id !== "aucun" ? `cadre cadre-${c.id}` : ""}`}>
+                onClick={() => choisirCadre(cle)}
+                title={[c.titre, possede ? c.desc || c.nom : (c.condition || c.desc)].filter(Boolean).join(" — ")}>
+                <span className={`pf-cadre-apercu ${possede && c.id !== "aucun" ? `cadre cadre-${c.id}` : ""}`}
+                  style={cadreStyle(cle)}>
                   <span aria-hidden="true">{avatar ? avatar.emoji : "🍕"}</span>
                   {!possede && <span className="pf-lock"><Icon name="lock" size={9} /></span>}
                 </span>
                 <span className="pf-cadre-nom">{c.nom}</span>
+                {/* Le CODE de la formation, sur sa propre ligne. Le titre complet faisait quatre
+                    lignes dans la tuile et noyait le nom du cadre ; il reste en info-bulle. */}
+                {c.formation && <span className="pf-cadre-code">{c.formation}</span>}
                 {!possede && <span className="pf-cadre-cond">{c.condition || c.desc}</span>}
               </button>
             );
           })}
         </div>
+        </div>
+        ))}
       </div>
 
       <div style={{ marginTop: 18 }}>

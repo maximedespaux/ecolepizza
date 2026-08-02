@@ -6,16 +6,16 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import DoughBar from "../components/DoughBar.jsx";
 import AvatarCadre from "../components/AvatarCadre.jsx";
-import { euro, colorOf, initials } from "../lib/format.js";
+import { euro, colorOf, initials, dateHeure } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { useCountUp } from "../lib/useCountUp.js";
 import { useEchap } from "../lib/useEchap.js";
-import { QuestionCard, QuestionModal, QuestionForm } from "../components/QuestionPost.jsx";
+import { QuestionCard, QuestionModal, QuestionForm, AnnonceCard } from "../components/QuestionPost.jsx";
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
-import { cadreFor, cadrePorteDe, useCadreChoisi } from "../lib/cadres.js";
+import { cadreFor, cadrePorteDe, cadreClass, cadreStyle, cadreValeur, useCadreChoisi } from "../lib/cadres.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
-import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts } from "../api/apiClient.js";
+import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost, unshareRecipe } from "../api/apiClient.js";
 
 /**
  * Temps de présence à l'écran avant qu'un halo « j'aime » s'éteigne.
@@ -148,14 +148,14 @@ function PostHead({ id, name, avatar, cadre, date, onOpen, children }) {
       <AvatarCadre
         avatar={av}
         initiales={initials(prenom, nom)}
-        cadre={cadre?.id}
+        cadre={cadreValeur(cadre)}
         size={38}
         title={`Voir le profil${cadre && cadre.id !== "aucun" ? ` · cadre ${cadre.nom}` : ""}`}
         onClick={ouvrir}
       />
       <span className="post-who">
         <button className="post-name" onClick={ouvrir}>{name || "Stagiaire"}</button>
-        <span className="post-date">{date}</span>
+        <span className="post-date">{dateHeure(date)}</span>
       </span>
       {children}
     </div>
@@ -170,8 +170,8 @@ function AuthorChip({ id, name, avatar, cadre, onOpen }) {
   return (
     <button className="author-chip" title={`Voir le profil${cadre.id !== "aucun" ? ` · cadre ${cadre.nom}` : ""}`}
       onClick={(e) => { e.stopPropagation(); if (id) onOpen(id); }}>
-      <span className={`author-ava ${cadre.id !== "aucun" ? `cadre cadre-${cadre.id}` : ""}`}
-        style={av ? { background: av.color, color: "#fff", fontSize: 11 } : null}>
+      <span className={`author-ava ${cadreClass(cadre.valeur || cadre.id)}`}
+        style={{ ...cadreStyle(cadre.valeur), ...(av ? { background: av.color, color: "#fff", fontSize: 11 } : null) }}>
         {av ? av.emoji : <Icon name="user" size={11} />}
       </span>{name || "Stagiaire"}
     </button>
@@ -204,9 +204,9 @@ function Commenters({ gens, total, cadreDe, onOpen }) {
         // l'épaisseur de 3 px des grands avatars mangeait le visage.
         const c = cadreDe(g.user_id, g.done, g.cadre, g.cadres_ex);
         return (
-          <button key={g.user_id || i} className={`comm-face${c.id !== "aucun" ? ` cadre cadre-${c.id} sm` : ""}`}
+          <button key={g.user_id || i} className={`comm-face${c.id !== "aucun" ? ` ${cadreClass(c.valeur || c.id)} sm` : ""}`}
             aria-label={`${g.name || "Stagiaire"}${c.id !== "aucun" ? ` · cadre ${c.nom}` : ""}`}
-            style={{ zIndex: gens.length - i, ...(av ? { background: av.color, color: "#fff" } : null) }}
+            style={{ zIndex: gens.length - i, ...cadreStyle(c.valeur), ...(av ? { background: av.color, color: "#fff" } : null) }}
             onClick={(e) => { e.stopPropagation(); if (g.user_id) onOpen(g.user_id); }}>
             {av ? av.emoji : <Icon name="user" size={10} />}
           </button>
@@ -245,7 +245,8 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
                   entrée ressort, et un halo tiré de la couleur de l'avatar. */}
               <span className={`prof-ava-wrap ${cadreProfil.id !== "aucun" ? "a-cadre" : ""}`}
                 style={{ "--halo": av ? av.color : "var(--ember1)" }}>
-                <span className={`prof-ava ${cadreProfil.id !== "aucun" ? `cadre cadre-${cadreProfil.id}` : ""}`}
+                <span className={`prof-ava ${cadreClass(cadreProfil.valeur || cadreProfil.id)}`}
+                  style={cadreStyle(cadreProfil.valeur)}
                   style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
               </span>
               {cadreProfil.id !== "aucun" && (
@@ -301,7 +302,7 @@ function costs(d) {
 // Fil de commentaires — défini AU NIVEAU MODULE (hors de Communaute). S'il était défini dans
 // le composant, il serait recréé à chaque frappe et le <textarea> perdrait le focus (une lettre
 // puis sortie du champ). Les états/handlers sont passés en props.
-function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onSubmit, onSaveEdit, onDelete }) {
+function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onSubmit, onSaveEdit, onDelete, cadreDe, onProfil, peutModerer }) {
   const cs = comments[id];
   return (
     <div className="comm-thread">
@@ -309,8 +310,16 @@ function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onS
         <p className="hint" style={{ margin: 0 }}>Sois le premier à commenter cette fiche.</p>
       ) : cs.map((c) => (
         <div key={c.id} className="comm-c">
+          {/* Le VISAGE du commentateur. Ce fil était la dernière liste de la Communauté à
+              n'afficher que des noms, alors que la fiche au-dessus porte un avatar et son
+              cadre — et que les pastilles « qui a commenté » en montrent déjà, juste à côté. */}
+          <AvatarCadre avatar={c.author_avatar ? parseAvatar(c.author_avatar) : null}
+            initiales={initials(...String(c.author_name || "Stagiaire").split(" ").slice(0, 2))}
+            cadre={cadreValeur(cadreDe(c.user_id, c.author_done, c.author_cadre, c.author_cadres_ex))}
+            size={30} title={c.author_name}
+            onClick={c.user_id ? () => onProfil(c.user_id) : undefined} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 12 }}><b>{c.author_name || "Stagiaire"}</b> <span className="hint">· {c.created_at || "à l'instant"}</span></span>
+            <span style={{ fontSize: 12 }}><b>{c.author_name || "Stagiaire"}</b> <span className="hint">· {c.created_at ? dateHeure(c.created_at) : "à l'instant"}</span></span>
             {editing[c.id] != null ? (
               <div style={{ marginTop: 4 }}>
                 <textarea className="inp" rows={2} value={editing[c.id]} onChange={(e) => setEditing((m) => ({ ...m, [c.id]: e.target.value }))} style={{ width: "100%" }} />
@@ -323,10 +332,15 @@ function CommentThread({ id, comments, editing, setEditing, draft, setDraft, onS
               <span style={{ display: "block", fontSize: 13.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</span>
             )}
           </div>
-          {c.mine && editing[c.id] == null && (
+          {(c.mine || peutModerer) && editing[c.id] == null && (
             <span style={{ display: "flex", gap: 2 }}>
-              <button className="iconbtn" title="Modifier" onClick={() => setEditing((m) => ({ ...m, [c.id]: c.body }))}><Icon name="pencil" size={13} /></button>
-              <button className="iconbtn del" title="Supprimer" onClick={() => onDelete(id, c.id)}><Icon name="trash" size={13} /></button>
+              {/* MODIFIER reste à l'auteur : corriger les mots de quelqu'un d'autre, c'est les
+                  lui faire dire. La modération RETIRE, elle ne réécrit pas. */}
+              {c.mine && (
+                <button className="iconbtn" title="Modifier" onClick={() => setEditing((m) => ({ ...m, [c.id]: c.body }))}><Icon name="pencil" size={13} /></button>
+              )}
+              <button className="iconbtn del" title={c.mine ? "Supprimer" : "Supprimer (modération)"}
+                onClick={() => onDelete(id, c.id)}><Icon name="trash" size={13} /></button>
             </span>
           )}
         </div>
@@ -356,7 +370,10 @@ export default function Communaute() {
   const [profileId, setProfileId] = useState(null);  // à qui appartient le profil ouvert
   const [posts, setPosts] = useState([]);           // questions et annonces (espace d'échange)
   const [openPost, setOpenPost] = useState(null);   // publication ouverte en détail
-  const [composer, setComposer] = useState(false);  // formulaire « poser une question »
+  // `composer` ne dit plus seulement « ouvert » mais QUOI ouvrir : « Créer une annonce »
+  // doit tomber directement du bon côté du formulaire (null | "QUESTION" | "ANNONCE").
+  const [composer, setComposer] = useState(null);
+  const [deplie, setDeplie] = useState(false);      // bandeau : voir les annonces précédentes
   const toggleWish = (id) => setWish((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); writeWish(n); return n; });
   const navigate = useNavigate();
 
@@ -365,6 +382,12 @@ export default function Communaute() {
   useEchap(() => setOpenId(null), !!openId);
   const { user } = useContext(UserContext);
   const moi = user?.id;
+  // Qui arrive par le menu de l'école — même liste que `STAFF` dans nav.js. STAGIAIRE et
+  // INTERVENANT entrent par l'espace stagiaire : même page, autre lecteur (cf. l'accroche).
+  const duBureau = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"].includes(user?.role);
+  // Qui parle AU NOM DE L'ÉCOLE — même liste que `STAFF` dans community.controller. Le
+  // formateur en est exclu : il est en salle avec eux, il n'engage pas l'organisme.
+  const peutAnnoncer = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
   // Le choix de cadre vit dans le navigateur de chacun : on ne le connaît donc QUE pour
   // l'utilisateur courant. Pour les autres, on retombe sur leur cadre de parcours, seule
   // information dont le serveur dispose aujourd'hui (cf. CHANTIERS.md §4.2 point 6).
@@ -384,10 +407,17 @@ export default function Communaute() {
    * perdu (donnée corrigée par l'école) cesse d'être affiché sans qu'il faille repasser sur
    * la base.
    */
-  const cadreDe = (id, done = 0, choixServeur = null, exclusifs = []) =>
-    (id && id === moi
-      ? cadrePorteDe(monChoix, done, exclusifs)
-      : cadrePorteDe(choixServeur, done, exclusifs));
+  const cadreDe = (id, done = 0, choixServeur = null, exclusifs = []) => {
+    /* LE CADRE « ÉCOLE » TIENT AU RÔLE, pas à une formation ni à une attribution. La possession
+       étant revérifiée ici, il était REJETÉ : la liste des cadres possédés vient du serveur, et
+       le serveur ne la connaît qu'une fois la migration 126 jouée. On voyait donc son avatar
+       changer tout de suite (localStorage) mais son cadre disparaître dans le fil — pour soi,
+       alors que la page sait parfaitement qu'on est du bureau. Pour les AUTRES, c'est bien le
+       serveur qui tranche : `enrichirAuteurs` pose « ecole » dans les cadres possédés. */
+    const aMoi = id && id === moi;
+    const possedes = aMoi && duBureau ? [...exclusifs, "ecole"] : exclusifs;
+    return cadrePorteDe(aMoi ? monChoix : choixServeur, done, possedes);
+  };
 
   function openProfile(userId) {
     setProfile(null); setProfileId(userId); setProfileOpen(true);
@@ -415,6 +445,14 @@ export default function Communaute() {
   // vider l'autre — c'est aussi ce qui fait que la page reste utile si la migration 114 n'est
   // pas jouée (l'API répond alors une liste vide).
   const chargerPosts = () => getPosts().then((r) => setPosts(r.data || [])).catch(() => {});
+
+  /* Épingler / dépingler une annonce. On recharge au lieu de retoucher l'état local : c'est le
+     SERVEUR qui décide de l'ordre (pinned DESC, puis date), et le reproduire ici serait un
+     second classement à tenir d'accord avec le premier. Le PATCH est déjà réservé au bureau. */
+  async function basculerEpingle(a) {
+    try { await updatePost(a.id, { pinned: !a.pinned }); await chargerPosts(); }
+    catch { /* le serveur a le dernier mot : en cas de refus, l'affichage reste tel quel */ }
+  }
   useEffect(() => {
     if (!openId) { setDetail(null); return; }
     setDetail(null);
@@ -468,6 +506,21 @@ export default function Communaute() {
     } catch { /* ignore */ }
   }
 
+  /* Retirer une fiche du fil — modération. Elle repasse en PRIVÉE : l'auteur la garde dans ses
+     empâtements ou ses garnitures, souvent le travail d'une session. Le libellé le dit en toutes
+     lettres dans la confirmation : « retirer » et « supprimer » ne doivent pas se confondre au
+     moment où l'on clique. */
+  async function retirerDuFil(d) {
+    if (!window.confirm(`Retirer « ${d.name} » de la communauté ?\n\nLa fiche redevient privée : elle disparaît du fil, mais ${d.author_name || "son auteur"} la garde dans ses propres fiches.`)) return;
+    setBusy(true);
+    try {
+      await unshareRecipe(d.id);
+      setOpenId(null);
+      setList((p) => p.filter((x) => x.id !== d.id));
+    } catch (e) { window.alert(e.message || "Retrait impossible."); }
+    finally { setBusy(false); }
+  }
+
   async function copyToMine(d) {
     setBusy(true);
     try {
@@ -480,11 +533,17 @@ export default function Communaute() {
   /* LE FIL UNIQUE.
      Deux sources — les fiches partagées et les publications d'entraide — fusionnées en un seul
      flux. Chaque élément est étiqueté `_post` pour que le rendu sache quoi dessiner ; le tri
-     et la recherche, eux, travaillent sur des champs communs normalisés (`_date`, `_texte`).
-     Les annonces épinglées passent devant, quel que soit le tri : c'est leur raison d'être. */
+     et la recherche, eux, travaillent sur des champs communs normalisés (`_date`, `_texte`). */
   const q = query.trim().toLowerCase();
+  /* LES ANNONCES SORTENT DU FIL. Elles viennent de l'école, s'adressent à tout le monde et
+     périment vite ; laissées dans le flux, elles se classaient comme le reste — une question
+     très commentée pouvait pousser « la session de mardi est décalée » hors du premier écran.
+     Elles ont donc leur bandeau, en tête, avant les filtres (qui ne les concernent pas). Le
+     serveur les rend déjà `pinned` d'abord, puis de la plus récente à la plus ancienne. */
+  const annonces = posts.filter((p) => p.kind === "ANNONCE");
   const fiches = list.map((x) => ({ ...x, _post: false, _date: x.updated_at, _texte: [x.name, x.description, x.type, x.author_name] }));
-  const echanges = posts.map((x) => ({ ...x, _post: true, _date: x.created_at, _texte: [x.title, x.body, x.author_name] }));
+  const echanges = posts.filter((p) => p.kind !== "ANNONCE")
+    .map((x) => ({ ...x, _post: true, _date: x.created_at, _texte: [x.title, x.body, x.author_name] }));
 
   const shown = [...fiches, ...echanges].filter((s) => {
     // La wishlist ne concerne que les fiches : on ne met pas une question « de côté », on y répond.
@@ -494,7 +553,8 @@ export default function Communaute() {
     if (!q) return true;
     return s._texte.some((f) => String(f || "").toLowerCase().includes(q));
   }).sort((a, b) => {
-    if (a.pinned !== b.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+    // Plus de tri par `pinned` ici : seule une ANNONCE s'épingle (cf. createPost côté serveur),
+    // et les annonces ont quitté le fil pour leur bandeau.
     if (sort === "liked") {
       // « Populaires » n'a pas de sens pour une question : elle se classe à ses RÉPONSES, qui
       // sont son équivalent d'engagement. Sans ça les questions tomberaient toutes en fin de fil.
@@ -507,13 +567,62 @@ export default function Communaute() {
 
   return (
     <>
-      <PageHead eyebrow="Outils · communauté" title="Communauté"
-        lead="Les fiches partagées par les autres stagiaires : empâtements, garnitures et réalisations. Aime, commente, mets de côté (wishlist), ou enregistre-en une dans tes fiches pour l'adapter." />
+      {/* MÊME page des deux côtés, mais pas le même lecteur. Le texte d'origine tutoie et dit
+          « les AUTRES stagiaires » : lu depuis le bureau, il prend l'école pour une stagiaire.
+          Seule l'accroche change — le fil, lui, reste le même (cadré sur l'organisme). */}
+      <PageHead eyebrow={duBureau ? "Formation · communauté" : "Outils · communauté"} title="Communauté"
+        lead={duBureau
+          ? "Le fil des stagiaires : questions d'entraide, empâtements, garnitures et réalisations. Vous pouvez y répondre, épingler ce qui compte, et publier une annonce de l'école."
+          : "Les fiches partagées par les autres stagiaires : empâtements, garnitures et réalisations. Aime, commente, mets de côté (wishlist), ou enregistre-en une dans tes fiches pour l'adapter."} />
 
-      {list.length === 0 && posts.length === 0 ? (
+      {/* LE BANDEAU DE L'ÉCOLE. Avant la barre d'outils, donc avant tout filtre : une annonce
+          ne se cherche pas, elle s'impose. Il ne s'affiche que s'il a quelque chose à dire —
+          sauf pour le bureau, à qui il faut bien un endroit d'où en publier une. */}
+      {(annonces.length > 0 || peutAnnoncer) && (
+        <section className="comm-annonces">
+          <div className="comm-annonces-t">
+            <Icon name="bell" size={15} />
+            <b>Annonces de l'école</b>
+            {annonces.length > 0 && <span className="hint">· {annonces.length}</span>}
+            {peutAnnoncer && (
+              <button className="btn sm primary" style={{ marginLeft: "auto" }}
+                onClick={() => setComposer("ANNONCE")}>
+                <Icon name="bell" size={13} /> Créer une annonce
+              </button>
+            )}
+          </div>
+          {annonces.length === 0 ? (
+            <p className="hint" style={{ margin: 0 }}>
+              Aucune annonce en ce moment. Ce qui est publié ici est vu par tous les stagiaires,
+              en tête de leur communauté.
+            </p>
+          ) : (
+            <>
+              {(deplie ? annonces : annonces.slice(0, 2)).map((a) => (
+                <AnnonceCard key={a.id} post={a} peutEpingler={peutAnnoncer}
+                  onOpen={setOpenPost} onEpingler={basculerEpingle} />
+              ))}
+              {/* Au-delà de deux, les anciennes se replient : le bandeau doit rester un
+                  bandeau, pas devenir un second fil au-dessus du fil. */}
+              {annonces.length > 2 && (
+                <button className="btn sm ghost" onClick={() => setDeplie((d) => !d)} style={{ alignSelf: "flex-start" }}>
+                  <Icon name={deplie ? "chevron-up" : "chevron-down"} size={13} />
+                  {/* « Voir les 1 annonce précédente » : au singulier, c'est l'article qui change,
+                      pas seulement le pluriel des mots. */}
+                  {deplie ? "Replier"
+                    : annonces.length - 2 === 1 ? "Voir l'annonce précédente"
+                      : `Voir les ${annonces.length - 2} annonces précédentes`}
+                </button>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {list.length === 0 && echanges.length === 0 ? (
         <EmptyState icon="users" title="La communauté est encore vide"
           text="Sois le premier : partage une fiche depuis le calculateur de pâte, ou pose une question — c'est souvent par là que ça commence.">
-          <button className="btn primary" onClick={() => setComposer(true)} style={{ marginTop: 14 }}>
+          <button className="btn primary" onClick={() => setComposer("QUESTION")} style={{ marginTop: 14 }}>
             <Icon name="help" size={14} /> Poser une question
           </button>
         </EmptyState>
@@ -540,7 +649,7 @@ export default function Communaute() {
             </button>
             {/* Poser une question est une ACTION, pas un filtre : elle est en primaire et à
                 part, sinon elle se perdrait au milieu des segments de tri. */}
-            <button className="btn sm primary" onClick={() => setComposer(true)}>
+            <button className="btn sm primary" onClick={() => setComposer("QUESTION")}>
               <Icon name="help" size={13} /> Poser une question
             </button>
           </div>
@@ -598,7 +707,13 @@ export default function Communaute() {
                         title={wish.has(s.id) ? "Retirer de ma wishlist" : "Mettre de côté (wishlist)"}>
                         <Icon name="bookmark" size={13} fill={wish.has(s.id) ? "currentColor" : "none"} />
                       </button>
-                      <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /></button>
+                      {/* « Enregistrer dans mes fiches » n'a de sens que pour un STAGIAIRE : il
+                          copie la fiche dans SES empâtements puis y navigue — des routes de
+                          l'espace stagiaire, que le bureau ne peut pas ouvrir. Le bouton menait
+                          donc à une redirection sèche, après avoir tout de même créé la copie. */}
+                      {!duBureau && (
+                        <button className="btn sm ghost" disabled={busy} onClick={() => copyToMine(s)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /></button>
+                      )}
                     </div>
                   </CommCard>
                 );
@@ -735,13 +850,25 @@ export default function Communaute() {
                       <button className={"btn sm " + (wish.has(detail.id) ? "primary" : "ghost")} onClick={() => toggleWish(detail.id)} title={wish.has(detail.id) ? "Retirer de ma wishlist" : "Mettre de côté"}>
                         <Icon name="bookmark" size={14} fill={wish.has(detail.id) ? "currentColor" : "none"} /> {wish.has(detail.id) ? "Mise de côté" : "Wishlist"}
                       </button>
-                      <button className="btn sm primary comm-save" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /> Enregistrer</button>
+                      {!duBureau && (
+                        <button className="btn sm primary comm-save" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /> Enregistrer</button>
+                      )}
+                      {/* La modération pouvait retirer un commentaire, mais pas la fiche qui le
+                          portait : il ne restait qu'à supprimer la fiche entière — ce que la
+                          route refuse à quiconque n'en est pas l'auteur. Retirer du fil suffit,
+                          et se défait : l'auteur peut repartager. */}
+                      {detail.can_moderate && !detail.mine && (
+                        <button className="btn sm ghost danger" disabled={busy} style={{ marginLeft: "auto" }}
+                          onClick={() => retirerDuFil(detail)} title="Retirer cette fiche de la communauté (elle redevient privée)">
+                          <Icon name="shield" size={14} /> Retirer du fil
+                        </button>
+                      )}
                     </div>
 
                     {/* Commentaires */}
                     <div style={{ marginTop: 18, borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
                       <div className="card-ttl" style={{ fontSize: 14, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}><Icon name="message-circle" size={15} /> Commentaires ({(comments[detail.id] || []).length})</div>
-                      <CommentThread id={detail.id} comments={comments} editing={editing} setEditing={setEditing}
+                      <CommentThread id={detail.id} comments={comments} cadreDe={cadreDe} onProfil={openProfile} peutModerer={!!detail.can_moderate} editing={editing} setEditing={setEditing}
                         draft={draft} setDraft={setDraft} onSubmit={submitComment} onSaveEdit={saveEdit} onDelete={delComment} />
                     </div>
                   </div>
@@ -763,9 +890,11 @@ export default function Communaute() {
       {composer && (
         // `peutAnnoncer` : une ANNONCE engage l'école, seul le bureau peut en publier. Le
         // serveur refuse de toute façon, mais proposer un choix qui sera rejeté est une
-        // mauvaise manière de le dire.
-        <QuestionForm onClose={() => setComposer(false)} onCreated={chargerPosts}
-          peutAnnoncer={["SUPER_ADMIN", "ADMIN", "SECRETARIAT", "INTERVENANT"].includes(user?.role)} />
+        // mauvaise manière de le dire. La liste doit rester la MÊME que `STAFF` dans
+        // community.controller : 'ADMIN' n'existe pas (le rôle réel est ADMIN_ORGANISME), et
+        // INTERVENANT est du côté des stagiaires — il ne parle pas au nom de l'école.
+        <QuestionForm onClose={() => setComposer(null)} onCreated={chargerPosts} kindInitial={composer}
+          peutAnnoncer={peutAnnoncer} />
       )}
     </>
   );

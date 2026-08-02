@@ -488,3 +488,158 @@ Un lanceur de migration existe (le client `mysql` n'est pas installé sur la mac
 - **Cadres exclusifs** : qui les attribue, et via quel écran ?
 - **Photos** : ~40 images disponibles sur ecole-pizza.com (autorisation donnée). Une seule
   utilisée. `moyens-techniques3-min-2.jpg` et `fond-aliments*.jpg` non exploitées.
+
+---
+
+## 7. Dépendances npm — état de `npm audit` (2026-07-29)
+
+**API (`src/api`) : 0 vulnérabilité.**
+
+**Front (`src/app`) : 2 alertes « high » restantes, volontairement non corrigées.**
+
+`react-router` 7.12 → 8.2 est signalé par [GHSA-qwww-vcr4-c8h2](https://github.com/advisories/GHSA-qwww-vcr4-c8h2)
+(« RSC Mode CSRF Bypass »). **On reste en 7.18 sciemment**, pour trois raisons :
+
+1. L'avis dit lui-même : *« This only affects your application if you are using the unstable RSC
+   APIs. »* Impasto est une SPA Vite — `BrowserRouter`, `Routes`, `Link`, `useNavigate`,
+   `useParams`, `Outlet`. Aucun RSC, aucun `loader`/`action`, aucun rendu serveur. **La faille
+   n'est pas atteignable ici.**
+2. Il n'existe **aucun correctif en 7.x** : la seule version corrigée est `react-router@8.3.0`.
+3. `react-router-dom` **n'existe plus en 8.x** (fusionné dans `react-router`). Corriger imposerait
+   donc de réécrire les imports de **34 fichiers** + de monter le plancher de `react` à `^19.2.7`,
+   pour zéro gain de sécurité réel.
+
+→ `npm audit` affichera donc 2 « high » tant qu'on ne migre pas en v8. **C'est attendu.** À
+revoir le jour où l'on migrera react-router pour d'autres raisons (et pas avant).
+
+**Ce qui a été corrigé** : la chaîne `eslint` 9 → 10 (`@eslint/js`, `eslint-plugin-react-hooks`
+5 → 7, `eslint-plugin-react-refresh` 0.4 → 0.5), qui traînait un `brace-expansion` 1.1.16
+vulnérable (DoS) via `minimatch@3` — 5 alertes supprimées. Aucun impact runtime : ce sont des
+`devDependencies`, jamais embarquées dans le bundle. À noter d'ailleurs qu'**il n'y a pas de
+fichier `eslint.config.js`** dans le projet : le script `npm run lint` ne peut pas s'exécuter en
+l'état (cf. CLAUDE.md § 2.4, « pas d'ESLint dans le projet »).
+
+---
+
+## 8. À ANTICIPER — envoi d'e-mails et sécurité des comptes (plan, 2026-08-02)
+
+Objectif demandé : sécuriser la **réinitialisation de mot de passe** et le **changement
+d'adresse e-mail** par un envoi d'e-mail. Rien n'est construit ; cette section est le plan, et
+surtout **l'ordre dans lequel il doit être construit**, parce que se tromper d'ordre OUVRE une
+faille qui n'existe pas aujourd'hui.
+
+### 8.1 État vérifié le 2026-08-02 (et non supposé)
+
+**Ce qui protège déjà :**
+- mots de passe en **bcrypt** (coût 10) — `password_plain_enc` a été supprimée (migration 039),
+  le H1 de l'audit est donc clos ;
+- JWT en cookie **httpOnly**, `sameSite: Lax`, `secure` en production ;
+- limitation de débit sur la connexion (`loginLimiter`) et sur les deux changements
+  (`passwordLimiter`) ;
+- `PATCH /api/auth/password` et `PATCH /api/auth/email` exigent **le mot de passe actuel**,
+  vérifié au bcrypt avant écriture. C'est le contrôle essentiel, et il est en place.
+
+**Ce qui manque :**
+1. **Aucune capacité d'envoi d'e-mail dans le projet.** Pas de dépendance, pas de transport, rien.
+   Les notifications existantes (`notification.controller.js`) sont **in-app uniquement** : une
+   ligne en base, lue depuis l'application. Il n'y a aucun canal sortant à réutiliser.
+2. **Aucune route « mot de passe oublié ».** La récupération passe aujourd'hui par l'école :
+   `POST /api/stagiaires/:id/reset-password` génère un mot de passe et **le renvoie en clair**
+   dans la réponse, que le secrétariat lit à l'écran et transmet de vive voix. Conséquence :
+   **l'école connaît le mot de passe de chaque stagiaire.** C'est le vrai sujet de ce chantier.
+3. **Aucune vérification de la NOUVELLE adresse** lors d'un changement d'e-mail. On peut
+   aujourd'hui se mettre une adresse qu'on ne contrôle pas.
+4. **Aucune notification** lors d'un changement de mot de passe ou d'adresse. Un compte pris en
+   main reste pris en main sans que personne ne s'en aperçoive.
+5. **Aucune invalidation des sessions** après un changement de mot de passe : le JWT déjà émis
+   reste valable jusqu'à son expiration. Or la raison n°1 de changer son mot de passe est de
+   penser que quelqu'un d'autre est entré — et c'est précisément le cas où il reste entré.
+
+### 8.2 LA CONTRAINTE D'ORDRE — à ne pas inverser
+
+Aujourd'hui, changer son e-mail sans le vérifier est **sans gravité** : rien ne permet de
+reprendre un compte depuis une adresse. Le jour où « mot de passe oublié → lien par e-mail »
+existe, cette même faiblesse devient un **chemin de prise de contrôle complet** :
+
+> session laissée ouverte sur un poste partagé → l'attaquant change l'adresse (le mot de passe
+> actuel est demandé, mais il est parfois dans le gestionnaire du navigateur) → « mot de passe
+> oublié » → il reçoit le lien → le compte est à lui, et le propriétaire n'a rien vu.
+
+**Donc : la vérification de la nouvelle adresse et la notification à l'ANCIENNE doivent être
+livrées AVANT ou EN MÊME TEMPS que la réinitialisation par e-mail. Jamais après.**
+
+### 8.3 Ordre de construction proposé
+
+| # | Étape | Pourquoi à ce rang |
+|---|---|---|
+| 1 | **Transport e-mail** générique (`lib/mailer.js`) + réglages SMTP hors dépôt | Rien n'est possible avant. À écrire une fois, pour tous les usages à venir. |
+| 2 | **Notification des changements sensibles** — un e-mail à l'ANCIENNE adresse à chaque changement de mot de passe ou d'adresse | Le moins risqué, le plus rentable : c'est ce qui fait qu'une prise de contrôle se voit. Aucun nouveau pouvoir accordé à personne. |
+| 3 | **Invalidation des sessions** au changement de mot de passe | Indépendant de l'e-mail. Sans lui, changer son mot de passe ne chasse pas l'intrus. |
+| 4 | **Changement d'e-mail à double confirmation** — lien envoyé à la NOUVELLE adresse, avertissement à l'ANCIENNE, adresse non appliquée tant que le lien n'est pas suivi | Ferme la faille décrite en 8.2, AVANT d'ouvrir le reset. |
+| 5 | **Mot de passe oublié** par lien à usage unique | En dernier, une fois le reste en place. |
+
+### 8.4 Le schéma (une seule table, pour les trois usages)
+
+```
+account_token
+  id              uuid
+  organization_id uuid            -- cloisonnement, comme partout
+  user_id         uuid
+  kind            ENUM('RESET_PASSWORD','VERIFY_EMAIL')
+  token_hash      char(64)        -- SHA-256 du jeton ; JAMAIS le jeton lui-même
+  payload         varchar(255)    -- pour VERIFY_EMAIL : la nouvelle adresse EN ATTENTE
+  expires_at      datetime
+  used_at         datetime NULL   -- usage unique
+  requested_ip    varchar(45)
+  created_at      timestamp
+```
+
+**Le jeton n'est jamais stocké en clair.** Une base lue (sauvegarde, injection, accès
+prestataire) donnerait sinon des liens de réinitialisation valides pour tous les comptes en
+attente. On stocke `sha256(jeton)` ; le jeton lui-même n'existe que dans l'e-mail. C'est la même
+logique qu'un mot de passe, pour la même raison.
+
+**L'adresse en attente vit sur le JETON, pas sur `user`.** Tant que le lien n'est pas suivi,
+`user.email` ne bouge pas — donc rien à annuler si le lien n'est jamais ouvert, et pas de
+colonne `email_pending` à nettoyer.
+
+### 8.5 Les décisions qui comptent (et leur raison)
+
+- **Jeton** : 32 octets d'aléa cryptographique (`crypto.randomBytes(32)`), en base64url. Pas
+  `Math.random`, pas un UUID v4 — un UUID est unique, pas imprévisible.
+- **Durée de vie courte** : 30 minutes pour un reset, 24 h pour une vérification d'adresse. Un
+  reset se fait dans la foulée ; une vérification d'adresse peut attendre le lendemain.
+- **Usage unique**, marqué à la consommation (`used_at`). Un lien qui resterait valide après
+  usage traîne dans l'historique du navigateur et dans les journaux du serveur de messagerie.
+- **Aucune énumération de comptes** (M3 de l'audit) : « si cette adresse est connue, un lien
+  vient de partir » — la même réponse et **le même temps de réponse** que l'adresse existe ou
+  non. Répondre « compte inconnu » offre la liste des stagiaires à qui veut la demander.
+- **Invalidation en cascade** : consommer un reset invalide tous les autres jetons du compte ET
+  toutes les sessions. Sinon on laisse à l'attaquant la porte par laquelle il est entré.
+- **L'ANCIENNE adresse est toujours prévenue**, y compris quand c'est elle qu'on remplace. C'est
+  le seul signal que reçoit un propriétaire dépossédé.
+- **Limitation de débit sur la demande**, par compte ET par IP. Sans quoi la fonction devient un
+  moyen d'inonder une boîte, et le nom de domaine de l'école finit en liste noire.
+- **Journalisation** dans `audit` : demande, consommation, échec. C'est ce qui permet de dire
+  après coup ce qui s'est passé.
+
+### 8.6 Ce qu'il ne faut pas faire
+
+- **Ne pas envoyer un mot de passe par e-mail**, même provisoire. Un e-mail n'est pas un canal
+  sûr et reste dans la boîte pour toujours. On envoie un LIEN à usage unique et limité dans le
+  temps ; l'utilisateur choisit son mot de passe lui-même.
+- **Ne pas mettre le jeton dans l'URL d'une page qui charge des ressources tierces** : il partirait
+  dans l'en-tête `Referer`.
+- **Ne pas retirer `POST /stagiaires/:id/reset-password`** dès la première étape. Tant que tous
+  les stagiaires n'ont pas une adresse valide et vérifiée, le secrétariat doit garder un moyen de
+  dépanner. On le retire quand le nouveau chemin fonctionne, pas avant.
+
+### 8.7 À trancher avant de commencer
+
+1. **Quel expéditeur ?** Un domaine qui envoie sans SPF/DKIM/DMARC finit en indésirables — et un
+   lien de réinitialisation en indésirables, c'est un stagiaire qui appelle l'école. Il faut
+   l'accès DNS du domaine.
+2. **Quel service d'envoi ?** SMTP de l'hébergeur, ou un service dédié. À choisir en fonction du
+   volume et de ce à quoi on veut se lier.
+3. **Les stagiaires ont-ils tous une adresse fiable en base ?** À vérifier avant : la fonction ne
+   sert qu'à ceux qui en ont une, et le reste continuera de passer par l'école.

@@ -15,6 +15,13 @@
  * échoue — `toBlob` renvoie alors du PNG, qui serait bien plus lourd.
  */
 
+/* Plafonds de la réduction, EXPORTÉS : l'écran les annonce à l'utilisateur, et les retaper
+   là-bas les ferait dériver le jour où on les change ici. `PHOTO_MAX_KO` doit rester SOUS la
+   limite du serveur (600 Ko, cf. uploadPostImage) — sinon une photo réduite dans les règles se
+   ferait refuser à l'arrivée, et personne ne comprendrait pourquoi. Un test le vérifie. */
+export const PHOTO_MAX_KO = 550;
+export const PHOTO_MAX_PX = 1400;
+
 /** Charge un fichier en <img>, en libérant l'URL objet quoi qu'il arrive. */
 function chargerImage(file) {
   return new Promise((resolve, reject) => {
@@ -36,7 +43,7 @@ const enBlob = (canvas, type, q) => new Promise((r) => canvas.toBlob(r, type, q)
  * une qualité fixe donnerait tantôt du gâchis, tantôt un refus. On s'arrête au premier palier
  * qui passe sous la limite.
  */
-export async function reduireImage(file, { maxPx = 1400, maxKo = 550 } = {}) {
+export async function reduireImage(file, { maxPx = PHOTO_MAX_PX, maxKo = PHOTO_MAX_KO } = {}) {
   const img = await chargerImage(file);
   const facteur = Math.min(1, maxPx / Math.max(img.width, img.height));
   const canvas = document.createElement("canvas");

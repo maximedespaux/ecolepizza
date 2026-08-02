@@ -39,7 +39,9 @@ const STATUS_LABEL = {
   PAYE: "Payé", FACTUREE: "Facturé", REMISE: "Remis", ANNULEE: "Annulée",
 };
 // Étapes visibles par le stagiaire (progression de sa demande).
-const DEMANDE_FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "FACTUREE", "PAYE", "REMISE"];
+// On encaisse AVANT de facturer : la facture constate un paiement reçu, elle ne le
+// précède pas. C'est aussi l'ordre que le serveur déclare (STATUSES).
+const DEMANDE_FLOW = ["NOUVELLE", "EN_PREPARATION", "PRETE", "PAYE", "FACTUREE", "REMISE"];
 
 function DemandeSteps({ status }) {
   const idx = DEMANDE_FLOW.indexOf(status);
@@ -248,7 +250,20 @@ function EcoleTab() {
             <b className="shop-name">{p.name}</b>
             {p.personalizable ? <span className="shop-brod"><Icon name="edit" size={11} /> Brodé à ton nom</span> : null}
             <span className="shop-price">
-              <b className="tnum">{euro(p.price_ttc)} <span className="shop-unit">TTC</span></b>
+              {/* Remise stagiaire : prix catalogue barré + badge. Une remise qu'on ne voit pas
+                  ne fait plaisir à personne — et sans le prix barré, le stagiaire ne peut pas
+                  savoir qu'il paie moins cher que le tarif affiché ailleurs. */}
+              <b className="tnum">
+                {p.remise_pct ? (
+                  <span className="hint" style={{ textDecoration: "line-through", fontWeight: 400 }}>
+                    {euro(p.price_ttc_avant)}
+                  </span>
+                ) : null}
+                {euro(p.price_ttc)} <span className="shop-unit">TTC</span>
+                {/* Le libellé porte la forme SAISIE (« −5,00 € » ou « −10 % ») : annoncer
+                    « −12,53 % » là où l'école a promis 5 € serait exact et incompréhensible. */}
+                {p.remise_label ? <span className="badge g">{p.remise_label}</span> : null}
+              </b>
               <span className="shop-ht tnum">{euro(p.price_ht)} HT</span>
             </span>
             {/* Disponibilité réelle (stock − demandes en cours). On affiche le NOMBRE, mais
@@ -719,7 +734,19 @@ function Boutique() {
   return (
     <>
       <PageHead eyebrow="Espace stagiaire · boutique" title="La boutique"
-        lead="Le matériel de l'école, à retirer sur place — et les offres négociées chez nos partenaires." />
+        lead={<>
+          Le matériel de l'école, à retirer sur place — et les offres négociées chez nos partenaires.
+          {/* La réserve est dite UNE FOIS, en arrivant, plutôt que répétée sur chaque carte
+              remisée. Formulée pour rester vraie même quand aucune remise n'est en cours :
+              c'est toute la boutique qui est réservée aux stagiaires, pas seulement les remises.
+              On ne CONDITIONNE pas l'accès à un badge : `learner.levels` est posé dès
+              l'INSCRIPTION, il ne dit donc pas qu'une formation a été suivie — et la colonne qui
+              le dirait (`completed_levels`) se remplit à la main, presque jamais renseignée.
+              L'accès est de toute façon déjà limité aux comptes stagiaires. */}
+          <span style={{ display: "block", marginTop: 4 }}>
+            Les tarifs affichés ici, remises comprises, sont réservés aux stagiaires de l'école.
+          </span>
+        </>} />
 
       {sent ? (
         <div className="ok-banner">

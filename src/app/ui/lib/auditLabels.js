@@ -55,9 +55,17 @@ const ACTION_LABEL = {
     'template.save': ['Modèle enregistré', A],
     'template.upload': ['Modèle importé', G],
     'template.duplicate': ['Modèle dupliqué', G],
+    'template.rename': ['Identifiant de modèle renommé', A],
     'template.reorder': ['Modèles réordonnés', A],
     'template.delete': ['Modèle supprimé', R],
+    'template.reset': ['Modèle revenu à sa version d\'origine', A],
     'template.customTokens': ['Jetons personnalisés modifiés', A],
+
+    /* Remise à zéro de la progression Pizza Quest. ROUGE : elle détruit les étoiles ET les
+       cadres qui en découlent, sans retour possible. Elle ne peut viser que soi — le serveur
+       prend l'identité du compte connecté — mais elle mérite une trace : c'est la seule
+       opération de l'espace stagiaire qui efface un acquis. */
+    'quest.reset': ['Progression Pizza Quest effacée', R],
 
     // Conditions et champs de document
     'condition.create': ['Condition créée', G],
@@ -93,6 +101,11 @@ const ACTION_LABEL = {
     'partner.delete': ['Partenaire supprimé', R],
     'partner.contribution.create': ['Financement enregistré', G],
     'partner.contribution.delete': ['Financement supprimé', R],
+    // Catalogue vendu par un partenaire, visible des stagiaires : ces prix les engagent, donc
+    // leurs modifications se tracent comme le reste.
+    'partner.product.create': ['Produit partenaire ajouté', G],
+    'partner.product.update': ['Produit partenaire modifié', A],
+    'partner.product.delete': ['Produit partenaire retiré', R],
     'opco.create': ['OPCO créé', G],
 
     // Quiz
@@ -102,12 +115,45 @@ const ACTION_LABEL = {
     'quiz.submit': ['Quiz passé', N],
     'quiz.send': ['Quiz envoyé', B],
 
+    /* Pièces justificatives fournies par le STAGIAIRE — le sens inverse du reste. Le dépôt et
+       la vérification se tracent : ce sont des copies de pièces d'identité, et « qui a vu quoi,
+       quand » est précisément ce qu'un contrôle demandera. La suppression d'un fichier est en
+       ROUGE et non en neutre : tant que la règle de conservation n'est pas tranchée, c'est la
+       seule purge existante — elle doit se repérer d'un coup d'œil dans le journal. */
+    'piecetype.create': ['Pièce justificative créée', G],
+    'piecetype.update': ['Pièce justificative modifiée', A],
+    'piecetype.delete': ['Pièce justificative supprimée', R],
+    'piece.depot': ['Pièce déposée', B],
+    'piece.validee': ['Pièce validée', G],
+    'piece.refusee': ['Pièce refusée', R],
+    'piece.fichier_supprime': ['Fichier de pièce supprimé', R],
+
+    /* Communauté — modération. Ces trois codes ne sont posés que quand on agit sur le message
+       d'UN AUTRE : supprimer sa propre publication ne regarde personne. Rouge pour les deux
+       suppressions — irréversibles, les réponses et l'image partent par cascade ; ambre pour la
+       correction, qui met des mots dans la bouche de quelqu'un sans rien détruire. */
+    'community.post_supprime': ['Publication supprimée (modération)', R],
+    'community.reponse_supprimee': ['Réponse supprimée (modération)', R],
+    'community.post_modifie': ['Publication corrigée (modération)', A],
+
+    /* Communauté — modération. Retirer la publication de quelqu'un doit laisser une trace
+       lisible : « fiche retirée » et non un code, sinon le journal ne sert qu'à qui l'a écrit.
+       Le ton est ROUGE comme les suppressions, sans en être une : la fiche redevient privée,
+       son auteur la garde. C'est bien un retrait de la vue de tous. */
+    'recipe.unshare': ['Fiche retirée de la communauté', R],
+
     // Organisme et accès
     'organization.update': ['Organisme modifié', A],
     'organization.locations': ['Lieux de formation modifiés', A],
     'accessprofile.create': ['Profil d\'accès créé', G],
     'accessprofile.system': ['Profil d\'accès système modifié', A],
     'platform.org.create': ['Organisme créé (plateforme)', G],
+
+    // Entités émettrices (identités de facturation)
+    'billing_profile.create': ['Entité émettrice créée', G],
+    'billing_profile.update': ['Entité émettrice modifiée', A],
+    'billing_profile.default': ['Entité émettrice par défaut modifiée', A],
+    'billing_profile.delete': ['Entité émettrice supprimée', R],
 
     // Archives
     'archive.bulk_delete': ['Archives supprimées en lot', R],
@@ -145,6 +191,14 @@ const SUFFIXE = {
 
 /** entité technique → nom lisible, et son genre (pour accorder le participe). */
 const ENTITY_LABEL = {
+    // La remise à zéro de Pizza Quest vise le STAGIAIRE lui-même : c'est sa progression qui
+    // disparaît, pas un objet qu'il possède.
+    Learner: ['Stagiaire', 'm'],
+    CommunityPost: ['Publication', 'f'],
+    CommunityAnswer: ['Réponse', 'f'],
+    PieceType: ['Pièce justificative', 'f'],
+    PieceDepot: ['Dépôt de pièce', 'm'],
+    Recipe: ['Fiche technique', 'f'],
     Invoice: ['Facture', 'f'],
     MaterialSale: ['Vente de matériel', 'f'],
     InventoryItem: ['Article d\'inventaire', 'm'],
@@ -162,9 +216,11 @@ const ENTITY_LABEL = {
     AccountingSettings: ['Réglages comptables', 'm'],
     Partner: ['Partenaire', 'm'],
     PartnerContribution: ['Financement', 'm'],
+    PartnerProduct: ['Produit partenaire', 'm'],
     Opco: ['OPCO', 'm'],
     Organization: ['Organisme', 'm'],
     AccessProfile: ['Profil d\'accès', 'm'],
+    BillingProfile: ['Entité émettrice', 'f'],
     Archive: ['Archive', 'f'],
     User: ['Membre', 'm'],
     quest_category: ['Catégorie (Pizza Quest)', 'f'],

@@ -47,7 +47,9 @@ const emargementTemplateRoutes = require('./routes/emargementTemplate.routes.js'
 const equipeRoutes = require('./routes/equipe.routes.js');
 const platformRoutes = require('./routes/platform.routes.js');
 const opcoRoutes = require('./routes/opco.routes.js');
+const pieceRoutes = require('./routes/piece.routes.js');
 const accessProfileRoutes = require('./routes/accessProfile.routes.js');
+const billingProfileRoutes = require('./routes/billingProfile.routes.js');
 const eventsRoutes = require('./routes/events.routes.js');
 
 // --- CORS ---
@@ -68,6 +70,16 @@ app.use(cors({
 }));
 
 // En-têtes de sécurité de base (sans dépendance).
+/* QUI EST LE CLIENT. `req.ip` n'honore `x-forwarded-for` que si on le lui dit ici — et par
+   défaut on ne lui dit pas. C'est ce qui rend le limiteur anti-force brute inviolable : sans
+   proxy déclaré, l'adresse vient de la SOCKET, que le client ne choisit pas. L'en-tête, lui,
+   est fourni par l'appelant : le lire sans condition permettait d'obtenir une identité neuve
+   à chaque requête, donc de ne jamais atteindre aucun plafond.
+   Derrière un reverse proxy (nginx, Traefik…), régler TRUST_PROXY — « 1 » pour un seul saut,
+   ou une liste d'adresses. Ne l'activer QUE si un proxy réécrit vraiment l'en-tête, sinon on
+   rouvre exactement le trou qu'on vient de fermer. */
+app.set('trust proxy', process.env.TRUST_PROXY || false);
+
 app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('X-Frame-Options', 'DENY');
@@ -132,7 +144,10 @@ app.use('/api/emargement-templates', emargementTemplateRoutes);
 app.use('/api/equipe', equipeRoutes);
 app.use('/api/platform', platformRoutes);
 app.use('/api/opcos', opcoRoutes);
+// Pièces justificatives fournies par le stagiaire (migration 127).
+app.use('/api/pieces', pieceRoutes);
 app.use('/api/access-profiles', accessProfileRoutes);
+app.use('/api/emetteurs', billingProfileRoutes);
 app.use('/api/events', eventsRoutes);
 
 // PUBLIC (sans authentification) : lien de signature partageable.
@@ -142,4 +157,8 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impasto-
 
 app.listen(port, () => {
     console.log(`Impasto API en écoute sur http://localhost:${port}`);
+    // Le pool est PARESSEUX (cf. config/database.js) : sans cet appel, rien ne toucherait la
+    // base avant la première requête d'un utilisateur, et une panne de connexion ne se
+    // découvrirait qu'à ce moment-là. On garde donc le diagnostic au démarrage, en l'assumant.
+    require('./config/database.js').verifierConnexion();
 });

@@ -3,7 +3,8 @@ import { Icon } from "../components/Icon.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
-  getShopSettings, saveShopSettings, downloadFacturX, getTemplates, getCompanies } from "../api/apiClient.js";
+  getShopSettings, downloadFacturX, getCompanies, getEmitters, getTemplates } from "../api/apiClient.js";
+import PaiementSplit, { resolvePayments } from "../components/PaiementSplit.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -20,7 +21,6 @@ const TABS = [
   { v: "caisse", label: "Caisse" },
   { v: "historique", label: "Historique des ventes" },
   { v: "inventaire", label: "Inventaire" },
-  { v: "reglages", label: "Réglages" },
 ];
 
 function Ventes() {
@@ -52,8 +52,18 @@ function Ventes() {
   // Quand l'entreprise paie, on peut RATTACHER un stagiaire (matériel destiné à un apprenant
   // précis) : c'est l'entreprise qui est facturée, le stagiaire n'est qu'un lien retrouvable.
   const [attachLearner, setAttachLearner] = useState(false);
+  // Entité émettrice : sous quelle identité la facture sort. Vide = défaut du serveur. On ne
+  // montre le sélecteur que s'il existe PLUSIEURS entités — sinon c'est du bruit.
+  const [emitters, setEmitters] = useState([]);
+  const [emitterId, setEmitterId] = useState("");
+  // Modèle de facture choisi à la vente (OBLIGATOIRE) : la facture sort sous ce modèle.
+  const [factureTemplates, setFactureTemplates] = useState([]);
+  const [factureSlug, setFactureSlug] = useState("");
   const [discount, setDiscount] = useState(""); // % remise globale
-  const [payment, setPayment] = useState("");
+  const [dueDate, setDueDate] = useState(""); // échéance de règlement (vide = à réception)
+  // Répartition du règlement : une ligne par moyen, la dernière prenant le solde. Une seule
+  // ligne = paiement simple. Le moyen se fixe quand les options chargent.
+  const [payments, setPayments] = useState([{ method: "", amount: "" }]);
   const [paid, setPaid] = useState(true);
   const [lastInvoice, setLastInvoice] = useState(null); // facture créée (pour télécharger le PDF)
 
@@ -67,12 +77,27 @@ function Ventes() {
     loadInventory();
     getStagiaires().then((r) => setLearners(r.data)).catch(() => {});
     getCompanies().then((r) => setCompanies(r.data || [])).catch(() => {});
-    getShopSettings().then((r) => { setSettings(r.data); setPayment((r.data.payment_methods || "").split(",")[0] || ""); }).catch(() => {});
+    getEmitters().then((r) => {
+      const list = r.data || [];
+      setEmitters(list);
+      setEmitterId((list.find((e) => e.is_default) || {}).id || ""); // présélectionne le défaut
+    }).catch(() => {});
+    getShopSettings().then((r) => setSettings(r.data)).catch(() => {});
+    // Modèles de FACTURE actifs : le vendeur choisit lequel utiliser pour cette vente.
+    getTemplates().then((r) => {
+      const list = (r.data || []).filter((t) => String(t.doc_type || "").toUpperCase() === "FACTURE" && t.active !== false && t.active !== 0);
+      setFactureTemplates(list);
+      if (list.length === 1) setFactureSlug(list[0].slug); // un seul modèle : présélectionné
+    }).catch(() => {});
   }, []);
 
+  // L'émettrice choisie porte désormais TVA et moyens de paiement ; à défaut, on retombe sur les
+  // réglages boutique, puis sur des valeurs par défaut. La caisse suit donc l'entité sélectionnée.
+  const selectedEmitter = useMemo(() => emitters.find((e) => e.id === emitterId) || null, [emitters, emitterId]);
   const payOptions = useMemo(
-    () => (settings?.payment_methods || "Espèces,CB,Virement,Chèque").split(",").map((s) => s.trim()).filter(Boolean),
-    [settings]
+    () => (selectedEmitter?.payment_methods || settings?.payment_methods || "Espèces,CB,Virement,Chèque")
+      .split(",").map((s) => s.trim()).filter(Boolean),
+    [selectedEmitter, settings]
   );
 
   const grouped = useMemo(() => {
@@ -136,21 +161,41 @@ function Ventes() {
   const removeLine = (id) => setCart((c) => c.filter((l) => l.item_id !== id));
   const setLine = (id, patch) => setCart((c) => c.map((l) => (l.item_id === id ? { ...l, ...patch } : l)));
 
-  const tvaApplies = settings ? !!settings.tva_applies : true;
+  // Cale les moyens de paiement sur les options disponibles : au chargement (ligne sans moyen),
+  // et si l'émettrice change et retire un moyen qui n'existe plus.
+  useEffect(() => {
+    if (!payOptions.length) return;
+    setPayments((rows) => {
+      const fixed = rows.map((r) => (payOptions.includes(r.method) ? r : { ...r, method: payOptions[0] }));
+      return fixed.length ? fixed : [{ method: payOptions[0], amount: "" }];
+    });
+  }, [payOptions]);
+
+  const tvaApplies = selectedEmitter ? !!selectedEmitter.tva_applies : (settings ? !!settings.tva_applies : true);
+  // Une remise de ligne exclut la remise globale, et réciproquement (cf. sale.controller.js) :
+  // les deux se cumulaient, et 10 % sur l'article plus 5 % sur la vente faisaient 14,5 %.
+  const remiseDeLigne = useMemo(() => cart.some((l) => Number(l.disc) > 0), [cart]);
+  const remiseGlobale = Math.min(100, Math.max(0, Number(discount) || 0));
+
   const totals = useMemo(() => {
-    const d = Math.min(100, Math.max(0, Number(discount) || 0));
-    const factor = 1 - d / 100;
     let ht = 0, tva = 0;
     for (const l of cart) {
-      const lineHT = l.unit_price * l.quantity * (1 - (Number(l.disc) || 0) / 100) * factor;
+      // Le taux qui s'applique vraiment : celui de la ligne en mode ligne, sinon le global.
+      const taux = remiseDeLigne ? (Number(l.disc) || 0) : remiseGlobale;
+      // MÊME ARRONDI QUE LE SERVEUR : prix unitaire arrondi d'abord, puis multiplié. La caisse
+      // arrondissait après la multiplication et pouvait donc afficher un centime de moins que
+      // la facture émise — un ticket qui ne tombe pas sur le montant encaissé.
+      const unitNet = Number((l.unit_price * (1 - taux / 100)).toFixed(2));
+      const lineHT = Number((unitNet * l.quantity).toFixed(2));
       ht += lineHT;
       if (tvaApplies) tva += lineHT * l.tax_rate / 100;
     }
-    return { ht, tva, ttc: ht + tva, discount: d };
-  }, [cart, discount, tvaApplies]);
+    return { ht, tva, ttc: ht + tva, discount: remiseDeLigne ? 0 : remiseGlobale };
+  }, [cart, remiseDeLigne, remiseGlobale, tvaApplies]);
 
   async function validate() {
     if (cart.length === 0) return;
+    if (!factureSlug) { setStatus({ type: "error", message: "Choisissez le modèle de facture avant d'encaisser." }); return; }
     setStatus(null);
     try {
       // Entreprise : elle est l'acheteur (company_id) ; le stagiaire n'est envoyé QUE si on l'a
@@ -158,14 +203,26 @@ function Ventes() {
       const buyerFields = buyerType === "entreprise"
         ? { company_id: company?.id || null, learner_id: (attachLearner && client?.id) || null }
         : { learner_id: client?.id || null, company_id: null };
+      // Répartition résolue : montants saisis + solde sur le dernier moyen. On envoie la liste ;
+      // le serveur revérifie que la somme tombe sur le TTC.
+      const { parts } = resolvePayments(payments, totals.ttc);
       const r = await checkoutSale({
         ...buyerFields,
-        discount: Number(discount) || 0,
-        payment_method: payment || null,
+        billing_profile_id: emitterId || null,
+        invoice_template_slug: factureSlug,
+        // Une remise de ligne annule la globale — le champ est désactivé, mais son ANCIENNE
+        // valeur reste en état si on remise un article après coup. L'envoyer ferait refuser la
+        // vente par le serveur (les deux ne se cumulent plus) pour une saisie que l'opérateur
+        // ne voit même plus à l'écran.
+        discount: remiseDeLigne ? 0 : remiseGlobale,
+        due_date: dueDate || null,
+        payment_method: parts[0]?.method || null,   // rétro-compat : moyen principal
+        payments: parts,
         status: paid ? "PAYEE" : "IMPAYEE",
         lines: cart.map((l) => ({ item_id: l.item_id, quantity: l.quantity, discount_pct: Number(l.disc) || 0 })),
       });
-      setCart([]); switchBuyerType("stagiaire"); setDiscount("");
+      setCart([]); switchBuyerType("stagiaire"); setDiscount(""); setDueDate("");
+      setPayments([{ method: payOptions[0] || "", amount: "" }]);
       setLastInvoice({ id: r.invoice_id, number: r.invoice_number });
       setStatus({ type: "success", message: `Vente validée — facture ${r.invoice_number} (${euro(r.total_ttc)} TTC) pour ${r.buyer}.` });
       loadSales(); loadInventory(); bumpBadges();
@@ -342,11 +399,40 @@ function Ventes() {
                   </>
                 )}
               </div>
-              <div className="row2">
-                <div className="field"><label htmlFor="caisse-paiement">Moyen de paiement</label>
-                  <select id="caisse-paiement" className="inp" value={payment} onChange={(e) => setPayment(e.target.value)}>
-                    {payOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+
+              {/* Modèle de facture (OBLIGATOIRE) : le vendeur choisit le type de facture à émettre. */}
+              <div className="field">
+                <label>Modèle de facture <span style={{ color: "var(--ember1)" }}>*</span></label>
+                <select className="inp" value={factureSlug} onChange={(e) => setFactureSlug(e.target.value)}
+                  style={!factureSlug ? { borderColor: "var(--ember1)" } : undefined}>
+                  <option value="">— Choisir le type de facture —</option>
+                  {factureTemplates.map((t) => (
+                    <option key={t.slug} value={t.slug}>{t.label || t.slug}</option>
+                  ))}
+                </select>
+                {factureTemplates.length === 0 && (
+                  <p className="hint" style={{ margin: "4px 0 0", fontSize: 12, color: "var(--ember1)" }}>
+                    Aucun modèle de type FACTURE. Créez-en un dans Modèles de documents.
+                  </p>
+                )}
+              </div>
+
+              {/* Sous quelle identité la facture sort — seulement s'il y a un choix à faire. */}
+              {emitters.length > 1 && (
+                <div className="field">
+                  <label>Facturer au nom de</label>
+                  <select className="inp" value={emitterId} onChange={(e) => setEmitterId(e.target.value)}>
+                    {emitters.map((em) => (
+                      <option key={em.id} value={em.id}>{em.label || em.legal_name}{em.is_default ? " (défaut)" : ""}</option>
+                    ))}
                   </select>
+                </div>
+              )}
+
+              <PaiementSplit options={payOptions} total={totals.ttc} rows={payments} onChange={setPayments} />
+              <div className="row2">
+                <div className="field"><label>Échéance de règlement</label>
+                  <input className="inp" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                 </div>
                 <label className="field" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 22 }}>
                   <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} /> Payé à l'encaissement
@@ -374,26 +460,57 @@ function Ventes() {
                         <input type="number" min="1" max={l.stock} value={l.quantity} title={`Quantité (max ${l.stock} en stock)`}
                           onChange={(e) => setLine(l.item_id, { quantity: Math.min(Number(l.stock) || 1, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
                           className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} />
-                        <input type="number" min="0" max="100" value={l.disc} title="Remise %"
+                        <input type="number" min="0" max="100" value={l.disc}
+                          disabled={remiseGlobale > 0}
+                          title={remiseGlobale > 0
+                            ? "Une remise globale est saisie : les deux ne se cumulent pas."
+                            : "Remise %"}
                           onChange={(e) => { const v = e.target.value; setLine(l.item_id, { disc: v === "" ? "" : Math.min(100, Math.max(0, Number(v) || 0)) }); }}
                           className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} placeholder="%" />
-                        <span className="mono" style={{ width: 74, textAlign: "right" }}>{euro(ttc(l.unit_price * l.quantity * (1 - (l.disc || 0) / 100), tvaApplies ? l.tax_rate : 0))}</span>
+                        {/* Le montant de ligne suit le MÊME arrondi que le serveur (prix unitaire
+                            d'abord), sinon le ticket ne tombe pas sur ce qui est facturé. */}
+                        <span className="mono" style={{ width: 74, textAlign: "right" }}>
+                          {euro(ttc(
+                            Number((l.unit_price * (1 - (remiseDeLigne ? (Number(l.disc) || 0) : remiseGlobale) / 100)).toFixed(2)) * l.quantity,
+                            tvaApplies ? l.tax_rate : 0))}
+                        </span>
                         <button className="iconbtn del" title="Retirer" onClick={() => removeLine(l.item_id)}><Icon name="trash" size={15} /></button>
                       </div>
                     ))}
                   </div>
                   <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
                     <label>Remise globale (%)</label>
-                    <input className="inp" type="number" min="0" max="100" step="0.1" placeholder="0" value={discount} onChange={(e) => setDiscount(e.target.value)} style={{ maxWidth: 140 }} />
+                    <input className="inp" type="number" min="0" max="100" step="0.1" placeholder="0"
+                      value={remiseDeLigne ? "" : discount}
+                      disabled={remiseDeLigne}
+                      title={remiseDeLigne ? "Un article porte déjà une remise : les deux ne se cumulent pas." : undefined}
+                      onChange={(e) => setDiscount(e.target.value)} style={{ maxWidth: 140 }} />
+                    {remiseDeLigne && (
+                      <p className="hint" style={{ margin: "6px 0 0" }}>
+                        Un article porte une remise : la remise globale ne s'applique pas en plus.
+                        Retire les remises des articles pour remiser toute la vente d'un coup.
+                      </p>
+                    )}
                   </div>
                   <div style={{ marginTop: 12, fontSize: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}><span>Total HT{totals.discount > 0 ? ` (remise ${totals.discount}%)` : ""}</span><span className="mono">{euro(totals.ht)}</span></div>
                     <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}><span>TVA{tvaApplies ? "" : " (exonérée)"}</span><span className="mono">{euro(totals.tva)}</span></div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, marginTop: 4 }}><span>Total TTC</span><span className="mono">{euro(totals.ttc)}</span></div>
                   </div>
-                  <button className="btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={validate}>
-                    Encaisser → créer la facture
-                  </button>
+                  {/* On bloque l'encaissement si le règlement dépasse le total : une répartition
+                      qui ne boucle pas ne doit pas partir. (Sans surcoût quand c'est payé.) */}
+                  {(() => {
+                    const trop = paid && !resolvePayments(payments, totals.ttc).valid;
+                    const sansModele = !factureSlug; // modèle de facture obligatoire
+                    const motif = trop ? "La répartition des paiements dépasse le total"
+                      : sansModele ? "Choisissez le modèle de facture" : undefined;
+                    return (
+                      <button className="btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }}
+                        onClick={validate} disabled={trop || sansModele} title={motif}>
+                        Encaisser → créer la facture
+                      </button>
+                    );
+                  })()}
                 </>
               )}
             </Card>
@@ -405,9 +522,6 @@ function Ventes() {
 
       {tab === "inventaire" && <Inventaire embedded />}
 
-      {tab === "reglages" && (
-        <ShopSettings settings={settings} onSaved={(s) => { setSettings(s); setStatus({ type: "success", message: "Réglages enregistrés." }); }} onError={(m) => setStatus({ type: "error", message: m })} />
-      )}
     </>
   );
 }
@@ -535,76 +649,6 @@ function SalesHistory({ sales, onRemove, onDownload }) {
         )}
       </Card>
     </>
-  );
-}
-
-function ShopSettings({ settings, onSaved, onError }) {
-  const [form, setForm] = useState(() => ({
-    invoice_prefix: settings?.invoice_prefix || "F",
-    next_number: settings?.next_number || 1,
-    payment_methods: settings?.payment_methods || "Espèces,CB,Virement,Chèque",
-    tva_applies: settings ? !!settings.tva_applies : true,
-    invoice_template_slug: settings?.invoice_template_slug || "",
-  }));
-  // SEULS les modèles de type FACTURE. Le serveur applique la même règle à l'enregistrement et
-  // au moment de produire le PDF — un modèle peut changer de type après avoir été choisi.
-  const [modeles, setModeles] = useState([]);
-  useEffect(() => {
-    getTemplates()
-      .then((r) => setModeles((r.data || []).filter((m) => String(m.doc_type || "").toUpperCase() === "FACTURE")))
-      .catch(() => {});
-  }, []);
-  const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
-
-  async function save() {
-    setSaving(true);
-    try { const r = await saveShopSettings(form); await Promise.resolve(r); onSaved({ ...form }); }
-    catch (e) { onError(e.message); }
-    finally { setSaving(false); }
-  }
-
-  return (
-    <Card title="Réglages de facturation">
-      <div className="row2">
-        <div className="field"><label htmlFor="fact-prefixe">Préfixe de numéro</label>
-          <input id="fact-prefixe" className="inp" value={form.invoice_prefix} onChange={set("invoice_prefix")} placeholder="F" /></div>
-        <div className="field"><label htmlFor="fact-numero">Prochain numéro</label>
-          <input id="fact-numero" className="inp" type="number" min="1" value={form.next_number} onChange={set("next_number")} /></div>
-      </div>
-      <p className="sub" style={{ marginTop: 0 }}>Exemple de numéro : <span className="mono">{form.invoice_prefix}-{new Date().getFullYear()}-{String(form.next_number).padStart(4, "0")}</span></p>
-      <div className="field"><label htmlFor="fact-paiements">Moyens de paiement (séparés par des virgules)</label>
-        <input id="fact-paiements" className="inp" value={form.payment_methods} onChange={set("payment_methods")} placeholder="Espèces,CB,Virement,Chèque" /></div>
-      <label className="field" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input type="checkbox" checked={form.tva_applies} onChange={(e) => setForm((p) => ({ ...p, tva_applies: e.target.checked }))} />
-        Appliquer la TVA (décochez pour une facturation exonérée)
-      </label>
-
-      {/* Mise en page de la facture. Par défaut celle de l'application ; un modèle permet d'y
-          mettre son logo, ses conditions, sa présentation. Le fichier Factur-X reste attaché
-          dans les deux cas — il est normé, il ne se met pas en page. */}
-      {/* Le choix est EXPLICITE. Le déduire du seul type ne tient pas dès qu'un organisme a
-          plusieurs modèles FACTURE qui ne se distinguent pas par une condition — facture de
-          formation et facture de boutique, par exemple. Le choix serait alors décidé par un
-          ordre d'affichage que personne ne pense à regarder. */}
-      <div className="field"><label htmlFor="fact-modele">Modèle de facture</label>
-        <select id="fact-modele" className="inp" value={form.invoice_template_slug}
-          onChange={(e) => setForm((p) => ({ ...p, invoice_template_slug: e.target.value }))}>
-          <option value="">— Aucun —</option>
-          {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.slug}</option>)}
-        </select>
-        <p className="hint" style={{ margin: "4px 0 0" }}>
-          {modeles.length === 0
-            ? "Aucun modèle de type FACTURE n'existe. Créez-le dans Modèles de documents : sans lui, aucune facture ne peut être éditée."
-            : form.invoice_template_slug
-              ? "Le PDF est composé à partir de ce modèle. Le fichier Factur-X y reste attaché, conforme."
-              : modeles.length === 1
-                ? "Un seul modèle de type FACTURE existe : il sera utilisé même sans être désigné ici."
-                : "Plusieurs modèles de type FACTURE existent : désignez celui qui doit servir de facture."}
-        </p>
-      </div>
-      <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer les réglages"}</button>
-    </Card>
   );
 }
 

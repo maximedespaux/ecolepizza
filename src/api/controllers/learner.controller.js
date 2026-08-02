@@ -5,7 +5,12 @@ const { encrypt, decrypt, generatePassword } = require('../lib/crypto.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
-// NB : password_plain_enc = copie chiffrée du mot de passe (DEV uniquement).
+/* NB — `password_plain_enc` N'EXISTE PLUS : la colonne portait une copie RÉVERSIBLE du mot de
+   passe et a été supprimée par la migration 039. Le mot de passe n'est stocké qu'en bcrypt.
+   Le commentaire est corrigé plutôt que retiré : lu tel quel dans un fichier qui manipule des
+   mots de passe, il laissait croire qu'une copie déchiffrable traînait quelque part — et c'est
+   le genre de fausse piste qui fait chercher une faille inexistante, ou pire, qui donne
+   l'impression qu'on peut en récupérer un. */
 async function createStagiaireAccount(conn, organizationId, { email, first_name, last_name, phone }) {
     if (!email) return null;
     // Unicité par organisme : le même e-mail peut exister dans un autre organisme.

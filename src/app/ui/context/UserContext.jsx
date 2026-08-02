@@ -1,6 +1,6 @@
 import { createContext, useEffect, useState } from "react";
 import { getCurrentUser, logout as apiLogout } from "../api/apiClient.js";
-import { clearRevealConfirmSkip } from "../lib/moneyPrivacy.js";
+import { clearRevealConfirmSkip, clearMoneyReveal } from "../lib/moneyPrivacy.js";
 
 export const UserContext = createContext();
 
@@ -50,6 +50,7 @@ export function UserProvider({ children }) {
       /* on ignore : on déconnecte côté client de toute façon */
     }
     clearRevealConfirmSkip(); // oublie le « ne plus demander » à la déconnexion
+    clearMoneyReveal();       // …et le masque revient : la session suivante repart confidentielle
     setUser(null);
   };
 

@@ -10,28 +10,54 @@ const {
 const num = (v) => (v == null ? 0 : Number(v));
 const currentYear = () => new Date().getFullYear();
 
-// Agrège les trois sources de CA + les dépenses pour une année donnée (org).
-async function computeYear(conn, orgId, annee) {
+/**
+ * Agrège les trois sources de CA + les dépenses pour une PÉRIODE : une année, ou un mois de cette
+ * année (`mois` de 1 à 12 ; 0 = l'année entière).
+ *
+ * UNE SEULE RÈGLE D'ATTRIBUTION, ET C'EST UN CHANGEMENT DE SENS ASSUMÉ. Cette fonction datait le
+ * CA des inscriptions à l'ANNÉE DE LA SESSION (`training_session.year`) pendant que le gain du
+ * mois, lui, le datait à l'ENCAISSEMENT (`enrollment.created_at`). Deux règles sur la même page :
+ * les douze mois ne s'additionnaient pas en l'année, et le sélecteur de mois ne pouvait donc
+ * piloter qu'une seule tuile — d'où l'impression, juste, que changer de mois ne changeait rien.
+ *
+ * Tout est passé à l'ENCAISSEMENT : une inscription compte le mois où elle a été ENREGISTRÉE.
+ * C'est la seule règle qui a un sens à l'échelle du mois (un mois n'a pas d'année de session), et
+ * c'est celle qui répond à la question qu'on pose à cet écran — combien est entré, combien est
+ * sorti. Conséquence à connaître : une inscription saisie en décembre pour une session de l'an
+ * prochain compte en décembre, plus dans l'année de la session. Le résultat annuel affiché peut
+ * donc différer de ce qu'il montrait avant ce changement.
+ *
+ * `nbSessions` et `stagiairesMoyens` restent comptés sur l'ANNÉE DE SESSION : une session n'est
+ * pas un encaissement, elle a lieu à sa date, et un « nombre de sessions de mars » n'aurait aucun
+ * rapport avec les inscriptions encaissées en mars.
+ */
+async function computePeriode(conn, orgId, annee, mois = 0) {
+    // Le filtre de mois n'existe que pour un vrai mois ; à 0 il disparaît de toutes les requêtes
+    // d'un coup — une seule condition, pas deux variantes de chaque requête à garder synchrones.
+    const parMois = (col) => (mois ? ` AND MONTH(${col}) = ?` : '');
+    const arg = () => (mois ? [orgId, annee, mois] : [orgId, annee]);
     const [[inscr]] = await conn.query(
         `SELECT COALESCE(SUM(e.price), 0) AS ca, COUNT(*) AS nb,
                 COUNT(DISTINCT e.learner_id) AS nb_stagiaires
          FROM enrollment e
-         JOIN training_session s ON s.id = e.session_id
-         WHERE e.organization_id = ? AND s.year = ?`,
-        [orgId, annee]
+         WHERE e.organization_id = ? AND YEAR(e.created_at) = ?${parMois('e.created_at')}`,
+        arg()
     );
     const [[mat]] = await conn.query(
         `SELECT COALESCE(SUM(amount * quantity), 0) AS ca
          FROM material_sale
-         WHERE organization_id = ? AND YEAR(date) = ?`,
-        [orgId, annee]
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
+        arg()
     );
     const [[extra]] = await conn.query(
         `SELECT COALESCE(SUM(amount), 0) AS ca
          FROM revenue_extra
-         WHERE organization_id = ? AND YEAR(date) = ?`,
-        [orgId, annee]
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
+        arg()
     );
+    /* Les SESSIONS restent annuelles : une session a lieu à sa date, pas au moment où on encaisse.
+       Les rapporter au mois donnerait un « stagiaires par session » qui divise des inscriptions
+       encaissées en mars par des sessions tenues en mars — deux populations sans rapport. */
     const [[sess]] = await conn.query(
         'SELECT COUNT(*) AS nb FROM training_session WHERE organization_id = ? AND year = ?',
         [orgId, annee]
@@ -39,9 +65,9 @@ async function computeYear(conn, orgId, annee) {
     const [postesRows] = await conn.query(
         `SELECT category, COALESCE(SUM(amount_ht), 0) AS total
          FROM expense
-         WHERE organization_id = ? AND YEAR(date) = ?
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}
          GROUP BY category`,
-        [orgId, annee]
+        arg()
     );
 
     const postes = {};
@@ -55,7 +81,7 @@ async function computeYear(conn, orgId, annee) {
     const depensesTotal = Object.values(postes).reduce((s, v) => s + v, 0);
 
     return {
-        annee,
+        annee, mois,
         caTotal, caInscriptions, caMateriel, caExtra,
         nbInscriptions: num(inscr.nb),
         nbStagiaires: num(inscr.nb_stagiaires),
@@ -68,62 +94,10 @@ async function computeYear(conn, orgId, annee) {
     };
 }
 
-/**
- * Gain d'UN mois : ce qui est entré moins ce qui est sorti, sur le mois donné.
- *
- * UNE DÉCISION À ASSUMER — l'attribution des inscriptions. Le tableau ANNUEL rattache le CA des
- * inscriptions à l'ANNÉE DE LA SESSION (`session.year`). Un mois n'a pas d'année de session : il
- * faut une vraie date. On prend `enrollment.created_at`, la date où l'inscription a été
- * ENREGISTRÉE — c'est le moment où l'argent est entré, ce qu'un « gain du mois » cherche à
- * mesurer. Conséquence à connaître : une inscription saisie en décembre pour une session de
- * l'an prochain compte dans le gain de décembre, pas dans celui de la session. Les deux vues
- * répondent à deux questions différentes ; mélanger leurs règles donnerait un chiffre qui ne
- * réconcilie ni l'une ni l'autre.
- *
- * Matériel, produits divers et dépenses ont, eux, une vraie date : on filtre dessus directement.
- *
- * MOIS = 0 → ANNÉE ENTIÈRE. Le même calcul sans le filtre de mois : les douze mois s'additionnent
- * alors exactement en l'année, ce qu'on ne peut garantir qu'en partageant une seule règle. On ne
- * bascule PAS sur la marge annuelle (computeYear) pour ce total : elle rattache les inscriptions
- * à l'année de session, pas à leur date d'encaissement, et un « gain de l'année » qui ne serait
- * pas la somme de ses mois trahirait le sélecteur juste au-dessus.
- */
-async function computeMonth(conn, orgId, annee, mois) {
-    // Le filtre de mois n'est ajouté que pour un vrai mois ; à 0, il disparaît des quatre
-    // requêtes d'un coup — une seule condition, pas quatre variantes à garder synchrones.
-    const parMois = (col) => (mois ? ` AND MONTH(${col}) = ?` : '');
-    const arg = (col) => (mois ? [orgId, annee, mois] : [orgId, annee]);
-    const [[inscr]] = await conn.query(
-        `SELECT COALESCE(SUM(price), 0) AS ca
-         FROM enrollment
-         WHERE organization_id = ? AND YEAR(created_at) = ?${parMois('created_at')}`,
-        arg('created_at')
-    );
-    const [[mat]] = await conn.query(
-        `SELECT COALESCE(SUM(amount * quantity), 0) AS ca
-         FROM material_sale
-         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
-        arg('date')
-    );
-    const [[extra]] = await conn.query(
-        `SELECT COALESCE(SUM(amount), 0) AS ca
-         FROM revenue_extra
-         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
-        arg('date')
-    );
-    const [[dep]] = await conn.query(
-        `SELECT COALESCE(SUM(amount_ht), 0) AS total
-         FROM expense
-         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
-        arg('date')
-    );
-    const caInscriptions = num(inscr.ca);
-    const caMateriel = num(mat.ca);
-    const caExtra = num(extra.ca);
-    const ca = caInscriptions + caMateriel + caExtra;
-    const depenses = num(dep.total);
-    return { mois, ca, caInscriptions, caMateriel, caExtra, depenses, gain: ca - depenses };
-}
+/* `computeMonth` a disparu : elle calculait le gain d'un mois avec la règle de l'encaissement,
+   pendant que le tableau annuel utilisait celle de l'année de session. Les deux règles se sont
+   rejointes dans `computePeriode` — c'était la condition pour que le sélecteur de mois pilote
+   TOUTE la page, et pour que les douze mois s'additionnent exactement en l'année. */
 
 async function loadSettings(conn, orgId) {
     const [rows] = await conn.query('SELECT * FROM accounting_settings WHERE organization_id = ?', [orgId]);
@@ -151,22 +125,27 @@ const getGestion = async (req, res) => {
     else mois = Math.min(12, Math.max(1, Number(rawMois)));
     try {
         const conn = db.promise();
-        const [year, settings, moisData] = await Promise.all([
-            computeYear(conn, orgId, annee),
+        const [year, settings] = await Promise.all([
+            computePeriode(conn, orgId, annee, mois),
             loadSettings(conn, orgId),
-            computeMonth(conn, orgId, annee, mois),
         ]);
+        /* LES LISTES SUIVENT LE MOIS, ELLES AUSSI. Elles restaient annuelles quand les totaux
+           passaient au mois : on lisait « 2 300 € de dépenses en mars » au-dessus d'une liste de
+           quarante lignes couvrant toute l'année, sans moyen de retrouver les trois qui font le
+           chiffre. Une liste qui ne justifie pas le total qu'elle accompagne est pire qu'absente. */
+        const parMois = (col) => (mois ? ` AND MONTH(${col}) = ?` : '');
+        const argListe = mois ? [orgId, annee, mois] : [orgId, annee];
         const [depenses] = await conn.query(
             `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount_ht, note
-             FROM expense WHERE organization_id = ? AND YEAR(date) = ?
+             FROM expense WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}
              ORDER BY date DESC, created_at DESC`,
-            [orgId, annee]
+            argListe
         );
         const [revenus] = await conn.query(
             `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount, note
-             FROM revenue_extra WHERE organization_id = ? AND YEAR(date) = ?
+             FROM revenue_extra WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}
              ORDER BY date DESC, created_at DESC`,
-            [orgId, annee]
+            argListe
         );
         const [yearsRows] = await conn.query(
             'SELECT DISTINCT year FROM training_session WHERE organization_id = ? ORDER BY year DESC',
@@ -205,16 +184,12 @@ const getGestion = async (req, res) => {
                 ca: { total: ca, inscriptions: year.caInscriptions, materiel: year.caMateriel, extra: year.caExtra },
                 postes, totalDepenses: year.depensesTotal,
                 marge, margePct,
-                // Gain du mois sélectionné : entrées − sorties sur le mois, cf. computeMonth.
-                mois: {
-                    numero: moisData.mois,
-                    gain: moisData.gain,
-                    ca: moisData.ca,
-                    depenses: moisData.depenses,
-                    caInscriptions: moisData.caInscriptions,
-                    caMateriel: moisData.caMateriel,
-                    caExtra: moisData.caExtra,
-                },
+                /* LA PÉRIODE COUVERTE PAR TOUS LES CHIFFRES CI-DESSUS. Il y avait ici un bloc
+                   « gain du mois » séparé : il était le SEUL chiffre à suivre le sélecteur, tout
+                   le reste restant annuel. Maintenant que la page entière suit le mois, un second
+                   total mensuel ne ferait que répéter le premier. On ne garde que le numéro, pour
+                   que l'écran puisse écrire « Résultat mars 2026 » au lieu de « Résultat 2026 ». */
+                mois: { numero: mois },
                 dividendeCible, dividendeVise, dividendePossible, dividendeRealiste,
                 partRealistePct, dividendeStatut, dividendeMessage,
                 targets: settings.targets,
@@ -238,8 +213,8 @@ const getPerformance = async (req, res) => {
     try {
         const conn = db.promise();
         const [current, previous] = await Promise.all([
-            computeYear(conn, orgId, annee),
-            computeYear(conn, orgId, annee - 1),
+            computePeriode(conn, orgId, annee),
+            computePeriode(conn, orgId, annee - 1),
         ]);
         const postesLabels = EXPENSE_CATEGORIES.map((c) => ({ categorie: c, label: CATEGORY_LABELS[c] }));
         res.json({ data: { annee, anneePrec: annee - 1, current, previous, postesLabels } });

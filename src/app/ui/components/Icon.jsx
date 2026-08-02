@@ -198,6 +198,22 @@ const PATHS = {
       <path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33" />
     </>
   ),
+  /* Appareil photo — « prendre une photo », à côté de « choisir ». Même jeu que le reste
+     (24×24, contour, jointures rondes) : dessiné à part, il jurerait. */
+  "camera": (
+    <>
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z" />
+      <circle cx="12" cy="13" r="3" />
+    </>
+  ),
+  /* Punaise — une annonce de l'école tenue en tête du fil. Le trait suit le même jeu que le
+     reste (24×24, contour, jointures rondes) : dessinée à part, elle jurerait. */
+  "pin": (
+    <>
+      <path d="M12 17v5" />
+      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+    </>
+  ),
   "power": (
     <>
       <path d="M12 2v10" />
@@ -443,6 +459,182 @@ const PATHS = {
     <>
       <path d="m9 11-6 6v3h9l3-3" />
       <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+    </>
+  ),
+  // — Éditeur : historique, blocs, listes —
+  "undo": (
+    <>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+    </>
+  ),
+  "redo": (
+    <>
+      <path d="m15 14 5-5-5-5" />
+      <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+    </>
+  ),
+  "pilcrow": (
+    <>
+      <path d="M13 4v16" /><path d="M17 4v16" />
+      <path d="M19 4H9.5a4.5 4.5 0 0 0 0 9H13" />
+    </>
+  ),
+  "list": (
+    <>
+      <path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" />
+      <path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" />
+    </>
+  ),
+  "list-ordered": (
+    <>
+      <path d="M10 6h11" /><path d="M10 12h11" /><path d="M10 18h11" />
+      <path d="M4 6h1v4" /><path d="M4 10h2" />
+      <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />
+    </>
+  ),
+  // Saut de page : une flèche pousse le contenu sous un trait discontinu (la coupure).
+  // Version antérieure : deux flèches s'écartant du trait — à 16 px les trois éléments se
+  // agglutinaient en tache illisible. Une seule flèche suffit à dire « la suite passe dessous ».
+  "page-break": (
+    <>
+      <path d="M12 3v7" /><path d="m8.5 6.5 3.5 3.5 3.5-3.5" />
+      <path d="M3 14h4" /><path d="M10 14h4" /><path d="M17 14h4" />
+    </>
+  ),
+  // — Éditeur : structure d'un tableau —
+  // Un « + » ou un « × » posé du côté concerné, le tableau décalé pour lui laisser la place :
+  // à 16 px, c'est le côté qui se lit en premier, pas le détail de la grille.
+  "column-insert-left": (
+    <>
+      <rect x="8" y="4" width="13" height="16" rx="2" />
+      <path d="M14.5 4v16" />
+      <path d="M4 10v4" /><path d="M2 12h4" />
+    </>
+  ),
+  "column-insert-right": (
+    <>
+      <rect x="3" y="4" width="13" height="16" rx="2" />
+      <path d="M9.5 4v16" />
+      <path d="M20 10v4" /><path d="M18 12h4" />
+    </>
+  ),
+  "column-remove": (
+    <>
+      <rect x="3" y="4" width="13" height="16" rx="2" />
+      <path d="M9.5 4v16" />
+      <path d="m18 10 4 4" /><path d="m22 10-4 4" />
+    </>
+  ),
+  /* Le « + » / « × » déborde franchement du tableau : à 16 px, c'est LUI qui doit se lire en
+     premier, pas la grille. Les rectangles gardent 11 px de haut pour lui laisser la place. */
+  "row-insert-top": (
+    <>
+      <rect x="4" y="9" width="16" height="11" rx="2" />
+      <path d="M4 14.5h16" />
+      <path d="M12 1.5v5.5" /><path d="M9.25 4.25h5.5" />
+    </>
+  ),
+  "row-insert-bottom": (
+    <>
+      <rect x="4" y="4" width="16" height="11" rx="2" />
+      <path d="M4 9.5h16" />
+      <path d="M12 17v5.5" /><path d="M9.25 19.75h5.5" />
+    </>
+  ),
+  "row-remove": (
+    <>
+      <rect x="4" y="4" width="16" height="11" rx="2" />
+      <path d="M4 9.5h16" />
+      <path d="m9.25 17.5 5.5 5.5" /><path d="m14.75 17.5-5.5 5.5" />
+    </>
+  ),
+  "table-header": (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9.5h18" /><path d="M12 9.5V20" />
+      <path d="M6.5 6.75h11" />
+    </>
+  ),
+  // Fusionner / séparer : le trait de séparation est rompu, une double flèche le traverse.
+  "merge-cells": (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M12 5v2.5" /><path d="M12 16.5v2.5" />
+      <path d="M6.5 12h11" />
+      <path d="m9 9.5-2.5 2.5 2.5 2.5" /><path d="m15 9.5 2.5 2.5-2.5 2.5" />
+    </>
+  ),
+  // — Éditeur : bordures d'un tableau —
+  "border-all": (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="1" />
+      <path d="M12 3v18" /><path d="M3 12h18" />
+    </>
+  ),
+  "border-dashed": (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="1" strokeDasharray="3 2.5" />
+      <path d="M12 3v18" strokeDasharray="3 2.5" />
+      <path d="M3 12h18" strokeDasharray="3 2.5" />
+    </>
+  ),
+  // Sans bordure : seuls les angles subsistent — la forme reste lisible, le trait a disparu.
+  "border-none": (
+    <>
+      <path d="M3 7V4a1 1 0 0 1 1-1h3" />
+      <path d="M17 3h3a1 1 0 0 1 1 1v3" />
+      <path d="M21 17v3a1 1 0 0 1-1 1h-3" />
+      <path d="M7 21H4a1 1 0 0 1-1-1v-3" />
+    </>
+  ),
+  // — Éditeur : largeur d'un tableau (les deux traits verticaux = les marges de la page) —
+  "width-full": (
+    <>
+      <path d="M3 4v16" /><path d="M21 4v16" />
+      <path d="M6 12h12" />
+      <path d="m9 9-3 3 3 3" /><path d="m15 9 3 3-3 3" />
+    </>
+  ),
+  "width-auto": (
+    <>
+      <path d="M3 4v16" /><path d="M21 4v16" />
+      <path d="M5 12h5" /><path d="m7 9 3 3-3 3" />
+      <path d="M19 12h-5" /><path d="m17 9-3 3 3 3" />
+    </>
+  ),
+  "width-half": (
+    <>
+      <path d="M3 4v16" /><path d="M21 4v16" />
+      <rect x="12" y="7" width="9" height="10" rx="1" />
+    </>
+  ),
+  // Hauteur réservée : une seule ligne de corps, plusieurs lignes de texte empilées dedans.
+  "rows-inline": (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M6 12.5h6" /><path d="M6 15.5h6" /><path d="M6 18h6" />
+      <path d="M15.5 12.5h3" />
+    </>
+  ),
+  // — Éditeur : bloc deux colonnes (proportions) —
+  "cols-equal": (
+    <>
+      <rect x="3" y="5" width="8" height="14" rx="1" />
+      <rect x="13" y="5" width="8" height="14" rx="1" />
+    </>
+  ),
+  "cols-left-wide": (
+    <>
+      <rect x="3" y="5" width="11" height="14" rx="1" />
+      <rect x="16" y="5" width="5" height="14" rx="1" />
+    </>
+  ),
+  "cols-right-wide": (
+    <>
+      <rect x="3" y="5" width="5" height="14" rx="1" />
+      <rect x="10" y="5" width="11" height="14" rx="1" />
     </>
   ),
   // — Accents pizza —

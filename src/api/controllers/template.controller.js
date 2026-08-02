@@ -5,11 +5,12 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS, SIGNER_ROLES, stepSigners } = require('../lib/documents.js');
-const { articlesTable, TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
+const { articlesTable, paiementsTable, TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
 const { decrypt } = require('../lib/crypto.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
 const { getEnabledFields } = require('../lib/conditions.js');
 const { resolveCustomTokens } = require('../lib/customtokens.js');
+const { identiteExemple } = require('../lib/echantillons.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
@@ -21,8 +22,11 @@ async function loadRows(organizationId) {
         `SELECT ${META_COLS}${extra}, name, (file IS NOT NULL) AS has_file, (body_html IS NOT NULL) AS has_body,
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
          FROM document_template WHERE organization_id = ?`;
-    // Colonnes optionnelles (migrations 077 / 086 / 087 / 088) : on retombe en cascade si absentes.
-    for (const extra of [', company_level, company_sign, signers', ', company_level, company_sign', ', company_level', '']) {
+    // Colonnes optionnelles (migrations 077 / 086 / 087 / 088 / 119) : on retombe en cascade si absentes.
+    for (const extra of [
+        ', company_level, company_sign, signers, buyer_audience',
+        ', company_level, company_sign, signers',
+        ', company_level, company_sign', ', company_level', '']) {
         try { const [rows] = await db.promise().query(sel(extra), [organizationId]); return rows; }
         catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; }
     }
@@ -113,7 +117,7 @@ async function upsertTemplate(conn, orgId, slug, fields) {
     const [ex] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, slug]);
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie
     // sans elles plutôt que d'échouer.
-    const OPTIONAL = ['layout', 'company_level', 'company_sign', 'signers'];
+    const OPTIONAL = ['layout', 'company_level', 'company_sign', 'signers', 'buyer_audience'];
     const run = async (f) => {
         const keys = Object.keys(f);
         if (ex.length) {
@@ -169,6 +173,11 @@ const saveTemplate = async (req, res) => {
     if (b.active !== undefined) fields.active = b.active ? 1 : 0;
     if (b.company_level !== undefined) fields.company_level = b.company_level ? 1 : 0;
     if (b.company_sign !== undefined) fields.company_sign = b.company_sign ? 1 : 0;
+    // Destinataire d'un modèle de facture : 'individual' | 'company' | null (tous). Migration 119.
+    if (b.buyer_audience !== undefined) {
+        const a = String(b.buyer_audience || '').toLowerCase();
+        fields.buyer_audience = (a === 'individual' || a === 'company') ? a : null;
+    }
     // Corps construit dans l'éditeur : passe l'étape en mode « builder ».
     if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }
@@ -186,12 +195,109 @@ const saveTemplate = async (req, res) => {
     }
 };
 
+/**
+ * PUT /api/templates/:slug/rename — change l'IDENTIFIANT (slug) d'un modèle, en RÉPERCUTANT le
+ * changement partout où le slug est référencé. Le slug est un identifiant : le renommer sans
+ * cascade orphelinerait le parcours (program_step), le réglage boutique, les factures, les
+ * documents générés, les points de rupture d'émargement et les slugs stockés dans du JSON
+ * (company_steps, arborescences d'archivage). On met donc tout à jour d'un bloc.
+ *
+ * On refuse de renommer un slug du SOCLE (il réapparaîtrait par défaut) ou vers un slug déjà pris.
+ */
+const renameTemplate = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const oldSlug = String(req.params.slug || '').trim().toLowerCase();
+    const newSlug = String(req.body.new_slug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+    if (!newSlug) return res.status(422).json({ message: 'Nouvel identifiant (slug) requis.' });
+    if (newSlug === oldSlug) return res.json({ slug: oldSlug, message: 'Identifiant inchangé.' });
+    if (DEFAULT_SLUGS.has(oldSlug)) return res.status(422).json({ message: 'Un modèle du socle ne peut pas être renommé — dupliquez-le pour repartir d\'un slug libre.' });
+    if (DEFAULT_SLUGS.has(newSlug)) return res.status(422).json({ message: 'Cet identifiant est réservé à un modèle du socle. Choisissez-en un autre.' });
+    const conn = db.promise();
+    try {
+        const [[row]] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, oldSlug]);
+        if (!row) return res.status(404).json({ message: 'Modèle introuvable.' });
+        const [[clash]] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, newSlug]);
+        if (clash) return res.status(422).json({ message: 'Un modèle porte déjà cet identifiant.' });
+
+        // Cascade RÉSILIENTE : chaque cible peut manquer selon les migrations jouées.
+        const upd = async (sql, params) => {
+            try { await conn.query(sql, params); }
+            catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
+        };
+        await conn.query('UPDATE document_template SET slug = ? WHERE organization_id = ? AND slug = ?', [newSlug, orgId, oldSlug]);
+        // Références en colonnes.
+        await upd('UPDATE program_step SET slug = ? WHERE organization_id = ? AND slug = ?', [newSlug, orgId, oldSlug]);
+        await upd('UPDATE shop_settings SET invoice_template_slug = ? WHERE organization_id = ? AND invoice_template_slug = ?', [newSlug, orgId, oldSlug]);
+        await upd('UPDATE invoice SET template_slug = ? WHERE organization_id = ? AND template_slug = ?', [newSlug, orgId, oldSlug]);
+        await upd('UPDATE generated_document SET template_slug = ? WHERE organization_id = ? AND template_slug = ?', [newSlug, orgId, oldSlug]);
+        await upd('UPDATE training_program SET emargement_break_slug = ? WHERE organization_id = ? AND emargement_break_slug = ?', [newSlug, orgId, oldSlug]);
+        await upd('UPDATE training_program SET company_break_slug = ? WHERE organization_id = ? AND company_break_slug = ?', [newSlug, orgId, oldSlug]);
+        // Références DANS du JSON (tableaux de slugs, arbres) : le slug y est une chaîne entre
+        // guillemets. On remplace le jeton EXACT "old" par "new" — jamais un préfixe (le guillemet
+        // fermant borne le remplacement, donc "facture" ne touche pas "facture-copie").
+        for (const col of ['company_steps', 'archive_tree', 'company_archive_tree']) {
+            await upd(`UPDATE training_program SET ${col} = REPLACE(${col}, ?, ?) WHERE organization_id = ? AND ${col} LIKE ?`,
+                [`"${oldSlug}"`, `"${newSlug}"`, orgId, `%"${oldSlug}"%`]);
+        }
+        /* LES ÉQUIVALENCES MANQUAIENT À CETTE LISTE, et c'est la cible la plus punitive de toutes.
+         * `document_equivalence.members` est un tableau JSON de slugs, comme les trois colonnes
+         * ci-dessus. Oublié ici, un renommage laissait le VIEUX slug dans le groupe « OU » — un
+         * membre qui ne désigne plus rien. Or la validation d'une équivalence exige que tous ses
+         * membres existent : le groupe devenait donc IMPOSSIBLE À MODIFIER par l'écran, avec un
+         * message citant un identifiant que l'utilisateur n'avait jamais tapé.
+         * Constaté sur le parcours RS7404 après un renommage `devis-particulier-copie` →
+         * `devis-professionnel` : plus aucune variante ajoutable au jalon « Devis particulier ».
+         * Même remplacement borné par les guillemets que plus haut. */
+        await upd('UPDATE document_equivalence SET members = REPLACE(members, ?, ?) WHERE organization_id = ? AND members LIKE ?',
+            [`"${oldSlug}"`, `"${newSlug}"`, orgId, `%"${oldSlug}"%`]);
+        logAudit(req, 'template.rename', 'DocumentTemplate', newSlug);
+        res.json({ slug: newSlug, message: 'Identifiant mis à jour.' });
+    } catch (e) {
+        console.error('Erreur renommage modèle :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 // Échantillon d'aperçu RÉALISTE selon le type et le NOM de colonne (pas le libellé, qui
 // afficherait « Intitulé de la formation » au lieu d'une vraie valeur d'exemple).
-function sampleForField(f) {
+/**
+ * Échantillon d'un champ document. `ident` (facultatif) = identité fictive du document, pour que
+ * `field:learner.phone` et le jeton `Téléphone` désignent la MÊME personne dans un aperçu ; sans
+ * elle, on retombe sur les valeurs génériques (palette, hors contexte d'aperçu).
+ */
+function sampleForField(f, ident) {
     if (f.type === 'bool') return 'Oui';
     if (f.type === 'enum') return (f.options && f.options[0] && f.options[0].value) || 'Valeur';
     const c = String(f.column || '').toLowerCase();
+    // `organization` est volontairement EXCLU : ses champs sont écrasés plus loin par les
+    // valeurs RÉELLES de la fiche organisme, et lui prêter le téléphone d'une personne fictive
+    // ferait clignoter un faux numéro sur les modèles où la colonne est vide.
+    const table = String(f.table || '').toLowerCase();
+    if (ident && table !== 'organization') {
+        const estEntreprise = table === 'company';
+        const p = ident.personne, e = ident.entreprise;
+        if (estEntreprise) {
+            if (/(phone|tel|mobile|portable|gsm)/.test(c)) return e.tel;
+            if (/(email|mail|courriel)/.test(c)) return e.email;
+            if (/(address|adresse|rue|voie)/.test(c)) return e.adresse;
+            if (/(city|ville|town|commune)/.test(c)) return e.ville;
+            if (/(zip|postal|cp\b)/.test(c)) return e.cp;
+            if (/siret/.test(c)) return e.siret;
+            if (/(naf|ape)/.test(c)) return e.naf;
+            if (/(legal_status|forme|statut_jur)/.test(c)) return e.statut;
+            if (/(company|entreprise|societe|raison|name|nom)/.test(c)) return e.nom;
+        } else {
+            if (/first_?name|prenom/.test(c)) return p.prenom;
+            if (/last_?name|nom/.test(c)) return p.nom;
+            if (/civilit|gender|sexe/.test(c)) return p.civilite;
+            if (/(email|mail|courriel)/.test(c)) return p.email;
+            if (/(phone|tel|mobile|portable|gsm)/.test(c)) return p.tel;
+            if (/(address|adresse|rue|voie)/.test(c)) return p.adresse;
+            if (/(city|ville|town|commune)/.test(c)) return p.ville;
+            if (/(zip|postal|cp\b)/.test(c)) return p.cp;
+            if (/(birth|naissance)/.test(c)) return p.naissance;
+        }
+    }
     if (f.type === 'number') {
         if (/price|amount|montant|prix|acompte|cpf|reste|total/.test(c)) return '1 500';
         if (/day|jour/.test(c)) return '5';
@@ -240,7 +346,7 @@ const LOCATION_FIELDS = [
 
 // Jetons de la palette = CHAMPS DOCUMENTS activés (colonnes du dossier), regroupés par table.
 // Clé « field:<table.column> », remplie au rendu depuis le dossier réel.
-async function fieldTokenGroups(orgId) {
+async function fieldTokenGroups(orgId, ident) {
     const fields = await getEnabledFields(db.promise(), orgId);
     const by = {};
     for (const f of fields) {
@@ -248,7 +354,7 @@ async function fieldTokenGroups(orgId) {
         // organisme » (image insérée au rendu), pas un simple jeton texte field:….
         const isSig = f.type === 'image' && f.column === 'signature_image';
         const key = isSig ? 'Signature organisme' : `field:${f.key}`;
-        const sample = isSig ? '✍ (image enregistrée)' : sampleForField(f);
+        const sample = isSig ? '✍ (image enregistrée)' : sampleForField(f, ident);
         (by[f.tableLabel] || (by[f.tableLabel] = [])).push({ key, label: f.label, sample });
     }
     return Object.entries(by).map(([group, tokens]) => ({ group, tokens }));
@@ -286,14 +392,42 @@ function groupTokensGroup() {
  * `{Articles}` est listé en dernier : c'est le seul qui s'utilise aussi comme BLOC répétable,
  * {#Articles}…{/Articles}, une ligne par article vendu.
  */
-function factureTokensGroup() {
-    const byKey = {};
-    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
-    const cat = TOKEN_CATALOG.find((g) => g.group === 'Facture');
-    const tokens = (cat ? cat.tokens.map((t) => t.key) : [])
-        .map((k) => byKey[k]).filter(Boolean)
-        .map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
-    return { group: 'Facture', tokens };
+/** Un groupe de palette bâti à partir d'un groupe du TOKEN_CATALOG (jetons nommés). */
+function catalogGroup(catName, paletteName) {
+    const cat = TOKEN_CATALOG.find((g) => g.group === catName);
+    const tokens = (cat ? cat.tokens : []).map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
+    return { group: paletteName || catName, tokens };
+}
+function factureTokensGroup() { return catalogGroup('Facture'); }
+
+/**
+ * Coordonnées de l'ACHETEUR pour une facture/devis, regroupées sous « Facture » à portée de main.
+ *
+ * Ce ne sont PAS de nouveaux jetons : ce sont les jetons « Champs documents » de l'acheteur
+ * (field:learner.* si c'est un stagiaire, field:company.* si c'est une entreprise), qui se
+ * remplissent déjà avec les valeurs de l'acheteur au rendu d'une facture. On les DUPLIQUE ici pour
+ * ne pas avoir à les chercher dans les groupes Stagiaire / Entreprise. `origin` porte la catégorie
+ * d'où ils viennent : la puce garde sa couleur d'origine (bleu Stagiaire / orange Entreprise).
+ */
+function acheteurFactureGroup() {
+    // label = texte COURT de la puce ; desc = explication LONGUE affichée au survol.
+    const t = (key, label, origin, sample, desc) => ({ key, label, origin, sample, desc });
+    return {
+        group: 'Acheteur (facture)',
+        tokens: [
+            // Acheteur ENTREPRISE (facture entreprise)
+            t('field:company.email', 'E-mail (entreprise)', 'Entreprise', 'contact@napoli.fr', "Adresse e-mail de l'acheteur lorsque c'est une ENTREPRISE. Se remplit avec l'e-mail de la fiche entreprise de l'acheteur."),
+            t('field:company.phone', 'Téléphone (entreprise)', 'Entreprise', '05 56 11 22 33', "Téléphone de l'acheteur ENTREPRISE (depuis sa fiche)."),
+            t('field:company.address', 'Adresse (entreprise)', 'Entreprise', '5 av. de la Gare', "Adresse postale de l'acheteur ENTREPRISE."),
+            t('field:company.vat_number', 'N° TVA (entreprise)', 'Entreprise', 'FR76123456789', "Numéro de TVA intracommunautaire de l'acheteur ENTREPRISE. Mention attendue dès qu'on facture une société, et obligatoire sur une opération intracommunautaire. Se remplit depuis sa fiche entreprise (migration 123)."),
+            t('field:company.naf_ape', 'NAF/APE (entreprise)', 'Entreprise', '5610C', "Code NAF/APE de l'acheteur ENTREPRISE."),
+            t('field:company.legal_status', 'Forme juridique (entreprise)', 'Entreprise', 'SARL', "Forme juridique de l'acheteur ENTREPRISE (SARL, SAS…)."),
+            // Acheteur PARTICULIER / STAGIAIRE (facture particulier)
+            t('field:learner.email', 'E-mail (particulier)', 'Stagiaire', 'jean@exemple.fr', "Adresse e-mail de l'acheteur lorsque c'est un PARTICULIER / stagiaire."),
+            t('field:learner.phone', 'Téléphone (particulier)', 'Stagiaire', '06 12 34 56 78', "Téléphone de l'acheteur PARTICULIER / stagiaire."),
+            t('field:learner.address', 'Adresse (particulier)', 'Stagiaire', '12 rue des Fours', "Adresse postale de l'acheteur PARTICULIER / stagiaire."),
+        ],
+    };
 }
 
 /**
@@ -306,13 +440,29 @@ function articleTokensGroup() {
         group: 'Ligne de facture',
         tokens: [
             t('N°', 'Numéro de ligne', '1'),
+            t('Référence', 'Référence / SKU de l’article', 'P0008'),
             t('Désignation', 'Désignation de l’article', 'Biberon valve 455 ml'),
             t('Quantité', 'Quantité', '2'),
             t('Prix unitaire HT', 'Prix unitaire HT', '8,91 €'),
+            t('Remise', 'Remise appliquée à l’article', '10 %'),
             t('Montant HT', 'Montant HT de la ligne', '17,82 €'),
             t('Taux TVA', 'Taux de TVA de la ligne', '20,00 %'),
             t('Montant TVA', 'Montant de TVA de la ligne', '3,56 €'),
             t('Montant TTC', 'Montant TTC de la ligne', '21,38 €'),
+        ],
+    };
+}
+
+/** Jetons disponibles DANS le bloc {#Paiements} — un moyen de règlement par ligne, son montant. */
+function paiementTokensGroup() {
+    const t = (key, label, sample) => ({ key, label, sample });
+    return {
+        group: 'Ligne de règlement',
+        tokens: [
+            t('Moyen', 'Moyen de paiement', 'Espèces'),
+            t('Montant réglé', 'Montant réglé par ce moyen', '300,00 €'),
+            t('Banque', 'Banque (chèque)', 'Crédit Agricole'),
+            t('N° chèque', 'Numéro de chèque', '0004567'),
         ],
     };
 }
@@ -339,10 +489,10 @@ async function loadCustomTokens(orgId) {
 const GROUP_ORDER = [
     'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
     'Inscription', 'Formation', 'Session', 'Lieu de formation',
-    'Organisme', 'Facture', 'Ligne de facture', 'Dates et valeurs calculées', 'Personnalisés',
+    'Organisme', 'Émetteur (identité)', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
-const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Ligne de facture']);
+const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -358,21 +508,42 @@ const getTokens = async (req, res) => {
         const orgId = req.user.organization_id;
         // Type du modèle en cours d'édition (résilient si la colonne/table manque).
         let companyLevel = null; // null = type inconnu → tout afficher
+        let docType = null;
         if (req.query.slug) {
             try {
                 const [[t]] = await db.promise().query(
-                    'SELECT company_level FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+                    'SELECT company_level, doc_type FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
                     [orgId, String(req.query.slug)]);
-                if (t) companyLevel = t.company_level ? 1 : 0;
-            } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+                if (t) { companyLevel = t.company_level ? 1 : 0; docType = String(t.doc_type || '').toUpperCase() || null; }
+            } catch (e) {
+                if (e && e.code === 'ER_BAD_FIELD_ERROR') { // company_level absent (077) : on lit au moins le type
+                    try { const [[t2]] = await db.promise().query(
+                        'SELECT doc_type FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1', [orgId, String(req.query.slug)]);
+                        if (t2) docType = String(t2.doc_type || '').toUpperCase() || null;
+                    } catch (e2) { if (!(e2 && e2.code === 'ER_NO_SUCH_TABLE')) throw e2; }
+                } else if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e;
+            }
         }
         const groups = await fieldTokenGroups(orgId);
         // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
         groups.push(groupTokensGroup());
+        // Jetons NOMMÉS de l'organisme/émetteur ({Organisme}, {Forme juridique organisme}…) : sur
+        // une facture ils reprennent l'identité de l'entité émettrice. Distincts des « Champs
+        // documents » (field:organization.*), qui viennent de la fiche organisme.
+        groups.push(catalogGroup('Organisme', 'Émetteur (identité)'));
         groups.push(factureTokensGroup());
+        // Sur une facture/devis, l'ACHETEUR est un stagiaire OU une entreprise. Ses coordonnées
+        // (e-mail, téléphone, adresse…) existent déjà dans les Champs documents (field:learner.* /
+        // field:company.*) et se remplissent avec les valeurs de l'acheteur ; on les REGROUPE ici,
+        // à portée de main sous « Facture ». Chaque jeton garde la COULEUR de son origine
+        // (Entreprise / Stagiaire) via `origin`, pour qu'on voie d'où il vient.
+        if (!docType || ['FACTURE', 'ACOMPTE', 'AVOIR', 'DEVIS'].includes(docType)) {
+            groups.push(acheteurFactureGroup());
+        }
         groups.push(articleTokensGroup());
+        groups.push(paiementTokensGroup());
         // Jetons personnalisés : rangés dans le groupe de leur CATÉGORIE (migration 093).
         // Sans catégorie → groupe « Personnalisés ». On fusionne dans un groupe existant
         // du même nom (ex. « Groupe entreprise »), sinon on le crée.
@@ -415,18 +586,52 @@ const getTokens = async (req, res) => {
     }
 };
 
-// Valeurs d'exemple { clé: échantillon } pour l'aperçu (intégrés + champs documents + personnalisés).
-async function sampleTokenValues(orgId) {
+/**
+ * Valeurs d'exemple { clé: échantillon } pour l'aperçu (intégrés + champs documents + persos).
+ *
+ * `graine` (facultatif) fige l'identité fictive tirée : deux aperçus successifs du MÊME modèle
+ * montrent alors la même personne, et une différence de mise en page vient du modèle, pas du
+ * nom qui a changé de longueur entre-temps.
+ */
+async function sampleTokenValues(orgId, graine) {
     const m = {};
     for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) m[t.key] = t.sample || '';
+    // UNE identité fictive pour tout le document : sans elle, un même aperçu montrait l'acheteur,
+    // l'e-mail et l'adresse de trois personnes différentes (cf. lib/echantillons.js).
+    const { personne: p, entreprise: e } = identiteExemple(graine);
+    Object.assign(m, {
+        'Personne': `${p.civilite} ${p.prenom} ${p.nom}`,
+        'Civilité': p.civilite,
+        'Prénom': p.prenom,
+        'Nom': p.nom,
+        'Adresse': `${p.adresse}, ${p.cp} ${p.ville}`,
+        'CP': p.cp,
+        'Ville': p.ville,
+        'Email': p.email,
+        'Téléphone': p.tel,
+        'D_Naissance': p.naissance,
+        'Lieu naissance': p.lieuNaissance,
+        'Acheteur': `${p.prenom} ${p.nom}`,
+        'Adresse acheteur': `${p.adresse}, ${p.cp} ${p.ville}`,
+        'Siret acheteur': e.siret,
+        'Entreprise': e.nom,
+    });
     // {Articles} est un TABLEAU (RAW_TOKENS) : un texte d'exemple s'afficherait tel quel au
     // lieu d'une grille, et on ne pourrait pas juger de sa mise en page — tout l'objet d'un
     // aperçu. On rend donc le vrai tableau, sur deux articles à des taux différents.
     m['Articles'] = articlesTable([
-        { name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
-        { name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
+        { reference: 'P0008', name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
+        { reference: 'P0014', name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
     ]);
-    try { for (const g of await fieldTokenGroups(orgId)) for (const t of g.tokens) m[t.key] = t.sample || ''; }
+    // Règlement d'exemple : deux moyens, pour juger l'affichage moyen + montant.
+    m['Règlement'] = 'Espèces + CB';
+    m['Détail règlement'] = 'Espèces : 20,00 € · CB : 25,82 €';
+    m['Règlements'] = paiementsTable([
+        { method: 'Espèces', amount: 20 },
+        { method: 'CB', amount: 25.82 },
+    ]);
+    // Champs documents remplis avec la MÊME identité que les jetons intégrés ci-dessus.
+    try { for (const g of await fieldTokenGroups(orgId, { personne: p, entreprise: e })) for (const t of g.tokens) m[t.key] = t.sample || ''; }
     catch { /* champs indisponibles : on garde les jetons intégrés */ }
     // Aperçu des champs Organisme : valeurs RÉELLES de la fiche organisme (plutôt qu'un exemple générique).
     try {
@@ -506,8 +711,8 @@ const previewPdf = async (req, res) => {
         // On ne peut alors pas juger de sa mise en page, ce qui est pourtant tout l'objet d'un
         // aperçu. Deux articles à des taux différents, pour que le cas mixte se voie aussi.
         const articlesExemple = [
-            { name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
-            { name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
+            { reference: 'P0008', name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
+            { reference: 'P0014', name: 'Farine T45 — sac 25 kg', qty: 1, unit_price_ht: 24, amount: 24, taxRate: 5.5 },
         ];
         const pdf = await composeDocumentPdf({
             bodyHtml: body_html || '<p></p>',
@@ -515,6 +720,8 @@ const previewPdf = async (req, res) => {
             ctx: { org: org || {}, articles: articlesExemple },
             sampleValues: await sampleTokenValues(req.user.organization_id),
             bleed: (layout && layout.bleed) || {},
+            // Papier à en-tête automatique désactivable (l'aperçu doit refléter le rendu réel).
+            useLetterhead: !(layout && layout.noLetterhead),
         });
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', 'inline; filename="apercu.pdf"');
@@ -691,6 +898,7 @@ const duplicateTemplate = async (req, res) => {
             stagiaire_sign: meta.stagiaire_sign ? 1 : 0,
             company_level: meta.company_level ? 1 : 0,
             company_sign: meta.company_sign ? 1 : 0,
+            buyer_audience: meta.buyer_audience || null,
             signers: JSON.stringify(stepSigners(meta)),
             applies_when: meta.applies_when && Object.keys(meta.applies_when).length ? JSON.stringify(meta.applies_when) : null,
             active: 1,
@@ -742,6 +950,6 @@ const reorderTemplates = async (req, res) => {
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate, duplicateTemplate,
-    getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
+    renameTemplate, getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
     loadCustomTokens, getCustomTokens, saveCustomTokens,
 };

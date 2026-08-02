@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
+const { parcoursManquant } = require('../lib/parcoursRequis.js');
 const { generatePassword } = require('../lib/crypto.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
@@ -102,13 +103,30 @@ const getCompany = async (req, res) => {
 
 const COMPANY_COLS = ['name', 'siret', 'naf_ape', 'legal_status', 'address', 'zip_code', 'town', 'email', 'phone', 'opco', 'representative_civ', 'representative_name', 'representative_role'];
 
+/* Colonnes arrivées par migration, donc pas forcément là. Écrire `vat_number` sur une base où
+ * la 123 n'a pas été jouée ferait échouer TOUTE la création d'entreprise en ER_BAD_FIELD_ERROR —
+ * on perdrait la fiche entière pour un champ facultatif. On sonde une fois par requête. */
+const COMPANY_COLS_OPT = ['vat_number'];
+async function colonnesEntreprise(conn) {
+    const dispo = [];
+    for (const c of COMPANY_COLS_OPT) {
+        try {
+            const [r] = await conn.query(
+                `SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = DATABASE() AND table_name = 'company' AND column_name = ? LIMIT 1`, [c]);
+            if (r.length) dispo.push(c);
+        } catch { /* introspection indisponible : on s'en passe */ }
+    }
+    return [...COMPANY_COLS, ...dispo];
+}
+
 /** POST /api/companies — crée une entreprise. */
 const createCompany = async (req, res) => {
     const b = req.body || {};
     if (!b.name) return res.status(422).json({ error: "Nom de l'entreprise requis" });
     try {
         const id = crypto.randomUUID();
-        const cols = COMPANY_COLS.filter((k) => b[k] !== undefined);
+        const cols = (await colonnesEntreprise(db.promise())).filter((k) => b[k] !== undefined);
         await db.promise().query(
             `INSERT INTO company (id, organization_id, ${cols.join(', ')}) VALUES (?, ?, ${cols.map(() => '?').join(', ')})`,
             [id, req.user.organization_id, ...cols.map((k) => clean(b[k]))]
@@ -127,7 +145,7 @@ const updateCompany = async (req, res) => {
         const conn = db.promise();
         const [[c]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!c) return res.status(404).json({ message: 'Entreprise introuvable.' });
-        const cols = COMPANY_COLS.filter((k) => b[k] !== undefined);
+        const cols = (await colonnesEntreprise(conn)).filter((k) => b[k] !== undefined);
         if (cols.length) {
             await conn.query(
                 `UPDATE company SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND organization_id = ?`,
@@ -172,6 +190,13 @@ const registerCompanyStagiaires = async (req, res) => {
             );
             if (!sess) return res.status(404).json({ message: 'Session introuvable.' });
             badge = sess.badge || null;
+
+            /* CETTE VOIE PASSE TOUJOURS PAR UNE ENTREPRISE : les deux parcours sont donc exigés,
+             * celui du dossier ET celui de l'arrivée via une entreprise. Le contrôle est fait
+             * ICI, avant la boucle : refuser au dixième stagiaire d'une liste de vingt laisserait
+             * neuf dossiers créés et onze non — un état que personne ne peut rattraper à la main. */
+            const refus = await parcoursManquant(conn, orgId, sessionId, true);
+            if (refus) return res.status(422).json({ error: refus });
         }
 
         // Inscrit un stagiaire (existant) à la session, sans doublon ; ajoute le badge.

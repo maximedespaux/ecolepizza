@@ -4,7 +4,7 @@
  * Trois niveaux d'accès internes :
  *  · ADMIN     — bureau (super admin, admin organisme, secrétariat) : accès complet.
  *  · FORMATEUR — accès pédagogique restreint (sessions/émargement, formations,
- *                consultation des stagiaires, saisie d'un produit divers).
+ *                consultation des stagiaires, annuaire des partenaires).
  *  · AUDITEUR  — consultation (suivi Qualiopi, journal d'audit).
  */
 const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
@@ -26,6 +26,13 @@ export const NAV = [
       { to: "/entreprises", ic: "building", label: "Entreprises", roles: ADMIN },
       { to: "/sessions", ic: "calendar", label: "Sessions", roles: STAFF },
       { to: "/formations", ic: "graduation", label: "Formations", roles: STAFF },
+      /* Le fil de la communauté, le MÊME que celui des stagiaires (l'API cadre sur
+         l'organisme, pas sur le stagiaire). L'école y publiait déjà des annonces — la page
+         prévoit `peutAnnoncer` pour le personnel — mais aucun chemin ne l'y menait : il fallait
+         un compte stagiaire pour voir ce qu'on y disait, et pour y répondre.
+         Rangé en « Formation » : c'est la vie du groupe pendant le stage, pas de la relation
+         commerciale. Ouvert au formateur, qui est en salle avec eux. */
+      { to: "/communaute", ic: "message-circle", label: "Communauté", roles: STAFF },
     ],
   },
   {
@@ -41,7 +48,6 @@ export const NAV = [
     items: [
       { to: "/ventes", ic: "cart", label: "Ventes & Inventaire", roles: ADMIN },
       { to: "/demandes-boutique", ic: "package", label: "Demandes boutique", roles: ADMIN },
-      { to: "/produit-divers", ic: "coins", label: "Produit divers", roles: ["FORMATEUR"] },
       { to: "/factures", ic: "receipt", label: "Facturation", roles: ADMIN },
       { to: "/comptabilite", ic: "calculator", label: "Comptabilité", roles: ADMIN },
     ],
@@ -57,6 +63,7 @@ export const NAV = [
     grp: "Configuration",        // paramétrage de l'organisme & modèles
     items: [
       { to: "/reglages", ic: "building", label: "Organisme", roles: ADMIN },
+      { to: "/reglages-facturation", ic: "receipt", label: "Facturation", roles: ADMIN },
       { to: "/equipe", ic: "team", label: "Équipe & accès", roles: OWNER },
       { to: "/roles", ic: "shield", label: "Rôles d'accès", roles: OWNER },
       { to: "/modeles", ic: "file-text", label: "Modèles de documents", roles: ADMIN },
@@ -119,15 +126,16 @@ export const PAGE_TITLES = {
   "/formations": "Formations",
   "/qcm": "Modèles de QCM",
   "/pizza-quest-admin": "Pizza Quest",
-  "/produit-divers": "Produit divers",
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
+  "/communaute": "Communauté",
   "/inventaire": "Inventaire",
   "/ventes": "Ventes de Matériels et Inventaire",
   "/demandes-boutique": "Demandes boutique",
   "/factures": "Facturation",
   "/comptabilite": "Comptabilité",
   "/reglages": "Organisme",
+  "/reglages-facturation": "Facturation",
   "/equipe": "Équipe & accès",
   "/roles": "Rôles d'accès",
   "/modeles": "Modèles de documents",
@@ -146,7 +154,7 @@ export function canAccess(role, roles) {
 export const OWNER_ROLES = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
 
 // Rubriques déplacées dans le hub « Paramètres » (menu profil) et retirées de la barre latérale.
-export const SETTINGS_PATHS = ["/reglages", "/equipe", "/roles"];
+export const SETTINGS_PATHS = ["/reglages", "/reglages-facturation", "/equipe", "/roles"];
 
 // Normalise nav_access en objet { chemin: "read" | "write" }.
 // Rétro-compat : un tableau (ancien format) = tout en écriture.
@@ -182,12 +190,36 @@ export function navMode(user, path) {
 const SECTION_OF = {
   "/stagiaires": "/stagiaires", "/entreprises": "/entreprises", "/sessions": "/sessions", "/formations": "/formations",
   "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
+  "/communaute": "/communaute",
   "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
-  "/comptabilite": "/comptabilite", "/produit-divers": "/produit-divers", "/carte": "/carte",
-  "/reglages": "/reglages", "/modeles": "/modeles", "/equipe": "/equipe",
+  "/comptabilite": "/comptabilite", "/carte": "/carte",
+  "/reglages": "/reglages", "/reglages-facturation": "/reglages-facturation", "/modeles": "/modeles", "/equipe": "/equipe",
   "/audit": "/audit", "/suivi": "/suivi", "/dashboard": "/dashboard",
 };
+
+/**
+ * Regroupe les pastilles par RUBRIQUE de menu.
+ *
+ * Le serveur compte les pastilles par PAGE, ce qui est la bonne unité de sens : les articles
+ * sous seuil concernent l'inventaire, pas « les ventes ». Mais toutes les pages n'ont pas leur
+ * entrée de menu — `/inventaire` est une sous-page de `/ventes` — et la barre latérale ne sait
+ * afficher une pastille que sur une entrée. Le compte des articles sous seuil était donc calculé
+ * à chaque appel puis jeté, faute d'entrée pour le porter : la pastille n'est jamais apparue.
+ *
+ * On remonte donc chaque pastille sur sa rubrique, en SOMMANT — deux sous-pages d'une même
+ * rubrique doivent additionner leurs alertes, pas s'écraser l'une l'autre. Un chemin absent de
+ * `SECTION_OF` reste sur lui-même : les rubriques qui sont déjà leur propre page ne bougent pas.
+ */
+export function badgesParRubrique(badges) {
+  const out = {};
+  for (const [chemin, n] of Object.entries(badges || {})) {
+    if (!n) continue;
+    const rubrique = SECTION_OF[chemin] || chemin;
+    out[rubrique] = (out[rubrique] || 0) + n;
+  }
+  return out;
+}
 
 /** Mode d'accès pour l'URL courante (rubrique déduite du 1er segment). */
 export function modeForPath(user, pathname) {
@@ -234,6 +266,31 @@ export const EXTRA_ACCESS = [
     defaultRoles: ["SUPER_ADMIN"],
   },
 ];
+
+/**
+ * Capacité attachée à UNE PAGE — elle se règle sur sa ligne, pas dans une liste à part.
+ *
+ * POURQUOI. « Lecture / Modifier » n'a aucun sens sur un FIL où tout le monde participe : la
+ * Communauté n'a pas de version « consultation », et surtout, la question qui se pose vraiment
+ * n'est pas celle-là. Quelqu'un du bureau qui publie sans pouvoir retirer un message est un
+ * problème, pas un réglage. Ce qui varie, c'est ADMINISTRER ou non.
+ *
+ * La capacité vivait dans « Accès supplémentaires », tout en bas de la fenêtre, sans rapport
+ * visible avec la ligne « Communauté » située plus haut : on pouvait accorder la page en
+ * croyant avoir tout donné. Elle est maintenant sur la ligne même.
+ *
+ * `defaultRoles` = ceux qui l'ont d'office par leur rôle (case allumée et verrouillée). Sans
+ * cela l'écran mentirait : `peutModerer` répond oui au bureau quoi qu'affiche la fenêtre.
+ * La liste DOIT rester celle de `STAFF` dans lib/moderation.js — un test le vérifie.
+ */
+export const PAGE_CAPS = {
+  "/communaute": {
+    cap: "cap:moderate-community",
+    label: "Administrer",
+    hint: "Retirer ou corriger la publication, la réponse ou le commentaire d'un autre. Publier une annonce et épingler restent au bureau.",
+    defaultRoles: ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"],
+  },
+};
 
 // Rôles « système » (intégrés) : servent de modèles d'accès réutilisables.
 export const BUILTIN_ROLES = [

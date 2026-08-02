@@ -38,7 +38,7 @@ const createEquivalence = async (req, res) => {
     try {
         const conn = db.promise();
         const bySlug = await stepIndex(req.user.organization_id);
-        const check = validateMembers(req.body?.members, bySlug);
+        const check = validateMembers(req.body?.members, bySlug, req.body?.ajoute || null);
         if (!check.ok) return res.status(422).json({ error: check.error });
         const label = (req.body?.label && String(req.body.label).trim())
             || check.value.map((m) => bySlug.get(m)?.label || m).join(' / ');
@@ -66,7 +66,7 @@ const updateEquivalence = async (req, res) => {
     try {
         const conn = db.promise();
         const bySlug = await stepIndex(req.user.organization_id);
-        const check = validateMembers(req.body?.members, bySlug);
+        const check = validateMembers(req.body?.members, bySlug, req.body?.ajoute || null);
         if (!check.ok) return res.status(422).json({ error: check.error });
         const label = (req.body?.label && String(req.body.label).trim())
             || check.value.map((m) => bySlug.get(m)?.label || m).join(' / ');

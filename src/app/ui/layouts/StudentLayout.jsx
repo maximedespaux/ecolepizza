@@ -9,7 +9,7 @@ import { initials } from "../lib/format.js";
 import { getMyAccess } from "../api/apiClient.js";
 import { getAvatar, AVATAR_EVENT, COMMUNITY_EVENT, hydrateProfile } from "../lib/gamification.js";
 import AvatarCadre from "../components/AvatarCadre.jsx";
-import { cadrePorteDe, useCadreChoisi } from "../lib/cadres.js";
+import { cadrePorteDe, cadreValeur, useCadreChoisi } from "../lib/cadres.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 
@@ -32,6 +32,7 @@ const OUTILS = [
   { to: "/empatements", ic: "wheat", label: "Mes empâtements" },
   { to: "/garnitures", ic: "list-checks", label: "Mes garnitures" },
   { to: "/realisations", ic: "pizza", label: "Mes réalisations" },
+  { to: "/hygiene", ic: "shield", label: "Maîtrise sanitaire" },
   { to: "/notions", ic: "book-open", label: "Notions & lexique" },
 ];
 
@@ -226,7 +227,7 @@ function StudentLayout() {
         <AvatarCadre
           avatar={avatar}
           initiales={initials(user?.first_name, user?.last_name)}
-          cadre={cadrePorteDe(choixCadre, done, exclusifs).id}
+          cadre={cadreValeur(cadrePorteDe(choixCadre, done, exclusifs))}
           size={38}
           title="Mon profil"
           onClick={() => setProfileOpen(true)}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
-import { getTemplates, saveTemplate, deleteTemplate, duplicateTemplate, reorderTemplates,
+import { getTemplates, saveTemplate, deleteTemplate, resetTemplate, duplicateTemplate, renameTemplate, reorderTemplates,
   getConditionCatalog, getConditions, createCondition, updateCondition, deleteCondition, getFieldValues,
   getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
@@ -154,8 +154,13 @@ function Modeles() {
   }
 
 
-  // Supprime DÉFINITIVEMENT le document (étape ajoutée = ligne effacée ;
-  // étape du socle = masquée par un « tombstone »). Irréversible.
+  /* Supprime DÉFINITIVEMENT le document, et sans retour possible dans les deux cas : étape
+     AJOUTÉE, la ligne est effacée ; étape DU SOCLE (définie en code, donc ineffaçable), elle est
+     masquée par un « tombstone » et quitte la liste pour de bon.
+     Une bande « rétablir » a été essayée puis retirée : un document supprimé est supprimé, et une
+     liste de regrets en pied d'écran ne fait qu'entretenir ce dont on a décidé de se passer.
+     Reste « Revenir à l'origine » pour le cas voisin mais distinct : défaire une personnalisation
+     sans perdre le document. */
   async function onDelete(t) {
     const socle = t.is_default
       ? "\n\nCe document fait partie du socle : il sera masqué définitivement (vous pourrez le recréer manuellement)."
@@ -165,6 +170,26 @@ function Modeles() {
     try {
       await deleteTemplate(t.slug);
       setStatus({ type: "success", message: "Document supprimé définitivement." });
+      await load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+    finally { setBusy(null); }
+  }
+
+  /* REVENIR AU MODÈLE D'ORIGINE. La route existait depuis toujours et aucun écran ne l'ouvrait :
+     on pouvait personnaliser un document du socle, jamais défaire. La seule issue offerte était
+     « Supprimer définitivement », qui pose un tombstone — le document disparaît au lieu de
+     revenir à sa version livrée. Deux gestes très différents derrière un seul bouton.
+
+     Réservé aux documents DU SOCLE (`is_default`) : un modèle créé de toutes pièces n'a pas de
+     version d'origine où revenir, et « réinitialiser » y voudrait dire « supprimer ». */
+  async function onReset(t) {
+    if (!window.confirm(`Revenir à la version d'origine de « ${t.label} » ?\n\n`
+      + 'Vos modifications de contenu et de réglages seront perdues. Le document reste dans la '
+      + 'liste — c\'est « Supprimer » qui le retire.')) return;
+    setBusy(t.slug);
+    try {
+      await resetTemplate(t.slug);
+      setStatus({ type: "success", message: "Modèle revenu à sa version d'origine." });
       await load();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setBusy(null); }
@@ -270,6 +295,11 @@ function Modeles() {
                     {!estEmarg(t) && (
                       <button type="button" disabled={busy === t.slug} onClick={() => onDuplicate(t)}>
                         <Icon name="copy" size={15} /> Dupliquer
+                      </button>
+                    )}
+                    {!estEmarg(t) && t.is_default && (
+                      <button type="button" disabled={busy === t.slug} onClick={() => onReset(t)}>
+                        <Icon name="history" size={15} /> Revenir à l'origine
                       </button>
                     )}
                     <button type="button" className="danger" disabled={busy === (estEmarg(t) ? t.id : t.slug)}
@@ -510,6 +540,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
       ...(step.company_sign ? ["ENTREPRISE"] : []),
     ],
     company_level: !!step.company_level,
+    buyer_audience: step.buyer_audience || "", // "" = tous, "individual", "company" (modèles FACTURE)
     sign_formateur: !!(step.config && step.config.show_formateurs),
     sign_intervenant: !!(step.config && step.config.show_intervenants),
     sign_organization: !!(step.config && step.config.show_organization),
@@ -539,11 +570,21 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
         if (isNew) await createEmargementTemplate({ name: form.label, applies_when, config });
         else await updateEmargementTemplate(step.id, { name: form.label, applies_when, active: form.active, config });
       } else {
-        const slug = isNew ? form.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-") : step.slug;
+        let slug = isNew ? form.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-") : step.slug;
         if (!slug) { onError("Identifiant (slug) requis."); setSaving(false); return; }
+        // Renommage d'un modèle EXISTANT (non-socle) : on répercute le slug PARTOUT (parcours,
+        // factures, réglages…) avant d'enregistrer sous le nouvel identifiant.
+        if (!isNew && !step.is_default) {
+          const newSlug = form.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "");
+          if (newSlug && newSlug !== step.slug) {
+            const r = await renameTemplate(step.slug, newSlug);
+            slug = (r && r.slug) || newSlug;
+          }
+        }
         await saveTemplate(slug, {
           label: form.label, doc_type: form.doc_type || null, sort_order: Number(form.sort_order) || 100,
           signers: form.signers, company_level: form.company_level,
+          buyer_audience: form.buyer_audience || null,
           active: form.active, applies_when,
         });
       }
@@ -568,9 +609,25 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
               </select>
             </div>
           )}
-          {isNew && !isEmarg && (
+          {/* Identifiant (slug) : saisi à la création, MODIFIABLE ensuite pour un modèle propre à
+              l'organisme (ex. nettoyer le « -copie » d'une duplication). Le renommage répercute le
+              slug partout où il est référencé. Les modèles du socle ne sont pas renommables. */}
+          {!isEmarg && (isNew || !step.is_default) && (
             <div className="field"><label>Identifiant (slug)</label>
               <input className="inp mono" value={form.slug} onChange={set("slug")} placeholder="ex. attestation-tva" />
+              {!isNew && (
+                <p className="hint" style={{ margin: "4px 0 0", fontSize: 12 }}>
+                  Le renommer met à jour toutes les références (parcours, factures, réglages, documents générés).
+                </p>
+              )}
+            </div>
+          )}
+          {!isEmarg && !isNew && step.is_default && (
+            <div className="field"><label>Identifiant (slug)</label>
+              <input className="inp mono" value={step.slug} readOnly disabled />
+              <p className="hint" style={{ margin: "4px 0 0", fontSize: 12 }}>
+                Modèle du socle : identifiant non modifiable. Dupliquez-le pour repartir d'un slug libre.
+              </p>
             </div>
           )}
           <div className="field"><label>Intitulé</label>

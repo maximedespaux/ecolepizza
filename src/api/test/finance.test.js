@@ -231,10 +231,15 @@ test("l'organisme est réellement chargé sur la facture", () => {
     // [lignes, champs] — et le `org[0]` qui suivait la cherchait une seconde fois, sur un objet
     // qui n'a pas d'index 0. L'organisme n'était donc jamais chargé, et le XML partait sans
     // BT-31/BT-32. Une facture sans identité du vendeur n'a pas de valeur probante.
-    const src = lire('controllers/invoice.controller.js');
+    // L'identité vendeur vient maintenant de l'émettrice si la facture en porte une, sinon de
+    // l'organisme — mais la garde reste la même : `org`, jamais `org[0]`.
+    // Sur le code sans commentaires : le bloc explicatif entre la requête et la ligne gardée
+    // dépasserait sinon la fenêtre, et un commentaire qui cite « org[0] » la ferait tomber à tort.
+    const src = net(lire('controllers/invoice.controller.js'));
     const bloc = src.slice(src.indexOf('FROM organization WHERE id = ?'));
-    assert.match(bloc.slice(0, 200), /const o = org \|\| \{\}/,
+    assert.match(bloc.slice(0, 200), /const o = emetteur \|\| org \|\| \{\}/,
         'la double déstructuration est de retour : l\'organisme ne sera pas chargé');
+    assert.doesNotMatch(bloc.slice(0, 200), /org\[0\]/, 'org[0] : la double déstructuration est de retour');
 });
 
 test("il n'existe plus de mise en page interne pour la facture", () => {
@@ -267,8 +272,23 @@ test('un seul modèle FACTURE se passe de désignation', () => {
     const inv = net(lire('controllers/invoice.controller.js'));
     assert.match(inv, /factures\.length === 1 \? factures\[0\] : null/,
         'le cas du modèle unique doit être traité sans réglage');
-    assert.match(inv, /Designez celui qui doit servir/,
-        'à partir de deux modèles, le refus doit demander un choix explicite');
+    // À partir de deux modèles sans destinataire qui les départage, le refus demande d'indiquer
+    // le destinataire (particulier / entreprise / tous), pas un choix figé.
+    assert.match(inv, /les particuliers, les entreprises, ou tous/,
+        'le refus doit demander de renseigner le destinataire d\'au moins un modèle');
+});
+
+test('le modèle CHOISI à la vente prime sur la sélection automatique', () => {
+    // Le vendeur choisit le modèle dans le panier (invoice.template_slug). Ce choix, figé sur la
+    // facture, l'emporte sur la sélection auto (destinataire, réglage, unique).
+    const inv = net(lire('controllers/invoice.controller.js'));
+    assert.match(inv, /data\.templateSlug && factures\.find\(\(x\) => x\.slug === data\.templateSlug\)/,
+        'le modèle figé à la vente doit être cherché en premier');
+    assert.match(inv, /templateSlug: inv\.template_slug \|\| null/,
+        'loadInvoiceData doit exposer le modèle choisi à la vente');
+    // Et la caisse fige bien ce choix sur la facture.
+    const sale = net(lire('controllers/sale.controller.js'));
+    assert.match(sale, /iCol\.push\('template_slug'\)/, 'le checkout doit écrire le modèle choisi sur la facture');
 });
 
 test('sans modèle de type FACTURE, la facture est refusée avec un motif', () => {

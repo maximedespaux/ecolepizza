@@ -1,11 +1,23 @@
 import { useMemo, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import { useEchap } from "../lib/useEchap.js";
+import Coeurs from "./Coeurs.jsx";
+import { COEURS_MAX, encoreEnVie } from "../lib/coeurs.js";
 
 /**
  * Le Constructeur de pizza — jeu d'ordonnancement : remettre les étapes de la
  * recette (empâtement → cuisson) dans le bon ordre. Tape une étape pour la placer,
  * retape-la pour la retirer, puis « Vérifier ». Score → étoiles + XP.
+ *
+ * TROIS ESSAIS, ET LA RÉPONSE NE SE DONNE QU'À LA FIN. Le jeu n'en offrait qu'un seul : on
+ * vérifiait, il affichait la bonne étape en face de chaque erreur, et c'était fini. Autant dire
+ * qu'on ne cherchait qu'une fois. Un cœur coûte un essai imparfait ; tant qu'il en reste, on
+ * apprend seulement QUELLES cases sont fausses — pas ce qu'il fallait mettre — et on corrige. La
+ * correction complète n'apparaît qu'au dernier cœur. C'est plus généreux qu'avant (trois passages
+ * au lieu d'un) et ça demande de raisonner au lieu de lire la solution.
+ *
+ * ON GARDE LE MEILLEUR SCORE des trois essais : le but est de trouver l'ordre, pas de le trouver
+ * du premier coup.
  *
  * ⚠️ Démo : étapes d'exemple (méthode simplifiée) — à caler sur les manuels.
  */
@@ -23,25 +35,49 @@ const RECIPE = [
 const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
 export default function ConstructorGame({ onClose, onFinish }) {
-  useEchap(onClose);
   const order = useMemo(() => shuffle(RECIPE.map((_, i) => i)), []);   // ordre d'affichage du vivier
   const [placed, setPlaced] = useState([]);                            // indices posés, dans l'ordre du joueur
   const [checked, setChecked] = useState(false);
+  const [perdus, setPerdus] = useState(0);       // essais imparfaits déjà consommés
+  const [meilleur, setMeilleur] = useState(0);   // le meilleur des trois essais, c'est lui qu'on valide
 
   const pool = order.filter((i) => !placed.includes(i));
   const N = RECIPE.length;
   const correct = placed.filter((idx, pos) => idx === pos).length;
-  const stars = checked ? (correct === N ? 3 : correct >= N - 2 ? 2 : correct >= Math.ceil(N / 2) ? 1 : 0) : 0;
+  const noteDe = (bons) => (bons === N ? 3 : bons >= N - 2 ? 2 : bons >= Math.ceil(N / 2) ? 1 : 0);
+  const stars = checked ? noteDe(correct) : 0;
+  /* La partie est FINIE quand la recette est juste, ou qu'il ne reste plus de cœur. C'est le seul
+     moment où l'on affiche la bonne étape en face des erreurs : la donner plus tôt viderait les
+     essais restants de leur intérêt. */
+  const fini = checked && (correct === N || !encoreEnVie(perdus));
+
+  function verifier() {
+    setChecked(true);
+    setMeilleur((m) => Math.max(m, noteDe(correct)));
+    if (correct !== N) setPerdus((p) => p + 1);
+  }
+
+  /* Dès qu'un score existe, TOUTES les sorties le valident — la croix, le voile et Échap.
+     Elles appelaient `onClose`, qui referme sans rien enregistrer : l'écran affichait les étoiles
+     obtenues et fermer par la croix les jetait. C'est le geste le plus naturel devant un
+     résultat, et c'était le seul qui perdait le score. Avant la première vérification il n'y a
+     rien à garder : la croix abandonne, comme avant. */
+  const fermer = checked ? () => onFinish(meilleur) : onClose;
+  useEchap(fermer);
 
   const place = (i) => { if (!checked) setPlaced((p) => [...p, i]); };
   const unplace = (i) => { if (!checked) setPlaced((p) => p.filter((x) => x !== i)); };
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay" onClick={fermer}>
       <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>🍕 Le Constructeur de pizza</h3>
-          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
+          {/* Dans l'EN-TÊTE, pas sous le sous-titre : à 375 px la rangée passait à la ligne et
+              coûtait une hauteur de plus à un écran qui défile déjà (neuf cases plus neuf
+              étiquettes). Ici elle occupe une place qui existait. */}
+          <Coeurs perdus={perdus} />
+          <button className="x" onClick={fermer} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
         <div className="mbody">
           <p className="sub" style={{ marginTop: 0 }}>Remets les étapes dans le bon ordre — de l'empâtement à la cuisson.</p>
@@ -69,7 +105,10 @@ export default function ConstructorGame({ onClose, onFinish }) {
                   title={retirable ? "Retirer" : undefined}>
                   <span className="cg-num">{pos + 1}</span>
                   {idx != null ? <span><span className="cg-e">{RECIPE[idx].e}</span> {RECIPE[idx].t}</span> : <span className="cg-ph">…</span>}
-                  {checked && idx != null && <span style={{ marginLeft: "auto" }}>{ok ? "✅" : `→ ${pos + 1}. ${RECIPE[pos].t}`}</span>}
+                  {/* Tant qu'il reste un essai, on dit SEULEMENT que la case est fausse. La bonne
+                      étape n'apparaît qu'une fois la partie finie — sinon le deuxième essai
+                      consisterait à recopier ce qui est déjà écrit à l'écran. */}
+                  {checked && idx != null && <span style={{ marginLeft: "auto" }}>{ok ? "✅" : fini ? `→ ${pos + 1}. ${RECIPE[pos].t}` : "❌"}</span>}
                 </div>
               );
             })}
@@ -98,18 +137,27 @@ export default function ConstructorGame({ onClose, onFinish }) {
                 ))}
               </div>
               <p style={{ fontWeight: 700, margin: "4px 0 0" }}>{correct}/{N} étapes bien placées</p>
-              <p className="hint" style={{ marginTop: 2 }}>{stars >= 2 ? "Belle recette !" : "Regarde le bon ordre ci-dessus et retente."}</p>
+              <p className="hint" style={{ marginTop: 2 }}>
+                {correct === N ? "Belle recette !"
+                  : fini ? "Plus de cœur — le bon ordre est affiché ci-dessus. On garde ton meilleur essai."
+                    : `Les cases ❌ sont mal placées. Il te reste ${COEURS_MAX - perdus} essai${COEURS_MAX - perdus > 1 ? "s" : ""}.`}
+              </p>
             </div>
           )}
         </div>
         <div className="mfoot">
-          <button className="btn ghost" onClick={onClose}>Fermer</button>
+          {/* « Fermer » disparaît dès qu'un score existe : le bouton principal dit alors
+              « Valider (n ★) », et deux boutons au même effet sous deux libellés différents ne
+              s'expliquent à personne. */}
+          {!checked && <button className="btn ghost" onClick={onClose}>Fermer</button>}
           {/* « Valider » et non « Valider (+90 XP) » : l'XP a été retirée du jeu, ce bouton
               promettait une monnaie qui n'existe plus. Ce sont les ÉTOILES qui comptent, et
               elles sont affichées juste au-dessus. */}
           {!checked
-            ? <button className="btn primary" disabled={placed.length !== N} onClick={() => setChecked(true)}>Vérifier</button>
-            : <button className="btn primary" onClick={() => onFinish(stars)}>Valider</button>}
+            ? <button className="btn primary" disabled={placed.length !== N} onClick={verifier}>Vérifier</button>
+            : fini
+              ? <button className="btn primary" onClick={() => onFinish(meilleur)}>Valider ({meilleur} ★)</button>
+              : <button className="btn primary" onClick={() => setChecked(false)}>Réessayer</button>}
         </div>
       </div>
     </div>

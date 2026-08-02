@@ -1,12 +1,16 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { logAudit } = require('../lib/audit.js');
 const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigners } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
+const { cadresQuest, possedeCadreQuest, parseCadre: parseCadreQuest, PALIER_IDS, EXPLOIT_IDS } = require('../lib/cadresQuest.js');
 const { encrypt } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
+const { notify } = require('./notification.controller.js');
+const { prixStagiaire } = require('../lib/remise.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -78,6 +82,22 @@ async function releaseAutoQuizzes(conn, learner) {
 }
 
 // Retrouve le stagiaire (learner) lié au compte connecté.
+/* Colonnes de `inventory_item` arrivées par la 125 : sondées avant usage, sinon la requête
+ * échouerait et la commande deviendrait impossible pour une remise facultative. */
+
+async function colLigneDemande(conn, colonne) { return colTable(conn, 'shop_request_line', colonne); }
+async function colInventaire(conn, colonne) { return colTable(conn, 'inventory_item', colonne); }
+
+async function colTable(conn, table, colonne) {
+    try {
+        const [r] = await conn.query(
+            `SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ? LIMIT 1`,
+            [table, colonne]);
+        return r.length > 0;
+    } catch { return false; }
+}
+
 async function learnerForUser(conn, userId) {
     const [rows] = await conn.query('SELECT * FROM learner WHERE user_id = ? LIMIT 1', [userId]);
     return rows[0] || null;
@@ -848,6 +868,39 @@ const LEGACY_AVATAR_IDS = new Set(['bread','chef2','chef3','burger','fries','pas
     'shrimp','sushi','taco','hotdog','sandwich','croissant','pretzel','avocado','pepper','corn','grapes','lemon','icecream','coffee']);
 const isKnownAvatar = (id) => AVATAR_IDS.has(id) || LEGACY_AVATAR_IDS.has(id);
 
+/**
+ * Les cadres de Pizza Quest possédés par un stagiaire.
+ *
+ * DÉRIVÉ, jamais stocké : la règle (moitié / bouclé / sans faute) porte sur le NOMBRE DE
+ * CHAPITRES ACTIFS, qui bouge dès que l'école enrichit sa banque. Cf. lib/cadresQuest.js.
+ *
+ * `world` dans `learner_quest_progress` est le CODE de la formation (c'est ce que le jeu
+ * enregistre) : c'est donc sur le code qu'on rapproche les deux, pas sur l'id.
+ *
+ * Dégradation silencieuse : ni `quest_chapter` (migration 102) ni la progression (070) ne sont
+ * garanties. Sans elles la liste est vide — le stagiaire ne voit pas ces cadres, et rien d'autre
+ * ne casse. Une exception ici ferait tomber tout le profil, avatar compris.
+ */
+async function cadresQuestDuStagiaire(conn, learner, progress) {
+    if (!progress || !Object.keys(progress).length) return [];
+    try {
+        const [rows] = await conn.query(
+            `SELECT p.code, p.title, p.color, COUNT(c.id) AS chapitres
+               FROM training_program p
+               LEFT JOIN quest_chapter c ON c.program_id = p.id AND c.active = 1
+              WHERE p.organization_id = ? AND p.active = 1
+              GROUP BY p.id, p.code, p.title, p.color`,
+            [learner.organization_id]
+        );
+        return cadresQuest(progress, rows.map((r) => ({
+            code: r.code, title: r.title, color: r.color, chapitres: Number(r.chapitres) || 0,
+        })));
+    } catch (e) {
+        if (isMissingSchema(e)) return [];
+        throw e;
+    }
+}
+
 /** GET /api/mon-espace/profile — avatar + progression { world: { step: stars } } + XP. */
 const getMyProfile = async (req, res) => {
     try {
@@ -872,7 +925,13 @@ const getMyProfile = async (req, res) => {
                 stars += r.stars; xp += r.stars * 10;
             }
         } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : profil vide
-        res.json({ data: { avatar, cadre, cadres_exclusifs, progress, xp, stars } });
+        /* Cadres de PIZZA QUEST, dérivés et jamais stockés (cf. lib/cadresQuest.js). Les
+           recalculer à chaque lecture coûte deux requêtes et garantit qu'ils suivent la banque de
+           questions : un chapitre ajouté par l'école DÉFAIT un « Monde bouclé », et c'est
+           volontaire — le cadre dit « j'ai tout fait », il doit redevenir faux quand ce n'est plus
+           vrai. Une liste figée en base aurait menti dès le premier chapitre ajouté. */
+        const quest_cadres = await cadresQuestDuStagiaire(conn, learner, progress);
+        res.json({ data: { avatar, cadre, cadres_exclusifs, progress, xp, stars, quest_cadres } });
     } catch (err) {
         console.error('Erreur profil stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -884,15 +943,18 @@ const saveMyAvatar = async (req, res) => {
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        // Le personnel n'a pas de fiche stagiaire — en creer une pour lui polluerait les
+        // effectifs, Qualiopi et les listes de session. Son avatar vit sur `user` (migration 126).
+        if (!learner && !estPersonnel(req.user)) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
         const avatar = req.body && req.body.avatar;
         if (avatar != null && avatar !== '') {
             const [id, color] = String(avatar).split('|'); // "id" ou "id|#rrggbb"
             if (!isKnownAvatar(id)) return res.status(422).json({ message: 'Avatar inconnu.' });
             if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) return res.status(422).json({ message: 'Couleur invalide.' });
         }
-        try { await conn.query('UPDATE learner SET avatar = ? WHERE id = ?', [avatar || null, learner.id]); }
-        catch (e) { if (!isMissingSchema(e)) throw e; }
+        const [table, cible] = learner ? ['learner', learner.id] : ['user', req.user.id];
+        try { await conn.query(`UPDATE ${table} SET avatar = ? WHERE id = ?`, [avatar || null, cible]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 126 non jouee (personnel)
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur avatar stagiaire :', err);
@@ -915,22 +977,60 @@ const saveMyAvatar = async (req, res) => {
  *
  * On valide en revanche la FORME, sans quoi la colonne accepterait n'importe quelle chaîne.
  */
-const CADRES_CONNUS = ['aucun', 'bronze', 'argent', 'or', 'braise', 'maestro', 'champion', 'jury', 'fondateur'];
+const CADRES_CONNUS = ['aucun', 'bronze', 'argent', 'or', 'braise', 'maestro',
+    // Résultats de concours, du plus haut au plus spécifique. « Champion » les couvrait tous,
+    // ce qui donnait le même cadre au vainqueur et au troisième.
+    'champion', 'categorie', 'podium', 'prix', 'jury', 'fondateur', 'ecole'];
+/* Le cadre « ecole » est le SEUL que le personnel porte, et le seul qu'un stagiaire ne peut
+ * pas porter. Les cadres de parcours annoncent un nombre de formations terminees : un
+ * secretariat en « Maestro » se lirait comme un stagiaire chevronne, et l'inverse — un
+ * stagiaire en « ecole » — le ferait passer pour le bureau dans la Communaute. */
+const CADRE_PERSONNEL = 'ecole';
+const ROLES_PERSONNEL = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'];
+const estPersonnel = (u) => ROLES_PERSONNEL.includes(u?.role);
 const listeCadres = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
 
 const saveMyCadre = async (req, res) => {
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        if (!learner && !estPersonnel(req.user)) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
         const cadre = req.body && req.body.cadre;
-        // NULL et « aucun » ne disent pas la même chose : NULL = aucun choix exprimé (on
-        // retombe sur le palier), « aucun » = le choix de ne rien porter.
-        if (cadre != null && cadre !== '' && !CADRES_CONNUS.includes(String(cadre))) {
+        // Le controle vaut DANS LES DEUX SENS : le front propose la bonne liste, mais la route
+        // est ouverte a tout compte authentifie — une requete a la main contournerait l'ecran.
+        if (cadre && cadre !== 'aucun') {
+            const perso = String(cadre) === CADRE_PERSONNEL;
+            if (perso && !estPersonnel(req.user)) {
+                return res.status(403).json({ message: 'Le cadre « École » est réservé au personnel de l\'organisme.' });
+            }
+            if (!perso && estPersonnel(req.user)) {
+                return res.status(403).json({ message: 'Les cadres de parcours récompensent des formations terminées.' });
+            }
+        }
+        /* CADRE DE QUÊTE : « palier|#rrggbb ». Celui-là se vérifie VRAIMENT, contrairement aux
+           autres — et la raison tient à la couleur. Un palier sans couleur ne dit rien de faux ;
+           un « Sans faute » teinté d'une formation qu'on n'a jamais ouverte, si. La possession se
+           calcule ici, à l'écriture, parce qu'elle dépend de la banque de questions du moment. */
+        const q = parseCadreQuest(cadre);
+        if (q.id && (PALIER_IDS.includes(q.id) || EXPLOIT_IDS.includes(q.id))) {
+            if (!learner) return res.status(403).json({ message: 'Les cadres de Pizza Quest récompensent la progression d\'un stagiaire.' });
+            const progress = {};
+            try {
+                const [rows] = await conn.query('SELECT world, step, stars FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
+                for (const r of rows) (progress[r.world] ||= {})[r.step] = r.stars;
+            } catch (e) { if (!isMissingSchema(e)) throw e; }
+            const possedes = await cadresQuestDuStagiaire(conn, learner, progress);
+            if (!possedeCadreQuest(cadre, possedes)) {
+                return res.status(403).json({ message: 'Ce cadre de Pizza Quest n\'est pas encore débloqué.' });
+            }
+        } else if (cadre != null && cadre !== '' && !CADRES_CONNUS.includes(String(cadre))) {
+            // NULL et « aucun » ne disent pas la même chose : NULL = aucun choix exprimé (on
+            // retombe sur le palier), « aucun » = le choix de ne rien porter.
             return res.status(422).json({ message: 'Cadre inconnu.' });
         }
-        try { await conn.query('UPDATE learner SET cadre = ? WHERE id = ?', [cadre || null, learner.id]); }
-        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 113 non jouée
+        const [tbl, ref] = learner ? ['learner', learner.id] : ['user', req.user.id];
+        try { await conn.query(`UPDATE ${tbl} SET cadre = ? WHERE id = ?`, [cadre || null, ref]); }
+        catch (e) { if (!isMissingSchema(e)) throw e; } // migration 113 (stagiaire) / 126 (personnel) non jouée
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur cadre stagiaire :', err);
@@ -1015,12 +1115,21 @@ const getBoutique = async (req, res) => {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
-        const [rows] = await conn.query(
-            `SELECT id, name, category, unit_price, tax_rate, quantity
+        // `learner_discount_pct` arrive par la 125 : sans elle, la cascade retombe sur la
+        // requête d'avant et la boutique affiche le prix catalogue, comme aujourd'hui.
+        let rows;
+        for (const remise of ['learner_discount_pct, learner_discount_eur',
+                              'NULL AS learner_discount_pct, NULL AS learner_discount_eur']) {
+          try {
+            [rows] = await conn.query(
+              `SELECT id, name, category, unit_price, tax_rate, quantity, ${remise}
              FROM inventory_item WHERE organization_id = ? AND unit_price IS NOT NULL
              ORDER BY category, name`,
-            [learner.organization_id]
-        );
+              [learner.organization_id]
+            );
+            break;
+          } catch (e) { if (!isMissingSchema(e)) throw e; }
+        }
         // Stock DISPONIBLE = stock physique − ce qui est déjà réservé par des demandes en
         // cours. Une demande ne décrémente pas l'inventaire (seule la caisse le fait, à la
         // vente) : sans cette déduction, trois stagiaires peuvent commander le même dernier
@@ -1030,10 +1139,26 @@ const getBoutique = async (req, res) => {
         const reserved = await reservedByPendingRequests(conn, learner.organization_id);
         const data = rows.map((r) => {
             const dispo = Math.max(0, Number(r.quantity) - (reserved.get(r.id) || 0));
+            /* REMISE STAGIAIRE (migration 125). Le prix montré ici est le prix REMISÉ : c'est
+             * celui que le stagiaire paiera, donc celui qui doit s'afficher. On renvoie aussi le
+             * prix barré et le taux, pour que la boutique puisse montrer l'économie — une remise
+             * qu'on ne voit pas ne fait plaisir à personne.
+             * Arrondi au centime AVANT multiplication, comme partout ailleurs (cf. sale.controller). */
+            const { brut: brutHt, net: netHt, taux, libelle } = prixStagiaire(r);
             return {
                 id: r.id, name: cleanName(r.name), category: r.category,
-                price_ht: Number(r.unit_price), tax_rate: Number(r.tax_rate),
-                price_ttc: +(Number(r.unit_price) * (1 + Number(r.tax_rate) / 100)).toFixed(2),
+                price_ht: netHt, tax_rate: Number(r.tax_rate),
+                price_ttc: +(netHt * (1 + Number(r.tax_rate) / 100)).toFixed(2),
+                // Prix catalogue + taux : présents SEULEMENT s'il y a une remise, pour que le
+                // front n'ait pas à comparer deux nombres pour savoir s'il doit barrer un prix.
+                ...(taux > 0 ? {
+                    // `remise_label` porte la forme SAISIE (« −5,00 € » ou « −10 % »), pas le
+                    // taux effectif : annoncer « −12,53 % » là où l'école a promis 5 € serait
+                    // exact et incompréhensible.
+                    remise_label: libelle,
+                    remise_pct: taux,
+                    price_ttc_avant: +(brutHt * (1 + Number(r.tax_rate) / 100)).toFixed(2),
+                } : {}),
                 stock: dispo,            // ce qu'il reste réellement à prendre
                 in_stock: dispo > 0,
                 personalizable: isPersonalizable(r.category),
@@ -1226,7 +1351,7 @@ const createShopRequest = async (req, res) => {
                     price: price == null ? null : Number(price), tax: 20, perso: null, variant: null, brodable: false });
             } else {
                 const [[it]] = await conn.query(
-                    'SELECT id, name, category, unit_price, tax_rate FROM inventory_item WHERE id = ? AND organization_id = ?',
+                    `SELECT id, name, category, unit_price, tax_rate, ${await colInventaire(conn, 'learner_discount_eur') ? 'learner_discount_pct, learner_discount_eur' : 'NULL AS learner_discount_pct, NULL AS learner_discount_eur'} FROM inventory_item WHERE id = ? AND organization_id = ?`,
                     [l.id, learner.organization_id]
                 );
                 if (!it || it.unit_price == null) continue;
@@ -1245,8 +1370,14 @@ const createShopRequest = async (req, res) => {
                     if (!perso) return res.status(422).json({ message: `« ${cleanName(it.name)} » est brodé : indique le nom et le prénom.` });
                     if (!variant) return res.status(422).json({ message: `« ${cleanName(it.name)} » : choisis la taille et la coupe.` });
                 }
+                /* REMISE STAGIAIRE (125), APPLIQUÉE ICI ET PAS SEULEMENT À L'AFFICHAGE. Le prix
+                 * retenu vient de la base, jamais du panier — un panier trafiqué ne peut donc pas
+                 * imposer son prix. On fige aussi le taux et le prix catalogue sur la ligne : le
+                 * stagiaire a vu un prix, c'est celui-là qui l'engage même si l'école change sa
+                 * remise le lendemain. Le brut sert ensuite à la colonne « Remise » de la facture. */
+                const { brut, net, taux: tauxStag } = prixStagiaire(it);
                 resolved.push({ source: 'ECOLE', pprod: null, item: it.id, label: cleanName(it.name), qty,
-                    price: Number(it.unit_price), tax: Number(it.tax_rate), perso: perso || null, variant, brodable });
+                    price: net, brut, remise: tauxStag, tax: Number(it.tax_rate), perso: perso || null, variant, brodable });
             }
         }
         if (!resolved.length) return res.status(422).json({ message: 'Aucun article valide dans la demande.' });
@@ -1299,6 +1430,11 @@ const createShopRequest = async (req, res) => {
             }
         }
 
+        /* PAS DE CHOIX DE DESTINATAIRE ICI. Le stagiaire commande, il ne décide pas qui sera
+         * facturé : c'est l'école qui sait si l'employeur prend en charge, et elle le tranche à
+         * l'émission (cf. shopRequest.controller, modale de facturation). Lui poser la question
+         * au panier l'obligerait à connaître un accord commercial qui ne le regarde pas, et
+         * l'école devrait de toute façon revérifier derrière. */
         const ref = await nextShopRef(conn, learner.organization_id);
         await conn.query(
             'INSERT INTO shop_request (id, organization_id, learner_id, ref, note, pickup_at) VALUES (uuid(), ?, ?, ?, ?, ?)',
@@ -1308,12 +1444,43 @@ const createShopRequest = async (req, res) => {
         const [[created]] = await conn.query('SELECT id FROM shop_request WHERE ref = ? LIMIT 1', [ref]);
         for (let i = 0; i < resolved.length; i++) {
             const r = resolved[i];
+            // Taux et prix catalogue figés SUR LA LIGNE quand la 125 est jouée : c'est ce qui
+            // permettra à la facture d'afficher la remise consentie plutôt qu'un prix nu.
+            const lc = ['id', 'request_id', 'source', 'inventory_item_id', 'partner_product_id', 'label',
+                'qty', 'unit_price_ht', 'tax_rate', 'personalization', 'variant', 'sort_order'];
+            const lv = [created.id, r.source, r.item, r.pprod, r.label, r.qty, r.price, r.tax, r.perso, r.variant, i];
+            if (r.remise > 0 && await colLigneDemande(conn, 'discount_pct')) {
+                lc.push('discount_pct', 'unit_price_gross_ht');
+                lv.push(r.remise, r.brut);
+            }
             await conn.query(
-                `INSERT INTO shop_request_line (id, request_id, source, inventory_item_id, partner_product_id, label, qty, unit_price_ht, tax_rate, personalization, variant, sort_order)
-                 VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [created.id, r.source, r.item, r.pprod, r.label, r.qty, r.price, r.tax, r.perso, r.variant, i]
+                `INSERT INTO shop_request_line (${lc.join(', ')}) VALUES (uuid(), ${lc.slice(1).map(() => '?').join(', ')})`,
+                lv
             );
         }
+        // Prévient le secrétariat : sans cela, une commande n'existait QUE dans l'écran
+        // « Demandes boutique », qu'il fallait penser à ouvrir. La pastille du menu comptait
+        // bien les demandes en cours, mais rien ne signalait l'arrivée d'une nouvelle — un
+        // stagiaire pouvait commander le vendredi soir et attendre le mardi qu'on la remarque.
+        // `user_id` nul : visible par tout l'organisme, comme les autres notifications de suivi.
+        const nomStagiaire = [learner.first_name, learner.last_name].filter(Boolean).join(' ').trim();
+        const nbArticles = resolved.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+        const totalTTC = resolved.reduce(
+            (s, r) => s + (Number(r.price) || 0) * (Number(r.qty) || 0) * (1 + (Number(r.tax) || 0) / 100), 0);
+        const quand = pickup
+            ? ` · retrait le ${String(pickup).slice(0, 10).split('-').reverse().join('/')}`
+            : '';
+        // ATTENDUE avant de répondre : la réponse déclenche la diffusion SSE, et les postes
+        // rechargent aussitôt. Sans cette attente, la notification peut n'être pas encore
+        // enregistrée à ce moment — le son et la cloche arriveraient au sondage suivant.
+        await notify(learner.organization_id, {
+            type: 'BOUTIQUE',
+            title: 'Nouvelle commande boutique',
+            body: `${nomStagiaire || 'Un stagiaire'} · ${nbArticles} article${nbArticles > 1 ? 's' : ''}`
+                + ` · ${totalTTC.toFixed(2).replace('.', ',')} € TTC · réf ${ref}${quand}`,
+            link: '/demandes-boutique',
+        });
+
         res.status(201).json({ success: true, ref, id: created.id });
     } catch (err) {
         if (isMissingSchema(err)) return res.status(503).json({ message: 'Migration 096 non jouée : boutique indisponible.' });
@@ -1494,6 +1661,47 @@ const deleteMyAvatarImage = async (req, res) => {
 };
 
 /** PUT /api/mon-espace/quest — { progress: { world: { step: stars } } } (upsert, meilleur score). */
+/**
+ * DELETE /api/mon-espace/quest — efface TOUTE la progression Pizza Quest du stagiaire.
+ *
+ * POURQUOI CETTE ROUTE EXISTE. `saveMyQuest` écrit avec `GREATEST(stars, VALUES(stars))` : une
+ * étoile ne redescend jamais, c'est voulu — on ne perd pas un acquis en rejouant moins bien. Il
+ * n'y avait donc AUCUN moyen de remettre à zéro, ni pour tester, ni pour un stagiaire qui veut
+ * reprendre son entraînement à blanc.
+ *
+ * ELLE N'EFFACE QUE SES PROPRES LIGNES : `learner_id` vient du compte connecté, jamais du corps
+ * de la requête. Personne ne peut remettre à zéro quelqu'un d'autre, même en forgeant l'appel.
+ *
+ * LE CADRE PORTÉ TOMBE AVEC. Les cadres de quête se déduisent de la progression : sans elle ils
+ * ne sont plus possédés, et le serveur refuserait de les réenregistrer. Le laisser en base
+ * afficherait un « Sans faute » que plus rien ne justifie — la possession n'étant revérifiée
+ * qu'à l'écriture, il resterait visible dans la Communauté.
+ */
+const resetMyQuest = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        try {
+            await conn.query('DELETE FROM learner_quest_progress WHERE learner_id = ?', [learner.id]);
+        } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : rien à effacer
+        // Le cadre n'est remis à zéro QUE s'il venait de la quête : un Bronze ou un Fondateur ne
+        // doit rien à Pizza Quest, et les effacer serait un dégât collatéral.
+        try {
+            const [[l]] = await conn.query('SELECT cadre FROM learner WHERE id = ?', [learner.id]);
+            const { id } = parseCadreQuest(l && l.cadre);
+            if (PALIER_IDS.includes(id) || EXPLOIT_IDS.includes(id)) {
+                await conn.query('UPDATE learner SET cadre = NULL WHERE id = ?', [learner.id]);
+            }
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
+        logAudit(req, 'quest.reset', 'Learner', learner.id);
+        res.json({ success: true, message: 'Progression Pizza Quest effacée.' });
+    } catch (err) {
+        console.error('Erreur remise à zéro Pizza Quest :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 const saveMyQuest = async (req, res) => {
     try {
         const conn = db.promise();
@@ -1628,5 +1836,5 @@ const updateMyInfos = async (req, res) => {
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
 module.exports = {
-    saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+    saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
 };

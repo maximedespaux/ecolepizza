@@ -47,7 +47,7 @@ function AppLayout() {
   // Mode confidentiel partagé : masque les montants sur les pages Ventes & Finance
   // (+ Partenaires). Toujours masqué pour les profils sans droit de révélation (formateur).
   const { masked: moneyMasked } = useMoneyMask();
-  const FINANCE = ["/ventes", "/inventaire", "/factures", "/comptabilite", "/produit-divers", "/partenaires"];
+  const FINANCE = ["/ventes", "/inventaire", "/factures", "/comptabilite", "/partenaires"];
   const moneyMask = FINANCE.some((p) => location.pathname.startsWith(p)) && (!canRevealMoney(user) || moneyMasked);
 
   // Charge une fois les couleurs personnalisées des formations pour que les

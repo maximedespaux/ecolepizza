@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { matchFormation, matchStep, stepSigners } = require('../lib/documents.js');
 const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
-const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
+const { loadEquivalences, equivalenceMap, alertesParSlug } = require('../lib/equivalence.js');
 const { loadOrgSteps } = require('./template.controller.js');
 
 /**
@@ -38,6 +38,33 @@ async function formationSteps(conn, orgId, program) {
             active: o ? !!o.active : true,
         };
     });
+
+    /* PIÈCES À FOURNIR (slug « piece:<id> ») — la troisième nature d'étape, à côté des
+     * documents et des QCM. Le sens est inversé : ce n'est pas l'école qui produit, c'est le
+     * stagiaire qui envoie (copie de pièce d'identité recto/verso…). Elles sont proposées ici
+     * pour que le POINT DE RUPTURE joue aussi sur elles : « pas d'accès à l'émargement tant
+     * que l'identité n'est pas validée » se règle alors sans écrire une ligne.
+     * Requête à part et try/catch : la table arrive avec la migration 127, et le parcours doit
+     * rester utilisable sans elle. */
+    let pieceSteps = [];
+    try {
+        const [pieces] = await conn.query(
+            'SELECT id, label, consigne, fichiers_attendus FROM piece_type WHERE organization_id = ? AND active = 1 ORDER BY label',
+            [orgId]);
+        pieceSteps = pieces.map((pc) => {
+            const slug = `piece:${pc.id}`;
+            const o = overlay.get(slug);
+            return {
+                slug, label: pc.label, doc_type: 'PIECE', quiz_id: null, piece_id: pc.id,
+                consigne: pc.consigne, fichiers_attendus: pc.fichiers_attendus, day: null,
+                // Une pièce ne se signe pas : elle se DÉPOSE puis se vérifie. Les badges de
+                // signature n'ont donc aucun sens ici, et les afficher tromperait.
+                signable: false, stagiaire_sign: false, company_sign: false, company_level: false,
+                sort_order: o ? o.sort_order : 15, // tôt dans le parcours : c'est un préalable
+                active: o ? !!o.active : false,    // jamais imposée d'office à toutes les formations
+            };
+        });
+    } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
 
     // QCM ajoutables comme étapes (slug « quiz:<id> ») : ceux rattachés à cette
     // formation, ET ceux non rattachés (program_id NULL) — pour qu'un QCM nouvellement
@@ -92,7 +119,7 @@ async function formationSteps(conn, orgId, program) {
         });
     } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
 
-    return [...docSteps, ...quizSteps, ...emargSteps].sort((a, b) => a.sort_order - b.sort_order);
+    return [...docSteps, ...quizSteps, ...pieceSteps, ...emargSteps].sort((a, b) => a.sort_order - b.sort_order);
 }
 
 /**
@@ -147,24 +174,50 @@ async function enrollmentSteps(conn, orgId, program, ctx, condById, eqMap) {
 /**
  * GET /api/formations — catalogue des formations de l'organisme.
  */
-const getPrograms = (req, res) => {
-    db.query(
-        `SELECT id, organization_id, code, level, color, title, days, hours, price, audience,
-                objectives, objective_general, duration_detail, program_detail,
-                rs_code, hygiene, active, sort_order, created_at
-         FROM training_program
-         WHERE organization_id = ?
-         ORDER BY sort_order, code`,
-        [req.user.organization_id],
-        (err, results) => {
-            if (err) {
-                console.error('Erreur récupération formations :', err);
-                return res.status(500).json({ error: 'Internal Server Error' });
+/**
+ * GET /api/formations — la liste, AVEC le nombre de choix « OU » mal conditionnés.
+ *
+ * Le diagnostic est fait UNE fois pour tout l'organisme : un groupe cassé l'est indépendamment
+ * de la formation. Ce qui varie, c'est de savoir QUELLES formations l'utilisent réellement —
+ * d'où une seule requête sur les étapes actives, et non une par formation.
+ *
+ * Toute cette partie est en try/catch : un diagnostic est un CONFORT. S'il échoue, la liste des
+ * formations doit sortir quand même — l'inverse ferait disparaître la page pour un badge.
+ */
+const getPrograms = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [progs] = await conn.query(
+            `SELECT id, organization_id, code, level, color, title, days, hours, price, audience,
+                    objectives, objective_general, duration_detail, program_detail,
+                    rs_code, hygiene, active, sort_order, created_at
+             FROM training_program WHERE organization_id = ? ORDER BY sort_order, code`, [orgId]);
+        try {
+            const bySlug = new Map((await loadOrgSteps(orgId)).map((x) => [x.slug, x]));
+            const alertes = alertesParSlug(await loadEquivalences(conn, orgId), bySlug);
+            if (alertes.size) {
+                const [actives] = await conn.query(
+                    'SELECT program_id, slug FROM program_step WHERE organization_id = ? AND active = 1', [orgId]);
+                const parProg = new Map();
+                for (const a of actives) {
+                    if (!alertes.has(a.slug)) continue;
+                    // Un même groupe cassé touche plusieurs slugs : on compte les GROUPES, pas
+                    // les étapes, sinon un « OU » à deux variantes s'annoncerait comme deux
+                    // problèmes distincts.
+                    (parProg.get(a.program_id) || parProg.set(a.program_id, new Set()).get(a.program_id))
+                        .add(alertes.get(a.slug).groupe);
+                }
+                progs.forEach((p) => { p.alertes_conditions = (parProg.get(p.id)?.size) || 0; });
             }
-            res.json({ data: results });
-        }
-    );
+        } catch (e) { console.error('Diagnostic conditions (non bloquant) :', e.message); }
+        return res.json({ data: progs });
+    } catch (err) {
+        console.error('Erreur récupération formations :', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
+
 
 /**
  * GET /api/formations/:id
@@ -360,7 +413,13 @@ const getFormationSteps = async (req, res) => {
             [req.params.id, req.user.organization_id]
         );
         if (!program) return res.status(404).json({ message: 'Formation introuvable' });
-        res.json({ data: await formationSteps(conn, req.user.organization_id, program) });
+        const steps = await formationSteps(conn, req.user.organization_id, program);
+        /* Les groupes « OU » mal conditionnés, marqués SUR l'étape concernée. Le diagnostic est
+         * porté par la donnée plutôt que recalculé à l'écran : la liste des formations pose la
+         * même question, et deux calculs auraient divergé. */
+        const bySlug = new Map(steps.map((x) => [x.slug, x]));
+        const alertes = alertesParSlug(await loadEquivalences(conn, req.user.organization_id), bySlug);
+        res.json({ data: steps.map((x) => (alertes.has(x.slug) ? { ...x, alerte: alertes.get(x.slug) } : x)) });
     } catch (err) {
         console.error('Erreur étapes formation :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -420,6 +479,10 @@ const saveFormationSteps = async (req, res) => {
         let hasOrGroup = true;
         try { await conn.query('SELECT or_group FROM program_step LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasOrGroup = false; else throw e; }
+        // Colonne piece_id disponible ? (migration 127) — même sonde, même raison.
+        let hasPiece = true;
+        try { await conn.query('SELECT piece_id FROM program_step LIMIT 1'); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasPiece = false; else throw e; }
         for (let i = 0; i < steps.length; i++) {
             const slug = String(steps[i].slug || '').trim().toLowerCase();
             if (!slug) continue;
@@ -434,6 +497,14 @@ const saveFormationSteps = async (req, res) => {
                     'INSERT INTO program_step (id, organization_id, program_id, slug, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)',
                     [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, steps[i].active ? 1 : 0]
                 );
+            }
+            /* Une pièce à fournir porte son identifiant DANS SA COLONNE, pas seulement dans le
+             * slug : c'est `piece_id` que joignent les requêtes de dépôt, et lire un préfixe de
+             * chaîne dans un JOIN serait à la fois lent et fragile. Le slug reste la clé du
+             * parcours, la colonne est la clé étrangère. */
+            if (hasPiece && slug.startsWith('piece:')) {
+                await conn.query('UPDATE program_step SET piece_id = ? WHERE program_id = ? AND slug = ?',
+                    [slug.slice(6), req.params.id, slug]).catch(() => {});
             }
             // QCM ajouté au parcours et non encore rattaché : on le lie à cette formation.
             if (steps[i].active && slug.startsWith('quiz:')) {

@@ -1,4 +1,4 @@
-import { Extension, Node } from "@tiptap/core";
+import { Extension, Node, mergeAttributes } from "@tiptap/core";
 
 /**
  * PageBreak — saut de page manuel.
@@ -34,6 +34,117 @@ export const PageBreak = Node.create({
   },
   addKeyboardShortcuts() {
     return { "Mod-Enter": () => this.editor.commands.setPageBreak() };
+  },
+});
+
+/**
+ * Column / Columns — bloc « deux colonnes » (texte à côté d'un tableau, sur la même bande).
+ *
+ * Dans l'éditeur, une colonne est un <div data-col> (flex) ; le conteneur est un <div data-cols>.
+ * Au rendu PDF, le serveur (htmlfill.columnsToTables) transforme ces div en un tableau de mise
+ * en page SANS BORDURE — la seule primitive que LibreOffice pose côte à côte de façon fiable.
+ * Le WYSIWYG tient parce que les largeurs (data-w, en %) et la pleine largeur des tableaux
+ * internes sont les mêmes des deux côtés.
+ *
+ * Une colonne accepte n'importe quel bloc (paragraphes, titres, tableau, image, jetons) : on peut
+ * donc y déposer le tableau des totaux d'un côté et les conditions de règlement de l'autre.
+ */
+export const Column = Node.create({
+  name: "column",
+  content: "block+",
+  isolating: true, // la touche Retour arrière ne fusionne pas deux colonnes
+  addAttributes() {
+    return {
+      width: {
+        default: null, // pourcentage (chaîne) ; null = colonnes égales
+        parseHTML: (el) => el.getAttribute("data-w"),
+        renderHTML: (attrs) => (attrs.width ? { "data-w": attrs.width } : {}),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "div[data-col]" }];
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    const a = mergeAttributes(HTMLAttributes, { "data-col": "", class: "doc-col" });
+    if (node.attrs.width) a.style = `flex:0 0 ${node.attrs.width}%;max-width:${node.attrs.width}%`;
+    return ["div", a, 0];
+  },
+});
+
+export const Columns = Node.create({
+  name: "columns",
+  group: "block",
+  content: "column column+", // au moins deux colonnes
+  defining: true,
+  isolating: true,
+  parseHTML() {
+    return [{ tag: "div[data-cols]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes, { "data-cols": "", class: "doc-cols" }), 0];
+  },
+  addCommands() {
+    // Retrouve le nœud `columns` contenant la sélection : { node, pos, depth } ou null.
+    const findColumns = ($from) => {
+      for (let d = $from.depth; d > 0; d--) {
+        if ($from.node(d).type.name === "columns") {
+          return { node: $from.node(d), pos: $from.before(d), depth: d };
+        }
+      }
+      return null;
+    };
+    return {
+      insertColumns:
+        (n = 2) =>
+        ({ commands }) => {
+          const column = { type: "column", content: [{ type: "paragraph" }] };
+          return commands.insertContent({
+            type: "columns",
+            content: Array.from({ length: Math.max(2, n) }, () => ({ ...column })),
+          });
+        },
+      // Fixe les largeurs (tableau de %) des colonnes du bloc courant. Tableau vide = égales.
+      setColumnsRatio:
+        (widths = []) =>
+        ({ state, dispatch }) => {
+          const found = findColumns(state.selection.$from);
+          if (!found) return false;
+          let tr = state.tr;
+          found.node.forEach((child, offset, index) => {
+            const w = widths[index] != null ? String(widths[index]) : null;
+            tr = tr.setNodeMarkup(found.pos + 1 + offset, undefined, { ...child.attrs, width: w });
+          });
+          if (dispatch) dispatch(tr);
+          return true;
+        },
+      addColumn:
+        () =>
+        ({ state, dispatch }) => {
+          const found = findColumns(state.selection.$from);
+          if (!found) return false;
+          const colType = state.schema.nodes.column;
+          const col = colType.create(null, state.schema.nodes.paragraph.create());
+          const end = found.pos + found.node.nodeSize - 1; // avant le </columns>
+          if (dispatch) dispatch(state.tr.insert(end, col));
+          return true;
+        },
+      removeColumn:
+        () =>
+        ({ state, dispatch }) => {
+          const { $from } = state.selection;
+          const found = findColumns($from);
+          if (!found || found.node.childCount <= 2) return false; // garder ≥ 2 colonnes
+          for (let d = $from.depth; d > found.depth; d--) {
+            if ($from.node(d).type.name === "column") {
+              const pos = $from.before(d);
+              if (dispatch) dispatch(state.tr.delete(pos, pos + $from.node(d).nodeSize));
+              return true;
+            }
+          }
+          return false;
+        },
+    };
   },
 });
 

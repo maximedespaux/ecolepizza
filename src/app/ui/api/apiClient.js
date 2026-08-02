@@ -96,8 +96,29 @@ export function checkoutSale(payload) {
 export function getShopSettings() {
   return request("/ventes/settings");
 }
-export function saveShopSettings(payload) {
-  return request("/ventes/settings", { method: "PUT", body: JSON.stringify(payload) });
+/* `saveShopSettings` a été retiré : les ENTITÉS ÉMETTRICES ont supplanté `shop_settings`.
+   Préfixe de numéro, prochain numéro, moyens de paiement et TVA s'éditent désormais par entité
+   (cf. BillingProfiles) ; `shop_settings` ne sert plus que de repli quand aucune entité n'est
+   choisie — cas qui ne se produit pas, l'entité « organisme » étant semée et par défaut.
+   La route serveur reste : elle est la dernière à écrire cette table, et la supprimer
+   demanderait de décider du sort de la table elle-même. */
+
+// --- Entités émettrices (identités de facturation) ---
+export function getEmitters() {
+  return request("/emetteurs");
+}
+export function createEmitter(payload) {
+  return request("/emetteurs", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateEmitter(id, payload) {
+  return request(`/emetteurs/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+/* `setDefaultEmitter` a été retiré : le bouton « Par défaut » a été ôté de l'écran Facturation
+   (décision consignée dans CLAUDE.md §5 — l'entité « organisme » est semée et reste le défaut).
+   La fonction survivait à son bouton. La route serveur reste, `is_default` pilotant toujours le
+   choix de l'entité : c'est l'ÉCRAN qui ne le change plus, pas le concept qui a disparu. */
+export function deleteEmitter(id) {
+  return request(`/emetteurs/${id}`, { method: "DELETE" });
 }
 
 // --- Émargement ---
@@ -200,6 +221,7 @@ async function download(path, filename) {
     const err = new Error(d.message || d.error || "Téléchargement échoué");
     err.status = res.status;
     if (d.missing) err.missing = d.missing;
+    if (d.forcable) err.forcable = true; // le serveur accepte ?force=1 malgré les manques
     throw err;
   }
   const blob = await res.blob();
@@ -212,21 +234,28 @@ async function download(path, filename) {
   a.remove();
   URL.revokeObjectURL(url);
 }
-export function downloadFacturX(id, number) {
-  return download(`/factures/${id}/facturx`, `${number}.pdf`);
+// `force` : émet malgré les informations manquantes (cf. avertirConformite, côté serveur).
+export function downloadFacturX(id, number, force) {
+  return download(`/factures/${id}/facturx${force ? "?force=1" : ""}`, `${number}.pdf`);
 }
 // Renvoie une URL blob du PDF (pour l'aperçu dans un onglet).
-export async function facturXUrl(id) {
+export async function facturXUrl(id, force) {
   startLoading();
   let res;
   try {
-    res = await fetch(`${API_BASE_URL}/factures/${id}/facturx`, { credentials: "include" });
+    res = await fetch(`${API_BASE_URL}/factures/${id}/facturx${force ? "?force=1" : ""}`, { credentials: "include" });
   } finally {
     stopLoading();
   }
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
-    throw new Error(d.message || d.error || "Aperçu impossible");
+    // `missing` était PERDU ici : l'aperçu ne rendait qu'une phrase, alors que le serveur
+    // envoyait déjà la liste de ce qu'il faut compléter. Le téléchargement, lui, la propageait.
+    const err = new Error(d.message || d.error || "Aperçu impossible");
+    err.status = res.status;
+    if (d.missing) err.missing = d.missing;
+    if (d.forcable) err.forcable = true;
+    throw err;
   }
   return URL.createObjectURL(await res.blob());
 }
@@ -259,11 +288,11 @@ export function createExpense(payload) {
 export function deleteExpense(id) {
   return request(`/comptabilite/depenses/${id}`, { method: "DELETE" });
 }
-export function getRevenues(annee) {
-  return request(`/comptabilite/revenus?annee=${annee}`);
-}
 export function createRevenue(payload) {
   return request("/comptabilite/revenus", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateRevenue(id, payload) {
+  return request(`/comptabilite/revenus/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 export function deleteRevenue(id) {
   return request(`/comptabilite/revenus/${id}`, { method: "DELETE" });
@@ -499,8 +528,10 @@ export function getPlayableChapters(programId) {
   return request(`/mon-espace/quest/${programId}/chapitres`, { silent: true });
 }
 // Cœurs : le capital est tenu par le serveur, jamais calculé côté client.
-export function getQuestLives() { return request("/mon-espace/quest/vies", { silent: true }); }
-export function loseQuestLife() { return request("/mon-espace/quest/vies/perdre", { method: "POST", silent: true }); }
+/* Les VIES de Pizza Quest n'existent plus — la mécanique d'XP et de cœurs a été remplacée par
+   les cadres. Ces deux fonctions pointaient vers `/mon-espace/quest/vies`, une route qui n'existe
+   dans AUCUN fichier de routes : elles auraient renvoyé une 404 si quelqu'un les avait appelées.
+   Du code mort qui désigne du vide. */
 // ⚠️ DÉBOGAGE — remet à zéro SA propre progression Pizza Quest. À retirer avec le bouton
 // correspondant (PizzaQuest.jsx) avant la mise en service.
 
@@ -646,6 +677,12 @@ export function getMyProfile() {
 export function saveMyAvatar(avatar) {
   return request("/mon-espace/avatar", { method: "PUT", body: JSON.stringify({ avatar }), silent: true });
 }
+/* Efface TOUTE la progression Pizza Quest — la sienne, jamais celle d'un autre : le serveur
+   prend l'identité du compte connecté et ignore ce qu'on lui passerait.  n'écrit
+   qu'à la hausse, il n'existait donc aucun chemin de retour. */
+export function resetMyQuest() {
+  return request("/mon-espace/quest", { method: "DELETE" });
+}
 export function saveMyQuest(progress) {
   return request("/mon-espace/quest", { method: "PUT", body: JSON.stringify({ progress }), silent: true });
 }
@@ -685,8 +722,10 @@ export function getShopRequests(status) {
 export function updateShopRequest(id, patch) {
   return request(`/boutique/demandes/${id}`, { method: "PUT", body: JSON.stringify(patch) });
 }
-export function invoiceShopRequest(id) {
-  return request(`/boutique/demandes/${id}/facture`, { method: "POST" });
+// `choix` (facultatif) : { bill_to, billing_profile_id, template_slug }. Sans lui, la facture
+// reprend ce qui a été figé à la commande — comportement d'avant.
+export function invoiceShopRequest(id, choix) {
+  return request(`/boutique/demandes/${id}/facture`, { method: "POST", body: JSON.stringify(choix || {}) });
 }
 export function deleteShopRequest(id) {
   return request(`/boutique/demandes/${id}`, { method: "DELETE" });
@@ -745,6 +784,8 @@ export async function uploadPostImage(id, blob) {
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }
+// Dépublier une fiche : elle quitte le fil, son auteur la garde. Voir `unshareRecipe`.
+export function unshareRecipe(id) { return request(`/recipes/${id}/retirer`, { method: "POST" }); }
 export function getAuthorProfile(userId) { return request(`/recipes/author/${userId}`, { silent: true }); }
 export function likeRecipe(id) { return request(`/recipes/${id}/like`, { method: "POST" }); }
 export function addRecipeComment(id, body) { return request(`/recipes/${id}/comments`, { method: "POST", body: JSON.stringify({ body }) }); }
@@ -883,6 +924,10 @@ export function deleteTemplate(slug) {
 export function duplicateTemplate(slug) {
   return request(`/templates/${slug}/duplicate`, { method: "POST" });
 }
+// Renomme l'identifiant (slug) d'un modèle, en répercutant partout où il est référencé.
+export function renameTemplate(slug, newSlug) {
+  return request(`/templates/${slug}/rename`, { method: "PUT", body: JSON.stringify({ new_slug: newSlug }) });
+}
 // Réordonne les modèles (glisser-déposer).
 export function reorderTemplates(orders) {
   // orders : [{ slug, sort_order }] (position globale) ; rétro-compat : tableau de slugs.
@@ -957,6 +1002,21 @@ export function deleteMember(id) {
 }
 
 // --- Partenaires ---
+/* Produits d'un partenaire — le catalogue montré aux stagiaires (« Offres partenaires »).
+   La table existait et l'espace stagiaire l'affichait déjà ; rien ne permettait de la remplir. */
+export function getPartenaireProduits(id) {
+  return request(`/partenaires/${id}/produits`);
+}
+export function createPartenaireProduit(id, payload) {
+  return request(`/partenaires/${id}/produits`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function updatePartenaireProduit(pid, payload) {
+  return request(`/partenaires/produits/${pid}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deletePartenaireProduit(pid) {
+  return request(`/partenaires/produits/${pid}`, { method: "DELETE" });
+}
+
 export function getPartenaires(category = "") {
   const query = category ? `?category=${encodeURIComponent(category)}` : "";
   return request(`/partenaires${query}`);
@@ -970,6 +1030,21 @@ export function updatePartenaire(id, payload) {
 }
 export function deletePartenaire(id) {
   return request(`/partenaires/${id}`, { method: "DELETE" });
+}
+/* Catégories de partenaires (migration 129). Elles étaient écrites en dur dans l'écran ; le
+   serveur renvoie la liste de l'organisme, ou la liste d'origine tant que la migration n'est pas
+   jouée — auquel cas les entrées n'ont pas d'`id` et ne sont donc pas modifiables. */
+export function getPartenaireCategories() {
+  return request("/partenaires/categories");
+}
+export function createPartenaireCategorie(payload) {
+  return request("/partenaires/categories", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updatePartenaireCategorie(cid, payload) {
+  return request(`/partenaires/categories/${cid}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deletePartenaireCategorie(cid) {
+  return request(`/partenaires/categories/${cid}`, { method: "DELETE" });
 }
 // Apports en nature (matériel/équipement) — distincts des commissions cash.
 export function createContribution(payload) {

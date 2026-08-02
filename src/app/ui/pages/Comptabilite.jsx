@@ -102,6 +102,11 @@ function Comptabilite() {
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
+  /* LE LIBELLÉ DE LA PÉRIODE, écrit une fois et repris partout. Chaque titre portait l'ANNÉE en
+     dur (« Résultat 2026 », « Dépenses 2026 ») alors que les chiffres suivent maintenant le mois :
+     un intitulé qui annonce l'année au-dessus d'un total mensuel est pire qu'un intitulé absent. */
+  const periode = mois === 0 ? String(annee) : `${MOIS[mois - 1].toLowerCase()} ${annee}`;
+
   const scale = useMemo(() => {
     if (!data) return 1;
     return Math.max(1, ...data.postes.map((p) => Math.max(p.pct, p.cible))) * 1.15;
@@ -121,9 +126,10 @@ function Comptabilite() {
             {/* `.inp` impose width:100% aux <select> ; dans cette barre horizontale, deux selects
                 pleine largeur écrasaient le bouton Masquer voisin. On les laisse tenir la largeur
                 de leur contenu — width:auto — pour que la rangée reste alignée. */}
-            {/* Le mois ne pilote QUE le gain du mois ; le reste de la page reste annuel.
-                Valeur 0 = année entière (le total de l'année dans la même carte). */}
-            <select className="inp" style={{ width: "auto" }} value={mois} onChange={(e) => setMois(Number(e.target.value))} aria-label="Mois (gain du mois)">
+            {/* LE MOIS PILOTE TOUTE LA PAGE. Il ne pilotait qu'une tuile sur une quinzaine — un
+                sélecteur en tête d'écran qui ne change qu'un chiffre se lit, à juste titre, comme
+                cassé. Valeur 0 = année entière. */}
+            <select className="inp" style={{ width: "auto" }} value={mois} onChange={(e) => setMois(Number(e.target.value))} aria-label="Mois">
               <option value={0}>Année entière</option>
               {MOIS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
@@ -154,7 +160,7 @@ function Comptabilite() {
               Le calcul est désormais ÉCRIT plutôt que réparti : recettes − dépenses = marge.
               On lit d'où vient le résultat au lieu de le recomposer de tuile en tuile. */}
           <div className="bilan" style={{ "--ton": data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>
-            <div className="bilan-t">Résultat {annee}</div>
+            <div className="bilan-t">Résultat {periode}</div>
             <div className="bilan-n tnum" style={{ color: data.marge >= 0 ? "var(--green)" : "var(--ember1)" }}>
               {euro(data.marge)}
             </div>
@@ -170,15 +176,10 @@ function Comptabilite() {
                 <b className="tnum">{euro(data.dividendeRealiste)}</b> de dividendes réalistes
                 <i> ({data.partRealistePct}% du CA)</i>
               </span>
-              {/* Le gain de la période est daté à L'ENCAISSEMENT, quand la marge annuelle
-                  rattache les inscriptions à l'année de leur session : deux chiffres proches
-                  mais pas identiques, d'où la précision. */}
-              {data.mois && (
-                <span>
-                  <b className="tnum">{euro(data.mois.gain)}</b>
-                  {data.mois.numero === 0 ? " encaissés sur l'année" : ` encaissés en ${MOIS[data.mois.numero - 1].toLowerCase()}`}
-                </span>
-              )}
+              {/* LA LIGNE « GAIN DU MOIS » A DISPARU. Elle existait parce qu'elle était le SEUL
+                  chiffre à suivre le sélecteur, avec sa propre règle d'attribution. Maintenant que
+                  toute la page suit le mois — et avec la même règle — elle répéterait mot pour mot
+                  le résultat affiché juste au-dessus. */}
             </div>
           </div>
 
@@ -305,17 +306,17 @@ function Comptabilite() {
 
           {/* Listes dépenses + produits divers */}
           <div className="grid cols-2">
-            <Card title={T("receipt", `Dépenses ${annee}`)}>
+            <Card title={T("receipt", `Dépenses ${periode}`)}>
               {data.depenses.length === 0 ? (
                 <EmptyState icon="receipt" title="Aucune dépense saisie"
-                  text="Ajoutez vos factures et charges avec le formulaire ci-dessus : elles alimentent la répartition par poste et le résultat de l'année." />
+                  text="Ajoutez vos factures et charges avec le formulaire ci-dessus : elles alimentent la répartition par poste et le résultat de la période." />
               ) : (
                 <div>{data.depenses.map((d) => (
                   <ListRow key={d.id} titre={d.label} sous={`${CATS.find((c) => c.v === d.category)?.label ?? d.category} · ${new Date(d.date).toLocaleDateString("fr-FR")}`} montant={euro(d.amount_ht)} onDel={() => delDep(d)} />
                 ))}</div>
               )}
             </Card>
-            <Card title={T("coins", `Produits divers ${annee} · ${euro(data.ca.extra)}`)}>
+            <Card title={T("coins", `Produits divers ${periode} · ${euro(data.ca.extra)}`)}>
               {(!data.revenus || data.revenus.length === 0) ? (
                 <EmptyState icon="handshake" title="Aucun produit divers"
                   text="Les commissions et apports des partenaires se saisissent depuis la page Partenaires ; ils remontent ici automatiquement." />
@@ -434,7 +435,7 @@ function DonutBlock({ segments, centerLabel, centerValue }) {
         </div>
       </div>
       <div style={{ flex: 1, width: "100%" }}>
-        {total === 0 ? <p className="lead" style={{ margin: 0 }}>Aucune donnée pour cette année.</p> : segments.map((s, i) => {
+        {total === 0 ? <p className="lead" style={{ margin: 0 }}>Aucune donnée sur cette période.</p> : segments.map((s, i) => {
           if (s.value <= 0) return null;
           const pct = Math.round((s.value / total) * 100);
           const on = active === i;

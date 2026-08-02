@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers, getLocations, updateSession } from "../api/apiClient.js";
+import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers, getLocations, updateSession, getCompanies, getCompany, registerCompanyStagiaires } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -28,6 +28,14 @@ function SessionDetail() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(null);
   const [notesFor, setNotesFor] = useState(null);
+  // Inscription : « individuel » (recherche nominative) ou « entreprise » (on choisit
+  // l'entreprise, puis les stagiaires parmi les SIENS). Deux façons de peupler la même session.
+  const [mode, setMode] = useState("individuel");
+  const [companies, setCompanies] = useState([]);
+  const [companyId, setCompanyId] = useState("");
+  const [companyLearners, setCompanyLearners] = useState(null); // null = pas encore chargé
+  const [picked, setPicked] = useState(() => new Set());
+  const [registering, setRegistering] = useState(false);
 
   async function load() {
     try {
@@ -44,7 +52,21 @@ function SessionDetail() {
     getStagiaires().then((r) => setAllLearners(r.data)).catch(() => {});
     getAssignableTrainers().then((r) => setTeam(r.data)).catch(() => {});
     getLocations().then((r) => setLocations(r.data || [])).catch(() => {});
+    getCompanies().then((r) => setCompanies(r.data || [])).catch(() => {});
   }, [id]);
+
+  // Stagiaires de l'entreprise choisie. Chargés à la demande : la liste des entreprises ne
+  // porte qu'un COMPTE (learner_count), pas les stagiaires eux-mêmes.
+  useEffect(() => {
+    if (!companyId) { setCompanyLearners(null); setPicked(new Set()); return; }
+    let vivant = true;
+    setCompanyLearners(null);
+    setPicked(new Set());
+    getCompany(companyId)
+      .then((r) => { if (vivant) setCompanyLearners(r.data?.learners || []); })
+      .catch((e) => { if (vivant) { setCompanyLearners([]); setStatus({ type: "error", message: e.message }); } });
+    return () => { vivant = false; };
+  }, [companyId]);
 
   async function changeLocation(location_id) {
     setSession((s) => ({ ...s, location_id }));
@@ -84,6 +106,74 @@ function SessionDetail() {
       load();
     } catch (err) {
       setStatus({ type: "error", message: err.message });
+    }
+  }
+
+  // Qui est déjà dans la session ? Sert à barrer les stagiaires déjà inscrits plutôt qu'à les
+  // masquer : les voir grisés dit « c'est déjà fait », alors que les cacher laisse croire que
+  // l'entreprise n'a que trois salariés.
+  const dejaInscrits = useMemo(
+    () => new Set((session?.enrollments || []).map((e) => e.learner_id)),
+    [session]
+  );
+  const inscriptibles = useMemo(
+    () => (companyLearners || []).filter((l) => !dejaInscrits.has(l.id)),
+    [companyLearners, dejaInscrits]
+  );
+  const nomEntreprise = useMemo(
+    () => companies.find((c) => c.id === companyId)?.name || "",
+    [companies, companyId]
+  );
+
+  /* Seules les entreprises AYANT au moins un stagiaire rattaché sont proposées.
+   *
+   * Sur les données réelles, le fichier compte environ quatre cents entreprises dont cinq
+   * seulement ont un stagiaire : dérouler les quatre cents, c'est faire défiler une page entière
+   * d'impasses pour trouver les rares lignes utiles. Et une entreprise sans stagiaire ne PEUT
+   * rien apporter à cette session — la choisir ne mènerait qu'à un panneau vide.
+   * Le compte des autres est affiché quand même : masquer sans le dire ferait croire à un bug
+   * (« mon entreprise n'est pas dans la liste »). */
+  const entreprisesAvecStagiaires = useMemo(
+    () => companies.filter((c) => Number(c.learner_count) > 0),
+    [companies]
+  );
+  const nbSansStagiaire = companies.length - entreprisesAvecStagiaires.length;
+
+  function bascule(learnerId) {
+    setPicked((prev) => {
+      const n = new Set(prev);
+      if (n.has(learnerId)) n.delete(learnerId); else n.add(learnerId);
+      return n;
+    });
+  }
+  const tousCoches = inscriptibles.length > 0 && inscriptibles.every((l) => picked.has(l.id));
+  function toutBasculer() {
+    setPicked(tousCoches ? new Set() : new Set(inscriptibles.map((l) => l.id)));
+  }
+
+  async function inscrireDepuisEntreprise() {
+    const ids = [...picked];
+    if (!ids.length) return;
+    setRegistering(true); setStatus(null);
+    try {
+      // Même route que la fiche entreprise : elle pose `company_id` et le financement
+      // PROFESSIONNEL sur l'inscription, ce qu'une inscription individuelle ne fait pas — c'est
+      // ce rattachement qui regroupe ensuite les stagiaires sous leur entreprise, ici et sur les
+      // documents de groupe.
+      const r = await registerCompanyStagiaires(companyId, { session_id: id, learner_ids: ids });
+      const n = (r.data?.created || []).filter((c) => c.enrolled).length;
+      setStatus({
+        type: "success",
+        message: n
+          ? `${n} stagiaire${n > 1 ? "s" : ""} inscrit${n > 1 ? "s" : ""} pour ${nomEntreprise || "l'entreprise"}.`
+          : "Aucun nouveau stagiaire à inscrire (déjà inscrits).",
+      });
+      setPicked(new Set());
+      load();
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    } finally {
+      setRegistering(false);
     }
   }
 
@@ -153,7 +243,100 @@ function SessionDetail() {
       )}
 
       <div className="grid cols-2">
-        <Card title="Inscrire un stagiaire">
+        <Card title="Inscrire des stagiaires">
+          <div className="tabs" role="tablist" style={{ margin: "0 0 14px" }}>
+            <button type="button" role="tab" aria-selected={mode === "individuel"}
+              className={"tab" + (mode === "individuel" ? " on" : "")}
+              onClick={() => setMode("individuel")}>
+              Un stagiaire
+            </button>
+            <button type="button" role="tab" aria-selected={mode === "entreprise"}
+              className={"tab" + (mode === "entreprise" ? " on" : "")}
+              onClick={() => setMode("entreprise")}>
+              Via une entreprise
+            </button>
+          </div>
+
+          {mode === "entreprise" ? (
+            <>
+              <select className="inp" style={{ marginBottom: 8 }} aria-label="Entreprise"
+                value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+                <option value="">— Choisir une entreprise —</option>
+                {entreprisesAvecStagiaires.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.learner_count})</option>
+                ))}
+              </select>
+
+              {!companyId ? (
+                <p className="hint" style={{ margin: 0 }}>
+                  {entreprisesAvecStagiaires.length === 0 ? (
+                    <>Aucune entreprise n'a de stagiaire rattaché.{" "}
+                      <Link to="/entreprises" className="card-more">Rattacher des stagiaires →</Link></>
+                  ) : (
+                    <>Choisissez une entreprise pour voir ses stagiaires.
+                      {nbSansStagiaire > 0 && (
+                        <> {nbSansStagiaire} entreprise{nbSansStagiaire > 1 ? "s" : ""} sans stagiaire rattaché
+                          {nbSansStagiaire > 1 ? " ne sont pas listées" : " n'est pas listée"}.</>
+                      )}
+                    </>
+                  )}
+                </p>
+              ) : companyLearners === null ? (
+                <Squelette lignes={3} h={38} />
+              ) : companyLearners.length === 0 ? (
+                <p className="hint" style={{ margin: 0 }}>
+                  Cette entreprise n'a aucun stagiaire rattaché.{" "}
+                  <Link to={`/entreprises/${companyId}`} className="card-more">Ouvrir sa fiche →</Link>
+                </p>
+              ) : inscriptibles.length === 0 ? (
+                <p className="hint" style={{ margin: 0 }}>
+                  Tous les stagiaires de {nomEntreprise} sont déjà inscrits à cette session.
+                </p>
+              ) : (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: 13 }}>
+                      <input type="checkbox" checked={tousCoches} onChange={toutBasculer} />
+                      Tout sélectionner
+                    </label>
+                    <span className="hint">{picked.size} sélectionné{picked.size > 1 ? "s" : ""}</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 280, overflowY: "auto" }}>
+                    {companyLearners.map((l) => {
+                      const dedans = dejaInscrits.has(l.id);
+                      return (
+                        <label key={l.id}
+                          title={dedans ? "Déjà inscrit à cette session" : undefined}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 10, padding: "6px 0",
+                            borderBottom: "1px solid var(--border-soft)",
+                            cursor: dedans ? "default" : "pointer", opacity: dedans ? 0.5 : 1,
+                          }}>
+                          <input type="checkbox" disabled={dedans}
+                            checked={dedans || picked.has(l.id)}
+                            onChange={() => bascule(l.id)} />
+                          <span className="avatar" style={{ width: 30, height: 30, fontSize: 11, flex: "0 0 30px" }}>
+                            {initials(l.first_name, l.last_name)}
+                          </span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <b>{l.last_name} {l.first_name}</b>
+                            <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"}</span>
+                          </span>
+                          {dedans && <Badge tone="ok">Déjà inscrit</Badge>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <button type="button" className="btn primary" style={{ marginTop: 12 }}
+                    disabled={picked.size === 0 || registering}
+                    onClick={inscrireDepuisEntreprise}>
+                    {registering ? "Inscription…" : `Inscrire ${picked.size || ""} stagiaire${picked.size > 1 ? "s" : ""}`.trim()}
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+          <>
           <input
             className="inp"
             placeholder="Rechercher un stagiaire (nom, prénom ou email)…"
@@ -183,6 +366,8 @@ function SessionDetail() {
                 </div>
               ))}
             </div>
+          )}
+          </>
           )}
         </Card>
 
