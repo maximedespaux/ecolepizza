@@ -642,7 +642,16 @@ test('« La commande piège » : le référentiel d\'allergènes tient debout', 
        les réponses donnait 689 px de contenu pour 664 visibles. Il prend donc la place de
        l'énoncé, dans la même boîte. */
     assert.match(srcJeu, /const DUREE = 120;/);
-    assert.match(srcJeu, /const MALUS = 4;/);
+    /* LE MALUS DE TEMPS A ÉTÉ REMPLACÉ PAR LES CŒURS. Une erreur coûtait quatre secondes de
+       chrono ; elle coûte un cœur, et à zéro le service s'arrête. Garder les deux punirait deux
+       fois la même faute — le temps qui fond ET la partie qui se rapproche de sa fin — sans qu'on
+       puisse dire laquelle a coûté quoi, ce qui rend les seuils d'étoiles incalibrables.
+       Ce test a fait exactement son travail : il épinglait `MALUS = 4` et il est passé au rouge
+       à la seconde où la règle a changé. On le déplace, on ne le supprime pas. */
+    assert.doesNotMatch(srcJeu, /MALUS/, 'le malus de temps ne doit pas revenir en plus des cœurs');
+    assert.match(srcJeu, /perdus\.current \+= 1;/, 'une mauvaise réponse coûte un cœur');
+    assert.match(srcJeu, /if \(!encoreEnVie\(perdus\.current\)\) \{ setPhase\("fin"\); return; \}/,
+        'et à zéro cœur la partie s\'arrête — sinon les cœurs ne veulent rien dire');
     /* LES SEUILS SUIVENT CE QUE LE JEU DEMANDE VRAIMENT, et le premier calcul était faux. Il
        transposait les paliers d'un jeu qu'on apprend par cœur : sur une carte figée, on finit par
        savoir que la Reine porte du jambon, et enchaîner devient possible. Ici la carte est

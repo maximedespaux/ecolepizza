@@ -2034,6 +2034,21 @@ tbody tr:last-child td{border-bottom:none}
 .jp-aide b{color:var(--text);font-weight:800}
 .jp-aide i{font-style:normal;opacity:.75}
 
+/* — LES CŒURS DE L'ARCADE —
+   Les emplacements PERDUS restent affichés, en creux : une rangée qui fond sans montrer son
+   maximum ne dit rien — « il m'en reste deux » n'a de sens que si l'on voit qu'il y en avait trois.
+   Le dernier cœur BAT, parce qu'à ce moment l'information change de nature : ce n'est plus un
+   score, c'est un avertissement, et dans un jeu chronométré on ne lit pas une rangée d'icônes, on
+   la voit du coin de l'œil. Le battement s'arrête sous `prefers-reduced-motion` — un pouls qui ne
+   s'arrête jamais est précisément ce que ce réglage existe pour éteindre. */
+.jeu-coeurs{display:inline-flex;align-items:center;gap:3px;color:var(--red);flex:none}
+/* Dans un en-tête de modale, la rangée se cale à droite du titre, avant la croix de fermeture. */
+.mhead .jeu-coeurs{margin-left:auto}
+.jeu-coeurs .off{opacity:.26}
+.jeu-coeurs.dernier .on{animation:coeur-bat 1.05s ease-in-out infinite;transform-origin:center}
+@keyframes coeur-bat{0%,100%{transform:scale(1)}18%{transform:scale(1.22)}36%{transform:scale(1)}54%{transform:scale(1.13)}}
+@media (prefers-reduced-motion:reduce){.jeu-coeurs.dernier .on{animation:none}}
+
 /* — LE JUSTE PRIX SUR TÉLÉPHONE —
    CE BLOC EST APRÈS LES RÈGLES DE BASE, ET C'EST LA RAISON D'ÊTRE DE SA POSITION. Les mêmes deux
    règles avaient d'abord été écrites dans le `@media` commun, deux cents lignes plus haut : à

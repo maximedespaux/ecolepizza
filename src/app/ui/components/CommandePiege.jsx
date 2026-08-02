@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import { useEchap } from "../lib/useEchap.js";
+import Coeurs from "./Coeurs.jsx";
+import { COEURS_MAX, encoreEnVie } from "../lib/coeurs.js";
 import { GARN_BASES, GARN_PRODUITS, GARN_DAIRY } from "../lib/garnitures.js";
 import { ALLERGENES, nomAllergene, verdict } from "../lib/allergenes.js";
 
@@ -25,8 +27,14 @@ import { ALLERGENES, nomAllergene, verdict } from "../lib/allergenes.js";
  * lui-même « souvent des sulfites (le jambon) ». Un stagiaire qui répond « non » avec aplomb sur
  * une charcuterie a tort, même quand il tombe juste. On sanctionne donc l'aplomb, pas l'ignorance.
  *
- * UNE ERREUR COÛTE DU TEMPS (−4 s) plutôt que des points : sur un allergène, se tromper vite est
- * pire que répondre lentement. C'est la seule pénalité qui enseigne quelque chose.
+ * UNE ERREUR COÛTE UN CŒUR, et à zéro le service s'arrête. Elle coûtait auparavant quatre
+ * secondes de chrono ; les deux ensemble puniraient deux fois la même faute — le temps qui fond ET
+ * la partie qui se rapproche de sa fin — sans qu'on puisse dire laquelle a coûté quoi. Une faute,
+ * une conséquence. Et sur un allergène, la conséquence juste n'est pas de perdre du temps : c'est
+ * que le service s'arrête, parce que c'est ce qui arrive pour de vrai.
+ *
+ * REJOUER RESTE IMMÉDIAT ET ILLIMITÉ — cf. `lib/coeurs.js`. Ces cœurs-là ne sont pas ceux qu'on a
+ * supprimés en 2026 : rien ne persiste, rien ne se régénère, rien ne bloque.
  *
  * LA CARTE EST TIRÉE AU SORT À CHAQUE PARTIE, sur les 44 produits de `garnitures.js` — ceux de
  * l'organisme, pas une liste inventée pour le jeu. Dix pizzas neuves à chaque service : on
@@ -144,7 +152,6 @@ const PIEGES = [
 ];
 
 const DUREE = 120;         // secondes — deux minutes de service
-const MALUS = 4;           // secondes perdues sur une erreur
 
 /** Une carte de dix pizzas, composée pour ce service. */
 const dresserCarte = () => NOMS.map((n) => composer(n));
@@ -286,6 +293,11 @@ export default function CommandePiege({ onClose, onFinish }) {
   const [flash, setFlash] = useState(null);     // { juste, pourquoi, source } — retour bref
   const [justes, setJustes] = useState(0);
   const [rates, setRates] = useState([]);       // les erreurs, pour le débriefing final
+  /* Les cœurs sont tenus en REF autant qu'en état : le compte doit être lu dans le `setTimeout`
+     qui suit la réponse, où un état React porterait encore la valeur d'avant. L'état ne sert qu'à
+     l'affichage. */
+  const perdus = useRef(0);
+  const [coeurs, setCoeurs] = useState(0);
   const tic = useRef(null);
 
   useEffect(() => {
@@ -299,6 +311,7 @@ export default function CommandePiege({ onClose, onFinish }) {
   function demarrer() {
     // Une carte NEUVE à chaque partie : figée, on finit par répondre de mémoire au lieu de lire.
     const c = dresserCarte();
+    perdus.current = 0; setCoeurs(0);
     setCarte(c); setJustes(0); setRates([]); setReste(DUREE); setQ(tirer(c)); setFlash(null); setPhase("jeu");
   }
 
@@ -307,9 +320,9 @@ export default function CommandePiege({ onClose, onFinish }) {
     const juste = v === q.rep;
     if (juste) setJustes((n) => n + 1);
     else {
-      // L'erreur coûte du TEMPS, pas des points : se tromper vite sur un allergène est pire que
-      // répondre lentement, et c'est la seule pénalité qui enseigne quelque chose.
-      setReste((r) => Math.max(0, r - MALUS));
+      // L'erreur coûte un CŒUR, et rien d'autre : une faute, une conséquence.
+      perdus.current += 1;
+      setCoeurs(perdus.current);
       const noms = Object.fromEntries((q.choix || REPONSES).map((r) => [r.v, r.label]));
       setRates((l) => (l.length >= 8 ? l : [...l, { q: q.q, pourquoi: q.pourquoi, source: q.source,
         donne: noms[v], rep: noms[q.rep] }]));
@@ -317,7 +330,14 @@ export default function CommandePiege({ onClose, onFinish }) {
     setFlash({ juste, pourquoi: q.pourquoi, source: q.source });
     // Le retour est BREF : le chrono tourne, et une explication qui bloque la partie casserait le
     // rythme qu'on cherche justement à entraîner. Le détail vient au débriefing.
-    setTimeout(() => { setFlash(null); setQ(tirer(carte)); }, juste ? 550 : 1500);
+    /* Le retour reste affiché AVANT que la partie ne s'arrête : perdre son dernier cœur sans
+       savoir pourquoi ne laisse rien à apprendre, et c'est la seule explication qu'on lira à coup
+       sûr. Le débriefing final la reprend, mais on vient de la mériter. */
+    setTimeout(() => {
+      setFlash(null);
+      if (!encoreEnVie(perdus.current)) { setPhase("fin"); return; }
+      setQ(tirer(carte));
+    }, juste ? 550 : 1500);
   }
 
   const stars = NOTE(justes);
@@ -340,8 +360,8 @@ export default function CommandePiege({ onClose, onFinish }) {
               ne répond pas à tout : la contamination croisée et les sulfites ne s'y lisent pas.
             </p>
             <p className="hint" style={{ margin: "0 0 18px" }}>
-              Une erreur coûte <b>{MALUS} secondes</b>. « À vérifier » est la bonne réponse quand
-              l'allergène dépend du fournisseur.
+              Tu as <b>{COEURS_MAX} cœurs</b> : une erreur en coûte un, et à zéro le service
+              s'arrête. « À vérifier » est la bonne réponse quand l'allergène dépend du fournisseur.
             </p>
             <button className="btn primary" onClick={demarrer} autoFocus>
               <Icon name="play" size={15} /> Ouvrir le service
@@ -356,6 +376,7 @@ export default function CommandePiege({ onClose, onFinish }) {
               <div className="pq-progress"><span style={{ width: `${(reste / DUREE) * 100}%`, background: reste <= 10 ? "var(--red)" : "var(--ember1)" }} /></div>
               <span className={"cp-chrono" + (reste <= 10 ? " urgent" : "")}>{reste}s</span>
               <span className="cp-score"><Icon name="check" size={13} /> {justes}</span>
+              <Coeurs perdus={coeurs} />
             </div>
 
             {/* LE VERDICT PREND LA PLACE DE LA QUESTION, il ne s'ajoute pas dessous. Ajouté, il

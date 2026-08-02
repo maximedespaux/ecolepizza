@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import { useEchap } from "../lib/useEchap.js";
+import Coeurs from "./Coeurs.jsx";
+import { COEURS_MAX, encoreEnVie } from "../lib/coeurs.js";
 import { euroFixe as euro } from "../lib/format.js";
 import {
   BASES, GARNITURES, coutPizza, ht, ratio, marge, auDemi, verdictPrix, TVA,
@@ -418,15 +420,17 @@ function tirer(carte, servis, recents) {
   return tirerUne(carte, servis);
 }
 
-/* DEUX MINUTES, et une erreur coûte quatre secondes — la même grammaire que « La commande piège »,
-   pour que l'arcade se joue sans réapprendre les règles à chaque jeu.
+/* DEUX MINUTES, ET TROIS CŒURS — la même grammaire que « La commande piège », pour que l'arcade se
+   joue sans réapprendre les règles à chaque jeu. L'erreur coûtait quatre secondes de chrono ; elle
+   coûte désormais un cœur, et à zéro la partie s'arrête. Les deux ensemble puniraient deux fois la
+   même faute (cf. `lib/coeurs.js`). Un prix posé de travers ne fait pas perdre du temps dans la
+   vraie vie : il fait perdre de l'argent jusqu'à ce qu'on ferme.
  *
  * QUATRE, HUIT, DOUZE. Plus bas que les 5/10/15 du jeu des allergènes, et pour une raison mesurée :
  * là-bas on LIT une composition, ici on fait une DIVISION. 2,45 ÷ 8,64 ne se voit pas, il se
  * calcule — et le prix HT demande d'abord de diviser par 1,10. Douze bonnes réponses en 120 s
  * laissent dix secondes par question, ce qui est le temps d'un calcul mental fait honnêtement. */
 const DUREE = 120;
-const MALUS = 4;
 const NOTE = (justes) => (justes >= 12 ? 3 : justes >= 8 ? 2 : justes >= 4 ? 1 : 0);
 
 export default function JustePrix({ onClose, onFinish }) {
@@ -438,6 +442,10 @@ export default function JustePrix({ onClose, onFinish }) {
   const [flash, setFlash] = useState(null);
   const [justes, setJustes] = useState(0);
   const [rates, setRates] = useState([]);
+  /* En REF autant qu'en état : le compte est lu dans le `setTimeout` qui suit la réponse, où un
+     état React porterait encore la valeur d'avant. L'état ne sert qu'à l'affichage. */
+  const perdus = useRef(0);
+  const [coeurs, setCoeurs] = useState(0);
   const servis = useRef({ bas: 0, bon: 0, cher: 0 });  // équilibrage des verdicts sur la partie
   const recents = useRef([]);                          // les 4 dernières questions, pour ne pas se répéter
   const tic = useRef(null);
@@ -462,6 +470,7 @@ export default function JustePrix({ onClose, onFinish }) {
     // de refaire la division.
     const c = dresserCarte();
     servis.current = { bas: 0, bon: 0, cher: 0 }; recents.current = [];
+    perdus.current = 0; setCoeurs(0);
     setCarte(c); setJustes(0); setRates([]); setReste(DUREE); setFlash(null); suivante(c); setPhase("jeu");
   }
 
@@ -470,15 +479,21 @@ export default function JustePrix({ onClose, onFinish }) {
     const juste = v === q.rep;
     if (juste) setJustes((n) => n + 1);
     else {
-      // L'erreur coûte du TEMPS, pas des points : un prix posé vite est exactement la façon dont on
-      // perd de l'argent sans s'en apercevoir, et c'est la seule pénalité qui enseigne quelque chose.
-      setReste((r) => Math.max(0, r - MALUS));
+      // L'erreur coûte un CŒUR, et rien d'autre : une faute, une conséquence.
+      perdus.current += 1;
+      setCoeurs(perdus.current);
       const noms = Object.fromEntries((q.choix || REPONSES).map((r) => [r.v, r.label]));
       setRates((l) => (l.length >= 8 ? l : [...l, { q: q.q, pourquoi: q.pourquoi, source: q.source,
         donne: noms[v], rep: noms[q.rep] }]));
     }
     setFlash({ juste, pourquoi: q.pourquoi, source: q.source });
-    setTimeout(() => { setFlash(null); suivante(carte); }, juste ? 550 : 1800);
+    /* Le retour reste affiché AVANT l'arrêt : perdre son dernier cœur sans savoir pourquoi ne
+       laisse rien à apprendre — et ici l'explication porte une division qu'on vient de rater. */
+    setTimeout(() => {
+      setFlash(null);
+      if (!encoreEnVie(perdus.current)) { setPhase("fin"); return; }
+      suivante(carte);
+    }, juste ? 550 : 1800);
   }
 
   const stars = NOTE(justes);
@@ -504,8 +519,8 @@ export default function JustePrix({ onClose, onFinish }) {
               reste ouverte à côté, avec le coût matière et le prix — tout sauf le ratio.
             </p>
             <p className="hint" style={{ margin: "0 0 18px" }}>
-              Cible du manuel : <b>25 à 30 %</b> du prix <b>HT</b> (TTC ÷ 1,10). Une erreur coûte
-              <b> {MALUS} secondes</b>.
+              Cible du manuel : <b>25 à 30 %</b> du prix <b>HT</b> (TTC ÷ 1,10). Tu as
+              <b> {COEURS_MAX} cœurs</b> : une erreur en coûte un, et à zéro la caisse ferme.
             </p>
             <button className="btn primary" onClick={demarrer} autoFocus>
               <Icon name="play" size={15} /> Ouvrir la caisse
@@ -520,6 +535,7 @@ export default function JustePrix({ onClose, onFinish }) {
                 <div className="pq-progress"><span style={{ width: `${(reste / DUREE) * 100}%`, background: reste <= 10 ? "var(--red)" : "var(--gold, #e0ac48)" }} /></div>
                 <span className={"cp-chrono" + (reste <= 10 ? " urgent" : "")}>{reste}s</span>
                 <span className="cp-score"><Icon name="check" size={13} /> {justes}</span>
+              <Coeurs perdus={coeurs} />
               </div>
 
               {/* Le verdict PREND LA PLACE de l'énoncé, il ne s'ajoute pas dessous : ajouté, il
