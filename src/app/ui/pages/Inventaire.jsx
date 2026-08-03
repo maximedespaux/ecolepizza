@@ -10,6 +10,7 @@ import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { euro } from "../lib/format.js";
+import ImageLien from "../components/ImageLien.jsx";
 import { bumpBadges } from "../lib/events.js";
 
 const CATEGORIES = [
@@ -21,7 +22,7 @@ const CATEGORIES = [
 ];
 const TVA_RATES = ["20", "10", "5.5", "2.1", "0"];
 const EMPTY = { name: "", category: "", sku: "", quantity: 0, unit_price: "", tax_rate: "20", threshold: 0,
-  remiseValeur: "", remiseUnite: "%" };
+  remiseValeur: "", remiseUnite: "%", image_url: "" };
 
 // Icône par (sous-)catégorie — vignette visuelle à défaut de photo produit.
 const CAT_ICON = {
@@ -210,6 +211,22 @@ function Inventaire({ embedded = false }) {
                 {TVA_RATES.map((r) => <option key={r} value={r}>{r} %</option>)}
               </SelectField>
             </div>
+            {/* PHOTO PAR LIEN (migration 133). L'aperçu est immédiat : sans lui on colle une
+                adresse, on enregistre, et on découvre au rechargement qu'elle ne pointait sur
+                rien — sans savoir si le lien ou l'enregistrement était en cause. */}
+            <div className="field">
+              <label>Photo (lien) <span className="hint" style={{ fontWeight: 400 }}>(facultatif)</span></label>
+              <div className="champ-image">
+                <input className="inp" type="url" value={form.image_url} onChange={set("image_url")}
+                  placeholder="https://site-du-fournisseur.fr/photo.jpg" />
+                <ImageLien src={form.image_url} className="champ-image-apercu"
+                  fallback={<ImagePlaceholder className="champ-image-apercu" icone="package" />} />
+              </div>
+              <span className="hint">
+                L'image reste hébergée sur le site du fournisseur : son serveur verra passer les
+                visites. Préférez « https:// », sinon elle sera bloquée en ligne.
+              </span>
+            </div>
             {/* row3 : trois colonnes (seuil · remise · TTC estimé), cf. la modale d'édition. */}
             <div className="row3">
               <Field label="Seuil d'alerte" type="number" min="0" value={form.threshold} onChange={set("threshold")} />
@@ -252,7 +269,12 @@ function Inventaire({ embedded = false }) {
                   <div key={it.id} id={`inv-${it.id}`} className="card" style={{ borderTop: `3px solid ${st.color}` }}>
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ display: "flex", gap: 10, minWidth: 0 }}>
-                        <span className="inv-thumb" style={{ color: st.color }}><Icon name={catIcon(it.category)} size={20} /></span>
+                        {/* LA PHOTO REMPLACE L'ICÔNE DE CATÉGORIE quand il y en a une. L'icône
+                            était déjà le repli « à défaut de photo produit » (cf. son commentaire
+                            en tête de fichier) — la 133 lui donne enfin la photo qu'elle
+                            remplaçait. Une adresse morte retombe sur l'icône : `fallback`. */}
+                        <ImageLien src={it.image_url} className="inv-thumb inv-thumb-img"
+                          fallback={<span className="inv-thumb" style={{ color: st.color }}><Icon name={catIcon(it.category)} size={20} /></span>} />
                         <div style={{ minWidth: 0 }}>
                           <b style={{ fontSize: 15 }}>{it.name}</b>
                           <div style={{ fontSize: 12, color: "var(--muted)" }}>
@@ -336,6 +358,22 @@ function Inventaire({ embedded = false }) {
                   <SelectField label="TVA (%)" value={String(editing.tax_rate)} onChange={setEdit("tax_rate")}>
                     {TVA_RATES.map((r) => <option key={r} value={r}>{r} %</option>)}
                   </SelectField>
+                </div>
+                {/* PHOTO PAR LIEN (migration 133). L'aperçu est immédiat : sans lui on colle une
+                    adresse, on enregistre, et on découvre au rechargement qu'elle ne pointait sur
+                    rien — sans savoir si le lien ou l'enregistrement était en cause. */}
+                <div className="field">
+                  <label>Photo (lien) <span className="hint" style={{ fontWeight: 400 }}>(facultatif)</span></label>
+                  <div className="champ-image">
+                    <input className="inp" type="url" value={editing.image_url ?? ""} onChange={setEdit("image_url")}
+                      placeholder="https://site-du-fournisseur.fr/photo.jpg" />
+                    <ImageLien src={editing.image_url ?? ""} className="champ-image-apercu"
+                      fallback={<ImagePlaceholder className="champ-image-apercu" icone="package" />} />
+                  </div>
+                  <span className="hint">
+                    L'image reste hébergée sur le site du fournisseur : son serveur verra passer les
+                    visites. Préférez « https:// », sinon elle sera bloquée en ligne.
+                  </span>
                 </div>
                 {/* row3 et non row2 : cette rangée porte TROIS colonnes (seuil · remise · TTC).
                     En row2 le troisième enfant retombait sur une ligne à lui, et les deux champs

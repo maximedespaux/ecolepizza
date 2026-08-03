@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { CONTRAT_VALABLE } = require('../lib/contratPartenaire.js');
+const { colonneExiste } = require('../lib/colonnes.js');
 const consentements = require('../lib/consentements.js');
 const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigners } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
@@ -1117,6 +1118,12 @@ const getBoutique = async (req, res) => {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        /* La photo (migration 133) est SONDÉE, pas tentée : nommer une colonne absente rendrait
+           TOUTE la boutique illisible pour une illustration facultative. Elle est lue AVANT la
+           boucle ci-dessous — placée à l'intérieur, la constante serait déclarée après son propre
+           usage dans le gabarit, et la première itération lèverait une erreur de zone morte. */
+        const image = await colonneExiste(conn, 'inventory_item', 'image_url')
+            ? 'image_url' : 'NULL AS image_url';
         // `learner_discount_pct` arrive par la 125 : sans elle, la cascade retombe sur la
         // requête d'avant et la boutique affiche le prix catalogue, comme aujourd'hui.
         let rows;
@@ -1124,7 +1131,7 @@ const getBoutique = async (req, res) => {
                               'NULL AS learner_discount_pct, NULL AS learner_discount_eur']) {
           try {
             [rows] = await conn.query(
-              `SELECT id, name, category, unit_price, tax_rate, quantity, ${remise}
+              `SELECT id, name, category, unit_price, tax_rate, quantity, ${remise}, ${image}
              FROM inventory_item WHERE organization_id = ? AND unit_price IS NOT NULL
              ORDER BY category, name`,
               [learner.organization_id]
@@ -1148,7 +1155,7 @@ const getBoutique = async (req, res) => {
              * Arrondi au centime AVANT multiplication, comme partout ailleurs (cf. sale.controller). */
             const { brut: brutHt, net: netHt, taux, libelle } = prixStagiaire(r);
             return {
-                id: r.id, name: cleanName(r.name), category: r.category,
+                id: r.id, name: cleanName(r.name), category: r.category, image_url: r.image_url,
                 price_ht: netHt, tax_rate: Number(r.tax_rate),
                 price_ttc: +(netHt * (1 + Number(r.tax_rate) / 100)).toFixed(2),
                 // Prix catalogue + taux : présents SEULEMENT s'il y a une remise, pour que le

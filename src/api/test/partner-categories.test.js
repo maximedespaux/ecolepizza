@@ -130,15 +130,21 @@ test('le nombre de produits se lit sans déplier la fiche', () => {
        d'appoint. */
     const bloc = CTRL.slice(CTRL.indexOf('const getPartners'), CTRL.indexOf('const createPartner'));
     assert.match(bloc, /if \(!isMissingSchema\(e\)\) throw e;/);
-    /* LE REPLI EXISTE TOUJOURS, SA FORME A CHANGÉ. Il s'écrivait `colonnes(false)` quand il n'y
-       avait qu'une colonne optionnelle ; la 131 en a ajouté une seconde, indépendante (le drapeau
-       destinataire), d'où une cascade d'essais du plus complet au plus pauvre. Ce que le test
-       protège est inchangé : il DOIT exister une tentative sans la sous-requête produits.
-       `[false, ...]` est le premier membre de ce couple d'essais. */
-    assert.match(bloc, /const essais = \[.*\[false, /,
+    /* LE REPLI EXISTE TOUJOURS, SA FORME A CHANGÉ DEUX FOIS — et c'est le signe que ce test fait
+       son travail : il a exigé une relecture à chaque fois.
+         · `colonnes(false)` tant qu'il n'y avait qu'une colonne optionnelle ;
+         · une cascade d'essais quand la 131 en a ajouté deux ;
+         · aujourd'hui un SONDAGE, la 133 en ajoutant une troisième — huit combinaisons à écrire
+           et à garder justes, là où une lecture d'`information_schema` répond directement.
+       Ce que le test protège n'a pas bougé : la page ne doit pas se perdre entière faute d'une
+       colonne d'appoint. Le compte de produits, lui, reste rattrapé par `catch` (la sous-requête
+       porte sur une TABLE, pas une colonne, donc `colonneExiste` ne saurait pas la sonder). */
+    assert.match(bloc, /colonnes\(false, avecDest, avecLogo\)/,
         'un repli sans la sous-requête produits doit rester possible');
-    assert.match(bloc, /\[false, false\]/,
-        'et un dernier repli sans AUCUNE des deux colonnes optionnelles');
+    assert.match(bloc, /colonneExiste\(conn, 'partner', 'recoit_coordonnees'\)/,
+        'les colonnes facultatives doivent être sondées, pas devinées');
+    assert.match(bloc, /NULL AS recoit_coordonnees/,
+        "et rendues en `NULL AS` pour que l'écran reçoive toujours la même forme d'objet");
 
     const comp = fs.readFileSync(path.join(UI, 'components/PartnerProduits.jsx'), 'utf8');
     assert.match(comp, /const nb = rows\?\.length \?\? \(nbInitial != null \? Number\(nbInitial\) : null\);/,

@@ -148,6 +148,7 @@ journal des transmissions), `131` (`partner.recoit_coordonnees` + suivi de contr
 
 | N° | Objet | État |
 |----|-------|------|
+| 133 | `partner.logo_url` + `inventory_item.image_url` — **images par LIEN**, hébergées chez le fournisseur. `partner_product.image_url` existait déjà (095) sans écran pour la remplir. ⚠️ Une image distante est **une requête vers un tiers** faite par le navigateur du stagiaire : la page Confidentialité le déclare désormais, et les images sont posées en `no-referrer` | **à jouer** |
 | 132 | `UNIQUE (organization_id, name)` sur `partner` — l'annuaire portait **deux fiches « Berkel »**, la vide a été supprimée. Un homonyme se paie cher ici : la demande de consentement NOMME les destinataires et son texte est figé comme preuve (« …, Berkel, Berkel, … »), et le semis des produits joint **sur le nom**. **Elle échoue s'il reste des doublons — c'est voulu** ; la requête pour les trouver est en tête du fichier | **à jouer** |
 
 ⚠️ **La 131 démarre à zéro destinataire**, volontairement : `DEFAULT 0` signifie qu'aucun

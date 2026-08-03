@@ -8,6 +8,7 @@ import CreneauCalendrier from "../components/CreneauCalendrier.jsx";
 import ConseilMateriel from "../components/ConseilMateriel.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import { euro } from "../lib/format.js";
+import ImageLien from "../components/ImageLien.jsx";
 import {
   getCart, addToCart, setQty, setBroderie, clearCart, cartTotals, cartCount,
   lineKey, brodValue, variantValue, brodOk, roomFor, CART_EVENT,
@@ -237,6 +238,13 @@ function EcoleTab() {
       <div className="shop-grid">
         {shown.map((p) => (
           <div key={p.id} className="shop-card">
+            {/* LA PHOTO PREND ENFIN LA PLACE QU'ELLE RÉCLAMAIT. Le commentaire ci-dessous raconte
+                qu'un glyphe posé seul en haut de carte « se lisait comme l'image de l'article,
+                donc il mentait » — il avait été redescendu près du nom du rayon pour cette
+                raison. Une vraie photo (migration 133) va précisément là, et n'y ment pas. Sans
+                adresse, ou si le lien est mort, il n'y a RIEN : la carte reprend exactement
+                l'allure qu'elle avait, plutôt qu'un cadre vide qui aurait l'air cassé. */}
+            <ImageLien src={p.image_url} className="shop-photo" fallback={null} />
             {/* Le glyphe est une marque de RAYON, pas une photo du produit : quatre catégories de
                 pelles partagent le même dessin, et « Coupe-pâte » sortirait des ciseaux. Seul, en
                 haut de la carte, il se lisait comme l'image de l'article — donc il mentait. Collé
@@ -384,6 +392,7 @@ function PartenairesTab() {
           const repete = String(p.category || "").toLowerCase() === String(g.partner_category || "").toLowerCase();
           return (
             <div key={p.id} className="shop-card">
+              <ImageLien src={p.image_url} className="shop-photo" fallback={null} />
               {/* Le glyphe n'apparaît QUE si la catégorie en a un vraiment : les catégories
                   partenaires (Four, Bac, Préparation) n'en ont pas, et CatGlyph retombait sur
                   l'icône « package » — dix-neuf boîtes grises identiques qui ne disaient rien

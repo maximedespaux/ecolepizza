@@ -4,6 +4,7 @@ import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, u
   getPartenaireCategories, createPartenaireCategorie, updatePartenaireCategorie, deletePartenaireCategorie,
   setPartenaireDestinataire } from "../api/apiClient.js";
 import { finContrat, etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js";
+import ImageLien, { ImagePlaceholder } from "../components/ImageLien.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -34,6 +35,7 @@ const EMPTY = {
   website: "", town: "", discount_pct: "", offer: "", notes: "",
   // Contrat (migration 131) : non coché par défaut — toutes les relations n'en ont pas.
   contrat: 0, contrat_debut: "", contrat_duree_mois: "",
+  logo_url: "",
 };
 const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR") : "-");
 const sumCash = (ap) => ap.filter((a) => apportType(a.type).cash).reduce((s, a) => s + (Number(a.value) || 0), 0);
@@ -193,7 +195,12 @@ function Partenaires() {
                    passerait pour un défaut. */
                 const recoitEffectif = Number(p.recoit_coordonnees) === 1 && !contratEchu;
                 return (
-                  <Card key={p.id} title={p.name} more={
+                  <Card key={p.id} title={
+                    <span className="card-ttl">
+                      <ImageLien src={p.logo_url} className="partner-logo" fallback={null} />
+                      {p.name}
+                    </span>
+                  } more={
                     <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
                       {/* La REMISE est le fait opérationnel de cette page : c'est ce qu'on vérifie
                           avant de commander. Elle était noyée en dernière ligne des coordonnées. */}
@@ -548,6 +555,7 @@ function PartnerModal({ partner, categories, onClose, onSaved, onError }) {
     contrat: Number(partner.contrat) === 1 ? 1 : 0,
     contrat_debut: partner.contrat_debut ?? "",
     contrat_duree_mois: partner.contrat_duree_mois ?? "",
+    logo_url: partner.logo_url ?? "",
   }));
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -567,6 +575,7 @@ function PartnerModal({ partner, categories, onClose, onSaved, onError }) {
         contrat: form.contrat ? 1 : 0,
         contrat_debut: form.contrat ? form.contrat_debut : "",
         contrat_duree_mois: form.contrat ? form.contrat_duree_mois : "",
+        logo_url: form.logo_url,
       };
       if (isNew) await createPartenaire(payload);
       else await updatePartenaire(partner.id, payload);
@@ -592,6 +601,22 @@ function PartnerModal({ partner, categories, onClose, onSaved, onError }) {
                 <option value={form.category}>{form.category}</option>
               )}
             </SelectField>
+          </div>
+          <div className="field">
+            <label>Logo (lien) <span className="hint" style={{ fontWeight: 400 }}>(facultatif)</span></label>
+            <div className="champ-image">
+              <input className="inp" type="url" value={form.logo_url} onChange={set("logo_url")}
+                placeholder="https://site-du-partenaire.fr/logo.png" />
+              {/* APERÇU IMMÉDIAT : c'est la seule façon de savoir qu'un lien est bon. Sans lui, on
+                  colle une adresse, on enregistre, et on découvre au rechargement qu'elle ne
+                  pointait sur rien — sans savoir si c'est le lien ou l'enregistrement. */}
+              <ImageLien src={form.logo_url} className="champ-image-apercu"
+                fallback={<ImagePlaceholder className="champ-image-apercu" icone="handshake" />} />
+            </div>
+            <span className="hint">
+              L'image reste hébergée sur le site du partenaire : son serveur verra passer les
+              visites. Préférez une adresse en « https:// », sinon elle sera bloquée en ligne.
+            </span>
           </div>
           <div className="field"><label>Ce qu'il propose (offre)</label>
             <textarea className="inp" rows={2} value={form.offer} onChange={set("offer")} placeholder="Farines T65, remise pro, livraison…" /></div>

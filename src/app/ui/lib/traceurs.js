@@ -18,9 +18,16 @@
  * exprimées par l'utilisateur (langue, thème, panier).
  *
  * Tout ce qui figure ci-dessous relève de cette exemption : rien n'est déposé à des fins
- * publicitaires, rien ne suit l'utilisateur d'un site à l'autre, et AUCUN TIERS n'est chargé —
- * pas de Google Analytics, pas de Tag Manager, pas de Matomo, pas de pixel. Vérifié par balayage
- * du code, pas supposé.
+ * publicitaires, rien ne suit l'utilisateur d'un site à l'autre, et AUCUN TRACEUR TIERS n'est
+ * chargé — pas de Google Analytics, pas de Tag Manager, pas de Matomo, pas de pixel. Vérifié par
+ * balayage du code, pas supposé.
+ *
+ * ⚠ « AUCUN TRACEUR TIERS » ET NON « AUCUN TIERS », ET LA NUANCE EST RÉELLE. Depuis la migration
+ * 133, les photos des articles et les logos des partenaires sont chargés DEPUIS LE SITE DU
+ * FOURNISSEUR. Ce n'est pas le serveur qui va les chercher, c'est le navigateur : ces sites voient
+ * donc passer une adresse IP. Ils ne déposent rien sur l'appareil et ne suivent personne d'un site
+ * à l'autre — ce ne sont pas des traceurs — mais ce sont bien des tiers contactés, et la première
+ * rédaction de ce fichier disait le contraire. C'est déclaré dans `TRANSMISSIONS` ci-dessous.
  *
  * Poser un bandeau ici serait donc à la fois inutile et NUISIBLE : il demanderait un consentement
  * qui n'a pas lieu d'être, et il entraînerait l'utilisateur à cliquer « accepter » sans lire —
@@ -159,6 +166,22 @@ export const TRACEURS = [
  * le lecteur, qui comprend « l'école », pas « le programme ». Les deux sont déclarés ici.
  */
 export const TRANSMISSIONS = [
+  {
+    destinataire: 'Sites des fournisseurs et partenaires (images)',
+    qui: "Les sites web des fournisseurs dont l'école reprend les photos de produits et les logos",
+    donnees: "Votre adresse IP et le type de votre navigateur, comme pour toute image affichée "
+      + "depuis un autre site. Ni votre nom, ni votre e-mail, ni la page que vous consultez : "
+      + "les images sont posées en « no-referrer », ce qui empêche votre navigateur d'indiquer "
+      + "d'où vient la demande.",
+    /* CE QUE CETTE LIGNE N'EST PAS : un traceur. Le fournisseur ne dépose rien sur l'appareil et
+       ne suit personne d'un site à l'autre — il reçoit une demande d'image, comme n'importe quel
+       serveur qui sert un fichier. Mais c'est bien un tiers contacté, et le taire rendrait faux
+       le raisonnement du haut de ce fichier. */
+    pourquoi: "Illustrer les articles de la boutique et les partenaires sans recopier leurs "
+      + "images chez nous : elles restent chez eux, et suivent leur catalogue.",
+    quand: "À l'affichage d'un article ou d'un partenaire qui porte une image.",
+    canal: 'application',
+  },
   {
     destinataire: 'Base Adresse Nationale (api-adresse.data.gouv.fr)',
     qui: "Service public de l'État français, sans clé ni compte",

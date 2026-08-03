@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon.jsx";
+import ImageLien, { ImagePlaceholder } from "./ImageLien.jsx";
 import Badge from "./Badge.jsx";
 import { euro } from "../lib/format.js";
 import {
@@ -24,7 +25,10 @@ import {
  * Le repli évite le problème plutôt que d'avoir à le contourner par un portail.
  */
 
-const VIDE = { name: "", category: "", reference: "", price_public: "", price_school: "", url: "", note: "" };
+/* `image_url` A TOUJOURS EXISTÉ EN BASE (migration 095) : la colonne était acceptée en écriture et
+   déjà renvoyée à la boutique du stagiaire. Il manquait juste le champ pour la remplir — elle
+   attendait son écran depuis huit migrations. */
+const VIDE = { name: "", category: "", reference: "", price_public: "", price_school: "", url: "", image_url: "", note: "" };
 
 function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
   const [ouvert, setOuvert] = useState(false);
@@ -98,6 +102,8 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
                 {rows.map((p) => (
                   <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0",
                     borderBottom: "1px solid var(--border-soft)", opacity: p.active ? 1 : 0.5 }}>
+                    <ImageLien src={p.image_url} className="pp-vignette"
+                      fallback={<ImagePlaceholder className="pp-vignette" icone="package" />} />
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <b style={{ fontSize: 13 }}>{p.name}</b>
                       {p.category ? <span className="hint" style={{ marginLeft: 6 }}>{p.category}</span> : null}
@@ -154,6 +160,18 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
                 <label>Fiche produit (lien)</label>
                 <input className="inp" value={form.url} onChange={set("url")} placeholder="https://…" />
               </div>
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Photo (lien) <span className="hint" style={{ fontWeight: 400 }}>(facultatif)</span></label>
+              <input className="inp" type="url" value={form.image_url} onChange={set("image_url")}
+                placeholder="https://site-du-fournisseur.fr/photo.jpg" />
+              {/* On dit d'où vient l'image ET ce que ça implique : elle est chargée depuis le site
+                  du fournisseur, qui voit donc passer la visite. Le dire ici évite d'avoir à le
+                  découvrir sur la page Confidentialité. */}
+              <span className="hint">
+                Clic droit sur l'image du site du fournisseur → « Copier l'adresse de l'image ».
+                Elle reste hébergée chez lui : son site verra passer les visites.
+              </span>
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Ce qu'on en dit au stagiaire <span className="hint" style={{ fontWeight: 400 }}>(facultatif)</span></label>

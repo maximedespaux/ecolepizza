@@ -168,8 +168,23 @@ test('l\'inventaire permet de RETIRER une remise, pas seulement d\'en poser une'
 
 test('l\'article reste modifiable si la 125 n\'est pas jouée', () => {
     // Écrire une colonne absente ferait échouer TOUTE la mise à jour de l'article.
-    assert.match(srcInv, /if \(!await colRemise\(db\.promise\(\), 'learner_discount_eur'\)\)/,
+    assert.match(srcInv, /colRemise\(db\.promise\(\), 'learner_discount_eur'\)/,
         'la colonne doit être sondée');
-    assert.match(srcInv, /if \(updates\[k\]\.endsWith\('= \?'\)\) values\.splice\(k, 1\)/,
-        'et retirée proprement de la requête, valeur comprise');
+    /* LE RETRAIT SE FAIT PAR `filter`, PLUS PAR `splice` SUR UN INDICE.
+     *
+     * L'ancienne forme tenait deux tableaux parallèles (`updates` / `values`) et retirait
+     * `values[k]` en se servant de l'indice du FRAGMENT. Or un fragment `= NULL` n'a pas de valeur
+     * associée et décale les deux tableaux. Sur
+     *     ['learner_discount_pct = NULL', 'learner_discount_eur = ?', 'name = ?'] + [10, 'Nom']
+     * le nettoyage retirait « Nom » au lieu de « 10 » : l'article était RENOMMÉ « 10 », par une
+     * requête SQL parfaitement valide. Aucune erreur, aucune alerte.
+     *
+     * En appariant chaque fragment à sa valeur, il n'y a plus d'indice à tenir juste — c'est la
+     * raison d'être de la nouvelle forme, et c'est elle que ce test gèle. */
+    assert.match(srcInv, /champs\.filter\(\(c\) => !c\.remise\)/,
+        'la remise doit se retirer par filtrage du couple fragment+valeur');
+    assert.match(srcInv, /const values = retenus\.filter\(\(c\) => 'valeur' in c\)\.map\(\(c\) => c\.valeur\)/,
+        'les valeurs doivent se DÉDUIRE des fragments retenus, jamais être indexées en parallèle');
+    assert.doesNotMatch(srcInv, /values\.splice\(k, 1\)/,
+        'plus aucune arithmétique d\'indices entre les deux tableaux');
 });

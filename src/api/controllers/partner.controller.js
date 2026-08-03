@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { CONTRAT_FIN } = require('../lib/contratPartenaire.js');
+const { colonneExiste } = require('../lib/colonnes.js');
+const { validerImage } = require('../lib/imageDistante.js');
 
 const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 
@@ -24,6 +26,11 @@ const CHAMP_DESTINATAIRE = 'recoit_coordonnees';
    pour qu'un enregistrement du formulaire ne puisse pas le décocher au passage. */
 const CONTRAT_FIELDS = ['contrat', 'contrat_debut', 'contrat_duree_mois'];
 
+/* Le LOGO du partenaire (migration 133) : une adresse, pas un fichier. Descriptif comme la ville
+   ou le site web, donc dans le même formulaire — mais validé à part, parce qu'une valeur qui
+   finit dans un `src` ne se traite pas comme une note de suivi (cf. `lib/imageDistante.js`). */
+const CHAMP_LOGO = 'logo_url';
+
 /**
  * GET /api/partenaires — annuaire + suivi (contacts, offre, commissions cumulées).
  * Filtre ?category=
@@ -39,7 +46,7 @@ const getPartners = async (req, res) => {
            chargement : il restait donc invisible tant qu'on n'avait pas déplié, et il fallait
            ouvrir les vingt-trois sections une par une pour savoir lesquelles ont un catalogue.
            Une sous-requête sur une requête qui tourne déjà coûte infiniment moins que ça. */
-        const colonnes = (avecProduits, avecDestinataire = true) => `
+        const colonnes = (avecProduits, avecDestinataire = true, avecLogo = true) => `
             SELECT p.id, p.name, p.category, p.contact_name, p.contact_email, p.contact_phone,
                    p.website, p.town, p.discount_pct, p.offer, p.notes, p.created_at,
                    ${avecDestinataire ? `p.recoit_coordonnees, p.contrat, p.contrat_duree_mois,
@@ -47,6 +54,7 @@ const getPartners = async (req, res) => {
                    ${CONTRAT_FIN('p')} AS contrat_fin,`
         : `NULL AS recoit_coordonnees, 0 AS contrat, NULL AS contrat_duree_mois,
                    NULL AS contrat_debut, NULL AS contrat_fin,`}
+                   ${avecLogo ? 'p.logo_url,' : 'NULL AS logo_url,'}
                    COALESCE(SUM(re.amount), 0) AS commissions_total,
                    COUNT(re.id) AS commissions_count,
                    DATE_FORMAT(MAX(re.date), '%Y-%m-%d') AS last_commission${avecProduits ? `,
@@ -57,24 +65,24 @@ const getPartners = async (req, res) => {
         const filtre = req.query.category ? ' AND p.category = ?' : '';
         if (req.query.category) params.push(req.query.category);
         const fin = ' GROUP BY p.id ORDER BY p.name';
-        /* DEUX COLONNES OPTIONNELLES INDÉPENDANTES : le compte de produits (migration 095) et le
-           drapeau destinataire (migration 131). Une seule cascade `avec/sans` les traiterait comme
-           liées — l'absence de la 131 ferait alors disparaître le compte de produits, qui n'a rien
-           à voir. D'où deux repêchages successifs, du plus complet au plus pauvre. */
+        /* ON SONDE, ON N'ESSAIE PLUS. Trois colonnes facultatives indépendantes cohabitent ici :
+           le compte de produits (095), le drapeau destinataire et le contrat (131), le logo (133).
+           La cascade « tenter puis rattraper » demandait déjà quatre requêtes pour deux d'entre
+           elles ; à trois elle en demanderait huit, chacune à garder juste. Une lecture
+           d'`information_schema` répond à la question directement. */
+        const [avecDest, avecLogo] = await Promise.all([
+            colonneExiste(conn, 'partner', 'recoit_coordonnees'),
+            colonneExiste(conn, 'partner', CHAMP_LOGO),
+        ]);
         let results;
-        const essais = [[true, true], [true, false], [false, true], [false, false]];
-        let derniere = null;
-        for (const [prod, dest] of essais) {
-            try {
-                [results] = await conn.query(colonnes(prod, dest) + filtre + fin, params);
-                derniere = null;
-                break;
-            } catch (e) {
-                if (!isMissingSchema(e)) throw e;
-                derniere = e;
-            }
+        try {
+            [results] = await conn.query(colonnes(true, avecDest, avecLogo) + filtre + fin, params);
+        } catch (e) {
+            // `partner_product` arrive avec la 095 : sans elle, la liste sort sans le compte
+            // plutôt que de perdre l'écran entier pour une colonne d'appoint.
+            if (!isMissingSchema(e)) throw e;
+            [results] = await conn.query(colonnes(false, avecDest, avecLogo) + filtre + fin, params);
         }
-        if (derniere) throw derniere;
 
         /* Détail des commissions par partenaire (libellé, date, montant, NATURE).
          *
@@ -152,6 +160,10 @@ const createPartner = async (req, res) => {
     if (!b.name) return res.status(422).json({ error: 'Nom du partenaire requis' });
     if (await nomDejaPris(req.user.organization_id, b.name.trim()))
         return res.status(409).json({ message: DEJA_PRIS(b.name.trim()) });
+    /* LE LOGO EST VALIDÉ AVANT TOUTE ÉCRITURE, et un refus est explicite : une adresse rejetée en
+       silence donnerait une fiche sans logo sans qu'on sache que le lien était en cause. */
+    const logo = validerImage(b[CHAMP_LOGO]);
+    if (!logo.ok) return res.status(422).json({ message: logo.message });
     const id = crypto.randomUUID();
     const base = ['id', 'organization_id', 'name', 'category', 'contact_name', 'contact_email',
         'contact_phone', 'website', 'town', 'discount_pct', 'offer', 'notes'];
@@ -165,6 +177,9 @@ const createPartner = async (req, res) => {
        `recoit_coordonnees` reste ABSENT, volontairement : un partenaire tout juste créé ne doit
        pas naître destinataire de données personnelles. C'est un geste séparé, sur sa fiche. */
     const colonnes = [...base], trous = base.map(() => '?');
+    if (logo.valeur !== undefined && logo.valeur !== null) {
+        colonnes.push(CHAMP_LOGO); trous.push('?'); vals.push(logo.valeur);
+    }
     for (const f of CONTRAT_FIELDS) {
         if (b[f] === undefined || b[f] === '') continue;
         colonnes.push(f); trous.push('?');
@@ -219,8 +234,15 @@ const updatePartner = async (req, res) => {
         && await nomDejaPris(req.user.organization_id, String(req.body.name).trim(), req.params.id)) {
         return res.status(409).json({ message: DEJA_PRIS(String(req.body.name).trim()) });
     }
+    const logo = validerImage(req.body[CHAMP_LOGO]);
+    if (!logo.ok) return res.status(422).json({ message: logo.message });
+
     const sets = [];
     const values = [];
+    /* LE LOGO PASSE PAR SA PROPRE VALIDATION, jamais par la boucle générique : celle-ci se
+       contente de convertir « chaîne vide » en `null`, ce qui laisserait entrer n'importe quoi
+       dans un attribut `src`. */
+    if (logo.valeur !== undefined) { sets.push(`${CHAMP_LOGO} = ?`); values.push(logo.valeur); }
     for (const f of [...PARTNER_FIELDS, ...CONTRAT_FIELDS]) {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];
@@ -242,6 +264,18 @@ const updatePartner = async (req, res) => {
         values,
         (err, result) => {
             if (err) {
+                /* `NULL AS logo_url` ne permet PAS à l'écran de distinguer « colonne absente » de
+                   « pas de logo » — les deux valent `null`. Le champ reste donc toujours visible,
+                   et c'est l'écriture qui explique. Un champ masqué aurait été plus élégant, mais
+                   il aurait fallu alourdir la réponse d'un inventaire de colonnes que personne
+                   d'autre ne lit. */
+                if (isMissingSchema(err)) {
+                    return res.status(409).json({
+                        message: 'Migration 133 non jouée : l\'adresse du logo ne peut pas encore '
+                            + 'être enregistrée. Les autres champs non plus, cet enregistrement '
+                            + 'n\'a rien modifié.',
+                    });
+                }
                 // La contrainte a parlé la première (deux requêtes simultanées) : on traduit.
                 if (err.code === 'ER_DUP_ENTRY') {
                     return res.status(409).json({ message: DEJA_PRIS(String(req.body.name || '').trim()) });
@@ -251,7 +285,7 @@ const updatePartner = async (req, res) => {
             }
             if (result.affectedRows === 0) return res.status(404).json({ message: 'Partenaire introuvable' });
             logAudit(req, 'partner.update', 'Partner', req.params.id);
-            res.json({ success: true, message: 'Partenaire mis à jour' });
+            res.json({ success: true, message: 'Partenaire mis à jour', avertissement: logo.avertissement || undefined });
         }
     );
 };
