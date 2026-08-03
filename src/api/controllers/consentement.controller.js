@@ -122,6 +122,40 @@ async function sessionAvecInscrits(conn, sessionId, orgId) {
 }
 
 /**
+ * GET /api/sessions/consentements-manquants — combien restent à solliciter, PAR SESSION.
+ *
+ * La pastille de la barre latérale dit COMBIEN ; ce tableau dit OÙ. Sans lui, on lit « 1 » sans
+ * savoir quelle session ouvrir — et sur un calendrier de vingt sessions, chercher la bonne à la
+ * main annule le service rendu par la pastille.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * BUREAU UNIQUEMENT, alors que le calendrier lui-même est ouvert au formateur. Le suivi des
+ * consentements lui est fermé délibérément (cf. les routes) : savoir qui a refusé de céder ses
+ * coordonnées n'aide en rien à enseigner. Un COMPTE de personnes jamais sollicitées ne nomme
+ * personne, et l'on pourrait plaider qu'il est anodin — mais c'est le même sujet, et une
+ * exception discrète est la façon dont une règle se défait. Le calendrier du formateur n'affiche
+ * simplement pas la marque.
+ *
+ * `refusLecture` traduit une migration non jouée en 409 explicite ; le calendrier n'affiche alors
+ * aucune marque, plutôt que d'annoncer « personne à solliciter », qui serait faux.
+ */
+const getManquantsParSession = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const parSession = await consentements.manquantsParSession(conn, req.user.organization_id);
+        res.json({ data: Object.fromEntries(parSession) });
+    } catch (e) {
+        /* `isMissingSchema` d'abord : sans registre (130) la question n'a pas de réponse, et
+           `refusLecture` le dit correctement. Toute AUTRE erreur est un vrai défaut, qu'il ne
+           faut pas déguiser en migration manquante — c'est la confusion qui m'avait fait
+           annoncer « migration non jouée » sur ma propre requête fautive. */
+        if (isMissingSchema(e)) return refusLecture(res, e, 'manquants par session');
+        console.error('Erreur consentements manquants :', e);
+        res.status(500).json({ message: 'Erreur serveur' });
+    }
+};
+
+/**
  * GET /api/sessions/:id/consentements — qui a accepté, qui a refusé, QUI N'A JAMAIS ÉTÉ SOLLICITÉ.
  *
  * Le troisième groupe est celui qui compte. C'est le seul sur lequel l'organisme a quelque chose à
@@ -527,5 +561,5 @@ const getTransmissions = async (req, res) => {
     }
 };
 
-module.exports = { getSessionConsents, setConsentPourStagiaire,
+module.exports = { getSessionConsents, setConsentPourStagiaire, getManquantsParSession,
     produireTransmissionPartenaire, getTransmissions };

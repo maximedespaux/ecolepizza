@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSessions, getFormations, createSession, getLocations, getEnrollments } from "../api/apiClient.js";
+import { getSessions, getFormations, createSession, getLocations, getEnrollments, getConsentsManquants } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -18,6 +18,10 @@ function Sessions() {
   const [view, setView] = useState("mois"); // mois | trimestre | semestre | annee
   const [sessions, setSessions] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
+  /* COMBIEN RESTENT À SOLLICITER, par session — le détail de la pastille « Sessions ».
+     `{}` et non `null` : chez le formateur la route répond 403, et le calendrier doit alors
+     s'afficher SANS marque plutôt que d'attendre une réponse qui ne viendra pas. */
+  const [aSolliciter, setASolliciter] = useState({});
   const [programs, setPrograms] = useState([]);
   const [locations, setLocations] = useState([]);
   const [status, setStatus] = useState(null);
@@ -38,6 +42,8 @@ function Sessions() {
     getFormations().then((r) => setPrograms(r.data)).catch(() => {});
     getLocations().then((r) => setLocations(r.data || [])).catch(() => {});
     getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
+    // Silencieux : réservé au bureau, et son absence n'empêche pas de lire un planning.
+    getConsentsManquants().then((r) => setASolliciter(r.data || {})).catch(() => {});
   }, []);
 
   const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "-");
@@ -274,19 +280,31 @@ function Sessions() {
                     {Array.from({ length: weekLaneCount }, (_, i) => {
                       const s = byLane[i];
                       if (!s) return <div key={i} className="cal-evt cal-evt-ghost" aria-hidden="true">&nbsp;</div>;
+                      /* UNE PUCE, PAS UN NOMBRE. La pastille se répète sur CHAQUE jour de la
+                         session — cinq fois pour une semaine — et un second chiffre à côté des
+                         inscrits se lirait de travers autant de fois. La puce dit qu'il y a
+                         quelque chose ici ; l'info-bulle et la liste en dessous disent quoi. */
+                      const reste = aSolliciter[s.id] || 0;
+                      const quoi = reste
+                        ? ` · ${reste} à solliciter pour les partenaires`
+                        : "";
                       return (
                         <div
                           key={i}
                           className="cal-evt"
                           style={{ background: colorOf(s.program_code) }}
-                          title={`${s.program_title}, ${s.stagiaires} stagiaire(s)`}
+                          title={`${s.program_title}, ${s.stagiaires} stagiaire(s)${quoi}`}
                           role="button"
                           tabIndex={0}
-                          aria-label={`Ouvrir la session ${s.program_title}, ${s.stagiaires} stagiaire(s)`}
+                          aria-label={`Ouvrir la session ${s.program_title}, ${s.stagiaires} stagiaire(s)${quoi}`}
                           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); navigate(`/sessions/${s.id}`); } }}
                           onClick={(e) => { e.stopPropagation(); navigate(`/sessions/${s.id}`); }}
                         >
                           {s.program_code}
+                          {/* `aria-hidden` : l'information est déjà dans l'`aria-label` du bouton,
+                              en toutes lettres. La répéter ferait entendre deux fois la même
+                              chose, la seconde sans son nombre. */}
+                          {reste > 0 && <i className="cal-evt-consent" aria-hidden="true" />}
                           <span className="n">{s.stagiaires}</span>
                         </div>
                       );
@@ -339,6 +357,15 @@ function Sessions() {
                     <div className="sess-meta">
                       <span className="sess-metaitem"><Icon name="calendar" size={13} /> {frDate(s.start_date)} → {frDate(s.end_date)}</span>
                       <span className="sess-metaitem">S{s.week} · {s.year}</span>
+                      {/* ICI LE NOMBRE EST LISIBLE : la session n'apparaît qu'une fois dans cette
+                          liste, contrairement à la pastille du calendrier. C'est donc là que la
+                          pastille de navigation s'explique — « 1 » devient « lesquels, et où ». */}
+                      {aSolliciter[s.id] > 0 && (
+                        <span className="sess-metaitem sess-consent">
+                          <Icon name="help" size={13} />
+                          <b className="chiffres">{aSolliciter[s.id]}</b> à solliciter
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="sess-people">

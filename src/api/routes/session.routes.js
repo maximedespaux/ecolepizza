@@ -1,7 +1,7 @@
 const express = require('express');
 const { getSessions, getSession, createSession, updateSession, deleteSession, getSessionBoard, listTrainers, setSessionTrainers } = require('../controllers/session.controller.js');
 const { listSessionIntervenants, addSessionIntervenant, setIntervenantSlots, removeSessionIntervenant } = require('../controllers/intervenant.controller.js');
-const { getSessionConsents, setConsentPourStagiaire } = require('../controllers/consentement.controller.js');
+const { getSessionConsents, setConsentPourStagiaire, getManquantsParSession } = require('../controllers/consentement.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -10,6 +10,11 @@ router.use(authenticateToken);
 // Lecture : tout le personnel (le formateur consulte ses sessions pour l'émargement).
 router.get('/', authorizeRoles(...STAFF_ROLES), getSessions);
 router.get('/trainers', authorizeRoles(...STAFF_ROLES), listTrainers); // avant /:id
+/* AVANT `/:id`, IMPÉRATIVEMENT : un seul segment, comme lui. Déclarée après, cette route ne
+ * serait jamais atteinte — Express prendrait `/:id` et irait chercher une session dont
+ * l'identifiant serait « consentements-manquants ». Bureau uniquement, comme tout le suivi des
+ * consentements : le calendrier est ouvert au formateur, cette marque ne l'est pas. */
+router.get('/consentements-manquants', authorizeRoles(...ADMIN_ROLES), getManquantsParSession);
 router.get('/:id', authorizeRoles(...STAFF_ROLES), getSession);
 router.get('/:id/board', authorizeRoles(...STAFF_ROLES), getSessionBoard);
 router.get('/:id/intervenants', authorizeRoles(...STAFF_ROLES), listSessionIntervenants);

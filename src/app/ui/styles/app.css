@@ -830,6 +830,19 @@ tbody tr:last-child td{border-bottom:none}
 .cal-evt-ghost{visibility:hidden;background:none;cursor:default;pointer-events:none}
 .cal-evt-ghost:hover{filter:none;transform:none}
 .cal-evt .n{margin-left:auto;background:rgba(255,255,255,.28);border-radius:99px;padding:0 6px;font-size:10px;font-weight:700}
+/* ————— DES STAGIAIRES RESTENT À SOLLICITER SUR CETTE SESSION —————
+   Une PUCE et non un nombre : la pastille se répète sur chaque jour de la session, et un second
+   chiffre s'y lirait cinq fois de suite. Le compte exact vit dans l'info-bulle, dans l'aria-label
+   et dans la liste « Prochaines sessions », où la session n'apparaît qu'une fois.
+   BLANCHE, ce qui tient sur N'IMPORTE QUELLE couleur de formation : la pastille écrit déjà son
+   texte en `#fff`, donc son fond est forcément assez sombre pour du blanc plein. Une teinte
+   d'alerte, elle, aurait disparu sur la formation orange. L'anneau sombre la détache du texte
+   voisin sans dépendre du fond. */
+.cal-evt-consent{width:6px;height:6px;border-radius:99px;background:#fff;flex:0 0 auto;
+  box-shadow:0 0 0 1.5px rgba(0,0,0,.28)}
+/* Le compte lisible, là où la session n'est écrite qu'une fois. */
+.sess-consent{color:var(--orange);font-weight:700}
+.sess-consent b{font-weight:800}
 .cal-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
 .cal-legitem{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
 .cal-legitem i{width:12px;height:12px;border-radius:4px;display:inline-block}

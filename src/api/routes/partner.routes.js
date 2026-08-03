@@ -41,9 +41,6 @@ router.post('/:id/transmission', authorizeRoles(...ADMIN_ROLES), produireTransmi
 /* Le journal de CE partenaire : ce qui lui est déjà parti. C'est lui qui permet de répondre à un
  * stagiaire demandant à qui ses coordonnées ont été communiquées (art. 15). */
 router.get('/:id/transmissions', authorizeRoles(...ADMIN_ROLES), getTransmissions);
-/* Le journal de CE partenaire : ce qui lui est déjà parti. C'est lui qui permet de répondre à un
- * stagiaire demandant à qui ses coordonnées ont été communiquées (art. 15). */
-router.get('/:id/transmissions', authorizeRoles(...ADMIN_ROLES), getTransmissions);
 router.delete('/:id', authorizeRoles(...ADMIN_ROLES), deletePartner);
 
 /* Produits d'un partenaire — le catalogue montré aux stagiaires (onglet « Offres partenaires »).

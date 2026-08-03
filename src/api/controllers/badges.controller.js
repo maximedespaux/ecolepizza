@@ -1,5 +1,5 @@
 const db = require('../config/database.js');
-const { CONTRAT_VALABLE } = require('../lib/contratPartenaire.js');
+const consentements = require('../lib/consentements.js');
 
 // Compte résilient : renvoie 0 si la table n'existe pas encore (migration non jouée).
 async function count(conn, sql, params) {
@@ -27,22 +27,25 @@ async function count(conn, sql, params) {
  * les gens que l'école a effectivement en face d'elle, donc à qui la question peut être posée.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- * ET RIEN SI PERSONNE NE REÇOIT RIEN. Tant qu'aucun partenaire n'est coché destinataire — c'est
- * le cas au lendemain de la 131, qui démarre à zéro — la question n'a pas d'objet : on
- * demanderait l'autorisation de transmettre à personne. La pastille ferait courir l'école après
- * des signatures pour un flux qui n'existe pas. Le contrat compte aussi : un partenaire dont la
- * convention est échue ne reçoit plus rien.
+ * ET RIEN SI PERSONNE NE REÇOIT RIEN — délégué à `aDesDestinataires`, partagé avec le détail par
+ * session et avec la phrase soumise au stagiaire. Tant qu'aucun partenaire n'est coché
+ * destinataire (la 131 démarre à zéro), la question n'a pas d'objet : on demanderait
+ * l'autorisation de transmettre à personne.
  *
- * `count()` renvoie 0 sur toute erreur, ce qui couvre les migrations non jouées (130 : pas de
- * registre, 131 : pas de colonne destinataire). Une pastille absente est le bon défaut — elle
- * réclame une action, et réclamer une action impossible ne sert personne.
+ * `count()` renvoie 0 sur toute erreur, ce qui couvre la 130 non jouée — pas de registre, donc
+ * pas de compte à donner. Une pastille absente est le bon défaut : elle réclame une action, et
+ * réclamer une action impossible ne sert personne.
  */
 async function sansReponsePartenaires(conn, org) {
-    const destinataires = await count(conn,
-        `SELECT COUNT(*) AS n FROM partner p
-          WHERE p.organization_id = ? AND p.recoit_coordonnees = 1 AND ${CONTRAT_VALABLE('p')}`,
-        [org]);
-    if (!destinataires) return 0;
+    /* LE GARDE-FOU EST CELUI DE LA BIBLIOTHÈQUE, pas une requête réécrite ici. Ma première
+       version comptait les partenaires cochés à la main et retombait sur 0 à la moindre erreur
+       SQL — donc AUCUNE PASTILLE sur une base où la 131 n'est pas jouée, alors que c'est
+       justement le monde où TOUT partenaire est destinataire. La lecture la plus prudente de
+       l'erreur donnait le résultat le plus faux. */
+    let ouvert;
+    try { ouvert = await consentements.aDesDestinataires(conn, org); }
+    catch { return 0; }
+    if (!ouvert) return 0;
 
     return count(conn,
         /* DISTINCT : un stagiaire inscrit à deux sessions en cours est UNE personne à qui l'on

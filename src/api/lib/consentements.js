@@ -245,6 +245,56 @@ async function partenairesDestinataires(conn, orgId) {
     }
 }
 
+/**
+ * Y A-T-IL QUELQU'UN AU BOUT ? — le garde-fou des indicateurs « à solliciter ».
+ *
+ * Tant qu'aucun partenaire ne reçoit de coordonnées, réclamer des consentements ferait courir
+ * l'école après des signatures autorisant une transmission vers personne. La 131 démarre à zéro
+ * destinataire, volontairement : au lendemain de la migration, c'est l'état normal.
+ *
+ * `colonne: false` — la 131 n'est pas jouée — VAUT « oui ». C'est le monde d'avant, où tout
+ * partenaire reçoit ; répondre « non » y masquerait les indicateurs sur une base où la
+ * transmission fonctionne pour tout le monde. Le piège est joli : la lecture la plus prudente
+ * de l'erreur donne ici le résultat le plus faux.
+ */
+async function aDesDestinataires(conn, orgId) {
+    const { rows, colonne } = await partenairesDestinataires(conn, orgId);
+    return colonne ? rows.length > 0 : true;
+}
+
+/**
+ * COMBIEN DE STAGIAIRES N'ONT JAMAIS ÉTÉ INTERROGÉS, session par session.
+ *
+ * Le pendant détaillé de la pastille de navigation : celle-ci dit COMBIEN, celui-ci dit OÙ. Les
+ * deux comptes doivent se lire ensemble — même définition (aucune ligne au registre, lequel est
+ * en ajout seul), même borne de date (sessions non terminées), même garde-fou.
+ *
+ * ILS NE S'ADDITIONNENT PAS POUR AUTANT, et c'est voulu : un stagiaire inscrit à deux sessions
+ * en cours apparaît sur les DEUX — il faut bien le voir là où on le cherche — alors que la
+ * pastille ne le compte qu'une fois, puisqu'il n'y a qu'une question à lui poser. Additionner les
+ * lignes de ce tableau pour retrouver la pastille donnerait donc un nombre plus grand, sans que
+ * l'un ni l'autre ne soit faux.
+ *
+ * Rend une `Map` identifiant de session → nombre. Une session absente n'attend personne.
+ */
+async function manquantsParSession(conn, orgId) {
+    if (!(await aDesDestinataires(conn, orgId))) return new Map();
+    const [rows] = await conn.query(
+        `SELECT e.session_id, COUNT(DISTINCT e.learner_id) AS n
+           FROM enrollment e
+           JOIN training_session s ON s.id = e.session_id
+           LEFT JOIN consent_record c
+                  ON c.learner_id = e.learner_id
+                 AND c.organization_id = e.organization_id
+                 AND c.finalite = 'partenaires'
+          WHERE e.organization_id = ?
+            AND COALESCE(s.end_date, s.start_date) >= CURDATE()
+            AND c.id IS NULL
+          GROUP BY e.session_id`,
+        [orgId]);
+    return new Map(rows.map((r) => [r.session_id, Number(r.n)]));
+}
+
 async function destinatairesPartenaires(conn, orgId) {
     try {
         const { rows, colonne } = await partenairesDestinataires(conn, orgId);
@@ -517,5 +567,6 @@ module.exports = {
     FINALITES, FINALITES_CONNUES, SOURCES, GROUPES,
     aReponduLuiMeme, ontReponduEuxMemes,
     CHAMPS_TRANSMISSIBLES, champsValides, formulationPour, champsOrganisme,
-    destinatairesPartenaires, partenairesDestinataires, etatCourant, etatParStagiaire, enregistrer, isMissingSchema,
+    destinatairesPartenaires, partenairesDestinataires, aDesDestinataires, manquantsParSession,
+    etatCourant, etatParStagiaire, enregistrer, isMissingSchema,
 };

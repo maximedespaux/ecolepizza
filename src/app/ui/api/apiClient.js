@@ -382,6 +382,13 @@ export function updateMyVisibility(visibility) { return request("/mon-espace/vis
 export function getSessionConsents(sessionId) {
   return request(`/sessions/${sessionId}/consentements`);
 }
+/* COMBIEN RESTENT À SOLLICITER, PAR SESSION — ce qui permet au calendrier de dire OÙ sont les
+   gens que la pastille de navigation compte. `silent` : c'est un indicateur d'ambiance, pas une
+   action ; il ne doit pas allumer la barre de chargement à chaque affichage du planning.
+   Bureau uniquement côté serveur : chez le formateur, l'appel échoue et le calendrier reste nu. */
+export function getConsentsManquants() {
+  return request("/sessions/consentements-manquants", { silent: true });
+}
 export function setSessionConsent(sessionId, learnerId, accorde, source) {
   return request(`/sessions/${sessionId}/consentements/${learnerId}`,
     { method: "PUT", body: JSON.stringify({ accorde, source }) });
