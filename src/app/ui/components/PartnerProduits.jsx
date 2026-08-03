@@ -36,6 +36,11 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
   const [form, setForm] = useState(VIDE);
   const [edite, setEdite] = useState(null);    // id du produit en cours de modification
   const [busy, setBusy] = useState(false);
+  /* LE FORMULAIRE EST FERMÉ AU DÉPART. Douze champs déployés en permanence sous chaque catalogue
+     donnaient à croire qu'il fallait les remplir : on ouvrait « Produits en boutique » pour LIRE
+     la liste, et on tombait sur une saisie. Le déplier à la demande rend la liste lisible et
+     l'ajout explicite. */
+  const [saisie, setSaisie] = useState(false);
 
   // Chargé À L'OUVERTURE seulement : une page de vingt-trois partenaires ne doit pas déclencher
   // vingt-trois requêtes pour des catalogues que personne ne regarde.
@@ -48,6 +53,16 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
 
   const recharger = () => getPartenaireProduits(partnerId).then((r) => setRows(r.data || [])).catch(() => {});
 
+  /* Ouvrir en MODIFICATION : on charge la fiche et on déplie. Sans `setSaisie(true)`, le crayon
+     ne ferait rien de visible — le formulaire resterait fermé et l'utilisateur cliquerait deux
+     fois en pensant que le bouton est cassé. */
+  function modifier(p) {
+    setEdite(p.id);
+    setForm({ ...VIDE, ...Object.fromEntries(Object.keys(VIDE).map((k) => [k, p[k] ?? ""])) });
+    setSaisie(true);
+  }
+  function fermerSaisie() { setEdite(null); setForm(VIDE); setSaisie(false); }
+
   async function enregistrer(e) {
     e.preventDefault();
     if (!form.name.trim()) return;
@@ -55,7 +70,12 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
     try {
       if (edite) await updatePartenaireProduit(edite, form);
       else await createPartenaireProduit(partnerId, form);
-      setForm(VIDE); setEdite(null);
+      /* APRÈS UN AJOUT LE FORMULAIRE RESTE OUVERT, vidé : on saisit rarement un seul produit, et
+         refermer obligerait à recliquer entre chaque ligne d'un catalogue. Après une MODIFICATION
+         il se referme — le travail sur ce produit-là est terminé, et le garder ouvert laisserait
+         une ligne surlignée sans qu'on sache si l'enregistrement a eu lieu. */
+      if (edite) { setEdite(null); setForm(VIDE); setSaisie(false); }
+      else setForm(VIDE);
       await recharger();
     } catch (err) { onErreur?.(err.message || "Enregistrement impossible."); }
     finally { setBusy(false); }
@@ -100,8 +120,14 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
                 {rows.map((p) => (
-                  <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0",
-                    borderBottom: "1px solid var(--border-soft)", opacity: p.active ? 1 : 0.5 }}>
+                  /* LA LIGNE EN COURS DE MODIFICATION EST SURLIGNÉE. Le formulaire s'ouvre plus
+                     bas, hors du champ de vision sur un catalogue de dix produits : sans repère,
+                     on ne sait plus lequel on est en train de modifier — et on enregistre sur le
+                     mauvais. `aria-current` porte la même information pour un lecteur d'écran, la
+                     couleur ne devant jamais être seule à la dire. */
+                  <div key={p.id} aria-current={edite === p.id ? "true" : undefined}
+                    className={"pp-ligne" + (edite === p.id ? " en-edition" : "")}
+                    style={{ opacity: p.active ? 1 : 0.5 }}>
                     <ImageLien src={p.image_url} className="pp-vignette"
                       fallback={<ImagePlaceholder className="pp-vignette" icone="package" />} />
                     {/* LE NOM SUR SA LIGNE, LES ÉTIQUETTES SUR LA LEUR.
@@ -139,7 +165,7 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
                     <button type="button" className="iconbtn" title={p.active ? "Masquer de la boutique" : "Afficher dans la boutique"}
                       onClick={() => basculer(p)}><Icon name={p.active ? "eye" : "eye-off"} size={14} /></button>
                     <button type="button" className="iconbtn" title="Modifier"
-                      onClick={() => { setEdite(p.id); setForm({ ...VIDE, ...Object.fromEntries(Object.keys(VIDE).map((k) => [k, p[k] ?? ""])) }); }}>
+                      aria-pressed={edite === p.id} onClick={() => modifier(p)}>
                       <Icon name="pencil" size={14} /></button>
                     <button type="button" className="iconbtn del" title="Retirer" onClick={() => supprimer(p)}>
                       <Icon name="trash" size={14} /></button>
@@ -148,7 +174,26 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
               </div>
             )}
 
-          <form onSubmit={enregistrer} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* LE BOUTON D'ABORD, LE FORMULAIRE ENSUITE. Il porte le mot « produit » et non un
+              simple « + » : sous un catalogue déjà rempli, une croix seule laisse deviner ce
+              qu'elle ajoute. */}
+          {!saisie && (
+            <button type="button" className="btn sm" onClick={() => setSaisie(true)}>
+              <Icon name="plus" size={14} /> Ajouter un produit
+            </button>
+          )}
+
+          {saisie && (
+          <form onSubmit={enregistrer} className={"pp-form" + (edite ? " en-edition" : "")}
+            style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {/* ON RAPPELLE CE QU'ON MODIFIE. Le formulaire est en bas d'un catalogue qui peut
+                compter dix lignes : la ligne surlignée est souvent hors du champ de vision au
+                moment où l'on tape. Sans ce titre, rien dans le formulaire ne dit s'il ajoute ou
+                s'il modifie, ni quoi. */}
+            <b className="pp-form-t">
+              <Icon name={edite ? "pencil" : "plus"} size={13} />
+              {edite ? `Modifier « ${form.name || "sans nom"} »` : "Nouveau produit"}
+            </b>
             <div className="row3" style={{ gap: 8 }}>
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Produit</label>
@@ -212,13 +257,13 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
               <button className="btn sm primary" disabled={busy || !form.name.trim()}>
                 <Icon name={edite ? "check" : "plus"} size={14} /> {edite ? "Enregistrer" : "Ajouter au catalogue"}
               </button>
-              {edite && (
-                <button type="button" className="btn sm ghost" onClick={() => { setEdite(null); setForm(VIDE); }}>
-                  Annuler
-                </button>
-              )}
+              {/* « Annuler » TOUJOURS PRÉSENT, et plus seulement en modification : depuis que le
+                  formulaire s'ouvre à la demande, il faut aussi pouvoir le refermer sans rien
+                  saisir. Sans lui, on rouvrait la fiche du partenaire pour s'en débarrasser. */}
+              <button type="button" className="btn sm ghost" onClick={fermerSaisie}>Annuler</button>
             </div>
           </form>
+          )}
         </div>
       )}
     </div>

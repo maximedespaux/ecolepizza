@@ -4593,3 +4593,17 @@ button.av-wrap:active{transform:scale(.94)}
 .pp-ident{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .pp-cats{display:flex;flex-wrap:wrap;gap:4px}
 .pp-cats .badge{font-size:10px;padding:2px 6px}
+
+/* Catalogue partenaire : la ligne en cours de modification, et le formulaire qui lui répond.
+   LA COULEUR N'EST PAS SEULE À PORTER L'INFORMATION (WCAG 1.4.1) : la ligne porte aussi
+   `aria-current`, une barre à gauche, et le formulaire rappelle le nom du produit modifié. */
+.pp-ligne{display:flex;align-items:center;gap:8px;padding:5px 0;
+  border-bottom:1px solid var(--border-soft);border-left:3px solid transparent;
+  padding-left:0;transition:background .15s,border-color .15s,padding-left .15s}
+.pp-ligne.en-edition{background:color-mix(in srgb, var(--blue) 9%, transparent);
+  border-left-color:var(--blue);padding-left:7px;border-radius:0 7px 7px 0}
+
+.pp-form{margin-top:10px;padding:11px;border-radius:10px;border:1px solid var(--border);
+  background:var(--surface2)}
+.pp-form.en-edition{border-color:color-mix(in srgb, var(--blue) 45%, transparent)}
+.pp-form-t{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:2px}
