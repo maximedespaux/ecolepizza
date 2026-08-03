@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { Icon } from "../components/Icon.jsx";
+import { useEchap } from "../lib/useEchap.js";
 import { TRACEURS, NATURES, TOUT_EXEMPTE, TRANSMISSIONS } from "../lib/traceurs.js";
 
 /**
@@ -16,7 +19,45 @@ import { TRACEURS, NATURES, TOUT_EXEMPTE, TRANSMISSIONS } from "../lib/traceurs.
  * l'exemption « strictement nécessaire au service demandé » (art. 82 de la loi Informatique et
  * Libertés). Le raisonnement complet est dans `lib/traceurs.js`.
  */
+/**
+ * L'EXPLICATION DE L'ABSENCE DE BANNIÈRE, derrière un clic.
+ *
+ * Elle occupait un pavé vert en tête de page. C'est l'information la plus contre-intuitive du
+ * document, mais elle n'intéresse que ceux qui se posent la question, et six lignes de
+ * raisonnement juridique avant la première donnée repoussaient la LISTE, qui est ce qu'on vient
+ * lire. Une ligne discrète, ouverte à la demande, dit la même chose sans occuper la place de ce
+ * qu'elle commente.
+ */
+function PourquoiPasDeBanniere({ onClose }) {
+  useEchap(onClose);
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 470 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <h3 style={{ fontSize: 16 }}>Pourquoi aucune bannière ?</h3>
+          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
+        </div>
+        <div className="mbody">
+          <p style={{ marginTop: 0 }}>
+            Nous ne déposons rien à des fins publicitaires, rien qui vous suive d'un site à
+            l'autre, et <b>aucun service tiers</b> n'est chargé, ni Google Analytics, ni pixel de
+            réseau social, ni régie. Tout ce qui figure sur cette page est strictement nécessaire
+            au fonctionnement du service que vous demandez : vous garder connecté, retenir votre
+            panier, votre thème, votre progression.
+          </p>
+          <p style={{ marginBottom: 0 }}>
+            La loi dispense ce type de dépôt de votre consentement préalable. Elle ne dispense pas
+            de vous dire ce qui est déposé : c'est l'objet de cette page.
+          </p>
+        </div>
+        <div className="mfoot"><button className="btn primary" onClick={onClose}>J'ai compris</button></div>
+      </div>
+    </div>
+  );
+}
+
 export default function Confidentialite() {
+  const [pourquoi, setPourquoi] = useState(false);
   const parNature = ["cookie", "local", "session"].map((n) => ({
     nature: n, items: TRACEURS.filter((t) => t.nature === n),
   })).filter((g) => g.items.length);
@@ -32,22 +73,16 @@ export default function Confidentialite() {
           temps ça reste.
         </p>
 
+        {/* Le pavé vert a laissé la place à ce déclencheur : l'information reste accessible, mais
+            elle ne s'interpose plus entre le titre et la liste, qui est ce qu'on vient lire. */}
         {TOUT_EXEMPTE && (
-          <div className="legale-encart">
-            <b>Aucune bannière à cliquer, et ce n'est pas un oubli.</b>
-            <p>
-              Nous ne déposons rien à des fins publicitaires, rien qui vous suive d'un site à
-              l'autre, et <b>aucun service tiers</b> n'est chargé, ni Google Analytics, ni pixel
-              de réseau social, ni régie. Tout ce qui figure ci-dessous est strictement nécessaire
-              au fonctionnement du service que vous demandez : vous garder connecté, retenir votre
-              panier, votre thème, votre progression.
-            </p>
-            <p>
-              La loi dispense ce type de dépôt de votre consentement préalable. Elle ne dispense
-              pas de vous dire ce qui est déposé : c'est l'objet de cette page.
-            </p>
-          </div>
+          <button className="legale-pourquoi" onClick={() => setPourquoi(true)}>
+            <Icon name="info" size={14} />
+            Aucune bannière à cliquer, et ce n'est pas un oubli.
+            <span>Pourquoi ?</span>
+          </button>
         )}
+        {pourquoi && <PourquoiPasDeBanniere onClose={() => setPourquoi(false)} />}
 
         {parNature.map(({ nature, items }) => (
           <section key={nature}>
