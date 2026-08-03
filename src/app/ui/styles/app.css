@@ -4708,3 +4708,7 @@ button.av-wrap:active{transform:scale(.94)}
 .export-part-journal{margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
 .export-part-journal > b{display:flex;align-items:center;gap:6px;font-size:11.5px;margin-bottom:5px}
 .export-part-journal-l{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11.5px;padding:2px 0}
+
+/* L'export vit dans la barre d'outils de la page : déplié, il prend toute la largeur sous elle
+   plutôt que de s'insérer entre deux boutons. */
+.filtres .export-part{flex-basis:100%;margin-top:8px}

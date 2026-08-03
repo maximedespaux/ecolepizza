@@ -1,15 +1,24 @@
 import { useState } from "react";
 import { Icon } from "./Icon.jsx";
+import { etatContrat } from "../lib/contrat.js";
 import { exporterPartenaire, getTransmissionsPartenaire } from "../api/apiClient.js";
 
 /**
  * EXPORTER LES STAGIAIRES CONSENTANTS d'un partenaire, sur une période.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- * LE SEUL POINT D'EXPORT, depuis qu'il a été retiré de la page d'une session. Il y en avait deux,
- * et l'école a tranché : c'est ICI qu'on choisit à qui l'on écrit, donc ici que la liste se
- * prépare. Un même geste offert à deux endroits oblige à se demander lequel des deux fait quoi —
- * et sur un écran qui manipule des coordonnées, cette hésitation est un coût.
+ * UN SEUL BOUTON POUR LA PAGE, et non un par fiche. Exporter est une action que l'on fait UNE
+ * fois de temps en temps, en choisissant à qui l'on écrit — pas une propriété de chaque
+ * partenaire. Répétée sur vingt-deux cartes, l'icône devenait un élément d'interface de plus à
+ * ignorer, et faisait croire que chaque fiche avait son propre export.
+ *
+ * C'est aussi le SEUL point d'export depuis qu'il a été retiré de la page d'une session. Un même
+ * geste offert à deux endroits oblige à se demander lequel des deux fait quoi — et sur un écran
+ * qui manipule des coordonnées, cette hésitation est un coût.
+ *
+ * LA LISTE DÉROULANTE NE PROPOSE QUE LES PARTENAIRES ÉLIGIBLES : destinataire déclaré, contrat en
+ * cours. Le serveur refuse les autres ; les offrir mènerait à un refus, qui se lit comme une
+ * panne alors que c'est un réglage qui manque. Aucun éligible, aucun bouton.
  *
  * L'APPLICATION N'ENVOIE RIEN ELLE-MÊME : elle prépare un tableau à copier ou à télécharger, que
  * l'école joint à son propre courriel. Produire la liste l'inscrit malgré tout au journal des
@@ -41,25 +50,34 @@ const csvCell = (v) => {
   return /[",;\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 };
 
-function ExportPartenaire({ partenaire, onErreur }) {
+function ExportPartenaire({ partenaires, onErreur }) {
   const [ouvert, setOuvert] = useState(false);
+  const [choisi, setChoisi] = useState("");
   const [periode, setPeriode] = useState(periodeParDefaut);
   const [busy, setBusy] = useState(false);
   const [resultat, setResultat] = useState(null);
   const [journal, setJournal] = useState([]);
 
-  /* Le journal se charge à l'OUVERTURE : savoir ce qu'on a déjà envoyé évite le double envoi,
-     et c'est l'information la plus utile avant de choisir une période. */
-  function ouvrirJournal() {
-    getTransmissionsPartenaire(partenaire.id).then((r) => setJournal(r.data || [])).catch(() => {});
+  /* ÉLIGIBLES : destinataire déclaré ET contrat en cours — les deux conditions que le serveur
+     vérifie. Les autres ne sont pas proposés : le serveur les refuserait, et un refus dont on ne
+     comprend pas la cause se lit comme une panne. */
+  const eligibles = (partenaires || []).filter(
+    (p) => Number(p.recoit_coordonnees) === 1 && etatContrat(p).actif !== false);
+  const partenaire = eligibles.find((p) => p.id === choisi) || null;
+
+  /* Le journal se charge dès qu'un partenaire est choisi : savoir ce qu'on lui a déjà envoyé
+     évite le double envoi, et c'est l'information la plus utile avant de fixer une période. */
+  function choisir(id) {
+    setChoisi(id); setResultat(null); setJournal([]);
+    if (id) getTransmissionsPartenaire(id).then((r) => setJournal(r.data || [])).catch(() => {});
   }
 
   async function produire() {
     setBusy(true); setResultat(null);
     try {
-      const r = await exporterPartenaire(partenaire.id, periode.depuis, periode.jusquA);
+      const r = await exporterPartenaire(choisi, periode.depuis, periode.jusquA);
       setResultat(r.data);
-      if (r.data.journalise) getTransmissionsPartenaire(partenaire.id).then((x) => setJournal(x.data || [])).catch(() => {});
+      if (r.data.journalise) getTransmissionsPartenaire(choisi).then((x) => setJournal(x.data || [])).catch(() => {});
     } catch (e) { onErreur?.(e.message); }
     finally { setBusy(false); }
   }
@@ -74,7 +92,7 @@ function ExportPartenaire({ partenaire, onErreur }) {
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${partenaire.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${periode.depuis}-${periode.jusquA}.csv`;
+    a.download = `${(resultat.partenaire || "partenaire").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${periode.depuis}-${periode.jusquA}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -90,12 +108,15 @@ function ExportPartenaire({ partenaire, onErreur }) {
      vingt-deux fiches, une phrase de plus par carte allongeait la page sans rien apprendre à
      qui n'exporte pas. L'icône garde son `title` et son `aria-label` — une icône seule sans
      libellé accessible n'existe pas pour un lecteur d'écran. */
+  /* AUCUN PARTENAIRE ÉLIGIBLE, AUCUN BOUTON. Un bouton qui n'aurait rien à proposer dans sa liste
+     déroulante n'apprend rien — sinon qu'il faut aller cocher « reçoit les coordonnées » quelque
+     part, ce qu'il ne dit pas. */
+  if (!eligibles.length) return null;
+
   if (!ouvert) {
     return (
-      <button type="button" className="iconbtn" onClick={() => { setOuvert(true); ouvrirJournal(); }}
-        title="Exporter les stagiaires consentants (tableur)"
-        aria-label={`Exporter les stagiaires consentants de ${partenaire.name}`}>
-        <Icon name="table" size={15} />
+      <button type="button" className="btn ghost" onClick={() => setOuvert(true)}>
+        <Icon name="table" size={15} /> Exporter les consentants
       </button>
     );
   }
@@ -113,6 +134,13 @@ function ExportPartenaire({ partenaire, onErreur }) {
       </span>
       <div className="export-part-periode">
         <label>
+          Partenaire
+          <select value={choisi} onChange={(e) => choisir(e.target.value)}>
+            <option value="">Choisir…</option>
+            {eligibles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
+        <label>
           Du
           <input type="date" value={periode.depuis}
             onChange={(e) => setPeriode((p) => ({ ...p, depuis: e.target.value }))} />
@@ -122,11 +150,11 @@ function ExportPartenaire({ partenaire, onErreur }) {
           <input type="date" value={periode.jusquA}
             onChange={(e) => setPeriode((p) => ({ ...p, jusquA: e.target.value }))} />
         </label>
-        <button className="btn sm primary" disabled={busy || !periode.depuis || !periode.jusquA}
+        <button className="btn sm primary" disabled={busy || !choisi || !periode.depuis || !periode.jusquA}
           onClick={produire}>
           {busy ? "…" : "Produire"}
         </button>
-        <button className="btn sm ghost" onClick={() => { setOuvert(false); setResultat(null); }}>
+        <button className="btn sm ghost" onClick={() => { setOuvert(false); setResultat(null); setChoisi(""); setJournal([]); }}>
           Fermer
         </button>
       </div>

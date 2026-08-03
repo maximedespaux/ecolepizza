@@ -160,6 +160,13 @@ function Partenaires() {
                 <Icon name="sliders" size={15} /> Gérer les catégories
               </button>
             )}
+            {/* UN SEUL EXPORT POUR LA PAGE, dans la barre d'outils. Exporter est une action qu'on
+                fait de temps en temps en choisissant à qui l'on écrit — pas une propriété de
+                chaque fiche. Répétée sur vingt-deux cartes, l'icône devenait un élément
+                d'interface de plus à ignorer, et faisait croire que chaque partenaire avait son
+                propre export. */}
+            {canEdit && <ExportPartenaire partenaires={partners}
+              onErreur={(m) => setStatus({ type: "error", message: m })} />}
           </div>
 
           {incompletes > 0 && (
@@ -329,18 +336,6 @@ function Partenaires() {
                           </span>
                         </span>
                       </label>
-                    )}
-
-                    {/* L'EXPORT N'APPARAÎT QUE POUR UN DESTINATAIRE DÉCLARÉ, et pas seulement
-                        pour faire propre : le serveur refuse de produire la liste d'un partenaire
-                        non coché. Montrer le bouton mènerait donc à un refus, ce qui se lit comme
-                        une panne alors que c'est le réglage juste au-dessus qui manque.
-                        Le contrat échu le masque aussi — même raison, même refus serveur. */}
-                    {canEdit && Number(p.recoit_coordonnees) === 1 && !contratEchu && (
-                      <div style={{ marginTop: 10 }}>
-                        <ExportPartenaire partenaire={p}
-                          onErreur={(m) => setStatus({ type: "error", message: m })} />
-                      </div>
                     )}
 
                     {/* Catalogue vendu par CE partenaire — ce que le stagiaire voit dans l'onglet

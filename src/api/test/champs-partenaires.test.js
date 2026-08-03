@@ -341,14 +341,28 @@ test("l'export par partenaire est BORNÉ dans le temps", () => {
     assert.match(bloc, /if \(!vus\.has\(l\.id\)\)/);
 });
 
-test("le bouton d'export ne s'affiche que là où le serveur accepterait", () => {
-    /* Montrer le bouton à un partenaire non destinataire mènerait à un refus — qui se lit comme
-       une panne, alors que c'est le réglage juste au-dessus qui manque. L'écran ne doit pas
-       proposer une action que le serveur refusera. */
+test("l'export ne propose que les partenaires que le serveur accepterait", () => {
+    /* LE FILTRE A CHANGÉ DE PLACE, PAS DE RÔLE. Il y avait un bouton par fiche, masqué pour les
+       partenaires inéligibles ; il y a désormais UN bouton pour la page, et c'est sa liste
+       déroulante qui écarte les mêmes. La règle est la même — destinataire déclaré ET contrat en
+       cours, les deux conditions que le serveur vérifie — et la raison aussi : proposer un
+       partenaire que le serveur refusera mène à un refus, qui se lit comme une panne alors que
+       c'est un réglage qui manque. */
+    const comp = fs.readFileSync(path.join(UI, 'components/ExportPartenaire.jsx'), 'utf8');
+    assert.match(comp, /Number\(p\.recoit_coordonnees\) === 1 && etatContrat\(p\)\.actif !== false/,
+        'La liste doit écarter les non-destinataires et les contrats échus.');
+    /* AUCUN ÉLIGIBLE, AUCUN BOUTON : un bouton dont la liste serait vide n'apprend rien, sinon
+       qu'il faut aller cocher quelque chose quelque part — ce qu'il ne dit pas. */
+    assert.match(comp, /if \(!eligibles\.length\) return null;/);
+    /* ET UN SEUL POUR TOUTE LA PAGE : répété sur vingt-deux fiches, il devenait un élément
+       d'interface de plus à ignorer, et laissait croire que chaque partenaire avait le sien. */
     const page = fs.readFileSync(path.join(UI, 'pages/Partenaires.jsx'), 'utf8');
-    assert.match(page, /canEdit && Number\(p\.recoit_coordonnees\) === 1 && !contratEchu && \(/,
-        'destinataire déclaré ET contrat en cours — les deux conditions du serveur.');
+    assert.strictEqual((page.match(/<ExportPartenaire/g) || []).length, 1,
+        'Un seul export pour la page, pas un par fiche.');
+    assert.match(page, /<ExportPartenaire partenaires=\{partners\}/,
+        'Il reçoit la LISTE des partenaires, et choisit lui-même les éligibles.');
 });
+
 
 test("une période sans consentement ne journalise RIEN", () => {
     /* Le journal répond à « à qui avez-vous donné mes coordonnées ? » (art. 15). Y inscrire un
