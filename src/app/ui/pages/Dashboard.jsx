@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getStagiaires, getFormations, getSessions, getEnrollments, getSales, getAudit, getOrganisation, getInvoices } from "../api/apiClient.js";
+import { getStagiaires, getFormations, getSessions, getEnrollments, getSales, getAudit, getOrganisation, getInvoices, getPartenaires } from "../api/apiClient.js";
 import Card from "../components/Card.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Badge from "../components/Badge.jsx";
 import Skeleton from "../components/Skeleton.jsx";
 import { Icon } from "../components/Icon.jsx";
+import { etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js";
 import { auditLabel } from "../lib/auditLabels.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { scoreBadge, euro, colorOf } from "../lib/format.js";
@@ -32,17 +33,44 @@ function Dashboard() {
   const [recent, setRecent] = useState([]);
   const [activity, setActivity] = useState([]);
   const [org, setOrg] = useState(null);
+  const [partenaires, setPartenaires] = useState(null);   // `null` = on charge
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  /* LE RÉCAPITULATIF PARTENAIRES, calculé à part de l'affichage. `etatContrat` fait de
+     l'arithmétique de dates : le refaire à chaque rendu recalculerait vingt-deux échéances à
+     chaque frappe ailleurs sur la page. */
+  const recapPartenaires = useMemo(() => {
+    if (!partenaires) return null;
+    const suivis = partenaires.map((p) => ({ p, c: etatContrat(p) })).filter((x) => x.c.suivi);
+    const echus = suivis.filter((x) => x.c.actif === false)
+      .sort((a, b) => a.c.jours - b.c.jours);           // le plus anciennement échu d'abord
+    const bientot = suivis.filter((x) => x.c.actif && !x.c.incomplet && x.c.jours <= BIENTOT_JOURS)
+      .sort((a, b) => a.c.jours - b.c.jours);           // le plus urgent d'abord
+    return {
+      total: partenaires.length,
+      suivis: suivis.length,
+      /* SANS CONTRAT ≠ CONTRAT EXPIRÉ, et la nuance compte : ne pas suivre d'échéance est un
+         choix légitime (un fournisseur de passage, une remise sans convention). Les confondre
+         ferait apparaître dix-huit « problèmes » sur une page qui doit n'en signaler aucun. */
+      sansContrat: partenaires.length - suivis.length,
+      incomplets: suivis.filter((x) => x.c.incomplet).length,
+      echus, bientot,
+    };
+  }, [partenaires]);
 
   useEffect(() => {
     async function load() {
       try {
-        const [s, f, se, e, v, a, o, iv] = await Promise.allSettled([
+        const [s, f, se, e, v, a, o, iv, pa] = await Promise.allSettled([
           getStagiaires(), getFormations(), getSessions(), getEnrollments(), getSales(), getAudit(), getOrganisation(),
           // La facturation n'est pas toujours accessible selon le rôle : `allSettled` la laisse
           // échouer sans emporter le reste, et la ligne « à relancer » s'efface d'elle-même.
           getInvoices(),
+          /* L'annuaire des partenaires : `allSettled` là aussi, pour que le formateur — qui y a
+             accès en lecture — ne perde pas tout le tableau de bord si la route lui est fermée
+             un jour. */
+          getPartenaires(),
         ]);
         const val = (r, def) => (r.status === "fulfilled" ? r.value : def);
 
@@ -97,6 +125,17 @@ function Dashboard() {
         const imminentes = activeSessions.filter((sess) =>
           sess.start_date && sess.start_date >= todayStr && sess.start_date <= j7Str);
 
+        /* LES CONTRATS PARTENAIRES ARRIVÉS À TERME OU SUR LE POINT DE L'ÊTRE.
+           Une convention qui s'achève ne se manifeste par RIEN — ni erreur, ni alerte : elle
+           cesse simplement d'exister, pendant que les offres du partenaire disparaissent de la
+           boutique sans que personne ne comprenne pourquoi. C'est précisément le genre
+           d'échéance qu'un tableau de bord doit rattraper. */
+        const partenairesData = val(pa, { data: [] }).data || [];
+        setPartenaires(partenairesData);
+        const contrats = partenairesData.map((x) => ({ p: x, c: etatContrat(x) })).filter((x) => x.c.suivi);
+        const echus = contrats.filter((x) => x.c.actif === false);
+        const bientot = contrats.filter((x) => x.c.actif && !x.c.incomplet && x.c.jours <= BIENTOT_JOURS);
+
         setTodos([
           aRelancer.length && { n: aRelancer.length, tone: "ember", to: "/factures",
             label: aRelancer.length > 1 ? "factures à relancer" : "facture à relancer",
@@ -107,6 +146,14 @@ function Dashboard() {
           imminentes.length && { n: imminentes.length, tone: "blue", to: "/sessions",
             label: imminentes.length > 1 ? "sessions cette semaine" : "session cette semaine",
             sous: "démarrage sous 8 jours" },
+          /* ÉCHU en premier, et en rouge : le partenaire ne reçoit plus rien et ses offres ont
+             déjà quitté la boutique. « Bientôt » est encore rattrapable, d'où l'orange. */
+          echus.length && { n: echus.length, tone: "ember", to: "/partenaires",
+            label: echus.length > 1 ? "contrats partenaires terminés" : "contrat partenaire terminé",
+            sous: "offres retirées de la boutique" },
+          bientot.length && { n: bientot.length, tone: "orange", to: "/partenaires",
+            label: bientot.length > 1 ? "contrats à renouveler" : "contrat à renouveler",
+            sous: `échéance sous ${BIENTOT_JOURS} jours` },
         ].filter(Boolean));
 
         if ([s, f, se, e].every((r) => r.status === "rejected")) {
@@ -146,7 +193,10 @@ function Dashboard() {
           <div className="todo-t">À traiter</div>
           <div className="todo-row">
             {todos.map((t) => (
-              <Link key={t.to} to={t.to} className={`todo-i tone-${t.tone}`}>
+              /* CLÉ SUR LE LIBELLÉ, PAS SUR LA DESTINATION. Deux entrées peuvent viser la même
+                 page — « contrats terminés » et « contrats à renouveler » pointent toutes deux
+                 vers /partenaires — et React n'en afficherait qu'une, en silence. */
+              <Link key={t.label} to={t.to} className={`todo-i tone-${t.tone}`}>
                 <b className="tnum">{t.n}</b>
                 <span className="todo-l">{t.label}<i>{t.sous}</i></span>
                 <Icon name="chevron-right" size={16} aria-hidden="true" />
@@ -255,6 +305,62 @@ function Dashboard() {
           })}
         </Card>
       </div>
+
+      {/* LES PARTENAIRES SUR LE TABLEAU DE BORD, parce qu'une échéance de contrat ne se
+          manifeste NULLE PART ailleurs : elle ne provoque ni erreur ni alerte, et le jour venu
+          les offres du partenaire disparaissent simplement de la boutique. C'est exactement le
+          genre de date qu'on ne va pas chercher — donc qu'il faut apporter. */}
+      <Card title="Partenaires" className="fade" style={{ marginBottom: 16 }}
+        more={<Link to="/partenaires" className="card-more">Annuaire <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>}>
+        {recapPartenaires === null ? (
+          <Skeleton w="60%" h={14} />
+        ) : recapPartenaires.total === 0 ? (
+          <p className="hint" style={{ margin: 0 }}>Aucun partenaire enregistré.</p>
+        ) : (
+          <>
+            <div className="compteurs" style={{ marginBottom: recapPartenaires.echus.length || recapPartenaires.bientot.length ? 12 : 0 }}>
+              <span><b className="tnum">{recapPartenaires.total}</b> au total</span><i />
+              <span><b className="tnum">{recapPartenaires.suivis}</b> sous contrat</span><i />
+              <span><b className="tnum">{recapPartenaires.sansContrat}</b> sans échéance suivie</span>
+            </div>
+
+            {recapPartenaires.echus.map(({ p, c }) => (
+              <div key={p.id} className="reca-ligne ton-r">
+                <Icon name="alert-triangle" size={13} />
+                <b>{p.name}</b>
+                <span className="hint">
+                  contrat terminé le {frISO(c.fin)}
+                  {c.jours < -1 ? ` · il y a ${Math.abs(c.jours)} jours` : ""}
+                </span>
+              </div>
+            ))}
+            {recapPartenaires.bientot.map(({ p, c }) => (
+              <div key={p.id} className="reca-ligne ton-o">
+                <Icon name="calendar" size={13} />
+                <b>{p.name}</b>
+                <span className="hint">
+                  jusqu'au {frISO(c.fin)} · {c.jours === 0 ? "dernier jour" : `${c.jours} jour${c.jours > 1 ? "s" : ""}`}
+                </span>
+              </div>
+            ))}
+            {recapPartenaires.incomplets > 0 && (
+              <div className="reca-ligne ton-n">
+                <Icon name="help" size={13} />
+                <span className="hint">
+                  {recapPartenaires.incomplets} contrat{recapPartenaires.incomplets > 1 ? "s" : ""} sans
+                  date de début ou durée : l'échéance ne peut pas être suivie.
+                </span>
+              </div>
+            )}
+            {!recapPartenaires.echus.length && !recapPartenaires.bientot.length && !recapPartenaires.incomplets && (
+              <p className="hint" style={{ margin: 0 }}>
+                <Icon name="check-circle" size={13} style={{ verticalAlign: "-2px" }} /> Aucune
+                échéance dans les {BIENTOT_JOURS} prochains jours.
+              </p>
+            )}
+          </>
+        )}
+      </Card>
 
       <Card title="Accès rapides" className="fade">
         <div className="grid cols-4" style={{ gap: 10 }}>

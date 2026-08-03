@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
+import ImageLien from "../components/ImageLien.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
@@ -281,6 +282,13 @@ function Ventes() {
                       const atMax = it.quantity <= 0 || inC >= it.quantity; // stock épuisé ou déjà tout au panier
                       return (
                         <div key={it.id} className="shop-card">
+                          {/* LA PHOTO À LA CAISSE (migration 133). On y vend en présence d'un
+                              client, souvent sans connaître le catalogue par cœur : reconnaître
+                              une veste ou une pelle d'un coup d'œil va plus vite que lire quinze
+                              libellés. Plus petite que dans la boutique du stagiaire — celui-ci
+                              choisit, l'opérateur RETROUVE — et absente s'il n'y a pas d'image,
+                              plutôt qu'un cadre vide qui aurait l'air cassé. */}
+                          <ImageLien src={it.image_url} className="pos-photo" fallback={null} />
                           {!posCat ? <span className="shop-rayon">{it.category || "Divers"}</span> : null}
                           <b className="shop-name">{it.name}</b>
                           <span className="shop-price"><b className="tnum">{euro(it.unit_price)} <span className="shop-unit">HT</span></b></span>

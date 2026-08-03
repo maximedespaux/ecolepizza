@@ -4551,7 +4551,15 @@ button.av-wrap:active{transform:scale(.94)}
 .partner-logo{height:22px;width:auto;max-width:76px;object-fit:contain;border-radius:4px;
   background:#fff;padding:2px;flex-shrink:0}
 
-.pp-vignette{width:34px;height:34px;object-fit:contain;border-radius:7px;background:#fff;
+/* 52 px : ASSEZ POUR RECONNAÎTRE UN PRODUIT, pas assez pour dominer la liste.
+   À 34 px on ne distinguait pas un four d'un pétrin — c'était une taille d'ICÔNE, pas d'aperçu,
+   et l'image n'apprenait rien de plus que le nom écrit à côté. Au-delà de 52, la ligne se
+   transforme en carte et le catalogue de dix produits ne tient plus d'un coup d'œil : la page
+   sert d'abord à parcourir une liste.
+   `contain` et fond blanc comme partout : ces visuels viennent des catalogues fournisseurs,
+   détourés sur fond clair et de proportions imprévisibles — `cover` rognerait l'objet, et sans
+   fond blanc un PNG détouré disparaît en thème sombre. */
+.pp-vignette{width:52px;height:52px;object-fit:contain;border-radius:7px;background:#fff;
   flex-shrink:0;border:1px solid var(--border)}
 
 .inv-thumb-img{object-fit:contain;background:#fff;border:1px solid var(--border);padding:2px}
@@ -4607,3 +4615,28 @@ button.av-wrap:active{transform:scale(.94)}
   background:var(--surface2)}
 .pp-form.en-edition{border-color:color-mix(in srgb, var(--blue) 45%, transparent)}
 .pp-form-t{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:2px}
+
+/* Photo d'article À LA CAISSE. 72 px contre 120 dans la boutique du stagiaire, et l'écart est
+   volontaire : le stagiaire CHOISIT (il compare, il hésite), l'opérateur RETROUVE un article
+   qu'il connaît déjà, souvent avec un client devant lui. Une vignette plus petite laisse plus
+   d'articles à l'écran, donc moins de défilement pendant la vente. */
+/* UN CARRÉ ALIGNÉ À GAUCHE, PAS UNE BANDE PLEINE LARGEUR — et c'est une correction, pas un
+   choix initial. En `width:100%`, la vignette mesurait 414 px de large pour 72 de haut : la
+   grille de la caisse tient sur UNE colonne de 440 px, pas sur trois comme la boutique du
+   stagiaire. `object-fit:contain` laissait donc l'image flotter, minuscule, au centre d'une
+   boîte aux lettres. Un carré fixe ne dépend pas du nombre de colonnes. */
+.pos-photo{width:64px;height:64px;object-fit:contain;background:#fff;border-radius:8px;
+  margin-bottom:6px;border:1px solid var(--border);align-self:flex-start}
+
+/* Récapitulatif partenaires du tableau de bord : une ligne par échéance.
+   LA COULEUR N'EST PAS SEULE À PORTER L'INFORMATION (WCAG 1.4.1) — l'icône change (triangle
+   d'alerte pour un contrat terminé, calendrier pour une échéance proche) et le texte dit la
+   date en toutes lettres. */
+.reca-ligne{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px;
+  padding:6px 9px;border-radius:8px;margin-bottom:4px}
+.reca-ligne:last-child{margin-bottom:0}
+.reca-ligne svg{flex-shrink:0}
+.reca-ligne .hint{font-size:11.5px}
+.reca-ligne.ton-r{background:color-mix(in srgb, var(--red) 10%, transparent);color:var(--red)}
+.reca-ligne.ton-o{background:color-mix(in srgb, var(--orange) 11%, transparent);color:var(--orange)}
+.reca-ligne.ton-n{background:var(--surface2)}
