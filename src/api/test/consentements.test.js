@@ -226,3 +226,53 @@ test("le formateur ne voit pas les consentements", () => {
         assert.doesNotMatch(r, /STAFF_ROLES/, `Le formateur ne doit pas y accéder : ${r.trim()}`);
     }
 });
+
+test("l'organisme ne peut pas écraser ce que le stagiaire a répondu lui-même", () => {
+    /* ─────────────────────────────────────────────────────────────────────────────────────────
+       LE POINT SOULEVÉ PAR L'ÉCOLE, et il est juste.
+
+       La saisie pour autrui existe pour une raison réelle : un stagiaire sans compte répond sur
+       un formulaire papier, et refuser d'enregistrer sa réponse l'exclurait de l'export alors
+       qu'il a accepté. Elle est donc légitime — TANT QUE LA PERSONNE NE S'EST PAS EXPRIMÉE.
+
+       Dès qu'elle l'a fait, l'organisme ne doit plus pouvoir passer par-dessus. C'est précisément
+       l'abus que ce registre existe pour rendre impossible : un « non » cliqué par un stagiaire
+       puis retourné en « oui » depuis un écran d'administration ne serait plus un consentement du
+       tout — et la trace datée ferait croire qu'il l'est, ce qui est pire que pas de trace.
+
+       CE QUE ÇA COÛTE, ET C'EST ASSUMÉ : si la personne change d'avis de vive voix, le
+       secrétariat ne peut pas le saisir pour elle. Elle le fait depuis son profil, en deux clics —
+       et l'article 7.3 exige justement que se rétracter soit aussi simple que d'accepter. */
+    const ctrl = sansCommentaires(lire(CTRL));
+    const bloc = ctrl.slice(ctrl.indexOf('const setConsentPourStagiaire'),
+        ctrl.indexOf('const composerLignes') > 0 ? ctrl.indexOf('const composerLignes') : undefined);
+    /* TOUT L'HISTORIQUE, PAS LA DERNIÈRE LIGNE — et ce test l'a appris à mes dépens. Un premier
+       jet ne regardait que la réponse la plus RÉCENTE : il suffisait alors d'UNE saisie de
+       l'organisme pour que la protection saute définitivement, la dernière ligne ne venant plus
+       de l'espace du stagiaire. Le verrou se désactivait en le forçant une fois. */
+    assert.match(bloc, /const quand = await consentements\.aReponduLuiMeme\(/,
+        'Le blocage doit interroger TOUT l\'historique, pas la dernière réponse.');
+    assert.match(bloc, /if \(quand\) \{/);
+    const lib3 = sansCommentaires(lire(path.join(API, 'lib/consentements.js')));
+    assert.match(lib3, /AND source = 'espace_stagiaire'/,
+        'La question posée est « s\'est-il exprimé une fois quelconque ».');
+    assert.doesNotMatch(bloc, /sien\.source === 'espace_stagiaire'/,
+        'Regarder la dernière ligne laisserait le verrou se désactiver en le forçant une fois.');
+    assert.match(bloc, /status\(409\)/);
+    assert.match(bloc, /lui seul peut en changer/,
+        'Et le refus doit dire QUI peut en changer, sinon il se lit comme une panne.');
+    /* LE CONTRÔLE DOIT PRÉCÉDER L'ÉCRITURE : placé après, il refuserait une ligne déjà inscrite
+       au registre — qui est en ajout seul et ne se retire pas. */
+    assert.ok(bloc.indexOf('aReponduLuiMeme') < bloc.indexOf('consentements.enregistrer'),
+        'le refus doit tomber AVANT l\'écriture');
+
+    /* ET L'ÉCRAN NE DOIT PAS PROPOSER L'ACTION : un bouton que le serveur refusera se lit comme
+       une panne. Masqué plutôt que grisé — un bouton désactivé invite à chercher comment le
+       réactiver, une phrase dit ce qui s'est passé. */
+    const ui = lire(path.join(UI, 'components/SessionConsentements.jsx'));
+    assert.match(ui, /s\.repondu_lui_meme \? \(/,
+        'L\'écran doit suivre la MÊME règle que le serveur : une fois quelconque, pas la dernière.');
+    assert.match(ui, /a répondu lui-même/);
+    assert.match(ui, /Un stagiaire qui a répondu\s*\n?\s*lui-même ne peut pas être modifié ici/,
+        'La limite doit être annoncée AVANT qu\'on la rencontre.');
+});

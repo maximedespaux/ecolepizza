@@ -122,6 +122,11 @@ const getSessionConsents = async (req, res) => {
 
         const etats = await consentements.etatParStagiaire(
             conn, req.user.organization_id, bloc.inscrits.map((l) => l.id), FINALITE);
+        /* QUI S'EST EXPRIMÉ LUI-MÊME, une fois quelconque. En LOT : une session de quinze
+           stagiaires ferait sinon quinze requêtes pour une information que l'écran affiche d'un
+           bloc. */
+        const propres = await consentements.ontReponduEuxMemes(
+            conn, req.user.organization_id, bloc.inscrits.map((l) => l.id), FINALITE);
         const stagiaires = bloc.inscrits.map((l) => {
             const e = etats.get(l.id);
             return {
@@ -135,6 +140,10 @@ const getSessionConsents = async (req, res) => {
                    dit s'il faut redemander : un partenaire ajouté depuis n'est couvert par aucun
                    accord passé, puisque la personne ne pouvait pas le connaître. */
                 destinataires: e ? e.destinataires : null,
+                /* DATE DE SA PROPRE RÉPONSE, s'il en a donné une un jour. C'est elle qui ferme la
+                   saisie pour autrui — pas la source de la DERNIÈRE ligne, qu'une saisie de
+                   l'organisme suffirait à changer. */
+                repondu_lui_meme: propres.get(l.id) || null,
             };
         });
 
@@ -190,6 +199,37 @@ const setConsentPourStagiaire = async (req, res) => {
                     + 'venant de l\'espace du stagiaire.',
             });
         }
+        /* ─────────────────────────────────────────────────────────────────────────────────────
+           LA PAROLE DU STAGIAIRE NE S'ÉCRASE PAS DEPUIS LE BACK-OFFICE.
+
+           Cette route existe pour une raison réelle : un stagiaire sans compte répond sur un
+           formulaire papier, et refuser d'enregistrer sa réponse l'exclurait de l'export alors
+           qu'il a accepté. La saisie pour autrui est donc légitime — TANT QUE LA PERSONNE NE
+           S'EST PAS EXPRIMÉE ELLE-MÊME.
+
+           Dès qu'elle l'a fait, l'organisme ne doit plus pouvoir passer par-dessus. C'est
+           précisément l'abus que ce registre existe pour rendre impossible : un « non » cliqué
+           par un stagiaire puis retourné en « oui » depuis un écran d'administration ne serait
+           plus un consentement du tout, et la trace ferait croire qu'il l'est.
+
+           CE QUE ÇA COÛTE, ET C'EST ASSUMÉ : si la personne change d'avis et le dit de vive voix,
+           le secrétariat ne peut pas le saisir pour elle. Elle le fait depuis son profil, en deux
+           clics — et l'article 7.3 exige justement que se rétracter soit aussi simple que
+           d'accepter. Le coût est faible ; l'inverse ouvrirait une porte qui ne se referme pas. */
+        /* TOUT L'HISTORIQUE, PAS LA DERNIÈRE LIGNE. Un premier jet ne regardait que la réponse
+           la plus récente : il suffisait alors d'UNE saisie de l'organisme pour que la protection
+           saute définitivement, la dernière ligne ne venant plus de l'espace du stagiaire. Le
+           verrou se désactivait en le forçant une fois. */
+        const quand = await consentements.aReponduLuiMeme(
+            conn, req.user.organization_id, req.params.learnerId, FINALITE);
+        if (quand) {
+            return res.status(409).json({
+                message: `Ce stagiaire a répondu lui-même depuis son espace (le ${quand}). Sa `
+                    + 'réponse ne peut pas être modifiée ici : lui seul peut en changer, depuis '
+                    + 'son profil.',
+            });
+        }
+
         const r = await consentements.enregistrer(conn, {
             orgId: req.user.organization_id, learnerId: req.params.learnerId,
             finalite: FINALITE, accorde: req.body.accorde, source, saisiPar: req.user.id,

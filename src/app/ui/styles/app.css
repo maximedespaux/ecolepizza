@@ -4697,3 +4697,9 @@ button.av-wrap:active{transform:scale(.94)}
 .export-part .hint{display:block;font-size:11px;margin:0}
 .export-part-res{margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
 .export-part-tt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:12.5px}
+
+/* « A répondu lui-même » : la saisie pour autrui s'arrête là.
+   MASQUÉ PLUTÔT QUE GRISÉ — un bouton désactivé invite à chercher comment le réactiver, une
+   phrase dit ce qui s'est passé et qui peut en changer. */
+.consent-verrou{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);
+  padding:3px 8px;border-radius:99px;background:var(--surface2);white-space:nowrap;flex-shrink:0}

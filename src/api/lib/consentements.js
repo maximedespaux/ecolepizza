@@ -471,8 +471,51 @@ async function enregistrer(conn, { orgId, learnerId, finalite, accorde, source, 
     }
 }
 
+
+/**
+ * CETTE PERSONNE S'EST-ELLE DÉJÀ EXPRIMÉE ELLE-MÊME, une fois quelconque ?
+ *
+ * ON REGARDE TOUT L'HISTORIQUE, PAS LA DERNIÈRE LIGNE — et la nuance est tout le sujet. Un
+ * premier jet ne vérifiait que la réponse la plus récente : il suffisait alors d'UNE saisie de
+ * l'organisme pour que la protection saute définitivement, puisque la dernière ligne ne venait
+ * plus de l'espace du stagiaire. Le verrou se désactivait en le forçant une fois.
+ *
+ * La règle juste est plus simple : dès qu'une personne a répondu depuis son espace, elle a un
+ * compte et sait s'en servir. C'est à elle de maintenir sa réponse, définitivement.
+ *
+ * Rend la date de sa dernière réponse personnelle, ou `null`.
+ */
+async function aReponduLuiMeme(conn, orgId, learnerId, finalite = 'partenaires') {
+    const m = await ontReponduEuxMemes(conn, orgId, [learnerId], finalite);
+    return m.get(learnerId) || null;
+}
+
+/** La même question pour toute une session — une requête au lieu de quinze. */
+async function ontReponduEuxMemes(conn, orgId, learnerIds, finalite = 'partenaires') {
+    const ids = (learnerIds || []).filter(Boolean);
+    if (!ids.length) return new Map();
+    try {
+        const trous = ids.map(() => '?').join(',');
+        const [rows] = await conn.query(
+            `SELECT learner_id, DATE_FORMAT(MAX(decide_at), '%Y-%m-%d %H:%i') AS quand
+               FROM consent_record
+              WHERE organization_id = ? AND finalite = ?
+                AND source = 'espace_stagiaire'
+                AND learner_id IN (${trous})
+              GROUP BY learner_id`,
+            [orgId, finalite, ...ids]);
+        return new Map(rows.map((r) => [r.learner_id, r.quand]));
+    } catch (e) {
+        // Sans le registre, on ne sait pas : on ne BLOQUE pas pour autant, la saisie hors ligne
+        // reste le seul moyen d'enregistrer une réponse sur une base sans migration 130.
+        if (isMissingSchema(e)) return new Map();
+        throw e;
+    }
+}
+
 module.exports = {
     FINALITES, FINALITES_CONNUES, SOURCES, GROUPES,
+    aReponduLuiMeme, ontReponduEuxMemes,
     CHAMPS_TRANSMISSIBLES, champsValides, formulationPour, champsOrganisme,
     destinatairesPartenaires, partenairesDestinataires, etatCourant, etatParStagiaire, enregistrer, isMissingSchema,
 };

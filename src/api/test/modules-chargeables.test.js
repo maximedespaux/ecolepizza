@@ -48,3 +48,37 @@ for (const dossier of ['controllers', 'lib', 'routes', 'middlewares']) {
             + 'Node refuse.');
     });
 }
+
+test("toute fonction appelée sur un module existe vraiment", () => {
+    /* ─────────────────────────────────────────────────────────────────────────────────────────
+       LE DÉFAUT VÉCU, deux fois dans la même session : un contrôleur appelait
+       `consentements.aReponduLuiMeme(...)` alors qu'une insertion avait échoué en silence et que
+       la fonction n'existait pas.
+       Rien ne l'a vu. Le fichier se CHARGE (l'appel n'a lieu qu'à l'exécution de la requête), et
+       les tests qui lisent le source trouvent très bien le nom qu'ils cherchent — il est écrit
+       dans le contrôleur. Le défaut n'apparaît qu'au premier clic de l'utilisateur, sous la forme
+       d'un « x is not a function » dans les journaux.
+       Ce test compare les APPELS aux EXPORTS réels, module par module. */
+    const modulesLib = fs.readdirSync(path.join(API, 'lib')).filter((f) => f.endsWith('.js'));
+    /* Les alias sous lesquels chaque bibliothèque est importée : `const consentements =
+       require('../lib/consentements.js')` — on récupère le nom de la variable. */
+    const fautes = [];
+    for (const dossier of ['controllers', 'routes']) {
+        for (const f of fs.readdirSync(path.join(API, dossier)).filter((x) => x.endsWith('.js'))) {
+            const src = fs.readFileSync(path.join(API, dossier, f), 'utf8');
+            for (const m of src.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*require\('\.\.\/lib\/([\w.]+)\.js'\)/g)) {
+                const [, alias, lib] = m;
+                if (!modulesLib.includes(`${lib}.js`)) continue;
+                const mod = require(path.join(API, 'lib', `${lib}.js`));
+                for (const appel of src.matchAll(new RegExp(`\\b${alias}\\.([A-Za-z_$][\\w$]*)\\s*\\(`, 'g'))) {
+                    if (mod[appel[1]] === undefined) {
+                        fautes.push(`${dossier}/${f} appelle ${alias}.${appel[1]}() — absent de lib/${lib}.js`);
+                    }
+                }
+            }
+        }
+    }
+    assert.deepStrictEqual(fautes, [],
+        'Un appel vers une fonction inexistante ne se voit ni au chargement du module, ni dans '
+        + 'un test qui lit le source : il attend le premier clic de l\'utilisateur.');
+});

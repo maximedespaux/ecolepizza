@@ -181,25 +181,46 @@ function SessionConsentements({ sessionId, canEdit }) {
                 {s.source && data.sources[s.source] ? ` · ${data.sources[s.source]}` : ""}
               </span>
             )}
+            {/* ─────────────────────────────────────────────────────────────────────────────
+                LA PAROLE DU STAGIAIRE NE S'ÉCRASE PAS D'ICI.
+
+                Cette saisie existe pour les réponses recueillies HORS LIGNE — un stagiaire sans
+                compte qui remplit un formulaire papier. Elle s'arrête net dès que la personne
+                s'est exprimée elle-même : un « non » cliqué depuis son espace puis retourné en
+                « oui » depuis un écran d'administration ne serait plus un consentement, et la
+                trace ferait croire qu'il l'est.
+
+                On MASQUE les boutons plutôt que de les désactiver : un bouton grisé invite à
+                chercher comment le réactiver. Une phrase dit ce qui s'est passé et qui peut en
+                changer. */}
             {canEdit && (
-              <span className="consent-actions">
-                <button
-                  className={"btn sm" + (s.accorde === true ? " primary" : "")}
-                  disabled={busy === s.learner_id}
-                  onClick={() => repondrePour(s.learner_id, true)}
-                  title="Enregistrer un accord donné hors ligne"
-                >
-                  <Icon name="check" size={12} /> Accepté
-                </button>
-                <button
-                  className={"btn sm" + (s.accorde === false ? " danger" : "")}
-                  disabled={busy === s.learner_id}
-                  onClick={() => repondrePour(s.learner_id, false)}
-                  title="Enregistrer un refus"
-                >
-                  <Icon name="x" size={12} /> Refusé
-                </button>
-              </span>
+              /* `repondu_lui_meme` ET NON `source` : la source ne dit que la DERNIÈRE ligne, et
+                 une saisie de l'organisme suffirait à la changer — le verrou se désactiverait en
+                 le forçant une fois. Ici, c'est « s'est-il exprimé UNE FOIS QUELCONQUE ». */
+              s.repondu_lui_meme ? (
+                <span className="consent-verrou" title={`Répondu depuis son espace le ${dateHeure(s.repondu_lui_meme)}`}>
+                  <Icon name="lock" size={12} /> a répondu lui-même
+                </span>
+              ) : (
+                <span className="consent-actions">
+                  <button
+                    className={"btn sm" + (s.accorde === true ? " primary" : "")}
+                    disabled={busy === s.learner_id}
+                    onClick={() => repondrePour(s.learner_id, true)}
+                    title="Enregistrer un accord donné hors ligne"
+                  >
+                    <Icon name="check" size={12} /> Accepté
+                  </button>
+                  <button
+                    className={"btn sm" + (s.accorde === false ? " danger" : "")}
+                    disabled={busy === s.learner_id}
+                    onClick={() => repondrePour(s.learner_id, false)}
+                    title="Enregistrer un refus"
+                  >
+                    <Icon name="x" size={12} /> Refusé
+                  </button>
+                </span>
+              )
             )}
           </div>
         ))}
@@ -232,7 +253,9 @@ function SessionConsentements({ sessionId, canEdit }) {
           </select>
           <span className="hint">
             Une réponse saisie ici est enregistrée à votre nom : elle reste distinguable d'un
-            accord donné par le stagiaire depuis son espace.
+            accord donné par le stagiaire depuis son espace. <b>Un stagiaire qui a répondu
+            lui-même ne peut pas être modifié ici</b> — lui seul peut en changer, depuis son
+            profil.
           </span>
         </div>
       )}
