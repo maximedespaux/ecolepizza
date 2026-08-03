@@ -56,8 +56,15 @@ test('le registre AJOUTE une ligne, il n\'en modifie aucune', () => {
 
 test('la formulation et les destinataires sont figés dans chaque réponse', () => {
     const lib = sansCommentaires(lire(path.join(API, 'lib/consentements.js')));
-    assert.match(lib, /f\.destinataires\.slice\(0, 500\), f\.formulation\.slice\(0, 600\)/,
+    assert.match(lib, /destinataires\.slice\(0, 500\), f\.formulation\.slice\(0, 600\)/,
         'Un consentement éclairé porte sur un TEXTE : reformuler plus tard ne doit pas réécrire le passé.');
+    /* ET LES DESTINATAIRES SONT LUS EN BASE, pas écrits en dur : on NOMME les entreprises qui
+       recevront les coordonnées. Une catégorie vague ne permet pas de savoir à quoi l'on dit oui,
+       et une liste figée dans le code aurait vieilli au premier partenaire ajouté. */
+    assert.match(lib, /SELECT name FROM partner WHERE organization_id = \?/,
+        'Les destinataires doivent venir de la table `partner`.');
+    assert.match(lib, /const destinataires = await destinatairesPartenaires\(conn, orgId\);/,
+        "…et c'est la liste DU MOMENT DE LA RÉPONSE qui est gelée dans le registre.");
 });
 
 test('le chemin du retour existe, dans les deux sens', () => {

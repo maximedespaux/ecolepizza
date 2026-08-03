@@ -155,10 +155,17 @@ export const TRANSMISSIONS = [
   {
     destinataire: 'Base Adresse Nationale (api-adresse.data.gouv.fr)',
     qui: "Service public de l'État français, sans clé ni compte",
-    donnees: 'Le code postal et la commune du stagiaire — ou l\'adresse de son entreprise '
-      + "lorsque la formation est financée par elle. Ni nom, ni prénom, ni e-mail.",
-    pourquoi: 'Convertir une adresse en coordonnées, pour placer les stagiaires sur la carte de '
-      + "l'organisme.",
+    donnees: "Un code postal et une commune, seuls — ou l'adresse de l'entreprise lorsqu'elle "
+      + "finance la formation. Jamais de nom, de prénom, d'e-mail ni de téléphone : le service "
+      + "reçoit une adresse, il ne peut pas savoir de qui il s'agit.",
+    /* CE QUE CETTE LIGNE N'EST PAS, et la confusion est naturelle : la carte est INTERNE, elle ne
+       sert qu'à l'école et n'est publiée nulle part. Ce n'est pas sa finalité qui est extérieure,
+       c'est un OUTIL qu'elle utilise. Un ordinateur ne sait pas placer « 65300 Lannemezan » sur
+       une carte : il lui faut une latitude et une longitude, et c'est ce service public qui fait
+       la conversion. Sans lui, il faudrait embarquer soi-même le répertoire des communes. */
+    pourquoi: "Transformer une adresse en coordonnées (latitude, longitude). La carte elle-même "
+      + "est un outil interne à l'école : elle n'est publiée nulle part, et personne d'autre n'y "
+      + "a accès. Seule la conversion passe par l'extérieur.",
     quand: "Uniquement lorsque l'organisme lance le géocodage depuis la carte des stagiaires.",
     canal: 'application',
   },
