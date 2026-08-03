@@ -20,17 +20,17 @@ const QTYPES = [
   { v: "SINGLE", label: "Choix unique (QCU)" },
   { v: "MULTI", label: "Choix multiple (QCM)" },
   { v: "SCALE", label: "Échelle / note" },
-  { v: "GRID_SINGLE", label: "Grille — 1 réponse par ligne" },
-  { v: "GRID_MULTI", label: "Grille — plusieurs réponses par ligne" },
+  { v: "GRID_SINGLE", label: "Grille, 1 réponse par ligne" },
+  { v: "GRID_MULTI", label: "Grille, plusieurs réponses par ligne" },
 ];
 const isGrid = (t) => t === "GRID_SINGLE" || t === "GRID_MULTI";
 const blankQuestion = () => ({ text: "", type: "SINGLE", points: 1, partial_scoring: 0, scale_max: 5, options: [{ text: "", is_correct: false }, { text: "", is_correct: false }], rows: [{ text: "", correct: [], points: 1 }, { text: "", correct: [], points: 1 }] });
 
 // Étiquette courte du jour : J2, ou J-3 (avant le début).
 function dayTag(day) {
-  if (day == null || day === "") return "—";
+  if (day == null || day === "") return "-";
   const d = Number(day);
-  if (!Number.isFinite(d)) return "—";
+  if (!Number.isFinite(d)) return "-";
   return d < 0 ? `J${d}` : `J${d < 1 ? 1 : d}`;
 }
 // Phrase pour le jour d'envoi.
@@ -125,7 +125,7 @@ function Quiz() {
           text="Crée un QCM : il pourra ensuite être envoyé aux stagiaires d'une session, à la main ou automatiquement." /></Card>
       ) : (
         groupByFormation(quizzes).map((g) => (
-          <Card key={g.key} title={g.program_code ? `${g.program_code} — ${g.program_title}` : "Non rattachés à une formation"}
+          <Card key={g.key} title={g.program_code ? `${g.program_code}, ${g.program_title}` : "Non rattachés à une formation"}
             more={<Badge tone="n">{g.items.length}</Badge>}>
             <DataTable
               rows={g.items}
@@ -213,15 +213,15 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
       <Card title="Réglages">
         <div className="row2">
           <div className="field"><label>Titre</label>
-            <input className="inp" value={form.title} onChange={set("title")} placeholder="Test de positionnement — Napolitaine" /></div>
+            <input className="inp" value={form.title} onChange={set("title")} placeholder="Test de positionnement, Napolitaine" /></div>
           <div className="field"><label>Type</label>
             <select value={form.kind} onChange={set("kind")}>{KINDS.map((k) => <option key={k.v} value={k.v}>{k.label}</option>)}</select></div>
         </div>
         <div className="row3">
           <div className="field"><label>Formation</label>
             <select value={form.program_id} onChange={set("program_id")}>
-              <option value="">— Choisir —</option>
-              {formations.map((f) => <option key={f.id} value={f.id}>{f.code} — {f.title}</option>)}
+              <option value="">Choisir</option>
+              {formations.map((f) => <option key={f.id} value={f.id}>{f.code}, {f.title}</option>)}
             </select></div>
           <div className="field"><label>Jour de la formation</label>
             <input className="inp" type="number" value={form.day} onChange={set("day")} placeholder="ex. 2, ou -3 (avant)" /></div>

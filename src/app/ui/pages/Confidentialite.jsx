@@ -37,21 +37,21 @@ export default function Confidentialite() {
             <b>Aucune bannière à cliquer, et ce n'est pas un oubli.</b>
             <p>
               Nous ne déposons rien à des fins publicitaires, rien qui vous suive d'un site à
-              l'autre, et <b>aucun service tiers</b> n'est chargé — ni Google Analytics, ni pixel
+              l'autre, et <b>aucun service tiers</b> n'est chargé, ni Google Analytics, ni pixel
               de réseau social, ni régie. Tout ce qui figure ci-dessous est strictement nécessaire
               au fonctionnement du service que vous demandez : vous garder connecté, retenir votre
               panier, votre thème, votre progression.
             </p>
             <p>
               La loi dispense ce type de dépôt de votre consentement préalable. Elle ne dispense
-              pas de vous dire ce qui est déposé — c'est l'objet de cette page.
+              pas de vous dire ce qui est déposé : c'est l'objet de cette page.
             </p>
           </div>
         )}
 
         {parNature.map(({ nature, items }) => (
           <section key={nature}>
-            <h2>{NATURES[nature].titre} <span className="legale-ou">— {NATURES[nature].ou}</span></h2>
+            <h2>{NATURES[nature].titre}, <span className="legale-ou">{NATURES[nature].ou}</span></h2>
             <ul className="legale-liste">
               {items.map((t) => (
                 <li key={t.cle}>
@@ -72,7 +72,7 @@ export default function Confidentialite() {
           <h2>Données transmises à l'extérieur</h2>
           <p>
             Distinct de ce qui précède : il s'agit ici de données qui <b>quittent l'organisme</b>.
-            Deux périmètres, et ils ne se confondent pas — ce que l'application envoie d'elle-même,
+            Deux périmètres, et ils ne se confondent pas : ce que l'application envoie d'elle-même,
             et ce que l'école transmet par d'autres moyens. La seconde ligne ci-dessous ne vous
             concerne <b>que si vous y avez consenti</b>.
           </p>

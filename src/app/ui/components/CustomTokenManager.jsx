@@ -119,7 +119,7 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
                         onFocus={(e) => { focusRef.current = { idx: i }; taRef.current = e.target; }}
                         onChange={(e) => setRow(i, { template: e.target.value })} placeholder="du {Jour1} au {endDate}" />
                     </td>
-                    <td className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>{applyTemplate(t.template, sampleMap) || "—"}</td>
+                    <td className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>{applyTemplate(t.template, sampleMap) || "-"}</td>
                     <td><button className="btn sm ghost danger" onClick={() => remove(i)} title="Supprimer"><Icon name="x" size={13} /></button></td>
                   </tr>
                 ))}
@@ -131,7 +131,7 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
 
           <div style={{ marginTop: 14 }}>
             <div style={{ marginBottom: 8 }}>
-              <button type="button" className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} (répété par stagiaire) — placez ensuite les jetons « par stagiaire » entre les marqueurs"
+              <button type="button" className="tok-chip" title="Insère un bloc {#Stagiaires} … {/Stagiaires} (répété par stagiaire), placez ensuite les jetons « par stagiaire » entre les marqueurs"
                 onClick={insertBlock}>
                 <Icon name="plus" size={13} /> Bloc « par stagiaire »
               </button>

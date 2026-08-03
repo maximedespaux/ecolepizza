@@ -36,7 +36,7 @@ const TEMP_PATE = [{ v: 4, l: 'de 20 à 24 °C' }, { v: 0, l: 'au-delà de 24 °
 
 /* Les cinq gestes d'hygiène, identiques aux protocoles 1-B1, 1-B2 et 1-B3. */
 const hygiene = (proto, ligne3) => ({
-    code: 'HYG', label: `Hygiène — protocole ${proto}`, elim: true,
+    code: 'HYG', label: `Hygiène, protocole ${proto}`, elim: true,
     points: ligne3 ? 20 : 16,
     criteres: [
         { id: `${proto}-tenue`, label: 'Tenue professionnelle propre', max: 4, mode: 'palier', paliers: [{ v: 4, l: 'Propre et complète' }, { v: 0, l: 'Non conforme' }] },
@@ -72,7 +72,7 @@ export const BLOCS = [
                 ],
             },
             {
-                code: 'C1.4', label: 'Conduire un empâtement direct — protocole 2', points: 18,
+                code: 'C1.4', label: 'Conduire un empâtement direct, protocole 2', points: 18,
                 criteres: [
                     { id: 'p2-ordre', label: 'Ordre d\'incorporation', mode: 'items', parItem: 2, items: ['Farine', 'Levure', 'Eau', 'Sel', 'Huile'], paliers: [{ v: 2, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
                     { id: 'p2-temp', label: 'Température en fin de pétrissage', max: 4, mode: 'palier', paliers: TEMP_PATE },
@@ -80,20 +80,20 @@ export const BLOCS = [
                 ],
             },
             {
-                code: 'C1.5', label: 'Conduire un empâtement indirect — protocoles 3 et 4', points: 32,
+                code: 'C1.5', label: 'Conduire un empâtement indirect, protocoles 3 et 4', points: 32,
                 aide: 'Poolish : 1re phase eau 600 g, levure 3 g, farine 600 g · repos 12 à 15 h. ' +
                       'Biga : farine 300 g, levure 3 g, eau 135 g (45 %) · frasage 2 mn · repos 16 à 20 h à 19-24 °C.',
                 criteres: [
-                    { id: 'p3-ordre', label: 'Poolish, 2e phase — ordre d\'incorporation', mode: 'items', parItem: 2, items: ['Farine 400 g', 'Sel 20 g', 'Huile 25 g'], paliers: [{ v: 2, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
-                    { id: 'p3-temp', label: 'Poolish — température', max: 4, mode: 'palier', paliers: TEMP_PATE },
-                    { id: 'p3-text', label: 'Poolish — texture', max: 4, mode: 'palier', paliers: TEXTURE },
-                    { id: 'p4-ordre', label: 'Biga, 2e phase — ordre d\'incorporation', mode: 'items', parItem: 2, items: ['Farine 700 g', 'Eau 465 g', 'Pâte de 1re phase', 'Sel 20 g', 'Huile 25 g'], paliers: [{ v: 2, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
-                    { id: 'p4-temp', label: 'Biga — température', max: 4, mode: 'palier', paliers: TEMP_PATE },
-                    { id: 'p4-text', label: 'Biga — texture', max: 4, mode: 'palier', paliers: TEXTURE },
+                    { id: 'p3-ordre', label: 'Poolish, 2e phase, ordre d\'incorporation', mode: 'items', parItem: 2, items: ['Farine 400 g', 'Sel 20 g', 'Huile 25 g'], paliers: [{ v: 2, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
+                    { id: 'p3-temp', label: 'Poolish, température', max: 4, mode: 'palier', paliers: TEMP_PATE },
+                    { id: 'p3-text', label: 'Poolish, texture', max: 4, mode: 'palier', paliers: TEXTURE },
+                    { id: 'p4-ordre', label: 'Biga, 2e phase, ordre d\'incorporation', mode: 'items', parItem: 2, items: ['Farine 700 g', 'Eau 465 g', 'Pâte de 1re phase', 'Sel 20 g', 'Huile 25 g'], paliers: [{ v: 2, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
+                    { id: 'p4-temp', label: 'Biga, température', max: 4, mode: 'palier', paliers: TEMP_PATE },
+                    { id: 'p4-text', label: 'Biga, texture', max: 4, mode: 'palier', paliers: TEXTURE },
                 ],
             },
             {
-                code: 'C1.6', label: 'Fermentation, division, blocage — protocole 5', points: 64,
+                code: 'C1.6', label: 'Fermentation, division, blocage, protocole 5', points: 64,
                 aide: '6 pâtons de 250 g en 3 minutes maximum.',
                 criteres: [
                     { id: 'p5-div', label: 'Diviser et peser', mode: 'items', parItem: 2, items: ['Pâton 1', 'Pâton 2', 'Pâton 3', 'Pâton 4', 'Pâton 5', 'Pâton 6'], paliers: [{ v: 2, l: 'Au poids' }, { v: 0, l: 'Hors poids' }] },
@@ -116,15 +116,15 @@ export const BLOCS = [
             // froid, et sort de l'éliminatoire.
             hygiene('1-B1', null),
         ],
-        secuNote: 'Arrêt du pétrin avant toute intervention dans la cuve — condition de validité, sans points.',
+        secuNote: 'Arrêt du pétrin avant toute intervention dans la cuve, condition de validité, sans points.',
     },
 
     {
         code: 'BC02', label: 'Produire et cuire la gamme', points: 318,
-        modalite: 'Mise en situation de 2 h 30 en conditions de service — Reine, Poulet aux poivrons, Calzone',
+        modalite: 'Mise en situation de 2 h 30 en conditions de service, Reine, Poulet aux poivrons, Calzone',
         competences: [
             {
-                code: 'C2.1', label: 'Façonner — protocole 7', points: 36,
+                code: 'C2.1', label: 'Façonner, protocole 7', points: 36,
                 criteres: [
                     { id: 'p7-depot', label: 'Déposer sur le plan fariné', mode: 'items', parItem: 1, items: ['Pâton 1', 'Pâton 2', 'Pâton 3'], paliers: [{ v: 1, l: 'Fait' }, { v: 0, l: 'Non fait' }] },
                     { id: 'p7-doigts', label: 'Agrandir le disque du bout des doigts', mode: 'items', parItem: 1, items: ['Pâton 1', 'Pâton 2', 'Pâton 3'], paliers: [{ v: 1, l: 'Fait' }, { v: 0, l: 'Non fait' }] },
@@ -135,18 +135,18 @@ export const BLOCS = [
                 ],
             },
             {
-                code: 'C2.2', label: 'Garnir — protocoles 6, 8, 9 et 10', points: 91,
+                code: 'C2.2', label: 'Garnir, protocoles 6, 8, 9 et 10', points: 91,
                 criteres: [
-                    { id: 'p6-prep', label: 'Préparation des ingrédients — poivrons lavés (5), épépinés (1), découpe régulière (1) ; champignons nettoyés (5), découpe (1) ; jambon (1) ; poulet découpé (1) et assaisonné (1)', max: 16, mode: 'points' },
-                    { id: 'bases', label: 'Bases à froid — sauce tomate et crème de poivrons aux quantités demandées', max: 15, mode: 'points' },
+                    { id: 'p6-prep', label: 'Préparation des ingrédients, poivrons lavés (5), épépinés (1), découpe régulière (1) ; champignons nettoyés (5), découpe (1) ; jambon (1) ; poulet découpé (1) et assaisonné (1)', max: 16, mode: 'points' },
+                    { id: 'bases', label: 'Bases à froid, sauce tomate et crème de poivrons aux quantités demandées', max: 15, mode: 'points' },
                     { id: 'louche', label: 'Sauce ou crème à la louche, en spirale, à 1,5 cm du bord', mode: 'items', parItem: 5, items: ['Reine', 'Poulet aux poivrons', 'Calzone'], paliers: [{ v: 5, l: 'Conforme' }, { v: 0, l: 'Non conforme' }] },
-                    { id: 'p8', label: 'Ordre Reine — sauce tomate, champignons, jambon, mozzarella, olives', mode: 'items', parItem: 3, items: ['Sauce tomate', 'Champignons', 'Jambon', 'Mozzarella', 'Olives'], paliers: [{ v: 3, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
-                    { id: 'p9', label: 'Ordre Poulet aux poivrons — mozzarella, poulet, poivrons, crème, olives noires', mode: 'items', parItem: 3, items: ['Mozzarella', 'Poulet', 'Poivrons', 'Crème de poivron', 'Olives noires'], paliers: [{ v: 3, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
-                    { id: 'p10', label: 'Ordre Calzone — sauce tomate, champignons, jambon, mozzarella, œuf', mode: 'items', parItem: 3, items: ['Sauce tomate', 'Champignons', 'Jambon', 'Mozzarella', 'Œuf'], paliers: [{ v: 3, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
+                    { id: 'p8', label: 'Ordre Reine, sauce tomate, champignons, jambon, mozzarella, olives', mode: 'items', parItem: 3, items: ['Sauce tomate', 'Champignons', 'Jambon', 'Mozzarella', 'Olives'], paliers: [{ v: 3, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
+                    { id: 'p9', label: 'Ordre Poulet aux poivrons, mozzarella, poulet, poivrons, crème, olives noires', mode: 'items', parItem: 3, items: ['Mozzarella', 'Poulet', 'Poivrons', 'Crème de poivron', 'Olives noires'], paliers: [{ v: 3, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
+                    { id: 'p10', label: 'Ordre Calzone, sauce tomate, champignons, jambon, mozzarella, œuf', mode: 'items', parItem: 3, items: ['Sauce tomate', 'Champignons', 'Jambon', 'Mozzarella', 'Œuf'], paliers: [{ v: 3, l: 'Au bon rang' }, { v: 0, l: 'Hors rang' }] },
                 ],
             },
             {
-                code: 'C2.3', label: 'Cuire — protocole 11', points: 42,
+                code: 'C2.3', label: 'Cuire, protocole 11', points: 42,
                 aide: 'Le candidat vérifie la température du four avant enfournement.',
                 criteres: [
                     { id: 'p11-enf', label: 'Enfourner sans déchirer ni déformer', mode: 'items', parItem: 5, items: ['Reine', 'Poulet aux poivrons', 'Calzone'], paliers: [{ v: 5, l: 'Maîtrisé' }, { v: 0, l: 'Non maîtrisé' }] },
@@ -155,12 +155,12 @@ export const BLOCS = [
                 ],
             },
             {
-                code: 'C2.4', label: 'Apprécier le produit fini — protocole 12', points: 87,
+                code: 'C2.4', label: 'Apprécier le produit fini, protocole 12', points: 87,
                 criteres: [
                     // La rondeur ne s'apprécie que sur les deux pizzas rondes : la Calzone est un chausson
                     // et porte sa propre ligne. Les noter toutes les trois donnerait 9 points là où
                     // le protocole 12 en prévoit 6.
-                    { id: 'p12-forme', label: 'Forme — rondeur', mode: 'items', parItem: 3, items: ['Reine', 'Poulet aux poivrons'], paliers: [{ v: 3, l: 'Ronde' }, { v: 2, l: 'Ovale' }, { v: 0, l: 'Difforme' }] },
+                    { id: 'p12-forme', label: 'Forme, rondeur', mode: 'items', parItem: 3, items: ['Reine', 'Poulet aux poivrons'], paliers: [{ v: 3, l: 'Ronde' }, { v: 2, l: 'Ovale' }, { v: 0, l: 'Difforme' }] },
                     { id: 'p12-crois', label: 'Croissant de la Calzone', max: 3, mode: 'palier', paliers: [{ v: 3, l: 'Forme de croissant' }, { v: 2, l: 'Trop allongé' }, { v: 0, l: 'Difforme' }] },
                     { id: 'p12-dessous', label: 'Cuisson du dessous de la pâte', mode: 'items', parItem: 7, items: ['Reine', 'Poulet aux poivrons', 'Calzone'], paliers: [{ v: 7, l: 'Dorée' }, { v: 4, l: 'Taches brunâtres' }, { v: 0, l: 'Brûlée' }] },
                     { id: 'p12-dessus', label: 'Cuisson du dessus de la pâte', mode: 'items', parItem: 7, items: ['Reine', 'Poulet aux poivrons', 'Calzone'], paliers: [{ v: 7, l: 'Dorée' }, { v: 4, l: 'Taches brunâtres' }, { v: 0, l: 'Brûlée' }] },
@@ -171,7 +171,7 @@ export const BLOCS = [
             },
             {
                 code: 'C2.5', label: 'Tenir la cadence et son poste en sécurité', points: 32, nonCompensable: true,
-                aide: 'Porte les principes de prévention en santé et sécurité au travail — article L. 4121-2 du code du travail, exigé par le décret n° 2025-500.',
+                aide: 'Porte les principes de prévention en santé et sécurité au travail, article L. 4121-2 du code du travail, exigé par le décret n° 2025-500.',
                 criteres: [
                     { id: 'c25-temps', label: 'Temps de réalisation des 3 pizzas', max: 13, mode: 'palier', paliers: [{ v: 13, l: 't ≤ 15 mn' }, { v: 7, l: '15 mn < t ≤ 17 mn' }, { v: 0, l: 't > 17 mn' }] },
                     { id: 'c25-mep', label: 'Mise en place complète avant le premier enfournement', max: 5, mode: 'palier', paliers: [{ v: 5, l: 'Complète' }, { v: 0, l: 'Incomplète' }] },
@@ -179,7 +179,7 @@ export const BLOCS = [
                     { id: 'c25-pelle', label: 'Usage de la pelle et des maniques conforme, pas de bras au-dessus de la sole', max: 5, mode: 'palier', paliers: [{ v: 5, l: 'Conforme' }, { v: 0, l: 'Non conforme' }] },
                     { id: 'c25-signal', label: 'Signalement oral des sols glissants et des surfaces chaudes', max: 4, mode: 'palier', paliers: [{ v: 4, l: 'Fait' }, { v: 0, l: 'Non fait' }] },
                 ],
-                elimNote: 'Aucune manipulation dangereuse à l\'enfournement — condition de validité.',
+                elimNote: 'Aucune manipulation dangereuse à l\'enfournement, condition de validité.',
             },
             hygiene('1-B2', 'Préparations du service réservées en bacs hermétiques, remises au froid dès l\'usage'),
             {
@@ -198,10 +198,10 @@ export const BLOCS = [
         modalite: 'Épreuve écrite sur dossier 2 h · mise en situation de création 1 h · soutenance 30 mn',
         competences: [
             {
-                code: 'C3.1', label: 'Créer une recette — protocole 13', points: 76,
-                aide: 'Une pizza diététique — végétarienne ou vegan — et une pizza gourmet, à partir du panier de saison.',
+                code: 'C3.1', label: 'Créer une recette, protocole 13', points: 76,
+                aide: 'Une pizza diététique (végétarienne ou vegan) et une pizza gourmet, à partir du panier de saison.',
                 criteres: [
-                    { id: 'p13-forme', label: 'Forme — rondeur', mode: 'items', parItem: 5, items: ['Diététique', 'Gourmet'], paliers: [{ v: 5, l: 'Ronde' }, { v: 2, l: 'Ovale' }, { v: 0, l: 'Difforme' }] },
+                    { id: 'p13-forme', label: 'Forme, rondeur', mode: 'items', parItem: 5, items: ['Diététique', 'Gourmet'], paliers: [{ v: 5, l: 'Ronde' }, { v: 2, l: 'Ovale' }, { v: 0, l: 'Difforme' }] },
                     { id: 'p13-dessous', label: 'Cuisson du dessous', mode: 'items', parItem: 3, items: ['Diététique', 'Gourmet'], paliers: [{ v: 3, l: 'Dorée' }, { v: 1.5, l: 'Taches brunâtres' }, { v: 0, l: 'Brûlée' }] },
                     { id: 'p13-dessus', label: 'Cuisson du dessus', mode: 'items', parItem: 3, items: ['Diététique', 'Gourmet'], paliers: [{ v: 3, l: 'Dorée' }, { v: 1.5, l: 'Taches brunâtres' }, { v: 0, l: 'Brûlée' }] },
                     { id: 'p13-tenue', label: 'Tenue', mode: 'items', parItem: 3, items: ['Diététique', 'Gourmet'], paliers: [{ v: 3, l: 'Correcte' }, { v: 1.5, l: 'Moyenne' }, { v: 0, l: 'Aucune' }] },
@@ -220,7 +220,7 @@ export const BLOCS = [
             {
                 code: 'C3.3', label: 'Calculer le coût matière', points: 30, nonCompensable: true,
                 criteres: [
-                    { id: 'c33', label: 'Coût matière calculé sur les tarifs fournis, rendements et pertes inclus — juste à ±2 % du recalcul du jury', max: 30, mode: 'points' },
+                    { id: 'c33', label: 'Coût matière calculé sur les tarifs fournis, rendements et pertes inclus, juste à ±2 % du recalcul du jury', max: 30, mode: 'points' },
                 ],
             },
             {
@@ -239,7 +239,7 @@ export const BLOCS = [
                 code: 'C3.6', label: 'Exploiter un outil numérique de gestion', points: 5, nonCompensable: true,
                 aide: 'Le jury annonce une hausse de prix d\'achat en soutenance.',
                 criteres: [
-                    { id: 'c36', label: 'Applique la hausse dans son outil, recalcule les coûts touchés et énonce sa décision — absorber, réajuster, substituer', max: 5, mode: 'points' },
+                    { id: 'c36', label: 'Applique la hausse dans son outil, recalcule les coûts touchés et énonce sa décision, absorber, réajuster, substituer', max: 5, mode: 'points' },
                 ],
             },
             hygiene('1-B3', null),
@@ -288,7 +288,7 @@ export const BLOCS = [
             {
                 code: 'C4.6', label: 'Entretien et maintenance', points: 8,
                 criteres: [
-                    { id: 'c46', label: 'Opérations d\'entretien et périodicité ; obligations propres à l\'énergie du four décrit — ramonage biannuel pour le bois', max: 8, mode: 'points' },
+                    { id: 'c46', label: 'Opérations d\'entretien et périodicité ; obligations propres à l\'énergie du four décrit, ramonage biannuel pour le bois', max: 8, mode: 'points' },
                 ],
                 elimNote: 'Aucune opération d\'entretien décrite sans consignation préalable de l\'énergie.',
             },

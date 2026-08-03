@@ -84,7 +84,7 @@ function CadresExclusifs({ learner, onSaved, onError }) {
     <Card title={T("star", "Cadres exclusifs")}>
       <p className="hint" style={{ marginTop: 0 }}>
         Distinctions accordées par l'école. Les cadres de parcours (Bronze à Maestro) se
-        gagnent seuls, aux formations terminées — ils n'apparaissent pas ici.
+        gagnent seuls, aux formations terminées, ils n'apparaissent pas ici.
       </p>
       <div className="cadres-attrib">
         {CADRES.filter((c) => c.exclusif).map((c) => {
@@ -406,7 +406,7 @@ function StagiaireDetail() {
         <form onSubmit={handlePrepare} style={{ marginBottom: 16 }}>
           <div className="row2">
             <SelectField label="Modèle de document" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
-              {templates.length === 0 && <option value="">— Aucun modèle disponible —</option>}
+              {templates.length === 0 && <option value="">Aucun modèle disponible</option>}
               {templates.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
             </SelectField>
             <Field label="Titre (facultatif)" value={prep.title} onChange={(e) => setPrep((p) => ({ ...p, title: e.target.value }))} placeholder="Laisser vide pour le titre par défaut" />
@@ -437,11 +437,11 @@ function StagiaireDetail() {
                     ) },
                   { k: "code", t: "Code", cell: (e) => <span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span> },
                   { k: "titre", t: "Formation", principal: true, cell: (e) => e.program_title },
-                  { k: "semaine", t: "Semaine", cell: (e) => <span className="tnum">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "—"}</span> },
+                  { k: "semaine", t: "Semaine", cell: (e) => <span className="tnum">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "-"}</span> },
                   { k: "dates", t: "Dates", td: { fontSize: 12.5, whiteSpace: "nowrap" },
                     cell: (e) => {
                       const fr = (v) => (v ? new Date(v).toLocaleDateString("fr-FR") : "");
-                      return e.start_date ? `${fr(e.start_date)}${e.end_date ? ` → ${fr(e.end_date)}` : ""}` : "—";
+                      return e.start_date ? `${fr(e.start_date)}${e.end_date ? ` → ${fr(e.end_date)}` : ""}` : "-";
                     } },
                   { k: "type", t: "Type", td: { fontSize: 12.5 },
                     cell: (e) => (e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier") },
@@ -499,7 +499,7 @@ function StagiaireDetail() {
                         <span style={{ flex: 1, minWidth: 0 }}>
                           <b>{d.title}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                            {d.formations || "—"}{d.sent_at ? ` · envoyé le ${d.sent_at}` : ""}{d.signed_at ? ` · signé le ${d.signed_at}` : ""}
+                            {d.formations || "-"}{d.sent_at ? ` · envoyé le ${d.sent_at}` : ""}{d.signed_at ? ` · signé le ${d.signed_at}` : ""}
                           </span>
                         </span>
                         <Badge tone={tone}>{label}</Badge>

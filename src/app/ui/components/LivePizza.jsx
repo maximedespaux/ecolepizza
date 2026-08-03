@@ -23,7 +23,7 @@ const rng = (seed) => { let s = (seed >>> 0) || 1; return () => ((s = (Math.imul
 /* ---------------------------------------------------------------- Le pâton (vue de profil) */
 
 const PATE_CLAIRE = [232, 213, 172];   // farine blanche (Tipo 00)
-const PATE_COMPLETE = [176, 143, 92];  // farine intégrale — plus le taux de son monte, plus ça fonce
+const PATE_COMPLETE = [176, 143, 92];  // farine intégrale, plus le taux de son monte, plus ça fonce
 const CHARBON = [46, 44, 52];          // charbon végétal : 1-2 % suffisent à faire une pâte noire
 const mixRGB = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * clamp(t, 0, 1)));
 const rgbStr = (c) => `rgb(${c.join(",")})`;
@@ -250,7 +250,7 @@ export function PizzaDisc({ base, items = [], cooked = false, size = 240 }) {
   const noms = ordered.map((i) => String(i.label || "").toLowerCase()).filter(Boolean);
   const desc = sauce || noms.length
     ? `Pizza vue de dessus${sauce ? ` sur base ${base}` : ""}${noms.length ? ` garnie de ${noms.join(", ")}` : " sans garniture"}${cooked ? ", sortie du four" : ""}.`
-    : "Disque de pâte nu — choisis une base et des produits pour garnir la pizza.";
+    : "Disque de pâte nu, choisis une base et des produits pour garnir la pizza.";
 
   return (
     <svg viewBox="0 0 240 240" style={{ width: "100%", maxWidth: size, height: "auto", display: "block", margin: "0 auto" }} role="img" aria-label={desc}>

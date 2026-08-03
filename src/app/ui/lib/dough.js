@@ -23,7 +23,7 @@ export const W_BRACKETS = [
   { w: 225, label: "W 200–250", use: "Empâtement direct, levage court", hydra: 54, maxTotal: 60 },
   { w: 280, label: "W 250–310", use: "Pizza napolitaine", hydra: 55, maxTotal: 62 },
   { w: 360, label: "W 330–390", use: "Directs longs & indirects", hydra: 57, maxTotal: 65 },
-  { w: 415, label: "W 400–430", use: "Manitoba — renfort de farine", hydra: 60, maxTotal: 68 },
+  { w: 415, label: "W 400–430", use: "Manitoba, renfort de farine", hydra: 60, maxTotal: 68 },
 ];
 export const wBracket = (w) => W_BRACKETS.find((b) => b.w === w) || W_BRACKETS[0];
 // Plafond d'hydratation TOTALE : dépend du W ; Teglia/Pala montent jusqu'à 80 % quelle que soit la force.
@@ -46,7 +46,7 @@ const interpW = (anchors, w) => {
 };
 export const hydraMinForW = (w) => Math.round(interpW(W_HYDRA_ANCHORS, num(w) || W_MIN));
 export const maxTotalForW = (w) => Math.round(interpW(W_MAXTOTAL_ANCHORS, num(w) || W_MIN));
-export const wUsage = (w) => (num(w) < 250 ? "Directs courts, levage rapide" : num(w) < 320 ? "Napolitaine & directs moyens" : num(w) < 400 ? "Directs longs & indirects (biga/poolish)" : "Manitoba — renfort, très longue fermentation");
+export const wUsage = (w) => (num(w) < 250 ? "Directs courts, levage rapide" : num(w) < 320 ? "Napolitaine & directs moyens" : num(w) < 400 ? "Directs longs & indirects (biga/poolish)" : "Manitoba, renfort, très longue fermentation");
 
 // Typologies. `hydraMax` = plafond d'hydratation ; `wMin`/`wMax` = plage de force W recommandée ;
 // `needs` = prérequis de formation (niv2 / napo / spe) pour débloquer la typologie.
@@ -68,11 +68,11 @@ export const NAPO_SPECS = [
   { key: "stg", label: "STG", w: 280, wMin: 220, wMax: 380, hydra: 56, hydraMin: 55, hydraMax: 62, sel: 2.9, huile: false,
     levure: 0.17, levureMin: 0.17, levureMax: 0.17, levureNote: "Fraîche 3 g / L d'eau · sèche = ⅓ de la fraîche.",
     paton: 220, patonMin: 180, patonMax: 250,
-    ambT: 25, ambH: 7, doughTemp: 25, ferment: "Pointage 2 h + apprêt 4-6 h, à température ambiante (~25 °C)", cuisson: "Four à bois — sole 485 °C, voûte 430 °C · 60-90 s", src: "Règlement UE 97/2010" },
+    ambT: 25, ambH: 7, doughTemp: 25, ferment: "Pointage 2 h + apprêt 4-6 h, à température ambiante (~25 °C)", cuisson: "Four à bois, sole 485 °C, voûte 430 °C · 60-90 s", src: "Règlement UE 97/2010" },
   { key: "avpn", label: "AVPN", w: 280, wMin: 250, wMax: 320, hydra: 58, hydraMin: 55, hydraMax: 62, sel: 2.9, huile: false,
     levure: 0.1, levureMin: 0.01, levureMax: 0.18, levureNote: "Fraîche 0,1-3 g / L d'eau (selon T°, humidité, temps) · sèche = ⅓ de la fraîche · levain < 10 % de la farine.",
     paton: 250, patonMin: 200, patonMax: 280,
-    ctrlT: 19, ctrlH: 8, doughTemp: 22, ferment: "2 étapes en chambre contrôlée 18-20 °C, 60-70 % HR", cuisson: "Four à bois — sole 380-430 °C, voûte 485 °C · 60-90 s", src: "Disciplinare AVPN 2024" },
+    ctrlT: 19, ctrlH: 8, doughTemp: 22, ferment: "2 étapes en chambre contrôlée 18-20 °C, 60-70 % HR", cuisson: "Four à bois, sole 380-430 °C, voûte 485 °C · 60-90 s", src: "Disciplinare AVPN 2024" },
   { key: "ecole", label: "École (libre)", w: 280, wMin: 280, wMax: 310, hydra: 60, hydraMin: 55, hydraMax: 68, sel: 2.8, levure: null, paton: 250,
     ferment: "", cuisson: "", src: "Règles École Pizza" },
 ];
@@ -279,9 +279,9 @@ export function computeBuild(r) {
   }
   if (adjTxt("knead")) steps.push({ t: "Adjonction", d: `À la 8ᵉ minute, incorporer ${adjTxt("knead")}.` });
   if (adjTxt("beforeSalt")) steps.push({ t: "Adjonction", d: `Avant le sel (≈ 10 mn), ajouter ${adjTxt("beforeSalt")}.` });
-  steps.push({ t: "Assaisonnement", d: `Ajouter le sel (${dp.sel} %) petit à petit, puis ${num(dp.huile) > 0 ? `l'huile d'olive (${dp.huile} %)` : "— sans huile"} après 1 mn. Pétrir 2-3 mn.` });
+  steps.push({ t: "Assaisonnement", d: `Ajouter le sel (${dp.sel} %) petit à petit, puis ${num(dp.huile) > 0 ? `l'huile d'olive (${dp.huile} %)` : "sans huile"} après 1 mn. Pétrir 2-3 mn.` });
   if (adjTxt("afterOil")) steps.push({ t: "Adjonction", d: `Après l'huile (≈ 12 mn), ajouter ${adjTxt("afterOil")}.` });
-  if (totalBass > 0) steps.push({ t: "Bassinage", d: `Ajouter l'eau de bassinage (${totalBass} %) par petits filets${compW > 0 ? ` — dont ${compW} % pour les farines / produits qui absorbent l'eau` : ""}, jusqu'à une texture souple et homogène.` });
+  if (totalBass > 0) steps.push({ t: "Bassinage", d: `Ajouter l'eau de bassinage (${totalBass} %) par petits filets${compW > 0 ? `dont ${compW} % pour les farines / produits qui absorbent l'eau` : ""}, jusqu'à une texture souple et homogène.` });
   steps.push({ t: "Pointage", d: "Repos en masse après pétrissage (10-40 mn selon la saison). Température de pâte 23-25 °C." });
   steps.push({ t: "Division & boulage", d: `Diviser en ${effNb} pâtons de ${patonG} g, bouler bien serré.` });
   if (ferment.length) steps.push({ t: "Maturation / stockage", d: `${ferment.join(" + ")}.` });

@@ -71,7 +71,7 @@ function Notifications() {
                   className={"notif-ligne" + (n.is_read ? "" : " neuf")}
                   role={agissable ? "button" : undefined}
                   tabIndex={agissable ? 0 : undefined}
-                  aria-label={agissable ? `${n.title}${n.body ? ` — ${n.body}` : ""}${n.is_read ? "" : " (non lue)"}` : undefined}
+                  aria-label={agissable ? `${n.title}${n.body ? `, ${n.body}` : ""}${n.is_read ? "" : " (non lue)"}` : undefined}
                   onClick={agir}
                   onKeyDown={agissable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); agir(); } } : undefined}
                   title={n.link ? "Ouvrir" : (n.is_read ? undefined : "Marquer comme lu")}

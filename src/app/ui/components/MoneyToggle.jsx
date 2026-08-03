@@ -23,7 +23,7 @@ export default function MoneyToggle() {
 
   if (!canRevealMoney(user)) {
     return (
-      <span className="btn ghost" style={{ cursor: "default", opacity: 0.75, gap: 6 }} title="Montants confidentiels — masqués pour votre profil">
+      <span className="btn ghost" style={{ cursor: "default", opacity: 0.75, gap: 6 }} title="Montants confidentiels, masqués pour votre profil">
         <Icon name="eye-off" size={16} /> Confidentiel
       </span>
     );

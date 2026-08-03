@@ -85,8 +85,8 @@ function Platform() {
               cols={[
                 { k: "nom", t: "Organisme", principal: true,
                   cell: (o) => <><b>{o.legal_name}</b>{o.short_name && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{o.short_name}</span>}</> },
-                { k: "code", t: "Code", cell: (o) => <Badge tone="b">{o.code || "—"}</Badge> },
-                { k: "ville", t: "Ville", td: { fontSize: 13, color: "var(--muted)" }, cell: (o) => o.town || "—" },
+                { k: "code", t: "Code", cell: (o) => <Badge tone="b">{o.code || "-"}</Badge> },
+                { k: "ville", t: "Ville", td: { fontSize: 13, color: "var(--muted)" }, cell: (o) => o.town || "-" },
                 { k: "users", t: "Comptes", cell: (o) => <span className="tnum">{o.users}</span> },
                 { k: "learners", t: "Stagiaires", cell: (o) => <span className="tnum">{o.learners}</span> },
                 { k: "cree", t: "Créé le", td: { fontSize: 13, color: "var(--muted)" }, cell: (o) => o.created_at },

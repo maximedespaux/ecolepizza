@@ -83,7 +83,7 @@ export default function ConsentModal() {
 
           <p className="hint" style={{ marginBottom: 0 }}>
             Votre réponse est enregistrée avec sa date. Vous pouvez en changer quand vous le
-            souhaitez depuis <b>Mon profil → Confidentialité</b> — dans un sens comme dans l'autre.
+            souhaitez depuis <b>Mon profil → Confidentialité</b>, dans un sens comme dans l'autre.
           </p>
 
           {erreur && <p className="consent-erreur">{erreur}</p>}

@@ -40,7 +40,7 @@ const OBJECTIFS = [
   {
     id: "classique", nom: "Classique", emoji: "🍕",
     intro: "La pizza de tous les jours, cornicione léger.",
-    brief: { type: "Une farine courante, T55 ou T65.", force: "Force moyenne — pas besoin qu'elle tienne des heures.", hydra: "Hydratation modérée, facile à étaler.", temp: "Four moyen." },
+    brief: { type: "Une farine courante, T55 ou T65.", force: "Force moyenne, pas besoin qu'elle tienne des heures.", hydra: "Hydratation modérée, facile à étaler.", temp: "Four moyen." },
     type: { ok: [1, 2], tol: [0, 3], why: "T55/T65 : la farine du quotidien, ni trop raffinée ni complète." },
     force: { ok: [200, 250], tol: [180, 280], why: "W ~220 : une fermentation courte ne demande pas une farine forte." },
     hydra: { ok: [55, 62], tol: [52, 66], why: "55-62 % : souple pour s'étaler, assez ferme pour un four moyen." },
@@ -49,7 +49,7 @@ const OBJECTIFS = [
   {
     id: "napolitaine", nom: "Napolitaine AVPN", emoji: "🔥",
     intro: "Cuisson éclair à très haute température. La reine, la plus exigeante.",
-    brief: { type: "Une farine 00, peu cendrée.", force: "Assez forte pour tenir la longue maturation.", hydra: "Maîtrisée — le disque doit tenir à 480 °C.", temp: "Un four brûlant." },
+    brief: { type: "Une farine 00, peu cendrée.", force: "Assez forte pour tenir la longue maturation.", hydra: "Maîtrisée, le disque doit tenir à 480 °C.", temp: "Un four brûlant." },
     type: { ok: [0, 1], tol: [0, 2], why: "Tipo 00 (T45/T55) : faible taux de cendres, la farine de la vraie napolitaine." },
     force: { ok: [280, 310], tol: [260, 330], why: "W 280-310 : la pâte doit encaisser une longue maturation sans s'affaisser." },
     hydra: { ok: [57, 65], tol: [55, 68], why: "57-65 % : le disciplinare AVPN 2024. Trop d'eau et le disque ne tient pas." },
@@ -67,11 +67,11 @@ const OBJECTIFS = [
   {
     id: "teglia", nom: "In teglia", emoji: "🍞",
     intro: "Pizza en plaque, al taglio. Très haute hydratation.",
-    brief: { type: "T65 ou une farine de caractère.", force: "Solide, pour tenir beaucoup d'eau.", hydra: "Très haute — c'est sa signature.", temp: "Four plus doux, cuisson longue." },
+    brief: { type: "T65 ou une farine de caractère.", force: "Solide, pour tenir beaucoup d'eau.", hydra: "Très haute : c'est sa signature.", temp: "Four plus doux, cuisson longue." },
     type: { ok: [2, 3], tol: [1, 3], why: "T65 à complète : la structure doit porter 75-80 % d'eau." },
     force: { ok: [300, 360], tol: [280, 380], why: "W 300-360 : sans force, la pâte gorgée d'eau s'effondre." },
     hydra: { ok: [75, 82], tol: [70, 85], why: "75-82 % : c'est ce qui fait la mie aérée de la teglia." },
-    temp: { ok: [300, 340], tol: [280, 360], why: "300-340 °C, cuisson longue en plaque — l'inverse de la napolitaine." },
+    temp: { ok: [300, 340], tol: [280, 360], why: "300-340 °C, cuisson longue en plaque, l'inverse de la napolitaine." },
   },
 ];
 
@@ -136,7 +136,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
 
         {!obj ? (
           <div className="mbody">
-            <p className="hint" style={{ marginTop: 0 }}>Choisis ta pizza à réussir. Tu régleras la farine, sa force, l'eau et le four — comme en vrai.</p>
+            <p className="hint" style={{ marginTop: 0 }}>Choisis ta pizza à réussir. Tu régleras la farine, sa force, l'eau et le four, comme en vrai.</p>
             <div className="sim-objs">
               {OBJECTIFS.map((o) => (
                 <button key={o.id} className="sim-obj" onClick={() => { setObj(o); setVerdict(null); fournees(); }}>
@@ -157,11 +157,11 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                 {[0, 1, 2].map((i) => <span key={i} className={i < verdict.stars ? "on" : ""}>★</span>)}
               </div>
               <p className="sim-verdict-t">
-                {verdict.stars === 3 ? "Parfait — c'est une vraie " + obj.nom + " !"
-                  : !encoreEnVie(perdus) ? `Plus de cœur — on garde ta meilleure fournée (${meilleur} ★).`
+                {verdict.stars === 3 ? "Parfait : c'est une vraie " + obj.nom + " !"
+                  : !encoreEnVie(perdus) ? `Plus de cœur : on garde ta meilleure fournée (${meilleur} ★).`
                   : verdict.stars === 2 ? "Bien joué, presque parfait."
                   : verdict.stars === 1 ? "Ça part, mais revois les points en rouge."
-                  : "Raté — mais regarde pourquoi, c'est là qu'on apprend."}
+                  : "Raté, mais regarde pourquoi, c'est là qu'on apprend."}
               </p>
               <ul className="sim-feedback">
                 {verdict.axes.map((a) => (
@@ -169,7 +169,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                     <Icon name={a.note === 2 ? "check-circle" : a.note === 1 ? "info" : "x-circle"} size={15} />
                     <span>
                       <b>{a.label}</b> : {a.val}
-                      {a.note === 2 ? " — parfait." : ` — ${a.sens}.`}
+                      {a.note === 2 ? "parfait." : `, ${a.sens}.`}
                       <em>{a.why}</em>
                     </span>
                   </li>
@@ -199,7 +199,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                   n'informe rien. */}
               <div className="sim-goal">
                 <span className="sim-obj-e" aria-hidden="true">{obj.emoji}</span>
-                <span style={{ flex: 1 }}>Objectif : <b>{obj.nom}</b> — {obj.intro}</span>
+                <span style={{ flex: 1 }}>Objectif : <b>{obj.nom}</b>, {obj.intro}</span>
                 <Coeurs perdus={perdus} />
               </div>
 
@@ -208,9 +208,9 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
               <div className="sim-brief">
                 <span className="sim-brief-t"><Icon name="compass" size={13} /> Ce qu'il te faut</span>
                 <ul>
-                  <li><b>Farine</b> — {obj.brief.type} {obj.brief.force}</li>
-                  <li><b>Eau</b> — {obj.brief.hydra}</li>
-                  <li><b>Four</b> — {obj.brief.temp}</li>
+                  <li><b>Farine</b>, {obj.brief.type} {obj.brief.force}</li>
+                  <li><b>Eau</b>, {obj.brief.hydra}</li>
+                  <li><b>Four</b>, {obj.brief.temp}</li>
                 </ul>
               </div>
 
@@ -240,7 +240,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                 <span className="sim-ctrl-h">Hydratation <b>{hydra} %</b></span>
                 <input type="range" min="50" max="85" value={hydra} className="sim-range"
                   onChange={(e) => setHydra(Number(e.target.value))} />
-                <span className="sim-range-hint">Plus d'eau = pâte plus souple, mie plus ouverte — mais plus dure à travailler.</span>
+                <span className="sim-range-hint">Plus d'eau = pâte plus souple, mie plus ouverte, mais plus dure à travailler.</span>
               </label>
 
               <label className="sim-ctrl">

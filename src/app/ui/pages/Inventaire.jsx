@@ -181,7 +181,7 @@ function Inventaire({ embedded = false }) {
       ) : items.length > 0 && (
         <div className="todo-calme">
           <Icon name="check-circle" size={17} aria-hidden="true" />
-          Tout est au-dessus de son seuil — rien à réapprovisionner.
+          Tout est au-dessus de son seuil, rien à réapprovisionner.
         </div>
       )}
 
@@ -256,7 +256,7 @@ function Inventaire({ embedded = false }) {
                         <div style={{ minWidth: 0 }}>
                           <b style={{ fontSize: 15 }}>{it.name}</b>
                           <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                            {it.category || "—"}{it.sku ? ` · ${it.sku}` : ""}
+                            {it.category || "-"}{it.sku ? ` · ${it.sku}` : ""}
                           </div>
                           {it.unit_price != null && (
                             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>

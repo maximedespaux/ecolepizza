@@ -141,7 +141,7 @@ function RoleModal({ role, onClose, onSaved, onError }) {
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="mhead"><h3>{isSystem ? `Rôle système — ${name}` : isNew ? "Nouveau rôle" : "Modifier le rôle"}</h3>
+        <div className="mhead"><h3>{isSystem ? `Rôle système, ${name}` : isNew ? "Nouveau rôle" : "Modifier le rôle"}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button></div>
         <div className="mbody">
           {isSystem ? (

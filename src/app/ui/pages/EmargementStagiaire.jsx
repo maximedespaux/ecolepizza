@@ -51,7 +51,7 @@ function EmargementStagiaire() {
               return (
                 <div key={r.record_id} className="stu-row" style={{ padding: "10px 4px" }}>
                   <span className="stu-row-t">
-                    <b style={{ textTransform: "capitalize" }}>{frDate(r.date)} — {SLOT[r.slot] || r.slot}</b>
+                    <b style={{ textTransform: "capitalize" }}>{frDate(r.date)}, {SLOT[r.slot] || r.slot}</b>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
                       {r.program_code ? `${r.program_code} · ` : ""}{r.program_title || ""}
                     </span>
@@ -72,7 +72,7 @@ function EmargementStagiaire() {
 
       {signing && (
         <SignatureModal
-          doc={{ label: `Émargement — ${SLOT[signing.slot] || signing.slot} ${frDate(signing.date)}` }}
+          doc={{ label: `Émargement, ${SLOT[signing.slot] || signing.slot} ${frDate(signing.date)}` }}
           defaultName={`${user?.first_name || ""} ${user?.last_name || ""}`.trim()}
           onConfirm={onConfirm}
           onClose={() => setSigning(null)}

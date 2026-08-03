@@ -24,7 +24,7 @@ export function BcgMatrix() {
   );
   return (
     <svg viewBox="0 0 344 264" style={{ width: "100%", maxWidth: 420, height: "auto" }} role="img"
-         aria-label="Matrice BCG : quatre familles selon la popularité et la marge — étoiles, vaches à lait, dilemmes, poids morts">
+         aria-label="Matrice BCG : quatre familles selon la popularité et la marge, étoiles, vaches à lait, dilemmes, poids morts">
       {/* quadrants */}
       {quad(X0, Y0, MX - X0, MY - Y0, "#3aa0e0")}
       {quad(MX, Y0, X1 - MX, MY - Y0, "#7bb661")}
@@ -74,8 +74,8 @@ export function OmnesGamme() {
   const BH = 4 * (PH + GAP) + 10; // hauteur de bande = 4 pastilles max
   return (
     <svg viewBox="0 0 344 224" style={{ width: "100%", maxWidth: 440, height: "auto" }} role="img"
-         aria-label="Exemple : une carte de 8 pizzas de 9 à 18 euros, réparties en trois tranches de prix — 2 pizzas en bas, 4 au milieu, 2 en haut">
-      <text x={X0} y={13} fontSize="10.5" fontWeight="800" fill={TXT}>EXEMPLE — une carte de 8 pizzas</text>
+         aria-label="Exemple : une carte de 8 pizzas de 9 à 18 euros, réparties en trois tranches de prix, 2 pizzas en bas, 4 au milieu, 2 en haut">
+      <text x={X0} y={13} fontSize="10.5" fontWeight="800" fill={TXT}>EXEMPLE, une carte de 8 pizzas</text>
       <text x={X0} y={25} fontSize="9" fill={MUT}>chaque pastille = une pizza de ta carte, rangée selon son prix</text>
 
       {zones.map((z, i) => {
@@ -139,7 +139,7 @@ export function CoutGauge() {
       {/* Texte court : au-delà de ~70 caractères, il déborde du viewBox et se fait rogner.
           Le détail (commissions en livraison) est dans la note de la fiche. */}
       <text x={(X0 + X1) / 2} y={Y + H + 44} textAnchor="middle" fontSize="9" fill={MUT}>
-        Coût matière ÷ prix de vente HT — la cible bouge selon le service.
+        Coût matière ÷ prix de vente HT, la cible bouge selon le service.
       </text>
     </svg>
   );

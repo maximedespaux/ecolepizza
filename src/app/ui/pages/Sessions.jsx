@@ -40,7 +40,7 @@ function Sessions() {
     getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
   }, []);
 
-  const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "—");
+  const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "-");
 
   // Stagiaires inscrits regroupés par session (pour l'agenda).
   const studentsBySession = useMemo(() => {
@@ -169,7 +169,7 @@ function Sessions() {
             <form onSubmit={handleAdd}>
               <div className="mbody">
                 <p className="sub" style={{ marginTop: 0 }}>
-                  Choisissez la formation — le premier jour est pré-rempli (modifiable). La durée colore les jours suivants.
+                  Choisissez la formation, le premier jour est pré-rempli (modifiable). La durée colore les jours suivants.
                 </p>
                 <StatusMessage status={status} />
                 <SelectField
@@ -178,9 +178,9 @@ function Sessions() {
                   onChange={(e) => setAddForm((f) => ({ ...f, program_id: e.target.value }))}
                   required
                 >
-                  <option value="">— Choisir —</option>
+                  <option value="">Choisir</option>
                   {programs.map((p) => (
-                    <option key={p.id} value={p.id}>{p.code} — {p.title} ({p.days} j)</option>
+                    <option key={p.id} value={p.id}>{p.code}, {p.title} ({p.days} j)</option>
                   ))}
                 </SelectField>
                 <Field
@@ -196,9 +196,9 @@ function Sessions() {
                     value={addForm.location_id || ""}
                     onChange={(e) => setAddForm((f) => ({ ...f, location_id: e.target.value }))}
                   >
-                    <option value="">— Aucun / à définir —</option>
+                    <option value="">Aucun / à définir</option>
                     {locations.map((l) => (
-                      <option key={l.id} value={l.id}>{l.name}{l.town ? ` — ${l.town}` : ""}</option>
+                      <option key={l.id} value={l.id}>{l.name}{l.town ? `, ${l.town}` : ""}</option>
                     ))}
                   </SelectField>
                 )}
@@ -279,7 +279,7 @@ function Sessions() {
                           key={i}
                           className="cal-evt"
                           style={{ background: colorOf(s.program_code) }}
-                          title={`${s.program_title} — ${s.stagiaires} stagiaire(s)`}
+                          title={`${s.program_title}, ${s.stagiaires} stagiaire(s)`}
                           role="button"
                           tabIndex={0}
                           aria-label={`Ouvrir la session ${s.program_title}, ${s.stagiaires} stagiaire(s)`}
@@ -404,7 +404,7 @@ function MiniMonth({ y, m, sessionsOn, onOpen, onAdd }) {
               className={`cal-mini-cell${inMonth ? "" : " out"}${isToday(day) ? " today" : ""}${has ? " openable" : ""}${addable ? " addable" : ""}`}
               onClick={has ? () => onOpen(evts[0].id) : (addable ? () => onAdd(dayStr) : undefined)}
               title={has
-                ? (evts.length > 1 ? `${evts.length} sessions — cliquez pour ouvrir (ou un point précis)` : "Cliquez pour ouvrir la session")
+                ? (evts.length > 1 ? `${evts.length} sessions, cliquez pour ouvrir (ou un point précis)` : "Cliquez pour ouvrir la session")
                 : (addable ? "Ajouter une formation ce jour" : undefined)}
             >
               <span className="d">{day.getDate()}</span>
@@ -412,7 +412,7 @@ function MiniMonth({ y, m, sessionsOn, onOpen, onAdd }) {
                 <span className="dots">
                   {evts.slice(0, 4).map((s) => (
                     <i key={s.id} style={{ background: colorOf(s.program_code) }}
-                      title={`${s.program_code} — ${s.program_title} · ${s.stagiaires} stag.`}
+                      title={`${s.program_code}, ${s.program_title} · ${s.stagiaires} stag.`}
                       onClick={(e) => { e.stopPropagation(); onOpen(s.id); }} />
                   ))}
                 </span>

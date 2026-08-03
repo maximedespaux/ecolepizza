@@ -15,7 +15,7 @@ function ReviewList({ review }) {
           </div>
           {q.image ? <img src={q.image} alt="" style={{ maxWidth: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 6, margin: "0 0 8px", display: "block" }} /> : null}
           {q.type === "SCALE" ? (
-            <div className="hint">Votre réponse : {q.scaleValue ?? "—"}{q.scale_max ? ` / ${q.scale_max}` : ""}</div>
+            <div className="hint">Votre réponse : {q.scaleValue ?? "-"}{q.scale_max ? ` / ${q.scale_max}` : ""}</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {q.options.map((o) => {

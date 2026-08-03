@@ -306,7 +306,7 @@ export default function PateWizard() {
                       <button key={t.key} type="button" aria-pressed={dp.tipo === t.key}
                         className={"tipo-card" + (dp.tipo === t.key ? " on" : "")}
                         onClick={() => setTipo(dp.tipo === t.key ? "" : t.key)}
-                        title={`${t.fr} · Tipo ${t.it} — ${t.name}${t.water ? ` (+${t.water} % de bassinage)` : ""}`}>
+                        title={`${t.fr} · Tipo ${t.it}, ${t.name}${t.water ? ` (+${t.water} % de bassinage)` : ""}`}>
                         <span className="tipo-dot" style={{ background: flourColor(t.water) }} />
                         <span className="tipo-it">Tipo {t.it}</span>
                         <span className="tipo-fr">{t.fr}</span>
@@ -414,7 +414,7 @@ export default function PateWizard() {
                 )}
                 <div style={{ font: "800 22px/1 var(--font-d)", color: "var(--green)" }}>{levReco} %</div>
                 <p className="hint" style={{ margin: "8px 0 0", fontSize: 12 }}>{napoLevFixed
-                  ? <>Cahier <b>{napoSpec.label}</b> — {napoSpec.levureNote}</>
+                  ? <>Cahier <b>{napoSpec.label}</b>, {napoSpec.levureNote}</>
                   : <><b>{+(levReco * 10).toFixed(1)} g</b>/kg · {yeastLabel(yeastType).toLowerCase()} · manuel p.21 (farine {flourTemp} °C).</>}</p>
               </div>
             )}
@@ -428,7 +428,7 @@ export default function PateWizard() {
                     <b className="tnum" style={{ fontSize: 19, color: eauCoulage < 4 ? "var(--blue)" : "var(--text)" }}>{eauCoulage} °C</b>
                   </div>
                 </div>
-                <p className="hint" style={{ margin: "10px 0 0" }}>Formule du manuel : eau de coulage = 50 − (2 × T° farine). Vise une pâte à ≈ 23-25 °C. {eauCoulage < 2 && <span style={{ color: "var(--ember1)" }}>Farine trop chaude — mets-en une partie au frais la veille.</span>}</p>
+                <p className="hint" style={{ margin: "10px 0 0" }}>Formule du manuel : eau de coulage = 50 − (2 × T° farine). Vise une pâte à ≈ 23-25 °C. {eauCoulage < 2 && <span style={{ color: "var(--ember1)" }}>Farine trop chaude, mets-en une partie au frais la veille.</span>}</p>
               </div>
             )}
 
@@ -463,7 +463,7 @@ export default function PateWizard() {
               <label style={{ color: "rgba(255,255,255,.8)" }}>Nom de l'empâtement</label>
               <input className="inp" value={r.name} onChange={(e) => setR((p) => ({ ...p, name: e.target.value }))} placeholder={`${dp.preset} maison`} />
             </div>
-            {r.id && <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="pencil" size={12} /> Fiche déjà enregistrée — « Enregistrer » la met à jour.</div>}
+            {r.id && <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="pencil" size={12} /> Fiche déjà enregistrée, « Enregistrer » la met à jour.</div>}
 
             <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)" }}>{curPreset.nom}{napoSpec ? ` · ${napoSpec.label}` : ""} · {String(dp.method).toLowerCase()}{dp.autolyse ? " · autolyse" : ""} · W {wv}</div>
             <div style={{ font: "800 24px/1.1 var(--font-d)", margin: "4px 0 2px" }}>{gfmt(totalDough)} de pâte</div>
@@ -552,7 +552,7 @@ export default function PateWizard() {
       )}
       </>)}
       <SaveToast signal={enregistre} label={`Empâtement enregistré : ${r.name || "sans nom"}`} />
-      <SaveToast signal={echec} label="Enregistrement impossible — réessayez" tone="err" />
+      <SaveToast signal={echec} label="Enregistrement impossible, réessayez" tone="err" />
     </>
   );
 }

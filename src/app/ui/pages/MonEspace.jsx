@@ -107,7 +107,7 @@ function MonEspace() {
         </div>
         <p>
           {enAttente.length > 0
-            ? "Voici ce qui vous attend aujourd'hui — puis le détail de chacun de vos dossiers."
+            ? "Voici ce qui vous attend aujourd'hui, puis le détail de chacun de vos dossiers."
             : "Tout est à jour. Retrouvez ici vos formations et l'ensemble de vos documents."}
         </p>
         {/* Le rang sort de la modale de profil : une progression qu'on ne voit pas ne motive
@@ -142,7 +142,7 @@ function MonEspace() {
       {tab === "formations" && (
         <Card>
           <p className="hint" style={{ marginTop: 0 }}>
-            Toutes vos démarches — avant, pendant et après la formation : convocation, règlement,
+            Toutes vos démarches, avant, pendant et après la formation : convocation, règlement,
             émargements, attestation, facture… Choisissez une formation pour ouvrir son dossier.
           </p>
           {!triees ? (
@@ -248,7 +248,7 @@ function FormationCard({ f, navigate, onInfo }) {
   // elle affiche la fiche d'information. L'ancien libellé promettait « mes documents et mon
   // émargement » puis ouvrait « Formation non suivie ».
   const action = openable ? "voir mes documents et mon émargement" : "voir les informations";
-  const nom = `${f.program_title} — ${action}`;
+  const nom = `${f.program_title}, ${action}`;
   return (
     <div
       className="card hover"
@@ -263,7 +263,7 @@ function FormationCard({ f, navigate, onInfo }) {
         e.preventDefault();
         ouvrir();
       }}
-      title={f.revoked && !f.finished ? "Accès suspendu — point d'accès non atteint au début de la session"
+      title={f.revoked && !f.finished ? "Accès suspendu, point d'accès non atteint au début de la session"
         : openable ? "Voir mes documents et mon émargement" : "Voir les informations (formation non suivie)"}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -299,7 +299,7 @@ function FormationCard({ f, navigate, onInfo }) {
         {f.revoked && !f.finished
           ? "Accès suspendu (point d'accès non atteint)"
           : f.finished
-            ? (openable ? "Terminée — documents & émargement →" : "Terminée")
+            ? (openable ? "Terminée, documents & émargement →" : "Terminée")
             : !f.enrolled ? "Non suivie" : `Documents & émargement · ${f.signed}/${f.total} signé(s) →`}
       </p>
     </div>
@@ -332,7 +332,7 @@ function FormationInfoModal({ f, onClose }) {
         </div>
         <div className="mbody">
           <p className="hint" style={{ marginTop: 0 }}>
-            Formation non suivie — ces informations sont fournies à titre indicatif.
+            Formation non suivie, ces informations sont fournies à titre indicatif.
             Inscrivez-vous à une session pour y accéder.
           </p>
           {/* Durée / heures / tarif : trois colonnes tant qu'elles tiennent, puis autant que

@@ -74,7 +74,7 @@ function RepresentantEspace() {
       <div className="hero">
         <div className="eyebrow">Espace entreprise</div>
         <h1>Bonjour {user?.first_name}</h1>
-        <p>Signez les documents de votre entreprise{data?.company ? ` — ${data.company}` : ""}.</p>
+        <p>Signez les documents de votre entreprise{data?.company ? `, ${data.company}` : ""}.</p>
         {toSign > 0 && <div className="badge-row"><span className="pill">{toSign} document(s) à signer</span></div>}
       </div>
 

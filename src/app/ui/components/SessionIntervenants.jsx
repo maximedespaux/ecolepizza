@@ -122,7 +122,7 @@ function SessionIntervenants({ sessionId, startDate, endDate, canEdit }) {
         ) : (
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <select value={pick} onChange={(e) => setPick(e.target.value)}>
-              <option value="">— Ajouter un intervenant —</option>
+              <option value="">Ajouter un intervenant</option>
               {roster.map((u) => <option key={u.id} value={u.id}>{u.last_name} {u.first_name}</option>)}
             </select>
             <input className="inp" style={{ maxWidth: 220 }} value={specialty} onChange={(e) => setSpecialty(e.target.value)} placeholder="Spécialité (ex. Expert HACCP)" />

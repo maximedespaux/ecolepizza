@@ -165,7 +165,7 @@ function Factures() {
                 {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </SelectField>
               <SelectField label="Client / entreprise (facultatif)" value={form.company_id} onChange={set("company_id")}>
-                <option value="">— Aucune —</option>
+                <option value="">Aucune</option>
                 {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </SelectField>
               <Field label="Échéance" type="date" value={form.due_date} onChange={set("due_date")} />
@@ -176,9 +176,9 @@ function Factures() {
               {form.lines.map((l, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "1.4fr 1.6fr 0.8fr auto", gap: 8, alignItems: "center" }}>
                   <select className="inp" value={l.enrollment_id} onChange={(e) => setLine(i, "enrollment_id", e.target.value)}>
-                    <option value="">— Dossier —</option>
+                    <option value="">Dossier</option>
                     {enrollments.map((e) => (
-                      <option key={e.id} value={e.id}>{e.last_name} {e.first_name} — {e.program_code}</option>
+                      <option key={e.id} value={e.id}>{e.last_name} {e.first_name}, {e.program_code}</option>
                     ))}
                   </select>
                   <input className="inp" placeholder="Libellé (par défaut : la formation)" value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} />

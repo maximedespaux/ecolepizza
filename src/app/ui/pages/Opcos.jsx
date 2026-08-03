@@ -101,7 +101,7 @@ function Opcos() {
             : etat !== "actifs"
               ? <EmptyState icon="euro" title={etat === "inactifs" ? "Aucun financeur désactivé" : "Aucun OPCO"}
                   text={etat === "inactifs"
-                    ? "Tous les financeurs du référentiel sont actifs — c'est plutôt bon signe."
+                    ? "Tous les financeurs du référentiel sont actifs : c'est plutôt bon signe."
                     : "Le référentiel est vide."} />
               : <EmptyState icon="euro" title="Aucun OPCO"
                   text="Le référentiel est vide. Ajoute les financeurs que tu rencontres : ils apparaîtront ensuite dans les fiches stagiaires et entreprises." />}
@@ -122,18 +122,18 @@ function Opcos() {
                 </>
               ) },
             { k: "ville", t: "Ville", td: { fontSize: 13 },
-              cell: (o) => [o.zip_code, o.town].filter(Boolean).join(" ") || <span className="hint">—</span> },
+              cell: (o) => [o.zip_code, o.town].filter(Boolean).join(" ") || <span className="hint">-</span> },
             /* LE DÉFAUT LE PLUS COÛTEUX DE CETTE PAGE : téléphone, e-mail et site étaient
                concaténés en UNE chaîne de texte, séparés par des points médians. Sur un écran
                dont la raison d'être est « trouver le numéro d'un financeur », on ne pouvait ni
                appeler, ni écrire, ni ouvrir le site — il fallait sélectionner et recopier.
                Trois données distinctes, trois liens. */
             { k: "tel", t: "Téléphone", td: { whiteSpace: "nowrap", fontSize: 13 },
-              cell: (o) => (o.phone ? <a href={`tel:${String(o.phone).replace(/\s+/g, "")}`}>{o.phone}</a> : <span className="hint">—</span>) },
+              cell: (o) => (o.phone ? <a href={`tel:${String(o.phone).replace(/\s+/g, "")}`}>{o.phone}</a> : <span className="hint">-</span>) },
             { k: "contact", t: "Contact", td: { fontSize: 13 },
               cell: (o) => {
                 const site = o.website && (o.website.startsWith("http") ? o.website : `https://${o.website}`);
-                if (!o.email && !site) return <span className="hint">—</span>;
+                if (!o.email && !site) return <span className="hint">-</span>;
                 return (
                   <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                     {o.email && <a href={`mailto:${o.email}`} style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{o.email}</a>}

@@ -50,7 +50,7 @@ export default function ApportForm({ partners = [], onSaved }) {
       <div className="row3" style={{ alignItems: "end" }}>
         <div className="field"><label htmlFor="ap-partenaire">Partenaire <span style={{ color: "var(--ember1)" }}>*</span></label>
           <select id="ap-partenaire" value={form.partner_id} onChange={(e) => setForm({ ...form, partner_id: e.target.value })}>
-            <option value="">— Sélectionner —</option>
+            <option value="">Sélectionner</option>
             {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select></div>
         <div className="field"><label htmlFor="ap-type">Type</label>

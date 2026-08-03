@@ -197,7 +197,7 @@ export default function EntrepriseDetail() {
   }
   async function deleteCompanyDoc(docId, title, signed) {
     const msg = signed
-      ? `Supprimer DÉFINITIVEMENT le document SIGNÉ « ${title || "sans titre"} » ?\nCe document a une valeur légale — sa suppression est irréversible.`
+      ? `Supprimer DÉFINITIVEMENT le document SIGNÉ « ${title || "sans titre"} » ?\nCe document a une valeur légale, sa suppression est irréversible.`
       : `Supprimer le document « ${title || "sans titre"} » ?`;
     if (!window.confirm(msg)) return;
     setStatus(null);
@@ -281,7 +281,7 @@ export default function EntrepriseDetail() {
 
           <div className="field"><label>Session</label>
             <select className="inp" value={enrollSessionId} onChange={(e) => setEnrollSessionId(e.target.value)}>
-              <option value="">— Choisir une session —</option>
+              <option value="">Choisir une session</option>
               {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
             </select>
           </div>
@@ -340,7 +340,7 @@ export default function EntrepriseDetail() {
                   <label>{label}</label>
                   {type === "select"
                     ? <select className="inp" value={cur || ""} onChange={set(k)}>
-                        <option value="">—</option>
+                        <option value="">-</option>
                         {allOpts.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
                     : <input className="inp" value={cur || ""} onChange={set(k)} placeholder={placeholder || ""} />}
@@ -414,7 +414,7 @@ export default function EntrepriseDetail() {
               <div className="field">
                 <label>Modèle de document (groupe)</label>
                 <select className="inp" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
-                  <option value="">{coveredTpls.length ? "— Choisir un document —" : "— Aucun document de groupe disponible —"}</option>
+                  <option value="">{coveredTpls.length ? "Choisir un document" : "Aucun document de groupe disponible"}</option>
                   {coveredTpls.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
                 </select>
               </div>

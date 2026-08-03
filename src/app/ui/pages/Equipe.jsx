@@ -135,7 +135,7 @@ function Equipe() {
             { k: "membre", t: "Membre", principal: true,
               cell: (m) => (
                 <>
-                  <b>{[m.first_name, m.last_name].filter(Boolean).join(" ") || "—"}{m.is_self && <span style={{ color: "var(--muted)", fontWeight: 400 }}> (vous)</span>}</b>
+                  <b>{[m.first_name, m.last_name].filter(Boolean).join(" ") || "-"}{m.is_self && <span style={{ color: "var(--muted)", fontWeight: 400 }}> (vous)</span>}</b>
                   <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }} className="mono">{m.email}</span>
                 </>
               ) },
@@ -269,7 +269,7 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
-          <h3>Accès menu — {who}</h3>
+          <h3>Accès menu, {who}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="mbody">
@@ -285,7 +285,7 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
             <label style={{ fontSize: 13, fontWeight: 600 }}>Appliquer un rôle :</label>
             <select className="inp" style={{ maxWidth: 240 }} value="" onChange={(e) => { if (e.target.value) applyRole(e.target.value); }}>
-              <option value="">— Choisir un rôle —</option>
+              <option value="">Choisir un rôle</option>
               <optgroup label="Rôles système">
                 {BUILTIN_ROLES.map((b) => <option key={b.role} value={`builtin:${b.role}`}>{b.name}</option>)}
               </optgroup>

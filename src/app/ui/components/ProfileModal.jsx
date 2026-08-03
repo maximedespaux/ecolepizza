@@ -291,7 +291,7 @@ function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, d
                 className={`pf-cadre${actif ? " on" : ""}${c.exclusif ? " exclusif" : ""}`}
                 disabled={!possede}
                 onClick={() => choisirCadre(cle)}
-                title={[c.titre, possede ? c.desc || c.nom : (c.condition || c.desc)].filter(Boolean).join(" — ")}>
+                title={[c.titre, possede ? c.desc || c.nom : (c.condition || c.desc)].filter(Boolean).join("-")}>
                 <span className={`pf-cadre-apercu ${possede && c.id !== "aucun" ? `cadre cadre-${c.id}` : ""}`}
                   style={cadreStyle(cle)}>
                   <span aria-hidden="true">{avatar ? avatar.emoji : "🍕"}</span>
@@ -375,7 +375,7 @@ function InfosTab({ onSaved }) {
       <p className="hint" style={{ margin: "0 0 12px" }}>Tes coordonnées. Toute modification est visible par ton organisme de formation.</p>
       <div className="grid cols-2" style={{ gap: 12 }}>
         <div className="field"><label>Civilité</label>
-          <select className="inp" value={f.civility || ""} onChange={set("civility")}>{CIVILITIES.map((c) => <option key={c} value={c}>{c || "—"}</option>)}</select></div>
+          <select className="inp" value={f.civility || ""} onChange={set("civility")}>{CIVILITIES.map((c) => <option key={c} value={c}>{c || "-"}</option>)}</select></div>
         <div className="field"><label>Téléphone</label><input className="inp" value={f.phone || ""} onChange={set("phone")} /></div>
         <div className="field"><label>Prénom</label><input className="inp" value={f.first_name || ""} onChange={set("first_name")} /></div>
         <div className="field"><label>Nom</label><input className="inp" value={f.last_name || ""} onChange={set("last_name")} /></div>
@@ -417,7 +417,7 @@ function VisibiliteTab({ who }) {
     <label className="vis-row">
       <span style={{ flex: 1, minWidth: 0 }}>
         <b style={{ fontSize: 13.5 }}>{label}</b>
-        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{value || "—"}</span>
+        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{value || "-"}</span>
       </span>
       <input type="checkbox" checked={!!vis[k]} onChange={() => toggle(k)} />
     </label>

@@ -118,48 +118,48 @@ const REPONSES = [
 /* LES PIÈGES DE SERVICE — ils ne se lisent pas sur la carte, et c'est pour cela qu'ils comptent.
    Même grammaire à trois réponses, tirés dans le même flux. Chacun porte sa source de manuel. */
 const PIEGES = [
-  { q: "« Je suis cœliaque. » La Marinara n'a ni fromage ni charcuterie — ça passe ?", rep: "non",
+  { q: "« Je suis cœliaque. » La Marinara n'a ni fromage ni charcuterie, ça passe ?", rep: "non",
     pourquoi: "Le gluten EST la pâte : aucune pizza de la carte n'en est exempte. Et même avec une "
       + "farine sans gluten, un four et un plan de travail couverts de farine de blé exposent à la "
       + "contamination croisée.",
-    source: "Manuel — Les allergènes · Points de vigilance" },
+    source: "Manuel : Les allergènes · Points de vigilance" },
   { q: "Tu viens de trancher du saumon sur ta planche. Une Margherita pour un allergique au poisson ?", rep: "non",
-    pourquoi: "C'est le cas d'école du manuel — « attention à la planche qui a servi au poisson juste "
+    pourquoi: "C'est le cas d'école du manuel, « attention à la planche qui a servi au poisson juste "
       + "avant ». Une pizza sans poisson préparée sur une planche à poisson contient du poisson, et "
       + "un rinçage n'enlève pas une protéine.",
-    source: "Manuel — Les allergènes · exemple de la Reine" },
+    source: "Manuel : Les allergènes · exemple de la Reine" },
   { q: "« Votre pâte à la châtaigne, c'est bien sans gluten ? »", rep: "non",
     pourquoi: "Une substitution remplace une PART du poids de farine de blé, à poids total constant. "
       + "Le blé reste majoritaire : la pâte contient toujours du gluten. Confondre substitution et "
       + "éviction est l'erreur qui envoie un cœliaque aux urgences.",
-    source: "Manuel — Les substitutions · Définition" },
+    source: "Manuel : Les substitutions · Définition" },
   { q: "« Vous avez la liste des allergènes ? » Tu l'as, dans un classeur derrière le comptoir.", rep: "oui",
-    pourquoi: "Un document écrit, clair et accessible suffit — carte, tableau, classeur ou support "
+    pourquoi: "Un document écrit, clair et accessible suffit, carte, tableau, classeur ou support "
       + "numérique. Il faut en revanche qu'un affichage dise qu'il existe : « La liste des allergènes "
       + "est disponible sur demande. »",
-    source: "Manuel — Les allergènes · Modalités d'affichage" },
+    source: "Manuel : Les allergènes · Modalités d'affichage" },
   { q: "Un extra embauché ce matin prend seul une commande « allergie arachide ». Tu le laisses faire ?", rep: "non",
     pourquoi: "« Formation des équipes » et « personnel formé » sont deux points distincts du manuel. "
-      + "Une liste ne remplace pas quelqu'un qui sait la lire — on reprend la commande, et on forme.",
-    source: "Manuel — Les allergènes · Bonnes pratiques" },
+      + "Une liste ne remplace pas quelqu'un qui sait la lire : on reprend la commande, et on forme.",
+    source: "Manuel : Les allergènes · Bonnes pratiques" },
   { q: "Ton fournisseur de mozzarella a changé le mois dernier. Ta fiche allergènes date de l'an passé.", rep: "non",
     pourquoi: "« Vérification des fournisseurs » et « mise à jour régulière » sont deux bonnes "
       + "pratiques du manuel, et elles vont ensemble : une fiche juste l'an dernier peut être fausse "
-      + "aujourd'hui. Une information périmée est pire qu'absente — on s'y fie.",
-    source: "Manuel — Les allergènes · Bonnes pratiques" },
+      + "aujourd'hui. Une information périmée est pire qu'absente : on s'y fie.",
+    source: "Manuel : Les allergènes · Bonnes pratiques" },
   { q: "Ta fiche allergènes couvre les pizzas. Le client commande un tiramisu maison.", rep: "non",
     pourquoi: "« Tous les plats concernés », dit le manuel. Desserts, entrées, sauces et boissons "
       + "comprises : un dessert maison porte typiquement œufs, lait et gluten, et l'oublier parce "
       + "que ce n'est pas une pizza est l'angle mort classique.",
-    source: "Manuel — Les allergènes · Points de vigilance" },
+    source: "Manuel : Les allergènes · Points de vigilance" },
   { q: "« C'est bon, je tolère un peu de lait. » Il te demande la pizza aux quatre fromages.", rep: "verifier",
-    pourquoi: "Ce n'est pas au professionnel d'évaluer le seuil de tolérance de quelqu'un — mais ce "
+    pourquoi: "Ce n'est pas au professionnel d'évaluer le seuil de tolérance de quelqu'un, mais ce "
       + "n'est pas non plus à lui de refuser une commande que le client assume. On l'informe "
       + "précisément de ce que contient le plat, et il décide en connaissance de cause.",
-    source: "Manuel — Les allergènes · Modalités d'affichage (information du client)" },
+    source: "Manuel : Les allergènes · Modalités d'affichage (information du client)" },
 ];
 
-const DUREE = 120;         // secondes — deux minutes de service
+const DUREE = 120;         // secondes, deux minutes de service
 
 /** Une carte de dix pizzas, composée pour ce service. */
 const dresserCarte = () => NOMS.map((n) => composer(n));
@@ -216,7 +216,7 @@ function questionRetrait(carte) {
     pourquoi: apres.rep === "oui"
       ? `Oui : ${retire.toLowerCase()} était le seul à en porter dans ${pizza.nom}.`
       : apres.rep === "non"
-        ? `Non — il reste ${apres.causes.join(", ").toLowerCase()}. Retirer ce qu'on voit ne suffit `
+        ? `Non, il reste ${apres.causes.join(", ").toLowerCase()}. Retirer ce qu'on voit ne suffit `
           + "pas : c'est la composition entière qu'il faut relire, base comprise."
         : `Il reste ${apres.causes.join(", ").toLowerCase()}, dont ça dépend du fournisseur.`,
     source: "Composition de la carte",
@@ -247,7 +247,7 @@ function questionComparaison(carte) {
     pourquoi: rep === "aucune"
       ? `Aucune des deux : ${a.nom} porte ${verdict(a.ing, c.cle).causes.join(", ").toLowerCase()}, `
         + `${b.nom} porte ${verdict(b.ing, c.cle).causes.join(", ").toLowerCase()}.`
-      : `${rep === "a" ? a.nom : b.nom} — l'autre porte `
+      : `${rep === "a" ? a.nom : b.nom}, l'autre porte `
         + `${verdict(rep === "a" ? b.ing : a.ing, c.cle).causes.join(", ").toLowerCase()}.`,
     source: "Composition de la carte",
   };
@@ -274,9 +274,9 @@ function tirer(carte) {
     pourquoi: rep === "non" ? `${pizza.nom} porte ${cause}.`
       : rep === "verifier"
         ? `${cause[0].toUpperCase()}${cause.slice(1)} : ça dépend du fournisseur. Le manuel écrit `
-          + "« SOUVENT des sulfites » — on vérifie la fiche avant de répondre."
-        : `Rien dans ${pizza.nom} ne porte cet allergène — la composition est sous tes yeux.`,
-    source: rep === "verifier" ? "Manuel — Les 14 allergènes (sulfites)" : "Composition de la carte",
+          + "« SOUVENT des sulfites » : on vérifie la fiche avant de répondre."
+        : `Rien dans ${pizza.nom} ne porte cet allergène, la composition est sous tes yeux.`,
+    source: rep === "verifier" ? "Manuel : Les 14 allergènes (sulfites)" : "Composition de la carte",
   };
 }
 
@@ -297,7 +297,7 @@ export default function CommandePiege({ onClose, onFinish }) {
   const [reste, setReste] = useState(DUREE);
   const [carte, setCarte] = useState(dresserCarte);
   const [q, setQ] = useState(null);
-  const [flash, setFlash] = useState(null);     // { juste, pourquoi, source } — retour bref
+  const [flash, setFlash] = useState(null);     // { juste, pourquoi, source }, retour bref
   const [justes, setJustes] = useState(0);
   const [rates, setRates] = useState([]);       // les erreurs, pour le débriefing final
   /* Les cœurs sont tenus en REF autant qu'en état : le compte doit être lu dans le `setTimeout`
@@ -372,7 +372,7 @@ export default function CommandePiege({ onClose, onFinish }) {
           <div className="mbody" style={{ textAlign: "center", padding: "22px 20px" }}>
             <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px" }}>Deux minutes au comptoir.</p>
             <p className="hint" style={{ margin: "0 0 4px" }}>
-              Un client annonce sa contrainte, tu réponds. La carte reste ouverte à côté — mais elle
+              Un client annonce sa contrainte, tu réponds. La carte reste ouverte à côté, mais elle
               ne répond pas à tout : la contamination croisée et les sulfites ne s'y lisent pas.
             </p>
             <p className="hint" style={{ margin: "0 0 18px" }}>

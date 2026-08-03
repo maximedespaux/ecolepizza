@@ -121,7 +121,7 @@ function Carte() {
     try {
       const { data: r } = await geocodeCarte(120);
       await reload();
-      setStatus({ type: "success", message: `${r.done} stagiaire(s) géolocalisé(s).` + (r.remaining ? ` ${r.remaining} restant(s) — relancez.` : "") });
+      setStatus({ type: "success", message: `${r.done} stagiaire(s) géolocalisé(s).` + (r.remaining ? ` ${r.remaining} restant(s), relancez.` : "") });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setGeo(false); }
   }
@@ -196,7 +196,7 @@ function Carte() {
           radius, weight: 1.5, color: "#fff", fillColor: "#2c3371", fillOpacity: 0.78,
         });
         m.on("click", () => setDept(d.dept));
-        m.bindTooltip(`${deptName(d.dept)} · ${d.count} — cliquer pour filtrer`, { direction: "top" });
+        m.bindTooltip(`${deptName(d.dept)} · ${d.count}, cliquer pour filtrer`, { direction: "top" });
         group.addLayer(m);
       }
       map.addLayer(group);
@@ -225,7 +225,7 @@ function Carte() {
 
       {dept && (
         <div className="dept-banner">
-          <b>{deptName(dept)} ({dept})</b> — {deptPoints.length} stagiaire(s) géolocalisé(s)
+          <b>{deptName(dept)} ({dept})</b>, {deptPoints.length} stagiaire(s) géolocalisé(s)
           <button className="btn sm ghost" onClick={() => setDept(null)}><Icon name="chevron-left" size={14} /> Tous les départements</button>
         </div>
       )}
@@ -274,7 +274,7 @@ function Carte() {
                   ))}
                   <span className="lg-item"><i style={{ background: "#9aa0b4" }} /> Non défini</span>
                   <p className="hud-note">Les particuliers sont situés à leur ville, jamais à leur
-                    adresse — c'est une donnée personnelle. Les professionnels le sont à l'adresse
+                    adresse : c'est une donnée personnelle. Les professionnels le sont à l'adresse
                     de leur entreprise.</p>
                 </div>
               )}
@@ -320,7 +320,7 @@ function Carte() {
       {(pending + ungeo) > 0 && (
         <div className="carte-dette">
           <Icon name="target" size={16} />
-          <span><b className="tnum">{pending + ungeo}</b> stagiaire(s) sans point précis — comptés dans leur département, mais pas situés à la ville.</span>
+          <span><b className="tnum">{pending + ungeo}</b> stagiaire(s) sans point précis, comptés dans leur département, mais pas situés à la ville.</span>
           {/* Pas de `title` quand le bouton porte déjà le nombre : l'infobulle DEVIENT le nom
               accessible et remplace l'intitulé lu à voix haute par une phrase qui n'est pas celui
               affiché à l'écran. Elle ne sert que dans le cas désactivé, qu'elle explique. */}

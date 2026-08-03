@@ -64,5 +64,5 @@ export async function reduireImage(file, { maxPx = PHOTO_MAX_PX, maxKo = PHOTO_M
       if (jpeg && jpeg.size <= maxKo * 1024) return jpeg;
     }
   }
-  throw new Error("Photo trop lourde même après réduction — essaie une image plus simple.");
+  throw new Error("Photo trop lourde même après réduction, essaie une image plus simple.");
 }

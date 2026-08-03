@@ -133,7 +133,7 @@ function PizzaQuest() {
   const [prog, setProg] = useState(loadProg);
   const [quiz, setQuiz] = useState(null);
   const [mini, setMini] = useState(null); // { key, obj? } du mini-jeu ouvert, ou null
-  const [fete, setFete] = useState(null); // { palier, monde } — palier tout juste franchi
+  const [fete, setFete] = useState(null); // { palier, monde }, palier tout juste franchi
   /* Les CŒURS et l'XP ont été retirés (2026-07-28) : ils récompensaient le temps passé à
      cliquer, et le manque de cœur BLOQUAIT la révision — punir quelqu'un qui veut réviser est
      un contresens pédagogique. La progression se voit désormais aux CADRES, gagnés sur les
@@ -215,7 +215,7 @@ function PizzaQuest() {
    *     pourrait plus tester l'animation qu'on vient d'écrire.
    */
   async function remiseAZero() {
-    if (!window.confirm("DEBUG — effacer TOUTE ta progression Pizza Quest ?\n\n"
+    if (!window.confirm("DEBUG, effacer TOUTE ta progression Pizza Quest ?\n\n"
       + "Chapitres, étoiles des mini-jeux et cadres de quête. Irréversible.")) return;
     try {
       await resetMyQuest();
@@ -262,7 +262,7 @@ function PizzaQuest() {
         <div>
           <div className="eyebrow">Espace stagiaire · entraînement</div>
           <h1 style={{ marginBottom: 4 }}>Pizza Quest</h1>
-          <p style={{ margin: 0 }}>Entraîne-toi pour le QCM de demain — choisis une formation sur la carte.</p>
+          <p style={{ margin: 0 }}>Entraîne-toi pour le QCM de demain, choisis une formation sur la carte.</p>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {/* Les étoiles restent : elles notent la réussite d'un chapitre. Ce sont l'XP et les
@@ -270,14 +270,14 @@ function PizzaQuest() {
           <div className="pq-stat"><Icon name="star" size={15} fill="currentColor" aria-hidden="true" /><b>{totalStars}</b><span>étoiles</span></div>
           {import.meta.env.DEV && (
             <button type="button" className="pq-debug" onClick={remiseAZero}
-              title="Développement seulement — ce bouton n'existe pas en production">
+              title="Développement seulement, ce bouton n'existe pas en production">
               <Icon name="trash" size={13} /> Debug : tout effacer
             </button>
           )}
         </div>
       </div>
       <p className="hint" style={{ marginTop: -6 }}>
-        Questions du manuel — QCM, vrai/faux et associations. Chaque bonne réponse s'accompagne
+        Questions du manuel, QCM, vrai/faux et associations. Chaque bonne réponse s'accompagne
         de son explication : c'est là que le chapitre se révise.
       </p>
 
@@ -348,7 +348,7 @@ function FetePalier({ palier, monde, onClose }) {
               se découvre par hasard dans le profil, des semaines plus tard. */}
           <p className="pq-fete-gain">
             <Icon name="star" size={14} fill="currentColor" /> Cadre débloqué : <b>{f.cadre}</b>
-            <span className="hint"> — à porter depuis ton profil</span>
+            <span className="hint">à porter depuis ton profil</span>
           </p>
           <button className="btn primary" onClick={onClose} autoFocus>Continuer</button>
         </div>
@@ -545,7 +545,7 @@ const ARCADE = [GAME_CONS, GAME_SIM, GAME_PIEGE, GAME_PRIX, GAME_SOON];
 function Arcade({ prog, onGame }) {
   return (
     <div className="pq-arcade">
-      <div className="pq-games-t">L'arcade — les défis de l'école</div>
+      <div className="pq-games-t">L'arcade, les défis de l'école</div>
       <div className="pq-minis">
         {ARCADE.map((g, i) => {
           /* LE RECORD PERSONNEL, et lui seul. Un classement nominatif entre stagiaires ferait,
@@ -590,7 +590,7 @@ function FCard({ w, prog, onPick }) {
   const manque = w.prereqMissing || [];
   const tous = w.prereqAll || [];
   const infobulle = tous.length
-    ? `Prérequis :\n${tous.map((p) => `${p.done ? "✓" : "✗"} ${p.code} — ${p.title}`).join("\n")}`
+    ? `Prérequis :\n${tous.map((p) => `${p.done ? "✓" : "✗"} ${p.code}, ${p.title}`).join("\n")}`
     : null;
   const raison = manque.length
     ? `À terminer d'abord : ${manque.map((m) => m.code).join(", ")}`
@@ -736,8 +736,7 @@ function WorldView({ world, prog, onBack, onChapter }) {
       {!chaptersLoading(world) && chapters.length === 0 && (
         <p className="hint" style={{ margin: "10px 0 16px" }}>
           <Icon name="clock" size={13} style={{ verticalAlign: "-2px" }} />{" "}
-          Les questions de cette formation ne sont pas encore en ligne. Reviens plus tard —
-          en attendant, les défis ci-dessous sont ouverts.
+          Les questions de cette formation ne sont pas encore en ligne. Reviens plus tard, en attendant, les défis ci-dessous sont ouverts.
         </p>
       )}
       <div className="pq-path-wrap">
@@ -782,8 +781,8 @@ function WorldView({ world, prog, onBack, onChapter }) {
             "--len": `${Math.hypot(ECART_X, dy).toFixed(1)}px`,
             "--ang": `${(Math.atan2(-dy, -ECART_X) * 180 / Math.PI).toFixed(2)}deg`,
           };
-          const titre = parfait ? `${ch.title} — sans faute (3 étoiles sur 3)`
-            : partiel ? `${ch.title} — ${stars} étoile${stars > 1 ? "s" : ""} sur 3, retente pour les 3`
+          const titre = parfait ? `${ch.title}, sans faute (3 étoiles sur 3)`
+            : partiel ? `${ch.title}, ${stars} étoile${stars > 1 ? "s" : ""} sur 3, retente pour les 3`
               : encours ? ch.title
                 : "Termine les chapitres précédents";
           return (
@@ -1051,7 +1050,7 @@ function QuizModal({ world, data, onClose, onFinish, onRetry }) {
                 {q.expl && (
                   <p className="pq-expl">
                     <Icon name="book-open" size={13} />
-                    <span>{q.expl}{q.src ? <em> — {q.src}</em> : null}</span>
+                    <span>{q.expl}{q.src ? <em>, {q.src}</em> : null}</span>
                   </p>
                 )}
               </div>
@@ -1071,7 +1070,7 @@ function QuizModal({ world, data, onClose, onFinish, onRetry }) {
             <p style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>{correct}/{total} bonnes réponses</p>
             <p className="hint" style={{ marginTop: 0 }}>
               {stars >= 2 ? "Excellent, prêt pour le QCM !"
-                : stars === 1 ? "Bien — retente pour 3 étoiles."
+                : stars === 1 ? "Bien, retente pour 3 étoiles."
                   : "Il faut au moins une étoile (la moitié de bonnes réponses) pour valider le chapitre. Reprends-le dans le manuel et réessaie."}
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12 }}>

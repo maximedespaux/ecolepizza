@@ -31,7 +31,7 @@ const TOOL = {
     color: "#5f9e3f", icon: "pizza", title: "L'assistant garniture",
     steps: [
       "Choisis la base (sauce tomate, crème, ratatouille…).",
-      "Ajoute les produits — le food-pairing te suggère des associations qui fonctionnent.",
+      "Ajoute les produits, le food-pairing te suggère des associations qui fonctionnent.",
       "Ajoute un ou plusieurs produits laitiers (mozzarella, burrata…).",
       "Le coût matière par pizza et des idées d'amélioration s'affichent à droite.",
     ],
@@ -62,7 +62,7 @@ export default function IntroGuide({ open, onClose, page }) {
       <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
           <h3 style={{ fontSize: 17, display: "flex", alignItems: "center", gap: 9 }}>
-            <Icon name={tool ? tool.icon : "book-open"} size={18} /> {tool ? `${tool.title} — comment ça marche ?` : "Comment ça marche ?"}
+            <Icon name={tool ? tool.icon : "book-open"} size={18} /> {tool ? `${tool.title}, comment ça marche ?` : "Comment ça marche ?"}
           </h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
@@ -81,7 +81,7 @@ export default function IntroGuide({ open, onClose, page }) {
             </>
           ) : (
             <>
-              <p style={{ fontSize: 14, lineHeight: 1.55, margin: "0 0 6px" }}>Ces outils t'assistent pour concevoir tes pizzas et <b>maîtriser tes coûts</b> — comme un vrai pizzaïolo. En 3 étapes&nbsp;:</p>
+              <p style={{ fontSize: 14, lineHeight: 1.55, margin: "0 0 6px" }}>Ces outils t'assistent pour concevoir tes pizzas et <b>maîtriser tes coûts</b>, comme un vrai pizzaïolo. En 3 étapes&nbsp;:</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 12, margin: "16px 0" }}>
                 {OVERVIEW.map((s) => (
                   <div key={s.n} style={{ display: "flex", gap: 13, alignItems: "flex-start" }}>

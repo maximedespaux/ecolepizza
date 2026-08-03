@@ -61,7 +61,7 @@ export const TRACEURS = [
     role: 'Vous maintenir connecté',
     detail: 'Contient votre identifiant de session, signé. Il est « httpOnly » : aucun script de '
       + 'la page ne peut le lire, ce qui le protège du vol par script injecté.',
-    duree: '1 heure — ou 7 jours si vous cochez « rester connecté »',
+    duree: '1 heure, ou 7 jours si vous cochez « rester connecté »',
   },
   {
     cle: 'impasto_theme', nature: 'local', exempte: true,
@@ -117,7 +117,7 @@ export const TRACEURS = [
     cle: 'impasto.consent.relances', nature: 'local', exempte: true,
     role: 'Compter combien de fois la demande de consentement a été présentée sans réponse',
     detail: 'Elle sert à ARRÊTER de vous la reposer. Fermer la fenêtre sans répondre n\'est pas un '
-      + 'refus, donc la question revient — mais pas indéfiniment : après trois fois, elle ne '
+      + 'refus, donc la question revient, mais pas indéfiniment : après trois fois, elle ne '
       + 'réapparaît plus et reste accessible depuis votre profil.',
     duree: 'Jusqu\'à effacement',
   },
@@ -155,7 +155,7 @@ export const TRANSMISSIONS = [
   {
     destinataire: 'Base Adresse Nationale (api-adresse.data.gouv.fr)',
     qui: "Service public de l'État français, sans clé ni compte",
-    donnees: "Un code postal et une commune, seuls — ou l'adresse de l'entreprise lorsqu'elle "
+    donnees: "Un code postal et une commune, seuls, ou l'adresse de l'entreprise lorsqu'elle "
       + "finance la formation. Jamais de nom, de prénom, d'e-mail ni de téléphone : le service "
       + "reçoit une adresse, il ne peut pas savoir de qui il s'agit.",
     /* CE QUE CETTE LIGNE N'EST PAS, et la confusion est naturelle : la carte est INTERNE, elle ne
@@ -174,7 +174,7 @@ export const TRANSMISSIONS = [
     qui: 'Fournisseurs et partenaires référencés par l\'école',
     donnees: 'Nom, prénom, adresse e-mail, téléphone, formation suivie et dates de session.',
     pourquoi: 'Leur permettre de vous proposer leurs offres et de vous contacter directement.',
-    quand: 'Session par session — et UNIQUEMENT si vous y avez consenti.',
+    quand: 'Session par session, et UNIQUEMENT si vous y avez consenti.',
     canal: 'organisme',
     /* CE QUI DISTINGUE CETTE LIGNE DE TOUTES LES AUTRES : elle repose sur le consentement, pas
        sur la nécessité du service. Elle ne s'applique donc qu'aux personnes qui ont dit oui, et

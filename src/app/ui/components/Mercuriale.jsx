@@ -44,11 +44,11 @@ function CatalogueTab({ refs, onAddFresh, onAddMetro }) {
   const [src, setSrc] = useState("frais"); // frais | metro
   const [fam, setFam] = useState("");      // filtre famille (frais) ou rayon (metro)
   const [q, setQ] = useState("");
-  const [sort, setSort] = useState("name_asc"); // name / price / origin — _asc | _desc
+  const [sort, setSort] = useState("name_asc"); // name / price / origin, _asc | _desc
   const [metro, setMetro] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [hover, setHover] = useState(null); // { row, x, y } — bulle info au survol
+  const [hover, setHover] = useState(null); // { row, x, y }, bulle info au survol
   const dir = sort.endsWith("desc") ? -1 : 1;
   const sortKey = sort.replace(/_(asc|desc)$/, "");
   const toggleSort = (field) => setSort((s) => (s === field + "_asc" ? field + "_desc" : field + "_asc"));
@@ -113,22 +113,22 @@ function CatalogueTab({ refs, onAddFresh, onAddMetro }) {
           </tr></thead>
           <tbody>
             {loading && src === "metro" && sorted.length === 0 ? <tr><td colSpan="6"><div className="cat-empty">Chargement…</div></td></tr>
-              : sorted.length === 0 ? <tr><td colSpan="6"><div className="cat-empty">Aucun produit ici — change de rayon ou de mot-clé.</div></td></tr>
+              : sorted.length === 0 ? <tr><td colSpan="6"><div className="cat-empty">Aucun produit ici, change de rayon ou de mot-clé.</div></td></tr>
               : sorted.map((r) => { const added = refs.has(r.id); return (
                 <tr key={r.id}
                     onMouseEnter={(e) => { const q = e.currentTarget.getBoundingClientRect(); setHover({ row: r, x: q.right, y: q.top, left: q.left }); }}
                     onMouseLeave={() => setHover((h) => (h && h.row.id === r.id ? null : h))}>
                   <td><b style={{ display: "block", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.full}>{r.label}</b></td>
-                  <td><span className="chip">{r.family || "—"}</span></td>
-                  <td className="hidecol" style={{ color: "var(--muted)", fontSize: 12.5 }}>{r.brand || "—"}</td>
-                  <td>{r.origin || "—"}</td>
+                  <td><span className="chip">{r.family || "-"}</span></td>
+                  <td className="hidecol" style={{ color: "var(--muted)", fontSize: 12.5 }}>{r.brand || "-"}</td>
+                  <td>{r.origin || "-"}</td>
                   <td className="r"><span className="price">{euro(num(r.price))}</span><span style={{ color: "var(--dim)" }}>/{unitPer(r.unit)}</span></td>
                   <td className="r">{added ? <span className="chip">✓ Ajouté</span> : <button className="btn sm primary" onClick={r.add}><Icon name="plus" size={12} /> Ajouter</button>}</td>
                 </tr>); })}
           </tbody>
         </table>
       </div>
-      {src === "metro" && total > sorted.length && <p className="hint" style={{ margin: "8px 0 0", fontSize: 11.5 }}>{sorted.length} produits affichés (sur {total} au rayon) — affine avec la recherche.</p>}
+      {src === "metro" && total > sorted.length && <p className="hint" style={{ margin: "8px 0 0", fontSize: 11.5 }}>{sorted.length} produits affichés (sur {total} au rayon), affine avec la recherche.</p>}
       {hover && <ProductBubble r={hover.row} anchor={hover} />}
     </Card>
   );
@@ -146,7 +146,7 @@ function ProductBubble({ r, anchor }) {
         ? <img src={r.image} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} style={{ width: "100%", height: 100, objectFit: "contain", background: "#fff", borderRadius: 8, marginBottom: 8 }} />
         : <div style={{ height: 100, display: "grid", placeItems: "center", background: "var(--surface2)", borderRadius: 8, marginBottom: 8, fontSize: 34 }}>🧺</div>}
       <b style={{ fontSize: 13, lineHeight: 1.3, display: "block" }}>{r.full}</b>
-      <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5 }}>{[r.brand, r.origin, r.market].filter(Boolean).join(" · ") || "—"}</div>
+      <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5 }}>{[r.brand, r.origin, r.market].filter(Boolean).join(" · ") || "-"}</div>
       <div style={{ fontSize: 13, marginTop: 5 }}><b className="price">{euro(num(r.price))}</b><span style={{ color: "var(--dim)" }}>/{unitPer(r.unit)}</span> · {r.family}</div>
     </div>
   );

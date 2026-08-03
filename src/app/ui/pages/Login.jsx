@@ -104,8 +104,7 @@ function Login() {
           </div>
           <h2 className="login-tag">Le secrétariat de votre organisme, simplifié.</h2>
           <p className="login-blurb">
-            Stagiaires, documents, signatures, émargement et suivi Qualiopi —
-            réunis dans un seul outil, pensé pour l'École Pizza.
+            Stagiaires, documents, signatures, émargement et suivi Qualiopi, réunis dans un seul outil, pensé pour l'École Pizza.
           </p>
           <ul className="login-feats">
             {feats.map((f) => (

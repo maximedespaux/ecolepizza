@@ -63,14 +63,14 @@ function Reglages() {
 
             <div className="divider" />
             <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Facturation / TVA</h3>
-            <p className="sub" style={{ marginTop: 0 }}>Taux appliqué sur les documents — jetons {"{Prix HT}"}, {"{TVA}"}, {"{Prix TTC}"}, {"{Reste à payer}"}. Laisser à 0 si la formation est exonérée de TVA (art. 261-4-4° CGI).</p>
+            <p className="sub" style={{ marginTop: 0 }}>Taux appliqué sur les documents, jetons {"{Prix HT}"}, {"{TVA}"}, {"{Prix TTC}"}, {"{Reste à payer}"}. Laisser à 0 si la formation est exonérée de TVA (art. 261-4-4° CGI).</p>
             <div className="row3">
               <Field label="Taux de TVA (%)" type="number" value={form.vat_rate ?? 0} onChange={set("vat_rate")} placeholder="0" />
             </div>
 
             <div className="divider" />
             <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Coordonnées bancaires (RIB)</h3>
-            <p className="sub" style={{ marginTop: 0 }}>Utilisées sur les devis, conventions et factures — jetons {"{IBAN}"}, {"{BIC}"}, {"{Banque}"}.</p>
+            <p className="sub" style={{ marginTop: 0 }}>Utilisées sur les devis, conventions et factures, jetons {"{IBAN}"}, {"{BIC}"}, {"{Banque}"}.</p>
             <div className="row3">
               <Field label="IBAN" value={form.iban || ""} onChange={set("iban")} placeholder="FR76 3000 4000 0100 0001 2345 678" />
               <Field label="BIC / SWIFT" value={form.bic || ""} onChange={set("bic")} placeholder="AGRIFRPP" />

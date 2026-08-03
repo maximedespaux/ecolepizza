@@ -233,7 +233,7 @@ function Suivi() {
           ) : dossiers.length > 0 && (
             <div className="todo-calme">
               <Icon name="check-circle" size={17} aria-hidden="true" />
-              Tous les dossiers sont complets — aucune pièce manquante à produire.
+              Tous les dossiers sont complets, aucune pièce manquante à produire.
             </div>
           )}
 
@@ -310,17 +310,17 @@ function Suivi() {
 function buildTree(rows) {
   const years = {};
   for (const r of rows) {
-    const y = r.year != null ? String(r.year) : "—";
-    const wKey = r.week != null ? String(r.week) : "—";
-    const fKey = r.program_code || "—";
+    const y = r.year != null ? String(r.year) : "-";
+    const wKey = r.week != null ? String(r.week) : "-";
+    const fKey = r.program_code || "-";
     // Feuille = stagiaire, ou ENTREPRISE pour un document de groupe (scope COMPANY).
     const isCo = r.scope === "COMPANY";
     const lKey = isCo ? `co:${r.company_id || r.company_name || "?"}` : (r.learner_id || `${r.last_name}${r.first_name}`);
     const Y = years[y] || (years[y] = { label: y, total: 0, weeks: {} });
     const W = Y.weeks[wKey] || (Y.weeks[wKey] = { week: r.week || 0, total: 0, formations: {} });
-    const F = W.formations[fKey] || (W.formations[fKey] = { code: r.program_code || "—", title: r.program_title || "", total: 0, learners: {} });
+    const F = W.formations[fKey] || (W.formations[fKey] = { code: r.program_code || "-", title: r.program_title || "", total: 0, learners: {} });
     const L = F.learners[lKey] || (F.learners[lKey] = {
-      name: isCo ? (r.company_name || "Entreprise") : (`${r.last_name || ""} ${r.first_name || ""}`.trim() || "—"),
+      name: isCo ? (r.company_name || "Entreprise") : (`${r.last_name || ""} ${r.first_name || ""}`.trim() || "-"),
       learner_id: r.learner_id, company: isCo, docs: [],
     });
     L.docs.push(r);
@@ -375,7 +375,7 @@ function ArchivesView({ onError, onInfo }) {
     const detail = document_ids.length && archive_ids.length
       ? ` (${document_ids.length} généré(s), ${archive_ids.length} archivé(s))`
       : "";
-    if (!window.confirm(`Supprimer définitivement ${total} document(s)${what ? ` — ${what}` : ""}${detail} ?\nCette action est irréversible et les supprime de la base.`)) return;
+    if (!window.confirm(`Supprimer définitivement ${total} document(s)${what ? `, ${what}` : ""}${detail} ?\nCette action est irréversible et les supprime de la base.`)) return;
     try {
       const { deleted } = await bulkDeleteArchives(archive_ids, document_ids);
       onInfo?.(`${deleted} document(s) supprimé(s).`);

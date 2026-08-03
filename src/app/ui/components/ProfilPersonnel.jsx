@@ -116,7 +116,7 @@ export default function ProfilPersonnel({ onClose }) {
             ))}
           </div>
           <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
-            Votre avatar et votre cadre vous représentent dans la Communauté — y compris sur les
+            Votre avatar et votre cadre vous représentent dans la Communauté, y compris sur les
             annonces publiées au nom de l'école.
           </p>
         </div>

@@ -80,7 +80,7 @@ export default function ConstructorGame({ onClose, onFinish }) {
           <button className="x" onClick={fermer} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
         <div className="mbody">
-          <p className="sub" style={{ marginTop: 0 }}>Remets les étapes dans le bon ordre — de l'empâtement à la cuisson.</p>
+          <p className="sub" style={{ marginTop: 0 }}>Remets les étapes dans le bon ordre, de l'empâtement à la cuisson.</p>
 
           {/* Séquence du joueur */}
           <div className="cg-seq">
@@ -139,7 +139,7 @@ export default function ConstructorGame({ onClose, onFinish }) {
               <p style={{ fontWeight: 700, margin: "4px 0 0" }}>{correct}/{N} étapes bien placées</p>
               <p className="hint" style={{ marginTop: 2 }}>
                 {correct === N ? "Belle recette !"
-                  : fini ? "Plus de cœur — le bon ordre est affiché ci-dessus. On garde ton meilleur essai."
+                  : fini ? "Plus de cœur, le bon ordre est affiché ci-dessus. On garde ton meilleur essai."
                     : `Les cases ❌ sont mal placées. Il te reste ${COEURS_MAX - perdus} essai${COEURS_MAX - perdus > 1 ? "s" : ""}.`}
               </p>
             </div>

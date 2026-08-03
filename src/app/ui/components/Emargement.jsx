@@ -143,10 +143,10 @@ function Emargement({ sessionId }) {
                     const rec = byKey[`${l.id}|${s.id}`];
                     return (
                       <td key={s.id} style={{ textAlign: "center" }}>
-                        {!rec ? "—" : rec.has_signature ? (
+                        {!rec ? "-" : rec.has_signature ? (
                           <span title={`Signé par ${rec.signer_name || l.last_name}${rec.signed_at ? ` · ${rec.signed_at}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}><Icon name="check" size={15} /></span>
                         ) : (
-                          <span title="En attente de la signature du stagiaire" style={{ color: "var(--dim)" }}>—</span>
+                          <span title="En attente de la signature du stagiaire" style={{ color: "var(--dim)" }}>-</span>
                         )}
                       </td>
                     );
@@ -182,7 +182,7 @@ function Emargement({ sessionId }) {
                         ) : isMe ? (
                           <button className="btn sm ghost" title="Signer cette demi-journée" onClick={() => setSignSheetRec(s)}>Signer</button>
                         ) : (
-                          <span style={{ color: "var(--dim)" }} title="En attente de la signature du formateur">—</span>
+                          <span style={{ color: "var(--dim)" }} title="En attente de la signature du formateur">-</span>
                         )}
                       </td>
                     );
@@ -217,7 +217,7 @@ function Emargement({ sessionId }) {
                           ) : sg && sg.signed ? (
                             <span title={`Signé par ${sg.signer_name || ""}${sg.signed_at ? ` · ${sg.signed_at}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}><Icon name="check" size={15} /></span>
                           ) : (
-                            <span style={{ color: "var(--dim)" }} title="En attente de la signature de l'intervenant">—</span>
+                            <span style={{ color: "var(--dim)" }} title="En attente de la signature de l'intervenant">-</span>
                           )}
                         </td>
                       );
@@ -232,7 +232,7 @@ function Emargement({ sessionId }) {
 
       {signSheetRec && (
         <SignatureModal
-          doc={{ label: `Émargement formateur — ${signSheetRec.date?.slice(8, 10)}/${signSheetRec.date?.slice(5, 7)} ${SLOT_SHORT[signSheetRec.slot] || ""}` }}
+          doc={{ label: `Émargement formateur, ${signSheetRec.date?.slice(8, 10)}/${signSheetRec.date?.slice(5, 7)} ${SLOT_SHORT[signSheetRec.slot] || ""}` }}
           defaultName={`${user?.first_name || ""} ${user?.last_name || ""}`.trim()}
           onConfirm={onSignSheet}
           onClose={() => setSignSheetRec(null)}

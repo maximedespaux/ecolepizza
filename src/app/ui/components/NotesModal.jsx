@@ -37,7 +37,7 @@ function NotesModal({ enrollmentId, name, onClose }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
-          <h3 style={{ fontSize: 16 }}>Notes de suivi — {name}</h3>
+          <h3 style={{ fontSize: 16 }}>Notes de suivi, {name}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="mbody">
@@ -63,7 +63,7 @@ function NotesModal({ enrollmentId, name, onClose }) {
                 <div key={n.id} className="card" style={{ padding: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <span style={{ fontSize: 12, color: "var(--muted)" }}>
-                      {n.created_at} · {[n.first_name, n.last_name].filter(Boolean).join(" ") || "—"}
+                      {n.created_at} · {[n.first_name, n.last_name].filter(Boolean).join(" ") || "-"}
                       {n.reminder_at && <span className="badge a" style={{ marginLeft: 8 }}>Rappel : {n.reminder_at}</span>}
                     </span>
                     <button className="iconbtn del" title="Supprimer" onClick={() => remove(n.id)}><Icon name="trash" size={15} /></button>

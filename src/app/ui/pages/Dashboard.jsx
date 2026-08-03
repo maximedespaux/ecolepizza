@@ -10,7 +10,7 @@ import { auditLabel } from "../lib/auditLabels.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { scoreBadge, euro, colorOf } from "../lib/format.js";
 
-const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "-");
 
 const QUICK = [
   ["/stagiaires", "user-plus", "Ajouter un stagiaire"],
@@ -125,7 +125,7 @@ function Dashboard() {
         <Icon name="pizza" size={210} strokeWidth={1.1} className="hero-motif" style={{ zIndex: 0 }} />
         <div className="eyebrow">Secrétariat · {org?.short_name || "École Pizza"}</div>
         <h1>Bonjour</h1>
-        <p>{org ? `${org.legal_name} — SIRET ${org.siret || "—"} · NDA ${org.nda || "—"}` : "Tableau de bord"}{org?.qualiopi ? " · Certifié Qualiopi." : ""}</p>
+        <p>{org ? `${org.legal_name}, SIRET ${org.siret || "-"} · NDA ${org.nda || "-"}` : "Tableau de bord"}{org?.qualiopi ? " · Certifié Qualiopi." : ""}</p>
         <div className="badge-row">
           {org?.qualiopi && <span className="pill" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="check" size={12} /> Qualiopi actif</span>}
           <span className="pill">{stats.dossiers} dossier(s)</span>
@@ -218,7 +218,7 @@ function Dashboard() {
             <p className="lead" style={{ margin: 0 }}>Aucun dossier pour le moment.</p>
           ) : recent.map((e) => (
             <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: "1px solid var(--border-soft)" }}>
-              <span style={{ flex: 1 }}>{e.first_name} {e.last_name} — {e.program_title || "Formation"}</span>
+              <span style={{ flex: 1 }}>{e.first_name} {e.last_name}, {e.program_title || "Formation"}</span>
               <Badge tone={scoreBadge(e.conformite_score)}>{e.conformite_score}</Badge>
             </div>
           ))}

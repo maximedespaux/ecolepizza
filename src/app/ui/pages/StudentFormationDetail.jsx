@@ -11,7 +11,7 @@ import SignatureModal from "../components/SignatureModal.jsx";
 import QuizModal from "../components/QuizModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 
-const STATUS = { SIGNE: ["Signé", "g"], ENVOYE: ["Reçu", "a"], CONSULTE: ["Consulté", "a"], A_FAIRE: ["—", "n"] };
+const STATUS = { SIGNE: ["Signé", "g"], ENVOYE: ["Reçu", "a"], CONSULTE: ["Consulté", "a"], A_FAIRE: ["-", "n"] };
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
 
@@ -109,11 +109,11 @@ function StudentFormationDetail() {
         const gate = data.emargement_gate || {};
         const locked = !!gate.locked;
         return (
-        <Card title="Émargement — ma présence">
+        <Card title="Émargement, ma présence">
           {locked && (
             <div className="emarg-lock">
               <Icon name="lock" size={15} />
-              <span>Émargement verrouillé — signe d'abord tes documents{gate.break_label ? <> jusqu'à « <b>{gate.break_label}</b> »</> : null}. <b>{gate.done}/{gate.need}</b> document{gate.need > 1 ? "s" : ""} signé{gate.done > 1 ? "s" : ""}.</span>
+              <span>Émargement verrouillé, signe d'abord tes documents{gate.break_label ? <> jusqu'à « <b>{gate.break_label}</b> »</> : null}. <b>{gate.done}/{gate.need}</b> document{gate.need > 1 ? "s" : ""} signé{gate.done > 1 ? "s" : ""}.</span>
             </div>
           )}
           {(!data.emargement || data.emargement.length === 0) ? (
@@ -126,7 +126,7 @@ function StudentFormationDetail() {
                   <div key={r.record_id} className="stu-row">
                     <span style={{ color: r.signed ? "var(--green)" : "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name="calendar" size={16} /></span>
                     <span className="stu-row-t">
-                      <b style={{ textTransform: "capitalize" }}>{frDate(r.date)} — {SLOT[r.slot] || r.slot}</b>
+                      <b style={{ textTransform: "capitalize" }}>{frDate(r.date)}, {SLOT[r.slot] || r.slot}</b>
                     </span>
                     {r.signed ? (
                       <Badge tone="g">Signé{r.signed_at ? ` · ${r.signed_at}` : ""}</Badge>
@@ -157,7 +157,7 @@ function StudentFormationDetail() {
 
       {signing && (
         <SignatureModal
-          doc={{ label: `Émargement — ${SLOT[signing.slot] || signing.slot} ${frDate(signing.date)}` }}
+          doc={{ label: `Émargement, ${SLOT[signing.slot] || signing.slot} ${frDate(signing.date)}` }}
           defaultName={`${user?.first_name || ""} ${user?.last_name || ""}`.trim()}
           onConfirm={onSign}
           onClose={() => setSigning(null)}

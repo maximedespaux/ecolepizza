@@ -152,7 +152,7 @@ function BroderieModal({ produit, defaults, onClose, onAdd }) {
           {ok ? (
             <p className="brod-apercu">
               <span>Tu commandes :</span> <b>{`${taille} · ${coupe}`}</b>
-              <span> — brodé </span><b>{`${nom.trim().toUpperCase()} ${prenom.trim()}`}</b>
+              <span>brodé </span><b>{`${nom.trim().toUpperCase()} ${prenom.trim()}`}</b>
             </p>
           ) : null}
         </div>
@@ -272,7 +272,7 @@ function EcoleTab() {
                 marchand. En dessous du seuil, le chiffre est une information utile — il évite
                 de composer un panier qu'on devra lui refuser. */}
             {!p.in_stock ? (
-              <span className="shop-stock"><Icon name="clock" size={12} /> Rupture — sur commande</span>
+              <span className="shop-stock"><Icon name="clock" size={12} /> Rupture, sur commande</span>
             ) : p.stock != null && p.stock <= STOCK_BAS ? (
               <span className="shop-stock"><Icon name="package" size={12} /> Plus que {p.stock} en stock</span>
             ) : null}
@@ -355,7 +355,7 @@ function PartenairesTab() {
   const aideBloc = (
     <Card key="aide">
       <button className="cm-open" onClick={() => setAide((v) => !v)} aria-expanded={aide}>
-        <span className="card-ttl"><Icon name="compass" size={16} /> Aide au choix — quel four, quel pétrin ?</span>
+        <span className="card-ttl"><Icon name="compass" size={16} /> Aide au choix, quel four, quel pétrin ?</span>
         <Icon name={aide ? "chevron-up" : "chevron-down"} size={16} />
       </button>
       {aide ? <div style={{ marginTop: 14 }}><ConseilMateriel /></div> : null}
@@ -431,7 +431,7 @@ function PanierTab({ onSent }) {
 
   if (!lines.length) {
     return <EmptyState icon="package" title="Ton panier est vide"
-      text="Ajoute du matériel depuis les onglets. Tu enverras ta demande à l'école, qui te la prépare — tu paies sur place." />;
+      text="Ajoute du matériel depuis les onglets. Tu enverras ta demande à l'école, qui te la prépare, tu paies sur place." />;
   }
   const t = cartTotals(lines);
   const brodes = lines.filter((l) => l.personalizable);
@@ -507,7 +507,7 @@ function PanierTab({ onSent }) {
               {brodOk(l) ? (
                 <p className="brod-apercu">
                   <span>Tu commandes :</span> <b>{variantValue(l)}</b>
-                  <span> — brodé </span><b>{brodValue(l)}</b>
+                  <span>brodé </span><b>{brodValue(l)}</b>
                 </p>
               ) : <p className="brod-apercu ko"><span>Complète le nom, le prénom, la taille et la coupe.</span></p>}
             </div>
@@ -569,14 +569,14 @@ function totalDemande(lines) {
 function MesDemandes() {
   const [rows, setRows] = useState(null);
   const [busy, setBusy] = useState(null);   // id en cours d'annulation
-  const [erreur, setErreur] = useState(null); // { id, message } — rattaché à SA demande
+  const [erreur, setErreur] = useState(null); // { id, message }, rattaché à SA demande
   const reload = () => getMyShopRequests().then((r) => setRows(r.data || [])).catch(() => setRows([]));
   useEffect(() => { reload(); }, []);
 
   // Annulation possible tant que l'école n'a rien engagé (statut « Reçue »). On confirme
   // d'abord : une demande annulée ne se réactive pas, il faut la recomposer.
   async function annuler(r) {
-    if (!window.confirm(`Annuler la demande ${r.ref} ? Cette action est définitive — il faudra recomposer ton panier.`)) return;
+    if (!window.confirm(`Annuler la demande ${r.ref} ? Cette action est définitive, il faudra recomposer ton panier.`)) return;
     setBusy(r.id); setErreur(null);
     try {
       await cancelMyShopRequest(r.id);
@@ -612,7 +612,7 @@ function MesDemandes() {
           <Icon name="clock" size={14} />
           {r.pickup_at
             ? <>Retrait le <b>{labelJour(String(r.pickup_at).slice(0, 10))} à {String(r.pickup_at).slice(11, 16)}</b></>
-            : <>Sans rendez-vous — passe quand tu veux pendant nos horaires</>}
+            : <>Sans rendez-vous, passe quand tu veux pendant nos horaires</>}
         </p>
 
         <ul className="dem-lignes">
@@ -735,7 +735,7 @@ function Boutique() {
     <>
       <PageHead eyebrow="Espace stagiaire · boutique" title="La boutique"
         lead={<>
-          Le matériel de l'école, à retirer sur place — et les offres négociées chez nos partenaires.
+          Le matériel de l'école, à retirer sur place, et les offres négociées chez nos partenaires.
           {/* La réserve est dite UNE FOIS, en arrivant, plutôt que répétée sur chaque carte
               remisée. Formulée pour rester vraie même quand aucune remise n'est en cours :
               c'est toute la boutique qui est réservée aux stagiaires, pas seulement les remises.
@@ -751,8 +751,7 @@ function Boutique() {
       {sent ? (
         <div className="ok-banner">
           <Icon name="check-circle" size={18} />
-          <span>Demande <b className="tnum">{sent}</b> envoyée. L'école la prépare et te recontacte —
-            garde cette référence, elle sert à la retrouver.</span>
+          <span>Demande <b className="tnum">{sent}</b> envoyée. L'école la prépare et te recontacte, garde cette référence, elle sert à la retrouver.</span>
           <button className="btn sm ghost" onClick={() => setSent(null)}>Fermer</button>
         </div>
       ) : null}

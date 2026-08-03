@@ -31,25 +31,25 @@ function lineFor(s) {
   if (isGroup(s)) {
     if (s.company_level) {
       if (s.total > 1) return `Document de groupe (entreprise) · ${s.signed}/${s.total} document(s) signé(s).`;
-      return s.signed >= 1 ? "Document de groupe — signé (organisme + entreprise)." : "Document de groupe — à faire signer (organisme + entreprise).";
+      return s.signed >= 1 ? "Document de groupe (signé (organisme + entreprise)." : "Document de groupe) à faire signer (organisme + entreprise).";
     }
     return `${s.signed}/${s.total} stagiaire(s) ont signé · ${s.gen}/${s.total} généré(s) · à générer depuis chaque fiche stagiaire.`;
   }
   // Doc destiné à l'entreprise, vu depuis la fiche stagiaire : lecture seule.
   if (s.company_level) {
     if (s.status === "done") return "Document entreprise signé.";
-    return "Document destiné à l'entreprise — généré depuis la fiche entreprise.";
+    return "Document destiné à l'entreprise, généré depuis la fiche entreprise.";
   }
   if (s.status === "done") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
   if (s.status === "todo") return "À venir.";
   if (s.quiz) return s.docId ? "En attente de réponse du stagiaire au QCM." : "QCM à envoyer au stagiaire.";
   if (s.signable) {
     if (!s.docId) return "Document à préparer, puis à faire signer.";
-    if (s.docStatus === "A_FAIRE") return "Document préparé — à envoyer au stagiaire.";
+    if (s.docStatus === "A_FAIRE") return "Document préparé, à envoyer au stagiaire.";
     return "En attente de signature du stagiaire.";
   }
   if (!s.docId) return "Document à préparer.";
-  if (s.docStatus === "A_FAIRE") return "Document préparé — à envoyer.";
+  if (s.docStatus === "A_FAIRE") return "Document préparé, à envoyer.";
   return "En cours.";
 }
 function actionFor(s) {

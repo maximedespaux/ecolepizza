@@ -104,7 +104,7 @@ function Demande({ d, onChange, onErreur }) {
       </span>
     }>
       <p className="hint" style={{ margin: "0 0 10px" }}>
-        {d.learner.email || "—"} · {d.learner.phone || "—"} · demandé le {new Date(d.created_at).toLocaleDateString("fr-FR")}
+        {d.learner.email || "-"} · {d.learner.phone || "-"} · demandé le {new Date(d.created_at).toLocaleDateString("fr-FR")}
       </p>
 
       {/* Créneau de retrait : QUAND le stagiaire passe chercher. Saisi par lui, mis en
@@ -113,7 +113,7 @@ function Demande({ d, onChange, onErreur }) {
         <label>Retrait</label>
         {d.pickup_at
           ? <b style={{ fontSize: 14 }}>{labelJour(String(d.pickup_at).slice(0, 10))} à {String(d.pickup_at).slice(11, 16)}</b>
-          : <span className="hint">Non précisé — le stagiaire passera quand il pourra</span>}
+          : <span className="hint">Non précisé, le stagiaire passera quand il pourra</span>}
       </div>
 
       {d.lines.map((l, i) => (
@@ -290,14 +290,14 @@ function FacturerModal({ d, busy, onClose, onValider }) {
               </select>
             ) : (
               <p className="hint" style={{ margin: 0 }}>
-                {d.learner.last_name} {d.learner.first_name} — ce stagiaire n'est rattaché à aucune entreprise.
+                {d.learner.last_name} {d.learner.first_name}, ce stagiaire n'est rattaché à aucune entreprise.
               </p>
             )}
           </div>
           <div className="field">
             <label>Entité émettrice</label>
             <select className="inp" value={emetteurId} onChange={(e) => setEmetteurId(e.target.value)}>
-              <option value="">— Aucune (numéro BQ séparé) —</option>
+              <option value="">Aucune (numéro BQ séparé)</option>
               {emetteurs.map((e) => <option key={e.id} value={e.id}>{e.legal_name || e.name}</option>)}
             </select>
             <p className="hint" style={{ margin: "6px 0 0" }}>
@@ -326,7 +326,7 @@ function FacturerModal({ d, busy, onClose, onValider }) {
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Modèle de facture</label>
             <select className="inp" value={slug} onChange={(e) => setSlug(e.target.value)}>
-              <option value="">— Choisir automatiquement —</option>
+              <option value="">Choisir automatiquement</option>
               {modeles.map((t) => <option key={t.slug} value={t.slug}>{t.title || t.slug}</option>)}
             </select>
             {!modeles.length && (

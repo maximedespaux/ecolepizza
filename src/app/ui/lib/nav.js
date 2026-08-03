@@ -261,7 +261,7 @@ export const EXTRA_ACCESS = [
   {
     to: "cap:reveal-money",
     label: "Révéler les montants",
-    hint: "Pages Ventes & Finance — lève le masque des montants (• • • • •).",
+    hint: "Pages Ventes & Finance, lève le masque des montants (• • • • •).",
     ic: "eye",
     defaultRoles: ["SUPER_ADMIN"],
   },

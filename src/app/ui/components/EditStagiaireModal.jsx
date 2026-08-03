@@ -114,7 +114,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
       } else {
         const res = await createStagiaire(payload);
         onSaved?.(res && res.password
-          ? `Stagiaire ajouté. Compte créé — mot de passe : ${res.password} (notez-le, il ne sera plus affiché).`
+          ? `Stagiaire ajouté. Compte créé, mot de passe : ${res.password} (notez-le, il ne sera plus affiché).`
           : "Stagiaire ajouté.");
       }
     } catch (err) { onError?.(err.message); }
@@ -142,7 +142,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
               </div>
               <div className="row3">
                 <SelectField label="Civilité" value={form.civility} onChange={set("civility")}>
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {CIVILITES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </SelectField>
                 <Field label="Prénom" value={form.first_name} onChange={set("first_name")} required />
@@ -173,7 +173,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                 <Field label="Dernière expérience professionnelle" value={form.last_experience} onChange={set("last_experience")} />
                 <Field label="Durée (nombre)" value={form.experience_value} onChange={set("experience_value")} />
                 <SelectField label="Durée (unité)" value={form.experience_unit} onChange={set("experience_unit")}>
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {UNITES.map((u) => <option key={u} value={u}>{u}</option>)}
                 </SelectField>
               </div>
@@ -182,7 +182,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
               <h3 style={{ fontSize: 15, marginBottom: 10 }}>Statut actuel &amp; financement</h3>
               <div className="row3">
                 <SelectField label="Êtes-vous ?" value={form.professional_status} onChange={set("professional_status")}>
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {STATUTS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </SelectField>
                 <Field label="Montant CPF (€)" type="number" step="0.01" value={form.cpf_amount} onChange={set("cpf_amount")} />
@@ -196,7 +196,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
               {isEmployed && (
                 <div className="row2">
                   <SelectField label="Votre contrat actuel" value={form.current_contract} onChange={set("current_contract")}>
-                    <option value="">—</option>
+                    <option value="">-</option>
                     {CONTRATS.map((c) => <option key={c} value={c}>{c}</option>)}
                   </SelectField>
                 </div>
@@ -207,12 +207,12 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                   <option value="PROFESSIONNEL">Professionnel (entreprise)</option>
                 </SelectField>
                 <SelectField label="OPCO / financeur" value={form.opco} onChange={set("opco")}>
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {[...new Set([...(form.opco ? [form.opco] : []), ...opcoNames])].map((o) => <option key={o} value={o}>{o}</option>)}
                 </SelectField>
               </div>
 
-              <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 6px" }}>Niveaux / accès — codes formation · cochez <b>terminé</b> quand la formation est finie</label>
+              <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 6px" }}>Niveaux / accès, codes formation · cochez <b>terminé</b> quand la formation est finie</label>
               {codes.length === 0 ? (
                 <p className="hint">Aucune formation. Créez-en dans « Formations ».</p>
               ) : (
@@ -254,7 +254,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                   <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>Rattache le stagiaire à une entreprise. Ses coordonnées (SIRET, adresse, représentant, OPCO…) se gèrent dans la section <b>Entreprises</b> et servent aux documents.</p>
                   <div className="row2">
                     <SelectField label="Entreprise rattachée" value={form.company_id} onChange={set("company_id")}>
-                      <option value="">— Aucune —</option>
+                      <option value="">Aucune</option>
                       {companies.map((c) => <option key={c.id} value={c.id}>{c.name}{c.town ? ` · ${c.town}` : ""}</option>)}
                     </SelectField>
                     <div style={{ display: "flex", alignItems: "flex-end" }}>

@@ -188,11 +188,11 @@ function questionRatio(carte, servis) {
   return {
     type: "ratio", pizza, rep,
     q: `« ${pizza.nom} » est affichée ${euro(pizza.prix)}. Ce prix tient-il ?`,
-    pourquoi: `${euro(pizza.cout)} de matière sur ${euro(ht(pizza.prix))} HT, soit ${pct} % — `
+    pourquoi: `${euro(pizza.cout)} de matière sur ${euro(ht(pizza.prix))} HT, soit ${pct} %, `
       + (rep === "bon" ? "dans la cible 25-30 %."
         : rep === "bas" ? `au-dessus de 30 % : la pizza mange la marge. Il reste ${euro(marge(pizza.cout, pizza.prix))} pour payer le reste.`
           : "sous 25 % : la marge est belle, mais ce prix-là sort du marché et la pizza ne se vendra pas."),
-    source: "Manuel — Le coût matière",
+    source: "Manuel : Le coût matière",
   };
 }
 
@@ -238,10 +238,10 @@ function questionPrix(carte) {
       choix: [...choix].sort((a, b) => a - b).map((p) => ({ v: String(p), label: euro(p) })),
       q: `Ton fournisseur augmente : « ${pizza.nom} » revient maintenant à ${euro(cout)} de matière. `
         + "Tu l'affiches à combien ?",
-      pourquoi: `${euro(cout)} ÷ 0,275 = ${euro(brutHt)} HT, soit ${euro(brutHt * TVA)} TTC — `
+      pourquoi: `${euro(cout)} ÷ 0,275 = ${euro(brutHt)} HT, soit ${euro(brutHt * TVA)} TTC, `
         + `on affiche ${euro(bon)}, ce qui fait ${pct} % de ratio. `
         + "Le manuel donne la formule : coût matière ÷ objectif.",
-      source: "Manuel — Le coût matière · Le calcul",
+      source: "Manuel : Le coût matière · Le calcul",
     };
   }
   return null;
@@ -282,10 +282,10 @@ function questionMarge(carte) {
     q: `Entre « ${a.nom} » et « ${b.nom} », laquelle te rapporte le plus ?`,
     pourquoi: rep === "pareil"
       ? `À quelques centimes près, la même chose : ${euro(ma)} contre ${euro(mb)} de marge brute.`
-      : `${gagnante.nom} — ${euro(Math.max(ma, mb))} de marge brute contre ${euro(Math.min(ma, mb))}. `
+      : `${gagnante.nom}, ${euro(Math.max(ma, mb))} de marge brute contre ${euro(Math.min(ma, mb))}. `
         + `Son ratio est pourtant de ${Math.round(ratio(gagnante.cout, gagnante.prix) * 100)} % : `
         + "c'est en euros qu'on compte, pas en pourcentage.",
-    source: "Manuel — La matrice BCG · La marge se compte en euros",
+    source: "Manuel : La matrice BCG · La marge se compte en euros",
   };
 }
 
@@ -299,31 +299,31 @@ const VF = [{ v: "oui", label: "Oui" }, { v: "non", label: "Non" }, { v: "depend
 const PIEGES = [
   { q: "Ta pizza est affichée 11 € TTC et coûte 2,75 € de matière. Ton ratio est de 25 % ?", rep: "non",
     choix: VF,
-    pourquoi: "Non : 25 % serait le ratio sur le TTC. Le ratio se calcule sur le prix HT — "
+    pourquoi: "Non : 25 % serait le ratio sur le TTC. Le ratio se calcule sur le prix HT, "
       + "11 ÷ 1,10 = 10 € HT, donc 2,75 ÷ 10 = 27,5 %. Diviser par le TTC flatte le ratio de "
       + "trois points et masque une dérive qui commence.",
-    source: "Manuel — Le coût matière · Le calcul" },
+    source: "Manuel : Le coût matière · Le calcul" },
 
   { q: "Une pizza à 9 € HT qui coûte 2 € de matière te laisse 7 € de bénéfice ?", rep: "non",
     choix: VF,
     pourquoi: "7 €, c'est la marge BRUTE, pas le bénéfice. Le manuel prévient : il reste les "
       + "salaires, le loyer, l'énergie et les charges à payer dessus. Confondre les deux, c'est se "
       + "croire rentable jusqu'au bilan.",
-    source: "Manuel — Le coût matière · Le calcul" },
+    source: "Manuel : Le coût matière · Le calcul" },
 
   { q: "Tu passes en livraison via une plateforme. Tu gardes le même coût matière cible ?", rep: "non",
     choix: VF,
     pourquoi: "Non : la commission de plateforme ponctionne le prix de vente. À prix affiché "
-      + "identique, ce qui te revient baisse — il faut donc un coût matière PLUS SERRÉ pour s'en "
+      + "identique, ce qui te revient baisse : il faut donc un coût matière PLUS SERRÉ pour s'en "
       + "sortir. La cible n'est pas une constante, elle dépend du canal.",
-    source: "Manuel — Le coût matière · L'objectif" },
+    source: "Manuel : Le coût matière · L'objectif" },
 
   { q: "Une pizza se vend très bien mais rapporte peu de marge. Tu la retires de la carte ?", rep: "non",
     choix: VF,
     pourquoi: "C'est une vache à lait : forte popularité, faible marge. On ne retire pas ce que les "
-      + "clients viennent chercher — on baisse le coût matière ou on monte légèrement le prix. "
+      + "clients viennent chercher : on baisse le coût matière ou on monte légèrement le prix. "
       + "Le poids mort, lui, ne se vend pas ET ne rapporte pas : celui-là se retire.",
-    source: "Manuel — La matrice BCG · Les 4 cases" },
+    source: "Manuel : La matrice BCG · Les 4 cases" },
 
   { q: "Une pizza que personne ne prend, mais qui a une belle marge. Tu fais quoi ?", rep: "pousser",
     choix: [{ v: "retirer", label: "La retirer" }, { v: "pousser", label: "Mieux la placer" },
@@ -331,27 +331,27 @@ const PIEGES = [
     pourquoi: "C'est un dilemme : elle rapporte, mais personne ne la voit. On la place mieux sur la "
       + "carte, on la renomme, on la suggère. Baisser son prix détruirait justement ce qui en fait "
       + "l'intérêt, et la retirer reviendrait à jeter une marge qui existe.",
-    source: "Manuel — La matrice BCG · Les 4 cases" },
+    source: "Manuel : La matrice BCG · Les 4 cases" },
 
   { q: "Ta pizza la moins chère est à 8 €, la plus chère à 26 €. Ton ouverture de gamme est bonne ?",
     rep: "non", choix: VF,
     pourquoi: "26 ÷ 8 = 3,25 : c'est trop large. Omnès situe l'ouverture entre 2,5 et 3. Trop serrée, "
       + "tu ne captes ni les petits budgets ni les gros ; trop large, la carte perd sa cohérence.",
-    source: "Manuel — La règle d'Omnès · Ouverture de gamme" },
+    source: "Manuel : La règle d'Omnès · Ouverture de gamme" },
 
   { q: "Sur tes 12 pizzas, 6 sont dans la tranche de prix médiane. C'est la bonne répartition ?",
     rep: "oui", choix: VF,
     pourquoi: "Oui : Omnès vise 25 % en tranche basse, 50 % en médiane, 25 % en haute. La médiane "
-      + "doit peser autant que les deux autres réunies — c'est là que le client se décide.",
-    source: "Manuel — La règle d'Omnès · Dispersion des prix" },
+      + "doit peser autant que les deux autres réunies : c'est là que le client se décide.",
+    source: "Manuel : La règle d'Omnès · Dispersion des prix" },
 
   { q: "Tu mets une pizza en avant sur l'ardoise. Tu choisis laquelle ?", rep: "mediane",
     choix: [{ v: "basse", label: "La moins chère" }, { v: "mediane", label: "Une du milieu de gamme" },
       { v: "haute", label: "La plus chère" }],
     pourquoi: "Dans la zone médiane, là où se trouve la demande. Et le manuel insiste : un produit "
-      + "en promotion n'est pas un produit à bas prix — c'est un plat proposé à un prix attractif "
+      + "en promotion n'est pas un produit à bas prix : c'est un plat proposé à un prix attractif "
       + "pour augmenter sa popularité.",
-    source: "Manuel — La règle d'Omnès · La promotion" },
+    source: "Manuel : La règle d'Omnès · La promotion" },
 
   { q: "Ton ticket moyen théorique est très au-dessus du réel. Qu'est-ce que ça dit ?",
     rep: "cher",
@@ -360,29 +360,29 @@ const PIEGES = [
     pourquoi: "TMT > TMR, c'est un problème de positionnement : la carte est perçue trop chère par "
       + "rapport à la valeur. C'est l'inverse qui ouvrirait une marge de manœuvre pour monter les "
       + "prix. Tolérance admise : ±20 %.",
-    source: "Manuel — Le ticket moyen · Lire l'écart" },
+    source: "Manuel : Le ticket moyen · Lire l'écart" },
 
   { q: "Une Margherita coûte 0,90 € de matière. À 0,90 ÷ 0,30, tu l'affiches 3,30 € TTC ?",
     rep: "non", choix: VF,
     pourquoi: "Non. La formule donne un PLANCHER, pas un prix. À 3,30 € la marge brute est de 2,10 € "
-      + "— et il faut encore payer les salaires, le loyer et l'énergie dessus. Une pizza bon marché "
+      + "et il faut encore payer les salaires, le loyer et l'énergie dessus. Une pizza bon marché "
       + "doit porter sa part des charges comme les autres : c'est le marché qui fixe le haut, la "
       + "formule qui interdit le bas.",
-    source: "Manuel — Le coût matière · marge brute" },
+    source: "Manuel : Le coût matière · marge brute" },
 
   { q: "Tu calcules le coût matière d'une pizza : base, garnitures, fromage. C'est complet ?",
     rep: "non", choix: VF,
     pourquoi: "Il manque le pâton. Le manuel est explicite : coût matière = pâton + base + "
-      + "garniture. L'oublier retire deux à trois points de ratio à chaque pizza de la carte — une "
+      + "garniture. L'oublier retire deux à trois points de ratio à chaque pizza de la carte, une "
       + "erreur invisible, et répétée partout.",
-    source: "Manuel — Le coût matière · Le ratio" },
+    source: "Manuel : Le coût matière · Le ratio" },
 
   { q: "Deux pizzas : l'une à 24 % de ratio, l'autre à 31 %. La première est forcément la meilleure ?",
     rep: "non", choix: VF,
     pourquoi: "Non : le ratio ne dit rien des euros. Une pizza à 31 % vendue 16 € rapporte plus "
       + "qu'une pizza à 24 % vendue 8 €. On surveille le ratio pour détecter les dérives, on "
       + "compte la marge en euros pour savoir ce qu'on gagne.",
-    source: "Manuel — La matrice BCG · La marge se compte en euros" },
+    source: "Manuel : La matrice BCG · La marge se compte en euros" },
 ];
 
 /**
@@ -524,7 +524,7 @@ export default function JustePrix({ onClose, onFinish }) {
             <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px" }}>Deux minutes pour auditer une carte.</p>
             <p className="hint" style={{ margin: "0 0 4px" }}>
               Elle a dérivé : certaines pizzas mangent la marge, d'autres sont hors marché. La carte
-              reste ouverte à côté, avec le coût matière et le prix — tout sauf le ratio.
+              reste ouverte à côté, avec le coût matière et le prix, tout sauf le ratio.
             </p>
             <p className="hint" style={{ margin: "0 0 18px" }}>
               Cible du manuel : <b>25 à 30 %</b> du prix <b>HT</b> (TTC ÷ 1,10). Tu as
@@ -576,7 +576,7 @@ export default function JustePrix({ onClose, onFinish }) {
                   au mur. */}
               <div className="jp-aide">
                 <span><b>Ratio</b> = coût ÷ HT<i>, et HT = TTC ÷ 1,10</i></span>
-                <span><b>Cible</b> 25 à 30 %<i> — au-delà, la marge est mangée</i></span>
+                <span><b>Cible</b> 25 à 30 %<i> (au-delà, la marge est mangée)</i></span>
                 <span><b>Marge brute</b> = HT − coût<i>, en euros</i></span>
               </div>
             </div>
@@ -615,7 +615,7 @@ export default function JustePrix({ onClose, onFinish }) {
             <p className="hint" style={{ marginTop: 0 }}>
               {stars === 3 ? "Tu tiens ta carte."
                 : stars === 2 ? "Bien. C'est la marge en euros qui fait la différence, pas le ratio."
-                  : "Relis « Le coût matière » dans Notions — la formule tient en une ligne."}
+                  : "Relis « Le coût matière » dans Notions, la formule tient en une ligne."}
             </p>
 
             {/* LE DÉBRIEFING EST LE VRAI COURS : pendant la partie le retour est bref parce que le

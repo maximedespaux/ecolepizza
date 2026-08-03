@@ -31,7 +31,7 @@ const EMPTY = {
   name: "", category: "AUTRE", contact_name: "", contact_email: "", contact_phone: "",
   website: "", town: "", discount_pct: "", offer: "", notes: "",
 };
-const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR") : "—");
+const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR") : "-");
 const sumCash = (ap) => ap.filter((a) => apportType(a.type).cash).reduce((s, a) => s + (Number(a.value) || 0), 0);
 const sumKind = (ap) => ap.filter((a) => !apportType(a.type).cash).reduce((s, a) => s + (Number(a.value) || 0), 0);
 
@@ -50,7 +50,7 @@ function Partenaires() {
   /* Le libellé d'un code, et le CODE LUI-MÊME à défaut. Un partenaire peut porter une catégorie
      que la liste ne connaît plus (supprimée, ou importée d'ailleurs) : afficher un vide à sa
      place le ferait passer pour non classé. Mieux vaut montrer le code brut que rien. */
-  const libelle = (code) => categories.find((c) => c.code === code)?.label || code || "—";
+  const libelle = (code) => categories.find((c) => c.code === code)?.label || code || "-";
   const couleur = (code) => categories.find((c) => c.code === code)?.color || null;
 
   async function loadCategories() {
@@ -142,7 +142,7 @@ function Partenaires() {
               <Icon name="info" size={16} />
               <span>
                 <b className="tnum">{incompletes}</b> fiche{incompletes > 1 ? "s" : ""} sur <b className="tnum">{partners.length}</b>
-                {incompletes > 1 ? " n'ont" : " n'a"} ni contact ni offre — un répertoire ne sert
+                {incompletes > 1 ? " n'ont" : " n'a"} ni contact ni offre, un répertoire ne sert
                 qu'une fois rempli.
               </span>
             </div>
@@ -369,7 +369,7 @@ function CategoriesModal({ categories, onClose, onChange, onReload, onError }) {
             </p>
           ) : (
             <p className="hint" style={{ marginTop: 0 }}>
-              L'intitulé se renomme librement — le <b>code</b> reste, c'est lui qui relie la
+              L'intitulé se renomme librement, le <b>code</b> reste, c'est lui qui relie la
               catégorie à ses partenaires. Une catégorie utilisée ne peut pas être supprimée.
             </p>
           )}
@@ -409,7 +409,7 @@ function CategoriesModal({ categories, onClose, onChange, onReload, onError }) {
                 <input type="color" className="cat-couleur" value={c.color || "#8b8fa3"} disabled={!modifiable || busy}
                   aria-label={`Couleur de ${c.label}`}
                   onChange={(e) => agir(() => updatePartenaireCategorie(c.id, { color: e.target.value }))} />
-                <code className="cat-code" title="Code stocké sur les partenaires — non modifiable">{c.code}</code>
+                <code className="cat-code" title="Code stocké sur les partenaires, non modifiable">{c.code}</code>
                 <span className="hint tnum" style={{ minWidth: 24, textAlign: "right" }}>{c.partners ?? 0}</span>
                 <button className="iconbtn sm" disabled={!modifiable || busy || Number(c.partners) > 0 || c.code === "AUTRE"}
                   title={Number(c.partners) > 0 ? `${c.partners} partenaire(s) dans cette catégorie`

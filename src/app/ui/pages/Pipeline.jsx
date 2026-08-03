@@ -39,7 +39,7 @@ function Pipeline() {
     return m;
   }, [board]);
 
-  const sessLabel = (s) => `${s.program_code} — S${s.week} ${s.year} · ${s.stagiaires} stag.`;
+  const sessLabel = (s) => `${s.program_code}, S${s.week} ${s.year} · ${s.stagiaires} stag.`;
 
   /* DIX-NEUF COLONNES, DIX-HUIT VIDES. Un parcours complet compte autant d'étapes qu'il y a de
      documents ; avec un ou deux stagiaires, presque toutes annoncent « Personne à cette étape ».
@@ -70,7 +70,7 @@ function Pipeline() {
         lead="Où en est chaque stagiaire de la session, étape par étape."
         actions={
           <select className="inp" aria-label="Choisir la session à afficher" style={{ minWidth: 260 }} value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
-            {sessions.length === 0 && <option value="">— Aucune session —</option>}
+            {sessions.length === 0 && <option value="">Aucune session</option>}
             {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
           </select>
         }

@@ -131,7 +131,7 @@ function DifficultesCard({ difficulties, run }) {
         QCM : c'est ce qui dit au stagiaire dans quoi il met les pieds.
       </p>
       <div className="status info">
-        <b>La colonne XP ne sert plus.</b> L'XP a été retirée de Pizza Quest — la progression
+        <b>La colonne XP ne sert plus.</b> L'XP a été retirée de Pizza Quest, la progression
         se lit maintenant aux <b>cadres</b>, gagnés sur les formations terminées. La valeur
         reste enregistrée, elle n'est simplement plus lue.
       </div>
@@ -248,7 +248,7 @@ function AxeCard({ axe, cats, programs, run }) {
         : (
           <>
             <p className="hint" style={{ marginTop: -4 }}>
-              L'ordre ci-dessous est celui de la carte du stagiaire — du premier au dernier.
+              L'ordre ci-dessous est celui de la carte du stagiaire, du premier au dernier.
               Rangez-les dans le sens du parcours.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -370,7 +370,7 @@ function RangementCard({ programs, themes, tiers, run }) {
                       : (
                         <select value={p[champ] || ""}
                           onChange={(e) => run(() => setProgramQuestCategories(p.id, { [champ]: e.target.value || null }))}>
-                          <option value="">—</option>
+                          <option value="">-</option>
                           {opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                       )}
@@ -431,7 +431,7 @@ function PrerequisCard({ programs, prerequisites, run }) {
       <p className="hint" style={{ marginTop: 0 }}>
         « Pour attaquer cette formation, il faut avoir <b>terminé</b> celle-là. » Côté stagiaire,
         un monde dont les prérequis manquent reste verrouillé, avec la liste de ce qui reste à faire.
-        Les formations sont classées ci-dessous dans l'ordre du parcours — celles sans prérequis en tête.
+        Les formations sont classées ci-dessous dans l'ordre du parcours : celles sans prérequis en tête.
       </p>
 
       <div className="pr-list">
@@ -479,7 +479,7 @@ function PrerequisCard({ programs, prerequisites, run }) {
                       setOuvert(null);
                     }}>
                     <option value="">choisir une formation…</option>
-                    {candidats.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}
+                    {candidats.map((c) => <option key={c.id} value={c.id}>{c.code}, {c.title}</option>)}
                   </select>
                 ) : (
                   <button type="button" className="pr-add" disabled={candidats.length === 0}

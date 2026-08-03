@@ -45,7 +45,7 @@ const BLOC_ARTICLES = '<table><tbody><tr>'
 // Bloc « par stagiaire » prêt à l'emploi : les jetons par stagiaire sont des PUCES, remplies
 // ligne par ligne par le moteur (expandGroupBlocks). Les marqueurs {#Stagiaires}/{/Stagiaires}
 // restent en texte : ils délimitent le bloc.
-const BLOC_STAGIAIRES = `{#Stagiaires}${pill('N°')}. ${pill('Personne')} — ${pill('OPCO')}<br>{/Stagiaires}`;
+const BLOC_STAGIAIRES = `{#Stagiaires}${pill('N°')}. ${pill('Personne')}, ${pill('OPCO')}<br>{/Stagiaires}`;
 
 // Jetons résolus PAR STAGIAIRE à l'intérieur d'un bloc {#Stagiaires}…{/Stagiaires}
 // (documents de groupe / entreprise). Insérés en TEXTE brut.
@@ -324,7 +324,7 @@ function TemplateEditor() {
       <div className="tpl-editor-sticky">
         <div className="tpl-editor-head">
           <button className="btn ghost sm" onClick={() => navigate("/modeles")}>← Modèles</button>
-          <h2 style={{ margin: 0, fontSize: 17 }}>Éditeur — <span className="mono">{slug}</span></h2>
+          <h2 style={{ margin: 0, fontSize: 17 }}>Éditeur, <span className="mono">{slug}</span></h2>
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button className="btn sm ghost" onClick={() => setShowFields(true)} title="Gérer les champs disponibles du dossier">Champs documents</button>
             <button className="btn sm ghost" onClick={() => setShowCustom(true)} title="Créer des jetons calculés (dates, combinaisons…)">Jetons perso</button>
@@ -396,7 +396,7 @@ function TemplateEditor() {
                 Bloc de signature nommé, signé séparément par chaque personne.
               </p>
               {SIG_PRESETS.map((s) => (
-                <button key={s} className="tok-chip" title={`Bloc de signature « ${s} » — cliquer ou glisser`}
+                <button key={s} className="tok-chip" title={`Bloc de signature « ${s} », cliquer ou glisser`}
                   draggable
                   onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: sigKey(s), label: s }))}
                   onClick={() => insertSignature(s)}><Icon name="pencil" size={13} /> {s}</button>
@@ -482,7 +482,7 @@ function TemplateEditor() {
                       <div style={{ height: 6 }} />
                       {GROUP_ROW_TOKENS.map((t) => (
                         <button key={t.key} className="tok-chip" style={categoryChipStyle(g.group)}
-                          onMouseEnter={(e) => montrerTip(e, { ...t, desc: `${t.label} — à placer dans un bloc « par stagiaire ».` }, g.group)} onMouseLeave={cacherTip}
+                          onMouseEnter={(e) => montrerTip(e, { ...t, desc: `${t.label}, à placer dans un bloc « par stagiaire ».` }, g.group)} onMouseLeave={cacherTip}
                           draggable
                           onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
                           onClick={() => insertToken(t)}>{t.label}</button>

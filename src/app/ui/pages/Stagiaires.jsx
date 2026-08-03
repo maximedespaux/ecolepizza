@@ -97,7 +97,7 @@ function Stagiaires() {
     setStatus(null);
     try {
       const r = await resetStagiairePassword(l.id);
-      setStatus({ type: "success", message: `${l.has_account ? "Nouveau mot de passe" : "Compte créé — mot de passe"} : ${r.password}` });
+      setStatus({ type: "success", message: `${l.has_account ? "Nouveau mot de passe" : "Compte créé, mot de passe"} : ${r.password}` });
       load(query);
     } catch (err) {
       setStatus({ type: "error", message: err.message });
@@ -160,7 +160,7 @@ function Stagiaires() {
           <input
             autoFocus
             aria-label="Rechercher un stagiaire par nom, prénom ou e-mail"
-            placeholder="Rechercher un stagiaire — nom, prénom, e-mail…"
+            placeholder="Rechercher un stagiaire, nom, prénom, e-mail…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -244,7 +244,7 @@ function Stagiaires() {
                   <span className="avatar">{initials(l.first_name, l.last_name)}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{l.last_name} {l.first_name}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"} · {l.phone || "—"}</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "-"} · {l.phone || "-"}</span>
                   </span>
                 </Link>
                 {/* Pastilles de niveau : information SECONDAIRE. Elles s'effacent sous 760 px

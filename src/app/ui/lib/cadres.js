@@ -30,7 +30,7 @@ const CLE = (uid) => `impasto.cadre.${uid || "anon"}`;
 export const CADRE_EVENT = "impasto:cadre";
 
 export const CADRES = [
-  { min: 0, id: "aucun",   nom: "Sans cadre", desc: "Aucun cadre — votre avatar seul." },
+  { min: 0, id: "aucun",   nom: "Sans cadre", desc: "Aucun cadre, votre avatar seul." },
   { min: 1, id: "bronze",  nom: "Bronze",     desc: "1 formation terminée" },
   { min: 2, id: "argent",  nom: "Argent",     desc: "2 formations terminées" },
   { min: 3, id: "or",      nom: "Or",         desc: "3 formations terminées" },

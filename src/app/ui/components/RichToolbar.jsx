@@ -188,12 +188,11 @@ function RichToolbar({ editor, compact = false }) {
 
       {editor.isActive("table") && !compact && (
         <>
-          {/* Groupe contextuel « tableau ». Ordonné par fréquence d'usage : on remanie la
-              structure souvent, l'habillage de temps en temps, et on supprime une fois. */}
+           8 
           <Sep />
           <Grp>Tableau</Grp>
 
-          {/* 1. Structure — lignes et colonnes */}
+           9 
           <Btn title="Insérer une colonne à gauche" on={() => c().addColumnBefore().run()}><Icon name="column-insert-left" size={16} /></Btn>
           <Btn title="Insérer une colonne à droite" on={() => c().addColumnAfter().run()}><Icon name="column-insert-right" size={16} /></Btn>
           <Btn title="Supprimer la colonne" on={() => c().deleteColumn().run()}><Icon name="column-remove" size={16} /></Btn>
@@ -203,20 +202,19 @@ function RichToolbar({ editor, compact = false }) {
           <Btn title="Ligne d'en-tête" active={editor.isActive("tableHeader")} on={() => c().toggleHeaderRow().run()}><Icon name="table-header" size={16} /></Btn>
           <Btn title="Fusionner / séparer les cellules" on={() => c().mergeOrSplit().run()}><Icon name="merge-cells" size={16} /></Btn>
 
-          {/* 2. Bordures */}
+           10 
           <Sep />
           <Btn title="Bordures pleines" active={editor.getAttributes("table").borderStyle === "solid" || !editor.getAttributes("table").borderStyle} on={() => c().updateAttributes("table", { borderStyle: "solid" }).run()}><Icon name="border-all" size={16} /></Btn>
           <Btn title="Bordures pointillées" active={editor.getAttributes("table").borderStyle === "dashed"} on={() => c().updateAttributes("table", { borderStyle: "dashed" }).run()}><Icon name="border-dashed" size={16} /></Btn>
           <Btn title="Sans bordure" active={editor.getAttributes("table").borderStyle === "none"} on={() => c().updateAttributes("table", { borderStyle: "none" }).run()}><Icon name="border-none" size={16} /></Btn>
 
-          {/* 3. Largeur — les deux traits verticaux des icônes figurent les marges de la page */}
+           11 
           <Sep />
           <Btn title="Pleine largeur" active={(editor.getAttributes("table").widthMode || "full") === "full"} on={() => c().updateAttributes("table", { widthMode: "full" }).run()}><Icon name="width-full" size={16} /></Btn>
           <Btn title="Ajusté au contenu (sans couper le texte)" active={editor.getAttributes("table").widthMode === "auto"} on={() => c().updateAttributes("table", { widthMode: "auto" }).run()}><Icon name="width-auto" size={16} /></Btn>
           <Btn title="Compact, aligné à droite (totaux…)" active={editor.getAttributes("table").widthMode === "half"} on={() => c().updateAttributes("table", { widthMode: "half" }).run()}><Icon name="width-half" size={16} /></Btn>
 
-          {/* 4. Tableau « à hauteur réservée » : cf. expandInlineTables (rendu). Ne vaut que pour un
-              tableau contenant un bloc {#Articles} / {#Paiements} — ailleurs il ne fait rien. */}
+           12 
           <Sep />
           <Btn title="Articles empilés dans UNE seule ligne (un saut de ligne par article) au lieu d'une ligne de tableau par article"
             active={editor.getAttributes("table").rowsMode === "inline"}
@@ -229,7 +227,7 @@ function RichToolbar({ editor, compact = false }) {
                pense une facture. « N lignes » promettait une hauteur physique que le code ne
                tient pas dès qu'un article occupe deux lignes. */
             <select className="tb-sel tb-sel-long" aria-label="Place réservée, en nombre d'articles"
-              title="Réserve la place d'un nombre d'articles donné. En dessous, le tableau garde quand même cette hauteur (lignes vides) : les totaux et la signature tombent au même endroit d'une facture à l'autre. Au-delà, le tableau s'allonge normalement — rien n'est jamais tronqué."
+              title="Réserve la place d'un nombre d'articles donné. En dessous, le tableau garde quand même cette hauteur (lignes vides) : les totaux et la signature tombent au même endroit d'une facture à l'autre. Au-delà, le tableau s'allonge normalement, rien n'est jamais tronqué."
               value={editor.getAttributes("table").minLines || 0}
               onChange={(e) => c().updateAttributes("table", { minLines: parseInt(e.target.value, 10) || 0 }).run()}>
               <option value="0">Pas de hauteur réservée</option>

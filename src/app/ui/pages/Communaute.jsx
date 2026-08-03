@@ -626,7 +626,7 @@ export default function Communaute() {
 
       {list.length === 0 && echanges.length === 0 ? (
         <EmptyState icon="users" title="La communauté est encore vide"
-          text="Sois le premier : partage une fiche depuis le calculateur de pâte, ou pose une question — c'est souvent par là que ça commence.">
+          text="Sois le premier : partage une fiche depuis le calculateur de pâte, ou pose une question : c'est souvent par là que ça commence.">
           <button className="btn primary" onClick={() => setComposer("QUESTION")} style={{ marginTop: 14 }}>
             <Icon name="help" size={14} /> Poser une question
           </button>
@@ -660,7 +660,7 @@ export default function Communaute() {
           </div>
 
           {shown.length === 0 ? (
-            <EmptyState icon={onlyWish ? "bookmark" : "search"}>{onlyWish ? "Ta wishlist est vide — mets des fiches de côté avec le marque-page." : "Aucune fiche ne correspond à ta recherche."}</EmptyState>
+            <EmptyState icon={onlyWish ? "bookmark" : "search"}>{onlyWish ? "Ta wishlist est vide, mets des fiches de côté avec le marque-page." : "Aucune fiche ne correspond à ta recherche."}</EmptyState>
           ) : (
             <div className="comm-grid">
               {shown.map((s) => {
@@ -688,7 +688,7 @@ export default function Communaute() {
                             Deux etiquettes distinctes parce que les deux signaux ne s'eteignent
                             pas au meme moment — voir CommCard. */}
                         {s.new_comments > 0 && (
-                          <span className="comm-neuf" title={`${s.new_comments} nouveau${s.new_comments > 1 ? "x" : ""} commentaire${s.new_comments > 1 ? "s" : ""} — ouvrez la fiche pour les lire`}>
+                          <span className="comm-neuf" title={`${s.new_comments} nouveau${s.new_comments > 1 ? "x" : ""} commentaire${s.new_comments > 1 ? "s" : ""}, ouvrez la fiche pour les lire`}>
                             <Icon name="message-circle" size={11} /> {s.new_comments}
                           </span>
                         )}

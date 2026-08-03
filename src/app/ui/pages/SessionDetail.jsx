@@ -236,8 +236,8 @@ function SessionDetail() {
         <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 14px", flexWrap: "wrap" }}>
           <span className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="map" size={13} /> Lieu de formation :</span>
           <select className="inp" style={{ maxWidth: 320 }} value={session.location_id || ""} onChange={(e) => changeLocation(e.target.value)}>
-            <option value="">— Aucun / à définir —</option>
-            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}{l.town ? ` — ${l.town}` : ""}</option>)}
+            <option value="">Aucun / à définir</option>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}{l.town ? `, ${l.town}` : ""}</option>)}
           </select>
         </div>
       )}
@@ -261,7 +261,7 @@ function SessionDetail() {
             <>
               <select className="inp" style={{ marginBottom: 8 }} aria-label="Entreprise"
                 value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-                <option value="">— Choisir une entreprise —</option>
+                <option value="">Choisir une entreprise</option>
                 {entreprisesAvecStagiaires.map((c) => (
                   <option key={c.id} value={c.id}>{c.name} ({c.learner_count})</option>
                 ))}
@@ -320,7 +320,7 @@ function SessionDetail() {
                           </span>
                           <span style={{ flex: 1, minWidth: 0 }}>
                             <b>{l.last_name} {l.first_name}</b>
-                            <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"}</span>
+                            <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "-"}</span>
                           </span>
                           {dedans && <Badge tone="ok">Déjà inscrit</Badge>}
                         </label>
@@ -360,7 +360,7 @@ function SessionDetail() {
                   <span className="avatar" style={{ width: 30, height: 30, fontSize: 11, flex: "0 0 30px" }}>{initials(l.first_name, l.last_name)}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{l.last_name} {l.first_name}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"}</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "-"}</span>
                   </span>
                   <button type="button" className="btn sm primary" onClick={() => addStagiaire(l.id)}>＋ Ajouter</button>
                 </div>
@@ -387,7 +387,7 @@ function SessionDetail() {
                   title="Voir la fiche du stagiaire"
                 >
                   <b style={{ color: "var(--text)" }}>{e.last_name} {e.first_name}</b>
-                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{e.email || "—"}</span>
+                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{e.email || "-"}</span>
                 </button>
                 <Badge tone={scoreBadge(e.conformite_score)}>{e.conformite_score}</Badge>
                 <button className="iconbtn" title="Notes de suivi" onClick={() => setNotesFor({ id: e.id, name: `${e.last_name} ${e.first_name}` })}><Icon name="pencil" size={15} /></button>

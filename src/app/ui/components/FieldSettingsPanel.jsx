@@ -56,7 +56,7 @@ const FieldSettingsPanel = forwardRef(function FieldSettingsPanel({ onStatus }, 
       {!onStatus && <StatusMessage status={status} />}
       <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "0 0 12px", flexWrap: "wrap" }}>
         <input className="inp" style={{ maxWidth: 280 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un champ…" />
-        <span className="hint">🏷️ {tokenCount} jeton(s) · 🔀 {condCount} condition(s) — sur {fields.length}</span>
+        <span className="hint">🏷️ {tokenCount} jeton(s) · 🔀 {condCount} condition(s), sur {fields.length}</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button className="btn sm ghost" onClick={() => setOpen(Object.fromEntries(groups.map(([t]) => [t, true])))}>Tout déplier</button>
           <button className="btn sm ghost" onClick={() => setOpen({})}>Tout replier</button>
