@@ -7,6 +7,7 @@ import { dateHeure } from "../lib/format.js";
    là qu'on choisit à qui l'on écrit. Cette carte garde le SUIVI des consentements, qui est son
    sujet : qui a accepté, qui a refusé, qui n'a jamais été sollicité. */
 import { getSessionConsents, setSessionConsent } from "../api/apiClient.js";
+import { bumpBadges } from "../lib/events.js";
 
 /**
  * TRANSMISSION AUX PARTENAIRES — le suivi des consentements d'une session, et la liste qui en sort.
@@ -90,6 +91,11 @@ function SessionConsentements({ sessionId, canEdit }) {
     try {
       await setSessionConsent(sessionId, learnerId, accorde, source);
       await charger();
+      /* LA PASTILLE « SESSIONS » COMPTE LES GENS JAMAIS SOLLICITÉS : celui-ci vient de l'être,
+         elle doit descendre tout de suite. Sans ce signal, la barre latérale ne se remet à jour
+         qu'à son sondage des 60 s — on répond pour trois personnes, le compte ne bouge pas, et
+         l'on croit que la saisie n'a rien enregistré. */
+      bumpBadges();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setBusy(null); }
   }
@@ -159,8 +165,13 @@ function SessionConsentements({ sessionId, canEdit }) {
                  une saisie de l'organisme suffirait à la changer — le verrou se désactiverait en
                  le forçant une fois. Ici, c'est « s'est-il exprimé UNE FOIS QUELCONQUE ». */
               s.repondu_lui_meme ? (
-                <span className="consent-verrou" title={`Répondu depuis son espace le ${dateHeure(s.repondu_lui_meme)}`}>
-                  <Icon name="lock" size={12} /> a répondu lui-même
+                /* « DEPUIS SON ESPACE » PLUTÔT QUE « LUI-MÊME » : la formule genrait au masculin
+                   des gens dont on ne sait rien, alors qu'elle ne cherchait qu'à dire d'OÙ vient
+                   la réponse. Le lieu est d'ailleurs l'information utile — c'est lui qui
+                   distingue une réponse cliquée d'une saisie de l'organisme, et c'est lui qui
+                   ferme les boutons juste en dessous. */
+                <span className="consent-verrou" title={`Réponse donnée depuis l'espace stagiaire le ${dateHeure(s.repondu_lui_meme)}`}>
+                  <Icon name="lock" size={12} /> a répondu depuis son espace
                 </span>
               ) : (
                 <span className="consent-actions">
@@ -192,7 +203,7 @@ function SessionConsentements({ sessionId, canEdit }) {
   return (
     <Card title={titre}>
       <p className="hint" style={{ marginTop: 0 }}>
-        Les coordonnées d'un stagiaire ne partent chez un partenaire que s'il l'a accepté. Cette
+        Les coordonnées d'un stagiaire ne partent chez un partenaire qu'avec son accord. Cette
         liste est composée par le serveur : elle écarte d'elle-même les refus et les personnes
         jamais sollicitées.
       </p>
@@ -214,9 +225,9 @@ function SessionConsentements({ sessionId, canEdit }) {
           </select>
           <span className="hint">
             Une réponse saisie ici est enregistrée à votre nom : elle reste distinguable d'un
-            accord donné par le stagiaire depuis son espace. <b>Un stagiaire qui a répondu
-            lui-même ne peut pas être modifié ici</b> — lui seul peut en changer, depuis son
-            profil.
+            accord donné par le stagiaire depuis son espace. <b>Une réponse donnée depuis
+            l'espace stagiaire ne peut pas être modifiée ici</b> — seule la personne concernée
+            peut en changer, depuis son profil.
           </span>
         </div>
       )}

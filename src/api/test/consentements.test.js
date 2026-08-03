@@ -259,8 +259,13 @@ test("l'organisme ne peut pas écraser ce que le stagiaire a répondu lui-même"
     assert.doesNotMatch(bloc, /sien\.source === 'espace_stagiaire'/,
         'Regarder la dernière ligne laisserait le verrou se désactiver en le forçant une fois.');
     assert.match(bloc, /status\(409\)/);
-    assert.match(bloc, /lui seul peut en changer/,
+    assert.match(bloc, /seule la personne concernée peut en/,
         'Et le refus doit dire QUI peut en changer, sinon il se lit comme une panne.');
+    /* AUCUNE FORME GENRÉE dans un message qui parle de gens dont on ne sait rien : le masculin
+       y était une supposition gratuite. Dire d'où vient la réponse suffit, et c'est plus juste —
+       c'est l'origine qui ferme la saisie, pas la personne. */
+    assert.doesNotMatch(bloc, /lui-même|lui seul/,
+        'Le refus ne doit pas présumer du genre de la personne.');
     /* LE CONTRÔLE DOIT PRÉCÉDER L'ÉCRITURE : placé après, il refuserait une ligne déjà inscrite
        au registre — qui est en ajout seul et ne se retire pas. */
     assert.ok(bloc.indexOf('aReponduLuiMeme') < bloc.indexOf('consentements.enregistrer'),
@@ -272,7 +277,12 @@ test("l'organisme ne peut pas écraser ce que le stagiaire a répondu lui-même"
     const ui = lire(path.join(UI, 'components/SessionConsentements.jsx'));
     assert.match(ui, /s\.repondu_lui_meme \? \(/,
         'L\'écran doit suivre la MÊME règle que le serveur : une fois quelconque, pas la dernière.');
-    assert.match(ui, /a répondu lui-même/);
-    assert.match(ui, /Un stagiaire qui a répondu\s*\n?\s*lui-même ne peut pas être modifié ici/,
+    assert.match(ui, /a répondu depuis son espace/);
+    assert.match(ui, /Une réponse donnée depuis\s*\n?\s*l'espace stagiaire ne peut pas être modifiée ici/,
         'La limite doit être annoncée AVANT qu\'on la rencontre.');
+    /* Même exigence à l'écran : le verrou et la phrase qui l'annonce ne genrent personne. On ne
+       regarde que le JSX rendu — les commentaires du fichier gardent leur français d'origine. */
+    const rendu = ui.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert.doesNotMatch(rendu, /lui-même|lui seul/,
+        'Aucune forme genrée dans les textes affichés de cet écran.');
 });

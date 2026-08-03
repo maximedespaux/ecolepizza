@@ -239,9 +239,13 @@ const setConsentPourStagiaire = async (req, res) => {
             conn, req.user.organization_id, req.params.learnerId, FINALITE);
         if (quand) {
             return res.status(409).json({
-                message: `Ce stagiaire a répondu lui-même depuis son espace (le ${quand}). Sa `
-                    + 'réponse ne peut pas être modifiée ici : lui seul peut en changer, depuis '
-                    + 'son profil.',
+                /* FORMULATION NEUTRE : le message parle de gens dont on ne connaît pas le genre,
+                   et le masculin en faisait une supposition gratuite. Dire d'OÙ vient la réponse
+                   est de toute façon plus juste que dire QUI l'a donnée — c'est l'origine qui
+                   ferme la saisie, pas la personne. */
+                message: `Cette réponse a été donnée depuis l'espace stagiaire (le ${quand}). Elle `
+                    + 'ne peut pas être modifiée ici : seule la personne concernée peut en '
+                    + 'changer, depuis son profil.',
             });
         }
 

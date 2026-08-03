@@ -87,3 +87,51 @@ test('le regroupement ADDITIONNE deux sous-pages d\'une même rubrique', () => {
         'les pastilles d\'une même rubrique doivent s\'additionner');
     assert.match(corps, /if \(!n\) continue/, 'un compte à zéro ne doit pas créer de pastille');
 });
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   LA PASTILLE « SESSIONS » — les stagiaires jamais interrogés sur la transmission aux partenaires.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+test('la pastille compte l\'ABSENCE de réponse, pas un refus', () => {
+    /* NI ACCEPTÉ NI REFUSÉ = aucune ligne au registre, lequel est en ajout seul : qui s'est
+       prononcé y a forcément une trace. Compter `accorde = 0` compterait les REFUS — c'est-à-dire
+       des gens qui ont répondu, et qu'on relancerait pour une question déjà tranchée. */
+    assert.match(srcBadges, /LEFT JOIN consent_record[\s\S]*?c\.id IS NULL/,
+        'La pastille doit compter les stagiaires SANS ligne au registre.');
+    assert.doesNotMatch(srcBadges, /c\.accorde\s*=\s*0/,
+        'Un refus est une réponse : il ne doit pas gonfler la pastille.');
+    assert.ok(clesDesPastilles().includes('/sessions'), 'la clé /sessions n\'est plus émise');
+});
+
+test('la pastille se limite aux sessions en cours ou à venir, et à une personne par tête', () => {
+    /* SANS LA BORNE DE DATE, la pastille compterait tout le fichier — un nombre à quatre chiffres
+       que personne ne peut faire descendre, puisque les stagiaires d'il y a six ans ne repasseront
+       pas. Une pastille qui ne bouge jamais cesse d'être lue, et emporte les autres avec elle. */
+    assert.match(srcBadges, /COALESCE\(s\.end_date, s\.start_date\) >= CURDATE\(\)/,
+        'Seules les sessions non terminées peuvent être comptées.');
+    /* Et DISTINCT : deux inscriptions pour la même personne, c'est UNE question à poser. */
+    assert.match(srcBadges, /COUNT\(DISTINCT e\.learner_id\)/,
+        'La pastille compte des personnes, pas des inscriptions.');
+});
+
+test('aucune pastille tant qu\'aucun partenaire ne reçoit rien', () => {
+    /* La 131 démarre à zéro destinataire, volontairement. Tant que l'école n'a coché personne,
+       demander un consentement reviendrait à faire autoriser une transmission vers personne :
+       la pastille enverrait courir après des signatures pour un flux qui n'existe pas. Le contrat
+       compte au même titre — une convention échue ne reçoit plus rien. */
+    assert.match(srcBadges, /recoit_coordonnees = 1[\s\S]*?CONTRAT_VALABLE/,
+        'Le compte des destinataires doit exiger la case ET un contrat valable.');
+    assert.match(srcBadges, /if \(!destinataires\) return 0;/,
+        'Sans destinataire, la pastille doit valoir zéro sans même interroger le registre.');
+});
+
+test('répondre pour quelqu\'un fait redescendre la pastille tout de suite', () => {
+    /* La barre latérale ne sonde que toutes les 60 s. Sans ce signal, on saisit trois réponses,
+       le compte ne bouge pas, et l'on croit que rien ne s'est enregistré. Le bus existait déjà
+       (`lib/events.js`) mais AUCUN appelant ne l'utilisait — il était branché dans le vide. */
+    const src = fs.readFileSync(path.join(APP, 'ui/components/SessionConsentements.jsx'), 'utf8');
+    assert.match(src, /import \{ bumpBadges \}/, 'SessionConsentements doit importer bumpBadges.');
+    assert.match(src, /await charger\(\);[\s\S]{0,400}?bumpBadges\(\);/,
+        'Après une réponse enregistrée, la pastille doit être rafraîchie.');
+    assert.match(srcSidebar, /onBadgesRefresh\(load\)/, 'La barre latérale doit écouter le bus.');
+});
