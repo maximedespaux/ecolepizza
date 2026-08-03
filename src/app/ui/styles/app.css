@@ -4380,3 +4380,33 @@ button.av-wrap:active{transform:scale(.94)}
    quelle. Une page de confidentialité approximative engage l'organisme plus qu'elle ne le protège. */
 .legale-incomplet{border-left:3px solid var(--gold)}
 .legale-incomplet .legale-atraiter{margin:6px 0 0;font-size:12.5px}
+/* La transmission qui repose sur le consentement — bordée d'ember, pour qu'on la distingue au
+   premier regard de celles qui ont lieu de toute façon. */
+.legale-consent{border-left:3px solid var(--ember1)}
+.legale-consent-note{margin-top:6px;font-size:12.5px;line-height:1.5;
+  background:color-mix(in srgb,var(--ember1) 8%,transparent);border-radius:8px;padding:9px 11px}
+
+/* — DEMANDE DE CONSENTEMENT —
+   LES DEUX RÉPONSES ONT LE MÊME POIDS. Un « J'accepte » en couleur pleine face à un « Je refuse »
+   en gris pâle est un choix guidé, et un choix guidé n'est pas un choix libre : le refus doit être
+   aussi facile à cliquer que l'accord. D'où deux boutons identiques, à largeur égale. */
+.consent-modal{max-width:520px}
+.consent-texte{font-size:14.5px;line-height:1.6;margin:0 0 14px}
+.consent-dest{background:var(--surface2);border-radius:10px;padding:11px 13px;margin-bottom:14px;
+  display:flex;flex-direction:column;gap:3px}
+.consent-dest b{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.consent-dest span{font-size:13.5px}
+.consent-erreur{color:var(--red);font-size:13px;margin:12px 0 0}
+.consent-foot{display:flex;gap:10px}
+.consent-choix{flex:1;justify-content:center;font-weight:700}
+
+/* Le chemin du retour, dans le profil. */
+.consent-bloc{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.consent-bloc-t{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);margin-bottom:10px}
+.consent-ligne{display:flex;align-items:flex-start;gap:14px;padding:12px 13px;
+  background:var(--surface2);border-radius:10px}
+.consent-ligne > div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.consent-ligne b{font-size:14px}
+.consent-ligne .hint{font-size:12px;line-height:1.45}
+@media (max-width:640px){ .consent-ligne{flex-direction:column} }

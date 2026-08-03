@@ -114,6 +114,14 @@ export const TRACEURS = [
     duree: 'Jusqu\'à effacement',
   },
   {
+    cle: 'impasto.consent.relances', nature: 'local', exempte: true,
+    role: 'Compter combien de fois la demande de consentement a été présentée sans réponse',
+    detail: 'Elle sert à ARRÊTER de vous la reposer. Fermer la fenêtre sans répondre n\'est pas un '
+      + 'refus, donc la question revient — mais pas indéfiniment : après trois fois, elle ne '
+      + 'réapparaît plus et reste accessible depuis votre profil.',
+    duree: 'Jusqu\'à effacement',
+  },
+  {
     cle: 'impasto.moneyMasked', nature: 'session', exempte: true,
     role: 'Retenir, le temps de votre session, que vous avez affiché les montants',
     detail: 'Les montants sont masqués par défaut. Ce réglage vit en mémoire de session : à la '
@@ -156,12 +164,16 @@ export const TRANSMISSIONS = [
   },
   {
     destinataire: 'Partenaires de l\'organisme',
-    qui: 'Fournisseurs et partenaires commerciaux référencés par l\'école',
-    donnees: 'À PRÉCISER PAR L\'ORGANISME',
-    pourquoi: 'À PRÉCISER PAR L\'ORGANISME',
-    quand: 'Par courriel, session par session',
+    qui: 'Fournisseurs et partenaires référencés par l\'école',
+    donnees: 'Nom, prénom, adresse e-mail, téléphone, formation suivie et dates de session.',
+    pourquoi: 'Leur permettre de vous proposer leurs offres et de vous contacter directement.',
+    quand: 'Session par session — et UNIQUEMENT si vous y avez consenti.',
     canal: 'organisme',
-    aCompleter: true,
+    /* CE QUI DISTINGUE CETTE LIGNE DE TOUTES LES AUTRES : elle repose sur le consentement, pas
+       sur la nécessité du service. Elle ne s'applique donc qu'aux personnes qui ont dit oui, et
+       chacune peut revenir sur sa réponse à tout moment. La page doit le dire, sinon un lecteur
+       comprend que ses coordonnées partent de toute façon. */
+    surConsentement: true,
   },
 ];
 

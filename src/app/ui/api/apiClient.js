@@ -347,6 +347,16 @@ export function changeMyEmail(payload) {
 // Infos personnelles du stagiaire (modifiables, visibles de l'organisme).
 export function getMyInfos() { return request("/mon-espace/infos", { silent: true }); }
 export function updateMyInfos(payload) { return request("/mon-espace/infos", { method: "PUT", body: JSON.stringify(payload) }); }
+/* Consentements du stagiaire (migration 130). `data` vaut `null` quand la migration n'est pas
+   jouée ou quand le compte n'a pas de fiche stagiaire : l'écran ne propose alors rien, plutôt que
+   d'afficher une demande qu'il ne pourrait pas enregistrer. */
+export function getMyConsents() {
+  return request("/mon-espace/consentements");
+}
+export function setMyConsent(finalite, accorde) {
+  return request(`/mon-espace/consentements/${finalite}`, { method: "PUT", body: JSON.stringify({ accorde }) });
+}
+
 export function updateMyVisibility(visibility) { return request("/mon-espace/visibility", { method: "PUT", body: JSON.stringify({ visibility }) }); }
 
 // --- Stagiaires ---

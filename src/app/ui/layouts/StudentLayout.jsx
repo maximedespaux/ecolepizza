@@ -3,6 +3,7 @@ import { Outlet, Navigate, NavLink, useLocation } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 import ProfileModal from "../components/ProfileModal.jsx";
+import ConsentModal from "../components/ConsentModal.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
@@ -273,6 +274,9 @@ function StudentLayout() {
         )}
       </main>
 
+      {/* La demande de consentement, posée UNE FOIS. Elle décide seule si elle doit s'afficher :
+          uniquement quand une finalité n'a jamais été soumise. Un refus ne la rouvre pas. */}
+      <ConsentModal />
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </div>
   );

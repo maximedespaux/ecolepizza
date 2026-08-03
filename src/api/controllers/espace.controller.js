@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const consentements = require('../lib/consentements.js');
 const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigners } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
@@ -1768,6 +1769,59 @@ const getMyInfos = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/mon-espace/consentements — l'état courant, finalité par finalité.
+ *
+ * `accorde: null` veut dire JAMAIS DEMANDÉ, et c'est la seule chose qui déclenche la fenêtre côté
+ * écran. Un refus rend `false` : il est mémorisé, et on ne redemande pas. Redemander à chaque
+ * connexion après un refus rendrait le consentement non « libre » — les gens finissent par
+ * accepter pour avoir la paix, et un consentement arraché ne couvre rien.
+ */
+const getMyConsents = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        // Pas de fiche stagiaire (personnel de l'organisme) : rien à demander.
+        if (!learner) return res.json({ data: null });
+        const etat = await consentements.etatCourant(conn, learner.organization_id, learner.id);
+        res.json({ data: etat });   // `null` si la migration 130 n'est pas jouée
+    } catch (err) {
+        console.error('Erreur consentements :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PUT /api/mon-espace/consentements/:finalite — enregistre une réponse.
+ *
+ * AJOUTE UNE LIGNE, ne modifie jamais la précédente : il faut pouvoir démontrer l'état au moment
+ * de chaque transmission passée. Accepter puis retirer son accord ne doit pas rendre indéfendable
+ * un envoi qui était licite le jour où il a été fait.
+ */
+const setMyConsent = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire liée à ce compte.' });
+        if (typeof req.body?.accorde !== 'boolean') {
+            // On EXIGE un booléen : « ni oui ni non » ne doit pas pouvoir s'enregistrer comme un
+            // refus par défaut. Fermer la fenêtre sans répondre n'appelle aucune écriture.
+            return res.status(422).json({ message: 'Réponse attendue : accepté ou refusé.' });
+        }
+        const r = await consentements.enregistrer(conn, {
+            orgId: learner.organization_id, learnerId: learner.id,
+            finalite: req.params.finalite, accorde: req.body.accorde, source: 'espace_stagiaire',
+        });
+        if (!r.ok) return res.status(409).json({ message: r.message });
+        await logAudit(req, { action: 'UPDATE', entity: 'consent_record', entityId: learner.id,
+            after: { finalite: req.params.finalite, accorde: req.body.accorde } });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur enregistrement consentement :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** PUT /api/mon-espace/visibility — enregistre ce que les autres stagiaires voient. */
 const updateMyVisibility = async (req, res) => {
     try {
@@ -1836,5 +1890,6 @@ const updateMyInfos = async (req, res) => {
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
 module.exports = {
+    getMyConsents, setMyConsent,
     saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
 };

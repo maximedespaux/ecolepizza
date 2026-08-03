@@ -73,21 +73,26 @@ export default function Confidentialite() {
           <p>
             Distinct de ce qui précède : il s'agit ici de données qui <b>quittent l'organisme</b>.
             Deux périmètres, et ils ne se confondent pas — ce que l'application envoie d'elle-même,
-            et ce que l'école transmet par d'autres moyens.
+            et ce que l'école transmet par d'autres moyens. La seconde ligne ci-dessous ne vous
+            concerne <b>que si vous y avez consenti</b>.
           </p>
           <ul className="legale-liste">
             {TRANSMISSIONS.map((t) => (
-              <li key={t.destinataire} className={t.aCompleter ? "legale-incomplet" : ""}>
+              <li key={t.destinataire} className={t.surConsentement ? "legale-consent" : ""}>
                 <code>{t.destinataire} · {t.canal === "application" ? "envoyé par l'application" : "transmis par l'école"}</code>
                 <b>{t.pourquoi}</b>
                 <span className="legale-detail"><b>Ce qui est envoyé :</b> {t.donnees}</span>
                 <span className="legale-detail">{t.qui}</span>
                 <span className="legale-duree">{t.quand}</span>
-                {t.aCompleter && (
-                  <span className="legale-atraiter">
-                    <b>À compléter avant mise en ligne :</b> quelles données exactement, pour quelle
-                    finalité, et sur quelle base légale. Tant que ce n'est pas écrit, cette page ne
-                    peut pas être publiée en l'état.
+                {/* CETTE LIGNE-LÀ REPOSE SUR VOTRE ACCORD, pas sur la nécessité du service. Le
+                    dire explicitement évite qu'un lecteur comprenne que ses coordonnées partent de
+                    toute façon — et lui indique où reprendre la main. */}
+                {t.surConsentement && (
+                  <span className="legale-consent-note">
+                    <b>Uniquement avec votre accord.</b> Cette transmission n'a lieu que si vous
+                    l'avez explicitement acceptée. Refuser n'a aucune conséquence sur votre
+                    formation, et vous pouvez revenir sur votre réponse à tout moment depuis
+                    <b> Mon profil → Visibilité</b>. Votre réponse est conservée avec sa date.
                   </span>
                 )}
               </li>

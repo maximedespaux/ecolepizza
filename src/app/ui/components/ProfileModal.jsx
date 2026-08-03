@@ -6,6 +6,7 @@ import { initials, colorOf } from "../lib/format.js";
 import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
 import { CADRES, cadreFor, cadrePossede, cadrePorte, cadreDeQuest, EXPLOITS_QUEST, adopterCadreServeur, cadreClass, cadreStyle, cadreValeur, parseCadre, estCadreQuest, getCadreChoisi, setCadreChoisi } from "../lib/cadres.js";
 import { useEchap } from "../lib/useEchap.js";
+import { getMyConsents, setMyConsent } from "../api/apiClient.js";
 
 /**
  * Profil stagiaire, en trois onglets :
@@ -16,6 +17,63 @@ import { useEchap } from "../lib/useEchap.js";
 const CIVILITIES = ["", "M.", "Mme"];
 // Fonds proposés (charte pizza) — plus le sélecteur libre pour une couleur personnalisée.
 const PALETTE = ["#dc3e37", "#ff6900", "#fcb900", "#2f9e6f", "#3aa0e0", "#2c3371", "#7b3f9e", "#8a5a2b", "#e0533e", "#111827"];
+
+/**
+ * LE CHEMIN DU RETOUR — se rétracter doit être aussi simple qu'accepter (art. 7.3).
+ *
+ * C'est la contrepartie de la règle « on ne redemande pas après un refus » : puisque la fenêtre ne
+ * revient plus, il faut un endroit stable où changer d'avis, DANS LES DEUX SENS. Quelqu'un qui a
+ * refusé doit pouvoir accepter plus tard sans qu'on l'ait harcelé entre-temps.
+ *
+ * Chaque bascule AJOUTE une ligne au registre : l'historique daté est ce qui permettra de
+ * démontrer qu'une transmission passée était licite au moment où elle a eu lieu.
+ */
+function ConsentementsBloc() {
+  const [liste, setListe] = useState(null);
+  const [busy, setBusy] = useState(null);
+
+  useEffect(() => {
+    getMyConsents().then((r) => setListe(Array.isArray(r?.data) ? r.data : [])).catch(() => setListe([]));
+  }, []);
+
+  // `null` : pas encore chargé. `[]` : rien à proposer (migration non jouée, ou pas de fiche).
+  if (!liste || !liste.length) return null;
+
+  const basculer = async (f, valeur) => {
+    setBusy(f.cle);
+    try {
+      await setMyConsent(f.cle, valeur);
+      setListe((l) => l.map((x) => (x.cle === f.cle ? { ...x, accorde: valeur } : x)));
+    } catch { /* l'écran garde l'ancienne valeur : mieux vaut ne rien changer que mentir */ }
+    finally { setBusy(null); }
+  };
+
+  return (
+    <div className="consent-bloc">
+      <div className="consent-bloc-t">Confidentialité</div>
+      {liste.map((f) => (
+        <div key={f.cle} className="consent-ligne">
+          <div>
+            <b>{f.titre}</b>
+            <span className="hint">{f.formulation}</span>
+            {f.decide_at && (
+              <span className="hint">
+                Votre réponse du {f.decide_at.slice(0, 10).split("-").reverse().join("/")} :
+                <b> {f.accorde ? "accepté" : "refusé"}</b>
+              </span>
+            )}
+          </div>
+          <span className="seg" style={{ flex: "none" }}>
+            <button className={"seg-btn" + (f.accorde === false ? " on" : "")}
+              disabled={busy === f.cle} onClick={() => basculer(f, false)}>Refuser</button>
+            <button className={"seg-btn" + (f.accorde === true ? " on" : "")}
+              disabled={busy === f.cle} onClick={() => basculer(f, true)}>Accepter</button>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function ProfileModal({ onClose }) {
   useEchap(onClose);
@@ -154,7 +212,7 @@ export default function ProfileModal({ onClose }) {
             <ProfilTab avatar={avatar} choose={choose} chooseColor={chooseColor} cadre={cadre} palier={palier} suivant={suivant} pct={pct} done={done} enrolled={enrolled} attribues={attribues} quest={quest} exploits={exploits} choisirCadre={choisirCadre} />
           )}
           {tab === "infos" && <InfosTab onSaved={refreshUser} />}
-          {tab === "visibilite" && <VisibiliteTab who={who} />}
+          {tab === "visibilite" && <><VisibiliteTab who={who} /><ConsentementsBloc /></>}
           {tab === "compte" && <CompteTab currentEmail={user?.email} onEmailChanged={refreshUser} />}
         </div>
         <div className="mfoot">
