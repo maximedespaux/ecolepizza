@@ -413,3 +413,31 @@ test("une colonne manquante ne s'annonce pas comme un défaut de code", () => {
         'Ce fichier COMPLÈTE la table, il ne la crée pas.');
     assert.ok(fs.existsSync(path.join(MIG, '136_revert_partner_disclosure_colonnes.sql')));
 });
+
+test("l'écran ne se contredit pas sur ce que l'application envoie", () => {
+    /* DEUX PHRASES À QUARANTE LIGNES D'ÉCART SE CONTREDISAIENT : « L'application n'envoie rien
+       elle-même » puis, sous le journal, « Déjà envoyé à ce partenaire ». Signalé par l'école, et
+       c'est exactement la question qu'il fallait poser — l'une des deux est fausse.
+       Ce qui est journalisé, c'est une liste PRÉPARÉE. L'envoi part d'une messagerie, et l'outil
+       n'en sait rien : c'est d'ailleurs POURQUOI ce journal existe. */
+    const comp = fs.readFileSync(path.join(UI, 'components/ExportPartenaire.jsx'), 'utf8')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');   // les commentaires EXPLIQUENT le défaut corrigé
+    assert.match(comp, /n'envoie rien elle-même/);
+    assert.doesNotMatch(comp, /Déjà envoyé à ce partenaire/,
+        'Un libellé ne doit pas affirmer un envoi que l\'application ne fait pas.');
+    assert.match(comp, /Listes déjà préparées pour ce partenaire/);
+    assert.match(comp, /l'envoi part de votre messagerie/,
+        'Et le journal doit dire pourquoi il existe : il est la SEULE trace.');
+});
+
+test("l'écran dit ce que le choix du partenaire décide — et ce qu'il ne décide pas", () => {
+    /* QUESTION POSÉE PAR L'ÉCOLE, et elle était fondée : à quoi sert de choisir un partenaire si
+       la liste ne change pas ? Elle ne change PAS, en effet — le consentement porte sur « les
+       partenaires de l'école », pas sur l'un d'eux. Le choix décide de deux choses INVISIBLES
+       dans le tableau : le contrôle d'éligibilité, et la ligne inscrite au journal à son nom.
+       Un écran qui laisse deviner ça laisse croire à un filtre qui n'existe pas. */
+    const comp = fs.readFileSync(path.join(UI, 'components/ExportPartenaire.jsx'), 'utf8');
+    assert.match(comp, /ne change pas <b>qui<\/b> figure dans la liste/);
+    assert.match(comp, /vérifier<\/b> que celui-ci a bien le droit de recevoir/);
+    assert.match(comp, /inscrire à son nom<\/b>/);
+});

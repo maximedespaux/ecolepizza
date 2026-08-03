@@ -165,13 +165,41 @@ function ExportPartenaire({ partenaires, onErreur }) {
         Sessions <b>terminées</b> dans cette période. Un stagiaire inscrit à plusieurs sessions
         n'apparaît qu'une fois.
       </span>
+      {/* CE QUE LE CHOIX DU PARTENAIRE CHANGE — et surtout ce qu'il NE change PAS.
+          La question est légitime : le consentement du stagiaire porte sur « les partenaires de
+          l'école », pas sur l'un d'eux en particulier. La liste est donc LA MÊME quel que soit le
+          partenaire choisi. Ce que le choix décide, c'est le CONTRÔLE (a-t-il le droit de
+          recevoir ?) et la TRACE (à qui l'a-t-on donnée ?) — deux choses invisibles dans le
+          tableau, et que l'écran devait donc énoncer. */}
+      <span className="hint">
+        Le choix du partenaire ne change pas <b>qui</b> figure dans la liste — un stagiaire
+        accepte pour les partenaires de l'école, pas pour l'un d'eux. Il décide de deux autres
+        choses : <b>vérifier</b> que celui-ci a bien le droit de recevoir ces informations, et
+        <b> inscrire à son nom</b> ce qui lui a été communiqué.
+      </span>
 
       {journal.length > 0 && (
         <div className="export-part-journal">
-          <b><Icon name="history" size={12} /> Déjà envoyé à ce partenaire</b>
+          {/* « DÉJÀ ENVOYÉ » CONTREDISAIT LA LIGNE DU DESSUS, à quarante lignes d'écart :
+              l'écran annonce que l'application n'envoie rien, puis affirme qu'elle a envoyé.
+              Ce qui est journalisé, c'est une liste PRÉPARÉE — l'envoi, lui, se fait par courriel
+              et l'outil n'en sait rien. Le libellé le dit maintenant, et la mention explique à
+              quoi sert ce journal : sans lui, l'école ne peut pas répondre à un stagiaire qui
+              demande à qui ses coordonnées ont été communiquées. */}
+          <b><Icon name="history" size={12} /> Listes déjà préparées pour ce partenaire</b>
+          <span className="hint" style={{ display: "block", marginBottom: 5 }}>
+            Ce journal est la seule trace : l'envoi part de votre messagerie, l'application ne le
+            voit pas. C'est lui qui permet de répondre à « à qui avez-vous donné mes
+            coordonnées ? ».
+          </span>
           {journal.slice(0, 5).map((j) => (
             <div key={j.id} className="export-part-journal-l">
-              <span className="tnum hint">{j.sent_at}</span>
+              {/* `.chiffres` ET NON `.tnum` : cette dernière déclenche le masque des montants
+                  (`.money-mask .tnum::after`), et la date du journal se serait affichée
+                  « ••••• » dès que l'utilisateur masque les montants. Une date de transmission
+                  n'est pas une somme, et la cacher ne protège rien — elle rend seulement le
+                  journal illisible au moment où l'on en a besoin. */}
+              <span className="chiffres hint">{j.sent_at}</span>
               <span className="hint">
                 {j.learners_count} stagiaire{j.learners_count > 1 ? "s" : ""}
                 {/* Les anciennes lignes portent un `session_id` : elles viennent de l'export par

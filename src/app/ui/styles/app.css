@@ -4711,4 +4711,19 @@ button.av-wrap:active{transform:scale(.94)}
 
 /* L'export vit dans la barre d'outils de la page : déplié, il prend toute la largeur sous elle
    plutôt que de s'insérer entre deux boutons. */
-.filtres .export-part{flex-basis:100%;margin-top:8px}
+/* `min-width:0` EST INDISPENSABLE, et son absence est le piège classique du flex : un élément
+   flex vaut `min-width:auto`, c'est-à-dire « au moins la largeur de mon contenu ». Un tableau de
+   douze colonnes lui donnait donc sa propre largeur, et l'`overflow-x:auto` du tableau ne servait
+   à rien — il ne peut découper que ce qui dépasse d'un parent BORNÉ. Mesuré : un enfant de
+   3000 px étirait le bloc à 3024 px et faisait déborder la page. */
+.filtres .export-part{flex-basis:100%;min-width:0;margin-top:8px}
+
+
+/* CHIFFRES ALIGNÉS, SANS LE MASQUE DES MONTANTS.
+   `.tnum` fait DEUX choses à la fois : la fonte à chasse fixe pour les chiffres, ET le marqueur
+   « c'est de l'argent, masque-le » (cf. `.money-mask .tnum::after`). Les deux rôles n'ont rien à
+   voir, et la confusion se paie : une date ou un compte marqué `.tnum` disparaît derrière des
+   points dès que l'utilisateur masque les montants — « 22 fiches sur 22 » devient « ••••• fiches
+   sur ••••• », ce qui ne protège rien et rend la phrase incompréhensible.
+   `.chiffres` ne porte que la typographie. À utiliser partout où le nombre n'est pas un montant. */
+.chiffres{font-variant-numeric:tabular-nums}

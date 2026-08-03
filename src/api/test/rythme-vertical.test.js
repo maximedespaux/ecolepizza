@@ -160,3 +160,35 @@ test("la page d'une session n'offre plus d'export", () => {
     assert.match(exp, /même si vous ne\s*\n?\s*l'envoyez pas ensuite/);
 });
 
+
+test('un tableau large défile au lieu de pousser la page', () => {
+    /* LE PIÈGE CLASSIQUE DU FLEX, et il annule silencieusement un `overflow-x:auto` : un élément
+       flex vaut `min-width:auto` par défaut, c'est-à-dire « au moins la largeur de mon contenu ».
+       Le conteneur de tableau ne peut découper que ce qui dépasse d'un parent BORNÉ — sans
+       `min-width:0`, il n'y a rien à découper, le parent ayant grandi avec lui.
+       Mesuré : un enfant de 3000 px étirait le bloc à 3024 px et faisait déborder la page ; avec
+       la règle, le bloc reste à 892 px et le tableau défile en interne. */
+    assert.match(CSS, /\.filtres \.export-part\{[^}]*min-width:0/,
+        'Sans `min-width:0`, le `overflow-x:auto` du tableau ne sert à rien.');
+    assert.match(CSS, /\.consent-table-wrap\{overflow-x:auto\}/,
+        'Et le conteneur doit bien porter le défilement.');
+});
+
+test("une date n'est pas un montant : elle ne doit pas être masquée", () => {
+    /* `.tnum` FAIT DEUX CHOSES À LA FOIS : la fonte à chiffres alignés, ET le marqueur « c'est de
+       l'argent, masque-le » (`.money-mask .tnum::after` remplace le contenu par « ••••• »). Les
+       deux rôles n'ont rien à voir, et la confusion se paie : la date du journal des
+       transmissions disparaissait derrière des points dès que l'utilisateur masquait les
+       montants — signalé par l'école.
+       Cacher une date de transmission ne protège rien, et rend le journal illisible au moment
+       précis où l'on en a besoin. D'où `.chiffres`, qui ne porte que la typographie. */
+    assert.match(CSS, /\.chiffres\{font-variant-numeric:tabular-nums\}/,
+        'Une classe de chiffres alignés SANS le masque doit exister.');
+    assert.match(CSS, /\.money-mask \.tnum::after/, 'et `.tnum` garder son rôle de masque');
+
+    const comp = fs.readFileSync(path.join(UI, 'components/ExportPartenaire.jsx'), 'utf8')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    assert.match(comp, /className="chiffres hint">\{j\.sent_at\}/,
+        'La date du journal doit utiliser `.chiffres`…');
+    assert.doesNotMatch(comp, /className="tnum hint">\{j\.sent_at\}/, '…et non `.tnum`.');
+});
