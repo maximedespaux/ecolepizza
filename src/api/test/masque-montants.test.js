@@ -71,11 +71,62 @@ test('la déconnexion oublie la révélation', () => {
 
 test('le masque couvre les pages où il y a de l\'argent', () => {
     const lay = lire('layouts/AppLayout.jsx');
-    for (const p of ['/ventes', '/inventaire', '/factures', '/comptabilite', '/partenaires']) {
+    /* `/dashboard` a longtemps manqué à cette liste, et il affiche le chiffre d'affaires — le
+       même que `/ventes`, qui le masque. C'est la page d'arrivée après connexion, donc celle qui
+       reste ouverte quand quelqu'un passe derrière l'écran : exactement le cas que le masque
+       existe pour couvrir. La classe `.tnum` était même déjà posée sur le montant ; seule
+       l'entrée dans cette liste manquait, et rien ne le signalait. */
+    for (const p of ['/ventes', '/inventaire', '/factures', '/comptabilite', '/partenaires', '/dashboard']) {
         assert.ok(lay.includes(`"${p}"`), `la page ${p} doit rester couverte par le masque`);
     }
     /* Et le masque tient TOUJOURS pour qui n'a pas la capacité : son état personnel ne doit pas
        pouvoir le lever. C'est la seule ligne qui rend `cap:reveal-money` contraignante. */
     assert.match(lay, /!canRevealMoney\(user\) \|\| moneyMasked/,
         'Sans droit de révélation, masqué quoi qu\'il arrive.');
+});
+
+/**
+ * LE BOUTON ET LE MASQUE DOIVENT COUVRIR LES MÊMES PAGES.
+ *
+ * Les deux moitiés du dispositif vivent à des endroits différents — la liste dans `AppLayout`,
+ * le bouton dans chaque page — et rien ne les tenait d'accord. Les deux façons de diverger sont
+ * aussi silencieuses l'une que l'autre : une page dans la liste sans bouton masque des montants
+ * que personne ne peut plus révéler ; une page avec bouton hors de la liste offre un « Afficher »
+ * qui ne cache rien. Le tableau de bord était le second cas, en pire : ni l'un ni l'autre.
+ *
+ * CE QUE CE TEST NE VOIT PAS : une page qui affiche de l'argent sans bouton NI entrée dans la
+ * liste reste invisible ici — c'est exactement ce qui est arrivé au tableau de bord, et aucun
+ * test ne pouvait le rattraper, faute de savoir dire ce qu'est « de l'argent de l'école ». La
+ * boutique du stagiaire affiche des prix et ne doit surtout pas être masquée. Ce test garde la
+ * cohérence du dispositif, pas l'exhaustivité du jugement.
+ */
+test('chaque page couverte par le masque porte le bouton, et réciproquement', () => {
+    const lay = lire('layouts/AppLayout.jsx');
+    const liste = lay.match(/const FINANCE = \[([^\]]*)\]/);
+    assert.ok(liste, 'La liste FINANCE doit rester lisible dans AppLayout.jsx.');
+    const chemins = [...liste[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+
+    const pages = fs.readdirSync(path.join(UI, 'pages'))
+        .filter((f) => f.endsWith('.jsx') && lire(`pages/${f}`).includes('MoneyToggle'));
+
+    assert.strictEqual(pages.length, chemins.length,
+        `${pages.length} page(s) portent le bouton pour ${chemins.length} chemin(s) masqué(s) : `
+        + `${pages.join(', ')} contre ${chemins.join(', ')}.`);
+});
+
+/**
+ * LE CHIFFRE D'AFFAIRES NE SE REPLIE PAS SUR ZÉRO.
+ *
+ * La caisse est fermée au formateur (`sale.routes.js` n'ouvre qu'aux rôles du bureau). Son appel
+ * partait donc en 403, et le repli d'`allSettled` — `val(v, { total: 0 })` — donnait un tableau
+ * de bord annonçant « 0,00 € de ventes ». Un chiffre inventé, présenté comme un vrai, qui dit que
+ * l'école n'a rien vendu. Le masque ne rattrape pas ça : il aurait affiché « ••••• », donc promis
+ * un montant que le navigateur n'a jamais reçu.
+ */
+test('le tableau de bord n\'affiche le CA que s\'il l\'a reçu', () => {
+    const dash = lire('pages/Dashboard.jsx');
+    assert.match(dash, /setCaConnu\(v\.status === "fulfilled"\)/,
+        'Le tableau de bord doit retenir si la caisse a répondu.');
+    assert.match(dash, /\{caConnu && \(/,
+        'Le CA ne doit s\'afficher que si la caisse a répondu — jamais replié sur zéro.');
 });

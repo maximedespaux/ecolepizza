@@ -9,6 +9,7 @@ import { Icon } from "../components/Icon.jsx";
 import { etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js";
 import { auditLabel } from "../lib/auditLabels.js";
 import StatusMessage from "../components/StatusMessage.jsx";
+import MoneyToggle from "../components/MoneyToggle.jsx";
 import { scoreBadge, euro, colorOf } from "../lib/format.js";
 
 const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "-");
@@ -26,6 +27,9 @@ const QUICK = [
 
 function Dashboard() {
   const [stats, setStats] = useState({ stagiaires: 0, formations: 0, sessions: 0, dossiers: 0, ca: 0 });
+  // La caisse est fermée au formateur : son appel échoue, et le CA ne doit alors pas
+  // s'afficher du tout — surtout pas replié sur zéro. Cf. la ligne des compteurs.
+  const [caConnu, setCaConnu] = useState(false);
   // Ce qui APPELLE UN GESTE aujourd'hui. Un tableau de bord doit se terminer par un clic,
   // pas par une lecture : « 47 dossiers » n'apprend rien tant qu'on ignore si c'est beaucoup.
   const [todos, setTodos] = useState([]);
@@ -98,6 +102,7 @@ function Dashboard() {
         const enr = val(e, { data: [] }).data;
         const activeEnr = enr.filter((x) => activeIds.has(x.session_id));
 
+        setCaConnu(v.status === "fulfilled");
         setStats({
           stagiaires: val(s, { data: [] }).data.length,
           formations: val(f, { data: [] }).data.length,
@@ -217,7 +222,16 @@ function Dashboard() {
         <Link to="/stagiaires"><b className="chiffres">{stats.stagiaires}</b> stagiaires</Link><i />
         <Link to="/suivi"><b className="chiffres">{stats.dossiers}</b> dossiers actifs</Link><i />
         <Link to="/sessions"><b className="chiffres">{stats.sessions}</b> sessions à venir</Link><i />
-        <Link to="/ventes"><b className="tnum">{euro(stats.ca)}</b> de ventes</Link>
+        {/* LE CA NE S'AFFICHE QUE S'IL A ÉTÉ REÇU. La caisse est fermée au formateur : son appel
+            partait en 403 et le repli de `allSettled` retombait sur 0, donc son tableau de bord
+            annonçait « 0,00 € de ventes » — un chiffre inventé, présenté comme un vrai, qui dit
+            que l'école n'a rien vendu. Mieux vaut ne rien dire que dire zéro. */}
+        {caConnu && (
+          <>
+            <Link to="/ventes"><b className="tnum">{euro(stats.ca)}</b> de ventes</Link><i />
+            <MoneyToggle sm />
+          </>
+        )}
       </div>
 
       <Card title="Prochaines sessions" className="fade" more={<Link to="/sessions" className="card-more">Planning <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>} style={{ marginBottom: 16 }}>
