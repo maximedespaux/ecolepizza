@@ -175,3 +175,45 @@ test('le logo du partenaire arrive jusqu\'à la boutique du stagiaire', () => {
     assert.match(page, /fallback=\{<Icon name="users" size=\{16\} \/>\}/,
         'Sans logo, on retombe sur l\'icône — jamais sur un trou.');
 });
+
+test('le prix se lit « ancien → nouveau », dans cet ordre', () => {
+    /* L'ORDRE ÉTAIT INVERSE : le tarif école venait en premier, l'ancien prix barré derrière. On
+       découvrait donc le rabais APRÈS avoir lu le montant à payer, alors que c'est justement lui
+       qui donne sa valeur au chiffre. */
+    const page = fs.readFileSync(path.join(UI, 'pages/Boutique.jsx'), 'utf8')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');   // jamais sur les commentaires JSX
+    const bloc = page.slice(page.indexOf('shop-price-evol'), page.indexOf('shop-price-evol') + 700);
+    assert.ok(bloc.indexOf('shop-old') < bloc.indexOf('shop-fleche'), "l'ancien prix vient avant la flèche");
+    /* ON VISE `euro(p.price_school)`, L'AFFICHAGE, et non `price_school` tout court : ce nom
+       apparaît d'abord dans la CONDITION qui décide de montrer la flèche, si bien qu'une
+       recherche naïve le trouvait avant elle et faisait échouer un code pourtant correct. */
+    assert.ok(bloc.indexOf('shop-fleche') < bloc.indexOf('euro(p.price_school)'),
+        'et la flèche avant le tarif école');
+
+    /* PAS DE FLÈCHE QUAND IL N'Y A RIEN À COMPARER. Sans cette garde, un produit dont le prix
+       public égale (ou est inférieur à) le tarif école afficherait « 500 € → 500 € école », ce qui
+       annonce une remise inexistante. */
+    assert.match(bloc, /Number\(p\.price_public\) > Number\(p\.price_school\)/,
+        'La flèche ne doit apparaître que si le tarif école est RÉELLEMENT plus bas.');
+
+    /* WCAG 1.4.1 : la flèche ne porte pas seule le sens (le barré et « école » le disent aussi),
+       et elle est retirée des lecteurs d'écran, qui liraient « flèche vers la droite » entre deux
+       montants. */
+    assert.match(bloc, /aria-hidden="true">→/);
+});
+
+test("la fourchette entre revendeurs n'emprunte pas la flèche du rabais", () => {
+    /* LA COLLISION QUE CE TEST EMPÊCHE : « 3 075 € → 3 225 € » désignait le moins cher et le plus
+       cher constatés, pas une évolution. Tant que « Constaté chez 2 revendeurs » précédait la
+       ligne, le contexte levait l'ambiguïté. Ce texte a été retiré à la demande de l'école — et
+       depuis que les cartes à tarif négocié affichent « 3 500 € → 3 075 € », la même flèche
+       signifierait deux choses opposées sur la même page. Pire : elle se lirait « c'était moins
+       cher avant », soit l'inverse d'une bonne nouvelle. */
+    const page = fs.readFileSync(path.join(UI, 'pages/Boutique.jsx'), 'utf8');
+    const cmp = page.slice(page.indexOf('function ComparateurPrix'),
+        page.indexOf('function ComparateurPrix') + 1800);
+    assert.match(cmp, /de \{euro\(p\.prix_min\)\} à \{euro\(p\.prix_max\)\}/,
+        'Une fourchette se dit « de … à … », jamais avec une flèche.');
+    assert.doesNotMatch(cmp.replace(/\/\*[\s\S]*?\*\//g, ''), /→/,
+        'Aucune flèche dans le comparateur : elle appartient au rabais.');
+});

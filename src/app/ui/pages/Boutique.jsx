@@ -316,38 +316,34 @@ function SpecsBadges({ specs }) {
    et sa date : un prix sans provenance périme dans son dos. « Sur devis » quand le partenaire
    ne publie rien (Marana). */
 function ComparateurPrix({ p }) {
-  const [ouvert, setOuvert] = useState(false);
   const prix = p.prix || [];
   const devis = p.specs && p.specs.devis;
 
   if (!prix.length) {
     return <span className="cmp-devis"><Icon name="send" size={12} /> {devis ? "Sur devis auprès du partenaire" : "Tarif sur demande"}</span>;
   }
-  const ecart = p.prix_max > p.prix_min ? Math.round((p.prix_max / p.prix_min - 1) * 100) : 0;
+  /* CE QUI A ÉTÉ RETIRÉ, ET CE QUI RESTE.
+   *
+   * La carte portait quatre informations pour un seul prix : « Constaté chez 2 revendeurs », la
+   * fourchette, « +5 % d'un revendeur à l'autre », et un dépliant « Voir les prix ». Trois
+   * commentaires sur un chiffre — le stagiaire vient chercher combien ça coûte, pas une étude de
+   * marché. Il reste le prix.
+   *
+   * « DE … À … » ET NON UNE FLÈCHE, et ce n'est pas un détail de style. Depuis que les cartes à
+   * tarif négocié affichent « 3 500 € → 3 075 € » (ancien prix, puis prix école), une flèche
+   * signifierait DEUX choses opposées sur la même page : une baisse ici, un écart entre
+   * revendeurs là. Tant que « Constaté chez 2 revendeurs » précédait la ligne, le contexte
+   * levait l'ambiguïté ; en le retirant, la flèche seule laissait lire « c'était 3 075 €, c'est
+   * maintenant 3 225 € » — soit exactement l'inverse d'une bonne nouvelle. */
   return (
     <div className="cmp">
-      <span className="cmp-src">Constaté chez {prix.length} revendeur{prix.length > 1 ? "s" : ""}</span>
       <div className="cmp-range">
-        <b className="tnum">{euro(p.prix_min)}{p.prix_max > p.prix_min ? <> → {euro(p.prix_max)}</> : null} <span className="shop-unit">HT</span></b>
-        {ecart > 0 ? <span className="cmp-ecart">+{ecart} % d'un revendeur à l'autre</span> : null}
+        <b className="tnum">
+          {p.prix_max > p.prix_min
+            ? <>de {euro(p.prix_min)} à {euro(p.prix_max)}</>
+            : euro(p.prix_min)} <span className="shop-unit">HT</span>
+        </b>
       </div>
-      {prix.length > 1 ? (
-        <button className="cmp-toggle" onClick={() => setOuvert((v) => !v)} aria-expanded={ouvert}>
-          <Icon name={ouvert ? "chevron-down" : "chevron-right"} size={12} /> {ouvert ? "Masquer" : "Voir les prix"}
-        </button>
-      ) : null}
-      {ouvert ? (
-        <ul className="cmp-list">
-          {prix.map((x, i) => (
-            <li key={i}>
-              <a href={x.url} target="_blank" rel="noopener noreferrer">
-                {x.reseller} <Icon name="link" size={10} />
-              </a>
-              <span className="tnum">{euro(x.price_ht)}{x.includes_install ? " · posé" : ""}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   );
 }
@@ -419,8 +415,25 @@ function PartenairesTab() {
                   Sinon, la fourchette revendeurs. Sinon « sur devis ». */}
               {eco ? (
                 <span className="shop-price">
-                  <b className="tnum" style={{ color: "var(--green)" }}>{euro(p.price_school)} <span className="shop-unit">école</span></b>
-                  {pub ? <span className="shop-old">{euro(p.price_public)}</span> : null}
+                  {/* L'ANCIEN PRIX VIENT EN PREMIER, puis la flèche, puis le tarif école.
+                      L'ordre inverse — nouveau prix, puis ancien barré derrière — se lisait à
+                      contretemps : on découvrait le rabais APRÈS avoir lu le montant à payer,
+                      alors que c'est justement lui qui donne sa valeur au chiffre. La flèche dit
+                      le mouvement que le barré seul laissait deviner. */}
+                  {/* UNE RANGÉE À PART, parce que `.shop-price` est délibérément en COLONNE :
+                      il porte jusqu'à quatre morceaux sur une carte de 165 px, et tout mettre en
+                      ligne débordait de 34 px sur la carte voisine (cf. le commentaire du CSS).
+                      Sans ce conteneur, la flèche tombait sur sa propre ligne entre les deux
+                      montants — vérifié à l'écran — et l'évolution ne se lisait plus d'un trait.
+                      La rangée s'enroule : sur une carte étroite, le tarif école passe dessous
+                      plutôt que de déborder. */}
+                  <span className="shop-price-evol">
+                    {pub && Number(p.price_public) > Number(p.price_school) ? (
+                      <><span className="shop-old">{euro(p.price_public)}</span>
+                      <span className="shop-fleche" aria-hidden="true">→</span></>
+                    ) : null}
+                    <b className="tnum" style={{ color: "var(--green)" }}>{euro(p.price_school)} <span className="shop-unit">école</span></b>
+                  </span>
                 </span>
               ) : <ComparateurPrix p={p} />}
               {p.note ? <span className="shop-note">{p.note}</span> : null}

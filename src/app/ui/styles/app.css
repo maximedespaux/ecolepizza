@@ -1723,7 +1723,6 @@ tbody tr:last-child td{border-bottom:none}
   border:1px dashed var(--border);border-radius:10px;opacity:.7}
 .pq-debug span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-weight:700}
 
-
 /* Flèches de bord : elles ne paraissent que du côté où il reste du chemin. Un chemin coupé
    net au bord de l'écran se lit comme un chemin fini — c'est ce malentendu qu'elles lèvent.
    Posées SUR le chemin (position absolue) plutôt qu'à côté : elles ne doivent pas rétrécir
@@ -2808,6 +2807,14 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Barré, mais pas décoratif : c'est en lisant ce prix que le stagiaire voit ce que le tarif
    école lui fait gagner. Donc lisible — cf. .shop-ht sur le choix de --muted. */
 .shop-old{font-size:11.5px;color:var(--muted);text-decoration:line-through}
+/* LA FLÈCHE N'EST PAS SEULE À PORTER L'INFORMATION (WCAG 1.4.1) : le prix barré dit déjà qu'il
+   s'agit d'un ancien tarif, et la mention « école » qualifie le nouveau. `aria-hidden` la retire
+   des lecteurs d'écran, qui liraient sinon « flèche vers la droite » entre deux montants. */
+.shop-fleche{font-size:11.5px;color:var(--muted)}
+/* La rangée « ancien prix → tarif école », dans un conteneur en colonne. `baseline` aligne les
+   deux montants sur leur ligne d'écriture malgré leurs tailles différentes (11,5 px et 15 px) ;
+   sans lui, le prix barré flottait au-dessus de la flèche. */
+.shop-price-evol{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 5px}
 .shop-note{font-size:10.5px;color:var(--muted);line-height:1.35;border-top:1px solid var(--border-soft);padding-top:5px;margin-top:2px}
 /* N'apparaît QUE si l'article n'est pas en stock — c'est une exception, pas une étiquette.
    L'ambre, pas le rouge : « sur commande » n'est pas une erreur, juste un délai. */
@@ -2964,21 +2971,11 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .spec-badges{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0}
 .spec-badges .badge{font-size:9.5px;padding:2px 6px;gap:3px}
 .cmp{display:flex;flex-direction:column;gap:3px;margin-top:auto;padding-top:6px}
-.cmp-src{font-size:10px;color:var(--muted)}
+
 .cmp-range b{font-size:15px;white-space:nowrap}
 /* L'écart entre revendeurs = l'argument. Fond ambre léger + texte normal (pas d'ambre EN
    texte, qui échoue au contraste). Le poids et le fond suffisent à le faire ressortir. */
-.cmp-ecart{display:inline-block;margin-left:2px;font-size:10px;font-weight:700;color:var(--text);
-  background:var(--amber-bg);padding:1px 6px;border-radius:999px}
-.cmp-toggle{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;padding:2px 0;
-  background:none;border:none;color:var(--muted);font-weight:600;font-size:11px;cursor:pointer}
-.cmp-toggle:hover{color:var(--text)}
-.cmp-list{list-style:none;margin:2px 0 0;padding:0;display:grid;gap:4px}
-.cmp-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px}
-.cmp-list a{display:inline-flex;align-items:center;gap:4px;color:var(--text);text-decoration:none}
-.cmp-list a:hover{text-decoration:underline}
-.cmp-list a svg{color:var(--muted)}
-.cmp-list li span{font-weight:600;white-space:nowrap;color:var(--text)}
+
 .cmp-devis{display:inline-flex;align-items:center;gap:5px;margin-top:auto;padding-top:6px;
   font-size:12px;font-weight:600;color:var(--muted)}
 .cmp-devis svg{flex-shrink:0}
@@ -3650,7 +3647,6 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 .stu-app .avatar:hover{transform:scale(1.06)}
 .stu-app .avatar:active{transform:scale(.94)}
 
-
 /* — Confirmation d'enregistrement ————————————————————————————————————————————————
    Flottante en bas d'écran : le bouton « Enregistrer » peut se trouver n'importe où dans un
    assistant qui défile, la confirmation doit être vue sans avoir à chercher.
@@ -3897,7 +3893,6 @@ button.av-wrap:active{transform:scale(.94)}
   .cadre-qparfait{animation:none}
 }
 
-
 @media (prefers-reduced-motion:reduce){
   .cadre-braise::after{animation:none;opacity:.8;scale:1}
   .cadre-maestro{animation:none}
@@ -4022,7 +4017,6 @@ button.av-wrap:active{transform:scale(.94)}
 /* Il RESPIRE légèrement — sans bouger de place. Un jeton parfaitement immobile passe pour une
    icône d'interface ; ce battement discret le rattache au cadre qu'il décore. */
 @keyframes cadreMedaillon{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
-
 
 /* — LES AUTRES RÉSULTATS DE CONCOURS —
    « Champion » couvrait seul l'ensemble des podiums, ce qui revenait à donner le même cadre au
@@ -4320,7 +4314,6 @@ button.av-wrap:active{transform:scale(.94)}
 .prof-ava.cadre{--anneau:5px} /* avatar de profil : pas de `--av`, on fixe la valeur */
 .prof-ava.cadre-braise::after,.prof-ava.cadre-maestro::after{inset:-5px}
 
-
 /* — CATÉGORIES DE PARTENAIRES (migration 129) —
    Une ligne par catégorie : rang, intitulé, couleur, code, nombre de partenaires, suppression.
    L'intitulé prend toute la place restante (`flex:1`) parce que c'est le seul champ qu'on écrit ;
@@ -4348,7 +4341,6 @@ button.av-wrap:active{transform:scale(.94)}
   .cat-code{display:none}
   .cat-rang{flex-direction:row}
 }
-
 
 /* — PAGES LÉGALES (confidentialité) —
    Colonne étroite et interlignage généreux : c'est du texte qu'on lit vraiment, pas un tableau de
@@ -4446,7 +4438,6 @@ button.av-wrap:active{transform:scale(.94)}
   @keyframes bandeau-monte{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 }
 @media (prefers-reduced-motion:reduce){ .bandeau-conf{animation:none} }
-
 
 /* ── Transmission aux partenaires : consentements d'une session ──────────────────────────────
    RÈGLES DE BASE D'ABORD, MÉDIA-QUERY ENSUITE. Une `@media` écrite AVANT la règle de base est
