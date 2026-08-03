@@ -170,3 +170,47 @@ test('les données sensibles ne sont ni offertes ni même LUES', () => {
             `« ${c} » ne doit pas même être LU par la requête de l'export`);
     }
 });
+
+test('le représentant de l\'entreprise ne peut pas être transmis', () => {
+    /* EXCLUSION D'UNE AUTRE NATURE QUE LES PRÉCÉDENTES : ce n'est pas une question de
+     * minimisation, mais de QUI PEUT CONSENTIR.
+     *
+     * Le représentant légal est un ÊTRE HUMAIN. Ses nom, civilité et fonction sont SES données
+     * personnelles, pas celles du stagiaire — aucun stagiaire ne peut consentir à leur
+     * transmission, quoi qu'il coche. Un consentement donné par quelqu'un d'autre ne couvre rien.
+     *
+     * `company.email` et `company.phone` sont écartés pour l'ambiguïté : souvent une adresse
+     * générique, parfois celle d'une personne nommée. On ne construit pas une transmission sur
+     * « c'est probablement une boîte aux lettres ». */
+    for (const c of ['entreprise_representant', 'entreprise_email', 'entreprise_telephone',
+        'representative_name', 'representative_role']) {
+        assert.ok(!lib.CHAMPS_TRANSMISSIBLES[c], `« ${c} » ne doit pas être offert`);
+    }
+    const ctrl = fs.readFileSync(path.join(API, 'controllers/consentement.controller.js'), 'utf8');
+    const d = ctrl.indexOf('async function sessionAvecInscrits');
+    const requete = ctrl.slice(d, ctrl.indexOf('return { session', d));
+    for (const col of ['representative_name', 'representative_civ', 'representative_role']) {
+        assert.ok(!requete.includes(col), `« ${col} » ne doit pas même être lu`);
+    }
+    assert.ok(!/c\.email|c\.phone/.test(requete),
+        'les coordonnées de l\'entreprise ne doivent pas être lues non plus');
+});
+
+test('les champs sont groupés par source, et chaque groupe est nommé', () => {
+    /* SANS GROUPEMENT, « Ville » apparaîtrait DEUX FOIS dans une liste indifférenciée — celle du
+       stagiaire et celle de l'entreprise, même mot pour deux données différentes. Le regroupement
+       n'est donc pas cosmétique : il est ce qui rend les étiquettes univoques. */
+    for (const [cle, v] of Object.entries(lib.CHAMPS_TRANSMISSIBLES)) {
+        assert.ok(lib.GROUPES[v.g], `« ${cle} » doit appartenir à un groupe nommé`);
+    }
+    const doublons = {};
+    for (const v of Object.values(lib.CHAMPS_TRANSMISSIBLES)) {
+        const k = `${v.g}|${v.libelle}`;
+        assert.ok(!doublons[k], `deux champs « ${v.libelle} » dans le même groupe`);
+        doublons[k] = true;
+    }
+    /* Et l'écran doit bien les rendre groupe par groupe, pas à la file. */
+    const comp = fs.readFileSync(path.join(UI, 'components/ChampsPartenaires.jsx'), 'utf8');
+    assert.match(comp, /Object\.entries\(data\.groupes\)\.map/);
+    assert.match(comp, /data\.catalogue\.filter\(\(c\) => c\.groupe === cle\)/);
+});

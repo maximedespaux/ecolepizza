@@ -89,14 +89,37 @@ function ChampsPartenaires() {
 
       <StatusMessage status={status} />
 
-      <div className="champs-grille">
-        {data.catalogue.map((c) => (
-          <label key={c.cle} className={"champ-case" + (choisis.includes(c.cle) ? " on" : "")}>
-            <input type="checkbox" checked={choisis.includes(c.cle)} onChange={() => basculer(c.cle)} />
-            <span>{c.libelle}</span>
-          </label>
-        ))}
-      </div>
+      {/* GROUPÉ PAR SOURCE. Dix-neuf cases à la file se lisaient comme une liste indifférenciée,
+          où « Ville » (celle du stagiaire) et « Ville » (celle de l'entreprise) portent le même
+          mot sans être la même donnée. Le regroupement fait la différence pour l'œil, et rappelle
+          au passage que le second bloc ne concerne que les stagiaires financés. */}
+      {Object.entries(data.groupes).map(([cle, titre]) => {
+        const champs = data.catalogue.filter((c) => c.groupe === cle);
+        if (!champs.length) return null;
+        return (
+          <div key={cle} className="champs-groupe">
+            <div className="champs-groupe-t">{titre}</div>
+            <div className="champs-grille">
+              {champs.map((c) => (
+                <label key={c.cle} className={"champ-case" + (choisis.includes(c.cle) ? " on" : "")}>
+                  <input type="checkbox" checked={choisis.includes(c.cle)} onChange={() => basculer(c.cle)} />
+                  <span>{c.libelle}</span>
+                </label>
+              ))}
+            </div>
+            {cle === "entreprise" && (
+              /* CE QUI N'EST PAS PROPOSÉ MÉRITE D'ÊTRE DIT, sinon on cherche la case du contact et
+                 l'on croit à un oubli. Le nom du représentant est la donnée d'un AUTRE — aucun
+                 stagiaire ne peut consentir pour lui, quoi qu'il coche. */
+              <p className="hint champs-note">
+                <Icon name="info" size={12} /> Le nom du représentant et les coordonnées de
+                l'entreprise ne sont pas proposés : ce sont les données d'une autre personne, que
+                le stagiaire ne peut pas engager par son accord.
+              </p>
+            )}
+          </div>
+        );
+      })}
 
       {/* CE QUE LE STAGIAIRE LIRA, mot pour mot. L'aperçu suit la sélection en direct : on voit
           la phrase se former en cochant, ce qui est la seule façon de juger d'un texte. */}
@@ -187,6 +210,12 @@ const ANNONCES = {
   projet: "la nature de mon projet",
   statut: "ma situation professionnelle",
   entreprise: "le nom de l'entreprise qui finance ma formation",
+  entreprise_siret: "le SIRET de cette entreprise",
+  entreprise_forme: "sa forme juridique",
+  entreprise_naf: "son code NAF",
+  entreprise_adresse: "son adresse",
+  entreprise_cp: "son code postal",
+  entreprise_ville: "sa ville",
 };
 
 export default ChampsPartenaires;

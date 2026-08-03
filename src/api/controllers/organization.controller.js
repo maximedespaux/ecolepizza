@@ -26,8 +26,9 @@ const getPartnerFields = async (req, res) => {
         const choisis = await consentements.champsOrganisme(conn, req.user.organization_id);
         res.json({
             data: {
+                groupes: consentements.GROUPES,
                 catalogue: Object.entries(consentements.CHAMPS_TRANSMISSIBLES)
-                    .map(([cle, v]) => ({ cle, libelle: v.libelle })),
+                    .map(([cle, v]) => ({ cle, libelle: v.libelle, groupe: v.g })),
                 choisis,
                 apercu: consentements.formulationPour(choisis),
                 defaut: consentements.FINALITES.partenaires.champsParDefaut,

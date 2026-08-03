@@ -4663,3 +4663,14 @@ button.av-wrap:active{transform:scale(.94)}
 .champs-effet{margin-top:11px;display:flex;flex-direction:column;gap:5px}
 .champs-effet .reca-ligne{align-items:flex-start}
 .champs-effet .reca-ligne svg{margin-top:2px}
+
+/* Champs transmissibles, groupés par source (stagiaire / entreprise).
+   Le regroupement n'est pas cosmétique : « Ville » figure dans les deux blocs et désigne deux
+   données différentes. Sans séparation visible, la même étiquette apparaîtrait deux fois dans
+   une liste indifférenciée. */
+.champs-groupe{margin-bottom:12px}
+.champs-groupe-t{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px}
+.champs-groupe .champs-grille{margin:0}
+.champs-note{display:flex;align-items:flex-start;gap:6px;font-size:11px;margin:7px 0 0;line-height:1.4}
+.champs-note svg{flex-shrink:0;margin-top:1px}

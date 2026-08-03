@@ -50,20 +50,40 @@ const FINALITES = {
 /** Détecte une table ou une colonne absente : la migration 130 peut ne pas être jouée. */
 const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 
+const GROUPES = {
+    stagiaire: 'Le stagiaire',
+    entreprise: 'Son entreprise, si elle finance la formation',
+};
+
 const CHAMPS_TRANSMISSIBLES = {
-    civilite: { libelle: 'Civilité', annonce: 'ma civilité' },
-    nom: { libelle: 'Nom', annonce: 'mon nom' },
-    prenom: { libelle: 'Prénom', annonce: 'mon prénom' },
-    email: { libelle: 'Adresse e-mail', annonce: 'mon adresse e-mail' },
-    telephone: { libelle: 'Téléphone', annonce: 'mon téléphone' },
-    adresse: { libelle: 'Adresse postale', annonce: 'mon adresse postale' },
-    code_postal: { libelle: 'Code postal', annonce: 'mon code postal' },
-    ville: { libelle: 'Ville', annonce: 'ma ville' },
-    formation: { libelle: 'Formation suivie', annonce: 'la formation que je suis' },
-    dates_session: { libelle: 'Dates de session', annonce: 'les dates de ma session' },
-    projet: { libelle: 'Projet (création, four, camion…)', annonce: 'la nature de mon projet' },
-    statut: { libelle: 'Situation professionnelle', annonce: 'ma situation professionnelle' },
-    entreprise: { libelle: 'Entreprise (si elle finance)', annonce: 'le nom de l\'entreprise qui finance ma formation' },
+    civilite: { g: 'stagiaire', libelle: 'Civilité', annonce: 'ma civilité' },
+    nom: { g: 'stagiaire', libelle: 'Nom', annonce: 'mon nom' },
+    prenom: { g: 'stagiaire', libelle: 'Prénom', annonce: 'mon prénom' },
+    email: { g: 'stagiaire', libelle: 'Adresse e-mail', annonce: 'mon adresse e-mail' },
+    telephone: { g: 'stagiaire', libelle: 'Téléphone', annonce: 'mon téléphone' },
+    adresse: { g: 'stagiaire', libelle: 'Adresse postale', annonce: 'mon adresse postale' },
+    code_postal: { g: 'stagiaire', libelle: 'Code postal', annonce: 'mon code postal' },
+    ville: { g: 'stagiaire', libelle: 'Ville', annonce: 'ma ville' },
+    formation: { g: 'stagiaire', libelle: 'Formation suivie', annonce: 'la formation que je suis' },
+    dates_session: { g: 'stagiaire', libelle: 'Dates de session', annonce: 'les dates de ma session' },
+    projet: { g: 'stagiaire', libelle: 'Projet (création, four, camion…)', annonce: 'la nature de mon projet' },
+    statut: { g: 'stagiaire', libelle: 'Situation professionnelle', annonce: 'ma situation professionnelle' },
+
+    /* ─────────────────────────────────────────────────────────────────────────────────────────
+       L'ENTREPRISE EST UNE PERSONNE MORALE, et cette distinction commande tout ce bloc.
+       Raison sociale, SIRET, forme juridique, adresse du siège : ce ne sont PAS des données
+       personnelles. Elles sont pour la plupart publiques (registre du commerce), et les
+       transmettre n'engage l'intimité de personne.
+       Elles restent néanmoins derrière le consentement du stagiaire, car c'est le RAPPROCHEMENT
+       qui parle : « cette personne suit telle formation, financée par telle entreprise » en dit
+       long sur elle. C'est donc bien sa décision. */
+    entreprise: { g: 'entreprise', libelle: 'Raison sociale', annonce: 'le nom de l\'entreprise qui finance ma formation' },
+    entreprise_siret: { g: 'entreprise', libelle: 'SIRET', annonce: 'le SIRET de cette entreprise' },
+    entreprise_forme: { g: 'entreprise', libelle: 'Forme juridique', annonce: 'sa forme juridique' },
+    entreprise_naf: { g: 'entreprise', libelle: 'Code NAF/APE', annonce: 'son code NAF' },
+    entreprise_adresse: { g: 'entreprise', libelle: 'Adresse', annonce: 'son adresse' },
+    entreprise_cp: { g: 'entreprise', libelle: 'Code postal', annonce: 'son code postal' },
+    entreprise_ville: { g: 'entreprise', libelle: 'Ville', annonce: 'sa ville' },
 };
 
 /**
@@ -89,6 +109,20 @@ const CHAMPS_TRANSMISSIBLES = {
  *  · `lat`, `lng` — géolocalisation à la maison près. `ville` et `code_postal` suffisent
  *    largement à savoir qui livrer, et n'exposent pas le domicile.
  *  · `opco`, `financing`, `current_contract`, `levels` — suivi administratif interne à l'école.
+ *
+ * ET DU CÔTÉ DE L'ENTREPRISE, UNE EXCLUSION D'UNE AUTRE NATURE, qui n'est pas une question de
+ * minimisation mais de QUI PEUT CONSENTIR.
+ *
+ *  · `representative_name`, `representative_civ`, `representative_role` — le représentant légal
+ *    est un ÊTRE HUMAIN. Ses coordonnées sont SES données personnelles, pas celles du stagiaire :
+ *    aucun stagiaire ne peut consentir à leur transmission, quoi qu'il coche. Un consentement
+ *    donné par quelqu'un d'autre ne couvre rien du tout.
+ *  · `company.email`, `company.phone` — souvent une adresse générique, parfois celle d'une
+ *    personne nommée. L'ambiguïté suffit à les écarter : on ne construit pas une transmission
+ *    sur « c'est probablement une boîte aux lettres ».
+ *
+ * Si l'école a besoin de joindre l'entreprise, elle a déjà ses coordonnées dans son propre
+ * annuaire. Le sujet ici est ce qui part CHEZ UN TIERS sur la foi du consentement d'un stagiaire.
  *
  * S'il faut un jour en ajouter un, la question n'est pas « la colonne existe-t-elle » mais « à
  * quoi ce partenaire précis en a-t-il besoin, et le stagiaire le comprendrait-il en lisant la
@@ -404,7 +438,7 @@ async function enregistrer(conn, { orgId, learnerId, finalite, accorde, source, 
 }
 
 module.exports = {
-    FINALITES, FINALITES_CONNUES, SOURCES,
+    FINALITES, FINALITES_CONNUES, SOURCES, GROUPES,
     CHAMPS_TRANSMISSIBLES, champsValides, formulationPour, champsOrganisme,
     destinatairesPartenaires, partenairesDestinataires, etatCourant, etatParStagiaire, enregistrer, isMissingSchema,
 };

@@ -94,7 +94,9 @@ async function sessionAvecInscrits(conn, sessionId, orgId) {
                 l.civility, l.address, l.zip_code, l.town, l.professional_status,
                 l.project_creation, l.project_takeover, l.project_oven, l.project_truck,
                 l.project_job,
-                c.name AS company_name
+                c.name AS company_name, c.siret AS company_siret,
+                c.legal_status AS company_legal, c.naf_ape AS company_naf,
+                c.address AS company_address, c.zip_code AS company_zip, c.town AS company_town
            FROM enrollment e
            JOIN learner l ON l.id = e.learner_id
            LEFT JOIN company c ON c.id = e.company_id
@@ -333,7 +335,15 @@ const produireTransmission = async (req, res) => {
             formation: s.program_title || s.program_code || '', dates_session: dates,
             projet: PROJETS.filter(([c]) => Number(l[c]) === 1).map(([, m]) => m).join(', '),
             statut: l.professional_status || '',
+            /* L'ENTREPRISE : vide quand le stagiaire n'en a pas. Une colonne présente et vide
+               dit « pas d'entreprise » ; une colonne absente forcerait à deviner. */
             entreprise: l.company_name || '',
+            entreprise_siret: l.company_siret || '',
+            entreprise_forme: l.company_legal || '',
+            entreprise_naf: l.company_naf || '',
+            entreprise_adresse: l.company_address || '',
+            entreprise_cp: l.company_zip || '',
+            entreprise_ville: l.company_town || '',
         });
         const lignes = retenus.map((l) => {
             const permis = champsParStagiaire.get(l.id);
