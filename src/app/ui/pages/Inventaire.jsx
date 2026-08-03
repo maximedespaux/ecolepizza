@@ -10,7 +10,7 @@ import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { euro } from "../lib/format.js";
-import ImageLien from "../components/ImageLien.jsx";
+import ImageLien, { ImagePlaceholder } from "../components/ImageLien.jsx";
 import { bumpBadges } from "../lib/events.js";
 
 const CATEGORIES = [
