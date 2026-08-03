@@ -214,3 +214,82 @@ test('les champs sont groupés par source, et chaque groupe est nommé', () => {
     assert.match(comp, /Object\.entries\(data\.groupes\)\.map/);
     assert.match(comp, /data\.catalogue\.filter\(\(c\) => c\.groupe === cle\)/);
 });
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   LA MISE À JOUR D'UN CONSENTEMENT, quand l'école élargit sa liste.
+
+   LE DÉFAUT SANS CE MÉCANISME : l'école ajoute « Projet » à sa liste, et l'écran du stagiaire
+   continue d'afficher « accepté ». Son accord ne couvre pourtant pas ce champ — il ne figurait pas
+   dans ce qu'il a lu. L'export l'exclut donc (intersection), et personne ne comprend pourquoi une
+   colonne reste vide. Il faut REPOSER la question, et une seule fois.
+
+   TROIS RÉPONSES POSSIBLES, PAS DEUX, et c'est là que tout se joue :
+     · accepter la nouvelle version   → accord sur le périmètre du jour ;
+     · CONSERVER SON ACCORD ACTUEL    → accord maintenu, sur le périmètre d'origine ;
+     · retirer son accord (profil)    → plus rien ne part.
+
+   La deuxième n'est pas un refus. L'écrire `accorde: false` aurait été plus simple et FAUX :
+   l'export aurait exclu la personne de TOUTE transmission, alors qu'elle consent toujours à
+   l'ancienne liste — et elle aurait perdu, sans l'avoir demandé, ce qu'elle avait accepté. */
+
+test('un élargissement rouvre la question, un rétrécissement non', () => {
+    const src = sansCommentaires(fs.readFileSync(path.join(API, 'lib/consentements.js'), 'utf8'));
+    assert.match(src, /ajoutes: par\[k\] && par\[k\]\.accorde \? champs\.filter\(\(c\) => !\(annonces\[k\] \|\| \[\]\)\.includes\(c\)\) : \[\]/,
+        'Seuls les champs AJOUTÉS depuis la réponse doivent rouvrir la question…');
+    /* …et RIEN pour un rétrécissement : on transmet moins que ce qui a été accepté, ce qui est
+       toujours permis. Reposer la question dans ce cas serait une relance sans objet. */
+    const lib2 = require('../lib/consentements.js');
+    assert.ok(lib2.CHAMPS_TRANSMISSIBLES, 'catalogue chargé');
+});
+
+test('un REFUS ne se rouvre pas, même si la liste change', () => {
+    /* LA RÈGLE QUI GOUVERNE DÉJÀ LA PREMIÈRE FENÊTRE (art. 4(11)) : reposer la question à qui a
+       dit non le pousse à accepter pour avoir la paix, et un consentement arraché ne couvre rien.
+       Élargir la liste ne doit donc pas rouvrir un dossier clos — d'où le `par[k].accorde` en tête
+       du calcul, qui rend `ajoutes` vide pour un refus. */
+    const src = sansCommentaires(fs.readFileSync(path.join(API, 'lib/consentements.js'), 'utf8'));
+    assert.match(src, /ajoutes: par\[k\] && par\[k\]\.accorde \?/,
+        'Un refus ne doit produire aucun ajout à re-soumettre.');
+});
+
+test('« conserver » enregistre un ACCORD, pas un refus', () => {
+    const ctrl = sansCommentaires(fs.readFileSync(path.join(API, 'controllers/espace.controller.js'), 'utf8'));
+    assert.match(ctrl, /if \(req\.body\.conserver === true\)/);
+    assert.match(ctrl, /if \(req\.body\.accorde !== true\)/,
+        'Conserver un accord suppose de l\'avoir donné : la combinaison refus+conserver n\'a pas de sens.');
+    assert.match(ctrl, /champsForces = f\.champsAnnonces;/,
+        'Le périmètre refigé doit être CELUI QUI AVAIT ÉTÉ ANNONCÉ, pas celui du jour.');
+    assert.match(ctrl, /Aucun accord antérieur à conserver/,
+        'Sans accord antérieur, « conserver » doit être refusé plutôt qu\'inventer un consentement.');
+
+    const src = sansCommentaires(fs.readFileSync(path.join(API, 'lib/consentements.js'), 'utf8'));
+    assert.match(src, /const champs = champsForces \? champsValides\(champsForces\) : await champsOrganisme\(conn, orgId\);/,
+        'La liste figée doit suivre `champsForces` quand il est fourni…');
+    assert.match(src, /const formulation = formulationPour\(champs\);/,
+        '…et la phrase gelée correspondre à CETTE liste, pas à la nouvelle.');
+});
+
+test('le second bouton ne dit pas « Je refuse » en mise à jour', () => {
+    /* « Je refuse » aurait laissé croire qu'on retire TOUT son accord, alors qu'on garde
+       exactement ce qu'on avait accepté. Le libellé doit dire ce que le serveur enregistre :
+       un consentement maintenu, pas une opposition. */
+    const comp = fs.readFileSync(path.join(UI, 'components/ConsentModal.jsx'), 'utf8');
+    assert.match(comp, /maj \? "Conserver mon accord actuel" : "Je refuse"/);
+    assert.match(comp, /maj \? "Accepter la nouvelle version" : "J'accepte"/);
+    assert.match(comp, /onClick=\{\(\) => \(maj \? repondre\(true, true\) : repondre\(false\)\)\}/,
+        'En mise à jour, le second bouton envoie un ACCORD conservé — pas un refus.');
+    /* ET CE QUI S'AJOUTE EST NOMMÉ EN TÊTE : reposer la question sans dire ce qui a changé
+       obligerait à relire deux paragraphes pour trouver le mot nouveau. Personne ne le fait. */
+    assert.match(comp, /Ce qui s'ajoute à votre accord/);
+    assert.match(comp, /aDemander\.ajoutes\.map/);
+});
+
+test('la fenêtre se déclenche sur les DEUX cas, et compte ses relances', () => {
+    const comp = fs.readFileSync(path.join(UI, 'components/ConsentModal.jsx'), 'utf8');
+    assert.match(comp, /liste\.find\(\(f\) => f\.accorde === null\) \|\| liste\.find\(\(f\) => f\.ajoutes\?\.length\)/,
+        'Jamais demandé OU liste élargie.');
+    /* Le compteur de relances vaut pour les deux : fermer sans répondre ne doit pas produire une
+       fenêtre à chaque connexion, sinon l'insistance fabrique le consentement extorqué qu'on
+       cherche à éviter. */
+    assert.match(comp, /if \(premiere\) \{ setADemander\(premiere\); compterUneRelance\(\); \}/);
+});

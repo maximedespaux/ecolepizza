@@ -1841,9 +1841,31 @@ const setMyConsent = async (req, res) => {
             // refus par défaut. Fermer la fenêtre sans répondre n'appelle aucune écriture.
             return res.status(422).json({ message: 'Réponse attendue : accepté ou refusé.' });
         }
+        /* TROIS RÉPONSES POSSIBLES, PAS DEUX — et la troisième est celle qui rend la mise à jour
+           tenable. Face à une liste ÉLARGIE, la personne peut :
+             · accepter la nouvelle version      → `accorde: true`, périmètre du jour ;
+             · CONSERVER SON ACCORD ACTUEL       → `accorde: true`, périmètre D'ORIGINE ;
+             · retirer son accord (depuis le profil) → `accorde: false`.
+           La deuxième n'est PAS un refus : la personne maintient son consentement, sur son
+           périmètre. L'écrire `false` l'aurait exclue de toute transmission alors qu'elle
+           consent toujours — et lui aurait fait perdre, sans l'avoir demandé, ce qu'elle avait
+           accepté. D'où `champsForces`, qui refige la liste qu'elle avait déjà acceptée. */
+        let champsForces;
+        if (req.body.conserver === true) {
+            if (req.body.accorde !== true) {
+                return res.status(422).json({ message: 'Conserver un accord suppose de l\'avoir donné.' });
+            }
+            const etat = await consentements.etatCourant(conn, learner.organization_id, learner.id);
+            const f = (etat || []).find((x) => x.cle === req.params.finalite);
+            if (!f || f.accorde !== true) {
+                return res.status(409).json({ message: 'Aucun accord antérieur à conserver.' });
+            }
+            champsForces = f.champsAnnonces;
+        }
         const r = await consentements.enregistrer(conn, {
             orgId: learner.organization_id, learnerId: learner.id,
             finalite: req.params.finalite, accorde: req.body.accorde, source: 'espace_stagiaire',
+            champsForces,
         });
         if (!r.ok) return res.status(409).json({ message: r.message });
         /* `logAudit(req, action, entity, entityId)` — QUATRE ARGUMENTS À PLAT, pas un objet. Une

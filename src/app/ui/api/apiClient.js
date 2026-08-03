@@ -361,8 +361,13 @@ export function updateMyInfos(payload) { return request("/mon-espace/infos", { m
 export function getMyConsents() {
   return request("/mon-espace/consentements");
 }
-export function setMyConsent(finalite, accorde) {
-  return request(`/mon-espace/consentements/${finalite}`, { method: "PUT", body: JSON.stringify({ accorde }) });
+/* `conserver` : la personne à qui l'on propose une liste ÉLARGIE et qui préfère garder la sienne.
+   Ce n'est PAS un refus — elle maintient son consentement, sur son périmètre d'origine, et le
+   serveur refige cette liste-là. Envoyer `accorde: false` l'aurait exclue de toute transmission
+   alors qu'elle consent toujours. */
+export function setMyConsent(finalite, accorde, conserver) {
+  return request(`/mon-espace/consentements/${finalite}`,
+    { method: "PUT", body: JSON.stringify(conserver ? { accorde, conserver: true } : { accorde }) });
 }
 
 export function updateMyVisibility(visibility) { return request("/mon-espace/visibility", { method: "PUT", body: JSON.stringify({ visibility }) }); }

@@ -285,8 +285,11 @@ async function destinatairesPartenaires(conn, orgId) {
 async function etatCourant(conn, orgId, learnerId) {
     try {
         const destinataires = await destinatairesPartenaires(conn, orgId);
-        const [rows] = await conn.query(
-            `SELECT c.finalite, c.accorde, c.destinataires, c.formulation, c.source,
+        /* `c.champs` arrive avec la 135 : son absence est un état LÉGITIME, pas un défaut de
+           code. On tente avec, puis sans — sinon la fenêtre du stagiaire disparaîtrait
+           entièrement sur une base à jour de la 130 mais pas de la 135. */
+        const requete = (avecChamps) => `SELECT c.finalite, c.accorde, c.destinataires, c.formulation,
+                    c.source, ${avecChamps ? 'c.champs,' : 'NULL AS champs,'}
                     DATE_FORMAT(c.decide_at, '%Y-%m-%d %H:%i') AS decide_at
                FROM consent_record c
                JOIN (SELECT finalite, MAX(decide_at) AS m
@@ -294,10 +297,22 @@ async function etatCourant(conn, orgId, learnerId) {
                       WHERE organization_id = ? AND learner_id = ?
                       GROUP BY finalite) d
                  ON d.finalite = c.finalite AND d.m = c.decide_at
-              WHERE c.organization_id = ? AND c.learner_id = ?`,
-            [orgId, learnerId, orgId, learnerId]);
-        const par = {};
-        for (const r of rows) par[r.finalite] = { ...r, accorde: Number(r.accorde) === 1 };
+              WHERE c.organization_id = ? AND c.learner_id = ?`;
+        const args = [orgId, learnerId, orgId, learnerId];
+        let rows;
+        try { [rows] = await conn.query(requete(true), args); }
+        catch (e) {
+            if (!isMissingSchema(e)) throw e;
+            [rows] = await conn.query(requete(false), args);
+        }
+        const par = {}, annonces = {};
+        for (const r of rows) {
+            par[r.finalite] = { ...r, accorde: Number(r.accorde) === 1 };
+            /* `champs` à NULL = réponse antérieure à la 135 : les six d'origine, seule liste
+               possible à l'époque. Supposer autre chose serait inventer. */
+            annonces[r.finalite] = r.champs ? champsValides(r.champs)
+                : [...FINALITES.partenaires.champsParDefaut];
+        }
         const champs = await champsOrganisme(conn, orgId);
         return FINALITES_CONNUES.map((k) => ({
             cle: k,
@@ -308,9 +323,22 @@ async function etatCourant(conn, orgId, learnerId) {
             formulation: formulationPour(champs),
             champs,
             destinataires,
-            // `null` = jamais demandé. C'est ce qui déclenche la fenêtre, et rien d'autre.
+            // `null` = jamais demandé. C'est ce qui déclenche la PREMIÈRE fenêtre.
             accorde: par[k] ? par[k].accorde : null,
             decide_at: par[k] ? par[k].decide_at : null,
+            /* CE À QUOI LA PERSONNE A DIT OUI, et ce qui s'y est ajouté DEPUIS.
+             *
+             * Sans `ajoutes`, l'école pourrait élargir sa liste et l'écran du stagiaire
+             * continuerait d'afficher « accepté » — un accord qui ne couvre plus ce qu'on
+             * transmet, sans que personne ne s'en aperçoive. C'est ce tableau qui déclenche la
+             * demande de MISE À JOUR.
+             *
+             * ET SEULEMENT SI LA PERSONNE AVAIT ACCEPTÉ. Un refus ne se redemande pas — c'est la
+             * règle qui gouverne déjà la première fenêtre (art. 4(11) : reposer la question à qui
+             * a dit non le pousse à accepter pour avoir la paix). Élargir la liste ne rouvre donc
+             * pas un dossier clos. */
+            champsAnnonces: annonces[k] || [],
+            ajoutes: par[k] && par[k].accorde ? champs.filter((c) => !(annonces[k] || []).includes(c)) : [],
         }));
     } catch (e) {
         if (isMissingSchema(e)) return null;
@@ -393,7 +421,7 @@ async function etatParStagiaire(conn, orgId, learnerIds, finalite = 'partenaires
  * accord en juin n'invalide pas l'envoi d'avril — encore faut-il que la trace de mars existe
  * toujours. Écraser une valeur détruirait précisément la preuve qu'on cherche à constituer.
  */
-async function enregistrer(conn, { orgId, learnerId, finalite, accorde, source, saisiPar }) {
+async function enregistrer(conn, { orgId, learnerId, finalite, accorde, source, saisiPar, champsForces }) {
     const f = FINALITES[finalite];
     if (!f) return { ok: false, message: 'Finalité inconnue.' };
     /* UNE SOURCE INCONNUE EST REFUSÉE, elle n'est pas remplacée par un défaut. Retomber en
@@ -409,7 +437,13 @@ async function enregistrer(conn, { orgId, learnerId, finalite, accorde, source, 
            relire pour en extraire les champs demanderait d'analyser de la prose, et une
            reformulation casserait l'analyse. La liste est donc stockée telle quelle, à côté du
            texte qu'elle a produit. */
-        const champs = await champsOrganisme(conn, orgId);
+        /* `champsForces` SERT AU CAS « JE CONSERVE MON ACCORD ACTUEL ». La personne à qui l'on
+           propose une liste élargie et qui préfère garder la sienne ne REFUSE pas son
+           consentement : elle le maintient, sur son périmètre d'origine. On fige donc CE
+           périmètre-là, avec la phrase qui lui correspond — et non la nouvelle, qu'elle n'a pas
+           acceptée. Écrire `accorde: false` aurait été plus simple et FAUX : l'export l'aurait
+           exclue de tout, alors qu'elle consent toujours à l'ancienne liste. */
+        const champs = champsForces ? champsValides(champsForces) : await champsOrganisme(conn, orgId);
         const formulation = formulationPour(champs);
         try {
             await conn.query(
