@@ -117,9 +117,41 @@ const getPartners = async (req, res) => {
 };
 
 /** POST /api/partenaires */
-const createPartner = (req, res) => {
+/**
+ * UN NOM DÉJÀ PRIS DANS CET ORGANISME ? (migration 132)
+ *
+ * DEUX PROTECTIONS, ET IL FAUT LES DEUX. La clé UNIQUE en base est la seule qui tienne face à un
+ * import ou à une insertion directe — les deux chemins par lesquels le doublon « Berkel » était
+ * précisément arrivé. Mais seule, elle rend une erreur SQL brute (`ER_DUP_ENTRY`) que l'écran
+ * afficherait telle quelle : « Duplicate entry 'xxx-Berkel' for key 'uq_partner_nom' ». Ce contrôle
+ * existe donc pour DIRE ce qui se passe, pas pour empêcher — c'est la contrainte qui empêche.
+ *
+ * Et il fonctionne AVANT la migration : tant que la 132 n'est pas jouée, il est la seule barrière.
+ *
+ * `exclureId` sert au renommage : une fiche n'est pas son propre doublon.
+ */
+function nomDejaPris(orgId, nom, exclureId) {
+    return new Promise((resolve) => {
+        db.query(
+            `SELECT id FROM partner
+              WHERE organization_id = ? AND name = ?${exclureId ? ' AND id <> ?' : ''} LIMIT 1`,
+            exclureId ? [orgId, nom, exclureId] : [orgId, nom],
+            // En cas d'erreur de lecture on laisse passer : la contrainte en base reste le filet,
+            // et refuser une création parce qu'on n'a pas pu VÉRIFIER serait pire que le doublon.
+            (err, rows) => resolve(!err && rows && rows.length > 0));
+    });
+}
+
+/** Message unique — la même cause doit donner la même phrase des deux côtés. */
+const DEJA_PRIS = (nom) => `Un partenaire nommé « ${nom} » existe déjà. `
+    + 'Deux fiches homonymes se confondent partout : dans la demande de consentement, qui NOMME '
+    + 'les destinataires, et au moment de cocher laquelle reçoit les coordonnées.';
+
+const createPartner = async (req, res) => {
     const b = req.body || {};
     if (!b.name) return res.status(422).json({ error: 'Nom du partenaire requis' });
+    if (await nomDejaPris(req.user.organization_id, b.name.trim()))
+        return res.status(409).json({ message: DEJA_PRIS(b.name.trim()) });
     const id = crypto.randomUUID();
     const base = ['id', 'organization_id', 'name', 'category', 'contact_name', 'contact_email',
         'contact_phone', 'website', 'town', 'discount_pct', 'offer', 'notes'];
@@ -144,6 +176,13 @@ const createPartner = (req, res) => {
         vals,
         (err) => {
             if (err) {
+                /* LA CONTRAINTE A PARLÉ LA PREMIÈRE — deux requêtes simultanées, ou un homonyme
+                   apparu entre la vérification et l'insertion. On traduit : « Duplicate entry
+                   'xxx-Berkel' for key 'uq_partner_nom' » est exact, illisible, et ne dit pas
+                   quoi faire. */
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ message: DEJA_PRIS(String(b.name).trim()) });
+                }
                 // La 131 peut ne pas être jouée : on recrée sans les colonnes de contrat plutôt
                 // que de refuser la création d'un partenaire pour une échéance facultative.
                 if (isMissingSchema(err) && colonnes.length > base.length) {
@@ -152,6 +191,9 @@ const createPartner = (req, res) => {
                         vals.slice(0, base.length),
                         (e2) => {
                             if (e2) {
+                                if (e2.code === 'ER_DUP_ENTRY') {
+                                    return res.status(409).json({ message: DEJA_PRIS(String(b.name).trim()) });
+                                }
                                 console.error('Erreur création partenaire :', e2);
                                 return res.status(500).json({ error: 'Internal Server Error' });
                             }
@@ -169,7 +211,14 @@ const createPartner = (req, res) => {
 };
 
 /** PATCH /api/partenaires/:id */
-const updatePartner = (req, res) => {
+const updatePartner = async (req, res) => {
+    /* LE RENOMMAGE AUSSI, pas seulement la création. Sans ce contrôle, il suffirait de créer
+       « Berkell » puis de le renommer « Berkel » pour retrouver deux homonymes — le garde-fou de
+       la création se contournerait en deux clics. */
+    if (req.body.name !== undefined && String(req.body.name).trim()
+        && await nomDejaPris(req.user.organization_id, String(req.body.name).trim(), req.params.id)) {
+        return res.status(409).json({ message: DEJA_PRIS(String(req.body.name).trim()) });
+    }
     const sets = [];
     const values = [];
     for (const f of [...PARTNER_FIELDS, ...CONTRAT_FIELDS]) {
@@ -193,6 +242,10 @@ const updatePartner = (req, res) => {
         values,
         (err, result) => {
             if (err) {
+                // La contrainte a parlé la première (deux requêtes simultanées) : on traduit.
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ message: DEJA_PRIS(String(req.body.name || '').trim()) });
+                }
                 console.error('Erreur mise à jour partenaire :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
