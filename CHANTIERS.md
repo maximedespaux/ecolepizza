@@ -643,3 +643,70 @@ colonne `email_pending` à nettoyer.
    volume et de ce à quoi on veut se lier.
 3. **Les stagiaires ont-ils tous une adresse fiable en base ?** À vérifier avant : la fonction ne
    sert qu'à ceux qui en ont une, et le reste continuera de passer par l'école.
+
+---
+
+## 9. RGPD — transmission des coordonnées aux partenaires (2026-08-02)
+
+### 9.1 La situation, telle qu'elle est
+
+L'organisme envoie à ses partenaires, **session par session et par courriel** : nom, prénom,
+e-mail, téléphone, formation, dates — et parfois l'entreprise. **Le partenaire démarche ensuite
+les stagiaires.**
+
+C'est de la **prospection commerciale par un tiers**. Elle exige le **consentement préalable** de
+chaque personne, et l'organisme doit pouvoir **prouver** l'avoir obtenu (art. 7.1 du RGPD). Pour
+une sollicitation par courriel ou SMS adressée à un particulier, l'article L34-5 du code des
+postes ajoute la même exigence d'accord préalable.
+
+**Aujourd'hui ce consentement n'existe pas** : ni demandé, ni enregistré, ni opposable. Et comme
+le courriel est écrit à la main, rien n'empêche d'y inclure quelqu'un qui aurait refusé.
+
+Ce n'est pas un défaut de code — l'application ne transmet rien à un partenaire, vérifié par
+balayage de tous les appels sortants. C'est précisément ce qui le rend invisible : une
+transmission par courriel ne laisse aucune trace côté outil.
+
+### 9.2 À faire tout de suite, sans attendre le code
+
+1. **Cesser d'envoyer e-mail et téléphone** tant qu'aucun consentement n'est recueilli. Nom,
+   formation et dates posent déjà question, mais ce sont les moyens de contact qui rendent le
+   démarchage possible.
+2. **Poser la question aux stagiaires en cours**, séparément de tout le reste : ni dans le
+   règlement intérieur, ni dans une case pré-cochée du dossier d'inscription. Un consentement noyé
+   dans un contrat n'est pas « libre et spécifique ».
+3. **Vérifier ce que le partenaire fait des données** — s'il les conserve, les revend, ou les
+   croise. Il devient responsable de son propre traitement, et l'organisme doit savoir à quoi il
+   expose ses stagiaires.
+
+### 9.3 Ce que le code doit porter (migration 130, écrite)
+
+| Colonne | Rôle | Pourquoi elle est indispensable |
+|---|---|---|
+| `learner.partner_consent` | NULL / 0 / 1 | **Trois** états, pas deux : NULL = jamais demandé, ce qui n'est ni un oui ni un non. Un booléen aurait forcé un défaut, et « présumé d'accord » est exactement ce qu'il faut éviter |
+| `learner.partner_consent_at` | date de la réponse | Un consentement sans date ne prouve rien — il faut qu'il précède la transmission |
+| `learner.partner_consent_text` | la phrase acceptée | Le consentement porte sur une formulation, pas sur une case. Si l'organisme reformule, les accords passés portent sur l'ancien texte |
+| `partner_disclosure` | journal des envois | La moitié manquante de la preuve : à qui, quand, combien, quels champs. Et c'est ce qui permet de répondre à « à qui avez-vous donné mes coordonnées ? » (art. 15) |
+
+La migration **ne pose aucun consentement par défaut** : tous les stagiaires existants restent à
+`NULL`. Pré-cocher aurait transformé une correction en aggravation.
+
+### 9.4 L'ordre de construction, et il compte
+
+1. **La case côté stagiaire** — dans son espace, à côté de la visibilité de profil. Il doit pouvoir
+   dire oui, dire non, et **changer d'avis** aussi facilement (art. 7.3). C'est la première brique :
+   sans elle, il n'y a rien à lire.
+2. **L'écran de suivi côté organisme** — qui a répondu quoi, qui n'a jamais été sollicité.
+3. **L'export par session, dans l'application**, qui remplace le courriel écrit à la main. Il ne
+   retient QUE les stagiaires ayant consenti, et journalise l'envoi.
+
+**Tant que l'étape 3 n'existe pas, les étapes 1 et 2 ne protègent rien** : recueillir un
+consentement puis continuer d'envoyer une liste faite à la main, c'est se donner une preuve qui
+démontre l'infraction. L'export est donc la vraie fin du chantier, pas un raffinement.
+
+### 9.5 Ce qui reste à trancher
+
+- **La formulation exacte** de la demande de consentement — elle doit nommer les partenaires (ou
+  au minimum leurs catégories), dire ce qu'ils feront des données, et rappeler que refuser
+  n'affecte pas la formation.
+- **Le sort des refus** : un stagiaire qui refuse doit-il être resollicité à la session suivante ?
+  Par défaut, non.
