@@ -43,12 +43,33 @@ test('l\'inventaire est réservé à l\'administration', () => {
     assert.match(ligne, /ADMIN_ROLES/, 'L\'inventaire ne doit pas être ouvert à tout le personnel.');
 });
 
-test('« ne garder que le premier » laisse toujours un exemplaire', () => {
-    /* LE DÉFAUT QU'ON NE VEUT PAS : proposer la suppression du groupe ENTIER. Ces fichiers sont
-       des pièces Qualiopi ; supprimer les N copies au lieu de N-1 efface le document. Le `.slice(1)`
-       est la seule chose qui garantit qu'il en reste un. */
-    assert.match(ui, /d\.exemplaires\.slice\(1\)\.map\(\(x\) => x\.id\)/,
-        'On ne propose que les copies AU-DELÀ de la première.');
+test('on supprime une copie À LA FOIS, en sachant laquelle', () => {
+    /* LE BOUTON GROUPÉ A ÉTÉ RETIRÉ. « Ne garder que le premier » décidait à la place de
+       l'utilisateur QUEL exemplaire survit — le premier rendu par la base, un ordre qui ne veut
+       rien dire. Or le choix compte : sur l'évaluation d'une stagiaire recopiée dans six autres
+       dossiers, la copie à garder est celle classée sous SON nom.
+
+       Une suppression groupée sur des pièces Qualiopi doit donc rester un geste explicite,
+       document par document, avec le nom du détenteur sous les yeux. */
+    assert.doesNotMatch(ui, /Ne garder que le premier/,
+        'Le bouton groupé choisissait le survivant au hasard de l\'ordre SQL.');
+    assert.match(ui, /onClick=\{\(\) => supprimerUne\(x\)\}/,
+        'Chaque exemplaire porte sa propre corbeille.');
+    /* ET LA CONFIRMATION NOMME CE QU'ELLE EFFACE — titre ET détenteur. « Supprimer 1
+       document ? » ne permet pas de vérifier qu'on vise la bonne copie parmi sept identiques. */
+    assert.match(ui, /onSupprime\(\[x\.id\], `« \$\{x\.title\} »\$\{x\.learner_name/,
+        'La confirmation doit nommer le document et son détenteur.');
+});
+
+test('l\'inventaire se relit après une suppression', () => {
+    /* Sinon la copie effacée reste affichée et son poids reste compté : le total ne bouge pas,
+       et l'on croit que le clic n'a rien fait. `deleteDocs` doit donc DIRE si la suppression a
+       eu lieu — d'où ses retours booléens, ajoutés pour cet écran. */
+    assert.match(ui, /if \(await onSupprime\([\s\S]{0,120}?\)\) \{\s*analyser\(\);/,
+        'Une suppression confirmée doit relancer l\'inventaire.');
+    assert.match(ui, /const \{ deleted \} = await bulkDeleteArchives[\s\S]{0,120}?return true;/,
+        'deleteDocs doit signaler le succès.');
+    assert.match(ui, /\)\) return false;/, 'Et signaler l\'annulation.');
 });
 
 test('un doublon se montre avec ceux qui le détiennent', () => {

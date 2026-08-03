@@ -371,16 +371,17 @@ function ArchivesView({ onError, onInfo }) {
     const archive_ids = docs.filter((d) => d.source === "archive").map((d) => d.doc_id);
     const document_ids = docs.filter((d) => d.source === "gen").map((d) => d.doc_id);
     const total = archive_ids.length + document_ids.length;
-    if (!total) { onError?.("Aucun document à supprimer ici."); return; }
+    if (!total) { onError?.("Aucun document à supprimer ici."); return false; }
     const detail = document_ids.length && archive_ids.length
       ? ` (${document_ids.length} généré(s), ${archive_ids.length} archivé(s))`
       : "";
-    if (!window.confirm(`Supprimer définitivement ${total} document(s)${what ? `, ${what}` : ""}${detail} ?\nCette action est irréversible et les supprime de la base.`)) return;
+    if (!window.confirm(`Supprimer définitivement ${total} document(s)${what ? `, ${what}` : ""}${detail} ?\nCette action est irréversible et les supprime de la base.`)) return false;
     try {
       const { deleted } = await bulkDeleteArchives(archive_ids, document_ids);
       onInfo?.(`${deleted} document(s) supprimé(s).`);
       load();
-    } catch (err) { onError?.(err.message); }
+      return true;
+    } catch (err) { onError?.(err.message); return false; }
   }
   const weekDocs = (W) => W.formationsArr.flatMap((F) => F.learnersArr.flatMap((L) => L.docs));
   const formationDocs = (F) => F.learnersArr.flatMap((L) => L.docs);
@@ -423,8 +424,8 @@ function ArchivesView({ onError, onInfo }) {
         </p>
       )}
 
-      {isAdmin && <PanneauStockage onError={onError} onSupprime={(ids) => deleteDocs(
-        ids.map((id) => ({ doc_id: id, source: "archive" })), "doublons")} />}
+      {isAdmin && <PanneauStockage onError={onError} onSupprime={(ids, quoi) => deleteDocs(
+        ids.map((id) => ({ doc_id: id, source: "archive" })), quoi)} />}
 
       {tree.length === 0 ? (
         <EmptyState icon="folder">Aucun document partagé pour l'instant.</EmptyState>
@@ -550,6 +551,15 @@ function PanneauStockage({ onError, onSupprime }) {
   // Ce qu'on peut réellement retirer : tout sauf un exemplaire par groupe.
   const copiesEnTrop = doublons.reduce((s, d) => s + d.n - 1, 0);
 
+  /* APRÈS UNE SUPPRESSION, L'INVENTAIRE EST FAUX — la copie effacée y figure encore, et son
+     poids est toujours compté. On relit donc, plutôt que de retirer la ligne côté écran : le
+     total et les tranches doivent bouger aussi, sinon on croit que rien ne s'est passé. */
+  async function supprimerUne(x) {
+    if (await onSupprime([x.id], `« ${x.title} »${x.learner_name ? ` — ${x.learner_name}` : ""}`)) {
+      analyser();
+    }
+  }
+
   return (
     <div className="stock">
       <div className="stock-tete">
@@ -591,18 +601,25 @@ function PanneauStockage({ onError, onSupprime }) {
               <div className="stock-dbl-t">
                 <b className="chiffres">{d.n}</b> exemplaires identiques ·
                 <span className="chiffres"> {mo(d.octets)}</span> pièce
-                <button className="btn ghost sm" onClick={() => {
-                  /* On ne propose de supprimer QUE les copies au-delà de la première : garder
-                     un exemplaire est le seul geste qui ne perde rien. */
-                  onSupprime(d.exemplaires.slice(1).map((x) => x.id));
-                }}>Ne garder que le premier</button>
               </div>
+              {/* UNE CORBEILLE PAR EXEMPLAIRE, et non un « ne garder que le premier ».
+                  Le bouton groupé décidait à la place de l'utilisateur QUEL exemplaire survit —
+                  le premier, c'est-à-dire celui que la base a rendu en premier, sans que cet
+                  ordre veuille dire quoi que ce soit. Or le choix a du sens : sur l'évaluation
+                  d'une stagiaire recopiée dans six autres dossiers, la copie à garder est celle
+                  classée sous SON nom, pas la première venue. On supprime donc au cas par cas,
+                  en voyant qui détient quoi. */}
               <ul className="stock-dbl-l">
                 {d.exemplaires.map((x) => (
                   <li key={x.id}>
                     <a href={archiveFileUrl(x.id)} target="_blank" rel="noopener noreferrer">{x.title}</a>
                     <span className="hint"> — {x.learner_name || "sans stagiaire"}
                       {x.year ? ` · ${x.year}` : ""}{x.week ? ` S${x.week}` : ""}</span>
+                    <button type="button" className="iconbtn del stock-del"
+                      title={`Supprimer cette copie${x.learner_name ? ` du dossier de ${x.learner_name}` : ""}`}
+                      onClick={() => supprimerUne(x)}>
+                      <Icon name="trash" size={14} />
+                    </button>
                   </li>
                 ))}
               </ul>
