@@ -293,22 +293,23 @@ function EcoleTab() {
   );
 }
 
-/* Badges de caractéristiques d'un four/pétrin, depuis `specs` (JSON servi par l'API). Tous en
-   `.badge.n` (neutre) : c'est le seul variant de badge qui passe le contraste dans les deux
-   thèmes. L'AVPN se distingue par l'étoile + le mot, pas par une couleur qui échoue. */
-const ENERGIE_LBL = { ELECTRIQUE: "Électrique", GAZ: "Gaz", BOIS: "Bois", COMBINE: "Bois + gaz", HYBRIDE: "Hybride", CONVOYEUR: "Convoyeur" };
-function SpecsBadges({ specs }) {
-  if (!specs) return null;
-  return (
-    <span className="spec-badges">
-      {specs.energie ? <span className="badge n">{ENERGIE_LBL[specs.energie] || specs.energie}</span> : null}
-      {specs.temp_max_c ? <span className="badge n tnum">{specs.temp_max_c} °C</span> : null}
-      {specs.pizzas ? <span className="badge n tnum">{specs.pizzas} pizzas</span> : null}
-      {specs.sole_rotative ? <span className="badge n">sole rotative</span> : null}
-      {specs.avpn ? <span className="badge n"><Icon name="star" size={10} /> AVPN</span> : null}
-    </span>
-  );
-}
+/* LES CARACTÉRISTIQUES NE SONT PLUS DES BADGES CODÉS EN DUR (migration 134).
+ *
+ * Une fonction `SpecsBadges` tirait cinq étiquettes de la colonne JSON `specs` : énergie,
+ * température, nombre de pizzas, sole rotative, AVPN. Elles se superposaient aux CATÉGORIES
+ * saisies par l'école — sur un même four, « 400 °C » et « électrique » s'affichaient deux fois,
+ * l'une à côté de l'autre.
+ *
+ * Le doublon n'était que le symptôme. Le vrai défaut : `specs` est une liste FERMÉE. Ajouter un
+ * critère — « pierre réfractaire », « hotte intégrée », « deux chambres » — demandait de modifier
+ * ce fichier. Les catégories séparées par des virgules n'ont pas cette limite, et l'école les
+ * remplit elle-même sans passer par un développeur.
+ *
+ * La migration 134 a recopié les cinq libellés dans `category`, à l'identique : rien n'a disparu
+ * de l'écran, seuls les doublons sont partis.
+ *
+ * `specs` RESTE EN BASE ET RESTE LUE : `specs.devis` pilote toujours le message « Sur devis
+ * auprès du partenaire » du comparateur. Seuls les BADGES cessent d'en être tirés. */
 
 /* Le comparateur : la fourchette de prix constatés chez les revendeurs, dépliable sur le
    détail. C'est l'ÉCART qui a de la valeur — « 9 000 → 15 200 € » dit au stagiaire qu'un four
@@ -425,7 +426,6 @@ function PartenairesTab() {
               <b className="shop-name">{p.name}</b>
               {/* La référence fabricant seulement si elle existe : « — » n'informe personne. */}
               {p.reference ? <span className="shop-ref">{p.reference}</span> : null}
-              <SpecsBadges specs={p.specs} />
               {/* Un tarif école négocié prime sur le comparateur (c'est CE que le stagiaire paie).
                   Sinon, la fourchette revendeurs. Sinon « sur devis ». */}
               {eco ? (

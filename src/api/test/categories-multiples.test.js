@@ -121,3 +121,52 @@ test("le nom et les étiquettes ne se partagent pas la même ligne", () => {
     assert.match(css, /\.pp-cats\{[^}]*flex-wrap:wrap/,
         'À sept étiquettes, le groupe doit s\'enrouler plutôt que déborder.');
 });
+
+test("les caractéristiques ne sont plus des badges codés en dur", () => {
+    /* LE DÉFAUT : deux rangées d'étiquettes se superposaient sur une même fiche. Les catégories
+     * saisies par l'école, et cinq badges tirés de la colonne JSON `specs` — sur un même four,
+     * « 400 °C » et « électrique » s'affichaient DEUX FOIS.
+     *
+     * Le doublon n'était que le symptôme. `specs` est une liste FERMÉE (`energie`, `temp_max_c`,
+     * `pizzas`, `sole_rotative`, `avpn`) : ajouter « pierre réfractaire » ou « hotte intégrée »
+     * demandait de modifier le code. Les catégories libres n'ont pas cette limite. */
+    const page = fs.readFileSync(path.join(UI, 'pages/Boutique.jsx'), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '');   // les commentaires EXPLIQUENT le retrait, ils ne comptent pas
+    assert.doesNotMatch(page, /function SpecsBadges/, 'Le composant doit avoir disparu…');
+    assert.doesNotMatch(page, /<SpecsBadges/, '…et ne plus être appelé.');
+    assert.doesNotMatch(page, /ENERGIE_LBL/, 'La table de libellés figés n\'a plus d\'objet.');
+
+    /* MAIS `specs` RESTE LUE : `specs.devis` pilote « Sur devis auprès du partenaire ». Retirer la
+       colonne avec les badges aurait fait disparaître ce message des quatre produits Marana, qui
+       ne publient aucun prix — ils seraient passés à « Tarif sur demande », plus vague. */
+    assert.match(page, /const devis = p\.specs && p\.specs\.devis;/,
+        'Le message « Sur devis » dépend toujours de `specs`.');
+});
+
+test('la migration 134 recopie EXACTEMENT ce qui était affiché', () => {
+    const MIG = path.join(__dirname, '..', '..', '..', 'database', 'migrations');
+    const sql = fs.readFileSync(path.join(MIG, '134_specs_vers_categories.sql'), 'utf8');
+
+    /* Les cinq libellés, aux mêmes mots : le stagiaire ne doit voir AUCUNE différence, sinon la
+       migration ne transporte pas l'information, elle en invente une autre. */
+    for (const libelle of ['Électrique', 'Gaz', 'Bois', 'Bois + gaz', 'Hybride', 'Convoyeur',
+        ' °C', ' pizzas', 'sole rotative', 'AVPN']) {
+        assert.ok(sql.includes(libelle), `le libellé « ${libelle} » doit être repris tel quel`);
+    }
+    /* `chambres` EXISTE DANS LE JSON MAIS N'A JAMAIS ÉTÉ AFFICHÉE. La recopier ferait APPARAÎTRE
+       une information nouvelle sous couvert de migration — ce n'est pas le rôle d'un transport. */
+    assert.doesNotMatch(sql, /\$\.chambres/,
+        'Une migration transporte ce qui était affiché, elle n\'ajoute rien.');
+
+    /* REJOUABLE : chaque libellé n'est ajouté que s'il est absent, et la comparaison encadre la
+       valeur de virgules — sans quoi « 400 °C » se trouverait dans « 1400 °C » et ne serait
+       jamais ajouté. */
+    assert.match(sql, /NOT LIKE/, 'Rejouer le fichier ne doit rien dupliquer.');
+    assert.ok(fs.existsSync(path.join(MIG, '134_revert_specs_vers_categories.sql')), 'un revert est obligatoire');
+
+    /* LE REVERT NE PEUT PAS DISTINGUER ce que la migration a ajouté de ce que l'école a saisi : il
+       doit le DIRE, sinon on le joue en croyant revenir en arrière sans perte. */
+    const revert = fs.readFileSync(path.join(MIG, '134_revert_specs_vers_categories.sql'), 'utf8');
+    assert.match(revert, /NE PEUT PAS DISTINGUER/,
+        'Un revert de données doit annoncer ce qu\'il ne sait pas faire.');
+});

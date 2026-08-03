@@ -2968,8 +2968,7 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .mode-card.on>span{color:var(--ember1)}
 /* ── Conseil matériel (fours / pétrins) ─────────────────────────────────────────────────── */
 /* Comparateur de prix (fours partenaires) + badges de specs */
-.spec-badges{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0}
-.spec-badges .badge{font-size:9.5px;padding:2px 6px;gap:3px}
+
 .cmp{display:flex;flex-direction:column;gap:3px;margin-top:auto;padding-top:6px}
 
 .cmp-range b{font-size:15px;white-space:nowrap}
