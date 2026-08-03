@@ -39,7 +39,7 @@ function Kpi({ label, value, sub, to, icon, tone = "ember", countUp = false, for
           </span>
         )}
       </div>
-      <div className="val tnum">{shown}</div>
+      <div className="val chiffres">{shown}</div>
       {sub && (
         <div className="sub kpi-sub">
           <span>{sub}</span>

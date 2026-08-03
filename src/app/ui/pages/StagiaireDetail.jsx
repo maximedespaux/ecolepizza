@@ -437,7 +437,7 @@ function StagiaireDetail() {
                     ) },
                   { k: "code", t: "Code", cell: (e) => <span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span> },
                   { k: "titre", t: "Formation", principal: true, cell: (e) => e.program_title },
-                  { k: "semaine", t: "Semaine", cell: (e) => <span className="tnum">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "-"}</span> },
+                  { k: "semaine", t: "Semaine", cell: (e) => <span className="chiffres">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "-"}</span> },
                   { k: "dates", t: "Dates", td: { fontSize: 12.5, whiteSpace: "nowrap" },
                     cell: (e) => {
                       const fr = (v) => (v ? new Date(v).toLocaleDateString("fr-FR") : "");
@@ -477,7 +477,7 @@ function StagiaireDetail() {
                 aria-label={`${signes} document(s) signé(s) sur ${docs.length}`}>
                 <span style={{ width: `${docs.length ? Math.round((signes / docs.length) * 100) : 0}%` }} />
               </div>
-              <span><b className="tnum">{signes}</b> signé{signes > 1 ? "s" : ""} sur <b className="tnum">{docs.length}</b></span>
+              <span><b className="chiffres">{signes}</b> signé{signes > 1 ? "s" : ""} sur <b className="chiffres">{docs.length}</b></span>
             </div>
 
             {GROUPES_DOC.map((g) => {
@@ -489,7 +489,7 @@ function StagiaireDetail() {
                 <div className="docs-grp" key={g.cle}>
                   <div className={`docs-grp-t ton-${g.ton}`}>
                     <span className="docs-pt" aria-hidden="true" />
-                    {g.titre} <b className="tnum">{items.length}</b>
+                    {g.titre} <b className="chiffres">{items.length}</b>
                     <i>{g.aide}</i>
                   </div>
                   {items.map((d) => {

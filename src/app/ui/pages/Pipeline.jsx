@@ -91,7 +91,7 @@ function Pipeline() {
                 <button type="button" className="pipe-plie" key={g.cle}
                   onClick={() => setDeplies((d) => ({ ...d, [g.cle]: true }))}
                   title={g.cols.map((c) => c.label).join(" · ")}>
-                  <b className="tnum">{g.cols.length}</b>
+                  <b className="chiffres">{g.cols.length}</b>
                   <span>étape{g.cols.length > 1 ? "s" : ""} sans personne</span>
                 </button>
               );
@@ -109,7 +109,7 @@ function Pipeline() {
                       complet reste lisible au survol. */}
                   <div className="pipe-head">
                     <span className="pipe-head-t" title={col.label}>{col.ic ? `${col.ic} ` : ""}{col.label}</span>
-                    <b className="tnum pipe-n">{items.length}</b>
+                    <b className="chiffres pipe-n">{items.length}</b>
                   </div>
                   <div className="pipe-body">
                     {items.length === 0 ? (

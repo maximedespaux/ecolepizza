@@ -173,7 +173,7 @@ function Partenaires() {
             <div className="carte-dette" style={{ marginBottom: 16 }}>
               <Icon name="info" size={16} />
               <span>
-                <b className="tnum">{incompletes}</b> fiche{incompletes > 1 ? "s" : ""} sur <b className="tnum">{partners.length}</b>
+                <b className="chiffres">{incompletes}</b> fiche{incompletes > 1 ? "s" : ""} sur <b className="chiffres">{partners.length}</b>
                 {incompletes > 1 ? " n'ont" : " n'a"} ni contact ni offre, un répertoire ne sert
                 qu'une fois rempli.
               </span>
@@ -368,7 +368,7 @@ function Partenaires() {
                 rows={ap}
                 rowKey={(a) => a.id}
                 cols={[
-                  { k: "date", t: "Date", td: { whiteSpace: "nowrap" }, cell: (a) => <span className="tnum">{frDate(a.date)}</span> },
+                  { k: "date", t: "Date", td: { whiteSpace: "nowrap" }, cell: (a) => <span className="chiffres">{frDate(a.date)}</span> },
                   // Le libellé identifie l'apport bien mieux que sa date : c'est lui qui
                   // devient le titre de la carte en écran étroit.
                   { k: "label", t: "Libellé", principal: true, cell: (a) => a.label },
@@ -535,7 +535,7 @@ function CategoriesModal({ categories, onClose, onChange, onReload, onError }) {
                   aria-label={`Couleur de ${c.label}`}
                   onChange={(e) => agir(() => updatePartenaireCategorie(c.id, { color: e.target.value }))} />
                 <code className="cat-code" title="Code stocké sur les partenaires, non modifiable">{c.code}</code>
-                <span className="hint tnum" style={{ minWidth: 24, textAlign: "right" }}>{c.partners ?? 0}</span>
+                <span className="hint chiffres" style={{ minWidth: 24, textAlign: "right" }}>{c.partners ?? 0}</span>
                 <button className="iconbtn sm" disabled={!modifiable || busy || Number(c.partners) > 0 || c.code === "AUTRE"}
                   title={Number(c.partners) > 0 ? `${c.partners} partenaire(s) dans cette catégorie`
                     : c.code === "AUTRE" ? "Rangement par défaut d'un nouveau partenaire" : "Supprimer"}

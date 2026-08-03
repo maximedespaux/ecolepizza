@@ -55,7 +55,7 @@ function SessionRetraits({ startDate, endDate }) {
             {r.learner.last_name} {r.learner.first_name}
             <span className="hint"> · {r.n_lines} article{r.n_lines > 1 ? "s" : ""}</span>
           </span>
-          <span className="tnum hint">{r.ref}</span>
+          <span className="chiffres hint">{r.ref}</span>
           <span className={"badge " + (r.status === "PRETE" ? "g" : "n")}>{STATUT[r.status] || r.status}</span>
         </div>
       ))}

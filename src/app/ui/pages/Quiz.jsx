@@ -132,10 +132,10 @@ function Quiz() {
               rowKey={(q) => q.id}
               cols={[
                 { k: "title", t: "Titre", principal: true, cell: (q) => <b>{q.title}</b> },
-                { k: "day", t: "Jour", cell: (q) => <span className="tnum">{dayTag(q.day)}</span> },
+                { k: "day", t: "Jour", cell: (q) => <span className="chiffres">{dayTag(q.day)}</span> },
                 { k: "envoi", t: "Envoi", cell: (q) => (q.auto_send ? <Badge tone="g">Auto</Badge> : <span className="hint">Manuel</span>) },
                 { k: "kind", t: "Type", cell: (q) => (q.kind === "SURVEY" ? <Badge tone="n">Enquête</Badge> : <Badge tone="b">Noté</Badge>) },
-                { k: "n", t: "Questions", cell: (q) => <span className="tnum">{q.n_questions}</span> },
+                { k: "n", t: "Questions", cell: (q) => <span className="chiffres">{q.n_questions}</span> },
                 { k: "actions", t: "", actions: true, td: { textAlign: "right", whiteSpace: "nowrap" },
                   cell: (q) => (
                     <>

@@ -68,7 +68,7 @@ function Slider({ label, val, min, max, step, set, suffix }) {
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
         <b style={{ fontSize: 13 }}>{label}</b>
-        <span className="tnum" style={{ fontWeight: 700, color: "var(--blue)" }}>{val}{suffix}</span>
+        <span className="chiffres" style={{ fontWeight: 700, color: "var(--blue)" }}>{val}{suffix}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={val}
         onChange={(e) => set(Number(e.target.value))} style={{ width: "100%", accentColor: "var(--ember1)" }} />
@@ -89,7 +89,7 @@ function HydraSlider({ val, recoMin, recoMax, eauPerKg, set, confirmed }) {
           <b style={{ fontSize: 13 }}>Hydratation</b>
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="hydra-badge ok"><Icon name="check" size={12} /> Confirmé</span>
-            <span className="tnum" style={{ fontWeight: 800, color: "var(--green)", fontSize: 15 }}>{val} %</span>
+            <span className="chiffres" style={{ fontWeight: 800, color: "var(--green)", fontSize: 15 }}>{val} %</span>
           </span>
         </div>
         <div className="hydra-track"><span className="hydra-zone" style={{ left: 0, right: 0 }} /></div>
@@ -111,7 +111,7 @@ function HydraSlider({ val, recoMin, recoMax, eauPerKg, set, confirmed }) {
         <b style={{ fontSize: 13 }}>Hydratation</b>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className={"hydra-badge " + badge}>{ok && <Icon name="check" size={12} />} {label}</span>
-          <span className="tnum" style={{ fontWeight: 800, color: c, fontSize: 15 }}>{val} %</span>
+          <span className="chiffres" style={{ fontWeight: 800, color: c, fontSize: 15 }}>{val} %</span>
         </span>
       </div>
       <div className="hydra-track">
@@ -143,7 +143,7 @@ function LevureControl({ val, reco, recoG, typeLabel, flourTemp, set, capNote, b
           <b style={{ fontSize: 13 }}>Levure</b>
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="hydra-badge ok"><Icon name="check" size={12} /> Cahier</span>
-            <span className="tnum" style={{ fontWeight: 800, color: "var(--green)", fontSize: 15 }}>{val} %</span>
+            <span className="chiffres" style={{ fontWeight: 800, color: "var(--green)", fontSize: 15 }}>{val} %</span>
           </span>
         </div>
         {bmax > bmin && <input type="range" min={bmin} max={bmax} step={0.01} value={v}
@@ -162,7 +162,7 @@ function LevureControl({ val, reco, recoG, typeLabel, flourTemp, set, capNote, b
         <b style={{ fontSize: 13 }}>Levure</b>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {ok && <span className="hydra-badge ok"><Icon name="check" size={12} /> Conforme</span>}
-          <span className="tnum" style={{ fontWeight: 800, color: c, fontSize: 15 }}>{val} %</span>
+          <span className="chiffres" style={{ fontWeight: 800, color: c, fontSize: 15 }}>{val} %</span>
         </span>
       </div>
       <div className="hydra-track">
@@ -795,7 +795,7 @@ function FicheRecette({ mode = "realisation" }) {
                     <input className="inp" type="number" min="0" max="35" value={dp.flourTemp ?? 17} onChange={(e) => setFlourTemp(Number(e.target.value))} /></div>
                   <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 1, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface2)" }}>
                     <span className="hint" style={{ fontSize: 11 }}>Eau de coulage <span style={{ opacity: .7 }}>(50 − 2×T°)</span></span>
-                    <b className="tnum" style={{ fontSize: 19, color: eauCoulage < 4 ? "var(--blue)" : "var(--text)" }}>{eauCoulage} °C</b>
+                    <b className="chiffres" style={{ fontSize: 19, color: eauCoulage < 4 ? "var(--blue)" : "var(--text)" }}>{eauCoulage} °C</b>
                   </div>
                 </div>
                 {eauCoulage < 2 && <p className="hint" style={{ margin: "8px 0 0", color: "var(--ember1)" }}>Farine trop chaude, mets-en une partie au frais la veille (conseil du manuel).</p>}
@@ -855,7 +855,7 @@ function FicheRecette({ mode = "realisation" }) {
                   <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={17} /></span>
                   <b style={{ flex: 1, fontSize: 13 }}>{i.k}</b>
                   <span style={{ fontSize: 11, color: "rgba(255,255,255,.6)" }}>{i.pct}</span>
-                  <b className="tnum" style={{ width: 90, textAlign: "right" }}>{gfmt(i.v)}</b>
+                  <b className="chiffres" style={{ width: 90, textAlign: "right" }}>{gfmt(i.v)}</b>
                 </div>
               ))}
               <div style={{ borderTop: "1px solid rgba(255,255,255,.15)", margin: "16px 0 0" }} />
@@ -1020,7 +1020,7 @@ function Row({ label, value, accent }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,.10)", borderRadius: 10, padding: "9px 12px" }}>
       <span style={{ fontSize: 13, color: "rgba(255,255,255,.85)" }}>{label}</span>
-      <b className="tnum" style={{ fontSize: 15, color: accent ? "var(--gold)" : "#fff" }}>{value}</b>
+      <b className="chiffres" style={{ fontSize: 15, color: accent ? "var(--gold)" : "#fff" }}>{value}</b>
     </div>
   );
 }

@@ -275,8 +275,8 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
                 </div>
               )}
               <div className="prof-stats">
-                <span><b className="tnum">{fiches}</b><span className="hint">fiche{profile.shared_count > 1 ? "s" : ""} partagée{profile.shared_count > 1 ? "s" : ""}</span></span>
-                <span><b className="tnum"><Icon name="heart" size={15} fill="currentColor" /> {coeurs}</b><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>
+                <span><b className="chiffres">{fiches}</b><span className="hint">fiche{profile.shared_count > 1 ? "s" : ""} partagée{profile.shared_count > 1 ? "s" : ""}</span></span>
+                <span><b className="chiffres"><Icon name="heart" size={15} fill="currentColor" /> {coeurs}</b><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>
               </div>
               {(profile.phone || profile.email) && (
                 <div style={{ marginTop: 16, textAlign: "left", display: "flex", flexDirection: "column", gap: 6 }}>

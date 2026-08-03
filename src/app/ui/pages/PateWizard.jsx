@@ -323,7 +323,7 @@ export default function PateWizard() {
                     <div key={x.key} className="mix-row">
                       <b style={{ width: 120, fontSize: 12.5, flexShrink: 0 }}>{m.label}</b>
                       <input type="range" min={5} max={m.max} step={5} value={num(x.pct)} onChange={(e) => setSubPct(x.key, Number(e.target.value))} style={{ flex: 1, accentColor: "var(--ember1)" }} />
-                      <span className="tnum" style={{ width: 40, textAlign: "right", fontWeight: 700, fontSize: 12.5 }}>{x.pct} %</span>
+                      <span className="chiffres" style={{ width: 40, textAlign: "right", fontWeight: 700, fontSize: 12.5 }}>{x.pct} %</span>
                       <button className="iconbtn del" title="Retirer" onClick={() => removeSub(x.key)}><Icon name="x" size={13} /></button>
                     </div>
                   ); })}
@@ -345,7 +345,7 @@ export default function PateWizard() {
                     <div key={a.key} className="mix-row">
                       <b style={{ width: 104, fontSize: 12.5, flexShrink: 0 }}>{m.label}</b>
                       <input type="range" min={m.min} max={m.max} step={1} value={num(a.pct)} onChange={(e) => setAdjPct(a.key, Number(e.target.value))} style={{ flex: 1, accentColor: "var(--ember1)" }} />
-                      <span className="tnum" style={{ width: 40, textAlign: "right", fontWeight: 700, fontSize: 12.5 }}>{a.pct} %</span>
+                      <span className="chiffres" style={{ width: 40, textAlign: "right", fontWeight: 700, fontSize: 12.5 }}>{a.pct} %</span>
                       <button className="iconbtn del" title="Retirer" onClick={() => removeAdj(a.key)}><Icon name="x" size={13} /></button>
                     </div>
                   ); })}
@@ -425,7 +425,7 @@ export default function PateWizard() {
                   <FlourTempField dp={dp} set={setFlourTemp} />
                   <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 1, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface2)" }}>
                     <span className="hint" style={{ fontSize: 11 }}>Eau de coulage <span style={{ opacity: .7 }}>(TB 50)</span></span>
-                    <b className="tnum" style={{ fontSize: 19, color: eauCoulage < 4 ? "var(--blue)" : "var(--text)" }}>{eauCoulage} °C</b>
+                    <b className="chiffres" style={{ fontSize: 19, color: eauCoulage < 4 ? "var(--blue)" : "var(--text)" }}>{eauCoulage} °C</b>
                   </div>
                 </div>
                 <p className="hint" style={{ margin: "10px 0 0" }}>Formule du manuel : eau de coulage = 50 − (2 × T° farine). Vise une pâte à ≈ 23-25 °C. {eauCoulage < 2 && <span style={{ color: "var(--ember1)" }}>Farine trop chaude, mets-en une partie au frais la veille.</span>}</p>
@@ -491,7 +491,7 @@ export default function PateWizard() {
                     <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={17} /></span>
                     <b style={{ flex: 1, fontSize: 13 }}>{i.k}</b>
                     <span style={{ fontSize: 11, color: "rgba(255,255,255,.6)" }}>{i.pct}</span>
-                    <b className="tnum" style={{ width: 90, textAlign: "right" }}>{gfmt(i.v)}</b>
+                    <b className="chiffres" style={{ width: 90, textAlign: "right" }}>{gfmt(i.v)}</b>
                   </div>
                 ))}
                 {ferment.length > 0 && <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.15)", fontSize: 11.5, color: "rgba(255,255,255,.75)", display: "flex", alignItems: "center", gap: 6 }}><Icon name="clock" size={13} /> Fermentation : {ferment.join(" + ")}</div>}
@@ -615,7 +615,7 @@ function CompositionList({ build, dense }) {
           <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={dense ? 15 : 16} /></span>
           <b style={{ flex: 1, fontSize: dense ? 12.5 : 13 }}>{i.k}</b>
           <span style={{ fontSize: 11, color: "var(--muted)" }}>{i.pct}</span>
-          <b className="tnum" style={{ width: 78, textAlign: "right" }}>{gfmt(i.v)}</b>
+          <b className="chiffres" style={{ width: 78, textAlign: "right" }}>{gfmt(i.v)}</b>
         </div>
       ))}
     </>
@@ -701,7 +701,7 @@ function Slider({ label, val, min, max, step, set }) {
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
         <b style={{ fontSize: 13 }}>{label}</b>
-        <span className="tnum" style={{ fontWeight: 700, color: "var(--blue)" }}>{val} %</span>
+        <span className="chiffres" style={{ fontWeight: 700, color: "var(--blue)" }}>{val} %</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={val} onChange={(e) => set(Number(e.target.value))} style={{ width: "100%", accentColor: "var(--ember1)" }} />
     </div>
@@ -734,7 +734,7 @@ function HydraStep({ val, recoMin, recoMax, confirmed, set }) {
         <b style={{ fontSize: 13 }}>Hydratation de coulage</b>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className={"hydra-badge " + (confirmed || ok ? "ok" : above ? "high" : "low")}>{(confirmed || ok) && <Icon name="check" size={12} />} {confirmed ? "Confirmé" : ok ? "Recommandé" : above ? "Au-dessus du seuil" : "Sous le minimum"}</span>
-          <span className="tnum" style={{ fontWeight: 800, color: c, fontSize: 15 }}>{val} %</span>
+          <span className="chiffres" style={{ fontWeight: 800, color: c, fontSize: 15 }}>{val} %</span>
         </span>
       </div>
       <div className="hydra-track">

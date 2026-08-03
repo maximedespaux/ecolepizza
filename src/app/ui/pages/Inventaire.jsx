@@ -177,7 +177,7 @@ function Inventaire({ embedded = false }) {
               return (
                 <button key={it.id} type="button" className="manque-i" style={{ borderLeftColor: s.color }}
                   onClick={() => document.getElementById(`inv-${it.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" })}>
-                  <b className="tnum" style={{ color: s.color }}>{it.quantity}</b>
+                  <b className="chiffres" style={{ color: s.color }}>{it.quantity}</b>
                   <span>{it.name}<i>{s.label}{it.threshold ? ` · seuil ${it.threshold}` : ""}</i></span>
                 </button>
               );
@@ -193,8 +193,8 @@ function Inventaire({ embedded = false }) {
 
       {/* Les trois autres compteurs décrivent, ils n'appellent rien : une ligne suffit. */}
       <div className="compteurs">
-        <span><b className="tnum">{totals.items}</b> article{totals.items > 1 ? "s" : ""}</span><i />
-        <span><b className="tnum">{totals.units}</b> unité{totals.units > 1 ? "s" : ""} en stock</span><i />
+        <span><b className="chiffres">{totals.items}</b> article{totals.items > 1 ? "s" : ""}</span><i />
+        <span><b className="chiffres">{totals.units}</b> unité{totals.units > 1 ? "s" : ""} en stock</span><i />
         <span><b className="tnum">{euro(totals.value)}</b> de valeur (HT)</span>
       </div>
 

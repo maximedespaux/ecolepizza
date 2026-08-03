@@ -507,7 +507,7 @@ function PanierTab({ onSent }) {
               {l.source === "PARTENAIRE" ? <span className="badge n" style={{ marginLeft: 6 }}>partenaire</span> : null}</b>
             <span className="cart-qty">
               <button className="iconbtn" onClick={() => setQty(k, l.qty - 1)} aria-label="Retirer un"><Icon name="minus" size={13} /></button>
-              <b className="tnum">{l.qty}</b>
+              <b className="chiffres">{l.qty}</b>
               <button className="iconbtn" onClick={() => setQty(k, l.qty + 1)} aria-label="Ajouter un"
                 disabled={roomFor(l, lines) <= 0} title={roomFor(l, lines) <= 0 ? "Stock disponible atteint" : undefined}><Icon name="plus" size={13} /></button>
             </span>
@@ -643,7 +643,7 @@ function MesDemandes() {
     return (
       <Card key={r.id} title={
         <span className="card-ttl">
-          <Icon name="history" size={16} /> <b className="tnum">{r.ref}</b>
+          <Icon name="history" size={16} /> <b className="chiffres">{r.ref}</b>
           <span className={"badge " + (STATUS_BADGE[r.status] || "n")} style={{ marginLeft: 8 }}>
             {STATUS_LABEL[r.status] || r.status}
           </span>
@@ -663,7 +663,7 @@ function MesDemandes() {
         <ul className="dem-lignes">
           {r.lines.map((l, i) => (
             <li key={i}>
-              <span className="dem-qty tnum">{l.qty} ×</span>
+              <span className="dem-qty chiffres">{l.qty} ×</span>
               <span className="dem-lbl">
                 {l.label}
                 {l.variant ? <span className="badge n dem-var">{l.variant}</span> : null}
@@ -731,7 +731,7 @@ function CartAside({ count, onCheckout }) {
                     {variantValue(l) ? <span className="badge b" style={{ marginLeft: 4 }}>{variantValue(l)}</span> : null}</span>
                   <span className="cart-mini-qty">
                     <button className="iconbtn" onClick={() => setQty(k, l.qty - 1)} aria-label="Retirer un"><Icon name="minus" size={12} /></button>
-                    <b className="tnum">{l.qty}</b>
+                    <b className="chiffres">{l.qty}</b>
                     <button className="iconbtn" onClick={() => setQty(k, l.qty + 1)} aria-label="Ajouter un"
                       disabled={roomFor(l, lines) <= 0} title={roomFor(l, lines) <= 0 ? "Stock disponible atteint" : undefined}><Icon name="plus" size={12} /></button>
                   </span>
@@ -796,7 +796,7 @@ function Boutique() {
       {sent ? (
         <div className="ok-banner">
           <Icon name="check-circle" size={18} />
-          <span>Demande <b className="tnum">{sent}</b> envoyée. L'école la prépare et te recontacte, garde cette référence, elle sert à la retrouver.</span>
+          <span>Demande <b className="chiffres">{sent}</b> envoyée. L'école la prépare et te recontacte, garde cette référence, elle sert à la retrouver.</span>
           <button className="btn sm ghost" onClick={() => setSent(null)}>Fermer</button>
         </div>
       ) : null}

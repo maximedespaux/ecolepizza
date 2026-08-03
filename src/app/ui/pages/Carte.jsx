@@ -284,11 +284,11 @@ function Carte() {
           <div className="hud-bot">
             {/* Les compteurs tiennent en une ligne : ils situent, ils ne se consultent pas. */}
             <div className="hud-panel hud-stats">
-              <b className="tnum">{total}</b> stagiaires
+              <b className="chiffres">{total}</b> stagiaires
               <i />
-              <b className="tnum">{nbDepts}</b> départements
+              <b className="chiffres">{nbDepts}</b> départements
               <i />
-              <b className="tnum">{geocoded}</b> points précis
+              <b className="chiffres">{geocoded}</b> points précis
             </div>
 
             {formationOptions.length > 0 && (
@@ -320,7 +320,7 @@ function Carte() {
       {(pending + ungeo) > 0 && (
         <div className="carte-dette">
           <Icon name="target" size={16} />
-          <span><b className="tnum">{pending + ungeo}</b> stagiaire(s) sans point précis, comptés dans leur département, mais pas situés à la ville.</span>
+          <span><b className="chiffres">{pending + ungeo}</b> stagiaire(s) sans point précis, comptés dans leur département, mais pas situés à la ville.</span>
           {/* Pas de `title` quand le bouton porte déjà le nombre : l'infobulle DEVIENT le nom
               accessible et remplace l'intitulé lu à voix haute par une phrase qui n'est pas celui
               affiché à l'écran. Elle ne sert que dans le cas désactivé, qu'elle explique. */}
@@ -348,7 +348,7 @@ function Carte() {
                   <div style={{ flex: 1, height: 8, borderRadius: 999, background: "var(--surface3)", overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${(d.count / maxCount) * 100}%`, background: "var(--navy)", borderRadius: 999 }} />
                   </div>
-                  <b className="tnum" style={{ width: 34, textAlign: "right", color: "var(--navy)" }}>{d.count}</b>
+                  <b className="chiffres" style={{ width: 34, textAlign: "right", color: "var(--navy)" }}>{d.count}</b>
                 </button>
               ))}
             </div>

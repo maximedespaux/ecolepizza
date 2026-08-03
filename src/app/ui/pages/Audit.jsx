@@ -88,7 +88,7 @@ function Audit() {
                        à ne rien mettre en avant. On balaie la colonne de couleur, on s'arrête
                        sur le rouge. */
                     <div key={r.id} className={`aud-l ton-${tone}`}>
-                      <span className="aud-h tnum">{String(r.created_at || "").slice(11, 16) || "-"}</span>
+                      <span className="aud-h chiffres">{String(r.created_at || "").slice(11, 16) || "-"}</span>
                       <span className="aud-pt" aria-hidden="true" />
                       <span className="aud-a">{label}</span>
                       <span className="aud-e">{entityLabel(r.entity)}</span>

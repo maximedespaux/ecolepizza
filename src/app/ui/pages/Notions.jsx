@@ -189,7 +189,7 @@ export default function Notions() {
                   <b style={{ fontSize: 13.5, minWidth: 118 }}>{i.k}</b>
                   <span className="hint" style={{ flex: 1, fontSize: 12, minWidth: 150 }}>{i.note}</span>
                   <span style={{ fontSize: 11.5, color: "var(--muted)", width: 48, textAlign: "right" }}>{i.pct}</span>
-                  <b className="tnum" style={{ width: 66, textAlign: "right" }}>{i.g}</b>
+                  <b className="chiffres" style={{ width: 66, textAlign: "right" }}>{i.g}</b>
                 </div>
               ))}
             </div>

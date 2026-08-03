@@ -225,7 +225,7 @@ function Suivi() {
                   <button key={m.type} type="button" aria-pressed={manqueFiltre === m.type}
                     className={"manque-i" + (manqueFiltre === m.type ? " on" : "")}
                     onClick={() => setManqueFiltre((f) => (f === m.type ? null : m.type))}>
-                    <b className="tnum">{m.n}</b><span>{m.label}</span>
+                    <b className="chiffres">{m.n}</b><span>{m.label}</span>
                   </button>
                 ))}
               </div>
@@ -239,9 +239,9 @@ function Suivi() {
 
           {/* Les compteurs descendent : ils résument, ils ne se traitent pas. */}
           <div className="compteurs">
-            <span><b className="tnum">{count("ROUGE")}</b> incomplet{count("ROUGE") > 1 ? "s" : ""}</span><i />
-            <span><b className="tnum">{count("ORANGE")}</b> en cours</span><i />
-            <span><b className="tnum">{count("VERT")}</b> complet{count("VERT") > 1 ? "s" : ""}</span>
+            <span><b className="chiffres">{count("ROUGE")}</b> incomplet{count("ROUGE") > 1 ? "s" : ""}</span><i />
+            <span><b className="chiffres">{count("ORANGE")}</b> en cours</span><i />
+            <span><b className="chiffres">{count("VERT")}</b> complet{count("VERT") > 1 ? "s" : ""}</span>
           </div>
 
           <Card title={`Dossiers (${dossiersVus.length}${manqueFiltre ? ` sur ${dossiers.length}` : ""})`}>

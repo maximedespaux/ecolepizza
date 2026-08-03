@@ -197,7 +197,7 @@ function Dashboard() {
                  page — « contrats terminés » et « contrats à renouveler » pointent toutes deux
                  vers /partenaires — et React n'en afficherait qu'une, en silence. */
               <Link key={t.label} to={t.to} className={`todo-i tone-${t.tone}`}>
-                <b className="tnum">{t.n}</b>
+                <b className="chiffres">{t.n}</b>
                 <span className="todo-l">{t.label}<i>{t.sous}</i></span>
                 <Icon name="chevron-right" size={16} aria-hidden="true" />
               </Link>
@@ -214,9 +214,9 @@ function Dashboard() {
       {/* Les compteurs situent, ils ne se consultent pas : une ligne suffit. Ils restent
           cliquables — c'était leur seul usage réel. */}
       <div className="compteurs">
-        <Link to="/stagiaires"><b className="tnum">{stats.stagiaires}</b> stagiaires</Link><i />
-        <Link to="/suivi"><b className="tnum">{stats.dossiers}</b> dossiers actifs</Link><i />
-        <Link to="/sessions"><b className="tnum">{stats.sessions}</b> sessions à venir</Link><i />
+        <Link to="/stagiaires"><b className="chiffres">{stats.stagiaires}</b> stagiaires</Link><i />
+        <Link to="/suivi"><b className="chiffres">{stats.dossiers}</b> dossiers actifs</Link><i />
+        <Link to="/sessions"><b className="chiffres">{stats.sessions}</b> sessions à venir</Link><i />
         <Link to="/ventes"><b className="tnum">{euro(stats.ca)}</b> de ventes</Link>
       </div>
 
@@ -247,9 +247,9 @@ function Dashboard() {
                 ) },
               { k: "inscrits", t: "Inscrits", th: { textAlign: "center" }, td: { textAlign: "center" },
                 cell: (s) => <span className="pill" style={{ fontSize: 12 }}>{s.stagiaires ?? 0}</span> },
-              { k: "date", t: "Date", td: { whiteSpace: "nowrap" }, cell: (s) => <span className="tnum">{frDate(s.start_date)}</span> },
+              { k: "date", t: "Date", td: { whiteSpace: "nowrap" }, cell: (s) => <span className="chiffres">{frDate(s.start_date)}</span> },
               { k: "semaine", t: "Semaine", th: { textAlign: "center" }, td: { textAlign: "center", color: "var(--muted)" },
-                cell: (s) => <span className="tnum">S{s.week} · {s.year}</span> },
+                cell: (s) => <span className="chiffres">S{s.week} · {s.year}</span> },
             ]}
           />
         )}
@@ -322,9 +322,9 @@ function Dashboard() {
         ) : (
           <>
             <div className="compteurs" style={{ marginBottom: recapPartenaires.echus.length || recapPartenaires.bientot.length ? 12 : 0 }}>
-              <span><b className="tnum">{recapPartenaires.total}</b> au total</span><i />
-              <span><b className="tnum">{recapPartenaires.suivis}</b> sous contrat</span><i />
-              <span><b className="tnum">{recapPartenaires.sansContrat}</b> sans échéance suivie</span>
+              <span><b className="chiffres">{recapPartenaires.total}</b> au total</span><i />
+              <span><b className="chiffres">{recapPartenaires.suivis}</b> sous contrat</span><i />
+              <span><b className="chiffres">{recapPartenaires.sansContrat}</b> sans échéance suivie</span>
             </div>
 
             {recapPartenaires.echus.map(({ p, c }) => (

@@ -98,7 +98,7 @@ function Demande({ d, onChange, onErreur }) {
           {initials(d.learner.first_name, d.learner.last_name)}
         </span>
         <b>{d.learner.last_name} {d.learner.first_name}</b>
-        <span className="tnum hint">{d.ref}</span>
+        <span className="chiffres hint">{d.ref}</span>
         <span className={"badge " + (TONE[d.status] || "n")}>{LABEL[d.status] || d.status}</span>
         {d.has_partner ? <span className="badge n">partenaire</span> : null}
       </span>
