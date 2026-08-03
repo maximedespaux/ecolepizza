@@ -148,6 +148,7 @@ journal des transmissions), `131` (`partner.recoit_coordonnees` + suivi de contr
 
 | N° | Objet | État |
 |----|-------|------|
+| 136 | **Rattrapage `partner_disclosure`** — `ADD COLUMN IF NOT EXISTS` sur les six colonnes. ⚠️ **`CREATE TABLE IF NOT EXISTS` (migration 130) ne complète PAS une table déjà présente** : elle est ignorée en bloc, sans erreur. Rejouer la 130 n'ajoute donc rien — il faut la 136 | **à jouer** |
 | 135 | `organization.partner_fields` + **`consent_record.champs`** — l'école choisit ce qu'elle transmet aux partenaires, et **ce qui a été ANNONCÉ à chaque personne est figé sur sa réponse**. L'export n'envoie que l'INTERSECTION des deux : restreindre s'applique à tout le monde, élargir ne vaut que pour les consentements suivants | **jouée** |
 | 134 | **`specs` → `category`** — les caractéristiques figées (énergie, °C, pizzas, sole rotative, AVPN) recopiées dans les catégories libres, puis les badges retirés du code. ⚠️ **À jouer AVANT de déployer**, sinon 12 produits sur 16 perdent l'affichage de leurs caractéristiques entre les deux. `specs` reste en base : `specs.devis` pilote toujours « Sur devis » | **à jouer** |
 | 133 | `partner.logo_url` + `inventory_item.image_url` — **images par LIEN**, hébergées chez le fournisseur. `partner_product.image_url` existait déjà (095) sans écran pour la remplir. ⚠️ Une image distante est **une requête vers un tiers** faite par le navigateur du stagiaire : la page Confidentialité le déclare désormais, et les images sont posées en `no-referrer` | **à jouer** |

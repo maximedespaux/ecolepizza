@@ -53,14 +53,29 @@ const SANS_REGISTRE = 'Registre des consentements indisponible (migration 130 no
     + 'Aucune liste ne peut être produite : sans lecture des réponses, transmettre reviendrait à '
     + 'transmettre sans consentement.';
 
-/** Le même refus pour les deux pannes, mais jamais le même diagnostic. */
+/**
+ * Le même refus pour les deux pannes, mais jamais le même diagnostic.
+ *
+ * ⚠ UNE COLONNE MANQUANTE N'EST PAS FORCÉMENT UN DÉFAUT DE CODE, et ce message l'a affirmé à
+ * tort. `CREATE TABLE IF NOT EXISTS` ne rattrape RIEN sur une table qui existe déjà : si elle a
+ * été créée dans une forme antérieure, rejouer la migration l'ignore intégralement, sans ajouter
+ * la moindre colonne ni lever d'erreur. C'est ce qui est arrivé à `partner_disclosure.
+ * champs_envoyes`, et le message envoyait alors chercher un bug dans le code — exactement là où
+ * il n'était pas.
+ *
+ * Il NOMME donc la colonne et laisse les deux hypothèses ouvertes. Nommer coûte une ligne et fait
+ * gagner une demi-heure : c'est ce nom qui a permis d'identifier la cause.
+ */
 function refusLecture(res, err, ou) {
     if (CHAMP_ABSENT(err)) {
         console.error(`Colonne inconnue dans ${ou} :`, err.sqlMessage || err.message);
+        const colonne = (err.sqlMessage || '').match(/Unknown column '([^']+)'/)?.[1];
         return res.status(500).json({
-            message: 'Le registre est en place mais la requête ne correspond pas à son schéma '
-                + '(colonne inconnue). Rien n\'a été transmis. C\'est un défaut du logiciel, pas '
-                + 'une migration manquante — le détail est dans les journaux du serveur.',
+            message: `Le registre est en place, mais la colonne ${colonne ? `« ${colonne} » ` : ''}`
+                + 'lui manque. Rien n\'a été transmis. Deux causes possibles : une migration qui '
+                + 'ajoute cette colonne n\'a pas été jouée — `CREATE TABLE IF NOT EXISTS` ne '
+                + 'complète jamais une table déjà présente — ou la requête nomme une colonne qui '
+                + 'n\'existe pas. Le détail est dans les journaux du serveur.',
         });
     }
     return res.status(409).json({ message: SANS_REGISTRE });

@@ -375,3 +375,41 @@ test("une période sans consentement ne journalise RIEN", () => {
     assert.ok(avant > 0 && avant < insert,
         'le retour « aucun consentement » doit précéder toute écriture au journal');
 });
+
+test("une colonne manquante ne s'annonce pas comme un défaut de code", () => {
+    /* ─────────────────────────────────────────────────────────────────────────────────────────
+       LE MESSAGE AFFIRMAIT « c'est un défaut du logiciel, pas une migration manquante ». Il avait
+       tort, et il a envoyé chercher la panne là où elle n'était pas.
+
+       `CREATE TABLE IF NOT EXISTS` NE RATTRAPE RIEN sur une table déjà présente : si elle existe
+       dans une forme antérieure, rejouer la migration l'ignore intégralement — aucune colonne
+       ajoutée, aucune erreur levée. On croit la migration passée. C'est ce qui est arrivé à
+       `partner_disclosure.champs_envoyes`, et l'export échouait au moment de JOURNALISER, donc
+       après avoir composé la liste : le diagnostic n'en était que plus opaque.
+
+       Le message NOMME désormais la colonne et laisse les deux hypothèses ouvertes. Nommer coûte
+       une ligne et fait gagner une demi-heure — c'est ce nom qui a permis d'identifier la cause. */
+    const src = sansCommentaires(fs.readFileSync(path.join(API, 'controllers/consentement.controller.js'), 'utf8'));
+    assert.match(src, /Unknown column '\(\[\^'\]\+\)'/,
+        'Le message doit extraire le NOM de la colonne manquante.');
+    assert.doesNotMatch(src, /défaut du logiciel, pas \+?\s*'?\+?\s*'?une migration manquante/,
+        'Il ne doit plus exclure la piste de la migration.');
+    assert.match(src, /CREATE TABLE IF NOT EXISTS` ne /,
+        'Et dire POURQUOI une migration jouée peut n\'avoir rien ajouté.');
+
+    /* ET LE RATTRAPAGE EXISTE : `ADD COLUMN IF NOT EXISTS` agit colonne par colonne, seule forme
+       réellement rejouable. Il porte sur TOUTES les colonnes, pas seulement celle qui manquait —
+       rien ne garantit que les autres soient là. */
+    const MIG136 = path.join(MIG, '136_partner_disclosure_colonnes.sql');
+    assert.ok(fs.existsSync(MIG136), 'le rattrapage doit exister');
+    const sql = fs.readFileSync(MIG136, 'utf8');
+    for (const c of ['session_id', 'learner_ids', 'learners_count', 'champs_envoyes', 'envoye_par', 'sent_at']) {
+        assert.match(sql, new RegExp(`ADD COLUMN IF NOT EXISTS ${c}\\b`), `${c} doit être rattrapée`);
+    }
+    /* SUR LE SQL DÉPOUILLÉ : le fichier EXPLIQUE pourquoi `CREATE TABLE IF NOT EXISTS` ne
+       rattrape rien, donc les mots y figurent — dans un commentaire. Troisième fois aujourd'hui
+       qu'une assertion se heurte à sa propre documentation ; il faut dépouiller par défaut. */
+    assert.doesNotMatch(sql.replace(/\/\*[\s\S]*?\*\//g, ''), /CREATE TABLE/,
+        'Ce fichier COMPLÈTE la table, il ne la crée pas.');
+    assert.ok(fs.existsSync(path.join(MIG, '136_revert_partner_disclosure_colonnes.sql')));
+});
