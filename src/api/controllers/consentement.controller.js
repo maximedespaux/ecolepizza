@@ -226,56 +226,130 @@ const setConsentPourStagiaire = async (req, res) => {
  * Il garde les IDENTIFIANTS, pas une copie des coordonnées. Recopier ici e-mails et téléphones
  * créerait une seconde base personnelle à protéger et à purger, sans rien prouver de plus.
  */
+/**
+ * LES LIGNES DE L'EXPORT — communes aux deux chemins (par session, par partenaire).
+ *
+ * ON N'ENVOIE QUE L'INTERSECTION entre ce que l'école transmet AUJOURD'HUI et ce qui avait été
+ * ANNONCÉ À CHAQUE PERSONNE. Un consentement porte sur ce qui a été dit : si l'école ajoute un
+ * champ six mois après, les accords déjà donnés ne le couvrent pas — la personne ne pouvait pas
+ * consentir à ce qu'elle ignorait. Restreindre la liste s'applique donc tout de suite à tout le
+ * monde, l'élargir ne vaut que pour les réponses suivantes. On transmet toujours MOINS que ce qui
+ * a été accepté, jamais plus.
+ *
+ * Extraite parce que les deux exports doivent appliquer la MÊME règle. Recopiée, elle aurait
+ * divergé — et une divergence ici ne se voit pas : elle produit un export qui envoie un champ de
+ * trop, sans erreur ni alerte.
+ */
+async function composerLignes(conn, orgId, retenus, etats) {
+    const choisis = await consentements.champsOrganisme(conn, orgId);
+    const champsParStagiaire = new Map(retenus.map((l) => {
+        const annonces = etats.get(l.id)?.champsAnnonces || [];
+        return [l.id, choisis.filter((c) => annonces.includes(c))];
+    }));
+    /* La colonne de l'export est l'UNION de ce qui part réellement : une colonne présente pour un
+       seul stagiaire doit exister dans le tableau, vide pour les autres. La cacher masquerait le
+       fait que la donnée est bel et bien partie pour celui-là. */
+    const champs = choisis.filter((c) => [...champsParStagiaire.values()].some((l) => l.includes(c)));
+
+    /* LE PROJET EST CINQ BOOLÉENS EN BASE. Les envoyer tels quels donnerait cinq colonnes de 0 et
+       de 1 à décoder ; on les rassemble en une phrase lisible. */
+    const PROJETS = [
+        ['project_creation', 'création'], ['project_takeover', 'reprise'],
+        ['project_oven', 'four'], ['project_truck', 'camion'],
+        ['project_job', 'recherche de poste'],
+    ];
+    const valeurs = (l) => ({
+        civilite: l.civility || '',
+        nom: l.last_name || '', prenom: l.first_name || '',
+        email: l.email || '', telephone: l.phone || '',
+        adresse: l.address || '', code_postal: l.zip_code || '', ville: l.town || '',
+        formation: l.program_title || l.program_code || '',
+        dates_session: l.start_date && l.end_date ? `${l.start_date} → ${l.end_date}` : '',
+        projet: PROJETS.filter(([c]) => Number(l[c]) === 1).map(([, m]) => m).join(', '),
+        statut: l.professional_status || '',
+        /* L'ENTREPRISE : vide quand le stagiaire n'en a pas. Une colonne présente et vide dit
+           « pas d'entreprise » ; une colonne absente forcerait à deviner. */
+        entreprise: l.company_name || '',
+        entreprise_siret: l.company_siret || '',
+        entreprise_forme: l.company_legal || '',
+        entreprise_naf: l.company_naf || '',
+        entreprise_adresse: l.company_address || '',
+        entreprise_cp: l.company_zip || '',
+        entreprise_ville: l.company_town || '',
+    });
+
+    const lignes = retenus.map((l) => {
+        const permis = champsParStagiaire.get(l.id);
+        const v = valeurs(l);
+        /* Un champ non couvert pour CE stagiaire sort VIDE, pas absent : le tableau garde la même
+           forme d'une ligne à l'autre, et un CSV dont les colonnes changent de sens d'une ligne à
+           l'autre est illisible. */
+        return Object.fromEntries(champs.map((c) => [c, permis.includes(c) ? v[c] : '']));
+    });
+    return { champs, lignes };
+}
+
+/**
+ * LE PARTENAIRE PEUT-IL RECEVOIR DES COORDONNÉES ? Deux questions, dans cet ordre.
+ *
+ * Extrait parce que le contrôle vaut pour les DEUX exports — par session et par partenaire.
+ * Recopié, il aurait divergé au premier ajustement, et une divergence ici produit un export qui
+ * contourne une garantie sans que rien ne le signale.
+ *
+ * Rend `{ partenaire }`, ou `{ refus: { statut, message } }`.
+ */
+async function partenaireRecevable(conn, orgId, partnerId) {
+    let pRows;
+    let colonneDestinataire = true;
+    try {
+        [pRows] = await conn.query(
+            `SELECT id, name, recoit_coordonnees, contrat, contrat_duree_mois,
+                    DATE_FORMAT(contrat_debut, '%Y-%m-%d') AS contrat_debut
+               FROM partner WHERE id = ? AND organization_id = ?`,
+            [partnerId, orgId]);
+    } catch (e) {
+        if (!isMissingSchema(e)) throw e;
+        /* Sans la 131, tout partenaire est destinataire : c'est le comportement d'avant, et il
+           reste juste tant que l'école n'a pas eu la possibilité de restreindre. */
+        colonneDestinataire = false;
+        [pRows] = await conn.query(
+            'SELECT id, name FROM partner WHERE id = ? AND organization_id = ?', [partnerId, orgId]);
+    }
+    if (!pRows.length) return { refus: { statut: 422, message: 'Partenaire inconnu.' } };
+    const partenaire = pRows[0];
+
+    /* CONTRAT ÉCHU : ON REFUSE, avant même de regarder les consentements. Transmettre à une
+       entreprise avec qui l'école n'a plus d'accord, c'est transmettre hors de tout cadre — et le
+       consentement recueilli nommait « un partenaire de l'école », pas une entreprise devenue
+       tierce. Le message donne la date : un refus dont on ne comprend pas la cause se contourne. */
+    const contrat = etatContrat(partenaire);
+    if (contrat.suivi && contrat.actif === false) {
+        return { refus: { statut: 422, message:
+            `Le contrat avec ${partenaire.name} a pris fin le `
+            + `${contrat.fin.split('-').reverse().join('/')}. Aucune coordonnée ne peut lui être `
+            + 'transmise tant qu\'il n\'est pas renouvelé.' } };
+    }
+    /* DÉCLARÉ DESTINATAIRE (migration 131) : le pendant serveur de la case cochée sur sa fiche.
+       Sans ce contrôle, la case ne serait qu'un affichage — il suffirait de choisir le partenaire
+       dans une liste déroulante pour lui produire quand même les coordonnées. */
+    if (colonneDestinataire && Number(partenaire.recoit_coordonnees) !== 1) {
+        return { refus: { statut: 422, message:
+            `${partenaire.name} n'est pas déclaré destinataire des coordonnées des stagiaires. `
+            + 'Les personnes qui ont consenti ne l\'ont pas fait pour lui : cochez « reçoit les '
+            + 'coordonnées » sur sa fiche si c\'est bien le cas.' } };
+    }
+    return { partenaire };
+}
+
 const produireTransmission = async (req, res) => {
     try {
         const conn = db.promise();
         const bloc = await sessionAvecInscrits(conn, req.params.id, req.user.organization_id);
         if (!bloc) return res.status(404).json({ message: 'Session introuvable' });
 
-        /* LE PARTENAIRE DOIT ÊTRE DÉCLARÉ DESTINATAIRE (migration 131), et ce contrôle est le
-           pendant serveur de la case cochée sur sa fiche. Sans lui, la case ne serait qu'un
-           affichage : il suffirait de choisir le partenaire dans la liste déroulante pour lui
-           produire quand même les coordonnées.
-           La double lecture gère l'avant/après migration : sans la colonne, tout partenaire est
-           destinataire — c'est le comportement d'avant, et il reste juste tant que l'école n'a
-           pas eu la possibilité de restreindre. */
-        let pRows;
-        let colonneDestinataire = true;
-        try {
-            [pRows] = await conn.query(
-                `SELECT id, name, recoit_coordonnees, contrat, contrat_duree_mois,
-                        DATE_FORMAT(contrat_debut, '%Y-%m-%d') AS contrat_debut
-                   FROM partner WHERE id = ? AND organization_id = ?`,
-                [req.body?.partner_id, req.user.organization_id]);
-        } catch (e) {
-            if (!isMissingSchema(e)) throw e;
-            colonneDestinataire = false;
-            [pRows] = await conn.query(
-                'SELECT id, name FROM partner WHERE id = ? AND organization_id = ?',
-                [req.body?.partner_id, req.user.organization_id]);
-        }
-        if (!pRows.length) return res.status(422).json({ message: 'Partenaire inconnu.' });
-        const partenaire = pRows[0];
-        /* CONTRAT ÉCHU : ON REFUSE, avant même de regarder les consentements. Transmettre des
-           coordonnées à une entreprise avec qui l'école n'a plus d'accord, c'est transmettre hors
-           de tout cadre — et le consentement recueilli nommait « un partenaire de l'école », pas
-           une entreprise devenue tierce. Le message donne la date : un refus dont on ne comprend
-           pas la cause se contourne, celui-ci se répare en renouvelant ou en décochant. */
-        const contrat = etatContrat(partenaire);
-        if (contrat.suivi && contrat.actif === false) {
-            return res.status(422).json({
-                message: `Le contrat avec ${partenaire.name} a pris fin le `
-                    + `${contrat.fin.split('-').reverse().join('/')}. Aucune coordonnée ne peut `
-                    + 'lui être transmise tant qu\'il n\'est pas renouvelé.',
-            });
-        }
-        if (colonneDestinataire && Number(partenaire.recoit_coordonnees) !== 1) {
-            return res.status(422).json({
-                message: `${partenaire.name} n'est pas déclaré destinataire des coordonnées des `
-                    + 'stagiaires. Les personnes qui ont consenti ne l\'ont pas fait pour lui : '
-                    + 'cochez « reçoit les coordonnées » sur sa fiche si c\'est bien le cas.',
-            });
-        }
+        const rec = await partenaireRecevable(conn, req.user.organization_id, req.body?.partner_id);
+        if (rec.refus) return res.status(rec.refus.statut).json({ message: rec.refus.message });
+        const partenaire = rec.partenaire;
 
         const etats = await consentements.etatParStagiaire(
             conn, req.user.organization_id, bloc.inscrits.map((l) => l.id), FINALITE);
@@ -292,67 +366,15 @@ const produireTransmission = async (req, res) => {
             });
         }
 
-        const s = bloc.session;
-        const dates = s.start_date && s.end_date ? `${s.start_date} → ${s.end_date}` : '';
-
-        /* ─────────────────────────────────────────────────────────────────────────────────────
-           ON N'ENVOIE QUE L'INTERSECTION entre ce que l'école transmet AUJOURD'HUI et ce qui
-           avait été ANNONCÉ À CETTE PERSONNE-LÀ.
-
-           Un consentement porte sur ce qui a été dit. Si l'école ajoute le téléphone six mois
-           après, les accords déjà donnés ne le couvrent pas : la personne ne pouvait pas
-           consentir à ce qu'elle ignorait. Sans cette intersection, l'organisme transmettrait un
-           champ de plus en se croyant couvert par un « oui » qui portait sur autre chose.
-
-           L'asymétrie est voulue : RESTREINDRE la liste s'applique tout de suite à tout le monde,
-           l'ÉLARGIR ne vaut que pour les réponses recueillies après. On transmet donc toujours
-           moins que ce qui a été accepté, jamais plus. */
-        const choisis = await consentements.champsOrganisme(conn, req.user.organization_id);
-        const champsParStagiaire = new Map(retenus.map((l) => {
-            const annonces = etats.get(l.id)?.champsAnnonces || [];
-            return [l.id, choisis.filter((c) => annonces.includes(c))];
-        }));
-        /* La colonne de l'export est l'UNION de ce qui part réellement : une colonne présente
-           pour un seul stagiaire doit exister dans le tableau, vide pour les autres. Cacher la
-           colonne masquerait le fait que la donnée est bel et bien partie pour celui-là. */
-        const champs = choisis.filter((c) => [...champsParStagiaire.values()].some((l) => l.includes(c)));
-
-        /* LE PROJET EST CINQ BOOLÉENS EN BASE — « création », « reprise », « four », « camion »,
-           « recherche de poste ». Les envoyer tels quels donnerait cinq colonnes de 0 et de 1 que
-           le partenaire devrait décoder ; on les rassemble en une phrase lisible. C'est aussi le
-           champ le plus utile de la liste : un fabricant de fours veut savoir qui ouvre une
-           pizzeria, pas qui cherche un emploi. */
-        const PROJETS = [
-            ['project_creation', 'création'], ['project_takeover', 'reprise'],
-            ['project_oven', 'four'], ['project_truck', 'camion'],
-            ['project_job', 'recherche de poste'],
-        ];
-        const valeurs = (l) => ({
-            civilite: l.civility || '',
-            nom: l.last_name || '', prenom: l.first_name || '',
-            email: l.email || '', telephone: l.phone || '',
-            adresse: l.address || '', code_postal: l.zip_code || '', ville: l.town || '',
-            formation: s.program_title || s.program_code || '', dates_session: dates,
-            projet: PROJETS.filter(([c]) => Number(l[c]) === 1).map(([, m]) => m).join(', '),
-            statut: l.professional_status || '',
-            /* L'ENTREPRISE : vide quand le stagiaire n'en a pas. Une colonne présente et vide
-               dit « pas d'entreprise » ; une colonne absente forcerait à deviner. */
-            entreprise: l.company_name || '',
-            entreprise_siret: l.company_siret || '',
-            entreprise_forme: l.company_legal || '',
-            entreprise_naf: l.company_naf || '',
-            entreprise_adresse: l.company_address || '',
-            entreprise_cp: l.company_zip || '',
-            entreprise_ville: l.company_town || '',
-        });
-        const lignes = retenus.map((l) => {
-            const permis = champsParStagiaire.get(l.id);
-            const v = valeurs(l);
-            /* Un champ non couvert pour CE stagiaire sort VIDE, pas absent : le tableau garde la
-               même forme d'une ligne à l'autre, et un CSV dont les colonnes changent de sens
-               d'une ligne à l'autre est illisible. */
-            return Object.fromEntries(champs.map((c) => [c, permis.includes(c) ? v[c] : '']));
-        });
+        const { champs, lignes } = await composerLignes(
+            conn, req.user.organization_id,
+            /* CHAQUE LIGNE PORTE SA SESSION. L'export par session la connaît d'avance ; celui par
+               partenaire en couvre plusieurs, et chaque stagiaire a la sienne. On les uniformise
+               ici plutôt que de passer un cas particulier à la fonction commune. */
+            retenus.map((l) => ({ ...l, program_title: bloc.session.program_title,
+                program_code: bloc.session.program_code,
+                start_date: bloc.session.start_date, end_date: bloc.session.end_date })),
+            etats);
         await conn.query(
             `INSERT INTO partner_disclosure
                (id, organization_id, partner_id, session_id, learner_ids, learners_count,
@@ -379,6 +401,96 @@ const produireTransmission = async (req, res) => {
  * (art. 15). Le journal est la seule source capable de le dire, puisque l'envoi lui-même part par
  * courriel et ne laisse aucune trace dans l'outil.
  */
+/**
+ * L'EXPORT PAR PARTENAIRE — tous les stagiaires consentants d'une PÉRIODE, toutes sessions.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * POURQUOI IL COMPLÈTE L'EXPORT PAR SESSION plutôt que de le remplacer.
+ *
+ * L'école transmet d'ordinaire session par session, et l'écran de la session reste le bon endroit
+ * pour ça. Mais un partenaire qui demande « envoyez-moi tout ce que vous avez sur l'année »
+ * obligeait à ouvrir douze sessions et à recoller douze listes à la main — c'est-à-dire à refaire
+ * exactement ce que ces écrans existent pour éviter.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * LA PÉRIODE EST OBLIGATOIRE, ET C'EST VOULU. « Tout depuis toujours » enverrait à un fournisseur
+ * les coordonnées de gens formés il y a six ans, qui ont consenti dans un tout autre contexte et
+ * ne se souviennent probablement plus de l'école. La minimisation ne porte pas que sur les
+ * CHAMPS : elle porte aussi sur COMBIEN DE PERSONNES. Douze mois par défaut, modifiable.
+ *
+ * UN STAGIAIRE INSCRIT À DEUX SESSIONS N'APPARAÎT QU'UNE FOIS : le partenaire recevrait sinon
+ * deux lignes pour la même personne, et croirait à deux prospects.
+ */
+const produireTransmissionPartenaire = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const rec = await partenaireRecevable(conn, req.user.organization_id, req.params.id);
+        if (rec.refus) return res.status(rec.refus.statut).json({ message: rec.refus.message });
+        const partenaire = rec.partenaire;
+
+        const { depuis, jusqu_a: jusqua } = req.body || {};
+        if (!depuis || !jusqua) {
+            return res.status(422).json({ message: 'Période requise (depuis, jusqu_a).' });
+        }
+
+        /* LES SESSIONS TERMINÉES DANS LA PÉRIODE. On borne sur la date de FIN : une session en
+           cours n'a pas encore de stagiaires « formés », et l'école les transmet à la clôture. */
+        const [inscrits] = await conn.query(
+            `SELECT l.id, l.first_name, l.last_name, l.email, l.phone, l.civility, l.address,
+                    l.zip_code, l.town, l.professional_status, l.project_creation,
+                    l.project_takeover, l.project_oven, l.project_truck, l.project_job,
+                    c.name AS company_name, c.siret AS company_siret, c.legal_status AS company_legal,
+                    c.naf_ape AS company_naf, c.address AS company_address,
+                    c.zip_code AS company_zip, c.town AS company_town,
+                    p.title AS program_title, p.code AS program_code,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                    DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date
+               FROM enrollment e
+               JOIN learner l ON l.id = e.learner_id
+               JOIN training_session s ON s.id = e.session_id
+               LEFT JOIN training_program p ON p.id = s.program_id
+               LEFT JOIN company c ON c.id = e.company_id
+              WHERE s.organization_id = ? AND s.end_date BETWEEN ? AND ?
+              ORDER BY l.last_name, l.first_name, s.end_date DESC`,
+            [req.user.organization_id, depuis, jusqua]);
+
+        /* DÉDOUBLONNAGE : on garde la session la PLUS RÉCENTE de chaque personne (l'ORDER BY la
+           place en tête). Deux lignes pour un même nom feraient croire à deux prospects. */
+        const uniques = [];
+        const vus = new Set();
+        for (const l of inscrits) { if (!vus.has(l.id)) { vus.add(l.id); uniques.push(l); } }
+
+        const etats = await consentements.etatParStagiaire(
+            conn, req.user.organization_id, uniques.map((l) => l.id), FINALITE);
+        const retenus = uniques.filter((l) => etats.get(l.id)?.accorde === true);
+        if (!retenus.length) {
+            return res.json({ data: {
+                partenaire: partenaire.name, lignes: [], champs: [], journalise: false,
+                message: 'Aucun stagiaire de cette période n\'a consenti à la transmission.',
+            } });
+        }
+
+        const { champs, lignes } = await composerLignes(conn, req.user.organization_id, retenus, etats);
+
+        await conn.query(
+            `INSERT INTO partner_disclosure
+               (id, organization_id, partner_id, session_id, learner_ids, learners_count,
+                champs_envoyes, envoye_par)
+             VALUES (?, ?, ?, NULL, ?, ?, ?, ?)`,
+            [crypto.randomUUID(), req.user.organization_id, partenaire.id,
+             retenus.map((l) => l.id).join(','), retenus.length,
+             champs.join(', ').slice(0, 255), req.user.id]);
+        logAudit(req, 'partner_disclosure.create', 'Partner', partenaire.id);
+
+        res.json({ data: { partenaire: partenaire.name, lignes, champs, journalise: true,
+            periode: { depuis, jusqu_a: jusqua } } });
+    } catch (err) {
+        if (isMissingSchema(err)) return refusLecture(res, err, 'transmission par partenaire');
+        console.error('Erreur transmission partenaire (période) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 const getTransmissions = async (req, res) => {
     try {
         const conn = db.promise();
@@ -404,4 +516,5 @@ const getTransmissions = async (req, res) => {
     }
 };
 
-module.exports = { getSessionConsents, setConsentPourStagiaire, produireTransmission, getTransmissions };
+module.exports = { getSessionConsents, setConsentPourStagiaire, produireTransmission,
+    produireTransmissionPartenaire, getTransmissions };

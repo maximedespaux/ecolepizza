@@ -5,6 +5,7 @@ import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, u
   setPartenaireDestinataire } from "../api/apiClient.js";
 import { finContrat, etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js";
 import ImageLien, { ImagePlaceholder } from "../components/ImageLien.jsx";
+import ExportPartenaire from "../components/ExportPartenaire.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -328,6 +329,18 @@ function Partenaires() {
                           </span>
                         </span>
                       </label>
+                    )}
+
+                    {/* L'EXPORT N'APPARAÎT QUE POUR UN DESTINATAIRE DÉCLARÉ, et pas seulement
+                        pour faire propre : le serveur refuse de produire la liste d'un partenaire
+                        non coché. Montrer le bouton mènerait donc à un refus, ce qui se lit comme
+                        une panne alors que c'est le réglage juste au-dessus qui manque.
+                        Le contrat échu le masque aussi — même raison, même refus serveur. */}
+                    {canEdit && Number(p.recoit_coordonnees) === 1 && !contratEchu && (
+                      <div style={{ marginTop: 10 }}>
+                        <ExportPartenaire partenaire={p}
+                          onErreur={(m) => setStatus({ type: "error", message: m })} />
+                      </div>
                     )}
 
                     {/* Catalogue vendu par CE partenaire — ce que le stagiaire voit dans l'onglet

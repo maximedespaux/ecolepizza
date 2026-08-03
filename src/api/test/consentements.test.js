@@ -148,8 +148,14 @@ test("l'export n'envoie que les champs annoncés au stagiaire", () => {
        Restreindre la liste s'applique donc à tout le monde tout de suite ; l'élargir ne vaut que
        pour les réponses suivantes. On transmet toujours MOINS que ce qui a été accepté. */
     const src = sansCommentaires(lire(CTRL));
-    assert.match(src, /const choisis = await consentements\.champsOrganisme\(conn, req\.user\.organization_id\);/,
+    /* LA RÈGLE A ÉTÉ EXTRAITE dans `composerLignes`, commune aux DEUX exports (par session, par
+       partenaire). Ce que le test protège n'a pas bougé — seul son emplacement a changé. La
+       partager était nécessaire : recopiée, elle aurait divergé, et une divergence ici ne se voit
+       pas — elle produit un export qui envoie un champ de trop, sans erreur ni alerte. */
+    assert.match(src, /const choisis = await consentements\.champsOrganisme\(conn, orgId\);/,
         "L'export doit lire les champs que l'école a choisis…");
+    assert.match(src, /async function composerLignes\(conn, orgId, retenus, etats\)/,
+        '…dans une fonction unique, partagée par les deux exports.');
     assert.match(src, /choisis\.filter\(\(c\) => annonces\.includes\(c\)\)/,
         "…et les croiser avec ce qui avait été annoncé à CHAQUE stagiaire.");
     assert.doesNotMatch(src, /champs = choisis;/,

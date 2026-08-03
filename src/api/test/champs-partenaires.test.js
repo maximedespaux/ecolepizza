@@ -293,3 +293,57 @@ test('la fenêtre se déclenche sur les DEUX cas, et compte ses relances', () =>
        cherche à éviter. */
     assert.match(comp, /if \(premiere\) \{ setADemander\(premiere\); compterUneRelance\(\); \}/);
 });
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   L'EXPORT PAR PARTENAIRE — le pendant de l'export par session. */
+
+test("les deux exports appliquent la MÊME règle d'intersection", () => {
+    /* LE DÉFAUT QU'ON ÉVITE EN PARTAGEANT : deux exports, deux copies de la règle, et la seconde
+       qui oublie l'intersection au premier ajustement. Une divergence ici ne se voit pas — elle
+       produit un export qui envoie un champ de trop, sans erreur ni alerte. */
+    const src = sansCommentaires(fs.readFileSync(path.join(API, 'controllers/consentement.controller.js'), 'utf8'));
+    assert.strictEqual((src.match(/async function composerLignes\(/g) || []).length, 1,
+        'la composition des lignes doit être écrite UNE fois');
+    assert.strictEqual((src.match(/composerLignes\(/g) || []).length, 3,
+        'et appelée par les deux exports (1 déclaration + 2 appels)');
+    assert.strictEqual((src.match(/async function partenaireRecevable\(/g) || []).length, 1,
+        'les contrôles du partenaire aussi : contrat échu, destinataire déclaré');
+    assert.strictEqual((src.match(/partenaireRecevable\(/g) || []).length, 3);
+});
+
+test("l'export par partenaire est BORNÉ dans le temps", () => {
+    /* « Tout depuis toujours » enverrait à un fournisseur les coordonnées de gens formés il y a
+       six ans, qui ont consenti dans un tout autre contexte. La minimisation ne porte pas que sur
+       les CHAMPS : elle porte aussi sur COMBIEN DE PERSONNES. */
+    const src = sansCommentaires(fs.readFileSync(path.join(API, 'controllers/consentement.controller.js'), 'utf8'));
+    const bloc = src.slice(src.indexOf('const produireTransmissionPartenaire'));
+    assert.match(bloc, /if \(!depuis \|\| !jusqua\)/, 'la période doit être exigée…');
+    assert.match(bloc, /status\(422\)/, '…et son absence refusée');
+    assert.match(bloc, /s\.end_date BETWEEN \? AND \?/,
+        'On borne sur la date de FIN : une session en cours n\'a pas de stagiaires formés.');
+    /* UN STAGIAIRE INSCRIT À DEUX SESSIONS N'APPARAÎT QU'UNE FOIS : le partenaire recevrait sinon
+       deux lignes pour la même personne et croirait à deux prospects. */
+    assert.match(bloc, /const vus = new Set\(\);/);
+    assert.match(bloc, /if \(!vus\.has\(l\.id\)\)/);
+});
+
+test("le bouton d'export ne s'affiche que là où le serveur accepterait", () => {
+    /* Montrer le bouton à un partenaire non destinataire mènerait à un refus — qui se lit comme
+       une panne, alors que c'est le réglage juste au-dessus qui manque. L'écran ne doit pas
+       proposer une action que le serveur refusera. */
+    const page = fs.readFileSync(path.join(UI, 'pages/Partenaires.jsx'), 'utf8');
+    assert.match(page, /canEdit && Number\(p\.recoit_coordonnees\) === 1 && !contratEchu && \(/,
+        'destinataire déclaré ET contrat en cours — les deux conditions du serveur.');
+});
+
+test("une période sans consentement ne journalise RIEN", () => {
+    /* Le journal répond à « à qui avez-vous donné mes coordonnées ? » (art. 15). Y inscrire un
+       envoi qui n'a rien envoyé le rendrait faux dans le sens le plus gênant : il annoncerait une
+       transmission qui n'a pas eu lieu. */
+    const src = sansCommentaires(fs.readFileSync(path.join(API, 'controllers/consentement.controller.js'), 'utf8'));
+    const bloc = src.slice(src.indexOf('const produireTransmissionPartenaire'));
+    const avant = bloc.indexOf('journalise: false');
+    const insert = bloc.indexOf('INSERT INTO partner_disclosure');
+    assert.ok(avant > 0 && avant < insert,
+        'le retour « aucun consentement » doit précéder toute écriture au journal');
+});

@@ -1075,6 +1075,14 @@ export function setPartenaireDestinataire(id, recoit) {
     { method: "PATCH", body: JSON.stringify({ recoit }) });
 }
 
+/* L'export des stagiaires consentants d'un partenaire, sur une période. Le serveur compose la
+   liste, écarte ceux qui n'ont pas consenti, n'envoie que les champs annoncés à CHACUN, et
+   inscrit l'envoi au journal. L'écran ne choisit personne — il affiche. */
+export function exporterPartenaire(id, depuis, jusquA) {
+  return request(`/partenaires/${id}/transmission`,
+    { method: "POST", body: JSON.stringify({ depuis, jusqu_a: jusquA }) });
+}
+
 export function createPartenaire(payload) {
   return request("/partenaires", { method: "POST", body: JSON.stringify(payload) });
 }
