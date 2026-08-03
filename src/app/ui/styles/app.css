@@ -4375,3 +4375,8 @@ button.av-wrap:active{transform:scale(.94)}
   border-left:3px solid var(--gold);border-radius:8px;padding:10px 13px;font-size:13.5px}
 .login-legal{margin:18px 0 0;text-align:center;font-size:12.5px}
 .login-legal a{color:var(--muted)}
+
+/* Une entrée d'inventaire encore incomplète : elle doit se voir, pour ne pas être publiée telle
+   quelle. Une page de confidentialité approximative engage l'organisme plus qu'elle ne le protège. */
+.legale-incomplet{border-left:3px solid var(--gold)}
+.legale-incomplet .legale-atraiter{margin:6px 0 0;font-size:12.5px}

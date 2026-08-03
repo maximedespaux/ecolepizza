@@ -71,17 +71,25 @@ export default function Confidentialite() {
         <section>
           <h2>Données transmises à l'extérieur</h2>
           <p>
-            Distinct de ce qui précède : il s'agit ici de données qui <b>quittent nos serveurs</b>.
-            Nous n'en transmettons qu'à un seul destinataire, et jamais à des fins commerciales.
+            Distinct de ce qui précède : il s'agit ici de données qui <b>quittent l'organisme</b>.
+            Deux périmètres, et ils ne se confondent pas — ce que l'application envoie d'elle-même,
+            et ce que l'école transmet par d'autres moyens.
           </p>
           <ul className="legale-liste">
             {TRANSMISSIONS.map((t) => (
-              <li key={t.destinataire}>
-                <code>{t.destinataire}</code>
+              <li key={t.destinataire} className={t.aCompleter ? "legale-incomplet" : ""}>
+                <code>{t.destinataire} · {t.canal === "application" ? "envoyé par l'application" : "transmis par l'école"}</code>
                 <b>{t.pourquoi}</b>
                 <span className="legale-detail"><b>Ce qui est envoyé :</b> {t.donnees}</span>
                 <span className="legale-detail">{t.qui}</span>
                 <span className="legale-duree">{t.quand}</span>
+                {t.aCompleter && (
+                  <span className="legale-atraiter">
+                    <b>À compléter avant mise en ligne :</b> quelles données exactement, pour quelle
+                    finalité, et sur quelle base légale. Tant que ce n'est pas écrit, cette page ne
+                    peut pas être publiée en l'état.
+                  </span>
+                )}
               </li>
             ))}
           </ul>

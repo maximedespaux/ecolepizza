@@ -137,7 +137,11 @@ export const TRACEURS = [
  * transmettre des données — c'était exactement le cas ici, et la première version de cette page
  * n'en disait rien.
  *
- * RELEVÉ PAR BALAYAGE DE TOUS LES APPELS SORTANTS DE L'API : il n'y en a qu'un.
+ * DEUX PÉRIMÈTRES, ET LA PAGE DOIT LES SÉPARER. Ce que l'APPLICATION envoie d'elle-même est
+ * relevé par balayage du code : il n'y a qu'un appel sortant. Mais l'ORGANISME transmet aussi des
+ * informations par d'autres canaux — courriel, téléphone — et cela n'apparaît nulle part dans le
+ * code. Une page qui dirait « nous ne transmettons qu'à un destinataire » serait donc fausse pour
+ * le lecteur, qui comprend « l'école », pas « le programme ». Les deux sont déclarés ici.
  */
 export const TRANSMISSIONS = [
   {
@@ -148,6 +152,16 @@ export const TRANSMISSIONS = [
     pourquoi: 'Convertir une adresse en coordonnées, pour placer les stagiaires sur la carte de '
       + "l'organisme.",
     quand: "Uniquement lorsque l'organisme lance le géocodage depuis la carte des stagiaires.",
+    canal: 'application',
+  },
+  {
+    destinataire: 'Partenaires de l\'organisme',
+    qui: 'Fournisseurs et partenaires commerciaux référencés par l\'école',
+    donnees: 'À PRÉCISER PAR L\'ORGANISME',
+    pourquoi: 'À PRÉCISER PAR L\'ORGANISME',
+    quand: 'Par courriel, session par session',
+    canal: 'organisme',
+    aCompleter: true,
   },
 ];
 
