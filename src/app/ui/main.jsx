@@ -51,6 +51,7 @@ import Notifications from "./pages/Notifications.jsx";
 import Platform from "./pages/Platform.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
 import EmargementStagiaire from "./pages/EmargementStagiaire.jsx";
+import Confidentialite from "./pages/Confidentialite.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
 import PizzaQuest from "./pages/PizzaQuest.jsx";
 import Boutique from "./pages/Boutique.jsx";
@@ -131,6 +132,9 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* PUBLIQUE, et volontairement : l'information sur ce qu'on dépose doit pouvoir être lue
+          AVANT de créer un compte, sinon elle arrive après la décision qu'elle éclaire. */}
+      <Route path="/confidentialite" element={<Confidentialite />} />
       <Route path="/signer/:token" element={<SignerPublic />} />
 
       {isPlatform ? (

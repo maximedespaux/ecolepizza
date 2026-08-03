@@ -4348,3 +4348,30 @@ button.av-wrap:active{transform:scale(.94)}
   .cat-code{display:none}
   .cat-rang{flex-direction:row}
 }
+
+
+/* — PAGES LÉGALES (confidentialité) —
+   Colonne étroite et interlignage généreux : c'est du texte qu'on lit vraiment, pas un tableau de
+   bord qu'on parcourt. Au-delà de ~70 caractères par ligne, l'œil perd le début de la suivante. */
+.page-legale{max-width:720px;margin:0 auto;padding:40px 22px 64px;line-height:1.65}
+.page-legale h1{font-family:var(--font-d);font-size:30px;margin:0 0 6px}
+.page-legale h2{font-family:var(--font-d);font-size:17px;margin:30px 0 10px}
+.page-legale .lead{color:var(--muted);margin:0 0 24px}
+.legale-ou{font-weight:400;font-size:13px;color:var(--muted)}
+/* L'encart qui explique l'absence de bandeau : c'est l'information la plus contre-intuitive de la
+   page, elle doit se lire avant la liste. */
+.legale-encart{background:color-mix(in srgb,var(--green,#2f9e6f) 8%,var(--surface2));
+  border-left:3px solid var(--green,#2f9e6f);border-radius:10px;padding:14px 16px;margin:0 0 28px}
+.legale-encart p{margin:8px 0 0;font-size:14px}
+.legale-liste{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.legale-liste li{display:flex;flex-direction:column;gap:3px;padding:12px 14px;
+  background:var(--surface2);border-radius:10px}
+.legale-liste code{font-family:var(--font-m);font-size:11.5px;color:var(--muted)}
+.legale-liste b{font-size:14.5px}
+.legale-detail{font-size:13px;color:var(--muted)}
+.legale-duree{font-size:12px;color:var(--muted);font-weight:600}
+/* Ce qui reste à remplir par l'organisme — visible, pour ne pas être mis en ligne tel quel. */
+.legale-atraiter{background:color-mix(in srgb,var(--gold) 14%,transparent);
+  border-left:3px solid var(--gold);border-radius:8px;padding:10px 13px;font-size:13.5px}
+.login-legal{margin:18px 0 0;text-align:center;font-size:12.5px}
+.login-legal a{color:var(--muted)}
