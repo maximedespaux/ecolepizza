@@ -381,66 +381,6 @@ async function partenaireRecevable(conn, orgId, partnerId) {
     return { partenaire };
 }
 
-const produireTransmission = async (req, res) => {
-    try {
-        const conn = db.promise();
-        const bloc = await sessionAvecInscrits(conn, req.params.id, req.user.organization_id);
-        if (!bloc) return res.status(404).json({ message: 'Session introuvable' });
-
-        const rec = await partenaireRecevable(conn, req.user.organization_id, req.body?.partner_id);
-        if (rec.refus) return res.status(rec.refus.statut).json({ message: rec.refus.message });
-        const partenaire = rec.partenaire;
-
-        const etats = await consentements.etatParStagiaire(
-            conn, req.user.organization_id, bloc.inscrits.map((l) => l.id), FINALITE);
-        const retenus = bloc.inscrits.filter((l) => etats.get(l.id)?.accorde === true);
-        /* PRODUIRE UNE LISTE VIDE EST UN RÉSULTAT LÉGITIME, et le dire vaut mieux que de laisser
-           l'écran l'interpréter. Mais on ne journalise pas un envoi qui n'a rien à envoyer. */
-        if (!retenus.length) {
-            return res.status(200).json({
-                data: {
-                    partenaire: partenaire.name, lignes: [], champs: consentements.FINALITES[FINALITE].champs,
-                    journalise: false,
-                    message: 'Aucun stagiaire de cette session n\'a consenti à la transmission.',
-                },
-            });
-        }
-
-        const { champs, lignes } = await composerLignes(
-            conn, req.user.organization_id,
-            /* CHAQUE LIGNE PORTE SA SESSION. L'export par session la connaît d'avance ; celui par
-               partenaire en couvre plusieurs, et chaque stagiaire a la sienne. On les uniformise
-               ici plutôt que de passer un cas particulier à la fonction commune. */
-            retenus.map((l) => ({ ...l, program_title: bloc.session.program_title,
-                program_code: bloc.session.program_code,
-                start_date: bloc.session.start_date, end_date: bloc.session.end_date })),
-            etats);
-        await conn.query(
-            `INSERT INTO partner_disclosure
-               (id, organization_id, partner_id, session_id, learner_ids, learners_count,
-                champs_envoyes, envoye_par)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [crypto.randomUUID(), req.user.organization_id, partenaire.id, s.id,
-             retenus.map((l) => l.id).join(','), retenus.length,
-             champs.join(', ').slice(0, 255), req.user.id]);
-
-        logAudit(req, 'partner_disclosure.create', 'Partner', partenaire.id);
-        res.json({ data: { partenaire: partenaire.name, lignes, champs, journalise: true } });
-    } catch (err) {
-        if (isMissingSchema(err)) return refusLecture(res, err, 'transmission partenaire');
-        console.error('Erreur transmission partenaire :', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
-
-/**
- * GET /api/sessions/:id/transmissions — ce qui est DÉJÀ parti pour cette session.
- *
- * Deux usages, et le second est le vrai. D'abord éviter le double envoi. Ensuite répondre au
- * stagiaire qui demande à qui ses coordonnées ont été communiquées : un droit, pas une faveur
- * (art. 15). Le journal est la seule source capable de le dire, puisque l'envoi lui-même part par
- * courriel et ne laisse aucune trace dans l'outil.
- */
 /**
  * L'EXPORT PAR PARTENAIRE — tous les stagiaires consentants d'une PÉRIODE, toutes sessions.
  *
@@ -531,30 +471,42 @@ const produireTransmissionPartenaire = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/partenaires/:id/transmissions — ce qui est déjà parti chez CE partenaire.
+ *
+ * PAR PARTENAIRE ET NON PAR SESSION, depuis que l'export l'est aussi. Un journal rangé par
+ * session ne pourrait plus rien montrer : les envois produits depuis la fiche d'un partenaire
+ * couvrent une PÉRIODE, pas une session, et n'ont donc pas de `session_id`.
+ *
+ * Deux usages, et le second est le vrai. D'abord éviter le double envoi. Ensuite répondre au
+ * stagiaire qui demande à qui ses coordonnées ont été communiquées : un droit, pas une faveur
+ * (art. 15). Le journal est la seule source capable de le dire, puisque l'envoi lui-même part par
+ * courriel et ne laisse aucune trace dans l'outil.
+ *
+ * LES ANCIENNES LIGNES PAR SESSION RESTENT VISIBLES : elles portent un `session_id`, et rien ne
+ * justifierait de les cacher — ce sont des transmissions qui ont bel et bien eu lieu.
+ */
 const getTransmissions = async (req, res) => {
     try {
         const conn = db.promise();
-        const bloc = await sessionAvecInscrits(conn, req.params.id, req.user.organization_id);
-        if (!bloc) return res.status(404).json({ message: 'Session introuvable' });
         const [rows] = await conn.query(
-            `SELECT d.id, d.learners_count, d.champs_envoyes,
+            `SELECT d.id, d.learners_count, d.champs_envoyes, d.session_id,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
-                    p.name AS partenaire,
                     TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) AS par
                FROM partner_disclosure d
-               LEFT JOIN partner p ON p.id = d.partner_id
                LEFT JOIN user u ON u.id = d.envoye_par
-              WHERE d.organization_id = ? AND d.session_id = ?
-              ORDER BY d.sent_at DESC`,
+              WHERE d.organization_id = ? AND d.partner_id = ?
+              ORDER BY d.sent_at DESC
+              LIMIT 20`,
             [req.user.organization_id, req.params.id]);
         res.json({ data: rows });
     } catch (err) {
-        // Ici le repli est ANODIN : ne pas savoir ce qui est parti n'autorise rien à partir.
+        // Repli ANODIN : ne pas savoir ce qui est parti n'autorise rien à partir.
         if (isMissingSchema(err)) return res.json({ data: [] });
         console.error('Erreur journal des transmissions :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
 
-module.exports = { getSessionConsents, setConsentPourStagiaire, produireTransmission,
+module.exports = { getSessionConsents, setConsentPourStagiaire,
     produireTransmissionPartenaire, getTransmissions };

@@ -386,12 +386,11 @@ export function setSessionConsent(sessionId, learnerId, accorde, source) {
   return request(`/sessions/${sessionId}/consentements/${learnerId}`,
     { method: "PUT", body: JSON.stringify({ accorde, source }) });
 }
-export function produireTransmission(sessionId, partnerId) {
-  return request(`/sessions/${sessionId}/transmission`,
-    { method: "POST", body: JSON.stringify({ partner_id: partnerId }) });
-}
-export function getTransmissions(sessionId) {
-  return request(`/sessions/${sessionId}/transmissions`, { silent: true });
+/* Le journal des envois d'UN PARTENAIRE. Par partenaire et non par session, depuis que l'export
+   l'est aussi : c'est lui qui permet de répondre à « à qui mes coordonnées ont-elles été
+   communiquées ? » (art. 15). */
+export function getTransmissionsPartenaire(id) {
+  return request(`/partenaires/${id}/transmissions`, { silent: true });
 }
 
 // --- Stagiaires ---

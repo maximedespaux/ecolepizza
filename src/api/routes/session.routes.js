@@ -1,8 +1,7 @@
 const express = require('express');
 const { getSessions, getSession, createSession, updateSession, deleteSession, getSessionBoard, listTrainers, setSessionTrainers } = require('../controllers/session.controller.js');
 const { listSessionIntervenants, addSessionIntervenant, setIntervenantSlots, removeSessionIntervenant } = require('../controllers/intervenant.controller.js');
-const { getSessionConsents, setConsentPourStagiaire, produireTransmission,
-    getTransmissions } = require('../controllers/consentement.controller.js');
+const { getSessionConsents, setConsentPourStagiaire } = require('../controllers/consentement.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -35,7 +34,9 @@ router.delete('/:id', authorizeRoles(...ADMIN_ROLES), deleteSession);
  * l'inscrit au journal. Il engage l'organisme, il reste au bureau. */
 router.get('/:id/consentements', authorizeRoles(...ADMIN_ROLES), getSessionConsents);
 router.put('/:id/consentements/:learnerId', authorizeRoles(...ADMIN_ROLES), setConsentPourStagiaire);
-router.get('/:id/transmissions', authorizeRoles(...ADMIN_ROLES), getTransmissions);
-router.post('/:id/transmission', authorizeRoles(...ADMIN_ROLES), produireTransmission);
+/* L'EXPORT A QUITTÉ CETTE PAGE. Il vit désormais sur la fiche du partenaire, où il couvre une
+ * PÉRIODE plutôt qu'une session — c'est là qu'on choisit à qui l'on écrit. La page de la session
+ * garde le SUIVI des consentements, qui est son sujet : qui a accepté, qui a refusé, qui n'a
+ * jamais été sollicité. */
 
 module.exports = router;

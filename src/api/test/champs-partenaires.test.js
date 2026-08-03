@@ -297,19 +297,33 @@ test('la fenêtre se déclenche sur les DEUX cas, et compte ses relances', () =>
 /* ═════════════════════════════════════════════════════════════════════════════════════════════
    L'EXPORT PAR PARTENAIRE — le pendant de l'export par session. */
 
-test("les deux exports appliquent la MÊME règle d'intersection", () => {
-    /* LE DÉFAUT QU'ON ÉVITE EN PARTAGEANT : deux exports, deux copies de la règle, et la seconde
-       qui oublie l'intersection au premier ajustement. Une divergence ici ne se voit pas — elle
-       produit un export qui envoie un champ de trop, sans erreur ni alerte. */
+test("il n'existe qu'UN SEUL chemin d'export, et il applique l'intersection", () => {
+    /* IL Y EN AVAIT DEUX — un par session, un par partenaire — et l'école a tranché : c'est sur la
+       fiche du partenaire qu'on choisit à qui l'on écrit, donc là que la liste se prépare. Un même
+       geste offert à deux endroits oblige à se demander lequel fait quoi, et sur un écran qui
+       manipule des coordonnées cette hésitation est un coût.
+       Les deux fonctions extraites du temps où il y en avait deux RESTENT séparées : elles
+       nomment ce qu'elles garantissent (`partenaireRecevable` : contrat en cours et destinataire
+       déclaré ; `composerLignes` : l'intersection). Les réinliner ferait disparaître ces noms du
+       code, et avec eux la raison d'être des contrôles. */
     const src = sansCommentaires(fs.readFileSync(path.join(API, 'controllers/consentement.controller.js'), 'utf8'));
-    assert.strictEqual((src.match(/async function composerLignes\(/g) || []).length, 1,
-        'la composition des lignes doit être écrite UNE fois');
-    assert.strictEqual((src.match(/composerLignes\(/g) || []).length, 3,
-        'et appelée par les deux exports (1 déclaration + 2 appels)');
-    assert.strictEqual((src.match(/async function partenaireRecevable\(/g) || []).length, 1,
-        'les contrôles du partenaire aussi : contrat échu, destinataire déclaré');
-    assert.strictEqual((src.match(/partenaireRecevable\(/g) || []).length, 3);
+    assert.doesNotMatch(src, /const produireTransmission = async/,
+        "L'export par session doit avoir disparu du contrôleur, pas seulement de l'écran.");
+    assert.strictEqual((src.match(/async function composerLignes\(/g) || []).length, 1);
+    assert.strictEqual((src.match(/async function partenaireRecevable\(/g) || []).length, 1);
+    assert.match(src, /choisis\.filter\(\(c\) => annonces\.includes\(c\)\)/,
+        "L'intersection reste la règle : ce que l'école transmet ∩ ce qui a été annoncé à chacun.");
+
+    /* ON DÉPOUILLE LES COMMENTAIRES : le fichier de routes EXPLIQUE que la transmission a quitté
+       cette page, donc le mot y figure. Sans dépouillement, l'assertion échouerait sur sa propre
+       explication — le même piège que le `referrerPolicy` trouvé dans sa documentation. */
+    const routes = sansCommentaires(fs.readFileSync(path.join(API, 'routes/session.routes.js'), 'utf8'));
+    assert.doesNotMatch(routes, /transmission/i,
+        'La page d\'une session ne doit plus exposer de route de transmission…');
+    assert.match(fs.readFileSync(path.join(API, 'routes/partner.routes.js'), 'utf8'), /router\.post\('\/:id\/transmission'/,
+        '…et la fiche du partenaire reste le seul point d\'entrée.');
 });
+
 
 test("l'export par partenaire est BORNÉ dans le temps", () => {
     /* « Tout depuis toujours » enverrait à un fournisseur les coordonnées de gens formés il y a

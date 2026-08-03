@@ -3,9 +3,10 @@ import Card from "./Card.jsx";
 import { Icon } from "./Icon.jsx";
 import StatusMessage from "./StatusMessage.jsx";
 import { dateHeure } from "../lib/format.js";
-import {
-  getSessionConsents, setSessionConsent, produireTransmission, getTransmissions, getPartenaires,
-} from "../api/apiClient.js";
+/* L'ENVOI A QUITTÉ CET ÉCRAN. Il vit sur la fiche du partenaire, où il couvre une PÉRIODE — c'est
+   là qu'on choisit à qui l'on écrit. Cette carte garde le SUIVI des consentements, qui est son
+   sujet : qui a accepté, qui a refusé, qui n'a jamais été sollicité. */
+import { getSessionConsents, setSessionConsent } from "../api/apiClient.js";
 
 /**
  * TRANSMISSION AUX PARTENAIRES — le suivi des consentements d'une session, et la liste qui en sort.
@@ -59,10 +60,6 @@ function SessionConsentements({ sessionId, canEdit }) {
   const [erreur, setErreur] = useState(null);
   const [status, setStatus] = useState(null);
   const [source, setSource] = useState("papier");
-  const [partenaires, setPartenaires] = useState([]);
-  const [partnerId, setPartnerId] = useState("");
-  const [liste, setListe] = useState(null);
-  const [journal, setJournal] = useState([]);
   const [busy, setBusy] = useState(null);
 
   async function charger() {
@@ -80,8 +77,6 @@ function SessionConsentements({ sessionId, canEdit }) {
 
   useEffect(() => {
     charger();
-    getTransmissions(sessionId).then((r) => setJournal(r.data || [])).catch(() => {});
-    getPartenaires().then((r) => setPartenaires(r.data || [])).catch(() => {});
   }, [sessionId]);
 
   const groupes = useMemo(() => {
@@ -95,49 +90,15 @@ function SessionConsentements({ sessionId, canEdit }) {
     try {
       await setSessionConsent(sessionId, learnerId, accorde, source);
       await charger();
-      // La liste déjà produite ne vaut plus : elle a été calculée sur l'état d'avant.
-      setListe(null);
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setBusy(null); }
   }
 
-  async function produire() {
-    if (!partnerId) return;
-    setBusy("liste"); setStatus(null);
-    try {
-      const r = await produireTransmission(sessionId, partnerId);
-      setListe(r.data);
-      if (r.data.journalise) {
-        setStatus({ type: "success", message: `Liste produite et inscrite au journal (${r.data.lignes.length} stagiaire${r.data.lignes.length > 1 ? "s" : ""}).` });
-        getTransmissions(sessionId).then((x) => setJournal(x.data || [])).catch(() => {});
-      }
-    } catch (e) { setStatus({ type: "error", message: e.message }); }
-    finally { setBusy(null); }
-  }
 
-  function copier() {
-    if (!liste?.lignes?.length) return;
-    const txt = [data.champs.join("\t"),
-      ...liste.lignes.map((l) => data.champs.map((c) => l[c] ?? "").join("\t"))].join("\n");
-    navigator.clipboard.writeText(txt)
-      .then(() => setStatus({ type: "success", message: "Liste copiée." }))
-      .catch(() => setStatus({ type: "error", message: "Copie impossible." }));
-  }
 
-  function telecharger() {
-    if (!liste?.lignes?.length) return;
-    /* POINT-VIRGULE ET BOM : Excel en français lit une virgule comme un séparateur décimal, et
-       sans BOM il affiche « Ãœ » à la place des accents. Un export illisible serait recopié à la
-       main — et une liste recopiée à la main est exactement ce que cet écran remplace. */
-    const csv = "﻿" + [data.champs.join(";"),
-      ...liste.lignes.map((l) => data.champs.map((c) => csvCell(l[c])).join(";"))].join("\r\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `partenaire-${liste.partenaire.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+
+
+
 
   const titre = (
     <span className="card-ttl">
@@ -262,82 +223,6 @@ function SessionConsentements({ sessionId, canEdit }) {
 
       {["jamais", "oui", "non"].map(rendreGroupe)}
 
-      {/* ─────────────────────────────────────────────────────────────────────────────────────
-          « PRODUIRE LA LISTE » NE DISAIT RIEN À PERSONNE, et l'école l'a signalé. Trois choses
-          manquaient, et chacune laisse une question sans réponse :
-
-            · CE QUE ÇA FAIT — l'application n'envoie RIEN. Elle prépare une liste que l'on copie
-              dans son propre courriel. Un bouton nommé « Produire » à côté d'une icône d'envoi
-              laissait au contraire croire à un envoi automatique ;
-            · SUR QUI ELLE PORTE — les inscrits de CETTE session, pas tout le fichier ;
-            · CE QUE ÇA DÉCLENCHE — l'inscription au journal, y compris si l'on n'envoie
-              finalement rien. Mieux vaut le dire avant que de le découvrir. */}
-      <div className="consent-envoi">
-        <b><Icon name="send" size={14} /> Préparer l'envoi à un partenaire</b>
-        <span className="hint" style={{ margin: "0 0 9px" }}>
-          L'application <b>n'envoie rien elle-même</b> : elle prépare la liste des stagiaires
-          <b> de cette session</b> qui ont accepté, à copier dans votre courriel au partenaire.
-        </span>
-        <div className="consent-envoi-ligne">
-          <select value={partnerId} onChange={(e) => { setPartnerId(e.target.value); setListe(null); }}>
-            <option value="">Choisir un partenaire…</option>
-            {partenaires.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <button className="btn primary" disabled={!partnerId || busy === "liste"} onClick={produire}>
-            {busy === "liste" ? "…" : "Préparer la liste"}
-          </button>
-        </div>
-        <span className="hint">
-          Préparer la liste l'inscrit au <b>journal des transmissions</b>, même si vous ne
-          l'envoyez pas ensuite. C'est ce journal qui permet de répondre à un stagiaire demandant
-          à qui ses coordonnées ont été communiquées.
-        </span>
-      </div>
-
-      {liste && (
-        <div className="consent-liste">
-          {liste.lignes.length === 0 ? (
-            <p className="hint" style={{ margin: 0 }}>
-              <Icon name="info" size={13} /> {liste.message} Rien n'a été journalisé.
-            </p>
-          ) : (
-            <>
-              <div className="consent-liste-tt">
-                <b>{liste.lignes.length} stagiaire{liste.lignes.length > 1 ? "s" : ""} pour {liste.partenaire}</b>
-                <span style={{ flex: 1 }} />
-                <button className="btn sm" onClick={copier}><Icon name="copy" size={12} /> Copier</button>
-                <button className="btn sm" onClick={telecharger}><Icon name="download" size={12} /> CSV</button>
-              </div>
-              <div className="consent-table-wrap">
-                <table className="consent-table">
-                  <thead>
-                    <tr>{data.champs.map((c) => <th key={c}>{c.replace(/_/g, " ")}</th>)}</tr>
-                  </thead>
-                  <tbody>
-                    {liste.lignes.map((l, i) => (
-                      <tr key={i}>{data.champs.map((c) => <td key={c}>{l[c] || "—"}</td>)}</tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {journal.length > 0 && (
-        <div className="consent-journal">
-          <b><Icon name="history" size={13} /> Déjà transmis pour cette session</b>
-          {journal.map((j) => (
-            <div key={j.id} className="consent-journal-ligne">
-              <span className="tnum hint">{dateHeure(j.sent_at)}</span>
-              <span style={{ flex: 1, minWidth: 0 }}>{j.partenaire}</span>
-              <span className="hint">{j.learners_count} stagiaire{j.learners_count > 1 ? "s" : ""}</span>
-              {j.par && <span className="hint">· {j.par}</span>}
-            </div>
-          ))}
-        </div>
-      )}
     </Card>
   );
 }

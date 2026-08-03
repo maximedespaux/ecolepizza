@@ -3,7 +3,7 @@ const { getPartners, createPartner, updatePartner, deletePartner, createContribu
     getPartnerProducts, createPartnerProduct, updatePartnerProduct, deletePartnerProduct,
     getPartnerCategories, createPartnerCategory, updatePartnerCategory,
     deletePartnerCategory, setPartnerDestinataire } = require('../controllers/partner.controller.js');
-const { produireTransmissionPartenaire } = require('../controllers/consentement.controller.js');
+const { produireTransmissionPartenaire, getTransmissions } = require('../controllers/consentement.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -38,6 +38,12 @@ router.patch('/:id/destinataire', authorizeRoles(...ADMIN_ROLES), setPartnerDest
  * destinée à un tiers et l'inscrit au journal des transmissions — il engage l'organisme, au même
  * titre que son pendant sur la page d'une session. */
 router.post('/:id/transmission', authorizeRoles(...ADMIN_ROLES), produireTransmissionPartenaire);
+/* Le journal de CE partenaire : ce qui lui est déjà parti. C'est lui qui permet de répondre à un
+ * stagiaire demandant à qui ses coordonnées ont été communiquées (art. 15). */
+router.get('/:id/transmissions', authorizeRoles(...ADMIN_ROLES), getTransmissions);
+/* Le journal de CE partenaire : ce qui lui est déjà parti. C'est lui qui permet de répondre à un
+ * stagiaire demandant à qui ses coordonnées ont été communiquées (art. 15). */
+router.get('/:id/transmissions', authorizeRoles(...ADMIN_ROLES), getTransmissions);
 router.delete('/:id', authorizeRoles(...ADMIN_ROLES), deletePartner);
 
 /* Produits d'un partenaire — le catalogue montré aux stagiaires (onglet « Offres partenaires »).

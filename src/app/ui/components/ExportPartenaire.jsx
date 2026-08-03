@@ -1,16 +1,20 @@
 import { useState } from "react";
 import { Icon } from "./Icon.jsx";
-import { exporterPartenaire } from "../api/apiClient.js";
+import { exporterPartenaire, getTransmissionsPartenaire } from "../api/apiClient.js";
 
 /**
  * EXPORTER LES STAGIAIRES CONSENTANTS d'un partenaire, sur une période.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- * IL COMPLÈTE L'EXPORT PAR SESSION, il ne le remplace pas. L'école transmet d'ordinaire session
- * par session, et l'écran de la session reste le bon endroit pour ça. Mais un partenaire qui
- * demande « envoyez-moi tout ce que vous avez sur l'année » obligeait à ouvrir douze sessions et à
- * recoller douze listes à la main — c'est-à-dire à refaire exactement ce que ces écrans existent
- * pour éviter.
+ * LE SEUL POINT D'EXPORT, depuis qu'il a été retiré de la page d'une session. Il y en avait deux,
+ * et l'école a tranché : c'est ICI qu'on choisit à qui l'on écrit, donc ici que la liste se
+ * prépare. Un même geste offert à deux endroits oblige à se demander lequel des deux fait quoi —
+ * et sur un écran qui manipule des coordonnées, cette hésitation est un coût.
+ *
+ * L'APPLICATION N'ENVOIE RIEN ELLE-MÊME : elle prépare un tableau à copier ou à télécharger, que
+ * l'école joint à son propre courriel. Produire la liste l'inscrit malgré tout au journal des
+ * transmissions, y compris si l'envoi ne suit pas : annoncer un destinataire de trop est
+ * réparable, en oublier un ne l'est pas.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * LA PÉRIODE EST OBLIGATOIRE, ET PROPOSÉE À DOUZE MOIS. « Tout depuis toujours » enverrait à un
@@ -42,12 +46,20 @@ function ExportPartenaire({ partenaire, onErreur }) {
   const [periode, setPeriode] = useState(periodeParDefaut);
   const [busy, setBusy] = useState(false);
   const [resultat, setResultat] = useState(null);
+  const [journal, setJournal] = useState([]);
+
+  /* Le journal se charge à l'OUVERTURE : savoir ce qu'on a déjà envoyé évite le double envoi,
+     et c'est l'information la plus utile avant de choisir une période. */
+  function ouvrirJournal() {
+    getTransmissionsPartenaire(partenaire.id).then((r) => setJournal(r.data || [])).catch(() => {});
+  }
 
   async function produire() {
     setBusy(true); setResultat(null);
     try {
       const r = await exporterPartenaire(partenaire.id, periode.depuis, periode.jusquA);
       setResultat(r.data);
+      if (r.data.journalise) getTransmissionsPartenaire(partenaire.id).then((x) => setJournal(x.data || [])).catch(() => {});
     } catch (e) { onErreur?.(e.message); }
     finally { setBusy(false); }
   }
@@ -74,10 +86,16 @@ function ExportPartenaire({ partenaire, onErreur }) {
     navigator.clipboard.writeText(txt).catch(() => onErreur?.("Copie impossible."));
   }
 
+  /* UNE ICÔNE, PAS UN BOUTON DE TEXTE. La fiche d'un partenaire porte déjà beaucoup : sur
+     vingt-deux fiches, une phrase de plus par carte allongeait la page sans rien apprendre à
+     qui n'exporte pas. L'icône garde son `title` et son `aria-label` — une icône seule sans
+     libellé accessible n'existe pas pour un lecteur d'écran. */
   if (!ouvert) {
     return (
-      <button type="button" className="btn sm ghost" onClick={() => setOuvert(true)}>
-        <Icon name="download" size={14} /> Exporter les stagiaires consentants
+      <button type="button" className="iconbtn" onClick={() => { setOuvert(true); ouvrirJournal(); }}
+        title="Exporter les stagiaires consentants (tableur)"
+        aria-label={`Exporter les stagiaires consentants de ${partenaire.name}`}>
+        <Icon name="table" size={15} />
       </button>
     );
   }
@@ -85,6 +103,14 @@ function ExportPartenaire({ partenaire, onErreur }) {
   return (
     <div className="export-part">
       <b><Icon name="download" size={13} /> Stagiaires consentants à transmettre</b>
+      {/* CE QUE L'APPLICATION NE FAIT PAS, dit avant qu'on le découvre. « Produire » à côté d'une
+          icône de téléchargement pourrait laisser croire à un envoi automatique — le pire
+          malentendu possible sur un écran qui manipule des coordonnées. */}
+      <span className="hint" style={{ margin: "0 0 8px" }}>
+        L'application <b>n'envoie rien elle-même</b> : elle prépare un tableau à joindre à votre
+        courriel. Le préparer l'inscrit au <b>journal des transmissions</b>, même si vous ne
+        l'envoyez pas ensuite.
+      </span>
       <div className="export-part-periode">
         <label>
           Du
@@ -111,6 +137,25 @@ function ExportPartenaire({ partenaire, onErreur }) {
         Sessions <b>terminées</b> dans cette période. Un stagiaire inscrit à plusieurs sessions
         n'apparaît qu'une fois.
       </span>
+
+      {journal.length > 0 && (
+        <div className="export-part-journal">
+          <b><Icon name="history" size={12} /> Déjà envoyé à ce partenaire</b>
+          {journal.slice(0, 5).map((j) => (
+            <div key={j.id} className="export-part-journal-l">
+              <span className="tnum hint">{j.sent_at}</span>
+              <span className="hint">
+                {j.learners_count} stagiaire{j.learners_count > 1 ? "s" : ""}
+                {/* Les anciennes lignes portent un `session_id` : elles viennent de l'export par
+                    session, retiré depuis. Rien ne justifierait de les cacher — ce sont des
+                    transmissions qui ont bel et bien eu lieu. */}
+                {j.session_id ? " · depuis une session" : ""}
+              </span>
+              {j.par && <span className="hint">· {j.par}</span>}
+            </div>
+          ))}
+        </div>
+      )}
 
       {resultat && (
         resultat.lignes.length === 0 ? (

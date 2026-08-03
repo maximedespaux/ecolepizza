@@ -140,20 +140,23 @@ test('des cartes empilées dans un même conteneur sont espacées', () => {
     assert.match(page, /<SessionIntervenants/);
 });
 
-test("« Préparer l'envoi » dit ce que l'application NE fait PAS", () => {
-    /* « Produire la liste pour un partenaire » ne parlait à personne — signalé par l'école.
-       Trois manques, et chacun laissait une question sans réponse : ce que ça fait (l'application
-       n'ENVOIE rien, elle prépare une liste à copier), sur qui ça porte (les inscrits de CETTE
-       session), et ce que ça déclenche (l'inscription au journal, même sans envoi ensuite).
-       Un bouton « Produire » à côté d'une icône d'envoi laissait au contraire croire à un envoi
-       automatique — le pire malentendu possible sur un écran qui manipule des coordonnées. */
+test("la page d'une session n'offre plus d'export", () => {
+    /* « Produire la liste pour un partenaire » ne parlait à personne, et l'école a préféré le
+       retirer plutôt que de le reformuler : cette carte a UN sujet, le suivi des consentements —
+       qui a accepté, qui a refusé, qui n'a jamais été sollicité. L'envoi se décide ailleurs, sur
+       la fiche du partenaire à qui l'on écrit. */
     const comp = fs.readFileSync(path.join(UI, 'components/SessionConsentements.jsx'), 'utf8');
-    assert.match(comp, /Préparer l'envoi à un partenaire/);
-    assert.match(comp, /n'envoie rien elle-même/,
-        "L'écran doit dire que l'application n'envoie rien.");
-    assert.match(comp, /de cette session/, '…sur quels stagiaires porte la liste…');
-    assert.match(comp, /même si vous ne\s*\n?\s*l'envoyez pas ensuite/,
-        '…et que le journal est écrit même sans envoi.');
-    assert.doesNotMatch(comp.replace(/\{\/\*[\s\S]*?\*\/\}/g, ''), />Produire<|Produire la liste pour un partenaire/,
-        'L\'ancien libellé ne doit pas revenir.');
+    assert.doesNotMatch(comp, /Préparer l'envoi|Produire la liste|consent-envoi/,
+        "La carte de session ne doit plus proposer d'export.");
+    assert.doesNotMatch(comp, /getPartenaires|produireTransmission/,
+        'Ni charger la liste des partenaires, dont elle n\'a plus l\'usage.');
+    /* ET CE QU'ELLE GARDE : le suivi, qui est son sujet. */
+    assert.match(comp, /Jamais sollicité/);
+
+    /* L'AVERTISSEMENT A SUIVI L'EXPORT. Il reste nécessaire là où il vit désormais : « Produire »
+       à côté d'une icône de téléchargement pourrait laisser croire à un envoi automatique. */
+    const exp = fs.readFileSync(path.join(UI, 'components/ExportPartenaire.jsx'), 'utf8');
+    assert.match(exp, /n'envoie rien elle-même/);
+    assert.match(exp, /même si vous ne\s*\n?\s*l'envoyez pas ensuite/);
 });
+
