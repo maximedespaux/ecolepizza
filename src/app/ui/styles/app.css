@@ -4585,3 +4585,12 @@ button.av-wrap:active{transform:scale(.94)}
    virgule cesse d'être une convention invisible. */
 .cat-apercu{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
 .cat-apercu .badge{font-size:10px;padding:2px 6px}
+
+/* Catalogue partenaire : le nom sur sa ligne, les étiquettes sur la leur.
+   Laissées en flux inline à la suite du nom, elles se coupaient là où la place manquait — donc
+   à un endroit différent selon la longueur du libellé, ce qui faisait croire à deux natures
+   d'étiquettes. `min-width:0` sur la colonne, sinon le nom impose sa largeur et pousse le prix
+   hors de la ligne. */
+.pp-ident{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.pp-cats{display:flex;flex-wrap:wrap;gap:4px}
+.pp-cats .badge{font-size:10px;padding:2px 6px}

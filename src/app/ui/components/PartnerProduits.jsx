@@ -104,15 +104,27 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
                     borderBottom: "1px solid var(--border-soft)", opacity: p.active ? 1 : 0.5 }}>
                     <ImageLien src={p.image_url} className="pp-vignette"
                       fallback={<ImagePlaceholder className="pp-vignette" icone="package" />} />
-                    <span style={{ flex: 1, minWidth: 0 }}>
+                    {/* LE NOM SUR SA LIGNE, LES ÉTIQUETTES SUR LA LEUR.
+                        En les laissant couler à la suite du nom, elles passaient à la ligne LÀ OÙ
+                        LA PLACE MANQUAIT : « Four » restait collé au titre et « 400 °C,
+                        électrique » tombaient dessous, ce qui donnait à croire à DEUX natures
+                        d'étiquettes différentes. Et le point de coupure changeait d'un produit à
+                        l'autre selon la longueur du nom — sur « AVGVSTO PR 9 — dôme à sole
+                        rotative 500 °C », même le seul « Four » basculait. Un groupe stable vaut
+                        mieux qu'un groupe qui se réorganise à chaque libellé. */}
+                    <span className="pp-ident">
                       <b style={{ fontSize: 13 }}>{p.name}</b>
                       {/* MÊME DÉCOUPAGE QU'À LA BOUTIQUE : l'école doit voir ce que le stagiaire
                           verra. Affichée en un bloc, « Four,400 °C » se lirait comme une seule
                           catégorie mal saisie et on la « corrigerait » en retirant la virgule. */}
-                      {listeCategories(p.category).map((c) => (
-                        <span key={c} className="badge n" style={{ marginLeft: 6 }}>{c}</span>
-                      ))}
-                      {!p.active ? <Badge tone="n">masqué</Badge> : null}
+                      {(listeCategories(p.category).length || !p.active) ? (
+                        <span className="pp-cats">
+                          {listeCategories(p.category).map((c) => (
+                            <span key={c} className="badge n">{c}</span>
+                          ))}
+                          {!p.active ? <Badge tone="n">masqué</Badge> : null}
+                        </span>
+                      ) : null}
                     </span>
                     {/* Le tarif ÉCOLE est celui que le stagiaire paie : c'est lui qu'on met en
                         avant, le prix public servant de repère pour mesurer la négociation. */}

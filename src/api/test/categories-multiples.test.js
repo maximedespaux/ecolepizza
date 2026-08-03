@@ -93,3 +93,31 @@ test("l'aperçu montre le découpage pendant la saisie", () => {
     assert.match(comp, /Séparez par des virgules pour plusieurs étiquettes\./,
         '…et le dire tant qu\'il n\'y en a qu\'une.');
 });
+
+test("le nom et les étiquettes ne se partagent pas la même ligne", () => {
+    /* LE DÉFAUT SIGNALÉ PAR L'ÉCOLE, et il était réel : dans le catalogue côté organisme, le nom
+     * du produit et ses étiquettes coulaient dans un MÊME conteneur inline. Elles passaient donc à
+     * la ligne LÀ OÙ LA PLACE MANQUAIT — « Four » restait collé au titre, « 400 °C » et
+     * « électrique » tombaient dessous — ce qui donnait à croire à DEUX natures d'étiquettes
+     * différentes, l'une du titre, l'autre du produit.
+     *
+     * Pire : le point de coupure changeait d'un produit à l'autre selon la longueur du libellé.
+     * Sur « AVGVSTO PR 9 — dôme à sole rotative 500 °C », même le seul « Four » basculait à la
+     * ligne. Un groupe stable vaut mieux qu'un groupe qui se réorganise à chaque nom.
+     *
+     * La correction n'est pas cosmétique : elle rétablit le fait que TOUTES ces étiquettes ont la
+     * même nature. */
+    const comp = fs.readFileSync(path.join(UI, 'components/PartnerProduits.jsx'), 'utf8');
+    assert.match(comp, /<span className="pp-ident">/,
+        'Le nom et ses étiquettes doivent vivre dans une colonne, pas dans un flux inline.');
+    assert.match(comp, /<span className="pp-cats">/,
+        'Les étiquettes doivent former un groupe à part, sur leur propre ligne.');
+
+    const css = fs.readFileSync(path.join(UI, 'styles/app.css'), 'utf8');
+    assert.match(css, /\.pp-ident\{[^}]*flex-direction:column/,
+        'La colonne empêche les étiquettes de remonter à côté du nom.');
+    assert.match(css, /\.pp-ident\{[^}]*min-width:0/,
+        'Sans `min-width:0`, un nom long impose sa largeur et pousse le prix hors de la ligne.');
+    assert.match(css, /\.pp-cats\{[^}]*flex-wrap:wrap/,
+        'À sept étiquettes, le groupe doit s\'enrouler plutôt que déborder.');
+});
