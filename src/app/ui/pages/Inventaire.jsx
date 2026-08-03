@@ -125,6 +125,11 @@ function Inventaire({ embedded = false }) {
     setEditing({
       id: item.id, name: item.name, category: item.category || "", sku: item.sku || "",
       quantity: item.quantity, unit_price: item.unit_price ?? "", tax_rate: item.tax_rate ?? "20", threshold: item.threshold,
+      /* SANS CETTE LIGNE, la photo existante n'apparaissait pas à l'édition : le champ s'ouvrait
+         vide alors que l'article en avait une, et on ne pouvait ni la voir ni la corriger — juste
+         en coller une autre à l'aveugle. Le `|| ""` suit la règle du reste de cette fonction :
+         aucune valeur `null` ne doit atteindre un `value` d'input. */
+      image_url: item.image_url || "",
       // Une SEULE valeur + son unité à l'écran : deux champs séparés laisseraient poser 10 %
       // ET 5 €, sans qu'on sache lequel s'applique.
       remiseValeur: item.learner_discount_eur ? String(item.learner_discount_eur)

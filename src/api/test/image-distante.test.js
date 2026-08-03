@@ -119,3 +119,36 @@ test('la migration 133 a son revert, et ne recrée pas une colonne existante', (
     assert.match(sql, /existe DÉJÀ, depuis la 095/);
     assert.ok(fs.existsSync(path.join(MIG, '133_revert_images_distantes.sql')), 'un revert est obligatoire');
 });
+
+test('aucun `null` de la base n\'entre dans un champ de formulaire', () => {
+    /* LE DÉFAUT, MESURÉ SUR LA VRAIE BASE : 22 fiches partenaires, et TOUS les champs facultatifs
+     * à `null` — contact, téléphone, site, ville, remise, offre, notes, logo. Ouvrir n'importe
+     * quelle fiche rendait huit champs NON CONTRÔLÉS, dont les deux zones de texte.
+     *
+     * `{ ...EMPTY, ...partner }` avait l'air correct : EMPTY pose des chaînes vides, la fiche
+     * complète. Sauf que la fiche apporte ses propres `null`, et qu'ils ÉCRASENT les chaînes
+     * vides. React abandonne alors le champ au DOM : `setForm` cesse d'être la source de vérité,
+     * et le seul signe est un avertissement en console que personne ne lit.
+     *
+     * ET LE PIÈGE DE MESURE VAUT D'ÊTRE NOTÉ : on ne peut PAS le constater en lisant `.value`
+     * dans le navigateur. La propriété DOM d'un champ est toujours une chaîne — React y met « »
+     * tout en avertissant. Une vérification par `.value` rend « aucune valeur nulle » aussi bien
+     * avant qu'après correction : elle ne prouve rien.
+     *
+     * La correction PARCOURT les clés d'EMPTY au lieu de les citer. Les traiter à la main, c'est
+     * en oublier un au prochain ajout — c'est exactement ce qui venait de se produire : trois
+     * champs rattrapés sur onze. */
+    const page = fs.readFileSync(path.join(UI, 'pages/Partenaires.jsx'), 'utf8');
+    assert.match(page,
+        /for \(const k of Object\.keys\(EMPTY\)\) if \(partner\[k\] !== undefined && partner\[k\] !== null\)/,
+        'La normalisation doit être générique, pas champ par champ.');
+    assert.doesNotMatch(page, /useState\(\(\) => \(\{\s*\.\.\.EMPTY, \.\.\.partner,/,
+        'Le simple étalement laisse passer les `null` de la base.');
+
+    /* Et la photo d'un article doit être RELUE à l'édition : sans elle, le champ s'ouvrait vide
+       alors que l'article en avait une — impossible de la voir ni de la corriger, seulement d'en
+       coller une autre à l'aveugle. */
+    const inv = fs.readFileSync(path.join(UI, 'pages/Inventaire.jsx'), 'utf8');
+    assert.match(inv, /image_url: item\.image_url \|\| ""/,
+        "openEdit doit charger la photo existante, et sans jamais laisser passer `null`.");
+});

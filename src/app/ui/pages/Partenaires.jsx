@@ -545,18 +545,25 @@ function CategoriesModal({ categories, onClose, onChange, onReload, onError }) {
 
 function PartnerModal({ partner, categories, onClose, onSaved, onError }) {
   const isNew = !!partner._new;
-  /* `?? ""` SUR CHAQUE CHAMP FACULTATIF. La base rend `null` pour une échéance non saisie, et un
-     `null` passé en `value` d'un `<input>` le rend NON CONTRÔLÉ : React laisse alors la saisie
-     vivre dans le DOM, `setForm` n'est plus la source de vérité, et l'avertissement n'apparaît
-     qu'en console. Le défaut se voit à l'enregistrement, pas à la saisie. */
-  const [form, setForm] = useState(() => ({
-    ...EMPTY, ...partner,
-    discount_pct: partner.discount_pct ?? "",
-    contrat: Number(partner.contrat) === 1 ? 1 : 0,
-    contrat_debut: partner.contrat_debut ?? "",
-    contrat_duree_mois: partner.contrat_duree_mois ?? "",
-    logo_url: partner.logo_url ?? "",
-  }));
+  /* AUCUN `null` NE DOIT ENTRER DANS LE FORMULAIRE, et la normalisation est GÉNÉRIQUE.
+   *
+   * `{ ...EMPTY, ...partner }` avait l'air correct : EMPTY pose des chaînes vides, la fiche
+   * complète. Sauf que la fiche apporte ses propres `null` — et ils ÉCRASENT les chaînes vides.
+   * Or un `null` passé en `value` d'un `<input>` le rend NON CONTRÔLÉ : React laisse la saisie
+   * vivre dans le DOM, `setForm` cesse d'être la source de vérité, et le seul signe est un
+   * avertissement en console que personne ne lit. Mesuré sur cette base : 22 fiches, et TOUS les
+   * champs facultatifs à `null` — contact, site, ville, remise, offre, notes. Ouvrir n'importe
+   * quelle fiche rendait huit champs incontrôlés, dont les deux zones de texte.
+   *
+   * La correction parcourt les clés d'EMPTY au lieu de les citer une par une : un champ ajouté à
+   * EMPTY est couvert d'office. Les traiter à la main, c'est en oublier un au prochain ajout —
+   * c'est exactement ce qui venait de se passer, trois champs corrigés sur onze. */
+  const [form, setForm] = useState(() => {
+    const f = { ...EMPTY };
+    for (const k of Object.keys(EMPTY)) if (partner[k] !== undefined && partner[k] !== null) f[k] = partner[k];
+    f.contrat = Number(partner.contrat) === 1 ? 1 : 0;   // TINYINT → 0/1, jamais "0"
+    return f;
+  });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
