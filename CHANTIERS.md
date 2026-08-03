@@ -680,15 +680,31 @@ transmission par courriel ne laisse aucune trace côté outil.
 
 ### 9.3 Ce que le code doit porter (migration 130, écrite)
 
-| Colonne | Rôle | Pourquoi elle est indispensable |
-|---|---|---|
-| `learner.partner_consent` | NULL / 0 / 1 | **Trois** états, pas deux : NULL = jamais demandé, ce qui n'est ni un oui ni un non. Un booléen aurait forcé un défaut, et « présumé d'accord » est exactement ce qu'il faut éviter |
-| `learner.partner_consent_at` | date de la réponse | Un consentement sans date ne prouve rien — il faut qu'il précède la transmission |
-| `learner.partner_consent_text` | la phrase acceptée | Le consentement porte sur une formulation, pas sur une case. Si l'organisme reformule, les accords passés portent sur l'ancien texte |
-| `partner_disclosure` | journal des envois | La moitié manquante de la preuve : à qui, quand, combien, quels champs. Et c'est ce qui permet de répondre à « à qui avez-vous donné mes coordonnées ? » (art. 15) |
+**Un REGISTRE en ajout seul, pas un drapeau sur la fiche du stagiaire.** La première version de
+cette migration posait trois colonnes sur `learner` ; elle a été remplacée, et la raison mérite
+d'être retenue.
 
-La migration **ne pose aucun consentement par défaut** : tous les stagiaires existants restent à
-`NULL`. Pré-cocher aurait transformé une correction en aggravation.
+Un drapeau ne garde que l'état COURANT. Or ce qu'il faut démontrer, c'est l'état **au moment de
+chaque envoi** :
+
+> mars : le stagiaire accepte → avril : l'organisme transmet → juin : il retire son accord
+
+Avec une colonne, la fiche affiche « refusé » en juillet et l'envoi d'avril devient indéfendable
+alors qu'il était licite. La preuve du consentement est une preuve **datée** : elle exige un
+historique, pas une valeur. Chaque réponse crée donc une ligne, aucune n'est modifiée.
+
+| Table / colonne | Rôle | Pourquoi |
+|---|---|---|
+| `consent_record` | une ligne par décision | L'état courant est la ligne la plus récente. **L'absence de ligne = jamais demandé** : plus besoin d'un troisième état artificiel, et on ne présume rien |
+| `.finalite` | à QUOI la personne a dit oui | Prospection partenaires aujourd'hui ; newsletter, photos, annuaire demain. Chacune se demande et se retire **séparément** |
+| `.destinataires` | à QUI, **en texte figé** | « J'accepte pour vos partenaires » ne couvre pas un partenaire ajouté l'an prochain. On garde ce que la personne a **lu** — des clés étrangères suivraient les renommages et le registre finirait par dire autre chose que ce qui a été montré |
+| `.formulation` | la phrase exacte | Un consentement éclairé porte sur un texte. Une reformulation ne doit pas réécrire le passé |
+| `.source` | espace stagiaire / papier / inscription | Une réponse recueillie hors ligne doit rester distinguable : c'est elle qu'on ira rechercher en cas de contestation |
+| `partner_disclosure` | journal des envois | Le registre prouve le consentement, pas ce qui est parti. Sans ce journal, impossible de répondre à « à qui avez-vous donné mes coordonnées ? » (art. 15). Il garde les identifiants, **pas** une copie des coordonnées — ce serait une seconde base personnelle à protéger, sans rien prouver de plus |
+
+La migration **ne crée aucun consentement** : la table naît vide, donc tous les stagiaires sont
+« jamais demandé ». Semer des accords présumés aurait transformé une mise en conformité en
+aggravation.
 
 ### 9.4 L'ordre de construction, et il compte
 
