@@ -1202,11 +1202,15 @@ const getBoutiquePartenaires = async (req, res) => {
            On distingue donc les deux : sans la colonne de contrat on refait la requête SANS le
            filtre (comportement d'avant, aucun partenaire n'a d'échéance à respecter) ; sans la
            table des produits, la vitrine est bien vide. */
-        const requete = (avecContrat) =>
+        /* `avec133` COUVRE DEUX COLONNES DE LA MÊME MIGRATION : `contrat*` (qui filtre) et
+           `logo_url` (qui illustre). Les séparer suggérerait qu'elles peuvent arriver l'une sans
+           l'autre — elles sont posées par le même fichier, elles vont et viennent ensemble. */
+        const requete = (avec133) =>
                 `SELECT pp.id, pp.name, pp.category, pp.reference, pp.price_public, pp.price_school,
                         pp.url, pp.image_url, pp.note, pp.specs,
                         p.id AS partner_id, p.name AS partner_name, p.category AS partner_category,
                         p.discount_pct, p.website
+                        ${avec133 ? ', p.logo_url AS partner_logo' : ''}
                  FROM partner_product pp
                  JOIN partner p ON p.id = pp.partner_id
                  WHERE pp.organization_id = ? AND pp.active = 1
@@ -1216,7 +1220,7 @@ const getBoutiquePartenaires = async (req, res) => {
                       plus d'accord, et le stagiaire se réclame d'un partenariat qui n'existe plus.
                       Le partenaire n'est pas supprimé pour autant — sa fiche, ses commissions et
                       son historique restent : c'est un retrait, pas un effacement. */
-                   ${avecContrat ? `AND ${CONTRAT_VALABLE('p')}` : ''}
+                   ${avec133 ? `AND ${CONTRAT_VALABLE('p')}` : ''}
                  -- PAS « ORDER BY p.category » : c'est un ENUM, et MySQL trie les ENUM par ordre
                  -- de DÉCLARATION, pas alphabétiquement. Or 'MATERIEL' y est déclaré avant 'FOUR'
                  -- — le stagiaire tombait donc sur une trancheuse à jambon avant les fours. Cet
@@ -1243,7 +1247,9 @@ const getBoutiquePartenaires = async (req, res) => {
                 byPartner.set(r.partner_id, {
                     partner_id: r.partner_id, partner_name: r.partner_name,
                     partner_category: r.partner_category, discount_pct: r.discount_pct,
-                    website: r.website, products: [],
+                    // `?? null` : sans la 133 la colonne n'est pas dans le SELECT, donc absente
+                    // de la ligne. L'écran doit recevoir la même forme d'objet dans les deux cas.
+                    website: r.website, partner_logo: r.partner_logo ?? null, products: [],
                 });
             }
             byPartner.get(r.partner_id).products.push({

@@ -378,7 +378,15 @@ function PartenairesTab() {
   return <>{aideBloc}{groups.map((g) => (
     <Card key={g.partner_id} title={
       <span className="card-ttl">
-        <Icon name="users" size={16} /> {g.partner_name}
+        {/* LE LOGO REMPLACE L'ICÔNE quand le partenaire en a un. Le pictogramme « users » était un
+            repli : il est identique pour les vingt-trois partenaires et ne dit donc rien de plus
+            que le nom écrit juste à côté. Un logo, lui, est ce que le stagiaire reconnaîtra en
+            magasin ou sur une facture.
+            Sans logo — ou si le lien est mort — on retombe sur l'icône : jamais un cadre vide,
+            qui ferait croire à une image cassée. */}
+        <ImageLien src={g.partner_logo} className="shop-partner-logo"
+          fallback={<Icon name="users" size={16} />} />
+        {g.partner_name}
         <span className="badge n" style={{ marginLeft: 8 }}>{g.partner_category}</span>
         {g.discount_pct ? <span className="badge g" style={{ marginLeft: 6 }}>−{g.discount_pct} % école</span> : null}
       </span>

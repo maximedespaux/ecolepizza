@@ -4578,3 +4578,10 @@ button.av-wrap:active{transform:scale(.94)}
    déforme pas d'un article à l'autre. */
 .shop-photo{width:100%;height:120px;object-fit:contain;background:#fff;border-radius:9px;
   margin-bottom:8px;border:1px solid var(--border)}
+
+/* Logo du partenaire en tête de sa vitrine, côté stagiaire. Il occupe la place de l'ancienne
+   icône « users » : même hauteur de ligne, largeur libre — un logo est rarement carré, et le
+   contraindre à 16×16 le rendrait illisible. Fond blanc, car ces fichiers sont presque toujours
+   détourés pour un fond clair et disparaîtraient en thème sombre. */
+.shop-partner-logo{height:20px;width:auto;max-width:92px;object-fit:contain;border-radius:4px;
+  background:#fff;padding:2px;flex-shrink:0}

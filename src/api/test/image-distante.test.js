@@ -152,3 +152,26 @@ test('aucun `null` de la base n\'entre dans un champ de formulaire', () => {
     assert.match(inv, /image_url: item\.image_url \|\| ""/,
         "openEdit doit charger la photo existante, et sans jamais laisser passer `null`.");
 });
+
+test('le logo du partenaire arrive jusqu\'à la boutique du stagiaire', () => {
+    /* LE CHEMIN COMPLET, ET IL SE COUPE FACILEMENT : la colonne peut exister, le formulaire la
+       remplir, la fiche l'afficher côté organisme — et le stagiaire ne rien voir, parce que la
+       requête de SA boutique ne la sélectionne pas. Trois maillons, testés ensemble.
+
+       `avec133` COUVRE DEUX COLONNES DE LA MÊME MIGRATION : `contrat*` (qui filtre la vitrine) et
+       `logo_url` (qui l'illustre). Les séparer suggérerait qu'elles peuvent arriver l'une sans
+       l'autre ; elles sont posées par le même fichier. */
+    const ctrl = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'espace.controller.js'), 'utf8');
+    assert.match(ctrl, /p\.logo_url AS partner_logo/,
+        'La requête de la boutique stagiaire doit sélectionner le logo.');
+    assert.match(ctrl, /partner_logo: r\.partner_logo \?\? null/,
+        'Et le regroupement par partenaire doit le transporter — sinon il se perd entre les deux.');
+
+    const page = fs.readFileSync(path.join(UI, 'pages/Boutique.jsx'), 'utf8');
+    assert.match(page, /<ImageLien src=\{g\.partner_logo\}/, "…et l'écran doit l'afficher.");
+    /* LE REPLI EST L'ICÔNE, PAS LE VIDE. Un `fallback={null}` laisserait un titre qui commence
+       directement par le nom pour les partenaires sans logo, alors que les autres ont une image :
+       la colonne des titres se désalignerait d'une carte à l'autre. */
+    assert.match(page, /fallback=\{<Icon name="users" size=\{16\} \/>\}/,
+        'Sans logo, on retombe sur l\'icône — jamais sur un trou.');
+});
