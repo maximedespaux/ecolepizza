@@ -142,7 +142,7 @@ function Partenaires() {
 
       <ApportForm partners={partners} onSaved={load} />
 
-      <div className="tabs" style={{ marginBottom: 14 }}>
+      <div className="tabs">
         <button className={"tab" + (tab === "partenaires" ? " on" : "")} onClick={() => setTab("partenaires")}>Partenaires</button>
         <button className={"tab" + (tab === "historique" ? " on" : "")} onClick={() => setTab("historique")}>Historique des apports</button>
       </div>
@@ -162,7 +162,7 @@ function Partenaires() {
           </div>
 
           {incompletes > 0 && (
-            <div className="carte-dette" style={{ marginBottom: 14 }}>
+            <div className="carte-dette" style={{ marginBottom: 16 }}>
               <Icon name="info" size={16} />
               <span>
                 <b className="tnum">{incompletes}</b> fiche{incompletes > 1 ? "s" : ""} sur <b className="tnum">{partners.length}</b>

@@ -255,7 +255,10 @@ function Dashboard() {
         )}
       </Card>
 
-      <div className="grid cols-2">
+      {/* `.grid` porte un `gap` ENTRE SES COLONNES, pas sous elle : une grille posée dans un
+          empilement se colle donc au bloc suivant. C'est ce qui collait « Partenaires » à
+          « Derniers dossiers » — 0 px là où tout le reste de la page respire de 16. */}
+      <div className="grid cols-2" style={{ marginBottom: 16 }}>
         <Card title="Derniers dossiers" more={<Link to="/suivi" className="card-more">Suivi <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>}>
           {loading ? (
             [0, 1, 2, 3].map((i) => (
