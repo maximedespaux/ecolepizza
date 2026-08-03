@@ -449,7 +449,16 @@ function SessionDetail() {
         </Card>
       </div>
 
-      <div style={{ marginTop: 16 }}>
+      {/* UN CONTENEUR EN COLONNE AVEC UN `gap`, ET NON UNE SIMPLE MARGE HAUTE.
+          Ces trois composants partageaient un seul `<div style={{ marginTop: 16 }}>` : la marge
+          s'appliquait donc AVANT LE GROUPE, et les cartes à l'intérieur se touchaient — mesuré à
+          0 px entre « Transmission aux partenaires » et « Intervenants externes ».
+          Le défaut était latent avant l'ajout de la carte de transmission : `SessionRetraits` rend
+          `null` quand aucun retrait n'est réservé, si bien qu'il n'y avait le plus souvent qu'une
+          seule carte dans ce conteneur et que rien ne pouvait se coller.
+          Un enfant qui rend `null` ne crée aucun espace fantôme : le `gap` n'agit qu'entre les
+          éléments réellement rendus. */}
+      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 16 }}>
         {/* SUR LA PAGE DE LA SESSION, et pas dans un écran RGPD à part : l'organisme envoie ses
             listes SESSION PAR SESSION, et c'est ici qu'il vient au moment de le faire. Une page
             de conformité rangée ailleurs ne s'ouvre que quand on la cherche — donc jamais au

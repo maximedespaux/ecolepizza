@@ -111,3 +111,49 @@ test('une grille empilée pousse ce qui la suit', () => {
     assert.match(tdb, /<div className="grid cols-2" style=\{\{ marginBottom: 16 \}\}>/,
         'La grille du tableau de bord doit espacer le bloc qui la suit.');
 });
+
+test('des cartes empilées dans un même conteneur sont espacées', () => {
+    /* ─────────────────────────────────────────────────────────────────────────────────────────
+       LE DÉFAUT SIGNALÉ, et il échappait à tous les contrôles précédents.
+
+       Trois composants partageaient un seul `<div style={{ marginTop: 16 }}>` sur la page d'une
+       session. La marge s'appliquait donc AVANT LE GROUPE, et les cartes à l'intérieur se
+       touchaient : 0 px mesuré entre « Transmission aux partenaires » et « Intervenants
+       externes ».
+       Le contrôle du rythme ne pouvait pas le voir — il compare les blocs de PREMIER NIVEAU, et
+       ces trois cartes n'en forment qu'un.
+
+       ET LE DÉFAUT ÉTAIT LATENT AVANT L'AJOUT DE LA CARTE DE TRANSMISSION : `SessionRetraits`
+       rend `null` quand aucun retrait n'est réservé, si bien qu'il n'y avait le plus souvent
+       qu'une seule carte dans ce conteneur — rien ne pouvait s'y coller. Une troisième l'a
+       révélé. */
+    const page = fs.readFileSync(path.join(UI, 'pages/SessionDetail.jsx'), 'utf8');
+    const d = page.indexOf('<SessionConsentements');
+    const ouverture = page.lastIndexOf('<div style={{', d);
+    const conteneur = page.slice(ouverture, d);
+    assert.match(conteneur, /display: "flex", flexDirection: "column", gap: 16/,
+        'Un conteneur qui empile plusieurs cartes doit porter un `gap`, pas seulement une marge '
+        + 'haute : la marge espace le GROUPE, jamais ce qu\'il contient.');
+    /* Un enfant qui rend `null` ne crée aucun espace fantôme : le `gap` n'agit qu'entre les
+       éléments réellement rendus. C'est ce qui rend cette forme sûre malgré `SessionRetraits`. */
+    assert.match(page, /<SessionRetraits/);
+    assert.match(page, /<SessionIntervenants/);
+});
+
+test("« Préparer l'envoi » dit ce que l'application NE fait PAS", () => {
+    /* « Produire la liste pour un partenaire » ne parlait à personne — signalé par l'école.
+       Trois manques, et chacun laissait une question sans réponse : ce que ça fait (l'application
+       n'ENVOIE rien, elle prépare une liste à copier), sur qui ça porte (les inscrits de CETTE
+       session), et ce que ça déclenche (l'inscription au journal, même sans envoi ensuite).
+       Un bouton « Produire » à côté d'une icône d'envoi laissait au contraire croire à un envoi
+       automatique — le pire malentendu possible sur un écran qui manipule des coordonnées. */
+    const comp = fs.readFileSync(path.join(UI, 'components/SessionConsentements.jsx'), 'utf8');
+    assert.match(comp, /Préparer l'envoi à un partenaire/);
+    assert.match(comp, /n'envoie rien elle-même/,
+        "L'écran doit dire que l'application n'envoie rien.");
+    assert.match(comp, /de cette session/, '…sur quels stagiaires porte la liste…');
+    assert.match(comp, /même si vous ne\s*\n?\s*l'envoyez pas ensuite/,
+        '…et que le journal est écrit même sans envoi.');
+    assert.doesNotMatch(comp.replace(/\{\/\*[\s\S]*?\*\/\}/g, ''), />Produire<|Produire la liste pour un partenaire/,
+        'L\'ancien libellé ne doit pas revenir.');
+});

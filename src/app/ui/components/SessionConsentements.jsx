@@ -262,20 +262,35 @@ function SessionConsentements({ sessionId, canEdit }) {
 
       {["jamais", "oui", "non"].map(rendreGroupe)}
 
+      {/* ─────────────────────────────────────────────────────────────────────────────────────
+          « PRODUIRE LA LISTE » NE DISAIT RIEN À PERSONNE, et l'école l'a signalé. Trois choses
+          manquaient, et chacune laisse une question sans réponse :
+
+            · CE QUE ÇA FAIT — l'application n'envoie RIEN. Elle prépare une liste que l'on copie
+              dans son propre courriel. Un bouton nommé « Produire » à côté d'une icône d'envoi
+              laissait au contraire croire à un envoi automatique ;
+            · SUR QUI ELLE PORTE — les inscrits de CETTE session, pas tout le fichier ;
+            · CE QUE ÇA DÉCLENCHE — l'inscription au journal, y compris si l'on n'envoie
+              finalement rien. Mieux vaut le dire avant que de le découvrir. */}
       <div className="consent-envoi">
-        <b><Icon name="send" size={14} /> Produire la liste pour un partenaire</b>
+        <b><Icon name="send" size={14} /> Préparer l'envoi à un partenaire</b>
+        <span className="hint" style={{ margin: "0 0 9px" }}>
+          L'application <b>n'envoie rien elle-même</b> : elle prépare la liste des stagiaires
+          <b> de cette session</b> qui ont accepté, à copier dans votre courriel au partenaire.
+        </span>
         <div className="consent-envoi-ligne">
           <select value={partnerId} onChange={(e) => { setPartnerId(e.target.value); setListe(null); }}>
             <option value="">Choisir un partenaire…</option>
             {partenaires.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <button className="btn primary" disabled={!partnerId || busy === "liste"} onClick={produire}>
-            {busy === "liste" ? "…" : "Produire"}
+            {busy === "liste" ? "…" : "Préparer la liste"}
           </button>
         </div>
         <span className="hint">
-          Produire la liste l'inscrit au journal des transmissions. C'est ce journal qui permet de
-          répondre à un stagiaire demandant à qui ses coordonnées ont été communiquées.
+          Préparer la liste l'inscrit au <b>journal des transmissions</b>, même si vous ne
+          l'envoyez pas ensuite. C'est ce journal qui permet de répondre à un stagiaire demandant
+          à qui ses coordonnées ont été communiquées.
         </span>
       </div>
 
