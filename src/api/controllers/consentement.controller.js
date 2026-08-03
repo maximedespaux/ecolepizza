@@ -82,9 +82,15 @@ async function sessionAvecInscrits(conn, sessionId, orgId) {
         [sessionId, orgId]);
     if (!rows.length) return null;
     const [inscrits] = await conn.query(
-        `SELECT l.id, l.first_name, l.last_name, l.email, l.phone
+        /* `entreprise` et `ville` NE SONT PAS TRANSMISES PAR DÉFAUT : elles ne font pas partie
+           des six champs d'origine, et n'apparaissent que si l'école les coche dans ses réglages
+           ET qu'elles ont été annoncées à la personne. On les LIT ici pour que l'export puisse
+           les servir le jour où c'est le cas — les lire ne les envoie pas. */
+        `SELECT l.id, l.first_name, l.last_name, l.email, l.phone, l.town,
+                c.name AS company_name
            FROM enrollment e
            JOIN learner l ON l.id = e.learner_id
+           LEFT JOIN company c ON c.id = e.company_id
           WHERE e.session_id = ?
           ORDER BY l.last_name, l.first_name`,
         [sessionId]);
@@ -279,13 +285,43 @@ const produireTransmission = async (req, res) => {
 
         const s = bloc.session;
         const dates = s.start_date && s.end_date ? `${s.start_date} → ${s.end_date}` : '';
-        const lignes = retenus.map((l) => ({
+
+        /* ─────────────────────────────────────────────────────────────────────────────────────
+           ON N'ENVOIE QUE L'INTERSECTION entre ce que l'école transmet AUJOURD'HUI et ce qui
+           avait été ANNONCÉ À CETTE PERSONNE-LÀ.
+
+           Un consentement porte sur ce qui a été dit. Si l'école ajoute le téléphone six mois
+           après, les accords déjà donnés ne le couvrent pas : la personne ne pouvait pas
+           consentir à ce qu'elle ignorait. Sans cette intersection, l'organisme transmettrait un
+           champ de plus en se croyant couvert par un « oui » qui portait sur autre chose.
+
+           L'asymétrie est voulue : RESTREINDRE la liste s'applique tout de suite à tout le monde,
+           l'ÉLARGIR ne vaut que pour les réponses recueillies après. On transmet donc toujours
+           moins que ce qui a été accepté, jamais plus. */
+        const choisis = await consentements.champsOrganisme(conn, req.user.organization_id);
+        const champsParStagiaire = new Map(retenus.map((l) => {
+            const annonces = etats.get(l.id)?.champsAnnonces || [];
+            return [l.id, choisis.filter((c) => annonces.includes(c))];
+        }));
+        /* La colonne de l'export est l'UNION de ce qui part réellement : une colonne présente
+           pour un seul stagiaire doit exister dans le tableau, vide pour les autres. Cacher la
+           colonne masquerait le fait que la donnée est bel et bien partie pour celui-là. */
+        const champs = choisis.filter((c) => [...champsParStagiaire.values()].some((l) => l.includes(c)));
+
+        const valeurs = (l) => ({
             nom: l.last_name || '', prenom: l.first_name || '',
             email: l.email || '', telephone: l.phone || '',
             formation: s.program_title || s.program_code || '', dates_session: dates,
-        }));
-
-        const champs = consentements.FINALITES[FINALITE].champs;
+            entreprise: l.company_name || '', ville: l.town || '',
+        });
+        const lignes = retenus.map((l) => {
+            const permis = champsParStagiaire.get(l.id);
+            const v = valeurs(l);
+            /* Un champ non couvert pour CE stagiaire sort VIDE, pas absent : le tableau garde la
+               même forme d'une ligne à l'autre, et un CSV dont les colonnes changent de sens
+               d'une ligne à l'autre est illisible. */
+            return Object.fromEntries(champs.map((c) => [c, permis.includes(c) ? v[c] : '']));
+        });
         await conn.query(
             `INSERT INTO partner_disclosure
                (id, organization_id, partner_id, session_id, learner_ids, learners_count,

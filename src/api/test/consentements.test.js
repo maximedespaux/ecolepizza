@@ -56,8 +56,19 @@ test('le registre AJOUTE une ligne, il n\'en modifie aucune', () => {
 
 test('la formulation et les destinataires sont figés dans chaque réponse', () => {
     const lib = sansCommentaires(lire(path.join(API, 'lib/consentements.js')));
-    assert.match(lib, /destinataires\.slice\(0, 500\), f\.formulation\.slice\(0, 600\)/,
-        'Un consentement éclairé porte sur un TEXTE : reformuler plus tard ne doit pas réécrire le passé.');
+    /* LA PHRASE GELÉE EST CELLE DU MOMENT, et elle est maintenant DÉRIVÉE des champs choisis par
+       l'école (migration 135) plutôt qu'écrite en dur. Ce que le test protège n'a pas bougé :
+       c'est le TEXTE soumis qui est figé avec la réponse, pas une référence vers un texte qui
+       pourrait changer ensuite. La forme, elle, a dû changer — il n'y a plus de `f.formulation`
+       à recopier, mais une phrase construite juste avant l'écriture. */
+    assert.match(lib, /const formulation = formulationPour\(champs\);/,
+        'La phrase soumise doit être construite au moment de la réponse…');
+    assert.match(lib, /destinataires\.slice\(0, 500\), formulation\.slice\(0, 600\)/,
+        '…puis figée telle quelle : reformuler plus tard ne doit pas réécrire le passé.');
+    /* ET LES CHAMPS ANNONCÉS SONT FIGÉS AVEC. La phrase seule ne suffirait pas : en extraire les
+       champs demanderait d'analyser de la prose, et une reformulation casserait l'analyse. */
+    assert.match(lib, /champs\.join\(','\), src, saisiPar \|\| null\]/,
+        'La liste des champs annoncés doit être stockée à côté du texte qu\'elle a produit.');
     /* ET LES DESTINATAIRES SONT LUS EN BASE, pas écrits en dur : on NOMME les entreprises qui
        recevront les coordonnées. Une catégorie vague ne permet pas de savoir à quoi l'on dit oui,
        et une liste figée dans le code aurait vieilli au premier partenaire ajouté. */
@@ -130,26 +141,35 @@ test("sans registre lisible, on n'envoie personne", () => {
 });
 
 test("l'export n'envoie que les champs annoncés au stagiaire", () => {
-    /* Le lien est volontairement direct : la liste des colonnes exportées EST celle que la
-       formulation soumise au stagiaire énumère. Ajouter ici l'entreprise qui finance, ou une note
-       interne, transmettrait une donnée à laquelle personne n'a consenti — sans que le texte
-       montré ait changé d'une virgule. */
+    /* LE LIEN EST VOLONTAIREMENT DIRECT : ce qui part EST ce que la phrase soumise énumère. Mais
+       depuis que l'école choisit ses champs (migration 135), « ce qui a été annoncé » n'est plus
+       une constante — c'est ce qui a été dit À CETTE PERSONNE-LÀ, le jour de sa réponse.
+       D'où l'INTERSECTION : ce que l'école transmet aujourd'hui ∩ ce qui lui avait été annoncé.
+       Restreindre la liste s'applique donc à tout le monde tout de suite ; l'élargir ne vaut que
+       pour les réponses suivantes. On transmet toujours MOINS que ce qui a été accepté. */
     const src = sansCommentaires(lire(CTRL));
-    assert.match(src, /consentements\.FINALITES\[FINALITE\]\.champs/,
-        "Les champs exportés doivent être lus dans la déclaration, jamais recopiés dans l'export.");
+    assert.match(src, /const choisis = await consentements\.champsOrganisme\(conn, req\.user\.organization_id\);/,
+        "L'export doit lire les champs que l'école a choisis…");
+    assert.match(src, /choisis\.filter\(\(c\) => annonces\.includes\(c\)\)/,
+        "…et les croiser avec ce qui avait été annoncé à CHAQUE stagiaire.");
+    assert.doesNotMatch(src, /champs = choisis;/,
+        'Envoyer tout ce que l\'école a coché ignorerait ce à quoi chacun a dit oui.');
 
     const lib = require('../lib/consentements.js');
-    const { champs, formulation } = lib.FINALITES.partenaires;
-    /* Chaque champ annoncé doit se retrouver dans la phrase lue par la personne. Le rapprochement
-       est grossier (un mot-clé par champ) mais il attrape le cas qui compte : une colonne ajoutée
-       à `champs` sans un mot de plus dans la formulation. */
-    const mots = { nom: 'nom', prenom: 'nom', email: 'e-mail', telephone: 'téléphone',
-        formation: 'formation', dates_session: 'formation' };
-    for (const c of champs) {
-        assert.ok(formulation.toLowerCase().includes(mots[c]),
-            `Le champ « ${c} » est exporté mais la formulation ne l'annonce pas.`);
+    /* CHAQUE CHAMP ANNONÇABLE DOIT AVOIR SON MOT DANS LA PHRASE, sinon cocher une case ajouterait
+       une colonne à l'export sans rien changer au texte — un consentement obtenu pour six champs
+       servant à en transmettre sept. */
+    for (const [cle, v] of Object.entries(lib.CHAMPS_TRANSMISSIBLES)) {
+        assert.ok(v.annonce && v.annonce.length > 2, `le champ « ${cle} » doit savoir s'annoncer`);
+        assert.ok(lib.formulationPour([cle]).includes(v.annonce),
+            `« ${cle} » coché doit apparaître dans la phrase`);
     }
+    /* ET UN CHAMP NON COCHÉ NE DOIT PAS S'Y GLISSER. */
+    const phrase = lib.formulationPour(['nom', 'email']);
+    assert.ok(!phrase.includes('téléphone'), 'un champ décoché ne doit pas être annoncé');
+    assert.ok(phrase.includes('mon nom') && phrase.includes('mon adresse e-mail'));
 });
+
 
 test("l'organisme ne peut pas fabriquer un accord « donné en ligne »", () => {
     /* Saisir une réponse RECUEILLIE hors ligne est légitime : elle existe déjà, sur un formulaire

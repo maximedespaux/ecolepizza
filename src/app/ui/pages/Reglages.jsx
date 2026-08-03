@@ -5,6 +5,7 @@ import Card from "../components/Card.jsx";
 import { Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import LocationsManager from "../components/LocationsManager.jsx";
+import ChampsPartenaires from "../components/ChampsPartenaires.jsx";
 
 const FIELDS = [
   ["legal_name", "Raison sociale"], ["short_name", "Sigle"], ["manager", "Responsable"],
@@ -123,7 +124,14 @@ function Reglages() {
             </button>
           </form>
         </Card>
+
       )}
+      {/* CE QUI SORT DE L'ÉCOLE mérite sa propre section, et non une ligne perdue dans la fiche
+          d'identité : ce réglage ne décrit pas l'organisme, il décide de ce que des dizaines de
+          personnes accepteront de communiquer. Hors du `{form && …}` : il ne dépend pas de la
+          fiche organisme, et se charge tout seul. La section ne s'affiche pas tant que la
+          migration 135 n'est pas jouée — mieux vaut rien qu'un réglage sans effet. */}
+      <div style={{ marginTop: 16 }}><ChampsPartenaires /></div>
       {form && <div style={{ marginTop: 16 }}><LocationsManager /></div>}
     </>
   );

@@ -32,17 +32,89 @@ const FINALITES = {
            — c'est ce qui rend le consentement « éclairé », une catégorie vague ne permettant pas
            de savoir à quoi l'on dit oui. */
         destinatairesParDefaut: 'Les partenaires référencés par l\'école',
-        formulation:
-            'J\'accepte que l\'école communique mon nom, mon adresse e-mail, mon téléphone et la '
-            + 'formation que je suis à ses partenaires, afin qu\'ils puissent me proposer leurs '
-            + 'offres et me contacter directement. Je peux revenir sur ce choix à tout moment '
-            + 'depuis mon profil. Refuser n\'a aucune conséquence sur ma formation, mon inscription '
-            + 'ou mon accès aux services de l\'école.',
-        /* Ce que l'on transmet réellement si la personne accepte. Écrit ici pour que l'export ne
-           puisse pas envoyer un champ qui n'a pas été annoncé. */
-        champs: ['nom', 'prenom', 'email', 'telephone', 'formation', 'dates_session'],
+        /* LES SIX CHAMPS D'ORIGINE — le défaut, et le repli quand la migration 135 n'est pas
+           jouée. L'école peut désormais restreindre cette liste depuis ses réglages ; sans la
+           colonne, on retombe ici, c'est-à-dire sur ce qui était annoncé jusqu'alors. */
+        champsParDefaut: ['nom', 'prenom', 'email', 'telephone', 'formation', 'dates_session'],
     },
 };
+
+/**
+ * LES CHAMPS TRANSMISSIBLES, et le mot par lequel on les annonce à la personne.
+ *
+ * L'ORDRE DE CET OBJET EST L'ORDRE DE LA PHRASE. « mon nom, mon prénom, mon adresse e-mail… » se
+ * lit dans cet ordre-là, quel que soit celui dans lequel l'école a coché les cases : une
+ * énumération qui change de séquence d'un stagiaire à l'autre donnerait deux textes différents
+ * pour un même choix, et le registre garderait deux preuves qui n'ont pas l'air d'être la même.
+ */
+/** Détecte une table ou une colonne absente : la migration 130 peut ne pas être jouée. */
+const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
+
+const CHAMPS_TRANSMISSIBLES = {
+    nom: { libelle: 'Nom', annonce: 'mon nom' },
+    prenom: { libelle: 'Prénom', annonce: 'mon prénom' },
+    email: { libelle: 'Adresse e-mail', annonce: 'mon adresse e-mail' },
+    telephone: { libelle: 'Téléphone', annonce: 'mon téléphone' },
+    formation: { libelle: 'Formation suivie', annonce: 'la formation que je suis' },
+    dates_session: { libelle: 'Dates de session', annonce: 'les dates de ma session' },
+    entreprise: { libelle: 'Entreprise (si elle finance)', annonce: 'le nom de l\'entreprise qui finance ma formation' },
+    ville: { libelle: 'Ville', annonce: 'ma ville' },
+};
+
+/** Ne garde que des clés connues, sans doublon, dans l'ordre d'annonce. */
+function champsValides(liste) {
+    const demandes = new Set((Array.isArray(liste) ? liste : String(liste || '').split(','))
+        .map((c) => String(c).trim()).filter(Boolean));
+    return Object.keys(CHAMPS_TRANSMISSIBLES).filter((c) => demandes.has(c));
+}
+
+/**
+ * LA PHRASE SOUMISE À LA PERSONNE, CONSTRUITE DEPUIS LES CHAMPS — jamais écrite à côté.
+ *
+ * C'est le point qui rend l'ensemble tenable. Tant que le texte était figé et la liste de champs
+ * à côté, les deux pouvaient diverger en silence : l'école retirait le téléphone de l'export et
+ * la phrase continuait de l'annoncer, ou l'inverse — un consentement obtenu pour six champs
+ * servant à en transmettre sept. En dérivant l'un de l'autre, l'écart devient impossible.
+ *
+ * Conséquence à connaître : changer la liste change la formulation, donc le texte des
+ * consentements À VENIR. Les réponses déjà données gardent la leur, figée dans le registre — et
+ * c'est exactement ce qui permet de savoir à quoi chacun a dit oui.
+ */
+function formulationPour(champs) {
+    const retenus = champsValides(champs);
+    const liste = retenus.map((c) => CHAMPS_TRANSMISSIBLES[c].annonce);
+    /* AUCUN CHAMP COCHÉ : la phrase ne doit pas devenir « J'accepte que l'école communique à ses
+       partenaires », qui ne veut rien dire. On l'énonce, plutôt que de produire un texte bancal
+       qu'on ferait ensuite signer. */
+    const quoi = liste.length === 0 ? null
+        : liste.length === 1 ? liste[0]
+            : `${liste.slice(0, -1).join(', ')} et ${liste[liste.length - 1]}`;
+    if (!quoi) {
+        return 'Aucune information n\'est actuellement transmise aux partenaires de l\'école.';
+    }
+    return `J'accepte que l'école communique ${quoi} à ses partenaires, afin qu'ils puissent me `
+        + 'proposer leurs offres et me contacter directement. Je peux revenir sur ce choix à tout '
+        + 'moment depuis mon profil. Refuser n\'a aucune conséquence sur ma formation, mon '
+        + 'inscription ou mon accès aux services de l\'école.';
+}
+
+/**
+ * Les champs que l'organisme a choisi de transmettre. Repli sur les six d'origine si la migration
+ * 135 n'est pas jouée — c'est-à-dire sur ce qui était annoncé jusqu'alors, donc sans changement
+ * visible pour personne.
+ */
+async function champsOrganisme(conn, orgId) {
+    try {
+        const [rows] = await conn.query(
+            'SELECT partner_fields FROM organization WHERE id = ?', [orgId]);
+        const v = rows[0]?.partner_fields;
+        if (v === undefined) throw Object.assign(new Error('colonne absente'), { code: 'ER_BAD_FIELD_ERROR' });
+        return champsValides(v);
+    } catch (e) {
+        if (!isMissingSchema(e)) throw e;
+        return [...FINALITES.partenaires.champsParDefaut];
+    }
+}
 
 const { CONTRAT_VALABLE } = require('./contratPartenaire.js');
 
@@ -132,8 +204,6 @@ async function destinatairesPartenaires(conn, orgId) {
     }
 }
 
-/** Détecte une table ou une colonne absente : la migration 130 peut ne pas être jouée. */
-const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 
 /**
  * L'état COURANT d'un stagiaire, finalité par finalité : la réponse la plus récente.
@@ -160,10 +230,15 @@ async function etatCourant(conn, orgId, learnerId) {
             [orgId, learnerId, orgId, learnerId]);
         const par = {};
         for (const r of rows) par[r.finalite] = { ...r, accorde: Number(r.accorde) === 1 };
+        const champs = await champsOrganisme(conn, orgId);
         return FINALITES_CONNUES.map((k) => ({
             cle: k,
             titre: FINALITES[k].titre,
-            formulation: FINALITES[k].formulation,
+            /* LA PHRASE DU JOUR, dérivée des champs actuellement choisis. Celle qui a été
+               ACCEPTÉE est ailleurs — figée sur la ligne du registre — et c'est la comparaison
+               des deux qui dit si l'accord couvre encore ce qu'on transmet. */
+            formulation: formulationPour(champs),
+            champs,
             destinataires,
             // `null` = jamais demandé. C'est ce qui déclenche la fenêtre, et rien d'autre.
             accorde: par[k] ? par[k].accorde : null,
@@ -202,8 +277,12 @@ async function etatParStagiaire(conn, orgId, learnerIds, finalite = 'partenaires
     const ids = (learnerIds || []).filter(Boolean);
     if (!ids.length) return new Map();
     const trous = ids.map(() => '?').join(',');
-    const [rows] = await conn.query(
-        `SELECT c.learner_id, c.accorde, c.source, c.destinataires,
+    /* `c.champs` ARRIVE AVEC LA 135, et son absence est un état LÉGITIME — pas un défaut de
+       code. Sans ce repli, la requête lèverait `ER_BAD_FIELD_ERROR` et l'appelant l'annoncerait
+       comme un bug logiciel (cf. `refusLecture`), alors qu'il suffit de jouer une migration.
+       On tente donc avec, puis sans. */
+    const requete = (avecChamps) => `SELECT c.learner_id, c.accorde, c.source, c.destinataires,
+                ${avecChamps ? 'c.champs,' : 'NULL AS champs,'}
                 DATE_FORMAT(c.decide_at, '%Y-%m-%d %H:%i') AS decide_at
            FROM consent_record c
            JOIN (SELECT learner_id, MAX(decide_at) AS m
@@ -211,8 +290,14 @@ async function etatParStagiaire(conn, orgId, learnerIds, finalite = 'partenaires
                   WHERE organization_id = ? AND finalite = ? AND learner_id IN (${trous})
                   GROUP BY learner_id) d
              ON d.learner_id = c.learner_id AND d.m = c.decide_at
-          WHERE c.organization_id = ? AND c.finalite = ?`,
-        [orgId, finalite, ...ids, orgId, finalite]);
+          WHERE c.organization_id = ? AND c.finalite = ?`;
+    const args = [orgId, finalite, ...ids, orgId, finalite];
+    let rows;
+    try { [rows] = await conn.query(requete(true), args); }
+    catch (e) {
+        if (!isMissingSchema(e)) throw e;
+        [rows] = await conn.query(requete(false), args);
+    }
     const par = new Map();
     /* DEUX RÉPONSES À LA MÊME SECONDE — le cas se produit sur un import, ou sur un double clic.
        La jointure par `MAX(decide_at)` en rend alors deux : on garde la PREMIÈRE rencontrée plutôt
@@ -220,7 +305,14 @@ async function etatParStagiaire(conn, orgId, learnerIds, finalite = 'partenaires
        preuve. Ne jamais « corriger » en supprimant : le registre est en ajout seul. */
     for (const r of rows) {
         if (par.has(r.learner_id)) continue;
-        par.set(r.learner_id, { ...r, accorde: Number(r.accorde) === 1 });
+        /* `champs` À NULL = réponse ANTÉRIEURE à la 135. On la lit comme « les six d'origine » :
+           c'était la seule liste possible à l'époque, donc la seule chose qu'on sache avec
+           certitude de ce qui lui a été montré. Supposer autre chose serait inventer. */
+        par.set(r.learner_id, {
+            ...r,
+            accorde: Number(r.accorde) === 1,
+            champsAnnonces: r.champs ? champsValides(r.champs) : [...FINALITES.partenaires.champsParDefaut],
+        });
     }
     return par;
 }
@@ -245,13 +337,31 @@ async function enregistrer(conn, { orgId, learnerId, finalite, accorde, source, 
     try {
         // La liste TELLE QU'ELLE EST AU MOMENT DE LA RÉPONSE : c'est elle que la personne a lue.
         const destinataires = await destinatairesPartenaires(conn, orgId);
-        await conn.query(
-            `INSERT INTO consent_record
-               (id, organization_id, learner_id, finalite, accorde, destinataires, formulation, source, saisi_par)
-             VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [orgId, learnerId, finalite, accorde ? 1 : 0,
-             destinataires.slice(0, 500), f.formulation.slice(0, 600),
-             src, saisiPar || null]);
+        /* CE QUI A ÉTÉ ANNONCÉ, FIGÉ AVEC LA RÉPONSE. La phrase seule ne suffirait pas : la
+           relire pour en extraire les champs demanderait d'analyser de la prose, et une
+           reformulation casserait l'analyse. La liste est donc stockée telle quelle, à côté du
+           texte qu'elle a produit. */
+        const champs = await champsOrganisme(conn, orgId);
+        const formulation = formulationPour(champs);
+        try {
+            await conn.query(
+                `INSERT INTO consent_record
+                   (id, organization_id, learner_id, finalite, accorde, destinataires, formulation,
+                    champs, source, saisi_par)
+                 VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [orgId, learnerId, finalite, accorde ? 1 : 0,
+                 destinataires.slice(0, 500), formulation.slice(0, 600),
+                 champs.join(','), src, saisiPar || null]);
+        } catch (e) {
+            if (!isMissingSchema(e)) throw e;
+            // Migration 135 non jouée : on écrit sans la colonne plutôt que de refuser la réponse.
+            await conn.query(
+                `INSERT INTO consent_record
+                   (id, organization_id, learner_id, finalite, accorde, destinataires, formulation, source, saisi_par)
+                 VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [orgId, learnerId, finalite, accorde ? 1 : 0,
+                 destinataires.slice(0, 500), formulation.slice(0, 600), src, saisiPar || null]);
+        }
         return { ok: true };
     } catch (e) {
         if (isMissingSchema(e)) return { ok: false, message: 'Migration 130 non jouée : consentements non enregistrables.' };
@@ -261,5 +371,6 @@ async function enregistrer(conn, { orgId, learnerId, finalite, accorde, source, 
 
 module.exports = {
     FINALITES, FINALITES_CONNUES, SOURCES,
+    CHAMPS_TRANSMISSIBLES, champsValides, formulationPour, champsOrganisme,
     destinatairesPartenaires, partenairesDestinataires, etatCourant, etatParStagiaire, enregistrer, isMissingSchema,
 };

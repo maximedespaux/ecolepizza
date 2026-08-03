@@ -31,6 +31,14 @@ async function request(path, options = {}) {
 export function getOrganisation() {
   return request("/organisation");
 }
+/* Le catalogue des informations transmissibles aux partenaires, la sélection de l'école, et
+   L'APERÇU DE LA PHRASE que le stagiaire lira. L'aperçu vient du SERVEUR, produit par la même
+   fonction que le texte réel : le recomposer ici donnerait une seconde rédaction à maintenir,
+   donc une occasion de montrer à l'école une phrase que personne d'autre ne verra. */
+export function getChampsPartenaires() {
+  return request("/organisation/champs-partenaires");
+}
+
 export function updateOrganisation(payload) {
   return request("/organisation", { method: "PATCH", body: JSON.stringify(payload) });
 }
