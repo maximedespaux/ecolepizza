@@ -7,6 +7,12 @@ import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
 import { CADRES, cadreFor, cadrePossede, cadrePorte, cadreDeQuest, EXPLOITS_QUEST, adopterCadreServeur, cadreClass, cadreStyle, cadreValeur, parseCadre, estCadreQuest, getCadreChoisi, setCadreChoisi } from "../lib/cadres.js";
 import { useEchap } from "../lib/useEchap.js";
 import { getMyConsents, setMyConsent } from "../api/apiClient.js";
+/* L'HEURE N'EST PAS UN DÉTAIL. Accepter puis se rétracter le même jour donne deux lignes que
+   seule l'heure distingue : sans elle, l'écran affirme « votre réponse du 03/08 » pour deux
+   réponses opposées, et le registre devient inutilisable là où il sert le plus. `dateHeure`
+   découpe la chaîne du serveur sans passer par `new Date()`, qui la retraduirait dans le
+   fuseau du navigateur — soit une heure différente de celle qui est en base. */
+import { dateHeure } from "../lib/format.js";
 
 /**
  * Profil stagiaire, en trois onglets :
@@ -43,7 +49,13 @@ function ConsentementsBloc() {
     setBusy(f.cle);
     try {
       await setMyConsent(f.cle, valeur);
-      setListe((l) => l.map((x) => (x.cle === f.cle ? { ...x, accorde: valeur } : x)));
+      /* ON RELIT LE REGISTRE au lieu de rapiécer l'état local. Une première version ne changeait
+         que `accorde` : l'écran affichait alors la NOUVELLE réponse sous l'ANCIENNE date, ce qui,
+         sur une preuve de consentement, est un mensonge — et précisément le genre de ligne qu'on
+         irait citer pour dater une rétractation. L'horodatage vient du SERVEUR, jamais de
+         l'horloge du navigateur, qui peut être fausse ou simplement dans un autre fuseau. */
+      const r = await getMyConsents();
+      if (Array.isArray(r?.data)) setListe(r.data);
     } catch { /* l'écran garde l'ancienne valeur : mieux vaut ne rien changer que mentir */ }
     finally { setBusy(null); }
   };
@@ -58,7 +70,7 @@ function ConsentementsBloc() {
             <span className="hint">{f.formulation}</span>
             {f.decide_at && (
               <span className="hint">
-                Votre réponse du {f.decide_at.slice(0, 10).split("-").reverse().join("/")} :
+                Votre réponse du {dateHeure(f.decide_at)} :
                 <b> {f.accorde ? "accepté" : "refusé"}</b>
               </span>
             )}

@@ -1,0 +1,340 @@
+const crypto = require('crypto');
+const db = require('../config/database.js');
+const { logAudit } = require('../lib/audit.js');
+const consentements = require('../lib/consentements.js');
+const { etatContrat } = require('../lib/contratPartenaire.js');
+
+/**
+ * LE CÔTÉ ORGANISME DU REGISTRE — voir qui a répondu quoi, saisir une réponse donnée hors ligne,
+ * et produire la liste destinée à un partenaire SANS pouvoir y glisser quelqu'un qui a refusé.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * POURQUOI CE FICHIER EXISTE, et ce qu'il remplace.
+ *
+ * L'organisme envoie aujourd'hui ses listes à la main, par courriel, session par session. Un
+ * courriel écrit à la main ne consulte aucun registre : rien n'empêche d'y inclure quelqu'un qui a
+ * refusé, et rien ne garde trace de ce qui est parti. Recueillir un consentement puis continuer
+ * d'envoyer une liste faite à la main est PIRE que de n'avoir rien demandé — on se constitue une
+ * preuve qui documente sa propre infraction.
+ *
+ * D'où le principe qui gouverne tout le fichier : LA LISTE EST PRODUITE PAR LE SERVEUR, jamais
+ * composée par l'écran. Le filtre sur le consentement n'est pas une case à cocher que l'on peut
+ * décocher, c'est la seule façon dont la liste existe.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * SANS LA TABLE, ON N'ENVOIE PERSONNE — et surtout pas tout le monde.
+ *
+ * Si la migration 130 n'est pas jouée, la lecture des consentements échoue. La tentation serait de
+ * rendre une liste « par défaut » : ce serait transmettre les coordonnées de gens dont on n'a
+ * jamais lu la réponse. Chaque route rend donc une erreur explicite (409) plutôt qu'un résultat
+ * vide qui se lirait comme « personne n'a consenti » — ou pire, une liste complète.
+ */
+
+const FINALITE = 'partenaires';
+
+/**
+ * DEUX PANNES QUI SE RESSEMBLENT, ET QU'IL NE FAUT SURTOUT PAS CONFONDRE.
+ *
+ * `isMissingSchema` de la bibliothèque accepte `ER_NO_SUCH_TABLE` ET `ER_BAD_FIELD_ERROR` : ce qui
+ * convient pour DÉCIDER (dans les deux cas, on ne lit rien, donc on n'envoie personne) mais pas
+ * pour EXPLIQUER. Une première version annonçait « migration 130 non jouée » dans les deux cas —
+ * y compris quand la table existait parfaitement et que c'était MA requête qui nommait une colonne
+ * inexistante. Le message accusait alors l'utilisateur d'un oubli qu'il n'avait pas commis, et
+ * envoyait chercher la panne à l'endroit exact où elle n'était pas.
+ *
+ * Une colonne manquante sur une table présente est un DÉFAUT DE CODE : il doit être dit comme tel,
+ * et remonter dans les journaux du serveur au lieu d'être maquillé en tâche d'administration.
+ */
+const TABLE_ABSENTE = (e) => e && e.code === 'ER_NO_SUCH_TABLE';
+const CHAMP_ABSENT = (e) => e && e.code === 'ER_BAD_FIELD_ERROR';
+const isMissingSchema = (e) => TABLE_ABSENTE(e) || CHAMP_ABSENT(e);
+
+const SANS_REGISTRE = 'Registre des consentements indisponible (migration 130 non jouée). '
+    + 'Aucune liste ne peut être produite : sans lecture des réponses, transmettre reviendrait à '
+    + 'transmettre sans consentement.';
+
+/** Le même refus pour les deux pannes, mais jamais le même diagnostic. */
+function refusLecture(res, err, ou) {
+    if (CHAMP_ABSENT(err)) {
+        console.error(`Colonne inconnue dans ${ou} :`, err.sqlMessage || err.message);
+        return res.status(500).json({
+            message: 'Le registre est en place mais la requête ne correspond pas à son schéma '
+                + '(colonne inconnue). Rien n\'a été transmis. C\'est un défaut du logiciel, pas '
+                + 'une migration manquante — le détail est dans les journaux du serveur.',
+        });
+    }
+    return res.status(409).json({ message: SANS_REGISTRE });
+}
+
+/**
+ * La session ET ses inscrits, en vérifiant qu'elle appartient bien à l'organisme du demandeur.
+ * Rend `null` si elle n'existe pas ou n'est pas la sienne — les deux cas se répondent pareil, pour
+ * ne pas révéler l'existence d'une session d'un autre organisme.
+ */
+async function sessionAvecInscrits(conn, sessionId, orgId) {
+    const [rows] = await conn.query(
+        `SELECT s.id, DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
+                p.title AS program_title, p.code AS program_code
+           FROM training_session s
+           LEFT JOIN training_program p ON p.id = s.program_id
+          WHERE s.id = ? AND s.organization_id = ?`,
+        [sessionId, orgId]);
+    if (!rows.length) return null;
+    const [inscrits] = await conn.query(
+        `SELECT l.id, l.first_name, l.last_name, l.email, l.phone
+           FROM enrollment e
+           JOIN learner l ON l.id = e.learner_id
+          WHERE e.session_id = ?
+          ORDER BY l.last_name, l.first_name`,
+        [sessionId]);
+    return { session: rows[0], inscrits };
+}
+
+/**
+ * GET /api/sessions/:id/consentements — qui a accepté, qui a refusé, QUI N'A JAMAIS ÉTÉ SOLLICITÉ.
+ *
+ * Le troisième groupe est celui qui compte. C'est le seul sur lequel l'organisme a quelque chose à
+ * faire : poser la question. Un écran qui n'afficherait que « oui » et « non » laisserait croire
+ * que tout le monde a répondu, et les silencieux disparaîtraient de la liste comme s'ils avaient
+ * refusé — alors qu'ils n'ont rien dit du tout.
+ */
+const getSessionConsents = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const bloc = await sessionAvecInscrits(conn, req.params.id, req.user.organization_id);
+        if (!bloc) return res.status(404).json({ message: 'Session introuvable' });
+
+        const etats = await consentements.etatParStagiaire(
+            conn, req.user.organization_id, bloc.inscrits.map((l) => l.id), FINALITE);
+        const stagiaires = bloc.inscrits.map((l) => {
+            const e = etats.get(l.id);
+            return {
+                learner_id: l.id, first_name: l.first_name, last_name: l.last_name,
+                email: l.email, phone: l.phone,
+                // `null` = jamais sollicité. Ni un oui, ni un non : une question jamais posée.
+                accorde: e ? e.accorde : null,
+                decide_at: e ? e.decide_at : null,
+                source: e ? e.source : null,
+                /* CE QUI LUI A ÉTÉ MONTRÉ le jour où il a répondu. Le comparer à la liste du jour
+                   dit s'il faut redemander : un partenaire ajouté depuis n'est couvert par aucun
+                   accord passé, puisque la personne ne pouvait pas le connaître. */
+                destinataires: e ? e.destinataires : null,
+            };
+        });
+
+        res.json({
+            data: {
+                session: bloc.session,
+                stagiaires,
+                destinatairesActuels: await consentements.destinatairesPartenaires(conn, req.user.organization_id),
+                formulation: consentements.FINALITES[FINALITE].formulation,
+                champs: consentements.FINALITES[FINALITE].champs,
+                sources: consentements.SOURCES,
+            },
+        });
+    } catch (err) {
+        if (isMissingSchema(err)) return refusLecture(res, err, 'consentements de session');
+        console.error('Erreur consentements de session :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PUT /api/sessions/:id/consentements/:learnerId — saisir une réponse donnée HORS LIGNE.
+ *
+ * POURQUOI L'ORGANISME PEUT ÉCRIRE À LA PLACE DU STAGIAIRE, alors que le consentement est
+ * strictement personnel : parce que la réponse existe déjà. Elle a été donnée sur un formulaire
+ * papier, ou de vive voix pendant l'inscription, et refuser de l'enregistrer ne la ferait pas
+ * disparaître — elle resterait dans un classeur, invisible de l'export, qui écarterait alors des
+ * gens ayant accepté. On saisit donc une réponse EXISTANTE ; on n'en invente pas.
+ *
+ * Ce qui rend la chose tenable, c'est la traçabilité : `source` dit d'où vient la réponse et
+ * `saisi_par` qui l'a saisie. Une ligne « papier, saisie par X » se conteste et se vérifie contre
+ * le document ; elle ne se confond jamais avec un « oui » cliqué par la personne elle-même.
+ *
+ * `espace_stagiaire` est donc REFUSÉ ici : c'est la seule source que le stagiaire produit lui-même,
+ * et l'autoriser depuis cette route permettrait de fabriquer un consentement en ligne qui n'a
+ * jamais été donné — exactement la preuve que ce registre existe pour empêcher.
+ */
+const setConsentPourStagiaire = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const bloc = await sessionAvecInscrits(conn, req.params.id, req.user.organization_id);
+        if (!bloc) return res.status(404).json({ message: 'Session introuvable' });
+        if (!bloc.inscrits.some((l) => l.id === req.params.learnerId)) {
+            return res.status(404).json({ message: 'Ce stagiaire n\'est pas inscrit à cette session.' });
+        }
+        if (typeof req.body?.accorde !== 'boolean') {
+            return res.status(422).json({ message: 'Réponse attendue : accepté ou refusé.' });
+        }
+        const source = req.body.source || 'papier';
+        if (source === 'espace_stagiaire') {
+            return res.status(422).json({
+                message: 'Une réponse saisie par l\'organisme ne peut pas être enregistrée comme '
+                    + 'venant de l\'espace du stagiaire.',
+            });
+        }
+        const r = await consentements.enregistrer(conn, {
+            orgId: req.user.organization_id, learnerId: req.params.learnerId,
+            finalite: FINALITE, accorde: req.body.accorde, source, saisiPar: req.user.id,
+        });
+        if (!r.ok) return res.status(409).json({ message: r.message });
+        logAudit(req, `consent.${req.body.accorde ? 'accorde' : 'refuse'}.${FINALITE}.${source}`,
+            'Learner', req.params.learnerId);
+        res.json({ success: true });
+    } catch (err) {
+        if (isMissingSchema(err)) return refusLecture(res, err, 'saisie de consentement');
+        console.error('Erreur saisie de consentement :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/sessions/:id/transmission — LA LISTE POUR UN PARTENAIRE, et son inscription au journal.
+ *
+ * ELLE NE RETIENT QUE LES « OUI », et le filtre est ici, dans le serveur : l'écran ne choisit pas
+ * qui figure sur la liste, il l'affiche. C'est la différence avec le courriel écrit à la main —
+ * il n'existe aucun chemin pour y ajouter quelqu'un.
+ *
+ * ELLE N'ENVOIE QUE LES CHAMPS ANNONCÉS. `FINALITES.partenaires.champs` est la liste exacte que la
+ * formulation soumise au stagiaire énumère. Ajouter ici une colonne — l'entreprise qui finance,
+ * une note interne — transmettrait une donnée à laquelle personne n'a consenti. Le lien entre les
+ * deux est volontairement direct : on ne peut pas élargir l'export sans rouvrir le texte.
+ *
+ * ELLE JOURNALISE AU MOMENT DE PRODUIRE. Le registre prouve le consentement, pas ce qui est parti ;
+ * sans ce journal, l'organisme ne peut pas répondre à « à qui avez-vous donné mes coordonnées ? »,
+ * question à laquelle le stagiaire a droit (art. 15). Le journal peut donc sur-déclarer — une liste
+ * produite puis jamais envoyée y figure quand même. C'est le bon sens de l'erreur : annoncer un
+ * destinataire de trop est réparable, en oublier un ne l'est pas.
+ *
+ * Il garde les IDENTIFIANTS, pas une copie des coordonnées. Recopier ici e-mails et téléphones
+ * créerait une seconde base personnelle à protéger et à purger, sans rien prouver de plus.
+ */
+const produireTransmission = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const bloc = await sessionAvecInscrits(conn, req.params.id, req.user.organization_id);
+        if (!bloc) return res.status(404).json({ message: 'Session introuvable' });
+
+        /* LE PARTENAIRE DOIT ÊTRE DÉCLARÉ DESTINATAIRE (migration 131), et ce contrôle est le
+           pendant serveur de la case cochée sur sa fiche. Sans lui, la case ne serait qu'un
+           affichage : il suffirait de choisir le partenaire dans la liste déroulante pour lui
+           produire quand même les coordonnées.
+           La double lecture gère l'avant/après migration : sans la colonne, tout partenaire est
+           destinataire — c'est le comportement d'avant, et il reste juste tant que l'école n'a
+           pas eu la possibilité de restreindre. */
+        let pRows;
+        let colonneDestinataire = true;
+        try {
+            [pRows] = await conn.query(
+                `SELECT id, name, recoit_coordonnees, contrat, contrat_duree_mois,
+                        DATE_FORMAT(contrat_debut, '%Y-%m-%d') AS contrat_debut
+                   FROM partner WHERE id = ? AND organization_id = ?`,
+                [req.body?.partner_id, req.user.organization_id]);
+        } catch (e) {
+            if (!isMissingSchema(e)) throw e;
+            colonneDestinataire = false;
+            [pRows] = await conn.query(
+                'SELECT id, name FROM partner WHERE id = ? AND organization_id = ?',
+                [req.body?.partner_id, req.user.organization_id]);
+        }
+        if (!pRows.length) return res.status(422).json({ message: 'Partenaire inconnu.' });
+        const partenaire = pRows[0];
+        /* CONTRAT ÉCHU : ON REFUSE, avant même de regarder les consentements. Transmettre des
+           coordonnées à une entreprise avec qui l'école n'a plus d'accord, c'est transmettre hors
+           de tout cadre — et le consentement recueilli nommait « un partenaire de l'école », pas
+           une entreprise devenue tierce. Le message donne la date : un refus dont on ne comprend
+           pas la cause se contourne, celui-ci se répare en renouvelant ou en décochant. */
+        const contrat = etatContrat(partenaire);
+        if (contrat.suivi && contrat.actif === false) {
+            return res.status(422).json({
+                message: `Le contrat avec ${partenaire.name} a pris fin le `
+                    + `${contrat.fin.split('-').reverse().join('/')}. Aucune coordonnée ne peut `
+                    + 'lui être transmise tant qu\'il n\'est pas renouvelé.',
+            });
+        }
+        if (colonneDestinataire && Number(partenaire.recoit_coordonnees) !== 1) {
+            return res.status(422).json({
+                message: `${partenaire.name} n'est pas déclaré destinataire des coordonnées des `
+                    + 'stagiaires. Les personnes qui ont consenti ne l\'ont pas fait pour lui : '
+                    + 'cochez « reçoit les coordonnées » sur sa fiche si c\'est bien le cas.',
+            });
+        }
+
+        const etats = await consentements.etatParStagiaire(
+            conn, req.user.organization_id, bloc.inscrits.map((l) => l.id), FINALITE);
+        const retenus = bloc.inscrits.filter((l) => etats.get(l.id)?.accorde === true);
+        /* PRODUIRE UNE LISTE VIDE EST UN RÉSULTAT LÉGITIME, et le dire vaut mieux que de laisser
+           l'écran l'interpréter. Mais on ne journalise pas un envoi qui n'a rien à envoyer. */
+        if (!retenus.length) {
+            return res.status(200).json({
+                data: {
+                    partenaire: partenaire.name, lignes: [], champs: consentements.FINALITES[FINALITE].champs,
+                    journalise: false,
+                    message: 'Aucun stagiaire de cette session n\'a consenti à la transmission.',
+                },
+            });
+        }
+
+        const s = bloc.session;
+        const dates = s.start_date && s.end_date ? `${s.start_date} → ${s.end_date}` : '';
+        const lignes = retenus.map((l) => ({
+            nom: l.last_name || '', prenom: l.first_name || '',
+            email: l.email || '', telephone: l.phone || '',
+            formation: s.program_title || s.program_code || '', dates_session: dates,
+        }));
+
+        const champs = consentements.FINALITES[FINALITE].champs;
+        await conn.query(
+            `INSERT INTO partner_disclosure
+               (id, organization_id, partner_id, session_id, learner_ids, learners_count,
+                champs_envoyes, envoye_par)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [crypto.randomUUID(), req.user.organization_id, partenaire.id, s.id,
+             retenus.map((l) => l.id).join(','), retenus.length,
+             champs.join(', ').slice(0, 255), req.user.id]);
+
+        logAudit(req, 'partner_disclosure.create', 'Partner', partenaire.id);
+        res.json({ data: { partenaire: partenaire.name, lignes, champs, journalise: true } });
+    } catch (err) {
+        if (isMissingSchema(err)) return refusLecture(res, err, 'transmission partenaire');
+        console.error('Erreur transmission partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/sessions/:id/transmissions — ce qui est DÉJÀ parti pour cette session.
+ *
+ * Deux usages, et le second est le vrai. D'abord éviter le double envoi. Ensuite répondre au
+ * stagiaire qui demande à qui ses coordonnées ont été communiquées : un droit, pas une faveur
+ * (art. 15). Le journal est la seule source capable de le dire, puisque l'envoi lui-même part par
+ * courriel et ne laisse aucune trace dans l'outil.
+ */
+const getTransmissions = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const bloc = await sessionAvecInscrits(conn, req.params.id, req.user.organization_id);
+        if (!bloc) return res.status(404).json({ message: 'Session introuvable' });
+        const [rows] = await conn.query(
+            `SELECT d.id, d.learners_count, d.champs_envoyes,
+                    DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
+                    p.name AS partenaire,
+                    TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) AS par
+               FROM partner_disclosure d
+               LEFT JOIN partner p ON p.id = d.partner_id
+               LEFT JOIN user u ON u.id = d.envoye_par
+              WHERE d.organization_id = ? AND d.session_id = ?
+              ORDER BY d.sent_at DESC`,
+            [req.user.organization_id, req.params.id]);
+        res.json({ data: rows });
+    } catch (err) {
+        // Ici le repli est ANODIN : ne pas savoir ce qui est parti n'autorise rien à partir.
+        if (isMissingSchema(err)) return res.json({ data: [] });
+        console.error('Erreur journal des transmissions :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getSessionConsents, setConsentPourStagiaire, produireTransmission, getTransmissions };

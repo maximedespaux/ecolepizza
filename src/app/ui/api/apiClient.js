@@ -359,6 +359,28 @@ export function setMyConsent(finalite, accorde) {
 
 export function updateMyVisibility(visibility) { return request("/mon-espace/visibility", { method: "PUT", body: JSON.stringify({ visibility }) }); }
 
+/* CÔTÉ ORGANISME — le registre des consentements d'une session, et la liste destinée à un
+   partenaire (migration 130).
+
+   `produireTransmission` N'EST PAS UNE SIMPLE LECTURE : le serveur compose la liste, en écarte
+   ceux qui n'ont pas consenti, et inscrit l'envoi au journal. L'écran ne choisit personne — il
+   affiche ce que le serveur a retenu. C'est ce qui le distingue du courriel écrit à la main, où
+   rien n'empêchait d'ajouter quelqu'un. */
+export function getSessionConsents(sessionId) {
+  return request(`/sessions/${sessionId}/consentements`);
+}
+export function setSessionConsent(sessionId, learnerId, accorde, source) {
+  return request(`/sessions/${sessionId}/consentements/${learnerId}`,
+    { method: "PUT", body: JSON.stringify({ accorde, source }) });
+}
+export function produireTransmission(sessionId, partnerId) {
+  return request(`/sessions/${sessionId}/transmission`,
+    { method: "POST", body: JSON.stringify({ partner_id: partnerId }) });
+}
+export function getTransmissions(sessionId) {
+  return request(`/sessions/${sessionId}/transmissions`, { silent: true });
+}
+
 // --- Stagiaires ---
 export function getStagiaires(q = "") {
   const query = q ? `?q=${encodeURIComponent(q)}` : "";
@@ -1030,6 +1052,14 @@ export function deletePartenaireProduit(pid) {
 export function getPartenaires(category = "") {
   const query = category ? `?category=${encodeURIComponent(category)}` : "";
   return request(`/partenaires${query}`);
+}
+
+/* DESTINATAIRE DES COORDONNÉES (migration 131) — route SÉPARÉE de `updatePartenaire`, pour que
+   modifier une adresse ne puisse pas décocher au passage une autorisation de transmettre des
+   données personnelles. Un 409 signifie que la migration n'est pas jouée. */
+export function setPartenaireDestinataire(id, recoit) {
+  return request(`/partenaires/${id}/destinataire`,
+    { method: "PATCH", body: JSON.stringify({ recoit }) });
 }
 
 export function createPartenaire(payload) {

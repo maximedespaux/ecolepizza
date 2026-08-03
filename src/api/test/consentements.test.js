@@ -91,3 +91,112 @@ test('le code marche sans la migration 130', () => {
     const modal = lire(path.join(UI, 'components/ConsentModal.jsx'));
     assert.match(modal, /if \(!Array\.isArray\(liste\)\) return;/);
 });
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   CÔTÉ ORGANISME — la liste envoyée au partenaire, et ce qui doit rester impossible.
+
+   L'étape qui protège réellement, c'est celle-ci. Recueillir un consentement puis continuer
+   d'envoyer une liste faite à la main est PIRE que de n'avoir rien demandé : on se constitue une
+   preuve datée qui documente sa propre infraction. Les règles ci-dessous sont celles qui, si elles
+   sautaient, rendraient l'export plus dangereux que le courriel qu'il remplace. */
+
+const CTRL = path.join(API, 'controllers/consentement.controller.js');
+
+test("l'export ne retient que ceux qui ont accepté", () => {
+    const src = sansCommentaires(lire(CTRL));
+    /* `=== true` ET NON UNE SIMPLE VÉRITÉ : `accorde` vaut `null` pour « jamais sollicité ». Un
+       test lâche (`if (etat.accorde)`) écarterait bien les null aujourd'hui, mais la moindre
+       valeur non booléenne — une chaîne '0' lue d'une colonne TINYINT, par exemple — passerait.
+       Le filtre porte sur la SEULE valeur qui vaut accord. */
+    assert.match(src, /\.filter\(\(l\) => etats\.get\(l\.id\)\?\.accorde === true\)/,
+        'La liste doit se composer par un accord EXPLICITE, jamais par absence de refus.');
+    /* Et le filtre vit dans le SERVEUR. Le jour où l'écran compose la liste lui-même, il redevient
+       possible d'y ajouter quelqu'un — ce qui est exactement le défaut du courriel écrit à la main. */
+    const ui = sansCommentaires(lire(path.join(UI, 'components/SessionConsentements.jsx')));
+    assert.doesNotMatch(ui, /\.filter\([^)]*accorde/,
+        "L'écran ne doit jamais composer la liste : il affiche ce que le serveur a retenu.");
+});
+
+test("sans registre lisible, on n'envoie personne", () => {
+    /* LE DÉFAUT LE PLUS GRAVE POSSIBLE ICI serait un repli « par défaut » : table absente, donc on
+       envoie tout le monde. Rendre une liste sans avoir lu une seule réponse, c'est transmettre
+       sans consentement en croyant faire l'inverse. Chaque route doit refuser. */
+    const src = sansCommentaires(lire(CTRL));
+    const bloc = src.slice(src.indexOf('const produireTransmission'));
+    assert.match(bloc, /refusLecture\(res, err/,
+        'Une lecture impossible doit refuser, pas produire une liste.');
+    assert.doesNotMatch(bloc, /catch[\s\S]{0,200}return res\.json\(\{ data: \{ [^}]*lignes: bloc\.inscrits/,
+        'Aucun repli ne doit rendre les inscrits quand les consentements sont illisibles.');
+});
+
+test("l'export n'envoie que les champs annoncés au stagiaire", () => {
+    /* Le lien est volontairement direct : la liste des colonnes exportées EST celle que la
+       formulation soumise au stagiaire énumère. Ajouter ici l'entreprise qui finance, ou une note
+       interne, transmettrait une donnée à laquelle personne n'a consenti — sans que le texte
+       montré ait changé d'une virgule. */
+    const src = sansCommentaires(lire(CTRL));
+    assert.match(src, /consentements\.FINALITES\[FINALITE\]\.champs/,
+        "Les champs exportés doivent être lus dans la déclaration, jamais recopiés dans l'export.");
+
+    const lib = require('../lib/consentements.js');
+    const { champs, formulation } = lib.FINALITES.partenaires;
+    /* Chaque champ annoncé doit se retrouver dans la phrase lue par la personne. Le rapprochement
+       est grossier (un mot-clé par champ) mais il attrape le cas qui compte : une colonne ajoutée
+       à `champs` sans un mot de plus dans la formulation. */
+    const mots = { nom: 'nom', prenom: 'nom', email: 'e-mail', telephone: 'téléphone',
+        formation: 'formation', dates_session: 'formation' };
+    for (const c of champs) {
+        assert.ok(formulation.toLowerCase().includes(mots[c]),
+            `Le champ « ${c} » est exporté mais la formulation ne l'annonce pas.`);
+    }
+});
+
+test("l'organisme ne peut pas fabriquer un accord « donné en ligne »", () => {
+    /* Saisir une réponse RECUEILLIE hors ligne est légitime : elle existe déjà, sur un formulaire
+       papier, et refuser de l'enregistrer l'exclurait de l'export alors que la personne a accepté.
+       Ce qui doit rester impossible, c'est de la faire passer pour un clic du stagiaire :
+       `source` + `saisi_par` sont exactement ce qui distingue les deux, et perdre la distinction
+       transformerait le registre en preuve fabriquée. */
+    const src = sansCommentaires(lire(CTRL));
+    assert.match(src, /source === 'espace_stagiaire'[\s\S]{0,300}status\(422\)/,
+        "La route de l'organisme doit refuser la source « espace stagiaire ».");
+    assert.match(src, /saisiPar: req\.user\.id/,
+        'Une réponse saisie par un tiers doit porter le nom de qui la saisit.');
+
+    const lib = require('../lib/consentements.js');
+    assert.ok(lib.SOURCES.espace_stagiaire && lib.SOURCES.papier,
+        'Les origines doivent rester énumérées : une valeur libre ne prouve rien.');
+});
+
+test('le registre reste en AJOUT SEUL', () => {
+    /* Toute la valeur probante tient là. Un stagiaire qui accepte en mars, voit ses coordonnées
+       transmises en avril puis se rétracte en juin n'invalide pas l'envoi d'avril — encore
+       faut-il que la ligne de mars existe toujours. Un UPDATE effacerait la preuve recherchée. */
+    const lib = sansCommentaires(lire(path.join(API, 'lib/consentements.js')));
+    assert.doesNotMatch(lib, /UPDATE\s+consent_record|DELETE\s+FROM\s+consent_record/i,
+        'Le registre ne se modifie ni ne se purge : chaque décision AJOUTE une ligne.');
+    assert.match(lib, /INSERT INTO consent_record/);
+});
+
+test("le journal des envois garde des identifiants, pas des coordonnées", () => {
+    /* Recopier e-mails et téléphones dans `partner_disclosure` créerait une SECONDE base
+       personnelle à protéger et à purger, sans rien prouver de plus : les identifiants suffisent à
+       répondre à « à qui avez-vous donné mes coordonnées ? » (art. 15). */
+    const src = sansCommentaires(lire(CTRL));
+    const bloc = src.slice(src.indexOf('INSERT INTO partner_disclosure'), src.indexOf('INSERT INTO partner_disclosure') + 700);
+    assert.doesNotMatch(bloc, /\.email|\.phone/,
+        'Le journal ne doit pas recopier les coordonnées transmises.');
+    assert.match(bloc, /learner_ids/);
+});
+
+test("le formateur ne voit pas les consentements", () => {
+    /* La minimisation ne s'arrête pas à la porte de l'organisme : savoir qui a refusé de céder ses
+       coordonnées n'aide en rien à enseigner, et cette information change le regard porté sur un
+       stagiaire. Le formateur lit pourtant tout le reste de la session — d'où ce test, qui gèle
+       une exception que la prochaine relecture prendrait sinon pour un oubli. */
+    const routes = lire(path.join(API, 'routes/session.routes.js'));
+    for (const r of routes.split('\n').filter((l) => /consentements|transmission/.test(l) && /router\./.test(l))) {
+        assert.match(r, /ADMIN_ROLES/, `Route trop ouverte : ${r.trim()}`);
+        assert.doesNotMatch(r, /STAFF_ROLES/, `Le formateur ne doit pas y accéder : ${r.trim()}`);
+    }
+});

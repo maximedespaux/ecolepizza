@@ -13,6 +13,7 @@ import Emargement from "../components/Emargement.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import SessionIntervenants from "../components/SessionIntervenants.jsx";
 import SessionRetraits from "../components/SessionRetraits.jsx";
+import SessionConsentements from "../components/SessionConsentements.jsx";
 import NotesModal from "../components/NotesModal.jsx";
 import { colorOf, initials, scoreBadge } from "../lib/format.js";
 
@@ -449,6 +450,13 @@ function SessionDetail() {
       </div>
 
       <div style={{ marginTop: 16 }}>
+        {/* SUR LA PAGE DE LA SESSION, et pas dans un écran RGPD à part : l'organisme envoie ses
+            listes SESSION PAR SESSION, et c'est ici qu'il vient au moment de le faire. Une page
+            de conformité rangée ailleurs ne s'ouvre que quand on la cherche — donc jamais au
+            moment où la question se pose vraiment.
+            Réservé au bureau : `isAdmin` reflète ce que le serveur autorise déjà (formateur
+            exclu), et savoir qui a refusé de céder ses coordonnées n'aide en rien à enseigner. */}
+        {isAdmin && <SessionConsentements sessionId={id} canEdit={isAdmin} />}
         <SessionRetraits startDate={session.start_date} endDate={session.end_date} />
         <SessionIntervenants sessionId={id} startDate={session.start_date} endDate={session.end_date} canEdit={isAdmin} />
       </div>

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const { CONTRAT_VALABLE } = require('../lib/contratPartenaire.js');
 const consentements = require('../lib/consentements.js');
 const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigners } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
@@ -1186,8 +1187,15 @@ const getBoutiquePartenaires = async (req, res) => {
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
         let rows = [];
-        try {
-            [rows] = await conn.query(
+        /* AVEC OU SANS LA CLAUSE DE CONTRAT (migration 131). Le repli d'origine renvoyait une
+           VITRINE VIDE dès qu'une colonne manquait — pensé pour l'absence de `partner_product`
+           (migration 095), où c'est le bon comportement. Mais appliqué à `p.contrat`, il aurait
+           vidé toute la boutique partenaires tant que la 131 n'est pas jouée : une régression
+           silencieuse, sur un écran que personne ne relit après une migration.
+           On distingue donc les deux : sans la colonne de contrat on refait la requête SANS le
+           filtre (comportement d'avant, aucun partenaire n'a d'échéance à respecter) ; sans la
+           table des produits, la vitrine est bien vide. */
+        const requete = (avecContrat) =>
                 `SELECT pp.id, pp.name, pp.category, pp.reference, pp.price_public, pp.price_school,
                         pp.url, pp.image_url, pp.note, pp.specs,
                         p.id AS partner_id, p.name AS partner_name, p.category AS partner_category,
@@ -1195,18 +1203,30 @@ const getBoutiquePartenaires = async (req, res) => {
                  FROM partner_product pp
                  JOIN partner p ON p.id = pp.partner_id
                  WHERE pp.organization_id = ? AND pp.active = 1
+                   /* UN CONTRAT ÉCHU RETIRE LA VITRINE (migration 131). Sans cette clause, une
+                      convention arrivée à terme ne se manifeste par RIEN : ni erreur, ni alerte.
+                      L'école continue de présenter les offres d'une entreprise avec qui elle n'a
+                      plus d'accord, et le stagiaire se réclame d'un partenariat qui n'existe plus.
+                      Le partenaire n'est pas supprimé pour autant — sa fiche, ses commissions et
+                      son historique restent : c'est un retrait, pas un effacement. */
+                   ${avecContrat ? `AND ${CONTRAT_VALABLE('p')}` : ''}
                  -- PAS « ORDER BY p.category » : c'est un ENUM, et MySQL trie les ENUM par ordre
                  -- de DÉCLARATION, pas alphabétiquement. Or 'MATERIEL' y est déclaré avant 'FOUR'
                  -- — le stagiaire tombait donc sur une trancheuse à jambon avant les fours. Cet
                  -- ordre-là est celui de l'annuaire des fournisseurs ; ici on équipe une pizzeria,
                  -- et le four est la décision la plus lourde. On impose donc l'ordre de la vitrine.
                  ORDER BY CASE p.category WHEN 'FOUR' THEN 1 WHEN 'MATERIEL' THEN 2 ELSE 3 END,
-                          p.name, pp.sort_order, pp.name`,
-                [learner.organization_id]
-            );
+                          p.name, pp.sort_order, pp.name`;
+        try {
+            [rows] = await conn.query(requete(true), [learner.organization_id]);
         } catch (e) {
-            if (isMissingSchema(e)) return res.json({ data: [] }); // migration 095 non jouée
-            throw e;
+            if (!isMissingSchema(e)) throw e;
+            try {
+                [rows] = await conn.query(requete(false), [learner.organization_id]);
+            } catch (e2) {
+                if (isMissingSchema(e2)) return res.json({ data: [] }); // migration 095 non jouée
+                throw e2;
+            }
         }
         // Regroupé PAR PARTENAIRE : c'est l'entrée demandée côté stagiaire (« chez qui ? »),
         // pas par catégorie — un four et une pelle ne se comparent pas.
@@ -1813,8 +1833,14 @@ const setMyConsent = async (req, res) => {
             finalite: req.params.finalite, accorde: req.body.accorde, source: 'espace_stagiaire',
         });
         if (!r.ok) return res.status(409).json({ message: r.message });
-        await logAudit(req, { action: 'UPDATE', entity: 'consent_record', entityId: learner.id,
-            after: { finalite: req.params.finalite, accorde: req.body.accorde } });
+        /* `logAudit(req, action, entity, entityId)` — QUATRE ARGUMENTS À PLAT, pas un objet. Une
+           première version passait ici `{ action, entity, after }` : la colonne `action` recevait
+           « [object Object] » et l'entité restait vide, si bien que la trace d'audit d'une décision
+           de consentement ne désignait plus personne. La réponse elle-même est dans le registre ;
+           l'audit dit seulement QUI a écrit QUOI, et QUAND — c'est ce qu'on relit quand un
+           stagiaire conteste avoir répondu. D'où le sens de la décision dans le nom de l'action. */
+        logAudit(req, `consent.${req.body.accorde ? 'accorde' : 'refuse'}.${req.params.finalite}`,
+            'Learner', learner.id);
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur enregistrement consentement :', err);
