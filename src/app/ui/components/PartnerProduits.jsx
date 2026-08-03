@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import ImageLien, { ImagePlaceholder } from "./ImageLien.jsx";
 import Badge from "./Badge.jsx";
-import { euro } from "../lib/format.js";
+import { euro, listeCategories } from "../lib/format.js";
 import {
   getPartenaireProduits, createPartenaireProduit, updatePartenaireProduit, deletePartenaireProduit,
 } from "../api/apiClient.js";
@@ -106,7 +106,12 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
                       fallback={<ImagePlaceholder className="pp-vignette" icone="package" />} />
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <b style={{ fontSize: 13 }}>{p.name}</b>
-                      {p.category ? <span className="hint" style={{ marginLeft: 6 }}>{p.category}</span> : null}
+                      {/* MÊME DÉCOUPAGE QU'À LA BOUTIQUE : l'école doit voir ce que le stagiaire
+                          verra. Affichée en un bloc, « Four,400 °C » se lirait comme une seule
+                          catégorie mal saisie et on la « corrigerait » en retirant la virgule. */}
+                      {listeCategories(p.category).map((c) => (
+                        <span key={c} className="badge n" style={{ marginLeft: 6 }}>{c}</span>
+                      ))}
                       {!p.active ? <Badge tone="n">masqué</Badge> : null}
                     </span>
                     {/* Le tarif ÉCOLE est celui que le stagiaire paie : c'est lui qu'on met en
@@ -138,8 +143,22 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
                 <input className="inp" value={form.name} onChange={set("name")} placeholder="Four à bois 100 cm" />
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
-                <label>Catégorie</label>
-                <input className="inp" value={form.category} onChange={set("category")} placeholder="Four" />
+                <label>Catégories</label>
+                <input className="inp" value={form.category} onChange={set("category")}
+                  placeholder="Four, 400 °C, électrique" />
+                {/* L'APERÇU MONTRE LE DÉCOUPAGE PENDANT LA SAISIE. Sans lui, la virgule est une
+                    convention invisible : on écrit « Four 400 °C » sans séparateur, on enregistre,
+                    et il faut aller regarder la boutique pour comprendre qu'il n'y a qu'une seule
+                    étiquette. Ici le résultat se voit à la frappe. */}
+                {listeCategories(form.category).length > 1 ? (
+                  <span className="cat-apercu">
+                    {listeCategories(form.category).map((c) => (
+                      <span key={c} className="badge n">{c}</span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="hint">Séparez par des virgules pour plusieurs étiquettes.</span>
+                )}
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Référence</label>

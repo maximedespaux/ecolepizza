@@ -4576,3 +4576,12 @@ button.av-wrap:active{transform:scale(.94)}
    détourés pour un fond clair et disparaîtraient en thème sombre. */
 .shop-partner-logo{height:20px;width:auto;max-width:92px;object-fit:contain;border-radius:4px;
   background:#fff;padding:2px;flex-shrink:0}
+
+/* Plusieurs catégories sur une même carte : elles s'enroulent au lieu d'élargir la carte.
+   `.shop-rayon` est en `align-self:flex-start` — dans un conteneur flex, cette propriété n'a
+   plus d'effet sur l'axe principal, d'où ce parent qui porte l'alignement à sa place. */
+.shop-rayons{display:flex;flex-wrap:wrap;gap:4px;align-self:flex-start}
+/* Aperçu du découpage sous le champ de saisie : le même rendu qu'à la boutique, pour que la
+   virgule cesse d'être une convention invisible. */
+.cat-apercu{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.cat-apercu .badge{font-size:10px;padding:2px 6px}

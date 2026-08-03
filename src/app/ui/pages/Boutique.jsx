@@ -7,7 +7,7 @@ import { CAT_ART, CAT_ICON } from "../components/CatIcon.jsx";
 import CreneauCalendrier from "../components/CreneauCalendrier.jsx";
 import ConseilMateriel from "../components/ConseilMateriel.jsx";
 import { UserContext } from "../context/UserContext.jsx";
-import { euro } from "../lib/format.js";
+import { euro, listeCategories } from "../lib/format.js";
 import ImageLien from "../components/ImageLien.jsx";
 import {
   getCart, addToCart, setQty, setBroderie, clearCart, cartTotals, cartCount,
@@ -393,7 +393,13 @@ function PartenairesTab() {
           // La puce ne s'affiche que si elle APPREND quelque chose : sous « Marana — FOUR »,
           // répéter « Four » sur les trois cartes ne fait qu'ajouter du bruit. Elle reste utile
           // chez un partenaire aux produits variés (Gilac : « Bac » vs « Préparation »).
-          const repete = String(p.category || "").toLowerCase() === String(g.partner_category || "").toLowerCase();
+          /* ON ÉCARTE ÉTIQUETTE PAR ÉTIQUETTE, plus la chaîne entière. L'ancien test comparait
+             `p.category` complet à la catégorie du partenaire : dès qu'un produit portait
+             « Four, 400 °C », l'égalité échouait et « Four » se réaffichait en doublon sous
+             « Marana — FOUR ». La règle voulue n'a pas changé — ne pas répéter ce que dit déjà
+             l'en-tête — mais elle s'applique maintenant à chaque étiquette prise à part. */
+          const cats = listeCategories(p.category)
+            .filter((c) => c.toLowerCase() !== String(g.partner_category || "").toLowerCase());
           return (
             <div key={p.id} className="shop-card">
               <ImageLien src={p.image_url} className="shop-photo" fallback={null} />
@@ -401,10 +407,19 @@ function PartenairesTab() {
                   partenaires (Four, Bac, Préparation) n'en ont pas, et CatGlyph retombait sur
                   l'icône « package » — dix-neuf boîtes grises identiques qui ne disaient rien
                   de plus que le mot déjà écrit à côté. */}
-              {p.category && !repete ? (
-                <span className="shop-rayon">
-                  {CAT_ICON[p.category] ? <CatGlyph category={p.category} size={13} /> : null}
-                  {p.category}
+              {/* UNE ÉTIQUETTE PAR CATÉGORIE. « Four, 400 °C » en donne deux, distinctes : un
+                  four est « Four » ET « 400 °C », et prévoir un champ par facette revient à en
+                  manquer une. Le glyphe se cherche PAR ÉTIQUETTE — sur la chaîne entière, la
+                  recherche échouait dès qu'il y avait une virgule, et « Four » perdait son dessin
+                  pour avoir gagné une précision. */}
+              {cats.length ? (
+                <span className="shop-rayons">
+                  {cats.map((c) => (
+                    <span key={c} className="shop-rayon">
+                      {CAT_ICON[c] ? <CatGlyph category={c} size={13} /> : null}
+                      {c}
+                    </span>
+                  ))}
                 </span>
               ) : null}
               <b className="shop-name">{p.name}</b>
