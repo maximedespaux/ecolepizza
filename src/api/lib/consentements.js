@@ -51,15 +51,49 @@ const FINALITES = {
 const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 
 const CHAMPS_TRANSMISSIBLES = {
+    civilite: { libelle: 'Civilité', annonce: 'ma civilité' },
     nom: { libelle: 'Nom', annonce: 'mon nom' },
     prenom: { libelle: 'Prénom', annonce: 'mon prénom' },
     email: { libelle: 'Adresse e-mail', annonce: 'mon adresse e-mail' },
     telephone: { libelle: 'Téléphone', annonce: 'mon téléphone' },
+    adresse: { libelle: 'Adresse postale', annonce: 'mon adresse postale' },
+    code_postal: { libelle: 'Code postal', annonce: 'mon code postal' },
+    ville: { libelle: 'Ville', annonce: 'ma ville' },
     formation: { libelle: 'Formation suivie', annonce: 'la formation que je suis' },
     dates_session: { libelle: 'Dates de session', annonce: 'les dates de ma session' },
+    projet: { libelle: 'Projet (création, four, camion…)', annonce: 'la nature de mon projet' },
+    statut: { libelle: 'Situation professionnelle', annonce: 'ma situation professionnelle' },
     entreprise: { libelle: 'Entreprise (si elle finance)', annonce: 'le nom de l\'entreprise qui finance ma formation' },
-    ville: { libelle: 'Ville', annonce: 'ma ville' },
 };
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * CE QUE LA FICHE STAGIAIRE CONTIENT ET QUI N'EST **PAS** PROPOSÉ ICI — délibérément.
+ *
+ * La table `learner` porte une trentaine de colonnes. Les rendre toutes cochables serait le geste
+ * facile, et le mauvais : une case cochable est une case qu'on finit par cocher, et la
+ * minimisation (art. 5.1.c) ne se joue pas au moment du clic mais au moment où l'on décide de
+ * l'offrir. Ce qui suit est donc exclu du catalogue, avec sa raison — pour que personne n'ajoute
+ * une ligne « parce que la colonne existe ».
+ *
+ *  · `social_security` — numéro de sécurité sociale. Identifiant national, chiffré au repos dans
+ *    cette base précisément parce qu'il ne doit jamais circuler. Aucun fournisseur n'en a l'usage.
+ *  · `france_travail_id` — même nature : un identifiant attribué par un organisme public.
+ *  · `birthday`, `birth_place` — données d'identité. Elles n'aident pas à vendre un four, mais
+ *    elles permettent de cibler par âge et d'usurper une identité.
+ *  · `cpf_amount` — le solde de formation disponible. L'offrir reviendrait à dire à un commercial
+ *    combien la personne peut dépenser avant qu'il ne l'appelle. C'est peut-être le champ dont
+ *    l'exclusion est la plus évidente.
+ *  · `diploma_*`, `last_experience`, `experience_*` — un CV. Ce n'est l'affaire ni d'un
+ *    fournisseur de farine ni d'un fabricant de fours.
+ *  · `lat`, `lng` — géolocalisation à la maison près. `ville` et `code_postal` suffisent
+ *    largement à savoir qui livrer, et n'exposent pas le domicile.
+ *  · `opco`, `financing`, `current_contract`, `levels` — suivi administratif interne à l'école.
+ *
+ * S'il faut un jour en ajouter un, la question n'est pas « la colonne existe-t-elle » mais « à
+ * quoi ce partenaire précis en a-t-il besoin, et le stagiaire le comprendrait-il en lisant la
+ * phrase ». Si la réponse demande une explication, c'est non.
+ */
 
 /** Ne garde que des clés connues, sans doublon, dans l'ordre d'annonce. */
 function champsValides(liste) {

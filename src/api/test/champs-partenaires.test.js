@@ -133,3 +133,40 @@ test('le réglage a sa propre rubrique dans Paramètres', () => {
     assert.doesNotMatch(reglages, /ChampsPartenaires/,
         'le réglage ne doit vivre qu\'à un seul endroit');
 });
+
+test("chaque champ offert sait produire une valeur à l'export", () => {
+    /* LE DÉFAUT QUE CE TEST EMPÊCHE : ajouter une case au catalogue sans brancher la valeur.
+       L'école la coche, la phrase l'annonce au stagiaire, le stagiaire l'accepte — et la colonne
+       sort VIDE dans la liste envoyée. Personne ne s'en aperçoit : ni erreur, ni alerte, juste une
+       promesse faite au stagiaire que rien ne tient. */
+    const ctrl = fs.readFileSync(path.join(API, 'controllers/consentement.controller.js'), 'utf8');
+    const d = ctrl.indexOf('const valeurs = (l) => ({');
+    const bloc = ctrl.slice(d, ctrl.indexOf('});', d));
+    for (const cle of Object.keys(lib.CHAMPS_TRANSMISSIBLES)) {
+        assert.match(bloc, new RegExp(`\\b${cle}:`), `« ${cle} » est cochable mais ne produit rien`);
+    }
+});
+
+test('les données sensibles ne sont ni offertes ni même LUES', () => {
+    /* LA MINIMISATION NE SE JOUE PAS AU CLIC, mais au moment où l'on décide d'offrir la case :
+       une case cochable est une case qu'on finit par cocher. La table `learner` porte une
+       trentaine de colonnes — numéro de sécurité sociale (chiffré au repos précisément parce
+       qu'il ne doit pas circuler), identifiant France Travail, date et lieu de naissance, solde
+       CPF, diplômes, coordonnées GPS. Aucune n'a d'usage pour un fournisseur de fours.
+       Le solde CPF est le cas le plus net : l'offrir reviendrait à dire à un commercial combien
+       la personne peut dépenser avant qu'il ne l'appelle.
+       ET ELLES NE SONT PAS LUES NON PLUS : une donnée qu'on ne charge pas ne peut pas partir par
+       erreur, même à la faveur d'un `...l` mal placé. */
+    const interdits = ['social_security', 'france_travail_id', 'birthday', 'birth_place',
+        'cpf_amount', 'diploma_level', 'diploma_name', 'last_experience', 'lat', 'lng'];
+    for (const c of interdits) {
+        assert.ok(!lib.CHAMPS_TRANSMISSIBLES[c], `« ${c} » ne doit pas être offert au catalogue`);
+    }
+    const ctrl = fs.readFileSync(path.join(API, 'controllers/consentement.controller.js'), 'utf8');
+    const d = ctrl.indexOf('async function sessionAvecInscrits');
+    const requete = ctrl.slice(d, ctrl.indexOf('return { session', d));
+    for (const c of interdits) {
+        assert.ok(!new RegExp(`l\\.${c}\\b`).test(requete),
+            `« ${c} » ne doit pas même être LU par la requête de l'export`);
+    }
+});

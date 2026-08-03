@@ -174,14 +174,19 @@ function apercuLocal(data, choisis) {
    phrase doit se former à la frappe, avant tout enregistrement — mais elle est bornée à ces huit
    fragments, et un test compare les deux listes pour qu'elles ne divergent pas. */
 const ANNONCES = {
+  civilite: "ma civilité",
   nom: "mon nom",
   prenom: "mon prénom",
   email: "mon adresse e-mail",
   telephone: "mon téléphone",
+  adresse: "mon adresse postale",
+  code_postal: "mon code postal",
+  ville: "ma ville",
   formation: "la formation que je suis",
   dates_session: "les dates de ma session",
+  projet: "la nature de mon projet",
+  statut: "ma situation professionnelle",
   entreprise: "le nom de l'entreprise qui finance ma formation",
-  ville: "ma ville",
 };
 
 export default ChampsPartenaires;

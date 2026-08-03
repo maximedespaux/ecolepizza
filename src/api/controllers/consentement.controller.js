@@ -86,7 +86,14 @@ async function sessionAvecInscrits(conn, sessionId, orgId) {
            des six champs d'origine, et n'apparaissent que si l'école les coche dans ses réglages
            ET qu'elles ont été annoncées à la personne. On les LIT ici pour que l'export puisse
            les servir le jour où c'est le cas — les lire ne les envoie pas. */
-        `SELECT l.id, l.first_name, l.last_name, l.email, l.phone, l.town,
+        /* ON NE LIT QUE CE QUE LE CATALOGUE PEUT OFFRIR. Les colonnes exclues (numéro de sécurité
+           sociale, date de naissance, solde CPF, coordonnées GPS…) ne sont pas seulement
+           décochables : elles ne sont pas lues du tout. Une donnée qu'on ne charge pas ne peut
+           pas partir par erreur. */
+        `SELECT l.id, l.first_name, l.last_name, l.email, l.phone,
+                l.civility, l.address, l.zip_code, l.town, l.professional_status,
+                l.project_creation, l.project_takeover, l.project_oven, l.project_truck,
+                l.project_job,
                 c.name AS company_name
            FROM enrollment e
            JOIN learner l ON l.id = e.learner_id
@@ -308,11 +315,25 @@ const produireTransmission = async (req, res) => {
            colonne masquerait le fait que la donnée est bel et bien partie pour celui-là. */
         const champs = choisis.filter((c) => [...champsParStagiaire.values()].some((l) => l.includes(c)));
 
+        /* LE PROJET EST CINQ BOOLÉENS EN BASE — « création », « reprise », « four », « camion »,
+           « recherche de poste ». Les envoyer tels quels donnerait cinq colonnes de 0 et de 1 que
+           le partenaire devrait décoder ; on les rassemble en une phrase lisible. C'est aussi le
+           champ le plus utile de la liste : un fabricant de fours veut savoir qui ouvre une
+           pizzeria, pas qui cherche un emploi. */
+        const PROJETS = [
+            ['project_creation', 'création'], ['project_takeover', 'reprise'],
+            ['project_oven', 'four'], ['project_truck', 'camion'],
+            ['project_job', 'recherche de poste'],
+        ];
         const valeurs = (l) => ({
+            civilite: l.civility || '',
             nom: l.last_name || '', prenom: l.first_name || '',
             email: l.email || '', telephone: l.phone || '',
+            adresse: l.address || '', code_postal: l.zip_code || '', ville: l.town || '',
             formation: s.program_title || s.program_code || '', dates_session: dates,
-            entreprise: l.company_name || '', ville: l.town || '',
+            projet: PROJETS.filter(([c]) => Number(l[c]) === 1).map(([, m]) => m).join(', '),
+            statut: l.professional_status || '',
+            entreprise: l.company_name || '',
         });
         const lignes = retenus.map((l) => {
             const permis = champsParStagiaire.get(l.id);
