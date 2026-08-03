@@ -114,6 +114,13 @@ export const TRACEURS = [
     duree: 'Jusqu\'à effacement',
   },
   {
+    cle: 'impasto.bandeauConfidentialite', nature: 'local', exempte: true,
+    role: 'Se souvenir que vous avez lu le bandeau d\'information',
+    detail: 'Pour ne pas vous le remontrer à chaque visite. Il n\'accorde ni ne refuse rien : '
+      + 'il informe, et cette page en est le détail.',
+    duree: 'Jusqu\'à effacement',
+  },
+  {
     cle: 'impasto.consent.relances', nature: 'local', exempte: true,
     role: 'Compter combien de fois la demande de consentement a été présentée sans réponse',
     detail: 'Elle sert à ARRÊTER de vous la reposer. Fermer la fenêtre sans répondre n\'est pas un '

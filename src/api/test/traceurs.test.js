@@ -104,3 +104,44 @@ test('le cookie de connexion reste protégé', () => {
     assert.match(bloc, /sameSite: 'Lax'/, 'sans sameSite, la session part sur des requêtes cross-site');
     assert.match(bloc, /secure: process\.env\.NODE_ENV === 'production'/, 'en production, HTTPS uniquement');
 });
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+   LE BANDEAU D'INFORMATION — ce qu'il doit être, et surtout ce qu'il ne doit pas devenir.
+
+   TROIS DÉFAUTS SÉPARÉS SONT GELÉS ICI, tous les trois vécus :
+
+   1. UN BANDEAU DE CONSENTEMENT DÉGUISÉ. Tout ce que l'application dépose est exempté (art. 82) :
+      il n'y a rien à accepter. Un second bouton « Refuser » — ou un bouton « Accepter » — ferait
+      croire qu'un choix était en jeu, donc qu'un consentement a été donné. On aurait alors une
+      preuve d'accord pour un traitement qui n'en demandait pas, et une habitude de cliquer sans
+      lire pour celui qui, lui, en demande un.
+
+   2. LA SURPROMESSE. Le texte a d'abord dit « aucun service tiers ». C'est vrai de ce qui est
+      écrit sur l'appareil, et un stagiaire le lit comme « rien n'est partagé avec personne ».
+      Or ses coordonnées PEUVENT partir chez les partenaires, sur un accord qu'il peut refuser.
+      Le bandeau doit nommer ce choix séparé, sinon il rassure à tort.
+
+   3. LE BANDEAU SUR L'ÉCRAN DE CONNEXION. Posé là, il se lit au moment où l'on cherche à entrer :
+      il est chassé, pas lu. Il est donc monté sous `user &&`, après connexion. */
+test("le bandeau informe sans demander de consentement", () => {
+    const src = fs.readFileSync(path.join(UI, 'components', 'BandeauConfidentialite.jsx'), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');   // jamais sur les commentaires
+
+    const boutons = [...src.matchAll(/<button[^>]*>([^<]+)</g)].map((m) => m[1].trim());
+    assert.deepStrictEqual(boutons, ["J'ai compris"],
+        'Un bandeau qui propose « Accepter » / « Refuser » recueille un consentement là où rien '
+        + "n'en demande : cela vaut preuve d'un accord qui n'a jamais eu lieu d'être.");
+
+    assert.doesNotMatch(src, /aucun service tiers|aucune donnée n'est (?:partagée|transmise)/i,
+        'Surpromesse : les coordonnées peuvent partir chez les partenaires, sur consentement.');
+    assert.match(src, /partenaires/i,
+        'Le bandeau doit nommer le partage aux partenaires comme un choix séparé et refusable.');
+});
+
+test("le bandeau est monté APRÈS connexion, pas sur l'écran de connexion", () => {
+    const src = fs.readFileSync(path.join(UI, 'main.jsx'), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    assert.match(src, /\{user && <BandeauConfidentialite \/>\}/,
+        'Sans la garde `user &&`, le bandeau retombe sur le formulaire de connexion, où il est '
+        + 'chassé sans être lu.');
+});

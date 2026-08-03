@@ -52,6 +52,7 @@ import Platform from "./pages/Platform.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
 import EmargementStagiaire from "./pages/EmargementStagiaire.jsx";
 import Confidentialite from "./pages/Confidentialite.jsx";
+import BandeauConfidentialite from "./components/BandeauConfidentialite.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
 import PizzaQuest from "./pages/PizzaQuest.jsx";
 import Boutique from "./pages/Boutique.jsx";
@@ -130,6 +131,11 @@ function AppRoutes() {
   const isRepresentant = user?.role === "ENTREPRISE";
 
   return (
+    <>
+    {/* APRÈS LA CONNEXION, et une seule fois pour les quatre rôles. Sur l'écran de connexion il
+        se lirait au moment où l'on cherche à entrer : personne ne le lit, tout le monde le
+        chasse. Le lien de l'écran de login reste là pour qui veut savoir AVANT d'entrer. */}
+    {user && <BandeauConfidentialite />}
     <Routes>
       <Route path="/login" element={<Login />} />
       {/* PUBLIQUE, et volontairement : l'information sur ce qu'on dépose doit pouvoir être lue
@@ -223,6 +229,7 @@ function AppRoutes() {
         </Route>
       )}
     </Routes>
+    </>
   );
 }
 

@@ -4416,3 +4416,33 @@ button.av-wrap:active{transform:scale(.94)}
 .consent-ligne b{font-size:14px}
 .consent-ligne .hint{font-size:12px;line-height:1.45}
 @media (max-width:640px){ .consent-ligne{flex-direction:column} }
+
+/* — BANDEAU D'INFORMATION (confidentialité) —
+   EN BAS ET NON EN HAUT : un bandeau haut repousse toute la page et se lit comme une alerte. En
+   bas il informe sans déplacer ce qu'on est venu faire.
+   `position:fixed` avec un fond plein et une ombre portée : il doit rester lisible par-dessus
+   n'importe quel contenu, y compris un tableau dense.
+   Il n'a QU'UN bouton, et c'est voulu : rien n'est à accepter ni à refuser ici. */
+.bandeau-conf{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:60;
+  display:flex;align-items:center;gap:14px;max-width:min(760px,calc(100% - 32px));
+  padding:13px 16px;border:1px solid var(--border);border-radius:14px;background:var(--surface);
+  box-shadow:0 10px 30px rgba(20,22,50,.16);animation:bandeau-monte .28s var(--spring)}
+.bandeau-conf > svg{flex:none;color:var(--green,#2f9e6f)}
+.bandeau-conf p{margin:0;font-size:13px;line-height:1.5}
+.bandeau-conf a{color:var(--navy);font-weight:700;text-decoration:underline}
+.bandeau-conf .btn{flex:none}
+@keyframes bandeau-monte{from{opacity:0;transform:translateX(-50%) translateY(12px)}
+  to{opacity:1;transform:translateX(-50%) translateY(0)}}
+/* Sur téléphone il s'empile : trois éléments côte à côte y laisseraient deux mots par ligne. */
+@media (max-width:640px){
+  /* ANCRÉ PAR SES DEUX BORDS, et non centré par `left:50%`. En `position:fixed` sans largeur
+     imposée, l'élément se réduit à son contenu : mesuré à 375 px, il se tassait à 188 px de
+     large pour 337 de haut, une colonne de deux mots. `left`+`right` lui donnent la largeur
+     de l'écran, et la hauteur suit. */
+  .bandeau-conf{left:10px;right:10px;transform:none;max-width:none;
+    flex-direction:column;align-items:stretch;gap:10px;bottom:10px;padding:12px 14px}
+  .bandeau-conf > svg{display:none}
+  .bandeau-conf .btn{width:100%;justify-content:center}
+  @keyframes bandeau-monte{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+}
+@media (prefers-reduced-motion:reduce){ .bandeau-conf{animation:none} }
