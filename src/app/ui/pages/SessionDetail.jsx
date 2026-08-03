@@ -316,7 +316,7 @@ function SessionDetail() {
                           <input type="checkbox" disabled={dedans}
                             checked={dedans || picked.has(l.id)}
                             onChange={() => bascule(l.id)} />
-                          <span className="avatar" style={{ width: 30, height: 30, fontSize: 11, flex: "0 0 30px" }}>
+                          <span className="avatar" style={{ width: 30, height: 30, fontSize: 11 }}>
                             {initials(l.first_name, l.last_name)}
                           </span>
                           <span style={{ flex: 1, minWidth: 0 }}>
@@ -358,7 +358,7 @@ function SessionDetail() {
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {matches.map((l) => (
                 <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                  <span className="avatar" style={{ width: 30, height: 30, fontSize: 11, flex: "0 0 30px" }}>{initials(l.first_name, l.last_name)}</span>
+                  <span className="avatar" style={{ width: 30, height: 30, fontSize: 11 }}>{initials(l.first_name, l.last_name)}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{l.last_name} {l.first_name}</b>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "-"}</span>

@@ -94,7 +94,7 @@ function Demande({ d, onChange, onErreur }) {
   return (
     <Card title={
       <span className="card-ttl" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span className="avatar" style={{ width: 28, height: 28, flex: "0 0 28px", fontSize: 11 }}>
+        <span className="avatar" style={{ width: 28, height: 28, fontSize: 11 }}>
           {initials(d.learner.first_name, d.learner.last_name)}
         </span>
         <b>{d.learner.last_name} {d.learner.first_name}</b>

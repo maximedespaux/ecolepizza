@@ -240,7 +240,14 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .side-foot{width:100%;padding:11px 16px;display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;cursor:pointer;color:inherit;font:inherit}
 .side-foot:hover,.side-foot.open{background:var(--hover,rgba(0,0,0,.04))}
 .side-foot .chev{margin-left:auto;color:var(--dim);display:grid;place-items:center}
-.avatar{width:34px;height:34px;border-radius:50%;background:var(--grad-ember);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;flex:0 0 34px}
+/* `flex-shrink:0` ET NON `flex:0 0 34px`. Dans un conteneur flex en ligne, `flex-basis` PASSE
+   DEVANT `width` : la base de 34px écrasait donc silencieusement tout redimensionnement posé en
+   style inline, pendant que la hauteur, elle, obéissait. Un avatar demandé en 44 sortait en
+   34×44 — et un `border-radius:50%` sur un rectangle ne fait pas un rond, il fait une ellipse.
+   Trois écrans avaient déjà contourné le problème en réécrivant `flex` sur place, chacun de son
+   côté ; c'était traiter le symptôme trois fois. Sans base, `width` gouverne — 34px par défaut,
+   comme avant, et la valeur inline quand il y en a une. */
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--grad-ember);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0}
 .side-foot .who{font-size:12.5px;font-weight:600;line-height:1.2}.side-foot .role{font-size:11px;color:var(--dim)}
 /* Menu profil (au-dessus du pied de barre) */
 .profile-menu{position:absolute;left:12px;right:12px;bottom:calc(100% + 6px);background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:6px;z-index:40;display:flex;flex-direction:column;gap:2px}
