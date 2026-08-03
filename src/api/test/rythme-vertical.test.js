@@ -80,7 +80,13 @@ test('aucune page ne contredit en ligne le rythme d\'une classe', () => {
     const fautes = [];
     for (const [nom, src] of pages()) {
         for (const m of src.matchAll(/className="([a-z][a-z0-9- ]*)"\s+[^>]*?style=\{\{([^}]*)\}\}/g)) {
-            const inline = m[2].match(/marginBottom:\s*(\d+)/);
+            /* DEUX ÉCRITURES POUR LA MÊME CHOSE, et la seconde m'avait échappé : `marginBottom: 14`
+               ET le raccourci `margin: "0 0 14px"`. Le test ne cherchait que la première — la page
+               d'une session écrasait donc `.tabs` à 14 depuis le début sans que rien ne le
+               signale, exactement le défaut que j'avais corrigé ailleurs. Un détecteur qui ne
+               connaît qu'une forme d'écriture ne détecte rien du tout. */
+            const inline = m[2].match(/marginBottom:\s*(\d+)/)
+                || m[2].match(/margin:\s*"[^"]*?\s(\d+)px"/);
             if (!inline) continue;
             for (const cl of m[1].split(/\s+/)) {
                 const attendu = rythmes.get(cl);

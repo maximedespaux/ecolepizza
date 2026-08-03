@@ -234,7 +234,7 @@ function SessionDetail() {
       <StatusMessage status={status} />
 
       {locations.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 14px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 16px", flexWrap: "wrap" }}>
           <span className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="map" size={13} /> Lieu de formation :</span>
           <select className="inp" style={{ maxWidth: 320 }} value={session.location_id || ""} onChange={(e) => changeLocation(e.target.value)}>
             <option value="">Aucun / à définir</option>
@@ -245,7 +245,7 @@ function SessionDetail() {
 
       <div className="grid cols-2">
         <Card title="Inscrire des stagiaires">
-          <div className="tabs" role="tablist" style={{ margin: "0 0 14px" }}>
+          <div className="tabs" role="tablist">
             <button type="button" role="tab" aria-selected={mode === "individuel"}
               className={"tab" + (mode === "individuel" ? " on" : "")}
               onClick={() => setMode("individuel")}>
