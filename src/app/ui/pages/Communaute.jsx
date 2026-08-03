@@ -245,9 +245,14 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
                   entrée ressort, et un halo tiré de la couleur de l'avatar. */}
               <span className={`prof-ava-wrap ${cadreProfil.id !== "aucun" ? "a-cadre" : ""}`}
                 style={{ "--halo": av ? av.color : "var(--ember1)" }}>
+                {/* UN SEUL `style`, FUSIONNÉ. Il y en avait DEUX sur cet élément : en JSX c'est le
+                    dernier qui gagne, donc `cadreStyle` était purement jeté — et avec lui la
+                    variable `--cadre-c`, c'est-à-dire la couleur de la formation. Le cadre de
+                    quête s'affichait ici dans sa teinte de repli, pas dans la sienne : très
+                    exactement ce que le commit qui a introduit la ligne était censé apporter.
+                    Rien ne le signalait à l'écran — un anneau coloré autrement reste un anneau. */}
                 <span className={`prof-ava ${cadreClass(cadreProfil.valeur || cadreProfil.id)}`}
-                  style={cadreStyle(cadreProfil.valeur)}
-                  style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
+                  style={{ ...cadreStyle(cadreProfil.valeur), background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
               </span>
               {cadreProfil.id !== "aucun" && (
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginTop: 8 }}>Cadre {cadreProfil.nom}</div>
