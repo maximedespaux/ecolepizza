@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { TRACEURS, NATURES, TOUT_EXEMPTE } from "../lib/traceurs.js";
+import { TRACEURS, NATURES, TOUT_EXEMPTE, TRANSMISSIONS } from "../lib/traceurs.js";
 
 /**
  * CONFIDENTIALITÉ — ce que l'application dépose sur l'appareil, et pourquoi.
@@ -64,6 +64,28 @@ export default function Confidentialite() {
             </ul>
           </section>
         ))}
+
+        {/* DEUX QUESTIONS DIFFÉRENTES, et la première version de cette page ne traitait que la
+            première : ce qu'on écrit sur l'APPAREIL, et ce qui QUITTE NOS SERVEURS. On peut
+            n'avoir aucun traceur tiers et transmettre quand même des données — c'était le cas. */}
+        <section>
+          <h2>Données transmises à l'extérieur</h2>
+          <p>
+            Distinct de ce qui précède : il s'agit ici de données qui <b>quittent nos serveurs</b>.
+            Nous n'en transmettons qu'à un seul destinataire, et jamais à des fins commerciales.
+          </p>
+          <ul className="legale-liste">
+            {TRANSMISSIONS.map((t) => (
+              <li key={t.destinataire}>
+                <code>{t.destinataire}</code>
+                <b>{t.pourquoi}</b>
+                <span className="legale-detail"><b>Ce qui est envoyé :</b> {t.donnees}</span>
+                <span className="legale-detail">{t.qui}</span>
+                <span className="legale-duree">{t.quand}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         <section>
           <h2>Effacer ces données</h2>

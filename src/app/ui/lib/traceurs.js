@@ -127,5 +127,29 @@ export const TRACEURS = [
   },
 ];
 
+/**
+ * CE QUI SORT DU SERVEUR VERS UN TIERS — et qui n'a rien à voir avec les traceurs ci-dessus.
+ *
+ * DEUX QUESTIONS DIFFÉRENTES, souvent confondues. Les traceurs concernent ce qu'on ÉCRIT SUR
+ * L'APPAREIL de l'utilisateur (régime du consentement, art. 82). Ici il s'agit de données qui
+ * QUITTENT NOS SERVEURS vers un tiers : régime du RGPD, obligation d'INFORMER des destinataires
+ * (art. 13), et base légale à justifier. On peut très bien n'avoir aucun traceur tiers ET
+ * transmettre des données — c'était exactement le cas ici, et la première version de cette page
+ * n'en disait rien.
+ *
+ * RELEVÉ PAR BALAYAGE DE TOUS LES APPELS SORTANTS DE L'API : il n'y en a qu'un.
+ */
+export const TRANSMISSIONS = [
+  {
+    destinataire: 'Base Adresse Nationale (api-adresse.data.gouv.fr)',
+    qui: "Service public de l'État français, sans clé ni compte",
+    donnees: 'Le code postal et la commune du stagiaire — ou l\'adresse de son entreprise '
+      + "lorsque la formation est financée par elle. Ni nom, ni prénom, ni e-mail.",
+    pourquoi: 'Convertir une adresse en coordonnées, pour placer les stagiaires sur la carte de '
+      + "l'organisme.",
+    quand: "Uniquement lorsque l'organisme lance le géocodage depuis la carte des stagiaires.",
+  },
+];
+
 /** Vrai tant qu'aucun dépôt ne sort de l'exemption — donc tant qu'aucun bandeau n'est requis. */
 export const TOUT_EXEMPTE = TRACEURS.every((t) => t.exempte);
