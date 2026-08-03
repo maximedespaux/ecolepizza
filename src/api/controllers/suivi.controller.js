@@ -377,7 +377,11 @@ const getArchiveStockage = async (req, res) => {
         const tranches = TRANCHES.map((t, i) => {
             const max = i === 0 ? Infinity : TRANCHES[i - 1].min;
             const dedans = rows.filter((r) => r.octets >= t.min && r.octets < max);
-            return { libelle: t.libelle, n: dedans.length,
+            /* `min` PART AVEC LA TRANCHE : après une suppression, l'écran retire le fichier de
+               sa tranche sans relire la base — encore faut-il qu'il sache où il tombait. Sans
+               cette borne, le client recopierait les seuils, et les deux jeux divergeraient au
+               premier changement. */
+            return { libelle: t.libelle, min: t.min, n: dedans.length,
                 octets: dedans.reduce((s, r) => s + Number(r.octets), 0) };
         });
 
@@ -397,7 +401,10 @@ const getArchiveStockage = async (req, res) => {
         const doublons = [...par.values()].filter((g) => g.length > 1)
             .map((g) => ({ octets: Number(g[0].octets), n: g.length,
                 gaspille: Number(g[0].octets) * (g.length - 1),
-                exemplaires: g.map(({ empreinte, ...x }) => x) }))
+                /* `octets` EN NOMBRE, explicitement : `LENGTH()` peut revenir en chaîne selon
+                   le pilote, et l'écran s'en sert pour retrancher d'un total après suppression.
+                   Une addition sur des chaînes concatène au lieu d'ajouter. */
+                exemplaires: g.map(({ empreinte, ...x }) => ({ ...x, octets: Number(x.octets) })) }))
             .sort((a, b) => b.gaspille - a.gaspille);
 
         res.json({

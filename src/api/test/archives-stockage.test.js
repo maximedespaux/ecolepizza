@@ -61,12 +61,13 @@ test('on supprime une copie À LA FOIS, en sachant laquelle', () => {
         'La confirmation doit nommer le document et son détenteur.');
 });
 
-test('l\'inventaire se relit après une suppression', () => {
-    /* Sinon la copie effacée reste affichée et son poids reste compté : le total ne bouge pas,
-       et l'on croit que le clic n'a rien fait. `deleteDocs` doit donc DIRE si la suppression a
-       eu lieu — d'où ses retours booléens, ajoutés pour cet écran. */
-    assert.match(ui, /if \(await onSupprime\([\s\S]{0,120}?\)\) \{\s*analyser\(\);/,
-        'Une suppression confirmée doit relancer l\'inventaire.');
+test('l\'inventaire suit la suppression, sans relire la base', () => {
+    /* Une première version relançait l'analyse complète après chaque corbeille. Corrigé : on
+       retranche ce qu'on sait avoir supprimé (cf. le test dédié plus bas). Reste l'exigence qui
+       rend l'un ou l'autre possible — `deleteDocs` doit DIRE si la suppression a eu lieu, sinon
+       l'écran ne peut ni relire ni retrancher au bon moment. */
+    assert.match(ui, /if \(await onSupprime\([\s\S]{0,140}?\)\) \{/,
+        'L\'écran doit attendre le résultat avant de toucher à l\'inventaire.');
     assert.match(ui, /const \{ deleted \} = await bulkDeleteArchives[\s\S]{0,120}?return true;/,
         'deleteDocs doit signaler le succès.');
     assert.match(ui, /\)\) return false;/, 'Et signaler l\'annulation.');
@@ -88,6 +89,57 @@ test('l\'empreinte ne sort jamais de l\'API', () => {
        vérifier qu'on détient le même fichier sans l'avoir. Elle est retirée des deux listes. */
     assert.match(bloc[0], /lourds:[\s\S]{0,200}?\.map\(\(\{ empreinte, \.\.\.x \}\)/,
         'L\'empreinte doit être retirée de la liste des plus lourds.');
-    assert.match(bloc[0], /exemplaires: g\.map\(\(\{ empreinte, \.\.\.x \}\) => x\)/,
+    assert.match(bloc[0], /exemplaires: g\.map\(\(\{ empreinte, \.\.\.x \}\) =>/,
         'L\'empreinte doit être retirée des doublons.');
+});
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   LE VERROU DE CONFIRMATION — l'inventaire ne se lance pas par curiosité.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+test('l\'inventaire se lance en recopiant un mot, et le mot est en clair', () => {
+    /* La requête lit les 681 Mo de blobs : 7,4 secondes mesurées, pendant lesquelles la base
+       travaille pour tout le monde. Un bouton se clique par curiosité et se REclique en attendant
+       que ça vienne ; un mot à recopier, non. */
+    assert.match(ui, /const MOT_INVENTAIRE = "INVENTAIRE";/, 'Le mot doit rester lisible dans le code.');
+    assert.match(ui, /disabled=\{!motOk\(saisie\)\}/, 'Le bouton reste fermé tant que le mot ne correspond pas.');
+    /* Tolérant sur la casse et les espaces : ce qu'on demande est un geste conscient, pas une
+       dictée. Refuser « inventaire » en minuscules ne filtrerait que la patience. */
+    assert.match(ui, /v\.trim\(\)\.toUpperCase\(\) === MOT_INVENTAIRE/,
+        'La comparaison doit ignorer la casse et les espaces.');
+});
+
+test('« Recalculer » passe par le même verrou', () => {
+    /* Sinon il suffirait d'un premier passage pour obtenir un bouton libre juste à côté — et
+       c'est précisément le reclic répété qu'on veut empêcher, pas le premier. */
+    const boutons = [...ui.matchAll(/<button className="btn ghost sm"[^>]*onClick=\{([^}]*)\}/g)]
+        .map((m) => m[1]);
+    const libres = boutons.filter((b) => /analyser/.test(b) && !/setDemande/.test(b));
+    assert.deepStrictEqual(libres, [],
+        `bouton(s) lançant l'inventaire sans passer par le verrou : ${libres.join(', ')}`);
+});
+
+test('supprimer une copie ne relance PAS l\'inventaire', () => {
+    /* LE PIÈGE QUE J'AI CRÉÉ PUIS RETIRÉ : relancer l'analyse après chaque corbeille ferait
+       relire les 681 Mo une fois par doublon traité — vingt-quatre fois pour les seuls groupes
+       de sept. C'est exactement le martèlement que le verrou cherche à éviter ; le rétablir ici
+       l'aurait vidé de son sens. On retranche ce qu'on sait avoir supprimé. */
+    const bloc = /async function supprimerUne[\s\S]*?\n  }/.exec(ui);
+    assert.ok(bloc, 'supprimerUne introuvable');
+    assert.doesNotMatch(bloc[0], /\banalyser\(\)/,
+        'Une suppression ne doit pas relire toute la table.');
+    assert.match(bloc[0], /retirerDeLInventaire\(x\)/, 'Elle met l\'inventaire à jour sur place.');
+});
+
+test('la tranche d\'un fichier supprimé vient du SERVEUR, pas d\'un seuil recopié', () => {
+    /* Deux jeux de seuils divergeraient au premier changement, et le fichier serait retranché
+       d'une tranche où il n'était pas — un total juste, une répartition fausse. */
+    assert.match(ctrl, /libelle: t\.libelle, min: t\.min/, 'Le serveur doit publier la borne.');
+    assert.match(ui, /d\.tranches\.find\(\(u\) => x\.octets >= u\.min\)/,
+        'L\'écran doit choisir la tranche avec la borne reçue.');
+});
+
+test('un groupe retombé à un exemplaire cesse d\'être un doublon', () => {
+    assert.match(ui, /\.filter\(\(g\) => g\.n > 1\)/,
+        '« 1 exemplaire identique » ne veut rien dire — le groupe doit disparaître.');
 });

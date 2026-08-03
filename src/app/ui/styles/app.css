@@ -4784,3 +4784,7 @@ button.av-wrap:active{transform:scale(.94)}
 .stock-del{margin-left:auto;opacity:.45;transition:opacity .12s var(--ease)}
 .stock-dbl-l li:hover .stock-del,.stock-del:focus-visible{opacity:1}
 .stock-dbl-l li{display:flex;align-items:center;gap:6px}
+/* Le champ de confirmation de l'inventaire : la consigne se détache du paragraphe qui l'explique,
+   sinon les deux se lisent comme une seule phrase et l'on ne voit pas qu'on doit écrire. */
+.modal .field.confirm-mot{margin-top:16px}
+.modal .field.confirm-mot>span{display:block;margin-bottom:6px}

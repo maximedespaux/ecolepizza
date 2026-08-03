@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import {
@@ -521,16 +522,65 @@ export default Suivi;
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 const mo = (o) => (o >= 1048576 ? (o / 1048576).toFixed(1) + " Mo" : Math.round(o / 1024) + " Ko");
 
+/* LE MOT À RECOPIER POUR LANCER L'INVENTAIRE.
+   Il n'est pas là pour vérifier une identité — l'écran est déjà réservé à l'administration — mais
+   pour rendre le geste DÉLIBÉRÉ. La requête lit les 681 Mo de blobs de la table : 7,4 secondes
+   mesurées, pendant lesquelles la base travaille pour tout le monde. Un bouton se clique par
+   curiosité, et se reclique en attendant que ça vienne ; un mot à recopier, non.
+   En français et en clair : un mot qu'on ne comprend pas se recopie machinalement, ce qui
+   annulerait tout l'intérêt. */
+const MOT_INVENTAIRE = "INVENTAIRE";
+/* Tolérant sur la casse et les espaces autour : ce qu'on demande, c'est un geste conscient,
+   pas une dictée. Refuser « inventaire » en minuscules ne filtrerait que la patience. */
+const motOk = (v) => v.trim().toUpperCase() === MOT_INVENTAIRE;
+
 function PanneauStockage({ onError, onSupprime }) {
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [demande, setDemande] = useState(false);   // le verrou est-il ouvert à l'écran ?
+  const [saisie, setSaisie] = useState("");
 
   async function analyser() {
+    setDemande(false); setSaisie("");
     setBusy(true);
     try { setData((await getArchiveStockage()).data); }
     catch (e) { onError?.(e.message); }
     finally { setBusy(false); }
   }
+
+  /* LE VERROU COUVRE AUSSI « RECALCULER ». Sans cela il suffirait d'un premier passage pour
+     obtenir un bouton libre juste à côté — et c'est précisément le reclic répété qu'on veut
+     empêcher, pas le premier. */
+  const verrou = demande && createPortal(
+    <div className="overlay" onClick={() => setDemande(false)}>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <h3>Lancer l'inventaire du coffre ?</h3>
+          <button className="x" onClick={() => setDemande(false)} aria-label="Fermer"><Icon name="x" size={16} /></button>
+        </div>
+        <div className="mbody">
+          <p className="lead" style={{ marginTop: 0 }}>
+            L'inventaire lit <b>l'intégralité des fichiers archivés</b> pour en calculer la taille
+            et l'empreinte. Comptez plusieurs secondes, pendant lesquelles la base est occupée
+            pour tout le monde.
+          </p>
+          <label className="field confirm-mot" style={{ marginBottom: 0 }}>
+            <span>Recopiez <b>{MOT_INVENTAIRE}</b> pour confirmer</span>
+            <input className="inp" autoFocus value={saisie} spellCheck="false"
+              onChange={(e) => setSaisie(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && motOk(saisie)) analyser(); }} />
+          </label>
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={() => setDemande(false)}>Annuler</button>
+          <button className="btn primary" disabled={!motOk(saisie)} onClick={analyser}>
+            <Icon name="package" size={15} /> Lancer l'inventaire
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
 
   if (!data) {
     return (
@@ -539,9 +589,10 @@ function PanneauStockage({ onError, onSupprime }) {
           <Icon name="package" size={13} /> Les archives sont stockées dans la base. Voir ce
           qu'elles occupent, et repérer les fichiers inutilement lourds ou en double.
         </span>
-        <button className="btn ghost sm" disabled={busy} onClick={analyser}>
+        <button className="btn ghost sm" disabled={busy} onClick={() => setDemande(true)}>
           {busy ? "Lecture des fichiers…" : "Analyser l'espace occupé"}
         </button>
+        {verrou}
       </div>
     );
   }
@@ -551,20 +602,51 @@ function PanneauStockage({ onError, onSupprime }) {
   // Ce qu'on peut réellement retirer : tout sauf un exemplaire par groupe.
   const copiesEnTrop = doublons.reduce((s, d) => s + d.n - 1, 0);
 
-  /* APRÈS UNE SUPPRESSION, L'INVENTAIRE EST FAUX — la copie effacée y figure encore, et son
-     poids est toujours compté. On relit donc, plutôt que de retirer la ligne côté écran : le
-     total et les tranches doivent bouger aussi, sinon on croit que rien ne s'est passé. */
+  /* APRÈS UNE SUPPRESSION, L'INVENTAIRE EST FAUX — la copie effacée y figure encore et son poids
+     est toujours compté. Mais on ne RELIT PAS la base pour autant : relancer l'inventaire à
+     chaque corbeille ferait relire les 681 Mo une fois par doublon traité, soit vingt-quatre
+     fois pour les seuls groupes de sept. C'est exactement le martèlement que le verrou de
+     confirmation cherche à éviter — le rétablir ici l'aurait vidé de son sens.
+     On retranche donc ce qu'on sait avoir supprimé : un identifiant, une taille, une tranche.
+     C'est de l'arithmétique exacte, pas une approximation. */
+  function retirerDeLInventaire(x) {
+    setData((d) => {
+      if (!d) return d;
+      const doublons = d.doublons
+        .map((g) => {
+          if (!g.exemplaires.some((e) => e.id === x.id)) return g;
+          const exemplaires = g.exemplaires.filter((e) => e.id !== x.id);
+          return { ...g, exemplaires, n: exemplaires.length,
+            gaspille: g.octets * (exemplaires.length - 1) };
+        })
+        /* UN GROUPE RETOMBÉ À UN SEUL EXEMPLAIRE N'EST PLUS UN DOUBLON : le laisser afficherait
+           « 1 exemplaire identique », ce qui ne veut rien dire. */
+        .filter((g) => g.n > 1);
+      return {
+        ...d,
+        total: { n: d.total.n - 1, octets: d.total.octets - x.octets },
+        // La tranche est celle dont le seuil est le plus haut que le fichier atteigne.
+        tranches: d.tranches.map((t) => (t === d.tranches.find((u) => x.octets >= u.min)
+          ? { ...t, n: t.n - 1, octets: t.octets - x.octets } : t)),
+        lourds: d.lourds.filter((l) => l.id !== x.id),
+        doublons,
+        gaspilleDoublons: doublons.reduce((s, g) => s + g.gaspille, 0),
+      };
+    });
+  }
+
   async function supprimerUne(x) {
     if (await onSupprime([x.id], `« ${x.title} »${x.learner_name ? ` — ${x.learner_name}` : ""}`)) {
-      analyser();
+      retirerDeLInventaire(x);
     }
   }
 
   return (
     <div className="stock">
+      {verrou}
       <div className="stock-tete">
         <b>{total.n} document{total.n > 1 ? "s" : ""} · <span className="chiffres">{mo(total.octets)}</span></b>
-        <button className="btn ghost sm" disabled={busy} onClick={analyser}>Recalculer</button>
+        <button className="btn ghost sm" disabled={busy} onClick={() => setDemande(true)}>Recalculer</button>
       </div>
 
       {/* LA RÉPARTITION EN PREMIER : c'est elle qui montre que quelques fichiers font le volume,
