@@ -4747,3 +4747,35 @@ button.av-wrap:active{transform:scale(.94)}
    sur ••••• », ce qui ne protège rien et rend la phrase incompréhensible.
    `.chiffres` ne porte que la typographie. À utiliser partout où le nombre n'est pas un montant. */
 .chiffres{font-variant-numeric:tabular-nums}
+
+/* ————— INVENTAIRE DU COFFRE DOCUMENTAIRE —————
+   Replié par défaut : l'analyse lit tous les blobs de la base pour en calculer les empreintes.
+   Le panneau se veut sobre — c'est un outil d'administration, pas une page de tableau de bord. */
+.stock-invite{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;
+  padding:10px 12px;margin-bottom:14px;border:1px dashed var(--border);border-radius:10px}
+.stock{padding:12px;margin-bottom:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface2)}
+.stock-tete{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+/* Une barre par tranche : la concentration se voit d'un coup d'œil, ce qu'un tableau de chiffres
+   ne montre pas — quelques fichiers pèsent autant que le millier d'autres. */
+.stock-tranches{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.stock-tr{display:grid;grid-template-columns:64px 1fr 44px 64px;align-items:center;gap:8px;font-size:12px}
+.stock-tr-l{color:var(--muted)}
+.stock-tr-b{height:8px;background:var(--surface);border-radius:99px;overflow:hidden}
+.stock-tr-b i{display:block;height:100%;background:var(--grad-ember);border-radius:99px}
+.stock-tr-n,.stock-tr-o{text-align:right;color:var(--muted)}
+.stock-bloc{margin-top:8px;border-top:1px solid var(--border);padding-top:8px}
+.stock-bloc>summary{cursor:pointer;font-size:13px;padding:2px 0}
+/* PAS DE `display:flex` ICI. Le paragraphe contient du gras : en flex, chaque fragment de texte
+   devient un élément à part, et la phrase se recompose dans le désordre — « retire son dossier …
+   avant de le document de trancher ». Un texte suivi se met en forme en flux, pas en flex ;
+   l'icône s'aligne avec `vertical-align`. */
+.stock-avert{margin:6px 0 10px;color:var(--orange)}
+.stock-avert svg{vertical-align:-1px;margin-right:4px}
+.stock-dbl{padding:8px 0;border-top:1px dashed var(--border)}
+.stock-dbl-t{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;margin-bottom:4px}
+.stock-dbl-l,.stock-lourds{margin:0;padding-left:18px;font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.stock-lourds{max-height:340px;overflow-y:auto;padding-top:6px}
+.stock-lourds li{display:flex;gap:8px;align-items:baseline}
+/* Le poids en tête et en colonne fixe : c'est la donnée qu'on parcourt, pas le titre. */
+.stock-poids{flex:0 0 62px;text-align:right;font-weight:700}
+.stock-dbl-l a,.stock-lourds a{color:inherit}

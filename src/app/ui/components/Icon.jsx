@@ -760,11 +760,23 @@ const PATHS = {
   ),
 };
 
-/** Icône SVG décorative. `name` = clé du dico (sinon la chaîne est rendue telle quelle).
- *  `fill` permet de remplir une forme fermée (ex. cœur « aimé »). */
+/** Icône SVG décorative. `name` = clé du dico. `fill` permet de remplir une forme fermée
+ *  (ex. cœur « aimé »). Un nom absent du dico ne rend RIEN de visible — cf. ci-dessous. */
 export function Icon({ name, size = 18, strokeWidth = 2, className = "", style, fill = "none" }) {
   const inner = PATHS[name];
-  if (!inner) return <span className={className} style={style}>{name}</span>;
+  if (!inner) {
+    /* UN NOM INCONNU NE S'ÉCRIT PAS À L'ÉCRAN. Le repli rendait `<span>{name}</span>`, donc le
+       mot « database » s'est affiché en toutes lettres dans le coffre documentaire le jour où
+       quelqu'un a demandé une icône qui n'existe pas. Du vocabulaire de développeur, en anglais,
+       devant l'école — et rien pour le signaler à celui qui l'a écrit.
+
+       On rend donc un espace de la BONNE TAILLE (la mise en page ne bouge pas, le trou se voit)
+       et l'on prévient dans la console pendant le développement. Un contrôle statique ne suffit
+       pas ici : 85 appels calculent leur nom à l'exécution (`x ? "check" : "plus"`), et aucune
+       relecture de source ne les couvre. */
+    if (import.meta.env?.DEV) console.warn(`Icon : nom inconnu « ${name} »`);
+    return <span className={className} style={{ display: "inline-block", width: size, height: size, ...style }} aria-hidden="true" />;
+  }
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"

@@ -684,6 +684,12 @@ export function downloadArchiveFile(id, filename) {
   return download(`/suivi/archives/${id}/file`, filename);
 }
 // Suppression groupée (semaine / formation / stagiaire / fichiers) — supprime en base.
+/* L'INVENTAIRE DU COFFRE : ce qu'il occupe, où, et ce qui est en double. Lourd par nature (le
+   serveur lit tous les blobs pour en calculer les empreintes), donc jamais appelé au chargement
+   — seulement quand on ouvre le panneau. */
+export function getArchiveStockage() {
+  return request("/suivi/archives/stockage");
+}
 export function bulkDeleteArchives(archive_ids, document_ids) {
   return request("/suivi/archives/delete", { method: "POST", body: JSON.stringify({ archive_ids, document_ids }) });
 }

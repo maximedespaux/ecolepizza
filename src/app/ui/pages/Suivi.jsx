@@ -3,7 +3,7 @@ import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
-  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives,
+  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage,
 } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
@@ -423,6 +423,9 @@ function ArchivesView({ onError, onInfo }) {
         </p>
       )}
 
+      {isAdmin && <PanneauStockage onError={onError} onSupprime={(ids) => deleteDocs(
+        ids.map((id) => ({ doc_id: id, source: "archive" })), "doublons")} />}
+
       {tree.length === 0 ? (
         <EmptyState icon="folder">Aucun document partagé pour l'instant.</EmptyState>
       ) : (
@@ -495,3 +498,133 @@ function ArchivesView({ onError, onInfo }) {
 }
 
 export default Suivi;
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   CE QUE LE COFFRE OCCUPE — l'inventaire, et de quoi agir dessus.
+
+   POURQUOI UN PANNEAU REPLIÉ, chargé au clic : la requête lit tous les blobs pour en calculer
+   les empreintes. Quelques secondes sur 681 Mo — acceptable pour un inventaire qu'on demande,
+   inacceptable à chaque ouverture de la page.
+
+   CE QU'IL MONTRE, ET POURQUOI DANS CET ORDRE. La mesure qui a précédé cet écran disait deux
+   choses. D'abord que la masse est CONCENTRÉE : 12 % des fichiers portent 55 % du volume — d'où
+   la liste des plus lourds, qui règle le problème en trente lignes. Ensuite que la DENSITÉ
+   sépare le bon grain de l'ivraie : un scan JPEG de 300 DPI tient en 0,13 octet par pixel, quand
+   certains fichiers d'ici en font 2,7 — soit presque un bitmap brut (3,0). C'est la seule mesure
+   qui distingue un document lourd parce qu'il est détaillé d'un document lourd pour rien.
+
+   LES DOUBLONS SE MONTRENT AVEC LEURS DÉTENTEURS. Supprimer une copie retire un document du
+   dossier de quelqu'un. Le même PDF sous sept stagiaires peut être une erreur de classement —
+   c'est le cas qu'on a trouvé, l'évaluation d'une personne recopiée dans six autres dossiers —
+   ou une pièce commune légitimement partout. L'écran ne tranche pas, il nomme.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+const mo = (o) => (o >= 1048576 ? (o / 1048576).toFixed(1) + " Mo" : Math.round(o / 1024) + " Ko");
+
+function PanneauStockage({ onError, onSupprime }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function analyser() {
+    setBusy(true);
+    try { setData((await getArchiveStockage()).data); }
+    catch (e) { onError?.(e.message); }
+    finally { setBusy(false); }
+  }
+
+  if (!data) {
+    return (
+      <div className="stock-invite">
+        <span className="hint">
+          <Icon name="package" size={13} /> Les archives sont stockées dans la base. Voir ce
+          qu'elles occupent, et repérer les fichiers inutilement lourds ou en double.
+        </span>
+        <button className="btn ghost sm" disabled={busy} onClick={analyser}>
+          {busy ? "Lecture des fichiers…" : "Analyser l'espace occupé"}
+        </button>
+      </div>
+    );
+  }
+
+  const { total, tranches, lourds, doublons, gaspilleDoublons } = data;
+  const maxT = Math.max(...tranches.map((t) => t.octets), 1);
+  // Ce qu'on peut réellement retirer : tout sauf un exemplaire par groupe.
+  const copiesEnTrop = doublons.reduce((s, d) => s + d.n - 1, 0);
+
+  return (
+    <div className="stock">
+      <div className="stock-tete">
+        <b>{total.n} document{total.n > 1 ? "s" : ""} · <span className="chiffres">{mo(total.octets)}</span></b>
+        <button className="btn ghost sm" disabled={busy} onClick={analyser}>Recalculer</button>
+      </div>
+
+      {/* LA RÉPARTITION EN PREMIER : c'est elle qui montre que quelques fichiers font le volume,
+          donc que la suite vaut la peine d'être lue. */}
+      <div className="stock-tranches">
+        {tranches.map((t) => (
+          <div key={t.libelle} className="stock-tr">
+            <span className="stock-tr-l">{t.libelle}</span>
+            <span className="stock-tr-b"><i style={{ width: `${100 * t.octets / maxT}%` }} /></span>
+            <span className="stock-tr-n chiffres">{t.n}</span>
+            <span className="stock-tr-o chiffres">{mo(t.octets)}</span>
+          </div>
+        ))}
+      </div>
+
+      {doublons.length > 0 && (
+        <details className="stock-bloc">
+          {/* « 26 documents en double » se lisait comme 26 fichiers à supprimer. Ce sont 26
+              documents présents en PLUSIEURS exemplaires, soit 46 copies en trop : c'est ce
+              second nombre qui dit ce qu'on peut retirer. */}
+          <summary>
+            <b>{doublons.length} document{doublons.length > 1 ? "s" : ""} en plusieurs exemplaires</b>
+            <span className="hint"> · <span className="chiffres">{copiesEnTrop}</span> copie
+              {copiesEnTrop > 1 ? "s" : ""} superflue{copiesEnTrop > 1 ? "s" : ""},
+              <span className="chiffres"> {mo(gaspilleDoublons)}</span></span>
+          </summary>
+          <p className="hint stock-avert">
+            <Icon name="alert-triangle" size={12} /> Chaque copie occupe le dossier d'un stagiaire.
+            Supprimer une copie retire le document de <b>son</b> dossier — vérifiez qui la détient
+            avant de trancher.
+          </p>
+          {doublons.map((d, i) => (
+            <div key={i} className="stock-dbl">
+              <div className="stock-dbl-t">
+                <b className="chiffres">{d.n}</b> exemplaires identiques ·
+                <span className="chiffres"> {mo(d.octets)}</span> pièce
+                <button className="btn ghost sm" onClick={() => {
+                  /* On ne propose de supprimer QUE les copies au-delà de la première : garder
+                     un exemplaire est le seul geste qui ne perde rien. */
+                  onSupprime(d.exemplaires.slice(1).map((x) => x.id));
+                }}>Ne garder que le premier</button>
+              </div>
+              <ul className="stock-dbl-l">
+                {d.exemplaires.map((x) => (
+                  <li key={x.id}>
+                    <a href={archiveFileUrl(x.id)} target="_blank" rel="noopener noreferrer">{x.title}</a>
+                    <span className="hint"> — {x.learner_name || "sans stagiaire"}
+                      {x.year ? ` · ${x.year}` : ""}{x.week ? ` S${x.week}` : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </details>
+      )}
+
+      <details className="stock-bloc">
+        <summary><b>Les {lourds.length} plus lourds</b>
+          <span className="hint"> · <span className="chiffres">{mo(lourds.reduce((s, x) => s + x.octets, 0))}</span> à eux seuls</span>
+        </summary>
+        <ul className="stock-lourds">
+          {lourds.map((x) => (
+            <li key={x.id}>
+              <span className="chiffres stock-poids">{mo(x.octets)}</span>
+              <a href={archiveFileUrl(x.id)} target="_blank" rel="noopener noreferrer">{x.title}</a>
+              <span className="hint">{x.learner_name ? ` — ${x.learner_name}` : ""}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </div>
+  );
+}
