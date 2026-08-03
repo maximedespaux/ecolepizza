@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const { CONTRAT_FIN } = require('../lib/contratPartenaire.js');
 
 const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 
@@ -8,6 +9,20 @@ const PARTNER_FIELDS = [
     'name', 'category', 'contact_name', 'contact_email', 'contact_phone',
     'website', 'town', 'discount_pct', 'offer', 'notes',
 ];
+
+/* CE PARTENAIRE REÇOIT-IL LES COORDONNÉES DES STAGIAIRES ? (migration 131)
+   Hors de `PARTNER_FIELDS` VOLONTAIREMENT : ce n'est pas une propriété descriptive comme une ville
+   ou une remise, c'est une autorisation de transmettre des données personnelles. La mélanger aux
+   autres la ferait passer dans les mêmes `UPDATE` en masse, sans qu'on puisse la tracer ni la
+   traiter à part — et un `PATCH` de la ville l'écraserait au passage si le formulaire ne la
+   renvoyait pas. Elle est lue et écrite explicitement, et jamais par défaut. */
+const CHAMP_DESTINATAIRE = 'recoit_coordonnees';
+
+/* LE CONTRAT, LUI, EST DANS LE FORMULAIRE (migration 131) — à la différence du drapeau ci-dessus.
+   Ce sont des faits descriptifs qu'on saisit en même temps que l'adresse ou la remise, et ils
+   arrivent donc dans le même `PATCH`. Le drapeau, lui, est une autorisation : il a sa propre route
+   pour qu'un enregistrement du formulaire ne puisse pas le décocher au passage. */
+const CONTRAT_FIELDS = ['contrat', 'contrat_debut', 'contrat_duree_mois'];
 
 /**
  * GET /api/partenaires — annuaire + suivi (contacts, offre, commissions cumulées).
@@ -24,9 +39,14 @@ const getPartners = async (req, res) => {
            chargement : il restait donc invisible tant qu'on n'avait pas déplié, et il fallait
            ouvrir les vingt-trois sections une par une pour savoir lesquelles ont un catalogue.
            Une sous-requête sur une requête qui tourne déjà coûte infiniment moins que ça. */
-        const colonnes = (avecProduits) => `
+        const colonnes = (avecProduits, avecDestinataire = true) => `
             SELECT p.id, p.name, p.category, p.contact_name, p.contact_email, p.contact_phone,
                    p.website, p.town, p.discount_pct, p.offer, p.notes, p.created_at,
+                   ${avecDestinataire ? `p.recoit_coordonnees, p.contrat, p.contrat_duree_mois,
+                   DATE_FORMAT(p.contrat_debut, '%Y-%m-%d') AS contrat_debut,
+                   ${CONTRAT_FIN('p')} AS contrat_fin,`
+        : `NULL AS recoit_coordonnees, 0 AS contrat, NULL AS contrat_duree_mois,
+                   NULL AS contrat_debut, NULL AS contrat_fin,`}
                    COALESCE(SUM(re.amount), 0) AS commissions_total,
                    COUNT(re.id) AS commissions_count,
                    DATE_FORMAT(MAX(re.date), '%Y-%m-%d') AS last_commission${avecProduits ? `,
@@ -37,15 +57,24 @@ const getPartners = async (req, res) => {
         const filtre = req.query.category ? ' AND p.category = ?' : '';
         if (req.query.category) params.push(req.query.category);
         const fin = ' GROUP BY p.id ORDER BY p.name';
+        /* DEUX COLONNES OPTIONNELLES INDÉPENDANTES : le compte de produits (migration 095) et le
+           drapeau destinataire (migration 131). Une seule cascade `avec/sans` les traiterait comme
+           liées — l'absence de la 131 ferait alors disparaître le compte de produits, qui n'a rien
+           à voir. D'où deux repêchages successifs, du plus complet au plus pauvre. */
         let results;
-        try {
-            [results] = await conn.query(colonnes(true) + filtre + fin, params);
-        } catch (e) {
-            // `partner_product` arrive avec la migration 095 : sans elle, on rend la liste sans
-            // le compte plutôt que de casser toute la page pour une colonne d'appoint.
-            if (!isMissingSchema(e)) throw e;
-            [results] = await conn.query(colonnes(false) + filtre + fin, params);
+        const essais = [[true, true], [true, false], [false, true], [false, false]];
+        let derniere = null;
+        for (const [prod, dest] of essais) {
+            try {
+                [results] = await conn.query(colonnes(prod, dest) + filtre + fin, params);
+                derniere = null;
+                break;
+            } catch (e) {
+                if (!isMissingSchema(e)) throw e;
+                derniere = e;
+            }
         }
+        if (derniere) throw derniere;
 
         /* Détail des commissions par partenaire (libellé, date, montant, NATURE).
          *
@@ -92,16 +121,44 @@ const createPartner = (req, res) => {
     const b = req.body || {};
     if (!b.name) return res.status(422).json({ error: 'Nom du partenaire requis' });
     const id = crypto.randomUUID();
+    const base = ['id', 'organization_id', 'name', 'category', 'contact_name', 'contact_email',
+        'contact_phone', 'website', 'town', 'discount_pct', 'offer', 'notes'];
+    const vals = [id, req.user.organization_id, b.name, b.category || 'AUTRE', b.contact_name || null,
+        b.contact_email || null, b.contact_phone || null, b.website || null, b.town || null,
+        b.discount_pct === '' || b.discount_pct == null ? null : Number(b.discount_pct),
+        b.offer || null, b.notes || null];
+    /* LE CONTRAT À LA CRÉATION AUSSI (migration 131). Sans cela, un partenaire créé avec ses dates
+       les perdait en silence : le formulaire les affichait, l'INSERT les ignorait, et il fallait
+       rouvrir la fiche pour les ressaisir — sans jamais comprendre pourquoi.
+       `recoit_coordonnees` reste ABSENT, volontairement : un partenaire tout juste créé ne doit
+       pas naître destinataire de données personnelles. C'est un geste séparé, sur sa fiche. */
+    const colonnes = [...base], trous = base.map(() => '?');
+    for (const f of CONTRAT_FIELDS) {
+        if (b[f] === undefined || b[f] === '') continue;
+        colonnes.push(f); trous.push('?');
+        vals.push(f === 'contrat' ? (b[f] ? 1 : 0)
+            : f === 'contrat_duree_mois' ? Number(b[f]) : b[f]);
+    }
     db.query(
-        `INSERT INTO partner (id, organization_id, name, category, contact_name, contact_email,
-                              contact_phone, website, town, discount_pct, offer, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, req.user.organization_id, b.name, b.category || 'AUTRE', b.contact_name || null,
-         b.contact_email || null, b.contact_phone || null, b.website || null, b.town || null,
-         b.discount_pct === '' || b.discount_pct == null ? null : Number(b.discount_pct),
-         b.offer || null, b.notes || null],
+        `INSERT INTO partner (${colonnes.join(', ')}) VALUES (${trous.join(', ')})`,
+        vals,
         (err) => {
             if (err) {
+                // La 131 peut ne pas être jouée : on recrée sans les colonnes de contrat plutôt
+                // que de refuser la création d'un partenaire pour une échéance facultative.
+                if (isMissingSchema(err) && colonnes.length > base.length) {
+                    return db.query(
+                        `INSERT INTO partner (${base.join(', ')}) VALUES (${base.map(() => '?').join(', ')})`,
+                        vals.slice(0, base.length),
+                        (e2) => {
+                            if (e2) {
+                                console.error('Erreur création partenaire :', e2);
+                                return res.status(500).json({ error: 'Internal Server Error' });
+                            }
+                            logAudit(req, 'partner.create', 'Partner', id);
+                            res.status(201).json({ message: 'Partenaire créé', id });
+                        });
+                }
                 console.error('Erreur création partenaire :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
@@ -115,10 +172,16 @@ const createPartner = (req, res) => {
 const updatePartner = (req, res) => {
     const sets = [];
     const values = [];
-    for (const f of PARTNER_FIELDS) {
+    for (const f of [...PARTNER_FIELDS, ...CONTRAT_FIELDS]) {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];
         if (f === 'discount_pct') v = v === '' || v == null ? null : Number(v);
+        /* `contrat` EST UN BOOLÉEN, PAS UNE CHAÎNE. Sans cette ligne, un `false` venu du
+           formulaire tomberait dans le `v === ''` ci-dessous — non, mais `0` serait écrit tel
+           quel et une case décochée arriverait en `false`, que MySQL accepte en TINYINT. Le
+           forcer à 0/1 évite d'avoir à s'en remettre à cette tolérance. */
+        else if (f === 'contrat') v = v ? 1 : 0;
+        else if (f === 'contrat_duree_mois') v = v === '' || v == null ? null : Number(v);
         else if (v === '') v = null;
         sets.push(`${f} = ?`);
         values.push(v);
@@ -276,6 +339,48 @@ const createPartnerProduct = async (req, res) => {
 };
 
 /** PATCH /api/partners/produits/:pid — modifie un produit. */
+/**
+ * PATCH /api/partenaires/:id/destinataire — ce partenaire reçoit-il les coordonnées ? (migration 131)
+ *
+ * UNE ROUTE À PART, et non un champ de plus dans `updatePartner`. Ce n'est pas une propriété
+ * descriptive : c'est une AUTORISATION DE TRANSMETTRE des données personnelles. Trois conséquences
+ * pratiques qui justifient la séparation :
+ *
+ *  · un `PATCH` du formulaire de la fiche ne peut pas l'écraser au passage en oubliant de la
+ *    renvoyer — le cas classique où une case se décoche parce qu'on a corrigé une adresse ;
+ *  · elle porte sa propre trace d'audit, distincte de « partenaire modifié », parce que c'est
+ *    celle-là qu'on ira relire pour savoir depuis quand une entreprise recevait des coordonnées ;
+ *  · elle exige un booléen explicite, là où le reste tolère des chaînes vides.
+ *
+ * REFUSE 409 SANS LA MIGRATION plutôt que d'ignorer silencieusement : une case qui se recoche
+ * toute seule au rechargement ferait croire à un bug d'affichage, et l'école finirait par
+ * transmettre en pensant avoir restreint.
+ */
+const setPartnerDestinataire = (req, res) => {
+    if (typeof req.body?.recoit !== 'boolean') {
+        return res.status(422).json({ message: 'Valeur attendue : vrai ou faux.' });
+    }
+    db.query(
+        `UPDATE partner SET ${CHAMP_DESTINATAIRE} = ? WHERE id = ? AND organization_id = ?`,
+        [req.body.recoit ? 1 : 0, req.params.id, req.user.organization_id],
+        (err, result) => {
+            if (err) {
+                if (isMissingSchema(err)) {
+                    return res.status(409).json({
+                        message: 'Migration 131 non jouée : le choix des partenaires destinataires '
+                            + 'ne peut pas encore être enregistré.',
+                    });
+                }
+                console.error('Erreur destinataire partenaire :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            if (result.affectedRows === 0) return res.status(404).json({ message: 'Partenaire introuvable' });
+            logAudit(req, `partner.destinataire.${req.body.recoit ? 'oui' : 'non'}`, 'Partner', req.params.id);
+            res.json({ success: true });
+        }
+    );
+};
+
 const updatePartnerProduct = async (req, res) => {
     const b = req.body || {};
     const sets = [], vals = [];
@@ -483,6 +588,7 @@ const deletePartnerCategory = async (req, res) => {
     }
 };
 
-module.exports = { getPartners, createPartner, updatePartner, deletePartner, createContribution, deleteContribution,
+module.exports = {
+    setPartnerDestinataire, getPartners, createPartner, updatePartner, deletePartner, createContribution, deleteContribution,
     getPartnerProducts, createPartnerProduct, updatePartnerProduct, deletePartnerProduct,
     getPartnerCategories, createPartnerCategory, updatePartnerCategory, deletePartnerCategory };

@@ -2,7 +2,7 @@ const express = require('express');
 const { getPartners, createPartner, updatePartner, deletePartner, createContribution, deleteContribution,
     getPartnerProducts, createPartnerProduct, updatePartnerProduct, deletePartnerProduct,
     getPartnerCategories, createPartnerCategory, updatePartnerCategory,
-    deletePartnerCategory } = require('../controllers/partner.controller.js');
+    deletePartnerCategory, setPartnerDestinataire } = require('../controllers/partner.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -29,6 +29,10 @@ router.delete('/categories/:cid', authorizeRoles(...ADMIN_ROLES), deletePartnerC
 // Gestion des partenaires : bureau uniquement.
 router.post('/', authorizeRoles(...ADMIN_ROLES), createPartner);
 router.patch('/:id', authorizeRoles(...ADMIN_ROLES), updatePartner);
+/* Déclarer un partenaire destinataire des coordonnées : DEUX SEGMENTS, donc aucun conflit avec
+ * `/:id`. Route séparée parce que ce n'est pas une propriété de la fiche mais une autorisation de
+ * transmettre — cf. le commentaire du contrôleur. */
+router.patch('/:id/destinataire', authorizeRoles(...ADMIN_ROLES), setPartnerDestinataire);
 router.delete('/:id', authorizeRoles(...ADMIN_ROLES), deletePartner);
 
 /* Produits d'un partenaire — le catalogue montré aux stagiaires (onglet « Offres partenaires »).

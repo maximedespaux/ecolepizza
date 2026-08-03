@@ -1,7 +1,9 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { getPartenaires, createPartenaire, updatePartenaire, deletePartenaire, updateRevenue, deleteRevenue, deleteContribution,
-  getPartenaireCategories, createPartenaireCategorie, updatePartenaireCategorie, deletePartenaireCategorie } from "../api/apiClient.js";
+  getPartenaireCategories, createPartenaireCategorie, updatePartenaireCategorie, deletePartenaireCategorie,
+  setPartenaireDestinataire } from "../api/apiClient.js";
+import { finContrat, etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -30,6 +32,8 @@ const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
 const EMPTY = {
   name: "", category: "AUTRE", contact_name: "", contact_email: "", contact_phone: "",
   website: "", town: "", discount_pct: "", offer: "", notes: "",
+  // Contrat (migration 131) : non coché par défaut — toutes les relations n'en ont pas.
+  contrat: 0, contrat_debut: "", contrat_duree_mois: "",
 };
 const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR") : "-");
 const sumCash = (ap) => ap.filter((a) => apportType(a.type).cash).reduce((s, a) => s + (Number(a.value) || 0), 0);
@@ -46,6 +50,7 @@ function Partenaires() {
   const [tab, setTab] = useState("partenaires");   // partenaires | historique
   const [categories, setCategories] = useState(CATEGORIES_REPLI);
   const [gererCats, setGererCats] = useState(false);
+  const [destBusy, setDestBusy] = useState(null);   // partenaire dont on écrit le drapeau
 
   /* Le libellé d'un code, et le CODE LUI-MÊME à défaut. Un partenaire peut porter une catégorie
      que la liste ne connaît plus (supprimée, ou importée d'ailleurs) : afficher un vide à sa
@@ -64,6 +69,23 @@ function Partenaires() {
     catch (err) { setStatus({ type: "error", message: err.message }); }
   }
   useEffect(() => { load(); }, []);
+
+  /* DÉCLARER (ou retirer) UN PARTENAIRE DESTINATAIRE DES COORDONNÉES.
+     ÉCRITURE OPTIMISTE ASSUMÉE : la case bascule tout de suite, sinon un aller-retour serveur la
+     ferait « coller » et l'utilisateur cliquerait deux fois — ce qui, sur une autorisation de
+     transmettre, finirait par la remettre dans l'état d'origine sans qu'il s'en aperçoive. En cas
+     d'échec on RECHARGE depuis le serveur au lieu d'inverser à la main : seule la base dit ce qui
+     est réellement enregistré, et c'est elle qui décide qui reçoit des données personnelles. */
+  async function basculerDestinataire(p, recoit) {
+    setDestBusy(p.id); setStatus(null);
+    setPartners((l) => l.map((x) => (x.id === p.id ? { ...x, recoit_coordonnees: recoit ? 1 : 0 } : x)));
+    try {
+      await setPartenaireDestinataire(p.id, recoit);
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
+      load();
+    } finally { setDestBusy(null); }
+  }
 
   async function removeApport(ap) {
     if (!window.confirm(`Supprimer « ${ap.label} » ?`)) return;
@@ -154,6 +176,22 @@ function Partenaires() {
             <div className="partner-grid">
               {filtered.map((p) => {
                 const ap = apportsOfPartner(p);
+                /* UN SEUL CALCUL POUR LES DEUX BLOCS : le bandeau d'échéance et la case
+                   « reçoit les coordonnées » doivent dire la même chose. Deux appels séparés
+                   finiraient par diverger au premier ajustement — et le désaccord serait
+                   précisément « contrat terminé » affiché au-dessus d'une case encore active. */
+                const contrat = etatContrat(p);
+                const contratEchu = contrat.suivi && contrat.actif === false;
+                /* CE QUE LA CASE MONTRE EST L'ÉTAT EFFECTIF, pas la valeur en base. Contrat
+                   terminé = le partenaire ne reçoit RIEN, quelle que soit la colonne : le serveur
+                   refuse l'export et ne le nomme plus dans la demande de consentement. Afficher
+                   une case cochée dirait le contraire de ce qui se passe.
+                   La valeur stockée n'est pas écrasée pour autant — l'effacer perdrait, sans le
+                   dire, l'information de qui était destinataire avant l'échéance, et il faudrait
+                   la reconstituer au renouvellement. D'où le texte qui annonce que le réglage est
+                   conservé : sans lui, voir la case se recocher toute seule après renouvellement
+                   passerait pour un défaut. */
+                const recoitEffectif = Number(p.recoit_coordonnees) === 1 && !contratEchu;
                 return (
                   <Card key={p.id} title={p.name} more={
                     <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
@@ -212,6 +250,78 @@ function Partenaires() {
                     )}
 
                     {p.notes && <p className="sub" style={{ marginBottom: 0 }}>{p.notes}</p>}
+
+                    {/* L'ÉCHÉANCE DU CONTRAT (migration 131) — visible sur la fiche, sans
+                        déplier ni ouvrir le formulaire. Un contrat qui arrive à terme ne se
+                        manifeste par RIEN : ni erreur, ni alerte. Il faut donc que la date se
+                        voie là où l'on passe, pas là où l'on va chercher.
+                        Trois états, trois couleurs : échu (rouge), bientôt (orange, 60 jours pour
+                        avoir le temps de renégocier), et coché sans date (à compléter). Un
+                        contrat encore loin ne dit rien de plus que sa date. */}
+                    {(() => {
+                      const c = contrat;
+                      if (!c.suivi) return null;
+                      const ton = c.incomplet ? "n" : !c.actif ? "r" : c.jours <= BIENTOT_JOURS ? "o" : "g";
+                      return (
+                        <div className={"partner-contrat ton-" + ton}>
+                          <Icon name={c.actif ? "calendar" : "alert-triangle"} size={13} />
+                          <span>
+                            {c.incomplet ? (
+                              <>Contrat sans échéance renseignée. <span className="sub">Ajoutez une date de début et une durée pour suivre son terme.</span></>
+                            ) : !c.actif ? (
+                              <>Contrat <b>terminé</b> le {frISO(c.fin)}. <span className="sub">Ses offres ne sont plus présentées aux stagiaires et aucune coordonnée ne lui est transmise.</span></>
+                            ) : c.jours <= BIENTOT_JOURS ? (
+                              <>Contrat jusqu'au <b>{frISO(c.fin)}</b> — <b>{c.jours === 0 ? "dernier jour" : `${c.jours} jour${c.jours > 1 ? "s" : ""}`}</b>.</>
+                            ) : (
+                              <>Contrat jusqu'au <b>{frISO(c.fin)}</b>.</>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* DESTINATAIRE DES COORDONNÉES (migration 131) — une autorisation, pas une
+                        propriété de la fiche. Elle est donc rendue à part, avec sa propre écriture
+                        et son propre libellé explicite : « reçoit » dit ce qui se passe, alors
+                        qu'une case nue à côté d'une remise se coche sans y penser.
+                        `null` = migration non jouée : on n'affiche RIEN plutôt qu'une case qui se
+                        décocherait au rechargement. Une commande qui ne s'enregistre pas est pire
+                        qu'une commande absente — elle fait croire que le réglage a été pris. */}
+                    {canEdit && p.recoit_coordonnees !== null && p.recoit_coordonnees !== undefined && (
+                      /* GRISÉE ET INERTE QUAND LE CONTRAT EST TERMINÉ. Le serveur refuse déjà de
+                         produire la liste dans cet état : laisser la case active ferait croire
+                         qu'un simple clic suffit, et le refus n'arriverait qu'à l'export — loin du
+                         geste qui l'a causé. La valeur enregistrée n'est pas touchée pour autant :
+                         renouveler le contrat rend la case telle qu'elle était, sans avoir à
+                         retrouver qui était destinataire avant l'échéance.
+                         Le `title` et le texte disent POURQUOI c'est inerte — une commande
+                         désactivée sans explication se lit comme une panne. */
+                      <label
+                        className={"partner-destinataire"
+                          + (recoitEffectif ? " on" : "")
+                          + (contratEchu ? " off" : "")}
+                        title={contratEchu
+                          ? "Contrat terminé : ce réglage reprendra effet au renouvellement."
+                          : undefined}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={recoitEffectif}
+                          disabled={destBusy === p.id || contratEchu}
+                          onChange={(e) => basculerDestinataire(p, e.target.checked)}
+                        />
+                        <span>
+                          <b>Reçoit les coordonnées des stagiaires</b>
+                          <span className="sub">
+                            {contratEchu
+                              ? "Suspendu tant que le contrat n'est pas renouvelé. Le réglage est conservé."
+                              : recoitEffectif
+                                ? "Ce partenaire est nommé dans la demande de consentement, et peut recevoir la liste d'une session."
+                                : "Aucune coordonnée ne lui sera transmise, et il n'est pas nommé dans la demande de consentement."}
+                          </span>
+                        </span>
+                      </label>
+                    )}
 
                     {/* Catalogue vendu par CE partenaire — ce que le stagiaire voit dans l'onglet
                         « Offres partenaires ». Replié par défaut : la page sert d'abord à trouver
@@ -428,7 +538,17 @@ function CategoriesModal({ categories, onClose, onChange, onReload, onError }) {
 
 function PartnerModal({ partner, categories, onClose, onSaved, onError }) {
   const isNew = !!partner._new;
-  const [form, setForm] = useState(() => ({ ...EMPTY, ...partner, discount_pct: partner.discount_pct ?? "" }));
+  /* `?? ""` SUR CHAQUE CHAMP FACULTATIF. La base rend `null` pour une échéance non saisie, et un
+     `null` passé en `value` d'un `<input>` le rend NON CONTRÔLÉ : React laisse alors la saisie
+     vivre dans le DOM, `setForm` n'est plus la source de vérité, et l'avertissement n'apparaît
+     qu'en console. Le défaut se voit à l'enregistrement, pas à la saisie. */
+  const [form, setForm] = useState(() => ({
+    ...EMPTY, ...partner,
+    discount_pct: partner.discount_pct ?? "",
+    contrat: Number(partner.contrat) === 1 ? 1 : 0,
+    contrat_debut: partner.contrat_debut ?? "",
+    contrat_duree_mois: partner.contrat_duree_mois ?? "",
+  }));
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -440,6 +560,13 @@ function PartnerModal({ partner, categories, onClose, onSaved, onError }) {
         name: form.name, category: form.category, contact_name: form.contact_name,
         contact_email: form.contact_email, contact_phone: form.contact_phone, website: form.website,
         town: form.town, discount_pct: form.discount_pct, offer: form.offer, notes: form.notes,
+        /* LES DEUX DATES PARTENT VIDES SI LE CONTRAT EST DÉCOCHÉ, au lieu de rester en base. Sans
+           cela, décocher « contrat » laisserait une échéance dormante : la recocher ferait
+           ressurgir une date d'il y a deux ans, et le partenaire serait écarté sans que personne
+           n'ait saisi quoi que ce soit. */
+        contrat: form.contrat ? 1 : 0,
+        contrat_debut: form.contrat ? form.contrat_debut : "",
+        contrat_duree_mois: form.contrat ? form.contrat_duree_mois : "",
       };
       if (isNew) await createPartenaire(payload);
       else await updatePartenaire(partner.id, payload);
@@ -480,6 +607,32 @@ function PartnerModal({ partner, categories, onClose, onSaved, onError }) {
             <Field label="Ville" value={form.town} onChange={set("town")} />
             <Field label="Remise (%)" type="number" step="0.1" value={form.discount_pct} onChange={set("discount_pct")} />
           </div>
+          {/* LE CONTRAT (migration 131). Replié derrière une case : la plupart des relations
+              n'en ont pas, et deux champs de date affichés en permanence donneraient à croire
+              qu'il faut les remplir. Cochée, elle déplie l'échéance — et c'est cette échéance
+              qui, une fois passée, retire les offres du partenaire de la vitrine stagiaire. */}
+          <label className="partner-contrat-case">
+            <input type="checkbox" checked={!!form.contrat}
+              onChange={(e) => setForm((p) => ({ ...p, contrat: e.target.checked ? 1 : 0 }))} />
+            <span>
+              <b>Ce partenariat est encadré par un contrat</b>
+              <span className="sub">Passée l'échéance, ses offres cessent d'être présentées aux
+                stagiaires et aucune coordonnée ne lui est transmise.</span>
+            </span>
+          </label>
+          {!!form.contrat && (
+            <div className="row2">
+              <Field label="Début du contrat" type="date" value={form.contrat_debut} onChange={set("contrat_debut")} />
+              <Field label="Durée (mois)" type="number" min="1" step="1"
+                value={form.contrat_duree_mois} onChange={set("contrat_duree_mois")} />
+            </div>
+          )}
+          {!!form.contrat && form.contrat_debut && form.contrat_duree_mois > 0 && (
+            <p className="hint" style={{ marginTop: -4 }}>
+              <Icon name="calendar" size={12} /> Fin le <b>{finContrat(form.contrat_debut, form.contrat_duree_mois)}</b>
+            </p>
+          )}
+
           <div className="field"><label>Notes de suivi</label>
             <textarea className="inp" rows={3} value={form.notes} onChange={set("notes")} /></div>
         </div>

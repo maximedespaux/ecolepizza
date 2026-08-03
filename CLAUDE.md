@@ -143,6 +143,15 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 | 127 | `piece_type` + `piece_depot` + `piece_fichier` + `program_step.piece_id` — **pièces justificatives fournies par le stagiaire** (identité recto/verso…). **Porte une question RGPD non tranchée, cf. le bloc en tête de ce fichier** |
 | 128 | `learner.cadre` élargie à 32 caractères — les **cadres de Pizza Quest** s'enregistrent en `palier|#rrggbb` (couleur de la formation). Le plus long tient dans les 16 actuels *au caractère près* : la migration écarte le mur, le code marche avant comme après |
 
+**Jouées le 2026-08-03** : `129` (catégories de partenaires), `130` (registre des consentements +
+journal des transmissions), `131` (`partner.recoit_coordonnees` + suivi de contrat).
+
+⚠️ **La 131 démarre à zéro destinataire**, volontairement : `DEFAULT 0` signifie qu'aucun
+partenaire ne reçoit de coordonnées tant que l'école ne l'a pas coché sur sa fiche. À 1, la
+migration aurait fait de vingt-trois annuaires des destinataires de données personnelles sans que
+personne ne l'ait décidé. **L'école doit donc cocher les quelques partenaires réellement
+concernés** — rien ne se transmet avant.
+
 Le code fonctionne sans elles (colonnes optionnelles), mais la fonctionnalité n'est complète
 qu'une fois jouées. D'autres migrations plus anciennes (106→117) peuvent aussi être en attente —
 **demander confirmation** avant de supposer qu'une colonne existe.

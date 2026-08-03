@@ -719,6 +719,42 @@ aggravation.
 consentement puis continuer d'envoyer une liste faite à la main, c'est se donner une preuve qui
 démontre l'infraction. L'export est donc la vraie fin du chantier, pas un raffinement.
 
+### 9.6 État au 2026-08-03 — les trois étapes sont faites
+
+- **Étape 1** — `ConsentModal` (posée une seule fois, `accorde === null`) + bloc « Confidentialité »
+  du profil, où l'on revient sur sa réponse dans les deux sens. Vérifié de bout en bout : réponse
+  enregistrée, horodatée, et les 23 partenaires figés dans la ligne du registre.
+- **Étape 2** — carte « Transmission aux partenaires » sur la page de la session
+  (`SessionConsentements`). Trois groupes, **« jamais sollicité » en premier** : c'est le seul sur
+  lequel l'organisme a quelque chose à faire. Le secrétariat y saisit les réponses recueillies
+  **hors ligne** (`source` = papier / oral / inscription, `saisi_par` = qui saisit) — sans quoi un
+  accord donné sur formulaire resterait invisible de l'export, qui écarterait quelqu'un ayant
+  pourtant accepté. `espace_stagiaire` est **refusé** sur cette route : on ne fabrique pas un
+  accord « donné en ligne ».
+- **Étape 3** — `POST /sessions/:id/transmission`. **Le serveur compose la liste**, l'écran ne
+  fait que l'afficher : il n'existe aucun chemin pour y ajouter quelqu'un. Filtre `accorde === true`
+  (et non « pas de refus »), colonnes limitées à `FINALITES.partenaires.champs`, envoi inscrit dans
+  `partner_disclosure`. Copie en tableau ou CSV (point-virgule + BOM, sinon Excel FR est illisible
+  et la liste serait recopiée à la main — ce que cet écran remplace).
+
+**Restriction ajoutée (migration 131)** : un partenaire ne reçoit rien tant qu'il n'est pas coché
+« reçoit les coordonnées », et la demande de consentement **ne nomme que ceux-là**. Mesuré : le
+texte est passé de **23 entreprises nommées à une seule**. Demander d'accepter vingt-trois
+destinataires quand quatre suffisent n'est pas une approximation — c'est un consentement plus large
+que le besoin (art. 5.1.c), et le meilleur moyen de faire refuser tout le monde.
+
+**Suivi de contrat (même migration)** : un contrat échu retire le partenaire des **trois** endroits
+à la fois — vitrine du stagiaire, liste nommée dans le consentement, et export (422 avec la date).
+Sa fiche et son historique restent : c'est un retrait, pas un effacement.
+
+### 9.7 Ce qui reste
+
+- **Cocher les partenaires réellement destinataires.** La 131 démarre à zéro : aujourd'hui la
+  demande de consentement annonce « aucun partenaire n'est actuellement destinataire ».
+- **Le sort des refus** : un stagiaire qui refuse doit-il être resollicité à la session suivante ?
+  Par défaut, non — et c'est ce que fait le code.
+- **Relire la formulation** (`api/lib/consentements.js`) : elle engage l'école, pas le développeur.
+
 ### 9.5 Ce qui reste à trancher
 
 - **La formulation exacte** de la demande de consentement — elle doit nommer les partenaires (ou

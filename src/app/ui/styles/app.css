@@ -4446,3 +4446,105 @@ button.av-wrap:active{transform:scale(.94)}
   @keyframes bandeau-monte{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 }
 @media (prefers-reduced-motion:reduce){ .bandeau-conf{animation:none} }
+
+
+/* ── Transmission aux partenaires : consentements d'une session ──────────────────────────────
+   RÈGLES DE BASE D'ABORD, MÉDIA-QUERY ENSUITE. Une `@media` écrite AVANT la règle de base est
+   écrasée par elle : la cascade départage à spécificité égale par l'ORDRE, pas par la présence
+   d'une condition. Le piège a déjà coûté deux passes dans ce fichier. */
+.consent-groupe{margin:14px 0}
+.consent-groupe-tt{display:flex;align-items:center;gap:7px;margin-bottom:6px;font-size:13px}
+.consent-ligne{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;
+  background:var(--surface2);margin-bottom:4px;min-width:0}
+.consent-nom{font-weight:600;font-size:13px;flex:1;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.consent-quand{font-size:11px;white-space:nowrap}
+.consent-actions{display:flex;gap:5px;flex-shrink:0}
+
+.consent-source{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:10px 12px;
+  border:1px dashed var(--border);border-radius:9px;margin:10px 0}
+.consent-source label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.consent-source select{padding:5px 8px;border-radius:7px;border:1px solid var(--border);
+  background:var(--surface);color:inherit;font:inherit;font-size:12px}
+.consent-source .hint{flex-basis:100%;font-size:11px;margin:0}
+
+.consent-envoi{margin-top:16px;padding:12px;border-radius:10px;background:var(--surface2)}
+.consent-envoi > b{display:flex;align-items:center;gap:7px;font-size:13px;margin-bottom:9px}
+.consent-envoi-ligne{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.consent-envoi-ligne select{flex:1;min-width:180px;padding:7px 9px;border-radius:8px;
+  border:1px solid var(--border);background:var(--surface);color:inherit;font:inherit;font-size:13px}
+.consent-envoi .hint{display:block;margin:9px 0 0;font-size:11px}
+
+.consent-liste{margin-top:12px;border:1px solid var(--border);border-radius:10px;padding:11px}
+.consent-liste-tt{display:flex;align-items:center;gap:7px;margin-bottom:9px;font-size:13px;
+  flex-wrap:wrap}
+/* LA TABLE DÉFILE DANS SON PROPRE CADRE. Six colonnes de coordonnées dépassent toujours sur un
+   écran étroit ; sans ce conteneur, c'est la PAGE qui gagnerait une barre horizontale. */
+.consent-table-wrap{overflow-x:auto}
+.consent-table{width:100%;border-collapse:collapse;font-size:12px}
+.consent-table th{text-align:left;font-weight:600;padding:5px 9px 5px 0;white-space:nowrap;
+  border-bottom:1px solid var(--border);text-transform:capitalize}
+.consent-table td{padding:5px 9px 5px 0;white-space:nowrap;
+  border-bottom:1px solid color-mix(in srgb, var(--border) 45%, transparent)}
+
+.consent-journal{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.consent-journal > b{display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:7px}
+.consent-journal-ligne{display:flex;align-items:center;gap:9px;font-size:12px;padding:3px 0;
+  min-width:0}
+
+@media (max-width:640px){
+  /* Les actions passent SOUS le nom : à trois éléments sur une ligne, le nom se réduisait à
+     quelques lettres pour laisser la place à deux boutons. */
+  .consent-ligne{flex-wrap:wrap}
+  .consent-nom{flex-basis:100%;white-space:normal}
+  .consent-actions{margin-left:auto}
+  .consent-envoi-ligne select{min-width:0;flex-basis:100%}
+}
+
+/* ── Partenaire destinataire des coordonnées (migration 131) ─────────────────────────────────
+   ELLE NE RESSEMBLE PAS AUX AUTRES RÉGLAGES DE LA FICHE, et c'est délibéré : ce n'est pas une
+   propriété descriptive comme une remise, c'est l'autorisation de transmettre des données
+   personnelles. Un cadre, une explication sous le libellé, et un état ACTIF nettement visible —
+   pour qu'on ne la coche pas d'un geste distrait au milieu d'un formulaire. */
+.partner-destinataire{display:flex;gap:9px;align-items:flex-start;margin-top:11px;padding:9px 11px;
+  border:1px solid var(--border);border-radius:9px;cursor:pointer;transition:border-color .15s,background .15s}
+.partner-destinataire:hover{border-color:color-mix(in srgb, var(--blue) 45%, var(--border))}
+.partner-destinataire.on{border-color:color-mix(in srgb, var(--green) 55%, transparent);
+  background:color-mix(in srgb, var(--green) 7%, transparent)}
+/* 16px sur une case native, plus une zone cliquable qui couvre TOUT le bloc grâce au <label> :
+   la cible tactile est le cadre entier, pas le carré de 16px. */
+.partner-destinataire input{width:16px;height:16px;margin:2px 0 0;flex-shrink:0;cursor:pointer;
+  accent-color:var(--green)}
+.partner-destinataire > span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.partner-destinataire b{font-size:12.5px;line-height:1.3}
+.partner-destinataire .sub{font-size:11px;line-height:1.35}
+
+/* ── Échéance de contrat partenaire (migration 131) ──────────────────────────────────────────
+   TROIS TONS, ET LA COULEUR N'EST JAMAIS SEULE À PORTER L'INFORMATION (WCAG 1.4.1) : le texte dit
+   « terminé le … » ou « 12 jours », et l'icône passe du calendrier au triangle d'alerte. Un
+   daltonien lit exactement la même chose. */
+.partner-contrat{display:flex;gap:8px;align-items:flex-start;margin-top:10px;padding:8px 10px;
+  border-radius:8px;font-size:12px;line-height:1.4}
+.partner-contrat .sub{display:block;font-size:11px;margin-top:2px}
+.partner-contrat.ton-g{background:color-mix(in srgb, var(--green) 8%, transparent);color:var(--green)}
+.partner-contrat.ton-o{background:color-mix(in srgb, var(--orange) 11%, transparent);color:var(--orange)}
+.partner-contrat.ton-r{background:color-mix(in srgb, var(--red) 11%, transparent);color:var(--red)}
+.partner-contrat.ton-n{background:var(--surface2)}
+.partner-contrat svg{flex-shrink:0;margin-top:1px}
+
+/* La case du formulaire : même traitement que celle de la fiche — un cadre, une explication, et
+   une cible cliquable qui couvre tout le bloc grâce au <label>. */
+.partner-contrat-case{display:flex;gap:9px;align-items:flex-start;margin:12px 0 10px;padding:9px 11px;
+  border:1px dashed var(--border);border-radius:9px;cursor:pointer}
+.partner-contrat-case input{width:16px;height:16px;margin:2px 0 0;flex-shrink:0;cursor:pointer}
+.partner-contrat-case > span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.partner-contrat-case b{font-size:12.5px;line-height:1.3}
+.partner-contrat-case .sub{font-size:11px;line-height:1.35}
+
+/* Contrat terminé : la case « reçoit les coordonnées » est SUSPENDUE, pas effacée.
+   `pointer-events:none` en plus de l'attribut `disabled` — sans lui, le <label> resterait
+   cliquable et transmettrait le clic à la case, qui l'ignorerait : on obtiendrait une commande
+   qui répond au survol et ne fait rien, ce qui se lit comme une panne plutôt qu'un blocage. */
+.partner-destinataire.off{opacity:.5;cursor:not-allowed;pointer-events:none;
+  border-style:dashed;background:var(--surface2)}
+.partner-destinataire.off input{cursor:not-allowed}

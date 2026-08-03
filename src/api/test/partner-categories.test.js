@@ -130,7 +130,15 @@ test('le nombre de produits se lit sans déplier la fiche', () => {
        d'appoint. */
     const bloc = CTRL.slice(CTRL.indexOf('const getPartners'), CTRL.indexOf('const createPartner'));
     assert.match(bloc, /if \(!isMissingSchema\(e\)\) throw e;/);
-    assert.match(bloc, /colonnes\(false\)/, 'un repli sans la sous-requête');
+    /* LE REPLI EXISTE TOUJOURS, SA FORME A CHANGÉ. Il s'écrivait `colonnes(false)` quand il n'y
+       avait qu'une colonne optionnelle ; la 131 en a ajouté une seconde, indépendante (le drapeau
+       destinataire), d'où une cascade d'essais du plus complet au plus pauvre. Ce que le test
+       protège est inchangé : il DOIT exister une tentative sans la sous-requête produits.
+       `[false, ...]` est le premier membre de ce couple d'essais. */
+    assert.match(bloc, /const essais = \[.*\[false, /,
+        'un repli sans la sous-requête produits doit rester possible');
+    assert.match(bloc, /\[false, false\]/,
+        'et un dernier repli sans AUCUNE des deux colonnes optionnelles');
 
     const comp = fs.readFileSync(path.join(UI, 'components/PartnerProduits.jsx'), 'utf8');
     assert.match(comp, /const nb = rows\?\.length \?\? \(nbInitial != null \? Number\(nbInitial\) : null\);/,
