@@ -105,3 +105,31 @@ test('sans la migration, tout continue comme avant', () => {
        possible à l'époque, donc la seule chose qu'on sache de ce qui lui a été montré. */
     assert.match(src, /champsAnnonces: r\.champs \? champsValides\(r\.champs\) : \[\.\.\.FINALITES\.partenaires\.champsParDefaut\]/);
 });
+
+test('le réglage a sa propre rubrique dans Paramètres', () => {
+    /* POURQUOI PAS UNE SECTION DE LA FICHE « ORGANISME », où elle se trouvait d'abord. Ce réglage
+       ne DÉCRIT pas l'organisme comme sa raison sociale ou son SIRET : il décide de ce qui SORT
+       de l'école, information par information, et le texte que des dizaines de personnes liront
+       et accepteront en découle mot pour mot. Rangé entre le code NAF et le RIB, il se serait lu
+       comme un détail administratif de plus.
+       TROIS DÉCLARATIONS SONT NÉCESSAIRES, et en oublier une donne une panne différente à chaque
+       fois : sans l'entrée NAV la rubrique n'existe pas, sans SETTINGS_PATHS elle n'apparaît pas
+       dans le sommaire, sans la route le clic tombe sur un 404. */
+    const nav = fs.readFileSync(path.join(UI, 'lib/nav.js'), 'utf8');
+    assert.match(nav, /\{ to: "\/reglages-partenaires", ic: "handshake", label: "Partenaires", roles: ADMIN \}/,
+        'la rubrique doit exister dans NAV…');
+    assert.match(nav, /SETTINGS_PATHS = \[[^\]]*"\/reglages-partenaires"/,
+        '…et figurer dans le sommaire des paramètres');
+    assert.match(nav, /"\/reglages-partenaires": "Partenaires"/, 'avec son libellé de fil d\'Ariane');
+
+    const routes = fs.readFileSync(path.join(UI, 'main.jsx'), 'utf8');
+    assert.match(routes, /<Route path="reglages-partenaires"[^>]*roles=\{ADMIN\}><ReglagesPartenaires \/>/,
+        'la route doit exister, et rester réservée au bureau');
+
+    /* ET LA SECTION NE DOIT PLUS ÊTRE DANS LES RÉGLAGES ORGANISME : l'y laisser en double
+       donnerait deux écrans qui écrivent le même réglage, dont un que personne ne penserait à
+       rouvrir après avoir modifié l'autre. */
+    const reglages = fs.readFileSync(path.join(UI, 'pages/Reglages.jsx'), 'utf8');
+    assert.doesNotMatch(reglages, /ChampsPartenaires/,
+        'le réglage ne doit vivre qu\'à un seul endroit');
+});

@@ -39,6 +39,7 @@ import Comptabilite from "./pages/Comptabilite.jsx";
 import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import FacturationReglages from "./pages/FacturationReglages.jsx";
+import ReglagesPartenaires from "./pages/ReglagesPartenaires.jsx";
 import Parametres from "./pages/Parametres.jsx";
 import Modeles from "./pages/Modeles.jsx";
 import Opcos from "./pages/Opcos.jsx";
@@ -216,6 +217,7 @@ function AppRoutes() {
           <Route path="carte" element={<Guard nav="/carte" roles={ADMIN}><Carte /></Guard>} />
           <Route path="reglages" element={<Guard nav="/reglages" roles={ADMIN}><Reglages /></Guard>} />
           <Route path="reglages-facturation" element={<Guard nav="/reglages-facturation" roles={ADMIN}><FacturationReglages /></Guard>} />
+          <Route path="reglages-partenaires" element={<Guard nav="/reglages-partenaires" roles={ADMIN}><ReglagesPartenaires /></Guard>} />
           <Route path="modeles" element={<Guard nav="/modeles" roles={ADMIN}><Modeles /></Guard>} />
           <Route path="modeles/:slug/editeur" element={<Guard nav="/modeles" roles={ADMIN}><TemplateEditor /></Guard>} />
           <Route path="modeles/emargement/:id" element={<Guard nav="/modeles" roles={ADMIN}><EmargementEditor /></Guard>} />
