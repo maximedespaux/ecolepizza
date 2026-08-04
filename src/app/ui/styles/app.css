@@ -4907,10 +4907,15 @@ button.av-wrap:active{transform:scale(.94)}
 .cp-lexique dd{margin:1px 0 0;color:var(--muted)}
 /* « Le client demandait une … » — la réponse à la devinette, donnée à chaque verdict, réussi ou
    non. Encadrée comme une carte de rappel : c'est la seule ligne du résultat qu'on relit. */
-.sim-etait{display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;
+/* EN FLUX, pas en flex : la phrase contient du gras, et chaque fragment devenait un élément
+   séparé — d'où des écarts de 8 px autour du nom du style et une coupure avant le tiret. Le
+   voisin `.pq-fete-gain` garde son flex, lui : ses fragments sont courts et l'écart y sert
+   d'espace voulu entre l'icône, le libellé et l'indication. */
+.sim-etait{text-align:center;
   margin:2px 0 12px;padding:8px 12px;border-radius:10px;font-size:12.5px;line-height:1.35;
   color:var(--muted);background:var(--surface2);border:1px solid var(--border)}
 .sim-etait b{color:var(--text)}
+.sim-etait .sim-obj-e{vertical-align:-3px;margin-right:5px}
 
 /* ————— LE SERVICE EN CINQ COMMANDES —————
    Le compteur de manches remplace les cœurs dans le bandeau : ce jeu n'a plus de reprise, c'est
@@ -4928,3 +4933,19 @@ button.av-wrap:active{transform:scale(.94)}
 .sim-brief-i{margin:0 0 2px;font-style:italic}
 /* Le compteur de manches dans l'en-tête : il pousse la croix à droite sans la déplacer. */
 .modal.sim .mhead .sim-manche-n{margin-left:auto;margin-right:8px}
+
+/* ————— « LA SUBSTITUTION » : LES QUATRE LIGNES DE LA FICHE —————
+   Deux colonnes sur écran large, une sur téléphone : quatre champs numériques côte à côte à
+   169 px se rempliraient au chausse-pied. */
+.sub-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:14px 0 10px}
+.sub-champ{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted)}
+/* L'unité collée au champ plutôt qu'écrite dans l'intitulé : on saisit un nombre, pas « 150 g ». */
+.sub-saisie{display:flex;align-items:center;gap:6px}
+.sub-saisie .inp{flex:1;min-width:0;text-align:right}
+.sub-saisie b{flex:none;color:var(--text);font-size:13px}
+/* PAS DE `display:flex` SUR UN PARAGRAPHE QUI CONTIENT DU GRAS. Chaque fragment de texte
+   devient un élément flex et la phrase se recompose dans le désordre : « remplace une à poids
+   total constant . Le bassinage… ». C'est exactement le défaut corrigé le même jour sur
+   `.stock-avert`, et je l'ai réintroduit ici. Un texte suivi se met en forme EN FLUX. */
+.sub-rappel{margin:0}
+.sub-rappel svg{vertical-align:-1px;margin-right:4px}
