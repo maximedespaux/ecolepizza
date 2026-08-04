@@ -169,7 +169,11 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                     <Icon name={a.note === 2 ? "check-circle" : a.note === 1 ? "info" : "x-circle"} size={15} />
                     <span>
                       <b>{a.label}</b> : {a.val}
-                      {a.note === 2 ? "parfait." : `, ${a.sens}.`}
+                      {/* L'ESPACE EST DANS LA CHAÎNE, pas entre les accolades : JSX supprime un
+                          saut de ligne qui sépare deux expressions, et « 65 % » se collait à
+                          « parfait ». L'autre branche s'en tirait par hasard — elle commence par
+                          sa propre virgule. */}
+                      {a.note === 2 ? " parfait." : `, ${a.sens}.`}
                       <em>{a.why}</em>
                     </span>
                   </li>
