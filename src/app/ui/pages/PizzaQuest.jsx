@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import StatusMessage from "../components/StatusMessage.jsx";
 import { getMyFormations, getMyProfile, getPlayableChapters, resetMyQuest } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
@@ -214,9 +216,30 @@ function PizzaQuest() {
    *   · la mémoire des fêtes, sinon les paliers déjà franchis ne se refêteraient jamais et on ne
    *     pourrait plus tester l'animation qu'on vient d'écrire.
    */
+  /* ─────────────────────────────────────────────────────────────────────────────────────────
+     LA REMISE À ZÉRO DE DÉVELOPPEMENT — pourquoi elle mérite mieux qu'un `confirm()`.
+
+     LE GARDE `DEV` CACHE LE BOUTON, PAS LA CONSÉQUENCE. `resetMyQuest()` efface la ligne dans
+     la BASE DISTANTE, celle-là même que l'école utilise : « développement » ne veut pas dire
+     « données jetables » sur ce projet. Un clic de trop et la progression réelle est perdue,
+     sans retour possible.
+
+     ET `window.alert` NE DIT RIEN DE SÛR. Mesuré dans un navigateur piloté : `alert()` rend la
+     main sans afficher, `confirm()` répond « Annuler » d'office, `prompt()` lève une erreur.
+     Une remise à zéro qui échoue s'annonçait donc par une boîte qui, selon le contexte, ne
+     paraît jamais — l'écran restait tel quel, et l'on croyait que ça avait marché. L'échec
+     s'affiche désormais DANS la page, où rien ne peut l'avaler.
+
+     Le mot à recopier reprend la mécanique de l'inventaire du coffre : sur une action qu'on ne
+     rattrape pas, un bouton se clique par réflexe, un mot non. */
+  const [razOuverte, setRazOuverte] = useState(false);
+  const [razSaisie, setRazSaisie] = useState("");
+  const [razErreur, setRazErreur] = useState(null);
+  const [razEnCours, setRazEnCours] = useState(false);
+  const razMotOk = razSaisie.trim().toUpperCase() === "EFFACER";
+
   async function remiseAZero() {
-    if (!window.confirm("DEBUG, effacer TOUTE ta progression Pizza Quest ?\n\n"
-      + "Chapitres, étoiles des mini-jeux et cadres de quête. Irréversible.")) return;
+    setRazEnCours(true); setRazErreur(null);
     try {
       await resetMyQuest();
       try {
@@ -225,7 +248,9 @@ function PizzaQuest() {
       } catch { /* navigation privée : la base est déjà vide, c'est l'essentiel */ }
       setProg({});
       setActive(null);
-    } catch (e) { window.alert("Échec de la remise à zéro : " + e.message); }
+      setRazOuverte(false); setRazSaisie("");
+    } catch (e) { setRazErreur(e.message); }
+    finally { setRazEnCours(false); }
   }
 
   const totalStars = useMemo(() => Object.values(prog).reduce((s, w) => s + Object.values(w).reduce((a, v) => a + v, 0), 0), [prog]);
@@ -268,11 +293,49 @@ function PizzaQuest() {
           {/* Les étoiles restent : elles notent la réussite d'un chapitre. Ce sont l'XP et les
               cœurs qui ont disparu — ils comptaient le temps passé et rationnaient l'accès. */}
           <div className="pq-stat"><Icon name="star" size={15} fill="currentColor" aria-hidden="true" /><b>{totalStars}</b><span>étoiles</span></div>
+          {/* TOUT CE BLOC DISPARAÎT DU BUNDLE EN PRODUCTION : Vite remplace `import.meta.env.DEV`
+              par `false` à la compilation. Ce n'est pas un bouton caché derrière un rôle, c'est
+              un bouton qui n'existe pas chez le stagiaire — la modale comprise. */}
           {import.meta.env.DEV && (
-            <button type="button" className="pq-debug" onClick={remiseAZero}
-              title="Développement seulement, ce bouton n'existe pas en production">
-              <Icon name="trash" size={13} /> Debug : tout effacer
-            </button>
+            <>
+              <button type="button" className="pq-debug"
+                onClick={() => { setRazOuverte(true); setRazSaisie(""); setRazErreur(null); }}
+                title="Développement seulement, ce bouton n'existe pas en production">
+                <Icon name="trash" size={13} /> Debug : tout effacer
+              </button>
+              {razOuverte && createPortal(
+                <div className="overlay" onClick={() => setRazOuverte(false)}>
+                  <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+                    <div className="mhead">
+                      <h3>Effacer toute ta progression ?</h3>
+                      <button className="x" onClick={() => setRazOuverte(false)} aria-label="Fermer">
+                        <Icon name="x" size={16} /></button>
+                    </div>
+                    <div className="mbody">
+                      <p className="lead" style={{ marginTop: 0 }}>
+                        Chapitres, étoiles des mini-jeux et cadres de quête : tout part, <b>dans la
+                        base</b>, et rien ne se récupère. Outil de développement — mais la base,
+                        elle, est la vraie.
+                      </p>
+                      {razErreur && <StatusMessage type="error" message={`Échec de la remise à zéro : ${razErreur}`} />}
+                      <label className="field confirm-mot" style={{ marginBottom: 0 }}>
+                        <span>Recopiez <b>EFFACER</b> pour confirmer</span>
+                        <input className="inp" autoFocus value={razSaisie} spellCheck="false"
+                          onChange={(e) => setRazSaisie(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter" && razMotOk && !razEnCours) remiseAZero(); }} />
+                      </label>
+                    </div>
+                    <div className="mfoot">
+                      <button className="btn ghost" onClick={() => setRazOuverte(false)}>Annuler</button>
+                      <button className="btn danger" disabled={!razMotOk || razEnCours} onClick={remiseAZero}>
+                        <Icon name="trash" size={15} /> {razEnCours ? "Effacement…" : "Tout effacer"}
+                      </button>
+                    </div>
+                  </div>
+                </div>,
+                document.body
+              )}
+            </>
           )}
         </div>
       </div>

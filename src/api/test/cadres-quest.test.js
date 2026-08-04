@@ -708,6 +708,27 @@ test('la remise à zéro n\'existe qu\'en développement, et ne vise que soi', (
            qu'à la hausse, mais une progression locale intacte suffit à tout restaurer ;
          · la mémoire des fêtes, sinon les paliers déjà franchis ne se refêteraient jamais et
            l'animation deviendrait intestable. */
+    /* ET ELLE NE PART PLUS SUR UN `confirm()`. Le garde `DEV` cache le BOUTON, pas la
+       conséquence : `resetMyQuest()` efface la ligne dans la base DISTANTE, celle que l'école
+       utilise. « Développement » ne veut pas dire « données jetables » ici. Un mot à recopier,
+       comme pour l'inventaire du coffre : sur une action qu'on ne rattrape pas, un bouton se
+       clique par réflexe, un mot non. */
+    /* SOURCE DÉPOUILLÉ DE SES COMMENTAIRES : les deux `doesNotMatch` ci-dessous cherchent des
+       mots que le code NE DOIT PLUS contenir — et les commentaires qui expliquent pourquoi les
+       contiennent forcément. Sans ce nettoyage, l'assertion trébuche sur sa propre documentation
+       et reste rouge quoi qu'on fasse au code. Le piège s'est déjà refermé plusieurs fois ici. */
+    const questRendu = srcQuest.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert.doesNotMatch(questRendu, /window\.confirm/, 'une action irréversible mérite mieux qu\'un confirm');
+    assert.match(srcQuest, /razSaisie\.trim\(\)\.toUpperCase\(\) === "EFFACER"/, 'le mot à recopier');
+    assert.match(srcQuest, /disabled=\{!razMotOk \|\| razEnCours\}/, 'le bouton reste fermé sans le mot');
+    /* ET L'ÉCHEC S'AFFICHE DANS LA PAGE. Mesuré dans un navigateur piloté : `alert()` rend la
+       main SANS RIEN AFFICHER, `confirm()` répond « Annuler » d'office, `prompt()` lève une
+       erreur. Une remise à zéro ratée s'annonçait donc par une boîte qui, selon le contexte, ne
+       paraît jamais : l'écran restait tel quel et l'on croyait que ça avait marché. */
+    assert.doesNotMatch(questRendu, /window\.alert/, 'une alerte native peut n\'afficher rien du tout');
+    assert.match(srcQuest, /setRazErreur\(e\.message\)/, 'l\'échec se dit dans la page');
+    assert.match(srcQuest, /razErreur && <StatusMessage type="error"/, 'et s\'y voit');
+
     assert.match(srcQuest, /await resetMyQuest\(\);/);
     assert.match(srcQuest, /localStorage\.removeItem\(KEY\);/);
     assert.match(srcQuest, /localStorage\.removeItem\("impasto\.quest\.fetes"\);/);
