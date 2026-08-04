@@ -4949,3 +4949,14 @@ button.av-wrap:active{transform:scale(.94)}
    `.stock-avert`, et je l'ai réintroduit ici. Un texte suivi se met en forme EN FLUX. */
 .sub-rappel{margin:0}
 .sub-rappel svg{vertical-align:-1px;margin-right:4px}
+
+/* ————— « COMPLÈTE LA PÂTE » : LA TABLE DE LA LEVURE —————
+   Repliée par défaut : elle sert de rappel, pas d'énoncé. La ligne qui correspond à la
+   température de la fiche est mise en avant — lire la BONNE ligne est justement l'exercice. */
+.pate-table{margin:4px 0 10px;font-size:11.5px}
+.pate-table>summary{cursor:pointer;color:var(--muted);display:flex;align-items:center;gap:5px}
+.pate-table table{width:100%;border-collapse:collapse;margin-top:7px}
+.pate-table th,.pate-table td{padding:4px 7px;text-align:right;border-bottom:1px solid var(--border)}
+.pate-table th:first-child,.pate-table td:first-child{text-align:left;color:var(--muted)}
+.pate-table thead th{font-size:10.5px;color:var(--muted);font-weight:700}
+.pate-table tr.on td{background:color-mix(in srgb,var(--gold) 15%,transparent);font-weight:700}

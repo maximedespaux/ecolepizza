@@ -8,6 +8,7 @@ import SimulateurPizza from "../components/SimulateurPizza.jsx";
 import CommandePiege from "../components/CommandePiege.jsx";
 import JustePrix from "../components/JustePrix.jsx";
 import Substitutions from "../components/Substitutions.jsx";
+import CompleterPate from "../components/CompleterPate.jsx";
 import { colorOf } from "../lib/format.js";
 import { saveQuestProgress } from "../lib/gamification.js";
 import { FETES, paliersFranchis, marquerFete, palierDuMonde } from "../lib/questPaliers.js";
@@ -368,6 +369,7 @@ function PizzaQuest() {
       {mini?.key === "piege" && <CommandePiege onClose={() => setMini(null)} onFinish={(stars) => finishMini("piege", stars)} />}
       {mini?.key === "prix" && <JustePrix onClose={() => setMini(null)} onFinish={(stars) => finishMini("prix", stars)} />}
       {mini?.key === "substitutions" && <Substitutions onClose={() => setMini(null)} onFinish={(stars) => finishMini("substitutions", stars)} />}
+      {mini?.key === "pate" && <CompleterPate onClose={() => setMini(null)} onFinish={(stars) => finishMini("pate", stars)} />}
 
       {fete && <FetePalier palier={fete.palier} monde={fete.monde} onClose={() => setFete(null)} />}
     </>
@@ -607,9 +609,13 @@ const GAME_PRIX = { key: "prix", ic: "coins", tint: "var(--gold, #e0ac48)",
    `SUBSTITUTIONS` (lib/dough.js), aucune n'est inventée. */
 const GAME_SUBS = { key: "substitutions", ic: "calculator", tint: "var(--blue, #3b6fd4)",
   label: "La substitution", sub: "Blé, bassinage, grammes" };
+/* « Complète la pâte » — la fiche d'empâtement en grammes. Pourcentages de `PRESETS`, dosage de
+   la levure de `LEVURE_TABLE` (manuel p.21) : rien d'inventé ici non plus. */
+const GAME_PATE = { key: "pate", ic: "wheat", tint: "var(--gold, #e0ac48)",
+  label: "Complète la pâte", sub: "Eau, sel, huile, levure" };
 const GAME_SOON = { key: null, ic: "clock", tint: "var(--dim)",
   label: "Chrono Rush", sub: "Bientôt", soon: true };
-const ARCADE = [GAME_CONS, GAME_SIM, GAME_PIEGE, GAME_PRIX, GAME_SUBS, GAME_SOON];
+const ARCADE = [GAME_CONS, GAME_SIM, GAME_PIEGE, GAME_PRIX, GAME_SUBS, GAME_PATE, GAME_SOON];
 
 function Arcade({ prog, onGame }) {
   return (
