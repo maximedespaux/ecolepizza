@@ -222,8 +222,22 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                 <Paton hydra={hydra} w={force} look={look} patonG={260} />
               </div>
 
-              <label className="sim-ctrl">
-                <span className="sim-ctrl-h">Type de farine <b>{TYPES[type].lbl}</b></span>
+              {/* ─────────────────────────────────────────────────────────────────────────
+                  PAS UN `<label>` — ET C'ÉTAIT UN VRAI DÉFAUT, pas une question de style.
+
+                  Un `<label>` sans `for` s'associe à son PREMIER DESCENDANT CONTRÔLABLE, et un
+                  `<button>` en est un. Le bloc entier étant un label, survoler n'importe où
+                  dedans — une pastille, le titre — mettait la PREMIÈRE pastille en `:hover` :
+                  « Tipo 00 » s'allumait quand on pointait « Complète ». C'est la spécification
+                  qui le veut, aucun CSS n'y pouvait rien.
+                  Au lecteur d'écran, c'était pire encore : « Type de farine » était annoncé
+                  comme le NOM du premier bouton, et les trois autres n'avaient plus d'intitulé
+                  de groupe du tout.
+                  Un groupe de boutons exclusifs n'est pas un champ de formulaire : `role="group"`
+                  nomme l'ensemble sans s'attacher à l'un d'eux. Les DEUX autres blocs, eux,
+                  enveloppent un vrai curseur unique — leur `<label>` est légitime et reste. */}
+              <div className="sim-ctrl" role="group" aria-labelledby="sim-t-farine">
+                <span className="sim-ctrl-h" id="sim-t-farine">Type de farine <b>{TYPES[type].lbl}</b></span>
                 <div className="sim-pills">
                   {TYPES.map((f) => (
                     <button key={f.idx} className={"sim-pill" + (type === f.idx ? " on" : "")} onClick={() => setType(f.idx)}>
@@ -231,7 +245,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                     </button>
                   ))}
                 </div>
-              </label>
+              </div>
 
               <label className="sim-ctrl">
                 <span className="sim-ctrl-h">Force de la farine <b>{force} W</b></span>
@@ -247,8 +261,22 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                 <span className="sim-range-hint">Plus d'eau = pâte plus souple, mie plus ouverte, mais plus dure à travailler.</span>
               </label>
 
-              <label className="sim-ctrl">
-                <span className="sim-ctrl-h">Four <b>{temp} °C</b></span>
+              {/* ─────────────────────────────────────────────────────────────────────────
+                  PAS UN `<label>` — ET C'ÉTAIT UN VRAI DÉFAUT, pas une question de style.
+
+                  Un `<label>` sans `for` s'associe à son PREMIER DESCENDANT CONTRÔLABLE, et un
+                  `<button>` en est un. Le bloc entier étant un label, survoler n'importe où
+                  dedans — une pastille, le titre — mettait la PREMIÈRE pastille en `:hover` :
+                  « Tipo 00 » s'allumait quand on pointait « Complète ». C'est la spécification
+                  qui le veut, aucun CSS n'y pouvait rien.
+                  Au lecteur d'écran, c'était pire encore : « Type de farine » était annoncé
+                  comme le NOM du premier bouton, et les trois autres n'avaient plus d'intitulé
+                  de groupe du tout.
+                  Un groupe de boutons exclusifs n'est pas un champ de formulaire : `role="group"`
+                  nomme l'ensemble sans s'attacher à l'un d'eux. Les DEUX autres blocs, eux,
+                  enveloppent un vrai curseur unique — leur `<label>` est légitime et reste. */}
+              <div className="sim-ctrl" role="group" aria-labelledby="sim-t-four">
+                <span className="sim-ctrl-h" id="sim-t-four">Four <b>{temp} °C</b></span>
                 <div className="sim-pills">
                   {FOURS.map((f) => (
                     <button key={f.t} className={"sim-pill" + (temp === f.t ? " on" : "")} onClick={() => setTemp(f.t)}>
@@ -256,7 +284,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                     </button>
                   ))}
                 </div>
-              </label>
+              </div>
             </div>
             <div className="mfoot">
               <button className="btn ghost" onClick={() => setObj(null)}>Changer d'objectif</button>

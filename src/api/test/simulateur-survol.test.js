@@ -45,15 +45,21 @@ test('l\'or reste la couleur des étoiles, ici et nulle part ailleurs dans le je
         'Les étoiles du verdict gardent l\'or : c\'est lui qui donne son sens à tout le reste.');
 });
 
-test('le survol d\'une pastille annonce la sélection, et ne la copie pas', () => {
+test('le survol ne ressemble à aucun des deux autres états', () => {
     const survol = regle('.sim-pill:hover:not(.on)');
     const choisi = regle('.sim-pill.on');
-    /* La même braise, mais ÉCLAIRCIE et sans aplat : « voilà ce que tu obtiendrais », distinct
-       de « voilà ce que tu as ». Deux états identiques ne vaudraient pas mieux que deux
-       couleurs sans rapport. */
-    assert.match(survol, /color-mix\(in srgb,var\(--ember1\) 45%,var\(--border\)\)/, 'braise éclaircie');
-    assert.match(choisi, /border-color:var\(--ember1\)/, 'braise pleine pour le choix');
-    assert.doesNotMatch(survol, /background:color-mix/, 'l\'aplat teinté reste au choix seul');
+    /* DEUX ESSAIS RATÉS AVANT CELUI-CI, en sens inverse l'un de l'autre :
+        · l'OR — la couleur qui, dans Pizza Quest, veut dire « acquis » (les étoiles, un record) ;
+        · la BRAISE ÉCLAIRCIE — pire en fait, car c'est la couleur du CHOIX en plus pâle :
+          survoler faisait apparaître une seconde pastille « à demi choisie » à côté de la vraie,
+          et l'œil ne savait plus laquelle était retenue.
+       D'où un survol SANS COULEUR DE SENS : un contour plus marqué que le repos, sur l'aplat
+       gris qui dit partout ailleurs « le pointeur est ici ». La braise reste au choix, et à lui
+       seul — c'est ce que la dernière assertion garde. */
+    assert.match(survol, /border-color:var\(--dim\)/, 'un contour neutre, simplement plus marqué');
+    assert.match(survol, /background:var\(--surface2\)/, 'l\'aplat gris du survol');
+    assert.doesNotMatch(survol, /ember|gold/, 'ni la couleur du choix, ni celle de la réussite');
+    assert.match(choisi, /border-color:var\(--ember1\)/, 'la braise reste au choix');
 });
 
 test('`:not(.on)` est explicite, et ne compte pas sur l\'ordre des règles', () => {
