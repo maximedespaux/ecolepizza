@@ -114,16 +114,25 @@ export default function ConstructorGame({ onClose, onFinish }) {
             })}
           </div>
 
-          {/* Vivier */}
+          {/* ─────────────────────────────────────────────────────────────────────────────
+              LE VIVIER, DANS UN BLOC À LUI — pour qu'il puisse coller en bas sur téléphone.
+
+              Mesuré avant : le contenu faisait 927 px pour 589 px visibles, soit 1,57 écran.
+              Les neuf emplacements occupaient toute la hauteur et les étapes à placer
+              commençaient SOUS la ligne de flottaison : on ne voyait jamais ensemble ce qu'on
+              prend et où on le pose, il fallait défiler à chaque étape. Neuf fois.
+
+              Le libellé et les pastilles étaient deux frères ; coller le second aurait laissé
+              le premier partir au défilement, et la barre serait apparue sans son titre. */}
           {!checked && pool.length > 0 && (
-            <>
-              <div className="hint" style={{ margin: "12px 0 6px" }}>Étapes à placer :</div>
+            <div className="cg-reserve">
+              <div className="hint cg-reserve-t">Étapes à placer :</div>
               <div className="cg-pool">
                 {pool.map((i) => (
                   <button key={i} className="cg-chip" onClick={() => place(i)}><span className="cg-e">{RECIPE[i].e}</span> {RECIPE[i].t}</button>
                 ))}
               </div>
-            </>
+            </div>
           )}
 
           {checked && (

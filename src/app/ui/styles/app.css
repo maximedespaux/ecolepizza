@@ -2387,6 +2387,25 @@ tbody tr:last-child td{border-bottom:none}
 .cg-e{font-size:16px}
 .cg-ph{color:var(--dim)}
 .cg-pool{display:flex;flex-wrap:wrap;gap:8px}
+/* Le libellé garde sa marge d'origine, qui vivait en style inline avant que le bloc existe. */
+.cg-reserve-t{margin:12px 0 6px}
+/* ————— LE VIVIER COLLE EN BAS SUR TÉLÉPHONE —————
+   Sans lui, le jeu demandait 1,57 écran de défilement : les neuf emplacements prenaient toute
+   la hauteur et les étapes à placer commençaient sous la ligne de flottaison. On ne voyait
+   jamais ensemble ce qu'on prend et où on le pose — un aller-retour par étape, neuf fois.
+   `sticky` DANS `.mbody`, qui est le conteneur qui défile (mesuré : 927 px de contenu pour
+   589 px visibles). Collé au `.modal`, il ne bougerait pas : ce n'est pas lui qui défile.
+   PLAFONNÉ À 40 % DE LA HAUTEUR, et défilant lui-même : les neuf pastilles font 356 px au
+   départ, soit les deux tiers de l'écran. Une barre qui mange plus qu'elle ne laisse voir ne
+   résout rien. Le plafond se libère tout seul à mesure qu'on place les étapes.
+   Le fond est OPAQUE — sans lui les emplacements défileraient en transparence sous les
+   pastilles, et l'on ne saurait plus lesquelles sont encore à placer. */
+@media (max-width:640px){
+  .cg-reserve{position:sticky;bottom:0;z-index:2;background:var(--panel,#fff);
+    margin:0 -14px -12px;padding:8px 14px 12px;border-top:1px solid var(--border);
+    max-height:40vh;overflow-y:auto}
+  .cg-reserve-t{margin:0 0 6px}
+}
 /* LES NEUF ÉTAPES SONT LA MANIPULATION MÊME DU JEU : on les prend une par une pour les ranger
    dans l'ordre, et chaque tentative imparfaite coûte un cœur. Elles faisaient 38 px de haut,
    sous les 44 px qu'on vise pour une cible tactile — rater une pastille et en poser une autre
