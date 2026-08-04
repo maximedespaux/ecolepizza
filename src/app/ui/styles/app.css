@@ -4967,3 +4967,24 @@ button.av-wrap:active{transform:scale(.94)}
 .pate-table th:first-child,.pate-table td:first-child{text-align:left;color:var(--muted)}
 .pate-table thead th{font-size:10.5px;color:var(--muted);font-weight:700}
 .pate-table tr.on td{background:color-mix(in srgb,var(--gold) 15%,transparent);font-weight:700}
+
+/* ————— « L'ACCORD DES SAVEURS » : LES QUATRE CANDIDATS —————
+   Deux colonnes : quatre noms de produits en ligne se couperaient sur téléphone. */
+.acc-choix{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+.acc-opt{display:flex;align-items:center;gap:8px;padding:11px 12px;min-height:44px;
+  border:1px solid var(--border);border-radius:11px;background:var(--surface);cursor:pointer;
+  font-size:13px;text-align:left;transition:border-color .12s var(--ease),background .12s var(--ease)}
+.acc-opt:hover:not(:disabled){border-color:var(--dim);background:var(--surface2)}
+.acc-opt b{flex:1;font-weight:600}
+.acc-emoji{font-size:18px;line-height:1;flex:none}
+/* Les trois états après réponse. Le libellé porte déjà l'icône : la couleur ne fait que
+   renforcer (WCAG 1.4.1). Les non-choisis pâlissent sans disparaître — on doit pouvoir relire
+   ce qu'on a écarté. */
+.acc-opt.ok{border-color:var(--green,#2e9e5b);background:color-mix(in srgb,var(--green,#2e9e5b) 10%,var(--surface))}
+.acc-opt.ko{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 10%,var(--surface))}
+.acc-opt.pale{opacity:.55}
+.acc-opt:disabled{cursor:default}
+/* La justification : qui suggère cet accord. C'est elle qui rend le jeu défendable. */
+.acc-pourquoi{padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);font-size:12.5px}
+.acc-pourquoi p{margin:0}
+.acc-pourquoi p + p{margin-top:4px}

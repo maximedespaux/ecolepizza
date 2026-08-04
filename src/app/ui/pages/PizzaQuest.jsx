@@ -9,6 +9,8 @@ import CommandePiege from "../components/CommandePiege.jsx";
 import JustePrix from "../components/JustePrix.jsx";
 import Substitutions from "../components/Substitutions.jsx";
 import CompleterPate from "../components/CompleterPate.jsx";
+import LeService from "../components/LeService.jsx";
+import AccordSaveurs from "../components/AccordSaveurs.jsx";
 import { colorOf } from "../lib/format.js";
 import { saveQuestProgress } from "../lib/gamification.js";
 import { FETES, paliersFranchis, marquerFete, palierDuMonde } from "../lib/questPaliers.js";
@@ -370,6 +372,8 @@ function PizzaQuest() {
       {mini?.key === "prix" && <JustePrix onClose={() => setMini(null)} onFinish={(stars) => finishMini("prix", stars)} />}
       {mini?.key === "substitutions" && <Substitutions onClose={() => setMini(null)} onFinish={(stars) => finishMini("substitutions", stars)} />}
       {mini?.key === "pate" && <CompleterPate onClose={() => setMini(null)} onFinish={(stars) => finishMini("pate", stars)} />}
+      {mini?.key === "service" && <LeService onClose={() => setMini(null)} onFinish={(stars) => finishMini("service", stars)} />}
+      {mini?.key === "accords" && <AccordSaveurs onClose={() => setMini(null)} onFinish={(stars) => finishMini("accords", stars)} />}
 
       {fete && <FetePalier palier={fete.palier} monde={fete.monde} onClose={() => setFete(null)} />}
     </>
@@ -613,9 +617,17 @@ const GAME_SUBS = { key: "substitutions", ic: "calculator", tint: "var(--blue, #
    la levure de `LEVURE_TABLE` (manuel p.21) : rien d'inventé ici non plus. */
 const GAME_PATE = { key: "pate", ic: "wheat", tint: "var(--gold, #e0ac48)",
   label: "Complète la pâte", sub: "Eau, sel, huile, levure" };
+/* « Le service » — remonter du nombre de pizzas au poids de farine (repère du manuel :
+   1 unité de calcul = 1 kg de farine ≈ 6 pâtons de 280 g). Le pendant de « Complète la pâte ». */
+const GAME_SERV = { key: "service", ic: "users", tint: "var(--blue, #3b6fd4)",
+  label: "Le service", sub: "Unités de calcul" };
+/* « L'accord des saveurs » — les affinités déclarées dans `garnitures.js`. */
+const GAME_ACC = { key: "accords", ic: "heart", tint: "var(--ember2)",
+  label: "L'accord des saveurs", sub: "Ce que l'école associe" };
 const GAME_SOON = { key: null, ic: "clock", tint: "var(--dim)",
   label: "Chrono Rush", sub: "Bientôt", soon: true };
-const ARCADE = [GAME_CONS, GAME_SIM, GAME_PIEGE, GAME_PRIX, GAME_SUBS, GAME_PATE, GAME_SOON];
+const ARCADE = [GAME_CONS, GAME_SIM, GAME_PIEGE, GAME_PRIX, GAME_SUBS, GAME_PATE,
+  GAME_SERV, GAME_ACC, GAME_SOON];
 
 function Arcade({ prog, onGame }) {
   return (
