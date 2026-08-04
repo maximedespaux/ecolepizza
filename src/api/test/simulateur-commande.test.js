@@ -23,27 +23,33 @@ const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui',
     'components', 'SimulateurPizza.jsx'), 'utf8');
 const rendu = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 
-test('chaque style a ses commandes, et il y en a plusieurs', () => {
+test('les quatre styles des manuels sont tous jouables', () => {
     const styles = [...rendu.matchAll(/id: "(\w+)"/g)].map((m) => m[1]);
-    assert.ok(styles.length >= 4, 'les quatre styles des manuels doivent rester');
-    const bloc = /const COMMANDES = \{([\s\S]*?)\n\};/.exec(rendu);
-    assert.ok(bloc, 'COMMANDES introuvable');
-    for (const s of styles) {
-        const liste = new RegExp(`${s}: \\[([\\s\\S]*?)\\]`).exec(bloc[1]);
-        assert.ok(liste, `« ${s} » n'a aucune commande : il sortirait sans phrase de client.`);
-        const n = (liste[1].match(/"/g) || []).length / 2;
-        assert.ok(n >= 3, `« ${s} » n'a que ${n} formulation(s) : deux parties suffiraient à en faire le tour.`);
-    }
+    assert.deepStrictEqual(styles, ['classique', 'napolitaine', 'contemporaine', 'teglia'],
+        'les quatre styles des manuels doivent rester, et eux seuls');
 });
 
 test('le style n\'est PAS nommé pendant le réglage', () => {
     /* C'est toute la différence : un nom en gras au-dessus des curseurs, et le jeu redevient une
-       table de correspondance. Le briefing, lui, guide en MOTS — « une farine 00, peu cendrée » —
-       ce qui rend la commande soluble sans la nommer. */
-    const bandeau = /<div className="sim-goal">([\s\S]*?)<\/div>/.exec(rendu);
-    assert.ok(bandeau, 'le bandeau de commande est introuvable');
-    assert.doesNotMatch(bandeau[1], /obj\.nom/, 'le nom du style ne doit pas s\'afficher pendant le réglage');
-    assert.match(bandeau[1], /cmd\.dit/, 'c\'est la phrase du client qui s\'affiche');
+       table de correspondance. Le briefing guide en MOTS — « faite d'une farine très blanche » —
+       ce qui rend la commande soluble sans la nommer. Le nom ne tombe qu'au verdict.
+
+       LE BANDEAU DE COMMANDE A ÉTÉ RETIRÉ : il citait le client juste au-dessus d'un briefing
+       qui, écrit à la première personne, le cite aussi — deux guillemets pour une même bouche.
+       On vérifie donc sur TOUT l'écran de réglage, plutôt que sur un bandeau disparu. */
+    const jeu = /<div className="mbody sim-play">([\s\S]*?)<div className="mfoot">/.exec(rendu);
+    assert.ok(jeu, 'l\'écran de réglage est introuvable');
+    assert.doesNotMatch(jeu[1], /obj\.nom/, 'le nom du style ne doit pas s\'afficher pendant le réglage');
+    assert.doesNotMatch(rendu, /className="sim-goal"/, 'le bandeau de commande a été retiré');
+    /* Et rien ne doit rester de la mécanique des formulations : une donnée écrite mais jamais
+       lue passe pour vivante et se recopie. */
+    /* `\bdit:` — DEUX RÉGLAGES SUCCESSIFS, chacun corrigé par l'épreuve. `\.dit` exigeait un
+       point devant : une propriété réintroduite en `dit: ""` passait au travers, et le test
+       restait vert sur le défaut qu'il prétendait interdire. `\bdit\b` attrapait au contraire
+       le mot français d'une phrase d'aide (« Le W dit combien de temps la pâte tient »), et
+       criait sur du texte parfaitement sain. C'est la propriété qu'on cherche, donc le
+       deux-points. */
+    assert.doesNotMatch(rendu, /COMMANDES|\bdit:/, 'les formulations retirées ne laissent pas de plomberie');
 });
 
 test('le verdict dit TOUJOURS ce que le client demandait', () => {

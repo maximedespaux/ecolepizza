@@ -80,49 +80,6 @@ const OBJECTIFS = [
   },
 ];
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════
-   LA COMMANDE D'UN CLIENT, PAS UNE CARTE À CHOISIR.
-
-   L'écran de choix montrait quatre pavés — « Classique », « Napolitaine AVPN »… — et le
-   briefing détaillait ensuite ce qu'il fallait viser. On prenait toujours le même, et comme le
-   style était NOMMÉ, la réponse s'apprenait par cœur : quatre jeux de quatre réglages, et le
-   simulateur ne simulait plus rien.
-
-   Désormais la partie s'ouvre sur une COMMANDE, tirée au sort. Le client ne dit pas « une
-   contemporaine à 70 % d'hydratation », il dit « j'ai vu vos photos, le bord bien alvéolé » —
-   c'est au pizzaïolo de traduire. C'est le geste du comptoir, et c'est le seul qui s'apprenne :
-   reconnaître ce qu'on vous demande.
-
-   ⚠ L'ALÉATOIRE NE TOUCHE PAS AUX VALEURS. Les fenêtres (W, hydratation, températures) viennent
-   des manuels et du disciplinare AVPN : les tirer au hasard produirait des napolitaines à 300 °C
-   et enseignerait du faux. Ce qui varie, c'est la FORMULATION et l'ordre de passage — trois
-   commandes par style, douze ouvertures possibles, et le style lui-même n'est révélé qu'au
-   verdict.
-
-   Le briefing reste : il guide en mots (« une farine 00, peu cendrée ») sans donner un chiffre.
-   C'est lui qui rend la commande soluble sans la nommer. */
-const COMMANDES = {
-  classique: [
-    "Bonjour ! Une margherita toute simple, c'est pour ce midi.",
-    "Trois pizzas pour la famille, rien de compliqué.",
-    "Comme d'habitude, la maison — celle de tous les jours.",
-  ],
-  napolitaine: [
-    "Je rentre de Naples… vous faites la vraie, celle qui gonfle ?",
-    "Votre four à bois est chaud ? Alors une napolitaine, la vraie.",
-    "On m'a dit que vous étiez certifiés. Une AVPN, s'il vous plaît.",
-  ],
-  contemporaine: [
-    "J'ai vu vos photos : le bord bien alvéolé, c'est ça que je veux.",
-    "Vous travaillez en biga ? Je prends ce que ça donne.",
-    "Une pizza à la mie ouverte, avec un cornicione qui monte haut.",
-  ],
-  teglia: [
-    "Deux parts de la plaque, à emporter s'il vous plaît.",
-    "Une pizza al taglio, comme à Rome — bien aérée.",
-    "Vous avez de la pizza en plaque, coupée au ciseau ?",
-  ],
-};
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    CINQ MANCHES, ET UN SEUL ENFOURNEMENT PAR MANCHE.
@@ -155,7 +112,13 @@ function etoilesPour(points) {
   return 0;
 }
 
-/* Cinq commandes tirées de sorte que LES QUATRE STYLES PASSENT. Un tirage indépendant à chaque
+/* LES FORMULATIONS DE CLIENT ONT ÉTÉ RETIRÉES avec le bandeau qui les portait (« Votre four à
+   bois est chaud ? »). Elles faisaient doublon depuis que le briefing est écrit à la première
+   personne : deux guillemets d'affilée pour une même bouche. Ce qui reste tiré au sort, c'est
+   le STYLE — et c'est lui qui fait varier la réponse. Les douze phrases sont récupérables dans
+   l'historique si on veut les reposer ailleurs, sur l'écran de verdict par exemple.
+
+   Cinq commandes tirées de sorte que LES QUATRE STYLES PASSENT. Un tirage indépendant à chaque
    manche pouvait donner cinq fois la même : une partie qui ne montre qu'un style n'apprend
    qu'un quart du programme, et le hasard le ferait arriver une fois sur 256. On mélange donc les
    quatre, puis on complète par un cinquième au hasard. */
@@ -166,10 +129,7 @@ function tirerPartie() {
     [styles[i], styles[j]] = [styles[j], styles[i]];
   }
   styles.push(OBJECTIFS[Math.floor(Math.random() * OBJECTIFS.length)]);
-  return styles.map((o) => {
-    const lignes = COMMANDES[o.id] || [o.intro];
-    return { obj: o, dit: lignes[Math.floor(Math.random() * lignes.length)] };
-  });
+  return styles.map((o) => ({ obj: o }));
 }
 
 /* Note d'un axe : 2 = plage juste, 1 = tolérance, 0 = raté. Les POINTS en découlent (1 et ½) —
@@ -191,8 +151,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
   const [partie, setPartie] = useState(() => {
     const impose = OBJECTIFS.find((o) => o.id === objectifId);
     if (!impose) return tirerPartie();
-    const lignes = COMMANDES[impose.id] || [impose.intro];
-    return Array.from({ length: MANCHES }, (_, i) => ({ obj: impose, dit: lignes[i % lignes.length] }));
+    return Array.from({ length: MANCHES }, () => ({ obj: impose }));
   });
   const [manche, setManche] = useState(0);          // 0 → 4
   const [acquis, setAcquis] = useState([]);         // points de chaque manche jouée
@@ -253,6 +212,10 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
       <div className="modal sim" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
           <h3><Icon name="pizza" size={18} /> Fais ta pizza</h3>
+          {/* L'AVANCEMENT DU SERVICE, à demeure. Il vivait dans le bandeau de commande, retiré
+              avec lui ; ici il tient sur les trois écrans — réglage, verdict de manche et fin —
+              et l'on sait toujours où l'on en est. */}
+          {!fini && <span className="sim-manche-n chiffres">Commande {manche + 1}/{MANCHES}</span>}
           <button className="x" onClick={fermer} aria-label="Fermer">×</button>
         </div>
 
@@ -356,14 +319,12 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                   écrit en gras transformait le jeu en table de correspondance. Le client parle,
                   le briefing ci-dessous guide en mots, et le nom du style ne tombe qu'au verdict
                   — au moment où il apprend quelque chose plutôt qu'il ne dispense de chercher. */}
-              <div className="sim-goal">
-                <span className="sim-obj-e" aria-hidden="true">🧑‍🍳</span>
-                <span style={{ flex: 1 }} className="sim-cmd">« {cmd.dit} »</span>
-                <span className="sim-manche-n chiffres">{manche + 1}/{MANCHES}</span>
-              </div>
-
-              {/* Instructions : ce qu'il faut viser, en mots. Ça guide sans donner les chiffres —
-                  c'est au stagiaire de traduire « farine forte » en un W. */}
+              {/* LE BANDEAU DE COMMANDE A ÉTÉ RETIRÉ : il citait le client (« Votre four à bois
+                  est chaud ? ») juste au-dessus d'un briefing qui, depuis qu'il est écrit à la
+                  première personne, le cite AUSSI. Deux guillemets d'affilée pour une même
+                  bouche : le second disait tout, le premier ne faisait plus que retarder la
+                  lecture. Le compteur de manches qu'il portait est remonté dans l'en-tête, où
+                  il reste visible sur les trois écrans du jeu. */}
               {/* CE QUE LE CLIENT ATTEND, DIT PAR LUI — pas une fiche technique.
                   Le bloc s'écrivait en télégramme : « Farine, Une farine courante, T55 ou T65.
                   Force moyenne, pas besoin qu'elle tienne des heures. » Deux défauts d'un coup.

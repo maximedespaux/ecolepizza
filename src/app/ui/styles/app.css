@@ -4926,3 +4926,5 @@ button.av-wrap:active{transform:scale(.94)}
 /* L'amorce du souhait du client — les puces qui suivent la complètent, d'où l'italique et
    l'absence de marge basse : c'est une seule phrase, coupée en quatre. */
 .sim-brief-i{margin:0 0 2px;font-style:italic}
+/* Le compteur de manches dans l'en-tête : il pousse la croix à droite sans la déplacer. */
+.modal.sim .mhead .sim-manche-n{margin-left:auto;margin-right:8px}
