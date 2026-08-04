@@ -33,7 +33,10 @@ const OUTILS = [
   { to: "/empatements", ic: "wheat", label: "Mes empâtements" },
   { to: "/garnitures", ic: "list-checks", label: "Mes garnitures" },
   { to: "/realisations", ic: "pizza", label: "Mes réalisations" },
-  { to: "/hygiene", ic: "shield", label: "Maîtrise sanitaire" },
+  /* « Maîtrise sanitaire » (/hygiene) RETIRÉE : l'entrée existait, la page jamais. Aucune route
+     ne servait ce chemin, et le `path="*"` de fin renvoyait donc le stagiaire sur /mon-espace
+     sans un mot — un menu qui promet un outil et ramène à l'accueil use la confiance qu'on a
+     dans les autres. */
   { to: "/notions", ic: "book-open", label: "Notions & lexique" },
 ];
 
