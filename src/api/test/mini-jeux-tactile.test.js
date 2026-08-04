@@ -26,8 +26,13 @@ const fs = require('fs');
 const path = require('path');
 
 const css = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'styles', 'app.css'), 'utf8');
+/* LE SÉLECTEUR EST ÉCHAPPÉ avant d'entrer dans une expression régulière. Sans cela,
+   `.pq-mini:hover:not(.soon)` voyait ses parenthèses et ses points lus comme un motif : la règle
+   n'était jamais trouvée, et le test échouait sans que le CSS ait tort. Le même helper, dans
+   `simulateur-survol.test.js`, portait exactement le même défaut. */
 const regle = (selecteur) => {
-    const m = new RegExp(`\\${selecteur}\\{([^}]*)\\}`).exec(css);
+    const motif = selecteur.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = new RegExp(`${motif}\\{([^}]*)\\}`).exec(css);
     assert.ok(m, `règle ${selecteur} introuvable`);
     return m[1];
 };
@@ -177,4 +182,26 @@ test('le disque coloré vit sur écran large, pas sur téléphone', () => {
     assert.ok(i > 0 && j > 0, 'les deux règles doivent exister');
     assert.ok(j > i,
         'L\'override téléphone doit venir APRÈS la règle de base, sinon c\'est elle qui gagne.');
+});
+
+test('la tuile ne se dérobe pas sous le curseur', () => {
+    /* LE CLIGNOTEMENT « AU BORD ». `transform:translateY(-2px)` au survol soulevait la tuile de
+       deux pixels : un point situé entre 0 et 2 px du bord bas se retrouvait alors HORS d'elle.
+       Le survol se perdait, la tuile redescendait, le survol revenait — une boucle à la cadence
+       de la transition (0,1 s), soit dix clignotements par seconde. Démontré dans le navigateur
+       en appliquant la transformation à la main et en testant la bande pixel par pixel : dedans
+       au repos, dehors une fois levée, jusqu'à 2 px. À 3 px, plus rien.
+
+       L'ombre donne le même relief sans toucher à la boîte. Rien ne bouge, rien ne peut fuir.
+
+       ⚠ CE TEST NE COUVRE QUE L'ARCADE. Le motif existe dans VINGT-CINQ autres règles de la
+       feuille (`.shop-card`, `.hub-card`, `.tipo-card`…), toutes exposées au même défaut sur
+       leur propre bande de un à quatre pixels. Les corriger en bloc changerait le langage visuel
+       de toute l'application : c'est une décision, pas un correctif. */
+    const survol = regle('.pq-mini:hover:not(.soon)');
+    assert.doesNotMatch(survol, /transform/,
+        'déplacer la tuile au survol la fait fuir le curseur près du bord');
+    assert.match(survol, /box-shadow/, 'le relief passe par une ombre, qui ne déplace rien');
+    /* L'enfoncement au clic, lui, reste : il descend la tuile, donc le curseur reste couvert. */
+    assert.match(regle('.pq-mini:active:not(.soon)'), /translateY\(1px\)/);
 });

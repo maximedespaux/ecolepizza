@@ -2395,8 +2395,15 @@ tbody tr:last-child td{border-bottom:none}
    l'arcade prenait 445 px de haut à elle seule, repoussant la carte des formations — le sujet
    de la page — hors de l'écran. */
 .pq-minis{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-bottom:16px}
-.pq-mini{display:flex;align-items:center;gap:11px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;transition:transform .1s var(--ease),border-color .1s var(--ease)}
-.pq-mini:hover:not(.soon){transform:translateY(-2px);border-color:var(--ember1)}
+.pq-mini{display:flex;align-items:center;gap:11px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;transition:transform .1s var(--ease),border-color .1s var(--ease),box-shadow .1s var(--ease)}
+/* ————— UNE ÉLÉVATION QUI NE DÉPLACE PAS LA TUILE —————
+   `transform:translateY(-2px)` la faisait SE DÉROBER SOUS LE CURSEUR. Démontré : un point situé
+   entre 0 et 2 px du bord bas est dans la tuile au repos et HORS d'elle une fois levée. Le
+   survol se perd donc, la tuile redescend, le survol revient — une boucle à la cadence de la
+   transition (0,1 s), soit dix clignotements par seconde. Le défaut n'existe que sur cette
+   bande de deux pixels, ce qui explique qu'on ne le voie qu'« au bord ».
+   L'ombre donne le même relief sans toucher à la boîte : rien ne bouge, rien ne peut fuir. */
+.pq-mini:hover:not(.soon){border-color:var(--ember1);box-shadow:0 4px 10px -2px rgba(0,0,0,.14)}
 /* Un ENFONCEMENT au clic, comme les autres boutons de jeu (`.pq-choice:active`) : sans lui, la
    tuile se soulevait au survol puis ne répondait plus rien au doigt — or sur téléphone il n'y a
    pas de survol, donc aucun retour du tout. */
