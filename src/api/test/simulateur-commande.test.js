@@ -68,3 +68,59 @@ test('les valeurs des manuels ne sont pas tirées au sort', () => {
     /* Et la napolitaine garde sa température de disciplinare, preuve que rien n'a glissé. */
     assert.match(objectifs[1], /ok: \[430, 485\]/, 'AVPN : 430-485 °C, manuel Niveau II');
 });
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   CINQ MANCHES, UN SEUL ENFOURNEMENT CHACUNE, ET UNE NOTE SUR 20.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+test('le barème répond aux seuils demandés, demi-points compris', () => {
+    /* Quatre réglages × cinq manches = 20. La plage JUSTE vaut 1 point, la TOLÉRANCE une demi :
+       « 62 % au lieu de 65 » n'est pas la même faute que « 62 au lieu de 80 », et les trois
+       couleurs du retour disent déjà cette nuance. Une note sur 20 avec des demis, c'est aussi
+       la façon dont on note en France. */
+    assert.match(rendu, /const MANCHES = 5;/);
+    assert.match(rendu, /const POINTS_MAX = MANCHES \* 4;/);
+    assert.match(rendu, /note === 2 \? 1 : note === 1 \? 0\.5 : 0/, 'juste = 1, tolérance = ½');
+    /* Les seuils, en `>=` pour que les demi-points tombent du bon côté : 17,5 reste à deux. */
+    const bloc = /function etoilesPour[\s\S]*?\n}/.exec(rendu);
+    assert.ok(bloc, 'etoilesPour introuvable');
+    assert.match(bloc[0], /points >= 18\) return 3/);
+    assert.match(bloc[0], /points >= 11\) return 2/);
+    assert.match(bloc[0], /points >= 5\) return 1/);
+});
+
+test('aucune reprise : le score est cumulé', () => {
+    /* « Réessayer » laissait corriger axe par axe jusqu'à tomber juste — les retours disent
+       eux-mêmes dans quel sens. Sur un score CUMULÉ, une reprise le ferait grossir à volonté et
+       les seuils ne voudraient plus rien dire. Les cœurs sortent donc de ce jeu : ils donnaient
+       les trois essais et ne modélisent plus rien. */
+    assert.doesNotMatch(rendu, /Réessayer/, 'une reprise rendrait le total extensible');
+    assert.doesNotMatch(rendu, /Coeurs|encoreEnVie/, 'les cœurs n\'ont plus d\'objet ici');
+});
+
+test('les quatre styles passent dans un service', () => {
+    /* Un tirage indépendant à chaque manche pouvait donner cinq fois le même style — une fois
+       sur 256. Une partie qui ne montre qu'un quart du programme n'apprend qu'un quart. */
+    const bloc = /function tirerPartie[\s\S]*?\n}/.exec(rendu);
+    assert.ok(bloc, 'tirerPartie introuvable');
+    assert.match(bloc[0], /\[styles\[i\], styles\[j\]\] = \[styles\[j\], styles\[i\]\]/, 'les quatre sont mélangés');
+    assert.match(bloc[0], /styles\.push\(OBJECTIFS\[/, 'puis complétés par un cinquième');
+});
+
+test('la dernière manche ne sort pas du tableau', () => {
+    /* LE PLANTAGE, trouvé en jouant les cinq manches et pas autrement : après la dernière,
+       `manche` vaut 5 et `partie[5]` n'existe pas — la partie en compte cinq, indices 0 à 4.
+       `cmd.obj` levait, React démontait la modale, et l'écran de fin disparaissait au lieu de
+       s'afficher. Le build ne voyait rien : c'est une erreur d'exécution. */
+    assert.match(rendu, /partie\[Math\.min\(manche, MANCHES - 1\)\]/,
+        'l\'index doit être borné, sinon l\'écran de fin fait tomber la modale');
+});
+
+test('le four se règle au curseur, plus en trois pastilles', () => {
+    /* « Électrique 340 / Gaz 400 / Bois 460 » donnait la réponse : trois valeurs, une par style,
+       il suffisait de reconnaître laquelle. Un curseur oblige à ESTIMER, comme pour le W et
+       l'eau — et c'est la même compétence. */
+    assert.doesNotMatch(rendu, /const FOURS =/, 'les trois choix ont disparu');
+    assert.match(rendu, /min="250" max="500" step="5"[\s\S]{0,60}?value=\{temp\}/,
+        'la plage couvre les quatre styles (teglia 280 en tolérance, AVPN 485) sans absurdités');
+});

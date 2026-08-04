@@ -45,23 +45,26 @@ test('les groupes de pastilles ne sont pas des `<label>`', () => {
         .map((m) => ({ balise: m[1], attrs: m[2], titre: m[4].trim().slice(0, 20) }));
     assert.strictEqual(blocs.length, 4, 'les quatre réglages du simulateur doivent rester lisibles');
 
-    const boutons = blocs.filter((b) => /farine <b>|Four <b>/.test(b.titre + '<b>') || /Type de farine|Four/.test(b.titre));
+    /* SEULE LA FARINE RESTE UN GROUPE DE BOUTONS. Le four est passé au curseur — « Électrique
+       340 / Gaz 400 / Bois 460 » donnait la réponse en trois valeurs, une par style. Son
+       `<label>` est donc redevenu légitime, comme ceux du W et de l'hydratation. */
+    const boutons = blocs.filter((b) => /Type de farine/.test(b.titre));
     for (const b of blocs) {
-        const groupeDeBoutons = /Type de farine|^Four/.test(b.titre);
+        const groupeDeBoutons = /Type de farine/.test(b.titre);
         if (!groupeDeBoutons) continue;
         assert.strictEqual(b.balise, 'div',
             `« ${b.titre} » enferme des boutons : un <label> associerait le PREMIER d'entre eux.`);
         assert.match(b.attrs, /role="group"/, 'Un groupe se nomme comme un groupe.');
         assert.match(b.attrs, /aria-labelledby="/, 'Et son intitulé pointe le titre, sans s\'attacher à un bouton.');
     }
-    assert.ok(boutons.length >= 2, 'les deux groupes de boutons doivent être trouvés');
+    assert.strictEqual(boutons.length, 1, 'seule la farine reste un groupe de boutons');
 });
 
 test('les deux curseurs gardent leur `<label>`, qui est légitime', () => {
     /* Un `<label>` autour d'un curseur UNIQUE fait exactement ce qu'on attend : il le nomme, et
        cliquer le titre y donne le focus. Le retirer par symétrie aurait dégradé l'accessibilité
        en croyant l'améliorer. */
-    for (const titre of ['Force de la farine', 'Hydratation']) {
+    for (const titre of ['Force de la farine', 'Hydratation', 'Four']) {
         const m = new RegExp(`<label className="sim-ctrl">\\s*<span className="sim-ctrl-h">${titre}`).exec(rendu);
         assert.ok(m, `« ${titre} » doit rester dans un <label> : il n'enveloppe qu'un curseur.`);
     }

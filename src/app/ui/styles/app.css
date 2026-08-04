@@ -4911,3 +4911,15 @@ button.av-wrap:active{transform:scale(.94)}
   margin:2px 0 12px;padding:8px 12px;border-radius:10px;font-size:12.5px;line-height:1.35;
   color:var(--muted);background:var(--surface2);border:1px solid var(--border)}
 .sim-etait b{color:var(--text)}
+
+/* ————— LE SERVICE EN CINQ COMMANDES —————
+   Le compteur de manches remplace les cœurs dans le bandeau : ce jeu n'a plus de reprise, c'est
+   l'avancement qui s'y lit. */
+.sim-manche-n{flex:none;font-size:11.5px;font-weight:700;color:var(--muted);
+  padding:2px 8px;border-radius:99px;background:var(--surface2);margin:0}
+/* Le détail des cinq manches, en fin de service : une note globale sans le détail ne dit pas OÙ
+   l'on a perdu, et c'est ce qu'on vient chercher. */
+.sim-manches{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.sim-manches li{display:flex;align-items:center;gap:8px;font-size:12.5px;
+  padding:6px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
+.sim-manches .sim-obj-e{font-size:17px}

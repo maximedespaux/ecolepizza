@@ -522,8 +522,9 @@ test('l\'arcade est en tête, et une seule fois', () => {
        désormais sur une commande de client, tirée au sort, dont il faut DÉDUIRE le style. */
     const srcSim = fs.readFileSync(path.join(APP, 'ui/components/SimulateurPizza.jsx'), 'utf8');
     assert.doesNotMatch(srcSim, /className="sim-objs"/, 'l\'écran de choix a disparu');
-    assert.match(srcSim, /useState\(\(\) => \{[\s\S]{0,300}?tirerCommande\(\)/,
-        'le jeu s\'ouvre sur une commande tirée au sort');
+    /* Et il en tire CINQ d'un coup : une partie est un service de cinq commandes. */
+    assert.match(srcSim, /useState\(\(\) => \{[\s\S]{0,300}?tirerPartie\(\)/,
+        'le jeu s\'ouvre sur un service tiré au sort');
 
     /* LE RECORD EST PERSONNEL, ET SEULEMENT LUI. Un classement nominatif installerait, dans une
        promotion de vingt, dix-sept personnes à demeure dans la moitié basse — celles-là mêmes
@@ -766,7 +767,10 @@ test('les jeux de l\'arcade ne jettent plus les étoiles gagnées', () => {
         'components/CommandePiege.jsx': /const fermer = phase === "fin" \? \(\) => onFinish\(stars\) : onClose;/,
         'components/JustePrix.jsx': /const fermer = phase === "fin" \? \(\) => onFinish\(stars\) : onClose;/,
         'components/ConstructorGame.jsx': /const fermer = checked \? \(\) => onFinish\(meilleur\) : onClose;/,
-        'components/SimulateurPizza.jsx': /const fermer = meilleur > 0 \? \(\) => onFinish\(meilleur\) : onClose;/,
+        /* Le simulateur ne garde plus « la meilleure fournée » : il ACCUMULE cinq manches. La
+           condition porte donc sur ce qui est acquis, et l'étoile se déduit du total. Même
+           exigence, autre compteur : sortir ne doit pas jeter quatre manches réussies. */
+        'components/SimulateurPizza.jsx': /const fermer = acquis\.length \? \(\) => onFinish\(etoiles\) : onClose;/,
     };
     for (const [f, re] of Object.entries(attendus)) {
         const src = fs.readFileSync(path.join(APP_UI, f), 'utf8');
