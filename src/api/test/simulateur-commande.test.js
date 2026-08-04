@@ -124,3 +124,32 @@ test('le four se règle au curseur, plus en trois pastilles', () => {
     assert.match(rendu, /min="250" max="500" step="5"[\s\S]{0,60}?value=\{temp\}/,
         'la plage couvre les quatre styles (teglia 280 en tolérance, AVPN 485) sans absurdités');
 });
+
+test('le briefing donne UNE phrase par réglage, dans l\'ordre des curseurs', () => {
+    /* LE DÉFAUT DE FOND, plus gênant que la forme : la FARINE et sa FORCE tenaient dans la MÊME
+       puce — « Farine, Une farine courante, T55 ou T65. Force moyenne, pas besoin qu'elle
+       tienne des heures. » Trois puces pour quatre réglages, et l'on cherchait le quatrième.
+
+       LA FORME COMPTAIT AUSSI : un intitulé, une virgule, deux phrases collées. Personne ne
+       parle comme ça, et le jeu venait justement de mettre un client au comptoir. C'est
+       désormais son souhait, coupé en quatre. */
+    const bloc = /<div className="sim-brief">([\s\S]*?)<\/div>/.exec(rendu);
+    assert.ok(bloc, 'le briefing est introuvable');
+    const puces = [...bloc[1].matchAll(/<li>\{obj\.brief\.(\w+)\}/g)].map((m) => m[1]);
+    assert.deepStrictEqual(puces, ['type', 'force', 'hydra', 'temp'],
+        'une puce par réglage, dans l\'ordre où les curseurs se présentent');
+    assert.match(bloc[1], /Je voudrais une pâte…/, 'et c\'est le client qui parle');
+});
+
+test('chaque souhait se lit comme une suite de phrase, pas comme une fiche', () => {
+    /* Les quatre morceaux complètent « Je voudrais une pâte… » : ils doivent donc commencer en
+       minuscule et ne pas se terminer par un point, sinon la phrase se casse en télégramme. */
+    const objectifs = /const OBJECTIFS = \[([\s\S]*?)\n\];/.exec(rendu)[1];
+    const briefs = [...objectifs.matchAll(/(type|force|hydra|temp): "([^"]+)"/g)]
+        .filter((m) => !/ok:|tol:/.test(m[0])).map((m) => m[2]);
+    assert.ok(briefs.length >= 16, `16 souhaits attendus, ${briefs.length} trouvés`);
+    for (const b of briefs) {
+        assert.ok(!/^[A-ZÀ-Ý]/.test(b), `« ${b} » commence par une majuscule : ce n'est plus une suite de phrase.`);
+        assert.ok(!b.endsWith('.'), `« ${b} » se termine par un point : la phrase se casserait.`);
+    }
+});

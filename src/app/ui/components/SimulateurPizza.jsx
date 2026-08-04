@@ -33,7 +33,10 @@ const OBJECTIFS = [
   {
     id: "classique", nom: "Classique", emoji: "🍕",
     intro: "La pizza de tous les jours, cornicione léger.",
-    brief: { type: "Une farine courante, T55 ou T65.", force: "Force moyenne, pas besoin qu'elle tienne des heures.", hydra: "Hydratation modérée, facile à étaler.", temp: "Four moyen." },
+    brief: { type: "faite avec la farine de tous les jours, ni la plus blanche ni une complète",
+             force: "qui lève en quelques heures, sans attendre le lendemain",
+             hydra: "facile à étaler, ni collante ni sèche",
+             temp: "et qui cuise tranquillement, en cinq ou six minutes" },
     type: { ok: [1, 2], tol: [0, 3], why: "T55/T65 : la farine du quotidien, ni trop raffinée ni complète." },
     force: { ok: [200, 250], tol: [180, 280], why: "W ~220 : une fermentation courte ne demande pas une farine forte." },
     hydra: { ok: [55, 62], tol: [52, 66], why: "55-62 % : souple pour s'étaler, assez ferme pour un four moyen." },
@@ -42,7 +45,10 @@ const OBJECTIFS = [
   {
     id: "napolitaine", nom: "Napolitaine AVPN", emoji: "🔥",
     intro: "Cuisson éclair à très haute température. La reine, la plus exigeante.",
-    brief: { type: "Une farine 00, peu cendrée.", force: "Assez forte pour tenir la longue maturation.", hydra: "Maîtrisée, le disque doit tenir à 480 °C.", temp: "Un four brûlant." },
+    brief: { type: "faite d'une farine très blanche, presque sans son",
+             force: "qui tienne une longue maturation sans s'affaisser",
+             hydra: "souple, mais pas noyée : le disque doit tenir sur la pelle",
+             temp: "et qui soit saisie en une minute, dans un four brûlant" },
     type: { ok: [0, 1], tol: [0, 2], why: "Tipo 00 (T45/T55) : faible taux de cendres, la farine de la vraie napolitaine." },
     force: { ok: [280, 310], tol: [260, 330], why: "W 280-310 : la pâte doit encaisser une longue maturation sans s'affaisser." },
     hydra: { ok: [57, 65], tol: [55, 68], why: "57-65 % : le disciplinare AVPN 2024. Trop d'eau et le disque ne tient pas." },
@@ -51,7 +57,10 @@ const OBJECTIFS = [
   {
     id: "contemporaine", nom: "Contemporaine", emoji: "🫧",
     intro: "Cornicione haut et alvéolé. Farine forte, fermentation indirecte.",
-    brief: { type: "Une T65, un peu plus de caractère.", force: "Farine forte, elle porte le biga/poolish.", hydra: "Généreuse, pour la mie ouverte.", temp: "Plus chaud que la classique." },
+    brief: { type: "faite d'une farine qui a du caractère, un peu plus cendrée",
+             force: "assez forte pour porter une biga ou une poolish sans lâcher",
+             hydra: "bien hydratée, pour une mie ouverte et un bord qui monte",
+             temp: "et qui cuise plus chaud que la classique, pour lever le bord d'un coup" },
     type: { ok: [2, 2], tol: [1, 3], why: "T65 : plus de goût et de tenue pour une longue fermentation indirecte." },
     force: { ok: [320, 380], tol: [300, 400], why: "W 320-380 : une farine forte porte la biga ou la poolish sans lâcher." },
     hydra: { ok: [65, 75], tol: [60, 78], why: "65-75 % : plus d'eau que la classique, pour la mie ouverte du cornicione." },
@@ -60,7 +69,10 @@ const OBJECTIFS = [
   {
     id: "teglia", nom: "In teglia", emoji: "🍞",
     intro: "Pizza en plaque, al taglio. Très haute hydratation.",
-    brief: { type: "T65 ou une farine de caractère.", force: "Solide, pour tenir beaucoup d'eau.", hydra: "Très haute : c'est sa signature.", temp: "Four plus doux, cuisson longue." },
+    brief: { type: "faite d'une farine de caractère, capable de porter la structure",
+             force: "solide, parce qu'elle va boire énormément",
+             hydra: "très hydratée, presque coulante — c'est sa signature",
+             temp: "et qui cuise longuement, dans un four plus doux" },
     type: { ok: [2, 3], tol: [1, 3], why: "T65 à complète : la structure doit porter 75-80 % d'eau." },
     force: { ok: [300, 360], tol: [280, 380], why: "W 300-360 : sans force, la pâte gorgée d'eau s'effondre." },
     hydra: { ok: [75, 82], tol: [70, 85], why: "75-82 % : c'est ce qui fait la mie aérée de la teglia." },
@@ -352,12 +364,22 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
 
               {/* Instructions : ce qu'il faut viser, en mots. Ça guide sans donner les chiffres —
                   c'est au stagiaire de traduire « farine forte » en un W. */}
+              {/* CE QUE LE CLIENT ATTEND, DIT PAR LUI — pas une fiche technique.
+                  Le bloc s'écrivait en télégramme : « Farine, Une farine courante, T55 ou T65.
+                  Force moyenne, pas besoin qu'elle tienne des heures. » Deux défauts d'un coup.
+                  La forme d'abord : un intitulé, une virgule, deux phrases collées — personne ne
+                  parle comme ça, et le jeu venait justement de mettre un client au comptoir.
+                  Le fond ensuite, plus gênant : la FARINE et sa FORCE tenaient dans la MÊME
+                  puce. Trois puces pour quatre réglages, et l'on cherchait le quatrième.
+                  Une phrase, un souhait, un réglage — dans l'ordre des curseurs en dessous. */}
               <div className="sim-brief">
-                <span className="sim-brief-t"><Icon name="compass" size={13} /> Ce qu'il te faut</span>
+                <span className="sim-brief-t"><Icon name="message-circle" size={13} /> Ce qu'il attend</span>
+                <p className="sim-brief-i">« Je voudrais une pâte…</p>
                 <ul>
-                  <li><b>Farine</b>, {obj.brief.type} {obj.brief.force}</li>
-                  <li><b>Eau</b>, {obj.brief.hydra}</li>
-                  <li><b>Four</b>, {obj.brief.temp}</li>
+                  <li>{obj.brief.type},</li>
+                  <li>{obj.brief.force},</li>
+                  <li>{obj.brief.hydra},</li>
+                  <li>{obj.brief.temp}. »</li>
                 </ul>
               </div>
 

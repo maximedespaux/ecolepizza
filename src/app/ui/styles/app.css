@@ -4923,3 +4923,6 @@ button.av-wrap:active{transform:scale(.94)}
 .sim-manches li{display:flex;align-items:center;gap:8px;font-size:12.5px;
   padding:6px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
 .sim-manches .sim-obj-e{font-size:17px}
+/* L'amorce du souhait du client — les puces qui suivent la complètent, d'où l'italique et
+   l'absence de marge basse : c'est une seule phrase, coupée en quatre. */
+.sim-brief-i{margin:0 0 2px;font-style:italic}
