@@ -69,13 +69,25 @@ async function sansReponsePartenaires(conn, org) {
 const getBadges = async (req, res) => {
     const conn = db.promise();
     const org = req.user.organization_id;
-    const [lowStock, unpaid, shopPending, consentManquant] = [
-        await count(conn, 'SELECT COUNT(*) AS n FROM inventory_item WHERE organization_id = ? AND quantity <= threshold', [org]),
-        await count(conn, "SELECT COUNT(*) AS n FROM invoice WHERE organization_id = ? AND type IN ('FACTURE','ACOMPTE') AND status IN ('EMISE','IMPAYEE')", [org]),
+    /* EN PARALLÈLE, ET C'EST TOUT SAUF UN DÉTAIL ICI. Ces comptes sont indépendants — rien ne
+       justifiait de les enchaîner. Un `await` par élément de tableau les faisait pourtant partir
+       l'un APRÈS l'autre, et la base est DISTANTE : chaque aller-retour coûte ~85 ms mesurés
+       depuis le navigateur. À trois comptes cela passait déjà inaperçu ; en ajoutant celui des
+       consentements — qui en déclenche deux à lui seul — on atteignait cinq allers-retours en
+       file, soit près d'une demi-seconde.
+
+       Et cette route n'est pas une page : la barre latérale l'appelle à CHAQUE montage et toutes
+       les 60 secondes. Un demi-quart de seconde y pèse sur toute la navigation.
+
+       `Promise.all` ramène le tout au coût du plus lent, soit un aller-retour. Le pool en accepte
+       dix simultanées (`connectionLimit`), les cinq passent sans file d'attente. */
+    const [lowStock, unpaid, shopPending, consentManquant] = await Promise.all([
+        count(conn, 'SELECT COUNT(*) AS n FROM inventory_item WHERE organization_id = ? AND quantity <= threshold', [org]),
+        count(conn, "SELECT COUNT(*) AS n FROM invoice WHERE organization_id = ? AND type IN ('FACTURE','ACOMPTE') AND status IN ('EMISE','IMPAYEE')", [org]),
         // Demandes boutique en cours : ni remises (terminées) ni annulées.
-        await count(conn, "SELECT COUNT(*) AS n FROM shop_request WHERE organization_id = ? AND status NOT IN ('REMISE', 'ANNULEE')", [org]),
-        await sansReponsePartenaires(conn, org),
-    ];
+        count(conn, "SELECT COUNT(*) AS n FROM shop_request WHERE organization_id = ? AND status NOT IN ('REMISE', 'ANNULEE')", [org]),
+        sansReponsePartenaires(conn, org),
+    ]);
     res.json({
         data: {
             '/inventaire': lowStock,
