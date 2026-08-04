@@ -516,8 +516,14 @@ test('l\'arcade est en tête, et une seule fois', () => {
        affiche son choix de pizzas. Le seul lien réel avec les formations survit sans les six
        répétitions. */
     assert.match(srcQuest, /const GAME_SIM = \{ key: "simulateur", obj: null,/);
+    /* LE SIMULATEUR N'OFFRE PLUS DE CHOIX — il TIRE. Les quatre pavés « Classique / Napolitaine
+       AVPN / Contemporaine / In teglia » nommaient le style, et la réponse s'apprenait par
+       cœur : quatre jeux de quatre réglages, et le simulateur ne simulait plus rien. On ouvre
+       désormais sur une commande de client, tirée au sort, dont il faut DÉDUIRE le style. */
     const srcSim = fs.readFileSync(path.join(APP, 'ui/components/SimulateurPizza.jsx'), 'utf8');
-    assert.match(srcSim, /\{!obj \? \(/, 'sans objectif, le simulateur ouvre son choix');
+    assert.doesNotMatch(srcSim, /className="sim-objs"/, 'l\'écran de choix a disparu');
+    assert.match(srcSim, /useState\(\(\) => \{[\s\S]{0,300}?tirerCommande\(\)/,
+        'le jeu s\'ouvre sur une commande tirée au sort');
 
     /* LE RECORD EST PERSONNEL, ET SEULEMENT LUI. Un classement nominatif installerait, dans une
        promotion de vingt, dix-sept personnes à demeure dans la moitié basse — celles-là mêmes

@@ -75,6 +75,58 @@ const OBJECTIFS = [
   },
 ];
 
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   LA COMMANDE D'UN CLIENT, PAS UNE CARTE À CHOISIR.
+
+   L'écran de choix montrait quatre pavés — « Classique », « Napolitaine AVPN »… — et le
+   briefing détaillait ensuite ce qu'il fallait viser. On prenait toujours le même, et comme le
+   style était NOMMÉ, la réponse s'apprenait par cœur : quatre jeux de quatre réglages, et le
+   simulateur ne simulait plus rien.
+
+   Désormais la partie s'ouvre sur une COMMANDE, tirée au sort. Le client ne dit pas « une
+   contemporaine à 70 % d'hydratation », il dit « j'ai vu vos photos, le bord bien alvéolé » —
+   c'est au pizzaïolo de traduire. C'est le geste du comptoir, et c'est le seul qui s'apprenne :
+   reconnaître ce qu'on vous demande.
+
+   ⚠ L'ALÉATOIRE NE TOUCHE PAS AUX VALEURS. Les fenêtres (W, hydratation, températures) viennent
+   des manuels et du disciplinare AVPN : les tirer au hasard produirait des napolitaines à 300 °C
+   et enseignerait du faux. Ce qui varie, c'est la FORMULATION et l'ordre de passage — trois
+   commandes par style, douze ouvertures possibles, et le style lui-même n'est révélé qu'au
+   verdict.
+
+   Le briefing reste : il guide en mots (« une farine 00, peu cendrée ») sans donner un chiffre.
+   C'est lui qui rend la commande soluble sans la nommer. */
+const COMMANDES = {
+  classique: [
+    "Bonjour ! Une margherita toute simple, c'est pour ce midi.",
+    "Trois pizzas pour la famille, rien de compliqué.",
+    "Comme d'habitude, la maison — celle de tous les jours.",
+  ],
+  napolitaine: [
+    "Je rentre de Naples… vous faites la vraie, celle qui gonfle ?",
+    "Votre four à bois est chaud ? Alors une napolitaine, la vraie.",
+    "On m'a dit que vous étiez certifiés. Une AVPN, s'il vous plaît.",
+  ],
+  contemporaine: [
+    "J'ai vu vos photos : le bord bien alvéolé, c'est ça que je veux.",
+    "Vous travaillez en biga ? Je prends ce que ça donne.",
+    "Une pizza à la mie ouverte, avec un cornicione qui monte haut.",
+  ],
+  teglia: [
+    "Deux parts de la plaque, à emporter s'il vous plaît.",
+    "Une pizza al taglio, comme à Rome — bien aérée.",
+    "Vous avez de la pizza en plaque, coupée au ciseau ?",
+  ],
+};
+
+/* Un tirage : un style, et une des façons de le demander. `graine` sert aux tests et à un
+   éventuel rejeu ; sans elle, on tire au hasard. */
+function tirerCommande() {
+  const o = OBJECTIFS[Math.floor(Math.random() * OBJECTIFS.length)];
+  const lignes = COMMANDES[o.id] || [o.intro];
+  return { obj: o, dit: lignes[Math.floor(Math.random() * lignes.length)] };
+}
+
 /* Note d'un axe : 2 = plage juste, 1 = tolérance, 0 = raté. */
 function noteAxe(val, axe) {
   if (val >= axe.ok[0] && val <= axe.ok[1]) return 2;
@@ -85,8 +137,14 @@ const SENS = (val, axe) => (val < axe.ok[0] ? "trop bas" : val > axe.ok[1] ? "tr
 const SENS_TYPE = (idx, axe) => (idx < axe.ok[0] ? "trop raffinée" : idx > axe.ok[1] ? "trop cendrée" : "juste");
 
 export default function SimulateurPizza({ onClose, onFinish, objectifId = null }) {
-  // Ouverture directe sur un objectif quand le jeu est lancé depuis une formation.
-  const [obj, setObj] = useState(() => OBJECTIFS.find((o) => o.id === objectifId) || null);
+  /* ON OUVRE SUR UNE COMMANDE, pas sur un menu. `objectifId` reste honoré s'il est fourni —
+     c'est le cas d'un lancement depuis une formation — mais l'arcade n'en passe pas, et le
+     tirage devient alors la règle. */
+  const [cmd, setCmd] = useState(() => {
+    const impose = OBJECTIFS.find((o) => o.id === objectifId);
+    return impose ? { obj: impose, dit: (COMMANDES[impose.id] || [impose.intro])[0] } : tirerCommande();
+  });
+  const obj = cmd.obj;
   const [type, setType] = useState(1);   // index dans TYPES (T55 par défaut)
   const [force, setForce] = useState(280);
   const [hydra, setHydra] = useState(62);
@@ -134,20 +192,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
           <button className="x" onClick={fermer} aria-label="Fermer">×</button>
         </div>
 
-        {!obj ? (
-          <div className="mbody">
-            <p className="hint" style={{ marginTop: 0 }}>Choisis ta pizza à réussir. Tu régleras la farine, sa force, l'eau et le four, comme en vrai.</p>
-            <div className="sim-objs">
-              {OBJECTIFS.map((o) => (
-                <button key={o.id} className="sim-obj" onClick={() => { setObj(o); setVerdict(null); fournees(); }}>
-                  <span className="sim-obj-e" aria-hidden="true">{o.emoji}</span>
-                  <b>{o.nom}</b>
-                  <span className="sim-obj-d">{o.intro}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : verdict ? (
+        {verdict ? (
           <>
             <div className="mbody sim-result">
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 6 }}>
@@ -157,11 +202,20 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                 {[0, 1, 2].map((i) => <span key={i} className={i < verdict.stars ? "on" : ""}>★</span>)}
               </div>
               <p className="sim-verdict-t">
-                {verdict.stars === 3 ? "Parfait : c'est une vraie " + obj.nom + " !"
+                {verdict.stars === 3 ? "Parfait, c'est exactement ça !"
                   : !encoreEnVie(perdus) ? `Plus de cœur : on garde ta meilleure fournée (${meilleur} ★).`
                   : verdict.stars === 2 ? "Bien joué, presque parfait."
                   : verdict.stars === 1 ? "Ça part, mais revois les points en rouge."
                   : "Raté, mais regarde pourquoi, c'est là qu'on apprend."}
+              </p>
+              {/* CE QUE LE CLIENT DEMANDAIT — À CHAQUE FOIS, RÉUSSI OU NON.
+                  Le nom du style ne tombait qu'au sans-faute : en ratant, on ne savait donc
+                  jamais ce qu'il aurait fallu reconnaître, et c'est justement là qu'on apprend.
+                  Cacher le nom pendant le réglage rend le jeu instructif ; le cacher au verdict
+                  le rendrait seulement obscur. */}
+              <p className="sim-etait">
+                <span className="sim-obj-e" aria-hidden="true">{obj.emoji}</span>
+                Le client demandait une <b>{obj.nom}</b> — {obj.intro}
               </p>
               <ul className="sim-feedback">
                 {verdict.axes.map((a) => (
@@ -181,7 +235,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
               </ul>
             </div>
             <div className="mfoot">
-              <button className="btn ghost" onClick={() => { setObj(null); setVerdict(null); fournees(); }}>Autre pizza</button>
+              <button className="btn ghost" onClick={() => { setCmd(tirerCommande()); setVerdict(null); fournees(); }}>Autre commande</button>
               {/* « Réessayer » disparaît quand la pizza est parfaite (il n'y a plus rien à
                   chercher) ou qu'il ne reste plus de cœur — sinon le bouton promettrait un essai
                   qui n'existe pas. */}
@@ -201,9 +255,13 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                   restait deux essais ou un seul, alors que c'est exactement ce qui décide entre
                   tenter un coup et sécuriser. Une information qui arrive après la décision
                   n'informe rien. */}
+              {/* LE STYLE N'EST PAS NOMMÉ ICI, et c'est tout l'intérêt : « Napolitaine AVPN »
+                  écrit en gras transformait le jeu en table de correspondance. Le client parle,
+                  le briefing ci-dessous guide en mots, et le nom du style ne tombe qu'au verdict
+                  — au moment où il apprend quelque chose plutôt qu'il ne dispense de chercher. */}
               <div className="sim-goal">
-                <span className="sim-obj-e" aria-hidden="true">{obj.emoji}</span>
-                <span style={{ flex: 1 }}>Objectif : <b>{obj.nom}</b>, {obj.intro}</span>
+                <span className="sim-obj-e" aria-hidden="true">🧑‍🍳</span>
+                <span style={{ flex: 1 }} className="sim-cmd">« {cmd.dit} »</span>
                 <Coeurs perdus={perdus} />
               </div>
 
@@ -287,7 +345,12 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
               </div>
             </div>
             <div className="mfoot">
-              <button className="btn ghost" onClick={() => setObj(null)}>Changer d'objectif</button>
+              {/* « Changer d'objectif » renvoyait au menu des quatre pavés, qui n'existe plus.
+                  Il retire une commande — même geste, sans revenir à une carte. */}
+              <button className="btn ghost"
+                onClick={() => { setCmd(tirerCommande()); setVerdict(null); fournees(); }}>
+                <Icon name="shuffle" size={14} /> Autre commande
+              </button>
               <button className="btn primary" onClick={valider}>
                 <Icon name="flame" size={15} /> Enfourner et noter
               </button>

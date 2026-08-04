@@ -2321,24 +2321,16 @@ tbody tr:last-child td{border-bottom:none}
 /* ── Simulateur « Fais ta pizza » ───────────────────────────────────────────────────────── */
 .modal.sim{max-width:520px}
 /* Choix de l'objectif */
-.sim-objs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.sim-obj{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:13px 14px;
-  border:1px solid var(--border);border-radius:13px;background:var(--surface);cursor:pointer;
-  text-align:left;transition:border-color .12s var(--ease),transform .12s var(--ease)}
-/* MÊME RAISON QUE POUR LES PASTILLES : dans ce jeu, l'or dit « acquis » — c'est la couleur des
-   étoiles du verdict (`.sim-stars span.on`). Le garder au survol lui ferait dire deux choses
-   dans le même écran. Ailleurs dans l'application, le survol en or reste l'usage (quatorze
-   règles) et n'entre en collision avec rien : on ne le change qu'ICI.
-   Ces cartes n'ont pas d'état « choisie » — on en prend une et l'écran change — donc le survol
-   n'annonce rien à imiter ; il se contente de ne plus emprunter le vocabulaire de la réussite. */
-.sim-obj:hover{border-color:var(--dim);transform:translateY(-2px)}
+/* L'emoji du bandeau de commande (le pizzaïolo). La classe garde son nom : elle servait aux
+   cartes d'objectif, retirées avec l'écran de choix, et sert encore ici. */
 .sim-obj-e{font-size:26px;line-height:1}
-.sim-obj b{font-size:14px}
-.sim-obj-d{font-size:11.5px;color:var(--muted);line-height:1.4}
 /* Écran de jeu */
 .sim-goal{display:flex;align-items:center;gap:9px;margin:0 0 14px;padding:9px 12px;border-radius:11px;
   background:var(--surface2);font-size:13px;color:var(--text)}
 .sim-goal .sim-obj-e{font-size:22px}
+/* CE QUE DIT LE CLIENT — en italique et en corps de texte : c'est une parole, pas un intitulé.
+   Le style visé n'y est jamais nommé (cf. le composant) ; c'est au joueur de le reconnaître. */
+.sim-cmd{font-style:italic;font-size:13.5px;line-height:1.35;color:var(--text)}
 /* Briefing d'instructions : ce qu'il faut viser, en mots. Fond doux, pas d'alerte. */
 .sim-brief{margin:0 0 14px;padding:11px 13px;border-radius:11px;background:var(--surface2);border:1px solid var(--border-soft)}
 .sim-brief-t{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
@@ -4913,3 +4905,9 @@ button.av-wrap:active{transform:scale(.94)}
 .cp-lexique dt{display:flex;align-items:center;gap:4px;font-weight:800;color:var(--text);margin-top:5px}
 .cp-lexique dt:first-child{margin-top:0}
 .cp-lexique dd{margin:1px 0 0;color:var(--muted)}
+/* « Le client demandait une … » — la réponse à la devinette, donnée à chaque verdict, réussi ou
+   non. Encadrée comme une carte de rappel : c'est la seule ligne du résultat qu'on relit. */
+.sim-etait{display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;
+  margin:2px 0 12px;padding:8px 12px;border-radius:10px;font-size:12.5px;line-height:1.35;
+  color:var(--muted);background:var(--surface2);border:1px solid var(--border)}
+.sim-etait b{color:var(--text)}
