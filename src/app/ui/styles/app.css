@@ -4878,3 +4878,17 @@ button.av-wrap:active{transform:scale(.94)}
    sinon les deux se lisent comme une seule phrase et l'on ne voit pas qu'on doit écrire. */
 .modal .field.confirm-mot{margin-top:16px}
 .modal .field.confirm-mot>span{display:block;margin-bottom:6px}
+
+/* ————— LA FARINE DE LA PÂTE, SUR LA CARTE —————
+   Posée entre le nom et la garniture : elle n'est ni l'un ni l'autre. Le liseré et l'épi la
+   font repérer sans lire — c'est ce qui compte quand le chrono tourne. Elle emprunte l'or de
+   la charte (`--gold`), déjà la couleur des farines et des empâtements ailleurs dans l'app. */
+.cp-farine{display:inline-flex;align-items:center;gap:3px;margin-left:6px;vertical-align:1px;
+  padding:0 5px;border-radius:99px;font-size:9.5px;font-weight:700;white-space:nowrap;
+  color:var(--text);background:color-mix(in srgb,var(--gold) 26%,transparent)}
+.cp-farine svg{flex:none;opacity:.75}
+/* Le lexique : ce que la carte ne dit pas d'elle-même, sous la carte, là où la question naît. */
+.cp-lexique{margin:8px 0 0;padding:8px 0 0;border-top:1px dashed var(--border);font-size:10.5px;line-height:1.35}
+.cp-lexique dt{display:flex;align-items:center;gap:4px;font-weight:800;color:var(--text);margin-top:5px}
+.cp-lexique dt:first-child{margin-top:0}
+.cp-lexique dd{margin:1px 0 0;color:var(--muted)}

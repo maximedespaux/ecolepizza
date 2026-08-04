@@ -5,6 +5,7 @@ import Coeurs from "./Coeurs.jsx";
 import { COEURS_MAX, encoreEnVie } from "../lib/coeurs.js";
 import { GARN_BASES, GARN_PRODUITS, GARN_DAIRY } from "../lib/garnitures.js";
 import { ALLERGENES, nomAllergene, verdict } from "../lib/allergenes.js";
+import { SUBSTITUTIONS } from "../lib/dough.js";
 
 /**
  * LA COMMANDE PIÈGE — deux minutes au comptoir, les allergènes en pleine bourre.
@@ -69,6 +70,23 @@ const tireDans = (l) => l[alea(l.length)];
  * `garnitures.js` porte déjà une table d'affinités curée (`pairs`) : on s'en sert pour choisir la
  * suite, et on ne retombe au hasard que lorsqu'elle ne propose rien de disponible.
  */
+/* ─────────────────────────────────────────────────────────────────────────────────────────
+   LES FARINES DE LA PÂTE — tirées de `SUBSTITUTIONS` (lib/dough.js, manuel p.32), jamais
+   recopiées ici. On écarte les blés T80/T110/T150 : ce sont des farines de blé, elles ne
+   changent rien à la lecture des allergènes et alourdiraient la carte pour rien.
+
+   LA FARINE ENTRE DANS `ing`, avec le reste de la composition. C'est ce qui fait que
+   `verdict()` la prend en compte PARTOUT — question simple, retrait, comparaison — sans qu'un
+   seul appel change. La sortir dans un champ à part aurait obligé à modifier chaque site
+   d'appel, et il aurait suffi d'en oublier un pour que le jeu marque faux un raisonnement juste.
+   Le drapeau `farine` ne sert qu'à l'affichage et au choix de ce qu'on propose de retirer.
+
+   DEUX PIZZAS SUR CINQ, PAS TOUTES : une carte où chaque pâte est spéciale ne ressemble à
+   aucune pizzeria, et l'information cesse de se remarquer. */
+const FARINES = SUBSTITUTIONS.filter((f) => !f.wheat)
+  .map((f) => ({ cle: `farine_${f.key}`, label: `Farine de ${f.label.toLowerCase()}`,
+    court: f.label, farine: true }));
+
 function composer(nom) {
   const base = tireDans(BASES);
   const choisies = [];
@@ -79,7 +97,8 @@ function composer(nom) {
     const amies = dispo().filter((g) => (dernier.pairs || []).includes(g.cle));
     choisies.push(amies.length ? tireDans(amies) : tireDans(dispo()));
   }
-  return { nom, ing: [base, ...choisies] };
+  const farine = alea(100) < 40 ? tireDans(FARINES) : null;
+  return { nom, farine, ing: [...(farine ? [farine] : []), base, ...choisies] };
 }
 
 /* Dix noms de maison, et AUCUN ne nomme un ingrédient ou un style. « La Marine » tirée au sort
@@ -207,7 +226,13 @@ function questionRetrait(carte) {
   }
   if (!candidats.length) return null;
   const { pizza, c, causes } = tireDans(candidats);
-  const retire = tireDans(causes);                       // l'ingrédient qu'on propose d'ôter
+  /* ON NE PROPOSE JAMAIS D'ÔTER LA FARINE : « sans la farine de soja, ça passe ? » n'est pas
+     une question de comptoir — la pâte est faite depuis ce matin. En revanche la farine
+     RESTE dans la composition, donc retirer une garniture ne suffira pas si c'est elle qui
+     porte l'allergène. C'est précisément la leçon qu'on veut : ce qu'on voit n'est pas tout. */
+  const otables = causes.filter((l) => !pizza.ing.some((i) => i.farine && i.label === l));
+  if (!otables.length) return null;
+  const retire = tireDans(otables);                      // l'ingrédient qu'on propose d'ôter
   const restant = pizza.ing.filter((i) => i.label !== retire);
   const apres = verdict(restant, c.cle);
   return {
@@ -429,12 +454,38 @@ export default function CommandePiege({ onClose, onFinish }) {
                 {carte.map((p) => (
                   <li key={p.nom} className={(q.choix || []).some((c) => c.label === p.nom)
                     || (q.pizza && q.pizza.nom === p.nom) ? "on" : ""}>
-                    <b>{p.nom}</b>
-                    <span>{p.ing.map((i) => i.label).join(", ")}</span>
+                    {/* LA FARINE À CÔTÉ DU NOM, PAS DANS LA GARNITURE : elle appartient à la
+                        pâte, pas à ce qu'on pose dessus. Noyée dans la liste des ingrédients,
+                        elle se lirait comme une garniture de plus — or c'est justement la
+                        distinction qu'on enseigne. Le pictogramme d'épi la fait repérer sans
+                        lire, ce qui compte à deux minutes de chrono.
+                        DANS le `<b>`, et non à côté : le `<li>` est une colonne flex, où un
+                        frère s'étire sur toute la largeur et retombe sous le nom. */}
+                    <b>{p.nom}
+                      {p.farine && (
+                        <span className="cp-farine" title={p.farine.label}>
+                          <Icon name="wheat" size={10} aria-hidden="true" /> {p.farine.court}
+                        </span>
+                      )}
+                    </b>
+                    <span>{p.ing.filter((i) => !i.farine).map((i) => i.label).join(", ")}</span>
                   </li>
                 ))}
               </ul>
-              <p className="hint">Toutes les pâtes contiennent du gluten.</p>
+              {/* ————— LE LEXIQUE —————
+                  Ce que la carte ne peut pas dire d'elle-même, et qui décide de la réponse.
+                  Il tient sous la carte plutôt qu'ailleurs : c'est en la lisant qu'on se pose
+                  la question. */}
+              <dl className="cp-lexique">
+                <dt><Icon name="wheat" size={10} aria-hidden="true" /> Farine de substitution</dt>
+                <dd>Elle remplace une <b>part</b> du blé, à poids constant. Le blé reste
+                  majoritaire : <b>toutes les pâtes contiennent du gluten</b>, celles-ci comprises.</dd>
+                <dt>Soja</dt>
+                <dd>C'est le seul de ces mélanges qui ajoute un des 14 allergènes.</dd>
+                <dt>Châtaigne</dt>
+                <dd>Malgré son nom, ce n'est <b>pas</b> un fruit à coque au sens de la
+                  réglementation — la liste en nomme huit, et elle n'y est pas.</dd>
+              </dl>
             </aside>
           </div>
         )}
