@@ -2021,7 +2021,13 @@ tbody tr:last-child td{border-bottom:none}
   .cp-jeu{grid-template-columns:1fr;gap:12px}
   .cp-client{min-height:0;font-size:14px;padding:10px 12px;margin-bottom:10px}
   .cp-reponses{gap:6px}
-  .cp-rep{padding:9px 4px;font-size:12.5px}
+  /* RÉTRÉCIES POUR TENIR SUR UNE LIGNE, mais pas au point de devenir difficiles à viser :
+     elles tombaient à 37,5 px de haut, sous les 44 px qu'on vise pour une cible tactile. Ce
+     sont les commandes PRINCIPALES d'un jeu chronométré où une erreur coûte un cœur — rater le
+     bouton sous la pression du temps produit une faute qui n'en est pas une. Les 6,5 px que
+     coûte le plancher ne remettent pas en cause ce que dit le commentaire ci-dessus : mesuré,
+     le service et la carte tiennent toujours sans défiler. */
+  .cp-rep{padding:9px 4px;font-size:12.5px;min-height:44px}
   .cp-carte{padding:8px 10px}
   .cp-carte ul{gap:1px}
   .cp-carte li{padding:2px 5px;font-size:11px;line-height:1.25}
@@ -2352,8 +2358,19 @@ tbody tr:last-child td{border-bottom:none}
 .sim-feedback li.mid svg{color:var(--orange)}
 .sim-feedback li.ko svg{color:var(--ember1)}
 
-.pq-minis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
-.pq-mini{display:flex;align-items:center;gap:10px;flex:1 1 180px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;transition:transform .1s var(--ease),border-color .1s var(--ease)}
+/* ————— L'ARCADE : UNE GRILLE, PAS UN FLEX QUI PASSE À LA LIGNE —————
+   En flex-wrap avec `flex:1 1 180px`, la cinquième tuile se retrouvait SEULE sur sa ligne et
+   son `flex-grow` l'étirait sur toute la largeur : « Chrono Rush », le seul jeu qu'on ne peut
+   PAS lancer, faisait 826 px quand chacun des quatre jouables en faisait 199. Le plus gros
+   pavé de l'arcade annonçait « Bientôt ».
+   `auto-fill` ET NON `auto-fit` : c'est toute la différence ici. `auto-fit` replie les colonnes
+   vides et l'orpheline se réétirerait exactement pareil ; `auto-fill` garde les colonnes, donc
+   la tuile seule reste à la largeur d'une colonne.
+   Et 160px de plancher fait tenir DEUX tuiles sur un téléphone là où il n'y en avait qu'une :
+   l'arcade prenait 445 px de haut à elle seule, repoussant la carte des formations — le sujet
+   de la page — hors de l'écran. */
+.pq-minis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px}
+.pq-mini{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;transition:transform .1s var(--ease),border-color .1s var(--ease)}
 .pq-mini:hover:not(.soon){transform:translateY(-2px);border-color:var(--ember1)}
 .pq-mini.soon{opacity:.55;cursor:default}
 .pq-mini-e{font-size:26px;line-height:1}
@@ -2361,7 +2378,8 @@ tbody tr:last-child td{border-bottom:none}
 .pq-mini-txt b{font-size:14px}
 .pq-mini-sub{font-size:11.5px;color:var(--muted)}
 .cg-seq{display:flex;flex-direction:column;gap:6px}
-.cg-slot{display:flex;align-items:center;gap:8px;border:1.5px dashed var(--border);border-radius:10px;padding:8px 10px;font-size:13.5px;font-weight:600;min-height:40px;background:var(--surface);color:var(--text);cursor:pointer}
+/* Même raison pour les emplacements : on y tape pour retirer une étape mal placée. */
+.cg-slot{display:flex;align-items:center;gap:8px;border:1.5px dashed var(--border);border-radius:10px;padding:8px 10px;font-size:13.5px;font-weight:600;min-height:44px;background:var(--surface);color:var(--text);cursor:pointer}
 .cg-slot.empty{color:var(--dim);font-weight:400;cursor:default}
 .cg-slot.ok{border-style:solid;border-color:var(--green);background:color-mix(in srgb,var(--green) 10%,var(--surface))}
 .cg-slot.ko{border-style:solid;border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,var(--surface))}
@@ -2369,7 +2387,13 @@ tbody tr:last-child td{border-bottom:none}
 .cg-e{font-size:16px}
 .cg-ph{color:var(--dim)}
 .cg-pool{display:flex;flex-wrap:wrap;gap:8px}
-.cg-chip{border:1.5px solid var(--border);border-radius:99px;padding:7px 12px;background:var(--surface);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;transition:transform .1s var(--ease),border-color .1s var(--ease)}
+/* LES NEUF ÉTAPES SONT LA MANIPULATION MÊME DU JEU : on les prend une par une pour les ranger
+   dans l'ordre, et chaque tentative imparfaite coûte un cœur. Elles faisaient 38 px de haut,
+   sous les 44 px qu'on vise pour une cible tactile — rater une pastille et en poser une autre
+   se paie exactement comme une erreur de raisonnement, alors que ce n'en est pas une.
+   `inline-flex` + `align-items:center` : sans ça, un plancher de hauteur laisserait le texte
+   collé en haut de la pastille au lieu de rester centré. */
+.cg-chip{display:inline-flex;align-items:center;min-height:44px;border:1.5px solid var(--border);border-radius:99px;padding:7px 14px;background:var(--surface);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;transition:transform .1s var(--ease),border-color .1s var(--ease)}
 .cg-chip:hover{border-color:var(--navy);background:var(--surface2);transform:translateY(-1px)}
 
 .tpl-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
