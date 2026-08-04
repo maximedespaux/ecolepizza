@@ -2173,6 +2173,18 @@ tbody tr:last-child td{border-bottom:none}
 .pq-mini-record > svg{opacity:.28}
 .pq-mini-record > svg.on{opacity:1}
 .pq-mini-record .hint{margin-left:4px;font-size:10.5px}
+/* « JAMAIS JOUÉ » A SA PROPRE FORME. Trois étoiles vides se lisaient comme un score de zéro,
+   et le seul mot qui rétablissait le sens faisait 10,5 px en gris. C'est pourtant le seul état
+   sur lequel il y a quelque chose à faire : il devient une pastille, donc repérable en balayant
+   la rangée. Le MOT porte le sens — la couleur n'est qu'un renfort (WCAG 1.4.1). */
+/* EN NAVY, PAS EN ROUGE, pour deux raisons qui vont dans le même sens. La mesure d'abord :
+   aucun rouge de la palette ne dépasse 3,68:1 en texte sur son propre fond teinté (éprouvé sur
+   `--ember1`, `--ember2` et `--red` à 8, 11 et 14 %), là où le seuil est de 4,5 pour un texte de
+   cette taille. Le navy tient 9:1. Et le sens ensuite : « jamais joué » n'est pas une alerte,
+   c'est une invitation — le rouge de l'école dit « attention », ce qui n'est pas le propos. */
+.pq-mini-neuf{align-self:flex-start;margin-top:5px;font-size:10.5px;font-weight:700;
+  letter-spacing:.02em;padding:2px 7px;border-radius:99px;
+  color:var(--navy);background:color-mix(in srgb,var(--navy) 10%,transparent)}
 .pq-games-t{font-size:13px;font-weight:700;color:var(--text);margin:20px 0 10px;text-align:center}
 /* Titre de palier, tenu par deux filets : centré et seul, il flottait au milieu de la page
    sans rien séparer. `--dim` en couleur de texte plafonne à ~2,6:1 en clair — sous le seuil
@@ -2369,11 +2381,46 @@ tbody tr:last-child td{border-bottom:none}
    Et 160px de plancher fait tenir DEUX tuiles sur un téléphone là où il n'y en avait qu'une :
    l'arcade prenait 445 px de haut à elle seule, repoussant la carte des formations — le sujet
    de la page — hors de l'écran. */
-.pq-minis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px}
-.pq-mini{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;transition:transform .1s var(--ease),border-color .1s var(--ease)}
+.pq-minis{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-bottom:16px}
+.pq-mini{display:flex;align-items:center;gap:11px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;transition:transform .1s var(--ease),border-color .1s var(--ease)}
 .pq-mini:hover:not(.soon){transform:translateY(-2px);border-color:var(--ember1)}
-.pq-mini.soon{opacity:.55;cursor:default}
-.pq-mini-e{font-size:26px;line-height:1}
+/* Un ENFONCEMENT au clic, comme les autres boutons de jeu (`.pq-choice:active`) : sans lui, la
+   tuile se soulevait au survol puis ne répondait plus rien au doigt — or sur téléphone il n'y a
+   pas de survol, donc aucun retour du tout. */
+.pq-mini:active:not(.soon){transform:translateY(1px)}
+
+/* ————— « BIENTÔT » : ON ÉTEINT LA SURFACE, PAS LE TEXTE —————
+   `opacity:.55` sur toute la tuile faisait tomber le sous-titre à 2,4:1 (mesuré), là où le
+   seuil est de 4,5. Un texte qu'on n'arrive pas à lire n'annonce plus rien — autant retirer la
+   tuile. On teinte donc le fond et l'on éteint l'icône, en laissant les mots lisibles. */
+.pq-mini.soon{cursor:default;background:var(--surface2);border-style:dashed}
+.pq-mini.soon .pq-mini-e{opacity:.5}
+.pq-mini.soon .pq-mini-sub{color:var(--dim)}
+
+/* ————— L'ICÔNE SUR SON DISQUE, À LA COULEUR DU JEU —————
+   Chaque jeu porte déjà sa teinte (`g.tint`), mais elle ne tenait qu'au trait d'une icône de
+   24 px : quatre cartes blanches identiques, à un détail près. Le disque en fait une surface,
+   et les quatre défis se distinguent enfin d'un coup d'œil.
+   `currentColor` EST cette teinte — elle arrive en style inline sur ce même span. Le fond se
+   déduit donc de la couleur du texte, sans qu'aucune valeur ne soit répétée ici ni en JSX. */
+.pq-mini-e{font-size:26px;line-height:1;flex:0 0 auto;display:grid;place-items:center;
+  width:42px;height:42px;border-radius:12px;
+  background:color-mix(in srgb,currentColor 13%,transparent)}
+
+/* DEUX PAR LIGNE SUR TÉLÉPHONE, en dur. Le plancher de 210px n'en laisserait qu'une, et
+   l'arcade reprendrait les 445 px de haut qu'elle occupait avant — au prix de la carte des
+   formations, qui est le sujet de la page. Le disque y est réduit : à 169px de tuile, il
+   mangerait la largeur qui reste au texte. */
+@media (max-width:640px){
+  .pq-minis{grid-template-columns:repeat(2,1fr)}
+  /* PAS DE DISQUE SUR TÉLÉPHONE — la décoration ne paie pas ici, elle coûte.
+     À 169 px de tuile, le disque en ligne ne laissait qu'une centaine de pixels aux mots et
+     tout passait à la ligne ; empiler pour rendre la largeur faisait grimper l'arcade de 285 à
+     397 px, soit 40 % de défilement en plus. Or c'est justement sur un écran où l'on ne voit
+     que deux tuiles à la fois que « distinguer les jeux d'un coup d'œil » sert le moins.
+     L'icône garde la couleur du jeu, simplement sans sa surface. */
+  .pq-mini-e{width:auto;height:auto;border-radius:0;background:none;font-size:22px}
+}
 .pq-mini-txt{display:flex;flex-direction:column}
 .pq-mini-txt b{font-size:14px}
 .pq-mini-sub{font-size:11.5px;color:var(--muted)}

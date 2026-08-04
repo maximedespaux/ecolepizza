@@ -60,8 +60,13 @@ test('l\'arcade est une grille en auto-FILL, pas en auto-fit', () => {
        `auto-fit` REPLIE les colonnes vides et l'orpheline se réétirerait exactement pareil.
        Seul `auto-fill` la laisse à la largeur d'une colonne. La distinction est tout l'objet
        de la correction — d'où ce test, qui la nomme. */
-    assert.match(regle('.pq-minis'), /grid-template-columns:repeat\(auto-fill,minmax\(160px,1fr\)\)/,
-        'auto-fill, et un plancher de 160px pour tenir à deux par ligne sur téléphone.');
+    assert.match(regle('.pq-minis'), /grid-template-columns:repeat\(auto-fill,minmax\(210px,1fr\)\)/,
+        'auto-fill, et un plancher assez large pour que le texte tienne sur une ligne.');
+    /* 210px NE DONNE QU'UNE COLONNE sur un téléphone : l'arcade y reprendrait les 445 px de
+       haut qu'elle occupait avant, au prix de la carte des formations. D'où les deux colonnes
+       en dur sous 640px. */
+    assert.match(css, /@media \(max-width:640px\)\{\s*\.pq-minis\{grid-template-columns:repeat\(2,1fr\)\}/,
+        'Deux par ligne sur téléphone, quoi qu\'il arrive.');
     assert.doesNotMatch(regle('.pq-mini'), /flex:\s*1\s+1/,
         'Un flex-grow sur la tuile rétablirait l\'étirement de l\'orpheline.');
 });
@@ -122,4 +127,54 @@ test('le libellé colle AVEC les pastilles, pas séparément', () => {
         'components', 'ConstructorGame.jsx'), 'utf8');
     assert.match(jsx, /className="cg-reserve">[\s\S]{0,200}?cg-reserve-t[\s\S]{0,200}?cg-pool/,
         'Le libellé et les pastilles doivent vivre dans le même bloc collant.');
+});
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   LA FINITION DE L'ARCADE — ce qui a été mesuré, et pourquoi c'est comme ça.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+test('« Bientôt » éteint sa surface, pas son texte', () => {
+    /* `opacity:.55` sur toute la tuile faisait tomber le sous-titre à 2,4:1 quand le seuil est
+       de 4,5 (mesuré au navigateur, opacité composée sur le fond de page). Un texte illisible
+       n'annonce plus rien — autant retirer la tuile. Après correction : 4,59. */
+    const soon = regle('.pq-mini.soon');
+    assert.doesNotMatch(soon, /opacity/, 'L\'opacité globale éteignait aussi les mots.');
+    assert.match(soon, /background:var\(--surface2\)/, 'C\'est la surface qui doit reculer.');
+    assert.match(css, /\.pq-mini\.soon \.pq-mini-e\{opacity:\.5\}/, 'Et l\'icône avec elle.');
+});
+
+test('« Jamais joué » a sa propre forme, et un contraste qui tient', () => {
+    /* Trois étoiles vides disaient « tu as fait zéro », ce qui est faux : la personne n'a pas
+       joué. C'est pourtant le seul état sur lequel il y a un geste à faire. */
+    const jsx = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui',
+        'pages', 'PizzaQuest.jsx'), 'utf8');
+    assert.match(jsx, /record > 0 \? \(/, 'Les étoiles ne s\'affichent que s\'il y a un record.');
+    assert.match(jsx, /className="pq-mini-neuf">Jamais joué/, 'Sinon, une forme à part.');
+    /* EN NAVY, PAS EN ROUGE : aucun rouge de la palette ne dépasse 3,68:1 en texte sur son
+       propre fond teinté — éprouvé sur `--ember1`, `--ember2` et `--red` à 8, 11 et 14 %. Le
+       navy tient 9,25:1 (mesuré). Et « jamais joué » est une invitation, pas une alerte. */
+    const pastille = regle('.pq-mini-neuf');
+    assert.match(pastille, /color:var\(--navy\)/, 'Le rouge n\'atteignait pas 4,5:1 ici.');
+    assert.doesNotMatch(pastille, /ember|--red/, 'Ni en texte ni en fond.');
+});
+
+test('le disque coloré vit sur écran large, pas sur téléphone', () => {
+    /* Il donne à chaque jeu sa teinte en SURFACE plutôt qu'au trait d'une icône de 24 px.
+       `currentColor` EST cette teinte — elle arrive en style inline sur le même span, donc
+       aucune valeur n'est répétée en CSS ni en JSX. */
+    /* On vise la règle DE BASE, pas la première `.pq-mini-e` venue : `.pq-mini.soon .pq-mini-e`
+       la précède dans la feuille, et le helper générique tombait dessus. */
+    const base = /\n\.pq-mini-e\{([\s\S]*?)\}/.exec(css);
+    assert.ok(base, 'la règle de base de .pq-mini-e est introuvable');
+    assert.match(base[1], /background:color-mix\(in srgb,currentColor/,
+        'Le fond du disque se déduit de la couleur du jeu.');
+    /* MAIS PAS SUR TÉLÉPHONE : à 169 px de tuile il ne laissait qu'une centaine de pixels aux
+       mots, tout passait à la ligne, et empiler pour rendre la largeur faisait grimper l'arcade
+       de 285 à 397 px. C'est justement là, où l'on ne voit que deux tuiles, que « distinguer
+       les jeux d'un coup d'œil » sert le moins. Ramené à 286 px en retirant le disque. */
+    const i = css.indexOf('.pq-mini-e{font-size:26px');
+    const j = css.indexOf('.pq-mini-e{width:auto');
+    assert.ok(i > 0 && j > 0, 'les deux règles doivent exister');
+    assert.ok(j > i,
+        'L\'override téléphone doit venir APRÈS la règle de base, sinon c\'est elle qui gagne.');
 });

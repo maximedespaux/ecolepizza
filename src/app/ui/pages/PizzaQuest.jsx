@@ -561,15 +561,22 @@ function Arcade({ prog, onGame }) {
               <span className="pq-mini-txt">
                 <b>{g.label}</b>
                 <span className="pq-mini-sub">{g.sub}</span>
-                {!g.soon && (
+                {/* TROIS ÉTOILES VIDES DISENT « TU AS FAIT ZÉRO », ce qui est faux : la personne
+                    n'a pas joué. Les deux états se ressemblaient pourtant — mêmes étoiles, seul
+                    un mot gris de 10,5 px les séparait — alors que « jamais joué » est le seul
+                    qui appelle un geste. Il a donc sa propre forme, et le mot suffit à le dire :
+                    la couleur n'y est qu'un renfort. */}
+                {!g.soon && (record > 0 ? (
                   <span className="pq-mini-record" aria-label={`Ton record : ${record} étoile${record > 1 ? "s" : ""} sur 3`}>
                     {[0, 1, 2].map((n) => (
                       <Icon key={n} name="star" size={11} fill={n < record ? "currentColor" : "none"}
                         className={n < record ? "on" : ""} />
                     ))}
-                    <span className="hint">{record ? "ton record" : "jamais joué"}</span>
+                    <span className="hint">ton record</span>
                   </span>
-                )}
+                ) : (
+                  <span className="pq-mini-neuf">Jamais joué</span>
+                ))}
               </span>
             </Balise>
           );

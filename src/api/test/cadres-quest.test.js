@@ -523,7 +523,13 @@ test('l\'arcade est en tête, et une seule fois', () => {
        promotion de vingt, dix-sept personnes à demeure dans la moitié basse — celles-là mêmes
        qu'on veut faire revenir. Et sur une session de trois, il serait franchement triste. */
     assert.match(srcQuest, /const record = g\.key \? \(prog\[g\.key\] \|\| \{\}\)\[0\] \|\| 0 : 0;/);
-    assert.match(srcQuest, /\{record \? "ton record" : "jamais joué"\}/);
+    /* LES DEUX ÉTATS RESTENT MONTRÉS, mais plus sous la même forme : trois étoiles vides
+       disaient « tu as fait zéro », alors que la personne n'a pas joué — et « jamais joué »
+       est justement le seul état sur lequel il y a un geste à faire. Il a donc sa pastille,
+       et les étoiles ne sortent que s'il y a vraiment un record. */
+    assert.match(srcQuest, /record > 0 \? \(/, 'les étoiles ne paraissent qu\'avec un record');
+    assert.match(srcQuest, /<span className="hint">ton record<\/span>/, 'le record se nomme');
+    assert.match(srcQuest, /className="pq-mini-neuf">Jamais joué/, 'et l\'absence de partie aussi');
     /* Et rien ne va CHERCHER le score des autres : un motif sur les mots interdits attraperait
        ce commentaire-ci. On vérifie ce qui compte — aucun appel réseau autre que les trois
        lectures du profil et des chapitres. */
