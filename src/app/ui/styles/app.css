@@ -2325,7 +2325,13 @@ tbody tr:last-child td{border-bottom:none}
 .sim-obj{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:13px 14px;
   border:1px solid var(--border);border-radius:13px;background:var(--surface);cursor:pointer;
   text-align:left;transition:border-color .12s var(--ease),transform .12s var(--ease)}
-.sim-obj:hover{border-color:var(--gold);transform:translateY(-2px)}
+/* MÊME RAISON QUE POUR LES PASTILLES : dans ce jeu, l'or dit « acquis » — c'est la couleur des
+   étoiles du verdict (`.sim-stars span.on`). Le garder au survol lui ferait dire deux choses
+   dans le même écran. Ailleurs dans l'application, le survol en or reste l'usage (quatorze
+   règles) et n'entre en collision avec rien : on ne le change qu'ICI.
+   Ces cartes n'ont pas d'état « choisie » — on en prend une et l'écran change — donc le survol
+   n'annonce rien à imiter ; il se contente de ne plus emprunter le vocabulaire de la réussite. */
+.sim-obj:hover{border-color:color-mix(in srgb,var(--ember1) 45%,var(--border));transform:translateY(-2px)}
 .sim-obj-e{font-size:26px;line-height:1}
 .sim-obj b{font-size:14px}
 .sim-obj-d{font-size:11.5px;color:var(--muted);line-height:1.4}
@@ -2349,7 +2355,18 @@ tbody tr:last-child td{border-bottom:none}
   padding:6px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);
   color:var(--text);font-weight:600;font-size:12.5px;cursor:pointer;transition:border-color .12s var(--ease),background .12s var(--ease)}
 .sim-pill span{font-size:10px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
-.sim-pill:hover{border-color:var(--gold)}
+/* LE SURVOL ANNONCE LA SÉLECTION, il n'invente pas un troisième état.
+   Il virait à l'OR — la couleur qui, partout ailleurs dans Pizza Quest, veut dire « acquis » :
+   les étoiles, les chapitres partiellement réussis, le record d'un jeu. Une pastille non
+   choisie prenait donc, au passage de la souris, l'apparence de quelque chose de gagné. Le
+   sélecteur frère `.pq-choice` ne s'y trompait pas et survole en navy ; l'or était l'exception.
+   Il emprunte maintenant la braise de la sélection, mais ÉCLAIRCIE et sans aplat : « voilà ce
+   que tu obtiendrais », distinct de « voilà ce que tu as ».
+   `:not(.on)` EXPLICITE, plutôt que de compter sur l'ordre des règles : les deux ont la même
+   spécificité, et un simple déplacement dans la feuille suffirait à faire gagner le survol sur
+   la pastille choisie. Ce piège s'est déjà refermé aujourd'hui sur `.pq-mini-e`. */
+.sim-pill:hover:not(.on){border-color:color-mix(in srgb,var(--ember1) 45%,var(--border));
+  background:var(--surface2)}
 .sim-pill.on{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,var(--surface))}
 .sim-range{width:100%;accent-color:var(--ember1);height:26px;cursor:pointer}
 .sim-range-hint{display:block;font-size:11px;color:var(--muted);margin-top:2px}
