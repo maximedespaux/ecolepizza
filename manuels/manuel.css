@@ -29,7 +29,6 @@
                                #83879a, la valeur d'avant, tombait à 3,56:1,
                                et c'est la couleur des textes les PLUS petits. */
   --trait:#e2e3ea; --tomate-encre:#b8322c;
-  --navy-clair:#8b95f2;     /* le marine, version lisible sur fond sombre */
   --nuit-ecole:#12142c;     /* le fond des COUVERTURES : marine de l'école, jamais l'accent */
   --papier:#fff;
   --papier-2:#f6f7fa;       /* aplat léger des tableaux et encadrés */
@@ -196,11 +195,14 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
    noyer l'image sous un voile noir.
    ========================================================================== */
 
-/* LA PREMIÈRE PAGE PARLE DE L'ÉCOLE, PAS DU PARCOURS. Marine, blanc, rouge —
-   la charte du fanion. Une seule chose y dit la formation : la bande pleine
-   largeur, à la jointure de la photo et du titre. C'est elle qui identifie le
-   parcours à un mètre, et elle suffit. Le corps du manuel, lui, est
-   entièrement dans la couleur de la formation (cf. --second). */
+/* LA COUVERTURE : LE FOND EST À L'ÉCOLE, LE TEXTE EST À LA FORMATION.
+   Le marine du fanion tient la page — c'est le même sur les neuf manuels, et
+   c'est ce qui en fait une collection. Ce qui se LIT par-dessus dit le
+   parcours : le sur-titre, la seconde ligne du titre, le trait, la pastille de
+   durée, et la bande pleine largeur à la jointure de la photo.
+   Ces textes prennent --accent-clair et non --accent : sur un fond sombre, la
+   teinte pleine du parcours ne se lit pas (le noir des trois formations
+   italiennes ne se lirait pas du tout). --accent-clair existe pour ça. */
 .couv{height:100%; display:flex; flex-direction:column; background:var(--nuit-ecole); color:#fff}
 
 .couv-visuel{position:relative; flex:0 0 163.2mm; height:163.2mm; overflow:hidden}
@@ -217,7 +219,7 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
 .couv-logo{width:44mm}
 .couv-duree{
   display:inline-flex; align-items:center; padding:1.8mm 4mm; border-radius:99px;
-  background:var(--navy); color:#fff;
+  background:var(--accent-encre); color:var(--sur-accent);
   font:700 8.4pt/1 var(--titre); letter-spacing:.1em; text-transform:uppercase;
   white-space:nowrap;
 }
@@ -239,16 +241,14 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
 .couv-bas{flex:1; min-height:0; display:flex; flex-direction:column; padding:9mm 14mm 12mm}
 .couv-genre{
   font:700 8.6pt/1 var(--titre); letter-spacing:.3em; text-transform:uppercase;
-  color:var(--navy-clair); margin-bottom:3.5mm;
+  color:var(--accent-clair); margin-bottom:3.5mm;
 }
 .couv-titre{font:900 30pt/1.14 var(--serif); letter-spacing:-.005em; margin:0 0 4.5mm; text-wrap:balance}
-.couv-titre .fin{display:block; color:var(--navy-clair)}
+.couv-titre .fin{display:block; color:var(--accent-clair)}
 
-/* Le petit trait sous le titre : le rouge du fanion. Avec le fond marine et le
-   texte blanc, la couverture porte les trois couleurs de l'école — et elles
-   seules. */
-.couv-regle{width:34mm; height:1.7mm; border-radius:99px; background:var(--tomate); margin-bottom:5mm}
-.dos-regle{width:34mm; height:1.7mm; border-radius:99px; background:var(--tomate); margin:6mm auto 0}
+/* Le trait sous le titre suit le texte : la couleur de la formation. */
+.couv-regle{width:34mm; height:1.7mm; border-radius:99px; background:var(--accent-clair); margin-bottom:5mm}
+.dos-regle{width:34mm; height:1.7mm; border-radius:99px; background:var(--accent-clair); margin:6mm auto 0}
 
 .couv-objectif{max-width:132mm; font-size:11pt; line-height:1.5; color:rgba(255,255,255,.86)}
 .couv-objectif .lbl{

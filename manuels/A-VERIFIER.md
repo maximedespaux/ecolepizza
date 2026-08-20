@@ -340,8 +340,16 @@ deux couleurs.
 | Sous le numéro de chapitre | Les deux barres marine + rouge (`.chap-marque`), sous les 210 numéros des neuf manuels |
 | La couverture et le dos | Fond marine, texte blanc, petit trait rouge — les trois couleurs du fanion, et rien d'autre |
 
-**Sur la couverture, une seule chose dit le parcours : la bande pleine largeur**, à la jointure
-de la photo et du titre, dans la teinte EXACTE de la formation. Elle porte deux filets blancs, et
+**Sur la couverture, le fond est à l'école et le texte est à la formation.** Le marine du fanion
+tient la page — le même sur les neuf manuels, et c'est ce qui en fait une collection. Ce qui se
+**lit** par-dessus dit le parcours : le sur-titre, la seconde ligne du titre, le trait, la
+pastille de durée. Ces textes prennent `--accent-clair` et non `--accent` : sur un fond sombre,
+la teinte pleine ne se lit pas. Contrôlé sur les neuf — de **6,61:1** (Niveau I) à **13,00:1**
+(Niveau II). Pour les trois formations italiennes, dont la couleur est le noir `#121212`, le
+texte de couverture est corail ou ambre : un noir sur un fond marine ne se lirait pas du tout.
+
+**La bande pleine largeur**, à la jointure de la photo et du titre, porte la teinte EXACTE de la
+formation. Elle porte deux filets blancs, et
 ce n'est pas un ornement : posée entre une photo et un fond marine, elle **disparaissait sur cinq
 manuels sur neuf** — 1,04:1 pour les trois formations noires (#121212 sur #12142c), 1,57:1 pour
 les deux marines. Les filets la détachent quelle que soit sa teinte, sans l'éclaircir. En
