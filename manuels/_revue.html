@@ -40,12 +40,26 @@ fetch(nom + ".html").then(r => r.text()).then(html => {
     v.appendChild(n);
     g.appendChild(v);
   });
-  // Détecte les pages dont le contenu déborde du cadre A4.
+  /* Détecte les pages trop pleines. DEUX mesures, et la seconde est la seule
+     qui voie le défaut réel : le cadre A4 est en overflow:hidden, donc
+     scrollHeight y est écrêté et un contenu trop haut ne se signale PAS. Ce
+     qui se voit à l'impression, c'est le contenu qui passe SOUS le filet de
+     pied de page et se superpose à lui — d'où la comparaison au haut du pied.
+     Seize pages sortaient ainsi, dont deux de plus d'un centimètre, sans que
+     la première mesure n'en signale aucune. */
   requestAnimationFrame(() => {
     document.querySelectorAll(".vig > .page").forEach((p, i) => {
       const c = p.querySelector(".corps");
-      const debord = Math.max(p.scrollHeight - p.clientHeight,
-                              c ? c.scrollHeight - c.clientHeight : 0);
+      let debord = Math.max(p.scrollHeight - p.clientHeight,
+                            c ? c.scrollHeight - c.clientHeight : 0);
+      const pied = p.querySelector(".pied");
+      if (pied && c) {
+        const y = pied.getBoundingClientRect().top;
+        c.querySelectorAll("*").forEach(el => {
+          const b = el.getBoundingClientRect();
+          if (b.height) debord = Math.max(debord, b.bottom - y);
+        });
+      }
       if (debord > 2) { p.parentElement.classList.add("deborde");
         p.parentElement.querySelector(".n").textContent = i + " ⚠ +" + Math.round(debord); }
     });

@@ -51,25 +51,22 @@ export const cereales = (m) => {
   m.p(`
 ${chapitre(n, "Les céréales",
   "Famille des poacées (les graminées). Elles produisent les grains comestibles que l'on moud en farine.")}
-        <p>Les céréales sont de la famille des poacées, sauvages ou cultivées, qui produisent des
-        grains comestibles utilisés en alimentation humaine et animale, souvent moulus sous forme
-        de farine raffinée plus ou moins complète.</p>
-        <div class="bilan">
-          <div class="plus" style="background:#fdf1f0;border-top-color:#dc3e37">
-            <h4 style="color:#dc3e37">Céréales contenant du gluten</h4>
-            <ul style="list-style:none;padding:0">
-              <li style="padding-left:0">Blé · Seigle · Orge · Épeautre</li>
-              <li style="padding-left:0">Kamut (cousin du blé dur)</li>
-              <li style="padding-left:0">Triticale</li>
-              <li style="padding-left:0">Avoine <span class="mention">(dans certains cas)</span></li>
+        <div class="panneaux">
+          <div class="alerte">
+            <h4>Céréales contenant du gluten</h4>
+            <ul>
+              <li>Blé · Seigle · Orge · Épeautre</li>
+              <li>Kamut (cousin du blé dur)</li>
+              <li>Triticale</li>
+              <li>Avoine <span class="mention">(dans certains cas)</span></li>
             </ul>
           </div>
-          <div class="moins" style="background:#eef8f2;border-top-color:#1b8f5a">
-            <h4 style="color:#0f7548">Céréales sans gluten</h4>
-            <ul style="list-style:none;padding:0">
-              <li style="padding-left:0">Maïs · Riz · Sorgho</li>
-              <li style="padding-left:0">Quinoa · Sarrasin · Millet · Teff</li>
-              <li style="padding-left:0">Pois · Fèves · Lupin</li>
+          <div class="sur">
+            <h4>Céréales sans gluten</h4>
+            <ul>
+              <li>Maïs · Riz · Sorgho</li>
+              <li>Quinoa · Sarrasin · Millet · Teff</li>
+              <li>Pois · Fèves · Lupin</li>
             </ul>
           </div>
         </div>
@@ -595,7 +592,7 @@ ${enc("alerte", "Jamais avec la levure", `<p>Le sel se verse <strong>petit à pe
         pétrissage</strong>, et jamais en contact direct avec la levure&nbsp;: mis ensemble dans
         l'eau, il en tue une partie avant même le démarrage.</p>`)}
 ${retenir([
-  "Le sel <strong>freine</strong> la fermentation, <strong>resserre</strong> le réseau, <strong>colore</strong> la croûte et fait le goût.",
+  "Il <strong>renforce le réseau</strong>&nbsp;: la gliadine devient moins soluble.",
   "Dose usuelle&nbsp;: <strong>17 à 22&nbsp;g par kilo de farine</strong> — et jamais en contact direct avec la levure.",
 ])}
 `, { chap: "Le sel", num: m._c });

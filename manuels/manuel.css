@@ -28,7 +28,7 @@
   --encre-3:#6f7488;        /* légendes, mentions — 4,64:1 sur blanc.
                                #83879a, la valeur d'avant, tombait à 3,56:1,
                                et c'est la couleur des textes les PLUS petits. */
-  --trait:#e2e3ea;
+  --trait:#e2e3ea; --tomate-encre:#b8322c;
   --papier:#fff;
   --papier-2:#f6f7fa;       /* aplat léger des tableaux et encadrés */
 
@@ -86,9 +86,11 @@
    seul endroit dans le corps du manuel : l'OUVERTURE DE CHAPITRE. */
 :root{--second:var(--accent)}
 
-/* Le fond des couvertures et des intercalaires : un bleu de nuit tiré du
-   marine du logo, plutôt qu'un noir neutre qui n'appartient à personne. */
-:root{--nuit:#12142c}
+/* Le fond des couvertures et des intercalaires est TIRÉ DE L'ACCENT : chaque
+   couverture est entièrement de la couleur de sa formation, jusque dans son
+   noir. Le marine et le rouge de l'école ne se disent plus ici — seulement sous
+   le numéro de chapitre. */
+body{--nuit:color-mix(in srgb, var(--accent) 24%, #0c0d12)}
 
 /* ==========================================================================
    1. SOCLE
@@ -187,7 +189,7 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
 .couv-visuel > img{width:100%; height:163.2mm; object-fit:cover; object-position:center 42%}
 .couv-visuel::after{
   content:""; position:absolute; inset:0;
-  background:linear-gradient(180deg, rgba(12,14,34,.55) 0%, rgba(12,14,34,.05) 38%, rgba(18,20,44,.58) 100%);
+  background:linear-gradient(180deg, rgba(8,9,12,.55) 0%, rgba(8,9,12,.05) 38%, rgba(8,9,12,.58) 100%);
 }
 
 .couv-haut{
@@ -214,19 +216,11 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
 .couv-titre{font:900 30pt/1.14 var(--serif); letter-spacing:-.005em; margin:0 0 4.5mm; text-wrap:balance}
 .couv-titre .fin{display:block; color:var(--accent-clair)}
 
-/* LA SIGNATURE — le parcours, puis le marine et le rouge du logo. Elle dit
-   « ce parcours, dans cette école » en un seul trait, et c'est elle qui relie
-   neuf couvertures de neuf couleurs différentes. */
-.signature{display:flex; gap:1.6mm; margin-bottom:5mm}
-.signature-centre{justify-content:center; margin:6mm 0 0}
-.signature i{display:block; height:1.7mm; border-radius:99px}
-.signature .s1{width:26mm; background:var(--accent-clair)}
-.signature .s2{width:8mm;  background:#5a63c8}
-.signature .s3{width:8mm;  background:var(--tomate)}
-/* Sur le Niveau I et le livret l'accent EST le marine : répéter la même
-   couleur n'ajouterait rien, le segment disparaît. */
-[data-parcours="niveau1"] .signature .s2,
-[data-parcours="livret"]  .signature .s2{display:none}
+/* Le trait de couverture : la couleur de la formation, et rien d'autre. La
+   marque de l'école se dit sous le numéro de chapitre, pas ici. */
+.couv-regle{width:34mm; height:1.7mm; border-radius:99px; background:var(--accent-clair); margin-bottom:5mm}
+.dos-regle{width:34mm; height:1.7mm; border-radius:99px; background:var(--accent-clair); margin:6mm auto 0}
+
 .couv-objectif{max-width:132mm; font-size:11pt; line-height:1.5; color:rgba(255,255,255,.86)}
 .couv-objectif .lbl{
   display:block; font:700 7.6pt/1 var(--titre); letter-spacing:.18em;
@@ -407,7 +401,7 @@ ol.etapes > li::before{
 .enc-conseil{border-left-color:var(--or); background:#fffaeb}
 .enc-conseil .enc-t{color:#8a6300}
 .enc-alerte{border-left-color:var(--tomate); background:#fdf1f0}
-.enc-alerte .enc-t{color:var(--tomate)}
+.enc-alerte .enc-t{color:var(--tomate-encre)}
 .enc-verif{border-left-color:#7a44d6; background:#f6f1fe}
 .enc-verif .enc-t{color:#6a34c4}
 .enc-note{border-left-color:var(--encre-3); background:#f6f7fa}
@@ -437,7 +431,7 @@ ol.etapes > li::before{
    quel que soit ce qui précède.
    ========================================================================== */
 .retenir{
-  margin-top:auto; margin-bottom:0; padding:3.4mm 4mm 3.6mm;
+  margin-top:auto; margin-bottom:0; padding:2.6mm 4mm 2.8mm;
   border-top:1.2mm solid var(--accent);
   border-radius:0 0 2.4mm 2.4mm;
   background:color-mix(in srgb, var(--accent) 9%, #fff);
@@ -445,11 +439,11 @@ ol.etapes > li::before{
 }
 .retenir-t{
   display:block; font:700 8.2pt/1 var(--titre); letter-spacing:.16em;
-  text-transform:uppercase; color:var(--accent-encre); margin-bottom:2.4mm;
+  text-transform:uppercase; color:var(--accent-encre); margin-bottom:2mm;
 }
 .retenir ul{list-style:none; margin:0; padding:0; counter-reset:rap; font-size:9.6pt}
 .retenir li{
-  position:relative; padding-left:6.4mm; margin-bottom:1.6mm; counter-increment:rap;
+  position:relative; padding-left:6.4mm; margin-bottom:1.3mm; counter-increment:rap;
   line-height:1.42;
 }
 .retenir li:last-child{margin-bottom:0}
@@ -541,11 +535,47 @@ ol.etapes > li::before{
   margin-bottom:2mm;
 }
 .bilan .plus h4{color:#0f7548}
-.bilan .moins h4{color:var(--tomate)}
+.bilan .moins h4{color:var(--tomate-encre)}
 .bilan ul{list-style:none; padding:0; margin:0; font-size:9pt}
 .bilan li{position:relative; padding-left:4.4mm; margin-bottom:1.2mm}
 .bilan .plus li::before{content:"+"; position:absolute; left:0; font-weight:700; color:#1b8f5a}
-.bilan .moins li::before{content:"–"; position:absolute; left:0; font-weight:700; color:var(--tomate)}
+.bilan .moins li::before{content:"–"; position:absolute; left:0; font-weight:700; color:var(--tomate-encre)}
+
+/* --------------------------------------------------------------------------
+   DEUX PANNEAUX CÔTE À CÔTE — une simple mise en regard.
+
+   À NE PAS CONFONDRE avec .bilan juste au-dessus, qui pose un « + » et un
+   « – » devant chaque ligne parce qu'il oppose des avantages à des
+   inconvénients. Quatre blocs empruntaient .bilan pour sa seule grille (les
+   céréales, les familles de produits, les marinades, direct / semi-direct) et
+   tentaient d'éteindre ces marqueurs avec un padding-left:0 en ligne. Cela
+   supprimait le RETRAIT mais pas le ::before, qui restait posé en left:0 —
+   donc SUR la première lettre. D'où ce composant, qui n'a jamais de marqueur.
+   -------------------------------------------------------------------------- */
+
+.panneaux{display:grid; grid-template-columns:1fr 1fr; gap:3mm; margin:0 0 3.4mm}
+.panneaux > div{
+  padding:3mm 3.4mm; border-radius:2.4mm; break-inside:avoid;
+  background:var(--papier-2); border-top:1mm solid var(--accent);
+}
+.panneaux h4{
+  font:700 8.2pt/1 var(--titre); letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent-encre); margin:0 0 2mm;
+}
+.panneaux h4 ~ h4{margin-top:3mm}
+.panneaux ul{list-style:none; padding:0; margin:0; font-size:9pt}
+.panneaux ul > li{padding-left:0; margin-bottom:1.2mm}
+.panneaux ul > li::before{content:none}
+.panneaux ol{margin:0}
+
+/* Variantes SÉMANTIQUES : le rouge dit « attention », le vert dit « sûr ».
+   Elles ne suivent volontairement PAS la couleur du parcours — un
+   avertissement teinté en jaune sur le manuel Niveau II ne se lirait plus
+   d'un coup d'œil. */
+.panneaux .alerte{background:#fdf1f0; border-top-color:var(--tomate)}
+.panneaux .alerte h4{color:var(--tomate-encre)}
+.panneaux .sur{background:#eef8f2; border-top-color:#1b8f5a}
+.panneaux .sur h4{color:#0f7548}
 
 /* ==========================================================================
    11. PHOTOGRAPHIE
@@ -632,7 +662,7 @@ ol.etapes > li::before{
 .inter{position:relative; height:100%; display:flex; flex-direction:column; justify-content:center;
        padding:0 20mm; background:var(--nuit); color:#fff; text-align:center}
 .inter .photo-pleine{position:absolute; inset:0}
-.inter .photo-pleine::after{content:""; position:absolute; inset:0; background:rgba(14,16,38,.74)}
+.inter .photo-pleine::after{content:""; position:absolute; inset:0; background:rgba(8,9,12,.74)}
 .inter > *{position:relative; z-index:1}
 .inter .part-n{
   font:700 8.6pt/1 var(--titre); letter-spacing:.32em; text-transform:uppercase;
@@ -713,9 +743,9 @@ ol.etapes > li::before{
 .dos-photo::after{
   content:""; position:absolute; inset:0;
   background:
-    linear-gradient(180deg, rgba(12,14,34,.86) 0%, rgba(12,14,34,.80) 26%,
-                            rgba(12,14,34,.46) 52%, rgba(12,14,34,.88) 100%),
-    linear-gradient(160deg, rgba(12,14,34,0) 30%, color-mix(in srgb, var(--accent) 52%, rgba(12,14,34,0)) 100%);
+    linear-gradient(180deg, rgba(8,9,12,.86) 0%, rgba(8,9,12,.80) 26%,
+                            rgba(8,9,12,.46) 52%, rgba(8,9,12,.88) 100%),
+    linear-gradient(160deg, rgba(8,9,12,0) 30%, color-mix(in srgb, var(--accent) 52%, rgba(8,9,12,0)) 100%);
 }
 .dos > :not(.dos-photo){position:relative; z-index:1}
 .dos-logo{width:64mm; margin-bottom:10mm}

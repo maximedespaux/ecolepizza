@@ -142,7 +142,7 @@ ${enc("conseil", "Le sel napolitain surprend", `<p>Près du double de la pizza c
         hydratation pourtant modérée. C'est la contrepartie d'une pâte sans huile et à fermentation
         courte&nbsp;: le sel est le seul frein dont dispose le pizzaïolo, et il porte tout le goût.</p>`)}
 ${retenir([
-  "Ici on part d'un <strong>litre d'eau</strong>, pas d'un kilo de farine&nbsp;: c'est l'inverse de tout le reste du manuel.",
+  "On part d'un <strong>litre d'eau</strong>, pas d'un kilo de farine.",
   "<strong>Aucune huile</strong> dans la pâte, et un sel presque double de la pizza classique.",
 ])}
 `, { chap: "L'unité de calcul napolitaine", num: m._c });

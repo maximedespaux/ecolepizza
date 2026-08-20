@@ -303,21 +303,21 @@ ${enc("conseil", "Le conseil", `<p>Utiliser principalement la crème <strong>liq
 
   m.p(`
         <h3 class="sec">Les familles de produits</h3>
-        <div class="bilan" style="grid-template-columns:1fr 1fr">
-          <div class="plus" style="background:var(--papier-2);border-top-color:var(--accent)">
-            <h4 style="color:var(--accent)">La mozzarella</h4>
-            <ul style="list-style:none;padding:0">
-              <li style="padding-left:0">Pain, brins (gros ou fins), cossette, cerise</li>
-              <li style="padding-left:0"><em>Di bufala</em>, <em>fior di latte</em>, <em>provola</em></li>
+        <div class="panneaux">
+          <div>
+            <h4>La mozzarella</h4>
+            <ul>
+              <li>Pain, brins (gros ou fins), cossette, cerise</li>
+              <li><em>Di bufala</em>, <em>fior di latte</em>, <em>provola</em></li>
             </ul>
-            <h4 style="color:var(--accent);margin-top:3mm">L'emmental</h4>
-            <ul style="list-style:none;padding:0"><li style="padding-left:0">Brins ou mini-dés</li></ul>
+            <h4>L'emmental</h4>
+            <ul><li>Brins ou mini-dés</li></ul>
           </div>
-          <div class="moins" style="background:var(--papier-2);border-top-color:var(--accent)">
-            <h4 style="color:var(--accent)">Les viandes</h4>
-            <ul style="list-style:none;padding:0">
-              <li style="padding-left:0">Merguez, haché de bœuf, viande kebab</li>
-              <li style="padding-left:0">Filet de dinde ou de poulet, magret de canard</li>
+          <div>
+            <h4>Les viandes</h4>
+            <ul>
+              <li>Merguez, haché de bœuf, viande kebab</li>
+              <li>Filet de dinde ou de poulet, magret de canard</li>
             </ul>
           </div>
         </div>
@@ -382,17 +382,17 @@ ${enc("verif", "620 ml, soit 62 % d'hydratation", `<p>Le chapitre « L'eau » do
         un empâtement direct. Cette fiche est donc <strong>au-dessus de la plage annoncée</strong> —
         ce qui se défend sur une farine type 00 très forte et une maturation longue, mais mérite
         d'être dit. ${averif("valeur à confirmer — Jean-Jacques")}</p>`)}
-        <div class="bilan" style="grid-template-columns:1fr 1fr">
-          <div class="plus" style="background:var(--papier-2);border-top-color:var(--accent)">
-            <h4 style="color:var(--accent)">Empâtement direct</h4>
+        <div class="panneaux">
+          <div>
+            <h4>Empâtement direct</h4>
             <ol class="etapes" style="font-size:8.8pt">
               <li><strong>Mélange initial</strong>&nbsp;: verser l'eau froide dans le pétrin, ajouter la farine progressivement, mélanger 2 mn</li>
               <li><strong>Incorporation</strong>&nbsp;: ajouter la levure, pétrir 10 à 12 mn ; verser le sel, pétrir 30 s à 1 mn ; ajouter l'huile</li>
               <li><strong>Pétrissage</strong>&nbsp;: jusqu'à disparition des traces d'huile et obtention d'une pâte lisse, souple et homogène — température finale 23 à 25&nbsp;°C</li>
             </ol>
           </div>
-          <div class="moins" style="background:var(--papier-2);border-top-color:var(--accent)">
-            <h4 style="color:var(--accent)">Semi-direct sur autolyse</h4>
+          <div>
+            <h4>Semi-direct sur autolyse</h4>
             <ol class="etapes" style="font-size:8.8pt">
               <li><strong>Autolyse</strong>&nbsp;: eau froide, farine progressivement, mélanger 2 mn</li>
               <li><strong>Repos</strong>&nbsp;: 20 mn</li>
@@ -496,21 +496,21 @@ ${enc("alerte", "Conservation", `<p>Réserver au frais entre <strong>2 et 4&nbsp
         en assaisonnant selon le goût. Ajouter un filet d'huile d'olive, mélanger et réserver en
         chambre froide. Laisser mariner <strong>24 heures</strong> et disposer
         <strong>cru</strong> sur la pizza, avant la cuisson.</p>
-        <div class="bilan" style="grid-template-columns:1fr 1fr">
-          <div class="plus" style="background:var(--papier-2);border-top-color:var(--accent)">
-            <h4 style="color:var(--accent)">Poulet aux épices — 1 kg de filet</h4>
-            <ul style="list-style:none;padding:0">
-              <li style="padding-left:0">12 g de sel · 2 g de poivre</li>
-              <li style="padding-left:0">25 g d'épices</li>
-              <li style="padding-left:0">80 g d'eau</li>
+        <div class="panneaux">
+          <div>
+            <h4>Poulet aux épices — 1 kg de filet</h4>
+            <ul>
+              <li>12 g de sel · 2 g de poivre</li>
+              <li>25 g d'épices</li>
+              <li>80 g d'eau</li>
             </ul>
           </div>
-          <div class="moins" style="background:var(--papier-2);border-top-color:var(--accent)">
-            <h4 style="color:var(--accent)">Poulet persillé — 1 kg de filet</h4>
-            <ul style="list-style:none;padding:0">
-              <li style="padding-left:0">12 g de sel · 2 g de poivre</li>
-              <li style="padding-left:0">80 g de persillade</li>
-              <li style="padding-left:0">50 g d'huile d'olive</li>
+          <div>
+            <h4>Poulet persillé — 1 kg de filet</h4>
+            <ul>
+              <li>12 g de sel · 2 g de poivre</li>
+              <li>80 g de persillade</li>
+              <li>50 g d'huile d'olive</li>
             </ul>
           </div>
         </div>

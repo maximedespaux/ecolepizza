@@ -39,9 +39,6 @@ ${tbl(["Empâtement", "Méthode", ["Étapes", "c"], "Ce que l'on fait"], [
         farine, la température de fermentation, le temps de maturation et les proportions des
         ingrédients.</p>
 ${SC.directIndirect()}
-${enc("conseil", "Le prérequis qu'on oublie", `<p>Un indirect demande une farine
-        <strong>W 330 minimum</strong>. En dessous, le réseau ne tient pas seize heures de
-        pré-fermentation&nbsp;: la pâte se liquéfie et rien ne la rattrape.</p>`)}
 ${retenir([
   "L'indirect fait fermenter <strong>une partie de la pâte avant la pâte</strong>&nbsp;: c'est là que se font le goût et la digestibilité.",
   "Il demande une farine <strong>W 330 minimum</strong>. En dessous, le réseau ne tient pas seize heures de pré-fermentation.",

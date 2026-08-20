@@ -245,10 +245,8 @@ ${enc("alerte", "Les mains sont le premier vecteur", `<p>Devant les surfaces, de
         <h3 class="sec">La marche en avant</h3>
 ${SC.marcheEnAvant()}
 ${enc("conseil", "En pizzeria, le point sensible est le poste de garnissage", `<p>C'est là que se
-        croisent des produits crus (viandes, œufs) et des produits prêts à consommer (jambon sec,
-        mozzarella, basilic), sur le même plan, avec les mêmes mains. Séparer ces deux familles dans
-        le tour réfrigéré et se laver les mains entre les deux règle l'essentiel du risque de
-        contamination croisée.</p>`)}
+        croisent des produits crus et des produits prêts à consommer, sur le même plan et avec les
+        mêmes mains. Les séparer dans le tour réfrigéré, et se laver les mains entre les deux.</p>`)}
 `);
 
   m.p(`

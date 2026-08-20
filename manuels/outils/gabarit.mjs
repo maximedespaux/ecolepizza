@@ -262,7 +262,7 @@ ${corps}
         <div class="couv-bas">
           <div class="couv-genre">${this.genre}${this.mention ? ` · ${this.mention}` : ""}</div>
           <h1 class="couv-titre">${t1}${t2 ? `<span class="fin">${t2}</span>` : ""}</h1>
-          <div class="signature"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
+          <div class="couv-regle"></div>
           <p class="couv-objectif"><span class="lbl">Objectif de la formation</span>${this.objectif}</p>
           <div class="couv-legal">
             <span>
@@ -288,7 +288,7 @@ ${corps}
         <img class="dos-logo" src="assets/logo/logo-blanc.png" alt="${ECOLE.nom}">
         <div class="parcours">${this.etiquette()}</div>
         <h2>Merci de nous<br>avoir choisis&nbsp;!</h2>
-        <div class="signature signature-centre"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
+        <div class="dos-regle"></div>
         <div class="legal">
           ${ECOLE.raison}<br>
           SIRET ${ECOLE.siret} · NAF ${ECOLE.naf} · ${ECOLE.ndaTexte}<br>

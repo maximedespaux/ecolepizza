@@ -326,6 +326,29 @@ variables du document, donc un schéma prend la couleur de son parcours sans êt
 Aucune information n'est portée par la seule couleur — chaque élément coloré porte aussi un mot
 ou un chiffre, ce qui vaut pour l'accessibilité autant que pour la photocopie en noir et blanc.
 
+## La règle des couleurs
+
+**Un manuel, une couleur.** La couleur de la formation tient TOUTE la brochure : la bande, les
+titres, les traits, les tableaux, les schémas — et, depuis cette version, **le fond de la
+couverture, des intercalaires et du dos**. Ce fond n'est plus un marine unique pour les neuf
+documents : il est calculé à partir de la couleur du parcours (`color-mix`, 24 % d'accent dans un
+noir presque neutre). Le manuel Niveau II est donc chaud jusque dans son noir, l'option hygiène
+turquoise jusque dans le sien. Contrôle fait : le blanc reste entre **11,4 et 19,3 pour 1** sur
+les neuf fonds, très au-delà des 4,5 exigés.
+
+**La charte de l'école se dit à UN seul endroit** : les deux barres marine + rouge, sous le
+numéro de chapitre. Elles sont présentes sous **les 210 numéros** des neuf manuels, jamais
+ailleurs. C'est le rappel demandé : au même endroit sur chaque page qui ouvre un chapitre, sous
+le numéro, sans jamais concurrencer la couleur de la formation.
+
+Deux nuances de la même couleur cohabitent, et il ne faut pas les confondre : `--accent` est la
+couleur qu'on **voit** (aplats, bandes, filets), `--accent-encre` la couleur qu'on **lit** (même
+teinte, assombrie jusqu'à 4,5:1 sur blanc). Toute surface qui porte du texte prend l'encre.
+
+**Le rouge qui subsiste ailleurs n'est pas de la marque, il est du sens** : encadrés « attention »
+et colonnes « inconvénients ». Un avertissement teinté en jaune sur le manuel Niveau II perdrait
+ce qui le rend lisible d'un coup d'œil. Ces rouges-là ne suivent pas le parcours, volontairement.
+
 **Un schéma a remplacé une photo** partout où les deux montraient la même chose : le réseau de
 gluten, la farine dans la cuve, l'eau pesée, les deux farines mélangées, la napolitaine crue.
 Une figure qui explique vaut mieux qu'une image qui illustre — et la page ne peut pas porter
@@ -336,6 +359,51 @@ Aucun schéma pour la **fabrication de l'huile d'olive** : la légende orpheline
 plutôt que de laisser annoncer une figure absente. À dessiner si le chapitre le mérite.
 
 ---
+
+
+## Redites supprimées, et le défaut de mise en page qu'elles causaient
+
+Cinq pages laissaient leur contenu passer **sous le filet de pied de page**, en s'y superposant.
+Le motif était le même presque partout, et il était éditorial avant d'être graphique : **la page
+disait deux fois la même chose**, et le bloc « Ce qu'il faut retenir » — calé en bas de page par
+construction — atterrissait pile sur le pied.
+
+| Page | La redite | Ce qui a été fait |
+|------|-----------|-------------------|
+| Les céréales | Le paragraphe d'intro reprenait le chapô du chapitre presque mot pour mot | Paragraphe supprimé, le chapô suffit |
+| Poolish & Biga | L'encadré « Le prérequis qu'on oublie » et le rappel juste dessous portaient **la même phrase sur la farine W 330** | Encadré supprimé, le rappel garde l'information |
+| Le sel | Le rappel recopiait le chapô à l'identique (« freine, resserre, colore, fait le goût ») | Rappel réécrit sur ce que la page démontre : le renforcement du réseau |
+| L'unité de calcul napolitaine | Le rappel redisait l'encadré placé au-dessus | Rappel raccourci |
+| Hygiène — la marche en avant | Pas de redite : la page portait simplement un schéma et un encadré de cinq lignes | Encadré resserré à trois lignes |
+
+**Un rappel qui recopie le titre de son chapitre n'est pas un rappel.** Il doit porter ce que la
+page a démontré, sinon il occupe une place sans rien ajouter. Les cinq cas ci-dessus sont les
+seuls trouvés ; les quatre-vingt-sept autres rappels disent bien autre chose que leur chapô.
+
+**Le contrôle qui ne voyait rien.** Ces seize pages (cinq pages, présentes dans plusieurs manuels)
+passaient toutes au vert. La raison : le cadre A4 est en `overflow:hidden`, donc son `scrollHeight`
+est **écrêté** — un contenu trop haut ne se signale pas, il est simplement rogné à l'affichage et
+imprimé par-dessus le pied. Mesurer le cadre ne prouvait donc rien. La planche de revue
+(`_revue.html`) compare désormais le bas de **chaque élément** au haut du filet de pied de page.
+C'est cette seconde mesure, et elle seule, qui a sorti les seize pages.
+
+## Le tableau des céréales : un composant emprunté à un autre
+
+Quatre blocs — les céréales, les familles de produits, les marinades, direct / semi-direct —
+utilisaient le composant **« avantages / inconvénients »** pour sa seule mise en deux colonnes, et
+tentaient d'éteindre ses puces `+` et `–` avec un `padding-left:0` posé en ligne. Cela supprimait
+le **retrait** mais pas les marqueurs, qui restaient positionnés à gauche : ils se posaient **sur
+la première lettre** de chaque ligne. « Blé » paraissait barré, « Maïs » aussi.
+
+Ces quatre blocs ont un composant à eux (« deux panneaux côte à côte »), qui n'a jamais de
+marqueur. Au passage, tous les styles écrits en ligne — couleurs de fond et de titre codées en
+dur — ont disparu : ces panneaux suivent maintenant la couleur du parcours, sauf les deux
+variantes **sémantiques** (rouge « attention », vert « sûr ») du tableau des céréales.
+
+Le titre rouge de ces encadrés ne faisait que **3,97:1** sur son fond rosé — sous le seuil de
+lisibilité pour du 8,2 pt. Il a désormais son encre propre (`--tomate-encre`, 5,39:1), sur le
+même principe que `--accent` / `--accent-encre` : la couleur qu'on **voit** n'est pas celle qu'on
+**lit**. Les encadrés « attention » du reste des manuels en profitent aussi.
 
 
 ## Comment sont fabriqués ces manuels
