@@ -18,6 +18,7 @@
  * Jean-Jacques pour la formation. Il est signalé comme tel.
  */
 import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan } from "../gabarit.mjs";
+import * as SC from "../schemas.mjs";
 
 /* ===========================================================================
    HISTOIRE ET RECONNAISSANCES
@@ -227,6 +228,7 @@ ${cote(`
             <li>Vérifier l'épaisseur au centre&nbsp;: <strong>0,4&nbsp;cm</strong>.</li>
           </ol>`,
   "napo-etalage", "Étalage à la main, du centre vers le bord")}
+${SC.cornicione()}
 ${reperes([["Centre", "0,4", "cm"], ["<em>Cornicione</em>", "1 – 2", "cm"], ["Diamètre", "22 – 35", "cm"]])}
 ${enc("alerte", "Les trois fautes classiques", `<p><strong>1.</strong> Écraser la corniche en
         posant la garniture trop au bord&nbsp;: elle ne gonflera pas.
@@ -234,8 +236,6 @@ ${enc("alerte", "Les trois fautes classiques", `<p><strong>1.</strong> Écraser 
         amer.
         <strong>3.</strong> Étaler un pâton trop froid&nbsp;: il revient sous les doigts et se
         déchire au centre. Le pâton napolitain se travaille <strong>à température ambiante</strong>.</p>`)}
-${photo("napo-crue", "Margherita crue sur le marbre, corniche préservée",
-  "La corniche est restée intacte&nbsp;: c'est elle qui va gonfler en quatre-vingts secondes.")}
 `, { chap: "L'étalage napolitain", num: m._c });
 
 /* ===========================================================================

@@ -127,16 +127,8 @@ ${SC.caryopse()}
 export const gluten = (m) => m.p(`
 ${chapitre(m.chapSuivant(), "Le gluten",
   "Ce n'est pas un ingrédient&nbsp;: c'est un réseau qui se construit sous vos mains, pendant le pétrissage.")}
-${cote(`
-          <p>Le gluten est un mélange de protéines qui, combiné avec l'eau et une source d'énergie,
-          forme des ponts disulfures créant le <strong>réseau de gluten</strong>. Il constitue
-          environ <strong>80&nbsp;%</strong> des protéines contenues dans le blé et se compose en
-          majorité de <strong>gliadine</strong> et de <strong>gluténine</strong>.</p>
-          <p>Lorsqu'une farine de blé est mélangée à de l'eau, le pétrissage fusionne ces deux
-          protéines et crée un réseau élastique et extensible qui retient les bulles de dioxyde de
-          carbone issues de la dégradation des sucres par les levures. C'est ce phénomène qui
-          provoque la levée de la pâte et l'aération de la mie.</p>`,
-  "gluten-reseau", "Réseau de gluten étiré à la main")}
+
+${SC.reseauGluten()}
         <h3 class="sec">Ce que permet le réseau</h3>
         <ul class="liste">
           <li>Retenir le gaz carbonique produit par les levures pendant la fermentation</li>
@@ -283,8 +275,7 @@ ${enc("conseil", "Comment lire ce tableau", `<p>De haut en bas, la farine devien
         <strong>boit davantage</strong> d'eau, la fermentation <strong>ralentit</strong>, et la
         pâte est <strong>plus dense</strong>. Descendre d'une ligne, c'est ajouter de l'eau et du
         temps.</p>`)}
-${photo("farine-bassine", "Farine pesée dans une bassine")}
-        <p class="mention">Le raffinage et les types — © École Pizza | Jean-Jacques Despaux</p>
+${SC.raffinage()}
 `, autonome
   ? { chap: "Le type de farine (raffinage)", num: n }
   : { sous: "9.3 Les types de farine (raffinage)" });
@@ -420,7 +411,7 @@ ${cote(`
 ${enc("alerte", "Trop de levure", `<p>Une dose de levure excessivement élevée ne permet pas de
         respecter les étapes de la panification. Elle conduit à une pâte à pizza peu savoureuse et
         à un <strong>rassissement très rapide</strong>. Le goût vient du temps, pas de la levure.</p>`)}
-        <p class="mention">La levure boulangère — © École Pizza | Jean-Jacques Despaux</p>
+${SC.levure()}
 `);
 
   m.p(`
@@ -532,17 +523,12 @@ ${chapitre(m.chapSuivant(), "Le calcul de la température de l'eau",
         régularité dans le déroulement de l'activité fermentaire et du travail de la pâte.</p>
         <p>Après plusieurs années d'expérience, nous appliquons une formule simple et efficace,
         dite <strong>TB&nbsp;50</strong>&nbsp;:</p>
-        <div class="enc" style="text-align:center;background:var(--papier-2);border-left-width:1.4mm">
-          <p style="font:700 15pt/1.4 var(--titre);margin:0">
-            Température de la farine <span class='gly'>×</span> 2 = Y<br>
-            <span style="color:var(--accent)">50 <span class='gly'>−</span> Y = température de l'eau de coulage</span>
-          </p>
-        </div>
 ${tbl(["Saison", ["T° farine", "c"], ["<span class='gly'>×</span> 2 = Y", "c"], ["TB <span class='gly'>−</span> Y", "c"], ["Eau de coulage", "c"], ["T° de la pâte visée", "c"]], [
     [["Été", "fort"], ["24 °C", "c"], ["48", "c"], ["50 <span class='gly'>−</span> 48", "c"], ["<span class='val'>2 °C</span>", "c"], ["22 à 24 °C", "c"]],
     [["Printemps / automne", "fort"], ["17 °C", "c"], ["34", "c"], ["50 <span class='gly'>−</span> 34", "c"], ["<span class='val'>16 °C</span>", "c"], ["22 à 25 °C", "c"]],
     [["Hiver", "fort"], ["10 °C", "c"], ["20", "c"], ["50 <span class='gly'>−</span> 20", "c"], ["<span class='val'>30 °C</span>", "c"], ["22 à 27 °C", "c"]],
   ], { titre: "La formule appliquée aux trois saisons" })}
+${SC.temperatureBase()}
         <h3 class="sec">Le cas extrême de l'été</h3>
 ${tbl(["Saison", ["T° farine", "c"], ["<span class='gly'>×</span> 2 = Y", "c"], ["TB <span class='gly'>−</span> Y", "c"], ["Eau de coulage", "c"]], [
     [["Été caniculaire", "fort"], ["28 °C", "c"], ["56", "c"], ["50 <span class='gly'>−</span> 56", "c"], ["<span class='val' style='color:#dc3e37'><span class='gly'>−</span> 6 °C</span>", "c"]],
@@ -551,8 +537,6 @@ ${enc("alerte", "Une eau à <span class='gly'>−</span>6 °C n'existe pas", `<p
         que vous êtes déjà en retard. <strong>Anticipez</strong> pour minimiser les risques&nbsp;:
         mettez la veille une partie ou la totalité de la farine au frais. Descendre la farine de
         28 à 20&nbsp;°C ramène l'eau de coulage à 10&nbsp;°C, une valeur atteignable.</p>`)}
-${duo(["eau", "Eau pesée avant le coulage"], ["sel-gros", "Gros sel"],
-  "L'eau se pèse&nbsp;: 1 litre = 1 kilo. La balance est plus fiable que le pichet gradué.")}
 `, { chap: "Le calcul de la température de l'eau", num: m._c });
 
 /* ===========================================================================
@@ -631,7 +615,6 @@ ${cote(`
           quelle&nbsp;: c'est là que l'extra vierge se justifie, et c'est le seul endroit où le
           client la perçoit.</p>`,
   "huile-verre", "Huile d'olive dans un verre")}
-        <p class="mention">Processus de fabrication de l'huile d'olive — © École Pizza | Jean-Jacques Despaux</p>
 `);
   return m;
 };

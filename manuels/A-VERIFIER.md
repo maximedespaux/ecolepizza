@@ -298,6 +298,46 @@ cp ~/Downloads/Merriweather,Mulish.zip ~/Documents/
 Les polices seront alors extraites dans `assets/fonts/`, le `@import` remplacé par des
 `@font-face` locaux, et la licence OFL jointe comme elle doit l'être.
 
+## Les schémas
+
+Les manuels d'origine portaient **huit légendes** du type « Schéma du caryopse — © École Pizza |
+Jean-Jacques Despaux » sous des dessins qui n'ont jamais été repris : la légende annonçait une
+figure absente. **Quatorze schémas** les remplacent et en ajoutent.
+
+| Schéma | Ce qu'il montre que le texte ne dit pas |
+|---|---|
+| Le caryopse | Les trois parties sont **emboîtées**, et l'amande fait 82 à 85 % à elle seule |
+| Le raffinage | Type, cendres, extraction et usage ne sont pas quatre étiquettes mais **une seule échelle** |
+| L'alvéogramme | P se lit en hauteur, L en largeur, et **W est une aire** — pas un point |
+| Le réseau de gluten | Le gluten n'existe pas dans la farine sèche : on le **fabrique** |
+| La levure | Le gaz et l'arôme sortent de la **même** réaction |
+| La température de base | Pourquoi plus la farine est chaude, plus l'eau doit être froide |
+| L'unité de calcul | D'où sortent les six pâtons, et pourquoi 1,68 kg |
+| Les substitutions | On **remplace**, on n'ajoute pas — seule l'eau grandit |
+| Les trois chaleurs | D'où vient chacune, donc laquelle corriger |
+| Le schéma des formations | Deux portes d'entrée, et tout le reste derrière |
+| Direct / Poolish / Biga | L'indirect n'est pas plus compliqué, il est **plus tôt** |
+| Le cornicione | La corniche est le gaz que le geste a poussé vers le bord |
+| La zone de danger | Elle est **large** — cinquante-trois degrés |
+| La marche en avant | Une règle de sens unique, et le retour barré |
+
+Ils sont écrits en **SVG dans la page**, sans librairie ni image : leurs couleurs passent par les
+variables du document, donc un schéma prend la couleur de son parcours sans être redessiné.
+Aucune information n'est portée par la seule couleur — chaque élément coloré porte aussi un mot
+ou un chiffre, ce qui vaut pour l'accessibilité autant que pour la photocopie en noir et blanc.
+
+**Un schéma a remplacé une photo** partout où les deux montraient la même chose : le réseau de
+gluten, la farine dans la cuve, l'eau pesée, les deux farines mélangées, la napolitaine crue.
+Une figure qui explique vaut mieux qu'une image qui illustre — et la page ne peut pas porter
+les deux.
+
+### Ce qui manque encore
+Aucun schéma pour la **fabrication de l'huile d'olive** : la légende orpheline a été retirée
+plutôt que de laisser annoncer une figure absente. À dessiner si le chapitre le mérite.
+
+---
+
+
 ## Comment sont fabriqués ces manuels
 
 Les neuf `.html` sont **générés** par `outils/construire.mjs` à partir des modules de

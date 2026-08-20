@@ -17,7 +17,7 @@
    « Graphiques d'arrière-plan » COCHÉ (sinon les aplats de couleur sautent).
    ========================================================================== */
 
-@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,400;1,600&family=Merriweather:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,300..900&family=Merriweather:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&display=swap");
 
 :root{
   /* Charte de l'école — reprise de src/app/ui/styles/app.css */
@@ -25,7 +25,9 @@
 
   --encre:#16171d;          /* le noir du texte : jamais #000, trop dur à lire */
   --encre-2:#4a4d5a;        /* texte secondaire */
-  --encre-3:#83879a;        /* légendes, mentions */
+  --encre-3:#6f7488;        /* légendes, mentions — 4,64:1 sur blanc.
+                               #83879a, la valeur d'avant, tombait à 3,56:1,
+                               et c'est la couleur des textes les PLUS petits. */
   --trait:#e2e3ea;
   --papier:#fff;
   --papier-2:#f6f7fa;       /* aplat léger des tableaux et encadrés */
@@ -100,7 +102,11 @@ body{
      servent aux COLONNES, pas à la prose ni aux titres, où ils écartent
      inutilement le 1 et le 7. Ils sont posés là où ils servent. */
 }
-h1,h2,h3,h4{font-family:var(--titre); font-weight:700; margin:0; letter-spacing:-.01em}
+/* Les titres de rang 1 à 3 sont éditoriaux — donc en serif. Le rang 4 est une
+   ÉTIQUETTE en capitales, pas un titre : il reste en sans. Écrite ainsi, la
+   règle s'applique vraiment, au lieu d'être annulée six fois plus bas. */
+h1,h2,h3{font-family:var(--serif); font-weight:900; margin:0}
+h4{font-family:var(--titre); font-weight:700; margin:0; letter-spacing:-.01em}
 p{margin:0 0 .62em}
 p:last-child{margin-bottom:0}
 strong,b{font-weight:700}
@@ -110,7 +116,11 @@ figure{margin:0}
 ul,ol{margin:0 0 .62em; padding-left:1.15em}
 li{margin-bottom:.2em}
 li:last-child{margin-bottom:0}
-sup{font-size:.62em; vertical-align:.55em; line-height:0}
+/* Plancher ABSOLU sur les exposants : `.62em` d'un libellé de repère à 7,2 pt
+   donnait 4,46 pt — illisible imprimé. Le décalage vertical descend de .55 à
+   .42em, sinon l'exposant grossi sort du filet des en-têtes de tableau. */
+sup{font-size:max(6.4pt,.62em); vertical-align:.42em; line-height:0}
+sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
 
 /* ==========================================================================
    2. LA PAGE A4
@@ -289,7 +299,7 @@ h4.sous:first-child{margin-top:0}
 .deux-col > *{break-inside:avoid}
 .intro{font-size:11.4pt; line-height:1.5; color:var(--encre-2)}
 .intro strong{color:var(--encre)}
-.legende{font-size:7.8pt; line-height:1.4; color:var(--encre-3); margin-top:1.6mm}
+.legende{font-size:8.2pt; line-height:1.4; color:var(--encre-3); margin-top:1.6mm}
 .mention{font-size:7.8pt; color:var(--encre-3)}
 
 /* Liste à puces carrées dans l'accent — le puce ronde par défaut se perd à
@@ -511,9 +521,9 @@ ol.etapes > li::before{
    de lisibilité en photocopie noir et blanc.
    ========================================================================== */
 
-.schema{margin:0 0 3.6mm; break-inside:avoid}
+.schema{margin:0 0 2.6mm; break-inside:avoid}
 .schema svg{width:100%; height:auto; display:block; font-family:var(--titre); overflow:visible}
-.schema figcaption{margin-top:2mm}
+.schema figcaption{margin-top:1.6mm}
 
 /* Surfaces */
 .schema .s-boite {fill:var(--papier-2); stroke:var(--trait); stroke-width:1.3}

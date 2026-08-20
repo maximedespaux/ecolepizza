@@ -6,13 +6,13 @@
      en vignettes pour repérer d'un coup d'œil un débordement ou une page vide.
      Usage : _revue.html?m=niveau-1&e=0.24 -->
 <style>
-  body{margin:0 !important;background:#5f6270 !important;font:12px/1.4 system-ui}
+  body{margin:0 !important;background:#5f6270 !important;font:12px/1.4 var(--titre)}
   h1{font-size:14px;padding:8px 12px;margin:0;background:#101118;color:#fff;position:sticky;top:0;z-index:9}
   .grille{display:flex;flex-wrap:wrap;gap:10px;padding:12px}
   .vig{position:relative;background:#fff;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.4)}
   .vig > .page{transform-origin:top left;margin:0 !important;box-shadow:none !important}
   .n{position:absolute;right:0;bottom:0;z-index:5;background:#101118;color:#fff;
-     font:700 10px/1 system-ui;padding:3px 5px}
+     font:700 10px/1 var(--titre);padding:3px 5px}
   .plein{outline:3px solid #dc3e37}
 </style>
 <h1 id="t">…</h1>
@@ -44,8 +44,8 @@ fetch(nom + ".html").then(r => r.text()).then(html => {
   requestAnimationFrame(() => {
     document.querySelectorAll(".vig > .page").forEach((p, i) => {
       const c = p.querySelector(".corps");
-      if (!c) return;
-      const debord = c.scrollHeight - c.clientHeight;
+      const debord = Math.max(p.scrollHeight - p.clientHeight,
+                              c ? c.scrollHeight - c.clientHeight : 0);
       if (debord > 2) { p.parentElement.classList.add("plein");
         p.parentElement.querySelector(".n").textContent = i + " ⚠ +" + Math.round(debord); }
     });

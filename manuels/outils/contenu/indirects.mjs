@@ -12,6 +12,7 @@
  *    questions reformulées, l'une derrière l'autre.
  */
 import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan } from "../gabarit.mjs";
+import * as SC from "../schemas.mjs";
 
 /* ===========================================================================
    POOLISH & BIGA — la comparaison d'entrée
@@ -37,11 +38,10 @@ ${tbl(["Empâtement", "Méthode", ["Étapes", "c"], "Ce que l'on fait"], [
         texture, de goût et de digestibilité. Il faut pour cela prendre en compte la qualité de la
         farine, la température de fermentation, le temps de maturation et les proportions des
         ingrédients.</p>
+${SC.directIndirect()}
 ${enc("conseil", "Le prérequis qu'on oublie", `<p>Un indirect demande une farine
         <strong>W 330 minimum</strong>. En dessous, le réseau ne tient pas seize heures de
         pré-fermentation&nbsp;: la pâte se liquéfie et rien ne la rattrape.</p>`)}
-${photo("gluten-reseau", "Réseau de gluten très développé, étiré à la main",
-  "Un indirect bien mené se reconnaît au réseau&nbsp;: fin, translucide, il s'étire sans se déchirer.")}
 `, { chap: "Poolish & Biga", num: m._c });
 
 /* ===========================================================================

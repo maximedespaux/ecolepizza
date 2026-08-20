@@ -8,6 +8,7 @@
  * fabrique la ou les pages nécessaires.
  */
 import { chapitre, cote, photo, enc, ECOLE } from "../gabarit.mjs";
+import * as SC from "../schemas.mjs";
 
 /* ===========================================================================
    PRÉFACE
@@ -67,6 +68,7 @@ ${enc("alerte", "Pourquoi c'est une règle et pas un conseil", `<p>Une bague ret
 export const schema = (m) => m.p(`
 ${chapitre(m.chapSuivant(), "Schéma des formations",
   "Deux portes d'entrée, puis des approfondissements. Le Niveau&nbsp;I ou le Niveau&nbsp;I&nbsp;Pro sont le prérequis de tout le reste.")}
+${SC.formations()}
         <h4 class="sous">Nos formations</h4>
         <table class="tbl tbl-compact">
           <thead><tr><th>Parcours</th><th>Durée</th><th>Contenu</th><th>Prérequis</th></tr></thead>

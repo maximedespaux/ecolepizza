@@ -17,6 +17,7 @@
  * alimentaire : il l'accompagne. Voir l'encadré en fin de chapitre 1.
  */
 import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan } from "../gabarit.mjs";
+import * as SC from "../schemas.mjs";
 
 /* ===========================================================================
    1 · ALIMENTS ET RISQUES POUR LE CONSOMMATEUR
@@ -37,21 +38,21 @@ ${tbl(["Famille de danger", "Ce que c'est", "Exemple en pizzeria"], [
         <strong>chaleur</strong>, de l'<strong>eau</strong>, des <strong>nutriments</strong> et du
         <strong>temps</strong>. En retirer un seul suffit à la freiner — c'est tout le principe de la
         chaîne du froid et de la cuisson.</p>
-${reperes([["Zone à risque", "+10 à +63", "°C"], ["Froid positif", "0 à +4", "°C"], ["Congélation", "max. <span class='gly'>−</span>18", "°C"], ["Liaison chaude", "min. +63", "°C"]])}
+${SC.zoneDanger()}
 ${enc("alerte", "La zone dangereuse", `<p>Entre <strong>+10 et +63&nbsp;°C</strong>, une population
         bactérienne peut doubler toutes les vingt minutes. Un bac de garniture laissé deux heures
         sur le plan de travail en plein service ne « se réchauffe » pas&nbsp;: il se
         <strong>multiplie</strong>. C'est le point où se joue l'essentiel de la sécurité en
         pizzeria.</p>`)}
+`, { chap: "Aliments et risques pour le consommateur", num: n });
+
+  m.p(`
         <h3 class="sec">Les trois modes de contamination</h3>
 ${tbl(["Mode", "Comment ça arrive", "Comment on l'évite"], [
     [["Contamination initiale", "fort"], "Le danger est déjà dans la matière première à la réception.", "Contrôle à réception, choix des fournisseurs, étiquetage, DLC."],
     [["Contamination croisée", "fort"], "Le danger passe d'un produit, d'une surface ou d'une main à un autre produit.", "Séparer le cru et le prêt-à-consommer&nbsp;; laver les mains&nbsp;; planches et couteaux dédiés."],
     [["Multiplication", "fort"], "Le danger était présent en quantité négligeable et s'est développé.", "Chaîne du froid, refroidissement rapide, respect des durées de vie."],
   ], { compact: true })}
-`, { chap: "Aliments et risques pour le consommateur", num: n });
-
-  m.p(`
         <h3 class="sec">Ce que le pizzaïolo maîtrise vraiment</h3>
         <p>Les cinq leviers de la méthode des <strong>5 M</strong> — la grille la plus simple pour
         chercher l'origine d'un problème sanitaire.</p>
@@ -235,11 +236,7 @@ ${enc("alerte", "Les mains sont le premier vecteur", `<p>Devant les surfaces, de
           ongles</li>
         </ul>
         <h3 class="sec">La marche en avant</h3>
-        <p>Le principe&nbsp;: un produit ne doit <strong>jamais revenir en arrière</strong> ni
-        croiser un flux plus sale que lui. Réception » stockage » préparation » cuisson » service.
-        Quand les locaux ne permettent pas une marche en avant <em>dans l'espace</em>, on l'organise
-        <strong>dans le temps</strong> — les tâches sales et les tâches propres à des moments
-        différents, avec un nettoyage entre les deux.</p>
+${SC.marcheEnAvant()}
 ${enc("conseil", "En pizzeria, le point sensible est le poste de garnissage", `<p>C'est là que se
         croisent des produits crus (viandes, œufs) et des produits prêts à consommer (jambon sec,
         mozzarella, basilic), sur le même plan, avec les mêmes mains. Séparer ces deux familles dans

@@ -11,6 +11,7 @@
  *  · le « Règlement intérieur » est annoncé au sommaire et ABSENT du document.
  */
 import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan, ECOLE } from "../gabarit.mjs";
+import * as SC from "../schemas.mjs";
 
 /* ===========================================================================
    MOT D'ACCUEIL
@@ -173,6 +174,7 @@ export const formations = (m) => {
   const n = m.chapSuivant();
   m.p(`
 ${chapitre(n, "Nos formations", "Six formations et deux spécialisations. Le Niveau I ou le Niveau I Pro ouvrent tout le reste.")}
+${SC.formations()}
 ${tbl(["Formation", ["Durée", "c"], "Objectif", "Prérequis"], [
     [["<strong>Niveau I</strong><br>Pizza classique", ""], ["<span class='val'>5 j · 35 h</span>", "c"],
      "Réaliser des pizzas classiques, de l'élaboration de l'empâtement direct jusqu'à la sortie du four.", "Aucun"],

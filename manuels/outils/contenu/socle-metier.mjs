@@ -168,20 +168,19 @@ ${tbl([["Force W", ""], ["Hydratation<br>minimale", "c"], ["Eau", "c"], ["Soja /
     [["W 390", "fort"], ["59 %", "c"], ["590 g", "c"], ["+ 30 g", "c"], ["<span class='val'>620 g</span>", "c"], ["+ 40 g", "c"], ["<span class='val'>630 g</span>", "c"]],
     [["W 420", "fort"], ["60 %", "c"], ["600 g", "c"], ["+ 30 g", "c"], ["<span class='val'>630 g</span>", "c"], ["+ 40 g", "c"], ["<span class='val'>640 g</span>", "c"]],
   ], { titre: "Poids d'eau pour 1 kg de farine(s)", compact: true })}
-${cote(`
+${(`
           <h3 class="sec">Exemple — 10 unités en W 330, dont 10 % de soja</h3>
           <ol class="etapes">
             <li><strong>9 kg</strong> de farine de blé + <strong>1 kg</strong> de farine de soja</li>
             <li>Eau de base&nbsp;: 570 g <span class='gly'>×</span> 10 = <strong>5,700 kg</strong></li>
             <li>Complément&nbsp;: 30 g <span class='gly'>×</span> 10 unités = <strong>0,300 kg</strong></li>
             <li><strong>Eau totale = 6 kg</strong></li>
-          </ol>`,
-  "farine-cuve", "Deux farines mélangées dans la cuve")}
+          </ol>`)}
 ${enc("alerte", "Certaines farines assèchent", `<p>Vous devez réagir&nbsp;: il sera toujours possible
         d'ajouter un peu d'<strong>eau de bassinage</strong> en fin de pétrissage pour retrouver une
         texture homogène avec une bonne élasticité. Le tableau donne le complément
         <em>attendu</em>&nbsp;; la pâte donne le complément <em>réel</em>.</p>`)}
-        <p class="mention">Schéma des substitutions — © École Pizza | Jean-Jacques Despaux</p>
+${SC.substitution()}
 `, { chap: "Les substitutions", num: m._c });
 
 /* ===========================================================================
