@@ -22,9 +22,9 @@ const POINTAGE = tbl(["Saison", ["Temps de pointage", "c"]], [
 const FIN_DIRECTE = [
   { repos: "5 mn", texte: "<b>Détente</b> — la pâte se relâche avant d'être divisée." },
   {
-    n: "→", titre: "Division et boulage", corps: `
+    n: "»", titre: "Division et boulage", corps: `
             <p>Étaler la masse en forme rectangulaire, d'une épaisseur de 10&nbsp;cm.
-            <strong>Diviser, peser, bouler</strong> et déposer dans des bacs Gilac 60 × 40&nbsp;cm.
+            <strong>Diviser, peser, bouler</strong> et déposer dans des bacs Gilac 60 <span class='gly'>×</span> 40&nbsp;cm.
             Bloquer à <strong>3 à 4&nbsp;°C</strong>.</p>`,
   },
 ];
@@ -35,7 +35,7 @@ const FIN_DIRECTE = [
 export const direct = (m) => m.p(`
 ${chapitre(m.chapSuivant(), "L'empâtement direct",
   "Tous les ingrédients en une seule fois. Au pétrin à spirale, de 10 à 30 litres.")}
-${reperes([["Hydratation", "54 – 60", "%"], ["T° pâte finale", "≤ 25", "°C"], ["Pétrissage", "≈ 15", "mn"]])}
+${reperes([["Hydratation", "54 – 60", "%"], ["T° pâte finale", "max. 25", "°C"], ["Pétrissage", "env. 15", "mn"]])}
 ${proto([
   { n: 1, titre: "Première phase", corps: `
             <p>Mettre la <strong>farine et la levure</strong>, laisser tourner <strong>1 mn</strong>
@@ -125,7 +125,7 @@ ${photo("rabat", "Rabat de la pâte en masse")}
 export const semiDirect = (m) => m.p(`
 ${chapitre(m.chapSuivant(), "L'empâtement semi-direct",
   "Un direct auquel on ajoute de la pâte fermentée. Le raccourci vers les arômes de l'indirect.")}
-${reperes([["Pâte fermentée", "10 – 30", "%"], ["Ajout", "8<sup>e</sup>", "minute"], ["T° pâte finale", "≤ 25", "°C"]])}
+${reperes([["Pâte fermentée", "10 – 30", "%"], ["Ajout", "8<sup>e</sup>", "minute"], ["T° pâte finale", "max. 25", "°C"]])}
 ${proto([
   { n: 1, titre: "Première phase", corps: `
             <p>Mettre la <strong>farine et la levure</strong>, laisser tourner <strong>1 mn</strong>
@@ -172,8 +172,8 @@ ${cote(`
           <h3 class="sec">Exemple — 10 unités en W 330, dont 10 % de soja</h3>
           <ol class="etapes">
             <li><strong>9 kg</strong> de farine de blé + <strong>1 kg</strong> de farine de soja</li>
-            <li>Eau de base&nbsp;: 570 g × 10 = <strong>5,700 kg</strong></li>
-            <li>Complément&nbsp;: 30 g × 10 unités = <strong>0,300 kg</strong></li>
+            <li>Eau de base&nbsp;: 570 g <span class='gly'>×</span> 10 = <strong>5,700 kg</strong></li>
+            <li>Complément&nbsp;: 30 g <span class='gly'>×</span> 10 unités = <strong>0,300 kg</strong></li>
             <li><strong>Eau totale = 6 kg</strong></li>
           </ol>`,
   "farine-cuve", "Deux farines mélangées dans la cuve")}
@@ -232,13 +232,13 @@ ${bilan(
     ["Bonnes pratiques", "Points de vigilance"])}
         <h3 class="sec">Exemple — tableau des allergènes sur trois pizzas</h3>
 ${tbl(["Allergène", ["Reine", "c"], ["Calzone", "c"], ["Océane", "c"]], [
-    ["Gluten", ["✕", "c"], ["✕", "c"], ["✕", "c"]],
+    ["Gluten", ["<span class='coche'></span>", "c"], ["<span class='coche'></span>", "c"], ["<span class='coche'></span>", "c"]],
     ["Crustacés", ["", "c"], ["", "c"], ["", "c"]],
-    ["Œufs", ["", "c"], ["✕", "c"], ["", "c"]],
-    ["Poissons", ["", "c"], ["", "c"], ["✕", "c"]],
+    ["Œufs", ["", "c"], ["<span class='coche'></span>", "c"], ["", "c"]],
+    ["Poissons", ["", "c"], ["", "c"], ["<span class='coche'></span>", "c"]],
     ["Arachides", ["", "c"], ["", "c"], ["", "c"]],
     ["Soja", ["", "c"], ["", "c"], ["", "c"]],
-    ["Lait", ["✕", "c"], ["✕", "c"], ["✕", "c"]],
+    ["Lait", ["<span class='coche'></span>", "c"], ["<span class='coche'></span>", "c"], ["<span class='coche'></span>", "c"]],
     ["Fruits à coque", ["", "c"], ["", "c"], ["", "c"]],
     ["Céleri", ["", "c"], ["", "c"], ["", "c"]],
     ["Moutarde", ["", "c"], ["", "c"], ["", "c"]],
@@ -331,7 +331,7 @@ ${duo(["mozzarella", "Mozzarella coupée en dés"], ["trancheur", "Trancheur Ber
 export const quantites = (m) => m.p(`
 ${chapitre(m.chapSuivant(), "Les quantités des matières premières",
   "Le grammage par diamètre. C'est ce tableau qui fait la marge autant que la carte.")}
-${tbl(["Ingrédient", ["Ø 26 cm", "c"], ["Ø 29 cm", "c"], ["Ø 33 cm", "c"], ["Plaque 40 × 60 cm", "c"]], [
+${tbl(["Ingrédient", ["Ø 26 cm", "c"], ["Ø 29 cm", "c"], ["Ø 33 cm", "c"], ["Plaque 40 <span class='gly'>×</span> 60 cm", "c"]], [
     [["Pâton", "fort"], ["<span class='val'>200 à 220 g</span>", "c"], ["<span class='val'>240 à 260 g</span>", "c"], ["<span class='val'>280 à 300 g</span>", "c"], ["<span class='val'>1 100 à 1 300 g</span>", "c"]],
     [["Sauce tomate", "fort"], ["80 g", "c"], ["90 g", "c"], ["100 g", "c"], ["700 à 800 g", "c"]],
     [["Crème", "fort"], ["50 g", "c"], ["60 g", "c"], ["70 g", "c"], ["épaisse 500 g<br>liquide 400 g", "c"]],
@@ -430,7 +430,7 @@ ${tbl(["Ingrédients", ["Unité de mesure", "c"], ["Prix / kg / L / u", "c"], ["
     "<span class='arempl'>· · · · · · · · · · · · · · · ·</span>",
     ["<span class='arempl'>· · · · ·</span>", "c"], ["<span class='arempl'>· · · · ·</span>", "c"],
     ["<span class='arempl'>· · · · ·</span>", "c"], ["<span class='arempl'>· · · · ·</span>", "d"],
-  ]).concat([[["<strong>Total</strong>", ""], ["", "c"], ["", "c"], ["<strong>… kg</strong>", "c"], ["<strong>… €</strong>", "d"]]]),
+  ]).concat([[["<strong>Total</strong>", ""], ["", "c"], ["", "c"], ["<strong>… kg</strong>", "c"], ["<strong>… <span class='gly'>€</span></strong>", "d"]]]),
   { compact: true })}
 ${enc("conseil", "Le prix au kilo de pâte", `<p>La dernière ligne, « total prix au kilo », est la
         seule qui compte pour fixer un prix de vente. Un pâton de 280&nbsp;g ne coûte que quelques
@@ -570,7 +570,7 @@ ${chapitre(n, "Le matériel dans une pizzeria", "Le gros matériel — celui qui
 ${cote(`
           <ul class="liste serre">
             <li>Four</li>
-            <li>Tour réfrigéré 40 × 60 cm ou GN 1/1 <span class="mention">(dimensions des bacs à pâtons)</span></li>
+            <li>Tour réfrigéré 40 <span class='gly'>×</span> 60 cm ou GN 1/1 <span class="mention">(dimensions des bacs à pâtons)</span></li>
             <li>Vitrine réfrigérée</li>
             <li>Lave-mains fémoral</li>
             <li>Pétrin</li>
@@ -580,7 +580,7 @@ ${cote(`
             <li>Plonge batterie et légumes</li>
             <li>Congélateur</li>
             <li>Chambre froide</li>
-            <li>Armoire réfrigérée 40 × 60 cm</li>
+            <li>Armoire réfrigérée 40 <span class='gly'>×</span> 60 cm</li>
           </ul>`,
   "petrins", "Rangée de pétrins à spirale")}
 ${enc("note", "À prévoir en plus", `<p><strong>Pizzeria à emporter</strong> et
@@ -603,7 +603,7 @@ ${enc("note", "À prévoir en plus", `<p><strong>Pizzeria à emporter</strong> e
             <li>Thermomètre</li>
             <li>Bacs gastro inox avec couvercles</li>
             <li>Bacs plastiques avec couvercles <span class="mention">(mise en place)</span></li>
-            <li>Bacs à pâtons 40 × 60 cm ou GN 1/1</li>
+            <li>Bacs à pâtons 40 <span class='gly'>×</span> 60 cm ou GN 1/1</li>
             <li>Biberon plastique et biberon à valve</li>
             <li>Bassine, cul-de-poule</li>
             <li>Coutellerie</li>
@@ -620,7 +620,7 @@ ${enc("note", "À prévoir en plus", `<p><strong>Pizzeria à emporter</strong> e
             <li>Ouvre-boîte</li>
             <li>Film alimentaire étirable</li>
             <li>Poubelle à pédale</li>
-            <li>Plaque à pizza 40 × 60 cm <span class="mention">(pizza traiteur)</span></li>
+            <li>Plaque à pizza 40 <span class='gly'>×</span> 60 cm <span class="mention">(pizza traiteur)</span></li>
             <li>Rouleau à pâtisserie <span class="mention">(plaque traiteur)</span></li>
           </ul>
         </div>

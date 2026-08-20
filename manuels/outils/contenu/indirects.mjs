@@ -102,9 +102,9 @@ ${proto([
             <p>La pâte est finie. Prendre la température et vérifier la texture&nbsp;: homogène et
             souple, sans dépasser les degrés imposés.</p>` },
   { repos: "5 mn", texte: "<b>Détente</b> — sur le marbre, en un gros pâton, avec un rabat, couvert d'un film plastique." },
-  { n: "→", titre: "Division et boulage", corps: `
+  { n: "»", titre: "Division et boulage", corps: `
             <p>Étaler la masse en rectangle de 10&nbsp;cm d'épaisseur. Diviser, peser, bouler,
-            déposer dans des bacs Gilac 60 × 40&nbsp;cm et bloquer à <strong>3 à 4&nbsp;°C</strong>.</p>` },
+            déposer dans des bacs Gilac 60 <span class='gly'>×</span> 40&nbsp;cm et bloquer à <strong>3 à 4&nbsp;°C</strong>.</p>` },
 ])}
 ${enc("alerte", "Pas de pointage", `<p>Contrairement au direct, l'indirect <strong>ne passe pas par
         un pointage</strong>&nbsp;: la fermentation a déjà eu lieu en première phase. On boule tout
@@ -194,9 +194,9 @@ ${proto([
             <p>Verser le <strong>sel</strong> et l'<strong>huile d'olive</strong>, laisser tourner
             <strong>2 à 3 mn</strong>. Prendre la température et vérifier la texture.</p>` },
   { repos: "5 mn", texte: "<b>Détente</b> — sur le marbre, un rabat, couvert d'un film plastique." },
-  { n: "→", titre: "Division et boulage", corps: `
+  { n: "»", titre: "Division et boulage", corps: `
             <p>Étaler la masse en rectangle de 10&nbsp;cm d'épaisseur. Diviser, peser, bouler,
-            déposer en bacs Gilac 60 × 40&nbsp;cm, bloquer entre <strong>3 et 4&nbsp;°C</strong>.</p>` },
+            déposer en bacs Gilac 60 <span class='gly'>×</span> 40&nbsp;cm, bloquer entre <strong>3 et 4&nbsp;°C</strong>.</p>` },
 ])}
 ${duo(["biga-melange", "Biga mélangée à la main dans une bassine"], ["biga-texture", "Texture filandreuse de la Biga"],
   "À gauche le geste de la première phase, à droite la texture recherchée&nbsp;: des filaments, pas une pâte.")}
@@ -219,7 +219,7 @@ ${chapitre(n, "La pizza contemporaine", "Une napolitaine poussée plus loin&nbsp
         développées et une mie alvéolée et aérienne. Le temps de cuisson est plus rapide que pour une
         pizza classique&nbsp;: le four est réglé entre <strong>400 et 420&nbsp;°C</strong>. Les
         pâtons s'utilisent entre <strong>24 et 96 heures</strong>.</p>
-${reperes([["Hydratation", "≈ 70", "%"], ["Four", "400 – 420", "°C"], ["Utilisation", "24 – 96", "h"]])}
+${reperes([["Hydratation", "env. 70", "%"], ["Four", "400 – 420", "°C"], ["Utilisation", "24 – 96", "h"]])}
         <h3 class="sec">Une histoire courte</h3>
         <div class="proto">
           <div class="phase" data-n="1"><div class="phase-t">Naissance</div>
@@ -333,7 +333,7 @@ ${tbl(["Ingrédient", ["1<sup>re</sup> phase", "c"], ["2<sup>e</sup> phase", "c"
     [["<em>ou</em> sèche instantanée", "fort"], ["<span class='val'>25 g</span>", "c"], ["", "c"], ["", "c"]],
     [["Sel", "fort"], ["", "c"], ["<span class='val'>250 g</span>", "c"], ["", "c"]],
     [["Lemady <em>ou</em> malt <span class='mention'>(facultatif)</span>", "fort"], ["", "c"], ["<span class='val'>150 g / 20 g</span>", "c"], ["", "c"]],
-    [["Eau de bassinage à 6 °C", "fort"], ["", "c"], ["", "c"], ["<span class='val'>≈ 1,1 kg</span>", "c"]],
+    [["Eau de bassinage à 6 °C", "fort"], ["", "c"], ["", "c"], ["<span class='val'>env. 1,1 kg</span>", "c"]],
   ], { compact: true })}
 ${proto([
   { n: 1, titre: "Première phase — la Biga", corps: `
@@ -352,7 +352,7 @@ ${proto([
             <strong>2 à 3 mn</strong> en vitesse rapide. La pâte doit se <strong>décoller du bord de
             la cuve</strong>&nbsp;: bien hydratée, lisse, élastique et brillante.</p>` },
   { repos: "30 à 40 mn", texte: "<b>Pointage</b> — en masse, dans un bac couvert." },
-  { n: "→", titre: "Boulage", corps: `
+  { n: "»", titre: "Boulage", corps: `
             <p>Déposer sur le plan de travail, faire un rabat. Diviser, peser, bouler&nbsp;: des
             pâtons d'environ <strong>290 g</strong>. Bloquer entre <strong>2 et 4&nbsp;°C</strong>.</p>` },
 ])}
@@ -405,8 +405,8 @@ ${chapitre(m.chapSuivant(), "Quiz — le type de farine",
             <div class="phase-t">Pourquoi le taux d'extraction est-il déterminant&nbsp;?</div>
             <p>Plus il est élevé, plus la farine contient de fibres et de minéraux, ce qui impacte
             l'absorption d'eau et la fermentation.<br>
-            Taux élevé (T150) → absorbe plus d'eau, fermentation plus lente, pâte dense.<br>
-            Taux faible (<em>Tipo 00</em>) → absorbe moins d'eau, pâte plus extensible et légère.</p>
+            Taux élevé (T150) » absorbe plus d'eau, fermentation plus lente, pâte dense.<br>
+            Taux faible (<em>Tipo 00</em>) » absorbe moins d'eau, pâte plus extensible et légère.</p>
           </div>
           <div class="phase" data-n="2">
             <div class="phase-t">Quel impact d'une farine à plus de 80 % d'extraction&nbsp;?</div>

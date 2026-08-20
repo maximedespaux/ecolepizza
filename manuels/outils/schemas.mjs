@@ -26,7 +26,7 @@
  *    pour qui ne voit pas la figure.
  *
  * LES FLÈCHES SONT ÉTIQUETÉES. Une flèche nue veut dire « lié d'une manière ou
- * d'une autre » ; « ×2 », « 50 − Y », « invalide » est une information.
+ * d'une autre » ; « x2 », « 50 moins Y », « invalide » est une information.
  */
 
 /** Enveloppe commune : figure + légende + accessibilité. */
@@ -71,7 +71,7 @@ export const caryopse = () => figure("caryopse", "0 24 660 202", `
             <text x="425" y="110" class="s-lbl">ALBUMEN · DEVIENT LA FARINE</text>
             <text x="425" y="130" class="s-val">82 à 85 %</text>
             <text x="425" y="168" class="s-lbl">GERME · GRAS, IL FAIT RANCIR</text>
-            <text x="425" y="188" class="s-val">≈ 3 %</text>`,
+            <text x="425" y="188" class="s-val">env. 3 %</text>`,
   "Le caryopse du froment en coupe. Le raffinage consiste à ne garder que l'amande&nbsp;: c'est elle qui fait la farine blanche.",
   "Coupe d'un grain de blé : l'amande occupe 82 à 85 % du grain, les enveloppes 13 à 15 %, le germe environ 3 %.");
 

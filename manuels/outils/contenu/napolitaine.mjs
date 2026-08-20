@@ -66,7 +66,7 @@ ${tbl(["", "STG <span class='mention'>UE 97/2010</span>", "AVPN <span class='men
     [["Sel", "fort"], ["<span class='val'>50 – 55 g</span>", ""], ["<span class='val'>40 – 60 g</span>", ""], "—"],
     [["Levure fraîche", "fort"], ["<span class='val'>3 g</span>", ""], ["<span class='val'>0,1 – 3 g</span>", ""], "Table du manuel Niveau I"],
     [["Farine", "fort"], ["<span class='val'>1,8 kg</span>", ""], ["<span class='val'>1,600 – 1,800 kg</span>", ""], "—"],
-    [["Hydratation obtenue", "fort"], ["<span class='val'>≈ 55,5 %</span>", ""], ["<span class='val'>55,5 – 62,5 %</span>", ""], ["<span class='val'>jusqu'à 68 %</span>", ""]],
+    [["Hydratation obtenue", "fort"], ["<span class='val'>env. 55,5 %</span>", ""], ["<span class='val'>55,5 – 62,5 %</span>", ""], ["<span class='val'>jusqu'à 68 %</span>", ""]],
     [["Huile dans la pâte", "fort"], ["<strong>Aucune</strong>", ""], ["<strong>Aucune</strong>", ""], ["<strong>Aucune</strong>", ""]],
     { groupe: "La fermentation" },
     [["Température", "fort"], ["<span class='val'>25 °C</span>", ""], ["<span class='val'>18 – 20 °C</span>, 60-70 % HR", ""], "—"],
@@ -74,8 +74,8 @@ ${tbl(["", "STG <span class='mention'>UE 97/2010</span>", "AVPN <span class='men
     [["pH de la pâte", "fort"], ["<span class='val'>5,87</span>", ""], "—", "—"],
     { groupe: "Le pâton et la pizza" },
     [["Poids du pâton", "fort"], ["<span class='val'>180 – 250 g</span>", ""], ["<span class='val'>200 – 280 g</span>", ""], "—"],
-    [["Diamètre", "fort"], ["<span class='val'>≤ 35 cm</span>", ""], ["<span class='val'>22 – 35 cm</span>", ""], "—"],
-    [["Épaisseur au centre", "fort"], ["<span class='val'>0,4 cm</span>", ""], ["<span class='val'>≈ 0,4 cm</span>", ""], "—"],
+    [["Diamètre", "fort"], ["<span class='val'>max. 35 cm</span>", ""], ["<span class='val'>22 – 35 cm</span>", ""], "—"],
+    [["Épaisseur au centre", "fort"], ["<span class='val'>0,4 cm</span>", ""], ["<span class='val'>env. 0,4 cm</span>", ""], "—"],
     [["<em>Cornicione</em>", "fort"], ["<span class='val'>1 – 2 cm</span>", ""], "Surélevé", "—"],
   ], { titre: "STG, AVPN, École — valeurs comparées", compact: true })}
 `, { chap: "Les deux cahiers des charges", num: n });
@@ -121,13 +121,13 @@ ${tbl(["Base : 1 litre d'eau", ["STG", "c"], ["AVPN", "c"]], [
     [["Levure fraîche", "fort"], ["<span class='val'>3 g</span>", "c"], ["<span class='val'>0,1 à 3 g</span>", "c"]],
     [["Farine <em>tipo 00</em>", "fort"], ["<span class='val'>1,800 kg</span>", "c"], ["<span class='val'>1,600 à 1,800 kg</span>", "c"]],
     [["Huile", "fort"], ["<strong>0</strong>", "c"], ["<strong>0</strong>", "c"]],
-    [["Hydratation résultante", "fort"], ["<span class='val'>≈ 55,5 %</span>", "c"], ["<span class='val'>55,5 à 62,5 %</span>", "c"]],
+    [["Hydratation résultante", "fort"], ["<span class='val'>env. 55,5 %</span>", "c"], ["<span class='val'>55,5 à 62,5 %</span>", "c"]],
   ], { titre: "Ce que donne un litre d'eau" })}
         <h3 class="sec">Combien de pâtons&nbsp;?</h3>
         <p>Un litre d'eau et 1,8 kg de farine donnent environ <strong>2,850 kg de pâte</strong>
         (eau + farine + sel + levure). À 250 g le pâton, cela fait environ
         <strong>11 pizzas</strong>&nbsp;; à 200 g, environ <strong>14</strong>.</p>
-${reperes([["Pâte obtenue", "≈ 2,85", "kg"], ["Pâtons de 250 g", "≈ 11", "pizzas"], ["Pâtons de 200 g", "≈ 14", "pizzas"]])}
+${reperes([["Pâte obtenue", "env. 2,85", "kg"], ["Pâtons de 250 g", "env. 11", "pizzas"], ["Pâtons de 200 g", "env. 14", "pizzas"]])}
         <h4 class="sous">Conversion&nbsp;: du litre d'eau au kilo de farine</h4>
         <p>Pour retrouver la logique habituelle de l'école&nbsp;: <strong>1 kg de farine</strong>
         correspond à <strong>555 ml d'eau</strong> en STG (55,5&nbsp;%), et de <strong>555 à
@@ -144,7 +144,7 @@ ${enc("conseil", "Le sel napolitain surprend", `<p>Près du double de la pizza c
 export const protoStg = (m) => m.p(`
 ${chapitre(m.chapSuivant(), "Protocole — la pâte STG",
   "Le déroulé du règlement européen&nbsp;: à température ambiante, pointage puis apprêt, sans froid.")}
-${reperes([["Hydratation", "≈ 55,5", "%"], ["Fermentation", "25", "°C"], ["Total", "6 – 8", "h"]])}
+${reperes([["Hydratation", "env. 55,5", "%"], ["Fermentation", "25", "°C"], ["Total", "6 – 8", "h"]])}
 ${proto([
   { n: 1, titre: "Dissoudre", corps: `
             <p>Verser <strong>1 litre d'eau</strong> dans le pétrin. Y dissoudre le

@@ -109,7 +109,7 @@ ${chapitre(m.chapSuivant(), "Le caryopse, ou le grain",
 ${tbl(["Partie du grain", "Ce qu'elle contient", ["Part du grain", "d"]], [
     ["<strong>Albumen</strong> ou amande", "Albumen amylacé (l'amidon), assise protéique. C'est ce qui devient la farine.", ["<span class='val'>82 à 85 %</span>", "d"]],
     ["<strong>Péricarpe</strong> (le son)", "Épicarpe, mésocarpe, endocarpe, testa, bande hyaline, couche à aleurone. Riche en fibres et en minéraux.", ["<span class='val'>13 à 15 %</span>", "d"]],
-    ["<strong>Embryon</strong> ou germe", "Scutellum, axe embryonnaire. Riche en lipides — c'est ce qui fait rancir une farine complète.", ["<span class='val'>≈ 3 %</span>", "d"]],
+    ["<strong>Embryon</strong> ou germe", "Scutellum, axe embryonnaire. Riche en lipides — c'est ce qui fait rancir une farine complète.", ["<span class='val'>env. 3 %</span>", "d"]],
   ], { compact: true })}
 ${enc("note", "Pourquoi le germe part", `<p>Le germe est gras. Laissé dans la farine, il la fait
         rancir en quelques semaines. C'est la raison pour laquelle une farine blanche se garde
@@ -298,11 +298,11 @@ export const farineQualite = (m) => m.p(`
         <p class="intro">La farine est une poudre obtenue après mouture de grains de céréales.
         Sa qualité — c'est-à-dire son <strong>W</strong> — dépend de la <strong>qualité de ses
         protéines</strong>.</p>
-${reperes([["Le climat", "①"], ["La nature du sol", "②"], ["La qualité de la semence", "③"]])}
+${reperes([["Le climat", "1"], ["La nature du sol", "2"], ["La qualité de la semence", "3"]])}
         <p class="legende" style="margin-top:-2mm">Les trois facteurs dont dépend la qualité de la farine, en amont du moulin.</p>
         <h4 class="sous">Deux familles de protéines</h4>
 ${tbl(["Famille", "Protéines", "Rôle"], [
-    [["Solubles", "fort"], "Globuline et albumine <span class='mention'>(≈ 15 %)</span>", "Ne participent pas au réseau."],
+    [["Solubles", "fort"], "Globuline et albumine <span class='mention'>(env. 15 %)</span>", "Ne participent pas au réseau."],
     [["Non solubles", "fort"], "Gliadine et <strong>gluténine</strong>", "Forment le <strong>réseau gluténique</strong> au contact de l'eau."],
   ], { compact: true })}
 ${enc("note", "La règle", `<p>Plus la farine est riche en protéines, plus le réseau gluténique
@@ -455,7 +455,7 @@ ${enc("conseil", "Lire le tableau à l'envers", `<p>Plus la farine est chaude, <
 export const eau = (m) => {
   const n = m.chapSuivant();
   m.p(`
-${chapitre(n, "L'eau (H₂O)",
+${chapitre(n, "L'eau (H<sub>2</sub>O)",
   "L'eau servant au pétrissage se nomme <strong>eau de coulage</strong>. Trois choses comptent&nbsp;: sa qualité, sa quantité, sa température.")}
 ${cote(`
           <h3 class="sec">Ce que fait l'eau de coulage</h3>
@@ -534,20 +534,20 @@ ${chapitre(m.chapSuivant(), "Le calcul de la température de l'eau",
         dite <strong>TB&nbsp;50</strong>&nbsp;:</p>
         <div class="enc" style="text-align:center;background:var(--papier-2);border-left-width:1.4mm">
           <p style="font:700 15pt/1.4 var(--titre);margin:0">
-            Température de la farine × 2 = Y<br>
-            <span style="color:var(--accent)">50 − Y = température de l'eau de coulage</span>
+            Température de la farine <span class='gly'>×</span> 2 = Y<br>
+            <span style="color:var(--accent)">50 <span class='gly'>−</span> Y = température de l'eau de coulage</span>
           </p>
         </div>
-${tbl(["Saison", ["T° farine", "c"], ["× 2 = Y", "c"], ["TB − Y", "c"], ["Eau de coulage", "c"], ["T° de la pâte visée", "c"]], [
-    [["Été", "fort"], ["24 °C", "c"], ["48", "c"], ["50 − 48", "c"], ["<span class='val'>2 °C</span>", "c"], ["22 à 24 °C", "c"]],
-    [["Printemps / automne", "fort"], ["17 °C", "c"], ["34", "c"], ["50 − 34", "c"], ["<span class='val'>16 °C</span>", "c"], ["22 à 25 °C", "c"]],
-    [["Hiver", "fort"], ["10 °C", "c"], ["20", "c"], ["50 − 20", "c"], ["<span class='val'>30 °C</span>", "c"], ["22 à 27 °C", "c"]],
+${tbl(["Saison", ["T° farine", "c"], ["<span class='gly'>×</span> 2 = Y", "c"], ["TB <span class='gly'>−</span> Y", "c"], ["Eau de coulage", "c"], ["T° de la pâte visée", "c"]], [
+    [["Été", "fort"], ["24 °C", "c"], ["48", "c"], ["50 <span class='gly'>−</span> 48", "c"], ["<span class='val'>2 °C</span>", "c"], ["22 à 24 °C", "c"]],
+    [["Printemps / automne", "fort"], ["17 °C", "c"], ["34", "c"], ["50 <span class='gly'>−</span> 34", "c"], ["<span class='val'>16 °C</span>", "c"], ["22 à 25 °C", "c"]],
+    [["Hiver", "fort"], ["10 °C", "c"], ["20", "c"], ["50 <span class='gly'>−</span> 20", "c"], ["<span class='val'>30 °C</span>", "c"], ["22 à 27 °C", "c"]],
   ], { titre: "La formule appliquée aux trois saisons" })}
         <h3 class="sec">Le cas extrême de l'été</h3>
-${tbl(["Saison", ["T° farine", "c"], ["× 2 = Y", "c"], ["TB − Y", "c"], ["Eau de coulage", "c"]], [
-    [["Été caniculaire", "fort"], ["28 °C", "c"], ["56", "c"], ["50 − 56", "c"], ["<span class='val' style='color:#dc3e37'>− 6 °C</span>", "c"]],
+${tbl(["Saison", ["T° farine", "c"], ["<span class='gly'>×</span> 2 = Y", "c"], ["TB <span class='gly'>−</span> Y", "c"], ["Eau de coulage", "c"]], [
+    [["Été caniculaire", "fort"], ["28 °C", "c"], ["56", "c"], ["50 <span class='gly'>−</span> 56", "c"], ["<span class='val' style='color:#dc3e37'><span class='gly'>−</span> 6 °C</span>", "c"]],
   ], { compact: true })}
-${enc("alerte", "Une eau à −6 °C n'existe pas", `<p>Le calcul ne se trompe pas&nbsp;: il vous dit
+${enc("alerte", "Une eau à <span class='gly'>−</span>6 °C n'existe pas", `<p>Le calcul ne se trompe pas&nbsp;: il vous dit
         que vous êtes déjà en retard. <strong>Anticipez</strong> pour minimiser les risques&nbsp;:
         mettez la veille une partie ou la totalité de la farine au frais. Descendre la farine de
         28 à 20&nbsp;°C ramène l'eau de coulage à 10&nbsp;°C, une valeur atteignable.</p>`)}
@@ -618,7 +618,7 @@ ${reperes([["Dose usuelle", "25", "g / kg de farine"], ["Moment", "En fin", "de 
         <h3 class="sec">Les catégories d'huile d'olive</h3>
 ${tbl(["Catégorie", ["Acidité", "c"], "Caractéristiques organoleptiques"], [
     [["Huile d'olive <strong>extra vierge</strong>", ""], ["<span class='val'>&lt; 0,8 %</span>", "c"], "Absence de défaut, présence de fruité."],
-    [["Huile d'olive <strong>vierge</strong>", ""], ["<span class='val'>≤ 2 %</span>", "c"], "Peu de défauts (3,5 / 10), présence de fruité."],
+    [["Huile d'olive <strong>vierge</strong>", ""], ["<span class='val'>max. 2 %</span>", "c"], "Peu de défauts (3,5 / 10), présence de fruité."],
     [["Huile d'olive <strong>premier prix</strong>", ""], ["<span class='val'>&gt; 3,3 %</span>", "c"], "Défauts marqués (6 / 10)."],
   ], { titre: "Acidité et défauts" })}
         <p class="mention">Échelle des défauts&nbsp;: 0 = aucun défaut, 10 = défauts maximaux.</p>

@@ -13,7 +13,7 @@
  * qui dépend de l'établissement (et non de la loi) porte un « à vérifier » :
  * un manuel de formation ne peut pas décider à la place du PMS d'une pizzeria.
  *
- * ⚠ Ce module NE remplace PAS l'attestation de formation spécifique en hygiène
+ * Ce module NE remplace PAS l'attestation de formation spécifique en hygiène
  * alimentaire : il l'accompagne. Voir l'encadré en fin de chapitre 1.
  */
 import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan } from "../gabarit.mjs";
@@ -37,7 +37,7 @@ ${tbl(["Famille de danger", "Ce que c'est", "Exemple en pizzeria"], [
         <strong>chaleur</strong>, de l'<strong>eau</strong>, des <strong>nutriments</strong> et du
         <strong>temps</strong>. En retirer un seul suffit à la freiner — c'est tout le principe de la
         chaîne du froid et de la cuisson.</p>
-${reperes([["Zone à risque", "+10 à +63", "°C"], ["Froid positif", "0 à +4", "°C"], ["Congélation", "≤ −18", "°C"], ["Liaison chaude", "≥ +63", "°C"]])}
+${reperes([["Zone à risque", "+10 à +63", "°C"], ["Froid positif", "0 à +4", "°C"], ["Congélation", "max. <span class='gly'>−</span>18", "°C"], ["Liaison chaude", "min. +63", "°C"]])}
 ${enc("alerte", "La zone dangereuse", `<p>Entre <strong>+10 et +63&nbsp;°C</strong>, une population
         bactérienne peut doubler toutes les vingt minutes. Un bac de garniture laissé deux heures
         sur le plan de travail en plein service ne « se réchauffe » pas&nbsp;: il se
@@ -181,11 +181,11 @@ ${enc("note", "Le guide de bonnes pratiques", `<p>Un <strong>GBPH</strong> — g
   m.p(`
         <h3 class="sec">Les températures réglementaires</h3>
 ${tbl(["Étape", ["Température", "c"], "Remarque"], [
-    [["Congélation", "fort"], ["<span class='val'>≤ −18 °C</span>", "c"], "Au cœur du produit."],
+    [["Congélation", "fort"], ["<span class='val'>max. <span class='gly'>−</span>18 °C</span>", "c"], "Au cœur du produit."],
     [["Froid positif — denrées très périssables", "fort"], ["<span class='val'>0 à +4 °C</span>", "c"], "Sauf indication plus stricte du fabricant, <strong>qui prime toujours</strong>."],
-    [["Liaison chaude", "fort"], ["<span class='val'>≥ +63 °C</span>", "c"], "Maintien au chaud avant service."],
-    [["Refroidissement rapide", "fort"], ["<span class='val'>+63 → +10 °C<br>en moins de 2 h</span>", "c"], "C'est le rôle de la cellule&nbsp;: un bac laissé refroidir à l'air ne tient pas ce délai."],
-    [["Remise en température", "fort"], ["<span class='val'>≥ +63 °C<br>en moins d'1 h</span>", "c"], "—"],
+    [["Liaison chaude", "fort"], ["<span class='val'>min. +63 °C</span>", "c"], "Maintien au chaud avant service."],
+    [["Refroidissement rapide", "fort"], ["<span class='val'>+63 » +10 °C<br>en moins de 2 h</span>", "c"], "C'est le rôle de la cellule&nbsp;: un bac laissé refroidir à l'air ne tient pas ce délai."],
+    [["Remise en température", "fort"], ["<span class='val'>min. +63 °C<br>en moins d'1 h</span>", "c"], "—"],
   ], { titre: "Les repères à retenir" })}
 ${enc("verif", "L'étiquette du fabricant prime", `<p>Quand un produit porte « à conserver entre
         +2 et +4&nbsp;°C », c'est cette valeur qui s'applique, pas le repère général. Les
@@ -236,7 +236,7 @@ ${enc("alerte", "Les mains sont le premier vecteur", `<p>Devant les surfaces, de
         </ul>
         <h3 class="sec">La marche en avant</h3>
         <p>Le principe&nbsp;: un produit ne doit <strong>jamais revenir en arrière</strong> ni
-        croiser un flux plus sale que lui. Réception → stockage → préparation → cuisson → service.
+        croiser un flux plus sale que lui. Réception » stockage » préparation » cuisson » service.
         Quand les locaux ne permettent pas une marche en avant <em>dans l'espace</em>, on l'organise
         <strong>dans le temps</strong> — les tâches sales et les tâches propres à des moments
         différents, avec un nettoyage entre les deux.</p>

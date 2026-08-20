@@ -79,7 +79,7 @@ export const enc = (genre, titre, corps) =>
   `<div class="enc enc-${genre}"><span class="enc-t">${titre}</span>${corps}</div>`;
 
 /** Marqueur « à vérifier » : une valeur que le formateur doit confirmer. */
-export const averif = (quoi = "à vérifier") => `<span class="averif">⚑ ${quoi}</span>`;
+export const averif = (quoi = "à vérifier") => `<span class="averif">${quoi}</span>`;
 
 /** Titre de chapitre. */
 export const chapitre = (n, titre, chapo = "") => `

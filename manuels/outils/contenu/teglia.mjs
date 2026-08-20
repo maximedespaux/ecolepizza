@@ -151,7 +151,7 @@ ${enc("note", "Deux voies pour un même produit", `<p>Le <strong>direct à 80&nb
 
   m.p(`
         <h3 class="sec">Protocole — <em>in teglia</em>, empâtement direct</h3>
-${reperes([["Hydratation", "80", "% minimum"], ["T° pâte", "≤ 25", "°C"], ["Pâtons", "≈ 1,3", "kg"]])}
+${reperes([["Hydratation", "80", "% minimum"], ["T° pâte", "max. 25", "°C"], ["Pâtons", "env. 1,3", "kg"]])}
 ${proto([
   { n: 1, titre: "Première phase", corps: `
             <p>Mettre dans le pétrin la <strong>farine, la levure et le Lemady</strong> en totalité.
@@ -185,7 +185,7 @@ ${cuissonTbl(320, 240, "15 mn", 75)}
 
   m.p(`
         <h3 class="sec">Protocole — <em>in teglia</em> sur Biga 100 %</h3>
-${reperes([["Hydratation", "75", "% minimum"], ["Repos Biga", "16 – 20", "h"], ["Pâtons", "≈ 1,3", "kg"]])}
+${reperes([["Hydratation", "75", "% minimum"], ["Repos Biga", "16 – 20", "h"], ["Pâtons", "env. 1,3", "kg"]])}
 ${enc("verif", "Un en-tête faux dans le manuel d'origine", `<p>Cette page portait le titre
         « <em>Empâtement direct W 330 à 390 — In Pala</em> » alors qu'elle décrit la
         <strong>Biga de l'In Teglia</strong>&nbsp;: ni le mode d'empâtement ni le produit n'étaient
@@ -276,7 +276,7 @@ ${enc("verif", "Les mêmes quantités que l'<em>in teglia</em>", `<p>À la virgu
 
   m.p(`
         <h3 class="sec">Protocole — <em>in pala</em>, empâtement direct</h3>
-${reperes([["Hydratation", "80", "% minimum"], ["Pâtons", "600 – 900", "g"], ["Longueur", "≈ 25", "cm"]])}
+${reperes([["Hydratation", "80", "% minimum"], ["Pâtons", "600 – 900", "g"], ["Longueur", "env. 25", "cm"]])}
         <p class="mention">Le pétrissage est identique à celui de l'<em>in teglia</em> direct
         (chapitre précédent). Ce qui change commence au façonnage.</p>
 ${proto([
@@ -286,7 +286,7 @@ ${proto([
             d'étalage. Donner une forme <strong>rectangulaire d'environ 25&nbsp;cm</strong> en
             ramenant les bords vers le haut central et en les collant entre eux&nbsp;: c'est la
             <strong>clé</strong>.</p>
-            <p>Les poser dans un bac Gilac 40 × 60&nbsp;cm, <strong>partie lisse dessus, clé
+            <p>Les poser dans un bac Gilac 40 <span class='gly'>×</span> 60&nbsp;cm, <strong>partie lisse dessus, clé
             dessous</strong>. Le bac contient 4 pâtons. Couvrir.</p>` },
   { repos: "1 h", texte: "Pousse à <b>22 à 25 °C</b>." },
   { n: 2, titre: "Deux voies possibles", corps: `

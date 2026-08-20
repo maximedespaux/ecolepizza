@@ -17,7 +17,7 @@
    « Graphiques d'arrière-plan » COCHÉ (sinon les aplats de couleur sautent).
    ========================================================================== */
 
-@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,400;1,600&family=Merriweather:ital,wght@0,400;0,700;0,900;1,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,400;1,600&family=Merriweather:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&display=swap");
 
 :root{
   /* Charte de l'école — reprise de src/app/ui/styles/app.css */
@@ -31,7 +31,16 @@
   --papier-2:#f6f7fa;       /* aplat léger des tableaux et encadrés */
 
   --accent:#2c3371;         /* défaut : écrasé par [data-parcours] */
-  --sur-accent:#fff;        /* couleur du texte POSÉ sur l'accent */
+  /* TROIS JETONS, PAS DEUX. `--accent` est la couleur qu'on VOIT — bandes,
+     filets, aplats sans texte. `--accent-encre` est celle qu'on LIT : la même
+     teinte, assombrie jusqu'à passer 4,5:1 sur blanc. Sans cette distinction,
+     le jaune du Niveau II (#EFC546) servait d'encre à 1,65:1 de contraste,
+     c'est-à-dire illisible, et le blanc des en-têtes de tableau tombait à
+     2,62:1 sur le turquoise de l'option hygiène.
+     RÈGLE : dès qu'une surface PORTE du texte ou EST du texte, c'est
+     `--accent-encre`. Le décor garde `--accent`. */
+  --accent-encre:#2c3371;
+  --sur-accent:#fff;        /* couleur du texte POSÉ sur l'accent-encre */
   --accent-clair:#8b95f2;   /* la version lisible sur fond sombre (couvertures) */
 
   /* LES DEUX POLICES DE L'ÉCOLE, et rien d'autre.
@@ -49,19 +58,24 @@
 }
 
 /* --- Les neuf parcours ----------------------------------------------------
-   `--sur-accent` n'est pas toujours blanc : sur le jaune du Niveau II
-   (#EFC546) un texte blanc tombe à 1,7:1 de contraste, soit illisible. On y
-   pose de l'encre foncée. Même raison sur le vert du RS, où le blanc passe
-   tout juste — on garde le blanc mais en gras uniquement (cf. .couv-titre). */
-[data-parcours="niveau1"]     {--accent:#2C3371; --accent-clair:#8b95f2}
-[data-parcours="rs"]          {--accent:#0CAC46; --accent-clair:#3fd97a}
-[data-parcours="hygiene"]     {--accent:#00B2B2; --accent-clair:#33dedd}
-[data-parcours="pro"]         {--accent:#DC3E37; --accent-clair:#ff8177}
-[data-parcours="niveau2"]     {--accent:#EFC546; --sur-accent:#1b1500; --accent-clair:#f6d977}
-[data-parcours="expert"]      {--accent:#121212; --accent-clair:#ff8177}
-[data-parcours="teglia"]      {--accent:#121212; --accent-clair:#ffb454}
-[data-parcours="napolitaine"] {--accent:#121212; --accent-clair:#ff8177}
-[data-parcours="livret"]      {--accent:#2C3371; --accent-clair:#8b95f2}
+   Trois valeurs par parcours :
+     --accent        ce qu'on VOIT — bande de couverture, filets, aplats nus
+     --accent-encre  ce qu'on LIT — assombri jusqu'à 4,5:1 sur blanc, et assez
+                     foncé pour porter du blanc (vérifié : 4,53 à 18,7:1)
+     --accent-clair  la version lisible sur le fond sombre des couvertures
+   Le blanc convient sur TOUTES les encres : `--sur-accent` n'est donc jamais
+   écrasé. C'est ce qui permet aux en-têtes de tableau d'être blancs partout,
+   y compris sur le Niveau II, dont le jaune vif ne pouvait porter ni blanc
+   (1,65:1) ni presque rien d'autre. */
+[data-parcours="niveau1"]     {--accent:#2C3371; --accent-encre:#2C3371; --accent-clair:#8b95f2}
+[data-parcours="rs"]          {--accent:#0CAC46; --accent-encre:#067A31; --accent-clair:#3fd97a}
+[data-parcours="hygiene"]     {--accent:#00B2B2; --accent-encre:#007878; --accent-clair:#33dedd}
+[data-parcours="pro"]         {--accent:#DC3E37; --accent-encre:#C4322C; --accent-clair:#ff8177}
+[data-parcours="niveau2"]     {--accent:#EFC546; --accent-encre:#8A6A00; --accent-clair:#f6d977}
+[data-parcours="expert"]      {--accent:#121212; --accent-encre:#121212; --accent-clair:#ff8177}
+[data-parcours="teglia"]      {--accent:#121212; --accent-encre:#121212; --accent-clair:#ffb454}
+[data-parcours="napolitaine"] {--accent:#121212; --accent-encre:#121212; --accent-clair:#ff8177}
+[data-parcours="livret"]      {--accent:#2C3371; --accent-encre:#2C3371; --accent-clair:#8b95f2}
 
 /* Le noir #121212 sert d'accent à trois parcours. En aplat de tableau ou en
    filet il devient une masse : on lui adjoint un second ton, tiré de la
@@ -80,8 +94,11 @@ html{-webkit-text-size-adjust:100%}
 body{
   margin:0; background:#8b8d99; color:var(--encre);
   font:400 10.7pt/1.55 var(--texte);
-  -webkit-font-smoothing:antialiased;
-  font-variant-numeric:tabular-nums;
+  /* Pas de `-webkit-font-smoothing:antialiased` : il amaigrit l'épreuve écran
+     alors que le tirage, lui, reste plein — on jugerait une graisse qu'on
+     n'imprime pas. Et pas de `tabular-nums` global : les chiffres tabulaires
+     servent aux COLONNES, pas à la prose ni aux titres, où ils écartent
+     inutilement le 1 et le 7. Ils sont posés là où ils servent. */
 }
 h1,h2,h3,h4{font-family:var(--titre); font-weight:700; margin:0; letter-spacing:-.01em}
 p{margin:0 0 .62em}
@@ -126,7 +143,7 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
 }
 .entete-parcours{
   font:700 7.6pt/1 var(--titre); letter-spacing:.16em; text-transform:uppercase;
-  color:var(--accent);
+  color:var(--accent-encre);
 }
 .entete-chap{font:600 7.6pt/1 var(--titre); letter-spacing:.06em; color:var(--encre-3)}
 
@@ -137,7 +154,7 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
   font-size:7.4pt; color:var(--encre-3);
 }
 .folio{
-  font:700 8.4pt/1 var(--titre); color:var(--accent);
+  font:700 8.4pt/1 var(--titre); color:var(--accent-encre);
   min-width:9mm; text-align:right;
 }
 
@@ -167,7 +184,7 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
 .couv-logo{width:44mm}
 .couv-duree{
   display:inline-flex; align-items:center; padding:1.8mm 4mm; border-radius:99px;
-  background:var(--accent); color:var(--sur-accent);
+  background:var(--accent-encre); color:var(--sur-accent);
   font:700 8.4pt/1 var(--titre); letter-spacing:.1em; text-transform:uppercase;
   white-space:nowrap;
 }
@@ -208,7 +225,7 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
 }
 .somm-sur{
   font:700 8pt/1 var(--titre); letter-spacing:.24em; text-transform:uppercase;
-  color:var(--accent); margin-bottom:3mm;
+  color:var(--accent-encre); margin-bottom:3mm;
 }
 .somm{list-style:none; margin:6mm 0 0; padding:0; columns:1}
 .somm li{margin:0}
@@ -217,7 +234,7 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
   text-decoration:none; border-bottom:.2mm dotted var(--trait);
 }
 .somm .num{
-  flex:0 0 8mm; font:700 9pt/1.4 var(--titre); color:var(--accent);
+  flex:0 0 8mm; font:700 9pt/1.4 var(--titre); color:var(--accent-encre);
   font-variant-numeric:tabular-nums;
 }
 .somm .lib{flex:1; font-size:10pt}
@@ -231,7 +248,7 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
 .somm-dense .sous .lib{font-size:8.4pt}
 .somm .part{
   margin-top:4mm; padding:2mm 3mm; border-radius:2mm;
-  background:var(--accent); color:var(--sur-accent);
+  background:var(--accent-encre); color:var(--sur-accent);
   font:700 8.6pt/1 var(--titre); letter-spacing:.14em; text-transform:uppercase;
   display:flex; justify-content:space-between;
 }
@@ -243,7 +260,7 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
 .chap{display:flex; align-items:flex-start; gap:4mm; margin-bottom:4.2mm}
 .chap-num{
   flex:0 0 auto; min-width:11mm; height:11mm; padding:0 2mm; border-radius:2.4mm;
-  background:var(--accent); color:var(--sur-accent);
+  background:var(--accent-encre); color:var(--sur-accent);
   display:flex; align-items:center; justify-content:center;
   font:700 13pt/1 var(--titre); font-variant-numeric:tabular-nums;
 }
@@ -260,7 +277,7 @@ h3.sec{
 h3.sec:first-child{margin-top:0}
 h4.sous{
   font:700 8.4pt/1 var(--titre); letter-spacing:.14em; text-transform:uppercase;
-  color:var(--accent); margin:4mm 0 1.8mm;
+  color:var(--accent-encre); margin:4mm 0 1.8mm;
 }
 h4.sous:first-child{margin-top:0}
 
@@ -293,7 +310,7 @@ ol.etapes > li{
 ol.etapes > li::before{
   content:counter(etape); position:absolute; left:0; top:-.2mm;
   width:5.6mm; height:5.6mm; border-radius:50%;
-  background:var(--accent); color:var(--sur-accent);
+  background:var(--accent-encre); color:var(--sur-accent);
   font:700 8pt/5.6mm var(--titre); text-align:center;
 }
 
@@ -305,10 +322,10 @@ ol.etapes > li::before{
 .tbl caption{
   caption-side:top; text-align:left; padding:0 0 2mm;
   font:700 8.4pt/1.3 var(--titre); letter-spacing:.1em; text-transform:uppercase;
-  color:var(--accent);
+  color:var(--accent-encre);
 }
 .tbl th{
-  background:var(--accent); color:var(--sur-accent); text-align:left;
+  background:var(--accent-encre); color:var(--sur-accent); text-align:left;
   padding:2mm 2.4mm; font:700 8.2pt/1.25 var(--titre); letter-spacing:.04em;
   vertical-align:bottom;
 }
@@ -321,7 +338,7 @@ ol.etapes > li::before{
   background:color-mix(in srgb, var(--accent) 12%, #fff); font-weight:700;
   border-bottom:.2mm solid color-mix(in srgb, var(--accent) 30%, #fff);
 }
-.tbl .fort{font-weight:700; color:var(--accent)}
+.tbl .fort{font-weight:700; color:var(--accent-encre)}
 .tbl .val{font-family:var(--titre); font-weight:600; font-variant-numeric:tabular-nums}
 .tbl-compact td, .tbl-compact th{padding:1.25mm 2mm; font-size:8.4pt}
 
@@ -346,7 +363,7 @@ ol.etapes > li::before{
 }
 .enc-t{
   display:block; font:700 8.2pt/1 var(--titre); letter-spacing:.16em;
-  text-transform:uppercase; color:var(--accent); margin-bottom:1.8mm;
+  text-transform:uppercase; color:var(--accent-encre); margin-bottom:1.8mm;
 }
 .enc-conseil{border-left-color:var(--or); background:#fffaeb}
 .enc-conseil .enc-t{color:#8a6300}
@@ -356,6 +373,21 @@ ol.etapes > li::before{
 .enc-verif .enc-t{color:#6a34c4}
 .enc-note{border-left-color:var(--encre-3); background:#f6f7fa}
 .enc-note .enc-t{color:var(--encre-2)}
+
+/* GLYPHES ABSENTS DE MULISH — mesurés au canvas, pas supposés. Le moins, le
+   fois et l'euro n'existent que dans Merriweather ; sans cette classe, ils
+   sortent dans une police système, et le PDF embarque une troisième fonte pour
+   trois caractères. */
+.gly{font-family:var(--serif)}
+
+/* La marque des tableaux d'allergènes. Ni « ✕ » ni « × » n'existent dans
+   Mulish : plutôt qu'un caractère de repli, on DESSINE la marque. Elle ne
+   dépend d'aucune police, sort à l'impression, et survit à la photocopie
+   en noir et blanc. */
+.coche{
+  display:inline-block; width:2.6mm; height:2.6mm; border-radius:.5mm;
+  background:var(--accent-encre); vertical-align:-.2mm;
+}
 
 /* Un point ouvert : la valeur n'est pas confirmée, le formateur doit trancher.
    Volontairement voyant — un « à vérifier » discret ne se vérifie jamais. */
@@ -389,7 +421,7 @@ ol.etapes > li::before{
 }
 .phase-t{
   font:700 9pt/1.2 var(--titre); letter-spacing:.1em; text-transform:uppercase;
-  color:var(--accent); margin-bottom:1.2mm;
+  color:var(--accent-encre); margin-bottom:1.2mm;
 }
 .phase p, .phase ul{font-size:9.4pt}
 
@@ -401,7 +433,7 @@ ol.etapes > li::before{
   break-inside:avoid;
 }
 .repos-d{
-  font:700 10pt/1 var(--titre); color:var(--accent); white-space:nowrap;
+  font:700 10pt/1 var(--titre); color:var(--accent-encre); white-space:nowrap;
   font-variant-numeric:tabular-nums;
 }
 .repos-l{font-size:8.8pt; color:var(--encre-2)}
@@ -419,7 +451,7 @@ ol.etapes > li::before{
   display:block; font:700 7.2pt/1 var(--titre); letter-spacing:.14em;
   text-transform:uppercase; color:var(--encre-3); margin-bottom:1.4mm;
 }
-.repere .v{font:700 13pt/1 var(--titre); color:var(--accent); font-variant-numeric:tabular-nums}
+.repere .v{font:700 13pt/1 var(--titre); color:var(--accent-encre); font-variant-numeric:tabular-nums}
 .repere .u{font-size:8pt; font-weight:600; color:var(--encre-2)}
 
 /* ==========================================================================
@@ -542,7 +574,7 @@ ol.etapes > li::before{
 .lex{columns:2; column-gap:7mm; font-size:8.6pt; line-height:1.42}
 .lex .lettre{
   break-after:avoid; break-inside:avoid;
-  font:700 12pt/1 var(--titre); color:var(--accent);
+  font:700 12pt/1 var(--titre); color:var(--accent-encre);
   padding-bottom:1mm; margin:3mm 0 2mm; border-bottom:.4mm solid var(--accent);
 }
 .lex .lettre:first-child{margin-top:0}
@@ -579,17 +611,17 @@ ol.etapes > li::before{
   width:34mm; height:34mm; margin:0 auto 3.4mm; border-radius:50%;
   background:var(--papier-2); border:1mm solid var(--accent);
   display:flex; align-items:center; justify-content:center;
-  font:700 15pt/1 var(--titre); color:var(--accent);
+  font:700 15pt/1 var(--titre); color:var(--accent-encre);
 }
 .membre .nom{font:700 11.5pt/1.24 var(--serif); margin-bottom:1.4mm}
 .membre .role{
   font:700 7.6pt/1.3 var(--titre); letter-spacing:.14em; text-transform:uppercase;
-  color:var(--accent);
+  color:var(--accent-encre);
 }
 
 .dos{
   height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
-  text-align:center; padding:0 20mm; background:var(--accent); color:var(--sur-accent);
+  text-align:center; padding:0 20mm; background:var(--accent-encre); color:var(--sur-accent);
 }
 .dos-logo{width:64mm; margin-bottom:10mm}
 .dos h2{font-family:var(--serif); font-weight:900; font-size:25pt; line-height:1.18; letter-spacing:-.005em; margin-bottom:4mm}
