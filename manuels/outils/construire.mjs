@@ -384,7 +384,7 @@ writeFileSync(resolve(RACINE, "index.html"), `<!doctype html>
   .doc-img img{width:100%; height:100%; object-fit:cover}
   .doc-bande{display:block; height:5px; background:var(--accent)}
   .doc-txt{display:flex; flex-direction:column; flex:1; padding:18px 20px 16px; gap:7px}
-  .doc-genre{font:700 8pt/1.3 var(--titre); letter-spacing:.14em; text-transform:uppercase; color:var(--accent)}
+  .doc-genre{font:700 8pt/1.3 var(--titre); letter-spacing:.14em; text-transform:uppercase; color:var(--accent-encre)}
   .doc-titre{font:700 16pt/1.15 var(--titre); letter-spacing:-.02em}
   .doc-obj{font-size:10pt; line-height:1.45; color:var(--encre-2); flex:1}
   .doc-pied{display:flex; justify-content:space-between; padding-top:11px; margin-top:4px;

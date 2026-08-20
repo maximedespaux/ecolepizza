@@ -550,7 +550,7 @@ ${tbl(["Saison", ["T° farine", "c"], ["<span class='gly'>×</span> 2 = Y", "c"]
 ${SC.temperatureBase()}
         <h3 class="sec">Le cas extrême de l'été</h3>
 ${tbl(["Saison", ["T° farine", "c"], ["<span class='gly'>×</span> 2 = Y", "c"], ["TB <span class='gly'>−</span> Y", "c"], ["Eau de coulage", "c"]], [
-    [["Été caniculaire", "fort"], ["28 °C", "c"], ["56", "c"], ["50 <span class='gly'>−</span> 56", "c"], ["<span class='val' style='color:#dc3e37'><span class='gly'>−</span> 6 °C</span>", "c"]],
+    [["Été caniculaire", "fort"], ["28 °C", "c"], ["56", "c"], ["50 <span class='gly'>−</span> 56", "c"], ["<span class='val impossible'><span class='gly'>−</span> 6 °C</span>", "c"]],
   ], { compact: true })}
 ${retenir([
   "<strong>TB 50</strong>&nbsp;: température de la farine × 2, puis 50 moins ce résultat = l'eau de coulage.",

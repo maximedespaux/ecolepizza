@@ -431,6 +431,75 @@ même principe que `--accent` / `--accent-encre` : la couleur qu'on **voit** n'e
 **lit**. Les encadrés « attention » du reste des manuels en profitent aussi.
 
 
+## L'audit de couleurs (2026-08-20)
+
+Quatre relectures indépendantes de toutes les couleurs du projet — portée des variables, feuille
+de style, générateur et contenus, schémas SVG — chaque constat passé ensuite devant un réfuteur
+chargé de le démolir. **32 constats émis, 20 ont survécu**, tous corrigés. Le plus grave n'était
+visible nulle part dans ce qui avait été signalé jusque-là.
+
+### Ce qui était illisible
+
+**Les valeurs chiffrées des schémas étaient peintes à `--accent` plein.** Sur le Niveau II, un
+chiffre jaune sur fond blanc : **1,65:1**. Durées, hydratations, températures, poids — plus de
+270 valeurs, sur les neuf manuels. Elles sont passées à `--accent-encre` : **5,07:1** au pire.
+
+**Les aplats de schéma qui portent un mot blanc.** « FARINE DE BLÉ W 330 », « EAU TOTALE »,
+« PÂTE OBTENUE », « LA SOLE », « GERME », « NOS FORMATIONS » : blanc sur jaune vif à 1,65:1 sur
+le Niveau II, 2,62:1 sur l'option hygiène, 3,00:1 sur le RS. **La règle `--accent` / `--accent-encre`
+vaut aussi dans un dessin** — un aplat qui porte du texte est une surface de texte. Le germe du
+caryopse était le pire cas, à **1,95:1**, et le seul qui demande un traitement particulier : il
+doit rester strictement plus sombre que l'amande, sinon la figure perd sa gradation. D'où un
+mélange vers `--encre` plutôt que vers l'encre du parcours seule.
+
+**Les pastilles de numéro de phase** (102 sur les quatre parcours clairs) : chiffre blanc dans un
+disque jaune. Passées à l'encre.
+
+**L'étiquette de genre de la page d'accueil** — la première chose qu'on voit en ouvrant le
+dossier : 1,65:1 sur le Niveau II.
+
+### Ce qui était invisible
+
+**Quatre-vingts renvois `*1` / `*2` sortaient en gris.** `.s-second` était déclarée avec les
+traits, donc **avant** `.s-lbl`, et perdait l'arbitrage à spécificité égale — la règle était
+morte. Elle est maintenant posée après, comme `.s-sur` l'était déjà (qui ne fonctionnait que
+grâce à cette place, sans que ce soit dit).
+
+**Les traits colorés finissaient sur une pointe de flèche grise.** Un seul marqueur servait à la
+fois les traits gris et les traits de couleur : un renvoi vert de 140 mm terminé par 3,4 mm de
+gris a l'air de passer sous quelque chose. Huit manuels sur neuf. Trois marqueurs désormais, le
+suffixe par figure conservé sur les trois — aucune collision d'identifiant possible.
+
+### Le rouge écrit en dur
+
+Une seule couleur littérale dans tous les contenus : le `− 6 °C` du tableau de l'été caniculaire,
+en `#dc3e37`. **Double défaut** — 4,39:1 sur blanc dans un tableau compact de 8,4 pt, et sur le
+manuel Pro ce rouge **est exactement `--accent`** : l'alerte y avait la couleur des titres du
+manuel, donc ne s'y voyait plus. Elle a maintenant sa classe `.tbl .val.impossible`, en
+`--tomate-encre`, **avec un trait sous la valeur** : une alerte portée par la seule couleur
+disparaît en photocopie noir et blanc, et le manuel Pro montre qu'elle peut disparaître même en
+couleur.
+
+### Deux jetons recalibrés
+
+`--encre-3` était justifiée « 4,64:1 sur blanc », mais son usage le plus dense — le plus petit
+libellé du manuel, 7,2 pt en capitales espacées — se pose sur `--papier-2`, où elle retombait à
+**4,33:1**. C'est ce second fond qui commande. La puce « + » du bilan était plus pâle (3,78:1) que
+son propre titre (5,29:1) et que son miroir « – » (5,42:1) : l'opposition qui fait tout l'intérêt
+du composant se lisait de travers.
+
+### Ce que l'audit a vérifié et trouvé sain
+
+Les couleurs **fonctionnelles** sont correctes et disciplinées : `--tomate` n'apparaît que sur des
+surfaces et des filets, `--tomate-encre` que sur du texte ; le vert « sûr » suit la même règle.
+`--sur-accent:#fff` n'est jamais écrasé par parcours, et c'est justifié : le blanc convient sur
+les neuf encres (4,53 à 18,7:1). Les neuf accents et leurs encres sont justes. Aucun `<style>`
+embarqué ni seconde feuille dans les HTML générés. Aucun littéral hexadécimal dans les schémas.
+`@media print` n'annule aucune couleur. `.s-accent` est à laisser à l'accent plein : ses trente
+usages sont exclusivement des cercles décoratifs, jamais sous du texte — un constat le demandait,
+il était faux.
+
+
 ## Comment sont fabriqués ces manuels
 
 Les neuf `.html` sont **générés** par `outils/construire.mjs` à partir des modules de

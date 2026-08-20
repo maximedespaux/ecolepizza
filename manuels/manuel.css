@@ -25,9 +25,13 @@
 
   --encre:#16171d;          /* le noir du texte : jamais #000, trop dur à lire */
   --encre-2:#4a4d5a;        /* texte secondaire */
-  --encre-3:#6f7488;        /* légendes, mentions — 4,64:1 sur blanc.
-                               #83879a, la valeur d'avant, tombait à 3,56:1,
-                               et c'est la couleur des textes les PLUS petits. */
+  --encre-3:#6a6f83;        /* légendes, mentions — 4,98:1 sur blanc, et 4,65:1
+                               sur --papier-2. C'est ce second fond qui commande :
+                               le plus petit libellé du manuel (.repere .k, 7,2 pt
+                               en capitales espacées) s'y pose, et la valeur
+                               précédente #6f7488 y retombait à 4,33:1. Avant elle,
+                               #83879a tombait à 3,56:1 — sur les textes les PLUS
+                               petits du document. */
   --trait:#e2e3ea; --tomate-encre:#b8322c;
   --nuit-ecole:#12142c;     /* le fond des COUVERTURES : marine de l'école, jamais l'accent */
   --papier:#fff;
@@ -429,6 +433,16 @@ ol.etapes > li::before{
 }
 .enc-conseil{border-left-color:var(--or); background:#fffaeb}
 .enc-conseil .enc-t{color:#8a6300}
+/* UNE VALEUR QUE LE CALCUL REND IMPOSSIBLE — l'eau de coulage à − 6 °C, dans
+   le tableau de l'été caniculaire. Rouge d'ALERTE : couleur fonctionnelle, elle
+   ne suit donc pas le parcours. Deux raisons de ne pas s'en tenir à la couleur :
+   --tomate brut tombe à 4,39:1 sur blanc dans un tableau compact de 8,4 pt, et
+   sur [data-parcours="pro"] le rouge de la charte EST l'accent — l'alerte y
+   aurait exactement la couleur des titres du manuel, donc ne s'y verrait plus.
+   D'où l'encre, et surtout le trait : il marque la valeur même en photocopie
+   noir et blanc, où toute alerte portée par la seule couleur disparaît. */
+.tbl .val.impossible{color:var(--tomate-encre); border-bottom:.4mm solid currentColor}
+
 .enc-alerte{border-left-color:var(--tomate); background:#fdf1f0}
 .enc-alerte .enc-t{color:var(--tomate-encre)}
 .enc-verif{border-left-color:#7a44d6; background:#f6f1fe}
@@ -513,7 +527,7 @@ ol.etapes > li::before{
 .phase::before{
   content:attr(data-n); position:absolute; left:-9mm; top:-.4mm;
   width:5.6mm; height:5.6mm; border-radius:50%;
-  background:var(--accent); color:var(--sur-accent);
+  background:var(--accent-encre); color:var(--sur-accent);
   font:700 8pt/5.6mm var(--titre); text-align:center;
 }
 .phase-t{
@@ -567,7 +581,7 @@ ol.etapes > li::before{
 .bilan .moins h4{color:var(--tomate-encre)}
 .bilan ul{list-style:none; padding:0; margin:0; font-size:9pt}
 .bilan li{position:relative; padding-left:4.4mm; margin-bottom:1.2mm}
-.bilan .plus li::before{content:"+"; position:absolute; left:0; font-weight:700; color:#1b8f5a}
+.bilan .plus li::before{content:"+"; position:absolute; left:0; font-weight:700; color:#0f7548}
 .bilan .moins li::before{content:"–"; position:absolute; left:0; font-weight:700; color:var(--tomate-encre)}
 
 /* --------------------------------------------------------------------------
@@ -648,14 +662,23 @@ ol.etapes > li::before{
 .schema svg{width:100%; height:auto; display:block; font-family:var(--titre); overflow:visible}
 .schema figcaption{margin-top:1.6mm}
 
-/* Surfaces */
+/* Surfaces — LA RÈGLE --accent / --accent-encre VAUT AUSSI DANS UN DESSIN.
+   Un aplat qui porte un mot blanc est une surface de TEXTE : il prend l'encre.
+   S'ils restaient à l'accent plein, « FARINE DE BLÉ W 330 », « EAU TOTALE »,
+   « PÂTE OBTENUE », « LA SOLE » et « GERME » sortaient à 1,65:1 sur le manuel
+   Niveau II — un mot blanc sur du jaune vif, illisible à bout de bras.
+   Les teintes CLAIRES (s-son, s-paton, s-pizza, s-aire) gardent l'accent :
+   elles portent du texte sombre, pas du blanc. */
 .schema .s-boite {fill:var(--papier-2); stroke:var(--trait); stroke-width:1.3}
-.schema .s-plein {fill:var(--accent)}
+.schema .s-plein {fill:var(--accent-encre)}
 .schema .s-son   {fill:color-mix(in srgb, var(--accent) 26%, #fff); stroke:#fff; stroke-width:1.4}
-.schema .s-amande{fill:var(--accent)}
-.schema .s-germe {fill:color-mix(in srgb, var(--accent) 68%, #fff); stroke:#fff; stroke-width:1.6}
+.schema .s-amande{fill:var(--accent-encre)}
+/* Le germe doit rester strictement PLUS SOMBRE que l'amande, sinon le caryopse
+   perd sa gradation — d'où un mélange vers --encre et non vers --accent-encre
+   seul, qui les rendrait identiques sur les cinq parcours où accent = encre. */
+.schema .s-germe {fill:color-mix(in srgb, var(--accent-encre) 70%, var(--encre)); stroke:#fff; stroke-width:1.6}
 .schema .s-paton {fill:color-mix(in srgb, var(--accent) 18%, #fff); stroke:var(--accent); stroke-width:1.3}
-.schema .s-sole  {fill:var(--accent)}
+.schema .s-sole  {fill:var(--accent-encre)}
 .schema .s-pizza {fill:color-mix(in srgb, var(--accent) 30%, #fff); stroke:var(--accent); stroke-width:1.2}
 .schema .s-aire  {fill:color-mix(in srgb, var(--accent) 14%, #fff); stroke:none}
 
@@ -667,22 +690,35 @@ ol.etapes > li::before{
 .schema .s-ray   {stroke:var(--second); stroke-width:1.6; fill:none}
 .schema .s-conv  {stroke:var(--encre-3); stroke-width:1.6; fill:none}
 .schema .s-cond  {stroke:var(--accent); stroke-width:2.2; fill:none}
-.schema .s-pointe{fill:var(--encre-3)}
-.schema .s-accent{fill:var(--accent)}
-.schema .s-second{fill:var(--second)}   /* le rouge du logo : renvois, marques */
+/* TROIS POINTES DE FLÈCHE, PAS UNE. Un seul marqueur gris servait à la fois
+   les traits gris et les traits colorés : un trait vert de 140 mm finissait sur
+   3,4 mm de gris et avait l'air de passer sous quelque chose. Huit manuels sur
+   neuf. Le suffixe par figure est conservé des deux côtés — aucune collision
+   d'identifiant possible. */
+.schema .s-pointe  {fill:var(--encre-3)}
+.schema .s-pointe-a{fill:var(--accent)}
+.schema .s-pointe-s{fill:var(--second)}
+.schema .s-accent  {fill:var(--accent)}   /* pastilles et points : décor, jamais de texte */
 
 /* Textes — les tailles sont en unités du viewBox, pas en points : elles
    suivent l'échelle du dessin quand celui-ci est réduit à la largeur de la
    colonne. 12 unités sur 660 de large donnent environ 8 pt sur le papier. */
 .schema .s-txt  {fill:var(--encre); font-size:13px; font-weight:600}
-.schema .s-lbl  {fill:var(--encre-3); font-size:10.5px; font-weight:700; letter-spacing:.6px}
-.schema .s-val  {fill:var(--accent); font-size:14px; font-weight:800}
+/* --encre-2 et non --encre-3 : les libellés se posent aussi sur les fonds
+   teintés des figures (s-boite, s-paton, s-aire), où --encre-3 retombait à
+   3,3:1. À 10,5 unités de viewBox, environ 7 pt, aucune dérogation possible. */
+.schema .s-lbl  {fill:var(--encre-2); font-size:10.5px; font-weight:700; letter-spacing:.6px}
+.schema .s-val  {fill:var(--accent-encre); font-size:14px; font-weight:800}
 .schema .s-fort {font-weight:800}
 .schema .s-gros {font-size:19px; font-weight:800}
 .schema .s-fin  {font-weight:600; letter-spacing:0}
 .schema .s-centre{text-anchor:middle}
 .schema .s-droite{text-anchor:end}
 .schema .s-sur  {fill:var(--sur-accent)}
+/* APRÈS .s-lbl, et c'est tout l'enjeu : .s-second était déclaré avec les traits,
+   donc AVANT .s-lbl, et perdait l'arbitrage à spécificité égale. Les quatre-vingt
+   renvois *1 / *2 du schéma des formations sortaient en gris. */
+.schema .s-second{fill:var(--accent-encre)}
 
 /* ==========================================================================
    12. INTERCALAIRE DE PARTIE (manuel Expert)
@@ -806,7 +842,7 @@ ol.etapes > li::before{
   background:transparent; color:#fff; font:600 12.5px/1 var(--titre);
   text-decoration:none; cursor:pointer;
 }
-.barre button.primaire{background:var(--accent); color:var(--sur-accent); border-color:transparent}
+.barre button.primaire{background:var(--accent-encre); color:var(--sur-accent); border-color:transparent}
 .barre a:hover, .barre button:hover{background:rgba(255,255,255,.12)}
 .barre button.primaire:hover{filter:brightness(1.12)}
 

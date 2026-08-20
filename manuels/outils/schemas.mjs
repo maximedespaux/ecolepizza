@@ -34,9 +34,21 @@ const figure = (nom, viewBox, corps, legende, claim) => `
         <figure class="schema">
           <svg viewBox="${viewBox}" role="img" aria-label="${claim.replace(/"/g, "&quot;")}">
             <defs>
+              <!-- Trois pointes, parce qu'un trait coloré ne peut pas finir en
+                   gris : un renvoi vert de 140 mm terminé par 3,4 mm de gris a
+                   l'air de passer sous quelque chose. f- pour les traits gris,
+                   fa- pour l'accent (s-cond), fs- pour le second (s-ray). -->
               <marker id="f-${nom}" viewBox="0 0 10 10" refX="9" refY="5"
                       markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M0 0 L10 5 L0 10 z" class="s-pointe"/>
+              </marker>
+              <marker id="fa-${nom}" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" class="s-pointe-a"/>
+              </marker>
+              <marker id="fs-${nom}" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" class="s-pointe-s"/>
               </marker>
             </defs>
 ${corps}
@@ -167,9 +179,9 @@ export const troisChaleurs = () => figure("chaleurs", "0 26 660 232", `
             <ellipse cx="330" cy="196" rx="86" ry="9" class="s-pizza"/>
 
             <!-- 1. Rayonnement : de la voûte, en droite ligne -->
-            <line x1="255" y1="86" x2="300" y2="176" class="s-ray" marker-end="url(#f-chaleurs)"/>
-            <line x1="330" y1="74" x2="330" y2="176" class="s-ray" marker-end="url(#f-chaleurs)"/>
-            <line x1="405" y1="86" x2="360" y2="176" class="s-ray" marker-end="url(#f-chaleurs)"/>
+            <line x1="255" y1="86" x2="300" y2="176" class="s-ray" marker-end="url(#fs-chaleurs)"/>
+            <line x1="330" y1="74" x2="330" y2="176" class="s-ray" marker-end="url(#fs-chaleurs)"/>
+            <line x1="405" y1="86" x2="360" y2="176" class="s-ray" marker-end="url(#fs-chaleurs)"/>
             <text x="330" y="56" class="s-txt s-centre s-fort">1 · Rayonnement</text>
             <text x="330" y="40" class="s-lbl s-centre">LA VOÛTE — COLORATION, RÉACTION DE MAILLARD</text>
 
@@ -181,7 +193,7 @@ export const troisChaleurs = () => figure("chaleurs", "0 26 660 232", `
             <text x="120" y="226" class="s-lbl s-fin">cuit la garniture</text>
 
             <!-- 3. Conduction : par contact -->
-            <line x1="330" y1="232" x2="330" y2="206" class="s-cond" marker-end="url(#f-chaleurs)"/>
+            <line x1="330" y1="232" x2="330" y2="206" class="s-cond" marker-end="url(#fa-chaleurs)"/>
             <text x="330" y="240" class="s-txt s-centre s-fort">3 · Conduction</text>
             <text x="330" y="254" class="s-lbl s-centre">PAR CONTACT AVEC LA SOLE — ELLE CUIT LE FOND ET FAIT LE CROUSTILLANT</text>`,
   "Les trois chaleurs travaillent en même temps, mais pas au même endroit. Un fond pâle sous une garniture brûlée n'est pas un problème de temps&nbsp;: c'est trop de voûte et pas assez de sole.",
@@ -276,7 +288,7 @@ export const raffinage = () => figure("raffinage", "0 10 660 252", `
             <text x="150" y="232" class="s-lbl s-centre">LE SON RETIENT L'EAU</text>
             <text x="430" y="232" class="s-lbl s-centre">LE SON GÊNE LE RÉSEAU DE GLUTEN</text>
             <text x="640" y="232" class="s-lbl s-droite">PLUS DE SON</text>
-            <line x1="90" y1="240" x2="640" y2="240" class="s-cond" marker-end="url(#f-raffinage)"/>
+            <line x1="90" y1="240" x2="640" y2="240" class="s-cond" marker-end="url(#fa-raffinage)"/>
             <text x="150" y="256" class="s-txt s-centre s-fort">La farine boit plus</text>
             <text x="430" y="256" class="s-txt s-centre s-fort">La fermentation est plus lente</text>`,
   "Type, cendres et extraction ne sont pas trois étiquettes indépendantes&nbsp;: c'est <strong>une seule échelle</strong>, celle de ce que le moulin garde du grain. La hauteur de l'aplat est le taux d'extraction, à l'échelle&nbsp;: le T45 jette un tiers du grain, la T150 le garde presque entier. Vers la droite, il faut donc <strong>plus d'eau et plus de temps</strong> — et la pizza se joue au bout blanc, du T45 au T65.",
