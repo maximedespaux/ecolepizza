@@ -328,38 +328,55 @@ ou un chiffre, ce qui vaut pour l'accessibilité autant que pour la photocopie e
 
 ## La règle des couleurs
 
-**Un manuel, une couleur.** La couleur de la formation tient TOUTE la brochure : la bande, les
-titres, les traits, les tableaux, les schémas — et, depuis cette version, **le fond de la
-couverture, des intercalaires et du dos**. Ce fond n'est plus un marine unique pour les neuf
-documents : il est calculé à partir de la couleur du parcours (`color-mix`, 24 % d'accent dans un
-noir presque neutre). Le manuel Niveau II est donc chaud jusque dans son noir, l'option hygiène
-turquoise jusque dans le sien. Contrôle fait : le blanc reste entre **11,4 et 19,3 pour 1** sur
-les neuf fonds, très au-delà des 4,5 exigés.
+**Le corps du manuel : une seule couleur, celle de la formation.** Filets de tête, traits de
+section, puces de liste, tableaux, encadrés, schémas, numéros de chapitre, intercalaires — tout
+prend `--accent`, posé par `[data-parcours]` sur `<body>`. Une page de cours ne mélange jamais
+deux couleurs.
 
-**La charte de l'école se dit à UN seul endroit** : les deux barres marine + rouge, sous le
-numéro de chapitre. Elles sont présentes sous **les 210 numéros** des neuf manuels, jamais
-ailleurs. C'est le rappel demandé : au même endroit sur chaque page qui ouvre un chapitre, sous
-le numéro, sans jamais concurrencer la couleur de la formation.
+**La charte de l'école se dit à deux endroits, et deux seulement :**
 
-Deux nuances de la même couleur cohabitent, et il ne faut pas les confondre : `--accent` est la
-couleur qu'on **voit** (aplats, bandes, filets), `--accent-encre` la couleur qu'on **lit** (même
-teinte, assombrie jusqu'à 4,5:1 sur blanc). Toute surface qui porte du texte prend l'encre.
+| Où | Quoi |
+|----|------|
+| Sous le numéro de chapitre | Les deux barres marine + rouge (`.chap-marque`), sous les 210 numéros des neuf manuels |
+| La couverture et le dos | Fond marine, texte blanc, petit trait rouge — les trois couleurs du fanion, et rien d'autre |
 
-**Le rouge qui subsiste ailleurs n'est pas de la marque, il est du sens** : encadrés « attention »
-et colonnes « inconvénients ». Un avertissement teinté en jaune sur le manuel Niveau II perdrait
-ce qui le rend lisible d'un coup d'œil. Ces rouges-là ne suivent pas le parcours, volontairement.
+**Sur la couverture, une seule chose dit le parcours : la bande pleine largeur**, à la jointure
+de la photo et du titre, dans la teinte EXACTE de la formation. Elle porte deux filets blancs, et
+ce n'est pas un ornement : posée entre une photo et un fond marine, elle **disparaissait sur cinq
+manuels sur neuf** — 1,04:1 pour les trois formations noires (#121212 sur #12142c), 1,57:1 pour
+les deux marines. Les filets la détachent quelle que soit sa teinte, sans l'éclaircir. En
+bordure et non en ombre portée : une bordure s'imprime, une ombre se perd.
 
-**Un schéma a remplacé une photo** partout où les deux montraient la même chose : le réseau de
-gluten, la farine dans la cuve, l'eau pesée, les deux farines mélangées, la napolitaine crue.
-Une figure qui explique vaut mieux qu'une image qui illustre — et la page ne peut pas porter
-les deux.
+**Deux nuances de la même couleur, à ne pas confondre** : `--accent` est la couleur qu'on
+**voit** (aplats, bandes, filets), `--accent-encre` la couleur qu'on **lit** (même teinte,
+assombrie jusqu'à 4,5:1 sur blanc). Toute surface qui porte du texte prend l'encre.
 
-### Ce qui manque encore
-Aucun schéma pour la **fabrication de l'huile d'olive** : la légende orpheline a été retirée
-plutôt que de laisser annoncer une figure absente. À dessiner si le chapitre le mérite.
+**Le rouge qui subsiste ailleurs n'est pas de la marque, il est du sens** : encadrés
+« attention », colonnes « inconvénients ». Un avertissement teinté en jaune sur le manuel
+Niveau II perdrait ce qui le rend lisible d'un coup d'œil. Ces rouges-là ne suivent pas le
+parcours, volontairement.
 
----
+### Le piège qui a coûté deux fois
 
+Une propriété personnalisée CSS est **substituée et calculée sur l'élément où elle est
+déclarée**, puis héritée en valeur figée. Écrite sur `:root`, une propriété dérivée de
+`--accent` capture donc le `--accent` **de secours** — le marine — et n'entend **jamais** le
+`[data-parcours]` posé sur `<body>` :
+
+```css
+:root{--accent:#2c3371}                        /* valeur de secours */
+:root{--second:var(--accent)}                  /* --second vaut #2c3371 POUR TOUJOURS */
+body[data-parcours="rs"]{--accent:#0CAC46}     /* --second n'en saura jamais rien */
+```
+
+Aucune erreur, aucun avertissement, la page s'affiche : c'est ce qui rend le piège coûteux. Il a
+été payé **deux fois**. `--nuit` laissait les neuf couvertures en bleu de nuit. `--second`
+laissait **les traits de section, les puces de liste, les rayons de schéma et le filet des
+intercalaires en marine dans les neuf manuels** — sur le manuel RS, une page entièrement verte
+portait des puces bleues, et personne ne voyait pourquoi.
+
+**Tout ce qui dérive de `--accent` se déclare désormais sur `body`**, dans un bloc unique, avec
+l'avertissement écrit au-dessus.
 
 ## Redites supprimées, et le défaut de mise en page qu'elles causaient
 

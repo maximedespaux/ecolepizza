@@ -29,6 +29,8 @@
                                #83879a, la valeur d'avant, tombait à 3,56:1,
                                et c'est la couleur des textes les PLUS petits. */
   --trait:#e2e3ea; --tomate-encre:#b8322c;
+  --navy-clair:#8b95f2;     /* le marine, version lisible sur fond sombre */
+  --nuit-ecole:#12142c;     /* le fond des COUVERTURES : marine de l'école, jamais l'accent */
   --papier:#fff;
   --papier-2:#f6f7fa;       /* aplat léger des tableaux et encadrés */
 
@@ -79,18 +81,29 @@
 [data-parcours="napolitaine"] {--accent:#121212; --accent-encre:#121212; --accent-clair:#ff8177}
 [data-parcours="livret"]      {--accent:#2C3371; --accent-encre:#2C3371; --accent-clair:#8b95f2}
 
-/* UN MANUEL, UNE COULEUR. `--second` suit l'accent : filets de section, puces
-   de liste et traits de schéma restent dans la teinte du parcours, et une page
-   de cours ne mélange jamais deux couleurs.
-   La charte de l'école — marine et rouge du fanion — se dit ailleurs, et à un
-   seul endroit dans le corps du manuel : l'OUVERTURE DE CHAPITRE. */
-:root{--second:var(--accent)}
+/* ⚠️ TOUT CE QUI DÉRIVE DE --accent SE DÉCLARE ICI, SUR body, ET JAMAIS SUR
+   :root. Une propriété personnalisée est substituée et calculée SUR L'ÉLÉMENT
+   OÙ ELLE EST DÉCLARÉE, puis héritée en valeur FIGÉE. Écrite sur :root, elle
+   capture le --accent de secours (le marine du bloc ci-dessus) et n'entend
+   JAMAIS le [data-parcours] posé sur body. Aucune erreur, aucun avertissement,
+   la page s'affiche : c'est ce qui rend le piège coûteux. Il a été payé deux
+   fois — par --second, resté marine dans les neuf manuels (filets de section,
+   puces de liste, traits de schéma), et par --nuit, qui laissait les neuf
+   couvertures en bleu de nuit.
 
-/* Le fond des couvertures et des intercalaires est TIRÉ DE L'ACCENT : chaque
-   couverture est entièrement de la couleur de sa formation, jusque dans son
-   noir. Le marine et le rouge de l'école ne se disent plus ici — seulement sous
-   le numéro de chapitre. */
-body{--nuit:color-mix(in srgb, var(--accent) 24%, #0c0d12)}
+   --second : UN MANUEL, UNE COULEUR. Filets de section, puces de liste et
+   traits de schéma restent dans la teinte du parcours ; une page de cours ne
+   mélange jamais deux couleurs. La charte de l'école — marine et rouge du
+   fanion — se dit à un seul endroit : l'OUVERTURE DE CHAPITRE.
+
+   --nuit : le fond des couvertures, des intercalaires et des dos, tiré de
+   l'accent. Chaque couverture est de la couleur de sa formation jusque dans
+   son noir. */
+body{
+  --second:var(--accent);
+  --nuit:color-mix(in srgb, var(--accent) 24%, #0c0d12);
+}
+
 
 /* ==========================================================================
    1. SOCLE
@@ -183,13 +196,18 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
    noyer l'image sous un voile noir.
    ========================================================================== */
 
-.couv{height:100%; display:flex; flex-direction:column; background:var(--nuit); color:#fff}
+/* LA PREMIÈRE PAGE PARLE DE L'ÉCOLE, PAS DU PARCOURS. Marine, blanc, rouge —
+   la charte du fanion. Une seule chose y dit la formation : la bande pleine
+   largeur, à la jointure de la photo et du titre. C'est elle qui identifie le
+   parcours à un mètre, et elle suffit. Le corps du manuel, lui, est
+   entièrement dans la couleur de la formation (cf. --second). */
+.couv{height:100%; display:flex; flex-direction:column; background:var(--nuit-ecole); color:#fff}
 
 .couv-visuel{position:relative; flex:0 0 163.2mm; height:163.2mm; overflow:hidden}
 .couv-visuel > img{width:100%; height:163.2mm; object-fit:cover; object-position:center 42%}
 .couv-visuel::after{
   content:""; position:absolute; inset:0;
-  background:linear-gradient(180deg, rgba(8,9,12,.55) 0%, rgba(8,9,12,.05) 38%, rgba(8,9,12,.58) 100%);
+  background:linear-gradient(180deg, rgba(12,14,34,.55) 0%, rgba(12,14,34,.05) 38%, rgba(18,20,44,.58) 100%);
 }
 
 .couv-haut{
@@ -199,27 +217,38 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
 .couv-logo{width:44mm}
 .couv-duree{
   display:inline-flex; align-items:center; padding:1.8mm 4mm; border-radius:99px;
-  background:var(--accent-encre); color:var(--sur-accent);
+  background:var(--navy); color:#fff;
   font:700 8.4pt/1 var(--titre); letter-spacing:.1em; text-transform:uppercase;
   white-space:nowrap;
 }
 
-/* La bande de couleur : le seul endroit où l'accent est à 100 %, pleine largeur.
-   C'est elle qui identifie le parcours à un mètre de distance. */
-.couv-bande{flex:0 0 5mm; background:var(--accent)}
+/* LA BANDE DE COULEUR — le seul endroit de la couverture où le parcours se
+   dit, et il s'y dit à 100 %, pleine largeur. C'est elle qui identifie la
+   formation à un mètre de distance.
+
+   Les deux filets blancs ne sont pas décoratifs : posée entre une photo et un
+   fond marine, la bande DISPARAISSAIT sur cinq manuels sur neuf — 1,04:1 pour
+   les trois formations noires (#121212 sur #12142c), 1,57:1 pour les deux
+   marines. En bordure et non en ombre portée : une bordure s'imprime, une
+   ombre se perd. */
+.couv-bande{
+  flex:0 0 5mm; box-sizing:border-box; background:var(--accent);
+  border-top:.4mm solid #fff; border-bottom:.4mm solid #fff;
+}
 
 .couv-bas{flex:1; min-height:0; display:flex; flex-direction:column; padding:9mm 14mm 12mm}
 .couv-genre{
   font:700 8.6pt/1 var(--titre); letter-spacing:.3em; text-transform:uppercase;
-  color:var(--accent-clair); margin-bottom:3.5mm;
+  color:var(--navy-clair); margin-bottom:3.5mm;
 }
 .couv-titre{font:900 30pt/1.14 var(--serif); letter-spacing:-.005em; margin:0 0 4.5mm; text-wrap:balance}
-.couv-titre .fin{display:block; color:var(--accent-clair)}
+.couv-titre .fin{display:block; color:var(--navy-clair)}
 
-/* Le trait de couverture : la couleur de la formation, et rien d'autre. La
-   marque de l'école se dit sous le numéro de chapitre, pas ici. */
-.couv-regle{width:34mm; height:1.7mm; border-radius:99px; background:var(--accent-clair); margin-bottom:5mm}
-.dos-regle{width:34mm; height:1.7mm; border-radius:99px; background:var(--accent-clair); margin:6mm auto 0}
+/* Le petit trait sous le titre : le rouge du fanion. Avec le fond marine et le
+   texte blanc, la couverture porte les trois couleurs de l'école — et elles
+   seules. */
+.couv-regle{width:34mm; height:1.7mm; border-radius:99px; background:var(--tomate); margin-bottom:5mm}
+.dos-regle{width:34mm; height:1.7mm; border-radius:99px; background:var(--tomate); margin:6mm auto 0}
 
 .couv-objectif{max-width:132mm; font-size:11pt; line-height:1.5; color:rgba(255,255,255,.86)}
 .couv-objectif .lbl{
@@ -736,16 +765,16 @@ ol.etapes > li::before{
 .dos{
   position:relative; overflow:hidden;
   height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
-  text-align:center; padding:20mm 20mm 14mm; background:var(--nuit); color:#fff;
+  text-align:center; padding:20mm 20mm 14mm; background:var(--nuit-ecole); color:#fff;
 }
 .dos-photo{position:absolute; inset:0}
 .dos-photo img{width:100%; height:100%; object-fit:cover}
 .dos-photo::after{
   content:""; position:absolute; inset:0;
   background:
-    linear-gradient(180deg, rgba(8,9,12,.86) 0%, rgba(8,9,12,.80) 26%,
-                            rgba(8,9,12,.46) 52%, rgba(8,9,12,.88) 100%),
-    linear-gradient(160deg, rgba(8,9,12,0) 30%, color-mix(in srgb, var(--accent) 52%, rgba(8,9,12,0)) 100%);
+    linear-gradient(180deg, rgba(12,14,34,.86) 0%, rgba(12,14,34,.80) 26%,
+                            rgba(12,14,34,.46) 52%, rgba(12,14,34,.88) 100%),
+    linear-gradient(160deg, rgba(12,14,34,0) 30%, color-mix(in srgb, var(--navy) 62%, rgba(12,14,34,0)) 100%);
 }
 .dos > :not(.dos-photo){position:relative; z-index:1}
 .dos-logo{width:64mm; margin-bottom:10mm}
