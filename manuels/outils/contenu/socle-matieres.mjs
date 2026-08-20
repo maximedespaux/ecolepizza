@@ -484,14 +484,14 @@ ${tbl([["Titre hydrotimétrique", ""], "Qualification", "Effet sur la pâte"], [
     [["30 à 40 °f", "fort"], "Eau dure", "Pâte dure et peu levée&nbsp;; utiliser un adoucisseur."],
     [["plus de 40 °f", "fort"], "Eau très dure", "Pâte dure et peu levée&nbsp;; adoucisseur nécessaire."],
   ])}
+`, { chap: "L'eau", num: n });
+
+  m.p(`
 ${enc("verif", "Deux versions dans le manuel d'origine", `<p>Le texte annonçait « douce jusqu'à
         5&nbsp;° », « moyennement dure entre 15 et 30&nbsp;° » et « dure&nbsp;: plus de 20&nbsp;° » —
         trois seuils qui se chevauchent et qui ne correspondent pas au tableau ci-dessus. C'est le
         <strong>tableau</strong> qui a été retenu ici, parce qu'il est cohérent de bout en bout.
         ${averif("à confirmer — Jean-Jacques")}</p>`)}
-`, { chap: "L'eau", num: n });
-
-  m.p(`
         <h3 class="sec">Corriger une eau mal adaptée</h3>
 ${tbl(["Problème", "Correction"], [
     [["Eau douce", "fort"], "On peut ajouter un peu de sel en plus dans la pâte."],

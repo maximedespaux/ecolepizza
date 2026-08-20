@@ -253,6 +253,51 @@ puisqu'il est expiré — le retaper figerait la version de 2021.
 
 ---
 
+## La typographie
+
+Deux polices, celles de la charte de l'école — et rien d'autre :
+
+| Rôle | Police | Où |
+|---|---|---|
+| `--serif` | **Merriweather** | Titres de chapitre, couvertures, intercalaires, sous-titres de section, noms de l'équipe |
+| `--titre` | **Mulish** | Étiquettes, en-têtes de tableau, chiffres, repères, folios, sommaire |
+| `--texte` | **Mulish** | Corps de texte |
+
+Le partage tient en une phrase : **le serif porte la voix, le sans porte les données.**
+Un tableau de dosages en serif se lit moins bien et prend plus de large ; un titre de
+chapitre en sans n'a pas de voix.
+
+**Pour des titres en Mulish partout** — si Merriweather ne convient pas : dans `manuel.css`,
+remplacer la valeur de `--serif` par `var(--titre)`. Une ligne, rien d'autre à toucher.
+
+Merriweather court environ 10 % plus large que la police précédente : les corps des titres
+ont été redescendus en conséquence (couverture 36 → 30 pt, chapitre 19 → 16,5 pt,
+intercalaire 34 → 28 pt) et le resserrement négatif retiré — on ne track pas un serif.
+Résultat mesuré : **376 pages, aucun débordement**, aucun titre sur deux lignes, et toutes
+les lignes de texte sous 80 signes.
+
+### ⚠ Les polices viennent de Google Fonts, en ligne
+`manuel.css` les charge par `@import` depuis `fonts.googleapis.com`, comme le fait déjà
+l'application. Deux conséquences :
+
+1. **Hors connexion**, un manuel ouvert par double-clic retombe sur les polices système
+   (Georgia pour Merriweather, system-ui pour Mulish). Il reste lisible, mais la mise en
+   page bouge.
+2. **C'est une requête vers un tiers** faite par le navigateur du lecteur — exactement le
+   point déjà relevé pour les images distantes (migration 133). Pour un organisme de
+   formation français qui remet ces documents à ses stagiaires, **héberger les polices dans
+   `assets/fonts/` est le choix défendable**.
+
+**À faire** : le fichier `Merriweather,Mulish.zip` est dans `~/Downloads`, que le bac à
+sable de cette session ne peut pas lire. Un déplacement suffit à débloquer :
+
+```bash
+cp ~/Downloads/Merriweather,Mulish.zip ~/Documents/
+```
+
+Les polices seront alors extraites dans `assets/fonts/`, le `@import` remplacé par des
+`@font-face` locaux, et la licence OFL jointe comme elle doit l'être.
+
 ## Comment sont fabriqués ces manuels
 
 Les neuf `.html` sont **générés** par `outils/construire.mjs` à partir des modules de

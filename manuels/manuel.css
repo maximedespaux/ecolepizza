@@ -17,7 +17,7 @@
    « Graphiques d'arrière-plan » COCHÉ (sinon les aplats de couleur sautent).
    ========================================================================== */
 
-@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,400;1,600&family=Space+Grotesk:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,400;1,600&family=Merriweather:ital,wght@0,400;0,700;0,900;1,400&display=swap");
 
 :root{
   /* Charte de l'école — reprise de src/app/ui/styles/app.css */
@@ -34,7 +34,15 @@
   --sur-accent:#fff;        /* couleur du texte POSÉ sur l'accent */
   --accent-clair:#8b95f2;   /* la version lisible sur fond sombre (couvertures) */
 
-  --titre:"Space Grotesk","Mulish",system-ui,sans-serif;
+  /* LES DEUX POLICES DE L'ÉCOLE, et rien d'autre.
+     `--titre` porte tout ce qui est étiquette, tableau, chiffre et repère : du
+     sans, parce qu'un tableau de dosages en serif se lit moins bien et prend
+     plus de large. `--serif` porte les moments éditoriaux — titres de chapitre,
+     couvertures, intercalaires — où le manuel doit avoir une voix.
+     POUR DES TITRES EN MULISH partout : remplacer la valeur de `--serif` par
+     `var(--titre)`. Une ligne, aucun autre changement. */
+  --titre:"Mulish",system-ui,-apple-system,sans-serif;
+  --serif:"Merriweather",Georgia,"Times New Roman",serif;
   --texte:"Mulish",system-ui,-apple-system,sans-serif;
 
   --marge:16mm;             /* marge intérieure des pages */
@@ -75,7 +83,7 @@ body{
   -webkit-font-smoothing:antialiased;
   font-variant-numeric:tabular-nums;
 }
-h1,h2,h3,h4{font-family:var(--titre); font-weight:700; margin:0; letter-spacing:-.015em}
+h1,h2,h3,h4{font-family:var(--titre); font-weight:700; margin:0; letter-spacing:-.01em}
 p{margin:0 0 .62em}
 p:last-child{margin-bottom:0}
 strong,b{font-weight:700}
@@ -173,7 +181,7 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
   font:700 8.6pt/1 var(--titre); letter-spacing:.3em; text-transform:uppercase;
   color:var(--accent-clair); margin-bottom:3.5mm;
 }
-.couv-titre{font:700 36pt/1.04 var(--titre); letter-spacing:-.025em; margin:0 0 4.5mm; text-wrap:balance}
+.couv-titre{font:900 30pt/1.14 var(--serif); letter-spacing:-.005em; margin:0 0 4.5mm; text-wrap:balance}
 .couv-titre .fin{display:block; color:var(--accent-clair)}
 .couv-objectif{max-width:132mm; font-size:11pt; line-height:1.5; color:rgba(255,255,255,.86)}
 .couv-objectif .lbl{
@@ -196,7 +204,7 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
    ========================================================================== */
 
 .somm-titre{
-  font:700 26pt/1 var(--titre); letter-spacing:-.02em; margin:0 0 1.5mm;
+  font:900 22pt/1.1 var(--serif); letter-spacing:-.005em; margin:0 0 1.5mm;
 }
 .somm-sur{
   font:700 8pt/1 var(--titre); letter-spacing:.24em; text-transform:uppercase;
@@ -232,7 +240,7 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
    5. TITRES DE CHAPITRE
    ========================================================================== */
 
-.chap{display:flex; align-items:flex-start; gap:4mm; margin-bottom:5mm}
+.chap{display:flex; align-items:flex-start; gap:4mm; margin-bottom:4.2mm}
 .chap-num{
   flex:0 0 auto; min-width:11mm; height:11mm; padding:0 2mm; border-radius:2.4mm;
   background:var(--accent); color:var(--sur-accent);
@@ -240,13 +248,14 @@ sup{font-size:.62em; vertical-align:.55em; line-height:0}
   font:700 13pt/1 var(--titre); font-variant-numeric:tabular-nums;
 }
 .chap-txt{flex:1; padding-top:.6mm}
-.chap h2{font-size:19pt; line-height:1.08; letter-spacing:-.02em}
-.chap .chapo{margin-top:1.6mm; font-size:10pt; color:var(--encre-2); max-width:150mm}
+.chap h2{font-family:var(--serif); font-weight:900; font-size:16.5pt; line-height:1.18; letter-spacing:0}
+.chap .chapo{margin-top:1.8mm; font-size:9.8pt; line-height:1.5; color:var(--encre-2); max-width:150mm}
 
 /* Sous-titre de section à l'intérieur d'un chapitre */
 h3.sec{
-  font-size:11.5pt; margin:5mm 0 2.4mm; padding-left:3mm;
-  border-left:1mm solid var(--second); line-height:1.2;
+  font-family:var(--serif); font-weight:700; letter-spacing:0;
+  font-size:11pt; margin:4.2mm 0 2.2mm; padding-left:3mm;
+  border-left:1mm solid var(--second); line-height:1.26;
 }
 h3.sec:first-child{margin-top:0}
 h4.sous{
@@ -448,7 +457,7 @@ ol.etapes > li::before{
 .photo-pleine{position:relative; margin:0; height:100%}
 .photo-pleine img{width:100%; height:100%; object-fit:cover; border-radius:0}
 .duo{display:grid; grid-template-columns:1fr 1fr; gap:3mm; margin:0 0 3.4mm}
-.duo img{width:100%; height:52mm; object-fit:cover; border-radius:2.4mm}
+.duo img{width:100%; height:48mm; object-fit:cover; border-radius:2.4mm}
 .trio{display:grid; grid-template-columns:repeat(3,1fr); gap:2.4mm; margin:0 0 3.4mm}
 .trio img{width:100%; height:38mm; object-fit:cover; border-radius:2mm}
 
@@ -471,7 +480,7 @@ ol.etapes > li::before{
   font:700 8.6pt/1 var(--titre); letter-spacing:.32em; text-transform:uppercase;
   color:rgba(255,255,255,.6); margin-bottom:4mm;
 }
-.inter h2{font-size:34pt; line-height:1.06; margin-bottom:5mm}
+.inter h2{font-family:var(--serif); font-weight:900; font-size:28pt; line-height:1.14; letter-spacing:-.005em; margin-bottom:5mm}
 .inter .regle{width:24mm; height:1.4mm; background:var(--second); border-radius:99px; margin:0 auto 5mm}
 .inter p{font-size:11.5pt; color:rgba(255,255,255,.82); max-width:130mm; margin:0 auto}
 
@@ -521,7 +530,7 @@ ol.etapes > li::before{
   display:flex; align-items:center; justify-content:center;
   font:700 15pt/1 var(--titre); color:var(--accent);
 }
-.membre .nom{font:700 12pt/1.2 var(--titre); margin-bottom:1.4mm}
+.membre .nom{font:700 11.5pt/1.24 var(--serif); margin-bottom:1.4mm}
 .membre .role{
   font:700 7.6pt/1.3 var(--titre); letter-spacing:.14em; text-transform:uppercase;
   color:var(--accent);
@@ -532,7 +541,7 @@ ol.etapes > li::before{
   text-align:center; padding:0 20mm; background:var(--accent); color:var(--sur-accent);
 }
 .dos-logo{width:64mm; margin-bottom:10mm}
-.dos h2{font-size:30pt; line-height:1.1; margin-bottom:4mm}
+.dos h2{font-family:var(--serif); font-weight:900; font-size:25pt; line-height:1.18; letter-spacing:-.005em; margin-bottom:4mm}
 .dos .parcours{
   font:700 9pt/1 var(--titre); letter-spacing:.28em; text-transform:uppercase;
   opacity:.72; margin-bottom:10mm;
