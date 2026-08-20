@@ -120,9 +120,22 @@ photo de façade devait occuper la seconde, il reste à le fournir.
 
 Le premier a été retenu (il apparaît partout ailleurs). **À confirmer.**
 
-### 18. Livret d'accueil — la durée du Niveau II a changé
-Le livret 2023 annonce le Niveau II sur **2 jours**. Les dossiers de formation 2026 le donnent
-sur **3 jours / 21 heures**. C'est cette dernière valeur qui est reprise. **À confirmer.**
+### 18. Les durées ne tombent pas juste — trois formations sur sept
+En reprenant les programmes détaillés du livret (théorie + pratique), les totaux ne
+correspondent pas toujours à la durée annoncée ailleurs :
+
+| Formation | Programme du livret | Annoncé ailleurs | Écart |
+|---|---|---|---|
+| Niveau II | 2 jours · **15 h** (4 + 11) | 3 jours · **21 h** (dossiers 2026) | **1 jour et 6 h** |
+| Niveau Expert | **32 h** (8 + 24), planning à 32 h | « 4 jours », aucune durée en heures nulle part | heures **jamais écrites** |
+| In Teglia & In Pala | **15 h** (4 + 11) | **14 h** (dossiers 2026) | 1 h |
+
+Niveau I (12 + 23 = 35 h) et Napolitaine (7 + 28 = 35 h) tombent juste, ainsi que le
+Niveau I Pro (4 + 11 = 15 h).
+
+**Choix fait** : le planning du livret est reproduit tel quel avec un encadré qui signale
+l'écart. La couverture du manuel Expert n'annonce **aucune durée en heures**, faute de source.
+**À trancher.**
 
 ### 19. Livret d'accueil — coquille dans le schéma des formations
 Page 11 : « IN TEGLIA, IN PALA, **PNTEMPORAINE** ». **Corrigé.**
@@ -207,6 +220,36 @@ de 1,3 kg avant plaquage. Ce sont les quatre images qui manquent le plus.
 
 Manquent aussi, à un moindre degré : une photo de façade ou un plan d'accès pour le livret,
 et un visuel de la salle de cuisson côté stagiaire.
+
+---
+
+## Contenu repris après relecture (2026-08-20, seconde passe)
+
+Un audit page à page a comparé le vocabulaire de **chaque page des PDF d'origine** à celui du
+nouveau manuel. Résultat : 251 pages d'origine sur 251 couvertes, sauf deux séries — corrigées.
+
+### Niveau I Pro — cinq chapitres avaient été coupés
+La première version retirait *L'histoire de la pizza*, *Les céréales*, *Le caryopse*,
+*L'évolution des moutures* et *Le sac de farine et le stockage*, au motif qu'un professionnel
+des métiers de bouche les connaît. **C'était un choix de trop** : le manuel Pro existe et il
+contient ces chapitres. Le sommaire d'origine est désormais suivi à l'identique — y compris
+ce qu'il ne contient pas (autolyse, semi-direct, allergènes, matières premières, quantités,
+fiches, conseils, matériel, organisation, cuisson, fours, pétrins). 32 → **34 pages**.
+
+### Livret d'accueil — les programmes et TOUS les plannings manquaient
+Les pages 12 à 21 du livret — programme théorique et pratique de chaque formation, heure par
+heure, avec son planning — avaient été résumées en un tableau de synthèse. C'est précisément
+ce qu'un stagiaire lit avant de s'inscrire, ce qu'un financeur demande et ce qu'un audit
+Qualiopi vérifie. Les sept programmes et les six plannings sont repris **intégralement**,
+avec les libellés d'origine. 14 → **21 pages**.
+
+Les horaires ont été remis au propre : la couche texte du PDF les rendait dans le désordre
+(« 13H00-17H1508H45-12H00 »). Les totaux ont été recalculés — voir le point 18.
+
+### Ce qui n'a volontairement pas été recopié
+Le pavé juridique du certificat ICPF (liste des décrets et arrêtés de 2019-2020, page 3 du
+livret). Il appartient au **scan du certificat**, qui doit de toute façon être remplacé
+puisqu'il est expiré — le retaper figerait la version de 2021.
 
 ---
 

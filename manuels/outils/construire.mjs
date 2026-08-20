@@ -28,6 +28,7 @@ import * as TP from "./contenu/teglia.mjs";
 import * as NA from "./contenu/napolitaine.mjs";
 import * as HY from "./contenu/hygiene.mjs";
 import * as LI from "./contenu/livret.mjs";
+import * as PR from "./contenu/programmes.mjs";
 
 const RACINE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -159,21 +160,22 @@ documents.push(socleComplet({
   });
   m.couverture();
   ouverture(m);
-  /* Deux jours, quinze heures : on garde ce qui sert AU PÉTRIN et on retire ce
-     qu'un professionnel des métiers de bouche connaît déjà — l'histoire de la
-     pizza, le caryopse, l'évolution des moutures, la fabrication de la farine,
-     les allergènes (obligatoires pour lui, mais déjà acquis), le matériel,
-     l'organisation en pizzeria, les conseils du cuisinier et les fours. */
-  MP.gluten(m);
-  MP.farineTypes(m, { autonome: true });
-  MP.farineQualite(m);
-  MP.farineW(m, { autonome: true });
+  /* LE SOMMAIRE DU MANUEL PRO D'ORIGINE, À L'IDENTIQUE.
+     La première version coupait l'histoire de la pizza, les céréales, le
+     caryopse, les moutures et le chapitre du sac de farine, au motif qu'un
+     professionnel des métiers de bouche les connaît. C'était un choix de trop :
+     le manuel Pro EXISTE et il contient ces chapitres. Ce qu'il ne contient pas
+     — autolyse, semi-direct, allergènes, matières premières, quantités, fiches,
+     conseils du cuisinier, matériel, organisation, cuisson, fours, pétrins —
+     reste dehors. C'est bien un manuel de deux jours, mais c'est SON découpage,
+     pas le nôtre. */
+  MP.histoire(m);
+  MP.cereales(m); MP.caryopse(m); MP.gluten(m); MP.moutures(m);
+  MP.farineFabrication(m); MP.farineTypes(m); MP.farineQualite(m); MP.farineW(m);
   MP.levure(m); MP.eau(m); MP.temperature(m); MP.sel(m); MP.huile(m);
   ME.substitutions(m); ME.adjonctions(m);
   MP.unites(m);
-  ME.direct(m); ME.autolyse(m);
-  ME.quantites(m);
-  ME.cuisson(m); ME.petrins(m);
+  ME.direct(m);
   fermeture(m, C.LEX_SOCLE);
   documents.push(m);
 }
@@ -219,7 +221,7 @@ documents.push(socleComplet({
     id: "expert", parcours: "expert", genre: "Formation",
     titre: "Niveau Expert | Spécialités italiennes",
     mention: "Prérequis : Niveau I ou Niveau I Pro",
-    duree: "4 jours · 28 h",
+    duree: "4 jours",
     objectif: "Réaliser les empâtements indirects Poolish, Biga, Contemporaine, In Teglia et In Pala, ainsi qu'un empâtement direct In Teglia et In Pala.",
     image: "couv-expert",
   });
@@ -314,12 +316,18 @@ documents.push(socleComplet({
     image: "couv-livret",
   });
   m.couverture();
-  LI.accueil(m);
+  /* L'ordre est celui du sommaire du livret d'origine : le certificat d'abord,
+     le mot d'accueil ensuite. */
   LI.certification(m);
+  LI.accueil(m);
   LI.formateur(m);
   LI.acces(m);
   LI.centre(m);
   LI.formations(m);
+  /* Les programmes détaillés et les plannings — pages 12 à 21 du livret. La
+     première version les avait résumés en un tableau : c'est précisément ce
+     qu'un stagiaire lit avant de s'inscrire et ce qu'un audit vérifie. */
+  PR.pagesProgrammes(m, ["niveau1", "pro", "niveau2", "expert", "teglia", "napolitaine", "hygiene"]);
   LI.securite(m);
   C.equipe(m);
   m.sommaire();
