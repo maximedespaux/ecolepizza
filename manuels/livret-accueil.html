@@ -33,7 +33,7 @@
         <div class="couv-bas">
           <div class="couv-genre">Document d'accueil</div>
           <h1 class="couv-titre">Livret<span class="fin">d'accueil</span></h1>
-          <div class="couv-regle"></div>
+          <div class="signature"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
           <p class="couv-objectif"><span class="lbl">Objectif de la formation</span>Tout ce qu'il faut savoir avant d'arriver : où nous trouver, comment se déroule votre formation, ce qui est attendu de vous.</p>
           <div class="couv-legal">
             <span>
@@ -466,7 +466,7 @@
         </div>
 
         <figure class="schema">
-          <svg viewBox="0 4 660 250" role="img" aria-label="Arbre des formations : le Niveau I ou le Niveau I Pro sont le prérequis du Niveau II, du Niveau Expert, de la spécialisation In Teglia et In Pala et de la spécialisation Pizza napolitaine.">
+          <svg viewBox="0 2 660 310" role="img" aria-label="Nos formations : Niveau I, Niveau I option hygiène, Fabriquer des pizzas artisanales RS 7404, Niveau I Pro, Niveau II, Niveau Expert. Nos spécialisations : In Teglia et In Pala, Pizza napolitaine. Les renvois 1 et 2 donnent les prérequis.">
             <defs>
               <marker id="f-form" viewBox="0 0 10 10" refX="9" refY="5"
                       markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -474,49 +474,65 @@
               </marker>
             </defs>
 
-            <!-- Les deux portes d'entrée, sans prérequis. -->
-            <rect x="8"   y="10" width="314" height="46" rx="6" class="s-plein"/>
-            <rect x="338" y="10" width="314" height="46" rx="6" class="s-plein"/>
-            <text x="165" y="30" class="s-txt s-centre s-sur">Niveau I — Pizza classique</text>
-            <text x="165" y="46" class="s-lbl s-centre s-sur">5 JOURS · 35 H — SANS PRÉREQUIS</text>
-            <text x="495" y="30" class="s-txt s-centre s-sur">Niveau I Pro — Pizza classique</text>
-            <text x="495" y="46" class="s-lbl s-centre s-sur">2 JOURS · 15 H — MÉTIERS DE BOUCHE</text>
+            <!-- Premier groupe : les formations. -->
+            <rect x="0" y="6" width="660" height="20" rx="4" class="s-plein"/>
+            <text x="12" y="20" class="s-lbl s-sur">NOS FORMATIONS</text>
 
-            <!-- Deux variantes de la même porte : même socle, autre habillage. -->
-            <rect x="8"   y="64" width="314" height="38" rx="6" class="s-boite"/>
-            <rect x="338" y="64" width="314" height="38" rx="6" class="s-boite"/>
-            <text x="165" y="80" class="s-txt s-centre">Option hygiène</text>
-            <text x="165" y="95" class="s-lbl s-centre">5 JOURS · 44 H</text>
-            <text x="495" y="80" class="s-txt s-centre">Fabriquer des pizzas artisanales</text>
-            <text x="495" y="95" class="s-lbl s-centre">RS 7404 · 5 JOURS · 35 H</text>
+            <rect x="0"   y="34" width="156" height="60" rx="5" class="s-boite"/>
+            <rect x="168" y="34" width="156" height="60" rx="5" class="s-boite"/>
+            <rect x="336" y="34" width="156" height="60" rx="5" class="s-boite"/>
+            <rect x="504" y="34" width="156" height="60" rx="5" class="s-boite"/>
+            <text x="78"  y="54" class="s-txt s-centre s-fort">NIVEAU I</text>
+            <text x="78"  y="69" class="s-lbl s-centre">PIZZA CLASSIQUE</text>
+            <text x="78"  y="86" class="s-val s-centre">5 j · 35 h</text>
+            <text x="246" y="54" class="s-txt s-centre s-fort">NIVEAU I</text>
+            <text x="246" y="69" class="s-lbl s-centre">OPTION HYGIÈNE</text>
+            <text x="246" y="86" class="s-val s-centre">5 j · 44 h</text>
+            <text x="414" y="50" class="s-txt s-centre s-fort">FABRIQUER DES</text>
+            <text x="414" y="64" class="s-txt s-centre s-fort">PIZZAS ARTISANALES</text>
+            <text x="414" y="76" class="s-lbl s-centre">RS 7404</text>
+            <text x="414" y="90" class="s-val s-centre">5 j · 35 h</text>
+            <text x="582" y="54" class="s-txt s-centre s-fort">NIVEAU I PRO</text>
+            <text x="582" y="69" class="s-lbl s-centre">PIZZA CLASSIQUE</text>
+            <text x="582" y="86" class="s-val s-centre">2 j · 15 h</text>
+            <text x="484" y="48" class="s-lbl s-second">*1</text>
+            <text x="652" y="48" class="s-lbl s-second s-droite">*1</text>
 
-            <!-- Le passage obligé. -->
-            <line x1="330" y1="108" x2="330" y2="146" class="s-fil" marker-end="url(#f-form)"/>
-            <text x="342" y="132" class="s-lbl">PRÉREQUIS DE TOUT CE QUI SUIT</text>
+            <rect x="0"   y="102" width="324" height="60" rx="5" class="s-boite"/>
+            <rect x="336" y="102" width="324" height="60" rx="5" class="s-boite"/>
+            <text x="162" y="122" class="s-txt s-centre s-fort">NIVEAU II</text>
+            <text x="162" y="137" class="s-lbl s-centre">EMPÂTEMENTS INDIRECTS</text>
+            <text x="162" y="154" class="s-val s-centre">3 j · 21 h</text>
+            <text x="498" y="122" class="s-txt s-centre s-fort">NIVEAU EXPERT</text>
+            <text x="498" y="137" class="s-lbl s-centre">POOLISH · BIGA · CONTEMPORAINE</text>
+            <text x="498" y="149" class="s-lbl s-centre">IN TEGLIA · IN PALA</text>
+            <text x="498" y="159" class="s-val s-centre">4 jours</text>
+            <text x="316" y="116" class="s-lbl s-second s-droite">*2</text>
+            <text x="652" y="116" class="s-lbl s-second s-droite">*2</text>
 
-            <!-- Les quatre approfondissements. -->
-            <rect x="8"   y="154" width="152" height="76" rx="6" class="s-boite"/>
-            <rect x="172" y="154" width="152" height="76" rx="6" class="s-boite"/>
-            <rect x="336" y="154" width="152" height="76" rx="6" class="s-boite"/>
-            <rect x="500" y="154" width="152" height="76" rx="6" class="s-boite"/>
-            <text x="84"  y="178" class="s-txt s-centre">Niveau II</text>
-            <text x="84"  y="196" class="s-lbl s-centre">EMPÂTEMENTS</text>
-            <text x="84"  y="209" class="s-lbl s-centre">INDIRECTS</text>
-            <text x="84"  y="224" class="s-val s-centre">3 j · 21 h</text>
-            <text x="248" y="178" class="s-txt s-centre">Niveau Expert</text>
-            <text x="248" y="196" class="s-lbl s-centre">INDIRECTS</text>
-            <text x="248" y="209" class="s-lbl s-centre">+ TEGLIA ET PALA</text>
-            <text x="248" y="224" class="s-val s-centre">4 jours</text>
-            <text x="412" y="178" class="s-txt s-centre">In Teglia &amp; In Pala</text>
-            <text x="412" y="196" class="s-lbl s-centre">SPÉCIALISATION</text>
-            <text x="412" y="209" class="s-lbl s-centre">VENTE À LA PART</text>
-            <text x="412" y="224" class="s-val s-centre">2 j · 14 h</text>
-            <text x="576" y="178" class="s-txt s-centre">Pizza napolitaine</text>
-            <text x="576" y="196" class="s-lbl s-centre">SPÉCIALISATION</text>
-            <text x="576" y="209" class="s-lbl s-centre">STG ET AVPN</text>
-            <text x="576" y="224" class="s-val s-centre">5 j · 35 h</text>
+            <!-- Second groupe : les spécialisations. -->
+            <rect x="0" y="176" width="660" height="20" rx="4" class="s-plein"/>
+            <text x="12" y="190" class="s-lbl s-sur">NOS SPÉCIALISATIONS</text>
+
+            <rect x="0"   y="204" width="324" height="60" rx="5" class="s-boite"/>
+            <rect x="336" y="204" width="324" height="60" rx="5" class="s-boite"/>
+            <text x="162" y="224" class="s-txt s-centre s-fort">IN TEGLIA &amp; IN PALA</text>
+            <text x="162" y="239" class="s-lbl s-centre">LA PIZZA VENDUE À LA PART</text>
+            <text x="162" y="256" class="s-val s-centre">2 j · 14 h</text>
+            <text x="498" y="224" class="s-txt s-centre s-fort">PIZZA NAPOLITAINE</text>
+            <text x="498" y="239" class="s-lbl s-centre">VERACE PIZZA NAPOLETANA</text>
+            <text x="498" y="256" class="s-val s-centre">5 j · 35 h</text>
+            <text x="316" y="218" class="s-lbl s-second s-droite">*2</text>
+            <text x="652" y="218" class="s-lbl s-second s-droite">*2</text>
+
+            <!-- Les prérequis, en renvois — comme sur le schéma d'origine. -->
+            <line x1="0" y1="276" x2="660" y2="276" class="s-cote"/>
+            <text x="0"  y="290" class="s-lbl s-second">*1</text>
+            <text x="20" y="290" class="s-lbl">UNIQUEMENT PROFESSIONNELS DES MÉTIERS DE BOUCHE</text>
+            <text x="0"  y="304" class="s-lbl s-second">*2</text>
+            <text x="20" y="304" class="s-lbl">PRÉREQUIS : AVOIR FAIT LE NIVEAU I OU LE NIVEAU I PRO</text>
           </svg>
-          <figcaption class="legende">Deux portes d'entrée, et tout le reste derrière elles. Le Niveau&nbsp;I et le Niveau&nbsp;I&nbsp;Pro ouvrent les mêmes suites&nbsp;: le choix entre les deux se fait sur le temps disponible et le statut, pas sur le programme.</figcaption>
+          <figcaption class="legende">Deux portes d'entrée — le Niveau&nbsp;I et le Niveau&nbsp;I&nbsp;Pro — et tout le reste derrière elles. Le choix entre les deux se fait sur le temps disponible et le statut, pas sur le programme&nbsp;: elles ouvrent les mêmes suites.</figcaption>
         </figure>
 
         <table class="tbl">
@@ -921,11 +937,16 @@
             <div class="nom">Maxime<br>Despaux</div>
             <div class="role">Formateur</div>
           </div>
+          <div class="membre">
+            <div class="rond">G&nbsp;D</div>
+            <div class="nom">Guillaume<br>Despaux</div>
+            <div class="role">Formateur</div>
+          </div>
         </div>
         <div style="margin-top:8mm">
 
         <figure class="photo">
-          <img src="assets/img/groupe.jpg" alt="Le formateur et un groupe de stagiaires autour d'une démonstration">
+          <img src="assets/img/groupe.jpg" alt="Un formateur et un groupe de stagiaires autour d'une démonstration">
           <figcaption class="legende">Chaque stagiaire dispose de son poste&nbsp;: un pétrin, un four, une balance.</figcaption>
         </figure>
         </div>
@@ -940,9 +961,11 @@
     </section>
     <section class="page page-pleine">
       <div class="dos">
+        <figure class="dos-photo"><img src="assets/img/four-flamme.jpg" alt=""></figure>
         <img class="dos-logo" src="assets/logo/logo-blanc.png" alt="École Pizza">
         <div class="parcours">Livret d'accueil</div>
         <h2>Merci de nous<br>avoir choisis&nbsp;!</h2>
+        <div class="signature signature-centre"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
         <div class="legal">
           École Pizzaïolo Jean-Jacques Despaux<br>
           SIRET 879 955 136 00012 · NAF 8559A · NDA 76 65 00989 65 auprès du préfet de la région Occitanie<br>

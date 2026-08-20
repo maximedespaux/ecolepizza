@@ -78,6 +78,21 @@ export const duo = (a, b, legende = "") => `
 export const enc = (genre, titre, corps) =>
   `<div class="enc enc-${genre}"><span class="enc-t">${titre}</span>${corps}</div>`;
 
+/**
+ * LE RAPPEL DE CHAPITRE — « ce qu'il faut retenir ».
+ *
+ * Il ferme un chapitre par ce qui doit rester quand tout le reste est oublié.
+ * Trois points au plus : au-delà, ce n'est plus un rappel, c'est un résumé, et
+ * un résumé ne se retient pas mieux que le chapitre.
+ * Il prend la couleur du parcours — c'est le repère qui court d'un chapitre à
+ * l'autre et qui dit au stagiaire où s'arrêter quand il révise.
+ */
+export const retenir = (points) => `
+        <div class="retenir">
+          <span class="retenir-t">Ce qu'il faut retenir</span>
+          <ul>${points.map((x) => `<li>${x}</li>`).join("")}</ul>
+        </div>`;
+
 /** Marqueur « à vérifier » : une valeur que le formateur doit confirmer. */
 export const averif = (quoi = "à vérifier") => `<span class="averif">${quoi}</span>`;
 
@@ -154,7 +169,8 @@ export class Manuel {
    * @param {string} d.duree     « 5 jours — 35 heures »
    * @param {string} d.objectif  objectif pédagogique officiel
    * @param {string} d.image     nom du visuel de couverture (assets/img/…)
-   * @param {string} [d.mention] ligne complémentaire sous le titre (ex. « RS 7404 »)
+   * @param {string} [d.mention]  ligne complémentaire sous le titre (ex. « RS 7404 »)
+   * @param {string} [d.imageDos] visuel du dos de couverture — « four-flamme » par défaut
    */
   constructor(d) {
     Object.assign(this, d);
@@ -243,7 +259,7 @@ ${corps}
         <div class="couv-bas">
           <div class="couv-genre">${this.genre}${this.mention ? ` · ${this.mention}` : ""}</div>
           <h1 class="couv-titre">${t1}${t2 ? `<span class="fin">${t2}</span>` : ""}</h1>
-          <div class="couv-regle"></div>
+          <div class="signature"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
           <p class="couv-objectif"><span class="lbl">Objectif de la formation</span>${this.objectif}</p>
           <div class="couv-legal">
             <span>
@@ -265,9 +281,11 @@ ${corps}
   dos() {
     return this.pleine(`
       <div class="dos">
+        <figure class="dos-photo"><img src="assets/img/${this.imageDos || "four-flamme"}.jpg" alt=""></figure>
         <img class="dos-logo" src="assets/logo/logo-blanc.png" alt="${ECOLE.nom}">
         <div class="parcours">${this.etiquette()}</div>
         <h2>Merci de nous<br>avoir choisis&nbsp;!</h2>
+        <div class="signature signature-centre"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
         <div class="legal">
           ${ECOLE.raison}<br>
           SIRET ${ECOLE.siret} · NAF ${ECOLE.naf} · ${ECOLE.ndaTexte}<br>

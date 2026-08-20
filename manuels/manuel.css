@@ -79,13 +79,20 @@
 [data-parcours="napolitaine"] {--accent:#121212; --accent-encre:#121212; --accent-clair:#ff8177}
 [data-parcours="livret"]      {--accent:#2C3371; --accent-encre:#2C3371; --accent-clair:#8b95f2}
 
-/* Le noir #121212 sert d'accent à trois parcours. En aplat de tableau ou en
-   filet il devient une masse : on lui adjoint un second ton, tiré de la
-   charte, qui porte les détails (numéros de chapitre, puces, surlignage). */
-[data-parcours="expert"], [data-parcours="teglia"], [data-parcours="napolitaine"]{
-  --second:#dc3e37;
-}
-:root{--second:var(--accent)}
+/* LA CHARTE DU LOGO — elle court par-dessus les couleurs de parcours.
+   Le fanion « École Pizza | Jean-Jacques Despaux » est tricolore : marine,
+   blanc, rouge. `--second` porte ce rouge dans les neuf manuels — filets de
+   section, puces de liste, traits de rayonnement des schémas. C'est lui qui
+   fait qu'un manuel se reconnaît comme un manuel de l'école avant même qu'on
+   lise sa couverture.
+   Sur le parcours Niveau I Pro, dont l'accent EST le rouge, le second ton
+   repasse au marine : deux rouges côte à côte n'opposeraient plus rien. */
+:root{--second:var(--tomate)}
+[data-parcours="pro"]{--second:var(--navy)}
+
+/* Le fond des couvertures et des intercalaires : un bleu de nuit tiré du
+   marine du logo, plutôt qu'un noir neutre qui n'appartient à personne. */
+:root{--nuit:#12142c}
 
 /* ==========================================================================
    1. SOCLE
@@ -178,13 +185,13 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
    noyer l'image sous un voile noir.
    ========================================================================== */
 
-.couv{height:100%; display:flex; flex-direction:column; background:#0f1017; color:#fff}
+.couv{height:100%; display:flex; flex-direction:column; background:var(--nuit); color:#fff}
 
 .couv-visuel{position:relative; flex:0 0 55%; overflow:hidden}
 .couv-visuel > img{width:100%; height:100%; object-fit:cover; object-position:center 42%}
 .couv-visuel::after{
   content:""; position:absolute; inset:0;
-  background:linear-gradient(180deg, rgba(10,11,18,.55) 0%, rgba(10,11,18,.05) 38%, rgba(15,16,23,.55) 100%);
+  background:linear-gradient(180deg, rgba(12,14,34,.55) 0%, rgba(12,14,34,.05) 38%, rgba(18,20,44,.58) 100%);
 }
 
 .couv-haut{
@@ -210,6 +217,20 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
 }
 .couv-titre{font:900 30pt/1.14 var(--serif); letter-spacing:-.005em; margin:0 0 4.5mm; text-wrap:balance}
 .couv-titre .fin{display:block; color:var(--accent-clair)}
+
+/* LA SIGNATURE — le parcours, puis le marine et le rouge du logo. Elle dit
+   « ce parcours, dans cette école » en un seul trait, et c'est elle qui relie
+   neuf couvertures de neuf couleurs différentes. */
+.signature{display:flex; gap:1.6mm; margin-bottom:5mm}
+.signature-centre{justify-content:center; margin:6mm 0 0}
+.signature i{display:block; height:1.7mm; border-radius:99px}
+.signature .s1{width:26mm; background:var(--accent-clair)}
+.signature .s2{width:8mm;  background:#5a63c8}
+.signature .s3{width:8mm;  background:var(--tomate)}
+/* Sur le Niveau I et le livret l'accent EST le marine : répéter la même
+   couleur n'ajouterait rien, le segment disparaît. */
+[data-parcours="niveau1"] .signature .s2,
+[data-parcours="livret"]  .signature .s2{display:none}
 .couv-objectif{max-width:132mm; font-size:11pt; line-height:1.5; color:rgba(255,255,255,.86)}
 .couv-objectif .lbl{
   display:block; font:700 7.6pt/1 var(--titre); letter-spacing:.18em;
@@ -399,6 +420,41 @@ ol.etapes > li::before{
   background:var(--accent-encre); vertical-align:-.2mm;
 }
 
+/* ==========================================================================
+   LE RAPPEL DE CHAPITRE
+   --------------------------------------------------------------------------
+   Il se distingue des encadrés : filet ÉPAIS en tête plutôt qu'en flanc, fond
+   teinté de l'accent du parcours, numérotation des points. Posé en bas de
+   chapitre, il ferme la page — d'où `margin-top:auto`, qui le colle au pied
+   quel que soit ce qui précède.
+   ========================================================================== */
+.retenir{
+  margin-top:auto; margin-bottom:0; padding:3.4mm 4mm 3.6mm;
+  border-top:1.2mm solid var(--accent);
+  border-radius:0 0 2.4mm 2.4mm;
+  background:color-mix(in srgb, var(--accent) 9%, #fff);
+  break-inside:avoid;
+}
+.retenir-t{
+  display:block; font:700 8.2pt/1 var(--titre); letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent-encre); margin-bottom:2.4mm;
+}
+.retenir ul{list-style:none; margin:0; padding:0; counter-reset:rap; font-size:9.6pt}
+.retenir li{
+  position:relative; padding-left:6.4mm; margin-bottom:1.6mm; counter-increment:rap;
+  line-height:1.42;
+}
+.retenir li:last-child{margin-bottom:0}
+.retenir li::before{
+  content:counter(rap); position:absolute; left:0; top:.2mm;
+  width:4.4mm; height:4.4mm; border-radius:50%;
+  background:var(--accent-encre); color:var(--sur-accent);
+  font:700 7pt/4.4mm var(--titre); text-align:center;
+}
+/* Le rappel occupe déjà le bas de page : les lignes de notes n'ont plus lieu
+   d'être en dessous. */
+.corps:has(.retenir)::after{display:none}
+
 /* Un point ouvert : la valeur n'est pas confirmée, le formateur doit trancher.
    Volontairement voyant — un « à vérifier » discret ne se vérifie jamais. */
 .averif{
@@ -546,6 +602,7 @@ ol.etapes > li::before{
 .schema .s-cond  {stroke:var(--accent); stroke-width:2.2; fill:none}
 .schema .s-pointe{fill:var(--encre-3)}
 .schema .s-accent{fill:var(--accent)}
+.schema .s-second{fill:var(--second)}   /* le rouge du logo : renvois, marques */
 
 /* Textes — les tailles sont en unités du viewBox, pas en points : elles
    suivent l'échelle du dessin quand celui-ci est réduit à la largeur de la
@@ -565,9 +622,9 @@ ol.etapes > li::before{
    ========================================================================== */
 
 .inter{position:relative; height:100%; display:flex; flex-direction:column; justify-content:center;
-       padding:0 20mm; background:#0d0e14; color:#fff; text-align:center}
+       padding:0 20mm; background:var(--nuit); color:#fff; text-align:center}
 .inter .photo-pleine{position:absolute; inset:0}
-.inter .photo-pleine::after{content:""; position:absolute; inset:0; background:rgba(9,10,16,.72)}
+.inter .photo-pleine::after{content:""; position:absolute; inset:0; background:rgba(14,16,38,.74)}
 .inter > *{position:relative; z-index:1}
 .inter .part-n{
   font:700 8.6pt/1 var(--titre); letter-spacing:.32em; text-transform:uppercase;
@@ -610,29 +667,49 @@ ol.etapes > li::before{
 }
 /* Les pages qui n'ont rien à faire de lignes : lexique, fiches à remplir. */
 .corps.plein::after{display:none}
+/* Et le livret d'accueil tout entier : c'est un document d'information qu'on
+   lit avant d'arriver, pas un support de cours qu'on annote en atelier. */
+[data-parcours="livret"] .corps::after{display:none}
 
 /* ==========================================================================
    15. ÉQUIPE ET DOS DE COUVERTURE
    ========================================================================== */
 
-.equipe{display:grid; grid-template-columns:repeat(3,1fr); gap:5mm; margin-top:8mm}
+.equipe{display:grid; grid-template-columns:repeat(4,1fr); gap:4mm; margin-top:8mm}
 .membre{text-align:center}
 .membre .rond{
-  width:34mm; height:34mm; margin:0 auto 3.4mm; border-radius:50%;
+  width:30mm; height:30mm; margin:0 auto 3mm; border-radius:50%;
   background:var(--papier-2); border:1mm solid var(--accent);
   display:flex; align-items:center; justify-content:center;
-  font:700 15pt/1 var(--titre); color:var(--accent-encre);
+  font:700 13pt/1 var(--titre); color:var(--accent-encre);
 }
-.membre .nom{font:700 11.5pt/1.24 var(--serif); margin-bottom:1.4mm}
+.membre .nom{font:700 10.5pt/1.24 var(--serif); margin-bottom:1.4mm}
 .membre .role{
   font:700 7.6pt/1.3 var(--titre); letter-spacing:.14em; text-transform:uppercase;
   color:var(--accent-encre);
 }
 
+/* Le dos de couverture répond à la couverture : même photo pleine page, même
+   voile, même signature. Le document se ferme comme il s'ouvre.
+   ATTENTION à la spécificité : une règle `.dos > *{position:relative}` écraserait
+   le `position:absolute` de la photo — c'est exactement l'erreur qui, sur la
+   couverture, avait fait descendre l'image dans le flux. On vise donc les
+   enfants SAUF la photo. */
 .dos{
+  position:relative; overflow:hidden;
   height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
-  text-align:center; padding:0 20mm; background:var(--accent-encre); color:var(--sur-accent);
+  text-align:center; padding:20mm 20mm 14mm; background:var(--nuit); color:#fff;
 }
+.dos-photo{position:absolute; inset:0}
+.dos-photo img{width:100%; height:100%; object-fit:cover}
+.dos-photo::after{
+  content:""; position:absolute; inset:0;
+  background:
+    linear-gradient(180deg, rgba(12,14,34,.86) 0%, rgba(12,14,34,.80) 26%,
+                            rgba(12,14,34,.46) 52%, rgba(12,14,34,.88) 100%),
+    linear-gradient(160deg, transparent 30%, color-mix(in srgb, var(--accent) 52%, transparent) 100%);
+}
+.dos > :not(.dos-photo){position:relative; z-index:1}
 .dos-logo{width:64mm; margin-bottom:10mm}
 .dos h2{font-family:var(--serif); font-weight:900; font-size:25pt; line-height:1.18; letter-spacing:-.005em; margin-bottom:4mm}
 .dos .parcours{
@@ -640,7 +717,7 @@ ol.etapes > li::before{
   opacity:.72; margin-bottom:10mm;
 }
 .dos .legal{
-  margin-top:auto; padding-bottom:16mm; font-size:8pt; line-height:1.6; opacity:.75;
+  margin-top:auto; padding-bottom:0; font-size:8pt; line-height:1.6; opacity:.75;
 }
 
 /* ==========================================================================

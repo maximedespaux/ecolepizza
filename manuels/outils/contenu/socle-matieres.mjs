@@ -10,7 +10,7 @@
  * Là où le manuel se contredit lui-même, la contradiction est signalée par
  * un encadré « à vérifier » plutôt que tranchée en douce — cf. A-VERIFIER.md.
  */
-import { chapitre, cote, photo, duo, enc, tbl, averif, reperes } from "../gabarit.mjs";
+import { chapitre, cote, photo, duo, enc, tbl, averif, reperes , retenir } from "../gabarit.mjs";
 import * as SC from "../schemas.mjs";
 
 /* ===========================================================================
@@ -94,6 +94,10 @@ ${tbl(["Au broyage", "Blé dur", "Blé tendre"], [
     ["Destination", ["<strong>Pasta</strong> — pâtes, semoule, couscous", "c"], ["<strong>Panification</strong> — pain, pizza, pâtisserie", "c"]],
   ], { titre: "Ce que le broyage sépare", compact: true })}
         <p class="mention">µm = micromètre, unité de mesure mille fois plus petite qu'un millimètre.</p>
+${retenir([
+  "Le <strong>blé tendre</strong> fait la farine de pizza&nbsp;; le blé dur fait les pâtes. Ce n'est pas une question de qualité mais d'albumen.",
+  "Six céréales portent du gluten, dix n'en portent pas — et l'<strong>avoine</strong> n'en porte pas mais en côtoie toujours.",
+])}
 `, { chap: "Les céréales", num: n, sous: "Le blé tendre et le blé dur" });
   return m;
 };
@@ -119,6 +123,10 @@ ${enc("note", "Pourquoi le germe part", `<p>Le germe est gras. Laissé dans la f
           <img src="assets/img/patons.jpg" alt="Pâtons en gros plan">
         </div>
 ${SC.caryopse()}
+${retenir([
+  "L'<strong>amande</strong> fait 82 à 85&nbsp;% du grain&nbsp;: c'est elle, et elle seule, qui devient la farine blanche.",
+  "Le <strong>germe</strong> est gras. C'est parce qu'on le retire qu'une farine blanche se garde, et qu'une complète rancit.",
+])}
 `, { chap: "Le caryopse", num: m._c });
 
 /* ===========================================================================
@@ -148,6 +156,11 @@ ${enc("verif", "Terminologie à unifier", `<p>Les manuels d'origine emploient in
         <em>glutamine</em> au lieu de <em>gluténine</em>. Trois mots pour une seule chose, et une
         protéine mal nommée. Ce manuel retient <strong>gluténine</strong> et <strong>réseau
         gluténique</strong> partout. ${averif("à valider — Jean-Jacques")}</p>`)}
+${retenir([
+  "Le gluten <strong>n'existe pas dans la farine sèche</strong>&nbsp;: il se forme quand l'eau et le pétrissage réunissent la gliadine et la gluténine.",
+  "Ce réseau est un <strong>filet</strong>. Sans lui, le gaz de la levure traverse la pâte et s'échappe.",
+  "Pétrir <strong>vite</strong> développe le réseau — c'est le levier le plus direct au pétrin, avant même de changer de farine.",
+])}
 `, { chap: "Le gluten", num: m._c });
 
 /* ===========================================================================
@@ -181,6 +194,10 @@ ${chapitre(m.chapSuivant(), "L'évolution des moutures",
         </div>
 ${duo(["farine-cuve", "Farine versée dans la cuve d'un pétrin"], ["fleurage", "Fleurage&nbsp;: farine jetée sur le marbre"],
   "La régularité d'une farine industrielle est ce qui rend un protocole reproductible d'un jour à l'autre.")}
+${retenir([
+  "Ce que la meunerie moderne a apporté n'est pas la finesse, c'est la <strong>régularité</strong>.",
+  "Un protocole n'est reproductible que parce que la farine du lundi ressemble à celle du vendredi.",
+])}
 `, { chap: "L'évolution des moutures", num: m._c });
 
 /* ===========================================================================
@@ -436,6 +453,11 @@ ${enc("conseil", "Lire le tableau à l'envers", `<p>Plus la farine est chaude, <
         <strong>délayée dans l'eau de coulage</strong> si la température de celle-ci est modérée.
         La levure fraîche a son action optimale pour une pâte dont la température se situe entre
         <strong>21 et 27&nbsp;°C</strong> suivant la saison.</p>
+${retenir([
+  "La levure transforme les sucres de la farine en <strong>gaz</strong> et en <strong>alcool</strong> — la levée et les arômes sortent de la même réaction.",
+  "Au-dessus de <strong>50&nbsp;°C</strong>, elle meurt. Un empâtement qui ne lève pas commence presque toujours par là.",
+  "Plus la farine est chaude, <strong>moins</strong> on met de levure&nbsp;: la chaleur fait déjà le travail.",
+])}
 `);
   return m;
 };
@@ -533,10 +555,10 @@ ${SC.temperatureBase()}
 ${tbl(["Saison", ["T° farine", "c"], ["<span class='gly'>×</span> 2 = Y", "c"], ["TB <span class='gly'>−</span> Y", "c"], ["Eau de coulage", "c"]], [
     [["Été caniculaire", "fort"], ["28 °C", "c"], ["56", "c"], ["50 <span class='gly'>−</span> 56", "c"], ["<span class='val' style='color:#dc3e37'><span class='gly'>−</span> 6 °C</span>", "c"]],
   ], { compact: true })}
-${enc("alerte", "Une eau à <span class='gly'>−</span>6 °C n'existe pas", `<p>Le calcul ne se trompe pas&nbsp;: il vous dit
-        que vous êtes déjà en retard. <strong>Anticipez</strong> pour minimiser les risques&nbsp;:
-        mettez la veille une partie ou la totalité de la farine au frais. Descendre la farine de
-        28 à 20&nbsp;°C ramène l'eau de coulage à 10&nbsp;°C, une valeur atteignable.</p>`)}
+${retenir([
+  "<strong>TB 50</strong>&nbsp;: température de la farine × 2, puis 50 moins ce résultat = l'eau de coulage.",
+  "Plus la farine est chaude, plus l'eau doit être froide. Quand le calcul donne l'impossible, c'est la farine qu'il fallait rafraîchir la veille.",
+])}
 `, { chap: "Le calcul de la température de l'eau", num: m._c });
 
 /* ===========================================================================
@@ -572,6 +594,10 @@ ${reperes([["Dose usuelle", "17 – 22", "g / kg de farine"]])}
 ${enc("alerte", "Jamais avec la levure", `<p>Le sel se verse <strong>petit à petit, en fin de
         pétrissage</strong>, et jamais en contact direct avec la levure&nbsp;: mis ensemble dans
         l'eau, il en tue une partie avant même le démarrage.</p>`)}
+${retenir([
+  "Le sel <strong>freine</strong> la fermentation, <strong>resserre</strong> le réseau, <strong>colore</strong> la croûte et fait le goût.",
+  "Dose usuelle&nbsp;: <strong>17 à 22&nbsp;g par kilo de farine</strong> — et jamais en contact direct avec la levure.",
+])}
 `, { chap: "Le sel", num: m._c });
 
 /* ===========================================================================

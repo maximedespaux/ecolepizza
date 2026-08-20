@@ -11,7 +11,7 @@
  *  · le « Quiz des farines » existait lui aussi en deux versions, cinq mêmes
  *    questions reformulées, l'une derrière l'autre.
  */
-import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan } from "../gabarit.mjs";
+import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan , retenir } from "../gabarit.mjs";
 import * as SC from "../schemas.mjs";
 
 /* ===========================================================================
@@ -42,6 +42,10 @@ ${SC.directIndirect()}
 ${enc("conseil", "Le prérequis qu'on oublie", `<p>Un indirect demande une farine
         <strong>W 330 minimum</strong>. En dessous, le réseau ne tient pas seize heures de
         pré-fermentation&nbsp;: la pâte se liquéfie et rien ne la rattrape.</p>`)}
+${retenir([
+  "L'indirect fait fermenter <strong>une partie de la pâte avant la pâte</strong>&nbsp;: c'est là que se font le goût et la digestibilité.",
+  "Il demande une farine <strong>W 330 minimum</strong>. En dessous, le réseau ne tient pas seize heures de pré-fermentation.",
+])}
 `, { chap: "Poolish & Biga", num: m._c });
 
 /* ===========================================================================
@@ -109,6 +113,10 @@ ${proto([
 ${enc("alerte", "Pas de pointage", `<p>Contrairement au direct, l'indirect <strong>ne passe pas par
         un pointage</strong>&nbsp;: la fermentation a déjà eu lieu en première phase. On boule tout
         de suite et on bloque au froid.</p>`)}
+${retenir([
+  "Pré-ferment <strong>liquide</strong>&nbsp;: autant de farine que d'eau, 2/3 de la levure, 12 à 15 heures.",
+  "Il <strong>double ou triple</strong> de volume&nbsp;: prévoir le contenant, sous peine de le retrouver par terre.",
+])}
 `);
   return m;
 };
@@ -200,6 +208,11 @@ ${proto([
 ])}
 ${duo(["biga-melange", "Biga mélangée à la main dans une bassine"], ["biga-texture", "Texture filandreuse de la Biga"],
   "À gauche le geste de la première phase, à droite la texture recherchée&nbsp;: des filaments, pas une pâte.")}
+${retenir([
+  "Pré-ferment <strong>solide et filandreux</strong>&nbsp;: 45&nbsp;% d'eau, 1&nbsp;% de levure, 16 à 20 heures à 19-24&nbsp;°C.",
+  "Elle ne doit surtout <strong>pas être lisse</strong> en fin de première phase — 1 à 2 minutes de mélange, pas plus.",
+  "Le pourcentage de Biga règle la durée de vie de la pâte&nbsp;: 20&nbsp;% pour 24&nbsp;h, 40&nbsp;% pour 96&nbsp;h.",
+])}
 `);
   return m;
 };
@@ -360,6 +373,10 @@ ${enc("alerte", "Pas d'huile", `<p>L'huile <strong>n'est pas recommandée</stron
         un empâtement à fermentation courte, elle n'a rien à figer. Cet empâtement s'utilise dans les
         <strong>24 à 96 h</strong>, un peu comme un empâtement napolitain, stocké en chambre
         froide.</p>`)}
+${retenir([
+  "Hydratation autour de <strong>70&nbsp;%</strong>, dont une bonne part versée en <strong>bassinage</strong>, quand le réseau est déjà construit.",
+  "Four à <strong>400-420&nbsp;°C</strong>, cuisson rapide, corniche « nuage ». Les pâtons s'utilisent de 24 à 96 heures.",
+])}
 `);
   return m;
 };
@@ -392,6 +409,10 @@ ${enc("verif", "Un tableau, deux versions", `<p>Ce tableau figurait <strong>deux
         le manuel Niveau&nbsp;II d'origine, sur deux pages consécutives, avec une ligne
         « Digestibilité » différente d'une copie à l'autre. La version retenue ici est celle de la
         première page. ${averif("à confirmer — Jean-Jacques")}</p>`)}
+${retenir([
+  "Aucun empâtement n'est meilleur&nbsp;: il y a celui qui convient à <strong>votre service</strong>.",
+  "À emporter, le direct l'emporte&nbsp;; sur place et pour le goût, l'indirect&nbsp;; pour tenir un rush, le direct encore.",
+])}
 `, { chap: "Différences entre les empâtements", num: m._c });
 
 /* ===========================================================================

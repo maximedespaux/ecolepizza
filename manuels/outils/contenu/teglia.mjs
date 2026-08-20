@@ -15,7 +15,7 @@
  *  3. la répartition de chaleur de l'In Pala annonçait « sole 60 % / voûte
  *     25 % », soit 85 % — le reste des tableaux somme bien à 100 %.
  */
-import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan } from "../gabarit.mjs";
+import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan , retenir } from "../gabarit.mjs";
 
 /* Le tableau de cuisson revient sur les quatre protocoles : une seule source. */
 const cuissonTbl = (sole, voute, temps, pctSole) => tbl(
@@ -62,6 +62,10 @@ ${tbl(["Ce qui change", "L'explication"], [
 ${enc("conseil", "Le repère à retenir", `<p><strong>Plus la pâte est hydratée, plus elle a besoin de
         sel et de temps.</strong> Si vous ne deviez retenir qu'une phrase de ce chapitre, c'est
         celle-là.</p>`)}
+${retenir([
+  "<strong>Plus la pâte est hydratée, plus elle a besoin de sel et de temps.</strong> Si vous ne retenez qu'une phrase, c'est celle-là.",
+  "Sel <strong>25 à 30&nbsp;g/kg</strong> et levure <strong>4&nbsp;g/kg toutes saisons</strong> — ce ne sont pas les valeurs de la pizza classique.",
+])}
 `, { chap: "Les dosages sur forte hydratation", num: m._c });
 
 /* ===========================================================================
@@ -214,6 +218,10 @@ ${proto([
             <p>Étaler sur semoule extra-fine et terminer sur la plaque légèrement huilée.</p>` },
 ])}
 ${cuissonTbl(320, 240, "15 mn", 75)}
+${retenir([
+  "Plaque rectangulaire, vendue <strong>au poids ou à la part</strong>&nbsp;; pâtons de <strong>1,3&nbsp;kg</strong>.",
+  "Les fonds se cuisent <strong>à l'avance</strong> et se stockent&nbsp;: c'est ce qui rend le produit tenable en service.",
+])}
 `);
   return m;
 };
@@ -342,6 +350,11 @@ ${proto([
             sole.</p>` },
 ])}
 ${cuissonTbl(290, 240, "7 à 10 mn", 75)}
+${retenir([
+  "Pâtons de <strong>600 à 900&nbsp;g</strong>, façonnés avec une <strong>clé</strong> dessous, cuits directement sur la sole.",
+  "Four plus doux que la teglia — <strong>280 à 290&nbsp;°C</strong> — et cuisson deux fois plus courte.",
+  "À la mise en pelle, on étire <strong>du bout des doigts</strong> pour garder le gaz&nbsp;: c'est lui qui fait la mie.",
+])}
 `);
   return m;
 };

@@ -69,36 +69,6 @@ export const schema = (m) => m.p(`
 ${chapitre(m.chapSuivant(), "Schéma des formations",
   "Deux portes d'entrée, puis des approfondissements. Le Niveau&nbsp;I ou le Niveau&nbsp;I&nbsp;Pro sont le prérequis de tout le reste.")}
 ${SC.formations()}
-        <h4 class="sous">Nos formations</h4>
-        <table class="tbl tbl-compact">
-          <thead><tr><th>Parcours</th><th>Durée</th><th>Contenu</th><th>Prérequis</th></tr></thead>
-          <tbody>
-            <tr><td class="fort">Niveau I — Pizza classique</td><td class="val">5 j · 35 h</td>
-                <td>Empâtement direct, de la farine à la sortie du four</td><td>Aucun</td></tr>
-            <tr><td class="fort">Niveau I — option hygiène</td><td class="val">5 j · 44 h</td>
-                <td>Niveau I + hygiène alimentaire en restauration commerciale</td><td>Aucun</td></tr>
-            <tr><td class="fort">Fabriquer des pizzas artisanales</td><td class="val">5 j · 35 h</td>
-                <td>Même contenu que le Niveau I, parcours certifiant RS&nbsp;7404</td>
-                <td>Professionnels des métiers de bouche</td></tr>
-            <tr><td class="fort">Niveau I Pro — Pizza classique</td><td class="val">2 j · 15 h</td>
-                <td>Le protocole direct et l'étalage à la main, compactés</td>
-                <td>Professionnels des métiers de bouche</td></tr>
-            <tr><td class="fort">Niveau II — Empâtements indirects</td><td class="val">3 j · 21 h</td>
-                <td>Poolish, Biga, pizza contemporaine</td><td>Niveau I ou Niveau I Pro</td></tr>
-            <tr><td class="fort">Niveau Expert</td><td class="val">4 j · 28 h</td>
-                <td>Indirects + In Teglia et In Pala</td><td>Niveau I ou Niveau I Pro</td></tr>
-          </tbody>
-        </table>
-        <h4 class="sous">Nos spécialisations</h4>
-        <table class="tbl tbl-compact">
-          <thead><tr><th>Parcours</th><th>Durée</th><th>Contenu</th><th>Prérequis</th></tr></thead>
-          <tbody>
-            <tr><td class="fort">In Teglia &amp; In Pala</td><td class="val">2 j · 14 h</td>
-                <td>Pizza sur plaque et sur pelle, vendue à la part</td><td>Niveau I ou Niveau I Pro</td></tr>
-            <tr><td class="fort">Pizza napolitaine</td><td class="val">5 j · 35 h</td>
-                <td>Empâtement napolitain, Margherita et Marinara</td><td>Niveau I ou Niveau I Pro</td></tr>
-          </tbody>
-        </table>
 ${enc("note", "Durées", `<p>Les durées et les tarifs en vigueur figurent sur le programme officiel
         de chaque formation et sur ${ECOLE.site}. Ce sont eux qui font foi&nbsp;: ce tableau situe
         les parcours les uns par rapport aux autres, il ne remplace pas le programme.</p>`)}
@@ -125,9 +95,14 @@ ${chapitre(m.chapSuivant(), "L'équipe École Pizza")}
             <div class="nom">Maxime<br>Despaux</div>
             <div class="role">Formateur</div>
           </div>
+          <div class="membre">
+            <div class="rond">G&nbsp;D</div>
+            <div class="nom">Guillaume<br>Despaux</div>
+            <div class="role">Formateur</div>
+          </div>
         </div>
         <div style="margin-top:8mm">
-${photo("groupe", "Le formateur et un groupe de stagiaires autour d'une démonstration",
+${photo("groupe", "Un formateur et un groupe de stagiaires autour d'une démonstration",
   "Chaque stagiaire dispose de son poste&nbsp;: un pétrin, un four, une balance.")}
         </div>
 ${enc("note", "Nous joindre", `<p><strong>${ECOLE.raison}</strong> — ${ECOLE.adresse}<br>

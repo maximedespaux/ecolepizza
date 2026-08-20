@@ -16,7 +16,7 @@
  * Ce module NE remplace PAS l'attestation de formation spécifique en hygiène
  * alimentaire : il l'accompagne. Voir l'encadré en fin de chapitre 1.
  */
-import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan } from "../gabarit.mjs";
+import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan , retenir } from "../gabarit.mjs";
 import * as SC from "../schemas.mjs";
 
 /* ===========================================================================
@@ -71,7 +71,11 @@ ${enc("alerte", "Ce module ne vaut pas l'attestation", `<p>La formation spécifi
         alimentaire adaptée à l'activité des établissements de restauration commerciale fait l'objet
         d'une <strong>attestation distincte</strong>, délivrée à l'issue du module et conforme à la
         réglementation en vigueur. Ce manuel en est le support&nbsp;; il ne s'y substitue pas.</p>`)}
-${photo("hygiene-cours", "Séance théorique d'hygiène en salle")}
+${retenir([
+  "Quatre dangers&nbsp;: <strong>microbiologique, chimique, physique, allergénique</strong>. Trois se voient rarement.",
+  "Entre <strong>+10 et +63&nbsp;°C</strong>, une population bactérienne peut doubler toutes les vingt minutes.",
+  "Un <strong>danger</strong> n'est pas un <strong>risque</strong>&nbsp;: l'HACCP ne supprime pas les dangers, il ramène les risques à un niveau acceptable — et le prouve par écrit.",
+])}
 `);
   return m;
 };
@@ -137,7 +141,10 @@ ${enc("alerte", "Ce qui n'est pas écrit n'existe pas", `<p>Un établissement pe
         parfaitement et être sanctionné&nbsp;: à l'inspection, c'est la <strong>preuve</strong> qui
         est demandée, pas la parole. Les relevés, les plans de nettoyage signés et les étiquettes
         conservées sont ce qui transforme une bonne pratique en conformité.</p>`)}
-${photo("hygiene-notes", "Prise de notes pendant le module hygiène")}
+${retenir([
+  "Le règlement <strong>852/2004</strong> impose la démarche HACCP à tout exploitant&nbsp;; le <strong>178/2002</strong> impose la traçabilité.",
+  "<strong>Ce qui n'est pas écrit n'existe pas</strong>&nbsp;: à l'inspection, c'est la preuve qui est demandée, pas la parole.",
+])}
 `);
   return m;
 };
@@ -266,6 +273,11 @@ ${proto([
   { n: 3, titre: "Mise en place", corps: "<p>Sortir la quantité nécessaire, dater les préparations, remettre au froid sans attendre.</p>" },
   { n: 4, titre: "Service", corps: "<p>Bacs de garniture au froid, réapprovisionnés par petites quantités. Mains lavées entre le cru et le prêt-à-consommer.</p>" },
   { n: 5, titre: "Fin de service", corps: "<p>Refroidissement rapide de ce qui doit l'être, nettoyage selon le plan, relevés notés.</p>" },
+])}
+${retenir([
+  "Trois volets&nbsp;: les <strong>bonnes pratiques d'hygiène</strong>, le <strong>plan HACCP</strong>, la <strong>traçabilité</strong> et les non-conformités.",
+  "Un PMS recopié d'un guide ne décrit pas votre cuisine, et ne protège personne.",
+  "Un <strong>registre de non-conformités vide</strong> signale un système qui ne détecte rien — pas un établissement irréprochable.",
 ])}
 `);
   return m;

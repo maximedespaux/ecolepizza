@@ -6,7 +6,7 @@
  * Niveau I d'origine, et les contradictions internes sont signalées, pas
  * corrigées en silence.
  */
-import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan } from "../gabarit.mjs";
+import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan , retenir } from "../gabarit.mjs";
 import * as SC from "../schemas.mjs";
 
 /* Le tableau de pointage revient sur les trois protocoles directs : une seule
@@ -56,6 +56,11 @@ ${POINTAGE}
 ${enc("conseil", "Prendre la température, vraiment", `<p>C'est le seul contrôle objectif de tout le
         protocole. Une pâte à 27&nbsp;°C au lieu de 24 fermentera trop vite et sera ingérable le
         lendemain — et rien dans son aspect ne le dira au moment où elle sort du pétrin.</p>`)}
+${retenir([
+  "Tous les ingrédients en une fois&nbsp;: farine et levure, l'eau d'un coup, le sel et l'huile en fin de pétrissage.",
+  "<strong>Prendre la température</strong> en fin de pétrissage — c'est le seul contrôle objectif du protocole.",
+  "Toujours garder <strong>un verre d'eau</strong> pour le bassinage&nbsp;: le tableau donne un point de départ, la pâte donne la vérité.",
+])}
 `, { chap: "L'empâtement direct", num: m._c });
 
 /* ===========================================================================
@@ -117,6 +122,10 @@ ${enc("conseil", "Une adjonction assèche", `<p>Graines, son et charbon <strong>
         et jamais en augmentant l'eau de coulage du départ&nbsp;: on ajusterait à l'aveugle une pâte
         qui n'a pas encore montré sa texture.</p>`)}
 ${photo("rabat", "Rabat de la pâte en masse")}
+${retenir([
+  "Une adjonction se calcule <strong>sur le poids de la farine</strong>, jamais sur celui de la pâte.",
+  "Graines, son et charbon <strong>boivent</strong>&nbsp;: le complément se verse en bassinage, en fin de pétrissage.",
+])}
 `, { chap: "Les adjonctions", num: m._c });
 
 /* ===========================================================================
@@ -148,6 +157,10 @@ ${enc("note", "Qu'est-ce que la pâte fermentée", `<p>C'est un empâtement, dir
         laissé fermenter <strong>24 heures à température ambiante</strong>, ou <strong>2 à 5 jours
         en chambre froide</strong>. Autrement dit&nbsp;: un reste de la veille, utilisé comme
         ferment. Rien ne se jette.</p>`)}
+${retenir([
+  "La <strong>pâte fermentée</strong> — un empâtement de la veille — s'ajoute à la 8<sup>e</sup> minute, à 10 ou 30&nbsp;% du poids de farine.",
+  "C'est le raccourci vers les arômes de l'indirect, sans son organisation en deux phases.",
+])}
 `, { chap: "L'empâtement semi-direct", num: m._c });
 
 /* ===========================================================================
@@ -168,19 +181,15 @@ ${tbl([["Force W", ""], ["Hydratation<br>minimale", "c"], ["Eau", "c"], ["Soja /
     [["W 390", "fort"], ["59 %", "c"], ["590 g", "c"], ["+ 30 g", "c"], ["<span class='val'>620 g</span>", "c"], ["+ 40 g", "c"], ["<span class='val'>630 g</span>", "c"]],
     [["W 420", "fort"], ["60 %", "c"], ["600 g", "c"], ["+ 30 g", "c"], ["<span class='val'>630 g</span>", "c"], ["+ 40 g", "c"], ["<span class='val'>640 g</span>", "c"]],
   ], { titre: "Poids d'eau pour 1 kg de farine(s)", compact: true })}
-${(`
-          <h3 class="sec">Exemple — 10 unités en W 330, dont 10 % de soja</h3>
-          <ol class="etapes">
-            <li><strong>9 kg</strong> de farine de blé + <strong>1 kg</strong> de farine de soja</li>
-            <li>Eau de base&nbsp;: 570 g <span class='gly'>×</span> 10 = <strong>5,700 kg</strong></li>
-            <li>Complément&nbsp;: 30 g <span class='gly'>×</span> 10 unités = <strong>0,300 kg</strong></li>
-            <li><strong>Eau totale = 6 kg</strong></li>
-          </ol>`)}
 ${enc("alerte", "Certaines farines assèchent", `<p>Vous devez réagir&nbsp;: il sera toujours possible
         d'ajouter un peu d'<strong>eau de bassinage</strong> en fin de pétrissage pour retrouver une
         texture homogène avec une bonne élasticité. Le tableau donne le complément
         <em>attendu</em>&nbsp;; la pâte donne le complément <em>réel</em>.</p>`)}
 ${SC.substitution()}
+${retenir([
+  "Le <strong>poids total de farine ne change pas</strong>&nbsp;: on remplace une part, on n'ajoute pas.",
+  "Seule l'<strong>eau</strong> augmente — 30&nbsp;g par unité pour du soja ou de la semi-complète, 40&nbsp;g pour de la complète.",
+])}
 `, { chap: "Les substitutions", num: m._c });
 
 /* ===========================================================================
@@ -345,6 +354,10 @@ ${enc("conseil", "Pourquoi ce tableau est un outil de gestion", `<p>Vingt gramme
         ne plus avoir à peser ensuite.</p>`)}
 ${duo(["napo-garniture", "Garnissage d'une pizza au poste"], ["mozzarella-main", "Mozzarella travaillée à la main"],
   "La régularité du grammage se voit à l'œil une fois le geste installé.")}
+${retenir([
+  "Vingt grammes de trop par pizza, sur cent pizzas par jour, font <strong>deux kilos</strong> — à peu près une journée de marge par semaine.",
+  "Peser en formation sert à ne plus avoir à peser en service&nbsp;: c'est le geste qu'on installe, pas la balance.",
+])}
 `, { chap: "Les quantités des matières premières", num: m._c });
 
 /* ===========================================================================
@@ -685,6 +698,10 @@ ${enc("conseil", "Un fond pâle, une garniture brûlée", `<p>Ce n'est pas un pr
         un problème d'équilibre&nbsp;: trop de voûte, pas assez de sole. Sur un four digital, on
         corrige par la répartition ; sur un four mécanique, en descendant la voûte et en montant la
         sole de quelques degrés.</p>`)}
+${retenir([
+  "Trois chaleurs&nbsp;: le <strong>rayonnement</strong> colore, la <strong>convection</strong> cuit la garniture, la <strong>conduction</strong> cuit le fond.",
+  "Un fond pâle sous une garniture brûlée n'est pas un problème de temps&nbsp;: c'est trop de voûte et pas assez de sole.",
+])}
 `, { chap: "La cuisson de la pizza", num: m._c });
 
 /* ===========================================================================
@@ -783,4 +800,8 @@ ${enc("note", "Le pétrin de l'école", `<p>Tous les protocoles de ce manuel son
         <strong>pétrin à spirale de 10 à 30 litres</strong>, celui de vos postes. Sur un axe oblique
         ou des bras plongeants, les temps de pétrissage sont à rallonger — la vitesse n'est pas la
         même, le réseau met plus longtemps à se construire.</p>`)}
+${retenir([
+  "La <strong>spirale</strong> va vite et chauffe la pâte&nbsp;: les temps de pétrissage y sont plus courts et plus précis.",
+  "Tous les protocoles de ce manuel sont écrits pour une <strong>spirale de 10 à 30 litres</strong>. Sur un axe oblique ou des bras plongeants, il faut rallonger.",
+])}
 `, { chap: "Les pétrins", num: m._c });

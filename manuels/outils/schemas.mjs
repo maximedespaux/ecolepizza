@@ -182,9 +182,8 @@ export const troisChaleurs = () => figure("chaleurs", "0 26 660 232", `
 
             <!-- 3. Conduction : par contact -->
             <line x1="330" y1="232" x2="330" y2="206" class="s-cond" marker-end="url(#f-chaleurs)"/>
-            <text x="352" y="240" class="s-txt s-fort">3 · Conduction</text>
-            <text x="352" y="254" class="s-lbl">PAR CONTACT AVEC LA SOLE — ELLE CUIT LE FOND</text>
-            <text x="352" y="266" class="s-lbl">ET FAIT LE CROUSTILLANT</text>`,
+            <text x="330" y="240" class="s-txt s-centre s-fort">3 · Conduction</text>
+            <text x="330" y="254" class="s-lbl s-centre">PAR CONTACT AVEC LA SOLE — ELLE CUIT LE FOND ET FAIT LE CROUSTILLANT</text>`,
   "Les trois chaleurs travaillent en même temps, mais pas au même endroit. Un fond pâle sous une garniture brûlée n'est pas un problème de temps&nbsp;: c'est trop de voûte et pas assez de sole.",
   "Coupe d'un four : le rayonnement vient de la voûte, la convection de l'air qui tourne, la conduction de la sole par contact direct.");
 
@@ -455,7 +454,7 @@ export const temperatureBase = () => figure("tb50", "0 2 660 244", `
    d'aplomb — 10 kg avant, 10 kg après — et seule l'eau, traitée à part comme
    une addition, dépasse son total de départ. D'où le bassinage.
    =========================================================================== */
-export const substitution = () => figure("subst", "0 20 660 253", `
+export const substitution = () => figure("subst", "0 16 660 258", `
             <!-- 1 · LA FARINE : deux barres de MÊME longueur, la seconde entamée par le soja. -->
             <text x="10" y="28" class="s-lbl">1 · LA FARINE — 10 UNITÉS EN W 330, LE TOTAL NE BOUGE PAS</text>
 
@@ -551,57 +550,67 @@ export const marcheEnAvant = () => figure("marche", "0 6 660 224", `
   "La marche en avant est une règle de <strong>sens unique</strong>&nbsp;: chaque station est plus propre que la précédente. En pizzeria, le point sensible est le poste de garnissage, où le cru et le prêt-à-consommer se croisent sur le même plan et sous les mêmes mains.",
   "Le flux va de la réception au service, du plus sale au plus propre. Un produit ne revient jamais en arrière et ne croise jamais un flux plus sale que lui.");
 
-export const formations = () => figure("form", "0 4 660 250", `
-            <!-- Les deux portes d'entrée, sans prérequis. -->
-            <rect x="8"   y="10" width="314" height="46" rx="6" class="s-plein"/>
-            <rect x="338" y="10" width="314" height="46" rx="6" class="s-plein"/>
-            <text x="165" y="30" class="s-txt s-centre s-sur">Niveau I — Pizza classique</text>
-            <text x="165" y="46" class="s-lbl s-centre s-sur">5 JOURS · 35 H — SANS PRÉREQUIS</text>
-            <text x="495" y="30" class="s-txt s-centre s-sur">Niveau I Pro — Pizza classique</text>
-            <text x="495" y="46" class="s-lbl s-centre s-sur">2 JOURS · 15 H — MÉTIERS DE BOUCHE</text>
+export const formations = () => figure("form", "0 2 660 310", `
+            <!-- Premier groupe : les formations. -->
+            <rect x="0" y="6" width="660" height="20" rx="4" class="s-plein"/>
+            <text x="12" y="20" class="s-lbl s-sur">NOS FORMATIONS</text>
 
-            <!-- Deux variantes de la même porte : même socle, autre habillage. -->
-            <rect x="8"   y="64" width="314" height="38" rx="6" class="s-boite"/>
-            <rect x="338" y="64" width="314" height="38" rx="6" class="s-boite"/>
-            <text x="165" y="80" class="s-txt s-centre">Option hygiène</text>
-            <text x="165" y="95" class="s-lbl s-centre">5 JOURS · 44 H</text>
-            <text x="495" y="80" class="s-txt s-centre">Fabriquer des pizzas artisanales</text>
-            <text x="495" y="95" class="s-lbl s-centre">RS 7404 · 5 JOURS · 35 H</text>
+            <rect x="0"   y="34" width="156" height="60" rx="5" class="s-boite"/>
+            <rect x="168" y="34" width="156" height="60" rx="5" class="s-boite"/>
+            <rect x="336" y="34" width="156" height="60" rx="5" class="s-boite"/>
+            <rect x="504" y="34" width="156" height="60" rx="5" class="s-boite"/>
+            <text x="78"  y="54" class="s-txt s-centre s-fort">NIVEAU I</text>
+            <text x="78"  y="69" class="s-lbl s-centre">PIZZA CLASSIQUE</text>
+            <text x="78"  y="86" class="s-val s-centre">5 j · 35 h</text>
+            <text x="246" y="54" class="s-txt s-centre s-fort">NIVEAU I</text>
+            <text x="246" y="69" class="s-lbl s-centre">OPTION HYGIÈNE</text>
+            <text x="246" y="86" class="s-val s-centre">5 j · 44 h</text>
+            <text x="414" y="50" class="s-txt s-centre s-fort">FABRIQUER DES</text>
+            <text x="414" y="64" class="s-txt s-centre s-fort">PIZZAS ARTISANALES</text>
+            <text x="414" y="76" class="s-lbl s-centre">RS 7404</text>
+            <text x="414" y="90" class="s-val s-centre">5 j · 35 h</text>
+            <text x="582" y="54" class="s-txt s-centre s-fort">NIVEAU I PRO</text>
+            <text x="582" y="69" class="s-lbl s-centre">PIZZA CLASSIQUE</text>
+            <text x="582" y="86" class="s-val s-centre">2 j · 15 h</text>
+            <text x="484" y="48" class="s-lbl s-second">*1</text>
+            <text x="652" y="48" class="s-lbl s-second s-droite">*1</text>
 
-            <!-- Le passage obligé. -->
-            <line x1="330" y1="108" x2="330" y2="146" class="s-fil" marker-end="url(#f-form)"/>
-            <text x="342" y="132" class="s-lbl">PRÉREQUIS DE TOUT CE QUI SUIT</text>
+            <rect x="0"   y="102" width="324" height="60" rx="5" class="s-boite"/>
+            <rect x="336" y="102" width="324" height="60" rx="5" class="s-boite"/>
+            <text x="162" y="122" class="s-txt s-centre s-fort">NIVEAU II</text>
+            <text x="162" y="137" class="s-lbl s-centre">EMPÂTEMENTS INDIRECTS</text>
+            <text x="162" y="154" class="s-val s-centre">3 j · 21 h</text>
+            <text x="498" y="122" class="s-txt s-centre s-fort">NIVEAU EXPERT</text>
+            <text x="498" y="137" class="s-lbl s-centre">POOLISH · BIGA · CONTEMPORAINE</text>
+            <text x="498" y="149" class="s-lbl s-centre">IN TEGLIA · IN PALA</text>
+            <text x="498" y="159" class="s-val s-centre">4 jours</text>
+            <text x="316" y="116" class="s-lbl s-second s-droite">*2</text>
+            <text x="652" y="116" class="s-lbl s-second s-droite">*2</text>
 
-            <!-- Les quatre approfondissements. -->
-            <rect x="8"   y="154" width="152" height="76" rx="6" class="s-boite"/>
-            <rect x="172" y="154" width="152" height="76" rx="6" class="s-boite"/>
-            <rect x="336" y="154" width="152" height="76" rx="6" class="s-boite"/>
-            <rect x="500" y="154" width="152" height="76" rx="6" class="s-boite"/>
-            <text x="84"  y="178" class="s-txt s-centre">Niveau II</text>
-            <text x="84"  y="196" class="s-lbl s-centre">EMPÂTEMENTS</text>
-            <text x="84"  y="209" class="s-lbl s-centre">INDIRECTS</text>
-            <text x="84"  y="224" class="s-val s-centre">3 j · 21 h</text>
-            <text x="248" y="178" class="s-txt s-centre">Niveau Expert</text>
-            <text x="248" y="196" class="s-lbl s-centre">INDIRECTS</text>
-            <text x="248" y="209" class="s-lbl s-centre">+ TEGLIA ET PALA</text>
-            <text x="248" y="224" class="s-val s-centre">4 jours</text>
-            <text x="412" y="178" class="s-txt s-centre">In Teglia &amp; In Pala</text>
-            <text x="412" y="196" class="s-lbl s-centre">SPÉCIALISATION</text>
-            <text x="412" y="209" class="s-lbl s-centre">VENTE À LA PART</text>
-            <text x="412" y="224" class="s-val s-centre">2 j · 14 h</text>
-            <text x="576" y="178" class="s-txt s-centre">Pizza napolitaine</text>
-            <text x="576" y="196" class="s-lbl s-centre">SPÉCIALISATION</text>
-            <text x="576" y="209" class="s-lbl s-centre">STG ET AVPN</text>
-            <text x="576" y="224" class="s-val s-centre">5 j · 35 h</text>`,
-  "Deux portes d'entrée, et tout le reste derrière elles. Le Niveau&nbsp;I et le Niveau&nbsp;I&nbsp;Pro ouvrent les mêmes suites&nbsp;: le choix entre les deux se fait sur le temps disponible et le statut, pas sur le programme.",
-  "Arbre des formations : le Niveau I ou le Niveau I Pro sont le prérequis du Niveau II, du Niveau Expert, de la spécialisation In Teglia et In Pala et de la spécialisation Pizza napolitaine.");
+            <!-- Second groupe : les spécialisations. -->
+            <rect x="0" y="176" width="660" height="20" rx="4" class="s-plein"/>
+            <text x="12" y="190" class="s-lbl s-sur">NOS SPÉCIALISATIONS</text>
 
-/* ===========================================================================
-   11 · LA LEVURE — un seul processus, deux produits
-   Le texte dit que la levure fait lever ET qu'elle donne des arômes. Ce que le
-   dessin ajoute : c'est la MÊME réaction qui rend les deux, et c'est pour cela
-   qu'une pâte qui lève trop vite n'a pas le temps d'avoir du goût.
-   =========================================================================== */
+            <rect x="0"   y="204" width="324" height="60" rx="5" class="s-boite"/>
+            <rect x="336" y="204" width="324" height="60" rx="5" class="s-boite"/>
+            <text x="162" y="224" class="s-txt s-centre s-fort">IN TEGLIA &amp; IN PALA</text>
+            <text x="162" y="239" class="s-lbl s-centre">LA PIZZA VENDUE À LA PART</text>
+            <text x="162" y="256" class="s-val s-centre">2 j · 14 h</text>
+            <text x="498" y="224" class="s-txt s-centre s-fort">PIZZA NAPOLITAINE</text>
+            <text x="498" y="239" class="s-lbl s-centre">VERACE PIZZA NAPOLETANA</text>
+            <text x="498" y="256" class="s-val s-centre">5 j · 35 h</text>
+            <text x="316" y="218" class="s-lbl s-second s-droite">*2</text>
+            <text x="652" y="218" class="s-lbl s-second s-droite">*2</text>
+
+            <!-- Les prérequis, en renvois — comme sur le schéma d'origine. -->
+            <line x1="0" y1="276" x2="660" y2="276" class="s-cote"/>
+            <text x="0"  y="290" class="s-lbl s-second">*1</text>
+            <text x="20" y="290" class="s-lbl">UNIQUEMENT PROFESSIONNELS DES MÉTIERS DE BOUCHE</text>
+            <text x="0"  y="304" class="s-lbl s-second">*2</text>
+            <text x="20" y="304" class="s-lbl">PRÉREQUIS : AVOIR FAIT LE NIVEAU I OU LE NIVEAU I PRO</text>`,
+  "Deux portes d'entrée — le Niveau&nbsp;I et le Niveau&nbsp;I&nbsp;Pro — et tout le reste derrière elles. Le choix entre les deux se fait sur le temps disponible et le statut, pas sur le programme&nbsp;: elles ouvrent les mêmes suites.",
+  "Nos formations : Niveau I, Niveau I option hygiène, Fabriquer des pizzas artisanales RS 7404, Niveau I Pro, Niveau II, Niveau Expert. Nos spécialisations : In Teglia et In Pala, Pizza napolitaine. Les renvois 1 et 2 donnent les prérequis.");
+
 export const levure = () => figure("lev", "0 6 660 224", `
             <!-- À gauche : le bourgeonnement, une cellule en une heure. -->
             <text x="8" y="24" class="s-lbl">1 · LA REPRODUCTION</text>

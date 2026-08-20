@@ -17,7 +17,7 @@
  * Le troisième jeu, « École », correspond aux réglages retenus par
  * Jean-Jacques pour la formation. Il est signalé comme tel.
  */
-import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan } from "../gabarit.mjs";
+import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan , retenir } from "../gabarit.mjs";
 import * as SC from "../schemas.mjs";
 
 /* ===========================================================================
@@ -100,6 +100,10 @@ ${enc("verif", "À trancher pour la formation", `<p>Le manuel ne peut pas enseig
         l'AVPN, puisque l'école est agréée. ${averif("à trancher — Jean-Jacques")}</p>`)}
 ${photo("napo-four", "Cuisson d'une napolitaine dans le four à bois",
   "Soixante à quatre-vingt-dix secondes. Le geste de rotation est ce qui décide de la régularité.")}
+${retenir([
+  "La <strong>STG</strong> est un règlement européen&nbsp;; l'<strong>AVPN</strong> est le cahier privé de l'association qui délivre l'agrément.",
+  "Ils divergent sur la farine, la levure, la fermentation — et jusqu'à <strong>inverser sole et voûte</strong>.",
+])}
 `);
   return m;
 };
@@ -137,6 +141,10 @@ ${reperes([["Pâte obtenue", "env. 2,85", "kg"], ["Pâtons de 250 g", "env. 11",
 ${enc("conseil", "Le sel napolitain surprend", `<p>Près du double de la pizza classique, à
         hydratation pourtant modérée. C'est la contrepartie d'une pâte sans huile et à fermentation
         courte&nbsp;: le sel est le seul frein dont dispose le pizzaïolo, et il porte tout le goût.</p>`)}
+${retenir([
+  "Ici on part d'un <strong>litre d'eau</strong>, pas d'un kilo de farine&nbsp;: c'est l'inverse de tout le reste du manuel.",
+  "<strong>Aucune huile</strong> dans la pâte, et un sel presque double de la pizza classique.",
+])}
 `, { chap: "L'unité de calcul napolitaine", num: m._c });
 
 /* ===========================================================================
@@ -236,6 +244,10 @@ ${enc("alerte", "Les trois fautes classiques", `<p><strong>1.</strong> Écraser 
         amer.
         <strong>3.</strong> Étaler un pâton trop froid&nbsp;: il revient sous les doigts et se
         déchire au centre. Le pâton napolitain se travaille <strong>à température ambiante</strong>.</p>`)}
+${retenir([
+  "On presse <strong>du centre vers le bord</strong> en s'arrêtant à 1-2&nbsp;cm&nbsp;: c'est ce geste qui chasse le gaz dans la corniche.",
+  "Ni rouleau ni laminoir&nbsp;: ils écrasent les alvéoles, et il n'y a plus de corniche.",
+])}
 `, { chap: "L'étalage napolitain", num: m._c });
 
 /* ===========================================================================
@@ -322,6 +334,10 @@ ${enc("conseil", "Le thermomètre infrarouge", `<p>À ces températures, le ther
         souvent de 30 à 50&nbsp;°C. Un thermomètre infrarouge pointé sur la sole coûte peu et donne
         la seule valeur qui compte&nbsp;: celle de l'endroit exact où va se poser la pizza.</p>`)}
 ${photo("napo-poste", "Deux pizzaïolos au poste, four napolitain")}
+${retenir([
+  "<strong>60 à 90 secondes</strong>, sur la sole, en faisant tourner la pizza à la pelle.",
+  "Des taches brunes <strong>irrégulières</strong> signent la bonne cuisson&nbsp;; des taches régulières signent un four trop doux.",
+])}
 `);
   return m;
 };
