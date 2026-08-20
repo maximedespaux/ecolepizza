@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manuels de formation — École Pizza</title>
+<link rel="icon" href="assets/logo/logo.png">
+<link rel="stylesheet" href="manuel.css">
+<style>
+  /* Page d'accueil : elle n'est pas destinée à l'impression, elle n'utilise
+     donc pas le gabarit A4. Le peu de style qu'elle demande vit ici. */
+  body{background:#f2f3f7}
+  .acc-tete{background:#0f1017; color:#fff; padding:52px 32px 44px}
+  .acc-tete .dedans{max-width:1180px; margin:0 auto}
+  .acc-tete img{width:52mm; margin-bottom:22px}
+  .acc-tete h1{font-size:34pt; line-height:1.05; letter-spacing:-.025em; margin-bottom:10px}
+  .acc-tete p{max-width:620px; color:rgba(255,255,255,.72); font-size:12pt}
+  .acc-grille{max-width:1180px; margin:0 auto; padding:34px 32px 60px;
+              display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:22px}
+  .doc{display:flex; flex-direction:column; background:#fff; border-radius:5mm; overflow:hidden;
+       text-decoration:none; color:var(--encre); box-shadow:0 1px 3px rgba(15,16,23,.12);
+       transition:transform .16s ease, box-shadow .16s ease}
+  .doc:hover{transform:translateY(-3px); box-shadow:0 10px 26px rgba(15,16,23,.18)}
+  .doc-img{display:block; height:150px; overflow:hidden}
+  .doc-img img{width:100%; height:100%; object-fit:cover}
+  .doc-bande{display:block; height:5px; background:var(--accent)}
+  .doc-txt{display:flex; flex-direction:column; flex:1; padding:18px 20px 16px; gap:7px}
+  .doc-genre{font:700 8pt/1.3 var(--titre); letter-spacing:.14em; text-transform:uppercase; color:var(--accent)}
+  .doc-titre{font:700 16pt/1.15 var(--titre); letter-spacing:-.02em}
+  .doc-obj{font-size:10pt; line-height:1.45; color:var(--encre-2); flex:1}
+  .doc-pied{display:flex; justify-content:space-between; padding-top:11px; margin-top:4px;
+            border-top:1px solid var(--trait); font:600 9pt/1 var(--titre); color:var(--encre-3)}
+  .acc-note{max-width:1180px; margin:0 auto; padding:0 32px 60px}
+  @media print{ .acc-tete{background:#fff; color:#000} .doc{box-shadow:none; border:1px solid #ddd} }
+</style>
+</head>
+<body>
+
+<header class="acc-tete">
+  <div class="dedans">
+    <img src="assets/logo/logo-blanc.png" alt="École Pizza">
+    <h1>Les manuels de formation</h1>
+    <p>Neuf documents, un par parcours. Chacun s'ouvre dans le navigateur et s'imprime
+    directement en A4 — bouton « Imprimer / PDF » en haut de chaque manuel.</p>
+  </div>
+</header>
+
+<main class="acc-grille">
+
+      <a class="doc" href="niveau-1.html" data-parcours="niveau1">
+        <span class="doc-img"><img src="assets/img/couv-niveau1.jpg" alt=""></span>
+        <span class="doc-bande"></span>
+        <span class="doc-txt">
+          <span class="doc-genre">Formation</span>
+          <span class="doc-titre">Niveau I Pizza classique</span>
+          <span class="doc-obj">Réaliser des pizzas classiques, de l'élaboration de l'empâtement direct jusqu'à la sortie du four.</span>
+          <span class="doc-pied"><span>5 jours · 35 h</span><span>55 pages</span></span>
+        </span>
+      </a>
+
+      <a class="doc" href="rs-pizzas-artisanales.html" data-parcours="rs">
+        <span class="doc-img"><img src="assets/img/couv-rs.jpg" alt=""></span>
+        <span class="doc-bande"></span>
+        <span class="doc-txt">
+          <span class="doc-genre">Parcours certifiant · RS 7404</span>
+          <span class="doc-titre">Fabriquer des pizzas artisanales</span>
+          <span class="doc-obj">Fabriquer des pizzas artisanales, de l'élaboration de l'empâtement direct ou semi-direct jusqu'à la présentation du produit fini.</span>
+          <span class="doc-pied"><span>5 jours · 35 h</span><span>55 pages</span></span>
+        </span>
+      </a>
+
+      <a class="doc" href="niveau-1-hygiene.html" data-parcours="hygiene">
+        <span class="doc-img"><img src="assets/img/couv-hygiene.jpg" alt=""></span>
+        <span class="doc-bande"></span>
+        <span class="doc-txt">
+          <span class="doc-genre">Formation · Hygiène alimentaire en restauration commerciale</span>
+          <span class="doc-titre">Niveau I option hygiène</span>
+          <span class="doc-obj">Réaliser des pizzas classiques, de l'élaboration de l'empâtement direct jusqu'à la sortie du four, en appliquant les gestes et la réglementation d'hygiène adaptés à la restauration commerciale.</span>
+          <span class="doc-pied"><span>5 jours · 44 h</span><span>64 pages</span></span>
+        </span>
+      </a>
+
+      <a class="doc" href="niveau-1-pro.html" data-parcours="pro">
+        <span class="doc-img"><img src="assets/img/couv-pro.jpg" alt=""></span>
+        <span class="doc-bande"></span>
+        <span class="doc-txt">
+          <span class="doc-genre">Formation · Professionnels des métiers de bouche</span>
+          <span class="doc-titre">Niveau I Pro Pizza classique</span>
+          <span class="doc-obj">Mettre en pratique le protocole de l'empâtement direct ainsi que l'étalage à la main.</span>
+          <span class="doc-pied"><span>2 jours · 15 h</span><span>32 pages</span></span>
+        </span>
+      </a>
+
+      <a class="doc" href="niveau-2.html" data-parcours="niveau2">
+        <span class="doc-img"><img src="assets/img/couv-niveau2.jpg" alt=""></span>
+        <span class="doc-bande"></span>
+        <span class="doc-txt">
+          <span class="doc-genre">Formation · Prérequis : Niveau I ou Niveau I Pro</span>
+          <span class="doc-titre">Niveau II Empâtements indirects</span>
+          <span class="doc-obj">Réaliser des empâtements indirects — Poolish, Biga, Contemporaine.</span>
+          <span class="doc-pied"><span>3 jours · 21 h</span><span>36 pages</span></span>
+        </span>
+      </a>
+
+      <a class="doc" href="expert.html" data-parcours="expert">
+        <span class="doc-img"><img src="assets/img/couv-expert.jpg" alt=""></span>
+        <span class="doc-bande"></span>
+        <span class="doc-txt">
+          <span class="doc-genre">Formation · Prérequis : Niveau I ou Niveau I Pro</span>
+          <span class="doc-titre">Niveau Expert Spécialités italiennes</span>
+          <span class="doc-obj">Réaliser les empâtements indirects Poolish, Biga, Contemporaine, In Teglia et In Pala, ainsi qu'un empâtement direct In Teglia et In Pala.</span>
+          <span class="doc-pied"><span>4 jours · 28 h</span><span>48 pages</span></span>
+        </span>
+      </a>
+
+      <a class="doc" href="teglia-pala.html" data-parcours="teglia">
+        <span class="doc-img"><img src="assets/img/couv-teglia.jpg" alt=""></span>
+        <span class="doc-bande"></span>
+        <span class="doc-txt">
+          <span class="doc-genre">Spécialisation · Prérequis : Niveau I ou Niveau I Pro</span>
+          <span class="doc-titre">In Teglia &amp; In Pala</span>
+          <span class="doc-obj">Réaliser une pizza In Teglia et In Pala, spécialités italiennes destinées à être vendues à la part.</span>
+          <span class="doc-pied"><span>2 jours · 14 h</span><span>34 pages</span></span>
+        </span>
+      </a>
+
+      <a class="doc" href="napolitaine.html" data-parcours="napolitaine">
+        <span class="doc-img"><img src="assets/img/couv-napolitaine.jpg" alt=""></span>
+        <span class="doc-bande"></span>
+        <span class="doc-txt">
+          <span class="doc-genre">Spécialisation · Verace Pizza Napoletana · STG UE 97/2010</span>
+          <span class="doc-titre">Pizza napolitaine</span>
+          <span class="doc-obj">Réaliser des pizzas napolitaines, de l'élaboration de l'empâtement jusqu'à la sortie du four, conformément aux cahiers des charges STG et AVPN.</span>
+          <span class="doc-pied"><span>5 jours · 35 h</span><span>29 pages</span></span>
+        </span>
+      </a>
+
+      <a class="doc" href="livret-accueil.html" data-parcours="livret">
+        <span class="doc-img"><img src="assets/img/couv-livret.jpg" alt=""></span>
+        <span class="doc-bande"></span>
+        <span class="doc-txt">
+          <span class="doc-genre">Document d'accueil</span>
+          <span class="doc-titre">Livret d'accueil</span>
+          <span class="doc-obj">Tout ce qu'il faut savoir avant d'arriver : où nous trouver, comment se déroule votre formation, ce qui est attendu de vous.</span>
+          <span class="doc-pied"><span>À lire avant le premier jour</span><span>14 pages</span></span>
+        </span>
+      </a>
+</main>
+
+<section class="acc-note">
+  <div class="enc enc-verif">
+    <span class="enc-t">Points à vérifier</span>
+    <p>Les manuels signalent en violet les valeurs à confirmer et les incohérences relevées dans
+    les documents d'origine. La liste complète est dans <strong>A-VERIFIER.md</strong>, à la racine
+    du dossier <code>manuels/</code>.</p>
+  </div>
+</section>
+
+</body>
+</html>

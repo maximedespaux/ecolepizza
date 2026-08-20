@@ -1,0 +1,601 @@
+/* =============================================================================
+   MANUELS ÉCOLE PIZZA — feuille de style unique
+   =============================================================================
+
+   Une seule feuille pour les neuf documents. Ce qui change d'un parcours à
+   l'autre tient dans DEUX variables (`--accent`, `--sur-accent`) posées par
+   l'attribut `data-parcours` du <body> : le reste du document ne connaît pas
+   sa propre couleur. Changer la charte d'un parcours = une ligne.
+
+   POURQUOI DES PAGES ET PAS UN FLUX CONTINU
+   Ces manuels sont IMPRIMÉS et remis en main propre. Une page HTML qui coule
+   librement donne un PDF dont on ne maîtrise ni les coupures ni le nombre de
+   feuilles. Ici chaque <section class="page"> fait exactement une feuille A4,
+   à l'écran comme à l'impression : ce qu'on voit est ce qui sort.
+
+   IMPRIMER : Fichier → Imprimer → Destination « PDF », marges « Aucune »,
+   « Graphiques d'arrière-plan » COCHÉ (sinon les aplats de couleur sautent).
+   ========================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..900;1,400;1,600&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+:root{
+  /* Charte de l'école — reprise de src/app/ui/styles/app.css */
+  --navy:#2c3371; --tomate:#dc3e37; --orange:#ff6900; --or:#fcb900;
+
+  --encre:#16171d;          /* le noir du texte : jamais #000, trop dur à lire */
+  --encre-2:#4a4d5a;        /* texte secondaire */
+  --encre-3:#83879a;        /* légendes, mentions */
+  --trait:#e2e3ea;
+  --papier:#fff;
+  --papier-2:#f6f7fa;       /* aplat léger des tableaux et encadrés */
+
+  --accent:#2c3371;         /* défaut : écrasé par [data-parcours] */
+  --sur-accent:#fff;        /* couleur du texte POSÉ sur l'accent */
+  --accent-clair:#8b95f2;   /* la version lisible sur fond sombre (couvertures) */
+
+  --titre:"Space Grotesk","Mulish",system-ui,sans-serif;
+  --texte:"Mulish",system-ui,-apple-system,sans-serif;
+
+  --marge:16mm;             /* marge intérieure des pages */
+}
+
+/* --- Les neuf parcours ----------------------------------------------------
+   `--sur-accent` n'est pas toujours blanc : sur le jaune du Niveau II
+   (#EFC546) un texte blanc tombe à 1,7:1 de contraste, soit illisible. On y
+   pose de l'encre foncée. Même raison sur le vert du RS, où le blanc passe
+   tout juste — on garde le blanc mais en gras uniquement (cf. .couv-titre). */
+[data-parcours="niveau1"]     {--accent:#2C3371; --accent-clair:#8b95f2}
+[data-parcours="rs"]          {--accent:#0CAC46; --accent-clair:#3fd97a}
+[data-parcours="hygiene"]     {--accent:#00B2B2; --accent-clair:#33dedd}
+[data-parcours="pro"]         {--accent:#DC3E37; --accent-clair:#ff8177}
+[data-parcours="niveau2"]     {--accent:#EFC546; --sur-accent:#1b1500; --accent-clair:#f6d977}
+[data-parcours="expert"]      {--accent:#121212; --accent-clair:#ff8177}
+[data-parcours="teglia"]      {--accent:#121212; --accent-clair:#ffb454}
+[data-parcours="napolitaine"] {--accent:#121212; --accent-clair:#ff8177}
+[data-parcours="livret"]      {--accent:#2C3371; --accent-clair:#8b95f2}
+
+/* Le noir #121212 sert d'accent à trois parcours. En aplat de tableau ou en
+   filet il devient une masse : on lui adjoint un second ton, tiré de la
+   charte, qui porte les détails (numéros de chapitre, puces, surlignage). */
+[data-parcours="expert"], [data-parcours="teglia"], [data-parcours="napolitaine"]{
+  --second:#dc3e37;
+}
+:root{--second:var(--accent)}
+
+/* ==========================================================================
+   1. SOCLE
+   ========================================================================== */
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:#8b8d99; color:var(--encre);
+  font:400 10.7pt/1.55 var(--texte);
+  -webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;
+}
+h1,h2,h3,h4{font-family:var(--titre); font-weight:700; margin:0; letter-spacing:-.015em}
+p{margin:0 0 .62em}
+p:last-child{margin-bottom:0}
+strong,b{font-weight:700}
+a{color:inherit}
+img{max-width:100%; display:block}
+figure{margin:0}
+ul,ol{margin:0 0 .62em; padding-left:1.15em}
+li{margin-bottom:.2em}
+li:last-child{margin-bottom:0}
+sup{font-size:.62em; vertical-align:.55em; line-height:0}
+
+/* ==========================================================================
+   2. LA PAGE A4
+   --------------------------------------------------------------------------
+   297mm pile fait déborder d'un cheveu sur certaines imprimantes, qui
+   ajoutent alors une page blanche entre chaque feuille. 296.8mm règle le
+   problème sans que l'œil voie la différence.
+   ========================================================================== */
+
+.page{
+  position:relative; width:210mm; height:296.8mm; overflow:hidden;
+  margin:0 auto 8mm; background:var(--papier);
+  padding:var(--marge) var(--marge) 14mm;
+  display:flex; flex-direction:column;
+  box-shadow:0 2mm 8mm rgba(0,0,0,.28);
+}
+.page:last-of-type{margin-bottom:0}
+.page-pleine{padding:0}          /* couvertures, intercalaires, dos */
+
+/* Le corps prend la hauteur restante : c'est lui qui permet de pousser un
+   bloc en pied de page avec `margin-top:auto` sans calcul de hauteur. */
+.corps{flex:1; min-height:0; display:flex; flex-direction:column}
+.pousse{margin-top:auto}
+
+/* --- Filet de tête ------------------------------------------------------- */
+.entete{
+  display:flex; align-items:baseline; justify-content:space-between; gap:8mm;
+  padding-bottom:2.4mm; margin-bottom:5.5mm;
+  border-bottom:.6mm solid var(--accent);
+}
+.entete-parcours{
+  font:700 7.6pt/1 var(--titre); letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent);
+}
+.entete-chap{font:600 7.6pt/1 var(--titre); letter-spacing:.06em; color:var(--encre-3)}
+
+/* --- Pied de page -------------------------------------------------------- */
+.pied{
+  display:flex; align-items:center; justify-content:space-between; gap:6mm;
+  margin-top:4mm; padding-top:2.2mm; border-top:.25mm solid var(--trait);
+  font-size:7.4pt; color:var(--encre-3);
+}
+.folio{
+  font:700 8.4pt/1 var(--titre); color:var(--accent);
+  min-width:9mm; text-align:right;
+}
+
+/* ==========================================================================
+   3. COUVERTURE
+   --------------------------------------------------------------------------
+   Photo en BANDEAU, pas en pleine page. Les photos de la bibliothèque sont
+   toutes en paysage 3:2 : recadrées en portrait A4, elles perdaient leur sujet
+   (la première version ne montrait plus que le torse du formateur). Un bandeau
+   respecte leur cadrage, et l'aplat du bas rend le titre lisible sans avoir à
+   noyer l'image sous un voile noir.
+   ========================================================================== */
+
+.couv{height:100%; display:flex; flex-direction:column; background:#0f1017; color:#fff}
+
+.couv-visuel{position:relative; flex:0 0 55%; overflow:hidden}
+.couv-visuel > img{width:100%; height:100%; object-fit:cover; object-position:center 42%}
+.couv-visuel::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(180deg, rgba(10,11,18,.55) 0%, rgba(10,11,18,.05) 38%, rgba(15,16,23,.55) 100%);
+}
+
+.couv-haut{
+  position:absolute; z-index:1; left:14mm; right:14mm; top:13mm;
+  display:flex; align-items:flex-start; justify-content:space-between; gap:8mm;
+}
+.couv-logo{width:44mm}
+.couv-duree{
+  display:inline-flex; align-items:center; padding:1.8mm 4mm; border-radius:99px;
+  background:var(--accent); color:var(--sur-accent);
+  font:700 8.4pt/1 var(--titre); letter-spacing:.1em; text-transform:uppercase;
+  white-space:nowrap;
+}
+
+/* La bande de couleur : le seul endroit où l'accent est à 100 %, pleine largeur.
+   C'est elle qui identifie le parcours à un mètre de distance. */
+.couv-bande{flex:0 0 5mm; background:var(--accent)}
+
+.couv-bas{flex:1; min-height:0; display:flex; flex-direction:column; padding:9mm 14mm 12mm}
+.couv-genre{
+  font:700 8.6pt/1 var(--titre); letter-spacing:.3em; text-transform:uppercase;
+  color:var(--accent-clair); margin-bottom:3.5mm;
+}
+.couv-titre{font:700 36pt/1.04 var(--titre); letter-spacing:-.025em; margin:0 0 4.5mm; text-wrap:balance}
+.couv-titre .fin{display:block; color:var(--accent-clair)}
+.couv-objectif{max-width:132mm; font-size:11pt; line-height:1.5; color:rgba(255,255,255,.86)}
+.couv-objectif .lbl{
+  display:block; font:700 7.6pt/1 var(--titre); letter-spacing:.18em;
+  text-transform:uppercase; color:rgba(255,255,255,.42); margin-bottom:2mm;
+}
+.couv-legal{
+  margin-top:auto; padding-top:5mm; border-top:.25mm solid rgba(255,255,255,.18);
+  display:flex; align-items:flex-end; justify-content:space-between; gap:8mm;
+  font-size:7.4pt; line-height:1.55; color:rgba(255,255,255,.55);
+}
+.couv-legal .maj{white-space:nowrap; text-align:right}
+/* Qualiopi est transparent, ICPF est déjà sur blanc : les recolorer est interdit
+   par les chartes des deux certificateurs. On les pose sur une pastille blanche. */
+.couv-labels{display:flex; align-items:center; gap:3mm; margin-top:3mm}
+.couv-labels img{height:6.5mm; width:auto; background:#fff; padding:1.2mm 1.6mm; border-radius:1.2mm}
+
+/* ==========================================================================
+   4. SOMMAIRE
+   ========================================================================== */
+
+.somm-titre{
+  font:700 26pt/1 var(--titre); letter-spacing:-.02em; margin:0 0 1.5mm;
+}
+.somm-sur{
+  font:700 8pt/1 var(--titre); letter-spacing:.24em; text-transform:uppercase;
+  color:var(--accent); margin-bottom:3mm;
+}
+.somm{list-style:none; margin:6mm 0 0; padding:0; columns:1}
+.somm li{margin:0}
+.somm a, .somm .ligne{
+  display:flex; align-items:baseline; gap:2mm; padding:1.35mm 0;
+  text-decoration:none; border-bottom:.2mm dotted var(--trait);
+}
+.somm .num{
+  flex:0 0 8mm; font:700 9pt/1.4 var(--titre); color:var(--accent);
+  font-variant-numeric:tabular-nums;
+}
+.somm .lib{flex:1; font-size:10pt}
+.somm .pts{
+  flex:1; border-bottom:.2mm dotted #c8cad6; transform:translateY(-1mm); min-width:6mm;
+}
+.somm .pg{font:600 9pt/1.4 var(--titre); color:var(--encre-3); font-variant-numeric:tabular-nums}
+.somm .sous .lib{padding-left:5mm; font-size:9.2pt; color:var(--encre-2)}
+.somm-dense a, .somm-dense .ligne{padding:.85mm 0}
+.somm-dense .lib{font-size:9pt}
+.somm-dense .sous .lib{font-size:8.4pt}
+.somm .part{
+  margin-top:4mm; padding:2mm 3mm; border-radius:2mm;
+  background:var(--accent); color:var(--sur-accent);
+  font:700 8.6pt/1 var(--titre); letter-spacing:.14em; text-transform:uppercase;
+  display:flex; justify-content:space-between;
+}
+
+/* ==========================================================================
+   5. TITRES DE CHAPITRE
+   ========================================================================== */
+
+.chap{display:flex; align-items:flex-start; gap:4mm; margin-bottom:5mm}
+.chap-num{
+  flex:0 0 auto; min-width:11mm; height:11mm; padding:0 2mm; border-radius:2.4mm;
+  background:var(--accent); color:var(--sur-accent);
+  display:flex; align-items:center; justify-content:center;
+  font:700 13pt/1 var(--titre); font-variant-numeric:tabular-nums;
+}
+.chap-txt{flex:1; padding-top:.6mm}
+.chap h2{font-size:19pt; line-height:1.08; letter-spacing:-.02em}
+.chap .chapo{margin-top:1.6mm; font-size:10pt; color:var(--encre-2); max-width:150mm}
+
+/* Sous-titre de section à l'intérieur d'un chapitre */
+h3.sec{
+  font-size:11.5pt; margin:5mm 0 2.4mm; padding-left:3mm;
+  border-left:1mm solid var(--second); line-height:1.2;
+}
+h3.sec:first-child{margin-top:0}
+h4.sous{
+  font:700 8.4pt/1 var(--titre); letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); margin:4mm 0 1.8mm;
+}
+h4.sous:first-child{margin-top:0}
+
+/* ==========================================================================
+   6. TEXTE COURANT
+   ========================================================================== */
+
+.deux-col{columns:2; column-gap:8mm}
+.deux-col > *{break-inside:avoid}
+.intro{font-size:11.4pt; line-height:1.5; color:var(--encre-2)}
+.intro strong{color:var(--encre)}
+.legende{font-size:7.8pt; line-height:1.4; color:var(--encre-3); margin-top:1.6mm}
+.mention{font-size:7.8pt; color:var(--encre-3)}
+
+/* Liste à puces carrées dans l'accent — le puce ronde par défaut se perd à
+   l'impression sur les listes longues de ces manuels. */
+ul.liste{list-style:none; padding-left:0}
+ul.liste li{position:relative; padding-left:5mm; margin-bottom:1mm}
+ul.liste li::before{
+  content:""; position:absolute; left:0; top:1.55mm;
+  width:2.2mm; height:2.2mm; border-radius:.5mm; background:var(--second);
+}
+ul.liste.serre li{margin-bottom:.4mm}
+
+/* Liste numérotée en pastilles */
+ol.etapes{list-style:none; padding-left:0; counter-reset:etape}
+ol.etapes > li{
+  position:relative; padding-left:8mm; margin-bottom:2.2mm; counter-increment:etape;
+}
+ol.etapes > li::before{
+  content:counter(etape); position:absolute; left:0; top:-.2mm;
+  width:5.6mm; height:5.6mm; border-radius:50%;
+  background:var(--accent); color:var(--sur-accent);
+  font:700 8pt/5.6mm var(--titre); text-align:center;
+}
+
+/* ==========================================================================
+   7. TABLEAUX
+   ========================================================================== */
+
+.tbl{width:100%; border-collapse:collapse; font-size:9pt; margin:0 0 3mm}
+.tbl caption{
+  caption-side:top; text-align:left; padding:0 0 2mm;
+  font:700 8.4pt/1.3 var(--titre); letter-spacing:.1em; text-transform:uppercase;
+  color:var(--accent);
+}
+.tbl th{
+  background:var(--accent); color:var(--sur-accent); text-align:left;
+  padding:2mm 2.4mm; font:700 8.2pt/1.25 var(--titre); letter-spacing:.04em;
+  vertical-align:bottom;
+}
+.tbl th.c, .tbl td.c{text-align:center}
+.tbl th.d, .tbl td.d{text-align:right}
+.tbl td{padding:1.8mm 2.4mm; border-bottom:.2mm solid var(--trait); vertical-align:top}
+.tbl tbody tr:nth-child(even) td{background:var(--papier-2)}
+.tbl tbody tr:last-child td{border-bottom:.4mm solid var(--accent)}
+.tbl .grp td{
+  background:color-mix(in srgb, var(--accent) 12%, #fff); font-weight:700;
+  border-bottom:.2mm solid color-mix(in srgb, var(--accent) 30%, #fff);
+}
+.tbl .fort{font-weight:700; color:var(--accent)}
+.tbl .val{font-family:var(--titre); font-weight:600; font-variant-numeric:tabular-nums}
+.tbl-compact td, .tbl-compact th{padding:1.25mm 2mm; font-size:8.4pt}
+
+/* Tableau sans en-tête : une grille de libellés, pas des données. Un filet
+   d'accent en tête remplace la bande de couleur. */
+.tbl-nue{border-top:.6mm solid var(--accent)}
+.tbl-nue tbody tr:first-child td{padding-top:2.4mm}
+
+/* Cases à remplir par le stagiaire : les manuels d'origine laissent des
+   pointillés dans les colonnes 3 kg / 10 kg, c'est un exercice. On garde. */
+.arempl{color:#b9bcc9; letter-spacing:.06em; font-weight:400}
+
+/* ==========================================================================
+   8. ENCADRÉS
+   ========================================================================== */
+
+.enc{
+  position:relative; padding:3.4mm 4mm 3.4mm 4.6mm; margin:0 0 3.4mm;
+  border-radius:2.4mm; background:var(--papier-2);
+  border-left:1.4mm solid var(--accent);
+  font-size:9.4pt; break-inside:avoid;
+}
+.enc-t{
+  display:block; font:700 8.2pt/1 var(--titre); letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); margin-bottom:1.8mm;
+}
+.enc-conseil{border-left-color:var(--or); background:#fffaeb}
+.enc-conseil .enc-t{color:#8a6300}
+.enc-alerte{border-left-color:var(--tomate); background:#fdf1f0}
+.enc-alerte .enc-t{color:var(--tomate)}
+.enc-verif{border-left-color:#7a44d6; background:#f6f1fe}
+.enc-verif .enc-t{color:#6a34c4}
+.enc-note{border-left-color:var(--encre-3); background:#f6f7fa}
+.enc-note .enc-t{color:var(--encre-2)}
+
+/* Un point ouvert : la valeur n'est pas confirmée, le formateur doit trancher.
+   Volontairement voyant — un « à vérifier » discret ne se vérifie jamais. */
+.averif{
+  display:inline-flex; align-items:center; gap:1.4mm; padding:.5mm 1.8mm;
+  border-radius:1.4mm; background:#f0e7ff; color:#5c2bb0;
+  font:700 7.4pt/1.5 var(--titre); letter-spacing:.06em; text-transform:uppercase;
+  white-space:nowrap;
+}
+
+/* ==========================================================================
+   9. PROTOCOLES D'EMPÂTEMENT
+   --------------------------------------------------------------------------
+   Le cœur des manuels. Une phase = un bloc numéroté sur un rail vertical ;
+   les temps de repos coupent le rail, parce qu'à ce moment-là le pizzaïolo
+   ne fait justement rien et que c'est une information à part entière.
+   ========================================================================== */
+
+.proto{position:relative; margin:0 0 3mm; padding-left:9mm}
+.proto::before{
+  content:""; position:absolute; left:2.6mm; top:2mm; bottom:2mm;
+  width:.5mm; background:color-mix(in srgb, var(--accent) 26%, #fff);
+}
+.phase{position:relative; margin-bottom:3.4mm; break-inside:avoid}
+.phase:last-child{margin-bottom:0}
+.phase::before{
+  content:attr(data-n); position:absolute; left:-9mm; top:-.4mm;
+  width:5.6mm; height:5.6mm; border-radius:50%;
+  background:var(--accent); color:var(--sur-accent);
+  font:700 8pt/5.6mm var(--titre); text-align:center;
+}
+.phase-t{
+  font:700 9pt/1.2 var(--titre); letter-spacing:.1em; text-transform:uppercase;
+  color:var(--accent); margin-bottom:1.2mm;
+}
+.phase p, .phase ul{font-size:9.4pt}
+
+.repos{
+  position:relative; display:flex; align-items:center; gap:2.6mm;
+  margin:0 0 3.4mm -9mm; padding:2mm 3mm;
+  border-radius:2mm; background:var(--papier-2);
+  border:.25mm dashed color-mix(in srgb, var(--accent) 45%, #fff);
+  break-inside:avoid;
+}
+.repos-d{
+  font:700 10pt/1 var(--titre); color:var(--accent); white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.repos-l{font-size:8.8pt; color:var(--encre-2)}
+.repos-l b{color:var(--encre)}
+
+/* Bandeau de repères d'un empâtement : hydratation, W, température… */
+.reperes{
+  display:flex; flex-wrap:wrap; gap:2mm; margin:0 0 3.4mm;
+}
+.repere{
+  flex:1 1 0; min-width:28mm; padding:2.4mm 3mm; border-radius:2.2mm;
+  background:var(--papier-2); border-top:1mm solid var(--accent);
+}
+.repere .k{
+  display:block; font:700 7.2pt/1 var(--titre); letter-spacing:.14em;
+  text-transform:uppercase; color:var(--encre-3); margin-bottom:1.4mm;
+}
+.repere .v{font:700 13pt/1 var(--titre); color:var(--accent); font-variant-numeric:tabular-nums}
+.repere .u{font-size:8pt; font-weight:600; color:var(--encre-2)}
+
+/* ==========================================================================
+   10. AVANTAGES / INCONVÉNIENTS
+   ========================================================================== */
+
+.bilan{display:grid; grid-template-columns:1fr 1fr; gap:3mm; margin:0 0 3.4mm}
+.bilan > div{padding:3mm 3.4mm; border-radius:2.4mm; break-inside:avoid}
+.bilan .plus{background:#eef8f2; border-top:1mm solid #1b8f5a}
+.bilan .moins{background:#fdf2f1; border-top:1mm solid var(--tomate)}
+.bilan h4{
+  font:700 8.2pt/1 var(--titre); letter-spacing:.14em; text-transform:uppercase;
+  margin-bottom:2mm;
+}
+.bilan .plus h4{color:#0f7548}
+.bilan .moins h4{color:var(--tomate)}
+.bilan ul{list-style:none; padding:0; margin:0; font-size:9pt}
+.bilan li{position:relative; padding-left:4.4mm; margin-bottom:1.2mm}
+.bilan .plus li::before{content:"+"; position:absolute; left:0; font-weight:700; color:#1b8f5a}
+.bilan .moins li::before{content:"–"; position:absolute; left:0; font-weight:700; color:var(--tomate)}
+
+/* ==========================================================================
+   11. PHOTOGRAPHIE
+   ========================================================================== */
+
+/* La hauteur des photos est BRIDÉE. Les fichiers sources font 1400 px de large
+   en 3:2 : posés pleine largeur dans une colonne de 178 mm, ils occupaient
+   119 mm — soit 40 % de la feuille pour une seule illustration, et huit pages
+   du Niveau I débordaient à cause de ça. En bandeau de 58 mm l'image reste
+   lisible et la page respire. */
+.photo{margin:0 0 3.4mm; break-inside:avoid}
+.photo img{width:100%; height:58mm; object-fit:cover; border-radius:2.4mm}
+.photo.grande img{height:86mm}
+.photo.petite img{height:44mm}
+.photo-pleine{position:relative; margin:0; height:100%}
+.photo-pleine img{width:100%; height:100%; object-fit:cover; border-radius:0}
+.duo{display:grid; grid-template-columns:1fr 1fr; gap:3mm; margin:0 0 3.4mm}
+.duo img{width:100%; height:52mm; object-fit:cover; border-radius:2.4mm}
+.trio{display:grid; grid-template-columns:repeat(3,1fr); gap:2.4mm; margin:0 0 3.4mm}
+.trio img{width:100%; height:38mm; object-fit:cover; border-radius:2mm}
+
+/* Texte à côté d'une image, la mise en page la plus fréquente du manuel */
+.cote{display:grid; grid-template-columns:1fr 70mm; gap:5mm; align-items:start; margin:0 0 3.4mm}
+.cote.inverse{grid-template-columns:70mm 1fr}
+.cote img{width:100%; height:62mm; object-fit:cover; border-radius:2.4mm}
+.cote-large{grid-template-columns:1fr 86mm}
+
+/* ==========================================================================
+   12. INTERCALAIRE DE PARTIE (manuel Expert)
+   ========================================================================== */
+
+.inter{position:relative; height:100%; display:flex; flex-direction:column; justify-content:center;
+       padding:0 20mm; background:#0d0e14; color:#fff; text-align:center}
+.inter .photo-pleine{position:absolute; inset:0}
+.inter .photo-pleine::after{content:""; position:absolute; inset:0; background:rgba(9,10,16,.72)}
+.inter > *{position:relative; z-index:1}
+.inter .part-n{
+  font:700 8.6pt/1 var(--titre); letter-spacing:.32em; text-transform:uppercase;
+  color:rgba(255,255,255,.6); margin-bottom:4mm;
+}
+.inter h2{font-size:34pt; line-height:1.06; margin-bottom:5mm}
+.inter .regle{width:24mm; height:1.4mm; background:var(--second); border-radius:99px; margin:0 auto 5mm}
+.inter p{font-size:11.5pt; color:rgba(255,255,255,.82); max-width:130mm; margin:0 auto}
+
+/* ==========================================================================
+   13. LEXIQUE
+   ========================================================================== */
+
+.lex{columns:2; column-gap:7mm; font-size:8.6pt; line-height:1.42}
+.lex .lettre{
+  break-after:avoid; break-inside:avoid;
+  font:700 12pt/1 var(--titre); color:var(--accent);
+  padding-bottom:1mm; margin:3mm 0 2mm; border-bottom:.4mm solid var(--accent);
+}
+.lex .lettre:first-child{margin-top:0}
+.lex dl{margin:0}
+.lex dt{font-weight:700; display:inline}
+.lex dd{display:inline; margin:0}
+.lex .mot{margin:0 0 1.6mm; break-inside:avoid}
+
+/* ==========================================================================
+   14. NOTES (les lignes à remplir des manuels d'origine)
+   ========================================================================== */
+
+/* Le blanc restant devient des lignes à écrire — AUTOMATIQUEMENT.
+   Un support de formation se remplit à la main : plutôt qu'un tiers de page
+   blanc sur les chapitres courts, on donne de la place pour noter.
+   `flex:1 1 0` + `min-height:0` fait que sur une page pleine ce pseudo-élément
+   reçoit zéro et disparaît : aucune page à surveiller, aucun réglage à faire.
+   Pas de libellé « Notes » : un libellé posé dans un bloc élastique se
+   retrouverait coupé en deux sur les pages presque pleines. */
+.corps::after{
+  content:""; flex:1 1 0; min-height:0; max-height:88mm; margin-top:5mm; align-self:stretch;
+  background:repeating-linear-gradient(180deg, transparent 0 6.1mm, var(--trait) 6.1mm 6.3mm);
+}
+/* Les pages qui n'ont rien à faire de lignes : lexique, fiches à remplir. */
+.corps.plein::after{display:none}
+
+/* ==========================================================================
+   15. ÉQUIPE ET DOS DE COUVERTURE
+   ========================================================================== */
+
+.equipe{display:grid; grid-template-columns:repeat(3,1fr); gap:5mm; margin-top:8mm}
+.membre{text-align:center}
+.membre .rond{
+  width:34mm; height:34mm; margin:0 auto 3.4mm; border-radius:50%;
+  background:var(--papier-2); border:1mm solid var(--accent);
+  display:flex; align-items:center; justify-content:center;
+  font:700 15pt/1 var(--titre); color:var(--accent);
+}
+.membre .nom{font:700 12pt/1.2 var(--titre); margin-bottom:1.4mm}
+.membre .role{
+  font:700 7.6pt/1.3 var(--titre); letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent);
+}
+
+.dos{
+  height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; padding:0 20mm; background:var(--accent); color:var(--sur-accent);
+}
+.dos-logo{width:64mm; margin-bottom:10mm}
+.dos h2{font-size:30pt; line-height:1.1; margin-bottom:4mm}
+.dos .parcours{
+  font:700 9pt/1 var(--titre); letter-spacing:.28em; text-transform:uppercase;
+  opacity:.72; margin-bottom:10mm;
+}
+.dos .legal{
+  margin-top:auto; padding-bottom:16mm; font-size:8pt; line-height:1.6; opacity:.75;
+}
+
+/* ==========================================================================
+   16. BARRE D'ÉCRAN — n'existe pas à l'impression
+   ========================================================================== */
+
+.barre{
+  position:sticky; top:0; z-index:50;
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:10px 18px; margin-bottom:8mm;
+  background:#101118; color:#fff; font:600 13px/1 var(--titre);
+  box-shadow:0 2px 12px rgba(0,0,0,.3);
+}
+.barre .pastille{width:12px; height:12px; border-radius:3px; background:var(--accent)}
+.barre .nom{font-weight:700}
+.barre .sep{flex:1}
+.barre a, .barre button{
+  padding:7px 13px; border-radius:8px; border:1px solid rgba(255,255,255,.24);
+  background:transparent; color:#fff; font:600 12.5px/1 var(--titre);
+  text-decoration:none; cursor:pointer;
+}
+.barre button.primaire{background:var(--accent); color:var(--sur-accent); border-color:transparent}
+.barre a:hover, .barre button:hover{background:rgba(255,255,255,.12)}
+.barre button.primaire:hover{filter:brightness(1.12)}
+
+/* ==========================================================================
+   17. IMPRESSION
+   ========================================================================== */
+
+@media print{
+  @page{size:A4; margin:0}
+  html,body{background:#fff}
+  body{font-size:10.7pt}
+  .barre{display:none !important}
+  .page{
+    margin:0; box-shadow:none; break-after:page; page-break-after:always;
+  }
+  .page:last-of-type{break-after:auto; page-break-after:auto}
+  /* Sans cela Chrome et Safari suppriment les aplats de couleur et les
+     couvertures sortent en blanc. */
+  *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important}
+}
+
+/* ==========================================================================
+   18. PETITS ÉCRANS — pour relire sur téléphone, jamais pour imprimer
+   ========================================================================== */
+
+@media screen and (max-width:230mm){
+  body{background:#fff}
+  .page{
+    width:auto; height:auto; min-height:0; overflow:visible;
+    margin:0; padding:20px 16px 26px; box-shadow:none;
+    border-bottom:1px solid var(--trait);
+  }
+  .page-pleine{padding:0}
+  .couv{min-height:70vh}
+  .deux-col, .lex{columns:1}
+  .bilan, .duo, .cote, .cote.inverse, .equipe, .trio{grid-template-columns:1fr}
+  .duo img, .trio img{height:auto}
+}

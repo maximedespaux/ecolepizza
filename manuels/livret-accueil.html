@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Livret d'accueil — École Pizza</title>
+<meta name="description" content="Tout ce qu'il faut savoir avant d'arriver : où nous trouver, comment se déroule votre formation, ce qui est attendu de vous.">
+<link rel="icon" href="assets/logo/logo.png">
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body data-parcours="livret">
+
+<!-- Barre d'écran : elle disparaît à l'impression (cf. manuel.css §17). -->
+<div class="barre">
+  <span class="pastille"></span>
+  <span class="nom">Livret d'accueil</span>
+  <span>À lire avant le premier jour</span>
+  <span class="sep"></span>
+  <a href="index.html">Tous les manuels</a>
+  <button class="primaire" onclick="print()">Imprimer / PDF</button>
+</div>
+
+    <section class="page page-pleine">
+      <div class="couv">
+        <div class="couv-visuel">
+          <img src="assets/img/couv-livret.jpg" alt="">
+          <div class="couv-haut">
+            <img class="couv-logo" src="assets/logo/logo-blanc.png" alt="École Pizza">
+            <span class="couv-duree">À lire avant le premier jour</span>
+          </div>
+        </div>
+        <div class="couv-bande"></div>
+        <div class="couv-bas">
+          <div class="couv-genre">Document d'accueil</div>
+          <h1 class="couv-titre">Livret<span class="fin">d'accueil</span></h1>
+          <div class="couv-regle"></div>
+          <p class="couv-objectif"><span class="lbl">Objectif de la formation</span>Tout ce qu'il faut savoir avant d'arriver : où nous trouver, comment se déroule votre formation, ce qui est attendu de vous.</p>
+          <div class="couv-legal">
+            <span>
+              École Pizzaïolo Jean-Jacques Despaux · SIRET 879 955 136 00012 · NAF 8559A<br>
+              NDA 76 65 00989 65 auprès du préfet de la région Occitanie<br>
+              101 rue Alsace Lorraine, 65300 Lannemezan · contact@ecole-pizza.com
+              <span class="couv-labels">
+                <img src="assets/logo/qualiopi.png" alt="Qualiopi">
+                <img src="assets/logo/icpf.png" alt="ICPF &amp; Cofrac">
+              </span>
+            </span>
+            <span class="maj">Version 2.0<br>Mise à jour le 14/01/2026</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Sommaire</span>
+      </div>
+      <div class="corps">
+        <div class="somm-sur">Document d'accueil</div>
+        <h2 class="somm-titre">Sommaire</h2>
+        <ol class="somm"><li>
+              <span class="ligne">
+                <span class="num">1.</span>
+                <span class="lib">Mot d'accueil</span>
+                <span class="pts"></span>
+                <span class="pg">1</span>
+              </span>
+            </li><li>
+              <span class="ligne">
+                <span class="num">2.</span>
+                <span class="lib">Notre certification</span>
+                <span class="pts"></span>
+                <span class="pg">2</span>
+              </span>
+            </li><li>
+              <span class="ligne">
+                <span class="num">3.</span>
+                <span class="lib">Votre formateur</span>
+                <span class="pts"></span>
+                <span class="pg">3</span>
+              </span>
+            </li><li>
+              <span class="ligne">
+                <span class="num">4.</span>
+                <span class="lib">Accès au centre de formation</span>
+                <span class="pts"></span>
+                <span class="pg">4</span>
+              </span>
+            </li><li>
+              <span class="ligne">
+                <span class="num">5.</span>
+                <span class="lib">Le centre de formation</span>
+                <span class="pts"></span>
+                <span class="pg">5</span>
+              </span>
+            </li><li>
+              <span class="ligne">
+                <span class="num">6.</span>
+                <span class="lib">Nos formations</span>
+                <span class="pts"></span>
+                <span class="pg">7</span>
+              </span>
+            </li><li>
+              <span class="ligne">
+                <span class="num">7.</span>
+                <span class="lib">Tenue, sécurité et hygiène</span>
+                <span class="pts"></span>
+                <span class="pg">9</span>
+              </span>
+            </li><li>
+              <span class="ligne">
+                <span class="num">8.</span>
+                <span class="lib">Règlement intérieur</span>
+                <span class="pts"></span>
+                <span class="pg">10</span>
+              </span>
+            </li><li>
+              <span class="ligne">
+                <span class="num">9.</span>
+                <span class="lib">L'équipe École Pizza</span>
+                <span class="pts"></span>
+                <span class="pg">11</span>
+              </span>
+            </li></ol>
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · Mise à jour le 14/01/2026</span>
+        <span class="folio"></span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Mot d'accueil</span>
+      </div>
+      <div class="corps">
+
+
+        <div class="chap">
+          <div class="chap-num">1</div>
+          <div class="chap-txt">
+            <h2>Mot d'accueil</h2>
+            <p class="chapo">Bienvenue à l'École Pizza.</p>
+          </div>
+        </div>
+<div class="cote"><div>
+          <p class="intro">Passionné par la cuisine depuis mon enfance, j'ai eu de belles
+          expériences dans le monde de la restauration.</p>
+          <p>Quand je me convertis au métier de la pizza, je ne me doute pas de la richesse de ce
+          savoir-faire. C'est aussi grâce à des formations en Italie et à la participation à de
+          nombreux championnats nationaux et internationaux que mon métier de pizzaïolo s'est
+          étoffé. Il suffisait d'une remise en question&nbsp;!</p>
+          <p>C'est au travers de la formation que je partage avec vous mes techniques, mes astuces,
+          ma passion.</p>
+          <p style="margin-top:5mm"><strong>Jean-Jacques Despaux</strong><br>
+          <span class="mention">Président de l'École Pizza</span></p></div><img src="assets/img/accueil.jpg" alt="L'accueil du centre de formation"></div>
+        <h3 class="sec">Pourquoi nous&nbsp;?</h3>
+        <p>L'École Pizza | Jean-Jacques Despaux a été créée en <strong>2007</strong> afin
+        d'accompagner les demandeurs d'emploi, les restaurateurs, les porteurs de projet, les
+        particuliers — toute personne désirant apprendre le métier de pizzaïolo ou ajouter des
+        compétences à son expérience professionnelle.</p>
+        <p>Dans cet élan, en <strong>2016</strong>, des travaux sont effectués au rez-de-chaussée du
+        bâtiment afin d'assurer aux stagiaires une formation de qualité, avec des
+        <strong>postes de travail individuels</strong> équipés du matériel nécessaire.</p>
+
+        <div class="reperes">
+          
+          <div class="repere"><span class="k">Depuis</span><span class="v">2007</span></div>
+          <div class="repere"><span class="k">Pizzaïolos formés</span><span class="v">+ 1 600</span></div>
+          <div class="repere"><span class="k">Postes individuels</span><span class="v">8</span></div>
+        </div>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">1</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Notre certification</span>
+      </div>
+      <div class="corps">
+
+
+        <div class="chap">
+          <div class="chap-num">2</div>
+          <div class="chap-txt">
+            <h2>Notre certification</h2>
+            <p class="chapo">La certification qualité a été délivrée au titre de la catégorie d'action suivante&nbsp;: <strong>actions de formation</strong>.</p>
+          </div>
+        </div>
+        <div class="duo" style="align-items:center">
+          <img src="assets/logo/qualiopi.png" alt="Qualiopi — processus certifié"
+               style="height:auto;object-fit:contain;background:#fff;padding:6mm;border:.25mm solid var(--trait)">
+          <img src="assets/logo/icpf.png" alt="ICPF &amp; Cofrac"
+               style="height:auto;object-fit:contain;background:#fff;padding:6mm;border:.25mm solid var(--trait)">
+        </div>
+
+        <table class="tbl tbl-compact tbl-nue">
+          
+          
+          <tbody><tr><td class="fort">Organisme certifié</td><td>École Pizzaïolo Jean-Jacques Despaux</td></tr><tr><td class="fort">Adresse</td><td>101 rue Alsace Lorraine, 65300 Lannemezan — France métropolitaine</td></tr><tr><td class="fort">Numéro de déclaration d'activité</td><td>76650098965</td></tr><tr><td class="fort">Certificateur</td><td>ICPF — accréditation Cofrac n° 5-0616, portée disponible sur cofrac.fr</td></tr><tr><td class="fort">Vérifiable sur</td><td>certif-icpf.org</td></tr></tbody>
+        </table>
+<div class="enc enc-alerte"><span class="enc-t">Le certificat reproduit dans le livret précédent était expiré</span><p>Le livret de
+        novembre 2023 reproduisait le certificat <strong>B01371</strong>, valable
+        <strong>du 17/05/2021 au 16/05/2024</strong>. Il ne peut plus être diffusé en l'état&nbsp;:
+        un stagiaire ou un financeur qui le lit aujourd'hui y voit une certification périmée.
+        <br><strong>À faire&nbsp;:</strong> insérer ici le scan du certificat en cours de validité,
+        avec ses dates. <span class="averif">⚑ certificat à jour à fournir — Marie-Christine</span></p></div>
+<div class="enc enc-note"><span class="enc-t">Ce que Qualiopi certifie</span><p>Qualiopi atteste de la <strong>qualité du processus</strong>
+        mis en œuvre par l'organisme — pas de la qualité d'une formation en particulier. C'est ce qui
+        rend les formations de l'école <strong>finançables</strong> par les opérateurs de compétences
+        et les financeurs publics.</p></div>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">2</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Votre formateur</span>
+      </div>
+      <div class="corps">
+
+
+        <div class="chap">
+          <div class="chap-num">3</div>
+          <div class="chap-txt">
+            <h2>Votre formateur</h2>
+            <p class="chapo">Jean-Jacques Despaux — Maître Artisan Pizzaïolo, Maître Instructeur Pizzaïolo.</p>
+          </div>
+        </div>
+
+        <div class="reperes">
+          
+          <div class="repere"><span class="k">Métier de la pizza</span><span class="v">27 <span class="u">ans</span></span></div>
+          <div class="repere"><span class="k">Métier de la cuisine</span><span class="v">17 <span class="u">ans</span></span></div>
+          <div class="repere"><span class="k">Maître Artisan</span><span class="v">2011</span></div>
+          <div class="repere"><span class="k">Maître Instructeur</span><span class="v">2007</span></div>
+        </div>
+<div class="cote"><div>
+          <h3 class="sec">Titres obtenus</h3>
+          <ul class="liste serre">
+            <li><strong>2013</strong> — 2<sup>e</sup> mondial, Championnat du Monde à Parme (Italie), <em>Pizza Due</em></li>
+            <li><strong>2012</strong> — 3<sup>e</sup> mondial, Championnat du Monde à Salsomaggiore (Italie), <em>Pizza Due</em></li>
+            <li><strong>2012</strong> — 1<sup>er</sup> prix en créativité, Championnat Mondial de Pizzaïoli à Naples (Italie)</li>
+            <li><strong>2010</strong> — 1<sup>er</sup> prix du World Pizza Plate à Paris, toutes catégories</li>
+            <li><strong>2006</strong> — 3<sup>e</sup> français, Championnat de France</li>
+            <li><strong>2005</strong> — 3<sup>e</sup> français, Championnat de France</li>
+            <li><strong>2004</strong> — 1<sup>er</sup> français au Championnat Européen à Marbella (Espagne)</li>
+          </ul></div><img src="assets/img/formateur.jpg" alt="Jean-Jacques Despaux en formation"></div>
+<div class="enc enc-note"><span class="enc-t">Organisateur du Championnat de France de la pizza</span><p>L'École Pizza organise le
+        <strong>Championnat de France de la pizza</strong> et les étapes du <strong>France Pizza
+        Tour</strong>, en partenariat avec l'Association des pizzerias françaises.</p></div>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">3</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Accès au centre de formation</span>
+      </div>
+      <div class="corps">
+
+
+        <div class="chap">
+          <div class="chap-num">4</div>
+          <div class="chap-txt">
+            <h2>Accès au centre de formation</h2>
+            <p class="chapo">Le centre est situé en centre-ville de Lannemezan.</p>
+          </div>
+        </div>
+
+        <table class="tbl tbl-compact tbl-nue">
+          
+          
+          <tbody><tr><td class="fort">Adresse</td><td><strong>École Pizzaïolo Jean-Jacques Despaux</strong><br>101 rue Alsace Lorraine, 65300 Lannemezan</td></tr><tr><td class="fort">Téléphone</td><td>05 62 50 18 64 — secrétariat</td></tr><tr><td class="fort">Courriel</td><td>contact@ecole-pizza.com</td></tr><tr><td class="fort">Site</td><td>www.ecole-pizza.com</td></tr></tbody>
+        </table>
+        <h3 class="sec">Transports et logement</h3>
+
+        <table class="tbl tbl-compact">
+          
+          <thead><tr><th></th><th>Détail</th><th class="c">Distance depuis l'école</th></tr></thead>
+          <tbody><tr><td class="fort">Gare SNCF</td><td>Lannemezan</td><td class="c"><span class='val'>2 km</span></td></tr><tr><td class="fort">Autoroute</td><td>A64, sortie 16 de Lannemezan</td><td class="c"><span class='val'>4 km</span></td></tr><tr><td class="fort">Hôtel de la Demi-Lune</td><td>462 route de Toulouse, 65300 Lannemezan — 05 62 98 33 33</td><td class="c"><span class='val'>2 km</span></td></tr></tbody>
+        </table>
+<div class="enc enc-verif"><span class="enc-t">Deux numéros de téléphone dans le livret précédent</span><p>La page « Accès » portait
+        le <strong>05 62 40 25 98</strong> alors que le pied de page et la page « Formateur »
+        donnaient le <strong>05 62 50 18 64</strong>, tous deux présentés comme celui du secrétariat.
+        C'est le second qui a été retenu ici, parce qu'il apparaît partout ailleurs.
+        <span class="averif">⚑ à confirmer — Marie-Christine</span></p></div>
+<div class="enc enc-verif"><span class="enc-t">Cette page figurait en double</span><p>Les pages 6 et 7 du livret de 2023 étaient
+        <strong>rigoureusement identiques</strong>. Une seule est conservée. Si un plan d'accès ou
+        une photo de façade devait occuper la seconde, il reste à le fournir.
+        <span class="averif">⚑ visuel d'accès à fournir</span></p></div>
+
+        <figure class="photo">
+          <img src="assets/img/couloir.jpg" alt="Le couloir du centre de formation">
+          
+        </figure>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">4</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Le centre de formation</span>
+      </div>
+      <div class="corps">
+
+
+        <div class="chap">
+          <div class="chap-num">5</div>
+          <div class="chap-txt">
+            <h2>Le centre de formation</h2>
+            <p class="chapo">Chaque stagiaire a son poste. Un four chacun, un pétrin chacun, en totale autonomie.</p>
+          </div>
+        </div>
+
+        <table class="tbl tbl-compact">
+          
+          <thead><tr><th>Espace</th><th>Ce qu'on y fait</th></tr></thead>
+          <tbody><tr><td class="fort">Salle théorique</td><td>Les apports théoriques, les quiz, les corrections collectives.</td></tr><tr><td class="fort">Salle de pétrissage</td><td>Un poste individuel par stagiaire, avec pétrin et balance. Coin cuisine pour la mise en place.</td></tr><tr><td class="fort">Salle de cuisson</td><td>Un poste individuel par stagiaire, avec four.</td></tr><tr><td class="fort">Cuisine</td><td>Préparation des matières premières, tranchage, cuisson des garnitures.</td></tr><tr><td class="fort">Salle de détente</td><td>Coin café, prise des repas.</td></tr><tr><td class="fort">Vestiaires</td><td>Deux vestiaires, femmes et hommes.</td></tr></tbody>
+        </table>
+
+        <div class="reperes">
+          
+          <div class="repere"><span class="k">Surface</span><span class="v">220 <span class="u">m²</span></span></div>
+          <div class="repere"><span class="k">Postes individuels</span><span class="v">8</span></div>
+          <div class="repere"><span class="k">Pétrins</span><span class="v">8</span></div>
+          <div class="repere"><span class="k">Balances</span><span class="v">8</span></div>
+        </div>
+
+        <figure class="photo">
+          <div class="duo">
+            <img src="assets/img/equipe-petrins.jpg" alt="L'équipe devant la rangée de pétrins">
+            <img src="assets/img/salle-theorique.jpg" alt="La salle théorique">
+          </div>
+          <figcaption class="legende">À gauche la salle de pétrissage, à droite la salle théorique.</figcaption>
+        </figure>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">5</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Le centre de formation</span>
+      </div>
+      <div class="corps">
+
+        <h3 class="sec">Les moyens techniques</h3>
+
+        <table class="tbl tbl-compact">
+          
+          <thead><tr><th>Équipement</th><th class="c">Nombre</th></tr></thead>
+          <tbody><tr><td class="fort">Postes individuels</td><td class="c"><span class='val'>8</span></td></tr><tr><td class="fort">Pétrins</td><td class="c"><span class='val'>8</span></td></tr><tr><td class="fort">Balances</td><td class="c"><span class='val'>8</span></td></tr><tr><td class="fort">Fours électriques</td><td class="c"><span class='val'>6</span></td></tr><tr><td class="fort">Four à bois à sole rotative</td><td class="c"><span class='val'>1</span></td></tr><tr><td class="fort">Four à bois traditionnel</td><td class="c"><span class='val'>1</span></td></tr></tbody>
+        </table>
+        <h3 class="sec">Trois postes, selon votre projet</h3>
+
+        <table class="tbl tbl-compact">
+          
+          <thead><tr><th>Poste</th><th>Ce qu'on y travaille</th></tr></thead>
+          <tbody><tr><td class="fort">Poste empâtement</td><td>Pesée, pétrissage, pointage, division, boulage, stockage.</td></tr><tr><td class="fort">Poste cuisson</td><td>Étalage, garnissage, enfournement, gestion des températures.</td></tr><tr><td class="fort">Poste cuisine</td><td>Mise en place, tranchage, cuissons de garniture, sauce tomate.</td></tr></tbody>
+        </table>
+
+        <figure class="photo">
+          <div class="duo">
+            <img src="assets/img/petrin-spirale.jpg" alt="Pétrin à spirale">
+            <img src="assets/img/four-marana.jpg" alt="Four à bois à sole rotative">
+          </div>
+          <figcaption class="legende">Le matériel de l'école est celui qu'on retrouve en pizzeria&nbsp;: on n'apprend pas sur du matériel de démonstration.</figcaption>
+        </figure>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">6</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Nos formations</span>
+      </div>
+      <div class="corps">
+
+
+        <div class="chap">
+          <div class="chap-num">6</div>
+          <div class="chap-txt">
+            <h2>Nos formations</h2>
+            <p class="chapo">Six formations et deux spécialisations. Le Niveau I ou le Niveau I Pro ouvrent tout le reste.</p>
+          </div>
+        </div>
+
+        <table class="tbl">
+          
+          <thead><tr><th>Formation</th><th class="c">Durée</th><th>Objectif</th><th>Prérequis</th></tr></thead>
+          <tbody><tr><td><strong>Niveau I</strong><br>Pizza classique</td><td class="c"><span class='val'>5 j · 35 h</span></td><td>Réaliser des pizzas classiques, de l'élaboration de l'empâtement direct jusqu'à la sortie du four.</td><td>Aucun</td></tr><tr><td><strong>Niveau I — option hygiène</strong></td><td class="c"><span class='val'>5 j · 44 h</span></td><td>Le Niveau I, en appliquant les gestes et la réglementation d'hygiène adaptés à la restauration commerciale.</td><td>Aucun</td></tr><tr><td><strong>Fabriquer des pizzas artisanales</strong><br><span class='mention'>RS 7404</span></td><td class="c"><span class='val'>5 j · 35 h</span></td><td>Fabriquer des pizzas artisanales, de l'empâtement direct ou semi-direct jusqu'à la présentation du produit fini.</td><td>Professionnels des métiers de bouche</td></tr><tr><td><strong>Niveau I Pro</strong><br>Pizza classique</td><td class="c"><span class='val'>2 j · 15 h</span></td><td>Mettre en pratique le protocole de l'empâtement direct et l'étalage à la main.</td><td>Professionnels des métiers de bouche</td></tr><tr><td><strong>Niveau II</strong><br>Empâtements indirects</td><td class="c"><span class='val'>3 j · 21 h</span></td><td>Maîtriser les empâtements indirects Poolish et Biga, et la pizza contemporaine.</td><td>Niveau I ou Niveau I Pro</td></tr><tr><td><strong>Niveau Expert</strong><br>Spécialités italiennes</td><td class="c"><span class='val'>4 j · 28 h</span></td><td>Réaliser les empâtements indirects Poolish, Biga, contemporaine, In Teglia et In Pala, et un empâtement direct In Teglia et In Pala.</td><td>Niveau I ou Niveau I Pro</td></tr></tbody>
+        </table>
+<div class="enc enc-verif"><span class="enc-t">Une durée qui a changé</span><p>Le livret de 2023 annonçait le Niveau&nbsp;II sur
+        <strong>2 jours</strong>. Les documents de formation 2026 le donnent sur
+        <strong>3 jours / 21 heures</strong>. C'est cette dernière valeur qui est reprise ici.
+        <span class="averif">⚑ à confirmer</span></p></div>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">7</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Nos formations</span>
+      </div>
+      <div class="corps">
+
+        <h3 class="sec">Nos spécialisations</h3>
+
+        <table class="tbl">
+          
+          <thead><tr><th>Spécialisation</th><th class="c">Durée</th><th>Objectif</th><th>Prérequis</th></tr></thead>
+          <tbody><tr><td><strong>In Teglia &amp; In Pala</strong></td><td class="c"><span class='val'>2 j · 14 h</span></td><td>Élaborer une pizza sur plaque, spécialité italienne, destinée à être vendue à la part.</td><td>Niveau I ou Niveau I Pro</td></tr><tr><td><strong>Pizza napolitaine</strong><br><span class='mention'>agréée AVPN</span></td><td class="c"><span class='val'>5 j · 35 h</span></td><td>Réaliser des pizzas napolitaines, de l'élaboration de l'empâtement jusqu'à la sortie du four.</td><td>Niveau I ou Niveau I Pro</td></tr></tbody>
+        </table>
+        <h3 class="sec">L'option hygiène</h3>
+        <p>Le stage spécifique en hygiène alimentaire, adapté à l'activité des établissements de
+        restauration commerciale, se décompose en un <strong>apport théorique</strong>, des
+        <strong>études de cas</strong>, des observations et du <strong>travail pratique</strong>, en
+        utilisant le guide de bonnes pratiques d'hygiène.</p>
+        <ul class="liste">
+          <li>Aliments et risques pour le consommateur</li>
+          <li>Les fondamentaux de la réglementation communautaire et nationale</li>
+          <li>Le plan de maîtrise sanitaire</li>
+        </ul>
+<div class="enc enc-note"><span class="enc-t">À l'issue de la formation</span><p>Une <strong>attestation de formation</strong> est
+        délivrée, en conformité avec la réglementation en vigueur.</p></div>
+
+        <figure class="photo">
+          <img src="assets/img/hygiene-tableau.jpg" alt="Séance d'hygiène au tableau">
+          
+        </figure>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">8</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Tenue, sécurité et hygiène</span>
+      </div>
+      <div class="corps">
+
+
+        <div class="chap">
+          <div class="chap-num">7</div>
+          <div class="chap-txt">
+            <h2>Tenue, sécurité et hygiène</h2>
+            <p class="chapo">Ce qui est attendu de vous dès le premier jour.</p>
+          </div>
+        </div>
+<div class="cote"><div>
+          <h3 class="sec">La tenue professionnelle est obligatoire</h3>
+          <p>Elle doit être propre et composée de&nbsp;:</p>
+          <ul class="liste">
+            <li>Veste blanche de cuisinier, tee-shirt ou polo</li>
+            <li>Pantalon de cuisine (jean toléré)</li>
+            <li>Chaussures de sécurité</li>
+            <li>Tablier</li>
+            <li>Torchon</li>
+          </ul>
+          <p><strong>Pas de bijoux</strong> — l'alliance est tolérée.
+          <strong>Interdiction de fumer</strong> dans les locaux.</p></div><img src="assets/img/veste.jpg" alt="Veste de cuisinier École Pizza"></div>
+        <h3 class="sec">Sécurité</h3>
+
+        <table class="tbl tbl-compact tbl-nue">
+          
+          
+          <tbody><tr><td class="fort">Extincteurs</td><td>À côté du bureau · sortie de secours (salle des pétrins) · à l'entrée (salle des cuissons).</td></tr><tr><td class="fort">Coupure de courant</td><td>Contacter <strong>immédiatement</strong> le formateur et <strong>ne pas remettre le courant</strong> soi-même.</td></tr></tbody>
+        </table>
+        <h4 class="sous">Pictogrammes à connaître</h4>
+        <ul class="liste serre">
+          <li><strong>Inflammable</strong></li>
+          <li><strong>Corrosif</strong></li>
+          <li><strong>Nocif, irritant</strong></li>
+          <li><strong>Dangereux</strong></li>
+          <li><strong>Polluant pour l'environnement</strong></li>
+        </ul>
+        <h3 class="sec">Hygiène</h3>
+        <p>Les mains sont le <strong>premier vecteur de contamination</strong>&nbsp;: il faut les
+        laver le plus régulièrement possible, et <strong>obligatoirement</strong> lors de la prise de
+        poste, après une opération contaminante, après avoir fumé, mangé ou s'être mouché, après le
+        nettoyage et la désinfection, après être allé aux toilettes, et avant de manipuler des
+        produits sensibles.</p>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">9</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">Règlement intérieur</span>
+      </div>
+      <div class="corps">
+
+
+        <div class="chap">
+          <div class="chap-num">8</div>
+          <div class="chap-txt">
+            <h2>Règlement intérieur</h2>
+            <p class="chapo">Les règles de vie du centre pendant votre séjour en formation.</p>
+          </div>
+        </div>
+<div class="enc enc-alerte"><span class="enc-t">Ce chapitre est à fournir</span><p>Le « Règlement intérieur » figurait au sommaire du
+        livret de 2023 <strong>mais n'existait dans aucune de ses 25 pages</strong>. C'est le seul
+        manque réel du document — et ce n'est pas un détail&nbsp;: le règlement intérieur d'un
+        organisme de formation est <strong>obligatoire</strong>, il doit être porté à la connaissance
+        du stagiaire, et il est demandé en audit.</p>
+        <p><strong>À faire&nbsp;:</strong> insérer ici le règlement intérieur en vigueur, ou le
+        rédiger s'il n'existe pas. <span class="averif">⚑ document à fournir — Marie-Christine</span></p></div>
+<div class="enc enc-note"><span class="enc-t">Ce qu'il doit couvrir</span><p>À titre indicatif, les rubriques attendues&nbsp;: les
+        règles de <strong>discipline</strong> et les sanctions applicables&nbsp;; les mesures
+        d'<strong>hygiène et de sécurité</strong>&nbsp;; la <strong>représentation des
+        stagiaires</strong> pour les formations longues&nbsp;; les <strong>horaires</strong> et les
+        conditions d'<strong>absence</strong>&nbsp;; l'usage du matériel&nbsp;; la procédure de
+        <strong>réclamation</strong> et le <strong>référent handicap</strong>.</p></div>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">10</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="entete">
+        <span class="entete-parcours">Livret d'accueil</span>
+        <span class="entete-chap">L'équipe École Pizza</span>
+      </div>
+      <div class="corps">
+
+
+        <div class="chap">
+          <div class="chap-num">9</div>
+          <div class="chap-txt">
+            <h2>L'équipe École Pizza</h2>
+            
+          </div>
+        </div>
+        <div class="equipe">
+          <div class="membre">
+            <div class="rond">JJ&nbsp;D</div>
+            <div class="nom">Jean-Jacques<br>Despaux</div>
+            <div class="role">Référent pédagogique</div>
+          </div>
+          <div class="membre">
+            <div class="rond">MC&nbsp;D</div>
+            <div class="nom">Marie-Christine<br>Despaux</div>
+            <div class="role">Référente administrative</div>
+          </div>
+          <div class="membre">
+            <div class="rond">M&nbsp;D</div>
+            <div class="nom">Maxime<br>Despaux</div>
+            <div class="role">Formateur</div>
+          </div>
+        </div>
+        <div style="margin-top:8mm">
+
+        <figure class="photo">
+          <img src="assets/img/groupe.jpg" alt="Le formateur et un groupe de stagiaires autour d'une démonstration">
+          <figcaption class="legende">Chaque stagiaire dispose de son poste&nbsp;: un pétrin, un four, une balance.</figcaption>
+        </figure>
+        </div>
+<div class="enc enc-note"><span class="enc-t">Nous joindre</span><p><strong>École Pizzaïolo Jean-Jacques Despaux</strong> — 101 rue Alsace Lorraine, 65300 Lannemezan<br>
+        Secrétariat 05 62 50 18 64 · contact@ecole-pizza.com · www.ecole-pizza.com</p></div>
+
+      </div>
+      <div class="pied">
+        <span>École Pizzaïolo Jean-Jacques Despaux · 101 rue Alsace Lorraine, 65300 Lannemezan</span>
+        <span class="folio">11</span>
+      </div>
+    </section>
+    <section class="page page-pleine">
+      <div class="dos">
+        <img class="dos-logo" src="assets/logo/logo-blanc.png" alt="École Pizza">
+        <div class="parcours">Livret d'accueil</div>
+        <h2>Merci de nous<br>avoir choisis&nbsp;!</h2>
+        <div class="legal">
+          École Pizzaïolo Jean-Jacques Despaux<br>
+          SIRET 879 955 136 00012 · NAF 8559A · NDA 76 65 00989 65 auprès du préfet de la région Occitanie<br>
+          101 rue Alsace Lorraine, 65300 Lannemezan · 05 62 50 18 64 · contact@ecole-pizza.com · www.ecole-pizza.com
+        </div>
+      </div>
+    </section>
+
+</body>
+</html>

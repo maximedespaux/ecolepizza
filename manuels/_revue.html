@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Planche de revue</title>
+<link rel="stylesheet" href="manuel.css">
+<!-- OUTIL DE RELECTURE, PAS UN LIVRABLE : affiche toutes les pages d'un manuel
+     en vignettes pour repérer d'un coup d'œil un débordement ou une page vide.
+     Usage : _revue.html?m=niveau-1&e=0.24 -->
+<style>
+  body{margin:0 !important;background:#5f6270 !important;font:12px/1.4 system-ui;color:#fff}
+  h1{font-size:14px;padding:8px 12px;margin:0;background:#101118;position:sticky;top:0;z-index:9}
+  .grille{display:flex;flex-wrap:wrap;gap:10px;padding:12px}
+  .vig{position:relative;background:#fff;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+  .vig > .page{transform-origin:top left;margin:0 !important;box-shadow:none !important}
+  .n{position:absolute;right:0;bottom:0;z-index:5;background:#101118;color:#fff;
+     font:700 10px/1 system-ui;padding:3px 5px}
+  .plein{outline:3px solid #dc3e37}
+</style>
+<h1 id="t">…</h1>
+<div class="grille" id="g"></div>
+<script>
+const par = new URLSearchParams(location.search);
+const nom = par.get("m") || "niveau-1";
+const ech = parseFloat(par.get("e") || "0.24");
+fetch(nom + ".html").then(r => r.text()).then(html => {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  document.body.dataset.parcours = doc.body.dataset.parcours;
+  const pages = doc.querySelectorAll(".page");
+  document.getElementById("t").textContent = nom + " — " + pages.length + " pages";
+  const g = document.getElementById("g");
+  pages.forEach((p, i) => {
+    const v = document.createElement("div");
+    v.className = "vig";
+    // 210mm x 296.8mm en px CSS : 1mm = 96/25.4 px
+    v.style.width  = (210 * 96 / 25.4 * ech) + "px";
+    v.style.height = (296.8 * 96 / 25.4 * ech) + "px";
+    p.style.transform = "scale(" + ech + ")";
+    v.appendChild(p);
+    const n = document.createElement("span");
+    n.className = "n"; n.textContent = i;
+    v.appendChild(n);
+    g.appendChild(v);
+  });
+  // Détecte les pages dont le contenu déborde du cadre A4.
+  requestAnimationFrame(() => {
+    document.querySelectorAll(".vig > .page").forEach((p, i) => {
+      const c = p.querySelector(".corps");
+      if (!c) return;
+      const debord = c.scrollHeight - c.clientHeight;
+      if (debord > 2) { p.parentElement.classList.add("plein");
+        p.parentElement.querySelector(".n").textContent = i + " ⚠ +" + Math.round(debord); }
+    });
+  });
+});
+</script>
