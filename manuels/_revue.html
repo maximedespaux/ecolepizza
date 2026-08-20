@@ -13,7 +13,7 @@
   .vig > .page{transform-origin:top left;margin:0 !important;box-shadow:none !important}
   .n{position:absolute;right:0;bottom:0;z-index:5;background:#101118;color:#fff;
      font:700 10px/1 var(--titre);padding:3px 5px}
-  .plein{outline:3px solid #dc3e37}
+  .deborde{outline:3px solid #dc3e37}
 </style>
 <h1 id="t">…</h1>
 <div class="grille" id="g"></div>
@@ -46,7 +46,7 @@ fetch(nom + ".html").then(r => r.text()).then(html => {
       const c = p.querySelector(".corps");
       const debord = Math.max(p.scrollHeight - p.clientHeight,
                               c ? c.scrollHeight - c.clientHeight : 0);
-      if (debord > 2) { p.parentElement.classList.add("plein");
+      if (debord > 2) { p.parentElement.classList.add("deborde");
         p.parentElement.querySelector(".n").textContent = i + " ⚠ +" + Math.round(debord); }
     });
   });

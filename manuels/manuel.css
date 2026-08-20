@@ -79,16 +79,12 @@
 [data-parcours="napolitaine"] {--accent:#121212; --accent-encre:#121212; --accent-clair:#ff8177}
 [data-parcours="livret"]      {--accent:#2C3371; --accent-encre:#2C3371; --accent-clair:#8b95f2}
 
-/* LA CHARTE DU LOGO — elle court par-dessus les couleurs de parcours.
-   Le fanion « École Pizza | Jean-Jacques Despaux » est tricolore : marine,
-   blanc, rouge. `--second` porte ce rouge dans les neuf manuels — filets de
-   section, puces de liste, traits de rayonnement des schémas. C'est lui qui
-   fait qu'un manuel se reconnaît comme un manuel de l'école avant même qu'on
-   lise sa couverture.
-   Sur le parcours Niveau I Pro, dont l'accent EST le rouge, le second ton
-   repasse au marine : deux rouges côte à côte n'opposeraient plus rien. */
-:root{--second:var(--tomate)}
-[data-parcours="pro"]{--second:var(--navy)}
+/* UN MANUEL, UNE COULEUR. `--second` suit l'accent : filets de section, puces
+   de liste et traits de schéma restent dans la teinte du parcours, et une page
+   de cours ne mélange jamais deux couleurs.
+   La charte de l'école — marine et rouge du fanion — se dit ailleurs, et à un
+   seul endroit dans le corps du manuel : l'OUVERTURE DE CHAPITRE. */
+:root{--second:var(--accent)}
 
 /* Le fond des couvertures et des intercalaires : un bleu de nuit tiré du
    marine du logo, plutôt qu'un noir neutre qui n'appartient à personne. */
@@ -187,8 +183,8 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
 
 .couv{height:100%; display:flex; flex-direction:column; background:var(--nuit); color:#fff}
 
-.couv-visuel{position:relative; flex:0 0 55%; overflow:hidden}
-.couv-visuel > img{width:100%; height:100%; object-fit:cover; object-position:center 42%}
+.couv-visuel{position:relative; flex:0 0 163.2mm; height:163.2mm; overflow:hidden}
+.couv-visuel > img{width:100%; height:163.2mm; object-fit:cover; object-position:center 42%}
 .couv-visuel::after{
   content:""; position:absolute; inset:0;
   background:linear-gradient(180deg, rgba(12,14,34,.55) 0%, rgba(12,14,34,.05) 38%, rgba(18,20,44,.58) 100%);
@@ -258,7 +254,10 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
   font:700 8pt/1 var(--titre); letter-spacing:.24em; text-transform:uppercase;
   color:var(--accent-encre); margin-bottom:3mm;
 }
-.somm{list-style:none; margin:6mm 0 0; padding:0; columns:1}
+/* Deux <ol> côte à côte, remplis par le générateur — voir gabarit.mjs. */
+.somm-cols{display:grid; grid-template-columns:1fr 1fr; gap:0 9mm; margin-top:6mm}
+.somm{list-style:none; margin:6mm 0 0; padding:0}
+.somm-cols .somm{margin-top:0}
 .somm li{margin:0}
 .somm a, .somm .ligne{
   display:flex; align-items:baseline; gap:2mm; padding:1.35mm 0;
@@ -296,6 +295,15 @@ sub{font-size:max(6.4pt,.62em); vertical-align:-.22em; line-height:0}
   font:700 13pt/1 var(--titre); font-variant-numeric:tabular-nums;
 }
 .chap-txt{flex:1; padding-top:.6mm}
+/* LA MARQUE DE L'ÉCOLE, une fois par chapitre. Deux traits courts — le marine
+   et le rouge du fanion — posés sous le numéro. Ils ne disent rien du contenu :
+   ils disent d'où vient le document, et c'est justement pour cela qu'ils sont
+   à l'ouverture et nulle part ailleurs. */
+.chap-marque{display:flex; gap:1.2mm; margin-top:2.2mm; justify-content:center}
+.chap-marque i{display:block; width:4.4mm; height:1.1mm; border-radius:99px}
+.chap-marque .m1{background:var(--navy)}
+.chap-marque .m2{background:var(--tomate)}
+.chap-num-bloc{display:flex; flex-direction:column; align-items:center; flex:0 0 auto}
 .chap h2{font-family:var(--serif); font-weight:900; font-size:16.5pt; line-height:1.18; letter-spacing:0}
 .chap .chapo{margin-top:1.8mm; font-size:9.8pt; line-height:1.5; color:var(--encre-2); max-width:150mm}
 
@@ -663,7 +671,7 @@ ol.etapes > li::before{
    retrouverait coupé en deux sur les pages presque pleines. */
 .corps::after{
   content:""; flex:1 1 0; min-height:0; max-height:88mm; margin-top:5mm; align-self:stretch;
-  background:repeating-linear-gradient(180deg, transparent 0 6.1mm, var(--trait) 6.1mm 6.3mm);
+  background:repeating-linear-gradient(180deg, var(--papier) 0 6.1mm, var(--trait) 6.1mm 6.3mm);
 }
 /* Les pages qui n'ont rien à faire de lignes : lexique, fiches à remplir. */
 .corps.plein::after{display:none}
@@ -707,7 +715,7 @@ ol.etapes > li::before{
   background:
     linear-gradient(180deg, rgba(12,14,34,.86) 0%, rgba(12,14,34,.80) 26%,
                             rgba(12,14,34,.46) 52%, rgba(12,14,34,.88) 100%),
-    linear-gradient(160deg, transparent 30%, color-mix(in srgb, var(--accent) 52%, transparent) 100%);
+    linear-gradient(160deg, rgba(12,14,34,0) 30%, color-mix(in srgb, var(--accent) 52%, rgba(12,14,34,0)) 100%);
 }
 .dos > :not(.dos-photo){position:relative; z-index:1}
 .dos-logo{width:64mm; margin-bottom:10mm}

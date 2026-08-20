@@ -99,7 +99,10 @@ export const averif = (quoi = "à vérifier") => `<span class="averif">${quoi}</
 /** Titre de chapitre. */
 export const chapitre = (n, titre, chapo = "") => `
         <div class="chap">
-          <div class="chap-num">${n}</div>
+          <div class="chap-num-bloc">
+            <div class="chap-num">${n}</div>
+            <div class="chap-marque"><i class="m1"></i><i class="m2"></i></div>
+          </div>
           <div class="chap-txt">
             <h2>${titre}</h2>
             ${chapo ? `<p class="chapo">${chapo}</p>` : ""}
@@ -301,7 +304,7 @@ ${corps}
    * correspondent plus au contenu (cf. A-VERIFIER.md).
    */
   sommaire() {
-    const lignes = this.entrees.map((e) => {
+    const ligne = (e) => {
       if (e.partie) return `<li class="part"><span>${e.lib}</span><span>p. ${e.page}</span></li>`;
       return `<li${e.sous ? ' class="sous"' : ""}>
               <span class="ligne">
@@ -311,19 +314,30 @@ ${corps}
                 <span class="pg">${e.page}</span>
               </span>
             </li>`;
-    }).join("");
+    };
 
-    // Au-delà de 34 lignes le sommaire ne tient plus sur une page : on passe en
-    // deux colonnes, puis on resserre l'interligne. Le manuel « Niveau I option
-    // hygiène » a 45 entrées — deux colonnes seules ne suffisaient pas, il
-    // débordait de 15 mm.
-    const deux = this.entrees.length > 34;
-    const dense = this.entrees.length > 40;
+    /* DEUX COLONNES, MAIS PAS EN `columns` CSS.
+       Le multi-colonnes a besoin d'une hauteur définie pour s'équilibrer. Dans
+       un conteneur flex de hauteur calculée, l'impression la résout autrement
+       que l'écran : le sommaire sortait en UNE colonne dans le PDF, débordait
+       de la page et recouvrait le pied. Une grille de deux <ol>, remplis par
+       le générateur, donne exactement le même rendu partout. */
+    const n = this.entrees.length;
+    const deux = n > 22;
+    const coupe = deux ? Math.ceil(n / 2) : n;
+    const dense = n > 40;
+    const colonnes = deux
+      ? `<div class="somm-cols">
+          <ol class="somm${dense ? " somm-dense" : ""}">${this.entrees.slice(0, coupe).map(ligne).join("")}</ol>
+          <ol class="somm${dense ? " somm-dense" : ""}" start="${coupe + 1}">${this.entrees.slice(coupe).map(ligne).join("")}</ol>
+        </div>`
+      : `<ol class="somm">${this.entrees.map(ligne).join("")}</ol>`;
+
     const html = `${entete(this.etiquette(), "Sommaire")}
-      <div class="corps">
+      <div class="corps plein">
         <div class="somm-sur">${this.genre}${this.mention ? ` · ${this.mention}` : ""}</div>
         <h2 class="somm-titre">Sommaire</h2>
-        <ol class="somm${dense ? " somm-dense" : ""}"${deux ? ' style="columns:2;column-gap:9mm"' : ""}>${lignes}</ol>
+        ${colonnes}
       </div>
       <div class="pied">
         <span>${ECOLE.raison} · Mise à jour le ${ECOLE.maj}</span>
