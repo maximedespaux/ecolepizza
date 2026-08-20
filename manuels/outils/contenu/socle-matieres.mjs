@@ -11,6 +11,7 @@
  * un encadré « à vérifier » plutôt que tranchée en douce — cf. A-VERIFIER.md.
  */
 import { chapitre, cote, photo, duo, enc, tbl, averif, reperes } from "../gabarit.mjs";
+import * as SC from "../schemas.mjs";
 
 /* ===========================================================================
    L'HISTOIRE DE LA PIZZA
@@ -117,7 +118,7 @@ ${enc("note", "Pourquoi le germe part", `<p>Le germe est gras. Laissé dans la f
           </div>
           <img src="assets/img/patons.jpg" alt="Pâtons en gros plan">
         </div>
-        <p class="mention">Schéma du caryopse du froment — © École Pizza | Jean-Jacques Despaux</p>
+${SC.caryopse()}
 `, { chap: "Le caryopse", num: m._c });
 
 /* ===========================================================================
@@ -361,7 +362,7 @@ ${enc("note", "Le P/L, l'indice qu'on oublie", `<p>Deux farines de même W peuve
         un P/L bas, une pâte molle qui se déchire. Pour la pizza, on cherche un P/L compris entre
         <strong>0,50 et 0,70</strong> — c'est d'ailleurs ce qu'imposent les cahiers des charges
         napolitains.</p>`)}
-        <p class="mention">Schéma de l'alvéographe de Chopin — © École Pizza | Jean-Jacques Despaux</p>
+${SC.alveographe()}
 `);
   return m;
 };
@@ -661,10 +662,9 @@ ${tbl(["Ingrédient", ["1 kg", "c"], ["3 kg", "c"], ["10 kg", "c"]], [
     [["Miel", ""], ["<span class='val'>0,6 g</span>", "c"], ["<span class='arempl'>· · · · · ·</span>", "c"], ["<span class='arempl'>· · · · · ·</span>", "c"]],
     [["Sucre, malt", ""], ["<span class='val'>1,8 g</span>", "c"], ["<span class='arempl'>· · · · · ·</span>", "c"], ["<span class='arempl'>· · · · · ·</span>", "c"]],
   ], { titre: "L'unité de calcul de l'empâtement direct", compact: true })}
-${reperes([["1 unité de calcul", "6", "pâtons de 280 g"], ["10 unités de calcul", "…", "pâtons de 280 g"]])}
 ${enc("conseil", "À compléter pendant le stage", `<p>Les colonnes 3&nbsp;kg et 10&nbsp;kg sont
         volontairement laissées vides&nbsp;: c'est l'exercice. Une unité de calcul donne environ
         <strong>1,68&nbsp;kg de pâte</strong>, soit six pâtons de 280&nbsp;g — à vous de trouver
         combien en donnent dix.</p>`)}
-        <p class="mention">Les unités de calcul — © École Pizza | Jean-Jacques Despaux</p>
+${SC.uniteCalcul()}
 `, { chap: "Les unités de calcul", num: m._c });

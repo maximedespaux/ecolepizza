@@ -467,6 +467,57 @@ ol.etapes > li::before{
 .cote img{width:100%; height:62mm; object-fit:cover; border-radius:2.4mm}
 .cote-large{grid-template-columns:1fr 86mm}
 
+
+/* ==========================================================================
+   11 bis. SCHÉMAS
+   --------------------------------------------------------------------------
+   Les figures sont du SVG écrit à la main, sans librairie ni image externe.
+   Leurs couleurs passent par les variables du document : un schéma prend donc
+   la couleur de son parcours sans être redessiné.
+   Aucune information n'est portée par la seule couleur — chaque élément coloré
+   porte aussi un libellé ou un chiffre, condition d'accessibilité autant que
+   de lisibilité en photocopie noir et blanc.
+   ========================================================================== */
+
+.schema{margin:0 0 3.6mm; break-inside:avoid}
+.schema svg{width:100%; height:auto; display:block; font-family:var(--titre); overflow:visible}
+.schema figcaption{margin-top:2mm}
+
+/* Surfaces */
+.schema .s-boite {fill:var(--papier-2); stroke:var(--trait); stroke-width:1.3}
+.schema .s-plein {fill:var(--accent)}
+.schema .s-son   {fill:color-mix(in srgb, var(--accent) 26%, #fff); stroke:#fff; stroke-width:1.4}
+.schema .s-amande{fill:var(--accent)}
+.schema .s-germe {fill:color-mix(in srgb, var(--accent) 68%, #fff); stroke:#fff; stroke-width:1.6}
+.schema .s-paton {fill:color-mix(in srgb, var(--accent) 18%, #fff); stroke:var(--accent); stroke-width:1.3}
+.schema .s-sole  {fill:var(--accent)}
+.schema .s-pizza {fill:color-mix(in srgb, var(--accent) 30%, #fff); stroke:var(--accent); stroke-width:1.2}
+.schema .s-aire  {fill:color-mix(in srgb, var(--accent) 14%, #fff); stroke:none}
+
+/* Traits */
+.schema .s-fil   {stroke:var(--encre-3); stroke-width:1.5; fill:none}
+.schema .s-axe   {stroke:var(--encre-3); stroke-width:1.4}
+.schema .s-cote  {stroke:var(--encre-3); stroke-width:1.1; stroke-dasharray:3 3; fill:none}
+.schema .s-courbe{stroke:var(--accent); stroke-width:2.4; fill:none; stroke-linecap:round}
+.schema .s-ray   {stroke:var(--second); stroke-width:1.6; fill:none}
+.schema .s-conv  {stroke:var(--encre-3); stroke-width:1.6; fill:none}
+.schema .s-cond  {stroke:var(--accent); stroke-width:2.2; fill:none}
+.schema .s-pointe{fill:var(--encre-3)}
+.schema .s-accent{fill:var(--accent)}
+
+/* Textes — les tailles sont en unités du viewBox, pas en points : elles
+   suivent l'échelle du dessin quand celui-ci est réduit à la largeur de la
+   colonne. 12 unités sur 660 de large donnent environ 8 pt sur le papier. */
+.schema .s-txt  {fill:var(--encre); font-size:13px; font-weight:600}
+.schema .s-lbl  {fill:var(--encre-3); font-size:10.5px; font-weight:700; letter-spacing:.6px}
+.schema .s-val  {fill:var(--accent); font-size:14px; font-weight:800}
+.schema .s-fort {font-weight:800}
+.schema .s-gros {font-size:19px; font-weight:800}
+.schema .s-fin  {font-weight:600; letter-spacing:0}
+.schema .s-centre{text-anchor:middle}
+.schema .s-droite{text-anchor:end}
+.schema .s-sur  {fill:var(--sur-accent)}
+
 /* ==========================================================================
    12. INTERCALAIRE DE PARTIE (manuel Expert)
    ========================================================================== */

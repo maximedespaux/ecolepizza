@@ -443,7 +443,49 @@
         un P/L bas, une pâte molle qui se déchire. Pour la pizza, on cherche un P/L compris entre
         <strong>0,50 et 0,70</strong> — c'est d'ailleurs ce qu'imposent les cahiers des charges
         napolitains.</p></div>
-        <p class="mention">Schéma de l'alvéographe de Chopin — © École Pizza | Jean-Jacques Despaux</p>
+
+        <figure class="schema">
+          <svg viewBox="0 10 660 288" role="img" aria-label="Courbe d'alvéogramme : P est la hauteur du sommet, L la largeur totale jusqu'à la rupture, W l'aire sous la courbe.">
+            <defs>
+              <marker id="f-alveo" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" class="s-pointe"/>
+              </marker>
+            </defs>
+
+            <!-- Les axes -->
+            <line x1="70" y1="250" x2="620" y2="250" class="s-axe"/>
+            <line x1="70" y1="250" x2="70"  y2="35"  class="s-axe"/>
+            <text x="70" y="25" class="s-lbl">PRESSION</text>
+            <text x="620" y="272" class="s-lbl s-droite">TEMPS · ALLONGEMENT</text>
+
+            <!-- L'aire sous la courbe : c'est ELLE qui est le W. -->
+            <path d="M70 250 C 120 250, 150 70, 215 70 C 300 70, 360 118, 470 165 L 470 250 Z"
+                  class="s-aire"/>
+            <path d="M70 250 C 120 250, 150 70, 215 70 C 300 70, 360 118, 470 165"
+                  class="s-courbe"/>
+            <!-- La rupture : la bulle éclate, la courbe s'arrête là. -->
+            <circle cx="470" cy="165" r="5" class="s-accent"/>
+            <text x="484" y="160" class="s-lbl">RUPTURE</text>
+
+            <!-- P : la hauteur du sommet = ténacité -->
+            <line x1="215" y1="70" x2="215" y2="250" class="s-cote"/>
+            <line x1="118" y1="70" x2="205" y2="70"  class="s-cote"/>
+            <text x="126" y="62" class="s-txt">P</text>
+            <text x="140" y="62" class="s-lbl s-fin">TÉNACITÉ</text>
+
+            <!-- L : la largeur = extensibilité -->
+            <line x1="70" y1="268" x2="470" y2="268" class="s-cote" marker-end="url(#f-alveo)"/>
+            <text x="262" y="288" class="s-txt s-centre">L</text>
+            <text x="278" y="288" class="s-lbl">EXTENSIBILITÉ</text>
+
+            <!-- W : l'aire -->
+            <text x="250" y="180" class="s-txt s-fort">W</text>
+            <text x="272" y="180" class="s-lbl">= L'AIRE SOUS LA COURBE</text>
+            <text x="250" y="200" class="s-lbl s-fin">le travail nécessaire pour faire éclater le pâton</text>
+          </svg>
+          <figcaption class="legende">L'alvéogramme de Chopin. <strong>P</strong> se lit en hauteur, <strong>L</strong> en largeur, et <strong>W</strong> est l'aire — pas un point sur la courbe. C'est pour cela que deux farines de même W peuvent se comporter à l'opposé&nbsp;: leur rapport P/L diffère.</figcaption>
+        </figure>
 
       </div>
       <div class="pied">
@@ -900,17 +942,51 @@
           <thead><tr><th>Ingrédient</th><th class="c">1 kg</th><th class="c">3 kg</th><th class="c">10 kg</th></tr></thead>
           <tbody><tr><td><strong>Farine de blé</strong></td><td class="c"><span class='val'>1 kg</span></td><td class="c"><span class='val'>3 kg</span></td><td class="c"><span class='val'>10 kg</span></td></tr><tr class="grp"><td colspan="4">Eau, suivant le W de la farine</td></tr><tr><td>W 200 — 54 %</td><td class="c"><span class='val'>540 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr><td>W 250 — 55 %</td><td class="c"><span class='val'>550 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr><td>W 300 — 56 %</td><td class="c"><span class='val'>560 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr><td>W 330 — 57 %</td><td class="c"><span class='val'>570 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr><td>W 390 — 59 %</td><td class="c"><span class='val'>590 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr><td>W 420 — 60 %</td><td class="c"><span class='val'>600 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr class="grp"><td colspan="4">Les autres ingrédients</td></tr><tr><td>Huile</td><td class="c"><span class='val'>25 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr><td>Sel</td><td class="c"><span class='val'>20 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr class="grp"><td colspan="4">Levure</td></tr><tr><td>Fraîche</td><td class="c"><span class='val'>2 à 4 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr><td>Sèche active</td><td class="c"><span class='val'>2 à 4 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr><td>Sèche instantanée</td><td class="c"><span class='val'>1 à 2 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr class="grp"><td colspan="4">Facultatif</td></tr><tr><td>Miel</td><td class="c"><span class='val'>0,6 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr><tr><td>Sucre, malt</td><td class="c"><span class='val'>1,8 g</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td><td class="c"><span class='arempl'>· · · · · ·</span></td></tr></tbody>
         </table>
-
-        <div class="reperes">
-          
-          <div class="repere"><span class="k">1 unité de calcul</span><span class="v">6 <span class="u">pâtons de 280 g</span></span></div>
-          <div class="repere"><span class="k">10 unités de calcul</span><span class="v">… <span class="u">pâtons de 280 g</span></span></div>
-        </div>
 <div class="enc enc-conseil"><span class="enc-t">À compléter pendant le stage</span><p>Les colonnes 3&nbsp;kg et 10&nbsp;kg sont
         volontairement laissées vides&nbsp;: c'est l'exercice. Une unité de calcul donne environ
         <strong>1,68&nbsp;kg de pâte</strong>, soit six pâtons de 280&nbsp;g — à vous de trouver
         combien en donnent dix.</p></div>
-        <p class="mention">Les unités de calcul — © École Pizza | Jean-Jacques Despaux</p>
+
+        <figure class="schema">
+          <svg viewBox="0 20 660 172" role="img" aria-label="Une unité de calcul : 1 kg de farine plus l'eau, le sel, l'huile et la levure donnent 1,68 kg de pâte, soit six pâtons de 280 grammes.">
+            <defs>
+              <marker id="f-unite" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" class="s-pointe"/>
+              </marker>
+            </defs>
+
+            <!-- L'entrée : les cinq ingrédients d'une unité -->
+            <rect x="10" y="30" width="176" height="150" rx="6" class="s-boite"/>
+            <text x="98" y="54" class="s-lbl s-centre">1 UNITÉ DE CALCUL</text>
+            <text x="30" y="82"  class="s-txt">Farine</text>       <text x="176" y="82"  class="s-val s-fin s-droite">1 000 g</text>
+            <text x="30" y="104" class="s-txt">Eau</text>          <text x="176" y="104" class="s-val s-fin s-droite">540 – 600 g</text>
+            <text x="30" y="126" class="s-txt">Sel</text>          <text x="176" y="126" class="s-val s-fin s-droite">20 g</text>
+            <text x="30" y="148" class="s-txt">Huile</text>        <text x="176" y="148" class="s-val s-fin s-droite">25 g</text>
+            <text x="30" y="170" class="s-txt">Levure</text>       <text x="176" y="170" class="s-val s-fin s-droite">2 – 4 g</text>
+
+            <line x1="196" y1="105" x2="248" y2="105" class="s-fil" marker-end="url(#f-unite)"/>
+            <text x="222" y="96" class="s-lbl s-centre">PÉTRIN</text>
+
+            <!-- La masse obtenue -->
+            <rect x="258" y="62" width="130" height="86" rx="6" class="s-plein"/>
+            <text x="323" y="96"  class="s-lbl s-centre s-sur">PÂTE OBTENUE</text>
+            <text x="323" y="124" class="s-txt s-centre s-sur s-gros">1,68 kg</text>
+
+            <line x1="398" y1="105" x2="450" y2="105" class="s-fil" marker-end="url(#f-unite)"/>
+            <text x="424" y="96" class="s-lbl s-centre">÷ 280 g</text>
+
+            <!-- Les six pâtons -->
+            <circle cx="484" cy="76"  r="21" class="s-paton"/>
+            <circle cx="534" cy="76"  r="21" class="s-paton"/>
+            <circle cx="584" cy="76"  r="21" class="s-paton"/>
+            <circle cx="484" cy="134" r="21" class="s-paton"/>
+            <circle cx="534" cy="134" r="21" class="s-paton"/>
+            <circle cx="584" cy="134" r="21" class="s-paton"/>
+            <text x="534" y="180" class="s-txt s-centre s-fort">6 pâtons de 280 g</text>
+          </svg>
+          <figcaption class="legende">Une unité de calcul part d'<strong>un kilo de farine</strong>. Les 1,68 kg de pâte sont la somme de tout ce qui entre au pétrin — c'est pour cela que le poids final ne dépend pas que de la farine.</figcaption>
+        </figure>
 
       </div>
       <div class="pied">

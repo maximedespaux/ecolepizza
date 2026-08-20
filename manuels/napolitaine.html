@@ -531,7 +531,49 @@
         un P/L bas, une pâte molle qui se déchire. Pour la pizza, on cherche un P/L compris entre
         <strong>0,50 et 0,70</strong> — c'est d'ailleurs ce qu'imposent les cahiers des charges
         napolitains.</p></div>
-        <p class="mention">Schéma de l'alvéographe de Chopin — © École Pizza | Jean-Jacques Despaux</p>
+
+        <figure class="schema">
+          <svg viewBox="0 10 660 288" role="img" aria-label="Courbe d'alvéogramme : P est la hauteur du sommet, L la largeur totale jusqu'à la rupture, W l'aire sous la courbe.">
+            <defs>
+              <marker id="f-alveo" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" class="s-pointe"/>
+              </marker>
+            </defs>
+
+            <!-- Les axes -->
+            <line x1="70" y1="250" x2="620" y2="250" class="s-axe"/>
+            <line x1="70" y1="250" x2="70"  y2="35"  class="s-axe"/>
+            <text x="70" y="25" class="s-lbl">PRESSION</text>
+            <text x="620" y="272" class="s-lbl s-droite">TEMPS · ALLONGEMENT</text>
+
+            <!-- L'aire sous la courbe : c'est ELLE qui est le W. -->
+            <path d="M70 250 C 120 250, 150 70, 215 70 C 300 70, 360 118, 470 165 L 470 250 Z"
+                  class="s-aire"/>
+            <path d="M70 250 C 120 250, 150 70, 215 70 C 300 70, 360 118, 470 165"
+                  class="s-courbe"/>
+            <!-- La rupture : la bulle éclate, la courbe s'arrête là. -->
+            <circle cx="470" cy="165" r="5" class="s-accent"/>
+            <text x="484" y="160" class="s-lbl">RUPTURE</text>
+
+            <!-- P : la hauteur du sommet = ténacité -->
+            <line x1="215" y1="70" x2="215" y2="250" class="s-cote"/>
+            <line x1="118" y1="70" x2="205" y2="70"  class="s-cote"/>
+            <text x="126" y="62" class="s-txt">P</text>
+            <text x="140" y="62" class="s-lbl s-fin">TÉNACITÉ</text>
+
+            <!-- L : la largeur = extensibilité -->
+            <line x1="70" y1="268" x2="470" y2="268" class="s-cote" marker-end="url(#f-alveo)"/>
+            <text x="262" y="288" class="s-txt s-centre">L</text>
+            <text x="278" y="288" class="s-lbl">EXTENSIBILITÉ</text>
+
+            <!-- W : l'aire -->
+            <text x="250" y="180" class="s-txt s-fort">W</text>
+            <text x="272" y="180" class="s-lbl">= L'AIRE SOUS LA COURBE</text>
+            <text x="250" y="200" class="s-lbl s-fin">le travail nécessaire pour faire éclater le pâton</text>
+          </svg>
+          <figcaption class="legende">L'alvéogramme de Chopin. <strong>P</strong> se lit en hauteur, <strong>L</strong> en largeur, et <strong>W</strong> est l'aire — pas un point sur la courbe. C'est pour cela que deux farines de même W peuvent se comporter à l'opposé&nbsp;: leur rapport P/L diffère.</figcaption>
+        </figure>
 
       </div>
       <div class="pied">

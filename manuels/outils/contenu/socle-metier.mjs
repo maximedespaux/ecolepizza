@@ -7,6 +7,7 @@
  * corrigées en silence.
  */
 import { chapitre, cote, photo, duo, enc, tbl, averif, reperes, proto, bilan } from "../gabarit.mjs";
+import * as SC from "../schemas.mjs";
 
 /* Le tableau de pointage revient sur les trois protocoles directs : une seule
    définition, trois usages — c'est exactement le genre de duplication qui a
@@ -680,28 +681,11 @@ ${tbl(["Type de pizza", ["Température du four", "c"]], [
       : [[["Plaque", "fort"], ["<span class='val'>320 °C</span>", "c"]]]),
   ], { titre: "La température idéale varie entre 320 et 450 °C" })}
         <h3 class="sec">Les trois chaleurs</h3>
-        <div class="proto">
-          <div class="phase" data-n="1">
-            <div class="phase-t">Rayonnement</div>
-            <p>La chaleur se diffuse par la <strong>voûte</strong> du four vers la pizza, sans
-            contact. C'est elle qui colore et qui déclenche la réaction de Maillard.</p>
-          </div>
-          <div class="phase" data-n="2">
-            <div class="phase-t">Convection</div>
-            <p>La chaleur se diffuse par l'<strong>air chaud</strong> qui tourne naturellement dans
-            la chambre vers la pizza. C'est elle qui cuit la garniture.</p>
-          </div>
-          <div class="phase" data-n="3">
-            <div class="phase-t">Conduction</div>
-            <p>La chaleur se diffuse de la <strong>sole</strong> — le sol du four — par contact
-            direct avec la pizza. C'est elle qui cuit le fond et fait le croustillant.</p>
-          </div>
-        </div>
+${SC.troisChaleurs()}
 ${enc("conseil", "Un fond pâle, une garniture brûlée", `<p>Ce n'est pas un problème de temps, c'est
         un problème d'équilibre&nbsp;: trop de voûte, pas assez de sole. Sur un four digital, on
         corrige par la répartition ; sur un four mécanique, en descendant la voûte et en montant la
         sole de quelques degrés.</p>`)}
-${photo("enfournement", "Enfournement dans un four à sole rotative")}
 `, { chap: "La cuisson de la pizza", num: m._c });
 
 /* ===========================================================================

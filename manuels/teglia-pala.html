@@ -436,7 +436,49 @@
         un P/L bas, une pâte molle qui se déchire. Pour la pizza, on cherche un P/L compris entre
         <strong>0,50 et 0,70</strong> — c'est d'ailleurs ce qu'imposent les cahiers des charges
         napolitains.</p></div>
-        <p class="mention">Schéma de l'alvéographe de Chopin — © École Pizza | Jean-Jacques Despaux</p>
+
+        <figure class="schema">
+          <svg viewBox="0 10 660 288" role="img" aria-label="Courbe d'alvéogramme : P est la hauteur du sommet, L la largeur totale jusqu'à la rupture, W l'aire sous la courbe.">
+            <defs>
+              <marker id="f-alveo" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" class="s-pointe"/>
+              </marker>
+            </defs>
+
+            <!-- Les axes -->
+            <line x1="70" y1="250" x2="620" y2="250" class="s-axe"/>
+            <line x1="70" y1="250" x2="70"  y2="35"  class="s-axe"/>
+            <text x="70" y="25" class="s-lbl">PRESSION</text>
+            <text x="620" y="272" class="s-lbl s-droite">TEMPS · ALLONGEMENT</text>
+
+            <!-- L'aire sous la courbe : c'est ELLE qui est le W. -->
+            <path d="M70 250 C 120 250, 150 70, 215 70 C 300 70, 360 118, 470 165 L 470 250 Z"
+                  class="s-aire"/>
+            <path d="M70 250 C 120 250, 150 70, 215 70 C 300 70, 360 118, 470 165"
+                  class="s-courbe"/>
+            <!-- La rupture : la bulle éclate, la courbe s'arrête là. -->
+            <circle cx="470" cy="165" r="5" class="s-accent"/>
+            <text x="484" y="160" class="s-lbl">RUPTURE</text>
+
+            <!-- P : la hauteur du sommet = ténacité -->
+            <line x1="215" y1="70" x2="215" y2="250" class="s-cote"/>
+            <line x1="118" y1="70" x2="205" y2="70"  class="s-cote"/>
+            <text x="126" y="62" class="s-txt">P</text>
+            <text x="140" y="62" class="s-lbl s-fin">TÉNACITÉ</text>
+
+            <!-- L : la largeur = extensibilité -->
+            <line x1="70" y1="268" x2="470" y2="268" class="s-cote" marker-end="url(#f-alveo)"/>
+            <text x="262" y="288" class="s-txt s-centre">L</text>
+            <text x="278" y="288" class="s-lbl">EXTENSIBILITÉ</text>
+
+            <!-- W : l'aire -->
+            <text x="250" y="180" class="s-txt s-fort">W</text>
+            <text x="272" y="180" class="s-lbl">= L'AIRE SOUS LA COURBE</text>
+            <text x="250" y="200" class="s-lbl s-fin">le travail nécessaire pour faire éclater le pâton</text>
+          </svg>
+          <figcaption class="legende">L'alvéogramme de Chopin. <strong>P</strong> se lit en hauteur, <strong>L</strong> en largeur, et <strong>W</strong> est l'aire — pas un point sur la courbe. C'est pour cela que deux farines de même W peuvent se comporter à l'opposé&nbsp;: leur rapport P/L diffère.</figcaption>
+        </figure>
 
       </div>
       <div class="pied">
@@ -945,32 +987,49 @@
           <tbody><tr><td class="fort">Classique</td><td class="c"><span class='val'>320 – 360 °C</span></td></tr><tr><td class="fort">Contemporaine</td><td class="c"><span class='val'>360 – 380 °C</span></td></tr><tr><td class="fort">Napolitaine</td><td class="c"><span class='val'>400 – 450 °C</span></td></tr><tr><td class="fort">Plaque <em>In Teglia</em></td><td class="c"><span class='val'>320 °C</span></td></tr><tr><td class="fort"><em>In Pala</em></td><td class="c"><span class='val'>290 °C</span></td></tr></tbody>
         </table>
         <h3 class="sec">Les trois chaleurs</h3>
-        <div class="proto">
-          <div class="phase" data-n="1">
-            <div class="phase-t">Rayonnement</div>
-            <p>La chaleur se diffuse par la <strong>voûte</strong> du four vers la pizza, sans
-            contact. C'est elle qui colore et qui déclenche la réaction de Maillard.</p>
-          </div>
-          <div class="phase" data-n="2">
-            <div class="phase-t">Convection</div>
-            <p>La chaleur se diffuse par l'<strong>air chaud</strong> qui tourne naturellement dans
-            la chambre vers la pizza. C'est elle qui cuit la garniture.</p>
-          </div>
-          <div class="phase" data-n="3">
-            <div class="phase-t">Conduction</div>
-            <p>La chaleur se diffuse de la <strong>sole</strong> — le sol du four — par contact
-            direct avec la pizza. C'est elle qui cuit le fond et fait le croustillant.</p>
-          </div>
-        </div>
+
+        <figure class="schema">
+          <svg viewBox="0 26 660 232" role="img" aria-label="Coupe d'un four : le rayonnement vient de la voûte, la convection de l'air qui tourne, la conduction de la sole par contact direct.">
+            <defs>
+              <marker id="f-chaleurs" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" class="s-pointe"/>
+              </marker>
+            </defs>
+
+            <!-- La chambre du four -->
+            <path d="M60 200 L60 110 A 270 130 0 0 1 600 110 L600 200 Z" class="s-boite"/>
+            <rect x="60" y="200" width="540" height="26" rx="3" class="s-sole"/>
+            <text x="330" y="218" class="s-lbl s-centre s-sur">LA SOLE</text>
+
+            <!-- La pizza, posée dessus -->
+            <ellipse cx="330" cy="196" rx="86" ry="9" class="s-pizza"/>
+
+            <!-- 1. Rayonnement : de la voûte, en droite ligne -->
+            <line x1="255" y1="86" x2="300" y2="176" class="s-ray" marker-end="url(#f-chaleurs)"/>
+            <line x1="330" y1="74" x2="330" y2="176" class="s-ray" marker-end="url(#f-chaleurs)"/>
+            <line x1="405" y1="86" x2="360" y2="176" class="s-ray" marker-end="url(#f-chaleurs)"/>
+            <text x="330" y="56" class="s-txt s-centre s-fort">1 · Rayonnement</text>
+            <text x="330" y="40" class="s-lbl s-centre">LA VOÛTE — COLORATION, RÉACTION DE MAILLARD</text>
+
+            <!-- 2. Convection : l'air tourne -->
+            <path d="M150 170 C 110 130, 130 96, 180 96" class="s-conv" marker-end="url(#f-chaleurs)"/>
+            <path d="M510 170 C 550 130, 530 96, 480 96" class="s-conv" marker-end="url(#f-chaleurs)"/>
+            <text x="120" y="196" class="s-txt s-fort">2 · Convection</text>
+            <text x="120" y="212" class="s-lbl">L'AIR CHAUD</text>
+            <text x="120" y="226" class="s-lbl s-fin">cuit la garniture</text>
+
+            <!-- 3. Conduction : par contact -->
+            <line x1="330" y1="232" x2="330" y2="206" class="s-cond" marker-end="url(#f-chaleurs)"/>
+            <text x="470" y="250" class="s-txt s-fort">3 · Conduction</text>
+            <text x="352" y="250" class="s-lbl">PAR CONTACT — CUIT LE FOND, FAIT LE CROUSTILLANT</text>
+          </svg>
+          <figcaption class="legende">Les trois chaleurs travaillent en même temps, mais pas au même endroit. Un fond pâle sous une garniture brûlée n'est pas un problème de temps&nbsp;: c'est trop de voûte et pas assez de sole.</figcaption>
+        </figure>
 <div class="enc enc-conseil"><span class="enc-t">Un fond pâle, une garniture brûlée</span><p>Ce n'est pas un problème de temps, c'est
         un problème d'équilibre&nbsp;: trop de voûte, pas assez de sole. Sur un four digital, on
         corrige par la répartition ; sur un four mécanique, en descendant la voûte et en montant la
         sole de quelques degrés.</p></div>
-
-        <figure class="photo">
-          <img src="assets/img/enfournement.jpg" alt="Enfournement dans un four à sole rotative">
-          
-        </figure>
 
       </div>
       <div class="pied">
