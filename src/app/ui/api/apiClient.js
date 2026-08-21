@@ -1,6 +1,21 @@
 import { startLoading, stopLoading } from "../lib/loading.js";
 
-export const API_BASE_URL = "http://localhost:3000/api";
+/**
+ * OÙ JOINDRE L'API — figée à la CONSTRUCTION, pas au chargement de la page.
+ *
+ * `import.meta.env` est remplacé par sa valeur littérale au moment du `vite build` : cette
+ * adresse est donc cuite dans le paquet livré, elle ne se lit pas à l'exécution. Conséquence
+ * concrète : changer d'adresse d'API impose de RECONSTRUIRE le front, pas de redémarrer quoi
+ * que ce soit. C'est aussi pourquoi `VITE_API_URL` doit être posée sur la machine qui construit.
+ *
+ * Le repli sur localhost garde le développement fonctionnel sans aucun réglage, comme avant.
+ *
+ * La barre oblique finale est retirée : `VITE_API_URL=https://api.exemple.fr/api/` produirait
+ * sinon des `//stagiaires` — que certains serveurs redirigent, et une redirection PERD le corps
+ * d'une requête POST. Une faute de frappe dans une variable d'environnement ne doit pas se
+ * traduire par des enregistrements qui disparaissent en silence.
+ */
+export const API_BASE_URL = String(import.meta.env.VITE_API_URL || "http://localhost:3000/api").replace(/\/+$/, "");
 
 async function request(path, options = {}) {
   const { silent, ...opts } = options; // `silent` = pas de barre de chargement (polls)

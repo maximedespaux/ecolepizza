@@ -52,11 +52,23 @@ const accessProfileRoutes = require('./routes/accessProfile.routes.js');
 const billingProfileRoutes = require('./routes/billingProfile.routes.js');
 const eventsRoutes = require('./routes/events.routes.js');
 
-// --- CORS ---
-const allowedOrigins = [
-    'http://localhost:5173',
-    'https://doc-gestionary.onrender.com'
-];
+/* --- CORS : QUI A LE DROIT D'APPELER L'API ---
+ *
+ * La liste vient de l'environnement, parce qu'elle change d'une machine à l'autre et qu'une
+ * adresse de production n'a rien à faire dans le dépôt. Format : origines séparées par des
+ * virgules, SANS barre oblique finale — le navigateur envoie `https://app.exemple.fr`, et
+ * `https://app.exemple.fr/` ne lui est pas égal.
+ *
+ *     CORS_ORIGINS=https://app.exemple.fr
+ *
+ * `https://doc-gestionary.onrender.com` A ÉTÉ RETIRÉE. C'était un essai de déploiement, jamais
+ * mis en service — mais l'API continuait de lui faire confiance. Une origine autorisée qu'on ne
+ * contrôle plus est une porte ouverte sur un nom qui, un jour, appartiendra à quelqu'un d'autre.
+ *
+ * Le repli sur `localhost:5173` garde le développement fonctionnel sans réglage.
+ */
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173')
+    .split(',').map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean);
 
 app.use(cors({
     origin(origin, callback) {

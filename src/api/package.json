@@ -1,6 +1,7 @@
 {
   "name": "impastio_api",
   "version": "1.0.0",
+  "engines": { "node": ">=20.11.0" },
   "description": "Impastio — API REST (Node.js + Express + MySQL) pour l'École Pizza Jean-Jacques Despaux",
   "license": "ISC",
   "type": "commonjs",
