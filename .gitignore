@@ -34,3 +34,11 @@ SECURITY_AUDIT.md
 .claude/
 CLAUDE.md
 CHANTIERS.md
+
+# Manuels de formation : outil autonome (15 Mo, 65 JPG), aucune référence depuis `src/`.
+# L'application ne s'en sert pas, la production n'en a pas besoin.
+#
+# ⚠ L'IGNORER NE SUFFIT PAS À LE DÉ-SUIVRE : git continue de suivre ce qu'il suit déjà.
+# Il a fallu `git rm -r --cached manuels/` en plus. Les fichiers restent dans l'historique
+# (13 commits) — les effacer vraiment demanderait de réécrire l'historique.
+manuels/
