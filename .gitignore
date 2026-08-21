@@ -25,6 +25,7 @@ npm-debug.log*
 # seed.sql contient des données personnelles réelles (stagiaires) ; les
 # dumps de base sont propres à un poste et ne doivent pas être poussés.
 database/
+database/*.sql
 database/seed.sql
 database/*_dump.sql
 database/gds_*.sql
