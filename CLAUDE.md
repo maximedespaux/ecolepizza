@@ -127,24 +127,31 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **DEUX seulement restent à jouer**
+## 4. Migrations — **aucune en attente**
 
-**Vérifié le 2026-08-22 contre la base de production**, colonne par colonne et index par index,
-après la migration vers le VPS. Ce paragraphe remplace une liste devenue fausse : elle annonçait
-une dizaine de migrations en attente, dont la plupart avaient été jouées sur AlwaysData sans que
-la note soit mise à jour. **La base est l'autorité, pas ce fichier** — en cas de doute, on
-interroge `information_schema`, on ne relit pas ces lignes.
+**Vérifié le 2026-08-22 contre la base de production** (VPS, 85 tables), colonne par colonne et
+index par index. Les 119 et 120 ont été jouées ce jour-là ; tout le reste l'avait été sur
+AlwaysData et est arrivé avec l'import.
 
-| N° | Objet | Contrôle qui le prouve |
-|----|-------|------------------------|
-| **119** | `document_template.buyer_audience` — destinataire d'un modèle de facture (repli serveur) | la colonne est **absente** |
-| **120** | DROP `billing_profile.default_template_slug` | la colonne est **encore présente** |
+**LA BASE EST L'AUTORITÉ, PAS CE FICHIER.** Ce paragraphe a remplacé une liste qui annonçait une
+dizaine de migrations en attente alors qu'il n'en restait aucune — parce que personne ne la
+mettait à jour en les jouant. Une note de ce genre se périme en silence, et on lui fait confiance
+justement parce qu'elle a l'air précise. Avant de supposer qu'une colonne manque, interroger
+`information_schema` :
 
-**Tout le reste est en base** : 121, 122, 123, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134,
-135, 136. Y compris la **132** (index `uq_partner_nom` sur `partner`), que la note d'hier
-annonçait à tort comme à jouer — le contrôle cherchait un nom d'index approximatif.
-Et la **134** : les catégories de `partner_product` portent bien les libellés recopiés depuis
-`specs` (« Four, Électrique, 450 °C, 4 pizzas »), aucun produit n'a perdu son affichage.
+```sql
+SELECT COUNT(*) FROM information_schema.COLUMNS
+ WHERE table_schema='impastio' AND table_name='…' AND column_name='…';
+```
+
+Deux pièges rencontrés en faisant ce contrôle, à ne pas re-découvrir :
+
+- **un index ne se cherche pas par un nom approximatif.** La 132 a été annoncée « à jouer » alors
+  qu'elle était en base : la requête filtrait sur `index_name LIKE '%name%'` au lieu du vrai nom,
+  `uq_partner_nom` ;
+- **une migration de DONNÉES est invisible à tout contrôle de schéma.** La 134 recopie `specs`
+  vers `category` sur `partner_product` sans rien changer à la structure. Elle se vérifie sur le
+  contenu : les catégories portent bien « Four, Électrique, 450 °C, 4 pizzas ».
 
 **124 : ABANDONNÉE, à reverter si elle a été jouée.** Elle stockait sur `shop_request` le
 destinataire de la facture choisi par le stagiaire au panier. Le choix est revenu à l'école, qui
