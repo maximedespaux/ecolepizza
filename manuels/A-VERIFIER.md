@@ -186,7 +186,7 @@ lectures et le signale explicitement, mais c'est un point à insister en formati
 ### 25. Napolitaine — la colonne « École »
 Le manuel donne trois jeux de valeurs : STG, AVPN, et **École** (W 280-310, hydratation
 jusqu'à 68 %, levure selon la table du Niveau I). Ce troisième jeu vient des réglages retenus
-par Jean-Jacques et déjà implémentés dans le calculateur d'Impasto. **À confirmer.**
+par Jean-Jacques et déjà implémentés dans le calculateur d'Impastio. **À confirmer.**
 
 ### 26. 5 Stagioni — le code couleur des sacs
 Le code couleur donné au chapitre « Le sac de farine » (Niveau I p. 13) appartient à un seul

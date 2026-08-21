@@ -11,7 +11,7 @@
  *    l'agrément et auprès de laquelle l'école est certifiée.
  *
  * Ces deux jeux de valeurs sont déjà implémentés dans le calculateur
- * d'empâtement d'Impasto (`NAPO_SPECS` dans FicheRecette.jsx) : ce manuel et
+ * d'empâtement d'Impastio (`NAPO_SPECS` dans FicheRecette.jsx) : ce manuel et
  * l'application disent la même chose, volontairement.
  *
  * Le troisième jeu, « École », correspond aux réglages retenus par
