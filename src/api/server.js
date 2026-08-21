@@ -9,6 +9,9 @@ dotenv.config({ path: path.join(__dirname, 'config', '.env') });
 const port = process.env.PORT || 3000;
 const app = express();
 
+// N'annonce pas « Express » dans les en-têtes : un attaquant apprend d'autant moins la pile.
+app.disable('x-powered-by');
+
 // --- Routes ---
 const authRoutes = require('./routes/auth.routes.js');
 const userRoutes = require('./routes/user.routes.js');

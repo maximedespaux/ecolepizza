@@ -127,50 +127,42 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations écrites, **en attente** que l'utilisateur les joue
+## 4. Migrations — **aucune en attente**
 
-`118` est appliquée. Restent (au moins) :
+**Vérifié le 2026-08-22 contre la base de production** (VPS, 85 tables), colonne par colonne et
+index par index. Les 119 et 120 ont été jouées ce jour-là ; tout le reste l'avait été sur
+AlwaysData et est arrivé avec l'import.
 
-| N° | Objet |
-|----|-------|
-| 119 | `document_template.buyer_audience` — destinataire d'un modèle de facture (repli serveur) |
-| 120 | DROP `billing_profile.default_template_slug` |
-| 121 | `invoice.template_slug` — **modèle de facture choisi à la vente** |
-| 122 | `invoice_line.discount_pct` + `unit_price_gross_ht` — **la remise, conservée comme donnée** (jetons `{Remise}` / `{Total remise}`) |
-| 123 | `company.vat_number` — **n° de TVA du client** (jeton `field:company.vat_number`) |
-| 125 | `inventory_item.learner_discount_pct` + `learner_discount_eur` + remise figée sur la ligne — **remise stagiaire en % ou en €**, visible seulement dans leur boutique. **À REJOUER** : la colonne « euros » a été ajoutée après coup (fichier entièrement rejouable) |
-| 126 | `user.avatar` + `user.cadre` — **avatar et cadre du PERSONNEL** de l'organisme (il n'a pas de fiche `learner`). Sans elle, l'école reste anonyme dans la Communauté chez les AUTRES |
-| 127 | `piece_type` + `piece_depot` + `piece_fichier` + `program_step.piece_id` — **pièces justificatives fournies par le stagiaire** (identité recto/verso…). **Porte une question RGPD non tranchée, cf. le bloc en tête de ce fichier** |
-| 128 | `learner.cadre` élargie à 32 caractères — les **cadres de Pizza Quest** s'enregistrent en `palier|#rrggbb` (couleur de la formation). Le plus long tient dans les 16 actuels *au caractère près* : la migration écarte le mur, le code marche avant comme après |
+**LA BASE EST L'AUTORITÉ, PAS CE FICHIER.** Ce paragraphe a remplacé une liste qui annonçait une
+dizaine de migrations en attente alors qu'il n'en restait aucune — parce que personne ne la
+mettait à jour en les jouant. Une note de ce genre se périme en silence, et on lui fait confiance
+justement parce qu'elle a l'air précise. Avant de supposer qu'une colonne manque, interroger
+`information_schema` :
 
-**Jouées le 2026-08-03** : `129` (catégories de partenaires), `130` (registre des consentements +
-journal des transmissions), `131` (`partner.recoit_coordonnees` + suivi de contrat).
+```sql
+SELECT COUNT(*) FROM information_schema.COLUMNS
+ WHERE table_schema='impastio' AND table_name='…' AND column_name='…';
+```
 
-| N° | Objet | État |
-|----|-------|------|
-| 136 | **Rattrapage `partner_disclosure`** — `ADD COLUMN IF NOT EXISTS` sur les six colonnes. ⚠️ **`CREATE TABLE IF NOT EXISTS` (migration 130) ne complète PAS une table déjà présente** : elle est ignorée en bloc, sans erreur. Rejouer la 130 n'ajoute donc rien — il faut la 136 | **à jouer** |
-| 135 | `organization.partner_fields` + **`consent_record.champs`** — l'école choisit ce qu'elle transmet aux partenaires, et **ce qui a été ANNONCÉ à chaque personne est figé sur sa réponse**. L'export n'envoie que l'INTERSECTION des deux : restreindre s'applique à tout le monde, élargir ne vaut que pour les consentements suivants | **jouée** |
-| 134 | **`specs` → `category`** — les caractéristiques figées (énergie, °C, pizzas, sole rotative, AVPN) recopiées dans les catégories libres, puis les badges retirés du code. ⚠️ **À jouer AVANT de déployer**, sinon 12 produits sur 16 perdent l'affichage de leurs caractéristiques entre les deux. `specs` reste en base : `specs.devis` pilote toujours « Sur devis » | **à jouer** |
-| 133 | `partner.logo_url` + `inventory_item.image_url` — **images par LIEN**, hébergées chez le fournisseur. `partner_product.image_url` existait déjà (095) sans écran pour la remplir. ⚠️ Une image distante est **une requête vers un tiers** faite par le navigateur du stagiaire : la page Confidentialité le déclare désormais, et les images sont posées en `no-referrer` | **à jouer** |
-| 132 | `UNIQUE (organization_id, name)` sur `partner` — l'annuaire portait **deux fiches « Berkel »**, la vide a été supprimée. Un homonyme se paie cher ici : la demande de consentement NOMME les destinataires et son texte est figé comme preuve (« …, Berkel, Berkel, … »), et le semis des produits joint **sur le nom**. **Elle échoue s'il reste des doublons — c'est voulu** ; la requête pour les trouver est en tête du fichier | **à jouer** |
+Deux pièges rencontrés en faisant ce contrôle, à ne pas re-découvrir :
 
-⚠️ **La 131 démarre à zéro destinataire**, volontairement : `DEFAULT 0` signifie qu'aucun
-partenaire ne reçoit de coordonnées tant que l'école ne l'a pas coché sur sa fiche. À 1, la
-migration aurait fait de vingt-trois annuaires des destinataires de données personnelles sans que
-personne ne l'ait décidé. **L'école doit donc cocher les quelques partenaires réellement
-concernés** — rien ne se transmet avant.
-
-Le code fonctionne sans elles (colonnes optionnelles), mais la fonctionnalité n'est complète
-qu'une fois jouées. D'autres migrations plus anciennes (106→117) peuvent aussi être en attente —
-**demander confirmation** avant de supposer qu'une colonne existe.
+- **un index ne se cherche pas par un nom approximatif.** La 132 a été annoncée « à jouer » alors
+  qu'elle était en base : la requête filtrait sur `index_name LIKE '%name%'` au lieu du vrai nom,
+  `uq_partner_nom` ;
+- **une migration de DONNÉES est invisible à tout contrôle de schéma.** La 134 recopie `specs`
+  vers `category` sur `partner_product` sans rien changer à la structure. Elle se vérifie sur le
+  contenu : les catégories portent bien « Four, Électrique, 450 °C, 4 pizzas ».
 
 **124 : ABANDONNÉE, à reverter si elle a été jouée.** Elle stockait sur `shop_request` le
 destinataire de la facture choisi par le stagiaire au panier. Le choix est revenu à l'école, qui
 le fait à l'émission — elle seule connaît l'accord de prise en charge. Son fichier **aller a été
-supprimé** (aucune base neuve ne doit la jouer) ; seul `124_revert_…` subsiste, pour les bases qui
-l'ont déjà reçue. Sans risque à ne pas jouer : quatre colonnes inertes.
+supprimé** ; seul `124_revert_…` subsiste. Sans risque à ne pas jouer : quatre colonnes inertes.
 
----
+⚠️ **La 131 a démarré à zéro destinataire**, volontairement : `DEFAULT 0` signifie qu'aucun
+partenaire ne reçoit de coordonnées tant que l'école ne l'a pas coché sur sa fiche. À 1, elle
+aurait fait de vingt-trois annuaires des destinataires de données personnelles sans que personne
+ne l'ait décidé. **L'école doit donc cocher les quelques partenaires réellement concernés** —
+rien ne se transmet avant.
 
 ## 5. Où en est le chantier « facturation / modèles » (session du 2026-07-29)
 
