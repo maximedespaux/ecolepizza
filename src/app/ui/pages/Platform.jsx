@@ -42,7 +42,7 @@ function Platform() {
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", borderBottom: "1px solid var(--border-soft)" }}>
           <img src={LOGO} alt="" style={{ width: 34, height: 34, borderRadius: 8 }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700 }}>Impasto · Plateforme</div>
+            <div style={{ fontWeight: 700 }}>Impastio · Plateforme</div>
             <div style={{ fontSize: 12, color: "var(--dim)" }}>{user?.email}</div>
           </div>
           <button className="btn sm ghost" onClick={logout}>Déconnexion</button>

@@ -1,6 +1,6 @@
 {
-  "name": "impasto",
-  "description": "Impasto — front React + Vite pour l'École Pizza Jean-Jacques Despaux",
+  "name": "impastio",
+  "description": "Impastio — front React + Vite pour l'École Pizza Jean-Jacques Despaux",
   "author": "Guillaume Despaux",
   "private": true,
   "version": "0.0.0",

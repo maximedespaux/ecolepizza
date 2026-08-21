@@ -1,5 +1,5 @@
 /* =====================================================================
-   Design system Impasto — charte École Pizza
+   Design system Impastio — charte École Pizza
    Bleu marine (structure) + rouge tomate (accent), police Mulish.
    Thème clair / sombre via [data-theme] sur <html>.
    ===================================================================== */
@@ -3386,7 +3386,7 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
     max-height:calc(100vh - 56px);overflow-y:auto}
 }
 @media(max-width:560px){
-  /* Marque réduite au logo : « Impasto » et son sous-titre valent moins, ici, que la place
+  /* Marque réduite au logo : « Impastio » et son sous-titre valent moins, ici, que la place
      qu'ils prennent au thème, à l'avatar et au menu. */
   .stu-brand .name,.stu-sub{display:none}
   .topbar{padding:10px 14px;gap:8px}

@@ -2,7 +2,7 @@
 
 ## Vue globale du projet
 
-- **Nom du projet :** Impasto
+- **Nom du projet :** Impastio
 - **Client :** École Pizzaïolo Jean-Jacques Despaux (« École Pizza »)
 - **Chef de projet :** Guillaume Despaux
 - **Document créé le :** 06/07/2026
@@ -64,7 +64,7 @@ statique + serveur Node), sans orchestration de conteneurs.
 ### Arborescence
 
 ```txt
-impasto/
+impastio/
 ├── src/
 │   ├── app/                     # Front React + Vite
 │   │   ├── index.html

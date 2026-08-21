@@ -1,4 +1,4 @@
-# Impasto / ecolepizza — instructions de travail
+# Impastio / ecolepizza — instructions de travail
 
 Ce fichier est chargé automatiquement à chaque session. Il porte les **règles permanentes** et
 l'**état de reprise**. Pour le détail (audits, dette, plan de refonte), lire `CHANTIERS.md`.
@@ -35,7 +35,7 @@ l'**état de reprise**. Pour le détail (audits, dette, plan de refonte), lire `
 
 ## 1. Le projet
 
-**Impasto** — gestion de l'École Pizza (Jean-Jacques Despaux, Lannemezan) : stagiaires,
+**Impastio** — gestion de l'École Pizza (Jean-Jacques Despaux, Lannemezan) : stagiaires,
 sessions, documents/parcours, signatures, boutique + facturation Factur-X, Qualiopi.
 
 - **Front** : React 19 + Vite — `src/app/ui` (dev sur `:5173`)

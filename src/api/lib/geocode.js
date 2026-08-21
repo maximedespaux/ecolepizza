@@ -20,7 +20,7 @@ async function geocodeAddress({ address, zip_code, town }) {
     let res;
     try {
         res = await fetch(`${ENDPOINT}?${params.toString()}`, {
-            headers: { 'User-Agent': 'Impasto/1.0 (geocoding)' },
+            headers: { 'User-Agent': 'Impastio/1.0 (geocoding)' },
         });
     } catch {
         return null; // réseau indisponible : on n'échoue pas le lot

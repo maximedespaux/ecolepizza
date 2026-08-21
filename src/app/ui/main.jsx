@@ -121,7 +121,7 @@ function AppRoutes() {
   if (isLoading) {
     return (
       <div className="app-loading">
-        <div className="brand-splash"><img src={LOGO} alt="" /><span>Impasto</span></div>
+        <div className="brand-splash"><img src={LOGO} alt="" /><span>Impastio</span></div>
       </div>
     );
   }

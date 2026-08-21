@@ -9,8 +9,13 @@ const { plainAddPlaceholder } = require('@signpdf/placeholder-plain');
 const signpdf = require('@signpdf/signpdf').default;
 const { P12Signer } = require('@signpdf/signer-p12');
 
-// Le conteneur P12 est chiffré au repos (cf. crypto.encrypt) ; cette passphrase
-// protège la clé privée à l'intérieur du conteneur.
+/* Le conteneur P12 est chiffré au repos (cf. crypto.encrypt) ; cette passphrase
+   protège la clé privée à l'intérieur du conteneur.
+
+   ⚠ ELLE NE SE RENOMME PAS — elle a gardé « impasto » après le passage à Impastio. Les
+   conteneurs DÉJÀ créés (certificats de l'organisme et des stagiaires, en base) sont scellés
+   avec cette phrase-là : la changer rend leur clé privée inouvrable, donc toute signature
+   ultérieure impossible avec un certificat existant. Même raison que le sel de `crypto.js`. */
 const P12_PASS = 'impasto-seal';
 
 /**

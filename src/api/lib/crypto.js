@@ -21,7 +21,13 @@ function getKey() {
         throw new Error('SSN_ENC_KEY manquante : définissez une clé de 64 caractères hexadécimaux en production.');
     }
     if (!raw) console.warn('[sécurité] SSN_ENC_KEY absente — clé de développement utilisée (NE PAS utiliser en production).');
-    // Dérive une clé de 32 octets depuis la valeur fournie (ou un défaut de dev).
+    /* Dérive une clé de 32 octets depuis la valeur fournie (ou un défaut de dev).
+       ⚠ CES DEUX CHAÎNES NE SE RENOMMENT PAS — elles ont gardé « impasto » après le passage à
+       Impastio, et ce n'est pas un oubli. Le sel entre dans la dérivation de la clé : le changer
+       d'un seul caractère produit une AUTRE clé, et tous les numéros de sécurité sociale déjà
+       chiffrés (`enc:…`) deviennent alors définitivement illisibles — AES-GCM refuse de
+       déchiffrer, il ne rend pas du charabia. Le renommage cosmétique de la marque n'a pas à
+       toucher un secret cryptographique. Cf. la même mise en garde dans `pdfseal.js`. */
     return crypto.scryptSync(raw || 'impasto-dev-key', 'impasto-ssn-salt', 32);
 }
 

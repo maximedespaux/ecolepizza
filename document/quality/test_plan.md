@@ -2,7 +2,7 @@
 
 ## Vue globale du projet
 
-- **Nom du projet :** Impasto
+- **Nom du projet :** Impastio
 - **Client :** École Pizzaïolo Jean-Jacques Despaux (« École Pizza »)
 - **Chef de projet :** Guillaume Despaux
 - **Document créé le :** 06/07/2026

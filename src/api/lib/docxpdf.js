@@ -57,7 +57,7 @@ function convertToPdf(inputBuffer, ext, pdfa) {
         e.code = 'NO_SOFFICE';
         throw e;
     }
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'impasto-pdf-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'impastio-pdf-'));
     const inPath = path.join(dir, `doc.${ext}`);
     const outPath = path.join(dir, 'doc.pdf');
     try {

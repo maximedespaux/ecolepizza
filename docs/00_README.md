@@ -1,4 +1,4 @@
-# Impasto — ERP de formation (École Pizzaïolo Jean-Jacques Despaux)
+# Impastio — ERP de formation (École Pizzaïolo Jean-Jacques Despaux)
 
 Application de secrétariat pour organisme de formation : CRM/pipeline, dossiers
 stagiaires, génération documentaire, signature électronique (tracé manuscrit),

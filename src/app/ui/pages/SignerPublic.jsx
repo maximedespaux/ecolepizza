@@ -35,7 +35,7 @@ export default function SignerPublic() {
     <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
       <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
         <img src={LOGO} alt="" style={{ width: 32, height: 32, borderRadius: 8, background: "#fff", padding: 3, objectFit: "contain" }} />
-        <b style={{ fontSize: 16 }}>Impasto, Signature de document</b>
+        <b style={{ fontSize: 16 }}>Impastio, Signature de document</b>
       </header>
 
       <main style={{ maxWidth: 900, width: "100%", margin: "0 auto", padding: 20, flex: 1 }}>

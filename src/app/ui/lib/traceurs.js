@@ -9,6 +9,20 @@
  * qui ne serait pas déclarée ici. On ne peut donc plus en ajouter une en silence.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * ⚠ LES CLÉS GARDENT LE PRÉFIXE `impasto.`, ALORS QUE LE PRODUIT S'APPELLE IMPASTIO. Ce n'est pas
+ * un renommage oublié : une clé de stockage n'est pas un nom de marque, c'est une ADRESSE. Elle
+ * désigne ce qui est déjà posé sur l'appareil de chaque personne — avatar, cadre, panier, liste
+ * d'envies, préférences. La renommer ne déplace rien : le navigateur ne trouverait plus rien à
+ * l'ancienne adresse, et chacun repartirait d'un avatar vide sans comprendre pourquoi. Les noms
+ * d'évènements (`impasto:panier`, `impasto:avatar`…) suivent le même préfixe pour rester dans le
+ * même espace de noms que la clé qu'ils accompagnent.
+ *
+ * Les migrer supposerait une recopie ancienne clé → nouvelle au premier démarrage, puis une purge
+ * — du code jetable à écrire, à tester et à retirer plus tard, pour un préfixe que personne ne
+ * voit. Sauf sur CETTE page, qui affiche les clés telles quelles : la colonne « clé » ci-dessous
+ * doit donc rester fidèle à ce qui est réellement écrit sur l'appareil.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
  * AUCUN BANDEAU DE CONSENTEMENT N'EST NÉCESSAIRE AUJOURD'HUI, et c'est un constat, pas un confort.
  *
  * L'article 82 de la loi Informatique et Libertés soumet au consentement toute lecture ou

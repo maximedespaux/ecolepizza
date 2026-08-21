@@ -71,7 +71,7 @@ function AppLayout() {
       <div className="app-loading">
         <div className="brand-splash">
           <img src={LOGO} alt="" />
-          <span>Impasto</span>
+          <span>Impastio</span>
         </div>
       </div>
     );

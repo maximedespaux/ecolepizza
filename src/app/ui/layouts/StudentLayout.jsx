@@ -163,7 +163,7 @@ function StudentLayout() {
   if (isLoading) {
     return (
       <div className="app-loading">
-        <div className="brand-splash"><img src={LOGO} alt="" /><span>Impasto</span></div>
+        <div className="brand-splash"><img src={LOGO} alt="" /><span>Impastio</span></div>
       </div>
     );
   }
@@ -190,7 +190,7 @@ function StudentLayout() {
         <div className="brand stu-brand" style={{ padding: 0, gap: 10 }}>
           <img src={LOGO} alt="École Pizza" style={{ width: 36, height: 36, borderRadius: 9, background: "#fff", padding: 3, objectFit: "contain" }} />
           <div>
-            <div className="name" style={{ fontSize: 17 }}>Impasto</div>
+            <div className="name" style={{ fontSize: 17 }}>Impastio</div>
             {/* Sous-titre décoratif : il cède la place au nom de marque sur un écran étroit. */}
             <div className="sub stu-sub" style={{ fontSize: 10, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em" }}>Espace stagiaire</div>
           </div>

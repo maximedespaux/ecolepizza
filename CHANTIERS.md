@@ -1,4 +1,4 @@
-# Chantiers Impasto — état des lieux et reprise
+# Chantiers Impastio — état des lieux et reprise
 
 > Document de reprise rédigé le 2026-07-28. Il consigne ce qui a été fait, **comment travailler
 > sur ce projet sans casser** (leçons payées cher), et tout ce qui reste, classé par valeur.
@@ -9,7 +9,7 @@
 
 ## 1. Le projet en dix lignes
 
-**Impasto** — application de gestion de l'École Pizza (Jean-Jacques Despaux, Lannemezan).
+**Impastio** — application de gestion de l'École Pizza (Jean-Jacques Despaux, Lannemezan).
 Deux mondes dans une même application :
 
 - **Espace stagiaire** — ludique, façon Duolingo. Police ronde Fredoka, coins doux, retour
@@ -501,7 +501,7 @@ Un lanceur de migration existe (le client `mysql` n'est pas installé sur la mac
 (« RSC Mode CSRF Bypass »). **On reste en 7.18 sciemment**, pour trois raisons :
 
 1. L'avis dit lui-même : *« This only affects your application if you are using the unstable RSC
-   APIs. »* Impasto est une SPA Vite — `BrowserRouter`, `Routes`, `Link`, `useNavigate`,
+   APIs. »* Impastio est une SPA Vite — `BrowserRouter`, `Routes`, `Link`, `useNavigate`,
    `useParams`, `Outlet`. Aucun RSC, aucun `loader`/`action`, aucun rendu serveur. **La faille
    n'est pas atteignable ici.**
 2. Il n'existe **aucun correctif en 7.x** : la seule version corrigée est `react-router@8.3.0`.

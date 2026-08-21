@@ -98,7 +98,7 @@ function Login() {
           <div className="login-brandmark">
             <img src={LOGO} alt="École Pizza" />
             <div>
-              <div className="lb-name">Impasto</div>
+              <div className="lb-name">Impastio</div>
               <div className="lb-sub">École Pizza · Jean-Jacques Despaux</div>
             </div>
           </div>

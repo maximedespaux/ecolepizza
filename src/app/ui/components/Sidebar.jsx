@@ -76,7 +76,7 @@ function Sidebar({ open }) {
       <div className="brand">
         <img src={LOGO} alt="École Pizza" />
         <div>
-          <div className="name">Impasto</div>
+          <div className="name">Impastio</div>
           <div className="sub">École Pizza · Despaux</div>
         </div>
       </div>
