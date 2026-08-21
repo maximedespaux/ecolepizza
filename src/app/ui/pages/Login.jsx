@@ -152,7 +152,7 @@ function Login() {
                   type="email"
                   value={form.email}
                   onChange={update("email")}
-                  placeholder="admin@ecole-pizza.com"
+                  placeholder="vous@exemple.fr"
                   autoComplete="username"
                   required
                 />
