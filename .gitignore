@@ -1,0 +1,46 @@
+# Dépendances
+node_modules/
+
+# Build front
+src/app/dist-react/
+
+# Environnement / secrets
+.env
+.env.*
+!.env.example
+src/api/config/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / éditeurs / artefacts FUSE
+.DS_Store
+.fuse_hidden*
+*~
+.idea/
+.vscode/
+
+# Données locales sensibles — NE PAS versionner
+# seed.sql contient des données personnelles réelles (stagiaires) ; les
+# dumps de base sont propres à un poste et ne doivent pas être poussés.
+database/
+database/*.sql
+database/seed.sql
+database/*_dump.sql
+database/gds_*.sql
+
+# Rapport d'audit de sécurité interne — ne jamais committer
+SECURITY_AUDIT.md
+
+.claude/
+CLAUDE.md
+CHANTIERS.md
+
+# Manuels de formation : outil autonome (15 Mo, 65 JPG), aucune référence depuis `src/`.
+# L'application ne s'en sert pas, la production n'en a pas besoin.
+#
+# ⚠ L'IGNORER NE SUFFIT PAS À LE DÉ-SUIVRE : git continue de suivre ce qu'il suit déjà.
+# Il a fallu `git rm -r --cached manuels/` en plus. Les fichiers restent dans l'historique
+# (13 commits) — les effacer vraiment demanderait de réécrire l'historique.
+manuels/

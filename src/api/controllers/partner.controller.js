@@ -1,0 +1,681 @@
+const crypto = require('crypto');
+const db = require('../config/database.js');
+const { logAudit } = require('../lib/audit.js');
+const { CONTRAT_FIN } = require('../lib/contratPartenaire.js');
+const { colonneExiste } = require('../lib/colonnes.js');
+const { validerImage } = require('../lib/imageDistante.js');
+
+const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
+
+const PARTNER_FIELDS = [
+    'name', 'category', 'contact_name', 'contact_email', 'contact_phone',
+    'website', 'town', 'discount_pct', 'offer', 'notes',
+];
+
+/* CE PARTENAIRE REÇOIT-IL LES COORDONNÉES DES STAGIAIRES ? (migration 131)
+   Hors de `PARTNER_FIELDS` VOLONTAIREMENT : ce n'est pas une propriété descriptive comme une ville
+   ou une remise, c'est une autorisation de transmettre des données personnelles. La mélanger aux
+   autres la ferait passer dans les mêmes `UPDATE` en masse, sans qu'on puisse la tracer ni la
+   traiter à part — et un `PATCH` de la ville l'écraserait au passage si le formulaire ne la
+   renvoyait pas. Elle est lue et écrite explicitement, et jamais par défaut. */
+const CHAMP_DESTINATAIRE = 'recoit_coordonnees';
+
+/* LE CONTRAT, LUI, EST DANS LE FORMULAIRE (migration 131) — à la différence du drapeau ci-dessus.
+   Ce sont des faits descriptifs qu'on saisit en même temps que l'adresse ou la remise, et ils
+   arrivent donc dans le même `PATCH`. Le drapeau, lui, est une autorisation : il a sa propre route
+   pour qu'un enregistrement du formulaire ne puisse pas le décocher au passage. */
+const CONTRAT_FIELDS = ['contrat', 'contrat_debut', 'contrat_duree_mois'];
+
+/* Le LOGO du partenaire (migration 133) : une adresse, pas un fichier. Descriptif comme la ville
+   ou le site web, donc dans le même formulaire — mais validé à part, parce qu'une valeur qui
+   finit dans un `src` ne se traite pas comme une note de suivi (cf. `lib/imageDistante.js`). */
+const CHAMP_LOGO = 'logo_url';
+
+/**
+ * GET /api/partenaires — annuaire + suivi (contacts, offre, commissions cumulées).
+ * Filtre ?category=
+ */
+const getPartners = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const params = [req.user.organization_id];
+        /* LE NOMBRE DE PRODUITS EST DANS LA LISTE, et pas seulement dans le détail.
+           La section « Produits en boutique » de chaque fiche ne chargeait son catalogue qu'à
+           l'ouverture — ce qui est le bon choix, vingt-trois partenaires ne doivent pas déclencher
+           vingt-trois requêtes. Mais le COMPTE affiché à côté du titre venait de ce même
+           chargement : il restait donc invisible tant qu'on n'avait pas déplié, et il fallait
+           ouvrir les vingt-trois sections une par une pour savoir lesquelles ont un catalogue.
+           Une sous-requête sur une requête qui tourne déjà coûte infiniment moins que ça. */
+        const colonnes = (avecProduits, avecDestinataire = true, avecLogo = true) => `
+            SELECT p.id, p.name, p.category, p.contact_name, p.contact_email, p.contact_phone,
+                   p.website, p.town, p.discount_pct, p.offer, p.notes, p.created_at,
+                   ${avecDestinataire ? `p.recoit_coordonnees, p.contrat, p.contrat_duree_mois,
+                   DATE_FORMAT(p.contrat_debut, '%Y-%m-%d') AS contrat_debut,
+                   ${CONTRAT_FIN('p')} AS contrat_fin,`
+        : `NULL AS recoit_coordonnees, 0 AS contrat, NULL AS contrat_duree_mois,
+                   NULL AS contrat_debut, NULL AS contrat_fin,`}
+                   ${avecLogo ? 'p.logo_url,' : 'NULL AS logo_url,'}
+                   COALESCE(SUM(re.amount), 0) AS commissions_total,
+                   COUNT(re.id) AS commissions_count,
+                   DATE_FORMAT(MAX(re.date), '%Y-%m-%d') AS last_commission${avecProduits ? `,
+                   (SELECT COUNT(*) FROM partner_product pp WHERE pp.partner_id = p.id) AS products` : ''}
+              FROM partner p
+              LEFT JOIN revenue_extra re ON re.partner_id = p.id
+             WHERE p.organization_id = ?`;
+        const filtre = req.query.category ? ' AND p.category = ?' : '';
+        if (req.query.category) params.push(req.query.category);
+        const fin = ' GROUP BY p.id ORDER BY p.name';
+        /* ON SONDE, ON N'ESSAIE PLUS. Trois colonnes facultatives indépendantes cohabitent ici :
+           le compte de produits (095), le drapeau destinataire et le contrat (131), le logo (133).
+           La cascade « tenter puis rattraper » demandait déjà quatre requêtes pour deux d'entre
+           elles ; à trois elle en demanderait huit, chacune à garder juste. Une lecture
+           d'`information_schema` répond à la question directement. */
+        const [avecDest, avecLogo] = await Promise.all([
+            colonneExiste(conn, 'partner', 'recoit_coordonnees'),
+            colonneExiste(conn, 'partner', CHAMP_LOGO),
+        ]);
+        let results;
+        try {
+            [results] = await conn.query(colonnes(true, avecDest, avecLogo) + filtre + fin, params);
+        } catch (e) {
+            // `partner_product` arrive avec la 095 : sans elle, la liste sort sans le compte
+            // plutôt que de perdre l'écran entier pour une colonne d'appoint.
+            if (!isMissingSchema(e)) throw e;
+            [results] = await conn.query(colonnes(false, avecDest, avecLogo) + filtre + fin, params);
+        }
+
+        /* Détail des commissions par partenaire (libellé, date, montant, NATURE).
+         *
+         * `category` manquait. Un produit divers peut être une COMMISSION, une SUBVENTION ou un
+         * AUTRE produit (cf. REVENU_CATEGORIES) ; sans la colonne, la page les affichait TOUS
+         * comme des commissions. Anodin tant qu'on ne faisait que lire — mais dès qu'on peut
+         * modifier une ligne, le formulaire se serait ouvert sur « Commission » pour une
+         * subvention, et l'aurait convertie en la réenregistrant. */
+        const [lines] = await conn.query(
+            `SELECT re.id, re.partner_id, re.label, re.amount, re.category, DATE_FORMAT(re.date, '%Y-%m-%d') AS date
+             FROM revenue_extra re JOIN partner p ON p.id = re.partner_id
+             WHERE p.organization_id = ? ORDER BY re.date DESC, re.created_at DESC`,
+            [req.user.organization_id]
+        );
+        const byPartner = {};
+        for (const l of lines) (byPartner[l.partner_id] = byPartner[l.partner_id] || []).push(l);
+        for (const p of results) p.commissions = byPartner[p.id] || [];
+
+        // Contributions en nature (matériel/équipement) — table optionnelle (migration 065).
+        // Si la table n'existe pas encore, on renvoie des contributions vides (pas d'erreur).
+        try {
+            const [contribs] = await conn.query(
+                `SELECT c.id, c.partner_id, c.type, c.label, c.value, DATE_FORMAT(c.date, '%Y-%m-%d') AS date
+                 FROM partner_contribution c JOIN partner p ON p.id = c.partner_id
+                 WHERE p.organization_id = ? ORDER BY c.date DESC, c.created_at DESC`,
+                [req.user.organization_id]
+            );
+            const cByPartner = {};
+            for (const c of contribs) (cByPartner[c.partner_id] = cByPartner[c.partner_id] || []).push(c);
+            for (const p of results) p.contributions = cByPartner[p.id] || [];
+        } catch {
+            for (const p of results) p.contributions = [];
+        }
+
+        res.json({ data: results });
+    } catch (err) {
+        console.error('Erreur récupération partenaires :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** POST /api/partenaires */
+/**
+ * UN NOM DÉJÀ PRIS DANS CET ORGANISME ? (migration 132)
+ *
+ * DEUX PROTECTIONS, ET IL FAUT LES DEUX. La clé UNIQUE en base est la seule qui tienne face à un
+ * import ou à une insertion directe — les deux chemins par lesquels le doublon « Berkel » était
+ * précisément arrivé. Mais seule, elle rend une erreur SQL brute (`ER_DUP_ENTRY`) que l'écran
+ * afficherait telle quelle : « Duplicate entry 'xxx-Berkel' for key 'uq_partner_nom' ». Ce contrôle
+ * existe donc pour DIRE ce qui se passe, pas pour empêcher — c'est la contrainte qui empêche.
+ *
+ * Et il fonctionne AVANT la migration : tant que la 132 n'est pas jouée, il est la seule barrière.
+ *
+ * `exclureId` sert au renommage : une fiche n'est pas son propre doublon.
+ */
+function nomDejaPris(orgId, nom, exclureId) {
+    return new Promise((resolve) => {
+        db.query(
+            `SELECT id FROM partner
+              WHERE organization_id = ? AND name = ?${exclureId ? ' AND id <> ?' : ''} LIMIT 1`,
+            exclureId ? [orgId, nom, exclureId] : [orgId, nom],
+            // En cas d'erreur de lecture on laisse passer : la contrainte en base reste le filet,
+            // et refuser une création parce qu'on n'a pas pu VÉRIFIER serait pire que le doublon.
+            (err, rows) => resolve(!err && rows && rows.length > 0));
+    });
+}
+
+/** Message unique — la même cause doit donner la même phrase des deux côtés. */
+const DEJA_PRIS = (nom) => `Un partenaire nommé « ${nom} » existe déjà. `
+    + 'Deux fiches homonymes se confondent partout : dans la demande de consentement, qui NOMME '
+    + 'les destinataires, et au moment de cocher laquelle reçoit les coordonnées.';
+
+const createPartner = async (req, res) => {
+    const b = req.body || {};
+    if (!b.name) return res.status(422).json({ error: 'Nom du partenaire requis' });
+    if (await nomDejaPris(req.user.organization_id, b.name.trim()))
+        return res.status(409).json({ message: DEJA_PRIS(b.name.trim()) });
+    /* LE LOGO EST VALIDÉ AVANT TOUTE ÉCRITURE, et un refus est explicite : une adresse rejetée en
+       silence donnerait une fiche sans logo sans qu'on sache que le lien était en cause. */
+    const logo = validerImage(b[CHAMP_LOGO]);
+    if (!logo.ok) return res.status(422).json({ message: logo.message });
+    const id = crypto.randomUUID();
+    const base = ['id', 'organization_id', 'name', 'category', 'contact_name', 'contact_email',
+        'contact_phone', 'website', 'town', 'discount_pct', 'offer', 'notes'];
+    const vals = [id, req.user.organization_id, b.name, b.category || 'AUTRE', b.contact_name || null,
+        b.contact_email || null, b.contact_phone || null, b.website || null, b.town || null,
+        b.discount_pct === '' || b.discount_pct == null ? null : Number(b.discount_pct),
+        b.offer || null, b.notes || null];
+    /* LE CONTRAT À LA CRÉATION AUSSI (migration 131). Sans cela, un partenaire créé avec ses dates
+       les perdait en silence : le formulaire les affichait, l'INSERT les ignorait, et il fallait
+       rouvrir la fiche pour les ressaisir — sans jamais comprendre pourquoi.
+       `recoit_coordonnees` reste ABSENT, volontairement : un partenaire tout juste créé ne doit
+       pas naître destinataire de données personnelles. C'est un geste séparé, sur sa fiche. */
+    const colonnes = [...base], trous = base.map(() => '?');
+    if (logo.valeur !== undefined && logo.valeur !== null) {
+        colonnes.push(CHAMP_LOGO); trous.push('?'); vals.push(logo.valeur);
+    }
+    for (const f of CONTRAT_FIELDS) {
+        if (b[f] === undefined || b[f] === '') continue;
+        colonnes.push(f); trous.push('?');
+        vals.push(f === 'contrat' ? (b[f] ? 1 : 0)
+            : f === 'contrat_duree_mois' ? Number(b[f]) : b[f]);
+    }
+    db.query(
+        `INSERT INTO partner (${colonnes.join(', ')}) VALUES (${trous.join(', ')})`,
+        vals,
+        (err) => {
+            if (err) {
+                /* LA CONTRAINTE A PARLÉ LA PREMIÈRE — deux requêtes simultanées, ou un homonyme
+                   apparu entre la vérification et l'insertion. On traduit : « Duplicate entry
+                   'xxx-Berkel' for key 'uq_partner_nom' » est exact, illisible, et ne dit pas
+                   quoi faire. */
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ message: DEJA_PRIS(String(b.name).trim()) });
+                }
+                // La 131 peut ne pas être jouée : on recrée sans les colonnes de contrat plutôt
+                // que de refuser la création d'un partenaire pour une échéance facultative.
+                if (isMissingSchema(err) && colonnes.length > base.length) {
+                    return db.query(
+                        `INSERT INTO partner (${base.join(', ')}) VALUES (${base.map(() => '?').join(', ')})`,
+                        vals.slice(0, base.length),
+                        (e2) => {
+                            if (e2) {
+                                if (e2.code === 'ER_DUP_ENTRY') {
+                                    return res.status(409).json({ message: DEJA_PRIS(String(b.name).trim()) });
+                                }
+                                console.error('Erreur création partenaire :', e2);
+                                return res.status(500).json({ error: 'Internal Server Error' });
+                            }
+                            logAudit(req, 'partner.create', 'Partner', id);
+                            res.status(201).json({ message: 'Partenaire créé', id });
+                        });
+                }
+                console.error('Erreur création partenaire :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            logAudit(req, 'partner.create', 'Partner', id);
+            res.status(201).json({ message: 'Partenaire créé', id });
+        }
+    );
+};
+
+/** PATCH /api/partenaires/:id */
+const updatePartner = async (req, res) => {
+    /* LE RENOMMAGE AUSSI, pas seulement la création. Sans ce contrôle, il suffirait de créer
+       « Berkell » puis de le renommer « Berkel » pour retrouver deux homonymes — le garde-fou de
+       la création se contournerait en deux clics. */
+    if (req.body.name !== undefined && String(req.body.name).trim()
+        && await nomDejaPris(req.user.organization_id, String(req.body.name).trim(), req.params.id)) {
+        return res.status(409).json({ message: DEJA_PRIS(String(req.body.name).trim()) });
+    }
+    const logo = validerImage(req.body[CHAMP_LOGO]);
+    if (!logo.ok) return res.status(422).json({ message: logo.message });
+
+    const sets = [];
+    const values = [];
+    /* LE LOGO PASSE PAR SA PROPRE VALIDATION, jamais par la boucle générique : celle-ci se
+       contente de convertir « chaîne vide » en `null`, ce qui laisserait entrer n'importe quoi
+       dans un attribut `src`. */
+    if (logo.valeur !== undefined) { sets.push(`${CHAMP_LOGO} = ?`); values.push(logo.valeur); }
+    for (const f of [...PARTNER_FIELDS, ...CONTRAT_FIELDS]) {
+        if (req.body[f] === undefined) continue;
+        let v = req.body[f];
+        if (f === 'discount_pct') v = v === '' || v == null ? null : Number(v);
+        /* `contrat` EST UN BOOLÉEN, PAS UNE CHAÎNE. Sans cette ligne, un `false` venu du
+           formulaire tomberait dans le `v === ''` ci-dessous — non, mais `0` serait écrit tel
+           quel et une case décochée arriverait en `false`, que MySQL accepte en TINYINT. Le
+           forcer à 0/1 évite d'avoir à s'en remettre à cette tolérance. */
+        else if (f === 'contrat') v = v ? 1 : 0;
+        else if (f === 'contrat_duree_mois') v = v === '' || v == null ? null : Number(v);
+        else if (v === '') v = null;
+        sets.push(`${f} = ?`);
+        values.push(v);
+    }
+    if (sets.length === 0) return res.status(400).json({ message: 'Aucun champ à mettre à jour' });
+    values.push(req.params.id, req.user.organization_id);
+    db.query(
+        `UPDATE partner SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`,
+        values,
+        (err, result) => {
+            if (err) {
+                /* `NULL AS logo_url` ne permet PAS à l'écran de distinguer « colonne absente » de
+                   « pas de logo » — les deux valent `null`. Le champ reste donc toujours visible,
+                   et c'est l'écriture qui explique. Un champ masqué aurait été plus élégant, mais
+                   il aurait fallu alourdir la réponse d'un inventaire de colonnes que personne
+                   d'autre ne lit. */
+                if (isMissingSchema(err)) {
+                    return res.status(409).json({
+                        message: 'Migration 133 non jouée : l\'adresse du logo ne peut pas encore '
+                            + 'être enregistrée. Les autres champs non plus, cet enregistrement '
+                            + 'n\'a rien modifié.',
+                    });
+                }
+                // La contrainte a parlé la première (deux requêtes simultanées) : on traduit.
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ message: DEJA_PRIS(String(req.body.name || '').trim()) });
+                }
+                console.error('Erreur mise à jour partenaire :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            if (result.affectedRows === 0) return res.status(404).json({ message: 'Partenaire introuvable' });
+            logAudit(req, 'partner.update', 'Partner', req.params.id);
+            res.json({ success: true, message: 'Partenaire mis à jour', avertissement: logo.avertissement || undefined });
+        }
+    );
+};
+
+/** DELETE /api/partenaires/:id */
+const deletePartner = (req, res) => {
+    db.query(
+        'DELETE FROM partner WHERE id = ? AND organization_id = ?',
+        [req.params.id, req.user.organization_id],
+        (err) => {
+            if (err) {
+                console.error('Erreur suppression partenaire :', err);
+                return res.status(400).json({ message: 'Erreur suppression' });
+            }
+            logAudit(req, 'partner.delete', 'Partner', req.params.id);
+            res.json({ success: true, message: 'Partenaire supprimé' });
+        }
+    );
+};
+
+/** POST /api/partenaires/contributions — apport EN NATURE (matériel/équipement). */
+const createContribution = (req, res) => {
+    const b = req.body || {};
+    if (!b.partner_id) return res.status(422).json({ error: 'Partenaire requis' });
+    if (!b.label) return res.status(422).json({ error: 'Libellé requis' });
+    const id = crypto.randomUUID();
+    db.query(
+        `INSERT INTO partner_contribution (id, organization_id, partner_id, date, type, label, value, note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, req.user.organization_id, b.partner_id, b.date || new Date().toISOString().slice(0, 10),
+         b.type || 'MATERIEL', b.label, b.value === '' || b.value == null ? 0 : Number(b.value), b.note || null],
+        (err) => {
+            if (err) {
+                console.error('Erreur création contribution :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            logAudit(req, 'partner.contribution.create', 'PartnerContribution', id);
+            res.status(201).json({ message: 'Contribution enregistrée', id });
+        }
+    );
+};
+
+/** DELETE /api/partenaires/contributions/:id */
+const deleteContribution = (req, res) => {
+    db.query(
+        'DELETE FROM partner_contribution WHERE id = ? AND organization_id = ?',
+        [req.params.id, req.user.organization_id],
+        (err) => {
+            if (err) {
+                console.error('Erreur suppression contribution :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            logAudit(req, 'partner.contribution.delete', 'PartnerContribution', req.params.id);
+            res.json({ success: true, message: 'Contribution supprimée' });
+        }
+    );
+};
+
+
+/* ---------------------------------------------------------------------------------------------
+ * PRODUITS D'UN PARTENAIRE
+ *
+ * La table `partner_product` existait, l'espace stagiaire l'AFFICHAIT déjà (onglet « Offres
+ * partenaires »)… et RIEN ne l'écrivait : aucune route, aucun écran. Les produits ne pouvaient
+ * donc apparaître dans la boutique que si on les insérait à la main en SQL. C'est ce chaînon
+ * manquant que voici.
+ *
+ * Sur une ligne partenaire, l'école NE VEND PAS : elle met en relation. D'où deux prix distincts
+ * — `price_public` (le tarif catalogue du partenaire) et `price_school` (le tarif négocié pour
+ * les stagiaires) — et aucun stock : ce n'est pas l'inventaire de l'école.
+ * ------------------------------------------------------------------------------------------- */
+
+const PRODUCT_FIELDS = ['name', 'category', 'reference', 'price_public', 'price_school',
+    'url', 'image_url', 'note', 'active', 'sort_order'];
+
+/** Normalise une valeur de produit : bornes numériques, longueurs, drapeaux. */
+function cleanProduct(champ, brut) {
+    if (brut === '' || brut === null || brut === undefined) return null;
+    if (champ === 'active') return brut ? 1 : 0;
+    if (champ === 'sort_order') return Math.max(0, parseInt(brut, 10) || 0);
+    if (champ === 'price_public' || champ === 'price_school') {
+        const n = Number(brut);
+        // Un prix négatif ou délirant vient d'une faute de frappe, pas d'une intention.
+        return Number.isFinite(n) && n >= 0 && n <= 1e6 ? Number(n.toFixed(2)) : null;
+    }
+    const max = { name: 255, category: 120, reference: 80, url: 500, image_url: 500, note: 500 }[champ] || 255;
+    return String(brut).trim().slice(0, max) || null;
+}
+
+/** GET /api/partners/:id/produits — les produits d'un partenaire (actifs ET inactifs). */
+const getPartnerProducts = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[p]] = await conn.query(
+            'SELECT id FROM partner WHERE id = ? AND organization_id = ? LIMIT 1',
+            [req.params.id, req.user.organization_id]);
+        if (!p) return res.status(404).json({ message: 'Partenaire introuvable.' });
+        const [rows] = await conn.query(
+            `SELECT id, name, category, reference, price_public, price_school, url, image_url,
+                    note, active, sort_order
+             FROM partner_product WHERE partner_id = ? AND organization_id = ?
+             ORDER BY sort_order, name`,
+            [req.params.id, req.user.organization_id]);
+        res.json({ data: rows });
+    } catch (err) {
+        console.error('Erreur produits partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** POST /api/partners/:id/produits — ajoute un produit au catalogue du partenaire. */
+const createPartnerProduct = async (req, res) => {
+    const b = req.body || {};
+    if (!b.name || !String(b.name).trim()) return res.status(422).json({ message: 'Nom du produit requis.' });
+    try {
+        const conn = db.promise();
+        // Le partenaire doit appartenir à l'organisme : un identifiant venu d'ailleurs créerait
+        // un produit rattaché à un partenaire qu'on ne voit pas.
+        const [[p]] = await conn.query(
+            'SELECT id FROM partner WHERE id = ? AND organization_id = ? LIMIT 1',
+            [req.params.id, req.user.organization_id]);
+        if (!p) return res.status(404).json({ message: 'Partenaire introuvable.' });
+
+        const cols = ['id', 'organization_id', 'partner_id'];
+        const vals = [crypto.randomUUID(), req.user.organization_id, req.params.id];
+        for (const f of PRODUCT_FIELDS) {
+            if (b[f] === undefined) continue;
+            cols.push(f); vals.push(cleanProduct(f, b[f]));
+        }
+        await conn.query(
+            `INSERT INTO partner_product (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
+        logAudit(req, 'partner.product.create', 'PartnerProduct', req.params.id);
+        res.status(201).json({ message: 'Produit ajouté' });
+    } catch (err) {
+        console.error('Erreur création produit partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PATCH /api/partners/produits/:pid — modifie un produit. */
+/**
+ * PATCH /api/partenaires/:id/destinataire — ce partenaire reçoit-il les coordonnées ? (migration 131)
+ *
+ * UNE ROUTE À PART, et non un champ de plus dans `updatePartner`. Ce n'est pas une propriété
+ * descriptive : c'est une AUTORISATION DE TRANSMETTRE des données personnelles. Trois conséquences
+ * pratiques qui justifient la séparation :
+ *
+ *  · un `PATCH` du formulaire de la fiche ne peut pas l'écraser au passage en oubliant de la
+ *    renvoyer — le cas classique où une case se décoche parce qu'on a corrigé une adresse ;
+ *  · elle porte sa propre trace d'audit, distincte de « partenaire modifié », parce que c'est
+ *    celle-là qu'on ira relire pour savoir depuis quand une entreprise recevait des coordonnées ;
+ *  · elle exige un booléen explicite, là où le reste tolère des chaînes vides.
+ *
+ * REFUSE 409 SANS LA MIGRATION plutôt que d'ignorer silencieusement : une case qui se recoche
+ * toute seule au rechargement ferait croire à un bug d'affichage, et l'école finirait par
+ * transmettre en pensant avoir restreint.
+ */
+const setPartnerDestinataire = (req, res) => {
+    if (typeof req.body?.recoit !== 'boolean') {
+        return res.status(422).json({ message: 'Valeur attendue : vrai ou faux.' });
+    }
+    db.query(
+        `UPDATE partner SET ${CHAMP_DESTINATAIRE} = ? WHERE id = ? AND organization_id = ?`,
+        [req.body.recoit ? 1 : 0, req.params.id, req.user.organization_id],
+        (err, result) => {
+            if (err) {
+                if (isMissingSchema(err)) {
+                    return res.status(409).json({
+                        message: 'Migration 131 non jouée : le choix des partenaires destinataires '
+                            + 'ne peut pas encore être enregistré.',
+                    });
+                }
+                console.error('Erreur destinataire partenaire :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            if (result.affectedRows === 0) return res.status(404).json({ message: 'Partenaire introuvable' });
+            logAudit(req, `partner.destinataire.${req.body.recoit ? 'oui' : 'non'}`, 'Partner', req.params.id);
+            res.json({ success: true });
+        }
+    );
+};
+
+const updatePartnerProduct = async (req, res) => {
+    const b = req.body || {};
+    const sets = [], vals = [];
+    for (const f of PRODUCT_FIELDS) {
+        if (b[f] === undefined) continue;
+        sets.push(`${f} = ?`); vals.push(cleanProduct(f, b[f]));
+    }
+    if (!sets.length) return res.status(422).json({ message: 'Rien à modifier.' });
+    try {
+        vals.push(req.params.pid, req.user.organization_id);
+        const [r] = await db.promise().query(
+            `UPDATE partner_product SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Produit introuvable.' });
+        logAudit(req, 'partner.product.update', 'PartnerProduct', req.params.pid);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur maj produit partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** DELETE /api/partners/produits/:pid — retire un produit du catalogue. */
+const deletePartnerProduct = async (req, res) => {
+    try {
+        const [r] = await db.promise().query(
+            'DELETE FROM partner_product WHERE id = ? AND organization_id = ?',
+            [req.params.pid, req.user.organization_id]);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Produit introuvable.' });
+        logAudit(req, 'partner.product.delete', 'PartnerProduct', req.params.pid);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur suppression produit partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+
+/* ---- Catégories de partenaires (migration 129) ---------------------------------------------
+ *
+ * Elles étaient écrites EN DUR dans l'écran : huit valeurs choisies une fois, que l'école ne
+ * pouvait ni renommer, ni compléter, ni ranger. Un partenaire « Boissons » ou « Assurance »
+ * n'avait d'autre place que « AUTRE », et le filtre devenait inutile à mesure que ce fourre-tout
+ * grossissait.
+ *
+ * LE CODE RESTE LA CLÉ. `partner.category` stocke toujours « FARINE » ; la table n'y attache
+ * qu'un intitulé, une couleur et un ordre. Renommer « Matériel » en « Équipement » ne touche donc
+ * AUCUNE ligne de partenaire — et c'est pour ça que le code n'est jamais modifiable après coup :
+ * le changer orphelinerait tous les partenaires qui le portent.
+ */
+
+/* Le repli quand la migration 129 n'est pas jouée : la liste d'origine, telle qu'elle était
+   écrite dans l'écran. Le code marche donc AVANT comme APRÈS, et l'écran ne se vide jamais. */
+const CATEGORIES_SOCLE = [
+    { code: 'FARINE', label: 'Farine', sort_order: 1 },
+    { code: 'MATERIEL', label: 'Matériel', sort_order: 2 },
+    { code: 'FOUR', label: 'Four', sort_order: 3 },
+    { code: 'CHARCUTERIE', label: 'Charcuterie', sort_order: 4 },
+    { code: 'FROMAGE', label: 'Fromage', sort_order: 5 },
+    { code: 'CONSERVE', label: 'Conserve', sort_order: 6 },
+    { code: 'DISTRIBUTION', label: 'Distribution', sort_order: 7 },
+    { code: 'AUTRE', label: 'Autre', sort_order: 99 },
+];
+
+/* « AUTRE » est le repli du serveur à la création d'un partenaire (`b.category || 'AUTRE'`) :
+   la supprimer laisserait des partenaires rangés sous un code que plus rien ne nomme. */
+const CATEGORIE_SOCLE = 'AUTRE';
+
+/** Un code de catégorie : majuscules, sans accent ni espace — il voyage en paramètre d'URL. */
+const versCode = (s) => String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+    .slice(0, 60);
+
+/** GET /api/partenaires/categories — la liste de l'organisme, ou le socle si 129 n'est pas jouée. */
+const getPartnerCategories = async (req, res) => {
+    try {
+        const conn = db.promise();
+        let rows;
+        try {
+            [rows] = await conn.query(
+                `SELECT id, code, label, color, sort_order,
+                        (SELECT COUNT(*) FROM partner p
+                          WHERE p.organization_id = c.organization_id AND p.category = c.code) AS partners
+                   FROM partner_category c
+                  WHERE c.organization_id = ?
+                  ORDER BY c.sort_order, c.label`,
+                [req.user.organization_id]);
+        } catch (e) {
+            if (!isMissingSchema(e)) throw e;
+            // Migration 129 non jouée : on rend le socle, sans identifiant — donc non modifiable
+            // côté écran, ce qui est exactement l'état d'avant.
+            return res.json({ data: CATEGORIES_SOCLE.map((c) => ({ ...c, id: null, color: null, partners: 0 })) });
+        }
+        res.json({ data: rows });
+    } catch (err) {
+        console.error('Erreur catégories partenaires :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** POST /api/partenaires/categories — en créer une. */
+const createPartnerCategory = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const label = String(req.body?.label || '').trim();
+        if (!label) return res.status(422).json({ message: 'Intitulé requis.' });
+        const code = versCode(req.body?.code || label);
+        if (!code) return res.status(422).json({ message: "L'intitulé ne donne aucun code utilisable." });
+
+        const [[dup]] = await conn.query(
+            'SELECT 1 AS x FROM partner_category WHERE organization_id = ? AND code = ? LIMIT 1', [orgId, code]);
+        if (dup) return res.status(409).json({ message: `La catégorie « ${code} » existe déjà.` });
+
+        const [[mx]] = await conn.query(
+            'SELECT COALESCE(MAX(sort_order), 0) AS n FROM partner_category WHERE organization_id = ?', [orgId]);
+        const id = crypto.randomUUID();
+        await conn.query(
+            'INSERT INTO partner_category (id, organization_id, code, label, color, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, orgId, code, label.slice(0, 120),
+             req.body?.color ? String(req.body.color).slice(0, 20) : null, Number(mx.n) + 1]);
+        await logAudit(req, { action: 'CREATE', entity: 'partner_category', entityId: id, after: { code, label } });
+        res.status(201).json({ data: { id, code, label } });
+    } catch (err) {
+        if (isMissingSchema(err)) return res.status(409).json({ message: 'Migration 129 non jouée : catégories non modifiables.' });
+        console.error('Erreur création catégorie partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PATCH /api/partenaires/categories/:cid — intitulé, couleur, ordre.
+ *
+ * LE CODE N'EST PAS MODIFIABLE, et c'est le point important : il est stocké tel quel sur chaque
+ * partenaire. Le changer ici les orphelinerait tous en silence — ils garderaient l'ancien code,
+ * plus aucune catégorie ne le porterait, et ils disparaîtraient du filtre.
+ */
+const updatePartnerCategory = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[cat]] = await conn.query(
+            'SELECT id, code, label FROM partner_category WHERE id = ? AND organization_id = ?',
+            [req.params.cid, req.user.organization_id]);
+        if (!cat) return res.status(404).json({ message: 'Catégorie introuvable.' });
+
+        const sets = [], vals = [];
+        if (req.body?.label !== undefined) {
+            const label = String(req.body.label).trim();
+            if (!label) return res.status(422).json({ message: 'Intitulé requis.' });
+            sets.push('label = ?'); vals.push(label.slice(0, 120));
+        }
+        if (req.body?.color !== undefined) {
+            sets.push('color = ?'); vals.push(req.body.color ? String(req.body.color).slice(0, 20) : null);
+        }
+        if (req.body?.sort_order !== undefined) { sets.push('sort_order = ?'); vals.push(Number(req.body.sort_order) || 0); }
+        if (!sets.length) return res.status(422).json({ message: 'Rien à modifier.' });
+
+        vals.push(cat.id, req.user.organization_id);
+        await conn.query(`UPDATE partner_category SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
+        await logAudit(req, { action: 'UPDATE', entity: 'partner_category', entityId: cat.id,
+            before: { label: cat.label }, after: { label: req.body?.label } });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur modification catégorie partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * DELETE /api/partenaires/categories/:cid
+ *
+ * REFUSÉE TANT QU'ELLE SERT. Supprimer une catégorie utilisée laisserait ses partenaires avec un
+ * code que plus rien ne nomme : ils sortiraient du filtre sans avoir bougé, et personne ne saurait
+ * pourquoi. On dit COMBIEN de partenaires la portent — c'est ce qu'il faut savoir pour les
+ * reclasser — plutôt que de les déplacer d'office vers « Autre », ce qui serait une décision
+ * prise à la place de l'école.
+ */
+const deletePartnerCategory = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[cat]] = await conn.query(
+            'SELECT id, code, label FROM partner_category WHERE id = ? AND organization_id = ?',
+            [req.params.cid, orgId]);
+        if (!cat) return res.status(404).json({ message: 'Catégorie introuvable.' });
+        if (cat.code === CATEGORIE_SOCLE) {
+            return res.status(409).json({ message: '« Autre » ne peut pas être supprimée : c\'est le rangement par défaut d\'un nouveau partenaire.' });
+        }
+        const [[used]] = await conn.query(
+            'SELECT COUNT(*) AS n FROM partner WHERE organization_id = ? AND category = ?', [orgId, cat.code]);
+        if (Number(used.n) > 0) {
+            const n = Number(used.n);
+            return res.status(409).json({
+                message: n > 1
+                    ? `${n} partenaires sont rangés dans « ${cat.label} ». Reclassez-les avant de la supprimer.`
+                    : `1 partenaire est rangé dans « ${cat.label} ». Reclassez-le avant de la supprimer.`,
+            });
+        }
+        await conn.query('DELETE FROM partner_category WHERE id = ? AND organization_id = ?', [cat.id, orgId]);
+        await logAudit(req, { action: 'DELETE', entity: 'partner_category', entityId: cat.id, before: cat });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur suppression catégorie partenaire :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = {
+    setPartnerDestinataire, getPartners, createPartner, updatePartner, deletePartner, createContribution, deleteContribution,
+    getPartnerProducts, createPartnerProduct, updatePartnerProduct, deletePartnerProduct,
+    getPartnerCategories, createPartnerCategory, updatePartnerCategory, deletePartnerCategory };

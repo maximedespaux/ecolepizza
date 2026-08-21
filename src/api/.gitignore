@@ -1,0 +1,25 @@
+# Dépendances
+node_modules/
+
+# Build front
+src/app/dist-react/
+
+# Environnement / secrets
+.env
+.env.*
+!.env.example
+src/api/config/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+.fuse_hidden*
+
+# OS
+.DS_Store
+
+# NOTE : « test/* » était ignoré ici. Les tests unitaires (node --test) s'en trouvaient
+# exclus du dépôt sans avertissement : `git add -A` les passait en silence, et une suite
+# entière a fini par disparaître au premier nettoyage du répertoire de travail. Les tests
+# font partie du code — ils sont versionnés.

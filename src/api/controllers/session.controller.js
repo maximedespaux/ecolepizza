@@ -1,0 +1,411 @@
+const db = require('../config/database.js');
+const { computeDocParcours, companyParcours, companyStepSlugs } = require('../lib/parcours.js');
+const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
+const { parseApplies } = require('../lib/documents.js');
+const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
+const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
+const { notify } = require('./notification.controller.js');
+
+// Deux étapes sont des « variantes » du même jalon si elles ne peuvent JAMAIS
+// s'appliquer au même dossier (conditions incompatibles : financement, RS, hygiène
+// ou durée) ET qu'elles relèvent du même jalon (même type de document ou même rang).
+// Ex. Devis particulier / Devis entreprise / Devis RS → une seule colonne « Devis ».
+function areExclusiveVariants(a, b) {
+    if (a.quiz_id || b.quiz_id) return false;
+    // Conditions incompatibles (jamais le même dossier) — MÊME de types différents
+    // (ex. Contrat particulier / Convention entreprise) : une seule colonne « OU ».
+    const A = parseApplies(a.applies_when), B = parseApplies(b.applies_when);
+    const conflicts = (k) => A[k] != null && B[k] != null && A[k] !== B[k];
+    return conflicts('financing') || conflicts('rs') || conflicts('hygiene') || conflicts('jours');
+}
+
+// Libellé générique d'une colonne fusionnée : préfixe commun tronqué à la limite
+// d'un mot (« Devis particulier »/« Devis entreprise » → « Devis »), sinon jonction.
+function mergedLabel(labels) {
+    if (labels.length === 1) return labels[0];
+    let p = labels[0];
+    for (const l of labels.slice(1)) { let i = 0; while (i < p.length && i < l.length && p[i] === l[i]) i++; p = p.slice(0, i); }
+    const cut = Math.max(p.lastIndexOf(' '), p.lastIndexOf('-'), p.lastIndexOf('/'));
+    if (cut <= 0) return [...new Set(labels)].join(' / ');
+    return p.slice(0, cut).trim().replace(/[\s\-–—:,/]+$/, '').trim();
+}
+
+// Libellé court par type de document (colonnes du tableau de session).
+const DOC_LABELS = {
+    FICHE_SEMAINE: "Fiche d'expression", DEVIS: 'Devis', CGV: 'CGV',
+    CONTRAT: 'Contrat', CONVENTION: 'Convention', INVITATION: 'Invitation',
+    CONVOCATION: 'Convocation', LIVRET_ACCUEIL: "Livret d'accueil",
+    TEST_POSITIONNEMENT: 'Test position.', DROIT_IMAGE: "Droit à l'image",
+    EMARGEMENT: 'Émargement', ATTESTATION_HYGIENE: 'Att. hygiène',
+    CERTIFICAT_REALISATION: 'Certificat', ATTESTATION_ASSIDUITE: "Att. assiduité",
+    DIPLOME: 'Diplôme', EVALUATION_SATISFACTION: 'Éval. satisfaction', PROGRAMME: 'Programme',
+};
+const DONE_STATUSES = ['GENERE', 'ENVOYE', 'CONSULTE', 'SIGNE'];
+
+// --- Utilitaires de dates (jours ouvrés + semaine ISO) ---------------------
+
+const pad = (n) => String(n).padStart(2, '0');
+const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+// Date de fin = premier jour + (total-1) jours ouvrés (lun-ven).
+function addBusinessDays(startStr, total) {
+    const [y, m, d] = startStr.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    let count = 1;
+    while (count < total) {
+        date.setDate(date.getDate() + 1);
+        const wd = date.getDay();
+        if (wd !== 0 && wd !== 6) count += 1;
+    }
+    return fmt(date);
+}
+
+// Année + n° de semaine ISO d'une date « YYYY-MM-DD ».
+function isoWeek(startStr) {
+    const [y, m, d] = startStr.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    const day = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+    return { year: date.getUTCFullYear(), week };
+}
+
+/**
+ * GET /api/sessions — sessions + programme + nombre de stagiaires inscrits.
+ */
+const getSessions = (req, res) => {
+    db.query(
+        `SELECT s.id, s.organization_id, s.program_id, s.year, s.week,
+                DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
+                s.trainer, s.status, s.created_at,
+                p.code AS program_code, p.title AS program_title, p.days AS program_days,
+                (SELECT COUNT(*) FROM enrollment e WHERE e.session_id = s.id) AS stagiaires
+         FROM training_session s
+         LEFT JOIN training_program p ON p.id = s.program_id
+         WHERE s.organization_id = ?
+         ORDER BY s.start_date DESC`,
+        [req.user.organization_id],
+        (err, results) => {
+            if (err) {
+                console.error('Erreur récupération sessions :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            res.json({ data: results });
+        }
+    );
+};
+
+/**
+ * GET /api/sessions/:id — session + programme + stagiaires inscrits.
+ */
+const getSession = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [rows] = await conn.query(
+            `SELECT s.id, s.program_id, s.year, s.week, s.trainer, s.status,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                    DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
+                    p.code AS program_code, p.title AS program_title,
+                    p.days AS program_days, p.hours AS program_hours
+             FROM training_session s
+             LEFT JOIN training_program p ON p.id = s.program_id
+             WHERE s.id = ? AND s.organization_id = ?`,
+            [req.params.id, req.user.organization_id]
+        );
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'Session introuvable' });
+        }
+        const [enrollments] = await conn.query(
+            `SELECT e.id, e.learner_id, e.crm_stage, e.conformite_score,
+                    l.first_name, l.last_name, l.email, l.phone,
+                    e.company_id, c.name AS company_name
+             FROM enrollment e
+             LEFT JOIN learner l ON l.id = e.learner_id
+             LEFT JOIN company c ON c.id = e.company_id
+             WHERE e.session_id = ? AND e.organization_id = ?
+             ORDER BY (e.company_id IS NULL), c.name, l.last_name, l.first_name`,
+            [req.params.id, req.user.organization_id]
+        );
+        const [trainers] = await conn.query(
+            `SELECT u.id, u.first_name, u.last_name
+             FROM session_trainer st JOIN user u ON u.id = st.user_id
+             WHERE st.session_id = ? ORDER BY u.last_name, u.first_name`,
+            [req.params.id]
+        );
+        // Lieu de formation (colonne/table récentes : résilient si migration 067 absente).
+        let location_id = null; let location_name = null;
+        try {
+            const [[loc]] = await conn.query(
+                'SELECT s.location_id, tl.name FROM training_session s LEFT JOIN training_location tl ON tl.id = s.location_id WHERE s.id = ?',
+                [req.params.id]);
+            if (loc) { location_id = loc.location_id || null; location_name = loc.name || null; }
+        } catch { /* migration des lieux non appliquée */ }
+        res.json({ data: { ...rows[0], location_id, location_name, enrollments, trainers } });
+    } catch (err) {
+        console.error('Erreur récupération session :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/sessions — crée une session à partir d'une formation + son premier
+ * jour. La date de fin est calculée automatiquement (jours ouvrés selon la durée).
+ */
+const createSession = async (req, res) => {
+    const { program_id, start_date, trainer = null, status = 'PLANIFIEE', location_id = null } = req.body;
+    if (!program_id || !start_date) {
+        return res.status(422).json({ error: 'Formation et premier jour requis' });
+    }
+    try {
+        const conn = db.promise();
+        const [progs] = await conn.query(
+            'SELECT days FROM training_program WHERE id = ? AND organization_id = ?',
+            [program_id, req.user.organization_id]
+        );
+        if (progs.length === 0) {
+            return res.status(404).json({ message: 'Formation introuvable' });
+        }
+        const days = progs[0].days || 1;
+        const end_date = addBusinessDays(start_date, days);
+        const { year, week } = isoWeek(start_date);
+
+        // Colonne location_id récente (migration 067) : on réessaie sans si absente.
+        const insert = (withLoc) => conn.query(
+            `INSERT INTO training_session
+                (id, organization_id, program_id, year, week, start_date, end_date, trainer, status${withLoc ? ', location_id' : ''})
+             VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?${withLoc ? ', ?' : ''})`,
+            withLoc
+                ? [req.user.organization_id, program_id, year, week, start_date, end_date, trainer, status, location_id || null]
+                : [req.user.organization_id, program_id, year, week, start_date, end_date, trainer, status]
+        );
+        try { await insert(true); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') await insert(false); else throw e; }
+        res.status(201).json({ message: 'Session créée' });
+    } catch (err) {
+        console.error('Erreur création session :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PATCH /api/sessions/:id — met à jour le lieu de la session. */
+const updateSession = async (req, res) => {
+    try {
+        const { location_id } = req.body || {};
+        const [r] = await db.promise().query(
+            'UPDATE training_session SET location_id = ? WHERE id = ? AND organization_id = ?',
+            [location_id || null, req.params.id, req.user.organization_id]
+        );
+        if (!r.affectedRows) return res.status(404).json({ message: 'Session introuvable' });
+        res.json({ success: true, message: 'Lieu mis à jour.' });
+    } catch (e) {
+        if (e && e.code === 'ER_BAD_FIELD_ERROR') return res.status(501).json({ message: 'Migration des lieux (067) non appliquée.' });
+        console.error('Erreur mise à jour session :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * DELETE /api/sessions/:id
+ */
+const deleteSession = (req, res) => {
+    db.query(
+        'DELETE FROM training_session WHERE id = ? AND organization_id = ?',
+        [req.params.id, req.user.organization_id],
+        (err) => {
+            if (err) {
+                console.error('Erreur suppression session :', err);
+                return res.status(400).json({ message: 'Erreur suppression' });
+            }
+            res.status(200).json({ success: true, message: 'Session supprimée' });
+        }
+    );
+};
+
+/**
+ * GET /api/sessions/:id/board — tableau de la session : colonnes = étapes
+ * documentaires de la formation ; cartes = stagiaires positionnés sur leur
+ * prochain document à faire.
+ */
+const getSessionBoard = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[s]] = await conn.query(
+            `SELECT s.id, s.program_id, s.year, s.week,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                    DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
+                    p.code, p.title, p.level, p.days, p.hygiene, p.rs_code
+             FROM training_session s
+             JOIN training_program p ON p.id = s.program_id
+             WHERE s.id = ? AND s.organization_id = ?`,
+            [req.params.id, req.user.organization_id]
+        );
+        if (!s) return res.status(404).json({ message: 'Session introuvable' });
+
+        const program = { id: s.program_id, code: s.code, days: s.days, hygiene: s.hygiene, rs_code: s.rs_code };
+        // Colonnes = jalons du parcours. Les variantes mutuellement exclusives d'un
+        // même jalon (ex. Devis particulier / entreprise) sont fusionnées en UNE colonne
+        // (condition « OU » : un dossier n'en fait qu'une seule).
+        const colSteps = (await formationSteps(conn, req.user.organization_id, program)).filter((st) => st.active);
+        // Regroupement « OU » d'après les ÉQUIVALENCES : étapes consécutives de la même équivalence.
+        const eqMap = equivalenceMap(await loadEquivalences(conn, req.user.organization_id));
+        const groupOf = (st) => (eqMap.get(st.slug) ? eqMap.get(st.slug).group : null);
+        const groups = [];
+        for (const st of colSteps) {
+            const last = groups[groups.length - 1];
+            const g = groupOf(st);
+            if (last && g && groupOf(last.steps[0]) === g) last.steps.push(st);
+            else groups.push({ steps: [st] });
+        }
+        const keyOf = (st) => (st.quiz_id ? `quiz:${st.quiz_id}` : st.slug);
+        const columns = groups.map((g, i) => {
+            const head = g.steps[0];
+            return {
+                index: i, key: keyOf(head), label: mergedLabel(g.steps.map((v) => v.label)),
+                ic: head.quiz_id ? '❓' : (head.stagiaire_sign ? '✍️' : '📄'),
+            };
+        });
+        // Chaque variante (slug/quiz) pointe vers l'index de sa colonne fusionnée.
+        const keyIndex = new Map();
+        groups.forEach((g, i) => g.steps.forEach((st) => keyIndex.set(keyOf(st), i)));
+        // Les étapes propres au parcours ENTREPRISE doivent aussi avoir une colonne : sans
+        // cela, une carte dont l'étape courante n'appartient qu'à ce parcours ne trouvait pas
+        // où se poser et atterrissait dans « Terminé » — un dossier à peine commencé s'affichait
+        // donc comme fini. On les ajoute à la fin, dans leur ordre, sans toucher aux autres.
+        {
+            const bySlug = new Map(colSteps.map((st) => [st.slug, st]));
+            for (const slug of await companyStepSlugs(conn, req.user.organization_id, program.id)) {
+                const st = bySlug.get(slug);
+                if (!st || keyIndex.has(keyOf(st))) continue;
+                keyIndex.set(keyOf(st), columns.length);
+                columns.push({ index: columns.length, key: keyOf(st), label: st.label,
+                    ic: st.quiz_id ? '❓' : (st.stagiaire_sign ? '✍️' : '📄') });
+            }
+        }
+
+        const [enr] = await conn.query(
+            `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.company_id, e.session_id,
+                    l.first_name, l.last_name, l.opco
+             FROM enrollment e LEFT JOIN learner l ON l.id = e.learner_id
+             WHERE e.session_id = ? AND e.organization_id = ?
+             ORDER BY l.last_name, l.first_name`,
+            [req.params.id, req.user.organization_id]
+        );
+        const condById = await loadConditionMap(conn, req.user.organization_id);
+        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id, 'condition');
+        const factsMap = await loadDossierFactsMap(
+            conn, req.user.organization_id, enr.map((e) => e.enrollment_id), fieldCatalog);
+
+        const cards = [];
+        for (const e of enr) {
+            const ctx = {
+                financing: e.financing, rsCode: s.rs_code, hygiene: !!s.hygiene,
+                jours: s.days, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
+                ...(factsMap.get(e.enrollment_id) || {}),
+            };
+            let steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
+            const [docs] = await conn.query(
+                `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id FROM generated_document gd
+                 JOIN document_formation df ON df.document_id = gd.id
+                 WHERE df.enrollment_id = ?
+                 ORDER BY gd.created_at DESC`,
+                [e.enrollment_id]
+            );
+            // Dossier envoyé par une entreprise : parcours plus court, et documents de groupe
+            // à compter. Ce tableau était le SEUL des trois écrans à l'ignorer — il montrait
+            // les mêmes dossiers à 1/14 quand le Suivi disait 1/2.
+            const ent = await companyParcours(conn, req.user.organization_id,
+                { programId: program.id, companyId: e.company_id, sessionId: e.session_id },
+                () => formationSteps(conn, req.user.organization_id, program));
+            if (ent.steps) steps = ent.steps;
+            if (ent.docs.length) docs.push(...ent.docs);
+            const parc = computeDocParcours({ steps, docs });
+            const column = parc.currentKey == null
+                ? columns.length
+                : (keyIndex.has(parc.currentKey) ? keyIndex.get(parc.currentKey) : columns.length);
+            cards.push({
+                learner_id: e.learner_id, enrollment_id: e.enrollment_id,
+                name: `${e.last_name || ''} ${e.first_name || ''}`.trim(),
+                column, done: parc.currentIndex, total: steps.length, percent: parc.percent,
+            });
+        }
+
+        res.json({ data: {
+            session: { id: s.id, code: s.code, title: s.title, year: s.year, week: s.week, start_date: s.start_date, end_date: s.end_date },
+            columns, cards,
+        } });
+    } catch (err) {
+        console.error('Erreur tableau session :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/sessions/trainers — membres de l'équipe pouvant être formateurs.
+ */
+const listTrainers = async (req, res) => {
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT id, first_name, last_name, role FROM user
+             WHERE organization_id = ? AND active = 1
+               AND role IN ('SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT','FORMATEUR')
+             ORDER BY FIELD(role,'FORMATEUR','SECRETARIAT','ADMIN_ORGANISME','SUPER_ADMIN'), last_name, first_name`,
+            [req.user.organization_id]
+        );
+        res.json({ data: rows });
+    } catch (err) {
+        console.error('Erreur liste formateurs :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PUT /api/sessions/:id/trainers — définit les formateurs de la session.
+ * Corps : { user_ids: [] }.
+ */
+const setSessionTrainers = async (req, res) => {
+    const ids = Array.isArray(req.body?.user_ids) ? req.body.user_ids : null;
+    if (!ids) return res.status(422).json({ error: 'Liste de formateurs requise.' });
+    try {
+        const conn = db.promise();
+        const [[s]] = await conn.query(
+            `SELECT s.id, s.week, s.year, p.code AS program_code
+             FROM training_session s LEFT JOIN training_program p ON p.id = s.program_id
+             WHERE s.id = ? AND s.organization_id = ?`,
+            [req.params.id, req.user.organization_id]
+        );
+        if (!s) return res.status(404).json({ message: 'Session introuvable' });
+        // Formateurs déjà affectés (pour ne notifier que les nouveaux).
+        const [prev] = await conn.query('SELECT user_id FROM session_trainer WHERE session_id = ?', [req.params.id]);
+        const prevIds = new Set(prev.map((r) => r.user_id));
+        await conn.query('DELETE FROM session_trainer WHERE session_id = ?', [req.params.id]);
+        for (const uid of ids) {
+            // N'accepte que des membres de l'organisme.
+            const [[u]] = await conn.query('SELECT id FROM user WHERE id = ? AND organization_id = ?', [uid, req.user.organization_id]);
+            if (!u) continue;
+            await conn.query('INSERT IGNORE INTO session_trainer (id, session_id, user_id) VALUES (UUID(), ?, ?)', [req.params.id, uid]);
+            // Demande de signature d'émargement au nouveau formateur.
+            if (!prevIds.has(uid)) {
+                notify(req.user.organization_id, {
+                    userId: uid, type: 'INFO', title: 'Émargement à signer',
+                    body: `Vous êtes formateur sur la session ${s.program_code || ''} S${s.week || ''} · ${s.year || ''}. Signez votre feuille d'émargement.`.trim(),
+                    link: `/sessions/${req.params.id}`,
+                });
+            }
+        }
+        // Reflète aussi les noms dans le champ texte (compatibilité affichage / documents).
+        const [names] = await conn.query(
+            `SELECT u.first_name, u.last_name FROM session_trainer st JOIN user u ON u.id = st.user_id WHERE st.session_id = ?`,
+            [req.params.id]
+        );
+        const label = names.map((n) => `${n.first_name || ''} ${n.last_name || ''}`.trim()).filter(Boolean).join(', ') || null;
+        await conn.query('UPDATE training_session SET trainer = ? WHERE id = ?', [label, req.params.id]);
+        res.json({ success: true, message: 'Formateurs enregistrés.' });
+    } catch (err) {
+        console.error('Erreur formateurs session :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getSessions, getSession, createSession, updateSession, deleteSession, getSessionBoard, listTrainers, setSessionTrainers };
