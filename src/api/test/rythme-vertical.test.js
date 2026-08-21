@@ -188,7 +188,12 @@ test("une date n'est pas un montant : elle ne doit pas être masquée", () => {
 
     const comp = fs.readFileSync(path.join(UI, 'components/ExportPartenaire.jsx'), 'utf8')
         .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
-    assert.match(comp, /className="chiffres hint">\{j\.sent_at\}/,
+    /* L'assertion porte sur la CLASSE, pas sur le contenu du span. Première rédaction :
+       `>\{j\.sent_at\}` — elle a viré au rouge le jour où la date est passée par `dateHeure`,
+       alors que rien du contrat ne bougeait. Un test qui casse sur un changement légitime finit
+       par être « réparé » en le supprimant, et le vrai défaut repasse. Le refus de `.tnum` est
+       donc écrit indépendamment du formatage. */
+    assert.match(comp, /className="chiffres hint">\{dateHeure\(j\.sent_at\)\}/,
         'La date du journal doit utiliser `.chiffres`…');
-    assert.doesNotMatch(comp, /className="tnum hint">\{j\.sent_at\}/, '…et non `.tnum`.');
+    assert.doesNotMatch(comp, /className="[^"]*\btnum\b[^"]*">\{[^}]*j\.sent_at/, '…et non `.tnum`.');
 });

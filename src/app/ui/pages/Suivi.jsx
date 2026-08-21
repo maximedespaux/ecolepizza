@@ -14,7 +14,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Roadmap from "../components/Roadmap.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
-import { scoreBadge, colorOf } from "../lib/format.js";
+import { scoreBadge, colorOf, dateHeure } from "../lib/format.js";
 
 const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"] };
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
@@ -465,7 +465,7 @@ function ArchivesView({ onError, onInfo }) {
                                         <span style={{ flex: 1, minWidth: 0 }}>
                                           <b>{d.title}</b>
                                           <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
-                                            {d.signed_at ? `signé le ${d.signed_at}` : d.sent_at ? `envoyé le ${d.sent_at}` : ""}
+                                            {d.signed_at ? `signé le ${dateHeure(d.signed_at)}` : d.sent_at ? `envoyé le ${dateHeure(d.sent_at)}` : ""}
                                           </span>
                                         </span>
                                         <Badge tone={tone}>{lab}</Badge>

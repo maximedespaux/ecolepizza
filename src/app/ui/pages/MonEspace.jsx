@@ -10,7 +10,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import QuizModal from "../components/QuizModal.jsx";
 import { Icon } from "../components/Icon.jsx";
-import { colorOf, euro } from "../lib/format.js";
+import { colorOf, euro, dateHeure } from "../lib/format.js";
 import { getAvatar, AVATAR_EVENT } from "../lib/gamification.js";
 import { RankBar, NextStep, prochaineEtape } from "../components/StuJourney.jsx";
 
@@ -202,7 +202,7 @@ function DocList({ docs, onView, onQuiz }) {
             <span className="stu-row-t">
               <b>{d.title}</b>
               <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                {d.formations || ""}{d.signed_at ? ` · signé le ${d.signed_at}` : d.sent_at ? ` · reçu le ${d.sent_at}` : ""}
+                {d.formations || ""}{d.signed_at ? ` · signé le ${dateHeure(d.signed_at)}` : d.sent_at ? ` · reçu le ${dateHeure(d.sent_at)}` : ""}
               </span>
             </span>
             <Badge tone={d.quiz_id && d.status !== "SIGNE" ? "b" : tone}>
@@ -288,7 +288,7 @@ function FormationCard({ f, navigate, onInfo }) {
       <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>
         {!f.enrolled
           ? (f.finished ? "Terminée" : "Non suivie")
-          : f.start_date && f.end_date ? `Du ${f.start_date} au ${f.end_date}` : `Semaine ${f.week} · ${f.year}`}
+          : f.start_date && f.end_date ? `Du ${dateHeure(f.start_date)} au ${dateHeure(f.end_date)}` : `Semaine ${f.week} · ${f.year}`}
         {f.session_count > 1 && <span style={{ marginLeft: 6, color: "var(--blue)", fontWeight: 700 }}>· {f.session_count} sessions</span>}
       </p>
 

@@ -7,6 +7,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
+import { dateHeure } from "../lib/format.js";
 
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
@@ -57,7 +58,7 @@ function EmargementStagiaire() {
                     </span>
                   </span>
                   {r.signed ? (
-                    <Badge tone="g">Signé{r.signed_at ? ` · ${r.signed_at}` : ""}</Badge>
+                    <Badge tone="g">Signé{r.signed_at ? ` · ${dateHeure(r.signed_at)}` : ""}</Badge>
                   ) : future ? (
                     <span className="hint">À venir</span>
                   ) : (

@@ -10,7 +10,7 @@ import { etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js";
 import { auditLabel } from "../lib/auditLabels.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
-import { scoreBadge, euro, colorOf } from "../lib/format.js";
+import { scoreBadge, euro, colorOf, dateHeure } from "../lib/format.js";
 
 const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "-");
 
@@ -316,7 +316,7 @@ function Dashboard() {
                     ce qui supprime. Elle était toujours orange, donc muette. */}
                 <span className={`dash-act-dot tone-${tone}`} aria-hidden="true" />
                 <span style={{ flex: 1 }}>{label}</span>
-                <span className="dash-act-date">{a.created_at}</span>
+                <span className="dash-act-date">{dateHeure(a.created_at)}</span>
               </div>
             );
           })}

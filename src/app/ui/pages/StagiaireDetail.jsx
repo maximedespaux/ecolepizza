@@ -16,7 +16,7 @@ import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
-import { initials, euro } from "../lib/format.js";
+import { initials, euro, dateHeure } from "../lib/format.js";
 
 const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
 
@@ -499,7 +499,7 @@ function StagiaireDetail() {
                         <span style={{ flex: 1, minWidth: 0 }}>
                           <b>{d.title}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                            {d.formations || "-"}{d.sent_at ? ` · envoyé le ${d.sent_at}` : ""}{d.signed_at ? ` · signé le ${d.signed_at}` : ""}
+                            {d.formations || "-"}{d.sent_at ? ` · envoyé le ${dateHeure(d.sent_at)}` : ""}{d.signed_at ? ` · signé le ${dateHeure(d.signed_at)}` : ""}
                           </span>
                         </span>
                         <Badge tone={tone}>{label}</Badge>

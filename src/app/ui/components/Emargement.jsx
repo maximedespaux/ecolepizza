@@ -6,7 +6,7 @@ import { UserContext } from "../context/UserContext.jsx";
 import Card from "./Card.jsx";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
-import { initials } from "../lib/format.js";
+import { initials, dateHeure } from "../lib/format.js";
 
 const SLOT_SHORT = { MATIN: "Matin", APRES_MIDI: "Après-m.", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 
@@ -144,7 +144,7 @@ function Emargement({ sessionId }) {
                     return (
                       <td key={s.id} style={{ textAlign: "center" }}>
                         {!rec ? "-" : rec.has_signature ? (
-                          <span title={`Signé par ${rec.signer_name || l.last_name}${rec.signed_at ? ` · ${rec.signed_at}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}><Icon name="check" size={15} /></span>
+                          <span title={`Signé par ${rec.signer_name || l.last_name}${rec.signed_at ? ` · ${dateHeure(rec.signed_at)}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}><Icon name="check" size={15} /></span>
                         ) : (
                           <span title="En attente de la signature du stagiaire" style={{ color: "var(--dim)" }}>-</span>
                         )}
@@ -178,7 +178,7 @@ function Emargement({ sessionId }) {
                     return (
                       <td key={s.id} style={{ textAlign: "center" }}>
                         {sg && sg.signed ? (
-                          <span title={`Signé par ${sg.signer_name || ""}${sg.signed_at ? ` · ${sg.signed_at}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}><Icon name="check" size={15} /></span>
+                          <span title={`Signé par ${sg.signer_name || ""}${sg.signed_at ? ` · ${dateHeure(sg.signed_at)}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}><Icon name="check" size={15} /></span>
                         ) : isMe ? (
                           <button className="btn sm ghost" title="Signer cette demi-journée" onClick={() => setSignSheetRec(s)}>Signer</button>
                         ) : (
@@ -215,7 +215,7 @@ function Emargement({ sessionId }) {
                           {!assigned ? (
                             <span style={{ color: "var(--border-soft)" }}></span>
                           ) : sg && sg.signed ? (
-                            <span title={`Signé par ${sg.signer_name || ""}${sg.signed_at ? ` · ${sg.signed_at}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}><Icon name="check" size={15} /></span>
+                            <span title={`Signé par ${sg.signer_name || ""}${sg.signed_at ? ` · ${dateHeure(sg.signed_at)}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}><Icon name="check" size={15} /></span>
                           ) : (
                             <span style={{ color: "var(--dim)" }} title="En attente de la signature de l'intervenant">-</span>
                           )}

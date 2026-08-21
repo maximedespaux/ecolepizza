@@ -15,7 +15,7 @@ import SessionIntervenants from "../components/SessionIntervenants.jsx";
 import SessionRetraits from "../components/SessionRetraits.jsx";
 import SessionConsentements from "../components/SessionConsentements.jsx";
 import NotesModal from "../components/NotesModal.jsx";
-import { colorOf, initials, scoreBadge } from "../lib/format.js";
+import { colorOf, initials, scoreBadge, dateHeure } from "../lib/format.js";
 
 function SessionDetail() {
   const { id } = useParams();
@@ -221,7 +221,7 @@ function SessionDetail() {
       <PageHead
         eyebrow={<Link to="/sessions" className="card-more" style={{ WebkitTextFillColor: "var(--ember1)" }}>← Retour au calendrier</Link>}
         title={session.program_title}
-        lead={`Semaine ${session.week} · ${session.year} · du ${session.start_date} au ${session.end_date} · ${session.program_hours} h`}
+        lead={`Semaine ${session.week} · ${session.year} · du ${dateHeure(session.start_date)} au ${dateHeure(session.end_date)} · ${session.program_hours} h`}
         actions={
           <>
             <span className="badge n" style={{ background: colorOf(session.program_code), color: "#fff", borderColor: "transparent" }}>

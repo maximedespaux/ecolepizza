@@ -9,6 +9,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { Icon } from "../components/Icon.jsx";
+import { dateHeure } from "../lib/format.js";
 
 const TONE = { SIGNATURE: "g", PAIEMENT: "a", RELANCE: "r", QUALIOPI: "b", BOUTIQUE: "b", INFO: "n", SYSTEME: "n" };
 
@@ -84,7 +85,7 @@ function Notifications() {
                   {/* Le « ↗ » littéral devient l'icône du jeu, comme partout ailleurs, et
                       `aria-hidden` : il redit ce que le nom de la ligne annonce déjà. */}
                   {n.link && <Icon name="chevron-right" size={15} aria-hidden="true" />}
-                  <span className="notif-date">{n.created_at}</span>
+                  <span className="notif-date">{dateHeure(n.created_at)}</span>
                   {!n.is_read && <span className="notif-point" aria-hidden="true" />}
                 </div>
               );

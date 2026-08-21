@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./Icon.jsx";
 import { getMyConsents, setMyConsent } from "../api/apiClient.js";
+import { dateHeure } from "../lib/format.js";
 
 /**
  * LA DEMANDE DE CONSENTEMENT — posée une fois, et une seule.
@@ -92,7 +93,7 @@ export default function ConsentModal() {
               <b><Icon name="alert-triangle" size={13} /> Ce qui s'ajoute à votre accord</b>
               <ul>{aDemander.ajoutes.map((c) => <li key={c}>{c.replace(/_/g, " ")}</li>)}</ul>
               <span className="hint">
-                Vous aviez accepté le {aDemander.decide_at}. Ces informations-là ne faisaient pas
+                Vous aviez accepté le {dateHeure(aDemander.decide_at)}. Ces informations-là ne faisaient pas
                 partie de ce que vous aviez lu.
               </span>
             </div>

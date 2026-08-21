@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Icon } from "./Icon.jsx";
 import { etatContrat } from "../lib/contrat.js";
 import { exporterPartenaire, getTransmissionsPartenaire } from "../api/apiClient.js";
+import { dateHeure } from "../lib/format.js";
 
 /**
  * EXPORTER LES STAGIAIRES CONSENTANTS d'un partenaire, sur une période.
@@ -199,7 +200,7 @@ function ExportPartenaire({ partenaires, onErreur }) {
                   « ••••• » dès que l'utilisateur masque les montants. Une date de transmission
                   n'est pas une somme, et la cacher ne protège rien — elle rend seulement le
                   journal illisible au moment où l'on en a besoin. */}
-              <span className="chiffres hint">{j.sent_at}</span>
+              <span className="chiffres hint">{dateHeure(j.sent_at)}</span>
               <span className="hint">
                 {j.learners_count} stagiaire{j.learners_count > 1 ? "s" : ""}
                 {/* Les anciennes lignes portent un `session_id` : elles viennent de l'export par
