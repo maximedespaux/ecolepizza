@@ -336,4 +336,94 @@ const bulkDeleteArchive = async (req, res) => {
     }
 };
 
-module.exports = { getSuivi, getArchive, importArchive, getArchiveFile, deleteArchive, bulkDeleteArchive };
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   CE QUE LE COFFRE OCCUPE — et où, précisément.
+   ═════════════════════════════════════════════════════════════════════════════════════════════
+
+   MESURÉ AVANT D'ÊTRE ÉCRIT (1188 PDF, 681 Mo) : la masse n'est pas répartie, elle est
+   CONCENTRÉE. 148 fichiers — 12 % — portent 378 Mo, soit 55 % du total ; les 1040 autres font
+   291 Ko de moyenne, ce qui est normal pour un scan. Un écran qui trie par poids décroissant
+   règle donc le problème en montrant trente lignes, là où compresser les 1188 rapporterait 9 %.
+
+   POURQUOI 9 % SEULEMENT en compression sans perte : le contenu des PDF est déjà en Flate.
+   Compresser du déjà-compressé ne rend rien — vérifié en gzipant quarante fichiers réels.
+   L'anomalie est ailleurs : certains fichiers pèsent 2,2 à 4,0 OCTETS PAR PIXEL quand un JPEG
+   en fait 0,13. Un bitmap RVB brut vaut exactement 3,0 : ces documents-là ne sont pas compressés
+   du tout. C'est pour cela que la densité est affichée — c'est elle qui distingue un scan de
+   300 DPI légitimement lourd d'un fichier qui gaspille dix fois sa place.
+
+   UNE SEULE PASSE SUR LES BLOBS. `LENGTH()` et `MD5()` obligent InnoDB à lire chaque blob : sur
+   681 Mo, c'est quelques secondes. On lit donc TOUT une fois et l'on calcule le reste en
+   mémoire — total, tranches, plus lourds, doublons. Deux requêtes auraient coûté deux lectures.
+   D'où aussi la route SÉPARÉE : la liste des archives, elle, reste instantanée.
+*/
+const TRANCHES = [
+    { libelle: '> 8 Mo', min: 8 * 1024 * 1024 },
+    { libelle: '3 à 8 Mo', min: 3 * 1024 * 1024 },
+    { libelle: '1 à 3 Mo', min: 1024 * 1024 },
+    { libelle: '< 1 Mo', min: 0 },
+];
+
+const getArchiveStockage = async (req, res) => {
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT id, title, learner_name, year, week,
+                    LENGTH(file) AS octets, MD5(file) AS empreinte
+               FROM archive_document WHERE organization_id = ?`,
+            [req.user.organization_id]);
+
+        const total = rows.reduce((s, r) => s + Number(r.octets || 0), 0);
+
+        const tranches = TRANCHES.map((t, i) => {
+            const max = i === 0 ? Infinity : TRANCHES[i - 1].min;
+            const dedans = rows.filter((r) => r.octets >= t.min && r.octets < max);
+            /* `min` PART AVEC LA TRANCHE : après une suppression, l'écran retire le fichier de
+               sa tranche sans relire la base — encore faut-il qu'il sache où il tombait. Sans
+               cette borne, le client recopierait les seuils, et les deux jeux divergeraient au
+               premier changement. */
+            return { libelle: t.libelle, min: t.min, n: dedans.length,
+                octets: dedans.reduce((s, r) => s + Number(r.octets), 0) };
+        });
+
+        /* LES DOUBLONS SE DISENT AVEC LE NOM DE CEUX QUI LES DÉTIENNENT. Supprimer une copie,
+           c'est retirer un document du dossier de quelqu'un : le même PDF classé sous sept
+           stagiaires est peut-être une erreur de classement (le cas rencontré — l'évaluation
+           d'une personne recopiée dans six autres dossiers), mais peut aussi être une pièce
+           commune légitimement présente partout. L'écran ne peut pas trancher ; il montre qui
+           détient quoi et laisse décider. */
+        const par = new Map();
+        for (const r of rows) {
+            if (!r.empreinte) continue;
+            const k = `${r.empreinte}:${r.octets}`;
+            if (!par.has(k)) par.set(k, []);
+            par.get(k).push(r);
+        }
+        const doublons = [...par.values()].filter((g) => g.length > 1)
+            .map((g) => ({ octets: Number(g[0].octets), n: g.length,
+                gaspille: Number(g[0].octets) * (g.length - 1),
+                /* `octets` EN NOMBRE, explicitement : `LENGTH()` peut revenir en chaîne selon
+                   le pilote, et l'écran s'en sert pour retrancher d'un total après suppression.
+                   Une addition sur des chaînes concatène au lieu d'ajouter. */
+                exemplaires: g.map(({ empreinte, ...x }) => ({ ...x, octets: Number(x.octets) })) }))
+            .sort((a, b) => b.gaspille - a.gaspille);
+
+        res.json({
+            data: {
+                total: { n: rows.length, octets: total },
+                tranches,
+                /* Soixante suffisent : au-delà, on est déjà sous la moyenne, et une liste plus
+                   longue ferait croire qu'il reste du gras alors qu'il n'y en a plus. */
+                lourds: [...rows].sort((a, b) => b.octets - a.octets).slice(0, 60)
+                    .map(({ empreinte, ...x }) => ({ ...x, octets: Number(x.octets) })),
+                doublons,
+                gaspilleDoublons: doublons.reduce((s, d) => s + d.gaspille, 0),
+            },
+        });
+    } catch (err) {
+        console.error('Erreur analyse stockage archives :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getSuivi, getArchive, importArchive, getArchiveFile, deleteArchive, bulkDeleteArchive,
+    getArchiveStockage };

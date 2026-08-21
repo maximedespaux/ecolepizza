@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon.jsx";
+import ImageLien, { ImagePlaceholder } from "./ImageLien.jsx";
 import Badge from "./Badge.jsx";
-import { euro } from "../lib/format.js";
+import { euro, listeCategories } from "../lib/format.js";
 import {
   getPartenaireProduits, createPartenaireProduit, updatePartenaireProduit, deletePartenaireProduit,
 } from "../api/apiClient.js";
@@ -24,7 +25,10 @@ import {
  * Le repli évite le problème plutôt que d'avoir à le contourner par un portail.
  */
 
-const VIDE = { name: "", category: "", reference: "", price_public: "", price_school: "", url: "", note: "" };
+/* `image_url` A TOUJOURS EXISTÉ EN BASE (migration 095) : la colonne était acceptée en écriture et
+   déjà renvoyée à la boutique du stagiaire. Il manquait juste le champ pour la remplir — elle
+   attendait son écran depuis huit migrations. */
+const VIDE = { name: "", category: "", reference: "", price_public: "", price_school: "", url: "", image_url: "", note: "" };
 
 function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
   const [ouvert, setOuvert] = useState(false);
@@ -32,6 +36,11 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
   const [form, setForm] = useState(VIDE);
   const [edite, setEdite] = useState(null);    // id du produit en cours de modification
   const [busy, setBusy] = useState(false);
+  /* LE FORMULAIRE EST FERMÉ AU DÉPART. Douze champs déployés en permanence sous chaque catalogue
+     donnaient à croire qu'il fallait les remplir : on ouvrait « Produits en boutique » pour LIRE
+     la liste, et on tombait sur une saisie. Le déplier à la demande rend la liste lisible et
+     l'ajout explicite. */
+  const [saisie, setSaisie] = useState(false);
 
   // Chargé À L'OUVERTURE seulement : une page de vingt-trois partenaires ne doit pas déclencher
   // vingt-trois requêtes pour des catalogues que personne ne regarde.
@@ -44,6 +53,16 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
 
   const recharger = () => getPartenaireProduits(partnerId).then((r) => setRows(r.data || [])).catch(() => {});
 
+  /* Ouvrir en MODIFICATION : on charge la fiche et on déplie. Sans `setSaisie(true)`, le crayon
+     ne ferait rien de visible — le formulaire resterait fermé et l'utilisateur cliquerait deux
+     fois en pensant que le bouton est cassé. */
+  function modifier(p) {
+    setEdite(p.id);
+    setForm({ ...VIDE, ...Object.fromEntries(Object.keys(VIDE).map((k) => [k, p[k] ?? ""])) });
+    setSaisie(true);
+  }
+  function fermerSaisie() { setEdite(null); setForm(VIDE); setSaisie(false); }
+
   async function enregistrer(e) {
     e.preventDefault();
     if (!form.name.trim()) return;
@@ -51,7 +70,12 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
     try {
       if (edite) await updatePartenaireProduit(edite, form);
       else await createPartenaireProduit(partnerId, form);
-      setForm(VIDE); setEdite(null);
+      /* APRÈS UN AJOUT LE FORMULAIRE RESTE OUVERT, vidé : on saisit rarement un seul produit, et
+         refermer obligerait à recliquer entre chaque ligne d'un catalogue. Après une MODIFICATION
+         il se referme — le travail sur ce produit-là est terminé, et le garder ouvert laisserait
+         une ligne surlignée sans qu'on sache si l'enregistrement a eu lieu. */
+      if (edite) { setEdite(null); setForm(VIDE); setSaisie(false); }
+      else setForm(VIDE);
       await recharger();
     } catch (err) { onErreur?.(err.message || "Enregistrement impossible."); }
     finally { setBusy(false); }
@@ -96,12 +120,37 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
                 {rows.map((p) => (
-                  <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0",
-                    borderBottom: "1px solid var(--border-soft)", opacity: p.active ? 1 : 0.5 }}>
-                    <span style={{ flex: 1, minWidth: 0 }}>
+                  /* LA LIGNE EN COURS DE MODIFICATION EST SURLIGNÉE. Le formulaire s'ouvre plus
+                     bas, hors du champ de vision sur un catalogue de dix produits : sans repère,
+                     on ne sait plus lequel on est en train de modifier — et on enregistre sur le
+                     mauvais. `aria-current` porte la même information pour un lecteur d'écran, la
+                     couleur ne devant jamais être seule à la dire. */
+                  <div key={p.id} aria-current={edite === p.id ? "true" : undefined}
+                    className={"pp-ligne" + (edite === p.id ? " en-edition" : "")}
+                    style={{ opacity: p.active ? 1 : 0.5 }}>
+                    <ImageLien src={p.image_url} className="pp-vignette"
+                      fallback={<ImagePlaceholder className="pp-vignette" icone="package" />} />
+                    {/* LE NOM SUR SA LIGNE, LES ÉTIQUETTES SUR LA LEUR.
+                        En les laissant couler à la suite du nom, elles passaient à la ligne LÀ OÙ
+                        LA PLACE MANQUAIT : « Four » restait collé au titre et « 400 °C,
+                        électrique » tombaient dessous, ce qui donnait à croire à DEUX natures
+                        d'étiquettes différentes. Et le point de coupure changeait d'un produit à
+                        l'autre selon la longueur du nom — sur « AVGVSTO PR 9 — dôme à sole
+                        rotative 500 °C », même le seul « Four » basculait. Un groupe stable vaut
+                        mieux qu'un groupe qui se réorganise à chaque libellé. */}
+                    <span className="pp-ident">
                       <b style={{ fontSize: 13 }}>{p.name}</b>
-                      {p.category ? <span className="hint" style={{ marginLeft: 6 }}>{p.category}</span> : null}
-                      {!p.active ? <Badge tone="n">masqué</Badge> : null}
+                      {/* MÊME DÉCOUPAGE QU'À LA BOUTIQUE : l'école doit voir ce que le stagiaire
+                          verra. Affichée en un bloc, « Four,400 °C » se lirait comme une seule
+                          catégorie mal saisie et on la « corrigerait » en retirant la virgule. */}
+                      {(listeCategories(p.category).length || !p.active) ? (
+                        <span className="pp-cats">
+                          {listeCategories(p.category).map((c) => (
+                            <span key={c} className="badge n">{c}</span>
+                          ))}
+                          {!p.active ? <Badge tone="n">masqué</Badge> : null}
+                        </span>
+                      ) : null}
                     </span>
                     {/* Le tarif ÉCOLE est celui que le stagiaire paie : c'est lui qu'on met en
                         avant, le prix public servant de repère pour mesurer la négociation. */}
@@ -116,7 +165,7 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
                     <button type="button" className="iconbtn" title={p.active ? "Masquer de la boutique" : "Afficher dans la boutique"}
                       onClick={() => basculer(p)}><Icon name={p.active ? "eye" : "eye-off"} size={14} /></button>
                     <button type="button" className="iconbtn" title="Modifier"
-                      onClick={() => { setEdite(p.id); setForm({ ...VIDE, ...Object.fromEntries(Object.keys(VIDE).map((k) => [k, p[k] ?? ""])) }); }}>
+                      aria-pressed={edite === p.id} onClick={() => modifier(p)}>
                       <Icon name="pencil" size={14} /></button>
                     <button type="button" className="iconbtn del" title="Retirer" onClick={() => supprimer(p)}>
                       <Icon name="trash" size={14} /></button>
@@ -125,15 +174,48 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
               </div>
             )}
 
-          <form onSubmit={enregistrer} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* LE BOUTON D'ABORD, LE FORMULAIRE ENSUITE. Il porte le mot « produit » et non un
+              simple « + » : sous un catalogue déjà rempli, une croix seule laisse deviner ce
+              qu'elle ajoute. */}
+          {!saisie && (
+            <button type="button" className="btn sm" onClick={() => setSaisie(true)}>
+              <Icon name="plus" size={14} /> Ajouter un produit
+            </button>
+          )}
+
+          {saisie && (
+          <form onSubmit={enregistrer} className={"pp-form" + (edite ? " en-edition" : "")}
+            style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {/* ON RAPPELLE CE QU'ON MODIFIE. Le formulaire est en bas d'un catalogue qui peut
+                compter dix lignes : la ligne surlignée est souvent hors du champ de vision au
+                moment où l'on tape. Sans ce titre, rien dans le formulaire ne dit s'il ajoute ou
+                s'il modifie, ni quoi. */}
+            <b className="pp-form-t">
+              <Icon name={edite ? "pencil" : "plus"} size={13} />
+              {edite ? `Modifier « ${form.name || "sans nom"} »` : "Nouveau produit"}
+            </b>
             <div className="row3" style={{ gap: 8 }}>
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Produit</label>
                 <input className="inp" value={form.name} onChange={set("name")} placeholder="Four à bois 100 cm" />
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
-                <label>Catégorie</label>
-                <input className="inp" value={form.category} onChange={set("category")} placeholder="Four" />
+                <label>Catégories</label>
+                <input className="inp" value={form.category} onChange={set("category")}
+                  placeholder="Four, 400 °C, électrique" />
+                {/* L'APERÇU MONTRE LE DÉCOUPAGE PENDANT LA SAISIE. Sans lui, la virgule est une
+                    convention invisible : on écrit « Four 400 °C » sans séparateur, on enregistre,
+                    et il faut aller regarder la boutique pour comprendre qu'il n'y a qu'une seule
+                    étiquette. Ici le résultat se voit à la frappe. */}
+                {listeCategories(form.category).length > 1 ? (
+                  <span className="cat-apercu">
+                    {listeCategories(form.category).map((c) => (
+                      <span key={c} className="badge n">{c}</span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="hint">Séparez par des virgules pour plusieurs étiquettes.</span>
+                )}
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Référence</label>
@@ -156,6 +238,18 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
               </div>
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
+              <label>Photo (lien) <span className="hint" style={{ fontWeight: 400 }}>(facultatif)</span></label>
+              <input className="inp" type="url" value={form.image_url} onChange={set("image_url")}
+                placeholder="https://site-du-fournisseur.fr/photo.jpg" />
+              {/* On dit d'où vient l'image ET ce que ça implique : elle est chargée depuis le site
+                  du fournisseur, qui voit donc passer la visite. Le dire ici évite d'avoir à le
+                  découvrir sur la page Confidentialité. */}
+              <span className="hint">
+                Clic droit sur l'image du site du fournisseur → « Copier l'adresse de l'image ».
+                Elle reste hébergée chez lui : son site verra passer les visites.
+              </span>
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
               <label>Ce qu'on en dit au stagiaire <span className="hint" style={{ fontWeight: 400 }}>(facultatif)</span></label>
               <input className="inp" value={form.note} onChange={set("note")} placeholder="Bon rapport qualité/prix pour démarrer." />
             </div>
@@ -163,13 +257,13 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
               <button className="btn sm primary" disabled={busy || !form.name.trim()}>
                 <Icon name={edite ? "check" : "plus"} size={14} /> {edite ? "Enregistrer" : "Ajouter au catalogue"}
               </button>
-              {edite && (
-                <button type="button" className="btn sm ghost" onClick={() => { setEdite(null); setForm(VIDE); }}>
-                  Annuler
-                </button>
-              )}
+              {/* « Annuler » TOUJOURS PRÉSENT, et plus seulement en modification : depuis que le
+                  formulaire s'ouvre à la demande, il faut aussi pouvoir le refermer sans rien
+                  saisir. Sans lui, on rouvrait la fiche du partenaire pour s'en débarrasser. */}
+              <button type="button" className="btn sm ghost" onClick={fermerSaisie}>Annuler</button>
             </div>
           </form>
+          )}
         </div>
       )}
     </div>

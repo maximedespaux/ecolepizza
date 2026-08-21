@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSessions, getFormations, createSession, getLocations, getEnrollments } from "../api/apiClient.js";
+import { getSessions, getFormations, createSession, getLocations, getEnrollments, getConsentsManquants } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -18,6 +18,10 @@ function Sessions() {
   const [view, setView] = useState("mois"); // mois | trimestre | semestre | annee
   const [sessions, setSessions] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
+  /* COMBIEN RESTENT À SOLLICITER, par session — le détail de la pastille « Sessions ».
+     `{}` et non `null` : chez le formateur la route répond 403, et le calendrier doit alors
+     s'afficher SANS marque plutôt que d'attendre une réponse qui ne viendra pas. */
+  const [aSolliciter, setASolliciter] = useState({});
   const [programs, setPrograms] = useState([]);
   const [locations, setLocations] = useState([]);
   const [status, setStatus] = useState(null);
@@ -38,9 +42,11 @@ function Sessions() {
     getFormations().then((r) => setPrograms(r.data)).catch(() => {});
     getLocations().then((r) => setLocations(r.data || [])).catch(() => {});
     getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
+    // Silencieux : réservé au bureau, et son absence n'empêche pas de lire un planning.
+    getConsentsManquants().then((r) => setASolliciter(r.data || {})).catch(() => {});
   }, []);
 
-  const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "—");
+  const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "-");
 
   // Stagiaires inscrits regroupés par session (pour l'agenda).
   const studentsBySession = useMemo(() => {
@@ -169,7 +175,7 @@ function Sessions() {
             <form onSubmit={handleAdd}>
               <div className="mbody">
                 <p className="sub" style={{ marginTop: 0 }}>
-                  Choisissez la formation — le premier jour est pré-rempli (modifiable). La durée colore les jours suivants.
+                  Choisissez la formation, le premier jour est pré-rempli (modifiable). La durée colore les jours suivants.
                 </p>
                 <StatusMessage status={status} />
                 <SelectField
@@ -178,9 +184,9 @@ function Sessions() {
                   onChange={(e) => setAddForm((f) => ({ ...f, program_id: e.target.value }))}
                   required
                 >
-                  <option value="">— Choisir —</option>
+                  <option value="">Choisir</option>
                   {programs.map((p) => (
-                    <option key={p.id} value={p.id}>{p.code} — {p.title} ({p.days} j)</option>
+                    <option key={p.id} value={p.id}>{p.code}, {p.title} ({p.days} j)</option>
                   ))}
                 </SelectField>
                 <Field
@@ -196,9 +202,9 @@ function Sessions() {
                     value={addForm.location_id || ""}
                     onChange={(e) => setAddForm((f) => ({ ...f, location_id: e.target.value }))}
                   >
-                    <option value="">— Aucun / à définir —</option>
+                    <option value="">Aucun / à définir</option>
                     {locations.map((l) => (
-                      <option key={l.id} value={l.id}>{l.name}{l.town ? ` — ${l.town}` : ""}</option>
+                      <option key={l.id} value={l.id}>{l.name}{l.town ? `, ${l.town}` : ""}</option>
                     ))}
                   </SelectField>
                 )}
@@ -274,19 +280,31 @@ function Sessions() {
                     {Array.from({ length: weekLaneCount }, (_, i) => {
                       const s = byLane[i];
                       if (!s) return <div key={i} className="cal-evt cal-evt-ghost" aria-hidden="true">&nbsp;</div>;
+                      /* UNE PUCE, PAS UN NOMBRE. La pastille se répète sur CHAQUE jour de la
+                         session — cinq fois pour une semaine — et un second chiffre à côté des
+                         inscrits se lirait de travers autant de fois. La puce dit qu'il y a
+                         quelque chose ici ; l'info-bulle et la liste en dessous disent quoi. */
+                      const reste = aSolliciter[s.id] || 0;
+                      const quoi = reste
+                        ? ` · ${reste} à solliciter pour les partenaires`
+                        : "";
                       return (
                         <div
                           key={i}
                           className="cal-evt"
                           style={{ background: colorOf(s.program_code) }}
-                          title={`${s.program_title} — ${s.stagiaires} stagiaire(s)`}
+                          title={`${s.program_title}, ${s.stagiaires} stagiaire(s)${quoi}`}
                           role="button"
                           tabIndex={0}
-                          aria-label={`Ouvrir la session ${s.program_title}, ${s.stagiaires} stagiaire(s)`}
+                          aria-label={`Ouvrir la session ${s.program_title}, ${s.stagiaires} stagiaire(s)${quoi}`}
                           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); navigate(`/sessions/${s.id}`); } }}
                           onClick={(e) => { e.stopPropagation(); navigate(`/sessions/${s.id}`); }}
                         >
                           {s.program_code}
+                          {/* `aria-hidden` : l'information est déjà dans l'`aria-label` du bouton,
+                              en toutes lettres. La répéter ferait entendre deux fois la même
+                              chose, la seconde sans son nombre. */}
+                          {reste > 0 && <i className="cal-evt-consent" aria-hidden="true" />}
                           <span className="n">{s.stagiaires}</span>
                         </div>
                       );
@@ -339,6 +357,15 @@ function Sessions() {
                     <div className="sess-meta">
                       <span className="sess-metaitem"><Icon name="calendar" size={13} /> {frDate(s.start_date)} → {frDate(s.end_date)}</span>
                       <span className="sess-metaitem">S{s.week} · {s.year}</span>
+                      {/* ICI LE NOMBRE EST LISIBLE : la session n'apparaît qu'une fois dans cette
+                          liste, contrairement à la pastille du calendrier. C'est donc là que la
+                          pastille de navigation s'explique — « 1 » devient « lesquels, et où ». */}
+                      {aSolliciter[s.id] > 0 && (
+                        <span className="sess-metaitem sess-consent">
+                          <Icon name="help" size={13} />
+                          <b className="chiffres">{aSolliciter[s.id]}</b> à solliciter
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="sess-people">
@@ -404,7 +431,7 @@ function MiniMonth({ y, m, sessionsOn, onOpen, onAdd }) {
               className={`cal-mini-cell${inMonth ? "" : " out"}${isToday(day) ? " today" : ""}${has ? " openable" : ""}${addable ? " addable" : ""}`}
               onClick={has ? () => onOpen(evts[0].id) : (addable ? () => onAdd(dayStr) : undefined)}
               title={has
-                ? (evts.length > 1 ? `${evts.length} sessions — cliquez pour ouvrir (ou un point précis)` : "Cliquez pour ouvrir la session")
+                ? (evts.length > 1 ? `${evts.length} sessions, cliquez pour ouvrir (ou un point précis)` : "Cliquez pour ouvrir la session")
                 : (addable ? "Ajouter une formation ce jour" : undefined)}
             >
               <span className="d">{day.getDate()}</span>
@@ -412,7 +439,7 @@ function MiniMonth({ y, m, sessionsOn, onOpen, onAdd }) {
                 <span className="dots">
                   {evts.slice(0, 4).map((s) => (
                     <i key={s.id} style={{ background: colorOf(s.program_code) }}
-                      title={`${s.program_code} — ${s.program_title} · ${s.stagiaires} stag.`}
+                      title={`${s.program_code}, ${s.program_title} · ${s.stagiaires} stag.`}
                       onClick={(e) => { e.stopPropagation(); onOpen(s.id); }} />
                   ))}
                 </span>

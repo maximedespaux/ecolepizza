@@ -49,3 +49,26 @@ export function dateHeure(v) {
   const [, a, mo, j, h, mi] = m;
   return `${j}-${mo}-${a}` + (h ? ` ${h}:${mi}` : "");
 }
+
+/**
+ * « Four, 400 °C » → ["Four", "400 °C"] — une catégorie qui en contient plusieurs.
+ *
+ * POURQUOI UN SÉPARATEUR PLUTÔT QUE DES CHAMPS EN PLUS. Un four est « Four » ET « 400 °C » ET
+ * « électrique » : combien de champs faudrait-il prévoir ? Trois, et le quatrième manquera. Une
+ * seule ligne, des virgules, autant d'étiquettes que nécessaire — et rien à migrer, puisque la
+ * colonne reste une chaîne de texte.
+ *
+ * LA VIRGULE, ET ELLE SEULE. Le point-virgule et la barre oblique se glissent naturellement dans
+ * un libellé (« Bac 60/40 », « Pelle 33 cm ; manche court ») : les accepter comme séparateurs
+ * couperait des catégories en deux au premier libellé qui en contient une. La virgule, elle,
+ * n'apparaît pas dans les libellés de cet annuaire.
+ *
+ * UNE VALEUR SANS VIRGULE RESSORT TELLE QUELLE, en un seul élément : tout l'existant continue de
+ * s'afficher exactement comme avant, sans reprise de données.
+ */
+export function listeCategories(v) {
+  return String(v ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}

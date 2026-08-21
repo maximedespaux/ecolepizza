@@ -185,7 +185,7 @@ function Modeles() {
   async function onReset(t) {
     if (!window.confirm(`Revenir à la version d'origine de « ${t.label} » ?\n\n`
       + 'Vos modifications de contenu et de réglages seront perdues. Le document reste dans la '
-      + 'liste — c\'est « Supprimer » qui le retire.')) return;
+      + 'liste, c\'est « Supprimer » qui le retire.')) return;
     setBusy(t.slug);
     try {
       await resetTemplate(t.slug);
@@ -227,14 +227,14 @@ function Modeles() {
         // Cinq lignes de mode d'emploi devant un tableau dont chaque geste s'annonce lui-même :
         // la poignée se voit, « Éditer » est écrit sur son bouton. Ne reste que l'ORDRE, qui
         // est la seule chose que ce tableau signifie sans le dire.
-        lead="Les documents partent dans l'ordre de cette liste — glissez une ligne pour le changer."
+        lead="Les documents partent dans l'ordre de cette liste, glissez une ligne pour le changer."
         actions={view === "documents"
           ? <button className="btn primary" onClick={() => setEditing({ _new: true, kind: "document", sort_order: Math.max(0, ...allItems.map((i) => i.sort_order || 0)) + 10, applies_when: {} })}>＋ Ajouter un document</button>
           : null}
       />
       <StatusMessage status={status} />
 
-      <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, marginBottom: 14, borderBottom: "1px solid var(--border-soft)" }}>
+      <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border-soft)" }}>
         <button type="button" role="tab" className={"tab" + (view === "documents" ? " on" : "")} onClick={() => setView("documents")}>
           Documents ({allItems.length})
         </button>
@@ -497,7 +497,7 @@ function ConditionsPanel({ conditions, catalog, onChanged, onCatalogChanged, onS
           </select></div>
         <div className="field"><label>Valeur</label>
           {!needsValue ? (
-            <input className="inp" value="" disabled placeholder="—" />
+            <input className="inp" value="" disabled placeholder="-" />
           ) : curField?.type === "enum" ? (
             <select value={value} onChange={(e) => setValue(e.target.value)}>
               <option value="">Choisir…</option>
@@ -782,7 +782,7 @@ function EquivalencesPanel({ onStatus }) {
         />
       )}
 
-      <div className="field"><label>{editId ? "Modifier l'équivalence" : "Nouvelle équivalence"} — cochez les documents alternatifs (« OU », autant que vous voulez)</label>
+      <div className="field"><label>{editId ? "Modifier l'équivalence" : "Nouvelle équivalence"}, cochez les documents alternatifs (« OU », autant que vous voulez)</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
           {docs.length === 0 ? <span className="hint">Aucun document.</span> : docs.map((d) => (
             <label key={d.slug} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", cursor: "pointer" }}>

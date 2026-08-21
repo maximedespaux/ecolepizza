@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { takeQuiz, submitQuiz } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
+import { dateHeure } from "../lib/format.js";
 
 // Correction d'un QCM : bonnes réponses (vert) + réponses données (croix si fausse).
 function ReviewList({ review }) {
@@ -15,7 +16,7 @@ function ReviewList({ review }) {
           </div>
           {q.image ? <img src={q.image} alt="" style={{ maxWidth: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 6, margin: "0 0 8px", display: "block" }} /> : null}
           {q.type === "SCALE" ? (
-            <div className="hint">Votre réponse : {q.scaleValue ?? "—"}{q.scale_max ? ` / ${q.scale_max}` : ""}</div>
+            <div className="hint">Votre réponse : {q.scaleValue ?? "-"}{q.scale_max ? ` / ${q.scale_max}` : ""}</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {q.options.map((o) => {
@@ -128,7 +129,7 @@ function QuizModal({ documentId, onClose, onDone }) {
               <div style={{ padding: "12px 0" }}>
                 <div style={{ textAlign: "center" }}>
                   <div style={{ marginBottom: 4 }}><Icon name="check-circle" size={40} style={{ color: "#16a34a" }} /></div>
-                  <p className="lead">Vous avez déjà répondu à ce QCM{alreadyDone.completed_at ? ` le ${alreadyDone.completed_at}` : ""}.
+                  <p className="lead">Vous avez déjà répondu à ce QCM{alreadyDone.completed_at ? ` le ${dateHeure(alreadyDone.completed_at)}` : ""}.
                     {alreadyDone.max_score ? <> Score : <b>{alreadyDone.score}/{alreadyDone.max_score}</b>.</> : null}</p>
                 </div>
                 {review && (

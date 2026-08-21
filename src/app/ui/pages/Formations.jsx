@@ -49,7 +49,7 @@ function Formations() {
   }
 
   async function onDelete(p) {
-    if (!window.confirm(`Supprimer définitivement la formation « ${p.code} — ${p.title} » ?\nCette action est irréversible.`)) return;
+    if (!window.confirm(`Supprimer définitivement la formation « ${p.code}, ${p.title} » ?\nCette action est irréversible.`)) return;
     try {
       await deleteFormation(p.id);
       setStatus({ type: "success", message: "Formation supprimée." });
@@ -99,7 +99,7 @@ function Formations() {
                     corrige. */}
                 {p.alertes_conditions > 0 && (
                   <span className="pastille-alerte"
-                    title={`${p.alertes_conditions} choix « OU » mal conditionné${p.alertes_conditions > 1 ? "s" : ""} — ouvrez « Parcours documentaire »`}>
+                    title={`${p.alertes_conditions} choix « OU » mal conditionné${p.alertes_conditions > 1 ? "s" : ""}, ouvrez « Parcours documentaire »`}>
                     ! {p.alertes_conditions > 1 ? p.alertes_conditions : ""}
                   </span>
                 )}
@@ -285,7 +285,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
-          <h3>{isNew ? "Nouvelle formation" : <>Modifier — <span className="mono" style={{ color: effColor }}>{program.code}</span></>}</h3>
+          <h3>{isNew ? "Nouvelle formation" : <>Modifier, <span className="mono" style={{ color: effColor }}>{program.code}</span></>}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, padding: "0 16px", borderBottom: "1px solid var(--border-soft)" }}>
@@ -331,7 +331,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               <input className="inp" type="number" min="0" step="0.01" value={form.price} onChange={set("price")} /></div>
           </div>
 
-          <div className="field"><label>Horaires (affiché sur la feuille d'émargement)<HelpDot text={"Une ligne par horaire — utile si les journées n'ont pas les mêmes horaires.\n\nEx. :\n9h00 – 12h30 / 13h30 – 17h00\nJour 5 : 9h00 – 12h00"} /></label>
+          <div className="field"><label>Horaires (affiché sur la feuille d'émargement)<HelpDot text={"Une ligne par horaire, utile si les journées n'ont pas les mêmes horaires.\n\nEx. :\n9h00 – 12h30 / 13h30 – 17h00\nJour 5 : 9h00 – 12h00"} /></label>
             <textarea className="inp" rows={3} value={form.horaires} onChange={set("horaires")} placeholder={"9h00 – 12h30 / 13h30 – 17h00\nJour 5 : 9h00 – 12h00"} /></div>
 
           <div className="field"><label>Public</label>
@@ -417,7 +417,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
                   <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
                     <ArchiveTreeEditor tree={curTree} onChange={setCurTree} eqMap={eqMap} docs={docs} />
                     <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu — {isEntArch ? "entreprise" : "stagiaire"}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu, {isEntArch ? "entreprise" : "stagiaire"}</div>
                       <ArchiveTreePreview tree={curTree} code={form.code} title={form.title} />
                     </div>
                   </div>
@@ -533,7 +533,7 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
             {alertes.length === 1 ? "Un choix « OU » mal conditionné" : `${alertes.length} choix « OU » mal conditionnés`}
           </div>
           {alertes.map((a, i) => (
-            <p key={i}><b>{a.jalon}</b> — {a.texte}</p>
+            <p key={i}><b>{a.jalon}</b>, {a.texte}</p>
           ))}
         </div>
       )}
@@ -826,7 +826,7 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
           {eligible.length === 0 ? (
             <>
               <div className="pf-add-title">Étapes disponibles</div>
-              <div className="pf-add-empty">Aucun document disponible — activez-le d'abord dans « Parcours du dossier ».</div>
+              <div className="pf-add-empty">Aucun document disponible, activez-le d'abord dans « Parcours du dossier ».</div>
             </>
           ) : (
             (() => {

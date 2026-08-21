@@ -1,9 +1,10 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
-  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives,
+  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage,
 } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
@@ -13,7 +14,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Roadmap from "../components/Roadmap.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
-import { scoreBadge, colorOf } from "../lib/format.js";
+import { scoreBadge, colorOf, dateHeure } from "../lib/format.js";
 
 const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"] };
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
@@ -225,7 +226,7 @@ function Suivi() {
                   <button key={m.type} type="button" aria-pressed={manqueFiltre === m.type}
                     className={"manque-i" + (manqueFiltre === m.type ? " on" : "")}
                     onClick={() => setManqueFiltre((f) => (f === m.type ? null : m.type))}>
-                    <b className="tnum">{m.n}</b><span>{m.label}</span>
+                    <b className="chiffres">{m.n}</b><span>{m.label}</span>
                   </button>
                 ))}
               </div>
@@ -233,15 +234,15 @@ function Suivi() {
           ) : dossiers.length > 0 && (
             <div className="todo-calme">
               <Icon name="check-circle" size={17} aria-hidden="true" />
-              Tous les dossiers sont complets — aucune pièce manquante à produire.
+              Tous les dossiers sont complets, aucune pièce manquante à produire.
             </div>
           )}
 
           {/* Les compteurs descendent : ils résument, ils ne se traitent pas. */}
           <div className="compteurs">
-            <span><b className="tnum">{count("ROUGE")}</b> incomplet{count("ROUGE") > 1 ? "s" : ""}</span><i />
-            <span><b className="tnum">{count("ORANGE")}</b> en cours</span><i />
-            <span><b className="tnum">{count("VERT")}</b> complet{count("VERT") > 1 ? "s" : ""}</span>
+            <span><b className="chiffres">{count("ROUGE")}</b> incomplet{count("ROUGE") > 1 ? "s" : ""}</span><i />
+            <span><b className="chiffres">{count("ORANGE")}</b> en cours</span><i />
+            <span><b className="chiffres">{count("VERT")}</b> complet{count("VERT") > 1 ? "s" : ""}</span>
           </div>
 
           <Card title={`Dossiers (${dossiersVus.length}${manqueFiltre ? ` sur ${dossiers.length}` : ""})`}>
@@ -310,17 +311,17 @@ function Suivi() {
 function buildTree(rows) {
   const years = {};
   for (const r of rows) {
-    const y = r.year != null ? String(r.year) : "—";
-    const wKey = r.week != null ? String(r.week) : "—";
-    const fKey = r.program_code || "—";
+    const y = r.year != null ? String(r.year) : "-";
+    const wKey = r.week != null ? String(r.week) : "-";
+    const fKey = r.program_code || "-";
     // Feuille = stagiaire, ou ENTREPRISE pour un document de groupe (scope COMPANY).
     const isCo = r.scope === "COMPANY";
     const lKey = isCo ? `co:${r.company_id || r.company_name || "?"}` : (r.learner_id || `${r.last_name}${r.first_name}`);
     const Y = years[y] || (years[y] = { label: y, total: 0, weeks: {} });
     const W = Y.weeks[wKey] || (Y.weeks[wKey] = { week: r.week || 0, total: 0, formations: {} });
-    const F = W.formations[fKey] || (W.formations[fKey] = { code: r.program_code || "—", title: r.program_title || "", total: 0, learners: {} });
+    const F = W.formations[fKey] || (W.formations[fKey] = { code: r.program_code || "-", title: r.program_title || "", total: 0, learners: {} });
     const L = F.learners[lKey] || (F.learners[lKey] = {
-      name: isCo ? (r.company_name || "Entreprise") : (`${r.last_name || ""} ${r.first_name || ""}`.trim() || "—"),
+      name: isCo ? (r.company_name || "Entreprise") : (`${r.last_name || ""} ${r.first_name || ""}`.trim() || "-"),
       learner_id: r.learner_id, company: isCo, docs: [],
     });
     L.docs.push(r);
@@ -371,16 +372,17 @@ function ArchivesView({ onError, onInfo }) {
     const archive_ids = docs.filter((d) => d.source === "archive").map((d) => d.doc_id);
     const document_ids = docs.filter((d) => d.source === "gen").map((d) => d.doc_id);
     const total = archive_ids.length + document_ids.length;
-    if (!total) { onError?.("Aucun document à supprimer ici."); return; }
+    if (!total) { onError?.("Aucun document à supprimer ici."); return false; }
     const detail = document_ids.length && archive_ids.length
       ? ` (${document_ids.length} généré(s), ${archive_ids.length} archivé(s))`
       : "";
-    if (!window.confirm(`Supprimer définitivement ${total} document(s)${what ? ` — ${what}` : ""}${detail} ?\nCette action est irréversible et les supprime de la base.`)) return;
+    if (!window.confirm(`Supprimer définitivement ${total} document(s)${what ? `, ${what}` : ""}${detail} ?\nCette action est irréversible et les supprime de la base.`)) return false;
     try {
       const { deleted } = await bulkDeleteArchives(archive_ids, document_ids);
       onInfo?.(`${deleted} document(s) supprimé(s).`);
       load();
-    } catch (err) { onError?.(err.message); }
+      return true;
+    } catch (err) { onError?.(err.message); return false; }
   }
   const weekDocs = (W) => W.formationsArr.flatMap((F) => F.learnersArr.flatMap((L) => L.docs));
   const formationDocs = (F) => F.learnersArr.flatMap((L) => L.docs);
@@ -423,6 +425,9 @@ function ArchivesView({ onError, onInfo }) {
         </p>
       )}
 
+      {isAdmin && <PanneauStockage onError={onError} onSupprime={(ids, quoi) => deleteDocs(
+        ids.map((id) => ({ doc_id: id, source: "archive" })), quoi)} />}
+
       {tree.length === 0 ? (
         <EmptyState icon="folder">Aucun document partagé pour l'instant.</EmptyState>
       ) : (
@@ -460,7 +465,7 @@ function ArchivesView({ onError, onInfo }) {
                                         <span style={{ flex: 1, minWidth: 0 }}>
                                           <b>{d.title}</b>
                                           <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
-                                            {d.signed_at ? `signé le ${d.signed_at}` : d.sent_at ? `envoyé le ${d.sent_at}` : ""}
+                                            {d.signed_at ? `signé le ${dateHeure(d.signed_at)}` : d.sent_at ? `envoyé le ${dateHeure(d.sent_at)}` : ""}
                                           </span>
                                         </span>
                                         <Badge tone={tone}>{lab}</Badge>
@@ -495,3 +500,230 @@ function ArchivesView({ onError, onInfo }) {
 }
 
 export default Suivi;
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   CE QUE LE COFFRE OCCUPE — l'inventaire, et de quoi agir dessus.
+
+   POURQUOI UN PANNEAU REPLIÉ, chargé au clic : la requête lit tous les blobs pour en calculer
+   les empreintes. Quelques secondes sur 681 Mo — acceptable pour un inventaire qu'on demande,
+   inacceptable à chaque ouverture de la page.
+
+   CE QU'IL MONTRE, ET POURQUOI DANS CET ORDRE. La mesure qui a précédé cet écran disait deux
+   choses. D'abord que la masse est CONCENTRÉE : 12 % des fichiers portent 55 % du volume — d'où
+   la liste des plus lourds, qui règle le problème en trente lignes. Ensuite que la DENSITÉ
+   sépare le bon grain de l'ivraie : un scan JPEG de 300 DPI tient en 0,13 octet par pixel, quand
+   certains fichiers d'ici en font 2,7 — soit presque un bitmap brut (3,0). C'est la seule mesure
+   qui distingue un document lourd parce qu'il est détaillé d'un document lourd pour rien.
+
+   LES DOUBLONS SE MONTRENT AVEC LEURS DÉTENTEURS. Supprimer une copie retire un document du
+   dossier de quelqu'un. Le même PDF sous sept stagiaires peut être une erreur de classement —
+   c'est le cas qu'on a trouvé, l'évaluation d'une personne recopiée dans six autres dossiers —
+   ou une pièce commune légitimement partout. L'écran ne tranche pas, il nomme.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+const mo = (o) => (o >= 1048576 ? (o / 1048576).toFixed(1) + " Mo" : Math.round(o / 1024) + " Ko");
+
+/* LE MOT À RECOPIER POUR LANCER L'INVENTAIRE.
+   Il n'est pas là pour vérifier une identité — l'écran est déjà réservé à l'administration — mais
+   pour rendre le geste DÉLIBÉRÉ. La requête lit les 681 Mo de blobs de la table : 7,4 secondes
+   mesurées, pendant lesquelles la base travaille pour tout le monde. Un bouton se clique par
+   curiosité, et se reclique en attendant que ça vienne ; un mot à recopier, non.
+   En français et en clair : un mot qu'on ne comprend pas se recopie machinalement, ce qui
+   annulerait tout l'intérêt. */
+const MOT_INVENTAIRE = "INVENTAIRE";
+/* Tolérant sur la casse et les espaces autour : ce qu'on demande, c'est un geste conscient,
+   pas une dictée. Refuser « inventaire » en minuscules ne filtrerait que la patience. */
+const motOk = (v) => v.trim().toUpperCase() === MOT_INVENTAIRE;
+
+function PanneauStockage({ onError, onSupprime }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [demande, setDemande] = useState(false);   // le verrou est-il ouvert à l'écran ?
+  const [saisie, setSaisie] = useState("");
+
+  async function analyser() {
+    setDemande(false); setSaisie("");
+    setBusy(true);
+    try { setData((await getArchiveStockage()).data); }
+    catch (e) { onError?.(e.message); }
+    finally { setBusy(false); }
+  }
+
+  /* LE VERROU COUVRE AUSSI « RECALCULER ». Sans cela il suffirait d'un premier passage pour
+     obtenir un bouton libre juste à côté — et c'est précisément le reclic répété qu'on veut
+     empêcher, pas le premier. */
+  const verrou = demande && createPortal(
+    <div className="overlay" onClick={() => setDemande(false)}>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <h3>Lancer l'inventaire du coffre ?</h3>
+          <button className="x" onClick={() => setDemande(false)} aria-label="Fermer"><Icon name="x" size={16} /></button>
+        </div>
+        <div className="mbody">
+          <p className="lead" style={{ marginTop: 0 }}>
+            L'inventaire lit <b>l'intégralité des fichiers archivés</b> pour en calculer la taille
+            et l'empreinte. Comptez plusieurs secondes, pendant lesquelles la base est occupée
+            pour tout le monde.
+          </p>
+          <label className="field confirm-mot" style={{ marginBottom: 0 }}>
+            <span>Recopiez <b>{MOT_INVENTAIRE}</b> pour confirmer</span>
+            <input className="inp" autoFocus value={saisie} spellCheck="false"
+              onChange={(e) => setSaisie(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && motOk(saisie)) analyser(); }} />
+          </label>
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={() => setDemande(false)}>Annuler</button>
+          <button className="btn primary" disabled={!motOk(saisie)} onClick={analyser}>
+            <Icon name="package" size={15} /> Lancer l'inventaire
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+
+  if (!data) {
+    return (
+      <div className="stock-invite">
+        <span className="hint">
+          <Icon name="package" size={13} /> Les archives sont stockées dans la base. Voir ce
+          qu'elles occupent, et repérer les fichiers inutilement lourds ou en double.
+        </span>
+        <button className="btn ghost sm" disabled={busy} onClick={() => setDemande(true)}>
+          {busy ? "Lecture des fichiers…" : "Analyser l'espace occupé"}
+        </button>
+        {verrou}
+      </div>
+    );
+  }
+
+  const { total, tranches, lourds, doublons, gaspilleDoublons } = data;
+  const maxT = Math.max(...tranches.map((t) => t.octets), 1);
+  // Ce qu'on peut réellement retirer : tout sauf un exemplaire par groupe.
+  const copiesEnTrop = doublons.reduce((s, d) => s + d.n - 1, 0);
+
+  /* APRÈS UNE SUPPRESSION, L'INVENTAIRE EST FAUX — la copie effacée y figure encore et son poids
+     est toujours compté. Mais on ne RELIT PAS la base pour autant : relancer l'inventaire à
+     chaque corbeille ferait relire les 681 Mo une fois par doublon traité, soit vingt-quatre
+     fois pour les seuls groupes de sept. C'est exactement le martèlement que le verrou de
+     confirmation cherche à éviter — le rétablir ici l'aurait vidé de son sens.
+     On retranche donc ce qu'on sait avoir supprimé : un identifiant, une taille, une tranche.
+     C'est de l'arithmétique exacte, pas une approximation. */
+  function retirerDeLInventaire(x) {
+    setData((d) => {
+      if (!d) return d;
+      const doublons = d.doublons
+        .map((g) => {
+          if (!g.exemplaires.some((e) => e.id === x.id)) return g;
+          const exemplaires = g.exemplaires.filter((e) => e.id !== x.id);
+          return { ...g, exemplaires, n: exemplaires.length,
+            gaspille: g.octets * (exemplaires.length - 1) };
+        })
+        /* UN GROUPE RETOMBÉ À UN SEUL EXEMPLAIRE N'EST PLUS UN DOUBLON : le laisser afficherait
+           « 1 exemplaire identique », ce qui ne veut rien dire. */
+        .filter((g) => g.n > 1);
+      return {
+        ...d,
+        total: { n: d.total.n - 1, octets: d.total.octets - x.octets },
+        // La tranche est celle dont le seuil est le plus haut que le fichier atteigne.
+        tranches: d.tranches.map((t) => (t === d.tranches.find((u) => x.octets >= u.min)
+          ? { ...t, n: t.n - 1, octets: t.octets - x.octets } : t)),
+        lourds: d.lourds.filter((l) => l.id !== x.id),
+        doublons,
+        gaspilleDoublons: doublons.reduce((s, g) => s + g.gaspille, 0),
+      };
+    });
+  }
+
+  async function supprimerUne(x) {
+    if (await onSupprime([x.id], `« ${x.title} »${x.learner_name ? ` — ${x.learner_name}` : ""}`)) {
+      retirerDeLInventaire(x);
+    }
+  }
+
+  return (
+    <div className="stock">
+      {verrou}
+      <div className="stock-tete">
+        <b>{total.n} document{total.n > 1 ? "s" : ""} · <span className="chiffres">{mo(total.octets)}</span></b>
+        <button className="btn ghost sm" disabled={busy} onClick={() => setDemande(true)}>Recalculer</button>
+      </div>
+
+      {/* LA RÉPARTITION EN PREMIER : c'est elle qui montre que quelques fichiers font le volume,
+          donc que la suite vaut la peine d'être lue. */}
+      <div className="stock-tranches">
+        {tranches.map((t) => (
+          <div key={t.libelle} className="stock-tr">
+            <span className="stock-tr-l">{t.libelle}</span>
+            <span className="stock-tr-b"><i style={{ width: `${100 * t.octets / maxT}%` }} /></span>
+            <span className="stock-tr-n chiffres">{t.n}</span>
+            <span className="stock-tr-o chiffres">{mo(t.octets)}</span>
+          </div>
+        ))}
+      </div>
+
+      {doublons.length > 0 && (
+        <details className="stock-bloc">
+          {/* « 26 documents en double » se lisait comme 26 fichiers à supprimer. Ce sont 26
+              documents présents en PLUSIEURS exemplaires, soit 46 copies en trop : c'est ce
+              second nombre qui dit ce qu'on peut retirer. */}
+          <summary>
+            <b>{doublons.length} document{doublons.length > 1 ? "s" : ""} en plusieurs exemplaires</b>
+            <span className="hint"> · <span className="chiffres">{copiesEnTrop}</span> copie
+              {copiesEnTrop > 1 ? "s" : ""} superflue{copiesEnTrop > 1 ? "s" : ""},
+              <span className="chiffres"> {mo(gaspilleDoublons)}</span></span>
+          </summary>
+          <p className="hint stock-avert">
+            <Icon name="alert-triangle" size={12} /> Chaque copie occupe le dossier d'un stagiaire.
+            Supprimer une copie retire le document de <b>son</b> dossier — vérifiez qui la détient
+            avant de trancher.
+          </p>
+          {doublons.map((d, i) => (
+            <div key={i} className="stock-dbl">
+              <div className="stock-dbl-t">
+                <b className="chiffres">{d.n}</b> exemplaires identiques ·
+                <span className="chiffres"> {mo(d.octets)}</span> pièce
+              </div>
+              {/* UNE CORBEILLE PAR EXEMPLAIRE, et non un « ne garder que le premier ».
+                  Le bouton groupé décidait à la place de l'utilisateur QUEL exemplaire survit —
+                  le premier, c'est-à-dire celui que la base a rendu en premier, sans que cet
+                  ordre veuille dire quoi que ce soit. Or le choix a du sens : sur l'évaluation
+                  d'une stagiaire recopiée dans six autres dossiers, la copie à garder est celle
+                  classée sous SON nom, pas la première venue. On supprime donc au cas par cas,
+                  en voyant qui détient quoi. */}
+              <ul className="stock-dbl-l">
+                {d.exemplaires.map((x) => (
+                  <li key={x.id}>
+                    <a href={archiveFileUrl(x.id)} target="_blank" rel="noopener noreferrer">{x.title}</a>
+                    <span className="hint"> — {x.learner_name || "sans stagiaire"}
+                      {x.year ? ` · ${x.year}` : ""}{x.week ? ` S${x.week}` : ""}</span>
+                    <button type="button" className="iconbtn del stock-del"
+                      title={`Supprimer cette copie${x.learner_name ? ` du dossier de ${x.learner_name}` : ""}`}
+                      onClick={() => supprimerUne(x)}>
+                      <Icon name="trash" size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </details>
+      )}
+
+      <details className="stock-bloc">
+        <summary><b>Les {lourds.length} plus lourds</b>
+          <span className="hint"> · <span className="chiffres">{mo(lourds.reduce((s, x) => s + x.octets, 0))}</span> à eux seuls</span>
+        </summary>
+        <ul className="stock-lourds">
+          {lourds.map((x) => (
+            <li key={x.id}>
+              <span className="chiffres stock-poids">{mo(x.octets)}</span>
+              <a href={archiveFileUrl(x.id)} target="_blank" rel="noopener noreferrer">{x.title}</a>
+              <span className="hint">{x.learner_name ? ` — ${x.learner_name}` : ""}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </div>
+  );
+}

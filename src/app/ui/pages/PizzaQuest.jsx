@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import StatusMessage from "../components/StatusMessage.jsx";
 import { getMyFormations, getMyProfile, getPlayableChapters, resetMyQuest } from "../api/apiClient.js";
 import { Icon } from "../components/Icon.jsx";
 import ConstructorGame from "../components/ConstructorGame.jsx";
 import SimulateurPizza from "../components/SimulateurPizza.jsx";
 import CommandePiege from "../components/CommandePiege.jsx";
 import JustePrix from "../components/JustePrix.jsx";
+import Substitutions from "../components/Substitutions.jsx";
+import CompleterPate from "../components/CompleterPate.jsx";
+import LeService from "../components/LeService.jsx";
+import AccordSaveurs from "../components/AccordSaveurs.jsx";
 import { colorOf } from "../lib/format.js";
 import { saveQuestProgress } from "../lib/gamification.js";
 import { FETES, paliersFranchis, marquerFete, palierDuMonde } from "../lib/questPaliers.js";
@@ -133,7 +139,7 @@ function PizzaQuest() {
   const [prog, setProg] = useState(loadProg);
   const [quiz, setQuiz] = useState(null);
   const [mini, setMini] = useState(null); // { key, obj? } du mini-jeu ouvert, ou null
-  const [fete, setFete] = useState(null); // { palier, monde } — palier tout juste franchi
+  const [fete, setFete] = useState(null); // { palier, monde }, palier tout juste franchi
   /* Les CŒURS et l'XP ont été retirés (2026-07-28) : ils récompensaient le temps passé à
      cliquer, et le manque de cœur BLOQUAIT la révision — punir quelqu'un qui veut réviser est
      un contresens pédagogique. La progression se voit désormais aux CADRES, gagnés sur les
@@ -214,9 +220,30 @@ function PizzaQuest() {
    *   · la mémoire des fêtes, sinon les paliers déjà franchis ne se refêteraient jamais et on ne
    *     pourrait plus tester l'animation qu'on vient d'écrire.
    */
+  /* ─────────────────────────────────────────────────────────────────────────────────────────
+     LA REMISE À ZÉRO DE DÉVELOPPEMENT — pourquoi elle mérite mieux qu'un `confirm()`.
+
+     LE GARDE `DEV` CACHE LE BOUTON, PAS LA CONSÉQUENCE. `resetMyQuest()` efface la ligne dans
+     la BASE DISTANTE, celle-là même que l'école utilise : « développement » ne veut pas dire
+     « données jetables » sur ce projet. Un clic de trop et la progression réelle est perdue,
+     sans retour possible.
+
+     ET `window.alert` NE DIT RIEN DE SÛR. Mesuré dans un navigateur piloté : `alert()` rend la
+     main sans afficher, `confirm()` répond « Annuler » d'office, `prompt()` lève une erreur.
+     Une remise à zéro qui échoue s'annonçait donc par une boîte qui, selon le contexte, ne
+     paraît jamais — l'écran restait tel quel, et l'on croyait que ça avait marché. L'échec
+     s'affiche désormais DANS la page, où rien ne peut l'avaler.
+
+     Le mot à recopier reprend la mécanique de l'inventaire du coffre : sur une action qu'on ne
+     rattrape pas, un bouton se clique par réflexe, un mot non. */
+  const [razOuverte, setRazOuverte] = useState(false);
+  const [razSaisie, setRazSaisie] = useState("");
+  const [razErreur, setRazErreur] = useState(null);
+  const [razEnCours, setRazEnCours] = useState(false);
+  const razMotOk = razSaisie.trim().toUpperCase() === "EFFACER";
+
   async function remiseAZero() {
-    if (!window.confirm("DEBUG — effacer TOUTE ta progression Pizza Quest ?\n\n"
-      + "Chapitres, étoiles des mini-jeux et cadres de quête. Irréversible.")) return;
+    setRazEnCours(true); setRazErreur(null);
     try {
       await resetMyQuest();
       try {
@@ -225,7 +252,9 @@ function PizzaQuest() {
       } catch { /* navigation privée : la base est déjà vide, c'est l'essentiel */ }
       setProg({});
       setActive(null);
-    } catch (e) { window.alert("Échec de la remise à zéro : " + e.message); }
+      setRazOuverte(false); setRazSaisie("");
+    } catch (e) { setRazErreur(e.message); }
+    finally { setRazEnCours(false); }
   }
 
   const totalStars = useMemo(() => Object.values(prog).reduce((s, w) => s + Object.values(w).reduce((a, v) => a + v, 0), 0), [prog]);
@@ -262,22 +291,60 @@ function PizzaQuest() {
         <div>
           <div className="eyebrow">Espace stagiaire · entraînement</div>
           <h1 style={{ marginBottom: 4 }}>Pizza Quest</h1>
-          <p style={{ margin: 0 }}>Entraîne-toi pour le QCM de demain — choisis une formation sur la carte.</p>
+          <p style={{ margin: 0 }}>Entraîne-toi pour le QCM de demain, choisis une formation sur la carte.</p>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {/* Les étoiles restent : elles notent la réussite d'un chapitre. Ce sont l'XP et les
               cœurs qui ont disparu — ils comptaient le temps passé et rationnaient l'accès. */}
           <div className="pq-stat"><Icon name="star" size={15} fill="currentColor" aria-hidden="true" /><b>{totalStars}</b><span>étoiles</span></div>
+          {/* TOUT CE BLOC DISPARAÎT DU BUNDLE EN PRODUCTION : Vite remplace `import.meta.env.DEV`
+              par `false` à la compilation. Ce n'est pas un bouton caché derrière un rôle, c'est
+              un bouton qui n'existe pas chez le stagiaire — la modale comprise. */}
           {import.meta.env.DEV && (
-            <button type="button" className="pq-debug" onClick={remiseAZero}
-              title="Développement seulement — ce bouton n'existe pas en production">
-              <Icon name="trash" size={13} /> Debug : tout effacer
-            </button>
+            <>
+              <button type="button" className="pq-debug"
+                onClick={() => { setRazOuverte(true); setRazSaisie(""); setRazErreur(null); }}
+                title="Développement seulement, ce bouton n'existe pas en production">
+                <Icon name="trash" size={13} /> Debug : tout effacer
+              </button>
+              {razOuverte && createPortal(
+                <div className="overlay" onClick={() => setRazOuverte(false)}>
+                  <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+                    <div className="mhead">
+                      <h3>Effacer toute ta progression ?</h3>
+                      <button className="x" onClick={() => setRazOuverte(false)} aria-label="Fermer">
+                        <Icon name="x" size={16} /></button>
+                    </div>
+                    <div className="mbody">
+                      <p className="lead" style={{ marginTop: 0 }}>
+                        Chapitres, étoiles des mini-jeux et cadres de quête : tout part, <b>dans la
+                        base</b>, et rien ne se récupère. Outil de développement — mais la base,
+                        elle, est la vraie.
+                      </p>
+                      {razErreur && <StatusMessage type="error" message={`Échec de la remise à zéro : ${razErreur}`} />}
+                      <label className="field confirm-mot" style={{ marginBottom: 0 }}>
+                        <span>Recopiez <b>EFFACER</b> pour confirmer</span>
+                        <input className="inp" autoFocus value={razSaisie} spellCheck="false"
+                          onChange={(e) => setRazSaisie(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter" && razMotOk && !razEnCours) remiseAZero(); }} />
+                      </label>
+                    </div>
+                    <div className="mfoot">
+                      <button className="btn ghost" onClick={() => setRazOuverte(false)}>Annuler</button>
+                      <button className="btn danger" disabled={!razMotOk || razEnCours} onClick={remiseAZero}>
+                        <Icon name="trash" size={15} /> {razEnCours ? "Effacement…" : "Tout effacer"}
+                      </button>
+                    </div>
+                  </div>
+                </div>,
+                document.body
+              )}
+            </>
           )}
         </div>
       </div>
       <p className="hint" style={{ marginTop: -6 }}>
-        Questions du manuel — QCM, vrai/faux et associations. Chaque bonne réponse s'accompagne
+        Questions du manuel, QCM, vrai/faux et associations. Chaque bonne réponse s'accompagne
         de son explication : c'est là que le chapitre se révise.
       </p>
 
@@ -303,6 +370,10 @@ function PizzaQuest() {
       {mini?.key === "simulateur" && <SimulateurPizza objectifId={mini.obj} onClose={() => setMini(null)} onFinish={(stars) => finishMini("simulateur", stars)} />}
       {mini?.key === "piege" && <CommandePiege onClose={() => setMini(null)} onFinish={(stars) => finishMini("piege", stars)} />}
       {mini?.key === "prix" && <JustePrix onClose={() => setMini(null)} onFinish={(stars) => finishMini("prix", stars)} />}
+      {mini?.key === "substitutions" && <Substitutions onClose={() => setMini(null)} onFinish={(stars) => finishMini("substitutions", stars)} />}
+      {mini?.key === "pate" && <CompleterPate onClose={() => setMini(null)} onFinish={(stars) => finishMini("pate", stars)} />}
+      {mini?.key === "service" && <LeService onClose={() => setMini(null)} onFinish={(stars) => finishMini("service", stars)} />}
+      {mini?.key === "accords" && <AccordSaveurs onClose={() => setMini(null)} onFinish={(stars) => finishMini("accords", stars)} />}
 
       {fete && <FetePalier palier={fete.palier} monde={fete.monde} onClose={() => setFete(null)} />}
     </>
@@ -348,7 +419,7 @@ function FetePalier({ palier, monde, onClose }) {
               se découvre par hasard dans le profil, des semaines plus tard. */}
           <p className="pq-fete-gain">
             <Icon name="star" size={14} fill="currentColor" /> Cadre débloqué : <b>{f.cadre}</b>
-            <span className="hint"> — à porter depuis ton profil</span>
+            <span className="hint">à porter depuis ton profil</span>
           </p>
           <button className="btn primary" onClick={onClose} autoFocus>Continuer</button>
         </div>
@@ -538,14 +609,30 @@ const GAME_PIEGE = { key: "piege", ic: "shield", tint: "var(--red)",
   label: "La commande piège", sub: "Allergènes et bon réflexe" };
 const GAME_PRIX = { key: "prix", ic: "coins", tint: "var(--gold, #e0ac48)",
   label: "Le juste prix", sub: "Coût matière et marge" };
+/* « La substitution » — le calcul de la fiche technique (manuel p.32). Les valeurs viennent de
+   `SUBSTITUTIONS` (lib/dough.js), aucune n'est inventée. */
+const GAME_SUBS = { key: "substitutions", ic: "calculator", tint: "var(--blue, #3b6fd4)",
+  label: "La substitution", sub: "Blé, bassinage, grammes" };
+/* « Complète la pâte » — la fiche d'empâtement en grammes. Pourcentages de `PRESETS`, dosage de
+   la levure de `LEVURE_TABLE` (manuel p.21) : rien d'inventé ici non plus. */
+const GAME_PATE = { key: "pate", ic: "wheat", tint: "var(--gold, #e0ac48)",
+  label: "Complète la pâte", sub: "Eau, sel, huile, levure" };
+/* « Le service » — remonter du nombre de pizzas au poids de farine (repère du manuel :
+   1 unité de calcul = 1 kg de farine ≈ 6 pâtons de 280 g). Le pendant de « Complète la pâte ». */
+const GAME_SERV = { key: "service", ic: "users", tint: "var(--blue, #3b6fd4)",
+  label: "Le service", sub: "Unités de calcul" };
+/* « L'accord des saveurs » — les affinités déclarées dans `garnitures.js`. */
+const GAME_ACC = { key: "accords", ic: "heart", tint: "var(--ember2)",
+  label: "L'accord des saveurs", sub: "Ce que l'école associe" };
 const GAME_SOON = { key: null, ic: "clock", tint: "var(--dim)",
   label: "Chrono Rush", sub: "Bientôt", soon: true };
-const ARCADE = [GAME_CONS, GAME_SIM, GAME_PIEGE, GAME_PRIX, GAME_SOON];
+const ARCADE = [GAME_CONS, GAME_SIM, GAME_PIEGE, GAME_PRIX, GAME_SUBS, GAME_PATE,
+  GAME_SERV, GAME_ACC, GAME_SOON];
 
 function Arcade({ prog, onGame }) {
   return (
     <div className="pq-arcade">
-      <div className="pq-games-t">L'arcade — les défis de l'école</div>
+      <div className="pq-games-t">L'arcade, les défis de l'école</div>
       <div className="pq-minis">
         {ARCADE.map((g, i) => {
           /* LE RECORD PERSONNEL, et lui seul. Un classement nominatif entre stagiaires ferait,
@@ -561,15 +648,22 @@ function Arcade({ prog, onGame }) {
               <span className="pq-mini-txt">
                 <b>{g.label}</b>
                 <span className="pq-mini-sub">{g.sub}</span>
-                {!g.soon && (
+                {/* TROIS ÉTOILES VIDES DISENT « TU AS FAIT ZÉRO », ce qui est faux : la personne
+                    n'a pas joué. Les deux états se ressemblaient pourtant — mêmes étoiles, seul
+                    un mot gris de 10,5 px les séparait — alors que « jamais joué » est le seul
+                    qui appelle un geste. Il a donc sa propre forme, et le mot suffit à le dire :
+                    la couleur n'y est qu'un renfort. */}
+                {!g.soon && (record > 0 ? (
                   <span className="pq-mini-record" aria-label={`Ton record : ${record} étoile${record > 1 ? "s" : ""} sur 3`}>
                     {[0, 1, 2].map((n) => (
                       <Icon key={n} name="star" size={11} fill={n < record ? "currentColor" : "none"}
                         className={n < record ? "on" : ""} />
                     ))}
-                    <span className="hint">{record ? "ton record" : "jamais joué"}</span>
+                    <span className="hint">ton record</span>
                   </span>
-                )}
+                ) : (
+                  <span className="pq-mini-neuf">Jamais joué</span>
+                ))}
               </span>
             </Balise>
           );
@@ -590,7 +684,7 @@ function FCard({ w, prog, onPick }) {
   const manque = w.prereqMissing || [];
   const tous = w.prereqAll || [];
   const infobulle = tous.length
-    ? `Prérequis :\n${tous.map((p) => `${p.done ? "✓" : "✗"} ${p.code} — ${p.title}`).join("\n")}`
+    ? `Prérequis :\n${tous.map((p) => `${p.done ? "✓" : "✗"} ${p.code}, ${p.title}`).join("\n")}`
     : null;
   const raison = manque.length
     ? `À terminer d'abord : ${manque.map((m) => m.code).join(", ")}`
@@ -736,8 +830,7 @@ function WorldView({ world, prog, onBack, onChapter }) {
       {!chaptersLoading(world) && chapters.length === 0 && (
         <p className="hint" style={{ margin: "10px 0 16px" }}>
           <Icon name="clock" size={13} style={{ verticalAlign: "-2px" }} />{" "}
-          Les questions de cette formation ne sont pas encore en ligne. Reviens plus tard —
-          en attendant, les défis ci-dessous sont ouverts.
+          Les questions de cette formation ne sont pas encore en ligne. Reviens plus tard, en attendant, les défis ci-dessous sont ouverts.
         </p>
       )}
       <div className="pq-path-wrap">
@@ -782,8 +875,8 @@ function WorldView({ world, prog, onBack, onChapter }) {
             "--len": `${Math.hypot(ECART_X, dy).toFixed(1)}px`,
             "--ang": `${(Math.atan2(-dy, -ECART_X) * 180 / Math.PI).toFixed(2)}deg`,
           };
-          const titre = parfait ? `${ch.title} — sans faute (3 étoiles sur 3)`
-            : partiel ? `${ch.title} — ${stars} étoile${stars > 1 ? "s" : ""} sur 3, retente pour les 3`
+          const titre = parfait ? `${ch.title}, sans faute (3 étoiles sur 3)`
+            : partiel ? `${ch.title}, ${stars} étoile${stars > 1 ? "s" : ""} sur 3, retente pour les 3`
               : encours ? ch.title
                 : "Termine les chapitres précédents";
           return (
@@ -1051,7 +1144,7 @@ function QuizModal({ world, data, onClose, onFinish, onRetry }) {
                 {q.expl && (
                   <p className="pq-expl">
                     <Icon name="book-open" size={13} />
-                    <span>{q.expl}{q.src ? <em> — {q.src}</em> : null}</span>
+                    <span>{q.expl}{q.src ? <em>, {q.src}</em> : null}</span>
                   </p>
                 )}
               </div>
@@ -1071,7 +1164,7 @@ function QuizModal({ world, data, onClose, onFinish, onRetry }) {
             <p style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>{correct}/{total} bonnes réponses</p>
             <p className="hint" style={{ marginTop: 0 }}>
               {stars >= 2 ? "Excellent, prêt pour le QCM !"
-                : stars === 1 ? "Bien — retente pour 3 étoiles."
+                : stars === 1 ? "Bien, retente pour 3 étoiles."
                   : "Il faut au moins une étoile (la moitié de bonnes réponses) pour valider le chapitre. Reprends-le dans le manuel et réessaie."}
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12 }}>

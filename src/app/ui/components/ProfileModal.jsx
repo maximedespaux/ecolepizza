@@ -6,6 +6,13 @@ import { initials, colorOf } from "../lib/format.js";
 import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
 import { CADRES, cadreFor, cadrePossede, cadrePorte, cadreDeQuest, EXPLOITS_QUEST, adopterCadreServeur, cadreClass, cadreStyle, cadreValeur, parseCadre, estCadreQuest, getCadreChoisi, setCadreChoisi } from "../lib/cadres.js";
 import { useEchap } from "../lib/useEchap.js";
+import { getMyConsents, setMyConsent } from "../api/apiClient.js";
+/* L'HEURE N'EST PAS UN DÉTAIL. Accepter puis se rétracter le même jour donne deux lignes que
+   seule l'heure distingue : sans elle, l'écran affirme « votre réponse du 03/08 » pour deux
+   réponses opposées, et le registre devient inutilisable là où il sert le plus. `dateHeure`
+   découpe la chaîne du serveur sans passer par `new Date()`, qui la retraduirait dans le
+   fuseau du navigateur — soit une heure différente de celle qui est en base. */
+import { dateHeure } from "../lib/format.js";
 
 /**
  * Profil stagiaire, en trois onglets :
@@ -16,6 +23,69 @@ import { useEchap } from "../lib/useEchap.js";
 const CIVILITIES = ["", "M.", "Mme"];
 // Fonds proposés (charte pizza) — plus le sélecteur libre pour une couleur personnalisée.
 const PALETTE = ["#dc3e37", "#ff6900", "#fcb900", "#2f9e6f", "#3aa0e0", "#2c3371", "#7b3f9e", "#8a5a2b", "#e0533e", "#111827"];
+
+/**
+ * LE CHEMIN DU RETOUR — se rétracter doit être aussi simple qu'accepter (art. 7.3).
+ *
+ * C'est la contrepartie de la règle « on ne redemande pas après un refus » : puisque la fenêtre ne
+ * revient plus, il faut un endroit stable où changer d'avis, DANS LES DEUX SENS. Quelqu'un qui a
+ * refusé doit pouvoir accepter plus tard sans qu'on l'ait harcelé entre-temps.
+ *
+ * Chaque bascule AJOUTE une ligne au registre : l'historique daté est ce qui permettra de
+ * démontrer qu'une transmission passée était licite au moment où elle a eu lieu.
+ */
+function ConsentementsBloc() {
+  const [liste, setListe] = useState(null);
+  const [busy, setBusy] = useState(null);
+
+  useEffect(() => {
+    getMyConsents().then((r) => setListe(Array.isArray(r?.data) ? r.data : [])).catch(() => setListe([]));
+  }, []);
+
+  // `null` : pas encore chargé. `[]` : rien à proposer (migration non jouée, ou pas de fiche).
+  if (!liste || !liste.length) return null;
+
+  const basculer = async (f, valeur) => {
+    setBusy(f.cle);
+    try {
+      await setMyConsent(f.cle, valeur);
+      /* ON RELIT LE REGISTRE au lieu de rapiécer l'état local. Une première version ne changeait
+         que `accorde` : l'écran affichait alors la NOUVELLE réponse sous l'ANCIENNE date, ce qui,
+         sur une preuve de consentement, est un mensonge — et précisément le genre de ligne qu'on
+         irait citer pour dater une rétractation. L'horodatage vient du SERVEUR, jamais de
+         l'horloge du navigateur, qui peut être fausse ou simplement dans un autre fuseau. */
+      const r = await getMyConsents();
+      if (Array.isArray(r?.data)) setListe(r.data);
+    } catch { /* l'écran garde l'ancienne valeur : mieux vaut ne rien changer que mentir */ }
+    finally { setBusy(null); }
+  };
+
+  return (
+    <div className="consent-bloc">
+      <div className="consent-bloc-t">Confidentialité</div>
+      {liste.map((f) => (
+        <div key={f.cle} className="consent-ligne">
+          <div>
+            <b>{f.titre}</b>
+            <span className="hint">{f.formulation}</span>
+            {f.decide_at && (
+              <span className="hint">
+                Votre réponse du {dateHeure(f.decide_at)} :
+                <b> {f.accorde ? "accepté" : "refusé"}</b>
+              </span>
+            )}
+          </div>
+          <span className="seg" style={{ flex: "none" }}>
+            <button className={"seg-btn" + (f.accorde === false ? " on" : "")}
+              disabled={busy === f.cle} onClick={() => basculer(f, false)}>Refuser</button>
+            <button className={"seg-btn" + (f.accorde === true ? " on" : "")}
+              disabled={busy === f.cle} onClick={() => basculer(f, true)}>Accepter</button>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function ProfileModal({ onClose }) {
   useEchap(onClose);
@@ -154,7 +224,7 @@ export default function ProfileModal({ onClose }) {
             <ProfilTab avatar={avatar} choose={choose} chooseColor={chooseColor} cadre={cadre} palier={palier} suivant={suivant} pct={pct} done={done} enrolled={enrolled} attribues={attribues} quest={quest} exploits={exploits} choisirCadre={choisirCadre} />
           )}
           {tab === "infos" && <InfosTab onSaved={refreshUser} />}
-          {tab === "visibilite" && <VisibiliteTab who={who} />}
+          {tab === "visibilite" && <><VisibiliteTab who={who} /><ConsentementsBloc /></>}
           {tab === "compte" && <CompteTab currentEmail={user?.email} onEmailChanged={refreshUser} />}
         </div>
         <div className="mfoot">
@@ -233,7 +303,7 @@ function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, d
                 className={`pf-cadre${actif ? " on" : ""}${c.exclusif ? " exclusif" : ""}`}
                 disabled={!possede}
                 onClick={() => choisirCadre(cle)}
-                title={[c.titre, possede ? c.desc || c.nom : (c.condition || c.desc)].filter(Boolean).join(" — ")}>
+                title={[c.titre, possede ? c.desc || c.nom : (c.condition || c.desc)].filter(Boolean).join("-")}>
                 <span className={`pf-cadre-apercu ${possede && c.id !== "aucun" ? `cadre cadre-${c.id}` : ""}`}
                   style={cadreStyle(cle)}>
                   <span aria-hidden="true">{avatar ? avatar.emoji : "🍕"}</span>
@@ -317,7 +387,7 @@ function InfosTab({ onSaved }) {
       <p className="hint" style={{ margin: "0 0 12px" }}>Tes coordonnées. Toute modification est visible par ton organisme de formation.</p>
       <div className="grid cols-2" style={{ gap: 12 }}>
         <div className="field"><label>Civilité</label>
-          <select className="inp" value={f.civility || ""} onChange={set("civility")}>{CIVILITIES.map((c) => <option key={c} value={c}>{c || "—"}</option>)}</select></div>
+          <select className="inp" value={f.civility || ""} onChange={set("civility")}>{CIVILITIES.map((c) => <option key={c} value={c}>{c || "-"}</option>)}</select></div>
         <div className="field"><label>Téléphone</label><input className="inp" value={f.phone || ""} onChange={set("phone")} /></div>
         <div className="field"><label>Prénom</label><input className="inp" value={f.first_name || ""} onChange={set("first_name")} /></div>
         <div className="field"><label>Nom</label><input className="inp" value={f.last_name || ""} onChange={set("last_name")} /></div>
@@ -359,7 +429,7 @@ function VisibiliteTab({ who }) {
     <label className="vis-row">
       <span style={{ flex: 1, minWidth: 0 }}>
         <b style={{ fontSize: 13.5 }}>{label}</b>
-        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{value || "—"}</span>
+        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{value || "-"}</span>
       </span>
       <input type="checkbox" checked={!!vis[k]} onChange={() => toggle(k)} />
     </label>

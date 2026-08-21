@@ -92,7 +92,7 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
           )}
           {doc && doc.status === "SIGNE" && (
             <div style={{ padding: "8px 14px", fontSize: 12, background: "rgba(22,163,74,.10)", borderBottom: "1px solid rgba(22,163,74,.30)" }}>
-              <b style={{ color: "#16a34a" }}><Icon name="check" size={13} style={{ verticalAlign: "text-bottom" }} /> Signé électroniquement</b> par <b>{doc.signer_name || "—"}</b>
+              <b style={{ color: "#16a34a" }}><Icon name="check" size={13} style={{ verticalAlign: "text-bottom" }} /> Signé électroniquement</b> par <b>{doc.signer_name || "-"}</b>
               {doc.signed_at ? ` le ${new Date(doc.signed_at).toLocaleString("fr-FR")}` : ""}
               {doc.signer_ip ? ` · IP ${doc.signer_ip}` : ""}
               {doc.signed_hash && (

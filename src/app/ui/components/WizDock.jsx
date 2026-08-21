@@ -15,7 +15,7 @@ export default function WizDock({ visual, title, sub, target = "wiz-result" }) {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   return (
-    <button type="button" className="wiz-dock" onClick={open} aria-label={`${title} — voir le détail`}>
+    <button type="button" className="wiz-dock" onClick={open} aria-label={`${title}, voir le détail`}>
       {visual && <span className="wiz-dock-v" aria-hidden="true">{visual}</span>}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span className="wiz-dock-t">{title}</span>

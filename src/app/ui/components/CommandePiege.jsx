@@ -5,6 +5,7 @@ import Coeurs from "./Coeurs.jsx";
 import { COEURS_MAX, encoreEnVie } from "../lib/coeurs.js";
 import { GARN_BASES, GARN_PRODUITS, GARN_DAIRY } from "../lib/garnitures.js";
 import { ALLERGENES, nomAllergene, verdict } from "../lib/allergenes.js";
+import { SUBSTITUTIONS } from "../lib/dough.js";
 
 /**
  * LA COMMANDE PIÈGE — deux minutes au comptoir, les allergènes en pleine bourre.
@@ -69,6 +70,23 @@ const tireDans = (l) => l[alea(l.length)];
  * `garnitures.js` porte déjà une table d'affinités curée (`pairs`) : on s'en sert pour choisir la
  * suite, et on ne retombe au hasard que lorsqu'elle ne propose rien de disponible.
  */
+/* ─────────────────────────────────────────────────────────────────────────────────────────
+   LES FARINES DE LA PÂTE — tirées de `SUBSTITUTIONS` (lib/dough.js, manuel p.32), jamais
+   recopiées ici. On écarte les blés T80/T110/T150 : ce sont des farines de blé, elles ne
+   changent rien à la lecture des allergènes et alourdiraient la carte pour rien.
+
+   LA FARINE ENTRE DANS `ing`, avec le reste de la composition. C'est ce qui fait que
+   `verdict()` la prend en compte PARTOUT — question simple, retrait, comparaison — sans qu'un
+   seul appel change. La sortir dans un champ à part aurait obligé à modifier chaque site
+   d'appel, et il aurait suffi d'en oublier un pour que le jeu marque faux un raisonnement juste.
+   Le drapeau `farine` ne sert qu'à l'affichage et au choix de ce qu'on propose de retirer.
+
+   DEUX PIZZAS SUR CINQ, PAS TOUTES : une carte où chaque pâte est spéciale ne ressemble à
+   aucune pizzeria, et l'information cesse de se remarquer. */
+const FARINES = SUBSTITUTIONS.filter((f) => !f.wheat)
+  .map((f) => ({ cle: `farine_${f.key}`, label: `Farine de ${f.label.toLowerCase()}`,
+    court: f.label, farine: true }));
+
 function composer(nom) {
   const base = tireDans(BASES);
   const choisies = [];
@@ -79,7 +97,8 @@ function composer(nom) {
     const amies = dispo().filter((g) => (dernier.pairs || []).includes(g.cle));
     choisies.push(amies.length ? tireDans(amies) : tireDans(dispo()));
   }
-  return { nom, ing: [base, ...choisies] };
+  const farine = alea(100) < 40 ? tireDans(FARINES) : null;
+  return { nom, farine, ing: [...(farine ? [farine] : []), base, ...choisies] };
 }
 
 /* Dix noms de maison, et AUCUN ne nomme un ingrédient ou un style. « La Marine » tirée au sort
@@ -118,48 +137,48 @@ const REPONSES = [
 /* LES PIÈGES DE SERVICE — ils ne se lisent pas sur la carte, et c'est pour cela qu'ils comptent.
    Même grammaire à trois réponses, tirés dans le même flux. Chacun porte sa source de manuel. */
 const PIEGES = [
-  { q: "« Je suis cœliaque. » La Marinara n'a ni fromage ni charcuterie — ça passe ?", rep: "non",
+  { q: "« Je suis cœliaque. » La Marinara n'a ni fromage ni charcuterie, ça passe ?", rep: "non",
     pourquoi: "Le gluten EST la pâte : aucune pizza de la carte n'en est exempte. Et même avec une "
       + "farine sans gluten, un four et un plan de travail couverts de farine de blé exposent à la "
       + "contamination croisée.",
-    source: "Manuel — Les allergènes · Points de vigilance" },
+    source: "Manuel : Les allergènes · Points de vigilance" },
   { q: "Tu viens de trancher du saumon sur ta planche. Une Margherita pour un allergique au poisson ?", rep: "non",
-    pourquoi: "C'est le cas d'école du manuel — « attention à la planche qui a servi au poisson juste "
+    pourquoi: "C'est le cas d'école du manuel, « attention à la planche qui a servi au poisson juste "
       + "avant ». Une pizza sans poisson préparée sur une planche à poisson contient du poisson, et "
       + "un rinçage n'enlève pas une protéine.",
-    source: "Manuel — Les allergènes · exemple de la Reine" },
+    source: "Manuel : Les allergènes · exemple de la Reine" },
   { q: "« Votre pâte à la châtaigne, c'est bien sans gluten ? »", rep: "non",
     pourquoi: "Une substitution remplace une PART du poids de farine de blé, à poids total constant. "
       + "Le blé reste majoritaire : la pâte contient toujours du gluten. Confondre substitution et "
       + "éviction est l'erreur qui envoie un cœliaque aux urgences.",
-    source: "Manuel — Les substitutions · Définition" },
+    source: "Manuel : Les substitutions · Définition" },
   { q: "« Vous avez la liste des allergènes ? » Tu l'as, dans un classeur derrière le comptoir.", rep: "oui",
-    pourquoi: "Un document écrit, clair et accessible suffit — carte, tableau, classeur ou support "
+    pourquoi: "Un document écrit, clair et accessible suffit, carte, tableau, classeur ou support "
       + "numérique. Il faut en revanche qu'un affichage dise qu'il existe : « La liste des allergènes "
       + "est disponible sur demande. »",
-    source: "Manuel — Les allergènes · Modalités d'affichage" },
+    source: "Manuel : Les allergènes · Modalités d'affichage" },
   { q: "Un extra embauché ce matin prend seul une commande « allergie arachide ». Tu le laisses faire ?", rep: "non",
     pourquoi: "« Formation des équipes » et « personnel formé » sont deux points distincts du manuel. "
-      + "Une liste ne remplace pas quelqu'un qui sait la lire — on reprend la commande, et on forme.",
-    source: "Manuel — Les allergènes · Bonnes pratiques" },
+      + "Une liste ne remplace pas quelqu'un qui sait la lire : on reprend la commande, et on forme.",
+    source: "Manuel : Les allergènes · Bonnes pratiques" },
   { q: "Ton fournisseur de mozzarella a changé le mois dernier. Ta fiche allergènes date de l'an passé.", rep: "non",
     pourquoi: "« Vérification des fournisseurs » et « mise à jour régulière » sont deux bonnes "
       + "pratiques du manuel, et elles vont ensemble : une fiche juste l'an dernier peut être fausse "
-      + "aujourd'hui. Une information périmée est pire qu'absente — on s'y fie.",
-    source: "Manuel — Les allergènes · Bonnes pratiques" },
+      + "aujourd'hui. Une information périmée est pire qu'absente : on s'y fie.",
+    source: "Manuel : Les allergènes · Bonnes pratiques" },
   { q: "Ta fiche allergènes couvre les pizzas. Le client commande un tiramisu maison.", rep: "non",
     pourquoi: "« Tous les plats concernés », dit le manuel. Desserts, entrées, sauces et boissons "
       + "comprises : un dessert maison porte typiquement œufs, lait et gluten, et l'oublier parce "
       + "que ce n'est pas une pizza est l'angle mort classique.",
-    source: "Manuel — Les allergènes · Points de vigilance" },
+    source: "Manuel : Les allergènes · Points de vigilance" },
   { q: "« C'est bon, je tolère un peu de lait. » Il te demande la pizza aux quatre fromages.", rep: "verifier",
-    pourquoi: "Ce n'est pas au professionnel d'évaluer le seuil de tolérance de quelqu'un — mais ce "
+    pourquoi: "Ce n'est pas au professionnel d'évaluer le seuil de tolérance de quelqu'un, mais ce "
       + "n'est pas non plus à lui de refuser une commande que le client assume. On l'informe "
       + "précisément de ce que contient le plat, et il décide en connaissance de cause.",
-    source: "Manuel — Les allergènes · Modalités d'affichage (information du client)" },
+    source: "Manuel : Les allergènes · Modalités d'affichage (information du client)" },
 ];
 
-const DUREE = 120;         // secondes — deux minutes de service
+const DUREE = 120;         // secondes, deux minutes de service
 
 /** Une carte de dix pizzas, composée pour ce service. */
 const dresserCarte = () => NOMS.map((n) => composer(n));
@@ -207,7 +226,13 @@ function questionRetrait(carte) {
   }
   if (!candidats.length) return null;
   const { pizza, c, causes } = tireDans(candidats);
-  const retire = tireDans(causes);                       // l'ingrédient qu'on propose d'ôter
+  /* ON NE PROPOSE JAMAIS D'ÔTER LA FARINE : « sans la farine de soja, ça passe ? » n'est pas
+     une question de comptoir — la pâte est faite depuis ce matin. En revanche la farine
+     RESTE dans la composition, donc retirer une garniture ne suffira pas si c'est elle qui
+     porte l'allergène. C'est précisément la leçon qu'on veut : ce qu'on voit n'est pas tout. */
+  const otables = causes.filter((l) => !pizza.ing.some((i) => i.farine && i.label === l));
+  if (!otables.length) return null;
+  const retire = tireDans(otables);                      // l'ingrédient qu'on propose d'ôter
   const restant = pizza.ing.filter((i) => i.label !== retire);
   const apres = verdict(restant, c.cle);
   return {
@@ -216,7 +241,7 @@ function questionRetrait(carte) {
     pourquoi: apres.rep === "oui"
       ? `Oui : ${retire.toLowerCase()} était le seul à en porter dans ${pizza.nom}.`
       : apres.rep === "non"
-        ? `Non — il reste ${apres.causes.join(", ").toLowerCase()}. Retirer ce qu'on voit ne suffit `
+        ? `Non, il reste ${apres.causes.join(", ").toLowerCase()}. Retirer ce qu'on voit ne suffit `
           + "pas : c'est la composition entière qu'il faut relire, base comprise."
         : `Il reste ${apres.causes.join(", ").toLowerCase()}, dont ça dépend du fournisseur.`,
     source: "Composition de la carte",
@@ -247,7 +272,7 @@ function questionComparaison(carte) {
     pourquoi: rep === "aucune"
       ? `Aucune des deux : ${a.nom} porte ${verdict(a.ing, c.cle).causes.join(", ").toLowerCase()}, `
         + `${b.nom} porte ${verdict(b.ing, c.cle).causes.join(", ").toLowerCase()}.`
-      : `${rep === "a" ? a.nom : b.nom} — l'autre porte `
+      : `${rep === "a" ? a.nom : b.nom}, l'autre porte `
         + `${verdict(rep === "a" ? b.ing : a.ing, c.cle).causes.join(", ").toLowerCase()}.`,
     source: "Composition de la carte",
   };
@@ -274,9 +299,9 @@ function tirer(carte) {
     pourquoi: rep === "non" ? `${pizza.nom} porte ${cause}.`
       : rep === "verifier"
         ? `${cause[0].toUpperCase()}${cause.slice(1)} : ça dépend du fournisseur. Le manuel écrit `
-          + "« SOUVENT des sulfites » — on vérifie la fiche avant de répondre."
-        : `Rien dans ${pizza.nom} ne porte cet allergène — la composition est sous tes yeux.`,
-    source: rep === "verifier" ? "Manuel — Les 14 allergènes (sulfites)" : "Composition de la carte",
+          + "« SOUVENT des sulfites » : on vérifie la fiche avant de répondre."
+        : `Rien dans ${pizza.nom} ne porte cet allergène, la composition est sous tes yeux.`,
+    source: rep === "verifier" ? "Manuel : Les 14 allergènes (sulfites)" : "Composition de la carte",
   };
 }
 
@@ -297,7 +322,7 @@ export default function CommandePiege({ onClose, onFinish }) {
   const [reste, setReste] = useState(DUREE);
   const [carte, setCarte] = useState(dresserCarte);
   const [q, setQ] = useState(null);
-  const [flash, setFlash] = useState(null);     // { juste, pourquoi, source } — retour bref
+  const [flash, setFlash] = useState(null);     // { juste, pourquoi, source }, retour bref
   const [justes, setJustes] = useState(0);
   const [rates, setRates] = useState([]);       // les erreurs, pour le débriefing final
   /* Les cœurs sont tenus en REF autant qu'en état : le compte doit être lu dans le `setTimeout`
@@ -372,7 +397,7 @@ export default function CommandePiege({ onClose, onFinish }) {
           <div className="mbody" style={{ textAlign: "center", padding: "22px 20px" }}>
             <p style={{ fontSize: 15, fontWeight: 600, margin: "0 0 6px" }}>Deux minutes au comptoir.</p>
             <p className="hint" style={{ margin: "0 0 4px" }}>
-              Un client annonce sa contrainte, tu réponds. La carte reste ouverte à côté — mais elle
+              Un client annonce sa contrainte, tu réponds. La carte reste ouverte à côté, mais elle
               ne répond pas à tout : la contamination croisée et les sulfites ne s'y lisent pas.
             </p>
             <p className="hint" style={{ margin: "0 0 18px" }}>
@@ -429,12 +454,38 @@ export default function CommandePiege({ onClose, onFinish }) {
                 {carte.map((p) => (
                   <li key={p.nom} className={(q.choix || []).some((c) => c.label === p.nom)
                     || (q.pizza && q.pizza.nom === p.nom) ? "on" : ""}>
-                    <b>{p.nom}</b>
-                    <span>{p.ing.map((i) => i.label).join(", ")}</span>
+                    {/* LA FARINE À CÔTÉ DU NOM, PAS DANS LA GARNITURE : elle appartient à la
+                        pâte, pas à ce qu'on pose dessus. Noyée dans la liste des ingrédients,
+                        elle se lirait comme une garniture de plus — or c'est justement la
+                        distinction qu'on enseigne. Le pictogramme d'épi la fait repérer sans
+                        lire, ce qui compte à deux minutes de chrono.
+                        DANS le `<b>`, et non à côté : le `<li>` est une colonne flex, où un
+                        frère s'étire sur toute la largeur et retombe sous le nom. */}
+                    <b>{p.nom}
+                      {p.farine && (
+                        <span className="cp-farine" title={p.farine.label}>
+                          <Icon name="wheat" size={10} aria-hidden="true" /> {p.farine.court}
+                        </span>
+                      )}
+                    </b>
+                    <span>{p.ing.filter((i) => !i.farine).map((i) => i.label).join(", ")}</span>
                   </li>
                 ))}
               </ul>
-              <p className="hint">Toutes les pâtes contiennent du gluten.</p>
+              {/* ————— LE LEXIQUE —————
+                  Ce que la carte ne peut pas dire d'elle-même, et qui décide de la réponse.
+                  Il tient sous la carte plutôt qu'ailleurs : c'est en la lisant qu'on se pose
+                  la question. */}
+              <dl className="cp-lexique">
+                <dt><Icon name="wheat" size={10} aria-hidden="true" /> Farine de substitution</dt>
+                <dd>Elle remplace une <b>part</b> du blé, à poids constant. Le blé reste
+                  majoritaire : <b>toutes les pâtes contiennent du gluten</b>, celles-ci comprises.</dd>
+                <dt>Soja</dt>
+                <dd>C'est le seul de ces mélanges qui ajoute un des 14 allergènes.</dd>
+                <dt>Châtaigne</dt>
+                <dd>Malgré son nom, ce n'est <b>pas</b> un fruit à coque au sens de la
+                  réglementation — la liste en nomme huit, et elle n'y est pas.</dd>
+              </dl>
             </aside>
           </div>
         )}

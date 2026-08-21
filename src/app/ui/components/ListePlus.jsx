@@ -14,8 +14,8 @@ export default function ListePlus({ montres, total, reste, onPlus }) {
   return (
     <div className="liste-plus">
       <span>
-        <b className="tnum">{montres}</b> affichés sur <b className="tnum">{total}</b>
-        {" — précisez la recherche pour trouver plus vite."}
+        <b className="chiffres">{montres}</b> affichés sur <b className="chiffres">{total}</b>
+        {"précisez la recherche pour trouver plus vite."}
       </span>
       <button type="button" className="btn sm" onClick={onPlus}>
         Afficher {Math.min(PAS, reste)} de plus

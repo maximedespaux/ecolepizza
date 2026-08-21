@@ -1,5 +1,5 @@
 /* =====================================================================
-   Design system Impasto — charte École Pizza
+   Design system Impastio — charte École Pizza
    Bleu marine (structure) + rouge tomate (accent), police Mulish.
    Thème clair / sombre via [data-theme] sur <html>.
    ===================================================================== */
@@ -240,7 +240,14 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .side-foot{width:100%;padding:11px 16px;display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;cursor:pointer;color:inherit;font:inherit}
 .side-foot:hover,.side-foot.open{background:var(--hover,rgba(0,0,0,.04))}
 .side-foot .chev{margin-left:auto;color:var(--dim);display:grid;place-items:center}
-.avatar{width:34px;height:34px;border-radius:50%;background:var(--grad-ember);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;flex:0 0 34px}
+/* `flex-shrink:0` ET NON `flex:0 0 34px`. Dans un conteneur flex en ligne, `flex-basis` PASSE
+   DEVANT `width` : la base de 34px écrasait donc silencieusement tout redimensionnement posé en
+   style inline, pendant que la hauteur, elle, obéissait. Un avatar demandé en 44 sortait en
+   34×44 — et un `border-radius:50%` sur un rectangle ne fait pas un rond, il fait une ellipse.
+   Trois écrans avaient déjà contourné le problème en réécrivant `flex` sur place, chacun de son
+   côté ; c'était traiter le symptôme trois fois. Sans base, `width` gouverne — 34px par défaut,
+   comme avant, et la valeur inline quand il y en a une. */
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--grad-ember);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0}
 .side-foot .who{font-size:12.5px;font-weight:600;line-height:1.2}.side-foot .role{font-size:11px;color:var(--dim)}
 /* Menu profil (au-dessus du pied de barre) */
 .profile-menu{position:absolute;left:12px;right:12px;bottom:calc(100% + 6px);background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:6px;z-index:40;display:flex;flex-direction:column;gap:2px}
@@ -830,6 +837,19 @@ tbody tr:last-child td{border-bottom:none}
 .cal-evt-ghost{visibility:hidden;background:none;cursor:default;pointer-events:none}
 .cal-evt-ghost:hover{filter:none;transform:none}
 .cal-evt .n{margin-left:auto;background:rgba(255,255,255,.28);border-radius:99px;padding:0 6px;font-size:10px;font-weight:700}
+/* ————— DES STAGIAIRES RESTENT À SOLLICITER SUR CETTE SESSION —————
+   Une PUCE et non un nombre : la pastille se répète sur chaque jour de la session, et un second
+   chiffre s'y lirait cinq fois de suite. Le compte exact vit dans l'info-bulle, dans l'aria-label
+   et dans la liste « Prochaines sessions », où la session n'apparaît qu'une fois.
+   BLANCHE, ce qui tient sur N'IMPORTE QUELLE couleur de formation : la pastille écrit déjà son
+   texte en `#fff`, donc son fond est forcément assez sombre pour du blanc plein. Une teinte
+   d'alerte, elle, aurait disparu sur la formation orange. L'anneau sombre la détache du texte
+   voisin sans dépendre du fond. */
+.cal-evt-consent{width:6px;height:6px;border-radius:99px;background:#fff;flex:0 0 auto;
+  box-shadow:0 0 0 1.5px rgba(0,0,0,.28)}
+/* Le compte lisible, là où la session n'est écrite qu'une fois. */
+.sess-consent{color:var(--orange);font-weight:700}
+.sess-consent b{font-weight:800}
 .cal-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
 .cal-legitem{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
 .cal-legitem i{width:12px;height:12px;border-radius:4px;display:inline-block}
@@ -1723,7 +1743,6 @@ tbody tr:last-child td{border-bottom:none}
   border:1px dashed var(--border);border-radius:10px;opacity:.7}
 .pq-debug span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-weight:700}
 
-
 /* Flèches de bord : elles ne paraissent que du côté où il reste du chemin. Un chemin coupé
    net au bord de l'écran se lit comme un chemin fini — c'est ce malentendu qu'elles lèvent.
    Posées SUR le chemin (position absolue) plutôt qu'à côté : elles ne doivent pas rétrécir
@@ -2002,7 +2021,13 @@ tbody tr:last-child td{border-bottom:none}
   .cp-jeu{grid-template-columns:1fr;gap:12px}
   .cp-client{min-height:0;font-size:14px;padding:10px 12px;margin-bottom:10px}
   .cp-reponses{gap:6px}
-  .cp-rep{padding:9px 4px;font-size:12.5px}
+  /* RÉTRÉCIES POUR TENIR SUR UNE LIGNE, mais pas au point de devenir difficiles à viser :
+     elles tombaient à 37,5 px de haut, sous les 44 px qu'on vise pour une cible tactile. Ce
+     sont les commandes PRINCIPALES d'un jeu chronométré où une erreur coûte un cœur — rater le
+     bouton sous la pression du temps produit une faute qui n'en est pas une. Les 6,5 px que
+     coûte le plancher ne remettent pas en cause ce que dit le commentaire ci-dessus : mesuré,
+     le service et la carte tiennent toujours sans défiler. */
+  .cp-rep{padding:9px 4px;font-size:12.5px;min-height:44px}
   .cp-carte{padding:8px 10px}
   .cp-carte ul{gap:1px}
   .cp-carte li{padding:2px 5px;font-size:11px;line-height:1.25}
@@ -2148,6 +2173,18 @@ tbody tr:last-child td{border-bottom:none}
 .pq-mini-record > svg{opacity:.28}
 .pq-mini-record > svg.on{opacity:1}
 .pq-mini-record .hint{margin-left:4px;font-size:10.5px}
+/* « JAMAIS JOUÉ » A SA PROPRE FORME. Trois étoiles vides se lisaient comme un score de zéro,
+   et le seul mot qui rétablissait le sens faisait 10,5 px en gris. C'est pourtant le seul état
+   sur lequel il y a quelque chose à faire : il devient une pastille, donc repérable en balayant
+   la rangée. Le MOT porte le sens — la couleur n'est qu'un renfort (WCAG 1.4.1). */
+/* EN NAVY, PAS EN ROUGE, pour deux raisons qui vont dans le même sens. La mesure d'abord :
+   aucun rouge de la palette ne dépasse 3,68:1 en texte sur son propre fond teinté (éprouvé sur
+   `--ember1`, `--ember2` et `--red` à 8, 11 et 14 %), là où le seuil est de 4,5 pour un texte de
+   cette taille. Le navy tient 9:1. Et le sens ensuite : « jamais joué » n'est pas une alerte,
+   c'est une invitation — le rouge de l'école dit « attention », ce qui n'est pas le propos. */
+.pq-mini-neuf{align-self:flex-start;margin-top:5px;font-size:10.5px;font-weight:700;
+  letter-spacing:.02em;padding:2px 7px;border-radius:99px;
+  color:var(--navy);background:color-mix(in srgb,var(--navy) 10%,transparent)}
 .pq-games-t{font-size:13px;font-weight:700;color:var(--text);margin:20px 0 10px;text-align:center}
 /* Titre de palier, tenu par deux filets : centré et seul, il flottait au milieu de la page
    sans rien séparer. `--dim` en couleur de texte plafonne à ~2,6:1 en clair — sous le seuil
@@ -2284,18 +2321,16 @@ tbody tr:last-child td{border-bottom:none}
 /* ── Simulateur « Fais ta pizza » ───────────────────────────────────────────────────────── */
 .modal.sim{max-width:520px}
 /* Choix de l'objectif */
-.sim-objs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.sim-obj{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:13px 14px;
-  border:1px solid var(--border);border-radius:13px;background:var(--surface);cursor:pointer;
-  text-align:left;transition:border-color .12s var(--ease),transform .12s var(--ease)}
-.sim-obj:hover{border-color:var(--gold);transform:translateY(-2px)}
+/* L'emoji du bandeau de commande (le pizzaïolo). La classe garde son nom : elle servait aux
+   cartes d'objectif, retirées avec l'écran de choix, et sert encore ici. */
 .sim-obj-e{font-size:26px;line-height:1}
-.sim-obj b{font-size:14px}
-.sim-obj-d{font-size:11.5px;color:var(--muted);line-height:1.4}
 /* Écran de jeu */
 .sim-goal{display:flex;align-items:center;gap:9px;margin:0 0 14px;padding:9px 12px;border-radius:11px;
   background:var(--surface2);font-size:13px;color:var(--text)}
 .sim-goal .sim-obj-e{font-size:22px}
+/* CE QUE DIT LE CLIENT — en italique et en corps de texte : c'est une parole, pas un intitulé.
+   Le style visé n'y est jamais nommé (cf. le composant) ; c'est au joueur de le reconnaître. */
+.sim-cmd{font-style:italic;font-size:13.5px;line-height:1.35;color:var(--text)}
 /* Briefing d'instructions : ce qu'il faut viser, en mots. Fond doux, pas d'alerte. */
 .sim-brief{margin:0 0 14px;padding:11px 13px;border-radius:11px;background:var(--surface2);border:1px solid var(--border-soft)}
 .sim-brief-t{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
@@ -2312,7 +2347,22 @@ tbody tr:last-child td{border-bottom:none}
   padding:6px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);
   color:var(--text);font-weight:600;font-size:12.5px;cursor:pointer;transition:border-color .12s var(--ease),background .12s var(--ease)}
 .sim-pill span{font-size:10px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
-.sim-pill:hover{border-color:var(--gold)}
+/* ————— LE SURVOL NE DOIT RESSEMBLER À AUCUN DES DEUX AUTRES ÉTATS —————
+   Deux essais ratés avant celui-ci, et ils se trompaient en sens inverse :
+    · L'OR — la couleur qui, partout dans Pizza Quest, veut dire « acquis » (les étoiles, le
+      record d'un jeu, un chapitre partiellement réussi). Une pastille non choisie prenait au
+      passage de la souris l'apparence de quelque chose de gagné.
+    · LA BRAISE ÉCLAIRCIE — pire, en fait : c'est la couleur du CHOIX en plus pâle. Survoler
+      faisait donc apparaître une seconde pastille « à demi choisie » à côté de la vraie, et
+      l'œil ne savait plus laquelle était retenue. Un survol qui imite la sélection ne la
+      prépare pas, il la brouille.
+   D'où un survol SANS COULEUR DE SENS : un contour simplement plus marqué que le repos, sur
+   l'aplat gris déjà utilisé partout pour dire « le pointeur est ici ». La braise reste la
+   couleur du choix, et d'elle seule.
+   `:not(.on)` EXPLICITE, plutôt que de compter sur l'ordre des règles : les deux ont la même
+   spécificité, et un simple déplacement dans la feuille suffirait à faire gagner le survol sur
+   la pastille choisie. Ce piège s'est déjà refermé aujourd'hui sur `.pq-mini-e`. */
+.sim-pill:hover:not(.on){border-color:var(--dim);background:var(--surface2)}
 .sim-pill.on{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,var(--surface))}
 .sim-range{width:100%;accent-color:var(--ember1);height:26px;cursor:pointer}
 .sim-range-hint{display:block;font-size:11px;color:var(--muted);margin-top:2px}
@@ -2333,16 +2383,70 @@ tbody tr:last-child td{border-bottom:none}
 .sim-feedback li.mid svg{color:var(--orange)}
 .sim-feedback li.ko svg{color:var(--ember1)}
 
-.pq-minis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
-.pq-mini{display:flex;align-items:center;gap:10px;flex:1 1 180px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;transition:transform .1s var(--ease),border-color .1s var(--ease)}
-.pq-mini:hover:not(.soon){transform:translateY(-2px);border-color:var(--ember1)}
-.pq-mini.soon{opacity:.55;cursor:default}
-.pq-mini-e{font-size:26px;line-height:1}
+/* ————— L'ARCADE : UNE GRILLE, PAS UN FLEX QUI PASSE À LA LIGNE —————
+   En flex-wrap avec `flex:1 1 180px`, la cinquième tuile se retrouvait SEULE sur sa ligne et
+   son `flex-grow` l'étirait sur toute la largeur : « Chrono Rush », le seul jeu qu'on ne peut
+   PAS lancer, faisait 826 px quand chacun des quatre jouables en faisait 199. Le plus gros
+   pavé de l'arcade annonçait « Bientôt ».
+   `auto-fill` ET NON `auto-fit` : c'est toute la différence ici. `auto-fit` replie les colonnes
+   vides et l'orpheline se réétirerait exactement pareil ; `auto-fill` garde les colonnes, donc
+   la tuile seule reste à la largeur d'une colonne.
+   Et 160px de plancher fait tenir DEUX tuiles sur un téléphone là où il n'y en avait qu'une :
+   l'arcade prenait 445 px de haut à elle seule, repoussant la carte des formations — le sujet
+   de la page — hors de l'écran. */
+.pq-minis{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-bottom:16px}
+.pq-mini{display:flex;align-items:center;gap:11px;border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;transition:transform .1s var(--ease),border-color .1s var(--ease),box-shadow .1s var(--ease)}
+/* ————— UNE ÉLÉVATION QUI NE DÉPLACE PAS LA TUILE —————
+   `transform:translateY(-2px)` la faisait SE DÉROBER SOUS LE CURSEUR. Démontré : un point situé
+   entre 0 et 2 px du bord bas est dans la tuile au repos et HORS d'elle une fois levée. Le
+   survol se perd donc, la tuile redescend, le survol revient — une boucle à la cadence de la
+   transition (0,1 s), soit dix clignotements par seconde. Le défaut n'existe que sur cette
+   bande de deux pixels, ce qui explique qu'on ne le voie qu'« au bord ».
+   L'ombre donne le même relief sans toucher à la boîte : rien ne bouge, rien ne peut fuir. */
+.pq-mini:hover:not(.soon){border-color:var(--ember1);box-shadow:0 4px 10px -2px rgba(0,0,0,.14)}
+/* Un ENFONCEMENT au clic, comme les autres boutons de jeu (`.pq-choice:active`) : sans lui, la
+   tuile se soulevait au survol puis ne répondait plus rien au doigt — or sur téléphone il n'y a
+   pas de survol, donc aucun retour du tout. */
+.pq-mini:active:not(.soon){transform:translateY(1px)}
+
+/* ————— « BIENTÔT » : ON ÉTEINT LA SURFACE, PAS LE TEXTE —————
+   `opacity:.55` sur toute la tuile faisait tomber le sous-titre à 2,4:1 (mesuré), là où le
+   seuil est de 4,5. Un texte qu'on n'arrive pas à lire n'annonce plus rien — autant retirer la
+   tuile. On teinte donc le fond et l'on éteint l'icône, en laissant les mots lisibles. */
+.pq-mini.soon{cursor:default;background:var(--surface2);border-style:dashed}
+.pq-mini.soon .pq-mini-e{opacity:.5}
+.pq-mini.soon .pq-mini-sub{color:var(--dim)}
+
+/* ————— L'ICÔNE SUR SON DISQUE, À LA COULEUR DU JEU —————
+   Chaque jeu porte déjà sa teinte (`g.tint`), mais elle ne tenait qu'au trait d'une icône de
+   24 px : quatre cartes blanches identiques, à un détail près. Le disque en fait une surface,
+   et les quatre défis se distinguent enfin d'un coup d'œil.
+   `currentColor` EST cette teinte — elle arrive en style inline sur ce même span. Le fond se
+   déduit donc de la couleur du texte, sans qu'aucune valeur ne soit répétée ici ni en JSX. */
+.pq-mini-e{font-size:26px;line-height:1;flex:0 0 auto;display:grid;place-items:center;
+  width:42px;height:42px;border-radius:12px;
+  background:color-mix(in srgb,currentColor 13%,transparent)}
+
+/* DEUX PAR LIGNE SUR TÉLÉPHONE, en dur. Le plancher de 210px n'en laisserait qu'une, et
+   l'arcade reprendrait les 445 px de haut qu'elle occupait avant — au prix de la carte des
+   formations, qui est le sujet de la page. Le disque y est réduit : à 169px de tuile, il
+   mangerait la largeur qui reste au texte. */
+@media (max-width:640px){
+  .pq-minis{grid-template-columns:repeat(2,1fr)}
+  /* PAS DE DISQUE SUR TÉLÉPHONE — la décoration ne paie pas ici, elle coûte.
+     À 169 px de tuile, le disque en ligne ne laissait qu'une centaine de pixels aux mots et
+     tout passait à la ligne ; empiler pour rendre la largeur faisait grimper l'arcade de 285 à
+     397 px, soit 40 % de défilement en plus. Or c'est justement sur un écran où l'on ne voit
+     que deux tuiles à la fois que « distinguer les jeux d'un coup d'œil » sert le moins.
+     L'icône garde la couleur du jeu, simplement sans sa surface. */
+  .pq-mini-e{width:auto;height:auto;border-radius:0;background:none;font-size:22px}
+}
 .pq-mini-txt{display:flex;flex-direction:column}
 .pq-mini-txt b{font-size:14px}
 .pq-mini-sub{font-size:11.5px;color:var(--muted)}
 .cg-seq{display:flex;flex-direction:column;gap:6px}
-.cg-slot{display:flex;align-items:center;gap:8px;border:1.5px dashed var(--border);border-radius:10px;padding:8px 10px;font-size:13.5px;font-weight:600;min-height:40px;background:var(--surface);color:var(--text);cursor:pointer}
+/* Même raison pour les emplacements : on y tape pour retirer une étape mal placée. */
+.cg-slot{display:flex;align-items:center;gap:8px;border:1.5px dashed var(--border);border-radius:10px;padding:8px 10px;font-size:13.5px;font-weight:600;min-height:44px;background:var(--surface);color:var(--text);cursor:pointer}
 .cg-slot.empty{color:var(--dim);font-weight:400;cursor:default}
 .cg-slot.ok{border-style:solid;border-color:var(--green);background:color-mix(in srgb,var(--green) 10%,var(--surface))}
 .cg-slot.ko{border-style:solid;border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 8%,var(--surface))}
@@ -2350,7 +2454,32 @@ tbody tr:last-child td{border-bottom:none}
 .cg-e{font-size:16px}
 .cg-ph{color:var(--dim)}
 .cg-pool{display:flex;flex-wrap:wrap;gap:8px}
-.cg-chip{border:1.5px solid var(--border);border-radius:99px;padding:7px 12px;background:var(--surface);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;transition:transform .1s var(--ease),border-color .1s var(--ease)}
+/* Le libellé garde sa marge d'origine, qui vivait en style inline avant que le bloc existe. */
+.cg-reserve-t{margin:12px 0 6px}
+/* ————— LE VIVIER COLLE EN BAS SUR TÉLÉPHONE —————
+   Sans lui, le jeu demandait 1,57 écran de défilement : les neuf emplacements prenaient toute
+   la hauteur et les étapes à placer commençaient sous la ligne de flottaison. On ne voyait
+   jamais ensemble ce qu'on prend et où on le pose — un aller-retour par étape, neuf fois.
+   `sticky` DANS `.mbody`, qui est le conteneur qui défile (mesuré : 927 px de contenu pour
+   589 px visibles). Collé au `.modal`, il ne bougerait pas : ce n'est pas lui qui défile.
+   PLAFONNÉ À 40 % DE LA HAUTEUR, et défilant lui-même : les neuf pastilles font 356 px au
+   départ, soit les deux tiers de l'écran. Une barre qui mange plus qu'elle ne laisse voir ne
+   résout rien. Le plafond se libère tout seul à mesure qu'on place les étapes.
+   Le fond est OPAQUE — sans lui les emplacements défileraient en transparence sous les
+   pastilles, et l'on ne saurait plus lesquelles sont encore à placer. */
+@media (max-width:640px){
+  .cg-reserve{position:sticky;bottom:0;z-index:2;background:var(--panel,#fff);
+    margin:0 -14px -12px;padding:8px 14px 12px;border-top:1px solid var(--border);
+    max-height:40vh;overflow-y:auto}
+  .cg-reserve-t{margin:0 0 6px}
+}
+/* LES NEUF ÉTAPES SONT LA MANIPULATION MÊME DU JEU : on les prend une par une pour les ranger
+   dans l'ordre, et chaque tentative imparfaite coûte un cœur. Elles faisaient 38 px de haut,
+   sous les 44 px qu'on vise pour une cible tactile — rater une pastille et en poser une autre
+   se paie exactement comme une erreur de raisonnement, alors que ce n'en est pas une.
+   `inline-flex` + `align-items:center` : sans ça, un plancher de hauteur laisserait le texte
+   collé en haut de la pastille au lieu de rester centré. */
+.cg-chip{display:inline-flex;align-items:center;min-height:44px;border:1.5px solid var(--border);border-radius:99px;padding:7px 14px;background:var(--surface);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;transition:transform .1s var(--ease),border-color .1s var(--ease)}
 .cg-chip:hover{border-color:var(--navy);background:var(--surface2);transform:translateY(-1px)}
 
 .tpl-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
@@ -2808,6 +2937,14 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 /* Barré, mais pas décoratif : c'est en lisant ce prix que le stagiaire voit ce que le tarif
    école lui fait gagner. Donc lisible — cf. .shop-ht sur le choix de --muted. */
 .shop-old{font-size:11.5px;color:var(--muted);text-decoration:line-through}
+/* LA FLÈCHE N'EST PAS SEULE À PORTER L'INFORMATION (WCAG 1.4.1) : le prix barré dit déjà qu'il
+   s'agit d'un ancien tarif, et la mention « école » qualifie le nouveau. `aria-hidden` la retire
+   des lecteurs d'écran, qui liraient sinon « flèche vers la droite » entre deux montants. */
+.shop-fleche{font-size:11.5px;color:var(--muted)}
+/* La rangée « ancien prix → tarif école », dans un conteneur en colonne. `baseline` aligne les
+   deux montants sur leur ligne d'écriture malgré leurs tailles différentes (11,5 px et 15 px) ;
+   sans lui, le prix barré flottait au-dessus de la flèche. */
+.shop-price-evol{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 5px}
 .shop-note{font-size:10.5px;color:var(--muted);line-height:1.35;border-top:1px solid var(--border-soft);padding-top:5px;margin-top:2px}
 /* N'apparaît QUE si l'article n'est pas en stock — c'est une exception, pas une étiquette.
    L'ambre, pas le rouge : « sur commande » n'est pas une erreur, juste un délai. */
@@ -2961,24 +3098,13 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .mode-card.on>span{color:var(--ember1)}
 /* ── Conseil matériel (fours / pétrins) ─────────────────────────────────────────────────── */
 /* Comparateur de prix (fours partenaires) + badges de specs */
-.spec-badges{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0}
-.spec-badges .badge{font-size:9.5px;padding:2px 6px;gap:3px}
+
 .cmp{display:flex;flex-direction:column;gap:3px;margin-top:auto;padding-top:6px}
-.cmp-src{font-size:10px;color:var(--muted)}
+
 .cmp-range b{font-size:15px;white-space:nowrap}
 /* L'écart entre revendeurs = l'argument. Fond ambre léger + texte normal (pas d'ambre EN
    texte, qui échoue au contraste). Le poids et le fond suffisent à le faire ressortir. */
-.cmp-ecart{display:inline-block;margin-left:2px;font-size:10px;font-weight:700;color:var(--text);
-  background:var(--amber-bg);padding:1px 6px;border-radius:999px}
-.cmp-toggle{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;padding:2px 0;
-  background:none;border:none;color:var(--muted);font-weight:600;font-size:11px;cursor:pointer}
-.cmp-toggle:hover{color:var(--text)}
-.cmp-list{list-style:none;margin:2px 0 0;padding:0;display:grid;gap:4px}
-.cmp-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px}
-.cmp-list a{display:inline-flex;align-items:center;gap:4px;color:var(--text);text-decoration:none}
-.cmp-list a:hover{text-decoration:underline}
-.cmp-list a svg{color:var(--muted)}
-.cmp-list li span{font-weight:600;white-space:nowrap;color:var(--text)}
+
 .cmp-devis{display:inline-flex;align-items:center;gap:5px;margin-top:auto;padding-top:6px;
   font-size:12px;font-weight:600;color:var(--muted)}
 .cmp-devis svg{flex-shrink:0}
@@ -3260,7 +3386,7 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
     max-height:calc(100vh - 56px);overflow-y:auto}
 }
 @media(max-width:560px){
-  /* Marque réduite au logo : « Impasto » et son sous-titre valent moins, ici, que la place
+  /* Marque réduite au logo : « Impastio » et son sous-titre valent moins, ici, que la place
      qu'ils prennent au thème, à l'avatar et au menu. */
   .stu-brand .name,.stu-sub{display:none}
   .topbar{padding:10px 14px;gap:8px}
@@ -3650,7 +3776,6 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 .stu-app .avatar:hover{transform:scale(1.06)}
 .stu-app .avatar:active{transform:scale(.94)}
 
-
 /* — Confirmation d'enregistrement ————————————————————————————————————————————————
    Flottante en bas d'écran : le bouton « Enregistrer » peut se trouver n'importe où dans un
    assistant qui défile, la confirmation doit être vue sans avoir à chercher.
@@ -3897,7 +4022,6 @@ button.av-wrap:active{transform:scale(.94)}
   .cadre-qparfait{animation:none}
 }
 
-
 @media (prefers-reduced-motion:reduce){
   .cadre-braise::after{animation:none;opacity:.8;scale:1}
   .cadre-maestro{animation:none}
@@ -4022,7 +4146,6 @@ button.av-wrap:active{transform:scale(.94)}
 /* Il RESPIRE légèrement — sans bouger de place. Un jeton parfaitement immobile passe pour une
    icône d'interface ; ce battement discret le rattache au cadre qu'il décore. */
 @keyframes cadreMedaillon{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
-
 
 /* — LES AUTRES RÉSULTATS DE CONCOURS —
    « Champion » couvrait seul l'ensemble des podiums, ce qui revenait à donner le même cadre au
@@ -4320,7 +4443,6 @@ button.av-wrap:active{transform:scale(.94)}
 .prof-ava.cadre{--anneau:5px} /* avatar de profil : pas de `--av`, on fixe la valeur */
 .prof-ava.cadre-braise::after,.prof-ava.cadre-maestro::after{inset:-5px}
 
-
 /* — CATÉGORIES DE PARTENAIRES (migration 129) —
    Une ligne par catégorie : rang, intitulé, couleur, code, nombre de partenaires, suppression.
    L'intitulé prend toute la place restante (`flex:1`) parce que c'est le seul champ qu'on écrit ;
@@ -4348,3 +4470,521 @@ button.av-wrap:active{transform:scale(.94)}
   .cat-code{display:none}
   .cat-rang{flex-direction:row}
 }
+
+/* — PAGES LÉGALES (confidentialité) —
+   Colonne étroite et interlignage généreux : c'est du texte qu'on lit vraiment, pas un tableau de
+   bord qu'on parcourt. Au-delà de ~70 caractères par ligne, l'œil perd le début de la suivante. */
+.page-legale{max-width:720px;margin:0 auto;padding:40px 22px 64px;line-height:1.65}
+.page-legale h1{font-family:var(--font-d);font-size:30px;margin:0 0 6px}
+.page-legale h2{font-family:var(--font-d);font-size:17px;margin:30px 0 10px}
+.page-legale .lead{color:var(--muted);margin:0 0 24px}
+.legale-ou{font-weight:400;font-size:13px;color:var(--muted)}
+/* LE DÉCLENCHEUR qui remplace l'ancien pavé vert. Discret, sur une ligne : l'explication de
+   l'absence de bannière n'intéresse que ceux qui se posent la question, et six lignes de
+   raisonnement juridique repoussaient la LISTE, qui est ce qu'on vient lire. Elle reste à un clic.
+   Rendu en <button> et non en lien : il n'y a pas de destination, seulement une action. */
+.legale-pourquoi{display:flex;align-items:center;gap:8px;width:100%;margin:0 0 24px;
+  padding:10px 13px;border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  font:inherit;font-size:13.5px;color:var(--text);text-align:left;cursor:pointer;
+  transition:border-color .12s var(--ease),background .12s var(--ease)}
+.legale-pourquoi:hover{border-color:var(--green,#2f9e6f);background:var(--surface2)}
+.legale-pourquoi svg{flex:none;color:var(--green,#2f9e6f)}
+.legale-pourquoi span{margin-left:auto;flex:none;font-weight:700;color:var(--green,#2f9e6f)}
+.legale-liste{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.legale-liste li{display:flex;flex-direction:column;gap:3px;padding:12px 14px;
+  background:var(--surface2);border-radius:10px}
+.legale-liste code{font-family:var(--font-m);font-size:11.5px;color:var(--muted)}
+.legale-liste b{font-size:14.5px}
+.legale-detail{font-size:13px;color:var(--muted)}
+.legale-duree{font-size:12px;color:var(--muted);font-weight:600}
+/* Ce qui reste à remplir par l'organisme — visible, pour ne pas être mis en ligne tel quel. */
+.legale-atraiter{background:color-mix(in srgb,var(--gold) 14%,transparent);
+  border-left:3px solid var(--gold);border-radius:8px;padding:10px 13px;font-size:13.5px}
+.login-legal{margin:18px 0 0;text-align:center;font-size:12.5px}
+.login-legal a{color:var(--muted)}
+
+/* Une entrée d'inventaire encore incomplète : elle doit se voir, pour ne pas être publiée telle
+   quelle. Une page de confidentialité approximative engage l'organisme plus qu'elle ne le protège. */
+.legale-incomplet{border-left:3px solid var(--gold)}
+.legale-incomplet .legale-atraiter{margin:6px 0 0;font-size:12.5px}
+/* La transmission qui repose sur le consentement — bordée d'ember, pour qu'on la distingue au
+   premier regard de celles qui ont lieu de toute façon. */
+.legale-consent{border-left:3px solid var(--ember1)}
+.legale-consent-note{margin-top:6px;font-size:12.5px;line-height:1.5;
+  background:color-mix(in srgb,var(--ember1) 8%,transparent);border-radius:8px;padding:9px 11px}
+
+/* — DEMANDE DE CONSENTEMENT —
+   LES DEUX RÉPONSES ONT LE MÊME POIDS. Un « J'accepte » en couleur pleine face à un « Je refuse »
+   en gris pâle est un choix guidé, et un choix guidé n'est pas un choix libre : le refus doit être
+   aussi facile à cliquer que l'accord. D'où deux boutons identiques, à largeur égale. */
+.consent-modal{max-width:520px}
+.consent-texte{font-size:14.5px;line-height:1.6;margin:0 0 14px}
+.consent-dest{background:var(--surface2);border-radius:10px;padding:11px 13px;margin-bottom:14px;
+  display:flex;flex-direction:column;gap:3px}
+.consent-dest b{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.consent-dest span{font-size:13.5px}
+.consent-erreur{color:var(--red);font-size:13px;margin:12px 0 0}
+.consent-foot{display:flex;gap:10px}
+.consent-choix{flex:1;justify-content:center;font-weight:700}
+
+/* Le chemin du retour, dans le profil. */
+.consent-bloc{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.consent-bloc-t{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);margin-bottom:10px}
+.consent-ligne{display:flex;align-items:flex-start;gap:14px;padding:12px 13px;
+  background:var(--surface2);border-radius:10px}
+.consent-ligne > div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.consent-ligne b{font-size:14px}
+.consent-ligne .hint{font-size:12px;line-height:1.45}
+@media (max-width:640px){ .consent-ligne{flex-direction:column} }
+
+/* — BANDEAU D'INFORMATION (confidentialité) —
+   EN BAS ET NON EN HAUT : un bandeau haut repousse toute la page et se lit comme une alerte. En
+   bas il informe sans déplacer ce qu'on est venu faire.
+   `position:fixed` avec un fond plein et une ombre portée : il doit rester lisible par-dessus
+   n'importe quel contenu, y compris un tableau dense.
+   Il n'a QU'UN bouton, et c'est voulu : rien n'est à accepter ni à refuser ici. */
+.bandeau-conf{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:60;
+  display:flex;align-items:center;gap:14px;max-width:min(760px,calc(100% - 32px));
+  padding:13px 16px;border:1px solid var(--border);border-radius:14px;background:var(--surface);
+  box-shadow:0 10px 30px rgba(20,22,50,.16);animation:bandeau-monte .28s var(--spring)}
+.bandeau-conf > svg{flex:none;color:var(--green,#2f9e6f)}
+.bandeau-conf p{margin:0;font-size:13px;line-height:1.5}
+.bandeau-conf a{color:var(--navy);font-weight:700;text-decoration:underline}
+.bandeau-conf .btn{flex:none}
+@keyframes bandeau-monte{from{opacity:0;transform:translateX(-50%) translateY(12px)}
+  to{opacity:1;transform:translateX(-50%) translateY(0)}}
+/* Sur téléphone il s'empile : trois éléments côte à côte y laisseraient deux mots par ligne. */
+@media (max-width:640px){
+  /* ANCRÉ PAR SES DEUX BORDS, et non centré par `left:50%`. En `position:fixed` sans largeur
+     imposée, l'élément se réduit à son contenu : mesuré à 375 px, il se tassait à 188 px de
+     large pour 337 de haut, une colonne de deux mots. `left`+`right` lui donnent la largeur
+     de l'écran, et la hauteur suit. */
+  .bandeau-conf{left:10px;right:10px;transform:none;max-width:none;
+    flex-direction:column;align-items:stretch;gap:10px;bottom:10px;padding:12px 14px}
+  .bandeau-conf > svg{display:none}
+  .bandeau-conf .btn{width:100%;justify-content:center}
+  @keyframes bandeau-monte{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+}
+@media (prefers-reduced-motion:reduce){ .bandeau-conf{animation:none} }
+
+/* ── Transmission aux partenaires : consentements d'une session ──────────────────────────────
+   RÈGLES DE BASE D'ABORD, MÉDIA-QUERY ENSUITE. Une `@media` écrite AVANT la règle de base est
+   écrasée par elle : la cascade départage à spécificité égale par l'ORDRE, pas par la présence
+   d'une condition. Le piège a déjà coûté deux passes dans ce fichier. */
+.consent-groupe{margin:14px 0}
+.consent-groupe-tt{display:flex;align-items:center;gap:7px;margin-bottom:6px;font-size:13px}
+.consent-ligne{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;
+  background:var(--surface2);margin-bottom:4px;min-width:0}
+.consent-nom{font-weight:600;font-size:13px;flex:1;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.consent-quand{font-size:11px;white-space:nowrap}
+.consent-actions{display:flex;gap:5px;flex-shrink:0}
+
+.consent-source{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:10px 12px;
+  border:1px dashed var(--border);border-radius:9px;margin:10px 0}
+.consent-source label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.consent-source select{padding:5px 8px;border-radius:7px;border:1px solid var(--border);
+  background:var(--surface);color:inherit;font:inherit;font-size:12px}
+.consent-source .hint{flex-basis:100%;font-size:11px;margin:0}
+
+.consent-envoi{margin-top:16px;padding:12px;border-radius:10px;background:var(--surface2)}
+.consent-envoi > b{display:flex;align-items:center;gap:7px;font-size:13px;margin-bottom:9px}
+.consent-envoi-ligne{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.consent-envoi-ligne select{flex:1;min-width:180px;padding:7px 9px;border-radius:8px;
+  border:1px solid var(--border);background:var(--surface);color:inherit;font:inherit;font-size:13px}
+.consent-envoi .hint{display:block;margin:9px 0 0;font-size:11px}
+
+.consent-liste{margin-top:12px;border:1px solid var(--border);border-radius:10px;padding:11px}
+.consent-liste-tt{display:flex;align-items:center;gap:7px;margin-bottom:9px;font-size:13px;
+  flex-wrap:wrap}
+/* LA TABLE DÉFILE DANS SON PROPRE CADRE. Six colonnes de coordonnées dépassent toujours sur un
+   écran étroit ; sans ce conteneur, c'est la PAGE qui gagnerait une barre horizontale. */
+.consent-table-wrap{overflow-x:auto}
+.consent-table{width:100%;border-collapse:collapse;font-size:12px}
+.consent-table th{text-align:left;font-weight:600;padding:5px 9px 5px 0;white-space:nowrap;
+  border-bottom:1px solid var(--border);text-transform:capitalize}
+.consent-table td{padding:5px 9px 5px 0;white-space:nowrap;
+  border-bottom:1px solid color-mix(in srgb, var(--border) 45%, transparent)}
+
+.consent-journal{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.consent-journal > b{display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:7px}
+.consent-journal-ligne{display:flex;align-items:center;gap:9px;font-size:12px;padding:3px 0;
+  min-width:0}
+
+@media (max-width:640px){
+  /* Les actions passent SOUS le nom : à trois éléments sur une ligne, le nom se réduisait à
+     quelques lettres pour laisser la place à deux boutons. */
+  .consent-ligne{flex-wrap:wrap}
+  .consent-nom{flex-basis:100%;white-space:normal}
+  .consent-actions{margin-left:auto}
+  .consent-envoi-ligne select{min-width:0;flex-basis:100%}
+}
+
+/* ── Partenaire destinataire des coordonnées (migration 131) ─────────────────────────────────
+   ELLE NE RESSEMBLE PAS AUX AUTRES RÉGLAGES DE LA FICHE, et c'est délibéré : ce n'est pas une
+   propriété descriptive comme une remise, c'est l'autorisation de transmettre des données
+   personnelles. Un cadre, une explication sous le libellé, et un état ACTIF nettement visible —
+   pour qu'on ne la coche pas d'un geste distrait au milieu d'un formulaire. */
+.partner-destinataire{display:flex;gap:9px;align-items:flex-start;margin-top:11px;padding:9px 11px;
+  border:1px solid var(--border);border-radius:9px;cursor:pointer;transition:border-color .15s,background .15s}
+.partner-destinataire:hover{border-color:color-mix(in srgb, var(--blue) 45%, var(--border))}
+.partner-destinataire.on{border-color:color-mix(in srgb, var(--green) 55%, transparent);
+  background:color-mix(in srgb, var(--green) 7%, transparent)}
+/* 16px sur une case native, plus une zone cliquable qui couvre TOUT le bloc grâce au <label> :
+   la cible tactile est le cadre entier, pas le carré de 16px. */
+.partner-destinataire input{width:16px;height:16px;margin:2px 0 0;flex-shrink:0;cursor:pointer;
+  accent-color:var(--green)}
+.partner-destinataire > span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.partner-destinataire b{font-size:12.5px;line-height:1.3}
+.partner-destinataire .sub{font-size:11px;line-height:1.35}
+
+/* ── Échéance de contrat partenaire (migration 131) ──────────────────────────────────────────
+   TROIS TONS, ET LA COULEUR N'EST JAMAIS SEULE À PORTER L'INFORMATION (WCAG 1.4.1) : le texte dit
+   « terminé le … » ou « 12 jours », et l'icône passe du calendrier au triangle d'alerte. Un
+   daltonien lit exactement la même chose. */
+.partner-contrat{display:flex;gap:8px;align-items:flex-start;margin-top:10px;padding:8px 10px;
+  border-radius:8px;font-size:12px;line-height:1.4}
+.partner-contrat .sub{display:block;font-size:11px;margin-top:2px}
+.partner-contrat.ton-g{background:color-mix(in srgb, var(--green) 8%, transparent);color:var(--green)}
+.partner-contrat.ton-o{background:color-mix(in srgb, var(--orange) 11%, transparent);color:var(--orange)}
+.partner-contrat.ton-r{background:color-mix(in srgb, var(--red) 11%, transparent);color:var(--red)}
+.partner-contrat.ton-n{background:var(--surface2)}
+.partner-contrat svg{flex-shrink:0;margin-top:1px}
+
+/* La case du formulaire : même traitement que celle de la fiche — un cadre, une explication, et
+   une cible cliquable qui couvre tout le bloc grâce au <label>. */
+.partner-contrat-case{display:flex;gap:9px;align-items:flex-start;margin:12px 0 10px;padding:9px 11px;
+  border:1px dashed var(--border);border-radius:9px;cursor:pointer}
+.partner-contrat-case input{width:16px;height:16px;margin:2px 0 0;flex-shrink:0;cursor:pointer}
+.partner-contrat-case > span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.partner-contrat-case b{font-size:12.5px;line-height:1.3}
+.partner-contrat-case .sub{font-size:11px;line-height:1.35}
+
+/* Contrat terminé : la case « reçoit les coordonnées » est SUSPENDUE, pas effacée.
+   `pointer-events:none` en plus de l'attribut `disabled` — sans lui, le <label> resterait
+   cliquable et transmettrait le clic à la case, qui l'ignorerait : on obtiendrait une commande
+   qui répond au survol et ne fait rien, ce qui se lit comme une panne plutôt qu'un blocage. */
+.partner-destinataire.off{opacity:.5;cursor:not-allowed;pointer-events:none;
+  border-style:dashed;background:var(--surface2)}
+.partner-destinataire.off input{cursor:not-allowed}
+
+/* ── Images hébergées ailleurs (migration 133) ───────────────────────────────────────────────
+   `object-fit:contain` PARTOUT, jamais `cover` : ces images viennent des catalogues fournisseurs,
+   souvent détourées sur fond blanc et dans des proportions imprévisibles. `cover` remplirait le
+   cadre en ROGNANT — sur un logo, il coupe la moitié du nom ; sur un four, il montre une plaque
+   grise. `contain` laisse des marges, ce qui est le prix à payer pour montrer l'objet entier.
+   Le fond blanc est nécessaire pour la même raison : un PNG détouré sur thème sombre disparaît. */
+.img-vide{display:inline-flex;align-items:center;justify-content:center;
+  background:var(--surface2);border-radius:8px;color:var(--muted);flex-shrink:0}
+
+.partner-logo{height:22px;width:auto;max-width:76px;object-fit:contain;border-radius:4px;
+  background:#fff;padding:2px;flex-shrink:0}
+
+/* 52 px : ASSEZ POUR RECONNAÎTRE UN PRODUIT, pas assez pour dominer la liste.
+   À 34 px on ne distinguait pas un four d'un pétrin — c'était une taille d'ICÔNE, pas d'aperçu,
+   et l'image n'apprenait rien de plus que le nom écrit à côté. Au-delà de 52, la ligne se
+   transforme en carte et le catalogue de dix produits ne tient plus d'un coup d'œil : la page
+   sert d'abord à parcourir une liste.
+   `contain` et fond blanc comme partout : ces visuels viennent des catalogues fournisseurs,
+   détourés sur fond clair et de proportions imprévisibles — `cover` rognerait l'objet, et sans
+   fond blanc un PNG détouré disparaît en thème sombre. */
+.pp-vignette{width:52px;height:52px;object-fit:contain;border-radius:7px;background:#fff;
+  flex-shrink:0;border:1px solid var(--border)}
+
+.inv-thumb-img{object-fit:contain;background:#fff;border:1px solid var(--border);padding:2px}
+
+/* Le champ « lien » et son aperçu côte à côte : c'est la seule façon de savoir qu'une adresse
+   est bonne AVANT d'enregistrer. Sans aperçu, on colle, on enregistre, et on découvre au
+   rechargement que le lien ne pointait sur rien — sans savoir lequel des deux a échoué. */
+.champ-image{display:flex;gap:9px;align-items:center}
+.champ-image .inp{flex:1;min-width:0}
+.champ-image-apercu{width:42px;height:42px;object-fit:contain;border-radius:8px;background:#fff;
+  border:1px solid var(--border);flex-shrink:0}
+
+/* Boutique : la photo occupe la largeur de la carte, hauteur fixe pour que la grille ne se
+   déforme pas d'un article à l'autre. */
+.shop-photo{width:100%;height:120px;object-fit:contain;background:#fff;border-radius:9px;
+  margin-bottom:8px;border:1px solid var(--border)}
+
+/* Logo du partenaire en tête de sa vitrine, côté stagiaire. Il occupe la place de l'ancienne
+   icône « users » : même hauteur de ligne, largeur libre — un logo est rarement carré, et le
+   contraindre à 16×16 le rendrait illisible. Fond blanc, car ces fichiers sont presque toujours
+   détourés pour un fond clair et disparaîtraient en thème sombre. */
+.shop-partner-logo{height:20px;width:auto;max-width:92px;object-fit:contain;border-radius:4px;
+  background:#fff;padding:2px;flex-shrink:0}
+
+/* Plusieurs catégories sur une même carte : elles s'enroulent au lieu d'élargir la carte.
+   `.shop-rayon` est en `align-self:flex-start` — dans un conteneur flex, cette propriété n'a
+   plus d'effet sur l'axe principal, d'où ce parent qui porte l'alignement à sa place. */
+.shop-rayons{display:flex;flex-wrap:wrap;gap:4px;align-self:flex-start}
+/* Aperçu du découpage sous le champ de saisie : le même rendu qu'à la boutique, pour que la
+   virgule cesse d'être une convention invisible. */
+.cat-apercu{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.cat-apercu .badge{font-size:10px;padding:2px 6px}
+
+/* Catalogue partenaire : le nom sur sa ligne, les étiquettes sur la leur.
+   Laissées en flux inline à la suite du nom, elles se coupaient là où la place manquait — donc
+   à un endroit différent selon la longueur du libellé, ce qui faisait croire à deux natures
+   d'étiquettes. `min-width:0` sur la colonne, sinon le nom impose sa largeur et pousse le prix
+   hors de la ligne. */
+.pp-ident{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.pp-cats{display:flex;flex-wrap:wrap;gap:4px}
+.pp-cats .badge{font-size:10px;padding:2px 6px}
+
+/* Catalogue partenaire : la ligne en cours de modification, et le formulaire qui lui répond.
+   LA COULEUR N'EST PAS SEULE À PORTER L'INFORMATION (WCAG 1.4.1) : la ligne porte aussi
+   `aria-current`, une barre à gauche, et le formulaire rappelle le nom du produit modifié. */
+.pp-ligne{display:flex;align-items:center;gap:8px;padding:5px 0;
+  border-bottom:1px solid var(--border-soft);border-left:3px solid transparent;
+  padding-left:0;transition:background .15s,border-color .15s,padding-left .15s}
+.pp-ligne.en-edition{background:color-mix(in srgb, var(--blue) 9%, transparent);
+  border-left-color:var(--blue);padding-left:7px;border-radius:0 7px 7px 0}
+
+.pp-form{margin-top:10px;padding:11px;border-radius:10px;border:1px solid var(--border);
+  background:var(--surface2)}
+.pp-form.en-edition{border-color:color-mix(in srgb, var(--blue) 45%, transparent)}
+.pp-form-t{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:2px}
+
+/* Photo d'article À LA CAISSE. 72 px contre 120 dans la boutique du stagiaire, et l'écart est
+   volontaire : le stagiaire CHOISIT (il compare, il hésite), l'opérateur RETROUVE un article
+   qu'il connaît déjà, souvent avec un client devant lui. Une vignette plus petite laisse plus
+   d'articles à l'écran, donc moins de défilement pendant la vente. */
+/* UN CARRÉ ALIGNÉ À GAUCHE, PAS UNE BANDE PLEINE LARGEUR — et c'est une correction, pas un
+   choix initial. En `width:100%`, la vignette mesurait 414 px de large pour 72 de haut : la
+   grille de la caisse tient sur UNE colonne de 440 px, pas sur trois comme la boutique du
+   stagiaire. `object-fit:contain` laissait donc l'image flotter, minuscule, au centre d'une
+   boîte aux lettres. Un carré fixe ne dépend pas du nombre de colonnes. */
+.pos-photo{width:64px;height:64px;object-fit:contain;background:#fff;border-radius:8px;
+  margin-bottom:6px;border:1px solid var(--border);align-self:flex-start}
+
+/* Récapitulatif partenaires du tableau de bord : une ligne par échéance.
+   LA COULEUR N'EST PAS SEULE À PORTER L'INFORMATION (WCAG 1.4.1) — l'icône change (triangle
+   d'alerte pour un contrat terminé, calendrier pour une échéance proche) et le texte dit la
+   date en toutes lettres. */
+.reca-ligne{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px;
+  padding:6px 9px;border-radius:8px;margin-bottom:4px}
+.reca-ligne:last-child{margin-bottom:0}
+.reca-ligne svg{flex-shrink:0}
+.reca-ligne .hint{font-size:11.5px}
+.reca-ligne.ton-r{background:color-mix(in srgb, var(--red) 10%, transparent);color:var(--red)}
+.reca-ligne.ton-o{background:color-mix(in srgb, var(--orange) 11%, transparent);color:var(--orange)}
+.reca-ligne.ton-n{background:var(--surface2)}
+
+/* Choix des informations transmises aux partenaires (migration 135).
+   Les cases sont larges et cliquables entières : ce ne sont pas des options d'affichage, chacune
+   décide qu'une donnée personnelle sort de l'école. */
+.champs-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:7px;
+  margin:10px 0 14px}
+.champ-case{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;
+  border:1px solid var(--border);cursor:pointer;font-size:12.5px;
+  transition:border-color .15s,background .15s}
+.champ-case:hover{border-color:color-mix(in srgb, var(--blue) 45%, var(--border))}
+.champ-case.on{border-color:color-mix(in srgb, var(--green) 55%, transparent);
+  background:color-mix(in srgb, var(--green) 7%, transparent)}
+.champ-case input{width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--green)}
+
+/* L'aperçu de la phrase : mis en avant, car c'est lui qui donne son sens au réglage. */
+.champs-apercu{padding:11px 13px;border-radius:10px;background:var(--surface2);
+  border-left:3px solid var(--blue)}
+.champs-apercu > b{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);
+  margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+.champs-apercu p{margin:0;font-size:13px;line-height:1.5}
+.champs-effet{margin-top:11px;display:flex;flex-direction:column;gap:5px}
+.champs-effet .reca-ligne{align-items:flex-start}
+.champs-effet .reca-ligne svg{margin-top:2px}
+
+/* Champs transmissibles, groupés par source (stagiaire / entreprise).
+   Le regroupement n'est pas cosmétique : « Ville » figure dans les deux blocs et désigne deux
+   données différentes. Sans séparation visible, la même étiquette apparaîtrait deux fois dans
+   une liste indifférenciée. */
+.champs-groupe{margin-bottom:12px}
+.champs-groupe-t{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px}
+.champs-groupe .champs-grille{margin:0}
+.champs-note{display:flex;align-items:flex-start;gap:6px;font-size:11px;margin:7px 0 0;line-height:1.4}
+.champs-note svg{flex-shrink:0;margin-top:1px}
+
+/* Mise à jour d'un consentement : ce qui S'AJOUTE, mis en tête et nommé.
+   Reposer la question sans dire ce qui a changé obligerait à relire deux paragraphes pour
+   trouver le mot nouveau — et personne ne le fait. */
+.consent-maj{padding:10px 12px;border-radius:9px;margin-bottom:11px;
+  background:color-mix(in srgb, var(--orange) 10%, transparent);
+  border-left:3px solid var(--orange)}
+.consent-maj > b{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:6px}
+.consent-maj ul{margin:0 0 6px;padding-left:20px;font-size:13px;line-height:1.6}
+.consent-maj li{text-transform:capitalize}
+.consent-maj .hint{font-size:11.5px}
+
+/* Export des stagiaires consentants, sur la fiche d'un partenaire. */
+.export-part{margin-top:10px;padding:11px;border-radius:10px;background:var(--surface2);
+  border:1px solid var(--border)}
+.export-part > b{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:9px}
+.export-part-periode{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px}
+.export-part-periode label{display:flex;align-items:center;gap:5px;font-size:12px}
+.export-part-periode input{padding:5px 7px;border-radius:7px;border:1px solid var(--border);
+  background:var(--surface);color:inherit;font:inherit;font-size:12px}
+.export-part .hint{display:block;font-size:11px;margin:0}
+.export-part-res{margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
+.export-part-tt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:12.5px}
+
+/* « A répondu lui-même » : la saisie pour autrui s'arrête là.
+   MASQUÉ PLUTÔT QUE GRISÉ — un bouton désactivé invite à chercher comment le réactiver, une
+   phrase dit ce qui s'est passé et qui peut en changer. */
+.consent-verrou{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);
+  padding:3px 8px;border-radius:99px;background:var(--surface2);white-space:nowrap;flex-shrink:0}
+
+/* Journal des envois, sous l'export d'un partenaire. */
+.export-part-journal{margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
+.export-part-journal > b{display:flex;align-items:center;gap:6px;font-size:11.5px;margin-bottom:5px}
+.export-part-journal-l{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11.5px;padding:2px 0}
+
+/* L'export vit dans la barre d'outils de la page : déplié, il prend toute la largeur sous elle
+   plutôt que de s'insérer entre deux boutons. */
+/* `min-width:0` EST INDISPENSABLE, et son absence est le piège classique du flex : un élément
+   flex vaut `min-width:auto`, c'est-à-dire « au moins la largeur de mon contenu ». Un tableau de
+   douze colonnes lui donnait donc sa propre largeur, et l'`overflow-x:auto` du tableau ne servait
+   à rien — il ne peut découper que ce qui dépasse d'un parent BORNÉ. Mesuré : un enfant de
+   3000 px étirait le bloc à 3024 px et faisait déborder la page. */
+.filtres .export-part{flex-basis:100%;min-width:0;margin-top:8px}
+
+
+/* CHIFFRES ALIGNÉS, SANS LE MASQUE DES MONTANTS.
+   `.tnum` fait DEUX choses à la fois : la fonte à chasse fixe pour les chiffres, ET le marqueur
+   « c'est de l'argent, masque-le » (cf. `.money-mask .tnum::after`). Les deux rôles n'ont rien à
+   voir, et la confusion se paie : une date ou un compte marqué `.tnum` disparaît derrière des
+   points dès que l'utilisateur masque les montants — « 22 fiches sur 22 » devient « ••••• fiches
+   sur ••••• », ce qui ne protège rien et rend la phrase incompréhensible.
+   `.chiffres` ne porte que la typographie. À utiliser partout où le nombre n'est pas un montant. */
+.chiffres{font-variant-numeric:tabular-nums}
+
+/* ————— INVENTAIRE DU COFFRE DOCUMENTAIRE —————
+   Replié par défaut : l'analyse lit tous les blobs de la base pour en calculer les empreintes.
+   Le panneau se veut sobre — c'est un outil d'administration, pas une page de tableau de bord. */
+.stock-invite{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;
+  padding:10px 12px;margin-bottom:14px;border:1px dashed var(--border);border-radius:10px}
+.stock{padding:12px;margin-bottom:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface2)}
+.stock-tete{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+/* Une barre par tranche : la concentration se voit d'un coup d'œil, ce qu'un tableau de chiffres
+   ne montre pas — quelques fichiers pèsent autant que le millier d'autres. */
+.stock-tranches{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.stock-tr{display:grid;grid-template-columns:64px 1fr 44px 64px;align-items:center;gap:8px;font-size:12px}
+.stock-tr-l{color:var(--muted)}
+.stock-tr-b{height:8px;background:var(--surface);border-radius:99px;overflow:hidden}
+.stock-tr-b i{display:block;height:100%;background:var(--grad-ember);border-radius:99px}
+.stock-tr-n,.stock-tr-o{text-align:right;color:var(--muted)}
+.stock-bloc{margin-top:8px;border-top:1px solid var(--border);padding-top:8px}
+.stock-bloc>summary{cursor:pointer;font-size:13px;padding:2px 0}
+/* PAS DE `display:flex` ICI. Le paragraphe contient du gras : en flex, chaque fragment de texte
+   devient un élément à part, et la phrase se recompose dans le désordre — « retire son dossier …
+   avant de le document de trancher ». Un texte suivi se met en forme en flux, pas en flex ;
+   l'icône s'aligne avec `vertical-align`. */
+.stock-avert{margin:6px 0 10px;color:var(--orange)}
+.stock-avert svg{vertical-align:-1px;margin-right:4px}
+.stock-dbl{padding:8px 0;border-top:1px dashed var(--border)}
+.stock-dbl-t{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;margin-bottom:4px}
+.stock-dbl-l,.stock-lourds{margin:0;padding-left:18px;font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.stock-lourds{max-height:340px;overflow-y:auto;padding-top:6px}
+.stock-lourds li{display:flex;gap:8px;align-items:baseline}
+/* Le poids en tête et en colonne fixe : c'est la donnée qu'on parcourt, pas le titre. */
+.stock-poids{flex:0 0 62px;text-align:right;font-weight:700}
+.stock-dbl-l a,.stock-lourds a{color:inherit}
+/* La corbeille d'un exemplaire : discrète tant qu'on ne la vise pas — supprimer une copie
+   retire un document du dossier de quelqu'un, ce n'est pas un geste à inviter. */
+.stock-del{margin-left:auto;opacity:.45;transition:opacity .12s var(--ease)}
+.stock-dbl-l li:hover .stock-del,.stock-del:focus-visible{opacity:1}
+.stock-dbl-l li{display:flex;align-items:center;gap:6px}
+/* Le champ de confirmation de l'inventaire : la consigne se détache du paragraphe qui l'explique,
+   sinon les deux se lisent comme une seule phrase et l'on ne voit pas qu'on doit écrire. */
+.modal .field.confirm-mot{margin-top:16px}
+.modal .field.confirm-mot>span{display:block;margin-bottom:6px}
+
+/* ————— LA FARINE DE LA PÂTE, SUR LA CARTE —————
+   Posée entre le nom et la garniture : elle n'est ni l'un ni l'autre. Le liseré et l'épi la
+   font repérer sans lire — c'est ce qui compte quand le chrono tourne. Elle emprunte l'or de
+   la charte (`--gold`), déjà la couleur des farines et des empâtements ailleurs dans l'app. */
+.cp-farine{display:inline-flex;align-items:center;gap:3px;margin-left:6px;vertical-align:1px;
+  padding:0 5px;border-radius:99px;font-size:9.5px;font-weight:700;white-space:nowrap;
+  color:var(--text);background:color-mix(in srgb,var(--gold) 26%,transparent)}
+.cp-farine svg{flex:none;opacity:.75}
+/* Le lexique : ce que la carte ne dit pas d'elle-même, sous la carte, là où la question naît. */
+.cp-lexique{margin:8px 0 0;padding:8px 0 0;border-top:1px dashed var(--border);font-size:10.5px;line-height:1.35}
+.cp-lexique dt{display:flex;align-items:center;gap:4px;font-weight:800;color:var(--text);margin-top:5px}
+.cp-lexique dt:first-child{margin-top:0}
+.cp-lexique dd{margin:1px 0 0;color:var(--muted)}
+/* « Le client demandait une … » — la réponse à la devinette, donnée à chaque verdict, réussi ou
+   non. Encadrée comme une carte de rappel : c'est la seule ligne du résultat qu'on relit. */
+/* EN FLUX, pas en flex : la phrase contient du gras, et chaque fragment devenait un élément
+   séparé — d'où des écarts de 8 px autour du nom du style et une coupure avant le tiret. Le
+   voisin `.pq-fete-gain` garde son flex, lui : ses fragments sont courts et l'écart y sert
+   d'espace voulu entre l'icône, le libellé et l'indication. */
+.sim-etait{text-align:center;
+  margin:2px 0 12px;padding:8px 12px;border-radius:10px;font-size:12.5px;line-height:1.35;
+  color:var(--muted);background:var(--surface2);border:1px solid var(--border)}
+.sim-etait b{color:var(--text)}
+.sim-etait .sim-obj-e{vertical-align:-3px;margin-right:5px}
+
+/* ————— LE SERVICE EN CINQ COMMANDES —————
+   Le compteur de manches remplace les cœurs dans le bandeau : ce jeu n'a plus de reprise, c'est
+   l'avancement qui s'y lit. */
+.sim-manche-n{flex:none;font-size:11.5px;font-weight:700;color:var(--muted);
+  padding:2px 8px;border-radius:99px;background:var(--surface2);margin:0}
+/* Le détail des cinq manches, en fin de service : une note globale sans le détail ne dit pas OÙ
+   l'on a perdu, et c'est ce qu'on vient chercher. */
+.sim-manches{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.sim-manches li{display:flex;align-items:center;gap:8px;font-size:12.5px;
+  padding:6px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
+.sim-manches .sim-obj-e{font-size:17px}
+/* L'amorce du souhait du client — les puces qui suivent la complètent, d'où l'italique et
+   l'absence de marge basse : c'est une seule phrase, coupée en quatre. */
+.sim-brief-i{margin:0 0 2px;font-style:italic}
+/* Le compteur de manches dans l'en-tête : il pousse la croix à droite sans la déplacer. */
+.modal.sim .mhead .sim-manche-n{margin-left:auto;margin-right:8px}
+
+/* ————— « LA SUBSTITUTION » : LES QUATRE LIGNES DE LA FICHE —————
+   Deux colonnes sur écran large, une sur téléphone : quatre champs numériques côte à côte à
+   169 px se rempliraient au chausse-pied. */
+.sub-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:14px 0 10px}
+.sub-champ{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted)}
+/* L'unité collée au champ plutôt qu'écrite dans l'intitulé : on saisit un nombre, pas « 150 g ». */
+.sub-saisie{display:flex;align-items:center;gap:6px}
+.sub-saisie .inp{flex:1;min-width:0;text-align:right}
+.sub-saisie b{flex:none;color:var(--text);font-size:13px}
+/* PAS DE `display:flex` SUR UN PARAGRAPHE QUI CONTIENT DU GRAS. Chaque fragment de texte
+   devient un élément flex et la phrase se recompose dans le désordre : « remplace une à poids
+   total constant . Le bassinage… ». C'est exactement le défaut corrigé le même jour sur
+   `.stock-avert`, et je l'ai réintroduit ici. Un texte suivi se met en forme EN FLUX. */
+.sub-rappel{margin:0}
+.sub-rappel svg{vertical-align:-1px;margin-right:4px}
+
+/* ————— « COMPLÈTE LA PÂTE » : LA TABLE DE LA LEVURE —————
+   Repliée par défaut : elle sert de rappel, pas d'énoncé. La ligne qui correspond à la
+   température de la fiche est mise en avant — lire la BONNE ligne est justement l'exercice. */
+.pate-table{margin:4px 0 10px;font-size:11.5px}
+.pate-table>summary{cursor:pointer;color:var(--muted);display:flex;align-items:center;gap:5px}
+.pate-table table{width:100%;border-collapse:collapse;margin-top:7px}
+.pate-table th,.pate-table td{padding:4px 7px;text-align:right;border-bottom:1px solid var(--border)}
+.pate-table th:first-child,.pate-table td:first-child{text-align:left;color:var(--muted)}
+.pate-table thead th{font-size:10.5px;color:var(--muted);font-weight:700}
+.pate-table tr.on td{background:color-mix(in srgb,var(--gold) 15%,transparent);font-weight:700}
+
+/* ————— « L'ACCORD DES SAVEURS » : LES QUATRE CANDIDATS —————
+   Deux colonnes : quatre noms de produits en ligne se couperaient sur téléphone. */
+.acc-choix{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+.acc-opt{display:flex;align-items:center;gap:8px;padding:11px 12px;min-height:44px;
+  border:1px solid var(--border);border-radius:11px;background:var(--surface);cursor:pointer;
+  font-size:13px;text-align:left;transition:border-color .12s var(--ease),background .12s var(--ease)}
+.acc-opt:hover:not(:disabled){border-color:var(--dim);background:var(--surface2)}
+.acc-opt b{flex:1;font-weight:600}
+.acc-emoji{font-size:18px;line-height:1;flex:none}
+/* Les trois états après réponse. Le libellé porte déjà l'icône : la couleur ne fait que
+   renforcer (WCAG 1.4.1). Les non-choisis pâlissent sans disparaître — on doit pouvoir relire
+   ce qu'on a écarté. */
+.acc-opt.ok{border-color:var(--green,#2e9e5b);background:color-mix(in srgb,var(--green,#2e9e5b) 10%,var(--surface))}
+.acc-opt.ko{border-color:var(--ember1);background:color-mix(in srgb,var(--ember1) 10%,var(--surface))}
+.acc-opt.pale{opacity:.55}
+.acc-opt:disabled{cursor:default}
+/* La justification : qui suggère cet accord. C'est elle qui rend le jeu défendable. */
+.acc-pourquoi{padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);font-size:12.5px}
+.acc-pourquoi p{margin:0}
+.acc-pourquoi p + p{margin-top:4px}

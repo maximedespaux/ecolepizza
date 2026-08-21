@@ -166,7 +166,7 @@ function EmitterForm({ initial, onCancel, onSave, saving }) {
           </div>
           <p className="hint" style={{ margin: "6px 0 0" }}>
             Entre les jetons, tapez vos séparateurs (<span className="mono">. - / _</span>) au clavier.
-            <b> {"{SEQ}"} est obligatoire</b> — c'est le numéro qui change à chaque facture.
+            <b> {"{SEQ}"} est obligatoire</b> : c'est le numéro qui change à chaque facture.
           </p>
         </div>
         <label className="field" style={{ gridColumn: "1 / -1", display: "flex", gap: 8, alignItems: "center" }}>
@@ -177,7 +177,7 @@ function EmitterForm({ initial, onCancel, onSave, saving }) {
       <p className="sub" style={{ margin: "4px 0 0" }}>
         Prochain numéro : <span className="mono">{apercuNumero(form.number_format, form.next_number || 1)}</span>
         {form.number_format && !/\{SEQ(?::\d+)?\}/.test(form.number_format)
-          ? <span style={{ color: "var(--ember1)" }}> — il manque {"{SEQ}"}</span> : null}
+          ? <span style={{ color: "var(--ember1)" }}>il manque {"{SEQ}"}</span> : null}
       </p>
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <button className="btn ghost sm" onClick={onCancel}>Annuler</button>
@@ -217,7 +217,7 @@ export default function BillingProfiles({ onError }) {
     <Card title={<span className="card-ttl"><Icon name="building" size={16} /> Entités émettrices</span>}>
       <p className="hint" style={{ marginTop: 0 }}>
         Les identités sous lesquelles tu factures. Une entité distincte a son SIRET, sa TVA et sa
-        numérotation propres — le PDF <b>et</b> le fichier Factur-X portent alors cette identité.
+        numérotation propres, le PDF <b>et</b> le fichier Factur-X portent alors cette identité.
         L'entité « par défaut » s'applique seule ; tu peux la changer à chaque vente ou facture.
       </p>
       {msg && <p className={"hint"} style={{ color: "var(--green)" }}>{msg.text}</p>}
@@ -231,7 +231,7 @@ export default function BillingProfiles({ onError }) {
               {r.is_organization ? <span className="badge b" style={{ marginLeft: 8 }}>organisme</span> : null}
               {r.is_default ? <span className="badge g" style={{ marginLeft: 8 }}>par défaut</span> : null}
               <div className="hint" style={{ fontSize: 12 }}>
-                {r.legal_name} · {r.siret || "SIRET —"} · <span className="mono">{apercuNumero(r.number_format, r.next_number || 1)}</span>
+                {r.legal_name} · {r.siret || "SIRET, "} · <span className="mono">{apercuNumero(r.number_format, r.next_number || 1)}</span>
               </div>
             </div>
             <button className="btn ghost sm" onClick={() => setEditing(r)}><Icon name="settings" size={13} /></button>

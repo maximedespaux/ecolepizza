@@ -7,6 +7,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
+import { dateHeure } from "../lib/format.js";
 
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
@@ -51,13 +52,13 @@ function EmargementStagiaire() {
               return (
                 <div key={r.record_id} className="stu-row" style={{ padding: "10px 4px" }}>
                   <span className="stu-row-t">
-                    <b style={{ textTransform: "capitalize" }}>{frDate(r.date)} — {SLOT[r.slot] || r.slot}</b>
+                    <b style={{ textTransform: "capitalize" }}>{frDate(r.date)}, {SLOT[r.slot] || r.slot}</b>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
                       {r.program_code ? `${r.program_code} · ` : ""}{r.program_title || ""}
                     </span>
                   </span>
                   {r.signed ? (
-                    <Badge tone="g">Signé{r.signed_at ? ` · ${r.signed_at}` : ""}</Badge>
+                    <Badge tone="g">Signé{r.signed_at ? ` · ${dateHeure(r.signed_at)}` : ""}</Badge>
                   ) : future ? (
                     <span className="hint">À venir</span>
                   ) : (
@@ -72,7 +73,7 @@ function EmargementStagiaire() {
 
       {signing && (
         <SignatureModal
-          doc={{ label: `Émargement — ${SLOT[signing.slot] || signing.slot} ${frDate(signing.date)}` }}
+          doc={{ label: `Émargement, ${SLOT[signing.slot] || signing.slot} ${frDate(signing.date)}` }}
           defaultName={`${user?.first_name || ""} ${user?.last_name || ""}`.trim()}
           onConfirm={onConfirm}
           onClose={() => setSigning(null)}

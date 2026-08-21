@@ -132,7 +132,7 @@ const TOKEN_CATALOG = [
         group: 'Organisme',
         tokens: [
             { key: 'Organisme', label: 'Nom de l’organisme', sample: 'École Pizzaïolo Despaux' },
-            { key: 'Organisme court', label: 'Nom court', sample: 'Impasto' },
+            { key: 'Organisme court', label: 'Nom court', sample: 'Impastio' },
             { key: 'Responsable', label: 'Responsable', sample: 'Jean-Jacques Despaux' },
             { key: 'Siret organisme', label: 'SIRET', sample: '987 654 321 00019' },
             { key: 'TVA organisme', label: 'N° TVA', sample: 'FR76987654321' },

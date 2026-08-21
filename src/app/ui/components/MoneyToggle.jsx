@@ -10,7 +10,12 @@ import { Icon } from "./Icon.jsx";
  * Les utilisateurs sans droit de révélation (ex. formateur) voient un simple
  * indicateur « Confidentiel » : les montants restent masqués en permanence.
  */
-export default function MoneyToggle() {
+/**
+ * `sm` : la variante courte, pour la ligne de compteurs du tableau de bord — un bouton de
+ * pleine taille y écraserait les quatre chiffres qu'il accompagne.
+ */
+export default function MoneyToggle({ sm = false }) {
+  const taille = sm ? " sm" : "";
   const { user } = useContext(UserContext);
   const { masked, hide, reveal } = useMoneyMask();
   const [confirm, setConfirm] = useState(false);
@@ -23,7 +28,7 @@ export default function MoneyToggle() {
 
   if (!canRevealMoney(user)) {
     return (
-      <span className="btn ghost" style={{ cursor: "default", opacity: 0.75, gap: 6 }} title="Montants confidentiels — masqués pour votre profil">
+      <span className={"btn ghost" + taille} style={{ cursor: "default", opacity: 0.75, gap: 6 }} title="Montants confidentiels, masqués pour votre profil">
         <Icon name="eye-off" size={16} /> Confidentiel
       </span>
     );
@@ -32,7 +37,7 @@ export default function MoneyToggle() {
   return (
     <>
       <button
-        className="btn ghost"
+        className={"btn ghost" + taille}
         onClick={() => (masked ? askOrReveal() : hide())}
         title={masked ? "Afficher les montants (confidentiel)" : "Masquer les montants"}
       >

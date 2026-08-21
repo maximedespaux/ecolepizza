@@ -64,6 +64,10 @@ export const NAV = [
     items: [
       { to: "/reglages", ic: "building", label: "Organisme", roles: ADMIN },
       { to: "/reglages-facturation", ic: "receipt", label: "Facturation", roles: ADMIN },
+      /* CE QUI SORT DE L'ÉCOLE a sa propre rubrique : ce réglage ne décrit pas l'organisme comme
+         son SIRET, il décide de ce qui est communiqué à des tiers — et le texte que les
+         stagiaires acceptent en découle mot pour mot. */
+      { to: "/reglages-partenaires", ic: "handshake", label: "Partenaires", roles: ADMIN },
       { to: "/equipe", ic: "team", label: "Équipe & accès", roles: OWNER },
       { to: "/roles", ic: "shield", label: "Rôles d'accès", roles: OWNER },
       { to: "/modeles", ic: "file-text", label: "Modèles de documents", roles: ADMIN },
@@ -136,6 +140,7 @@ export const PAGE_TITLES = {
   "/comptabilite": "Comptabilité",
   "/reglages": "Organisme",
   "/reglages-facturation": "Facturation",
+  "/reglages-partenaires": "Partenaires",
   "/equipe": "Équipe & accès",
   "/roles": "Rôles d'accès",
   "/modeles": "Modèles de documents",
@@ -154,7 +159,7 @@ export function canAccess(role, roles) {
 export const OWNER_ROLES = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
 
 // Rubriques déplacées dans le hub « Paramètres » (menu profil) et retirées de la barre latérale.
-export const SETTINGS_PATHS = ["/reglages", "/reglages-facturation", "/equipe", "/roles"];
+export const SETTINGS_PATHS = ["/reglages", "/reglages-facturation", "/reglages-partenaires", "/equipe", "/roles"];
 
 // Normalise nav_access en objet { chemin: "read" | "write" }.
 // Rétro-compat : un tableau (ancien format) = tout en écriture.
@@ -261,7 +266,7 @@ export const EXTRA_ACCESS = [
   {
     to: "cap:reveal-money",
     label: "Révéler les montants",
-    hint: "Pages Ventes & Finance — lève le masque des montants (• • • • •).",
+    hint: "Pages Ventes & Finance, lève le masque des montants (• • • • •).",
     ic: "eye",
     defaultRoles: ["SUPER_ADMIN"],
   },

@@ -39,6 +39,7 @@ import Comptabilite from "./pages/Comptabilite.jsx";
 import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
 import FacturationReglages from "./pages/FacturationReglages.jsx";
+import ReglagesPartenaires from "./pages/ReglagesPartenaires.jsx";
 import Parametres from "./pages/Parametres.jsx";
 import Modeles from "./pages/Modeles.jsx";
 import Opcos from "./pages/Opcos.jsx";
@@ -51,6 +52,8 @@ import Notifications from "./pages/Notifications.jsx";
 import Platform from "./pages/Platform.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
 import EmargementStagiaire from "./pages/EmargementStagiaire.jsx";
+import Confidentialite from "./pages/Confidentialite.jsx";
+import BandeauConfidentialite from "./components/BandeauConfidentialite.jsx";
 import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
 import PizzaQuest from "./pages/PizzaQuest.jsx";
 import Boutique from "./pages/Boutique.jsx";
@@ -118,7 +121,7 @@ function AppRoutes() {
   if (isLoading) {
     return (
       <div className="app-loading">
-        <div className="brand-splash"><img src={LOGO} alt="" /><span>Impasto</span></div>
+        <div className="brand-splash"><img src={LOGO} alt="" /><span>Impastio</span></div>
       </div>
     );
   }
@@ -129,8 +132,16 @@ function AppRoutes() {
   const isRepresentant = user?.role === "ENTREPRISE";
 
   return (
+    <>
+    {/* APRÈS LA CONNEXION, et une seule fois pour les quatre rôles. Sur l'écran de connexion il
+        se lirait au moment où l'on cherche à entrer : personne ne le lit, tout le monde le
+        chasse. Le lien de l'écran de login reste là pour qui veut savoir AVANT d'entrer. */}
+    {user && <BandeauConfidentialite />}
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* PUBLIQUE, et volontairement : l'information sur ce qu'on dépose doit pouvoir être lue
+          AVANT de créer un compte, sinon elle arrive après la décision qu'elle éclaire. */}
+      <Route path="/confidentialite" element={<Confidentialite />} />
       <Route path="/signer/:token" element={<SignerPublic />} />
 
       {isPlatform ? (
@@ -206,6 +217,7 @@ function AppRoutes() {
           <Route path="carte" element={<Guard nav="/carte" roles={ADMIN}><Carte /></Guard>} />
           <Route path="reglages" element={<Guard nav="/reglages" roles={ADMIN}><Reglages /></Guard>} />
           <Route path="reglages-facturation" element={<Guard nav="/reglages-facturation" roles={ADMIN}><FacturationReglages /></Guard>} />
+          <Route path="reglages-partenaires" element={<Guard nav="/reglages-partenaires" roles={ADMIN}><ReglagesPartenaires /></Guard>} />
           <Route path="modeles" element={<Guard nav="/modeles" roles={ADMIN}><Modeles /></Guard>} />
           <Route path="modeles/:slug/editeur" element={<Guard nav="/modeles" roles={ADMIN}><TemplateEditor /></Guard>} />
           <Route path="modeles/emargement/:id" element={<Guard nav="/modeles" roles={ADMIN}><EmargementEditor /></Guard>} />
@@ -219,6 +231,7 @@ function AppRoutes() {
         </Route>
       )}
     </Routes>
+    </>
   );
 }
 

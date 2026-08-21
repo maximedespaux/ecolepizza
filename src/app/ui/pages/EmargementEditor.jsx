@@ -83,7 +83,7 @@ export default function EmargementEditor() {
 
   return (
     <>
-      <PageHead eyebrow="Modèles" title={`Feuille d'émargement — ${name || "…"}`}
+      <PageHead eyebrow="Modèles" title={`Feuille d'émargement, ${name || "…"}`}
         lead="Mise en page du modèle. Les colonnes s'adaptent au nombre de jours ; la feuille tient sur une page."
         actions={<button className="btn ghost" onClick={() => navigate("/modeles")}><Icon name="chevron-left" size={14} aria-hidden="true" /> Retour aux documents</button>} />
       <StatusMessage status={status} />
@@ -178,11 +178,11 @@ export default function EmargementEditor() {
                 onChange={(e) => { setCfg((p) => ({ ...p, margin_mm: parseInt(e.target.value, 10) })); setDirty(true); }} style={{ width: "100%" }} /></div>
           </div>
 
-          <div className="field"><label>Pied de page — mention gauche (optionnel)</label>
+          <div className="field"><label>Pied de page, mention gauche (optionnel)</label>
             <input className="inp" value={cfg.footer_left} onChange={set("footer_left")}
               placeholder="Par défaut : « Fait à {ville}, le {date} »" /></div>
 
-          <div className="field"><label>Pied de page — légende du cachet</label>
+          <div className="field"><label>Pied de page, légende du cachet</label>
             <input className="inp" value={cfg.footer_caption} onChange={set("footer_caption")}
               placeholder="Signature et cachet de l'organisme de formation" /></div>
 
@@ -249,7 +249,7 @@ export function EmargementPreview({ cfg, org }) {
           <div style={{ fontWeight: 700, marginTop: 2 }}>{org.legal_name}</div>
           <div style={{ color: "#444", lineHeight: 1.5, marginTop: 3 }}>
             Intitulé de l'action de formation : <b>Pizzaïolo Niveau I</b> (NIV1)<br />
-            Date(s) : <b>du 06/07/2026 au 07/07/2026</b> — Semaine 28/2026{cfg.show_duration ? " · Durée : 2 jours · 14 h" : ""}<br />
+            Date(s) : <b>du 06/07/2026 au 07/07/2026</b>Semaine 28/2026{cfg.show_duration ? " · Durée : 2 jours · 14 h" : ""}<br />
             {cfg.show_horaires ? <>Horaires : 9h00 – 12h30 / 13h30 – 17h00<br /></> : null}
             {cfg.header_note ? <>{cfg.header_note}<br /></> : null}
             {cfg.show_lieu && orgAddr ? `Lieu : ${orgAddr}` : null}

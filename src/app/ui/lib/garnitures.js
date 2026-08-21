@@ -152,13 +152,13 @@ export const isRawProduct = (p) => !PREPARED_RE.test(`${p.name || p.produit || p
 // Mode de préparation d'une base (surtout tomate & crème) : produit prêt, préparé, ou cuisiné maison.
 export const BASE_MODES = {
   tomate: [
-    { key: "prete", label: "Prête à l'emploi", desc: "Sauce du commerce", hint: "Sauce tomate prête, versée telle quelle — coût = produit catalogue." },
-    { key: "preparee", label: "Préparée", desc: "Pelati assaisonnés", hint: "Tomates concassées + huile, sel, origan — assaisonnées, non cuites." },
+    { key: "prete", label: "Prête à l'emploi", desc: "Sauce du commerce", hint: "Sauce tomate prête, versée telle quelle, coût = produit catalogue." },
+    { key: "preparee", label: "Préparée", desc: "Pelati assaisonnés", hint: "Tomates concassées + huile, sel, origan, assaisonnées, non cuites." },
     { key: "cuisinee", label: "Cuisinée maison", desc: "Recette mijotée", hint: "Ta sauce cuisinée à partir de produits bruts (atelier produits cuisinés)." },
   ],
   creme: [
-    { key: "prete", label: "Crème (produit)", desc: "Crème du commerce", hint: "Crème fraîche épaisse prête — coût = produit catalogue." },
-    { key: "perso", label: "Crème personnalisée", desc: "Base crème maison", hint: "Ta base crème (ail, herbes, réduction…) — atelier produits cuisinés." },
+    { key: "prete", label: "Crème (produit)", desc: "Crème du commerce", hint: "Crème fraîche épaisse prête, coût = produit catalogue." },
+    { key: "perso", label: "Crème personnalisée", desc: "Base crème maison", hint: "Ta base crème (ail, herbes, réduction…), atelier produits cuisinés." },
   ],
 };
 export const baseModesOf = (baseKey) => BASE_MODES[baseKey] || null;
@@ -179,7 +179,7 @@ export const GARN_TIPS = {
   chorizo: "Un filet de miel adoucit le piquant du chorizo.",
   roquette: "À déposer crue APRÈS cuisson (elle brûle au four).",
   basilic: "À ajouter à la sortie du four pour garder son parfum.",
-  burrata: "À poser après cuisson — elle ne doit jamais cuire.",
+  burrata: "À poser après cuisson, elle ne doit jamais cuire.",
   stracciatella: "À poser après cuisson, façon fraîcheur crémeuse.",
   mozza_bufala: "Bien l'égoutter, sinon elle détrempe la pâte.",
   jambon_cru: "À poser après cuisson pour garder son moelleux.",

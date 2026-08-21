@@ -119,7 +119,7 @@ function Comptabilite() {
         title="Comptabilité"
         // L'avertissement reste : il empêche de prendre cet écran pour une comptabilité
         // opposable. Le reste décrivait ce qui est maintenant lisible juste en dessous.
-        lead="Tableau de gestion — ce n'est pas une comptabilité légale."
+        lead="Tableau de gestion, ce n'est pas une comptabilité légale."
         actions={
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <MoneyToggle />
@@ -466,7 +466,7 @@ function Dividendes({ data }) {
     ...(data.marge > 0 ? [{ label: "Marge (→ dividendes)", value: data.marge, color: "var(--green)" }] : []),
   ];
   return (
-    <Card title={T("coins", `Dividendes — objectif ${data.dividendeCible}% du CA`)}>
+    <Card title={T("coins", `Dividendes, objectif ${data.dividendeCible}% du CA`)}>
       <p className="sub" style={{ marginTop: -4 }}>La part distribuable ne peut jamais dépasser la marge.</p>
       <div className="grid cols-3" style={{ marginBottom: 18 }}>
         <Mini label="Marge distribuable" value={euro(data.dividendePossible)} tone={data.dividendePossible > 0 ? "var(--green)" : "var(--ember1)"} />
@@ -490,7 +490,7 @@ function Dividendes({ data }) {
             <span key={i} title={`${s.label} : ${euro(s.value)}`} style={{ width: `${(s.value / denom) * 100}%`, background: s.color }} />
           ))}
         </div>
-        <p className="sub" style={{ marginTop: 8 }}>Réduire les postes en rouge agrandit la marge verte — donc la part distribuable en dividendes.</p>
+        <p className="sub" style={{ marginTop: 8 }}>Réduire les postes en rouge agrandit la marge verte, donc la part distribuable en dividendes.</p>
       </div>
     </Card>
   );
@@ -537,7 +537,7 @@ function Performance({ annee }) {
         <PerfCard label="Dépenses" icon="receipt" tone="ember" cur={euro(c.depensesTotal)} prev={euro(p.depensesTotal)} rc={c.depensesTotal} rp={p.depensesTotal} an={d.anneePrec} invert />
         <PerfCard label="Marge" icon="target" tone="green" cur={euro(c.marge)} prev={euro(p.marge)} rc={c.marge} rp={p.marge} an={d.anneePrec} />
       </div>
-      <Card title={T("receipt", `Dépenses par poste — ${d.annee} vs ${d.anneePrec}`)}>
+      <Card title={T("receipt", `Dépenses par poste, ${d.annee} vs ${d.anneePrec}`)}>
         <DataTable
           rows={d.postesLabels}
           rowKey={(pl) => pl.categorie}

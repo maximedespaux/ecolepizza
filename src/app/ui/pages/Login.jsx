@@ -98,14 +98,13 @@ function Login() {
           <div className="login-brandmark">
             <img src={LOGO} alt="École Pizza" />
             <div>
-              <div className="lb-name">Impasto</div>
+              <div className="lb-name">Impastio</div>
               <div className="lb-sub">École Pizza · Jean-Jacques Despaux</div>
             </div>
           </div>
           <h2 className="login-tag">Le secrétariat de votre organisme, simplifié.</h2>
           <p className="login-blurb">
-            Stagiaires, documents, signatures, émargement et suivi Qualiopi —
-            réunis dans un seul outil, pensé pour l'École Pizza.
+            Stagiaires, documents, signatures, émargement et suivi Qualiopi, réunis dans un seul outil, pensé pour l'École Pizza.
           </p>
           <ul className="login-feats">
             {feats.map((f) => (
@@ -210,6 +209,14 @@ function Login() {
               )}
             </button>
           </form>
+
+          {/* Le lien vers la page de confidentialité est ICI, sur l'écran de connexion : c'est le
+              seul endroit que TOUT LE MONDE traverse, et il doit se lire avant de se connecter —
+              une information sur ce qu'on dépose qui n'arriverait qu'une fois dedans arriverait
+              après la décision qu'elle éclaire. */}
+          <p className="login-legal">
+            <a href="/confidentialite">Confidentialité et données déposées sur votre appareil</a>
+          </p>
 
         </div>
       </section>

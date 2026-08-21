@@ -51,7 +51,7 @@ export default function Entreprises() {
         <label className="rech-champ">
           <Icon name="search" size={18} />
           <input autoFocus aria-label="Rechercher une entreprise"
-            placeholder="Rechercher une entreprise — nom, SIRET, ville, référent…"
+            placeholder="Rechercher une entreprise, nom, SIRET, ville, référent…"
             value={query} onChange={(e) => setQuery(e.target.value)} />
           {query && (
             <button type="button" className="rech-x" onClick={() => setQuery("")} aria-label="Effacer la recherche">
@@ -134,7 +134,7 @@ function CreateCompanyModal({ onClose, onCreated, onError }) {
           <div className="field"><label>E-mail</label><input className="inp" type="email" value={f.email} onChange={set("email")} /></div>
           <div className="grid cols-2" style={{ gap: 12 }}>
             <div className="field"><label>Civilité référent</label>
-              <select className="inp" value={f.representative_civ} onChange={set("representative_civ")}><option value="">—</option><option>M.</option><option>Mme</option></select></div>
+              <select className="inp" value={f.representative_civ} onChange={set("representative_civ")}><option value="">-</option><option>M.</option><option>Mme</option></select></div>
             <div className="field"><label>Nom du référent</label><input className="inp" value={f.representative_name} onChange={set("representative_name")} /></div>
           </div>
         </div>

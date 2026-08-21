@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
+import ImageLien from "../components/ImageLien.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
@@ -224,7 +225,7 @@ function Ventes() {
       setCart([]); switchBuyerType("stagiaire"); setDiscount(""); setDueDate("");
       setPayments([{ method: payOptions[0] || "", amount: "" }]);
       setLastInvoice({ id: r.invoice_id, number: r.invoice_number });
-      setStatus({ type: "success", message: `Vente validée — facture ${r.invoice_number} (${euro(r.total_ttc)} TTC) pour ${r.buyer}.` });
+      setStatus({ type: "success", message: `Vente validée, facture ${r.invoice_number} (${euro(r.total_ttc)} TTC) pour ${r.buyer}.` });
       loadSales(); loadInventory(); bumpBadges();
     } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
@@ -264,7 +265,7 @@ function Ventes() {
           )}
           {/* Caisse : boutique (catalogue) à gauche, panier avec client + paiement à droite. */}
           <div className="grid cols-2" style={{ alignItems: "start" }}>
-            <Card title={<span className="card-ttl"><Icon name="package" size={16} /> Boutique — cliquer pour ajouter</span>}>
+            <Card title={<span className="card-ttl"><Icon name="package" size={16} /> Boutique, cliquer pour ajouter</span>}>
               {posItems.length === 0 ? (
                 <EmptyState icon="package">Aucun article en boutique. Ajoute un prix aux articles dans l'onglet Inventaire.</EmptyState>
               ) : (
@@ -281,6 +282,13 @@ function Ventes() {
                       const atMax = it.quantity <= 0 || inC >= it.quantity; // stock épuisé ou déjà tout au panier
                       return (
                         <div key={it.id} className="shop-card">
+                          {/* LA PHOTO À LA CAISSE (migration 133). On y vend en présence d'un
+                              client, souvent sans connaître le catalogue par cœur : reconnaître
+                              une veste ou une pelle d'un coup d'œil va plus vite que lire quinze
+                              libellés. Plus petite que dans la boutique du stagiaire — celui-ci
+                              choisit, l'opérateur RETROUVE — et absente s'il n'y a pas d'image,
+                              plutôt qu'un cadre vide qui aurait l'air cassé. */}
+                          <ImageLien src={it.image_url} className="pos-photo" fallback={null} />
                           {!posCat ? <span className="shop-rayon">{it.category || "Divers"}</span> : null}
                           <b className="shop-name">{it.name}</b>
                           <span className="shop-price"><b className="tnum">{euro(it.unit_price)} <span className="shop-unit">HT</span></b></span>
@@ -333,7 +341,7 @@ function Ventes() {
                           {matches.map((l) => (
                             <button key={l.id} className="btn sm" style={{ justifyContent: "flex-start" }}
                               onClick={() => setClient({ id: l.id, name: `${l.first_name} ${l.last_name}` })}>
-                              {l.last_name} {l.first_name} <span className="hint">· {l.email || "—"}</span>
+                              {l.last_name} {l.first_name} <span className="hint">· {l.email || "-"}</span>
                             </button>
                           ))}
                         </div>
@@ -356,7 +364,7 @@ function Ventes() {
                             {companyMatches.map((c) => (
                               <button key={c.id} className="btn sm" style={{ justifyContent: "flex-start" }}
                                 onClick={() => setCompany({ id: c.id, name: c.name })}>
-                                {c.name} <span className="hint">· {c.siret || "SIRET —"}</span>
+                                {c.name} <span className="hint">· {c.siret || "SIRET, "}</span>
                               </button>
                             ))}
                           </div>
@@ -388,7 +396,7 @@ function Ventes() {
                               {matches.map((l) => (
                                 <button key={l.id} className="btn sm" style={{ justifyContent: "flex-start" }}
                                   onClick={() => setClient({ id: l.id, name: `${l.first_name} ${l.last_name}` })}>
-                                  {l.last_name} {l.first_name} <span className="hint">· {l.email || "—"}</span>
+                                  {l.last_name} {l.first_name} <span className="hint">· {l.email || "-"}</span>
                                 </button>
                               ))}
                             </div>
@@ -405,7 +413,7 @@ function Ventes() {
                 <label>Modèle de facture <span style={{ color: "var(--ember1)" }}>*</span></label>
                 <select className="inp" value={factureSlug} onChange={(e) => setFactureSlug(e.target.value)}
                   style={!factureSlug ? { borderColor: "var(--ember1)" } : undefined}>
-                  <option value="">— Choisir le type de facture —</option>
+                  <option value="">Choisir le type de facture</option>
                   {factureTemplates.map((t) => (
                     <option key={t.slug} value={t.slug}>{t.label || t.slug}</option>
                   ))}
@@ -552,7 +560,7 @@ function SalesHistory({ sales, onRemove, onDownload }) {
           key, invoice_id: s.invoice_id || null, invoice_number: s.invoice_number || null,
           // L'entreprise acheteuse prime dans l'affichage : c'est elle qui a payé. À défaut, le
           // stagiaire ; à défaut encore, un tiret pour une vente comptoir.
-          date: s.date, client: s.company_name || (s.last_name ? `${s.last_name} ${s.first_name || ""}`.trim() : "—"),
+          date: s.date, client: s.company_name || (s.last_name ? `${s.last_name} ${s.first_name || ""}`.trim() : "-"),
           lines: [], total: 0, units: 0,
         };
         map.set(key, g);

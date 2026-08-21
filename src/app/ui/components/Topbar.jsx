@@ -51,7 +51,7 @@ function Topbar({ onMenu }) {
         <Icon name="menu" size={20} />
       </button>
       <div className="crumbs">
-        Impasto <span style={{ opacity: 0.4 }}>/</span> <b>{title}</b>
+        Impastio <span style={{ opacity: 0.4 }}>/</span> <b>{title}</b>
       </div>
       <div className="spacer" />
 

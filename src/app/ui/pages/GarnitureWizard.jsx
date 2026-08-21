@@ -217,7 +217,7 @@ export default function GarnitureWizard() {
                         ) : (
                           <>
                             <div className="ate-lbl" style={{ marginBottom: 6 }}>Choisis la base dans ta mercuriale</div>
-                            <MercProductPicker items={merc} onAdd={setBaseProductFromMerc} addedKeys={new Set()} onManage={() => openMerc("create")} filter={baseMercFilter} emptyLabel="Aucune base ici — ajoute une tomate / crème depuis le catalogue." />
+                            <MercProductPicker items={merc} onAdd={setBaseProductFromMerc} addedKeys={new Set()} onManage={() => openMerc("create")} filter={baseMercFilter} emptyLabel="Aucune base ici, ajoute une tomate / crème depuis le catalogue." />
                           </>
                         )
                       ) : (
@@ -227,12 +227,12 @@ export default function GarnitureWizard() {
                         </div>
                       )}
                       {(garn.baseMode === "cuisinee" || garn.baseMode === "perso") && (
-                        <p className="hint" style={{ margin: "8px 0 0", fontSize: 11.5, color: "var(--orange)" }}>🔧 L'atelier « produit cuisiné » (composer depuis des produits bruts avec rendement) arrive bientôt — en attendant, saisis le libellé et le coût €/kg de ta préparation.</p>
+                        <p className="hint" style={{ margin: "8px 0 0", fontSize: 11.5, color: "var(--orange)" }}>🔧 L'atelier « produit cuisiné » (composer depuis des produits bruts avec rendement) arrive bientôt, en attendant, saisis le libellé et le coût €/kg de ta préparation.</p>
                       )}
                       <div className="field" style={{ marginTop: 12, maxWidth: 240 }}><label>Quantité de base ({qtyUnit((garn.baseProduct && garn.baseMode === "prete") ? garn.baseProduct.unit : "Kg")}/pizza)</label><input className="inp" type="number" min="0" value={garn.baseQty ?? baseObj.qty} onChange={(e) => setGarn({ baseQty: Number(e.target.value) })} /></div>
                     </div>
                   )}
-                  <p className="hint" style={{ margin: "14px 0 0" }}>La base pose le profil de saveur — on te proposera ensuite des produits qui s'y associent bien.</p>
+                  <p className="hint" style={{ margin: "14px 0 0" }}>La base pose le profil de saveur : on te proposera ensuite des produits qui s'y associent bien.</p>
                 </div>
               )}
 
@@ -243,7 +243,7 @@ export default function GarnitureWizard() {
 
                   {(garn.products || []).length > 0 && (
                     <div style={{ marginTop: 18 }}>
-                      <div className="ate-lbl" style={{ marginBottom: 6 }}>Produits choisis ({garn.products.length}) <span className="hint" style={{ fontWeight: 400 }}>— ajuste le grammage / pizza</span></div>
+                      <div className="ate-lbl" style={{ marginBottom: 6 }}>Produits choisis ({garn.products.length}) <span className="hint" style={{ fontWeight: 400 }}>ajuste le grammage / pizza</span></div>
                       {garn.products.map((p) => { const m = prodOf(p.key); const unit = p.unit || "Kg";
                         return (
                           <div key={p.key} className="mix-row">
@@ -364,7 +364,7 @@ export default function GarnitureWizard() {
         </>
       )}
       <SaveToast signal={enregistre} label={`Garniture enregistrée : ${r.name || "sans nom"}`} />
-      <SaveToast signal={echec} label="Enregistrement impossible — réessayez" tone="err" />
+      <SaveToast signal={echec} label="Enregistrement impossible, réessayez" tone="err" />
     </>
   );
 }
@@ -391,14 +391,14 @@ function MercProductPicker({ items, onAdd, addedKeys, onManage, filter, emptyLab
         <button className="btn sm ghost" onClick={onManage}><Icon name="plus" size={13} /> depuis le catalogue</button>
       </div>
       <div className="cat-results">
-        {list.length === 0 ? <div className="cat-empty">{emptyLabel || "Aucun produit ici — ajoute-en depuis le catalogue."}</div>
+        {list.length === 0 ? <div className="cat-empty">{emptyLabel || "Aucun produit ici, ajoute-en depuis le catalogue."}</div>
           : Object.entries(byFam).map(([fam, ms]) => (
             <div key={fam}>
               <div className="ate-lbl" style={{ margin: "4px 0", fontSize: 11 }}>{fam}</div>
               {ms.map((m) => { const added = addedKeys && addedKeys.has("merc:" + m.id); return (
                 <button key={m.id} className={"cat-row" + (added ? " added" : "")} onClick={() => !added && onAdd(m)} style={{ marginBottom: 4 }}>
                   <Icon name={added ? "check" : "plus"} size={15} />
-                  <div style={{ flex: 1, minWidth: 0 }}><b style={{ fontSize: 12.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.label}</b><span style={{ fontSize: 11, color: "var(--muted)" }}>{[m.brand, m.origin, m.market].filter(Boolean).join(" · ") || "—"}</span></div>
+                  <div style={{ flex: 1, minWidth: 0 }}><b style={{ fontSize: 12.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.label}</b><span style={{ fontSize: 11, color: "var(--muted)" }}>{[m.brand, m.origin, m.market].filter(Boolean).join(" · ") || "-"}</span></div>
                   <span className="tnum" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{euro(num(m.price))}/{unitShort(m.unit)}</span>
                 </button>
               ); })}

@@ -1,4 +1,4 @@
-# Chantiers Impasto — état des lieux et reprise
+# Chantiers Impastio — état des lieux et reprise
 
 > Document de reprise rédigé le 2026-07-28. Il consigne ce qui a été fait, **comment travailler
 > sur ce projet sans casser** (leçons payées cher), et tout ce qui reste, classé par valeur.
@@ -9,7 +9,7 @@
 
 ## 1. Le projet en dix lignes
 
-**Impasto** — application de gestion de l'École Pizza (Jean-Jacques Despaux, Lannemezan).
+**Impastio** — application de gestion de l'École Pizza (Jean-Jacques Despaux, Lannemezan).
 Deux mondes dans une même application :
 
 - **Espace stagiaire** — ludique, façon Duolingo. Police ronde Fredoka, coins doux, retour
@@ -501,7 +501,7 @@ Un lanceur de migration existe (le client `mysql` n'est pas installé sur la mac
 (« RSC Mode CSRF Bypass »). **On reste en 7.18 sciemment**, pour trois raisons :
 
 1. L'avis dit lui-même : *« This only affects your application if you are using the unstable RSC
-   APIs. »* Impasto est une SPA Vite — `BrowserRouter`, `Routes`, `Link`, `useNavigate`,
+   APIs. »* Impastio est une SPA Vite — `BrowserRouter`, `Routes`, `Link`, `useNavigate`,
    `useParams`, `Outlet`. Aucun RSC, aucun `loader`/`action`, aucun rendu serveur. **La faille
    n'est pas atteignable ici.**
 2. Il n'existe **aucun correctif en 7.x** : la seule version corrigée est `react-router@8.3.0`.
@@ -643,3 +643,122 @@ colonne `email_pending` à nettoyer.
    volume et de ce à quoi on veut se lier.
 3. **Les stagiaires ont-ils tous une adresse fiable en base ?** À vérifier avant : la fonction ne
    sert qu'à ceux qui en ont une, et le reste continuera de passer par l'école.
+
+---
+
+## 9. RGPD — transmission des coordonnées aux partenaires (2026-08-02)
+
+### 9.1 La situation, telle qu'elle est
+
+L'organisme envoie à ses partenaires, **session par session et par courriel** : nom, prénom,
+e-mail, téléphone, formation, dates — et parfois l'entreprise. **Le partenaire démarche ensuite
+les stagiaires.**
+
+C'est de la **prospection commerciale par un tiers**. Elle exige le **consentement préalable** de
+chaque personne, et l'organisme doit pouvoir **prouver** l'avoir obtenu (art. 7.1 du RGPD). Pour
+une sollicitation par courriel ou SMS adressée à un particulier, l'article L34-5 du code des
+postes ajoute la même exigence d'accord préalable.
+
+**Aujourd'hui ce consentement n'existe pas** : ni demandé, ni enregistré, ni opposable. Et comme
+le courriel est écrit à la main, rien n'empêche d'y inclure quelqu'un qui aurait refusé.
+
+Ce n'est pas un défaut de code — l'application ne transmet rien à un partenaire, vérifié par
+balayage de tous les appels sortants. C'est précisément ce qui le rend invisible : une
+transmission par courriel ne laisse aucune trace côté outil.
+
+### 9.2 À faire tout de suite, sans attendre le code
+
+1. **Cesser d'envoyer e-mail et téléphone** tant qu'aucun consentement n'est recueilli. Nom,
+   formation et dates posent déjà question, mais ce sont les moyens de contact qui rendent le
+   démarchage possible.
+2. **Poser la question aux stagiaires en cours**, séparément de tout le reste : ni dans le
+   règlement intérieur, ni dans une case pré-cochée du dossier d'inscription. Un consentement noyé
+   dans un contrat n'est pas « libre et spécifique ».
+3. **Vérifier ce que le partenaire fait des données** — s'il les conserve, les revend, ou les
+   croise. Il devient responsable de son propre traitement, et l'organisme doit savoir à quoi il
+   expose ses stagiaires.
+
+### 9.3 Ce que le code doit porter (migration 130, écrite)
+
+**Un REGISTRE en ajout seul, pas un drapeau sur la fiche du stagiaire.** La première version de
+cette migration posait trois colonnes sur `learner` ; elle a été remplacée, et la raison mérite
+d'être retenue.
+
+Un drapeau ne garde que l'état COURANT. Or ce qu'il faut démontrer, c'est l'état **au moment de
+chaque envoi** :
+
+> mars : le stagiaire accepte → avril : l'organisme transmet → juin : il retire son accord
+
+Avec une colonne, la fiche affiche « refusé » en juillet et l'envoi d'avril devient indéfendable
+alors qu'il était licite. La preuve du consentement est une preuve **datée** : elle exige un
+historique, pas une valeur. Chaque réponse crée donc une ligne, aucune n'est modifiée.
+
+| Table / colonne | Rôle | Pourquoi |
+|---|---|---|
+| `consent_record` | une ligne par décision | L'état courant est la ligne la plus récente. **L'absence de ligne = jamais demandé** : plus besoin d'un troisième état artificiel, et on ne présume rien |
+| `.finalite` | à QUOI la personne a dit oui | Prospection partenaires aujourd'hui ; newsletter, photos, annuaire demain. Chacune se demande et se retire **séparément** |
+| `.destinataires` | à QUI, **en texte figé** | « J'accepte pour vos partenaires » ne couvre pas un partenaire ajouté l'an prochain. On garde ce que la personne a **lu** — des clés étrangères suivraient les renommages et le registre finirait par dire autre chose que ce qui a été montré |
+| `.formulation` | la phrase exacte | Un consentement éclairé porte sur un texte. Une reformulation ne doit pas réécrire le passé |
+| `.source` | espace stagiaire / papier / inscription | Une réponse recueillie hors ligne doit rester distinguable : c'est elle qu'on ira rechercher en cas de contestation |
+| `partner_disclosure` | journal des envois | Le registre prouve le consentement, pas ce qui est parti. Sans ce journal, impossible de répondre à « à qui avez-vous donné mes coordonnées ? » (art. 15). Il garde les identifiants, **pas** une copie des coordonnées — ce serait une seconde base personnelle à protéger, sans rien prouver de plus |
+
+La migration **ne crée aucun consentement** : la table naît vide, donc tous les stagiaires sont
+« jamais demandé ». Semer des accords présumés aurait transformé une mise en conformité en
+aggravation.
+
+### 9.4 L'ordre de construction, et il compte
+
+1. **La case côté stagiaire** — dans son espace, à côté de la visibilité de profil. Il doit pouvoir
+   dire oui, dire non, et **changer d'avis** aussi facilement (art. 7.3). C'est la première brique :
+   sans elle, il n'y a rien à lire.
+2. **L'écran de suivi côté organisme** — qui a répondu quoi, qui n'a jamais été sollicité.
+3. **L'export par session, dans l'application**, qui remplace le courriel écrit à la main. Il ne
+   retient QUE les stagiaires ayant consenti, et journalise l'envoi.
+
+**Tant que l'étape 3 n'existe pas, les étapes 1 et 2 ne protègent rien** : recueillir un
+consentement puis continuer d'envoyer une liste faite à la main, c'est se donner une preuve qui
+démontre l'infraction. L'export est donc la vraie fin du chantier, pas un raffinement.
+
+### 9.6 État au 2026-08-03 — les trois étapes sont faites
+
+- **Étape 1** — `ConsentModal` (posée une seule fois, `accorde === null`) + bloc « Confidentialité »
+  du profil, où l'on revient sur sa réponse dans les deux sens. Vérifié de bout en bout : réponse
+  enregistrée, horodatée, et les 23 partenaires figés dans la ligne du registre.
+- **Étape 2** — carte « Transmission aux partenaires » sur la page de la session
+  (`SessionConsentements`). Trois groupes, **« jamais sollicité » en premier** : c'est le seul sur
+  lequel l'organisme a quelque chose à faire. Le secrétariat y saisit les réponses recueillies
+  **hors ligne** (`source` = papier / oral / inscription, `saisi_par` = qui saisit) — sans quoi un
+  accord donné sur formulaire resterait invisible de l'export, qui écarterait quelqu'un ayant
+  pourtant accepté. `espace_stagiaire` est **refusé** sur cette route : on ne fabrique pas un
+  accord « donné en ligne ».
+- **Étape 3** — `POST /sessions/:id/transmission`. **Le serveur compose la liste**, l'écran ne
+  fait que l'afficher : il n'existe aucun chemin pour y ajouter quelqu'un. Filtre `accorde === true`
+  (et non « pas de refus »), colonnes limitées à `FINALITES.partenaires.champs`, envoi inscrit dans
+  `partner_disclosure`. Copie en tableau ou CSV (point-virgule + BOM, sinon Excel FR est illisible
+  et la liste serait recopiée à la main — ce que cet écran remplace).
+
+**Restriction ajoutée (migration 131)** : un partenaire ne reçoit rien tant qu'il n'est pas coché
+« reçoit les coordonnées », et la demande de consentement **ne nomme que ceux-là**. Mesuré : le
+texte est passé de **23 entreprises nommées à une seule**. Demander d'accepter vingt-trois
+destinataires quand quatre suffisent n'est pas une approximation — c'est un consentement plus large
+que le besoin (art. 5.1.c), et le meilleur moyen de faire refuser tout le monde.
+
+**Suivi de contrat (même migration)** : un contrat échu retire le partenaire des **trois** endroits
+à la fois — vitrine du stagiaire, liste nommée dans le consentement, et export (422 avec la date).
+Sa fiche et son historique restent : c'est un retrait, pas un effacement.
+
+### 9.7 Ce qui reste
+
+- **Cocher les partenaires réellement destinataires.** La 131 démarre à zéro : aujourd'hui la
+  demande de consentement annonce « aucun partenaire n'est actuellement destinataire ».
+- **Le sort des refus** : un stagiaire qui refuse doit-il être resollicité à la session suivante ?
+  Par défaut, non — et c'est ce que fait le code.
+- **Relire la formulation** (`api/lib/consentements.js`) : elle engage l'école, pas le développeur.
+
+### 9.5 Ce qui reste à trancher
+
+- **La formulation exacte** de la demande de consentement — elle doit nommer les partenaires (ou
+  au minimum leurs catégories), dire ce qu'ils feront des données, et rappeler que refuser
+  n'affecte pas la formation.
+- **Le sort des refus** : un stagiaire qui refuse doit-il être resollicité à la session suivante ?
+  Par défaut, non.

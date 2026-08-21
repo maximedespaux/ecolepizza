@@ -80,12 +80,12 @@ function FourConseil() {
         <div className="cm-verdict">
           <Icon name="thermometer" size={18} />
           <span>Il te faut un four qui monte à <b>{need} °C</b> minimum
-            {avpn && veutNapo ? <> — <span className="cm-avpn-note">une napolitaine AVPN se cuit entre 400 et 485 °C</span></> : null}.
+            {avpn && veutNapo ? <>, <span className="cm-avpn-note">une napolitaine AVPN se cuit entre 400 et 485 °C</span></> : null}.
             <span className="cm-count"> {possibles} énergie{possibles > 1 ? "s" : ""} sur {energies.length} conviennent.</span>
           </span>
         </div>
       ) : (
-        <p className="hint cm-vide">Choisis au moins un type de pizza — je te dis quelle énergie tient la route.</p>
+        <p className="hint cm-vide">Choisis au moins un type de pizza, je te dis quelle énergie tient la route.</p>
       )}
 
       {need != null ? (
@@ -149,11 +149,11 @@ function PetrinConseil() {
           <Icon name="sliders" size={18} />
           <span>Pour <b>{kg} kg</b> de pâte,
             <span className="cm-count"> {possibles} famille{possibles > 1 ? "s" : ""} sur 3 conviennent.</span>
-            {" "}Le choix ne se joue pas que sur le volume — chacune fait une pâte différente.
+            {" "}Le choix ne se joue pas que sur le volume, chacune fait une pâte différente.
           </span>
         </div>
       ) : (
-        <p className="hint cm-vide">Indique une quantité — je te dis quelle famille de pétrin tient ce volume.</p>
+        <p className="hint cm-vide">Indique une quantité, je te dis quelle famille de pétrin tient ce volume.</p>
       )}
 
       {kg > 0 ? (

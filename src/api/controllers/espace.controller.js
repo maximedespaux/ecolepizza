@@ -1,6 +1,9 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const { CONTRAT_VALABLE } = require('../lib/contratPartenaire.js');
+const { colonneExiste } = require('../lib/colonnes.js');
+const consentements = require('../lib/consentements.js');
 const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigners } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps } = require('./formationProgram.controller.js');
@@ -1115,6 +1118,12 @@ const getBoutique = async (req, res) => {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        /* La photo (migration 133) est SONDÉE, pas tentée : nommer une colonne absente rendrait
+           TOUTE la boutique illisible pour une illustration facultative. Elle est lue AVANT la
+           boucle ci-dessous — placée à l'intérieur, la constante serait déclarée après son propre
+           usage dans le gabarit, et la première itération lèverait une erreur de zone morte. */
+        const image = await colonneExiste(conn, 'inventory_item', 'image_url')
+            ? 'image_url' : 'NULL AS image_url';
         // `learner_discount_pct` arrive par la 125 : sans elle, la cascade retombe sur la
         // requête d'avant et la boutique affiche le prix catalogue, comme aujourd'hui.
         let rows;
@@ -1122,7 +1131,7 @@ const getBoutique = async (req, res) => {
                               'NULL AS learner_discount_pct, NULL AS learner_discount_eur']) {
           try {
             [rows] = await conn.query(
-              `SELECT id, name, category, unit_price, tax_rate, quantity, ${remise}
+              `SELECT id, name, category, unit_price, tax_rate, quantity, ${remise}, ${image}
              FROM inventory_item WHERE organization_id = ? AND unit_price IS NOT NULL
              ORDER BY category, name`,
               [learner.organization_id]
@@ -1146,7 +1155,7 @@ const getBoutique = async (req, res) => {
              * Arrondi au centime AVANT multiplication, comme partout ailleurs (cf. sale.controller). */
             const { brut: brutHt, net: netHt, taux, libelle } = prixStagiaire(r);
             return {
-                id: r.id, name: cleanName(r.name), category: r.category,
+                id: r.id, name: cleanName(r.name), category: r.category, image_url: r.image_url,
                 price_ht: netHt, tax_rate: Number(r.tax_rate),
                 price_ttc: +(netHt * (1 + Number(r.tax_rate) / 100)).toFixed(2),
                 // Prix catalogue + taux : présents SEULEMENT s'il y a une remise, pour que le
@@ -1185,27 +1194,50 @@ const getBoutiquePartenaires = async (req, res) => {
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
         let rows = [];
-        try {
-            [rows] = await conn.query(
+        /* AVEC OU SANS LA CLAUSE DE CONTRAT (migration 131). Le repli d'origine renvoyait une
+           VITRINE VIDE dès qu'une colonne manquait — pensé pour l'absence de `partner_product`
+           (migration 095), où c'est le bon comportement. Mais appliqué à `p.contrat`, il aurait
+           vidé toute la boutique partenaires tant que la 131 n'est pas jouée : une régression
+           silencieuse, sur un écran que personne ne relit après une migration.
+           On distingue donc les deux : sans la colonne de contrat on refait la requête SANS le
+           filtre (comportement d'avant, aucun partenaire n'a d'échéance à respecter) ; sans la
+           table des produits, la vitrine est bien vide. */
+        /* `avec133` COUVRE DEUX COLONNES DE LA MÊME MIGRATION : `contrat*` (qui filtre) et
+           `logo_url` (qui illustre). Les séparer suggérerait qu'elles peuvent arriver l'une sans
+           l'autre — elles sont posées par le même fichier, elles vont et viennent ensemble. */
+        const requete = (avec133) =>
                 `SELECT pp.id, pp.name, pp.category, pp.reference, pp.price_public, pp.price_school,
                         pp.url, pp.image_url, pp.note, pp.specs,
                         p.id AS partner_id, p.name AS partner_name, p.category AS partner_category,
                         p.discount_pct, p.website
+                        ${avec133 ? ', p.logo_url AS partner_logo' : ''}
                  FROM partner_product pp
                  JOIN partner p ON p.id = pp.partner_id
                  WHERE pp.organization_id = ? AND pp.active = 1
+                   /* UN CONTRAT ÉCHU RETIRE LA VITRINE (migration 131). Sans cette clause, une
+                      convention arrivée à terme ne se manifeste par RIEN : ni erreur, ni alerte.
+                      L'école continue de présenter les offres d'une entreprise avec qui elle n'a
+                      plus d'accord, et le stagiaire se réclame d'un partenariat qui n'existe plus.
+                      Le partenaire n'est pas supprimé pour autant — sa fiche, ses commissions et
+                      son historique restent : c'est un retrait, pas un effacement. */
+                   ${avec133 ? `AND ${CONTRAT_VALABLE('p')}` : ''}
                  -- PAS « ORDER BY p.category » : c'est un ENUM, et MySQL trie les ENUM par ordre
                  -- de DÉCLARATION, pas alphabétiquement. Or 'MATERIEL' y est déclaré avant 'FOUR'
                  -- — le stagiaire tombait donc sur une trancheuse à jambon avant les fours. Cet
                  -- ordre-là est celui de l'annuaire des fournisseurs ; ici on équipe une pizzeria,
                  -- et le four est la décision la plus lourde. On impose donc l'ordre de la vitrine.
                  ORDER BY CASE p.category WHEN 'FOUR' THEN 1 WHEN 'MATERIEL' THEN 2 ELSE 3 END,
-                          p.name, pp.sort_order, pp.name`,
-                [learner.organization_id]
-            );
+                          p.name, pp.sort_order, pp.name`;
+        try {
+            [rows] = await conn.query(requete(true), [learner.organization_id]);
         } catch (e) {
-            if (isMissingSchema(e)) return res.json({ data: [] }); // migration 095 non jouée
-            throw e;
+            if (!isMissingSchema(e)) throw e;
+            try {
+                [rows] = await conn.query(requete(false), [learner.organization_id]);
+            } catch (e2) {
+                if (isMissingSchema(e2)) return res.json({ data: [] }); // migration 095 non jouée
+                throw e2;
+            }
         }
         // Regroupé PAR PARTENAIRE : c'est l'entrée demandée côté stagiaire (« chez qui ? »),
         // pas par catégorie — un four et une pelle ne se comparent pas.
@@ -1215,7 +1247,9 @@ const getBoutiquePartenaires = async (req, res) => {
                 byPartner.set(r.partner_id, {
                     partner_id: r.partner_id, partner_name: r.partner_name,
                     partner_category: r.partner_category, discount_pct: r.discount_pct,
-                    website: r.website, products: [],
+                    // `?? null` : sans la 133 la colonne n'est pas dans le SELECT, donc absente
+                    // de la ligne. L'écran doit recevoir la même forme d'objet dans les deux cas.
+                    website: r.website, partner_logo: r.partner_logo ?? null, products: [],
                 });
             }
             byPartner.get(r.partner_id).products.push({
@@ -1768,6 +1802,87 @@ const getMyInfos = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/mon-espace/consentements — l'état courant, finalité par finalité.
+ *
+ * `accorde: null` veut dire JAMAIS DEMANDÉ, et c'est la seule chose qui déclenche la fenêtre côté
+ * écran. Un refus rend `false` : il est mémorisé, et on ne redemande pas. Redemander à chaque
+ * connexion après un refus rendrait le consentement non « libre » — les gens finissent par
+ * accepter pour avoir la paix, et un consentement arraché ne couvre rien.
+ */
+const getMyConsents = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        // Pas de fiche stagiaire (personnel de l'organisme) : rien à demander.
+        if (!learner) return res.json({ data: null });
+        const etat = await consentements.etatCourant(conn, learner.organization_id, learner.id);
+        res.json({ data: etat });   // `null` si la migration 130 n'est pas jouée
+    } catch (err) {
+        console.error('Erreur consentements :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PUT /api/mon-espace/consentements/:finalite — enregistre une réponse.
+ *
+ * AJOUTE UNE LIGNE, ne modifie jamais la précédente : il faut pouvoir démontrer l'état au moment
+ * de chaque transmission passée. Accepter puis retirer son accord ne doit pas rendre indéfendable
+ * un envoi qui était licite le jour où il a été fait.
+ */
+const setMyConsent = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire liée à ce compte.' });
+        if (typeof req.body?.accorde !== 'boolean') {
+            // On EXIGE un booléen : « ni oui ni non » ne doit pas pouvoir s'enregistrer comme un
+            // refus par défaut. Fermer la fenêtre sans répondre n'appelle aucune écriture.
+            return res.status(422).json({ message: 'Réponse attendue : accepté ou refusé.' });
+        }
+        /* TROIS RÉPONSES POSSIBLES, PAS DEUX — et la troisième est celle qui rend la mise à jour
+           tenable. Face à une liste ÉLARGIE, la personne peut :
+             · accepter la nouvelle version      → `accorde: true`, périmètre du jour ;
+             · CONSERVER SON ACCORD ACTUEL       → `accorde: true`, périmètre D'ORIGINE ;
+             · retirer son accord (depuis le profil) → `accorde: false`.
+           La deuxième n'est PAS un refus : la personne maintient son consentement, sur son
+           périmètre. L'écrire `false` l'aurait exclue de toute transmission alors qu'elle
+           consent toujours — et lui aurait fait perdre, sans l'avoir demandé, ce qu'elle avait
+           accepté. D'où `champsForces`, qui refige la liste qu'elle avait déjà acceptée. */
+        let champsForces;
+        if (req.body.conserver === true) {
+            if (req.body.accorde !== true) {
+                return res.status(422).json({ message: 'Conserver un accord suppose de l\'avoir donné.' });
+            }
+            const etat = await consentements.etatCourant(conn, learner.organization_id, learner.id);
+            const f = (etat || []).find((x) => x.cle === req.params.finalite);
+            if (!f || f.accorde !== true) {
+                return res.status(409).json({ message: 'Aucun accord antérieur à conserver.' });
+            }
+            champsForces = f.champsAnnonces;
+        }
+        const r = await consentements.enregistrer(conn, {
+            orgId: learner.organization_id, learnerId: learner.id,
+            finalite: req.params.finalite, accorde: req.body.accorde, source: 'espace_stagiaire',
+            champsForces,
+        });
+        if (!r.ok) return res.status(409).json({ message: r.message });
+        /* `logAudit(req, action, entity, entityId)` — QUATRE ARGUMENTS À PLAT, pas un objet. Une
+           première version passait ici `{ action, entity, after }` : la colonne `action` recevait
+           « [object Object] » et l'entité restait vide, si bien que la trace d'audit d'une décision
+           de consentement ne désignait plus personne. La réponse elle-même est dans le registre ;
+           l'audit dit seulement QUI a écrit QUOI, et QUAND — c'est ce qu'on relit quand un
+           stagiaire conteste avoir répondu. D'où le sens de la décision dans le nom de l'action. */
+        logAudit(req, `consent.${req.body.accorde ? 'accorde' : 'refuse'}.${req.params.finalite}`,
+            'Learner', learner.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur enregistrement consentement :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** PUT /api/mon-espace/visibility — enregistre ce que les autres stagiaires voient. */
 const updateMyVisibility = async (req, res) => {
     try {
@@ -1836,5 +1951,6 @@ const updateMyInfos = async (req, res) => {
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
 module.exports = {
+    getMyConsents, setMyConsent,
     saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
 };

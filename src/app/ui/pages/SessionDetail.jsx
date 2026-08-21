@@ -13,8 +13,9 @@ import Emargement from "../components/Emargement.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import SessionIntervenants from "../components/SessionIntervenants.jsx";
 import SessionRetraits from "../components/SessionRetraits.jsx";
+import SessionConsentements from "../components/SessionConsentements.jsx";
 import NotesModal from "../components/NotesModal.jsx";
-import { colorOf, initials, scoreBadge } from "../lib/format.js";
+import { colorOf, initials, scoreBadge, dateHeure } from "../lib/format.js";
 
 function SessionDetail() {
   const { id } = useParams();
@@ -220,7 +221,7 @@ function SessionDetail() {
       <PageHead
         eyebrow={<Link to="/sessions" className="card-more" style={{ WebkitTextFillColor: "var(--ember1)" }}>← Retour au calendrier</Link>}
         title={session.program_title}
-        lead={`Semaine ${session.week} · ${session.year} · du ${session.start_date} au ${session.end_date} · ${session.program_hours} h`}
+        lead={`Semaine ${session.week} · ${session.year} · du ${dateHeure(session.start_date)} au ${dateHeure(session.end_date)} · ${session.program_hours} h`}
         actions={
           <>
             <span className="badge n" style={{ background: colorOf(session.program_code), color: "#fff", borderColor: "transparent" }}>
@@ -233,18 +234,18 @@ function SessionDetail() {
       <StatusMessage status={status} />
 
       {locations.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 14px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 16px", flexWrap: "wrap" }}>
           <span className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="map" size={13} /> Lieu de formation :</span>
           <select className="inp" style={{ maxWidth: 320 }} value={session.location_id || ""} onChange={(e) => changeLocation(e.target.value)}>
-            <option value="">— Aucun / à définir —</option>
-            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}{l.town ? ` — ${l.town}` : ""}</option>)}
+            <option value="">Aucun / à définir</option>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}{l.town ? `, ${l.town}` : ""}</option>)}
           </select>
         </div>
       )}
 
       <div className="grid cols-2">
         <Card title="Inscrire des stagiaires">
-          <div className="tabs" role="tablist" style={{ margin: "0 0 14px" }}>
+          <div className="tabs" role="tablist">
             <button type="button" role="tab" aria-selected={mode === "individuel"}
               className={"tab" + (mode === "individuel" ? " on" : "")}
               onClick={() => setMode("individuel")}>
@@ -261,7 +262,7 @@ function SessionDetail() {
             <>
               <select className="inp" style={{ marginBottom: 8 }} aria-label="Entreprise"
                 value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-                <option value="">— Choisir une entreprise —</option>
+                <option value="">Choisir une entreprise</option>
                 {entreprisesAvecStagiaires.map((c) => (
                   <option key={c.id} value={c.id}>{c.name} ({c.learner_count})</option>
                 ))}
@@ -315,12 +316,12 @@ function SessionDetail() {
                           <input type="checkbox" disabled={dedans}
                             checked={dedans || picked.has(l.id)}
                             onChange={() => bascule(l.id)} />
-                          <span className="avatar" style={{ width: 30, height: 30, fontSize: 11, flex: "0 0 30px" }}>
+                          <span className="avatar" style={{ width: 30, height: 30, fontSize: 11 }}>
                             {initials(l.first_name, l.last_name)}
                           </span>
                           <span style={{ flex: 1, minWidth: 0 }}>
                             <b>{l.last_name} {l.first_name}</b>
-                            <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"}</span>
+                            <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "-"}</span>
                           </span>
                           {dedans && <Badge tone="ok">Déjà inscrit</Badge>}
                         </label>
@@ -357,10 +358,10 @@ function SessionDetail() {
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {matches.map((l) => (
                 <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                  <span className="avatar" style={{ width: 30, height: 30, fontSize: 11, flex: "0 0 30px" }}>{initials(l.first_name, l.last_name)}</span>
+                  <span className="avatar" style={{ width: 30, height: 30, fontSize: 11 }}>{initials(l.first_name, l.last_name)}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{l.last_name} {l.first_name}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "—"}</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "-"}</span>
                   </span>
                   <button type="button" className="btn sm primary" onClick={() => addStagiaire(l.id)}>＋ Ajouter</button>
                 </div>
@@ -387,7 +388,7 @@ function SessionDetail() {
                   title="Voir la fiche du stagiaire"
                 >
                   <b style={{ color: "var(--text)" }}>{e.last_name} {e.first_name}</b>
-                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{e.email || "—"}</span>
+                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{e.email || "-"}</span>
                 </button>
                 <Badge tone={scoreBadge(e.conformite_score)}>{e.conformite_score}</Badge>
                 <button className="iconbtn" title="Notes de suivi" onClick={() => setNotesFor({ id: e.id, name: `${e.last_name} ${e.first_name}` })}><Icon name="pencil" size={15} /></button>
@@ -448,7 +449,23 @@ function SessionDetail() {
         </Card>
       </div>
 
-      <div style={{ marginTop: 16 }}>
+      {/* UN CONTENEUR EN COLONNE AVEC UN `gap`, ET NON UNE SIMPLE MARGE HAUTE.
+          Ces trois composants partageaient un seul `<div style={{ marginTop: 16 }}>` : la marge
+          s'appliquait donc AVANT LE GROUPE, et les cartes à l'intérieur se touchaient — mesuré à
+          0 px entre « Transmission aux partenaires » et « Intervenants externes ».
+          Le défaut était latent avant l'ajout de la carte de transmission : `SessionRetraits` rend
+          `null` quand aucun retrait n'est réservé, si bien qu'il n'y avait le plus souvent qu'une
+          seule carte dans ce conteneur et que rien ne pouvait se coller.
+          Un enfant qui rend `null` ne crée aucun espace fantôme : le `gap` n'agit qu'entre les
+          éléments réellement rendus. */}
+      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* SUR LA PAGE DE LA SESSION, et pas dans un écran RGPD à part : l'organisme envoie ses
+            listes SESSION PAR SESSION, et c'est ici qu'il vient au moment de le faire. Une page
+            de conformité rangée ailleurs ne s'ouvre que quand on la cherche — donc jamais au
+            moment où la question se pose vraiment.
+            Réservé au bureau : `isAdmin` reflète ce que le serveur autorise déjà (formateur
+            exclu), et savoir qui a refusé de céder ses coordonnées n'aide en rien à enseigner. */}
+        {isAdmin && <SessionConsentements sessionId={id} canEdit={isAdmin} />}
         <SessionRetraits startDate={session.start_date} endDate={session.end_date} />
         <SessionIntervenants sessionId={id} startDate={session.start_date} endDate={session.end_date} canEdit={isAdmin} />
       </div>

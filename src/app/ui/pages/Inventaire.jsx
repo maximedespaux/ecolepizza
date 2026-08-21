@@ -10,6 +10,7 @@ import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { euro } from "../lib/format.js";
+import ImageLien, { ImagePlaceholder } from "../components/ImageLien.jsx";
 import { bumpBadges } from "../lib/events.js";
 
 const CATEGORIES = [
@@ -21,7 +22,7 @@ const CATEGORIES = [
 ];
 const TVA_RATES = ["20", "10", "5.5", "2.1", "0"];
 const EMPTY = { name: "", category: "", sku: "", quantity: 0, unit_price: "", tax_rate: "20", threshold: 0,
-  remiseValeur: "", remiseUnite: "%" };
+  remiseValeur: "", remiseUnite: "%", image_url: "" };
 
 // Icône par (sous-)catégorie — vignette visuelle à défaut de photo produit.
 const CAT_ICON = {
@@ -124,6 +125,11 @@ function Inventaire({ embedded = false }) {
     setEditing({
       id: item.id, name: item.name, category: item.category || "", sku: item.sku || "",
       quantity: item.quantity, unit_price: item.unit_price ?? "", tax_rate: item.tax_rate ?? "20", threshold: item.threshold,
+      /* SANS CETTE LIGNE, la photo existante n'apparaissait pas à l'édition : le champ s'ouvrait
+         vide alors que l'article en avait une, et on ne pouvait ni la voir ni la corriger — juste
+         en coller une autre à l'aveugle. Le `|| ""` suit la règle du reste de cette fonction :
+         aucune valeur `null` ne doit atteindre un `value` d'input. */
+      image_url: item.image_url || "",
       // Une SEULE valeur + son unité à l'écran : deux champs séparés laisseraient poser 10 %
       // ET 5 €, sans qu'on sache lequel s'applique.
       remiseValeur: item.learner_discount_eur ? String(item.learner_discount_eur)
@@ -171,7 +177,7 @@ function Inventaire({ embedded = false }) {
               return (
                 <button key={it.id} type="button" className="manque-i" style={{ borderLeftColor: s.color }}
                   onClick={() => document.getElementById(`inv-${it.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" })}>
-                  <b className="tnum" style={{ color: s.color }}>{it.quantity}</b>
+                  <b className="chiffres" style={{ color: s.color }}>{it.quantity}</b>
                   <span>{it.name}<i>{s.label}{it.threshold ? ` · seuil ${it.threshold}` : ""}</i></span>
                 </button>
               );
@@ -181,14 +187,14 @@ function Inventaire({ embedded = false }) {
       ) : items.length > 0 && (
         <div className="todo-calme">
           <Icon name="check-circle" size={17} aria-hidden="true" />
-          Tout est au-dessus de son seuil — rien à réapprovisionner.
+          Tout est au-dessus de son seuil, rien à réapprovisionner.
         </div>
       )}
 
       {/* Les trois autres compteurs décrivent, ils n'appellent rien : une ligne suffit. */}
       <div className="compteurs">
-        <span><b className="tnum">{totals.items}</b> article{totals.items > 1 ? "s" : ""}</span><i />
-        <span><b className="tnum">{totals.units}</b> unité{totals.units > 1 ? "s" : ""} en stock</span><i />
+        <span><b className="chiffres">{totals.items}</b> article{totals.items > 1 ? "s" : ""}</span><i />
+        <span><b className="chiffres">{totals.units}</b> unité{totals.units > 1 ? "s" : ""} en stock</span><i />
         <span><b className="tnum">{euro(totals.value)}</b> de valeur (HT)</span>
       </div>
 
@@ -209,6 +215,22 @@ function Inventaire({ embedded = false }) {
               <SelectField label="TVA (%)" value={form.tax_rate} onChange={set("tax_rate")}>
                 {TVA_RATES.map((r) => <option key={r} value={r}>{r} %</option>)}
               </SelectField>
+            </div>
+            {/* PHOTO PAR LIEN (migration 133). L'aperçu est immédiat : sans lui on colle une
+                adresse, on enregistre, et on découvre au rechargement qu'elle ne pointait sur
+                rien — sans savoir si le lien ou l'enregistrement était en cause. */}
+            <div className="field">
+              <label>Photo (lien) <span className="hint" style={{ fontWeight: 400 }}>(facultatif)</span></label>
+              <div className="champ-image">
+                <input className="inp" type="url" value={form.image_url} onChange={set("image_url")}
+                  placeholder="https://site-du-fournisseur.fr/photo.jpg" />
+                <ImageLien src={form.image_url} className="champ-image-apercu"
+                  fallback={<ImagePlaceholder className="champ-image-apercu" icone="package" />} />
+              </div>
+              <span className="hint">
+                L'image reste hébergée sur le site du fournisseur : son serveur verra passer les
+                visites. Préférez « https:// », sinon elle sera bloquée en ligne.
+              </span>
             </div>
             {/* row3 : trois colonnes (seuil · remise · TTC estimé), cf. la modale d'édition. */}
             <div className="row3">
@@ -252,11 +274,16 @@ function Inventaire({ embedded = false }) {
                   <div key={it.id} id={`inv-${it.id}`} className="card" style={{ borderTop: `3px solid ${st.color}` }}>
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ display: "flex", gap: 10, minWidth: 0 }}>
-                        <span className="inv-thumb" style={{ color: st.color }}><Icon name={catIcon(it.category)} size={20} /></span>
+                        {/* LA PHOTO REMPLACE L'ICÔNE DE CATÉGORIE quand il y en a une. L'icône
+                            était déjà le repli « à défaut de photo produit » (cf. son commentaire
+                            en tête de fichier) — la 133 lui donne enfin la photo qu'elle
+                            remplaçait. Une adresse morte retombe sur l'icône : `fallback`. */}
+                        <ImageLien src={it.image_url} className="inv-thumb inv-thumb-img"
+                          fallback={<span className="inv-thumb" style={{ color: st.color }}><Icon name={catIcon(it.category)} size={20} /></span>} />
                         <div style={{ minWidth: 0 }}>
                           <b style={{ fontSize: 15 }}>{it.name}</b>
                           <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                            {it.category || "—"}{it.sku ? ` · ${it.sku}` : ""}
+                            {it.category || "-"}{it.sku ? ` · ${it.sku}` : ""}
                           </div>
                           {it.unit_price != null && (
                             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
@@ -336,6 +363,22 @@ function Inventaire({ embedded = false }) {
                   <SelectField label="TVA (%)" value={String(editing.tax_rate)} onChange={setEdit("tax_rate")}>
                     {TVA_RATES.map((r) => <option key={r} value={r}>{r} %</option>)}
                   </SelectField>
+                </div>
+                {/* PHOTO PAR LIEN (migration 133). L'aperçu est immédiat : sans lui on colle une
+                    adresse, on enregistre, et on découvre au rechargement qu'elle ne pointait sur
+                    rien — sans savoir si le lien ou l'enregistrement était en cause. */}
+                <div className="field">
+                  <label>Photo (lien) <span className="hint" style={{ fontWeight: 400 }}>(facultatif)</span></label>
+                  <div className="champ-image">
+                    <input className="inp" type="url" value={editing.image_url ?? ""} onChange={setEdit("image_url")}
+                      placeholder="https://site-du-fournisseur.fr/photo.jpg" />
+                    <ImageLien src={editing.image_url ?? ""} className="champ-image-apercu"
+                      fallback={<ImagePlaceholder className="champ-image-apercu" icone="package" />} />
+                  </div>
+                  <span className="hint">
+                    L'image reste hébergée sur le site du fournisseur : son serveur verra passer les
+                    visites. Préférez « https:// », sinon elle sera bloquée en ligne.
+                  </span>
                 </div>
                 {/* row3 et non row2 : cette rangée porte TROIS colonnes (seuil · remise · TTC).
                     En row2 le troisième enfant retombait sur une ligne à lui, et les deux champs

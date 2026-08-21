@@ -19,7 +19,7 @@ import { SCHEMAS } from "../components/Schemas.jsx";
 const REF_UNITE = [
   { ic: "wheat", color: "#fcb900", k: "Farine (type 00)", g: "1000 g", pct: "100 %", note: "Riche en gluten" },
   { ic: "yeast", color: "#ff6900", k: "Levure fraîche", g: "3 g", pct: "0,3 %", note: "Émiettée dans la farine (1 mn d'oxygénation)" },
-  { ic: "droplet", color: "#3aa0e0", k: "Eau de coulage", g: "620 g", pct: "62 %", note: "D'un coup — garder un verre pour le bassinage" },
+  { ic: "droplet", color: "#3aa0e0", k: "Eau de coulage", g: "620 g", pct: "62 %", note: "D'un coup, garder un verre pour le bassinage" },
   { ic: "salt", color: "#c9cede", k: "Sel fin", g: "20 g", pct: "2 %", note: "Petit à petit, après 12 mn de pétrissage" },
   { ic: "oil", color: "#7bb661", k: "Huile d'olive", g: "25 g", pct: "2,5 %", note: "1 mn après le sel" },
 ];
@@ -156,10 +156,10 @@ export default function Notions() {
   // Table des types France ↔ Italie, injectée dans la fiche « farine ».
   const typesTable = (
     <div style={{ marginTop: 4 }}>
-      <div className="ate-lbl" style={{ marginBottom: 7 }}>Les types — France ↔ Italie</div>
-      <Tbl t={{ head: ["France", "Italie", "Caractère", "Eau bue"], rows: TIPOS.map((t) => [t.fr, `Tipo ${t.it}`, t.name, t.water ? `+${t.water} %` : "—"]) }} />
+      <div className="ate-lbl" style={{ marginBottom: 7 }}>Les types, France ↔ Italie</div>
+      <Tbl t={{ head: ["France", "Italie", "Caractère", "Eau bue"], rows: TIPOS.map((t) => [t.fr, `Tipo ${t.it}`, t.name, t.water ? `+${t.water} %` : "-"]) }} />
       <p style={{ margin: "10px 0 0", fontSize: 12.5, lineHeight: 1.55, color: "var(--muted)", padding: "9px 12px", background: "var(--surface2)", borderRadius: 9, borderLeft: "3px solid #fcb900" }}>
-        6 types en France, 5 en Italie. Plus le type monte, plus il reste de son — et plus la farine boit d'eau (à compenser en bassinage). Pour la pizza on reste souvent en 00/0 (T45–T65).
+        6 types en France, 5 en Italie. Plus le type monte, plus il reste de son, et plus la farine boit d'eau (à compenser en bassinage). Pour la pizza on reste souvent en 00/0 (T45–T65).
       </p>
     </div>
   );
@@ -167,7 +167,7 @@ export default function Notions() {
   return (
     <>
       <PageHead eyebrow="Outils · information" title="Notions & lexique"
-        lead="Tout le technique du manuel — la farine, la levure, l'eau, le sel, l'huile, les protocoles — plus les notions de gestion pour tenir une carte rentable." />
+        lead="Tout le technique du manuel (la farine, la levure, l'eau, le sel, l'huile, les protocoles) plus les notions de gestion pour tenir une carte rentable." />
 
       <span className="seg" style={{ marginBottom: 18, flexWrap: "wrap" }}>
         <button className={"seg-btn" + (tab === "manuel" ? " on" : "")} onClick={() => setTab("manuel")}><Icon name="book-open" size={13} /> Le manuel</button>
@@ -189,7 +189,7 @@ export default function Notions() {
                   <b style={{ fontSize: 13.5, minWidth: 118 }}>{i.k}</b>
                   <span className="hint" style={{ flex: 1, fontSize: 12, minWidth: 150 }}>{i.note}</span>
                   <span style={{ fontSize: 11.5, color: "var(--muted)", width: 48, textAlign: "right" }}>{i.pct}</span>
-                  <b className="tnum" style={{ width: 66, textAlign: "right" }}>{i.g}</b>
+                  <b className="chiffres" style={{ width: 66, textAlign: "right" }}>{i.g}</b>
                 </div>
               ))}
             </div>

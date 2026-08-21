@@ -245,9 +245,14 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
                   entrée ressort, et un halo tiré de la couleur de l'avatar. */}
               <span className={`prof-ava-wrap ${cadreProfil.id !== "aucun" ? "a-cadre" : ""}`}
                 style={{ "--halo": av ? av.color : "var(--ember1)" }}>
+                {/* UN SEUL `style`, FUSIONNÉ. Il y en avait DEUX sur cet élément : en JSX c'est le
+                    dernier qui gagne, donc `cadreStyle` était purement jeté — et avec lui la
+                    variable `--cadre-c`, c'est-à-dire la couleur de la formation. Le cadre de
+                    quête s'affichait ici dans sa teinte de repli, pas dans la sienne : très
+                    exactement ce que le commit qui a introduit la ligne était censé apporter.
+                    Rien ne le signalait à l'écran — un anneau coloré autrement reste un anneau. */}
                 <span className={`prof-ava ${cadreClass(cadreProfil.valeur || cadreProfil.id)}`}
-                  style={cadreStyle(cadreProfil.valeur)}
-                  style={{ background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
+                  style={{ ...cadreStyle(cadreProfil.valeur), background: av ? av.color : "var(--surface2)" }}>{av ? av.emoji : <Icon name="user" size={26} />}</span>
               </span>
               {cadreProfil.id !== "aucun" && (
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginTop: 8 }}>Cadre {cadreProfil.nom}</div>
@@ -270,8 +275,8 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
                 </div>
               )}
               <div className="prof-stats">
-                <span><b className="tnum">{fiches}</b><span className="hint">fiche{profile.shared_count > 1 ? "s" : ""} partagée{profile.shared_count > 1 ? "s" : ""}</span></span>
-                <span><b className="tnum"><Icon name="heart" size={15} fill="currentColor" /> {coeurs}</b><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>
+                <span><b className="chiffres">{fiches}</b><span className="hint">fiche{profile.shared_count > 1 ? "s" : ""} partagée{profile.shared_count > 1 ? "s" : ""}</span></span>
+                <span><b className="chiffres"><Icon name="heart" size={15} fill="currentColor" /> {coeurs}</b><span className="hint">cœur{profile.likes_received > 1 ? "s" : ""} reçu{profile.likes_received > 1 ? "s" : ""}</span></span>
               </div>
               {(profile.phone || profile.email) && (
                 <div style={{ marginTop: 16, textAlign: "left", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -621,7 +626,7 @@ export default function Communaute() {
 
       {list.length === 0 && echanges.length === 0 ? (
         <EmptyState icon="users" title="La communauté est encore vide"
-          text="Sois le premier : partage une fiche depuis le calculateur de pâte, ou pose une question — c'est souvent par là que ça commence.">
+          text="Sois le premier : partage une fiche depuis le calculateur de pâte, ou pose une question : c'est souvent par là que ça commence.">
           <button className="btn primary" onClick={() => setComposer("QUESTION")} style={{ marginTop: 14 }}>
             <Icon name="help" size={14} /> Poser une question
           </button>
@@ -655,7 +660,7 @@ export default function Communaute() {
           </div>
 
           {shown.length === 0 ? (
-            <EmptyState icon={onlyWish ? "bookmark" : "search"}>{onlyWish ? "Ta wishlist est vide — mets des fiches de côté avec le marque-page." : "Aucune fiche ne correspond à ta recherche."}</EmptyState>
+            <EmptyState icon={onlyWish ? "bookmark" : "search"}>{onlyWish ? "Ta wishlist est vide, mets des fiches de côté avec le marque-page." : "Aucune fiche ne correspond à ta recherche."}</EmptyState>
           ) : (
             <div className="comm-grid">
               {shown.map((s) => {
@@ -683,7 +688,7 @@ export default function Communaute() {
                             Deux etiquettes distinctes parce que les deux signaux ne s'eteignent
                             pas au meme moment — voir CommCard. */}
                         {s.new_comments > 0 && (
-                          <span className="comm-neuf" title={`${s.new_comments} nouveau${s.new_comments > 1 ? "x" : ""} commentaire${s.new_comments > 1 ? "s" : ""} — ouvrez la fiche pour les lire`}>
+                          <span className="comm-neuf" title={`${s.new_comments} nouveau${s.new_comments > 1 ? "x" : ""} commentaire${s.new_comments > 1 ? "s" : ""}, ouvrez la fiche pour les lire`}>
                             <Icon name="message-circle" size={11} /> {s.new_comments}
                           </span>
                         )}

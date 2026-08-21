@@ -516,14 +516,27 @@ test('l\'arcade est en tête, et une seule fois', () => {
        affiche son choix de pizzas. Le seul lien réel avec les formations survit sans les six
        répétitions. */
     assert.match(srcQuest, /const GAME_SIM = \{ key: "simulateur", obj: null,/);
+    /* LE SIMULATEUR N'OFFRE PLUS DE CHOIX — il TIRE. Les quatre pavés « Classique / Napolitaine
+       AVPN / Contemporaine / In teglia » nommaient le style, et la réponse s'apprenait par
+       cœur : quatre jeux de quatre réglages, et le simulateur ne simulait plus rien. On ouvre
+       désormais sur une commande de client, tirée au sort, dont il faut DÉDUIRE le style. */
     const srcSim = fs.readFileSync(path.join(APP, 'ui/components/SimulateurPizza.jsx'), 'utf8');
-    assert.match(srcSim, /\{!obj \? \(/, 'sans objectif, le simulateur ouvre son choix');
+    assert.doesNotMatch(srcSim, /className="sim-objs"/, 'l\'écran de choix a disparu');
+    /* Et il en tire CINQ d'un coup : une partie est un service de cinq commandes. */
+    assert.match(srcSim, /useState\(\(\) => \{[\s\S]{0,300}?tirerPartie\(\)/,
+        'le jeu s\'ouvre sur un service tiré au sort');
 
     /* LE RECORD EST PERSONNEL, ET SEULEMENT LUI. Un classement nominatif installerait, dans une
        promotion de vingt, dix-sept personnes à demeure dans la moitié basse — celles-là mêmes
        qu'on veut faire revenir. Et sur une session de trois, il serait franchement triste. */
     assert.match(srcQuest, /const record = g\.key \? \(prog\[g\.key\] \|\| \{\}\)\[0\] \|\| 0 : 0;/);
-    assert.match(srcQuest, /\{record \? "ton record" : "jamais joué"\}/);
+    /* LES DEUX ÉTATS RESTENT MONTRÉS, mais plus sous la même forme : trois étoiles vides
+       disaient « tu as fait zéro », alors que la personne n'a pas joué — et « jamais joué »
+       est justement le seul état sur lequel il y a un geste à faire. Il a donc sa pastille,
+       et les étoiles ne sortent que s'il y a vraiment un record. */
+    assert.match(srcQuest, /record > 0 \? \(/, 'les étoiles ne paraissent qu\'avec un record');
+    assert.match(srcQuest, /<span className="hint">ton record<\/span>/, 'le record se nomme');
+    assert.match(srcQuest, /className="pq-mini-neuf">Jamais joué/, 'et l\'absence de partie aussi');
     /* Et rien ne va CHERCHER le score des autres : un motif sur les mots interdits attraperait
        ce commentaire-ci. On vérifie ce qui compte — aucun appel réseau autre que les trois
        lectures du profil et des chapitres. */
@@ -702,6 +715,27 @@ test('la remise à zéro n\'existe qu\'en développement, et ne vise que soi', (
            qu'à la hausse, mais une progression locale intacte suffit à tout restaurer ;
          · la mémoire des fêtes, sinon les paliers déjà franchis ne se refêteraient jamais et
            l'animation deviendrait intestable. */
+    /* ET ELLE NE PART PLUS SUR UN `confirm()`. Le garde `DEV` cache le BOUTON, pas la
+       conséquence : `resetMyQuest()` efface la ligne dans la base DISTANTE, celle que l'école
+       utilise. « Développement » ne veut pas dire « données jetables » ici. Un mot à recopier,
+       comme pour l'inventaire du coffre : sur une action qu'on ne rattrape pas, un bouton se
+       clique par réflexe, un mot non. */
+    /* SOURCE DÉPOUILLÉ DE SES COMMENTAIRES : les deux `doesNotMatch` ci-dessous cherchent des
+       mots que le code NE DOIT PLUS contenir — et les commentaires qui expliquent pourquoi les
+       contiennent forcément. Sans ce nettoyage, l'assertion trébuche sur sa propre documentation
+       et reste rouge quoi qu'on fasse au code. Le piège s'est déjà refermé plusieurs fois ici. */
+    const questRendu = srcQuest.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert.doesNotMatch(questRendu, /window\.confirm/, 'une action irréversible mérite mieux qu\'un confirm');
+    assert.match(srcQuest, /razSaisie\.trim\(\)\.toUpperCase\(\) === "EFFACER"/, 'le mot à recopier');
+    assert.match(srcQuest, /disabled=\{!razMotOk \|\| razEnCours\}/, 'le bouton reste fermé sans le mot');
+    /* ET L'ÉCHEC S'AFFICHE DANS LA PAGE. Mesuré dans un navigateur piloté : `alert()` rend la
+       main SANS RIEN AFFICHER, `confirm()` répond « Annuler » d'office, `prompt()` lève une
+       erreur. Une remise à zéro ratée s'annonçait donc par une boîte qui, selon le contexte, ne
+       paraît jamais : l'écran restait tel quel et l'on croyait que ça avait marché. */
+    assert.doesNotMatch(questRendu, /window\.alert/, 'une alerte native peut n\'afficher rien du tout');
+    assert.match(srcQuest, /setRazErreur\(e\.message\)/, 'l\'échec se dit dans la page');
+    assert.match(srcQuest, /razErreur && <StatusMessage type="error"/, 'et s\'y voit');
+
     assert.match(srcQuest, /await resetMyQuest\(\);/);
     assert.match(srcQuest, /localStorage\.removeItem\(KEY\);/);
     assert.match(srcQuest, /localStorage\.removeItem\("impasto\.quest\.fetes"\);/);
@@ -733,7 +767,10 @@ test('les jeux de l\'arcade ne jettent plus les étoiles gagnées', () => {
         'components/CommandePiege.jsx': /const fermer = phase === "fin" \? \(\) => onFinish\(stars\) : onClose;/,
         'components/JustePrix.jsx': /const fermer = phase === "fin" \? \(\) => onFinish\(stars\) : onClose;/,
         'components/ConstructorGame.jsx': /const fermer = checked \? \(\) => onFinish\(meilleur\) : onClose;/,
-        'components/SimulateurPizza.jsx': /const fermer = meilleur > 0 \? \(\) => onFinish\(meilleur\) : onClose;/,
+        /* Le simulateur ne garde plus « la meilleure fournée » : il ACCUMULE cinq manches. La
+           condition porte donc sur ce qui est acquis, et l'étoile se déduit du total. Même
+           exigence, autre compteur : sortir ne doit pas jeter quatre manches réussies. */
+        'components/SimulateurPizza.jsx': /const fermer = acquis\.length \? \(\) => onFinish\(etoiles\) : onClose;/,
     };
     for (const [f, re] of Object.entries(attendus)) {
         const src = fs.readFileSync(path.join(APP_UI, f), 'utf8');

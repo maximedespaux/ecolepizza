@@ -3,6 +3,7 @@ import { Outlet, Navigate, NavLink, useLocation } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 import ProfileModal from "../components/ProfileModal.jsx";
+import ConsentModal from "../components/ConsentModal.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
@@ -32,7 +33,10 @@ const OUTILS = [
   { to: "/empatements", ic: "wheat", label: "Mes empâtements" },
   { to: "/garnitures", ic: "list-checks", label: "Mes garnitures" },
   { to: "/realisations", ic: "pizza", label: "Mes réalisations" },
-  { to: "/hygiene", ic: "shield", label: "Maîtrise sanitaire" },
+  /* « Maîtrise sanitaire » (/hygiene) RETIRÉE : l'entrée existait, la page jamais. Aucune route
+     ne servait ce chemin, et le `path="*"` de fin renvoyait donc le stagiaire sur /mon-espace
+     sans un mot — un menu qui promet un outil et ramène à l'accueil use la confiance qu'on a
+     dans les autres. */
   { to: "/notions", ic: "book-open", label: "Notions & lexique" },
 ];
 
@@ -159,7 +163,7 @@ function StudentLayout() {
   if (isLoading) {
     return (
       <div className="app-loading">
-        <div className="brand-splash"><img src={LOGO} alt="" /><span>Impasto</span></div>
+        <div className="brand-splash"><img src={LOGO} alt="" /><span>Impastio</span></div>
       </div>
     );
   }
@@ -186,7 +190,7 @@ function StudentLayout() {
         <div className="brand stu-brand" style={{ padding: 0, gap: 10 }}>
           <img src={LOGO} alt="École Pizza" style={{ width: 36, height: 36, borderRadius: 9, background: "#fff", padding: 3, objectFit: "contain" }} />
           <div>
-            <div className="name" style={{ fontSize: 17 }}>Impasto</div>
+            <div className="name" style={{ fontSize: 17 }}>Impastio</div>
             {/* Sous-titre décoratif : il cède la place au nom de marque sur un écran étroit. */}
             <div className="sub stu-sub" style={{ fontSize: 10, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em" }}>Espace stagiaire</div>
           </div>
@@ -273,6 +277,9 @@ function StudentLayout() {
         )}
       </main>
 
+      {/* La demande de consentement, posée UNE FOIS. Elle décide seule si elle doit s'afficher :
+          uniquement quand une finalité n'a jamais été soumise. Un refus ne la rouvre pas. */}
+      <ConsentModal />
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </div>
   );

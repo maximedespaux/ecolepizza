@@ -35,7 +35,7 @@ export function prochaineEtape({ enAttente = [], questUnlocked, formations = [] 
   };
   if (questUnlocked) return {
     ton: "jeu", ic: "pizza", titre: "Entraînez-vous pour le prochain QCM",
-    detail: "Pizza Quest — des questions tirées de vos manuels.", action: "Reprendre l'entraînement", to: "/pizza-quest",
+    detail: "Pizza Quest, des questions tirées de vos manuels.", action: "Reprendre l'entraînement", to: "/pizza-quest",
   };
   const encours = formations.find((f) => f.enrolled && !f.finished);
   if (encours) return {
@@ -91,7 +91,7 @@ export function NextStep({ etape, onOpenDoc }) {
       <span className="stu-next-ic"><Icon name="check-circle" size={22} /></span>
       <div className="stu-next-txt">
         <b>Tout est à jour.</b>
-        <span>Rien ne vous attend — vos dossiers sont en bas de page.</span>
+        <span>Rien ne vous attend, vos dossiers sont en bas de page.</span>
       </div>
     </div>
   );

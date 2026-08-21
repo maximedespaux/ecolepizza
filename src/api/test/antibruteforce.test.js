@@ -26,9 +26,22 @@ const fs = require('fs');
 const path = require('path');
 
 const API = path.join(__dirname, '..');
-const srcLim = fs.readFileSync(path.join(API, 'middlewares/rateLimit.js'), 'utf8');
-const srcServer = fs.readFileSync(path.join(API, 'server.js'), 'utf8');
-const srcRoutes = fs.readFileSync(path.join(API, 'routes/auth.routes.js'), 'utf8');
+
+/**
+ * ON LIT LE CODE, PAS SA PROSE — et ce fichier a servi de démonstration.
+ *
+ * Sans dépouillement, mettre une ligne EN COMMENTAIRE ne fait rien échouer : le texte reste dans
+ * le fichier, l'expression le retrouve, le test reste vert. Vérifié ici même — commenter
+ * `echecs.delete(cleFine);` laissait la suite entièrement au vert, alors que le compteur d'échecs
+ * ne se remettait plus jamais à zéro et qu'une école entière finissait bloquée derrière son NAT.
+ *
+ * C'est le pire genre de test : il donne l'assurance d'une vérification sans en faire aucune.
+ */
+const sansCommentaires = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+const srcLim = sansCommentaires(fs.readFileSync(path.join(API, 'middlewares/rateLimit.js'), 'utf8'));
+const srcServer = sansCommentaires(fs.readFileSync(path.join(API, 'server.js'), 'utf8'));
+const srcRoutes = sansCommentaires(fs.readFileSync(path.join(API, 'routes/auth.routes.js'), 'utf8'));
 
 test('le client ne choisit pas sa propre identité', () => {
     // `req.ip` n'honore `x-forwarded-for` que si `trust proxy` le permet — sinon c'est la SOCKET.
@@ -48,7 +61,11 @@ test('seuls les ÉCHECS comptent, et un succès efface l\'ardoise', () => {
     assert.match(srcLim, /res\.on\('finish'/, 'le comptage doit attendre l\'issue de la requete');
     assert.match(srcLim, /const rate = res\.statusCode === 401 \|\| res\.statusCode === 403;/,
         'seuls 401 et 403 sont des echecs d\'authentification');
-    assert.match(srcLim, /echecs\.delete\(cleFine\); \/\/ un succès efface l'ardoise/,
+    /* LE MOTIF S'ARRÊTE AU CODE. Il incluait la fin du commentaire (« // un succès efface
+       l'ardoise ») : reformuler une explication aurait fait échouer un test qui porte sur un
+       COMPORTEMENT. Un test de source doit s'accrocher à ce qui s'exécute, pas à sa prose —
+       sans quoi il décourage d'améliorer les commentaires. */
+    assert.match(srcLim, /echecs\.delete\(cleFine\);/,
         'un succes doit remettre le compteur a zero');
     // Une 500 n'est pas la faute de qui se connecte : elle ne doit pas non plus compter.
     assert.match(srcLim, /\} else if \(res\.statusCode < 400\) \{/,

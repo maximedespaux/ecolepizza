@@ -80,7 +80,7 @@ export default function ConstructorGame({ onClose, onFinish }) {
           <button className="x" onClick={fermer} aria-label="Fermer"><Icon name="x" size={16} /></button>
         </div>
         <div className="mbody">
-          <p className="sub" style={{ marginTop: 0 }}>Remets les étapes dans le bon ordre — de l'empâtement à la cuisson.</p>
+          <p className="sub" style={{ marginTop: 0 }}>Remets les étapes dans le bon ordre, de l'empâtement à la cuisson.</p>
 
           {/* Séquence du joueur */}
           <div className="cg-seq">
@@ -114,16 +114,25 @@ export default function ConstructorGame({ onClose, onFinish }) {
             })}
           </div>
 
-          {/* Vivier */}
+          {/* ─────────────────────────────────────────────────────────────────────────────
+              LE VIVIER, DANS UN BLOC À LUI — pour qu'il puisse coller en bas sur téléphone.
+
+              Mesuré avant : le contenu faisait 927 px pour 589 px visibles, soit 1,57 écran.
+              Les neuf emplacements occupaient toute la hauteur et les étapes à placer
+              commençaient SOUS la ligne de flottaison : on ne voyait jamais ensemble ce qu'on
+              prend et où on le pose, il fallait défiler à chaque étape. Neuf fois.
+
+              Le libellé et les pastilles étaient deux frères ; coller le second aurait laissé
+              le premier partir au défilement, et la barre serait apparue sans son titre. */}
           {!checked && pool.length > 0 && (
-            <>
-              <div className="hint" style={{ margin: "12px 0 6px" }}>Étapes à placer :</div>
+            <div className="cg-reserve">
+              <div className="hint cg-reserve-t">Étapes à placer :</div>
               <div className="cg-pool">
                 {pool.map((i) => (
                   <button key={i} className="cg-chip" onClick={() => place(i)}><span className="cg-e">{RECIPE[i].e}</span> {RECIPE[i].t}</button>
                 ))}
               </div>
-            </>
+            </div>
           )}
 
           {checked && (
@@ -139,7 +148,7 @@ export default function ConstructorGame({ onClose, onFinish }) {
               <p style={{ fontWeight: 700, margin: "4px 0 0" }}>{correct}/{N} étapes bien placées</p>
               <p className="hint" style={{ marginTop: 2 }}>
                 {correct === N ? "Belle recette !"
-                  : fini ? "Plus de cœur — le bon ordre est affiché ci-dessus. On garde ton meilleur essai."
+                  : fini ? "Plus de cœur, le bon ordre est affiché ci-dessus. On garde ton meilleur essai."
                     : `Les cases ❌ sont mal placées. Il te reste ${COEURS_MAX - perdus} essai${COEURS_MAX - perdus > 1 ? "s" : ""}.`}
               </p>
             </div>

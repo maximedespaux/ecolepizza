@@ -109,10 +109,10 @@ test('le producteur est écrit de façon identique des deux côtés', () => {
     // PDF/A exige que le dictionnaire d'information et le XMP disent la même chose. pdf-lib
     // signe de son propre nom dès qu'on enregistre : on ne peut pas l'en empêcher, alors on
     // écrit la même signature des deux côtés. Constaté sur le FICHIER, pas sur le code.
-    const out = fusionnerXmp(XMP_LO, { producer: 'Impasto', creator: 'Impasto', modifyDate: '2026-07-21T19:49:06Z' });
-    assert.match(out, /<pdf:Producer>Impasto<\/pdf:Producer>/);
+    const out = fusionnerXmp(XMP_LO, { producer: 'Impastio', creator: 'Impastio', modifyDate: '2026-07-21T19:49:06Z' });
+    assert.match(out, /<pdf:Producer>Impastio<\/pdf:Producer>/);
     assert.doesNotMatch(out, /LibreOffice/, 'l\'ancien producteur subsiste');
-    assert.match(out, /<xmp:CreatorTool>Impasto<\/xmp:CreatorTool>/);
+    assert.match(out, /<xmp:CreatorTool>Impastio<\/xmp:CreatorTool>/);
     assert.match(out, /<xmp:ModifyDate>2026-07-21T19:49:06Z<\/xmp:ModifyDate>/);
     assert.match(out, /<xmp:MetadataDate>2026-07-21T19:49:06Z<\/xmp:MetadataDate>/);
 });
@@ -120,7 +120,7 @@ test('le producteur est écrit de façon identique des deux côtés', () => {
 test('une propriété absente du XMP est ajoutée, pas silencieusement perdue', () => {
     // XMP_LO ne porte ni CreatorTool ni date : remplacer sans ajouter aurait laissé le
     // dictionnaire seul à les déclarer, soit précisément l'écart qu'on corrige.
-    const out = fusionnerXmp(XMP_LO, { producer: 'Impasto', creator: 'Impasto', modifyDate: '2026-07-21T19:49:06Z' });
+    const out = fusionnerXmp(XMP_LO, { producer: 'Impastio', creator: 'Impastio', modifyDate: '2026-07-21T19:49:06Z' });
     assert.match(out, /xmlns:xmp="http:\/\/ns\.adobe\.com\/xap\/1\.0\/"/);
     assert.match(out, /<xmp:CreatorTool>/);
 });

@@ -1,6 +1,21 @@
 import { startLoading, stopLoading } from "../lib/loading.js";
 
-export const API_BASE_URL = "http://localhost:3000/api";
+/**
+ * OÙ JOINDRE L'API — figée à la CONSTRUCTION, pas au chargement de la page.
+ *
+ * `import.meta.env` est remplacé par sa valeur littérale au moment du `vite build` : cette
+ * adresse est donc cuite dans le paquet livré, elle ne se lit pas à l'exécution. Conséquence
+ * concrète : changer d'adresse d'API impose de RECONSTRUIRE le front, pas de redémarrer quoi
+ * que ce soit. C'est aussi pourquoi `VITE_API_URL` doit être posée sur la machine qui construit.
+ *
+ * Le repli sur localhost garde le développement fonctionnel sans aucun réglage, comme avant.
+ *
+ * La barre oblique finale est retirée : `VITE_API_URL=https://api.exemple.fr/api/` produirait
+ * sinon des `//stagiaires` — que certains serveurs redirigent, et une redirection PERD le corps
+ * d'une requête POST. Une faute de frappe dans une variable d'environnement ne doit pas se
+ * traduire par des enregistrements qui disparaissent en silence.
+ */
+export const API_BASE_URL = String(import.meta.env.VITE_API_URL || "http://localhost:3000/api").replace(/\/+$/, "");
 
 async function request(path, options = {}) {
   const { silent, ...opts } = options; // `silent` = pas de barre de chargement (polls)
@@ -31,6 +46,14 @@ async function request(path, options = {}) {
 export function getOrganisation() {
   return request("/organisation");
 }
+/* Le catalogue des informations transmissibles aux partenaires, la sélection de l'école, et
+   L'APERÇU DE LA PHRASE que le stagiaire lira. L'aperçu vient du SERVEUR, produit par la même
+   fonction que le texte réel : le recomposer ici donnerait une seconde rédaction à maintenir,
+   donc une occasion de montrer à l'école une phrase que personne d'autre ne verra. */
+export function getChampsPartenaires() {
+  return request("/organisation/champs-partenaires");
+}
+
 export function updateOrganisation(payload) {
   return request("/organisation", { method: "PATCH", body: JSON.stringify(payload) });
 }
@@ -347,7 +370,50 @@ export function changeMyEmail(payload) {
 // Infos personnelles du stagiaire (modifiables, visibles de l'organisme).
 export function getMyInfos() { return request("/mon-espace/infos", { silent: true }); }
 export function updateMyInfos(payload) { return request("/mon-espace/infos", { method: "PUT", body: JSON.stringify(payload) }); }
+/* Consentements du stagiaire (migration 130). `data` vaut `null` quand la migration n'est pas
+   jouée ou quand le compte n'a pas de fiche stagiaire : l'écran ne propose alors rien, plutôt que
+   d'afficher une demande qu'il ne pourrait pas enregistrer. */
+export function getMyConsents() {
+  return request("/mon-espace/consentements");
+}
+/* `conserver` : la personne à qui l'on propose une liste ÉLARGIE et qui préfère garder la sienne.
+   Ce n'est PAS un refus — elle maintient son consentement, sur son périmètre d'origine, et le
+   serveur refige cette liste-là. Envoyer `accorde: false` l'aurait exclue de toute transmission
+   alors qu'elle consent toujours. */
+export function setMyConsent(finalite, accorde, conserver) {
+  return request(`/mon-espace/consentements/${finalite}`,
+    { method: "PUT", body: JSON.stringify(conserver ? { accorde, conserver: true } : { accorde }) });
+}
+
 export function updateMyVisibility(visibility) { return request("/mon-espace/visibility", { method: "PUT", body: JSON.stringify({ visibility }) }); }
+
+/* CÔTÉ ORGANISME — le registre des consentements d'une session, et la liste destinée à un
+   partenaire (migration 130).
+
+   `produireTransmission` N'EST PAS UNE SIMPLE LECTURE : le serveur compose la liste, en écarte
+   ceux qui n'ont pas consenti, et inscrit l'envoi au journal. L'écran ne choisit personne — il
+   affiche ce que le serveur a retenu. C'est ce qui le distingue du courriel écrit à la main, où
+   rien n'empêchait d'ajouter quelqu'un. */
+export function getSessionConsents(sessionId) {
+  return request(`/sessions/${sessionId}/consentements`);
+}
+/* COMBIEN RESTENT À SOLLICITER, PAR SESSION — ce qui permet au calendrier de dire OÙ sont les
+   gens que la pastille de navigation compte. `silent` : c'est un indicateur d'ambiance, pas une
+   action ; il ne doit pas allumer la barre de chargement à chaque affichage du planning.
+   Bureau uniquement côté serveur : chez le formateur, l'appel échoue et le calendrier reste nu. */
+export function getConsentsManquants() {
+  return request("/sessions/consentements-manquants", { silent: true });
+}
+export function setSessionConsent(sessionId, learnerId, accorde, source) {
+  return request(`/sessions/${sessionId}/consentements/${learnerId}`,
+    { method: "PUT", body: JSON.stringify({ accorde, source }) });
+}
+/* Le journal des envois d'UN PARTENAIRE. Par partenaire et non par session, depuis que l'export
+   l'est aussi : c'est lui qui permet de répondre à « à qui mes coordonnées ont-elles été
+   communiquées ? » (art. 15). */
+export function getTransmissionsPartenaire(id) {
+  return request(`/partenaires/${id}/transmissions`, { silent: true });
+}
 
 // --- Stagiaires ---
 export function getStagiaires(q = "") {
@@ -633,6 +699,12 @@ export function downloadArchiveFile(id, filename) {
   return download(`/suivi/archives/${id}/file`, filename);
 }
 // Suppression groupée (semaine / formation / stagiaire / fichiers) — supprime en base.
+/* L'INVENTAIRE DU COFFRE : ce qu'il occupe, où, et ce qui est en double. Lourd par nature (le
+   serveur lit tous les blobs pour en calculer les empreintes), donc jamais appelé au chargement
+   — seulement quand on ouvre le panneau. */
+export function getArchiveStockage() {
+  return request("/suivi/archives/stockage");
+}
 export function bulkDeleteArchives(archive_ids, document_ids) {
   return request("/suivi/archives/delete", { method: "POST", body: JSON.stringify({ archive_ids, document_ids }) });
 }
@@ -1020,6 +1092,22 @@ export function deletePartenaireProduit(pid) {
 export function getPartenaires(category = "") {
   const query = category ? `?category=${encodeURIComponent(category)}` : "";
   return request(`/partenaires${query}`);
+}
+
+/* DESTINATAIRE DES COORDONNÉES (migration 131) — route SÉPARÉE de `updatePartenaire`, pour que
+   modifier une adresse ne puisse pas décocher au passage une autorisation de transmettre des
+   données personnelles. Un 409 signifie que la migration n'est pas jouée. */
+export function setPartenaireDestinataire(id, recoit) {
+  return request(`/partenaires/${id}/destinataire`,
+    { method: "PATCH", body: JSON.stringify({ recoit }) });
+}
+
+/* L'export des stagiaires consentants d'un partenaire, sur une période. Le serveur compose la
+   liste, écarte ceux qui n'ont pas consenti, n'envoie que les champs annoncés à CHACUN, et
+   inscrit l'envoi au journal. L'écran ne choisit personne — il affiche. */
+export function exporterPartenaire(id, depuis, jusquA) {
+  return request(`/partenaires/${id}/transmission`,
+    { method: "POST", body: JSON.stringify({ depuis, jusqu_a: jusquA }) });
 }
 
 export function createPartenaire(payload) {

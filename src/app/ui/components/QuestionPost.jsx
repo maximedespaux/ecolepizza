@@ -279,7 +279,7 @@ export function QuestionModal({ id, moi, cadreDe, onClose, onProfil, onChange })
                   );
                 })}
                 <textarea className="inp" rows={3} value={reponse} onChange={(e) => setReponse(e.target.value)}
-                  placeholder="Ta réponse — ce qui a marché chez toi vaut mieux qu'une règle générale." style={{ marginTop: 10, width: "100%" }} />
+                  placeholder="Ta réponse : ce qui a marché chez toi vaut mieux qu'une règle générale." style={{ marginTop: 10, width: "100%" }} />
                 <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
                   <button className="btn sm primary" disabled={busy || !reponse.trim()} onClick={repondre}>
                     <Icon name="send" size={13} /> Répondre
@@ -438,7 +438,7 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
               <label>Une photo (facultatif)</label>
               <p className="hint" style={{ marginTop: 0 }}>
                 {annonce
-                  ? "Un plan, une affiche, une photo du lieu — ce qui évite d'avoir à le décrire."
+                  ? "Un plan, une affiche, une photo du lieu : ce qui évite d'avoir à le décrire."
                   : "C'est un métier qui se voit. Une croûte trop pâle ou une alvéole serrée se montrent mieux qu'elles ne se décrivent."}
               </p>
               {apercu && <img className="q-photo" src={apercu} alt="Aperçu de la photo choisie" />}

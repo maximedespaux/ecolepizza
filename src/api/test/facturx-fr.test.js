@@ -20,8 +20,8 @@ const FACTURE = () => ({
     amountNet: 200, tvaExoneree: false, taxRate: null,
     lines: [{ name: 'Farine T65', amount: 100, taxRate: 5.5 }, { name: 'Pelle', amount: 100, taxRate: 20 }],
     seller: {
-        name: 'Impasto Formation', siret: '879 955 136 00012', vat: 'FR12879955136',
-        email: 'contact@impasto.fr', address: { line: '12 rue des Fours', zip: '75011', city: 'Paris' },
+        name: 'Impastio Formation', siret: '879 955 136 00012', vat: 'FR12879955136',
+        email: 'contact@impastio.fr', address: { line: '12 rue des Fours', zip: '75011', city: 'Paris' },
     },
     buyer: {
         name: 'Pizzeria Bella', siret: '12345678900011', email: 'compta@bella.fr',
@@ -96,7 +96,7 @@ test('un SIRET mal saisi n\'est pas tronqué en silence', () => {
 test('BR-FR-13 : l\'adresse électronique du vendeur est déclarée', () => {
     const xml = buildCII(FACTURE());
     const bloc = xml.slice(xml.indexOf('<ram:SellerTradeParty>'), xml.indexOf('</ram:SellerTradeParty>'));
-    assert.match(bloc, /<ram:URIUniversalCommunication><ram:URIID schemeID="EM">contact@impasto\.fr<\/ram:URIID>/);
+    assert.match(bloc, /<ram:URIUniversalCommunication><ram:URIID schemeID="EM">contact@impastio\.fr<\/ram:URIID>/);
 });
 
 test('BR-FR-12 : l\'adresse électronique de l\'acheteur est déclarée', () => {

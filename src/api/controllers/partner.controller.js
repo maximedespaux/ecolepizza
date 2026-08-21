@@ -1,6 +1,9 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const { CONTRAT_FIN } = require('../lib/contratPartenaire.js');
+const { colonneExiste } = require('../lib/colonnes.js');
+const { validerImage } = require('../lib/imageDistante.js');
 
 const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 
@@ -8,6 +11,25 @@ const PARTNER_FIELDS = [
     'name', 'category', 'contact_name', 'contact_email', 'contact_phone',
     'website', 'town', 'discount_pct', 'offer', 'notes',
 ];
+
+/* CE PARTENAIRE REÇOIT-IL LES COORDONNÉES DES STAGIAIRES ? (migration 131)
+   Hors de `PARTNER_FIELDS` VOLONTAIREMENT : ce n'est pas une propriété descriptive comme une ville
+   ou une remise, c'est une autorisation de transmettre des données personnelles. La mélanger aux
+   autres la ferait passer dans les mêmes `UPDATE` en masse, sans qu'on puisse la tracer ni la
+   traiter à part — et un `PATCH` de la ville l'écraserait au passage si le formulaire ne la
+   renvoyait pas. Elle est lue et écrite explicitement, et jamais par défaut. */
+const CHAMP_DESTINATAIRE = 'recoit_coordonnees';
+
+/* LE CONTRAT, LUI, EST DANS LE FORMULAIRE (migration 131) — à la différence du drapeau ci-dessus.
+   Ce sont des faits descriptifs qu'on saisit en même temps que l'adresse ou la remise, et ils
+   arrivent donc dans le même `PATCH`. Le drapeau, lui, est une autorisation : il a sa propre route
+   pour qu'un enregistrement du formulaire ne puisse pas le décocher au passage. */
+const CONTRAT_FIELDS = ['contrat', 'contrat_debut', 'contrat_duree_mois'];
+
+/* Le LOGO du partenaire (migration 133) : une adresse, pas un fichier. Descriptif comme la ville
+   ou le site web, donc dans le même formulaire — mais validé à part, parce qu'une valeur qui
+   finit dans un `src` ne se traite pas comme une note de suivi (cf. `lib/imageDistante.js`). */
+const CHAMP_LOGO = 'logo_url';
 
 /**
  * GET /api/partenaires — annuaire + suivi (contacts, offre, commissions cumulées).
@@ -24,9 +46,15 @@ const getPartners = async (req, res) => {
            chargement : il restait donc invisible tant qu'on n'avait pas déplié, et il fallait
            ouvrir les vingt-trois sections une par une pour savoir lesquelles ont un catalogue.
            Une sous-requête sur une requête qui tourne déjà coûte infiniment moins que ça. */
-        const colonnes = (avecProduits) => `
+        const colonnes = (avecProduits, avecDestinataire = true, avecLogo = true) => `
             SELECT p.id, p.name, p.category, p.contact_name, p.contact_email, p.contact_phone,
                    p.website, p.town, p.discount_pct, p.offer, p.notes, p.created_at,
+                   ${avecDestinataire ? `p.recoit_coordonnees, p.contrat, p.contrat_duree_mois,
+                   DATE_FORMAT(p.contrat_debut, '%Y-%m-%d') AS contrat_debut,
+                   ${CONTRAT_FIN('p')} AS contrat_fin,`
+        : `NULL AS recoit_coordonnees, 0 AS contrat, NULL AS contrat_duree_mois,
+                   NULL AS contrat_debut, NULL AS contrat_fin,`}
+                   ${avecLogo ? 'p.logo_url,' : 'NULL AS logo_url,'}
                    COALESCE(SUM(re.amount), 0) AS commissions_total,
                    COUNT(re.id) AS commissions_count,
                    DATE_FORMAT(MAX(re.date), '%Y-%m-%d') AS last_commission${avecProduits ? `,
@@ -37,14 +65,23 @@ const getPartners = async (req, res) => {
         const filtre = req.query.category ? ' AND p.category = ?' : '';
         if (req.query.category) params.push(req.query.category);
         const fin = ' GROUP BY p.id ORDER BY p.name';
+        /* ON SONDE, ON N'ESSAIE PLUS. Trois colonnes facultatives indépendantes cohabitent ici :
+           le compte de produits (095), le drapeau destinataire et le contrat (131), le logo (133).
+           La cascade « tenter puis rattraper » demandait déjà quatre requêtes pour deux d'entre
+           elles ; à trois elle en demanderait huit, chacune à garder juste. Une lecture
+           d'`information_schema` répond à la question directement. */
+        const [avecDest, avecLogo] = await Promise.all([
+            colonneExiste(conn, 'partner', 'recoit_coordonnees'),
+            colonneExiste(conn, 'partner', CHAMP_LOGO),
+        ]);
         let results;
         try {
-            [results] = await conn.query(colonnes(true) + filtre + fin, params);
+            [results] = await conn.query(colonnes(true, avecDest, avecLogo) + filtre + fin, params);
         } catch (e) {
-            // `partner_product` arrive avec la migration 095 : sans elle, on rend la liste sans
-            // le compte plutôt que de casser toute la page pour une colonne d'appoint.
+            // `partner_product` arrive avec la 095 : sans elle, la liste sort sans le compte
+            // plutôt que de perdre l'écran entier pour une colonne d'appoint.
             if (!isMissingSchema(e)) throw e;
-            [results] = await conn.query(colonnes(false) + filtre + fin, params);
+            [results] = await conn.query(colonnes(false, avecDest, avecLogo) + filtre + fin, params);
         }
 
         /* Détail des commissions par partenaire (libellé, date, montant, NATURE).
@@ -88,20 +125,97 @@ const getPartners = async (req, res) => {
 };
 
 /** POST /api/partenaires */
-const createPartner = (req, res) => {
+/**
+ * UN NOM DÉJÀ PRIS DANS CET ORGANISME ? (migration 132)
+ *
+ * DEUX PROTECTIONS, ET IL FAUT LES DEUX. La clé UNIQUE en base est la seule qui tienne face à un
+ * import ou à une insertion directe — les deux chemins par lesquels le doublon « Berkel » était
+ * précisément arrivé. Mais seule, elle rend une erreur SQL brute (`ER_DUP_ENTRY`) que l'écran
+ * afficherait telle quelle : « Duplicate entry 'xxx-Berkel' for key 'uq_partner_nom' ». Ce contrôle
+ * existe donc pour DIRE ce qui se passe, pas pour empêcher — c'est la contrainte qui empêche.
+ *
+ * Et il fonctionne AVANT la migration : tant que la 132 n'est pas jouée, il est la seule barrière.
+ *
+ * `exclureId` sert au renommage : une fiche n'est pas son propre doublon.
+ */
+function nomDejaPris(orgId, nom, exclureId) {
+    return new Promise((resolve) => {
+        db.query(
+            `SELECT id FROM partner
+              WHERE organization_id = ? AND name = ?${exclureId ? ' AND id <> ?' : ''} LIMIT 1`,
+            exclureId ? [orgId, nom, exclureId] : [orgId, nom],
+            // En cas d'erreur de lecture on laisse passer : la contrainte en base reste le filet,
+            // et refuser une création parce qu'on n'a pas pu VÉRIFIER serait pire que le doublon.
+            (err, rows) => resolve(!err && rows && rows.length > 0));
+    });
+}
+
+/** Message unique — la même cause doit donner la même phrase des deux côtés. */
+const DEJA_PRIS = (nom) => `Un partenaire nommé « ${nom} » existe déjà. `
+    + 'Deux fiches homonymes se confondent partout : dans la demande de consentement, qui NOMME '
+    + 'les destinataires, et au moment de cocher laquelle reçoit les coordonnées.';
+
+const createPartner = async (req, res) => {
     const b = req.body || {};
     if (!b.name) return res.status(422).json({ error: 'Nom du partenaire requis' });
+    if (await nomDejaPris(req.user.organization_id, b.name.trim()))
+        return res.status(409).json({ message: DEJA_PRIS(b.name.trim()) });
+    /* LE LOGO EST VALIDÉ AVANT TOUTE ÉCRITURE, et un refus est explicite : une adresse rejetée en
+       silence donnerait une fiche sans logo sans qu'on sache que le lien était en cause. */
+    const logo = validerImage(b[CHAMP_LOGO]);
+    if (!logo.ok) return res.status(422).json({ message: logo.message });
     const id = crypto.randomUUID();
+    const base = ['id', 'organization_id', 'name', 'category', 'contact_name', 'contact_email',
+        'contact_phone', 'website', 'town', 'discount_pct', 'offer', 'notes'];
+    const vals = [id, req.user.organization_id, b.name, b.category || 'AUTRE', b.contact_name || null,
+        b.contact_email || null, b.contact_phone || null, b.website || null, b.town || null,
+        b.discount_pct === '' || b.discount_pct == null ? null : Number(b.discount_pct),
+        b.offer || null, b.notes || null];
+    /* LE CONTRAT À LA CRÉATION AUSSI (migration 131). Sans cela, un partenaire créé avec ses dates
+       les perdait en silence : le formulaire les affichait, l'INSERT les ignorait, et il fallait
+       rouvrir la fiche pour les ressaisir — sans jamais comprendre pourquoi.
+       `recoit_coordonnees` reste ABSENT, volontairement : un partenaire tout juste créé ne doit
+       pas naître destinataire de données personnelles. C'est un geste séparé, sur sa fiche. */
+    const colonnes = [...base], trous = base.map(() => '?');
+    if (logo.valeur !== undefined && logo.valeur !== null) {
+        colonnes.push(CHAMP_LOGO); trous.push('?'); vals.push(logo.valeur);
+    }
+    for (const f of CONTRAT_FIELDS) {
+        if (b[f] === undefined || b[f] === '') continue;
+        colonnes.push(f); trous.push('?');
+        vals.push(f === 'contrat' ? (b[f] ? 1 : 0)
+            : f === 'contrat_duree_mois' ? Number(b[f]) : b[f]);
+    }
     db.query(
-        `INSERT INTO partner (id, organization_id, name, category, contact_name, contact_email,
-                              contact_phone, website, town, discount_pct, offer, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, req.user.organization_id, b.name, b.category || 'AUTRE', b.contact_name || null,
-         b.contact_email || null, b.contact_phone || null, b.website || null, b.town || null,
-         b.discount_pct === '' || b.discount_pct == null ? null : Number(b.discount_pct),
-         b.offer || null, b.notes || null],
+        `INSERT INTO partner (${colonnes.join(', ')}) VALUES (${trous.join(', ')})`,
+        vals,
         (err) => {
             if (err) {
+                /* LA CONTRAINTE A PARLÉ LA PREMIÈRE — deux requêtes simultanées, ou un homonyme
+                   apparu entre la vérification et l'insertion. On traduit : « Duplicate entry
+                   'xxx-Berkel' for key 'uq_partner_nom' » est exact, illisible, et ne dit pas
+                   quoi faire. */
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ message: DEJA_PRIS(String(b.name).trim()) });
+                }
+                // La 131 peut ne pas être jouée : on recrée sans les colonnes de contrat plutôt
+                // que de refuser la création d'un partenaire pour une échéance facultative.
+                if (isMissingSchema(err) && colonnes.length > base.length) {
+                    return db.query(
+                        `INSERT INTO partner (${base.join(', ')}) VALUES (${base.map(() => '?').join(', ')})`,
+                        vals.slice(0, base.length),
+                        (e2) => {
+                            if (e2) {
+                                if (e2.code === 'ER_DUP_ENTRY') {
+                                    return res.status(409).json({ message: DEJA_PRIS(String(b.name).trim()) });
+                                }
+                                console.error('Erreur création partenaire :', e2);
+                                return res.status(500).json({ error: 'Internal Server Error' });
+                            }
+                            logAudit(req, 'partner.create', 'Partner', id);
+                            res.status(201).json({ message: 'Partenaire créé', id });
+                        });
+                }
                 console.error('Erreur création partenaire :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
@@ -112,13 +226,33 @@ const createPartner = (req, res) => {
 };
 
 /** PATCH /api/partenaires/:id */
-const updatePartner = (req, res) => {
+const updatePartner = async (req, res) => {
+    /* LE RENOMMAGE AUSSI, pas seulement la création. Sans ce contrôle, il suffirait de créer
+       « Berkell » puis de le renommer « Berkel » pour retrouver deux homonymes — le garde-fou de
+       la création se contournerait en deux clics. */
+    if (req.body.name !== undefined && String(req.body.name).trim()
+        && await nomDejaPris(req.user.organization_id, String(req.body.name).trim(), req.params.id)) {
+        return res.status(409).json({ message: DEJA_PRIS(String(req.body.name).trim()) });
+    }
+    const logo = validerImage(req.body[CHAMP_LOGO]);
+    if (!logo.ok) return res.status(422).json({ message: logo.message });
+
     const sets = [];
     const values = [];
-    for (const f of PARTNER_FIELDS) {
+    /* LE LOGO PASSE PAR SA PROPRE VALIDATION, jamais par la boucle générique : celle-ci se
+       contente de convertir « chaîne vide » en `null`, ce qui laisserait entrer n'importe quoi
+       dans un attribut `src`. */
+    if (logo.valeur !== undefined) { sets.push(`${CHAMP_LOGO} = ?`); values.push(logo.valeur); }
+    for (const f of [...PARTNER_FIELDS, ...CONTRAT_FIELDS]) {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];
         if (f === 'discount_pct') v = v === '' || v == null ? null : Number(v);
+        /* `contrat` EST UN BOOLÉEN, PAS UNE CHAÎNE. Sans cette ligne, un `false` venu du
+           formulaire tomberait dans le `v === ''` ci-dessous — non, mais `0` serait écrit tel
+           quel et une case décochée arriverait en `false`, que MySQL accepte en TINYINT. Le
+           forcer à 0/1 évite d'avoir à s'en remettre à cette tolérance. */
+        else if (f === 'contrat') v = v ? 1 : 0;
+        else if (f === 'contrat_duree_mois') v = v === '' || v == null ? null : Number(v);
         else if (v === '') v = null;
         sets.push(`${f} = ?`);
         values.push(v);
@@ -130,12 +264,28 @@ const updatePartner = (req, res) => {
         values,
         (err, result) => {
             if (err) {
+                /* `NULL AS logo_url` ne permet PAS à l'écran de distinguer « colonne absente » de
+                   « pas de logo » — les deux valent `null`. Le champ reste donc toujours visible,
+                   et c'est l'écriture qui explique. Un champ masqué aurait été plus élégant, mais
+                   il aurait fallu alourdir la réponse d'un inventaire de colonnes que personne
+                   d'autre ne lit. */
+                if (isMissingSchema(err)) {
+                    return res.status(409).json({
+                        message: 'Migration 133 non jouée : l\'adresse du logo ne peut pas encore '
+                            + 'être enregistrée. Les autres champs non plus, cet enregistrement '
+                            + 'n\'a rien modifié.',
+                    });
+                }
+                // La contrainte a parlé la première (deux requêtes simultanées) : on traduit.
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ message: DEJA_PRIS(String(req.body.name || '').trim()) });
+                }
                 console.error('Erreur mise à jour partenaire :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
             if (result.affectedRows === 0) return res.status(404).json({ message: 'Partenaire introuvable' });
             logAudit(req, 'partner.update', 'Partner', req.params.id);
-            res.json({ success: true, message: 'Partenaire mis à jour' });
+            res.json({ success: true, message: 'Partenaire mis à jour', avertissement: logo.avertissement || undefined });
         }
     );
 };
@@ -276,6 +426,48 @@ const createPartnerProduct = async (req, res) => {
 };
 
 /** PATCH /api/partners/produits/:pid — modifie un produit. */
+/**
+ * PATCH /api/partenaires/:id/destinataire — ce partenaire reçoit-il les coordonnées ? (migration 131)
+ *
+ * UNE ROUTE À PART, et non un champ de plus dans `updatePartner`. Ce n'est pas une propriété
+ * descriptive : c'est une AUTORISATION DE TRANSMETTRE des données personnelles. Trois conséquences
+ * pratiques qui justifient la séparation :
+ *
+ *  · un `PATCH` du formulaire de la fiche ne peut pas l'écraser au passage en oubliant de la
+ *    renvoyer — le cas classique où une case se décoche parce qu'on a corrigé une adresse ;
+ *  · elle porte sa propre trace d'audit, distincte de « partenaire modifié », parce que c'est
+ *    celle-là qu'on ira relire pour savoir depuis quand une entreprise recevait des coordonnées ;
+ *  · elle exige un booléen explicite, là où le reste tolère des chaînes vides.
+ *
+ * REFUSE 409 SANS LA MIGRATION plutôt que d'ignorer silencieusement : une case qui se recoche
+ * toute seule au rechargement ferait croire à un bug d'affichage, et l'école finirait par
+ * transmettre en pensant avoir restreint.
+ */
+const setPartnerDestinataire = (req, res) => {
+    if (typeof req.body?.recoit !== 'boolean') {
+        return res.status(422).json({ message: 'Valeur attendue : vrai ou faux.' });
+    }
+    db.query(
+        `UPDATE partner SET ${CHAMP_DESTINATAIRE} = ? WHERE id = ? AND organization_id = ?`,
+        [req.body.recoit ? 1 : 0, req.params.id, req.user.organization_id],
+        (err, result) => {
+            if (err) {
+                if (isMissingSchema(err)) {
+                    return res.status(409).json({
+                        message: 'Migration 131 non jouée : le choix des partenaires destinataires '
+                            + 'ne peut pas encore être enregistré.',
+                    });
+                }
+                console.error('Erreur destinataire partenaire :', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            if (result.affectedRows === 0) return res.status(404).json({ message: 'Partenaire introuvable' });
+            logAudit(req, `partner.destinataire.${req.body.recoit ? 'oui' : 'non'}`, 'Partner', req.params.id);
+            res.json({ success: true });
+        }
+    );
+};
+
 const updatePartnerProduct = async (req, res) => {
     const b = req.body || {};
     const sets = [], vals = [];
@@ -483,6 +675,7 @@ const deletePartnerCategory = async (req, res) => {
     }
 };
 
-module.exports = { getPartners, createPartner, updatePartner, deletePartner, createContribution, deleteContribution,
+module.exports = {
+    setPartnerDestinataire, getPartners, createPartner, updatePartner, deletePartner, createContribution, deleteContribution,
     getPartnerProducts, createPartnerProduct, updatePartnerProduct, deletePartnerProduct,
     getPartnerCategories, createPartnerCategory, updatePartnerCategory, deletePartnerCategory };

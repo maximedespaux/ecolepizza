@@ -78,7 +78,7 @@ function ChapterIcon({ value, onPick }) {
   return (
     <span className="qb-ico" ref={ref}>
       <button type="button" className={"qb-ico-btn" + (value ? "" : " vide")} onClick={() => setOpen((o) => !o)}
-        title={value ? `Icône : ${courant ? courant.l : value} — cliquer pour changer` : "Aucune icône — cliquer pour en choisir une"}>
+        title={value ? `Icône : ${courant ? courant.l : value} (cliquer pour changer` : "Aucune icône) cliquer pour en choisir une"}>
         <Icon name={value || "image"} size={15} />
       </button>
       {open && (
@@ -171,7 +171,7 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
           {!ch.active && <span className="badge n">inactif</span>}
           <select className="qb-ch-sel" value={ch.program_id || ""} title="Formation rattachée"
             onChange={(e) => run(() => updateQuestChapter(ch.id, { program_id: e.target.value || null }))}>
-            <option value="">— non rattaché</option>
+            <option value="">non rattaché</option>
             {programs.map((p) => <option key={p.id} value={p.id}>{p.code}</option>)}
           </select>
           <button type="button" className="btn sm ghost danger"
@@ -218,7 +218,7 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
         <select style={{ flex: "0 1 260px", minWidth: 150 }} value={programId}
           onChange={(e) => { setProgramId(e.target.value); setOpenCh(null); }}>
           <option value="">Toutes</option>
-          {programs.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.title}</option>)}
+          {programs.map((p) => <option key={p.id} value={p.id}>{p.code}, {p.title}</option>)}
         </select>
         <form style={{ display: "flex", gap: 6, marginLeft: "auto" }}
           onSubmit={(e) => {
@@ -313,7 +313,7 @@ function QuestionRow({ q, opts, difficulties, onEdit, onDelete }) {
     ? (q.vf_answer ? "Vrai" : "Faux")
     : q.type === "ASSOC"
       ? `${opts.length} paires`
-      : (opts.find((o) => o.is_correct) || {}).text || "—";
+      : (opts.find((o) => o.is_correct) || {}).text || "-";
 
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0", borderBottom: "1px solid var(--border-soft)" }}>
@@ -452,7 +452,7 @@ function QuestionModal({ question, options, difficulties, onClose, onSave }) {
 
                 {type === "QCM" && (
                   <div className="field">
-                    <label>Choix <span className="field-opt">— cliquez sur celui qui est correct</span></label>
+                    <label>Choix <span className="field-opt">cliquez sur celui qui est correct</span></label>
                     {choices.map((c, i) => (
                       <div key={i} className={"qz-choice" + (correct === i ? " ok" : "")}>
                         <button type="button" className="qz-mark" onClick={() => setCorrect(i)}
@@ -488,7 +488,7 @@ function QuestionModal({ question, options, difficulties, onClose, onSave }) {
                     </button>
                     <p className="hint" style={{ marginTop: 6 }}>
                       Les choix sont mélangés à l'écran : la position ne trahit rien. Un leurre doit
-                      rester crédible — une valeur plausible du métier, sinon la question ne teste plus rien.
+                      rester crédible, une valeur plausible du métier, sinon la question ne teste plus rien.
                     </p>
                   </div>
                 )}
@@ -534,7 +534,7 @@ function QuestionModal({ question, options, difficulties, onClose, onSave }) {
                 )}
 
                 <div className="field">
-                  <label>Explication <span className="field-opt">— affichée après la réponse</span></label>
+                  <label>Explication <span className="field-opt">affichée après la réponse</span></label>
                   <textarea className="inp" rows={3} value={expl} onChange={(e) => setExpl(e.target.value)}
                     placeholder="Le pourquoi : sans lui, le stagiaire retient la bonne case et pas la raison." />
                 </div>
@@ -548,12 +548,12 @@ function QuestionModal({ question, options, difficulties, onClose, onSave }) {
                   <div className="field" style={{ margin: 0 }}>
                     <label>Difficulté</label>
                     <select value={diffId} onChange={(e) => setDiffId(e.target.value)}>
-                      <option value="">—</option>
+                      <option value="">-</option>
                       {difficulties.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.xp} XP)</option>)}
                     </select>
                   </div>
                   <div className="field" style={{ margin: 0 }}>
-                    <label>XP <span className="field-opt">— vide = hérité</span></label>
+                    <label>XP <span className="field-opt">vide = hérité</span></label>
                     <input className="inp" type="number" min="0" value={xp} onChange={(e) => setXp(e.target.value)}
                       placeholder={diff ? String(diff.xp) : "10"} />
                   </div>
@@ -564,7 +564,7 @@ function QuestionModal({ question, options, difficulties, onClose, onSave }) {
 
                 <label className="qz-active">
                   <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-                  Active <span className="field-opt">— décochez pour la retirer du jeu sans la supprimer</span>
+                  Active <span className="field-opt">décochez pour la retirer du jeu sans la supprimer</span>
                 </label>
               </div>
 

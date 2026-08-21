@@ -1,6 +1,6 @@
-# Impasto — logiciel de gestion pour organisme de formation
+# Impastio — logiciel de gestion pour organisme de formation
 
-Impasto est le logiciel de secrétariat de l'**École Pizzaïolo Jean-Jacques
+Impastio est le logiciel de secrétariat de l'**École Pizzaïolo Jean-Jacques
 Despaux** (« École Pizza »). Il remplace l'ancienne solution bricolée sur la
 suite Google (Sheets, Docs, Forms) par une application unique qui gère les
 stagiaires, produit automatiquement les documents administratifs, les fait
@@ -8,7 +8,7 @@ signer électroniquement, suit l'émargement et prépare les preuves Qualiopi.
 
 > Ce dépôt contient uniquement la **documentation projet**, organisée selon la
 > même architecture que le projet `doc_gestionary`. Le contenu provient de
-> l'application `impasto` existante, réécrit pour être clair et cohérent.
+> l'application `impastio` existante, réécrit pour être clair et cohérent.
 
 ## Documentation
 

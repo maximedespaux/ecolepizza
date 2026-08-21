@@ -71,6 +71,37 @@ export const PAR_CATEGORIE = {
  *      `garnitures.js`).
  */
 export const PAR_INGREDIENT = {
+  /* ═══════════════════════════════════════════════════════════════════════════════════════
+     — FARINES DE SUBSTITUTION —  ⚠️ À FAIRE VALIDER, comme le reste de ce fichier.
+
+     LA PÂTE EST UN INGRÉDIENT, et c'est ce qui permet à tout le reste de marcher sans une
+     ligne de logique en plus : une farine posée dans la composition passe par `verdict()`
+     comme une garniture. Les clés reprennent celles de `SUBSTITUTIONS` (lib/dough.js,
+     manuel p.32), préfixées, pour qu'aucune liste ne soit recopiée.
+
+     LE GLUTEN N'EST PAS RÉPÉTÉ ICI. Une substitution remplace une PART du poids de blé, à
+     poids total constant (manuel : Les substitutions · Définition) : le blé reste
+     majoritaire, la pâte porte toujours du gluten quelle que soit la farine ajoutée. Le
+     marquer sur chaque farine laisserait croire qu'une pâte sans farine marquée en serait
+     exempte — l'inverse exact de la leçon.
+
+     ET UNE SEULE DE CES FARINES AJOUTE UN DES 14 : le soja. C'est le point qui vaut d'être
+     enseigné, parce que l'intuition dit le contraire :
+      · CHÂTAIGNE — sonne comme un fruit à coque, n'en est pas un. Le règlement (UE)
+        1169/2011, annexe II, point 8, NOMME les fruits à coque concernés : amande, noisette,
+        noix, noix de cajou, noix de pécan, noix du Brésil, pistache, macadamia. La châtaigne
+        n'y figure pas. Un allergique aux fruits à coque n'a donc rien à en craindre au titre
+        des 14 — ce qui ne dispense jamais d'écouter le client.
+      · SARRASIN — sans gluten par nature, et absent des 14 malgré des allergies connues.
+      · MAÏS, SEIGLE, ÉPEAUTRE, BLÉS T80/T110/T150 — aucun des 14 en propre. Les trois
+        derniers et le seigle sont des céréales à gluten, déjà couvert par la pâte. */
+  farine_soja: { allergenes: ["soja"] },
+  farine_chataigne: {},
+  farine_sarrasin: {},
+  farine_seigle: {},
+  farine_mais: {},
+  farine_epeautre: {},
+
   // — Bases —
   tomate: {},
   creme: { allergenes: ["lait"] },

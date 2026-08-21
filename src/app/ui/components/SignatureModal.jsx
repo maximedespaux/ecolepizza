@@ -64,7 +64,7 @@ function SignatureModal({ doc, defaultName = "", onConfirm, onClose }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
-          <h3 style={{ fontSize: 17 }}>Signer — {doc.label}</h3>
+          <h3 style={{ fontSize: 17 }}>Signer, {doc.label}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="mbody">

@@ -87,3 +87,111 @@ test('le regroupement ADDITIONNE deux sous-pages d\'une même rubrique', () => {
         'les pastilles d\'une même rubrique doivent s\'additionner');
     assert.match(corps, /if \(!n\) continue/, 'un compte à zéro ne doit pas créer de pastille');
 });
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   LA PASTILLE « SESSIONS » — les stagiaires jamais interrogés sur la transmission aux partenaires.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+test('la pastille compte l\'ABSENCE de réponse, pas un refus', () => {
+    /* NI ACCEPTÉ NI REFUSÉ = aucune ligne au registre, lequel est en ajout seul : qui s'est
+       prononcé y a forcément une trace. Compter `accorde = 0` compterait les REFUS — c'est-à-dire
+       des gens qui ont répondu, et qu'on relancerait pour une question déjà tranchée. */
+    assert.match(srcBadges, /LEFT JOIN consent_record[\s\S]*?c\.id IS NULL/,
+        'La pastille doit compter les stagiaires SANS ligne au registre.');
+    assert.doesNotMatch(srcBadges, /c\.accorde\s*=\s*0/,
+        'Un refus est une réponse : il ne doit pas gonfler la pastille.');
+    assert.ok(clesDesPastilles().includes('/sessions'), 'la clé /sessions n\'est plus émise');
+});
+
+test('la pastille se limite aux sessions en cours ou à venir, et à une personne par tête', () => {
+    /* SANS LA BORNE DE DATE, la pastille compterait tout le fichier — un nombre à quatre chiffres
+       que personne ne peut faire descendre, puisque les stagiaires d'il y a six ans ne repasseront
+       pas. Une pastille qui ne bouge jamais cesse d'être lue, et emporte les autres avec elle. */
+    assert.match(srcBadges, /COALESCE\(s\.end_date, s\.start_date\) >= CURDATE\(\)/,
+        'Seules les sessions non terminées peuvent être comptées.');
+    /* Et DISTINCT : deux inscriptions pour la même personne, c'est UNE question à poser. */
+    assert.match(srcBadges, /COUNT\(DISTINCT e\.learner_id\)/,
+        'La pastille compte des personnes, pas des inscriptions.');
+});
+
+test('aucune pastille tant qu\'aucun partenaire ne reçoit rien', () => {
+    /* La 131 démarre à zéro destinataire, volontairement. Tant que l'école n'a coché personne,
+       demander un consentement reviendrait à faire autoriser une transmission vers personne :
+       la pastille enverrait courir après des signatures pour un flux qui n'existe pas. Le contrat
+       compte au même titre — une convention échue ne reçoit plus rien. */
+    /* La condition elle-même vit dans `lib/consentements.js` — partagée avec le détail par
+       session et avec la phrase soumise au stagiaire, qui NOMME les destinataires. Trois écrans
+       qui la réécriraient chacun finiraient par se contredire : un partenaire disparaîtrait
+       d'une liste tout en recevant encore des coordonnées. */
+    const lib = fs.readFileSync(path.join(API, 'lib/consentements.js'), 'utf8');
+    assert.match(lib, /recoit_coordonnees = 1 AND \$\{CONTRAT_VALABLE/,
+        'Être destinataire exige la case ET un contrat valable.');
+    assert.match(srcBadges, /if \(!ouvert\) return 0;/,
+        'Sans destinataire, la pastille doit valoir zéro sans même interroger le registre.');
+});
+
+test('répondre pour quelqu\'un fait redescendre la pastille tout de suite', () => {
+    /* La barre latérale ne sonde que toutes les 60 s. Sans ce signal, on saisit trois réponses,
+       le compte ne bouge pas, et l'on croit que rien ne s'est enregistré. Le bus existait déjà
+       (`lib/events.js`) mais AUCUN appelant ne l'utilisait — il était branché dans le vide. */
+    const src = fs.readFileSync(path.join(APP, 'ui/components/SessionConsentements.jsx'), 'utf8');
+    assert.match(src, /import \{ bumpBadges \}/, 'SessionConsentements doit importer bumpBadges.');
+    assert.match(src, /await charger\(\);[\s\S]{0,400}?bumpBadges\(\);/,
+        'Après une réponse enregistrée, la pastille doit être rafraîchie.');
+    assert.match(srcSidebar, /onBadgesRefresh\(load\)/, 'La barre latérale doit écouter le bus.');
+});
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   LE DÉTAIL PAR SESSION — la pastille dit COMBIEN, le calendrier dit OÙ.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+const srcLib = fs.readFileSync(path.join(API, 'lib/consentements.js'), 'utf8');
+const srcRoutes = fs.readFileSync(path.join(API, 'routes/session.routes.js'), 'utf8');
+
+test('le détail par session applique EXACTEMENT la définition de la pastille', () => {
+    /* Deux comptes affichés côte à côte qui ne diraient pas la même chose seraient pires que pas
+       de compte du tout : on chercherait un écart qui n'existe pas. Même absence de ligne au
+       registre, même borne de date, même garde-fou. */
+    const bloc = /async function manquantsParSession[\s\S]*?\n}/.exec(srcLib);
+    assert.ok(bloc, 'manquantsParSession introuvable');
+    assert.match(bloc[0], /c\.id IS NULL/, 'Même définition que la pastille : aucune ligne au registre.');
+    assert.match(bloc[0], /COALESCE\(s\.end_date, s\.start_date\) >= CURDATE\(\)/,
+        'Même borne de date que la pastille.');
+    assert.match(bloc[0], /aDesDestinataires/, 'Même garde-fou que la pastille.');
+});
+
+test('sans la migration 131, tout le monde est destinataire — donc les indicateurs s\'affichent', () => {
+    /* LE PIÈGE : la lecture la plus prudente de l'erreur donne ici le résultat le plus faux.
+       Ma première version comptait les partenaires cochés à la main et retombait sur 0 à la
+       moindre erreur SQL, donc AUCUN indicateur sur une base sans la 131 — alors que c'est
+       justement le monde où TOUT partenaire reçoit les coordonnées. */
+    const bloc = /async function aDesDestinataires[\s\S]*?\n}/.exec(srcLib);
+    assert.ok(bloc, 'aDesDestinataires introuvable');
+    assert.match(bloc[0], /return colonne \? rows\.length > 0 : true;/,
+        'Colonne absente = monde d\'avant = tout le monde reçoit, donc les indicateurs valent.');
+    assert.match(srcBadges, /aDesDestinataires/,
+        'La pastille doit passer par le garde-fou partagé, pas par une requête réécrite.');
+});
+
+test('la route du détail est déclarée AVANT /:id, et fermée au formateur', () => {
+    /* UN SEUL SEGMENT, comme `/:id`. Déclarée après, elle ne serait jamais atteinte : Express
+       partirait chercher une session dont l'identifiant serait « consentements-manquants ». */
+    const iDetail = srcRoutes.indexOf("'/consentements-manquants'");
+    const iId = srcRoutes.indexOf("router.get('/:id'");
+    assert.ok(iDetail > 0 && iId > 0, 'les deux routes doivent exister');
+    assert.ok(iDetail < iId, 'la route du détail doit précéder /:id, sinon elle est morte');
+    /* ET BUREAU UNIQUEMENT, alors que le calendrier est ouvert au formateur : le suivi des
+       consentements lui est fermé délibérément, et une exception discrète est la façon dont une
+       règle se défait. */
+    const ligne = srcRoutes.split('\n').find((l) => l.includes("'/consentements-manquants'"));
+    assert.match(ligne, /ADMIN_ROLES/, 'Le détail des consentements ne doit pas passer au formateur.');
+});
+
+test('le calendrier survit à l\'absence de ce détail', () => {
+    /* Chez le formateur la route répond 403. Le planning doit s'afficher SANS marque plutôt que
+       de rester en attente d'une réponse qui ne viendra jamais. */
+    const ui = fs.readFileSync(path.join(APP, 'ui/pages/Sessions.jsx'), 'utf8');
+    assert.match(ui, /setASolliciter\] = useState\(\{\}\)/, 'L\'état doit démarrer vide, pas à null.');
+    assert.match(ui, /getConsentsManquants\(\)[\s\S]{0,120}?\.catch\(\(\) => \{\}\)/,
+        'Un échec de cet appel ne doit pas empêcher de lire un planning.');
+});

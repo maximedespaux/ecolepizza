@@ -1,7 +1,5 @@
 import { useMemo, useState } from "react";
 import { Icon } from "./Icon.jsx";
-import Coeurs from "./Coeurs.jsx";
-import { encoreEnVie } from "../lib/coeurs.js";
 import { Paton, doughLook } from "./LivePizza.jsx";
 // Échap : ce jeu était la modale qui l'avait oublié (cf. lib/useEchap.js).
 import { useEchap } from "../lib/useEchap.js";
@@ -28,11 +26,6 @@ const TYPES = [
   { idx: 2, lbl: "T65", sub: "semi-complète", water: 4 },
   { idx: 3, lbl: "Complète", sub: "cendrée", water: 7 },
 ];
-const FOURS = [
-  { lbl: "Électrique", sub: "340 °C", t: 340 },
-  { lbl: "Gaz", sub: "400 °C", t: 400 },
-  { lbl: "Bois", sub: "460 °C", t: 460 },
-];
 
 /* Un objectif = une fenêtre idéale par axe (des manuels) + un briefing qualitatif qui GUIDE
    sans donner les chiffres — c'est au joueur de traduire « farine forte » en un W. */
@@ -40,7 +33,10 @@ const OBJECTIFS = [
   {
     id: "classique", nom: "Classique", emoji: "🍕",
     intro: "La pizza de tous les jours, cornicione léger.",
-    brief: { type: "Une farine courante, T55 ou T65.", force: "Force moyenne — pas besoin qu'elle tienne des heures.", hydra: "Hydratation modérée, facile à étaler.", temp: "Four moyen." },
+    brief: { type: "faite avec la farine de tous les jours, ni la plus blanche ni une complète",
+             force: "qui lève en quelques heures, sans attendre le lendemain",
+             hydra: "facile à étaler, ni collante ni sèche",
+             temp: "et qui cuise tranquillement, en cinq ou six minutes" },
     type: { ok: [1, 2], tol: [0, 3], why: "T55/T65 : la farine du quotidien, ni trop raffinée ni complète." },
     force: { ok: [200, 250], tol: [180, 280], why: "W ~220 : une fermentation courte ne demande pas une farine forte." },
     hydra: { ok: [55, 62], tol: [52, 66], why: "55-62 % : souple pour s'étaler, assez ferme pour un four moyen." },
@@ -49,7 +45,10 @@ const OBJECTIFS = [
   {
     id: "napolitaine", nom: "Napolitaine AVPN", emoji: "🔥",
     intro: "Cuisson éclair à très haute température. La reine, la plus exigeante.",
-    brief: { type: "Une farine 00, peu cendrée.", force: "Assez forte pour tenir la longue maturation.", hydra: "Maîtrisée — le disque doit tenir à 480 °C.", temp: "Un four brûlant." },
+    brief: { type: "faite d'une farine très blanche, presque sans son",
+             force: "qui tienne une longue maturation sans s'affaisser",
+             hydra: "souple, mais pas noyée : le disque doit tenir sur la pelle",
+             temp: "et qui soit saisie en une minute, dans un four brûlant" },
     type: { ok: [0, 1], tol: [0, 2], why: "Tipo 00 (T45/T55) : faible taux de cendres, la farine de la vraie napolitaine." },
     force: { ok: [280, 310], tol: [260, 330], why: "W 280-310 : la pâte doit encaisser une longue maturation sans s'affaisser." },
     hydra: { ok: [57, 65], tol: [55, 68], why: "57-65 % : le disciplinare AVPN 2024. Trop d'eau et le disque ne tient pas." },
@@ -58,7 +57,10 @@ const OBJECTIFS = [
   {
     id: "contemporaine", nom: "Contemporaine", emoji: "🫧",
     intro: "Cornicione haut et alvéolé. Farine forte, fermentation indirecte.",
-    brief: { type: "Une T65, un peu plus de caractère.", force: "Farine forte, elle porte le biga/poolish.", hydra: "Généreuse, pour la mie ouverte.", temp: "Plus chaud que la classique." },
+    brief: { type: "faite d'une farine qui a du caractère, un peu plus cendrée",
+             force: "assez forte pour porter une biga ou une poolish sans lâcher",
+             hydra: "bien hydratée, pour une mie ouverte et un bord qui monte",
+             temp: "et qui cuise plus chaud que la classique, pour lever le bord d'un coup" },
     type: { ok: [2, 2], tol: [1, 3], why: "T65 : plus de goût et de tenue pour une longue fermentation indirecte." },
     force: { ok: [320, 380], tol: [300, 400], why: "W 320-380 : une farine forte porte la biga ou la poolish sans lâcher." },
     hydra: { ok: [65, 75], tol: [60, 78], why: "65-75 % : plus d'eau que la classique, pour la mie ouverte du cornicione." },
@@ -67,46 +69,117 @@ const OBJECTIFS = [
   {
     id: "teglia", nom: "In teglia", emoji: "🍞",
     intro: "Pizza en plaque, al taglio. Très haute hydratation.",
-    brief: { type: "T65 ou une farine de caractère.", force: "Solide, pour tenir beaucoup d'eau.", hydra: "Très haute — c'est sa signature.", temp: "Four plus doux, cuisson longue." },
+    brief: { type: "faite d'une farine de caractère, capable de porter la structure",
+             force: "solide, parce qu'elle va boire énormément",
+             hydra: "très hydratée, presque coulante — c'est sa signature",
+             temp: "et qui cuise longuement, dans un four plus doux" },
     type: { ok: [2, 3], tol: [1, 3], why: "T65 à complète : la structure doit porter 75-80 % d'eau." },
     force: { ok: [300, 360], tol: [280, 380], why: "W 300-360 : sans force, la pâte gorgée d'eau s'effondre." },
     hydra: { ok: [75, 82], tol: [70, 85], why: "75-82 % : c'est ce qui fait la mie aérée de la teglia." },
-    temp: { ok: [300, 340], tol: [280, 360], why: "300-340 °C, cuisson longue en plaque — l'inverse de la napolitaine." },
+    temp: { ok: [300, 340], tol: [280, 360], why: "300-340 °C, cuisson longue en plaque, l'inverse de la napolitaine." },
   },
 ];
 
-/* Note d'un axe : 2 = plage juste, 1 = tolérance, 0 = raté. */
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   CINQ MANCHES, ET UN SEUL ENFOURNEMENT PAR MANCHE.
+
+   La partie tenait en UNE pizza qu'on pouvait retenter trois fois, en gardant la meilleure
+   fournée. On pouvait donc corriger axe par axe jusqu'à tomber juste — les retours disent
+   eux-mêmes dans quel sens — et trois étoiles finissaient par tomber sans qu'on ait rien
+   reconnu. Cinq commandes d'affilée, un seul essai chacune, mesurent autre chose : savoir lire
+   ce qu'on vous demande, du premier coup, cinq fois de suite.
+
+   LES CŒURS SORTENT DE CE JEU. Ils donnaient les trois essais ; sans reprise, ils ne modélisent
+   plus rien. Et ils ne pourraient pas revenir tels quels : un score CUMULÉ se ferait grossir à
+   volonté si l'on pouvait rejouer une manche, et les seuils ci-dessous ne voudraient plus rien
+   dire. Les trois autres jeux de l'arcade les gardent (cf. `lib/coeurs.js`).
+
+   LE BARÈME EST SUR 20 — quatre réglages × cinq manches. La plage JUSTE vaut 1 point, la
+   TOLÉRANCE une demi. Garder la demi-mesure importe : « 62 % au lieu de 65 » n'est pas la même
+   faute que « 62 % au lieu de 80 », et les trois couleurs du retour disent déjà cette nuance.
+   Une note sur 20 avec des demi-points, c'est aussi la façon dont on note en France.
+
+   Les seuils sont ceux demandés : 18 et plus, trois étoiles ; 11 à 17, deux ; 5 à 10, une.
+   Écrits en `>=` pour que les demi-points tombent du bon côté — 17,5 reste à deux étoiles. */
+const MANCHES = 5;
+const POINTS_MAX = MANCHES * 4;
+
+function etoilesPour(points) {
+  if (points >= 18) return 3;
+  if (points >= 11) return 2;
+  if (points >= 5) return 1;
+  return 0;
+}
+
+/* LES FORMULATIONS DE CLIENT ONT ÉTÉ RETIRÉES avec le bandeau qui les portait (« Votre four à
+   bois est chaud ? »). Elles faisaient doublon depuis que le briefing est écrit à la première
+   personne : deux guillemets d'affilée pour une même bouche. Ce qui reste tiré au sort, c'est
+   le STYLE — et c'est lui qui fait varier la réponse. Les douze phrases sont récupérables dans
+   l'historique si on veut les reposer ailleurs, sur l'écran de verdict par exemple.
+
+   Cinq commandes tirées de sorte que LES QUATRE STYLES PASSENT. Un tirage indépendant à chaque
+   manche pouvait donner cinq fois la même : une partie qui ne montre qu'un style n'apprend
+   qu'un quart du programme, et le hasard le ferait arriver une fois sur 256. On mélange donc les
+   quatre, puis on complète par un cinquième au hasard. */
+function tirerPartie() {
+  const styles = [...OBJECTIFS];
+  for (let i = styles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [styles[i], styles[j]] = [styles[j], styles[i]];
+  }
+  styles.push(OBJECTIFS[Math.floor(Math.random() * OBJECTIFS.length)]);
+  return styles.map((o) => ({ obj: o }));
+}
+
+/* Note d'un axe : 2 = plage juste, 1 = tolérance, 0 = raté. Les POINTS en découlent (1 et ½) —
+   la note à trois niveaux reste, c'est elle qui colore le retour. */
 function noteAxe(val, axe) {
   if (val >= axe.ok[0] && val <= axe.ok[1]) return 2;
   if (val >= axe.tol[0] && val <= axe.tol[1]) return 1;
   return 0;
 }
+const pointsDe = (note) => (note === 2 ? 1 : note === 1 ? 0.5 : 0);
+/* « 3,5 » et non « 3.5 » : c'est une note, en français. */
+const fmtPts = (n) => String(n).replace(".", ",");
 const SENS = (val, axe) => (val < axe.ok[0] ? "trop bas" : val > axe.ok[1] ? "trop haut" : "juste");
 const SENS_TYPE = (idx, axe) => (idx < axe.ok[0] ? "trop raffinée" : idx > axe.ok[1] ? "trop cendrée" : "juste");
 
 export default function SimulateurPizza({ onClose, onFinish, objectifId = null }) {
-  // Ouverture directe sur un objectif quand le jeu est lancé depuis une formation.
-  const [obj, setObj] = useState(() => OBJECTIFS.find((o) => o.id === objectifId) || null);
+  /* ON OUVRE SUR UN SERVICE : cinq commandes tirées d'avance. `objectifId` reste honoré s'il
+     est fourni — lancement depuis une formation — et impose alors le style des cinq. */
+  const [partie, setPartie] = useState(() => {
+    const impose = OBJECTIFS.find((o) => o.id === objectifId);
+    if (!impose) return tirerPartie();
+    return Array.from({ length: MANCHES }, () => ({ obj: impose }));
+  });
+  const [manche, setManche] = useState(0);          // 0 → 4
+  const [acquis, setAcquis] = useState([]);         // points de chaque manche jouée
+  /* APRÈS LA DERNIÈRE MANCHE, `manche` vaut 5 et `partie[5]` N'EXISTE PAS — la partie en compte
+     cinq, indices 0 à 4. `cmd.obj` levait alors, et React démontait la modale : le service se
+     jouait entièrement puis l'écran de fin disparaissait au lieu de s'afficher. On retient la
+     dernière commande, qui est justement celle dont ce résumé parle. */
+  const cmd = partie[Math.min(manche, MANCHES - 1)];
+  const obj = cmd.obj;
+  const pointsTotal = acquis.reduce((a, b) => a + b, 0);
   const [type, setType] = useState(1);   // index dans TYPES (T55 par défaut)
   const [force, setForce] = useState(280);
   const [hydra, setHydra] = useState(62);
   const [temp, setTemp] = useState(400);
   const [verdict, setVerdict] = useState(null);
-  /* TROIS FOURNÉES, ET ON GARDE LA MEILLEURE. « Réessayer » existait déjà, mais gratuit et sans
-     fin : on pouvait enfourner au hasard jusqu'à tomber juste, et les axes en rouge disaient
-     eux-mêmes dans quel sens corriger. Un cœur par fournée ratée redonne du poids au réglage —
-     c'est-à-dire au seul moment où l'on réfléchit. Rien ne persiste : fermer et rouvrir rend les
-     trois cœurs (cf. `lib/coeurs.js`). */
-  const [perdus, setPerdus] = useState(0);
-  const [meilleur, setMeilleur] = useState(0);
-  const fournees = () => { setPerdus(0); setMeilleur(0); };
+  /* PLUS DE CŒURS ICI : ils donnaient les trois essais d'une même pizza. Un seul enfournement
+     par manche les rend sans objet — et ils rendraient le score cumulé extensible à volonté. */
+  const fini = manche >= MANCHES;
+  const etoiles = etoilesPour(pointsTotal);
 
   /* Dès qu'un score existe, TOUTES les sorties le valident — la croix, le voile et Échap.
      Elles appelaient `onClose`, qui referme sans rien enregistrer : l'écran affichait les étoiles
      obtenues et fermer par la croix les jetait. C'est le geste le plus naturel devant un
      résultat, et c'était le seul qui perdait le score. Avant la première vérification il n'y a
      rien à garder : la croix abandonne, comme avant. */
-  const fermer = meilleur > 0 ? () => onFinish(meilleur) : onClose;
+  /* Dès qu'une manche est jouée, sortir VALIDE ce qui est acquis — fermer par la croix ne doit
+     pas jeter quatre manches réussies. Avant la première, il n'y a rien à garder. */
+  const fermer = acquis.length ? () => onFinish(etoiles) : onClose;
   useEchap(fermer);
 
   // La couleur/le grain du pâton suivent le TYPE choisi (Tipo 00 clair → complète foncée).
@@ -119,11 +192,19 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
       { key: "hydra", label: "Hydratation", val: `${hydra} %`, note: noteAxe(hydra, obj.hydra), sens: SENS(hydra, obj.hydra), why: obj.hydra.why },
       { key: "temp", label: "Four (température)", val: `${temp} °C`, note: noteAxe(temp, obj.temp), sens: SENS(temp, obj.temp), why: obj.temp.why },
     ];
-    const total = axes.reduce((s, a) => s + a.note, 0);          // sur 8
-    const stars = total >= 8 ? 3 : total >= 6 ? 2 : total >= 3 ? 1 : 0;
-    setVerdict({ axes, total, stars });
-    setMeilleur((m) => Math.max(m, stars));
-    if (stars < 3) setPerdus((p) => p + 1);
+    const points = axes.reduce((s, a) => s + pointsDe(a.note), 0);   // sur 4
+    setVerdict({ axes, points });
+    setAcquis((l) => [...l, points]);
+  }
+
+  /* Passer à la suite : la manche d'après, ou l'écran de fin quand les cinq sont jouées. */
+  function suivante() {
+    setVerdict(null);
+    setManche((m) => m + 1);
+  }
+  function rejouer() {
+    setPartie(tirerPartie()); setManche(0); setAcquis([]); setVerdict(null);
+    setType(1); setForce(280); setHydra(62); setTemp(400);
   }
 
   return (
@@ -131,37 +212,71 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
       <div className="modal sim" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
           <h3><Icon name="pizza" size={18} /> Fais ta pizza</h3>
+          {/* L'AVANCEMENT DU SERVICE, à demeure. Il vivait dans le bandeau de commande, retiré
+              avec lui ; ici il tient sur les trois écrans — réglage, verdict de manche et fin —
+              et l'on sait toujours où l'on en est. */}
+          {!fini && <span className="sim-manche-n chiffres">Commande {manche + 1}/{MANCHES}</span>}
           <button className="x" onClick={fermer} aria-label="Fermer">×</button>
         </div>
 
-        {!obj ? (
-          <div className="mbody">
-            <p className="hint" style={{ marginTop: 0 }}>Choisis ta pizza à réussir. Tu régleras la farine, sa force, l'eau et le four — comme en vrai.</p>
-            <div className="sim-objs">
-              {OBJECTIFS.map((o) => (
-                <button key={o.id} className="sim-obj" onClick={() => { setObj(o); setVerdict(null); fournees(); }}>
-                  <span className="sim-obj-e" aria-hidden="true">{o.emoji}</span>
-                  <b>{o.nom}</b>
-                  <span className="sim-obj-d">{o.intro}</span>
-                </button>
-              ))}
+        {fini ? (
+          /* FIN DE SERVICE — le seul endroit où les étoiles se comptent. Le détail des cinq
+             manches y figure : une note globale sans le détail ne dit pas OÙ l'on a perdu, et
+             c'est précisément ce qu'on vient chercher. */
+          <>
+            <div className="mbody sim-result">
+              <div className="sim-stars" aria-label={`${etoiles} étoiles sur 3`}>
+                {[0, 1, 2].map((i) => <span key={i} className={i < etoiles ? "on" : ""}>★</span>)}
+              </div>
+              <p className="sim-verdict-t">
+                Service terminé — <b>{fmtPts(pointsTotal)} / {POINTS_MAX}</b>
+              </p>
+              <p className="sim-etait" style={{ justifyContent: "center" }}>
+                {etoiles === 3 ? "Sans faute ou presque : tu lis une commande comme un pro."
+                  : etoiles === 2 ? "Bon service. Les styles sont là, les réglages se peaufinent."
+                  : etoiles === 1 ? "Le service passe, mais relis les fenêtres du manuel."
+                  : "Rude soirée. Reprends les quatre styles, ils reviennent tous."}
+              </p>
+              <ol className="sim-manches">
+                {partie.slice(0, acquis.length).map((c, i) => (
+                  <li key={i}>
+                    <span className="sim-obj-e" aria-hidden="true">{c.obj.emoji}</span>
+                    <span style={{ flex: 1 }}>{c.obj.nom}</span>
+                    <b className="chiffres">{fmtPts(acquis[i])} / 4</b>
+                  </li>
+                ))}
+              </ol>
             </div>
-          </div>
+            <div className="mfoot">
+              <button className="btn ghost" onClick={rejouer}>
+                <Icon name="refresh" size={14} /> Rejouer un service
+              </button>
+              <button className="btn primary" onClick={() => onFinish(etoiles)}>
+                <Icon name="check" size={15} /> Valider ({etoiles} ★)
+              </button>
+            </div>
+          </>
         ) : verdict ? (
           <>
             <div className="mbody sim-result">
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 6 }}>
-                <Coeurs perdus={perdus} />
-              </div>
-              <div className="sim-stars" aria-label={`${verdict.stars} étoiles sur 3`}>
-                {[0, 1, 2].map((i) => <span key={i} className={i < verdict.stars ? "on" : ""}>★</span>)}
-              </div>
+              {/* PAS D'ÉTOILES ICI. Elles ne se comptent qu'en fin de service, sur les cinq
+                  manches : en afficher par manche laisserait croire qu'on les gagne à l'unité. */}
+              <p className="sim-manche-n">Commande {manche + 1} / {MANCHES}</p>
               <p className="sim-verdict-t">
-                {verdict.stars === 3 ? "Parfait — c'est une vraie " + obj.nom + " !"
-                  : !encoreEnVie(perdus) ? `Plus de cœur — on garde ta meilleure fournée (${meilleur} ★).`
-                  : verdict.stars === 2 ? "Bien joué, presque parfait."
-                  : verdict.stars === 1 ? "Ça part, mais revois les points en rouge."
-                  : "Raté — mais regarde pourquoi, c'est là qu'on apprend."}
+                {verdict.points === 4 ? "Parfait, c'est exactement ça !"
+                  : verdict.points >= 3 ? "Bien joué, presque parfait."
+                  : verdict.points >= 1.5 ? "Ça part, mais revois les points en rouge."
+                  : "Raté, mais regarde pourquoi, c'est là qu'on apprend."}
+                {" "}<b>{fmtPts(verdict.points)} / 4</b>
+              </p>
+              {/* CE QUE LE CLIENT DEMANDAIT — À CHAQUE FOIS, RÉUSSI OU NON.
+                  Le nom du style ne tombait qu'au sans-faute : en ratant, on ne savait donc
+                  jamais ce qu'il aurait fallu reconnaître, et c'est justement là qu'on apprend.
+                  Cacher le nom pendant le réglage rend le jeu instructif ; le cacher au verdict
+                  le rendrait seulement obscur. */}
+              <p className="sim-etait">
+                <span className="sim-obj-e" aria-hidden="true">{obj.emoji}</span>
+                Le client demandait une <b>{obj.nom}</b> — {obj.intro}
               </p>
               <ul className="sim-feedback">
                 {verdict.axes.map((a) => (
@@ -169,23 +284,26 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                     <Icon name={a.note === 2 ? "check-circle" : a.note === 1 ? "info" : "x-circle"} size={15} />
                     <span>
                       <b>{a.label}</b> : {a.val}
-                      {a.note === 2 ? " — parfait." : ` — ${a.sens}.`}
+                      {/* L'ESPACE EST DANS LA CHAÎNE, pas entre les accolades : JSX supprime un
+                          saut de ligne qui sépare deux expressions, et « 65 % » se collait à
+                          « parfait ». L'autre branche s'en tirait par hasard — elle commence par
+                          sa propre virgule. */}
+                      {a.note === 2 ? " parfait." : `, ${a.sens}.`}
                       <em>{a.why}</em>
                     </span>
                   </li>
                 ))}
               </ul>
             </div>
+            {/* PAS DE « RÉESSAYER » : le score est CUMULÉ, une reprise le ferait grossir à
+                volonté et les seuils ne voudraient plus rien dire. Une commande, un
+                enfournement — c'est ce que mesure le jeu. */}
             <div className="mfoot">
-              <button className="btn ghost" onClick={() => { setObj(null); setVerdict(null); fournees(); }}>Autre pizza</button>
-              {/* « Réessayer » disparaît quand la pizza est parfaite (il n'y a plus rien à
-                  chercher) ou qu'il ne reste plus de cœur — sinon le bouton promettrait un essai
-                  qui n'existe pas. */}
-              {verdict.stars < 3 && encoreEnVie(perdus) && (
-                <button className="btn" onClick={() => setVerdict(null)}>Réessayer</button>
-              )}
-              <button className="btn primary" onClick={() => onFinish(meilleur)}>
-                <Icon name="check" size={15} /> Valider ({meilleur} ★)
+              <span className="hint" style={{ flex: 1 }}>Total {fmtPts(pointsTotal)} / {POINTS_MAX}</span>
+              <button className="btn primary" onClick={suivante}>
+                {manche + 1 < MANCHES
+                  ? <><Icon name="chevron-right" size={15} /> Commande suivante</>
+                  : <><Icon name="check" size={15} /> Voir le service</>}
               </button>
             </div>
           </>
@@ -197,20 +315,32 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                   restait deux essais ou un seul, alors que c'est exactement ce qui décide entre
                   tenter un coup et sécuriser. Une information qui arrive après la décision
                   n'informe rien. */}
-              <div className="sim-goal">
-                <span className="sim-obj-e" aria-hidden="true">{obj.emoji}</span>
-                <span style={{ flex: 1 }}>Objectif : <b>{obj.nom}</b> — {obj.intro}</span>
-                <Coeurs perdus={perdus} />
-              </div>
-
-              {/* Instructions : ce qu'il faut viser, en mots. Ça guide sans donner les chiffres —
-                  c'est au stagiaire de traduire « farine forte » en un W. */}
+              {/* LE STYLE N'EST PAS NOMMÉ ICI, et c'est tout l'intérêt : « Napolitaine AVPN »
+                  écrit en gras transformait le jeu en table de correspondance. Le client parle,
+                  le briefing ci-dessous guide en mots, et le nom du style ne tombe qu'au verdict
+                  — au moment où il apprend quelque chose plutôt qu'il ne dispense de chercher. */}
+              {/* LE BANDEAU DE COMMANDE A ÉTÉ RETIRÉ : il citait le client (« Votre four à bois
+                  est chaud ? ») juste au-dessus d'un briefing qui, depuis qu'il est écrit à la
+                  première personne, le cite AUSSI. Deux guillemets d'affilée pour une même
+                  bouche : le second disait tout, le premier ne faisait plus que retarder la
+                  lecture. Le compteur de manches qu'il portait est remonté dans l'en-tête, où
+                  il reste visible sur les trois écrans du jeu. */}
+              {/* CE QUE LE CLIENT ATTEND, DIT PAR LUI — pas une fiche technique.
+                  Le bloc s'écrivait en télégramme : « Farine, Une farine courante, T55 ou T65.
+                  Force moyenne, pas besoin qu'elle tienne des heures. » Deux défauts d'un coup.
+                  La forme d'abord : un intitulé, une virgule, deux phrases collées — personne ne
+                  parle comme ça, et le jeu venait justement de mettre un client au comptoir.
+                  Le fond ensuite, plus gênant : la FARINE et sa FORCE tenaient dans la MÊME
+                  puce. Trois puces pour quatre réglages, et l'on cherchait le quatrième.
+                  Une phrase, un souhait, un réglage — dans l'ordre des curseurs en dessous. */}
               <div className="sim-brief">
-                <span className="sim-brief-t"><Icon name="compass" size={13} /> Ce qu'il te faut</span>
+                <span className="sim-brief-t"><Icon name="message-circle" size={13} /> Ce qu'il attend</span>
+                <p className="sim-brief-i">« Je voudrais une pâte…</p>
                 <ul>
-                  <li><b>Farine</b> — {obj.brief.type} {obj.brief.force}</li>
-                  <li><b>Eau</b> — {obj.brief.hydra}</li>
-                  <li><b>Four</b> — {obj.brief.temp}</li>
+                  <li>{obj.brief.type},</li>
+                  <li>{obj.brief.force},</li>
+                  <li>{obj.brief.hydra},</li>
+                  <li>{obj.brief.temp}. »</li>
                 </ul>
               </div>
 
@@ -218,8 +348,22 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                 <Paton hydra={hydra} w={force} look={look} patonG={260} />
               </div>
 
-              <label className="sim-ctrl">
-                <span className="sim-ctrl-h">Type de farine <b>{TYPES[type].lbl}</b></span>
+              {/* ─────────────────────────────────────────────────────────────────────────
+                  PAS UN `<label>` — ET C'ÉTAIT UN VRAI DÉFAUT, pas une question de style.
+
+                  Un `<label>` sans `for` s'associe à son PREMIER DESCENDANT CONTRÔLABLE, et un
+                  `<button>` en est un. Le bloc entier étant un label, survoler n'importe où
+                  dedans — une pastille, le titre — mettait la PREMIÈRE pastille en `:hover` :
+                  « Tipo 00 » s'allumait quand on pointait « Complète ». C'est la spécification
+                  qui le veut, aucun CSS n'y pouvait rien.
+                  Au lecteur d'écran, c'était pire encore : « Type de farine » était annoncé
+                  comme le NOM du premier bouton, et les trois autres n'avaient plus d'intitulé
+                  de groupe du tout.
+                  Un groupe de boutons exclusifs n'est pas un champ de formulaire : `role="group"`
+                  nomme l'ensemble sans s'attacher à l'un d'eux. Les DEUX autres blocs, eux,
+                  enveloppent un vrai curseur unique — leur `<label>` est légitime et reste. */}
+              <div className="sim-ctrl" role="group" aria-labelledby="sim-t-farine">
+                <span className="sim-ctrl-h" id="sim-t-farine">Type de farine <b>{TYPES[type].lbl}</b></span>
                 <div className="sim-pills">
                   {TYPES.map((f) => (
                     <button key={f.idx} className={"sim-pill" + (type === f.idx ? " on" : "")} onClick={() => setType(f.idx)}>
@@ -227,7 +371,7 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                     </button>
                   ))}
                 </div>
-              </label>
+              </div>
 
               <label className="sim-ctrl">
                 <span className="sim-ctrl-h">Force de la farine <b>{force} W</b></span>
@@ -240,22 +384,29 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
                 <span className="sim-ctrl-h">Hydratation <b>{hydra} %</b></span>
                 <input type="range" min="50" max="85" value={hydra} className="sim-range"
                   onChange={(e) => setHydra(Number(e.target.value))} />
-                <span className="sim-range-hint">Plus d'eau = pâte plus souple, mie plus ouverte — mais plus dure à travailler.</span>
+                <span className="sim-range-hint">Plus d'eau = pâte plus souple, mie plus ouverte, mais plus dure à travailler.</span>
               </label>
 
+              {/* LE FOUR AU CURSEUR, PLUS EN TROIS PASTILLES. « Électrique 340 / Gaz 400 /
+                  Bois 460 » donnait la réponse : trois valeurs, une par style, il suffisait de
+                  reconnaître laquelle. Un curseur oblige à ESTIMER, comme pour le W et l'eau —
+                  et c'est la même compétence : traduire « un four brûlant » en un nombre.
+                  La plage 250-500 couvre les quatre styles avec de la marge (la teglia descend
+                  à 280 en tolérance, l'AVPN monte à 485) sans permettre d'absurdités. */}
               <label className="sim-ctrl">
                 <span className="sim-ctrl-h">Four <b>{temp} °C</b></span>
-                <div className="sim-pills">
-                  {FOURS.map((f) => (
-                    <button key={f.t} className={"sim-pill" + (temp === f.t ? " on" : "")} onClick={() => setTemp(f.t)}>
-                      {f.lbl}<span>{f.sub}</span>
-                    </button>
-                  ))}
-                </div>
+                <input type="range" min="250" max="500" step="5" value={temp} className="sim-range"
+                  onChange={(e) => setTemp(Number(e.target.value))} />
+                <span className="sim-range-hint">Plus le four est chaud, plus la cuisson est courte : 5-6 min à 340 °C, 60-90 s à 460 °C.</span>
               </label>
             </div>
             <div className="mfoot">
-              <button className="btn ghost" onClick={() => setObj(null)}>Changer d'objectif</button>
+              {/* « Changer d'objectif » renvoyait au menu des quatre pavés, qui n'existe plus.
+                  Il retire une commande — même geste, sans revenir à une carte. */}
+              <span className="hint" style={{ flex: 1 }}>
+                {manche === 0 ? "Cinq commandes, un seul enfournement chacune."
+                  : `Total ${fmtPts(pointsTotal)} / ${POINTS_MAX}`}
+              </span>
               <button className="btn primary" onClick={valider}>
                 <Icon name="flame" size={15} /> Enfourner et noter
               </button>

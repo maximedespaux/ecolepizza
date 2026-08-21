@@ -18,7 +18,7 @@ import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT,
  */
 const TYPES = ["Classique", "Contemporaine", "Napolitaine", "Teglia", "Pala"];
 const KINDS = [
-  { k: "PATE", label: "Pâte", icon: "settings", hint: "Un empâtement — rendement en pâtons" },
+  { k: "PATE", label: "Pâte", icon: "settings", hint: "Un empâtement, rendement en pâtons" },
   { k: "PREPARATION", label: "Préparation", icon: "list-checks", hint: "Sauce, base… avec un rendement" },
   { k: "RECETTE", label: "Recette", icon: "pizza", hint: "Pizza complète : pâte + préparations + garnitures" },
 ];
@@ -40,7 +40,7 @@ const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Garniture", RECETTE: "R�
 const SAVED_TITLE = { PATE: "Mes empâtements enregistrés", PREPARATION: "Mes garnitures enregistrées", RECETTE: "Mes réalisations enregistrées" };
 const SAVED_EMPTY = { PATE: "Aucun empâtement enregistré pour l'instant.", PREPARATION: "Aucune garniture enregistrée pour l'instant.", RECETTE: "Aucune réalisation enregistrée pour l'instant." };
 const HEADS = {
-  empatement: { eyebrow: "Outils · mes empâtements", title: "Mes empâtements", lead: "Calcule ton empâtement au pourcentage boulanger : typologie, force de la farine (W), hydratation, sel, huile, levure, température. Obtiens le poids de chaque ingrédient, le nombre de pâtons et le coût — puis enregistre ta pâte pour la réutiliser dans une réalisation." },
+  empatement: { eyebrow: "Outils · mes empâtements", title: "Mes empâtements", lead: "Calcule ton empâtement au pourcentage boulanger : typologie, force de la farine (W), hydratation, sel, huile, levure, température. Obtiens le poids de chaque ingrédient, le nombre de pâtons et le coût, puis enregistre ta pâte pour la réutiliser dans une réalisation." },
   garniture: { eyebrow: "Outils · mes garnitures", title: "Mes garnitures", lead: "Compose une garniture (sauce, base, topping…) à partir du catalogue Metro : coût matière, rendement, et le déroulé de fabrication. Réutilisable dans une réalisation." },
   realisation: { eyebrow: "Outils · mes réalisations", title: "Mes réalisations", lead: "Assemble une pizza complète : ton empâtement + tes garnitures + le catalogue, avec la cuisson (four, température, énergie, temps). Calcule le coût matière et fixe ton prix de vente conseillé." },
 };
@@ -68,7 +68,7 @@ function Slider({ label, val, min, max, step, set, suffix }) {
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
         <b style={{ fontSize: 13 }}>{label}</b>
-        <span className="tnum" style={{ fontWeight: 700, color: "var(--blue)" }}>{val}{suffix}</span>
+        <span className="chiffres" style={{ fontWeight: 700, color: "var(--blue)" }}>{val}{suffix}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={val}
         onChange={(e) => set(Number(e.target.value))} style={{ width: "100%", accentColor: "var(--ember1)" }} />
@@ -89,7 +89,7 @@ function HydraSlider({ val, recoMin, recoMax, eauPerKg, set, confirmed }) {
           <b style={{ fontSize: 13 }}>Hydratation</b>
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="hydra-badge ok"><Icon name="check" size={12} /> Confirmé</span>
-            <span className="tnum" style={{ fontWeight: 800, color: "var(--green)", fontSize: 15 }}>{val} %</span>
+            <span className="chiffres" style={{ fontWeight: 800, color: "var(--green)", fontSize: 15 }}>{val} %</span>
           </span>
         </div>
         <div className="hydra-track"><span className="hydra-zone" style={{ left: 0, right: 0 }} /></div>
@@ -111,7 +111,7 @@ function HydraSlider({ val, recoMin, recoMax, eauPerKg, set, confirmed }) {
         <b style={{ fontSize: 13 }}>Hydratation</b>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className={"hydra-badge " + badge}>{ok && <Icon name="check" size={12} />} {label}</span>
-          <span className="tnum" style={{ fontWeight: 800, color: c, fontSize: 15 }}>{val} %</span>
+          <span className="chiffres" style={{ fontWeight: 800, color: c, fontSize: 15 }}>{val} %</span>
         </span>
       </div>
       <div className="hydra-track">
@@ -143,7 +143,7 @@ function LevureControl({ val, reco, recoG, typeLabel, flourTemp, set, capNote, b
           <b style={{ fontSize: 13 }}>Levure</b>
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="hydra-badge ok"><Icon name="check" size={12} /> Cahier</span>
-            <span className="tnum" style={{ fontWeight: 800, color: "var(--green)", fontSize: 15 }}>{val} %</span>
+            <span className="chiffres" style={{ fontWeight: 800, color: "var(--green)", fontSize: 15 }}>{val} %</span>
           </span>
         </div>
         {bmax > bmin && <input type="range" min={bmin} max={bmax} step={0.01} value={v}
@@ -162,7 +162,7 @@ function LevureControl({ val, reco, recoG, typeLabel, flourTemp, set, capNote, b
         <b style={{ fontSize: 13 }}>Levure</b>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {ok && <span className="hydra-badge ok"><Icon name="check" size={12} /> Conforme</span>}
-          <span className="tnum" style={{ fontWeight: 800, color: c, fontSize: 15 }}>{val} %</span>
+          <span className="chiffres" style={{ fontWeight: 800, color: c, fontSize: 15 }}>{val} %</span>
         </span>
       </div>
       <div className="hydra-track">
@@ -302,7 +302,7 @@ function IngredientSearchModal({ onClose, onAdd, added }) {
                   <b style={{ display: "block", fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</b>
                   <span style={{ fontSize: 11, color: "var(--muted)" }}>{[p.brand, p.family].filter(Boolean).join(" · ")}</span>
                 </span>
-                <span className="mono" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{p.unit_ht != null ? `${euro(p.unit_ht)}/${unitLabel(p.type_unity)}` : "—"}</span>
+                <span className="mono" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{p.unit_ht != null ? `${euro(p.unit_ht)}/${unitLabel(p.type_unity)}` : "-"}</span>
                 <button className={"btn sm " + (added.has(p.id) ? "ghost" : "primary")} onClick={() => onAdd(p)}>
                   <Icon name={added.has(p.id) ? "check" : "plus"} size={13} /> {added.has(p.id) ? "Ajouté" : "Ajouter"}
                 </button>
@@ -684,7 +684,7 @@ function FicheRecette({ mode = "realisation" }) {
                 {W_BRACKETS.map((b) => {
                   const reco = wOk(b.w);
                   return (
-                    <button key={b.w} onClick={() => applyW(b)} title={reco ? b.use : `Déconseillé pour « ${curPreset.nom} » — vise ${wRangeLabel}`}
+                    <button key={b.w} onClick={() => applyW(b)} title={reco ? b.use : `Déconseillé pour « ${curPreset.nom} », vise ${wRangeLabel}`}
                       className={`btn sm ${curW.w === b.w ? "primary" : "ghost"}`} style={{ opacity: reco ? 1 : 0.45 }}>
                       {b.label}
                     </button>
@@ -706,7 +706,7 @@ function FicheRecette({ mode = "realisation" }) {
                     <button key={m} onClick={() => !locked && setMethod(m)} disabled={locked}
                       className={`btn sm ${dp.method === m ? "primary" : "ghost"}`}
                       style={{ display: "inline-flex", alignItems: "center", gap: 5, opacity: locked ? 0.5 : 1 }}
-                      title={locked ? "Débloqué au Niveau II (empâtements indirects)" : (INDIRECT.includes(m) ? `${m} — farine ≥ W320` : m)}>
+                      title={locked ? "Débloqué au Niveau II (empâtements indirects)" : (INDIRECT.includes(m) ? `${m}, farine ≥ W320` : m)}>
                       {locked && <Icon name="lock" size={12} />}{m}
                     </button>
                   );
@@ -732,7 +732,7 @@ function FicheRecette({ mode = "realisation" }) {
                       <b style={{ fontSize: 13 }}>Eau de bassinage</b>
                       <span className="hydra-badge high">Plafond atteint</span>
                     </div>
-                    <p className="hint" style={{ margin: 0, fontSize: 11.5 }}>Hydratation totale au plafond de cette force — monte le W pour pouvoir bassiner davantage.</p>
+                    <p className="hint" style={{ margin: 0, fontSize: 11.5 }}>Hydratation totale au plafond de cette force, monte le W pour pouvoir bassiner davantage.</p>
                   </div>
                 )}
                 <p className="hint" style={{ margin: "2px 0 12px", fontSize: 11.5 }}>Hydratation totale <b style={{ color: totalHydra > maxTotal ? "var(--ember1)" : "var(--green)" }}>{totalHydra} %</b> <span style={{ opacity: .8 }}>(coulage {num(dp.hydra)} % + bassinage {num(dp.bassinage)} %)</span> · plafond <b>{maxTotal} %</b> pour {curW.label}.</p>
@@ -768,7 +768,7 @@ function FicheRecette({ mode = "realisation" }) {
                 </div>
               </>}
               <LevureControl val={num(dp.levure)} reco={levReco} recoG={levRecoG} typeLabel={yeastLabel(yeastType)} flourTemp={flourTemp} set={(v) => setDP("levure", v)}
-                bounded={napoLevFixed ? { min: napoSpec.levureMin, max: napoSpec.levureMax, note: <>Cahier <b>{napoSpec.label}</b> — {napoSpec.levureNote}</> } : null} />
+                bounded={napoLevFixed ? { min: napoSpec.levureMin, max: napoSpec.levureMax, note: <>Cahier <b>{napoSpec.label}</b>, {napoSpec.levureNote}</> } : null} />
               {!napoLevFixed && yeastType === "seche_active" && <p className="hint" style={{ margin: "-2px 0 6px", fontSize: 11.5 }}>À réhydrater dans l'eau à ≈ 38 °C (jamais &gt; 50 °C, sinon elle meurt).</p>}
 
               {/* 5 · Production : quantités & prix */}
@@ -795,28 +795,28 @@ function FicheRecette({ mode = "realisation" }) {
                     <input className="inp" type="number" min="0" max="35" value={dp.flourTemp ?? 17} onChange={(e) => setFlourTemp(Number(e.target.value))} /></div>
                   <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 1, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface2)" }}>
                     <span className="hint" style={{ fontSize: 11 }}>Eau de coulage <span style={{ opacity: .7 }}>(50 − 2×T°)</span></span>
-                    <b className="tnum" style={{ fontSize: 19, color: eauCoulage < 4 ? "var(--blue)" : "var(--text)" }}>{eauCoulage} °C</b>
+                    <b className="chiffres" style={{ fontSize: 19, color: eauCoulage < 4 ? "var(--blue)" : "var(--text)" }}>{eauCoulage} °C</b>
                   </div>
                 </div>
-                {eauCoulage < 2 && <p className="hint" style={{ margin: "8px 0 0", color: "var(--ember1)" }}>Farine trop chaude — mets-en une partie au frais la veille (conseil du manuel).</p>}
+                {eauCoulage < 2 && <p className="hint" style={{ margin: "8px 0 0", color: "var(--ember1)" }}>Farine trop chaude, mets-en une partie au frais la veille (conseil du manuel).</p>}
               </Collapse>
 
               <Collapse title={<><Icon name="clock" size={14} /> Stockage &amp; fermentation</>} hint="pointage, apprêt, chambre froide">
                 {indirectSel && (
-                  <div className="field" style={{ marginBottom: 10 }}><label>Temps de pré-ferment — {dp.method} (heures)</label>
+                  <div className="field" style={{ marginBottom: 10 }}><label>Temps de pré-ferment, {dp.method} (heures)</label>
                     <input className="inp" type="number" min="0" step="0.5" value={dp.prefermentH ?? ""} onChange={(e) => setDP("prefermentH", e.target.value)} placeholder="Ex. 16" /></div>
                 )}
                 <div className="field" style={{ marginBottom: 12 }}><label>Temps de fermentation total (heures)</label>
                   <input className="inp" type="number" min="0" step="0.5" value={dp.fermentH ?? ""} onChange={(e) => setDP("fermentH", e.target.value)} placeholder="Ex. 24" /></div>
-                <p className="hint" style={{ margin: "0 0 10px" }}>Conditions — remplis l'une, l'autre, ou <b>les deux</b> (ex. 24 h à 20 °C puis 48 h à 4 °C).</p>
+                <p className="hint" style={{ margin: "0 0 10px" }}>Conditions, remplis l'une, l'autre, ou <b>les deux</b> (ex. 24 h à 20 °C puis 48 h à 4 °C).</p>
                 <div className="stock-cond">
                   <span className="stock-lbl"><Icon name="thermometer" size={14} /> À température ambiante</span>
-                  <div className="field" style={{ marginBottom: 0 }}><label>Durée (h)</label><input className="inp" type="number" min="0" step="0.5" value={dp.ambH ?? ""} onChange={(e) => setDP("ambH", e.target.value)} placeholder="—" /></div>
+                  <div className="field" style={{ marginBottom: 0 }}><label>Durée (h)</label><input className="inp" type="number" min="0" step="0.5" value={dp.ambH ?? ""} onChange={(e) => setDP("ambH", e.target.value)} placeholder="-" /></div>
                   <div className="field" style={{ marginBottom: 0 }}><label>Température (°C)</label><input className="inp" type="number" value={dp.ambT ?? ""} onChange={(e) => setDP("ambT", e.target.value)} placeholder="Ex. 20" /></div>
                 </div>
                 <div className="stock-cond" style={{ marginBottom: 0 }}>
                   <span className="stock-lbl"><Icon name="thermometer" size={14} /> En température contrôlée <span className="hint" style={{ fontWeight: 400 }}>· chambre froide</span></span>
-                  <div className="field" style={{ marginBottom: 0 }}><label>Durée (h)</label><input className="inp" type="number" min="0" step="0.5" value={dp.ctrlH ?? ""} onChange={(e) => setDP("ctrlH", e.target.value)} placeholder="—" /></div>
+                  <div className="field" style={{ marginBottom: 0 }}><label>Durée (h)</label><input className="inp" type="number" min="0" step="0.5" value={dp.ctrlH ?? ""} onChange={(e) => setDP("ctrlH", e.target.value)} placeholder="-" /></div>
                   <div className="field" style={{ marginBottom: 0 }}><label>Température (°C)</label><input className="inp" type="number" value={dp.ctrlT ?? ""} onChange={(e) => setDP("ctrlT", e.target.value)} placeholder="Ex. 4" /></div>
                 </div>
               </Collapse>
@@ -846,7 +846,7 @@ function FicheRecette({ mode = "realisation" }) {
               </div>
               {dp.autolyse && (
                 <p style={{ fontSize: 11.5, color: "rgba(255,255,255,.75)", background: "rgba(255,255,255,.08)", borderRadius: 8, padding: "8px 10px", margin: "0 0 10px" }}>
-                  <b>Autolyse</b> — mélange la farine et l'eau, laisse reposer 30–60 min, puis ajoute sel &amp; levure.
+                  <b>Autolyse</b> : mélange la farine et l'eau, laisse reposer 30–60 min, puis ajoute sel &amp; levure.
                 </p>
               )}
               {dough.map((i, idx) => (
@@ -855,7 +855,7 @@ function FicheRecette({ mode = "realisation" }) {
                   <span style={{ color: i.color, display: "inline-flex" }}><Icon name={i.ic} size={17} /></span>
                   <b style={{ flex: 1, fontSize: 13 }}>{i.k}</b>
                   <span style={{ fontSize: 11, color: "rgba(255,255,255,.6)" }}>{i.pct}</span>
-                  <b className="tnum" style={{ width: 90, textAlign: "right" }}>{gfmt(i.v)}</b>
+                  <b className="chiffres" style={{ width: 90, textAlign: "right" }}>{gfmt(i.v)}</b>
                 </div>
               ))}
               <div style={{ borderTop: "1px solid rgba(255,255,255,.15)", margin: "16px 0 0" }} />
@@ -976,7 +976,7 @@ function FicheRecette({ mode = "realisation" }) {
             <div className="grid cols-2" style={{ gap: 12 }}>
               <div className="field" style={{ marginBottom: 0 }}><label>Type de four</label>
                 <select className="inp" value={cooking.type || ""} onChange={(e) => setCook("type", e.target.value)}>
-                  <option value="">— à choisir —</option>
+                  <option value="">à choisir</option>
                   {COOK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select></div>
               <div className="field" style={{ marginBottom: 0 }}><label>Température (°C)</label>
@@ -1020,7 +1020,7 @@ function Row({ label, value, accent }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,.10)", borderRadius: 10, padding: "9px 12px" }}>
       <span style={{ fontSize: 13, color: "rgba(255,255,255,.85)" }}>{label}</span>
-      <b className="tnum" style={{ fontSize: 15, color: accent ? "var(--gold)" : "#fff" }}>{value}</b>
+      <b className="chiffres" style={{ fontSize: 15, color: accent ? "var(--gold)" : "#fff" }}>{value}</b>
     </div>
   );
 }

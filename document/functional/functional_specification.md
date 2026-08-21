@@ -2,7 +2,7 @@
 
 ## Vue globale du projet
 
-- **Nom du projet :** Impasto
+- **Nom du projet :** Impastio
 - **Client :** École Pizzaïolo Jean-Jacques Despaux (« École Pizza »)
 - **Chef de projet :** Guillaume Despaux
 - **Document créé le :** 06/07/2026
@@ -51,7 +51,7 @@ réduit : 1 à 2 formateurs et 1 secrétariat.
 Aujourd'hui, la gestion s'appuie sur un assemblage manuel d'outils Google
 (Sheets pour les données, Docs pour les modèles de documents, Forms pour les
 tests et les avis des stagiaires). Ce fonctionnement est chronophage et fragile.
-Impasto remplace cet assemblage par une application unique et cohérente.
+Impastio remplace cet assemblage par une application unique et cohérente.
 
 ## Objectifs
 

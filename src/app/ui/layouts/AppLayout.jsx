@@ -47,7 +47,12 @@ function AppLayout() {
   // Mode confidentiel partagé : masque les montants sur les pages Ventes & Finance
   // (+ Partenaires). Toujours masqué pour les profils sans droit de révélation (formateur).
   const { masked: moneyMasked } = useMoneyMask();
-  const FINANCE = ["/ventes", "/inventaire", "/factures", "/comptabilite", "/partenaires"];
+  /* LE TABLEAU DE BORD EN FAIT PARTIE, et c'est même la page qui compte le plus. Il affiche le
+     chiffre d'affaires — le même que `/ventes`, qui le masque — et c'est la page d'arrivée après
+     connexion : celle qui reste ouverte quand quelqu'un passe derrière l'écran. Le masque servait
+     à couvrir « un écran de caisse ou de comptabilité ouvert devant un stagiaire » ; il laissait
+     à découvert l'écran le plus souvent ouvert de tous. */
+  const FINANCE = ["/ventes", "/inventaire", "/factures", "/comptabilite", "/partenaires", "/dashboard"];
   const moneyMask = FINANCE.some((p) => location.pathname.startsWith(p)) && (!canRevealMoney(user) || moneyMasked);
 
   // Charge une fois les couleurs personnalisées des formations pour que les
@@ -66,7 +71,7 @@ function AppLayout() {
       <div className="app-loading">
         <div className="brand-splash">
           <img src={LOGO} alt="" />
-          <span>Impasto</span>
+          <span>Impastio</span>
         </div>
       </div>
     );
@@ -92,7 +97,7 @@ function AppLayout() {
               background: "rgba(230,160,30,.12)", border: "1px solid rgba(230,160,30,.35)",
               color: "var(--muted)", fontSize: 13, display: "flex", gap: 8, alignItems: "center",
             }}>
-              Lecture seule — vous pouvez consulter cette rubrique mais pas la modifier.
+              Lecture seule, vous pouvez consulter cette rubrique mais pas la modifier.
             </div>
           )}
           {/* `lecture-seule` habille ce que `blockMutations` intercepte : sans elle, un bouton

@@ -7,7 +7,8 @@ import { CAT_ART, CAT_ICON } from "../components/CatIcon.jsx";
 import CreneauCalendrier from "../components/CreneauCalendrier.jsx";
 import ConseilMateriel from "../components/ConseilMateriel.jsx";
 import { UserContext } from "../context/UserContext.jsx";
-import { euro } from "../lib/format.js";
+import { euro, listeCategories } from "../lib/format.js";
+import ImageLien from "../components/ImageLien.jsx";
 import {
   getCart, addToCart, setQty, setBroderie, clearCart, cartTotals, cartCount,
   lineKey, brodValue, variantValue, brodOk, roomFor, CART_EVENT,
@@ -152,7 +153,7 @@ function BroderieModal({ produit, defaults, onClose, onAdd }) {
           {ok ? (
             <p className="brod-apercu">
               <span>Tu commandes :</span> <b>{`${taille} · ${coupe}`}</b>
-              <span> — brodé </span><b>{`${nom.trim().toUpperCase()} ${prenom.trim()}`}</b>
+              <span>brodé </span><b>{`${nom.trim().toUpperCase()} ${prenom.trim()}`}</b>
             </p>
           ) : null}
         </div>
@@ -237,6 +238,13 @@ function EcoleTab() {
       <div className="shop-grid">
         {shown.map((p) => (
           <div key={p.id} className="shop-card">
+            {/* LA PHOTO PREND ENFIN LA PLACE QU'ELLE RÉCLAMAIT. Le commentaire ci-dessous raconte
+                qu'un glyphe posé seul en haut de carte « se lisait comme l'image de l'article,
+                donc il mentait » — il avait été redescendu près du nom du rayon pour cette
+                raison. Une vraie photo (migration 133) va précisément là, et n'y ment pas. Sans
+                adresse, ou si le lien est mort, il n'y a RIEN : la carte reprend exactement
+                l'allure qu'elle avait, plutôt qu'un cadre vide qui aurait l'air cassé. */}
+            <ImageLien src={p.image_url} className="shop-photo" fallback={null} />
             {/* Le glyphe est une marque de RAYON, pas une photo du produit : quatre catégories de
                 pelles partagent le même dessin, et « Coupe-pâte » sortirait des ciseaux. Seul, en
                 haut de la carte, il se lisait comme l'image de l'article — donc il mentait. Collé
@@ -272,7 +280,7 @@ function EcoleTab() {
                 marchand. En dessous du seuil, le chiffre est une information utile — il évite
                 de composer un panier qu'on devra lui refuser. */}
             {!p.in_stock ? (
-              <span className="shop-stock"><Icon name="clock" size={12} /> Rupture — sur commande</span>
+              <span className="shop-stock"><Icon name="clock" size={12} /> Rupture, sur commande</span>
             ) : p.stock != null && p.stock <= STOCK_BAS ? (
               <span className="shop-stock"><Icon name="package" size={12} /> Plus que {p.stock} en stock</span>
             ) : null}
@@ -285,22 +293,23 @@ function EcoleTab() {
   );
 }
 
-/* Badges de caractéristiques d'un four/pétrin, depuis `specs` (JSON servi par l'API). Tous en
-   `.badge.n` (neutre) : c'est le seul variant de badge qui passe le contraste dans les deux
-   thèmes. L'AVPN se distingue par l'étoile + le mot, pas par une couleur qui échoue. */
-const ENERGIE_LBL = { ELECTRIQUE: "Électrique", GAZ: "Gaz", BOIS: "Bois", COMBINE: "Bois + gaz", HYBRIDE: "Hybride", CONVOYEUR: "Convoyeur" };
-function SpecsBadges({ specs }) {
-  if (!specs) return null;
-  return (
-    <span className="spec-badges">
-      {specs.energie ? <span className="badge n">{ENERGIE_LBL[specs.energie] || specs.energie}</span> : null}
-      {specs.temp_max_c ? <span className="badge n tnum">{specs.temp_max_c} °C</span> : null}
-      {specs.pizzas ? <span className="badge n tnum">{specs.pizzas} pizzas</span> : null}
-      {specs.sole_rotative ? <span className="badge n">sole rotative</span> : null}
-      {specs.avpn ? <span className="badge n"><Icon name="star" size={10} /> AVPN</span> : null}
-    </span>
-  );
-}
+/* LES CARACTÉRISTIQUES NE SONT PLUS DES BADGES CODÉS EN DUR (migration 134).
+ *
+ * Une fonction `SpecsBadges` tirait cinq étiquettes de la colonne JSON `specs` : énergie,
+ * température, nombre de pizzas, sole rotative, AVPN. Elles se superposaient aux CATÉGORIES
+ * saisies par l'école — sur un même four, « 400 °C » et « électrique » s'affichaient deux fois,
+ * l'une à côté de l'autre.
+ *
+ * Le doublon n'était que le symptôme. Le vrai défaut : `specs` est une liste FERMÉE. Ajouter un
+ * critère — « pierre réfractaire », « hotte intégrée », « deux chambres » — demandait de modifier
+ * ce fichier. Les catégories séparées par des virgules n'ont pas cette limite, et l'école les
+ * remplit elle-même sans passer par un développeur.
+ *
+ * La migration 134 a recopié les cinq libellés dans `category`, à l'identique : rien n'a disparu
+ * de l'écran, seuls les doublons sont partis.
+ *
+ * `specs` RESTE EN BASE ET RESTE LUE : `specs.devis` pilote toujours le message « Sur devis
+ * auprès du partenaire » du comparateur. Seuls les BADGES cessent d'en être tirés. */
 
 /* Le comparateur : la fourchette de prix constatés chez les revendeurs, dépliable sur le
    détail. C'est l'ÉCART qui a de la valeur — « 9 000 → 15 200 € » dit au stagiaire qu'un four
@@ -308,38 +317,34 @@ function SpecsBadges({ specs }) {
    et sa date : un prix sans provenance périme dans son dos. « Sur devis » quand le partenaire
    ne publie rien (Marana). */
 function ComparateurPrix({ p }) {
-  const [ouvert, setOuvert] = useState(false);
   const prix = p.prix || [];
   const devis = p.specs && p.specs.devis;
 
   if (!prix.length) {
     return <span className="cmp-devis"><Icon name="send" size={12} /> {devis ? "Sur devis auprès du partenaire" : "Tarif sur demande"}</span>;
   }
-  const ecart = p.prix_max > p.prix_min ? Math.round((p.prix_max / p.prix_min - 1) * 100) : 0;
+  /* CE QUI A ÉTÉ RETIRÉ, ET CE QUI RESTE.
+   *
+   * La carte portait quatre informations pour un seul prix : « Constaté chez 2 revendeurs », la
+   * fourchette, « +5 % d'un revendeur à l'autre », et un dépliant « Voir les prix ». Trois
+   * commentaires sur un chiffre — le stagiaire vient chercher combien ça coûte, pas une étude de
+   * marché. Il reste le prix.
+   *
+   * « DE … À … » ET NON UNE FLÈCHE, et ce n'est pas un détail de style. Depuis que les cartes à
+   * tarif négocié affichent « 3 500 € → 3 075 € » (ancien prix, puis prix école), une flèche
+   * signifierait DEUX choses opposées sur la même page : une baisse ici, un écart entre
+   * revendeurs là. Tant que « Constaté chez 2 revendeurs » précédait la ligne, le contexte
+   * levait l'ambiguïté ; en le retirant, la flèche seule laissait lire « c'était 3 075 €, c'est
+   * maintenant 3 225 € » — soit exactement l'inverse d'une bonne nouvelle. */
   return (
     <div className="cmp">
-      <span className="cmp-src">Constaté chez {prix.length} revendeur{prix.length > 1 ? "s" : ""}</span>
       <div className="cmp-range">
-        <b className="tnum">{euro(p.prix_min)}{p.prix_max > p.prix_min ? <> → {euro(p.prix_max)}</> : null} <span className="shop-unit">HT</span></b>
-        {ecart > 0 ? <span className="cmp-ecart">+{ecart} % d'un revendeur à l'autre</span> : null}
+        <b className="tnum">
+          {p.prix_max > p.prix_min
+            ? <>de {euro(p.prix_min)} à {euro(p.prix_max)}</>
+            : euro(p.prix_min)} <span className="shop-unit">HT</span>
+        </b>
       </div>
-      {prix.length > 1 ? (
-        <button className="cmp-toggle" onClick={() => setOuvert((v) => !v)} aria-expanded={ouvert}>
-          <Icon name={ouvert ? "chevron-down" : "chevron-right"} size={12} /> {ouvert ? "Masquer" : "Voir les prix"}
-        </button>
-      ) : null}
-      {ouvert ? (
-        <ul className="cmp-list">
-          {prix.map((x, i) => (
-            <li key={i}>
-              <a href={x.url} target="_blank" rel="noopener noreferrer">
-                {x.reseller} <Icon name="link" size={10} />
-              </a>
-              <span className="tnum">{euro(x.price_ht)}{x.includes_install ? " · posé" : ""}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   );
 }
@@ -355,7 +360,7 @@ function PartenairesTab() {
   const aideBloc = (
     <Card key="aide">
       <button className="cm-open" onClick={() => setAide((v) => !v)} aria-expanded={aide}>
-        <span className="card-ttl"><Icon name="compass" size={16} /> Aide au choix — quel four, quel pétrin ?</span>
+        <span className="card-ttl"><Icon name="compass" size={16} /> Aide au choix, quel four, quel pétrin ?</span>
         <Icon name={aide ? "chevron-up" : "chevron-down"} size={16} />
       </button>
       {aide ? <div style={{ marginTop: 14 }}><ConseilMateriel /></div> : null}
@@ -370,7 +375,15 @@ function PartenairesTab() {
   return <>{aideBloc}{groups.map((g) => (
     <Card key={g.partner_id} title={
       <span className="card-ttl">
-        <Icon name="users" size={16} /> {g.partner_name}
+        {/* LE LOGO REMPLACE L'ICÔNE quand le partenaire en a un. Le pictogramme « users » était un
+            repli : il est identique pour les vingt-trois partenaires et ne dit donc rien de plus
+            que le nom écrit juste à côté. Un logo, lui, est ce que le stagiaire reconnaîtra en
+            magasin ou sur une facture.
+            Sans logo — ou si le lien est mort — on retombe sur l'icône : jamais un cadre vide,
+            qui ferait croire à une image cassée. */}
+        <ImageLien src={g.partner_logo} className="shop-partner-logo"
+          fallback={<Icon name="users" size={16} />} />
+        {g.partner_name}
         <span className="badge n" style={{ marginLeft: 8 }}>{g.partner_category}</span>
         {g.discount_pct ? <span className="badge g" style={{ marginLeft: 6 }}>−{g.discount_pct} % école</span> : null}
       </span>
@@ -381,29 +394,61 @@ function PartenairesTab() {
           // La puce ne s'affiche que si elle APPREND quelque chose : sous « Marana — FOUR »,
           // répéter « Four » sur les trois cartes ne fait qu'ajouter du bruit. Elle reste utile
           // chez un partenaire aux produits variés (Gilac : « Bac » vs « Préparation »).
-          const repete = String(p.category || "").toLowerCase() === String(g.partner_category || "").toLowerCase();
+          /* ON ÉCARTE ÉTIQUETTE PAR ÉTIQUETTE, plus la chaîne entière. L'ancien test comparait
+             `p.category` complet à la catégorie du partenaire : dès qu'un produit portait
+             « Four, 400 °C », l'égalité échouait et « Four » se réaffichait en doublon sous
+             « Marana — FOUR ». La règle voulue n'a pas changé — ne pas répéter ce que dit déjà
+             l'en-tête — mais elle s'applique maintenant à chaque étiquette prise à part. */
+          const cats = listeCategories(p.category)
+            .filter((c) => c.toLowerCase() !== String(g.partner_category || "").toLowerCase());
           return (
             <div key={p.id} className="shop-card">
+              <ImageLien src={p.image_url} className="shop-photo" fallback={null} />
               {/* Le glyphe n'apparaît QUE si la catégorie en a un vraiment : les catégories
                   partenaires (Four, Bac, Préparation) n'en ont pas, et CatGlyph retombait sur
                   l'icône « package » — dix-neuf boîtes grises identiques qui ne disaient rien
                   de plus que le mot déjà écrit à côté. */}
-              {p.category && !repete ? (
-                <span className="shop-rayon">
-                  {CAT_ICON[p.category] ? <CatGlyph category={p.category} size={13} /> : null}
-                  {p.category}
+              {/* UNE ÉTIQUETTE PAR CATÉGORIE. « Four, 400 °C » en donne deux, distinctes : un
+                  four est « Four » ET « 400 °C », et prévoir un champ par facette revient à en
+                  manquer une. Le glyphe se cherche PAR ÉTIQUETTE — sur la chaîne entière, la
+                  recherche échouait dès qu'il y avait une virgule, et « Four » perdait son dessin
+                  pour avoir gagné une précision. */}
+              {cats.length ? (
+                <span className="shop-rayons">
+                  {cats.map((c) => (
+                    <span key={c} className="shop-rayon">
+                      {CAT_ICON[c] ? <CatGlyph category={c} size={13} /> : null}
+                      {c}
+                    </span>
+                  ))}
                 </span>
               ) : null}
               <b className="shop-name">{p.name}</b>
               {/* La référence fabricant seulement si elle existe : « — » n'informe personne. */}
               {p.reference ? <span className="shop-ref">{p.reference}</span> : null}
-              <SpecsBadges specs={p.specs} />
               {/* Un tarif école négocié prime sur le comparateur (c'est CE que le stagiaire paie).
                   Sinon, la fourchette revendeurs. Sinon « sur devis ». */}
               {eco ? (
                 <span className="shop-price">
-                  <b className="tnum" style={{ color: "var(--green)" }}>{euro(p.price_school)} <span className="shop-unit">école</span></b>
-                  {pub ? <span className="shop-old">{euro(p.price_public)}</span> : null}
+                  {/* L'ANCIEN PRIX VIENT EN PREMIER, puis la flèche, puis le tarif école.
+                      L'ordre inverse — nouveau prix, puis ancien barré derrière — se lisait à
+                      contretemps : on découvrait le rabais APRÈS avoir lu le montant à payer,
+                      alors que c'est justement lui qui donne sa valeur au chiffre. La flèche dit
+                      le mouvement que le barré seul laissait deviner. */}
+                  {/* UNE RANGÉE À PART, parce que `.shop-price` est délibérément en COLONNE :
+                      il porte jusqu'à quatre morceaux sur une carte de 165 px, et tout mettre en
+                      ligne débordait de 34 px sur la carte voisine (cf. le commentaire du CSS).
+                      Sans ce conteneur, la flèche tombait sur sa propre ligne entre les deux
+                      montants — vérifié à l'écran — et l'évolution ne se lisait plus d'un trait.
+                      La rangée s'enroule : sur une carte étroite, le tarif école passe dessous
+                      plutôt que de déborder. */}
+                  <span className="shop-price-evol">
+                    {pub && Number(p.price_public) > Number(p.price_school) ? (
+                      <><span className="shop-old">{euro(p.price_public)}</span>
+                      <span className="shop-fleche" aria-hidden="true">→</span></>
+                    ) : null}
+                    <b className="tnum" style={{ color: "var(--green)" }}>{euro(p.price_school)} <span className="shop-unit">école</span></b>
+                  </span>
                 </span>
               ) : <ComparateurPrix p={p} />}
               {p.note ? <span className="shop-note">{p.note}</span> : null}
@@ -431,7 +476,7 @@ function PanierTab({ onSent }) {
 
   if (!lines.length) {
     return <EmptyState icon="package" title="Ton panier est vide"
-      text="Ajoute du matériel depuis les onglets. Tu enverras ta demande à l'école, qui te la prépare — tu paies sur place." />;
+      text="Ajoute du matériel depuis les onglets. Tu enverras ta demande à l'école, qui te la prépare, tu paies sur place." />;
   }
   const t = cartTotals(lines);
   const brodes = lines.filter((l) => l.personalizable);
@@ -462,7 +507,7 @@ function PanierTab({ onSent }) {
               {l.source === "PARTENAIRE" ? <span className="badge n" style={{ marginLeft: 6 }}>partenaire</span> : null}</b>
             <span className="cart-qty">
               <button className="iconbtn" onClick={() => setQty(k, l.qty - 1)} aria-label="Retirer un"><Icon name="minus" size={13} /></button>
-              <b className="tnum">{l.qty}</b>
+              <b className="chiffres">{l.qty}</b>
               <button className="iconbtn" onClick={() => setQty(k, l.qty + 1)} aria-label="Ajouter un"
                 disabled={roomFor(l, lines) <= 0} title={roomFor(l, lines) <= 0 ? "Stock disponible atteint" : undefined}><Icon name="plus" size={13} /></button>
             </span>
@@ -507,7 +552,7 @@ function PanierTab({ onSent }) {
               {brodOk(l) ? (
                 <p className="brod-apercu">
                   <span>Tu commandes :</span> <b>{variantValue(l)}</b>
-                  <span> — brodé </span><b>{brodValue(l)}</b>
+                  <span>brodé </span><b>{brodValue(l)}</b>
                 </p>
               ) : <p className="brod-apercu ko"><span>Complète le nom, le prénom, la taille et la coupe.</span></p>}
             </div>
@@ -569,14 +614,14 @@ function totalDemande(lines) {
 function MesDemandes() {
   const [rows, setRows] = useState(null);
   const [busy, setBusy] = useState(null);   // id en cours d'annulation
-  const [erreur, setErreur] = useState(null); // { id, message } — rattaché à SA demande
+  const [erreur, setErreur] = useState(null); // { id, message }, rattaché à SA demande
   const reload = () => getMyShopRequests().then((r) => setRows(r.data || [])).catch(() => setRows([]));
   useEffect(() => { reload(); }, []);
 
   // Annulation possible tant que l'école n'a rien engagé (statut « Reçue »). On confirme
   // d'abord : une demande annulée ne se réactive pas, il faut la recomposer.
   async function annuler(r) {
-    if (!window.confirm(`Annuler la demande ${r.ref} ? Cette action est définitive — il faudra recomposer ton panier.`)) return;
+    if (!window.confirm(`Annuler la demande ${r.ref} ? Cette action est définitive, il faudra recomposer ton panier.`)) return;
     setBusy(r.id); setErreur(null);
     try {
       await cancelMyShopRequest(r.id);
@@ -598,7 +643,7 @@ function MesDemandes() {
     return (
       <Card key={r.id} title={
         <span className="card-ttl">
-          <Icon name="history" size={16} /> <b className="tnum">{r.ref}</b>
+          <Icon name="history" size={16} /> <b className="chiffres">{r.ref}</b>
           <span className={"badge " + (STATUS_BADGE[r.status] || "n")} style={{ marginLeft: 8 }}>
             {STATUS_LABEL[r.status] || r.status}
           </span>
@@ -612,13 +657,13 @@ function MesDemandes() {
           <Icon name="clock" size={14} />
           {r.pickup_at
             ? <>Retrait le <b>{labelJour(String(r.pickup_at).slice(0, 10))} à {String(r.pickup_at).slice(11, 16)}</b></>
-            : <>Sans rendez-vous — passe quand tu veux pendant nos horaires</>}
+            : <>Sans rendez-vous, passe quand tu veux pendant nos horaires</>}
         </p>
 
         <ul className="dem-lignes">
           {r.lines.map((l, i) => (
             <li key={i}>
-              <span className="dem-qty tnum">{l.qty} ×</span>
+              <span className="dem-qty chiffres">{l.qty} ×</span>
               <span className="dem-lbl">
                 {l.label}
                 {l.variant ? <span className="badge n dem-var">{l.variant}</span> : null}
@@ -686,7 +731,7 @@ function CartAside({ count, onCheckout }) {
                     {variantValue(l) ? <span className="badge b" style={{ marginLeft: 4 }}>{variantValue(l)}</span> : null}</span>
                   <span className="cart-mini-qty">
                     <button className="iconbtn" onClick={() => setQty(k, l.qty - 1)} aria-label="Retirer un"><Icon name="minus" size={12} /></button>
-                    <b className="tnum">{l.qty}</b>
+                    <b className="chiffres">{l.qty}</b>
                     <button className="iconbtn" onClick={() => setQty(k, l.qty + 1)} aria-label="Ajouter un"
                       disabled={roomFor(l, lines) <= 0} title={roomFor(l, lines) <= 0 ? "Stock disponible atteint" : undefined}><Icon name="plus" size={12} /></button>
                   </span>
@@ -735,7 +780,7 @@ function Boutique() {
     <>
       <PageHead eyebrow="Espace stagiaire · boutique" title="La boutique"
         lead={<>
-          Le matériel de l'école, à retirer sur place — et les offres négociées chez nos partenaires.
+          Le matériel de l'école, à retirer sur place, et les offres négociées chez nos partenaires.
           {/* La réserve est dite UNE FOIS, en arrivant, plutôt que répétée sur chaque carte
               remisée. Formulée pour rester vraie même quand aucune remise n'est en cours :
               c'est toute la boutique qui est réservée aux stagiaires, pas seulement les remises.
@@ -751,8 +796,7 @@ function Boutique() {
       {sent ? (
         <div className="ok-banner">
           <Icon name="check-circle" size={18} />
-          <span>Demande <b className="tnum">{sent}</b> envoyée. L'école la prépare et te recontacte —
-            garde cette référence, elle sert à la retrouver.</span>
+          <span>Demande <b className="chiffres">{sent}</b> envoyée. L'école la prépare et te recontacte, garde cette référence, elle sert à la retrouver.</span>
           <button className="btn sm ghost" onClick={() => setSent(null)}>Fermer</button>
         </div>
       ) : null}

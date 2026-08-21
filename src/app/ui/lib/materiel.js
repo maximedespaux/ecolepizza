@@ -62,13 +62,13 @@ export const ENERGIES = [
     resume: "Le gage de qualité commercial. Cuisson très rapide, idéale napolitaine et contemporaine.",
     pour: [
       "Argument commercial fort : le bois se voit et se vend.",
-      "Cuisson très rapide — le terrain naturel de la napolitaine.",
+      "Cuisson très rapide, le terrain naturel de la napolitaine.",
       "Le four garde sa chaleur pour le lendemain.",
     ],
     contraintes: [
       "Sécurité des locaux.",
       "Sortie des fumées : conduit isolé réglementé.",
-      "Ramonage 2 fois par an — facture à l'appui, exigée par l'assurance.",
+      "Ramonage 2 fois par an, facture à l'appui, exigée par l'assurance.",
       "Qualité du bois (séchage) et place pour le stocker.",
     ],
     variantes: [
@@ -102,18 +102,18 @@ export const ENERGIES = [
       "Le plus simple à faire accepter par un bailleur ou une copropriété.",
     ],
     contraintes: [
-      "Demande de la puissance électrique — à vérifier AVANT de signer un bail.",
+      "Demande de la puissance électrique, à vérifier AVANT de signer un bail.",
       "Les modèles à commande mécanique sont mal isolés : la facture s'en ressent.",
     ],
     variantes: [
       { id: "digital", label: "Commande digitale", texte: "Réglage bien plus précis selon les modes et les temps (classique ou teglia). Fours récents, excellente isolation." },
-      { id: "mecanique", label: "Commande mécanique", texte: "Deux boutons, affichage de 1 à 10, températures moins précises. Ancienne génération, moins bien isolée donc plus gourmande — mais les prix sont plus attractifs." },
+      { id: "mecanique", label: "Commande mécanique", texte: "Deux boutons, affichage de 1 à 10, températures moins précises. Ancienne génération, moins bien isolée donc plus gourmande, mais les prix sont plus attractifs." },
       { id: "sole_rotative", label: "Sole rotative", texte: "La nouveauté : plus de rotation des pizzas dans la chambre, cuissons fiables et régulières." },
     ],
   },
   {
     id: "HYBRIDE", label: "Hybride bois + gaz", tmax: 500,
-    resume: "Fonctionne au bois ET au gaz — mais uniquement SIMULTANÉMENT.",
+    resume: "Fonctionne au bois ET au gaz, mais uniquement SIMULTANÉMENT.",
     pour: ["L'aspect et le goût du bois, avec l'appoint du gaz pour tenir la température."],
     contraintes: [
       "Les deux énergies ne s'utilisent que simultanément : tu gardes TOUTES les contraintes du bois (conduit, ramonage, stockage) ET celles du gaz.",
@@ -122,7 +122,7 @@ export const ENERGIES = [
   },
   {
     id: "CONVOYEUR", label: "Convoyeur", tmax: 350,
-    resume: "Cuisson parfaite et uniforme sans rotation. Pour le volume — le geste disparaît.",
+    resume: "Cuisson parfaite et uniforme sans rotation. Pour le volume, le geste disparaît.",
     pour: [
       "Cadence et régularité : la pizza sort toujours pareil, quel que soit l'opérateur.",
       "Pratique pour une cuisson à 80 % destinée aux distributeurs à pizzas.",
@@ -148,7 +148,7 @@ export const PETRINS = [
     pour: [
       "Accélère la formation de la maille gluténique.",
       "L'empâtement est plus lisse, avec une mie plus régulière.",
-      "Le plus répandu — donc le plus facile à faire réparer.",
+      "Le plus répandu, donc le plus facile à faire réparer.",
     ],
     contraintes: [
       "Sa vitesse échauffe l'empâtement : les temps de pétrissage sont plus courts et demandent plus de précision.",

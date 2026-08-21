@@ -1,0 +1,207 @@
+/**
+ * LES MINI-JEUX SE JOUENT AU DOIGT — les cibles doivent faire 44 px.
+ *
+ * MESURÉ SUR TÉLÉPHONE (375 px) avant d'écrire ce test :
+ *  · « La commande piège » — les trois réponses (Oui / Non / À vérifier) faisaient 94 × 37,5 px ;
+ *  · « Le Constructeur » — les neuf étapes et leurs neuf emplacements, 38 et 40 px.
+ *
+ * CE SONT LES COMMANDES PRINCIPALES DE CES JEUX, pas des boutons de réglage. La commande piège
+ * est CHRONOMÉTRÉE et coûte un cœur par erreur ; le Constructeur coûte un cœur par tentative
+ * imparfaite. Une cible trop petite y produit une faute qui n'est pas une faute de connaissance —
+ * le jeu sanctionne alors la précision du doigt, pas le savoir, ce qui est exactement l'inverse
+ * de ce qu'il mesure.
+ *
+ * LE RÉTRÉCISSEMENT ÉTAIT DÉLIBÉRÉ, et c'est pour cela que ce test existe : le commentaire du
+ * media query explique qu'on serre pour que tout tienne sans défiler. L'intention est bonne, mais
+ * elle se repaie en cibles. Mesuré après correction : les trois réponses tiennent toujours sur
+ * une ligne et la carte reste entièrement visible.
+ *
+ * CE QUI N'EST PAS COUVERT ICI : `.btn` et le `×` des modales font 38 et 32 px. Ce sont les
+ * classes GLOBALES de l'application — les relever toucherait tous les écrans, ce qui est une
+ * autre décision que celle-ci.
+ */
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+
+const css = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'styles', 'app.css'), 'utf8');
+/* LE SÉLECTEUR EST ÉCHAPPÉ avant d'entrer dans une expression régulière. Sans cela,
+   `.pq-mini:hover:not(.soon)` voyait ses parenthèses et ses points lus comme un motif : la règle
+   n'était jamais trouvée, et le test échouait sans que le CSS ait tort. Le même helper, dans
+   `simulateur-survol.test.js`, portait exactement le même défaut. */
+const regle = (selecteur) => {
+    const motif = selecteur.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = new RegExp(`${motif}\\{([^}]*)\\}`).exec(css);
+    assert.ok(m, `règle ${selecteur} introuvable`);
+    return m[1];
+};
+
+test('les trois réponses de « La commande piège » gardent 44 px sur téléphone', () => {
+    /* LA RÈGLE QUI COMPTE EST CELLE QUI RÉTRÉCIT — celle du cas général était déjà à 44 px.
+       On la reconnaît À SON CONTENU (`padding:9px 4px`), et non à sa position : deux tentatives
+       s'y sont cassées avant. Découper le bloc du media query tombait sur la fermeture d'une
+       règle imbriquée ; le repérer par index échouait parce que la feuille contient PLUSIEURS
+       `@media(max-width:640px)` et que le premier est très en amont. Le contenu, lui, ne se
+       trouve qu'à un endroit. */
+    const serree = /\.cp-rep\{[^}]*padding:9px 4px[^}]*\}/.exec(css);
+    assert.ok(serree, 'la règle qui resserre les réponses sur téléphone a disparu');
+    assert.match(serree[0], /min-height:44px/,
+        'Les réponses ne doivent pas retomber sous 44 px en se resserrant.');
+});
+
+test('les étapes du Constructeur et leurs emplacements font 44 px', () => {
+    assert.match(regle('.cg-chip'), /min-height:44px/, 'Les neuf étapes sont la manipulation du jeu.');
+    assert.match(regle('.cg-slot'), /min-height:44px/, 'On tape aussi sur un emplacement, pour retirer une étape.');
+    /* `inline-flex` + centrage : sans eux, un plancher de hauteur laisse le texte collé en haut. */
+    assert.match(regle('.cg-chip'), /display:inline-flex[^}]*align-items:center/,
+        'Le texte doit rester centré dans la pastille agrandie.');
+});
+
+test('l\'arcade est une grille en auto-FILL, pas en auto-fit', () => {
+    /* En flex-wrap, la cinquième tuile se retrouvait seule sur sa ligne et son `flex-grow`
+       l'étirait sur toute la largeur : « Chrono Rush », le seul jeu injouable, faisait 826 px
+       quand chacun des quatre jouables en faisait 199.
+       `auto-fit` REPLIE les colonnes vides et l'orpheline se réétirerait exactement pareil.
+       Seul `auto-fill` la laisse à la largeur d'une colonne. La distinction est tout l'objet
+       de la correction — d'où ce test, qui la nomme. */
+    assert.match(regle('.pq-minis'), /grid-template-columns:repeat\(auto-fill,minmax\(210px,1fr\)\)/,
+        'auto-fill, et un plancher assez large pour que le texte tienne sur une ligne.');
+    /* 210px NE DONNE QU'UNE COLONNE sur un téléphone : l'arcade y reprendrait les 445 px de
+       haut qu'elle occupait avant, au prix de la carte des formations. D'où les deux colonnes
+       en dur sous 640px. */
+    assert.match(css, /@media \(max-width:640px\)\{\s*\.pq-minis\{grid-template-columns:repeat\(2,1fr\)\}/,
+        'Deux par ligne sur téléphone, quoi qu\'il arrive.');
+    assert.doesNotMatch(regle('.pq-mini'), /flex:\s*1\s+1/,
+        'Un flex-grow sur la tuile rétablirait l\'étirement de l\'orpheline.');
+});
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   LE VIVIER DU CONSTRUCTEUR COLLE EN BAS SUR TÉLÉPHONE.
+   ═════════════════════════════════════════════════════════════════════════════════════════════
+
+   MESURÉ AVANT : 927 px de contenu pour 589 px visibles, soit 1,57 écran. Les neuf emplacements
+   prenaient toute la hauteur et les étapes à placer commençaient SOUS la ligne de flottaison —
+   on ne voyait jamais ensemble ce qu'on prend et où on le pose. Un aller-retour par étape, neuf
+   fois, dans un jeu qui coûte un cœur par tentative imparfaite.
+
+   ET CE SONT BIEN LES PASTILLES QUI COMPTENT : `place(i)` empile dans l'emplacement libre
+   SUIVANT — on ne choisit pas la case, on choisit l'étape. Les emplacements sont un retour
+   visuel. C'est ce qui justifie de donner la place du bas aux pastilles plutôt que l'inverse.
+
+   MESURÉ APRÈS : trois emplacements ET six pastilles visibles ensemble au départ ; après trois
+   placements la barre tombe de 325 à 247 px et cinq emplacements se voient. Elle se libère
+   d'elle-même à mesure qu'on joue.
+*/
+const cgReserve = () => {
+    const m = /@media \(max-width:640px\)\{\s*\.cg-reserve\{([^}]*)\}/.exec(css);
+    assert.ok(m, 'la règle téléphone de .cg-reserve est introuvable');
+    return m[1];
+};
+
+test('le vivier colle dans le conteneur QUI DÉFILE', () => {
+    const r = cgReserve();
+    assert.match(r, /position:sticky/, 'Sans sticky, les pastilles repartent au défilement.');
+    assert.match(r, /bottom:0/, 'Collé en bas : c\'est là que le pouce arrive.');
+    /* `.mbody` est le conteneur qui défile (927 px de contenu pour 589 visibles). Coller au
+       `.modal` ne bougerait rien : ce n'est pas lui qui défile. Le bloc doit donc rester
+       ENFANT de `.mbody` — d'où cette vérification côté composant, pas seulement côté CSS. */
+    const jsx = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui',
+        'components', 'ConstructorGame.jsx'), 'utf8');
+    const corps = /<div className="mbody">([\s\S]*?)\n        <\/div>/.exec(jsx);
+    assert.ok(corps, 'le corps de la modale doit rester lisible');
+    assert.match(corps[1], /className="cg-reserve"/,
+        'Le vivier doit rester dans .mbody, seul élément qui défile.');
+});
+
+test('le vivier ne mange pas l\'écran, et ne laisse rien transparaître', () => {
+    const r = cgReserve();
+    /* Les neuf pastilles font 356 px : sans plafond, la barre prendrait les deux tiers de
+       l'écran et l'on aurait remplacé un défilement par un autre. */
+    assert.match(r, /max-height:40vh/, 'La barre doit rester plafonnée.');
+    assert.match(r, /overflow-y:auto/, 'Et défiler elle-même quand les neuf n\'y tiennent pas.');
+    /* Fond OPAQUE : sinon les emplacements défilent en transparence sous les pastilles et l'on
+       ne sait plus lesquelles restent à placer. */
+    assert.match(r, /background:var\(--panel/, 'Le fond de la barre doit être opaque.');
+});
+
+test('le libellé colle AVEC les pastilles, pas séparément', () => {
+    /* Ils étaient deux frères : coller le second aurait laissé le premier partir au
+       défilement, et la barre serait apparue sans son titre. */
+    const jsx = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui',
+        'components', 'ConstructorGame.jsx'), 'utf8');
+    assert.match(jsx, /className="cg-reserve">[\s\S]{0,200}?cg-reserve-t[\s\S]{0,200}?cg-pool/,
+        'Le libellé et les pastilles doivent vivre dans le même bloc collant.');
+});
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   LA FINITION DE L'ARCADE — ce qui a été mesuré, et pourquoi c'est comme ça.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+test('« Bientôt » éteint sa surface, pas son texte', () => {
+    /* `opacity:.55` sur toute la tuile faisait tomber le sous-titre à 2,4:1 quand le seuil est
+       de 4,5 (mesuré au navigateur, opacité composée sur le fond de page). Un texte illisible
+       n'annonce plus rien — autant retirer la tuile. Après correction : 4,59. */
+    const soon = regle('.pq-mini.soon');
+    assert.doesNotMatch(soon, /opacity/, 'L\'opacité globale éteignait aussi les mots.');
+    assert.match(soon, /background:var\(--surface2\)/, 'C\'est la surface qui doit reculer.');
+    assert.match(css, /\.pq-mini\.soon \.pq-mini-e\{opacity:\.5\}/, 'Et l\'icône avec elle.');
+});
+
+test('« Jamais joué » a sa propre forme, et un contraste qui tient', () => {
+    /* Trois étoiles vides disaient « tu as fait zéro », ce qui est faux : la personne n'a pas
+       joué. C'est pourtant le seul état sur lequel il y a un geste à faire. */
+    const jsx = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui',
+        'pages', 'PizzaQuest.jsx'), 'utf8');
+    assert.match(jsx, /record > 0 \? \(/, 'Les étoiles ne s\'affichent que s\'il y a un record.');
+    assert.match(jsx, /className="pq-mini-neuf">Jamais joué/, 'Sinon, une forme à part.');
+    /* EN NAVY, PAS EN ROUGE : aucun rouge de la palette ne dépasse 3,68:1 en texte sur son
+       propre fond teinté — éprouvé sur `--ember1`, `--ember2` et `--red` à 8, 11 et 14 %. Le
+       navy tient 9,25:1 (mesuré). Et « jamais joué » est une invitation, pas une alerte. */
+    const pastille = regle('.pq-mini-neuf');
+    assert.match(pastille, /color:var\(--navy\)/, 'Le rouge n\'atteignait pas 4,5:1 ici.');
+    assert.doesNotMatch(pastille, /ember|--red/, 'Ni en texte ni en fond.');
+});
+
+test('le disque coloré vit sur écran large, pas sur téléphone', () => {
+    /* Il donne à chaque jeu sa teinte en SURFACE plutôt qu'au trait d'une icône de 24 px.
+       `currentColor` EST cette teinte — elle arrive en style inline sur le même span, donc
+       aucune valeur n'est répétée en CSS ni en JSX. */
+    /* On vise la règle DE BASE, pas la première `.pq-mini-e` venue : `.pq-mini.soon .pq-mini-e`
+       la précède dans la feuille, et le helper générique tombait dessus. */
+    const base = /\n\.pq-mini-e\{([\s\S]*?)\}/.exec(css);
+    assert.ok(base, 'la règle de base de .pq-mini-e est introuvable');
+    assert.match(base[1], /background:color-mix\(in srgb,currentColor/,
+        'Le fond du disque se déduit de la couleur du jeu.');
+    /* MAIS PAS SUR TÉLÉPHONE : à 169 px de tuile il ne laissait qu'une centaine de pixels aux
+       mots, tout passait à la ligne, et empiler pour rendre la largeur faisait grimper l'arcade
+       de 285 à 397 px. C'est justement là, où l'on ne voit que deux tuiles, que « distinguer
+       les jeux d'un coup d'œil » sert le moins. Ramené à 286 px en retirant le disque. */
+    const i = css.indexOf('.pq-mini-e{font-size:26px');
+    const j = css.indexOf('.pq-mini-e{width:auto');
+    assert.ok(i > 0 && j > 0, 'les deux règles doivent exister');
+    assert.ok(j > i,
+        'L\'override téléphone doit venir APRÈS la règle de base, sinon c\'est elle qui gagne.');
+});
+
+test('la tuile ne se dérobe pas sous le curseur', () => {
+    /* LE CLIGNOTEMENT « AU BORD ». `transform:translateY(-2px)` au survol soulevait la tuile de
+       deux pixels : un point situé entre 0 et 2 px du bord bas se retrouvait alors HORS d'elle.
+       Le survol se perdait, la tuile redescendait, le survol revenait — une boucle à la cadence
+       de la transition (0,1 s), soit dix clignotements par seconde. Démontré dans le navigateur
+       en appliquant la transformation à la main et en testant la bande pixel par pixel : dedans
+       au repos, dehors une fois levée, jusqu'à 2 px. À 3 px, plus rien.
+
+       L'ombre donne le même relief sans toucher à la boîte. Rien ne bouge, rien ne peut fuir.
+
+       ⚠ CE TEST NE COUVRE QUE L'ARCADE. Le motif existe dans VINGT-CINQ autres règles de la
+       feuille (`.shop-card`, `.hub-card`, `.tipo-card`…), toutes exposées au même défaut sur
+       leur propre bande de un à quatre pixels. Les corriger en bloc changerait le langage visuel
+       de toute l'application : c'est une décision, pas un correctif. */
+    const survol = regle('.pq-mini:hover:not(.soon)');
+    assert.doesNotMatch(survol, /transform/,
+        'déplacer la tuile au survol la fait fuir le curseur près du bord');
+    assert.match(survol, /box-shadow/, 'le relief passe par une ombre, qui ne déplace rien');
+    /* L'enfoncement au clic, lui, reste : il descend la tuile, donc le curseur reste couvert. */
+    assert.match(regle('.pq-mini:active:not(.soon)'), /translateY\(1px\)/);
+});

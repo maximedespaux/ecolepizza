@@ -90,7 +90,7 @@ function CreneauCalendrier({ value, onChange, textile }) {
           return (
             <button key={i} type="button" disabled={!ouvert}
               className={"cal-day" + (selDate === k ? " on" : "") + (ouvert ? "" : " off")}
-              aria-label={ouvert ? `${d.getDate()} ${MOIS[d.getMonth()]}` : `${d.getDate()} ${MOIS[d.getMonth()]} — fermé`}
+              aria-label={ouvert ? `${d.getDate()} ${MOIS[d.getMonth()]}` : `${d.getDate()} ${MOIS[d.getMonth()]}, fermé`}
               onClick={() => onChange(`${k}T${parDate.get(k)[0]}`)}>
               {d.getDate()}
             </button>

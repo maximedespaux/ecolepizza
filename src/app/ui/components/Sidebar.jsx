@@ -76,7 +76,7 @@ function Sidebar({ open }) {
       <div className="brand">
         <img src={LOGO} alt="École Pizza" />
         <div>
-          <div className="name">Impasto</div>
+          <div className="name">Impastio</div>
           <div className="sub">École Pizza · Despaux</div>
         </div>
       </div>
@@ -133,7 +133,7 @@ function Sidebar({ open }) {
             {monAvatar ? monAvatar.emoji : initials(user?.first_name, user?.last_name)}
           </div>
           <div>
-            <div className="who">{user ? `${user.first_name} ${user.last_name}` : "—"}</div>
+            <div className="who">{user ? `${user.first_name} ${user.last_name}` : "-"}</div>
             <div className="role">{ROLE_LABELS[role] || ""}</div>
           </div>
           <span className="chev"><Icon name="chevron-down" size={16} style={{ transform: menuOpen ? "none" : "rotate(180deg)", transition: "transform .2s var(--ease)" }} /></span>

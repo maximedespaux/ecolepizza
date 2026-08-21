@@ -1,4 +1,4 @@
-# Impasto / ecolepizza — instructions de travail
+# Impastio / ecolepizza — instructions de travail
 
 Ce fichier est chargé automatiquement à chaque session. Il porte les **règles permanentes** et
 l'**état de reprise**. Pour le détail (audits, dette, plan de refonte), lire `CHANTIERS.md`.
@@ -35,7 +35,7 @@ l'**état de reprise**. Pour le détail (audits, dette, plan de refonte), lire `
 
 ## 1. Le projet
 
-**Impasto** — gestion de l'École Pizza (Jean-Jacques Despaux, Lannemezan) : stagiaires,
+**Impastio** — gestion de l'École Pizza (Jean-Jacques Despaux, Lannemezan) : stagiaires,
 sessions, documents/parcours, signatures, boutique + facturation Factur-X, Qualiopi.
 
 - **Front** : React 19 + Vite — `src/app/ui` (dev sur `:5173`)
@@ -142,6 +142,23 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 | 126 | `user.avatar` + `user.cadre` — **avatar et cadre du PERSONNEL** de l'organisme (il n'a pas de fiche `learner`). Sans elle, l'école reste anonyme dans la Communauté chez les AUTRES |
 | 127 | `piece_type` + `piece_depot` + `piece_fichier` + `program_step.piece_id` — **pièces justificatives fournies par le stagiaire** (identité recto/verso…). **Porte une question RGPD non tranchée, cf. le bloc en tête de ce fichier** |
 | 128 | `learner.cadre` élargie à 32 caractères — les **cadres de Pizza Quest** s'enregistrent en `palier|#rrggbb` (couleur de la formation). Le plus long tient dans les 16 actuels *au caractère près* : la migration écarte le mur, le code marche avant comme après |
+
+**Jouées le 2026-08-03** : `129` (catégories de partenaires), `130` (registre des consentements +
+journal des transmissions), `131` (`partner.recoit_coordonnees` + suivi de contrat).
+
+| N° | Objet | État |
+|----|-------|------|
+| 136 | **Rattrapage `partner_disclosure`** — `ADD COLUMN IF NOT EXISTS` sur les six colonnes. ⚠️ **`CREATE TABLE IF NOT EXISTS` (migration 130) ne complète PAS une table déjà présente** : elle est ignorée en bloc, sans erreur. Rejouer la 130 n'ajoute donc rien — il faut la 136 | **à jouer** |
+| 135 | `organization.partner_fields` + **`consent_record.champs`** — l'école choisit ce qu'elle transmet aux partenaires, et **ce qui a été ANNONCÉ à chaque personne est figé sur sa réponse**. L'export n'envoie que l'INTERSECTION des deux : restreindre s'applique à tout le monde, élargir ne vaut que pour les consentements suivants | **jouée** |
+| 134 | **`specs` → `category`** — les caractéristiques figées (énergie, °C, pizzas, sole rotative, AVPN) recopiées dans les catégories libres, puis les badges retirés du code. ⚠️ **À jouer AVANT de déployer**, sinon 12 produits sur 16 perdent l'affichage de leurs caractéristiques entre les deux. `specs` reste en base : `specs.devis` pilote toujours « Sur devis » | **à jouer** |
+| 133 | `partner.logo_url` + `inventory_item.image_url` — **images par LIEN**, hébergées chez le fournisseur. `partner_product.image_url` existait déjà (095) sans écran pour la remplir. ⚠️ Une image distante est **une requête vers un tiers** faite par le navigateur du stagiaire : la page Confidentialité le déclare désormais, et les images sont posées en `no-referrer` | **à jouer** |
+| 132 | `UNIQUE (organization_id, name)` sur `partner` — l'annuaire portait **deux fiches « Berkel »**, la vide a été supprimée. Un homonyme se paie cher ici : la demande de consentement NOMME les destinataires et son texte est figé comme preuve (« …, Berkel, Berkel, … »), et le semis des produits joint **sur le nom**. **Elle échoue s'il reste des doublons — c'est voulu** ; la requête pour les trouver est en tête du fichier | **à jouer** |
+
+⚠️ **La 131 démarre à zéro destinataire**, volontairement : `DEFAULT 0` signifie qu'aucun
+partenaire ne reçoit de coordonnées tant que l'école ne l'a pas coché sur sa fiche. À 1, la
+migration aurait fait de vingt-trois annuaires des destinataires de données personnelles sans que
+personne ne l'ait décidé. **L'école doit donc cocher les quelques partenaires réellement
+concernés** — rien ne se transmet avant.
 
 Le code fonctionne sans elles (colonnes optionnelles), mais la fonctionnalité n'est complète
 qu'une fois jouées. D'autres migrations plus anciennes (106→117) peuvent aussi être en attente —

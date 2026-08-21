@@ -276,7 +276,7 @@ export default function RealisationWizard() {
         </>
       )}
       <SaveToast signal={enregistre} label={`Réalisation enregistrée : ${r.name || "sans nom"}`} />
-      <SaveToast signal={echec} label="Enregistrement impossible — réessayez" tone="err" />
+      <SaveToast signal={echec} label="Enregistrement impossible, réessayez" tone="err" />
     </>
   );
 }
@@ -301,8 +301,8 @@ function RealisationDetails({ recipe }) {
       <div className="grid cols-2" style={{ gap: 24, alignItems: "start" }}>
         <div>
           <div className="ate-lbl" style={{ marginBottom: 8 }}>Composants</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}><Icon name="wheat" size={15} style={{ color: "#fcb900" }} /><b style={{ flex: 1, fontSize: 12.5 }}>{emp ? emp.name : "—"}</b><span className="tnum" style={{ fontSize: 12.5 }}>{euro(empCost(emp))}</span></div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}><Icon name="pizza" size={15} style={{ color: "#7bb661" }} /><b style={{ flex: 1, fontSize: 12.5 }}>{garn ? garn.name : "—"}</b><span className="tnum" style={{ fontSize: 12.5 }}>{euro(garnCost(garn))}</span></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}><Icon name="wheat" size={15} style={{ color: "#fcb900" }} /><b style={{ flex: 1, fontSize: 12.5 }}>{emp ? emp.name : "-"}</b><span className="tnum" style={{ fontSize: 12.5 }}>{euro(empCost(emp))}</span></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}><Icon name="pizza" size={15} style={{ color: "#7bb661" }} /><b style={{ flex: 1, fontSize: 12.5 }}>{garn ? garn.name : "-"}</b><span className="tnum" style={{ fontSize: 12.5 }}>{euro(garnCost(garn))}</span></div>
           {items.map((i) => <div key={i.key} style={{ display: "flex", gap: 8, fontSize: 11.5, color: "var(--muted)", padding: "3px 0 3px 22px" }}><span>{i.emoji}</span><span style={{ flex: 1 }}>{i.label}</span><span>{num(i.qty)} g</span></div>)}
           <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 9, fontWeight: 800, fontSize: 13 }}><span>Coût matière / pizza</span><span className="tnum" style={{ color: "var(--gold)" }}>{euro(cm)}</span></div>
           <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 6 }}><span className="hint">Prix conseillé (marge {recipe.margin_pct} %)</span><b className="tnum" style={{ color: "var(--ember1)", fontSize: 16 }}>{euro(price)}</b></div>
@@ -350,8 +350,8 @@ function RecapRealisation({ recipe, onBack, onEdit, onDuplicate, onShare, onDele
         <div className="grid cols-2" style={{ gap: 22, marginTop: 18, alignItems: "start" }}>
           <div>
             <div className="ate-lbl" style={{ marginBottom: 8 }}>Composants</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid var(--border-soft)" }}><Icon name="wheat" size={15} style={{ color: "#fcb900" }} /><b style={{ flex: 1, fontSize: 13 }}>{emp ? emp.name : "—"}</b><span className="tnum">{euro(empCost(emp))}</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid var(--border-soft)" }}><Icon name="pizza" size={15} style={{ color: "#7bb661" }} /><b style={{ flex: 1, fontSize: 13 }}>{garn ? garn.name : "—"}</b><span className="tnum">{euro(garnCost(garn))}</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid var(--border-soft)" }}><Icon name="wheat" size={15} style={{ color: "#fcb900" }} /><b style={{ flex: 1, fontSize: 13 }}>{emp ? emp.name : "-"}</b><span className="tnum">{euro(empCost(emp))}</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid var(--border-soft)" }}><Icon name="pizza" size={15} style={{ color: "#7bb661" }} /><b style={{ flex: 1, fontSize: 13 }}>{garn ? garn.name : "-"}</b><span className="tnum">{euro(garnCost(garn))}</span></div>
             {items.map((i) => <div key={i.key} style={{ display: "flex", gap: 8, fontSize: 12, color: "var(--muted)", padding: "3px 0 3px 22px" }}><span>{i.emoji}</span><span style={{ flex: 1 }}>{i.label}</span><span>{num(i.qty)} g</span></div>)}
             <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 10, fontWeight: 800 }}><span>Coût matière / pizza</span><span className="tnum" style={{ color: "var(--gold)" }}>{euro(cm)}</span></div>
             <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 6 }}><span className="hint">Prix conseillé (marge {recipe.margin_pct} %)</span><b className="tnum" style={{ color: "var(--ember1)", fontSize: 18 }}>{euro(price)}</b></div>
