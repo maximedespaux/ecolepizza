@@ -64,6 +64,7 @@ import RealisationWizard from "./pages/RealisationWizard.jsx";
 import Communaute from "./pages/Communaute.jsx";
 import Notions from "./pages/Notions.jsx";
 import NotFound from "./pages/NotFound.jsx";
+import ServerDown from "./pages/ServerDown.jsx";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 
@@ -116,7 +117,7 @@ const OWNER = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
 
 /** Choisit l'application selon le rôle : espace stagiaire vs application admin. */
 function AppRoutes() {
-  const { user, isLoading } = useContext(UserContext);
+  const { user, isLoading, serverDown } = useContext(UserContext);
 
   if (isLoading) {
     return (
@@ -125,6 +126,9 @@ function AppRoutes() {
       </div>
     );
   }
+
+  // Le serveur ne répond pas : ni routes ni connexion possibles, on montre la page dédiée.
+  if (serverDown) return <ServerDown />;
 
   const isStudent = user?.role === "STAGIAIRE";
   const isIntervenant = user?.role === "INTERVENANT";
