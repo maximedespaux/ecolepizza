@@ -41,7 +41,7 @@ async function emailNotification(orgId, userId, { title, body, link }) {
         // Le lien stocké est relatif (« /mon-espace ») : un e-mail a besoin d'une URL absolue.
         const lien = link && link.startsWith('/') ? `${appUrl()}${link}` : link;
         const { subject, html } = notificationEmail({ firstName: u.first_name, title, body, link: lien });
-        sendMail({ to: u.email, subject, html });
+        sendMail({ to: u.email, subject, html, kind: 'notifications' });
     } catch (e) {
         console.error('[mail] notification:', e.message);
     }

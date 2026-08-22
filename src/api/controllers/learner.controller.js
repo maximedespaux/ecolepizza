@@ -31,7 +31,7 @@ async function createStagiaireAccount(conn, organizationId, { email, first_name,
     // PAS échouer ni ralentir si le SMTP est lent ou absent (cf. lib/mailer.js). Sans SMTP
     // configuré, c'est un no-op — le mot de passe reste communiqué à la main comme avant.
     const { subject, html } = credentialsEmail({ firstName: first_name, email, password, loginUrl: `${appUrl()}/login` });
-    sendMail({ to: email, subject, html });
+    sendMail({ to: email, subject, html, kind: 'credentials' });
     return { userId, password };
 }
 
@@ -361,7 +361,8 @@ const resetStagiairePassword = async (req, res) => {
             const { subject, html } = learner.user_id
                 ? resetEmail({ firstName: learner.first_name, password, loginUrl: login })
                 : credentialsEmail({ firstName: learner.first_name, email: learner.email, password, loginUrl: login });
-            sendMail({ to: learner.email, subject, html });
+            // Compte préexistant → réinitialisation ('reset') ; sinon création → identifiants ('credentials').
+            sendMail({ to: learner.email, subject, html, kind: learner.user_id ? 'reset' : 'credentials' });
         }
         res.status(200).json({
             success: true,
