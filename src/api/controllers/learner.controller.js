@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
 const { encrypt, decrypt, generatePassword } = require('../lib/crypto.js');
+const { sendMail, appUrl } = require('../lib/mailer.js');
+const { credentialsEmail, resetEmail } = require('../lib/mailTemplates.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -25,6 +27,11 @@ async function createStagiaireAccount(conn, organizationId, { email, first_name,
          VALUES (?, ?, 'STAGIAIRE', ?, ?, ?, ?, ?)`,
         [userId, organizationId, first_name, last_name, email, phone || null, hash]
     );
+    // E-mail de bienvenue avec les identifiants. Fire-and-forget : la création du compte NE DOIT
+    // PAS échouer ni ralentir si le SMTP est lent ou absent (cf. lib/mailer.js). Sans SMTP
+    // configuré, c'est un no-op — le mot de passe reste communiqué à la main comme avant.
+    const { subject, html } = credentialsEmail({ firstName: first_name, email, password, loginUrl: `${appUrl()}/login` });
+    sendMail({ to: email, subject, html });
     return { userId, password };
 }
 
@@ -342,6 +349,10 @@ const resetStagiairePassword = async (req, res) => {
             await conn.query('UPDATE learner SET user_id = ? WHERE id = ?', [userId, learner.id]);
         }
 
+        if (learner.email) {
+            const { subject, html } = resetEmail({ firstName: learner.first_name, password, loginUrl: `${appUrl()}/login` });
+            sendMail({ to: learner.email, subject, html });
+        }
         res.status(200).json({ success: true, message: 'Mot de passe réinitialisé', password });
     } catch (err) {
         console.error('Erreur réinitialisation mot de passe :', err);

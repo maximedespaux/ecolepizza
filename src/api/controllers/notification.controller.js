@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { sendMail, appUrl } = require('../lib/mailer.js');
+const { notificationEmail } = require('../lib/mailTemplates.js');
 
 /**
  * Crée une notification (best-effort). user_id null = visible par tout l'organisme.
@@ -20,7 +22,29 @@ function notify(orgId, { userId = null, type = 'INFO', title, body = null, link 
         .query(
             `INSERT INTO notification (id, organization_id, user_id, type, title, body, link) VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [crypto.randomUUID(), orgId, userId, type, title, body, link])
+        .then(() => {
+            // Miroir e-mail — UNIQUEMENT pour une notification adressée à une personne (userId).
+            // Une notification d'organisme (userId null) est visible par tous dans l'app ; l'envoyer
+            // par mail écrirait à tout le monde, ce qu'on ne veut pas. Best-effort, jamais bloquant.
+            if (userId) emailNotification(orgId, userId, { title, body, link });
+        })
         .catch((err) => { console.error('notification:', err.message); });
+}
+
+/** Double une notification ciblée par un e-mail, si le destinataire a une adresse. Best-effort. */
+async function emailNotification(orgId, userId, { title, body, link }) {
+    try {
+        const [rows] = await db.promise().query(
+            'SELECT first_name, email FROM user WHERE id = ? AND organization_id = ?', [userId, orgId]);
+        const u = rows[0];
+        if (!u || !u.email) return;
+        // Le lien stocké est relatif (« /mon-espace ») : un e-mail a besoin d'une URL absolue.
+        const lien = link && link.startsWith('/') ? `${appUrl()}${link}` : link;
+        const { subject, html } = notificationEmail({ firstName: u.first_name, title, body, link: lien });
+        sendMail({ to: u.email, subject, html });
+    } catch (e) {
+        console.error('[mail] notification:', e.message);
+    }
 }
 
 /**
