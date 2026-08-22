@@ -233,7 +233,7 @@ export default function EntrepriseDetail() {
   async function makeRepAccount() {
     if (!window.confirm(`Créer / réinitialiser le compte de connexion du représentant de « ${data?.name} » ?\nUn mot de passe sera généré (affiché une seule fois).`)) return;
     setStatus(null);
-    try { const r = await createRepresentativeAccount(id); setRepCreds(r.data); }
+    try { const r = await createRepresentativeAccount(id); setRepCreds(r.data); load(); } // recharge : si l'accès vient d'être RATTACHÉ à une personne, le bouton disparaît
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function removeCompany() {
@@ -355,8 +355,19 @@ export default function EntrepriseDetail() {
             </div>
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-soft)" }}>
               <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 6 }}>Compte représentant (signature en ligne)</label>
-              <p className="hint" style={{ margin: "0 0 8px" }}>Accès pour signer les documents entreprise (requiert l'e-mail).</p>
-              <button className="btn sm ghost" onClick={makeRepAccount} disabled={!form.email}><Icon name="key" size={14} /> {data.user_id ? "Réinitialiser le compte représentant" : "Créer le compte représentant"}</button>
+              {data.representative?.is_person ? (
+                // Le référent est une VRAIE personne déjà connectée (stagiaire lié / membre du
+                // bureau) : le bouton n'aurait rien à réinitialiser (le serveur refuse d'écraser
+                // son compte). On l'enlève et on explique où il signe.
+                <p className="hint" style={{ margin: 0 }}>
+                  <Icon name="check" size={13} /> Le référent{data.representative.name ? <> (<b>{data.representative.name}</b>)</> : ""} est déjà un compte {data.representative.role === "STAGIAIRE" || !data.representative.role ? "stagiaire" : "membre de l'équipe"} : il signe les documents entreprise depuis son espace habituel, onglet <b>Entreprise</b>. Aucun compte à créer ou réinitialiser ici.
+                </p>
+              ) : (
+                <>
+                  <p className="hint" style={{ margin: "0 0 8px" }}>Accès pour signer les documents entreprise (requiert l'e-mail).</p>
+                  <button className="btn sm ghost" onClick={makeRepAccount} disabled={!form.email}><Icon name="key" size={14} /> {data.user_id ? "Réinitialiser le compte représentant" : "Créer le compte représentant"}</button>
+                </>
+              )}
               {repCreds && (
                 <div className="ent-result" style={{ marginTop: 10 }}>
                   {repCreds.linked ? (
