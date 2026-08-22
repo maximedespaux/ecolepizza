@@ -70,9 +70,11 @@ const getLearners = (req, res) => {
         `SELECT l.id, l.organization_id, l.first_name, l.last_name, l.email, l.phone,
                 l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.levels,
                 l.financing, l.opco, l.created_at,
+                l.company_id, c.name AS company_name,
                 u.email AS account_email
          FROM learner l
          LEFT JOIN user u ON u.id = l.user_id
+         LEFT JOIN company c ON c.id = l.company_id
          WHERE l.organization_id = ?
            AND (l.first_name LIKE ? OR l.last_name LIKE ? OR l.email LIKE ?)
          ORDER BY l.last_name, l.first_name`,

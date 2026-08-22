@@ -263,6 +263,15 @@ function Stagiaires() {
                 {l.professional_status && (
                   <Badge tone="n" className="statut-chip" title={l.professional_status}>{l.professional_status}</Badge>
                 )}
+                {/* Rattaché à une entreprise : petit lien vers sa fiche. `stopPropagation` inutile
+                    ici — la ligne n'a pas d'onClick, seul le NOM est un lien voisin. */}
+                {l.company_id && (
+                  <Link to={`/entreprises/${l.company_id}`} className="iconbtn"
+                    title={l.company_name ? `Entreprise : ${l.company_name}` : "Voir l'entreprise"}
+                    aria-label={l.company_name ? `Voir l'entreprise ${l.company_name}` : "Voir l'entreprise"}>
+                    <Icon name="building" size={15} />
+                  </Link>
+                )}
                 {l.has_account ? (
                   <>
                     <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" aria-label={`Réinitialiser le mot de passe de ${l.last_name} ${l.first_name}`} onClick={() => resetPassword(l)}><Icon name="key" size={15} /></button>
