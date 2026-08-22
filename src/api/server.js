@@ -176,4 +176,9 @@ app.listen(port, () => {
     // base avant la première requête d'un utilisateur, et une panne de connexion ne se
     // découvrirait qu'à ce moment-là. On garde donc le diagnostic au démarrage, en l'assumant.
     require('./config/database.js').verifierConnexion();
+    // Coordonnées de l'organisme pour le pied de page des e-mails : chargées ici (au runtime, pas
+    // à l'import — sinon les tests ouvriraient une connexion) puis rafraîchies toutes les 10 min.
+    const org = require('./lib/orgContext.js');
+    org.charger();
+    setInterval(() => org.charger(), 10 * 60 * 1000).unref?.();
 });

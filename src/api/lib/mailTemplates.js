@@ -14,13 +14,25 @@
  */
 
 const { LOGO_CID } = require('./mailer.js');
+const { orgInfo } = require('./orgContext.js');
 
 const MARQUE = 'École Pizza';       // repli texte ; surchargée par l'organisme quand on le connaît
 const ENCRE = '#c0392b';            // le rouge « ember » de l'application
 
 /** Coquille commune : en-tête sobre, carte centrée, pied discret. `contenu` = HTML du corps. */
 function coquille(titre, contenu, { orgName } = {}) {
-    const marque = orgName || MARQUE;
+    /* Coordonnées tirées de l'organisme en base (cf. orgContext) : le pied de page se remplit
+       tout seul — nom, dirigeant, e-mail, téléphone, adresse. Repli sur les valeurs par défaut si
+       rien n'est encore chargé (tests, ou tout premier envoi après un démarrage). */
+    const o = orgInfo();
+    const marque = orgName || o.short_name || o.legal_name || MARQUE;
+    const lignesContact = [
+        `<b style="color:#3b3f44">${esc(marque)}</b>${o.manager ? ' &nbsp;|&nbsp; ' + esc(o.manager) : ''}`,
+        o.email ? `Mail&nbsp;: ${esc(o.email)}` : '',
+        o.phone ? `Tél.&nbsp;: ${esc(o.phone)}` : '',
+        (o.zip_code || o.town) ? esc([o.zip_code, o.town].filter(Boolean).join(' - ')) : '',
+        o.address ? esc(o.address) : '',
+    ].filter(Boolean).join('<br>');
     return `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:0;background:#f4f5f8;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f2430">
@@ -34,9 +46,11 @@ function coquille(titre, contenu, { orgName } = {}) {
           <h1 style="margin:0 0 14px;font-size:20px;color:#1f2430">${esc(titre)}</h1>
           ${contenu}
         </td></tr>
-        <tr><td style="padding:18px 28px;border-top:1px solid #eef0f4;color:#8a90a0;font-size:12px;line-height:1.5">
-          Message automatique — merci de ne pas y répondre.<br>
-          ${esc(marque)}, votre organisme de formation.
+        <tr><td style="padding:22px 28px 16px;border-top:1px solid #eef0f4;background:#f9fafb;text-align:center;color:#5e5e68;font-size:13px;line-height:1.75">
+          ${lignesContact}
+        </td></tr>
+        <tr><td style="padding:0 28px 20px;background:#f9fafb;text-align:center;color:#a8adba;font-size:11px;line-height:1.5">
+          Message automatique — merci de ne pas y répondre.
         </td></tr>
       </table>
     </td></tr>
