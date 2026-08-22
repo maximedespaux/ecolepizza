@@ -41,15 +41,19 @@ function reemettreSession(res, u) {
 
 /* Jeton d'annulation (24 h), signé par le serveur donc infalsifiable. Porte la valeur à restaurer
  * (ancien e-mail, ou ancien hash de mot de passe). Purpose dédié pour qu'il ne serve à rien d'autre. */
-function jetonAnnulation(userId, kind, prev) {
-    return jwt.sign({ id: userId, purpose: 'annuler', kind, prev }, JWT_SECRET,
+function jetonAnnulation(userId, kind, prev, current) {
+    /* USAGE UNIQUE (même astuce que le lien de réinitialisation) : signé avec JWT_SECRET + la valeur
+       ACTUELLE (le NOUVEAU mot de passe/e-mail). Dès que l'annulation restaure `prev`, la valeur
+       change et le jeton cesse de vérifier — et tout autre changement du même champ l'invalide aussi.
+       Sans ça, le lien restait rejouable 24 h (il pouvait ré-annuler un mot de passe re-changé). */
+    return jwt.sign({ id: userId, purpose: 'annuler', kind, prev }, JWT_SECRET + String(current || ''),
         { algorithm: 'HS256', expiresIn: '24h' });
 }
 
 /* Envoie l'alerte « votre X a été modifié — ce n'était pas vous ? » avec le lien d'annulation. */
-function alerteChangement({ toEmail, firstName, userId, kind, prev, detail }) {
+function alerteChangement({ toEmail, firstName, userId, kind, prev, current, detail }) {
     if (!toEmail) return;
-    const cancelUrl = `${appUrl()}/annuler?token=${encodeURIComponent(jetonAnnulation(userId, kind, prev))}`;
+    const cancelUrl = `${appUrl()}/annuler?token=${encodeURIComponent(jetonAnnulation(userId, kind, prev, current))}`;
     const { subject, html } = securityAlertEmail({ firstName, kind, detail, cancelUrl });
     sendMail({ to: toEmail, subject, html, kind: 'security' }); // best-effort
 }
@@ -205,7 +209,7 @@ const changePassword = (req, res) => {
             reemettreSession(res, req.user);
             alerteChangement({
                 toEmail: results[0].email, firstName: results[0].first_name,
-                userId: req.user.id, kind: 'pwd', prev: ancienHash,
+                userId: req.user.id, kind: 'pwd', prev: ancienHash, current: hashed,
             });
             res.json({ success: true, message: 'Mot de passe modifié.' });
         });
@@ -241,7 +245,7 @@ const changeEmail = (req, res) => {
                     reemettreSession(res, { ...req.user, email });
                     alerteChangement({
                         toEmail: ancienEmail, firstName: prenom, userId: req.user.id,
-                        kind: 'email', prev: ancienEmail,
+                        kind: 'email', prev: ancienEmail, current: email,
                         detail: `Nouvelle adresse : ${email}.`,
                     });
                     res.json({ success: true, email });
@@ -328,6 +332,9 @@ async function resetPassword(req, res) {
         }
         const hash = await bcrypt.hash(password, 10);
         await conn.query('UPDATE user SET password = ? WHERE id = ?', [hash, user.id]);
+        // FLUX DE RÉCUPÉRATION : couper les sessions existantes. Sans ça, un cookie déjà volé
+        // survivait au « mot de passe oublié » — la récupération n'évinçait pas le pirate.
+        await couperSessions(user.id);
         return res.status(200).json({ success: true, message: 'Mot de passe réinitialisé. Vous pouvez vous connecter.' });
     } catch (e) {
         console.error('resetPassword:', e.message);
@@ -342,17 +349,20 @@ async function resetPassword(req, res) {
 async function annulerModification(req, res) {
     const token = String(req.body?.token || '');
     if (!token) return res.status(400).json({ message: 'Lien invalide.' });
-    let payload;
-    try {
-        payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-    } catch {
-        return res.status(400).json({ message: 'Lien invalide ou expiré.' });
-    }
-    if (!payload || payload.purpose !== 'annuler' || !payload.id || !payload.kind) {
+    // Décoder SANS vérifier pour connaître id + kind : le SECRET dépend de la valeur ACTUELLE du
+    // compte (comme le lien de reset). La signature est vérifiée juste après, contre cette valeur.
+    const claim = jwt.decode(token);
+    if (!claim || claim.purpose !== 'annuler' || !claim.id || (claim.kind !== 'email' && claim.kind !== 'pwd')) {
         return res.status(400).json({ message: 'Lien invalide.' });
     }
     try {
         const conn = db.promise();
+        const col = claim.kind === 'email' ? 'email' : 'password'; // nom de colonne FIGÉ (jamais l'entrée)
+        const [[u]] = await conn.query(`SELECT ${col} AS courant FROM user WHERE id = ?`, [claim.id]);
+        if (!u) return res.status(400).json({ message: 'Lien invalide.' });
+        let payload;
+        try { payload = jwt.verify(token, JWT_SECRET + String(u.courant || ''), { algorithms: ['HS256'] }); }
+        catch { return res.status(400).json({ message: 'Lien invalide, expiré, ou déjà utilisé.' }); }
         if (payload.kind === 'email') {
             // Restaure l'ancienne adresse, côté compte ET fiche stagiaire.
             await conn.query('UPDATE user SET email = ? WHERE id = ?', [payload.prev, payload.id]);
@@ -377,4 +387,4 @@ async function annulerModification(req, res) {
     }
 }
 
-module.exports = { userAuthentification, getCurrentUser, changePassword, changeEmail, logout, forgotPassword, resetPassword, annulerModification };
+module.exports = { userAuthentification, getCurrentUser, changePassword, changeEmail, logout, forgotPassword, resetPassword, annulerModification, couperSessions };

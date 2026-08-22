@@ -668,12 +668,18 @@ const SPACER_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALA
 // forme respectée au rendu PDF). `w`/`h` (px) facultatifs — défaut SIG_W × SIG_H.
 // Empreinte identique que le cadre soit signé ou vide (la mise en page ne bouge pas).
 function signatureBox(dataUrl, label, w, h) {
-    const bw = w || SIG_W, bh = h || SIG_H;
+    const bw = Number(w) || SIG_W, bh = Number(h) || SIG_H; // dimensions FORCÉES en nombre (jamais injectables)
+    /* #2 XSS — ces jetons sont RAW (non échappés par htmlfill), et une « signature » est une donnée
+       fournie par l'utilisateur. On échappe donc pour le CONTEXTE ATTRIBUT (dont `"`) : sinon un
+       `data:image/png;base64,AA"><img src=x onerror=…>` fermerait la balise et s'exécuterait à
+       l'aperçu du document — dans la session de l'admin qui l'ouvre. Défense au sink, en plus de la
+       validation à l'écriture (signDocument / signRepDocument / setRepStamp / submitSign). */
+    const a = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     if (dataUrl && /^data:image\//.test(dataUrl)) {
-        return `<img src="${dataUrl}" alt="${label}" width="${bw}" height="${bh}" `
+        return `<img src="${a(dataUrl)}" alt="${a(label)}" width="${bw}" height="${bh}" `
             + `style="max-width:100%;object-fit:contain;vertical-align:middle" />`;
     }
-    return `<img src="${SPACER_GIF}" alt="${label}" width="${bw}" height="${bh}" `
+    return `<img src="${SPACER_GIF}" alt="${a(label)}" width="${bw}" height="${bh}" `
         + `style="max-width:100%;border:1px dashed #b0b0b0;border-radius:6px;vertical-align:middle" />`;
 }
 

@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
+const { couperSessions } = require('./auth.controller.js'); // couper les sessions après un reset admin
 
 // NB : la gestion de l'équipe passe désormais par /api/equipe (equipe.controller).
 // Ces points d'accès /api/user sont conservés pour compatibilité mais TOUJOURS
@@ -114,12 +115,14 @@ const updateUser = async (req, res) => {
             }
         }
 
+        let pwChanged = false;
         if (req.body.password) {
             if (String(req.body.password).length < 8) {
                 return res.status(400).json({ success: false, message: 'Mot de passe trop court (8 caractères minimum).' });
             }
             updates.push('password = ?');
             values.push(await bcrypt.hash(req.body.password, 10));
+            pwChanged = true;
         }
 
         if (updates.length === 0) {
@@ -128,6 +131,9 @@ const updateUser = async (req, res) => {
 
         values.push(userId, orgId);
         await conn.query(`UPDATE user SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`, values);
+        // #4 FLUX DE RÉCUPÉRATION : un reset de mot de passe par un admin évince les sessions du
+        // compte (sinon un cookie déjà volé survivait au « je réinitialise le compte compromis »).
+        if (pwChanged) await couperSessions(userId);
         res.status(200).json({ success: true, message: 'Utilisateur mis à jour' });
     } catch (error) {
         console.error('Erreur mise à jour utilisateur :', error);
