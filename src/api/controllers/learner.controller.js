@@ -4,6 +4,7 @@ const db = require('../config/database.js');
 const { encrypt, decrypt, generatePassword } = require('../lib/crypto.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { credentialsEmail, resetEmail } = require('../lib/mailTemplates.js');
+const { couperSessions } = require('./auth.controller.js'); // évincer les sessions après un reset
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -327,18 +328,33 @@ const resetStagiairePassword = async (req, res) => {
 
         let userId = learner.user_id;
         if (userId) {
+            /* #1 GARDE DE RÔLE — ne JAMAIS réinitialiser un compte du bureau via la route stagiaire.
+               Un compte converti (stagiaire→bureau) garde sa fiche ; sans ce garde-fou, « réinitialiser
+               son mot de passe stagiaire » écraserait un compte admin. Mêmes règles que deleteLearner. */
+            const [[u]] = await conn.query('SELECT role FROM user WHERE id = ? AND organization_id = ?', [userId, organizationId]);
+            if (u && u.role !== 'STAGIAIRE') {
+                return res.status(409).json({ error: "Ce compte n'est pas un compte stagiaire : sa gestion passe par « Équipe & accès »." });
+            }
             await conn.query('UPDATE user SET password = ? WHERE id = ? AND organization_id = ?',
                 [hash, userId, organizationId]);
+            await couperSessions(userId); // #4 : évincer toute session existante (compte peut-être compromis)
         } else {
             if (!learner.email) {
                 return res.status(422).json({ error: "Ce stagiaire n'a pas d'email : impossible de créer un compte." });
             }
             // Cloisonnement : ne rattacher/réinitialiser qu'un compte du MÊME organisme.
-            const [ex] = await conn.query('SELECT id FROM user WHERE email = ? AND organization_id = ?', [learner.email, organizationId]);
+            const [ex] = await conn.query('SELECT id, role FROM user WHERE email = ? AND organization_id = ?', [learner.email, organizationId]);
             if (ex.length > 0) {
+                /* #1 GARDE DE RÔLE — l'e-mail correspond à un compte existant : ne le toucher QUE si
+                   c'est un stagiaire. Sinon un SECRETARIAT pourrait créer une fiche à l'e-mail d'un
+                   admin puis « réinitialiser » = prise de contrôle du compte. Refuser. */
+                if (ex[0].role !== 'STAGIAIRE') {
+                    return res.status(409).json({ error: "Cette adresse appartient déjà à un compte non-stagiaire : impossible de le réinitialiser ici." });
+                }
                 userId = ex[0].id;
                 await conn.query('UPDATE user SET password = ? WHERE id = ? AND organization_id = ?',
                     [hash, userId, organizationId]);
+                await couperSessions(userId); // #4
             } else {
                 userId = crypto.randomUUID();
                 await conn.query(
@@ -422,9 +438,17 @@ const deleteStagiaireAccount = async (req, res) => {
             'SELECT id, user_id FROM learner WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!learner) return res.status(404).json({ message: 'Stagiaire introuvable' });
         if (!learner.user_id) return res.status(400).json({ message: "Ce stagiaire n'a pas de compte de connexion." });
-        // Détache la fiche puis supprime le compte (login) — la fiche reste intacte.
+        /* #3 GARDE DE RÔLE — cette route ne supprime QUE des comptes stagiaire. Une fiche peut pointer
+           sur un compte du bureau (stagiaire converti) ; le supprimer ici effacerait un login admin
+           (et, s'il était le dernier propriétaire, verrouillerait l'organisme). */
+        const [[u]] = await conn.query('SELECT role FROM user WHERE id = ? AND organization_id = ?', [learner.user_id, orgId]);
+        if (u && u.role !== 'STAGIAIRE') {
+            return res.status(409).json({ error: "Ce compte n'est pas un compte stagiaire : sa suppression passe par « Équipe & accès »." });
+        }
+        // Détache la fiche puis supprime le compte (login) — la fiche reste intacte. `role='STAGIAIRE'`
+        // en défense de profondeur (comme deleteLearner), même si le pré-contrôle l'a déjà écarté.
         await conn.query('UPDATE learner SET user_id = NULL WHERE id = ?', [learner.id]);
-        await conn.query('DELETE FROM user WHERE id = ? AND organization_id = ?', [learner.user_id, orgId]);
+        await conn.query("DELETE FROM user WHERE id = ? AND organization_id = ? AND role = 'STAGIAIRE'", [learner.user_id, orgId]);
         res.json({ success: true, message: 'Compte de connexion supprimé (fiche conservée).' });
     } catch (err) {
         console.error('Erreur suppression compte stagiaire :', err);

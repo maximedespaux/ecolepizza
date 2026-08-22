@@ -175,7 +175,17 @@ async function piecesDuDossier(conn, orgId, enrollmentId) {
 /** GET /api/pieces/dossier/:enrollmentId — côté école. */
 const listDossier = async (req, res) => {
     try {
-        res.json({ data: await piecesDuDossier(db.promise(), req.user.organization_id, req.params.enrollmentId) });
+        const conn = db.promise();
+        /* #5 GARDE DE PROPRIÉTÉ — même règle que deposer/servirFichier/supprimerFichier : un stagiaire
+           ne voit QUE son propre dossier. Sans elle, cette route (volontairement sans authorizeRoles,
+           pour le dépôt par le stagiaire) laissait lire les MÉTADONNÉES d'un dossier tiers : libellés
+           (« Carte d'identité »), statuts, motifs de refus, et NOMS de fichiers (souvent le nom de la
+           personne) — donnée sensible RGPD. Les octets restaient protégés (servirFichier re-vérifie). */
+        const e = await dossierDe(conn, req.params.enrollmentId, req.user.organization_id);
+        if (!e) return res.status(404).json({ message: 'Dossier introuvable.' });
+        const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
+        if (e.user_id !== req.user.id && !staff) return res.status(403).json({ message: "Dossier d'un autre stagiaire." });
+        res.json({ data: await piecesDuDossier(conn, req.user.organization_id, req.params.enrollmentId) });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] });
         console.error('Erreur pièces du dossier :', err);

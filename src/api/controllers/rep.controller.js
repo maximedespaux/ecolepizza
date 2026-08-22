@@ -2,6 +2,7 @@
 // signe lui-même les documents de NIVEAU ENTREPRISE de son entreprise.
 const db = require('../config/database.js');
 const { renderDocumentHtml, applySlotSignature, clientIp } = require('./document.controller.js');
+const { estSignatureValide } = require('../lib/signatures.js');
 
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
 
@@ -51,6 +52,8 @@ const setRepStamp = async (req, res) => {
         const companies = await repCompanies(conn, req);
         if (!companies.length) return res.status(403).json({ message: 'Accès refusé.' });
         const stamp = (req.body || {}).stamp || null;
+        // #2 : le cachet est réinséré dans le HTML (jeton RAW) → validation stricte. null = suppression.
+        if (stamp !== null && !estSignatureValide(stamp)) return res.status(422).json({ message: 'Cachet invalide (image attendue).' });
         try {
             await conn.query('UPDATE company SET stamp = ? WHERE user_id = ? AND organization_id = ?', [stamp, req.user.id, req.user.organization_id]);
         } catch (e) {
@@ -102,6 +105,9 @@ const signRepDocument = async (req, res) => {
             const stampCompany = companies.find((c) => c.id === doc.company_id) || companies[0];
             signatureData = stampCompany?.stamp || null;
             if (!signerName) signerName = stampCompany?.name || 'Représentant';
+        } else if (signatureData !== undefined && !estSignatureValide(signatureData)) {
+            // #2 : tracé fourni → validation stricte (le cachet enregistré l'a déjà été à l'écriture).
+            return res.status(422).json({ message: 'Signature invalide (image attendue).' });
         }
         if (!signerName || !signatureData) return res.status(422).json({ message: 'Nom et signature (ou cachet enregistré) requis.' });
         if (doc.status === 'SIGNE') return res.status(409).json({ message: 'Document déjà signé.' });

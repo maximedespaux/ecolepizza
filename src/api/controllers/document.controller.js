@@ -3,6 +3,7 @@ const db = require('../config/database.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
 const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc } = require('../lib/documents.js');
+const { estSignatureValide } = require('../lib/signatures.js');
 
 /**
  * La signature de ce document incombe-t-elle à l'entreprise ?
@@ -931,6 +932,8 @@ const sendDocument = async (req, res) => {
 const signDocument = async (req, res) => {
     const { signer_name, signature_data } = req.body;
     if (!signer_name) return res.status(422).json({ error: 'Nom du signataire requis.' });
+    // #2 : la signature est un jeton RAW réinséré dans le HTML → validation STRICTE à l'écriture.
+    if (!estSignatureValide(signature_data)) return res.status(422).json({ error: 'Signature invalide (image attendue).' });
     try {
         const conn = db.promise();
         // Vérifie l'accès : même organisme, et si stagiaire, propriétaire du document.
