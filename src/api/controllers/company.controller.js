@@ -46,9 +46,20 @@ const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code =
 /** GET /api/companies — entreprises de l'organisme (avec nb de stagiaires rattachés). */
 const getCompanies = (req, res) => {
     db.query(
+        /* `learner_id` / `learner_name` : LE stagiaire dont l'adresse est EXACTEMENT celle de
+           l'entreprise — c.-à-d. le cas « le référent EST un stagiaire » (petite société au nom
+           du propriétaire). Sert à afficher côté admin un lien vers sa fiche. Une adresse vide
+           (`c.email <> ''` échoue, et `NULL <> ''` vaut NULL) ne correspond à personne : pas de
+           lien pour une entreprise sans e-mail ou dont l'e-mail ne pointe sur aucun stagiaire. */
         `SELECT c.id, c.organization_id, c.name, c.siret, c.town, c.email, c.phone, c.opco,
                 c.representative_civ, c.representative_name, c.created_at,
-                (SELECT COUNT(*) FROM learner l WHERE l.company_id = c.id) AS learner_count
+                (SELECT COUNT(*) FROM learner l WHERE l.company_id = c.id) AS learner_count,
+                (SELECT sl.id FROM learner sl
+                   WHERE sl.organization_id = c.organization_id AND c.email <> '' AND sl.email = c.email
+                   ORDER BY sl.created_at LIMIT 1) AS learner_id,
+                (SELECT CONCAT_WS(' ', sl.first_name, sl.last_name) FROM learner sl
+                   WHERE sl.organization_id = c.organization_id AND c.email <> '' AND sl.email = c.email
+                   ORDER BY sl.created_at LIMIT 1) AS learner_name
          FROM company c
          WHERE c.organization_id = ?
          ORDER BY c.name`,

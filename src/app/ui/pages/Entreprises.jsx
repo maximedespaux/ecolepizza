@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { getCompanies, createCompany } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -81,7 +81,23 @@ export default function Entreprises() {
             })}
             cols={[
               { k: "name", t: "Entreprise", principal: true,
-                cell: (c) => <><b>{c.name}</b>{c.email && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{c.email}</span>}</> },
+                cell: (c) => (
+                  <>
+                    <b>{c.name}</b>
+                    {/* L'e-mail de l'entreprise EST celui d'un stagiaire → lien vers sa fiche.
+                        `stopPropagation` : sinon le clic déclencherait aussi l'ouverture de la
+                        ligne (fiche entreprise). Absent si l'e-mail ne pointe sur personne. */}
+                    {c.learner_id && (
+                      <Link to={`/stagiaires/${c.learner_id}`} onClick={(e) => e.stopPropagation()}
+                        title={c.learner_name ? `Contact aussi stagiaire : ${c.learner_name} — ouvrir sa fiche` : "Contact aussi stagiaire — ouvrir sa fiche"}
+                        aria-label={c.learner_name ? `Ouvrir la fiche stagiaire de ${c.learner_name}` : "Ouvrir la fiche stagiaire liée"}
+                        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, marginLeft: 7, borderRadius: 6, border: "1px solid var(--border)", color: "var(--muted)", verticalAlign: "middle" }}>
+                        <Icon name="graduation" size={12} />
+                      </Link>
+                    )}
+                    {c.email && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{c.email}</span>}
+                  </>
+                ) },
               { k: "siret", t: "SIRET", td: { fontSize: 12 }, cell: (c) => (c.siret ? <span className="mono">{c.siret}</span> : null) },
               { k: "town", t: "Ville", cell: (c) => c.town || null },
               { k: "ref", t: "Référent", cell: (c) => [c.representative_civ, c.representative_name].filter(Boolean).join(" ") || null },
