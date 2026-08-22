@@ -38,6 +38,7 @@ import Factures from "./pages/Factures.jsx";
 import Comptabilite from "./pages/Comptabilite.jsx";
 import Carte from "./pages/Carte.jsx";
 import Reglages from "./pages/Reglages.jsx";
+import Mailing from "./pages/Mailing.jsx";
 import FacturationReglages from "./pages/FacturationReglages.jsx";
 import ReglagesPartenaires from "./pages/ReglagesPartenaires.jsx";
 import Parametres from "./pages/Parametres.jsx";
@@ -227,6 +228,7 @@ function AppRoutes() {
           <Route path="comptabilite" element={<Guard nav="/comptabilite" roles={ADMIN}><Comptabilite /></Guard>} />
           <Route path="carte" element={<Guard nav="/carte" roles={ADMIN}><Carte /></Guard>} />
           <Route path="reglages" element={<Guard nav="/reglages" roles={ADMIN}><Reglages /></Guard>} />
+          <Route path="reglages-mailing" element={<Guard nav="/reglages-mailing" roles={ADMIN}><Mailing /></Guard>} />
           <Route path="reglages-facturation" element={<Guard nav="/reglages-facturation" roles={ADMIN}><FacturationReglages /></Guard>} />
           <Route path="reglages-partenaires" element={<Guard nav="/reglages-partenaires" roles={ADMIN}><ReglagesPartenaires /></Guard>} />
           <Route path="modeles" element={<Guard nav="/modeles" roles={ADMIN}><Modeles /></Guard>} />
