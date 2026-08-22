@@ -13,7 +13,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
  * 138) et aux `kind` passés à sendMail.
  */
 const MAILS = [
-  ["mail_credentials", "Compte créé — identifiants de connexion", "Au stagiaire, quand un compte lui est créé (avec son mot de passe)."],
+  ["mail_credentials", "Compte créé — identifiants de connexion", "Au stagiaire quand un compte lui est créé, ou au représentant d'une entreprise quand son accès est ouvert (avec ses identifiants)."],
   ["mail_reset", "Réinitialisation du mot de passe", "Quand vous réinitialisez le mot de passe d'un stagiaire depuis sa fiche."],
   ["mail_forgot", "Lien « mot de passe oublié »", "Quand un utilisateur demande lui-même à réinitialiser son mot de passe."],
   ["mail_security", "Alerte de sécurité (changement d'e-mail / mot de passe)", "Prévient la personne d'un changement, avec un lien « ce n'était pas moi ». Le couper retire ce garde-fou."],

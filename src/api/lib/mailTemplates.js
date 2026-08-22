@@ -160,4 +160,33 @@ function securityAlertEmail({ firstName, kind, detail, cancelUrl, orgName }) {
     return { subject: `Sécurité : ${quoi} modifié — ${orgName || MARQUE}`, html: coquille(titre, contenu, { orgName }) };
 }
 
-module.exports = { credentialsEmail, resetEmail, resetLinkEmail, notificationEmail, securityAlertEmail };
+/* ─── Compte représentant d'entreprise : accès pour signer les documents de l'entreprise ─────── */
+function representativeEmail({ firstName, email, password, companyName, loginUrl, orgName }) {
+    const soc = companyName ? ` de ${esc(companyName)}` : '';
+    const titre = 'Documents de votre entreprise à signer';
+    /* Deux cas : soit un mot de passe vient d'être généré (nouveau compte représentant) et on le
+       communique ; soit l'accès a été RATTACHÉ à un compte existant (le référent est déjà
+       stagiaire) — pas de mot de passe, on renvoie vers la connexion habituelle. */
+    const bloc = password
+        ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f7f8fb;border:1px solid #e6e8ee;border-radius:10px;margin:6px 0 16px">
+             <tr><td style="padding:14px 18px;font-size:14px;line-height:1.9">
+               <span style="color:#8a90a0">Identifiant&nbsp;:</span> <b>${esc(email)}</b><br>
+               <span style="color:#8a90a0">Mot de passe&nbsp;:</span> <b style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${esc(password)}</b>
+             </td></tr>
+           </table>`
+        : `<p style="margin:0 0 16px;font-size:15px;line-height:1.6">Connectez-vous avec vos identifiants habituels&nbsp;: l'onglet <b>Entreprise</b> vous donne accès aux documents à signer.</p>`;
+    const contenu = `
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">Bonjour ${esc(firstName || '')},</p>
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">
+        Un accès vous a été ouvert pour signer en ligne les documents${soc} (convention de formation, etc.).
+        ${password ? 'Voici vos identifiants de connexion&nbsp;:' : ''}
+      </p>
+      ${bloc}
+      ${bouton(loginUrl, 'Voir les documents à signer')}
+      <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#8a90a0">
+        Une fois connecté, ouvrez l'onglet <b>Entreprise</b> pour consulter et signer chaque document.${password ? ' Par sécurité, pensez à changer ce mot de passe après votre première connexion.' : ''}
+      </p>`;
+    return { subject: `Documents à signer — ${orgName || MARQUE}`, html: coquille(titre, contenu, { orgName }) };
+}
+
+module.exports = { credentialsEmail, resetEmail, resetLinkEmail, notificationEmail, securityAlertEmail, representativeEmail };
