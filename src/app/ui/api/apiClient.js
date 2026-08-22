@@ -371,6 +371,11 @@ export function resetPassword({ token, password }) {
   return request("/auth/reset", { method: "POST", body: JSON.stringify({ token, password }) });
 }
 
+// « Ce n'était pas moi » : annule un changement d'e-mail/mot de passe depuis le lien reçu.
+export function annulerModification({ token }) {
+  return request("/auth/annuler", { method: "POST", body: JSON.stringify({ token }) });
+}
+
 // L'utilisateur connecté change son propre mot de passe.
 export function changeMyPassword(payload) {
   return request("/auth/password", { method: "PATCH", body: JSON.stringify(payload) });

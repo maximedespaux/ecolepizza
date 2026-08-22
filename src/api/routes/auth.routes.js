@@ -1,5 +1,5 @@
 const express = require('express');
-const { userAuthentification, getCurrentUser, changePassword, changeEmail, logout, forgotPassword, resetPassword } = require('../controllers/auth.controller.js');
+const { userAuthentification, getCurrentUser, changePassword, changeEmail, logout, forgotPassword, resetPassword, annulerModification } = require('../controllers/auth.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 const { rateLimit } = require('../middlewares/rateLimit.js');
 
@@ -36,6 +36,14 @@ const resetLimiter = rateLimit({
 router.post('/', loginLimiter, userAuthentification);
 router.post('/forgot', forgotLimiter, forgotPassword);
 router.post('/reset', resetLimiter, resetPassword);
+// « Ce n'était pas moi » : annulation d'un changement d'e-mail/mot de passe. Public (le lien
+// arrive par e-mail, l'utilisateur n'est pas forcément connecté). Comptage par requête sur le
+// jeton, pour freiner tout forçage.
+const annulerLimiter = rateLimit({
+    windowMs: 15 * 60000, max: 10, maxIp: 40, key: 'annuler', countAll: true,
+    identifiant: (req) => String(req.body?.token || '').slice(0, 24),
+});
+router.post('/annuler', annulerLimiter, annulerModification);
 router.get('/me', authenticateToken, getCurrentUser);
 router.patch('/password', authenticateToken, passwordLimiter, changePassword);
 router.patch('/email', authenticateToken, passwordLimiter, changeEmail);

@@ -125,4 +125,25 @@ function resetLinkEmail({ firstName, resetUrl, orgName }) {
     return { subject: `Réinitialisation de mot de passe — ${orgName || MARQUE}`, html: coquille(titre, contenu, { orgName }) };
 }
 
-module.exports = { credentialsEmail, resetEmail, resetLinkEmail, notificationEmail };
+/* ─── Alerte de sécurité : un identifiant (mot de passe ou e-mail) vient d'être modifié ──────── */
+function securityAlertEmail({ firstName, kind, detail, cancelUrl, orgName }) {
+    const quoi = kind === 'email' ? 'adresse e-mail de connexion' : 'mot de passe';
+    const titre = `Votre ${quoi} a été modifié`;
+    const contenu = `
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">Bonjour ${esc(firstName || '')},</p>
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">
+        Votre <b>${esc(quoi)}</b> vient d'être modifié${kind === 'email' ? 'e' : ''}.${detail ? ' ' + esc(detail) : ''}
+      </p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6">
+        <b>Si c'est bien vous</b>, aucune action n'est nécessaire.
+      </p>
+      <p style="margin:0 0 6px;font-size:15px;line-height:1.6"><b>Si ce n'est PAS vous</b>, annulez
+        immédiatement : nous rétablirons l'ancienne valeur et déconnecterons toutes les sessions.</p>
+      ${bouton(cancelUrl, "Ce n'était pas moi — annuler")}
+      <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#8a90a0">
+        Ce lien est valable 24 heures. Pensez ensuite à changer votre mot de passe.
+      </p>`;
+    return { subject: `Sécurité : ${quoi} modifié — ${orgName || MARQUE}`, html: coquille(titre, contenu, { orgName }) };
+}
+
+module.exports = { credentialsEmail, resetEmail, resetLinkEmail, notificationEmail, securityAlertEmail };

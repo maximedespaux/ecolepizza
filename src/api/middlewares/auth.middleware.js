@@ -7,6 +7,10 @@ dotenv.config({ path: path.join(__dirname, '..', 'config', '.env') });
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// Mémorise si la colonne `sessions_valid_after` existe (migration 137). undefined = pas encore
+// testé ; true/false = connu. Évite une requête en échec par requête avant la migration.
+let colonneSVA;
+
 /**
  * Vérifie le JWT (cookie httpOnly `auth_token` ou en-tête `Authorization: Bearer`).
  * Place le payload décodé dans `req.user`.
@@ -39,10 +43,41 @@ function authenticateToken(req, res, next) {
            Le coût est une lecture par clé primaire (indexée) — négligeable, et de toute façon
            la requête qui suit touchera la base. */
         try {
-            const [rows] = await db.promise().query(
-                'SELECT active, role, organization_id FROM user WHERE id = ?', [user.id]);
+            /* Repli si `sessions_valid_after` n'existe pas encore (migration 137 non jouée) : on
+               retombe sur la requête d'origine. Le code marche donc AVANT comme APRÈS la migration
+               — sans elle, la coupure de session est simplement inopérante.
+               Le résultat du test est MÉMORISÉ (`colonneSVA`) : sans ça, chaque requête
+               authentifiée lancerait une requête vouée à l'échec et remplirait le journal de
+               MariaDB tant que la migration n'est pas jouée. Corollaire : REDÉMARRER l'API après
+               avoir joué la 137, pour que le cache repasse à « colonne présente ». */
+            let rows;
+            if (colonneSVA === false) {
+                [rows] = await db.promise().query(
+                    'SELECT active, role, organization_id FROM user WHERE id = ?', [user.id]);
+            } else {
+                try {
+                    [rows] = await db.promise().query(
+                        'SELECT active, role, organization_id, sessions_valid_after FROM user WHERE id = ?', [user.id]);
+                    colonneSVA = true;
+                } catch (e) {
+                    if (e && e.code === 'ER_BAD_FIELD_ERROR') {
+                        colonneSVA = false;
+                        [rows] = await db.promise().query(
+                            'SELECT active, role, organization_id FROM user WHERE id = ?', [user.id]);
+                    } else { throw e; }
+                }
+            }
             if (rows.length === 0 || rows[0].active === 0) {
                 return res.status(401).json({ message: 'Compte inactif' });
+            }
+            /* SESSION COUPÉE. Après un changement sensible ou une annulation « ce n'était pas moi »,
+               `sessions_valid_after` passe à l'instant présent : tout jeton émis AVANT (le `iat` du
+               JWT, en secondes) cesse d'être accepté. C'est ce qui déconnecte réellement un pirate
+               dont on annule le méfait, là où un JWT sans état survivrait sinon des jours. */
+            const borne = rows[0].sessions_valid_after
+                ? Math.floor(new Date(rows[0].sessions_valid_after).getTime() / 1000) : 0;
+            if (borne && typeof user.iat === 'number' && user.iat < borne) {
+                return res.status(401).json({ message: 'Session expirée' });
             }
             req.user = { ...user, role: rows[0].role, organization_id: rows[0].organization_id };
             next();

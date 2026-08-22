@@ -66,6 +66,7 @@ import Notions from "./pages/Notions.jsx";
 import NotFound from "./pages/NotFound.jsx";
 import MotDePasseOublie from "./pages/MotDePasseOublie.jsx";
 import Reinitialiser from "./pages/Reinitialiser.jsx";
+import AnnulerModification from "./pages/AnnulerModification.jsx";
 import ServerDown from "./pages/ServerDown.jsx";
 
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -148,6 +149,7 @@ function AppRoutes() {
       {/* Publiques : le flux « mot de passe oublié » doit fonctionner AVANT toute connexion. */}
       <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
       <Route path="/reinitialiser" element={<Reinitialiser />} />
+      <Route path="/annuler" element={<AnnulerModification />} />
       {/* PUBLIQUE, et volontairement : l'information sur ce qu'on dépose doit pouvoir être lue
           AVANT de créer un compte, sinon elle arrive après la décision qu'elle éclaire. */}
       <Route path="/confidentialite" element={<Confidentialite />} />
