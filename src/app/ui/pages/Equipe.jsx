@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { getTeam, createMember, updateMember, deleteMember, getAccessProfiles, createAccessProfile } from "../api/apiClient.js";
+import { getTeam, createMember, updateMember, deleteMember, getAccessProfiles, createAccessProfile, getStagiaires } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { GRANTABLE_NAV, EXTRA_ACCESS, PAGE_CAPS, canAccess, OWNER_ROLES, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
@@ -107,7 +107,16 @@ function Equipe() {
       />
       <StatusMessage status={status} />
 
-      {credential && (
+      {credential && (credential.converted ? (
+        <Card title="Stagiaire converti en membre">
+          <p className="sub" style={{ marginTop: 0 }}>
+            Le compte <b className="mono">{credential.email}</b> est désormais un membre de l'équipe.
+            {" "}<b>Il conserve son mot de passe stagiaire</b> — aucun nouveau n'a été généré. Il garde
+            aussi sa fiche stagiaire (il peut basculer entre les deux espaces).
+          </p>
+          <button className="btn sm ghost" onClick={() => setCredential(null)}>J'ai noté, masquer</button>
+        </Card>
+      ) : (
         <Card title="Identifiants du nouveau compte">
           <p className="sub" style={{ marginTop: 0 }}>
             Communiquez ces identifiants au membre. <b>Le mot de passe ne sera plus affiché ensuite.</b>
@@ -121,7 +130,7 @@ function Equipe() {
             <button className="btn sm ghost" onClick={() => setCredential(null)}>J'ai noté, masquer</button>
           </div>
         </Card>
-      )}
+      ))}
 
       <Card title={`Membres${items ? ` (${items.length})` : ""}`}>
         <DataTable
@@ -388,15 +397,32 @@ function MemberModal({ member, actorRole, onClose, onError, onCreated, onSaved }
   const [password, setPassword] = useState(isNew ? generatePassword() : "");
   const [resetPw, setResetPw] = useState(false); // édition : réinitialiser le mot de passe
   const [saving, setSaving] = useState(false);
+  // « Depuis un stagiaire » : recopie ses infos et CONVERTIT son compte existant en membre —
+  // il garde son mot de passe, on n'en génère aucun (le serveur ne le change que si on en envoie un).
+  const [fromStagiaire, setFromStagiaire] = useState(false);
+  const [stagiaires, setStagiaires] = useState(null); // null = pas encore chargé
+  const [stagiaireId, setStagiaireId] = useState("");
+  useEffect(() => {
+    if (!fromStagiaire || stagiaires) return;
+    // Seuls ceux qui ONT un compte se convertissent : sinon rien à promouvoir, et pas de mot de passe à garder.
+    getStagiaires().then((r) => setStagiaires((r.data || []).filter((s) => s.has_account))).catch(() => setStagiaires([]));
+  }, [fromStagiaire, stagiaires]);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
   async function save() {
     if (!form.email.trim()) { onError("Adresse e-mail requise."); return; }
+    if (isNew && fromStagiaire && !stagiaireId) { onError("Choisissez le stagiaire à convertir."); return; }
     setSaving(true);
     try {
       if (isNew) {
-        await createMember({ ...form, password });
-        onCreated({ email: form.email.trim(), password });
+        if (fromStagiaire) {
+          // Conversion d'un stagiaire : PAS de mot de passe → le serveur garde le sien.
+          await createMember({ ...form });
+          onCreated({ email: form.email.trim(), converted: true });
+        } else {
+          await createMember({ ...form, password });
+          onCreated({ email: form.email.trim(), password });
+        }
       } else {
         const payload = { ...form };
         let cred = null;
@@ -416,6 +442,31 @@ function MemberModal({ member, actorRole, onClose, onError, onCreated, onSaved }
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="mbody">
+          {isNew && (
+            <div className="field">
+              <label style={{ display: "flex", gap: 7, alignItems: "center" }}>
+                <input type="checkbox" checked={fromStagiaire}
+                  onChange={(e) => { setFromStagiaire(e.target.checked); if (!e.target.checked) setStagiaireId(""); }} />
+                Ajouter depuis un stagiaire existant
+              </label>
+              {fromStagiaire && (
+                <>
+                  <select className="inp" style={{ marginTop: 6 }} value={stagiaireId}
+                    onChange={(e) => {
+                      const id = e.target.value; setStagiaireId(id);
+                      const s = (stagiaires || []).find((x) => String(x.id) === id);
+                      if (s) setForm((p) => ({ ...p, first_name: s.first_name || "", last_name: s.last_name || "", email: s.email || "", phone: s.phone || "" }));
+                    }}>
+                    <option value="">{stagiaires === null ? "Chargement…" : (stagiaires.length ? "Choisir un stagiaire…" : "Aucun stagiaire avec un compte")}</option>
+                    {(stagiaires || []).map((s) => (
+                      <option key={s.id} value={s.id}>{[s.last_name, s.first_name].filter(Boolean).join(" ")} — {s.email}</option>
+                    ))}
+                  </select>
+                  <span className="sub" style={{ fontSize: 11 }}>Ses informations sont recopiées ci-dessous. Il conserve son mot de passe actuel : aucun nouveau n'est généré.</span>
+                </>
+              )}
+            </div>
+          )}
           <div className="row2">
             <div className="field"><label>Prénom</label>
               <input className="inp" value={form.first_name} onChange={set("first_name")} /></div>
@@ -435,7 +486,7 @@ function MemberModal({ member, actorRole, onClose, onError, onCreated, onSaved }
             </div>
           </div>
 
-          {isNew ? (
+          {isNew && !fromStagiaire && (
             <div className="field">
               <label>Mot de passe (généré, affiché une seule fois)</label>
               <div style={{ display: "flex", gap: 8 }}>
@@ -443,7 +494,8 @@ function MemberModal({ member, actorRole, onClose, onError, onCreated, onSaved }
                 <button type="button" className="btn sm ghost" onClick={() => setPassword(generatePassword())}><Icon name="refresh" size={13} /> Générer</button>
               </div>
             </div>
-          ) : (
+          )}
+          {!isNew && (
             <div className="field">
               <label style={{ display: "flex", gap: 7, alignItems: "center" }}>
                 <input type="checkbox" checked={resetPw} onChange={(e) => { setResetPw(e.target.checked); if (e.target.checked && !password) setPassword(generatePassword()); }} />
