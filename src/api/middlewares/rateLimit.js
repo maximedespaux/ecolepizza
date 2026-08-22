@@ -81,6 +81,16 @@ function rateLimit({ windowMs = 60000, max = 10, maxIp = 0, key = 'default', cou
             return res.status(429).json({ message: `Trop de tentatives. Réessayez dans ${reste} seconde${reste > 1 ? 's' : ''}.` });
         }
 
+        /* countAll : compter LA REQUÊTE elle-même, tout de suite. Pour un point d'entrée dont
+         * TOUTES les réponses se ressemblent — « mot de passe oublié » répond toujours 200 pour ne
+         * pas révéler si l'e-mail existe. Compter seulement les échecs n'y bornerait rien, et
+         * laisserait bombarder un destinataire d'e-mails de réinitialisation. */
+        if (countAll) {
+            echecs.set(cleFine, [...seau(echecs, cleFine, windowMs, Date.now()), Date.now()]);
+            if (maxIp) echecs.set(cleIp, [...seau(echecs, cleIp, windowMs, Date.now()), Date.now()]);
+            return next();
+        }
+
         /* On compte APRÈS coup, et seulement les échecs. `finish` se déclenche quelle que soit
          * l'issue — y compris sur une erreur serveur, qu'on ne compte pas non plus : ce n'est pas
          * la faute de celui qui se connecte. */
