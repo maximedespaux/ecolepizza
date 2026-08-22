@@ -377,20 +377,37 @@ const resetStagiairePassword = async (req, res) => {
 };
 
 /**
- * DELETE /api/stagiaires/:id
+ * DELETE /api/stagiaires/:id — supprime la fiche ET, si c'est son seul rôle, le compte de connexion.
+ *
+ * Sinon le compte reste ORPHELIN (aucune fiche pour le gérer) et continue de réserver son e-mail :
+ * on ne peut plus réutiliser l'adresse (« e-mail déjà utilisé »). On ne supprime le compte QUE s'il
+ * est de rôle STAGIAIRE et que plus RIEN ne s'y rattache — aucune autre fiche, aucune entreprise
+ * (représentant). Un compte du bureau, ou un référent d'entreprise, n'est jamais supprimé ici.
+ * (La migration 139 a nettoyé les orphelins déjà présents avant ce correctif.)
  */
-const deleteLearner = (req, res) => {
-    db.query(
-        'DELETE FROM learner WHERE id = ? AND organization_id = ?',
-        [req.params.id, req.user.organization_id],
-        (err) => {
-            if (err) {
-                console.error('Erreur suppression stagiaire :', err);
-                return res.status(400).json({ message: 'Erreur suppression' });
+const deleteLearner = async (req, res) => {
+    const orgId = req.user.organization_id;
+    try {
+        const conn = db.promise();
+        const [[learner]] = await conn.query('SELECT user_id FROM learner WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        await conn.query('DELETE FROM learner WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+
+        const uid = learner?.user_id;
+        if (uid) {
+            const [[{ n: autresFiches }]] = await conn.query('SELECT COUNT(*) AS n FROM learner WHERE user_id = ?', [uid]);
+            let refEntreprise = 0;
+            try { const [[c]] = await conn.query('SELECT COUNT(*) AS n FROM company WHERE user_id = ?', [uid]); refEntreprise = c.n; }
+            catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; } // company.user_id : migration 084
+            if (autresFiches === 0 && refEntreprise === 0) {
+                // `role = STAGIAIRE` : garde-fou en plus — jamais un compte du bureau, même en cas d'incohérence.
+                await conn.query("DELETE FROM user WHERE id = ? AND organization_id = ? AND role = 'STAGIAIRE'", [uid, orgId]);
             }
-            res.status(200).json({ success: true, message: 'Stagiaire supprimé' });
         }
-    );
+        res.status(200).json({ success: true, message: 'Stagiaire supprimé' });
+    } catch (err) {
+        console.error('Erreur suppression stagiaire :', err);
+        res.status(400).json({ message: 'Erreur suppression' });
+    }
 };
 
 /**
