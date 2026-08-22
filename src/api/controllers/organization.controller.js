@@ -69,9 +69,12 @@ const updateOrganization = async (req, res) => {
     const allowed = ['legal_name', 'short_name', 'code', 'manager', 'siret', 'vat_number', 'nda', 'naf_ape',
         'address', 'zip_code', 'town', 'phone', 'email', 'iban', 'bic', 'bank_name', 'signature_image',
         'logo_image', 'emargement_config', 'qualiopi', 'vat_rate', 'partner_fields',
+        // Réglages « Mailing » (migration 138) : un interrupteur 0/1 par type d'e-mail.
+        'mail_credentials', 'mail_reset', 'mail_forgot', 'mail_security', 'mail_notifications',
     ];
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie sans elles.
-    const OPTIONAL = new Set(['vat_rate', 'partner_fields']);
+    const OPTIONAL = new Set(['vat_rate', 'partner_fields',
+        'mail_credentials', 'mail_reset', 'mail_forgot', 'mail_security', 'mail_notifications']);
 
     const cols = [];
     const valOf = {};
@@ -79,6 +82,7 @@ const updateOrganization = async (req, res) => {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];
         if (f === 'qualiopi') v = v ? 1 : 0;
+        else if (f.startsWith('mail_')) v = v ? 1 : 0;
         else if (f === 'vat_rate') v = Math.max(0, Math.min(100, Number(v) || 0));
         else if (f === 'code') v = String(v).trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 24) || null;
         else if (f === 'signature_image') v = encrypt(v || null);

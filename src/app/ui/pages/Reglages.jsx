@@ -13,6 +13,17 @@ const FIELDS = [
   ["phone", "Téléphone"], ["email", "Email"],
 ];
 
+// Réglages « Mailing » : un interrupteur par type d'e-mail transactionnel. Décoché = l'organisme
+// ne l'envoie plus — le SERVEUR applique le même filtre (lib/orgContext.js mailActif), pas
+// seulement l'affichage. `[clé, libellé, aide]`.
+const MAILS = [
+  ["mail_credentials", "Compte créé — identifiants de connexion", "Au stagiaire, quand un compte lui est créé (avec son mot de passe)."],
+  ["mail_reset", "Réinitialisation du mot de passe", "Quand vous réinitialisez le mot de passe d'un stagiaire depuis sa fiche."],
+  ["mail_forgot", "Lien « mot de passe oublié »", "Quand un utilisateur demande lui-même à réinitialiser son mot de passe."],
+  ["mail_security", "Alerte de sécurité (changement d'e-mail / mot de passe)", "Prévient la personne d'un changement, avec un lien « ce n'était pas moi ». Le couper retire ce garde-fou."],
+  ["mail_notifications", "Notifications par e-mail", "Double par e-mail les notifications importantes adressées à une personne."],
+];
+
 function Reglages() {
   const [form, setForm] = useState(null);
   const [status, setStatus] = useState(null);
@@ -111,6 +122,25 @@ function Reglages() {
                   Retirer
                 </button>
               )}
+            </div>
+
+            <div className="divider" />
+            <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Mailing</h3>
+            <p className="sub" style={{ marginTop: 0 }}>Les e-mails que l'organisme envoie automatiquement. Décocher en coupe l'envoi — côté serveur aussi, pas seulement l'affichage. Sans SMTP configuré, aucun e-mail ne part de toute façon.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, margin: "2px 0 4px" }}>
+              {MAILS.map(([k, label, hint]) => (
+                <label key={k} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, cursor: "pointer" }}>
+                  {/* `!== 0` et non `!!` : une colonne absente (migration non jouée) ou NULL vaut
+                      « activé », comme le serveur. Seul un 0 explicite décoche la case. */}
+                  <input type="checkbox" style={{ marginTop: 3 }}
+                    checked={form[k] !== 0}
+                    onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }))} />
+                  <span>
+                    {label}
+                    <span className="sub" style={{ display: "block", fontSize: 11.5 }}>{hint}</span>
+                  </span>
+                </label>
+              ))}
             </div>
 
             <div className="divider" />

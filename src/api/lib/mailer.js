@@ -70,8 +70,14 @@ function appUrl() {
  * `text` est optionnel : à défaut, une version texte est dérivée du HTML (les clients sans HTML,
  * et les filtres anti-spam, veulent une alternative texte).
  */
-async function sendMail({ to, subject, html, text }) {
+async function sendMail({ to, subject, html, text, kind }) {
     if (!to) return { sent: false, reason: 'destinataire absent' };
+    /* Interrupteur par organisme (réglages « Mailing », migration 138). `kind` est OPTIONNEL :
+       un envoi sans type n'est jamais filtré. `require` local exprès — évite tout problème
+       d'ordre de chargement, et Node met le module en cache (coût négligeable au runtime). */
+    if (kind && !require('./orgContext.js').mailActif(kind)) {
+        return { sent: false, reason: `type « ${kind} » désactivé par l'organisme` };
+    }
     const t = getTransport();
     if (!t) return { sent: false, reason: 'SMTP non configuré' };
     try {

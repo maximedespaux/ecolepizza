@@ -51,7 +51,7 @@ function alerteChangement({ toEmail, firstName, userId, kind, prev, detail }) {
     if (!toEmail) return;
     const cancelUrl = `${appUrl()}/annuler?token=${encodeURIComponent(jetonAnnulation(userId, kind, prev))}`;
     const { subject, html } = securityAlertEmail({ firstName, kind, detail, cancelUrl });
-    sendMail({ to: toEmail, subject, html }); // best-effort
+    sendMail({ to: toEmail, subject, html, kind: 'security' }); // best-effort
 }
 
 // nav_access est stocké en JSON (colonne TEXT) : on le renvoie TOUJOURS désérialisé
@@ -293,7 +293,7 @@ async function forgotPassword(req, res) {
             const token = jwt.sign({ id: user.id, purpose: 'reset' }, JWT_SECRET + user.password, { algorithm: 'HS256', expiresIn: '1h' });
             const resetUrl = `${appUrl()}/reinitialiser?token=${encodeURIComponent(token)}`;
             const { subject, html } = resetLinkEmail({ firstName: user.first_name, resetUrl });
-            sendMail({ to: user.email, subject, html }); // best-effort, ne bloque pas la réponse
+            sendMail({ to: user.email, subject, html, kind: 'forgot' }); // best-effort, ne bloque pas la réponse
         }
         return res.status(200).json(generique);
     } catch (e) {
