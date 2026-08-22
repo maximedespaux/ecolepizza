@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+<title>École Pizza — Jean-Jacques Despaux</title>
+<rect width="400" height="400" fill="#dbe7f4"/>
+<circle cx="200" cy="188" r="128" fill="#ffffff"/>
+<g fill="none" stroke="#1e2a63" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+<path d="M182 124 V212 A44 44 0 0 1 94 212"/>
+<path d="M214 124 V252"/>
+<path d="M214 124 C 300 124 306 252 214 252"/>
+</g>
+<rect x="120" y="330" width="50.6" height="18" rx="9" fill="#1e2a63"/>
+<rect x="174.7" y="330" width="50.6" height="18" rx="9" fill="#ffffff"/>
+<rect x="229.4" y="330" width="50.6" height="18" rx="9" fill="#c0392b"/>
+</svg>
