@@ -3,6 +3,8 @@ const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
 const { generatePassword } = require('../lib/crypto.js');
+const { sendMail, appUrl } = require('../lib/mailer.js');
+const { representativeEmail } = require('../lib/mailTemplates.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
@@ -699,6 +701,18 @@ const createRepresentativeAccount = async (req, res) => {
             catch (e) { if (!isMissingSchema(e)) throw e; } // migration 084 non jouée
         };
 
+        /* E-mail au représentant : « voici votre accès pour signer les documents de l'entreprise ».
+           Best-effort (ne bloque JAMAIS la création du compte, cf. lib/mailer.js) et soumis à
+           l'interrupteur « Mailing » de l'organisme — kind 'credentials', même catégorie qu'un
+           compte créé avec identifiants. `motDePasse` null quand l'accès est rattaché à un compte
+           existant (le référent est déjà stagiaire) : l'e-mail renvoie alors vers sa connexion habituelle. */
+        const prevenirRepresentant = (motDePasse) => {
+            const { subject, html } = representativeEmail({
+                firstName: first, email, password: motDePasse, companyName: company.name, loginUrl: `${appUrl()}/login`,
+            });
+            sendMail({ to: email, subject, html, kind: 'credentials' });
+        };
+
         if (existing) {
             // Ce compte appartient-il à une vraie personne à NE PAS écraser (stagiaire lié,
             // ou membre du bureau) ? Si oui, on ne touche NI son rôle NI son mot de passe :
@@ -708,6 +722,7 @@ const createRepresentativeAccount = async (req, res) => {
             const isRealPerson = lc.n > 0 || ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'].includes(existing.role);
             if (isRealPerson) {
                 await linkCompany(existing.id);
+                prevenirRepresentant(null); // pas de mot de passe : il garde sa connexion habituelle
                 return res.status(200).json({ data: { email, linked: true, existing_role: existing.role } });
             }
             // Compte représentant dédié déjà en place : on réinitialise juste le mot de passe.
@@ -715,6 +730,7 @@ const createRepresentativeAccount = async (req, res) => {
             await conn.query("UPDATE user SET role = 'ENTREPRISE', password = ?, first_name = ?, last_name = ? WHERE id = ? AND organization_id = ?",
                 [await bcrypt.hash(password, 10), first || 'Représentant', last, existing.id, orgId]);
             await linkCompany(existing.id);
+            prevenirRepresentant(password);
             return res.status(200).json({ data: { email, password } });
         }
 
@@ -726,6 +742,7 @@ const createRepresentativeAccount = async (req, res) => {
              VALUES (?, ?, 'ENTREPRISE', ?, ?, ?, ?, ?)`,
             [userId, orgId, first || 'Représentant', last, email, company.phone || null, await bcrypt.hash(password, 10)]);
         await linkCompany(userId);
+        prevenirRepresentant(password);
         res.status(201).json({ data: { email, password } });
     } catch (err) {
         console.error('Erreur compte représentant :', err);
