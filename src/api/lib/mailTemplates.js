@@ -13,7 +13,9 @@
  * Chaque fonction renvoie `{ subject, html }`. Le texte de repli est dérivé du HTML par `mailer`.
  */
 
-const MARQUE = 'École Pizza';       // en-tête ; surchargée par l'organisme quand on le connaît
+const { LOGO_CID } = require('./mailer.js');
+
+const MARQUE = 'École Pizza';       // repli texte ; surchargée par l'organisme quand on le connaît
 const ENCRE = '#c0392b';            // le rouge « ember » de l'application
 
 /** Coquille commune : en-tête sobre, carte centrée, pied discret. `contenu` = HTML du corps. */
@@ -25,8 +27,8 @@ function coquille(titre, contenu, { orgName } = {}) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f8;padding:28px 12px">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:540px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e6e8ee">
-        <tr><td style="background:${ENCRE};padding:20px 28px">
-          <span style="color:#fff;font-size:18px;font-weight:700;letter-spacing:.3px">${esc(marque)}</span>
+        <tr><td style="background:#ffffff;padding:24px 28px 18px;text-align:center;border-bottom:3px solid ${ENCRE}">
+          <img src="cid:${LOGO_CID}" alt="${esc(marque)}" width="210" style="width:210px;max-width:72%;height:auto;border:0;display:inline-block">
         </td></tr>
         <tr><td style="padding:28px">
           <h1 style="margin:0 0 14px;font-size:20px;color:#1f2430">${esc(titre)}</h1>

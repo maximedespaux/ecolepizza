@@ -17,6 +17,20 @@
  * « fire-and-forget » pour ne pas ralentir la requête d'une seconde d'aller-retour SMTP.
  */
 const nodemailer = require('nodemailer');
+const fs = require('fs');
+const path = require('path');
+
+// Le logo, joint EN LIGNE (Content-ID) à chaque e-mail. Pièce jointe et non image distante :
+// c'est le seul moyen fiable d'afficher une image sans qu'un client la bloque (« afficher les
+// images ? ») et sans pister le destinataire — cohérent avec la promesse « aucun traceur ».
+const LOGO_PATH = path.join(__dirname, '..', 'assets', 'mail-logo.png');
+const LOGO_CID = 'ecolepizza-logo';
+function logoAttachment() {
+    try {
+        if (!fs.existsSync(LOGO_PATH)) return [];
+        return [{ filename: 'ecole-pizza.png', path: LOGO_PATH, cid: LOGO_CID, contentDisposition: 'inline' }];
+    } catch { return []; }
+}
 
 let transport;      // instance nodemailer, ou null si non configuré
 let resolved = false;
@@ -67,6 +81,7 @@ async function sendMail({ to, subject, html, text }) {
             subject,
             html,
             text: text || htmlToText(html),
+            attachments: logoAttachment(),
         });
         return { sent: true };
     } catch (e) {
@@ -86,4 +101,4 @@ function htmlToText(html) {
         .trim();
 }
 
-module.exports = { sendMail, appUrl, htmlToText, _getTransport: getTransport };
+module.exports = { sendMail, appUrl, htmlToText, LOGO_CID, _getTransport: getTransport };
