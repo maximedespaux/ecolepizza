@@ -107,7 +107,21 @@ const getCompany = async (req, res) => {
                 [req.params.id, req.user.organization_id]
             );
         } catch (e) { if (!isMissingSchema(e)) throw e; }
-        res.json({ data: { ...company, learners, sessions } });
+        /* État du COMPTE REPRÉSENTANT, pour l'écran. Le bouton « créer / réinitialiser » n'a de sens
+           que si le compte n'existe pas encore, ou si c'est un compte représentant DÉDIÉ. Quand le
+           référent est une VRAIE personne déjà connectée (stagiaire lié ou membre du bureau), le
+           réinitialiser reviendrait à écraser SON compte : createRepresentativeAccount refuse de le
+           faire (isRealPerson). L'écran masque donc le bouton dans ce cas. Mêmes rôles ici. */
+        let representative = { linked: false, is_person: false, role: null, name: null };
+        if (company.user_id) {
+            const [[u]] = await conn.query('SELECT id, role, first_name, last_name FROM user WHERE id = ? AND organization_id = ?', [company.user_id, req.user.organization_id]);
+            if (u) {
+                const [[lc]] = await conn.query('SELECT COUNT(*) AS n FROM learner WHERE user_id = ?', [u.id]);
+                const isPerson = lc.n > 0 || ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'].includes(u.role);
+                representative = { linked: true, is_person: isPerson, role: u.role, name: [u.first_name, u.last_name].filter(Boolean).join(' ') || null };
+            }
+        }
+        res.json({ data: { ...company, learners, sessions, representative } });
     } catch (err) {
         console.error('Erreur lecture entreprise :', err);
         res.status(500).json({ error: 'Internal Server Error' });
