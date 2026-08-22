@@ -63,6 +63,7 @@ export const NAV = [
     grp: "Configuration",        // paramétrage de l'organisme & modèles
     items: [
       { to: "/reglages", ic: "building", label: "Organisme", roles: ADMIN },
+      { to: "/reglages-mailing", ic: "send", label: "Mailing", roles: ADMIN },
       { to: "/reglages-facturation", ic: "receipt", label: "Facturation", roles: ADMIN },
       /* CE QUI SORT DE L'ÉCOLE a sa propre rubrique : ce réglage ne décrit pas l'organisme comme
          son SIRET, il décide de ce qui est communiqué à des tiers — et le texte que les
@@ -139,6 +140,7 @@ export const PAGE_TITLES = {
   "/factures": "Facturation",
   "/comptabilite": "Comptabilité",
   "/reglages": "Organisme",
+  "/reglages-mailing": "Mailing",
   "/reglages-facturation": "Facturation",
   "/reglages-partenaires": "Partenaires",
   "/equipe": "Équipe & accès",
@@ -159,7 +161,7 @@ export function canAccess(role, roles) {
 export const OWNER_ROLES = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
 
 // Rubriques déplacées dans le hub « Paramètres » (menu profil) et retirées de la barre latérale.
-export const SETTINGS_PATHS = ["/reglages", "/reglages-facturation", "/reglages-partenaires", "/equipe", "/roles"];
+export const SETTINGS_PATHS = ["/reglages", "/reglages-mailing", "/reglages-facturation", "/reglages-partenaires", "/equipe", "/roles"];
 
 // Normalise nav_access en objet { chemin: "read" | "write" }.
 // Rétro-compat : un tableau (ancien format) = tout en écriture.
@@ -199,7 +201,7 @@ const SECTION_OF = {
   "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   "/comptabilite": "/comptabilite", "/carte": "/carte",
-  "/reglages": "/reglages", "/reglages-facturation": "/reglages-facturation", "/modeles": "/modeles", "/equipe": "/equipe",
+  "/reglages": "/reglages", "/reglages-mailing": "/reglages-mailing", "/reglages-facturation": "/reglages-facturation", "/modeles": "/modeles", "/equipe": "/equipe",
   "/audit": "/audit", "/suivi": "/suivi", "/dashboard": "/dashboard",
 };
 
