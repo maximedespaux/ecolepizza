@@ -6,6 +6,8 @@ const path = require('path');
 dotenv.config({ path: path.join(__dirname, '..', 'config', '.env') });
 
 const db = require('../config/database.js');
+const { sendMail, appUrl } = require('../lib/mailer.js');
+const { resetLinkEmail } = require('../lib/mailTemplates.js');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -198,4 +200,80 @@ const logout = (req, res) => {
     return res.status(200).json({ success: true, message: 'Déconnexion réussie' });
 };
 
-module.exports = { userAuthentification, getCurrentUser, changePassword, changeEmail, logout };
+/**
+ * POST /api/auth/forgot — demande de réinitialisation (« mot de passe oublié »).
+ *
+ * RÉPONSE TOUJOURS IDENTIQUE, que le compte existe ou non : révéler « cette adresse n'existe pas »
+ * transformerait ce point d'entrée en oracle d'énumération de comptes. Le limiteur `countAll`
+ * (cf. routes) empêche par ailleurs de bombarder un destinataire d'e-mails.
+ */
+async function forgotPassword(req, res) {
+    const email = String(req.body?.email || '').trim();
+    const orgCode = req.body?.orgCode ? String(req.body.orgCode).trim() : null;
+    const generique = { success: true, message: "Si un compte correspond à cette adresse, un e-mail de réinitialisation vient d'être envoyé." };
+    if (!email) return res.status(200).json(generique);
+    try {
+        const conn = db.promise();
+        let user = null;
+        if (orgCode) {
+            const [[org]] = await conn.query('SELECT id FROM organization WHERE code = ?', [orgCode]);
+            if (org) {
+                const [rows] = await conn.query('SELECT id, first_name, email, password FROM user WHERE email = ? AND organization_id = ?', [email, org.id]);
+                user = rows[0] || null;
+            }
+        } else {
+            const [rows] = await conn.query('SELECT id, first_name, email, password FROM user WHERE email = ?', [email]);
+            user = rows[0] || null;
+        }
+        if (user && user.email) {
+            /* JETON SIGNÉ AVEC JWT_SECRET + LE HASH ACTUEL DU MOT DE PASSE. Astuce qui rend le lien
+               à USAGE UNIQUE sans aucune table de jetons : dès que le mot de passe change, le hash
+               change, et tout jeton signé avec l'ancien devient invérifiable. Un lien déjà utilisé,
+               ou un ancien lien, cesse donc de fonctionner tout seul. Portée limitée à 'reset' et
+               à une heure. */
+            const token = jwt.sign({ id: user.id, purpose: 'reset' }, JWT_SECRET + user.password, { algorithm: 'HS256', expiresIn: '1h' });
+            const resetUrl = `${appUrl()}/reinitialiser?token=${encodeURIComponent(token)}`;
+            const { subject, html } = resetLinkEmail({ firstName: user.first_name, resetUrl });
+            sendMail({ to: user.email, subject, html }); // best-effort, ne bloque pas la réponse
+        }
+        return res.status(200).json(generique);
+    } catch (e) {
+        console.error('forgotPassword:', e.message);
+        return res.status(200).json(generique); // même en cas d'erreur : ne rien révéler
+    }
+}
+
+/**
+ * POST /api/auth/reset — pose le nouveau mot de passe à partir du jeton du lien.
+ */
+async function resetPassword(req, res) {
+    const token = String(req.body?.token || '');
+    const password = String(req.body?.password || '');
+    if (password.length < 8) return res.status(400).json({ message: 'Le mot de passe doit contenir au moins 8 caractères.' });
+    if (!token) return res.status(400).json({ message: 'Lien invalide.' });
+    try {
+        // Décoder SANS vérifier : on a besoin de l'id pour retrouver le hash, qui EST une partie du
+        // secret. `decode` ne valide pas la signature — la vérification vient juste après.
+        const brut = jwt.decode(token);
+        if (!brut || brut.purpose !== 'reset' || !brut.id) {
+            return res.status(400).json({ message: 'Lien invalide ou expiré.' });
+        }
+        const conn = db.promise();
+        const [rows] = await conn.query('SELECT id, password FROM user WHERE id = ?', [brut.id]);
+        const user = rows[0];
+        if (!user) return res.status(400).json({ message: 'Lien invalide ou expiré.' });
+        try {
+            jwt.verify(token, JWT_SECRET + user.password, { algorithms: ['HS256'] });
+        } catch {
+            return res.status(400).json({ message: 'Lien invalide ou expiré.' });
+        }
+        const hash = await bcrypt.hash(password, 10);
+        await conn.query('UPDATE user SET password = ? WHERE id = ?', [hash, user.id]);
+        return res.status(200).json({ success: true, message: 'Mot de passe réinitialisé. Vous pouvez vous connecter.' });
+    } catch (e) {
+        console.error('resetPassword:', e.message);
+        return res.status(500).json({ message: 'Erreur serveur.' });
+    }
+}
+
+module.exports = { userAuthentification, getCurrentUser, changePassword, changeEmail, logout, forgotPassword, resetPassword };

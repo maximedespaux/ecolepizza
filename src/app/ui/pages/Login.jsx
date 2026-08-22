@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import { login } from "../api/apiClient.js";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -183,6 +183,10 @@ function Login() {
                   {showPw ? <IconEyeOff /> : <IconEye />}
                 </button>
               </div>
+            </div>
+
+            <div className="login-forgot">
+              <Link to="/mot-de-passe-oublie">Mot de passe oublié&nbsp;?</Link>
             </div>
 
             <label className="login-remember">

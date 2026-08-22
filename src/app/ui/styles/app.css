@@ -734,6 +734,9 @@ tbody tr:last-child td{border-bottom:none}
 
 /* Bouton de soumission + spinner */
 .login-submit{width:100%;justify-content:center;margin-top:16px;height:46px;font-size:14.5px;cursor:pointer}
+.login-forgot{text-align:right;margin:-4px 0 10px;font-size:13px}
+.login-forgot a{color:var(--muted);text-decoration:none}
+.login-forgot a:hover{color:var(--ember1);text-decoration:underline}
 .login-submit:disabled{cursor:default;opacity:.85}
 .login-spinner{width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;animation:loginSpin .7s linear infinite}
 @keyframes loginSpin{to{transform:rotate(360deg)}}

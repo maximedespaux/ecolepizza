@@ -359,6 +359,18 @@ export function logout() {
   return request("/auth/logout", { method: "POST" });
 }
 
+// « Mot de passe oublié » : demande d'un lien de réinitialisation. La réponse est toujours la
+// même (le serveur ne dit jamais si l'adresse existe), donc `silent` — pas de barre de chargement
+// qui trahirait quoi que ce soit, et l'appelant affiche un message générique.
+export function forgotPassword({ email, org_code }) {
+  return request("/auth/forgot", { method: "POST", silent: true, body: JSON.stringify({ email, orgCode: org_code }) });
+}
+
+// Pose du nouveau mot de passe depuis le jeton du lien reçu par e-mail.
+export function resetPassword({ token, password }) {
+  return request("/auth/reset", { method: "POST", body: JSON.stringify({ token, password }) });
+}
+
 // L'utilisateur connecté change son propre mot de passe.
 export function changeMyPassword(payload) {
   return request("/auth/password", { method: "PATCH", body: JSON.stringify(payload) });

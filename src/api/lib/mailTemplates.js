@@ -108,4 +108,21 @@ function notificationEmail({ firstName, title, body, link, orgName }) {
     return { subject: `${title} — ${orgName || MARQUE}`, html: coquille(title, contenu, { orgName }) };
 }
 
-module.exports = { credentialsEmail, resetEmail, notificationEmail };
+/* ─── Lien de réinitialisation (demande « mot de passe oublié ») ─────────────────────────── */
+function resetLinkEmail({ firstName, resetUrl, orgName }) {
+    const titre = 'Réinitialisation de votre mot de passe';
+    const contenu = `
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">Bonjour ${esc(firstName || '')},</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6">
+        Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous
+        pour en choisir un nouveau. Ce lien est valable <b>une heure</b> et ne sert qu’une fois.
+      </p>
+      ${bouton(resetUrl, 'Choisir un nouveau mot de passe')}
+      <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#8a90a0">
+        Vous n’êtes pas à l’origine de cette demande&nbsp;? Ignorez cet e-mail : votre mot de passe
+        actuel reste valable, rien n’a changé.
+      </p>`;
+    return { subject: `Réinitialisation de mot de passe — ${orgName || MARQUE}`, html: coquille(titre, contenu, { orgName }) };
+}
+
+module.exports = { credentialsEmail, resetEmail, resetLinkEmail, notificationEmail };

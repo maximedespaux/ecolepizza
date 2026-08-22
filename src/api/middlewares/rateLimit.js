@@ -48,7 +48,7 @@ function seau(map, cle, fenetreMs, maintenant) {
  * @param key        préfixe, pour ne pas mélanger connexion et changement de mot de passe
  * @param identifiant  extrait la cible tentée de la requête (e-mail…). Retourne '' si absente.
  */
-function rateLimit({ windowMs = 60000, max = 10, maxIp = 0, key = 'default',
+function rateLimit({ windowMs = 60000, max = 10, maxIp = 0, key = 'default', countAll = false,
                      identifiant = (req) => String(req.body?.email || '').toLowerCase().trim() } = {}) {
     const echecs = new Map();   // "clé" -> [horodatages]
 
