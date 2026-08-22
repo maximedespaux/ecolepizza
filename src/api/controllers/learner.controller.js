@@ -350,10 +350,23 @@ const resetStagiairePassword = async (req, res) => {
         }
 
         if (learner.email) {
-            const { subject, html } = resetEmail({ firstName: learner.first_name, password, loginUrl: `${appUrl()}/login` });
+            const login = `${appUrl()}/login`;
+            /* Le MÊME bouton sert à créer un compte et à en réinitialiser un. L'e-mail, lui, ne
+               doit pas être le même : `learner.user_id` (sa valeur AVANT réassignation) dit si le
+               compte préexistait. Absent → on vient de le créer/rattacher pour ce stagiaire, donc
+               e-mail de BIENVENUE avec ses identifiants (son e-mail sert d'identifiant). Présent →
+               simple réinitialisation. */
+            const { subject, html } = learner.user_id
+                ? resetEmail({ firstName: learner.first_name, password, loginUrl: login })
+                : credentialsEmail({ firstName: learner.first_name, email: learner.email, password, loginUrl: login });
             sendMail({ to: learner.email, subject, html });
         }
-        res.status(200).json({ success: true, message: 'Mot de passe réinitialisé', password });
+        res.status(200).json({
+            success: true,
+            created: !learner.user_id,
+            message: learner.user_id ? 'Mot de passe réinitialisé' : 'Compte créé',
+            password,
+        });
     } catch (err) {
         console.error('Erreur réinitialisation mot de passe :', err);
         res.status(500).json({ error: 'Internal Server Error' });
