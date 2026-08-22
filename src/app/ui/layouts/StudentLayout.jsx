@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { Outlet, Navigate, NavLink, useLocation } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
+import SpaceSwitcher from "../components/SpaceSwitcher.jsx";
 import ProfileModal from "../components/ProfileModal.jsx";
 import ConsentModal from "../components/ConsentModal.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -222,6 +223,7 @@ function StudentLayout() {
         </nav>
 
         <div className="spacer" />
+        <SpaceSwitcher />
         <ThemeToggle />
         {/* Le changement de mot de passe vit dans le profil (onglet Compte) : le doubler
             dans la barre en faisait la seconde action la plus visible de l'espace. */}

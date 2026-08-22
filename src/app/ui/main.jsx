@@ -1,8 +1,9 @@
-import React, { useContext } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { UserProvider, UserContext } from "./context/UserContext.jsx";
+import { EspaceContext } from "./context/EspaceContext.jsx";
 import { landingPath, navAllowed, OWNER_ROLES } from "./lib/nav.js";
 import { verrouillerZoom } from "./lib/nozoom.js";
 import "./styles/app.css";
@@ -123,6 +124,21 @@ const OWNER = ["SUPER_ADMIN", "ADMIN_ORGANISME"];
 function AppRoutes() {
   const { user, isLoading, serverDown } = useContext(UserContext);
 
+  /* Compte À DEUX CASQUETTES : un rôle du bureau + une fiche stagiaire (has_learner). Il peut
+     basculer entre le backoffice et « Mon espace stagiaire » — même connexion, aucun changement de
+     rôle ni de mot de passe (l'espace stagiaire est servi PAR DONNÉE, cf. espace.routes ; les droits
+     admin restent gardés PAR RÔLE côté serveur). Basculer change l'écran, pas l'autorité. Défaut :
+     backoffice ; le dernier choix est mémorisé par utilisateur. Hooks au SOMMET (jamais après un
+     `return` conditionnel). */
+  const ROLES_DOUBLE = ["SUPER_ADMIN", "ADMIN_ORGANISME", "FORMATEUR"];
+  const canBeStudent = !!user?.has_learner && ROLES_DOUBLE.includes(user?.role);
+  const [viewAs, setViewAsState] = useState("backoffice");
+  useEffect(() => {
+    if (!canBeStudent) { setViewAsState("backoffice"); return; }
+    try { if (localStorage.getItem(`impasto.viewAs.${user.id}`) === "stagiaire") setViewAsState("stagiaire"); } catch { /* stockage indisponible */ }
+  }, [canBeStudent, user?.id]);
+  const setViewAs = (v) => { setViewAsState(v); try { localStorage.setItem(`impasto.viewAs.${user.id}`, v); } catch { /* ignore */ } };
+
   if (isLoading) {
     return (
       <div className="app-loading">
@@ -138,9 +154,12 @@ function AppRoutes() {
   const isIntervenant = user?.role === "INTERVENANT";
   const isPlatform = user?.role === "PLATFORM_OWNER";
   const isRepresentant = user?.role === "ENTREPRISE";
+  // Un membre du bureau qui a choisi de voir SON espace stagiaire : on l'envoie vers la coquille
+  // stagiaire (données servies par son user id), sans toucher à son rôle.
+  const studentView = canBeStudent && viewAs === "stagiaire";
 
   return (
-    <>
+    <EspaceContext.Provider value={{ viewAs, setViewAs, canBeStudent }}>
     {/* APRÈS LA CONNEXION, et une seule fois pour les quatre rôles. Sur l'écran de connexion il
         se lirait au moment où l'on cherche à entrer : personne ne le lit, tout le monde le
         chasse. Le lien de l'écran de login reste là pour qui veut savoir AVANT d'entrer. */}
@@ -177,8 +196,8 @@ function AppRoutes() {
           <Route path="emargement" element={<IntervenantEspace />} />
           <Route path="*" element={<Navigate to="/emargement" replace />} />
         </Route>
-      ) : (isStudent || isIntervenant) ? (
-        // --- Espace stagiaire (+ onglet « Intervention » si le compte est aussi intervenant) ---
+      ) : (isStudent || isIntervenant || studentView) ? (
+        // --- Espace stagiaire (+ onglet « Intervention » ; ou membre du bureau en vue stagiaire) ---
         <Route path="/" element={<StudentLayout />}>
           <Route index element={<Navigate to="/mon-espace" replace />} />
           {/* « Mon espace » et « Mes documents » ne font plus qu'une page (documents reçus
@@ -244,7 +263,7 @@ function AppRoutes() {
         </Route>
       )}
     </Routes>
-    </>
+    </EspaceContext.Provider>
   );
 }
 
