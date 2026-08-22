@@ -7,6 +7,7 @@ import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { playNotif, isNotifMuted, setNotifMuted } from "../lib/notifSound.js";
 import { Icon } from "./Icon.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
+import SpaceSwitcher from "./SpaceSwitcher.jsx";
 
 /** Barre supérieure : fil d'Ariane, notifications, thème, déconnexion. */
 function Topbar({ onMenu }) {
@@ -54,6 +55,7 @@ function Topbar({ onMenu }) {
         Impastio <span style={{ opacity: 0.4 }}>/</span> <b>{title}</b>
       </div>
       <div className="spacer" />
+      <SpaceSwitcher />
 
       <button
         className="icon-btn"

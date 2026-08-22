@@ -135,6 +135,13 @@ export const TRACEURS = [
     duree: 'Jusqu\'à effacement',
   },
   {
+    cle: 'impasto.viewAs.<votre compte>', nature: 'local', exempte: true,
+    role: 'Retenir l\'espace choisi (backoffice ou espace stagiaire) pour un compte qui a les deux',
+    detail: 'Ne concerne qu\'un membre du bureau qui est AUSSI stagiaire. Elle ne garde qu\'un mot '
+      + '(« backoffice » ou « stagiaire ») ; par défaut, c\'est le backoffice.',
+    duree: 'Jusqu\'à effacement',
+  },
+  {
     cle: 'impasto.bandeauConfidentialite', nature: 'local', exempte: true,
     role: 'Se souvenir que vous avez lu le bandeau d\'information',
     detail: 'Pour ne pas vous le remontrer à chaque visite. Il n\'accorde ni ne refuse rien : '
