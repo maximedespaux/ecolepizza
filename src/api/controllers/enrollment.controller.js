@@ -125,8 +125,15 @@ const getParcours = async (req, res) => {
                 { programId: program.id, companyId: e.company_id, sessionId: e.session_id },
                 () => formationSteps(conn, orgId, program));
             if (ent.docs.length) docs.push(...ent.docs);
+            // Statut des pièces déposées (carte d'identité…) : une étape « pièce » VALIDÉE fait
+            // avancer le parcours — elle n'a pas de document généré, sa complétion vient de piece_depot.
+            let pieces = {};
+            try {
+                const [pd] = await conn.query('SELECT piece_type_id, statut FROM piece_depot WHERE enrollment_id = ? AND organization_id = ?', [e.id, orgId]);
+                pieces = Object.fromEntries(pd.map((r) => [r.piece_type_id, r.statut]));
+            } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; } // migration 127 non jouée
             const steps = ent.steps || await enrollmentSteps(conn, orgId, program, ctx, condById);
-            parc = computeDocParcours({ steps, docs });
+            parc = computeDocParcours({ steps, docs, pieces });
         }
 
         res.json({

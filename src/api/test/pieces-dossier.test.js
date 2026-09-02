@@ -14,6 +14,19 @@ const fs = require('fs');
 const path = require('path');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'piece.controller.js'), 'utf8');
+const { computeDocParcours } = require('../lib/parcours.js');
+
+test('une pièce VALIDÉE fait avancer le parcours ; déposée-mais-pas-validée non', () => {
+    const steps = [{ slug: 'id', label: 'Pièce', doc_type: 'PIECE', piece_id: 'pt1' }, { slug: 'devis', label: 'Devis', stagiaire_sign: 1 }];
+    const validee = computeDocParcours({ steps, docs: [], pieces: { pt1: 'VALIDEE' } });
+    assert.strictEqual(validee.steps[0].status, 'done', 'pièce validée ⇒ étape faite');
+    assert.strictEqual(validee.currentIndex, 1, 'le parcours passe à l\'étape suivante');
+    const deposee = computeDocParcours({ steps, docs: [], pieces: { pt1: 'DEPOSEE' } });
+    assert.strictEqual(deposee.currentIndex, 0, 'déposée mais non validée ⇒ le parcours attend l\'approbation');
+    assert.strictEqual(deposee.steps[0].piece, true, 'l\'étape est marquée « pièce » (pas de bouton Préparer)');
+    // Rétro-compat : sans le paramètre `pieces`, une étape pièce reste « en attente » (ATTENDUE, non faite).
+    assert.strictEqual(computeDocParcours({ steps }).steps[0].pieceStatus, 'ATTENDUE');
+});
 
 test('le dossier de pièces se relie au programme VIA la session (jamais e.program_id)', () => {
     assert.match(src, /JOIN training_session s ON s\.id = e\.session_id/,
