@@ -45,8 +45,15 @@ function stepDone(step, doc) {
  * Renvoie { steps:[{key,ic,label,sub,signable,quiz,docId,docStatus,status}],
  *           percent, currentIndex, currentKey }.
  */
-function computeDocParcours({ steps = [], docs = [] } = {}) {
+function computeDocParcours({ steps = [], docs = [], pieces = {} } = {}) {
     const rows = steps.map((s) => {
+        // Étape « pièce » (dépôt du stagiaire, ex. carte d'identité) : sa complétion vient de
+        // piece_depot.statut, PAS d'un document généré (il n'y en a pas). VALIDÉE ⇒ étape faite,
+        // le parcours avance. `pieces` = { [piece_id]: statut } fourni par getParcours.
+        if (s.piece_id) {
+            const st = pieces[s.piece_id] || null;
+            return { s, doc: null, done: st === 'VALIDEE', pieceStatus: st || 'ATTENDUE' };
+        }
         const doc = matchDoc(s, docs);
         return { s, doc, done: stepDone(s, doc) };
     });
@@ -62,6 +69,8 @@ function computeDocParcours({ steps = [], docs = [] } = {}) {
         company_level: !!r.s.company_level,
         docId: r.doc ? r.doc.id : null,
         docStatus: r.doc ? r.doc.status : null,
+        piece: !!r.s.piece_id, // étape « pièce » (dépôt du stagiaire) — gérée par le panneau Pièces, pas « à préparer »
+        pieceStatus: r.pieceStatus || null, // ATTENDUE | DEPOSEE | VALIDEE | REFUSEE (étapes « pièce »)
         status: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo',
     }));
 

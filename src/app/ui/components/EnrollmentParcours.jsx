@@ -40,6 +40,13 @@ function lineFor(s) {
     if (s.status === "done") return "Document entreprise signé.";
     return "Document destiné à l'entreprise, généré depuis la fiche entreprise.";
   }
+  // Étape « pièce » (dépôt du stagiaire, ex. carte d'identité) : statut piloté par le dépôt,
+  // pas par un document. Le dépôt/validation se fait dans le panneau « Pièces justificatives ».
+  if (s.piece) {
+    return { VALIDEE: "Pièce validée.", DEPOSEE: "Déposée par le stagiaire, à vérifier ci-dessous.",
+      REFUSEE: "Refusée — le stagiaire doit en renvoyer une.", ATTENDUE: "En attente du dépôt par le stagiaire." }[s.pieceStatus]
+      || "Pièce à fournir.";
+  }
   if (s.status === "done") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
   if (s.status === "todo") return "À venir.";
   if (s.quiz) return s.docId ? "En attente de réponse du stagiaire au QCM." : "QCM à envoyer au stagiaire.";
@@ -53,6 +60,8 @@ function lineFor(s) {
   return "En cours.";
 }
 function actionFor(s) {
+  // Pièce : aucun « Préparer » — le stagiaire dépose, l'école valide dans le panneau Pièces.
+  if (s.piece) return null;
   if (isGroup(s)) {
     // Fiche entreprise : seuls les documents de groupe se génèrent ici ; les documents
     // stagiaire sont visibles mais générés depuis chaque fiche stagiaire.
