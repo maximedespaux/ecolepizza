@@ -17,9 +17,20 @@ import { startLoading, stopLoading } from "../lib/loading.js";
  */
 export const API_BASE_URL = String(import.meta.env.VITE_API_URL || "http://localhost:3000/api").replace(/\/+$/, "");
 
+// Instant de la DERNIÈRE mutation déclenchée par CE client (POST/PUT/PATCH/DELETE, uploads
+// compris). Le serveur diffuse un « refresh » temps réel à TOUTE l'organisation sur chaque
+// mutation — y compris les miennes : ce repère permet de distinguer « quelqu'un d'autre a
+// agi » de l'écho de ma propre action, et de ne pas se jouer à soi-même le son d'activité
+// (cf. Topbar). On le pose à l'ENVOI (avant la réponse) pour couvrir tout l'aller-retour.
+let derniereMutationLocale = 0;
+function marquerMutationLocale() { derniereMutationLocale = Date.now(); } // interne (appelé ici même)
+export function msDepuisMutationLocale() { return Date.now() - derniereMutationLocale; }
+
 async function request(path, options = {}) {
   const { silent, ...opts } = options; // `silent` = pas de barre de chargement (polls)
   if (!silent) startLoading();
+  const methode = String(opts.method || "GET").toUpperCase();
+  if (methode !== "GET" && methode !== "HEAD") marquerMutationLocale();
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       credentials: "include",
@@ -701,6 +712,7 @@ export async function importArchives(files, paths) {
   fd.append("paths", JSON.stringify(paths));
   startLoading();
   try {
+    marquerMutationLocale();
     const res = await fetch(`${API_BASE_URL}/suivi/archives/import`, { method: "POST", credentials: "include", body: fd });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.message || data.error || "Import échoué");
@@ -862,6 +874,7 @@ export async function uploadPostImage(id, blob) {
   fd.append("image", blob, "photo.webp");
   startLoading();
   try {
+    marquerMutationLocale();
     const res = await fetch(`${API_BASE_URL}/community/posts/${id}/image`, { method: "POST", credentials: "include", body: fd });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.message || data.error || "Envoi de la photo échoué");
@@ -878,6 +891,7 @@ export async function deposerPiece(enrollmentId, pieceTypeId, file) {
   fd.append("fichier", file); // doit matcher depot.single('fichier') côté route
   startLoading();
   try {
+    marquerMutationLocale();
     const res = await fetch(`${API_BASE_URL}/pieces/dossier/${enrollmentId}/${pieceTypeId}`, { method: "POST", credentials: "include", body: fd });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.message || data.error || "Envoi du fichier échoué");
@@ -1086,6 +1100,7 @@ export async function uploadTemplate(slug, file) {
   startLoading();
   let res;
   try {
+    marquerMutationLocale();
     res = await fetch(`${API_BASE_URL}/templates/${slug}`, { method: "POST", credentials: "include", body: fd });
   } finally {
     stopLoading();
