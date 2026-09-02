@@ -11,6 +11,21 @@ import { dateHeure } from "../lib/format.js";
 // Couleur d'un pourcentage de réussite : vert / ambre / rouge.
 const pctTone = (p) => (p == null ? "n" : p >= 75 ? "g" : p >= 50 ? "a" : "r");
 
+// Export CSV, format « Excel FR » : POINT-VIRGULE (la virgule y est un séparateur décimal) et BOM
+// (sans lui, « Ã© » à la place des accents). Même choix que ExportPartenaire — un CSV illisible
+// serait recopié à la main, ce que cet écran veut justement éviter.
+function cellCsv(v) {
+  const s = v == null ? "" : String(v);
+  return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function telechargerCsv(nom, entetes, lignes) {
+  const csv = "﻿" + [entetes, ...lignes].map((r) => r.map(cellCsv).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = nom; a.click();
+  URL.revokeObjectURL(url);
+}
+
 // Grand chiffre encadré (réponses, score moyen, réussite).
 function Stat({ label, value, tone }) {
   const col = tone === "g" ? "var(--green,#2e9e5b)" : tone === "r" ? "var(--ember1,#c0392b)" : tone === "a" ? "var(--amber,#b8860b)" : "var(--text)";
@@ -145,13 +160,39 @@ function ResultatsQCM() {
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
+  // Suffixe de nom de fichier reflétant le filtre courant (session lisible + année).
+  function suffixeFiltre() {
+    const s = selSession ? filtres.sessions.find((x) => x.id === selSession) : null;
+    const parts = [];
+    if (s) parts.push([s.code, s.start_date].filter(Boolean).join("-"));
+    if (selYear) parts.push(selYear);
+    return parts.length ? "-" + parts.join("-").replace(/[^\w-]+/g, "-") : "";
+  }
+  function exporterVue() {
+    if (!rows || !rows.length) return;
+    const entetes = ["QCM", "Type", "Réponses", "Score moyen %", "Taux de réussite %"];
+    const lignes = rows.map((q) => [q.title, q.kind === "GRADED" ? "Noté" : "Enquête", q.responses, q.avg_pct ?? "", q.pass_rate ?? ""]);
+    telechargerCsv(`resultats-qcm${suffixeFiltre()}.csv`, entetes, lignes);
+  }
+  function exporterStagiaires() {
+    if (!detail || !detail.learners.length) return;
+    const note = detail.quiz.kind === "GRADED";
+    const entetes = note ? ["Stagiaire", "Score %", "Résultat", "Date"] : ["Stagiaire", "Date"];
+    const lignes = detail.learners.map((l) => {
+      const reussi = note && l.pct != null && detail.quiz.pass_score != null ? (l.pct >= detail.quiz.pass_score ? "Réussi" : "Échoué") : "";
+      return note ? [l.name, l.pct ?? "", reussi, dateHeure(l.completed_at)] : [l.name, dateHeure(l.completed_at)];
+    });
+    const base = (detail.quiz.title || "qcm").replace(/[^\w-]+/g, "-").toLowerCase().slice(0, 40);
+    telechargerCsv(`${base}${suffixeFiltre()}.csv`, entetes, lignes);
+  }
+
   return (
     <>
       <PageHead eyebrow="Qualité & conformité" title="Résultats QCM"
         lead="Ce que les stagiaires répondent aux QCM — moyenne, réussite, et le détail par question pour repérer ce qui coince." />
       <StatusMessage status={status} />
 
-      {(filtres.sessions.length > 0 || filtres.years.length > 0) && (
+      {rows && rows.length > 0 && (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", margin: "0 0 14px" }}>
           {filtres.sessions.length > 0 && (
             <select className="inp" value={selSession} onChange={(e) => setSelSession(e.target.value)} style={{ maxWidth: 300 }}
@@ -170,6 +211,8 @@ function ResultatsQCM() {
           {(selSession || selYear) && (
             <button type="button" className="btn sm ghost" onClick={() => { setSelSession(""); setSelYear(""); }}>Réinitialiser</button>
           )}
+          <div style={{ flex: 1 }} />
+          <button type="button" className="btn sm" onClick={exporterVue} title="Exporter la vue d'ensemble filtrée (CSV)">⬇ Exporter (CSV)</button>
         </div>
       )}
 
@@ -236,7 +279,12 @@ function ResultatsQCM() {
                       {detail.questions.map((q, i) => <DetailQuestion key={q.id} q={q} num={i + 1} />)}
                     </div>
                   ) : (
-                    <StagiairesTable learners={detail.learners} quiz={detail.quiz} isAdmin={isAdmin} onDelete={supprimerReponse} />
+                    <>
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                        <button type="button" className="btn sm" onClick={exporterStagiaires} title="Exporter la liste par stagiaire (CSV)">⬇ Exporter (CSV)</button>
+                      </div>
+                      <StagiairesTable learners={detail.learners} quiz={detail.quiz} isAdmin={isAdmin} onDelete={supprimerReponse} />
+                    </>
                   )}
                 </>
               )}
