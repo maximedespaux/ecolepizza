@@ -760,7 +760,8 @@ const resultatsDetail = async (req, res) => {
         // PAR STAGIAIRE : une ligne par réponse (les reprises apparaissent, avec leur date).
         // pct calculé côté base (NULL pour une enquête sans note) ; le front en tire réussi/échoué.
         const [learners] = await conn.query(
-            `SELECT COALESCE(NULLIF(TRIM(CONCAT(COALESCE(l.first_name,''), ' ', COALESCE(l.last_name,''))), ''), 'Stagiaire') AS name,
+            `SELECT r.id AS id,
+                    COALESCE(NULLIF(TRIM(CONCAT(COALESCE(l.first_name,''), ' ', COALESCE(l.last_name,''))), ''), 'Stagiaire') AS name,
                     CASE WHEN r.max_score > 0 THEN ROUND(r.score / r.max_score * 100) END AS pct,
                     DATE_FORMAT(r.completed_at, '%Y-%m-%d %H:%i') AS completed_at
                FROM quiz_response r
@@ -776,4 +777,24 @@ const resultatsDetail = async (req, res) => {
     }
 };
 
-module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment, resultatsOverview, resultatsDetail, aggregerQuestions };
+/**
+ * DELETE /api/quizzes/reponse/:id — supprime UNE réponse de stagiaire à un QCM.
+ * Les réponses détaillées (quiz_answer) suivent par cascade (fk_qa_resp ON DELETE CASCADE).
+ * Réservé au bureau (l'auditeur est en lecture seule) : effacer une réponse change une
+ * statistique — c'est une correction, pas une consultation.
+ */
+const deleteResponse = async (req, res) => {
+    try {
+        const [r] = await db.promise().query(
+            'DELETE FROM quiz_response WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Réponse introuvable.' });
+        logAudit(req, 'quiz.response_delete', 'QuizResponse', req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur suppression réponse QCM :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment, resultatsOverview, resultatsDetail, aggregerQuestions, deleteResponse };

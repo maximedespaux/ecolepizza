@@ -571,6 +571,7 @@ export function submitQuiz(documentId, answers) { return request(`/quizzes/take/
 // Résultats QCM (Qualité & conformité) : vue d'ensemble + détail par question d'un QCM.
 export function getQcmResultats() { return request("/quizzes/resultats"); }
 export function getQcmResultatDetail(id) { return request(`/quizzes/resultats/${id}`); }
+export function deleteQcmResponse(id) { return request(`/quizzes/reponse/${id}`, { method: "DELETE" }); }
 
 // --- Parcours documentaire par formation ---
 export function getFormationSteps(id) {

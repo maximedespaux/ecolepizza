@@ -74,6 +74,15 @@ test('le détail expose aussi les résultats PAR STAGIAIRE (nom, %, date)', () =
         'le % par réponse (NULL pour une enquête sans note) est calculé en base');
 });
 
+test('supprimer une réponse : bornée à l\'organisation, réservée au bureau', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'quiz.controller.js'), 'utf8');
+    assert.match(src, /DELETE FROM quiz_response WHERE id = \? AND organization_id = \?/,
+        'jamais la réponse d\'une AUTRE organisation');
+    const routes = fs.readFileSync(path.join(__dirname, '..', 'routes', 'quiz.routes.js'), 'utf8');
+    assert.match(routes, /router\.delete\('\/reponse\/:id', authorizeRoles\(\.\.\.ADMIN_ROLES\), deleteResponse\)/,
+        'réservée au bureau (ADMIN_ROLES) — l\'auditeur voit la page mais ne supprime pas');
+});
+
 test('Aucune réponse : effectifs à 0, correct_pct null (jamais de division par zéro)', () => {
     const questions = [{ id: 'q1', position: 0, text: 'Q', type: 'SINGLE' }];
     const options = [{ id: 'a', question_id: 'q1', text: 'A', is_correct: 1 }];

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { getQcmResultats, getQcmResultatDetail } from "../api/apiClient.js";
+import { useContext, useEffect, useState } from "react";
+import { getQcmResultats, getQcmResultatDetail, deleteQcmResponse } from "../api/apiClient.js";
+import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -75,7 +76,7 @@ function DetailQuestion({ q, num }) {
 
 // Par stagiaire : une ligne par réponse (score + réussi/échoué pour un QCM noté, date). Une reprise
 // apparaît comme une ligne de plus, avec sa date — on voit qui a repassé et progressé.
-function StagiairesTable({ learners, quiz }) {
+function StagiairesTable({ learners, quiz, isAdmin, onDelete }) {
   const note = quiz.kind === "GRADED";
   if (!learners.length) return <p className="hint" style={{ margin: 0 }}>Aucune réponse.</p>;
   return (
@@ -83,11 +84,15 @@ function StagiairesTable({ learners, quiz }) {
       {learners.map((l, i) => {
         const reussi = note && l.pct != null && quiz.pass_score != null ? l.pct >= quiz.pass_score : null;
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", border: "1px solid var(--border-soft)", borderRadius: 8 }}>
+          <div key={l.id || i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", border: "1px solid var(--border-soft)", borderRadius: 8 }}>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</span>
             {note && <span style={{ flex: "none", minWidth: 50, textAlign: "right", fontWeight: 600 }}>{l.pct != null ? `${l.pct}%` : "—"}</span>}
             {reussi != null && <Badge tone={reussi ? "g" : "r"}>{reussi ? "Réussi" : "Échoué"}</Badge>}
             <span className="hint" style={{ flex: "none", fontSize: 12 }}>{dateHeure(l.completed_at)}</span>
+            {isAdmin && l.id && (
+              <button type="button" className="icon-btn" title="Supprimer cette réponse" aria-label="Supprimer cette réponse"
+                onClick={() => onDelete(l.id)} style={{ flex: "none" }}><Icon name="x" size={14} /></button>
+            )}
           </div>
         );
       })}
@@ -106,6 +111,8 @@ function ResultatsQCM() {
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [vue, setVue] = useState("questions"); // "questions" | "stagiaires"
+  const { user } = useContext(UserContext);
+  const isAdmin = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role); // l'auditeur ne supprime pas
 
   useEffect(() => {
     getQcmResultats().then((r) => setRows(r.data || [])).catch((e) => setStatus({ type: "error", message: e.message }));
@@ -118,6 +125,17 @@ function ResultatsQCM() {
       .then((r) => setDetail(r.data))
       .catch((e) => setStatus({ type: "error", message: e.message }))
       .finally(() => setLoadingDetail(false));
+  }
+
+  async function supprimerReponse(id) {
+    if (!window.confirm("Supprimer cette réponse ? Les statistiques seront recalculées.")) return;
+    try {
+      await deleteQcmResponse(id);
+      // Le compteur du QCM change aussi : on recharge la vue d'ensemble ET le détail ouvert.
+      const [ov, det] = await Promise.all([getQcmResultats(), getQcmResultatDetail(sel)]);
+      setRows(ov.data || []);
+      setDetail(det.data);
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   return (
@@ -189,7 +207,7 @@ function ResultatsQCM() {
                       {detail.questions.map((q, i) => <DetailQuestion key={q.id} q={q} num={i + 1} />)}
                     </div>
                   ) : (
-                    <StagiairesTable learners={detail.learners} quiz={detail.quiz} />
+                    <StagiairesTable learners={detail.learners} quiz={detail.quiz} isAdmin={isAdmin} onDelete={supprimerReponse} />
                   )}
                 </>
               )}
