@@ -725,18 +725,20 @@ const resultatsOverview = async (req, res) => {
         const year = req.query.year || null;
         const f = clauseFiltre(sessionId, year);
         const [rows] = await conn.query(
-            `SELECT q.id, q.title, q.kind, q.pass_score, q.active,
+            `SELECT q.id, q.title, q.kind, q.pass_score, q.active, q.program_id,
+                    p.code AS program_code, p.title AS program_title,
                     COUNT(fr.id) AS responses,
                     ROUND(AVG(CASE WHEN fr.max_score > 0 THEN fr.score / fr.max_score * 100 END)) AS avg_pct,
                     ROUND(AVG(CASE WHEN fr.max_score > 0 AND q.pass_score IS NOT NULL
                                    THEN fr.score / fr.max_score * 100 >= q.pass_score END) * 100) AS pass_rate
                FROM quiz q
+               LEFT JOIN training_program p ON p.id = q.program_id
                LEFT JOIN (SELECT r.id, r.quiz_id, r.score, r.max_score
                             FROM quiz_response r
                            WHERE r.organization_id = ?${f.sql}) fr ON fr.quiz_id = q.id
               WHERE q.organization_id = ?
-              GROUP BY q.id, q.title, q.kind, q.pass_score, q.active
-              ORDER BY q.active DESC, responses DESC, q.title`,
+              GROUP BY q.id, q.title, q.kind, q.pass_score, q.active, q.program_id, p.code, p.title
+              ORDER BY (q.program_id IS NULL), p.code, q.active DESC, responses DESC, q.title`,
             [orgId, ...f.params, orgId]);
         // Sessions et années qui ONT des réponses (pour les menus de filtre).
         const [sessions] = await conn.query(

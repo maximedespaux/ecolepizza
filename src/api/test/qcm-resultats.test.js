@@ -74,6 +74,13 @@ test('le détail expose aussi les résultats PAR STAGIAIRE (nom, %, date)', () =
         'le % par réponse (NULL pour une enquête sans note) est calculé en base');
 });
 
+test('la vue d\'ensemble rattache chaque QCM à sa FORMATION, « Autre » en dernier', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'quiz.controller.js'), 'utf8');
+    assert.match(src, /p\.code AS program_code, p\.title AS program_title/, 'la formation accompagne chaque ligne');
+    assert.match(src, /LEFT JOIN training_program p ON p\.id = q\.program_id/, 'jointure sur la formation (NULL = sans formation)');
+    assert.match(src, /ORDER BY \(q\.program_id IS NULL\)/, 'les QCM sans formation (Autre) passent en dernier');
+});
+
 test('clauseFiltre : session et année passées DEUX fois (motif « ? IS NULL OR … = ? »)', () => {
     // Chaque valeur revient deux fois : une pour le test NULL, une pour l'égalité. L'oublier
     // décalerait les paramètres (l'année irait au test de session) — bug silencieux.

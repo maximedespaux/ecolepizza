@@ -115,9 +115,56 @@ function StagiairesTable({ learners, quiz, isAdmin, onDelete }) {
   );
 }
 
+// Une ligne QCM de la vue d'ensemble (sélectionnable, ouvre le détail).
+function QcmRow({ q, on, onClick }) {
+  const note = q.kind === "GRADED";
+  return (
+    <button type="button" onClick={onClick}
+      style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", padding: "10px 12px", borderRadius: 10, cursor: "pointer", color: "var(--text)",
+        background: on ? "var(--surface2)" : "transparent", border: on ? "1px solid var(--ember1,#c0392b)" : "1px solid var(--border-soft)", opacity: q.active ? 1 : 0.55 }}>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <b>{q.title}</b>{!q.active && <span className="hint"> · inactif</span>}
+        <div className="hint" style={{ fontSize: 12 }}>{q.responses} réponse{q.responses > 1 ? "s" : ""}</div>
+      </span>
+      <Badge tone={note ? "b" : "n"}>{note ? "Noté" : "Enquête"}</Badge>
+      {note && (
+        <span style={{ flex: "none", minWidth: 86, textAlign: "right" }}>
+          {q.responses > 0 ? <><b>{q.avg_pct ?? "—"}%</b><span className="hint"> moy.</span></> : <span className="hint">—</span>}
+        </span>
+      )}
+      {note && (
+        <span style={{ flex: "none", minWidth: 104, textAlign: "right" }}>
+          {q.pass_rate != null ? <Badge tone={pctTone(q.pass_rate)}>{q.pass_rate}% réussite</Badge> : <span className="hint">—</span>}
+        </span>
+      )}
+      <Icon name="chevron-right" size={16} />
+    </button>
+  );
+}
+
+// Regroupe les QCM par FORMATION (program_id) ; « Autre » pour ceux qui n'en ont pas.
+function grouperParFormation(rows) {
+  const parCle = new Map();
+  for (const q of rows) {
+    const cle = q.program_id || "_autre";
+    if (!parCle.has(cle)) {
+      parCle.set(cle, {
+        cle,
+        autre: !q.program_id,
+        label: q.program_id ? [q.program_code, q.program_title].filter(Boolean).join(" · ") : "Autre — sans formation",
+        items: [],
+      });
+    }
+    parCle.get(cle).items.push(q);
+  }
+  // « Autre » toujours en dernier (le serveur trie déjà program_id NULL en fin, on s'en assure).
+  return [...parCle.values()].sort((a, b) => (a.autre ? 1 : 0) - (b.autre ? 1 : 0));
+}
+
 /**
  * Résultats QCM (Qualité & conformité) : ce que les stagiaires répondent aux QCM de « Modèles de
- * QCM » (sans rapport avec le Pizza Quest). Vue d'ensemble par QCM, puis par question / par stagiaire.
+ * QCM » (sans rapport avec le Pizza Quest). Vue d'ensemble par QCM (groupée par formation), puis
+ * par question / par stagiaire.
  */
 function ResultatsQCM() {
   const [rows, setRows] = useState(null);
@@ -170,8 +217,11 @@ function ResultatsQCM() {
   }
   function exporterVue() {
     if (!rows || !rows.length) return;
-    const entetes = ["QCM", "Type", "Réponses", "Score moyen %", "Taux de réussite %"];
-    const lignes = rows.map((q) => [q.title, q.kind === "GRADED" ? "Noté" : "Enquête", q.responses, q.avg_pct ?? "", q.pass_rate ?? ""]);
+    const entetes = ["Formation", "QCM", "Type", "Réponses", "Score moyen %", "Taux de réussite %"];
+    const lignes = rows.map((q) => [
+      q.program_id ? [q.program_code, q.program_title].filter(Boolean).join(" · ") : "Autre",
+      q.title, q.kind === "GRADED" ? "Noté" : "Enquête", q.responses, q.avg_pct ?? "", q.pass_rate ?? "",
+    ]);
     telechargerCsv(`resultats-qcm${suffixeFiltre()}.csv`, entetes, lignes);
   }
   function exporterStagiaires() {
@@ -222,34 +272,17 @@ function ResultatsQCM() {
         <Card title="Résultats QCM"><p className="hint" style={{ margin: 0 }}>Aucun QCM au référentiel. Créez-en dans Configuration → Modèles de QCM.</p></Card>
       ) : (
         <Card title={`QCM (${rows.length})`}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {rows.map((q) => {
-              const on = q.id === sel;
-              const note = q.kind === "GRADED";
-              return (
-                <button type="button" key={q.id} onClick={() => ouvrir(q.id)}
-                  style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", padding: "10px 12px", borderRadius: 10, cursor: "pointer", color: "var(--text)",
-                    background: on ? "var(--surface2)" : "transparent", border: on ? "1px solid var(--ember1,#c0392b)" : "1px solid var(--border-soft)", opacity: q.active ? 1 : 0.55 }}>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <b>{q.title}</b>{!q.active && <span className="hint"> · inactif</span>}
-                    <div className="hint" style={{ fontSize: 12 }}>{q.responses} réponse{q.responses > 1 ? "s" : ""}</div>
-                  </span>
-                  <Badge tone={note ? "b" : "n"}>{note ? "Noté" : "Enquête"}</Badge>
-                  {note && (
-                    <span style={{ flex: "none", minWidth: 86, textAlign: "right" }}>
-                      {q.responses > 0 ? <><b>{q.avg_pct ?? "—"}%</b><span className="hint"> moy.</span></> : <span className="hint">—</span>}
-                    </span>
-                  )}
-                  {note && (
-                    <span style={{ flex: "none", minWidth: 104, textAlign: "right" }}>
-                      {q.pass_rate != null ? <Badge tone={pctTone(q.pass_rate)}>{q.pass_rate}% réussite</Badge> : <span className="hint">—</span>}
-                    </span>
-                  )}
-                  <Icon name="chevron-right" size={16} />
-                </button>
-              );
-            })}
-          </div>
+          {grouperParFormation(rows).map((g) => (
+            <div key={g.cle} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase",
+                color: g.autre ? "var(--dim)" : "var(--ember1,#c0392b)", margin: "2px 2px 6px" }}>
+                {g.label} <span className="hint" style={{ fontWeight: 400 }}>({g.items.length})</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {g.items.map((q) => <QcmRow key={q.id} q={q} on={q.id === sel} onClick={() => ouvrir(q.id)} />)}
+              </div>
+            </div>
+          ))}
         </Card>
       )}
 
