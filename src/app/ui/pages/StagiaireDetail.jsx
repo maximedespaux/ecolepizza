@@ -14,6 +14,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
+import PiecesReview from "../components/PiecesReview.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro, dateHeure } from "../lib/format.js";
@@ -397,6 +398,8 @@ function StagiaireDetail() {
               onPrepare={prepareStep}
               onSendQuiz={handleSendQuiz}
             />
+            {/* Pièces justificatives du dossier sélectionné : validation/refus par le personnel. */}
+            <PiecesReview enrollmentId={curEnrId} />
             <div className="divider" style={{ margin: "18px 0" }} />
           </>
         )}

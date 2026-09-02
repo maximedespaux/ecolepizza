@@ -1,6 +1,6 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getMyFormation, signMyEmargement } from "../api/apiClient.js";
+import { getMyFormation, signMyEmargement, getDossierPieces, deposerPiece, pieceFichierUrl } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -12,22 +12,36 @@ import QuizModal from "../components/QuizModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { dateHeure } from "../lib/format.js";
 
-const STATUS = { SIGNE: ["Signé", "g"], ENVOYE: ["Reçu", "a"], CONSULTE: ["Consulté", "a"], A_FAIRE: ["-", "n"] };
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
 
+/* ÉTAT VISUEL D'UNE ÉTAPE — la « pastille » du parcours. `done` (fait), `wait` (déposé, en cours de
+   vérification), `refused` (à refaire), `current` (l'étape sur laquelle agir maintenant), `todo`. */
+const PASTILLE = {
+  done:    { bg: "var(--green)", ic: "check", label: "Fait" },
+  wait:    { bg: "var(--gold, #c79a2e)", ic: "clock", label: "En vérification" },
+  refused: { bg: "var(--red, #c0392b)", ic: "x", label: "À refaire" },
+  current: { bg: "var(--blue)", ic: "chevron-right", label: "À faire" },
+  todo:    { bg: "var(--border)", ic: "circle", label: "À venir" },
+};
+const PIECE_ETAT = { VALIDEE: "done", DEPOSEE: "wait", REFUSEE: "refused", ATTENDUE: "todo" };
+
 function StudentFormationDetail() {
-  const { id } = useParams();
+  const { id } = useParams(); // = enrollment_id (le dossier)
   const navigate = useNavigate();
   const { user } = useContext(UserContext);
   const [data, setData] = useState(null);
+  const [pieces, setPieces] = useState([]); // pièces à fournir (dossier de cette inscription)
   const [status, setStatus] = useState(null);
   const [viewId, setViewId] = useState(null);
-  const [quizDoc, setQuizDoc] = useState(null); // document QCM à répondre / consulter
-  const [signing, setSigning] = useState(null); // demi-journée d'émargement à signer
+  const [quizDoc, setQuizDoc] = useState(null);
+  const [signing, setSigning] = useState(null);
+  const fileRef = useRef(null);
+  const pieceCible = useRef(null); // pieceTypeId pour lequel on ouvre le sélecteur de fichier
 
   function load() {
     getMyFormation(id).then((r) => setData(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
+    getDossierPieces(id).then((r) => setPieces(r.data || [])).catch(() => setPieces([]));
   }
   useEffect(() => { load(); }, [id]);
 
@@ -39,6 +53,25 @@ function StudentFormationDetail() {
       load();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
+
+  function choisirFichier(pieceTypeId) { pieceCible.current = pieceTypeId; fileRef.current?.click(); }
+  async function onFichier(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !pieceCible.current) return;
+    try {
+      await deposerPiece(id, pieceCible.current, file);
+      setStatus({ type: "success", message: "Document envoyé. Il sera vérifié par l'école." });
+      load();
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
+  }
+
+  // Construit la liste ordonnée des ÉTAPES : d'abord les pièces à fournir, puis les documents.
+  const etapesPieces = pieces.map((p) => ({ kind: "piece", key: `p-${p.piece_type_id}`, p, etat: PIECE_ETAT[p.statut] || "todo" }));
+  const etapesDocs = (data?.documents || []).map((d) => ({ kind: "doc", key: `d-${d.id}`, d, etat: d.status === "SIGNE" ? "done" : "todo" }));
+  const etapes = [...etapesPieces, ...etapesDocs];
+  // La PREMIÈRE étape non terminée (et non en attente de vérif) porte la pastille « en cours ».
+  const idxCourant = etapes.findIndex((e) => e.etat === "todo" || e.etat === "refused");
 
   return (
     <>
@@ -52,7 +85,7 @@ function StudentFormationDetail() {
         )}
       </div>
 
-      {/* Onglets : autres sessions du même programme (W23 / W25…) */}
+      {/* Onglets : autres sessions du même programme */}
       {data && data.sessions && data.sessions.length > 1 && (
         <div className="sess-tabs">
           {data.sessions.map((s) => (
@@ -68,36 +101,71 @@ function StudentFormationDetail() {
 
       <StatusMessage status={status} />
 
+      {/* Sélecteur de fichier partagé (déclenché par « Fournir »/« Renvoyer »). */}
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={onFichier} />
+
       {data && (
-        <Card title="Documents de la formation">
-          {(!data.documents || data.documents.length === 0) ? (
-            <EmptyState icon="file-text">Aucun document disponible.</EmptyState>
+        <Card title="Mon parcours">
+          {etapes.length === 0 ? (
+            <EmptyState icon="file-text">Aucune étape pour le moment.</EmptyState>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {data.documents.map((d) => {
-                const [label, tone] = STATUS[d.status] || [d.status, "n"];
+            <div className="parcours">
+              {etapes.map((e, i) => {
+                const etat = i === idxCourant ? "current" : e.etat;
+                const pas = PASTILLE[etat] || PASTILLE.todo;
+                const dernier = i === etapes.length - 1;
                 return (
-                  <div key={d.id} className="stu-row">
-                    <span style={{ color: "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name={d.quiz_id ? "list-checks" : "file-text"} size={17} /></span>
-                    <span className="stu-row-t">
-                      <b>{d.title}</b>
-                      {d.signed_at && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>Signé le {dateHeure(d.signed_at)}</span>}
-                    </span>
-                    {d.quiz_id ? (
-                      <>
-                        <Badge tone={d.status === "SIGNE" ? "g" : "b"}>{d.status === "SIGNE" ? "Répondu" : "QCM à faire"}</Badge>
-                        <button className="btn sm primary" onClick={() => setQuizDoc(d.id)}>
-                          {d.status === "SIGNE" ? "Voir mon QCM" : "Répondre au QCM"}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <Badge tone={tone}>{label}</Badge>
-                        <button className="btn sm primary" onClick={() => setViewId(d.id)}>
-                          {d.status === "SIGNE" ? "Consulter" : "Consulter / signer"}
-                        </button>
-                      </>
-                    )}
+                  <div key={e.key} className="parcours-etape" style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
+                    {/* Rail vertical : pastille + trait de liaison. */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "none" }}>
+                      <span style={{ width: 26, height: 26, borderRadius: "50%", background: pas.bg, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
+                        <Icon name={pas.ic} size={14} />
+                      </span>
+                      {!dernier && <span style={{ width: 2, flex: 1, background: "var(--border-soft)", marginTop: 2 }} />}
+                    </div>
+                    {/* Contenu de l'étape. */}
+                    <div style={{ flex: 1, minWidth: 0, paddingBottom: dernier ? 0 : 14 }}>
+                      {e.kind === "piece" ? (
+                        <>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <b style={{ flex: 1, minWidth: 0 }}>Fournir&nbsp;: {e.p.label}</b>
+                            <Badge tone={{ done: "g", wait: "a", refused: "r", todo: "n", current: "b" }[etat]}>{pas.label}</Badge>
+                            {e.p.fichiers?.length > 0 && (
+                              <button className="btn sm ghost" onClick={() => window.open(pieceFichierUrl(e.p.fichiers[0].id), "_blank", "noopener")}>
+                                <Icon name="eye" size={14} /> Voir
+                              </button>
+                            )}
+                            {(e.etat === "todo" || e.etat === "refused") && (
+                              <button className="btn sm primary" onClick={() => choisirFichier(e.p.piece_type_id)}>
+                                <Icon name="upload" size={14} /> {e.etat === "refused" ? "Renvoyer" : "Fournir"}
+                              </button>
+                            )}
+                          </div>
+                          {e.p.consigne && <p className="hint" style={{ margin: "2px 0 0" }}>{e.p.consigne}</p>}
+                          {e.etat === "refused" && e.p.motif_refus && (
+                            <p className="hint" style={{ margin: "4px 0 0", color: "var(--red, #c0392b)" }}>
+                              <Icon name="x" size={12} /> Refusé&nbsp;: {e.p.motif_refus} — merci d'en envoyer un nouveau.
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ color: "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name={e.d.quiz_id ? "list-checks" : "file-text"} size={16} /></span>
+                          <b style={{ flex: 1, minWidth: 0 }}>{e.d.title}{e.d.signed_at && <span style={{ display: "block", fontSize: 12, color: "var(--muted)", fontWeight: 400 }}>Signé le {dateHeure(e.d.signed_at)}</span>}</b>
+                          {e.d.quiz_id ? (
+                            <>
+                              <Badge tone={e.d.status === "SIGNE" ? "g" : "b"}>{e.d.status === "SIGNE" ? "Répondu" : "QCM à faire"}</Badge>
+                              <button className="btn sm primary" onClick={() => setQuizDoc(e.d.id)}>{e.d.status === "SIGNE" ? "Voir" : "Répondre"}</button>
+                            </>
+                          ) : (
+                            <>
+                              <Badge tone={e.d.status === "SIGNE" ? "g" : "b"}>{e.d.status === "SIGNE" ? "Signé" : "À signer"}</Badge>
+                              <button className="btn sm primary" onClick={() => setViewId(e.d.id)}>{e.d.status === "SIGNE" ? "Consulter" : "Consulter / signer"}</button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}

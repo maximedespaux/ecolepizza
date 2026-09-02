@@ -870,6 +870,25 @@ export async function uploadPostImage(id, blob) {
     stopLoading();
   }
 }
+// --- Pièces justificatives (dossier d'une inscription : à fournir / déposée / validée / refusée) ---
+// Accessible au stagiaire pour SON dossier (garde de propriété serveur) et au personnel.
+export function getDossierPieces(enrollmentId) { return request(`/pieces/dossier/${enrollmentId}`, { silent: true }); }
+export async function deposerPiece(enrollmentId, pieceTypeId, file) {
+  const fd = new FormData();
+  fd.append("fichier", file); // doit matcher depot.single('fichier') côté route
+  startLoading();
+  try {
+    const res = await fetch(`${API_BASE_URL}/pieces/dossier/${enrollmentId}/${pieceTypeId}`, { method: "POST", credentials: "include", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Envoi du fichier échoué");
+    return data;
+  } finally { stopLoading(); }
+}
+// URL directe du fichier (déchiffré à la volée côté serveur) — pour un aperçu inline.
+export function pieceFichierUrl(fichierId) { return `${API_BASE_URL}/pieces/fichier/${fichierId}`; }
+// Personnel : valider ou refuser (motif requis si REFUSEE).
+export function verifierPiece(depotId, statut, motif_refus) { return request(`/pieces/depot/${depotId}`, { method: "PATCH", body: JSON.stringify({ statut, motif_refus }) }); }
+
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }

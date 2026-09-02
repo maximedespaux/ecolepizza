@@ -22,6 +22,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const { encryptBytes, decryptBytes } = require('../lib/crypto.js'); // pièces chiffrées AU REPOS (scans d'identité)
 
 // Migration 127 non jouée : on dégrade au lieu de renvoyer une 500 incompréhensible.
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
@@ -152,7 +153,8 @@ async function piecesDuDossier(conn, orgId, enrollmentId) {
                 DATE_FORMAT(d.verifie_le, '%Y-%m-%d %H:%i') AS verifie_le,
                 COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''), u.email) AS verifie_par
            FROM enrollment e
-           JOIN program_step ps ON ps.program_id = e.program_id AND ps.active = 1 AND ps.piece_id IS NOT NULL
+           JOIN training_session s ON s.id = e.session_id
+           JOIN program_step ps ON ps.program_id = s.program_id AND ps.active = 1 AND ps.piece_id IS NOT NULL
            JOIN piece_type pt ON pt.id = ps.piece_id
            LEFT JOIN piece_depot d ON d.enrollment_id = e.id AND d.piece_type_id = pt.id
            LEFT JOIN user u ON u.id = d.verifie_par
@@ -258,7 +260,7 @@ const deposer = async (req, res) => {
         await conn.query(
             'INSERT INTO piece_fichier (id, depot_id, sort_order, nom, mime, bytes, taille) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [crypto.randomUUID(), d.id, n.m + 1, String(f.originalname || '').slice(0, 200) || null,
-                f.mimetype, f.buffer, f.buffer.length]);
+                f.mimetype, encryptBytes(f.buffer), f.buffer.length]); // `taille` = taille CLAIRE (affichage)
         logAudit(req, 'piece.depot', 'PieceDepot', d.id);
         res.status(201).json({ success: true });
     } catch (err) {
@@ -290,10 +292,12 @@ const servirFichier = async (req, res) => {
         if (!f || f.organization_id !== req.user.organization_id) return res.status(404).end();
         const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
         if (f.user_id !== req.user.id && !staff) return res.status(403).end();
+        const clair = decryptBytes(f.bytes); // déchiffré à la lecture ; jamais renvoyé/stocké en clair ailleurs
+        if (clair === null) return res.status(500).json({ error: 'Pièce illisible (déchiffrement — clé ?).' });
         res.set('Content-Type', f.mime);
         res.set('Content-Disposition', `inline; filename="${encodeURIComponent(f.nom || 'piece')}"`);
         res.set('Cache-Control', 'no-store, private');
-        res.send(f.bytes);
+        res.send(clair);
     } catch (err) {
         if (noTable(err)) return res.status(404).end();
         console.error('Erreur lecture pièce :', err);

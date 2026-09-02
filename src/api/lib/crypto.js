@@ -60,6 +60,37 @@ function decrypt(value) {
     }
 }
 
+/* CHIFFREMENT BINAIRE — pour les OCTETS d'un fichier (pièces justificatives : scans de carte
+   d'identité, etc.) et non du texte. `encrypt`/`decrypt` ci-dessus passent par `String(...)`/utf8
+   et corromperaient des octets bruts ; on chiffre donc le Buffer directement. Format :
+   [marqueur "encb1" | iv(12) | tag(16) | ciphertext]. Non chiffré / hérité → renvoyé tel quel. */
+const BYTES_MARQUEUR = Buffer.from('encb1');
+
+/** Chiffre un Buffer -> Buffer. Buffer vide/absent renvoyé tel quel. */
+function encryptBytes(buf) {
+    if (!buf || !buf.length) return buf;
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(ALGO, getKey(), iv);
+    const enc = Buffer.concat([cipher.update(buf), cipher.final()]);
+    return Buffer.concat([BYTES_MARQUEUR, iv, cipher.getAuthTag(), enc]);
+}
+
+/** Déchiffre un Buffer produit par encryptBytes(). Renvoie le clair, le Buffer TEL QUEL s'il n'est
+ *  pas au format chiffré (compat. d'éventuelles données antérieures), ou null si illisible (clé
+ *  changée, corruption — le tag GCM détecte toute altération). */
+function decryptBytes(buf) {
+    if (!buf || !buf.length) return buf;
+    const m = BYTES_MARQUEUR.length;
+    if (buf.length < m + 28 || !buf.subarray(0, m).equals(BYTES_MARQUEUR)) return buf; // clair / hérité
+    try {
+        const iv = buf.subarray(m, m + 12);
+        const tag = buf.subarray(m + 12, m + 28);
+        const decipher = crypto.createDecipheriv(ALGO, getKey(), iv);
+        decipher.setAuthTag(tag);
+        return Buffer.concat([decipher.update(buf.subarray(m + 28)), decipher.final()]);
+    } catch { return null; }
+}
+
 /** Masque un numéro pour l'affichage en liste (ne garde que les 4 derniers). */
 function mask(plain) {
     if (!plain) return null;
@@ -76,4 +107,4 @@ function generatePassword(length = 10) {
     return out;
 }
 
-module.exports = { encrypt, decrypt, mask, generatePassword };
+module.exports = { encrypt, decrypt, encryptBytes, decryptBytes, mask, generatePassword };
