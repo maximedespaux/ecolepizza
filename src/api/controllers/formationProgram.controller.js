@@ -5,6 +5,14 @@ const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap, alertesParSlug } = require('../lib/equivalence.js');
 const { loadOrgSteps } = require('./template.controller.js');
 
+// Parse d'une condition `applies_when` stockée (chaîne JSON en base, ou déjà objet). Tolérant :
+// une valeur illisible vaut « aucune condition » plutôt que de casser tout le parcours.
+const parseAW = (v) => {
+    if (v == null) return {};
+    if (typeof v === 'object') return v;
+    try { return JSON.parse(v); } catch { return {}; }
+};
+
 /**
  * Étapes documentaires d'une formation : documents candidats (selon rs/hygiène/
  * jours) + surcharge program_step (inclusion/ordre). Renvoie la liste ordonnée
@@ -15,12 +23,17 @@ async function formationSteps(conn, orgId, program) {
     const candidates = orgSteps.filter((s) => s.active && matchFormation(s.applies_when, program));
     let rows = [];
     try {
-        [rows] = await conn.query('SELECT slug, sort_order, active, or_group FROM program_step WHERE program_id = ?', [program.id]);
+        [rows] = await conn.query('SELECT slug, sort_order, active, or_group, applies_when FROM program_step WHERE program_id = ?', [program.id]);
     } catch (e) {
-        // Colonne or_group absente (migration 052 non jouée) : on lit sans.
-        if (e && e.code === 'ER_BAD_FIELD_ERROR') {
+        if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
+        // applies_when (migration 140) absente : on relit sans. Puis, si or_group (052) manque
+        // aussi, on retombe sur le minimum. Le parcours doit rester lisible sans ces colonnes.
+        try {
+            [rows] = await conn.query('SELECT slug, sort_order, active, or_group FROM program_step WHERE program_id = ?', [program.id]);
+        } catch (e2) {
+            if (!(e2 && e2.code === 'ER_BAD_FIELD_ERROR')) throw e2;
             [rows] = await conn.query('SELECT slug, sort_order, active FROM program_step WHERE program_id = ?', [program.id]);
-        } else { throw e; }
+        }
     }
     const overlay = new Map(rows.map((r) => [r.slug, r]));
 
@@ -60,6 +73,11 @@ async function formationSteps(conn, orgId, program) {
                 // Une pièce ne se signe pas : elle se DÉPOSE puis se vérifie. Les badges de
                 // signature n'ont donc aucun sens ici, et les afficher tromperait.
                 signable: false, stagiaire_sign: false, company_sign: false, company_level: false,
+                // Choix « OU » PAR FORMATION : quelles pièces sont interchangeables (or_group), et
+                // sous quelle condition CELLE-CI est demandée (applies_when). Portés par program_step,
+                // distincts des équivalences d'organisme (réservées aux documents).
+                or_group: o ? (o.or_group || null) : null,
+                applies_when: parseAW(o && o.applies_when),
                 sort_order: o ? o.sort_order : 15, // tôt dans le parcours : c'est un préalable
                 active: o ? !!o.active : false,    // jamais imposée d'office à toutes les formations
             };
@@ -123,22 +141,26 @@ async function formationSteps(conn, orgId, program) {
 }
 
 /**
- * Parcours documentaire d'un DOSSIER précis : parcours de la formation filtré par
- * les conditions du dossier (financement, AGEFICE…) pour ne garder que la bonne
- * variante (devis particulier/entreprise, attestation d'assiduité, etc.).
- * ctx = { financing, rsCode, hygiene, jours, agefice }.
+ * Résolution des choix « OU » d'un parcours — fonction PURE (sans base, donc testable seule).
+ *   `active` = étapes actives ; `ctx` = dossier (financement, RS…) ; `conds` = conditions
+ *   personnalisées (map) ; `eq` = équivalences d'organisme (map slug → { group }).
+ *
+ * Une étape ISOLÉE passe si ses conditions correspondent au dossier. Un groupe « OU » ne garde
+ * qu'UNE variante : la plus spécifique qui s'applique, sinon la première (jamais de jalon perdu).
+ * DEUX sources de groupe, disjointes : les DOCUMENTS par équivalence d'organisme, les PIÈCES par
+ * `program_step.or_group` (par formation) — d'où le préfixe `piece:` qui isole leurs espaces.
  */
-async function enrollmentSteps(conn, orgId, program, ctx, condById, eqMap) {
-    const steps = await formationSteps(conn, orgId, program);
-    // Conditions personnalisées (Modeles → Conditions) évaluées en plus des intégrées.
-    const conds = condById || await loadConditionMap(conn, orgId);
-    // Carte des équivalences « OU » (slug -> groupe) pour collapser les variantes.
-    const eq = eqMap || equivalenceMap(await loadEquivalences(conn, orgId));
-
-    const active = steps.filter((s) => s.active);
+function resoudreVariantes(active, ctx, conds, eq) {
     // Une étape « passe » si c'est un QCM ou si ses conditions correspondent au dossier.
     const passes = (s) => s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds));
-    const groupOf = (s) => (eq && eq.get(s.slug) ? eq.get(s.slug).group : null);
+    const groupOf = (s) => {
+        const e = eq && eq.get(s.slug);
+        if (e) return e.group; // équivalences d'organisme (documents)
+        // Pièces à fournir : choix « OU » PAR FORMATION porté par program_step.or_group. Espace de
+        // noms distinct (préfixe) pour ne JAMAIS fusionner une pièce avec un groupe d'équivalence.
+        if (s.doc_type === 'PIECE' && s.or_group) return `piece:${s.or_group}`;
+        return null;
+    };
     // Spécificité d'une variante = nombre de contraintes (built-in + conditions perso).
     // Sert à départager plusieurs variantes qui s'appliquent au même dossier : on garde
     // la PLUS SPÉCIFIQUE (ex. « Devis entreprise » [pro + OPCO] l'emporte sur « Devis pro »
@@ -169,6 +191,21 @@ async function enrollmentSteps(conn, orgId, program, ctx, condById, eqMap) {
         out.push(chosen);
     }
     return out;
+}
+
+/**
+ * Parcours documentaire d'un DOSSIER précis : parcours de la formation filtré par
+ * les conditions du dossier (financement, AGEFICE…) pour ne garder que la bonne
+ * variante (devis particulier/entreprise, attestation d'assiduité, etc.).
+ * ctx = { financing, rsCode, hygiene, jours, agefice }.
+ */
+async function enrollmentSteps(conn, orgId, program, ctx, condById, eqMap) {
+    const steps = await formationSteps(conn, orgId, program);
+    // Conditions personnalisées (Modeles → Conditions) évaluées en plus des intégrées.
+    const conds = condById || await loadConditionMap(conn, orgId);
+    // Carte des équivalences « OU » (slug -> groupe) pour collapser les variantes.
+    const eq = eqMap || equivalenceMap(await loadEquivalences(conn, orgId));
+    return resoudreVariantes(steps.filter((s) => s.active), ctx, conds, eq);
 }
 
 /**
@@ -483,6 +520,10 @@ const saveFormationSteps = async (req, res) => {
         let hasPiece = true;
         try { await conn.query('SELECT piece_id FROM program_step LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasPiece = false; else throw e; }
+        // Colonne applies_when disponible ? (migration 140) — condition « OU » des pièces.
+        let hasAppliesWhen = true;
+        try { await conn.query('SELECT applies_when FROM program_step LIMIT 1'); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasAppliesWhen = false; else throw e; }
         for (let i = 0; i < steps.length; i++) {
             const slug = String(steps[i].slug || '').trim().toLowerCase();
             if (!slug) continue;
@@ -505,6 +546,15 @@ const saveFormationSteps = async (req, res) => {
             if (hasPiece && slug.startsWith('piece:')) {
                 await conn.query('UPDATE program_step SET piece_id = ? WHERE program_id = ? AND slug = ?',
                     [slug.slice(6), req.params.id, slug]).catch(() => {});
+            }
+            /* Condition « OU » de CETTE pièce dans son groupe (migration 140), PAR formation —
+             * comme un document a la sienne, mais globalement. Réservé aux pièces. NULL = variante
+             * par défaut (aucune condition : demandée quand aucune autre du groupe ne correspond). */
+            if (hasAppliesWhen && slug.startsWith('piece:')) {
+                const cond = steps[i].applies_when;
+                const aw = cond && typeof cond === 'object' && Object.keys(cond).length ? JSON.stringify(cond) : null;
+                await conn.query('UPDATE program_step SET applies_when = ? WHERE program_id = ? AND slug = ?',
+                    [aw, req.params.id, slug]).catch(() => {});
             }
             // QCM ajouté au parcours et non encore rattaché : on le lie à cette formation.
             if (steps[i].active && slug.startsWith('quiz:')) {
@@ -552,5 +602,5 @@ const saveFormationSteps = async (req, res) => {
 
 module.exports = {
     getPrograms, getProgram, createProgram, updateProgram, reorderPrograms,
-    getFormationSteps, saveFormationSteps, saveArchiveTree, formationSteps, enrollmentSteps, deleteProgram,
+    getFormationSteps, saveFormationSteps, saveArchiveTree, formationSteps, enrollmentSteps, resoudreVariantes, deleteProgram,
 };
