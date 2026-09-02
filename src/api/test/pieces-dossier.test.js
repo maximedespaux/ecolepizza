@@ -29,3 +29,9 @@ test('les octets des pièces sont chiffrés au repos (dépôt) et déchiffrés �
     assert.doesNotMatch(src, /res\.send\(f\.bytes\)/, 'ne jamais renvoyer les octets bruts stockés.');
     assert.doesNotMatch(src, /mime, f\.buffer, f\.buffer\.length/, 'ne jamais stocker le buffer EN CLAIR.');
 });
+
+test('refuser une pièce PURGE le(s) fichier(s) déposé(s)', () => {
+    // Un scan d'identité refusé ne doit pas rester en base ; le stagiaire en renvoie un neuf.
+    assert.match(src, /statut === 'REFUSEE'[\s\S]*?DELETE FROM piece_fichier WHERE depot_id/,
+        'verifier doit supprimer les fichiers du dépôt au refus (le dépôt/motif restent, pas les octets).');
+});

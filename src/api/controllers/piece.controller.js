@@ -371,6 +371,13 @@ const verifier = async (req, res) => {
               WHERE id = ? AND organization_id = ?`,
             [statut, statut === 'REFUSEE' ? motif : null, req.user.id, req.params.id, req.user.organization_id]);
         if (!r.affectedRows) return res.status(404).json({ message: 'Dépôt introuvable.' });
+        if (statut === 'REFUSEE') {
+            /* Refusé → on PURGE le(s) fichier(s) déposé(s). Un scan d'identité refusé n'a pas à
+               rester en base (minimisation RGPD), et le stagiaire doit en renvoyer un NEUF. Le dépôt
+               lui-même reste (statut REFUSEE + motif) pour qu'il voie POURQUOI et redépose ; son
+               prochain envoi le repasse en « déposée » (cf. deposer). */
+            await db.promise().query('DELETE FROM piece_fichier WHERE depot_id = ?', [req.params.id]);
+        }
         logAudit(req, statut === 'VALIDEE' ? 'piece.validee' : 'piece.refusee', 'PieceDepot', req.params.id);
         res.json({ success: true });
     } catch (err) {
