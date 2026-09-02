@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { aggregerQuestions } = require('../controllers/quiz.controller.js');
+const { aggregerQuestions, clauseFiltre } = require('../controllers/quiz.controller.js');
 
 test('QCU : effectif + % par option, option correcte marquée, % de bonnes réponses', () => {
     const questions = [{ id: 'q1', position: 0, text: 'Q', type: 'SINGLE' }];
@@ -72,6 +72,14 @@ test('le détail expose aussi les résultats PAR STAGIAIRE (nom, %, date)', () =
     assert.match(src, /LEFT JOIN learner l ON l\.id = r\.learner_id/, 'joint le stagiaire pour son nom');
     assert.match(src, /CASE WHEN r\.max_score > 0 THEN ROUND\(r\.score \/ r\.max_score \* 100\)/,
         'le % par réponse (NULL pour une enquête sans note) est calculé en base');
+});
+
+test('clauseFiltre : session et année passées DEUX fois (motif « ? IS NULL OR … = ? »)', () => {
+    // Chaque valeur revient deux fois : une pour le test NULL, une pour l'égalité. L'oublier
+    // décalerait les paramètres (l'année irait au test de session) — bug silencieux.
+    assert.deepStrictEqual(clauseFiltre('s1', 2026).params, ['s1', 's1', 2026, 2026]);
+    assert.deepStrictEqual(clauseFiltre(null, null).params, [null, null, null, null], 'sans filtre : les NULL neutralisent la clause');
+    assert.match(clauseFiltre('s1', null).sql, /session_id = \?[\s\S]*YEAR\(r\.completed_at\) = \?/, 'session via enrollment, année via YEAR');
 });
 
 test('supprimer une réponse : bornée à l\'organisation, réservée au bureau', () => {

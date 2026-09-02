@@ -111,17 +111,24 @@ function ResultatsQCM() {
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [vue, setVue] = useState("questions"); // "questions" | "stagiaires"
+  const [filtres, setFiltres] = useState({ sessions: [], years: [] }); // options disponibles
+  const [selSession, setSelSession] = useState("");
+  const [selYear, setSelYear] = useState("");
   const { user } = useContext(UserContext);
   const isAdmin = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role); // l'auditeur ne supprime pas
 
+  // Recharge la vue d'ensemble à chaque changement de filtre ; un détail ouvert suit le filtre.
   useEffect(() => {
-    getQcmResultats().then((r) => setRows(r.data || [])).catch((e) => setStatus({ type: "error", message: e.message }));
-  }, []);
+    getQcmResultats(selSession || null, selYear || null)
+      .then((r) => { setRows(r.data || []); if (r.filtres) setFiltres(r.filtres); })
+      .catch((e) => setStatus({ type: "error", message: e.message }));
+    if (sel) getQcmResultatDetail(sel, selSession || null, selYear || null).then((r) => setDetail(r.data)).catch(() => {});
+  }, [selSession, selYear]);
 
   function ouvrir(id) {
     if (id === sel) { setSel(null); setDetail(null); return; } // re-clic = replier
     setSel(id); setDetail(null); setVue("questions"); setLoadingDetail(true);
-    getQcmResultatDetail(id)
+    getQcmResultatDetail(id, selSession || null, selYear || null)
       .then((r) => setDetail(r.data))
       .catch((e) => setStatus({ type: "error", message: e.message }))
       .finally(() => setLoadingDetail(false));
@@ -132,7 +139,7 @@ function ResultatsQCM() {
     try {
       await deleteQcmResponse(id);
       // Le compteur du QCM change aussi : on recharge la vue d'ensemble ET le détail ouvert.
-      const [ov, det] = await Promise.all([getQcmResultats(), getQcmResultatDetail(sel)]);
+      const [ov, det] = await Promise.all([getQcmResultats(selSession || null, selYear || null), getQcmResultatDetail(sel, selSession || null, selYear || null)]);
       setRows(ov.data || []);
       setDetail(det.data);
     } catch (e) { setStatus({ type: "error", message: e.message }); }
@@ -143,6 +150,28 @@ function ResultatsQCM() {
       <PageHead eyebrow="Qualité & conformité" title="Résultats QCM"
         lead="Ce que les stagiaires répondent aux QCM — moyenne, réussite, et le détail par question pour repérer ce qui coince." />
       <StatusMessage status={status} />
+
+      {(filtres.sessions.length > 0 || filtres.years.length > 0) && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", margin: "0 0 14px" }}>
+          {filtres.sessions.length > 0 && (
+            <select className="inp" value={selSession} onChange={(e) => setSelSession(e.target.value)} style={{ maxWidth: 300 }}
+              aria-label="Filtrer par session">
+              <option value="">Toutes les sessions</option>
+              {filtres.sessions.map((s) => <option key={s.id} value={s.id}>{[s.code, s.start_date].filter(Boolean).join(" · ")}</option>)}
+            </select>
+          )}
+          {filtres.years.length > 0 && (
+            <select className="inp" value={selYear} onChange={(e) => setSelYear(e.target.value)} style={{ maxWidth: 150 }}
+              aria-label="Filtrer par année">
+              <option value="">Toutes les années</option>
+              {filtres.years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+            </select>
+          )}
+          {(selSession || selYear) && (
+            <button type="button" className="btn sm ghost" onClick={() => { setSelSession(""); setSelYear(""); }}>Réinitialiser</button>
+          )}
+        </div>
+      )}
 
       {!rows ? (
         <p className="hint">Chargement…</p>
