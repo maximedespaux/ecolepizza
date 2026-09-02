@@ -8,6 +8,8 @@
  */
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
 const { aggregerQuestions } = require('../controllers/quiz.controller.js');
 
 test('QCU : effectif + % par option, option correcte marquée, % de bonnes réponses', () => {
@@ -62,6 +64,14 @@ test('Grille : seulement le nombre de réponses (v1, pas de détail par cellule)
     assert.strictEqual(r.grille, true);
     assert.strictEqual(r.responses, 2);
     assert.ok(!r.options, 'pas de répartition par option pour une grille en v1');
+});
+
+test('le détail expose aussi les résultats PAR STAGIAIRE (nom, %, date)', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'quiz.controller.js'), 'utf8');
+    assert.match(src, /questions: out, learners/, 'le détail renvoie la liste par stagiaire');
+    assert.match(src, /LEFT JOIN learner l ON l\.id = r\.learner_id/, 'joint le stagiaire pour son nom');
+    assert.match(src, /CASE WHEN r\.max_score > 0 THEN ROUND\(r\.score \/ r\.max_score \* 100\)/,
+        'le % par réponse (NULL pour une enquête sans note) est calculé en base');
 });
 
 test('Aucune réponse : effectifs à 0, correct_pct null (jamais de division par zéro)', () => {
