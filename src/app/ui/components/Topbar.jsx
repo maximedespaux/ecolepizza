@@ -2,8 +2,9 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import { PAGE_TITLES } from "../lib/nav.js";
-import { getNotifications } from "../api/apiClient.js";
+import { getNotifications, msDepuisMutationLocale } from "../api/apiClient.js";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
+import { subscribeRealtime } from "../lib/realtime.js";
 import { playNotif, isNotifMuted, setNotifMuted } from "../lib/notifSound.js";
 import { Icon } from "./Icon.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
@@ -38,6 +39,16 @@ function Topbar({ onMenu }) {
   useEffect(() => { loadNotifs(); }, [pathname]);
   // Rafraîchit le compteur automatiquement (toutes les 25 s + au retour sur l'onglet).
   useAutoRefresh(loadNotifs, { interval: 25000 });
+
+  // Son d'ACTIVITÉ : quelqu'un D'AUTRE a modifié quelque chose dans l'organisation.
+  // Le serveur diffuse un « refresh » temps réel à chaque mutation (cf. realtime.js) —
+  // y compris les miennes : on ne sonne QUE si aucune de mes propres actions n'est
+  // récente (sinon je m'entendrais moi-même). playNotif respecte la coupure du son et
+  // déduplique avec le son de notification ci-dessus. Réservé au backoffice : seul le
+  // personnel voit ce Topbar (et son bouton de coupure du son).
+  useEffect(() => subscribeRealtime(() => {
+    if (msDepuisMutationLocale() > 2500) playNotif();
+  }), []);
 
   const toggleMute = () => {
     const next = !muted;

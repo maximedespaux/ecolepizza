@@ -26,10 +26,17 @@ export function setNotifMuted(muted) {
 }
 
 let ctx;
+let dernierSon = 0;
 
 /** Joue un carillon discret (sauf si coupé). */
 export function playNotif() {
   if (isNotifMuted()) return;
+  // Anti-doublon : un même événement temps réel peut déclencher DEUX appels (nouvelle
+  // notification pour moi ET activité d'un autre utilisateur). Un seul « pop » par courte
+  // fenêtre — le déclencheur de notification est asynchrone (fetch), d'où 500 ms.
+  const t = Date.now();
+  if (t - dernierSon < 500) return;
+  dernierSon = t;
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
