@@ -756,7 +756,20 @@ const resultatsDetail = async (req, res) => {
             [answers] = await conn.query('SELECT qa.question_id, qa.value FROM quiz_answer qa JOIN quiz_response r ON r.id = qa.response_id WHERE r.quiz_id = ?', [quiz.id]);
         }
         const out = aggregerQuestions(questions, options, answers);
-        res.json({ data: { quiz, ...agg, questions: out } });
+
+        // PAR STAGIAIRE : une ligne par réponse (les reprises apparaissent, avec leur date).
+        // pct calculé côté base (NULL pour une enquête sans note) ; le front en tire réussi/échoué.
+        const [learners] = await conn.query(
+            `SELECT COALESCE(NULLIF(TRIM(CONCAT(COALESCE(l.first_name,''), ' ', COALESCE(l.last_name,''))), ''), 'Stagiaire') AS name,
+                    CASE WHEN r.max_score > 0 THEN ROUND(r.score / r.max_score * 100) END AS pct,
+                    DATE_FORMAT(r.completed_at, '%Y-%m-%d %H:%i') AS completed_at
+               FROM quiz_response r
+               LEFT JOIN learner l ON l.id = r.learner_id
+              WHERE r.quiz_id = ? AND r.organization_id = ?
+              ORDER BY r.completed_at DESC`,
+            [quiz.id, req.user.organization_id]);
+
+        res.json({ data: { quiz, ...agg, questions: out, learners } });
     } catch (err) {
         console.error('Erreur résultats QCM (détail) :', err);
         res.status(500).json({ error: 'Internal Server Error' });

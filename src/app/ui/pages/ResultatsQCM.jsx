@@ -5,6 +5,7 @@ import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
+import { dateHeure } from "../lib/format.js";
 
 // Couleur d'un pourcentage de réussite : vert / ambre / rouge.
 const pctTone = (p) => (p == null ? "n" : p >= 75 ? "g" : p >= 50 ? "a" : "r");
@@ -72,9 +73,31 @@ function DetailQuestion({ q, num }) {
   );
 }
 
+// Par stagiaire : une ligne par réponse (score + réussi/échoué pour un QCM noté, date). Une reprise
+// apparaît comme une ligne de plus, avec sa date — on voit qui a repassé et progressé.
+function StagiairesTable({ learners, quiz }) {
+  const note = quiz.kind === "GRADED";
+  if (!learners.length) return <p className="hint" style={{ margin: 0 }}>Aucune réponse.</p>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {learners.map((l, i) => {
+        const reussi = note && l.pct != null && quiz.pass_score != null ? l.pct >= quiz.pass_score : null;
+        return (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", border: "1px solid var(--border-soft)", borderRadius: 8 }}>
+            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</span>
+            {note && <span style={{ flex: "none", minWidth: 50, textAlign: "right", fontWeight: 600 }}>{l.pct != null ? `${l.pct}%` : "—"}</span>}
+            {reussi != null && <Badge tone={reussi ? "g" : "r"}>{reussi ? "Réussi" : "Échoué"}</Badge>}
+            <span className="hint" style={{ flex: "none", fontSize: 12 }}>{dateHeure(l.completed_at)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * Résultats QCM (Qualité & conformité) : ce que les stagiaires répondent aux QCM de « Modèles de
- * QCM » (sans rapport avec le Pizza Quest). Vue d'ensemble par QCM, puis répartition par question.
+ * QCM » (sans rapport avec le Pizza Quest). Vue d'ensemble par QCM, puis par question / par stagiaire.
  */
 function ResultatsQCM() {
   const [rows, setRows] = useState(null);
@@ -82,6 +105,7 @@ function ResultatsQCM() {
   const [sel, setSel] = useState(null);        // id du QCM ouvert
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [vue, setVue] = useState("questions"); // "questions" | "stagiaires"
 
   useEffect(() => {
     getQcmResultats().then((r) => setRows(r.data || [])).catch((e) => setStatus({ type: "error", message: e.message }));
@@ -89,7 +113,7 @@ function ResultatsQCM() {
 
   function ouvrir(id) {
     if (id === sel) { setSel(null); setDetail(null); return; } // re-clic = replier
-    setSel(id); setDetail(null); setLoadingDetail(true);
+    setSel(id); setDetail(null); setVue("questions"); setLoadingDetail(true);
     getQcmResultatDetail(id)
       .then((r) => setDetail(r.data))
       .catch((e) => setStatus({ type: "error", message: e.message }))
@@ -155,9 +179,19 @@ function ResultatsQCM() {
               {detail.responses === 0 ? (
                 <p className="hint" style={{ margin: 0 }}>Aucun stagiaire n'a encore répondu à ce QCM.</p>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                  {detail.questions.map((q, i) => <DetailQuestion key={q.id} q={q} num={i + 1} />)}
-                </div>
+                <>
+                  <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border-soft)" }}>
+                    <button type="button" role="tab" className={"tab" + (vue === "questions" ? " on" : "")} onClick={() => setVue("questions")}>Par question</button>
+                    <button type="button" role="tab" className={"tab" + (vue === "stagiaires" ? " on" : "")} onClick={() => setVue("stagiaires")}>Par stagiaire ({detail.learners.length})</button>
+                  </div>
+                  {vue === "questions" ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                      {detail.questions.map((q, i) => <DetailQuestion key={q.id} q={q} num={i + 1} />)}
+                    </div>
+                  ) : (
+                    <StagiairesTable learners={detail.learners} quiz={detail.quiz} />
+                  )}
+                </>
               )}
             </>
           )}
