@@ -36,16 +36,42 @@ const STATUTS = ['ATTENDUE', 'DEPOSEE', 'VALIDEE', 'REFUSEE'];
 const MIMES = ['image/webp', 'image/jpeg', 'image/png', 'application/pdf'];
 const MAX_OCTETS = 3 * 1024 * 1024;
 
+// Formats que l'app sait recevoir, déchiffrer et resservir. Une pièce peut n'en accepter qu'un
+// SOUS-ENSEMBLE (ex. « PDF seul »), jamais un format hors de cette liste (cf. § .docx ci-dessus).
+const MIMES_CONNUS = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const LIB_FORMAT = { 'image/jpeg': 'JPEG', 'image/png': 'PNG', 'image/webp': 'WebP', 'application/pdf': 'PDF' };
+const formatsLisibles = (mimes) => mimes.map((m) => LIB_FORMAT[m] || m).join(', ');
+// `mimes` stocké en texte JSON -> tableau, ou null (= aucune restriction propre : formats par défaut).
+const parseMimes = (v) => {
+    if (!v) return null;
+    if (Array.isArray(v)) return v.length ? v : null;
+    try { const a = JSON.parse(v); return Array.isArray(a) && a.length ? a : null; } catch { return null; }
+};
+
+// Les colonnes de limites PAR PIÈCE (migration 141) existent-elles ? Sondé une fois puis mémorisé :
+// le serveur redémarre au déploiement, donc après avoir joué la migration. Permet au code de
+// tourner AVANT comme APRÈS la 141 (repli sur les plafonds communs).
+let _hasPieceLimits = null;
+async function hasPieceLimits(conn) {
+    if (_hasPieceLimits !== null) return _hasPieceLimits;
+    try { await conn.query('SELECT max_octets, mimes FROM piece_type LIMIT 1'); _hasPieceLimits = true; }
+    catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') _hasPieceLimits = false; else throw e; }
+    return _hasPieceLimits;
+}
+
 /* ─────────────────────────── Référentiel : ce qu'on PEUT demander ─────────────────────────── */
 
 /** GET /api/pieces — le référentiel de l'organisme. */
 const listTypes = async (req, res) => {
     try {
-        const [rows] = await db.promise().query(
-            `SELECT id, code, label, consigne, fichiers_attendus, active
+        const conn = db.promise();
+        const lim = await hasPieceLimits(conn);
+        const [rows] = await conn.query(
+            `SELECT id, code, label, consigne, fichiers_attendus, active${lim ? ', max_octets, mimes' : ''}
                FROM piece_type WHERE organization_id = ? ORDER BY active DESC, label`,
             [req.user.organization_id]);
-        res.json({ data: rows });
+        // mimes renvoyé en TABLEAU (le front coche des cases) ; max_octets tel quel (octets).
+        res.json({ data: rows.map((r) => ({ ...r, mimes: parseMimes(r.mimes) })) });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] }); // avant la 127 : référentiel vide
         console.error('Erreur référentiel pièces :', err);
@@ -62,6 +88,15 @@ const champsType = (b) => ({
        demander six. Sans plafond appliqué, le champ n'était qu'un texte : rien n'empêchait d'en
        envoyer quinze, et la vérification devenait un dépouillement. */
     fichiers_attendus: Math.min(12, Math.max(1, Number(b?.fichiers_attendus) || 1)),
+    // Taille max PAR PIÈCE en octets, bornée [100 Ko, 25 Mo] ; null = plafond commun (3 Mo).
+    max_octets: Number(b?.max_octets) > 0
+        ? Math.min(25 * 1024 * 1024, Math.max(100 * 1024, Math.round(Number(b.max_octets)))) : null,
+    // Formats acceptés PAR PIÈCE (sous-ensemble des formats connus). Rien coché, ou tous : null
+    // (= aucune restriction propre, on retombe sur les formats par défaut).
+    mimes: (() => {
+        const arr = Array.isArray(b?.mimes) ? b.mimes.filter((m) => MIMES_CONNUS.includes(m)) : [];
+        return arr.length && arr.length < MIMES_CONNUS.length ? JSON.stringify(arr) : null;
+    })(),
     active: b?.active === false || b?.active === 0 ? 0 : 1,
 });
 
@@ -72,11 +107,13 @@ const createType = async (req, res) => {
     // Le code sert de repère stable côté écran ; à défaut on le dérive du libellé.
     if (!f.code) f.code = f.label.toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 60);
     try {
+        const conn = db.promise();
+        const lim = await hasPieceLimits(conn);
         const id = crypto.randomUUID();
-        await db.promise().query(
-            `INSERT INTO piece_type (id, organization_id, code, label, consigne, fichiers_attendus, active)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [id, req.user.organization_id, f.code, f.label, f.consigne, f.fichiers_attendus, f.active]);
+        const cols = ['id', 'organization_id', 'code', 'label', 'consigne', 'fichiers_attendus', 'active'];
+        const vals = [id, req.user.organization_id, f.code, f.label, f.consigne, f.fichiers_attendus, f.active];
+        if (lim) { cols.push('max_octets', 'mimes'); vals.push(f.max_octets, f.mimes); }
+        await conn.query(`INSERT INTO piece_type (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
         logAudit(req, 'piecetype.create', 'PieceType', id);
         res.status(201).json({ data: { id, ...f } });
     } catch (err) {
@@ -92,10 +129,13 @@ const updateType = async (req, res) => {
     const f = champsType(req.body);
     if (!f.label) return res.status(422).json({ message: 'Libellé requis.' });
     try {
-        const [r] = await db.promise().query(
-            `UPDATE piece_type SET code = ?, label = ?, consigne = ?, fichiers_attendus = ?, active = ?
-              WHERE id = ? AND organization_id = ?`,
-            [f.code, f.label, f.consigne, f.fichiers_attendus, f.active, req.params.id, req.user.organization_id]);
+        const conn = db.promise();
+        const lim = await hasPieceLimits(conn);
+        const sets = ['code = ?', 'label = ?', 'consigne = ?', 'fichiers_attendus = ?', 'active = ?'];
+        const vals = [f.code, f.label, f.consigne, f.fichiers_attendus, f.active];
+        if (lim) { sets.push('max_octets = ?', 'mimes = ?'); vals.push(f.max_octets, f.mimes); }
+        vals.push(req.params.id, req.user.organization_id);
+        const [r] = await conn.query(`UPDATE piece_type SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
         if (!r.affectedRows) return res.status(404).json({ message: 'Pièce introuvable.' });
         logAudit(req, 'piecetype.update', 'PieceType', req.params.id);
         res.json({ success: true });
@@ -220,13 +260,27 @@ const deposer = async (req, res) => {
     try {
         const f = req.file;
         if (!f || !f.buffer?.length) return res.status(422).json({ message: 'Fichier requis.' });
-        if (f.buffer.length > MAX_OCTETS) {
-            return res.status(413).json({ message: `Fichier trop lourd (${Math.round(MAX_OCTETS / 1024 / 1024)} Mo maximum).` });
-        }
-        if (!MIMES.includes(String(f.mimetype))) {
-            return res.status(415).json({ message: 'Formats acceptés : photo (JPEG, PNG, WebP) ou PDF.' });
-        }
         const conn = db.promise();
+        // Limites PROPRES à cette pièce (taille, formats), avec repli sur les plafonds communs
+        // (pièce sans limite fixée, ou migration 141 non jouée). On lit le type AVANT d'accepter.
+        let pt = null;
+        try {
+            const lim = await hasPieceLimits(conn);
+            const [[row]] = await conn.query(
+                `SELECT label, fichiers_attendus${lim ? ', max_octets, mimes' : ''}
+                   FROM piece_type WHERE id = ? AND organization_id = ?`,
+                [req.params.pieceTypeId, req.user.organization_id]);
+            pt = row || null;
+        } catch (err) { if (!noTable(err)) throw err; }
+        const maxOctets = (pt && pt.max_octets) || MAX_OCTETS;
+        const mimesOk = (pt && parseMimes(pt.mimes)) || MIMES;
+        if (f.buffer.length > maxOctets) {
+            const mo = Math.round(maxOctets / 1024 / 1024 * 10) / 10;
+            return res.status(413).json({ message: `Fichier trop lourd (${mo} Mo maximum pour cette pièce).` });
+        }
+        if (!mimesOk.includes(String(f.mimetype))) {
+            return res.status(415).json({ message: `Format refusé pour cette pièce. Acceptés : ${formatsLisibles(mimesOk)}.` });
+        }
         const e = await dossierDe(conn, req.params.enrollmentId, req.user.organization_id);
         if (!e) return res.status(404).json({ message: 'Dossier introuvable.' });
         const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
@@ -247,9 +301,7 @@ const deposer = async (req, res) => {
          * aussi comment s'en sortir — retirer avant d'ajouter — parce que c'est le geste que
          * personne ne trouve seul. */
         const [[dejaN]] = await conn.query('SELECT COUNT(*) AS n FROM piece_fichier WHERE depot_id = ?', [d.id]);
-        const [[pt]] = await conn.query('SELECT label, fichiers_attendus FROM piece_type WHERE id = ? AND organization_id = ?',
-            [req.params.pieceTypeId, req.user.organization_id]);
-        const max = Math.max(1, Number(pt?.fichiers_attendus) || 1);
+        const max = Math.max(1, Number(pt?.fichiers_attendus) || 1); // pt (avec ses limites) lu plus haut
         if (dejaN.n >= max) {
             return res.status(409).json({
                 message: `« ${pt?.label || 'Cette pièce'} » accepte ${max} fichier${max > 1 ? 's' : ''} au maximum. `
@@ -389,4 +441,4 @@ const verifier = async (req, res) => {
 
 module.exports = { listTypes, createType, updateType, deleteType, listDossier, piecesDuDossier,
     deposer, servirFichier, supprimerFichier, verifier,
-    STATUTS, MIMES, MAX_OCTETS, noTable, ABSENTE };
+    STATUTS, MIMES, MIMES_CONNUS, MAX_OCTETS, champsType, parseMimes, noTable, ABSENTE };
