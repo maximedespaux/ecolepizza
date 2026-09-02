@@ -56,6 +56,7 @@ export const NAV = [
     grp: "Qualité & conformité", // Qualiopi + traçabilité
     items: [
       { to: "/suivi", ic: "clipboard-check", label: "Suivi Qualiopi", roles: AUDIT },
+      { to: "/qcm-resultats", ic: "list-checks", label: "Résultats QCM", roles: AUDIT },
       { to: "/audit", ic: "history", label: "Journal d'audit", roles: AUDIT },
     ],
   },
@@ -128,6 +129,7 @@ export const PAGE_TITLES = {
   "/pipeline": "Pipeline CRM",
   "/sessions": "Sessions",
   "/suivi": "Suivi Qualiopi",
+  "/qcm-resultats": "Résultats QCM",
   "/formations": "Formations",
   "/qcm": "Modèles de QCM",
   "/pizza-quest-admin": "Pizza Quest",
@@ -202,7 +204,7 @@ const SECTION_OF = {
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   "/comptabilite": "/comptabilite", "/carte": "/carte",
   "/reglages": "/reglages", "/reglages-mailing": "/reglages-mailing", "/reglages-facturation": "/reglages-facturation", "/modeles": "/modeles", "/equipe": "/equipe",
-  "/audit": "/audit", "/suivi": "/suivi", "/dashboard": "/dashboard",
+  "/audit": "/audit", "/suivi": "/suivi", "/qcm-resultats": "/qcm-resultats", "/dashboard": "/dashboard",
 };
 
 /**

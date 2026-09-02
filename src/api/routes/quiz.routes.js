@@ -1,8 +1,9 @@
 const express = require('express');
 const {
     listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment,
+    resultatsOverview, resultatsDetail,
 } = require('../controllers/quiz.controller.js');
-const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
+const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES, AUDIT_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -13,6 +14,10 @@ router.post('/take/:documentId/submit', submitQuiz);
 
 // Administration.
 router.get('/', authorizeRoles(...STAFF_ROLES), listQuizzes);
+// Résultats QCM (Qualité & conformité) — DÉCLARÉS AVANT /:id, sinon « resultats » serait pris
+// pour un identifiant de QCM. AUDIT_ROLES : même accès que le reste du groupe Qualité.
+router.get('/resultats', authorizeRoles(...AUDIT_ROLES), resultatsOverview);
+router.get('/resultats/:id', authorizeRoles(...AUDIT_ROLES), resultatsDetail);
 router.post('/', authorizeRoles(...ADMIN_ROLES), createQuiz);
 router.post('/:id/duplicate', authorizeRoles(...ADMIN_ROLES), duplicateQuiz);
 router.post('/:id/send', authorizeRoles(...ADMIN_ROLES), sendQuiz);

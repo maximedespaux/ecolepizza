@@ -650,4 +650,117 @@ const sendQuizToEnrollment = async (req, res) => {
     }
 };
 
-module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment };
+/**
+ * Agrégation PAR QUESTION — fonction PURE (sans base, donc testable seule). À partir des questions,
+ * des options et des réponses brutes (quiz_answer.value : ids d'options en CSV, valeur d'échelle,
+ * ou JSON de grille), produit la répartition affichée :
+ *   · QCU/QCM : effectif + % par option, l'option correcte marquée, et le % de stagiaires ayant
+ *     ENTIÈREMENT bien répondu (l'ensemble choisi = l'ensemble correct) ;
+ *   · Échelle : répartition 1..max + moyenne ;
+ *   · Grille : nombre de réponses seul (détail par cellule en v2).
+ */
+function aggregerQuestions(questions, options, answers) {
+    const optsByQ = {}; for (const o of options) (optsByQ[o.question_id] = optsByQ[o.question_id] || []).push(o);
+    const ansByQ = {}; for (const a of answers) (ansByQ[a.question_id] = ansByQ[a.question_id] || []).push(a.value);
+    return questions.map((q) => {
+        const vals = ansByQ[q.id] || [];
+        const n = vals.length;
+        if (q.type === 'SCALE') {
+            const dist = {}; for (let i = 1; i <= (q.scale_max || 5); i++) dist[i] = 0;
+            let sum = 0, cnt = 0;
+            for (const v of vals) { const x = Number(v); if (Number.isFinite(x) && dist[x] != null) { dist[x]++; sum += x; cnt++; } }
+            return { id: q.id, position: q.position, text: q.text, type: q.type, responses: n,
+                scale: { max: q.scale_max || 5, dist, avg: cnt ? Math.round((sum / cnt) * 10) / 10 : null } };
+        }
+        if (GRID_TYPES.has(q.type)) {
+            return { id: q.id, position: q.position, text: q.text, type: q.type, responses: n, grille: true };
+        }
+        // QCU / QCM : les réponses sont des ids d'options en CSV.
+        const opts = optsByQ[q.id] || [];
+        const counts = {}; opts.forEach((o) => { counts[o.id] = 0; });
+        const correct = new Set(opts.filter((o) => o.is_correct).map((o) => o.id));
+        let bien = 0;
+        for (const v of vals) {
+            const chosen = String(v || '').split(',').filter(Boolean);
+            chosen.forEach((id) => { if (counts[id] != null) counts[id]++; });
+            if (correct.size) {
+                const cs = new Set(chosen);
+                if (cs.size === correct.size && [...correct].every((id) => cs.has(id))) bien++;
+            }
+        }
+        return {
+            id: q.id, position: q.position, text: q.text, type: q.type, responses: n,
+            options: opts.map((o) => ({ text: o.text, is_correct: !!o.is_correct, count: counts[o.id] || 0,
+                pct: n ? Math.round(((counts[o.id] || 0) / n) * 100) : 0 })),
+            correct_pct: correct.size && n ? Math.round((bien / n) * 100) : null,
+        };
+    });
+}
+
+/**
+ * GET /api/quiz/resultats — VUE D'ENSEMBLE des résultats (Qualité & conformité).
+ * Par QCM : nombre de réponses de stagiaires, score moyen % et taux de réussite (GRADED).
+ * Une enquête (SURVEY) n'a ni score ni réussite — seul son nombre de réponses la concerne
+ * (avg_pct / pass_rate y sortent NULL, car max_score est NULL et pass_score absent).
+ */
+const resultatsOverview = async (req, res) => {
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT q.id, q.title, q.kind, q.pass_score, q.active,
+                    COUNT(r.id) AS responses,
+                    ROUND(AVG(CASE WHEN r.max_score > 0 THEN r.score / r.max_score * 100 END)) AS avg_pct,
+                    ROUND(AVG(CASE WHEN r.max_score > 0 AND q.pass_score IS NOT NULL
+                                   THEN r.score / r.max_score * 100 >= q.pass_score END) * 100) AS pass_rate
+               FROM quiz q
+               LEFT JOIN quiz_response r ON r.quiz_id = q.id
+              WHERE q.organization_id = ?
+              GROUP BY q.id, q.title, q.kind, q.pass_score, q.active
+              ORDER BY q.active DESC, responses DESC, q.title`,
+            [req.user.organization_id]);
+        res.json({ data: rows });
+    } catch (err) {
+        console.error('Erreur résultats QCM (vue d\'ensemble) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/quiz/resultats/:id — DÉTAIL d'un QCM : agrégat + répartition PAR QUESTION.
+ *   · QCU/QCM : répartition des réponses par option (%, effectif), l'option correcte marquée, et
+ *     le % de stagiaires ayant ENTIÈREMENT bien répondu (GRADED). C'est la répartition, pas un
+ *     simple bon/faux : voir que 60 % ont choisi le MÊME mauvais distracteur en dit plus long.
+ *   · Échelle : répartition 1..max + moyenne (ex. satisfaction).
+ *   · Grille : seul le nombre de réponses (le détail par cellule attendra une v2).
+ */
+const resultatsDetail = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[quiz]] = await conn.query(
+            'SELECT id, title, kind, pass_score FROM quiz WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        if (!quiz) return res.status(404).json({ message: 'QCM introuvable.' });
+
+        const [[agg]] = await conn.query(
+            `SELECT COUNT(*) AS responses,
+                    ROUND(AVG(CASE WHEN max_score > 0 THEN score / max_score * 100 END)) AS avg_pct,
+                    ROUND(AVG(CASE WHEN max_score > 0 AND ? IS NOT NULL THEN score / max_score * 100 >= ? END) * 100) AS pass_rate
+               FROM quiz_response WHERE quiz_id = ?`,
+            [quiz.pass_score, quiz.pass_score, quiz.id]);
+
+        const [questions] = await conn.query(
+            'SELECT id, position, text, type, scale_max FROM quiz_question WHERE quiz_id = ? ORDER BY position', [quiz.id]);
+        const qids = questions.map((q) => q.id);
+        let options = [], answers = [];
+        if (qids.length) {
+            [options] = await conn.query('SELECT id, question_id, text, is_correct FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
+            [answers] = await conn.query('SELECT qa.question_id, qa.value FROM quiz_answer qa JOIN quiz_response r ON r.id = qa.response_id WHERE r.quiz_id = ?', [quiz.id]);
+        }
+        const out = aggregerQuestions(questions, options, answers);
+        res.json({ data: { quiz, ...agg, questions: out } });
+    } catch (err) {
+        console.error('Erreur résultats QCM (détail) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment, resultatsOverview, resultatsDetail, aggregerQuestions };

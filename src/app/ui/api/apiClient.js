@@ -568,6 +568,9 @@ export function sendQuiz(id, session_id) { return request(`/quizzes/${id}/send`,
 export function sendQuizToEnrollment(id, enrollmentId) { return request(`/quizzes/${id}/send/${enrollmentId}`, { method: "POST" }); }
 export function takeQuiz(documentId) { return request(`/quizzes/take/${documentId}`); }
 export function submitQuiz(documentId, answers) { return request(`/quizzes/take/${documentId}/submit`, { method: "POST", body: JSON.stringify({ answers }) }); }
+// Résultats QCM (Qualité & conformité) : vue d'ensemble + détail par question d'un QCM.
+export function getQcmResultats() { return request("/quizzes/resultats"); }
+export function getQcmResultatDetail(id) { return request(`/quizzes/resultats/${id}`); }
 
 // --- Parcours documentaire par formation ---
 export function getFormationSteps(id) {
