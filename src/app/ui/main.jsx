@@ -32,6 +32,7 @@ import Sessions from "./pages/Sessions.jsx";
 import Pipeline from "./pages/Pipeline.jsx";
 import SessionDetail from "./pages/SessionDetail.jsx";
 import Suivi from "./pages/Suivi.jsx";
+import ResultatsQCM from "./pages/ResultatsQCM.jsx";
 import Partenaires from "./pages/Partenaires.jsx";
 import Ventes from "./pages/Ventes.jsx";
 import Inventaire from "./pages/Inventaire.jsx";
@@ -256,6 +257,7 @@ function AppRoutes() {
           <Route path="equipe" element={<Guard nav="/equipe" roles={OWNER}><Equipe /></Guard>} />
           <Route path="roles" element={<Guard nav="/roles" roles={OWNER}><AccessRoles /></Guard>} />
           <Route path="audit" element={<Guard nav="/audit" roles={SUIVI}><Audit /></Guard>} />
+          <Route path="qcm-resultats" element={<Guard nav="/qcm-resultats" roles={SUIVI}><ResultatsQCM /></Guard>} />
           <Route path="parametres" element={<Parametres />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="suivi" element={<Guard nav="/suivi" roles={SUIVI}><Suivi /></Guard>} />
