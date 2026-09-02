@@ -43,6 +43,15 @@ const SECTION_BY_BASE = {
  */
 function sectionFor(base, reste) {
     if (base === 'comptabilite' && /^revenus(\/|$)/.test(reste || '')) return '/partenaires';
+    // SIGNER un document (POST /documents/:id/sign) n'est PAS une écriture « backoffice » de la
+    // rubrique /stagiaires : c'est un acte de PARTICIPANT (le stagiaire propriétaire, ou le
+    // personnel signataire), déjà autorisé sur la PROPRIÉTÉ du document par signDocument
+    // (l.user_id = req.user.id, sinon rôle bureau). Sans cette exception, un compte à DEUX
+    // CASQUETTES (rôle configurable FORMATEUR/SECRÉTARIAT/AUDITEUR *et* stagiaire) ne pouvait pas
+    // signer SON PROPRE document depuis son espace : la rubrique /stagiaires étant en lecture seule
+    // pour son rôle, le geste tombait en « Accès en lecture seule ». On NE dé-cadenasse PAS
+    // /sign-link (création d'un lien de signature partageable = acte bureau, resté sous /stagiaires).
+    if (base === 'documents' && /\/sign\/?$/.test(reste || '')) return null;
     return SECTION_BY_BASE[base];
 }
 
@@ -91,4 +100,4 @@ async function enforceSectionMode(req, res, next) {
     }
 }
 
-module.exports = { enforceSectionMode };
+module.exports = { enforceSectionMode, sectionFor };
