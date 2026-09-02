@@ -569,8 +569,16 @@ export function sendQuizToEnrollment(id, enrollmentId) { return request(`/quizze
 export function takeQuiz(documentId) { return request(`/quizzes/take/${documentId}`); }
 export function submitQuiz(documentId, answers) { return request(`/quizzes/take/${documentId}/submit`, { method: "POST", body: JSON.stringify({ answers }) }); }
 // Résultats QCM (Qualité & conformité) : vue d'ensemble + détail par question d'un QCM.
-export function getQcmResultats() { return request("/quizzes/resultats"); }
-export function getQcmResultatDetail(id) { return request(`/quizzes/resultats/${id}`); }
+function qcmFiltreQuery(session, year) {
+  const p = new URLSearchParams();
+  if (session) p.set("session", session);
+  if (year) p.set("year", year);
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}
+export function getQcmResultats(session, year) { return request(`/quizzes/resultats${qcmFiltreQuery(session, year)}`); }
+export function getQcmResultatDetail(id, session, year) { return request(`/quizzes/resultats/${id}${qcmFiltreQuery(session, year)}`); }
+export function deleteQcmResponse(id) { return request(`/quizzes/reponse/${id}`, { method: "DELETE" }); }
 
 // --- Parcours documentaire par formation ---
 export function getFormationSteps(id) {

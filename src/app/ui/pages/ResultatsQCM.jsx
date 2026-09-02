@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { getQcmResultats, getQcmResultatDetail } from "../api/apiClient.js";
+import { useContext, useEffect, useState } from "react";
+import { getQcmResultats, getQcmResultatDetail, deleteQcmResponse } from "../api/apiClient.js";
+import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -75,7 +76,7 @@ function DetailQuestion({ q, num }) {
 
 // Par stagiaire : une ligne par réponse (score + réussi/échoué pour un QCM noté, date). Une reprise
 // apparaît comme une ligne de plus, avec sa date — on voit qui a repassé et progressé.
-function StagiairesTable({ learners, quiz }) {
+function StagiairesTable({ learners, quiz, isAdmin, onDelete }) {
   const note = quiz.kind === "GRADED";
   if (!learners.length) return <p className="hint" style={{ margin: 0 }}>Aucune réponse.</p>;
   return (
@@ -83,11 +84,15 @@ function StagiairesTable({ learners, quiz }) {
       {learners.map((l, i) => {
         const reussi = note && l.pct != null && quiz.pass_score != null ? l.pct >= quiz.pass_score : null;
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", border: "1px solid var(--border-soft)", borderRadius: 8 }}>
+          <div key={l.id || i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", border: "1px solid var(--border-soft)", borderRadius: 8 }}>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</span>
             {note && <span style={{ flex: "none", minWidth: 50, textAlign: "right", fontWeight: 600 }}>{l.pct != null ? `${l.pct}%` : "—"}</span>}
             {reussi != null && <Badge tone={reussi ? "g" : "r"}>{reussi ? "Réussi" : "Échoué"}</Badge>}
             <span className="hint" style={{ flex: "none", fontSize: 12 }}>{dateHeure(l.completed_at)}</span>
+            {isAdmin && l.id && (
+              <button type="button" className="icon-btn" title="Supprimer cette réponse" aria-label="Supprimer cette réponse"
+                onClick={() => onDelete(l.id)} style={{ flex: "none" }}><Icon name="x" size={14} /></button>
+            )}
           </div>
         );
       })}
@@ -106,18 +111,38 @@ function ResultatsQCM() {
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [vue, setVue] = useState("questions"); // "questions" | "stagiaires"
+  const [filtres, setFiltres] = useState({ sessions: [], years: [] }); // options disponibles
+  const [selSession, setSelSession] = useState("");
+  const [selYear, setSelYear] = useState("");
+  const { user } = useContext(UserContext);
+  const isAdmin = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role); // l'auditeur ne supprime pas
 
+  // Recharge la vue d'ensemble à chaque changement de filtre ; un détail ouvert suit le filtre.
   useEffect(() => {
-    getQcmResultats().then((r) => setRows(r.data || [])).catch((e) => setStatus({ type: "error", message: e.message }));
-  }, []);
+    getQcmResultats(selSession || null, selYear || null)
+      .then((r) => { setRows(r.data || []); if (r.filtres) setFiltres(r.filtres); })
+      .catch((e) => setStatus({ type: "error", message: e.message }));
+    if (sel) getQcmResultatDetail(sel, selSession || null, selYear || null).then((r) => setDetail(r.data)).catch(() => {});
+  }, [selSession, selYear]);
 
   function ouvrir(id) {
     if (id === sel) { setSel(null); setDetail(null); return; } // re-clic = replier
     setSel(id); setDetail(null); setVue("questions"); setLoadingDetail(true);
-    getQcmResultatDetail(id)
+    getQcmResultatDetail(id, selSession || null, selYear || null)
       .then((r) => setDetail(r.data))
       .catch((e) => setStatus({ type: "error", message: e.message }))
       .finally(() => setLoadingDetail(false));
+  }
+
+  async function supprimerReponse(id) {
+    if (!window.confirm("Supprimer cette réponse ? Les statistiques seront recalculées.")) return;
+    try {
+      await deleteQcmResponse(id);
+      // Le compteur du QCM change aussi : on recharge la vue d'ensemble ET le détail ouvert.
+      const [ov, det] = await Promise.all([getQcmResultats(selSession || null, selYear || null), getQcmResultatDetail(sel, selSession || null, selYear || null)]);
+      setRows(ov.data || []);
+      setDetail(det.data);
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   return (
@@ -125,6 +150,28 @@ function ResultatsQCM() {
       <PageHead eyebrow="Qualité & conformité" title="Résultats QCM"
         lead="Ce que les stagiaires répondent aux QCM — moyenne, réussite, et le détail par question pour repérer ce qui coince." />
       <StatusMessage status={status} />
+
+      {(filtres.sessions.length > 0 || filtres.years.length > 0) && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", margin: "0 0 14px" }}>
+          {filtres.sessions.length > 0 && (
+            <select className="inp" value={selSession} onChange={(e) => setSelSession(e.target.value)} style={{ maxWidth: 300 }}
+              aria-label="Filtrer par session">
+              <option value="">Toutes les sessions</option>
+              {filtres.sessions.map((s) => <option key={s.id} value={s.id}>{[s.code, s.start_date].filter(Boolean).join(" · ")}</option>)}
+            </select>
+          )}
+          {filtres.years.length > 0 && (
+            <select className="inp" value={selYear} onChange={(e) => setSelYear(e.target.value)} style={{ maxWidth: 150 }}
+              aria-label="Filtrer par année">
+              <option value="">Toutes les années</option>
+              {filtres.years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+            </select>
+          )}
+          {(selSession || selYear) && (
+            <button type="button" className="btn sm ghost" onClick={() => { setSelSession(""); setSelYear(""); }}>Réinitialiser</button>
+          )}
+        </div>
+      )}
 
       {!rows ? (
         <p className="hint">Chargement…</p>
@@ -189,7 +236,7 @@ function ResultatsQCM() {
                       {detail.questions.map((q, i) => <DetailQuestion key={q.id} q={q} num={i + 1} />)}
                     </div>
                   ) : (
-                    <StagiairesTable learners={detail.learners} quiz={detail.quiz} />
+                    <StagiairesTable learners={detail.learners} quiz={detail.quiz} isAdmin={isAdmin} onDelete={supprimerReponse} />
                   )}
                 </>
               )}

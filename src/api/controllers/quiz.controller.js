@@ -698,26 +698,59 @@ function aggregerQuestions(questions, options, answers) {
 }
 
 /**
+ * Filtre optionnel des réponses par SESSION et/ou ANNÉE, sur l'alias `r` (= quiz_response).
+ * Renvoie { sql, params } à concaténer dans une clause WHERE. Vide (NULL) = pas de filtre.
+ * La session passe par une sous-requête sur enrollment (pas de jointure à ajouter aux requêtes).
+ */
+function clauseFiltre(sessionId, year) {
+    return {
+        sql: ' AND (? IS NULL OR r.enrollment_id IN (SELECT id FROM enrollment WHERE session_id = ?))'
+            + ' AND (? IS NULL OR YEAR(r.completed_at) = ?)',
+        params: [sessionId, sessionId, year, year],
+    };
+}
+
+/**
  * GET /api/quiz/resultats — VUE D'ENSEMBLE des résultats (Qualité & conformité).
  * Par QCM : nombre de réponses de stagiaires, score moyen % et taux de réussite (GRADED).
- * Une enquête (SURVEY) n'a ni score ni réussite — seul son nombre de réponses la concerne
- * (avg_pct / pass_rate y sortent NULL, car max_score est NULL et pass_score absent).
+ * Une enquête (SURVEY) n'a ni score ni réussite — seul son nombre de réponses la concerne.
+ * Filtres optionnels ?session= & ?year= ; `filtres` renvoie les sessions/années DISPONIBLES
+ * (indépendantes du filtre courant, pour ne jamais se retrouver avec un menu vide).
  */
 const resultatsOverview = async (req, res) => {
     try {
-        const [rows] = await db.promise().query(
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const sessionId = req.query.session || null;
+        const year = req.query.year || null;
+        const f = clauseFiltre(sessionId, year);
+        const [rows] = await conn.query(
             `SELECT q.id, q.title, q.kind, q.pass_score, q.active,
-                    COUNT(r.id) AS responses,
-                    ROUND(AVG(CASE WHEN r.max_score > 0 THEN r.score / r.max_score * 100 END)) AS avg_pct,
-                    ROUND(AVG(CASE WHEN r.max_score > 0 AND q.pass_score IS NOT NULL
-                                   THEN r.score / r.max_score * 100 >= q.pass_score END) * 100) AS pass_rate
+                    COUNT(fr.id) AS responses,
+                    ROUND(AVG(CASE WHEN fr.max_score > 0 THEN fr.score / fr.max_score * 100 END)) AS avg_pct,
+                    ROUND(AVG(CASE WHEN fr.max_score > 0 AND q.pass_score IS NOT NULL
+                                   THEN fr.score / fr.max_score * 100 >= q.pass_score END) * 100) AS pass_rate
                FROM quiz q
-               LEFT JOIN quiz_response r ON r.quiz_id = q.id
+               LEFT JOIN (SELECT r.id, r.quiz_id, r.score, r.max_score
+                            FROM quiz_response r
+                           WHERE r.organization_id = ?${f.sql}) fr ON fr.quiz_id = q.id
               WHERE q.organization_id = ?
               GROUP BY q.id, q.title, q.kind, q.pass_score, q.active
               ORDER BY q.active DESC, responses DESC, q.title`,
-            [req.user.organization_id]);
-        res.json({ data: rows });
+            [orgId, ...f.params, orgId]);
+        // Sessions et années qui ONT des réponses (pour les menus de filtre).
+        const [sessions] = await conn.query(
+            `SELECT DISTINCT s.id, p.code AS code, DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date
+               FROM quiz_response r
+               JOIN enrollment e ON e.id = r.enrollment_id
+               JOIN training_session s ON s.id = e.session_id
+               LEFT JOIN training_program p ON p.id = s.program_id
+              WHERE r.organization_id = ?
+              ORDER BY s.start_date DESC`, [orgId]);
+        const [years] = await conn.query(
+            `SELECT DISTINCT YEAR(completed_at) AS year FROM quiz_response
+              WHERE organization_id = ? AND completed_at IS NOT NULL ORDER BY year DESC`, [orgId]);
+        res.json({ data: rows, filtres: { sessions, years: years.map((y) => y.year) } });
     } catch (err) {
         console.error('Erreur résultats QCM (vue d\'ensemble) :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -735,6 +768,9 @@ const resultatsOverview = async (req, res) => {
 const resultatsDetail = async (req, res) => {
     try {
         const conn = db.promise();
+        const sessionId = req.query.session || null;
+        const year = req.query.year || null;
+        const f = clauseFiltre(sessionId, year); // même filtre session/année que la vue d'ensemble
         const [[quiz]] = await conn.query(
             'SELECT id, title, kind, pass_score FROM quiz WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
@@ -742,10 +778,10 @@ const resultatsDetail = async (req, res) => {
 
         const [[agg]] = await conn.query(
             `SELECT COUNT(*) AS responses,
-                    ROUND(AVG(CASE WHEN max_score > 0 THEN score / max_score * 100 END)) AS avg_pct,
-                    ROUND(AVG(CASE WHEN max_score > 0 AND ? IS NOT NULL THEN score / max_score * 100 >= ? END) * 100) AS pass_rate
-               FROM quiz_response WHERE quiz_id = ?`,
-            [quiz.pass_score, quiz.pass_score, quiz.id]);
+                    ROUND(AVG(CASE WHEN r.max_score > 0 THEN r.score / r.max_score * 100 END)) AS avg_pct,
+                    ROUND(AVG(CASE WHEN r.max_score > 0 AND ? IS NOT NULL THEN r.score / r.max_score * 100 >= ? END) * 100) AS pass_rate
+               FROM quiz_response r WHERE r.quiz_id = ?${f.sql}`,
+            [quiz.pass_score, quiz.pass_score, quiz.id, ...f.params]);
 
         const [questions] = await conn.query(
             'SELECT id, position, text, type, scale_max FROM quiz_question WHERE quiz_id = ? ORDER BY position', [quiz.id]);
@@ -753,21 +789,22 @@ const resultatsDetail = async (req, res) => {
         let options = [], answers = [];
         if (qids.length) {
             [options] = await conn.query('SELECT id, question_id, text, is_correct FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
-            [answers] = await conn.query('SELECT qa.question_id, qa.value FROM quiz_answer qa JOIN quiz_response r ON r.id = qa.response_id WHERE r.quiz_id = ?', [quiz.id]);
+            [answers] = await conn.query('SELECT qa.question_id, qa.value FROM quiz_answer qa JOIN quiz_response r ON r.id = qa.response_id WHERE r.quiz_id = ?' + f.sql, [quiz.id, ...f.params]);
         }
         const out = aggregerQuestions(questions, options, answers);
 
         // PAR STAGIAIRE : une ligne par réponse (les reprises apparaissent, avec leur date).
         // pct calculé côté base (NULL pour une enquête sans note) ; le front en tire réussi/échoué.
         const [learners] = await conn.query(
-            `SELECT COALESCE(NULLIF(TRIM(CONCAT(COALESCE(l.first_name,''), ' ', COALESCE(l.last_name,''))), ''), 'Stagiaire') AS name,
+            `SELECT r.id AS id,
+                    COALESCE(NULLIF(TRIM(CONCAT(COALESCE(l.first_name,''), ' ', COALESCE(l.last_name,''))), ''), 'Stagiaire') AS name,
                     CASE WHEN r.max_score > 0 THEN ROUND(r.score / r.max_score * 100) END AS pct,
                     DATE_FORMAT(r.completed_at, '%Y-%m-%d %H:%i') AS completed_at
                FROM quiz_response r
                LEFT JOIN learner l ON l.id = r.learner_id
-              WHERE r.quiz_id = ? AND r.organization_id = ?
+              WHERE r.quiz_id = ? AND r.organization_id = ?${f.sql}
               ORDER BY r.completed_at DESC`,
-            [quiz.id, req.user.organization_id]);
+            [quiz.id, req.user.organization_id, ...f.params]);
 
         res.json({ data: { quiz, ...agg, questions: out, learners } });
     } catch (err) {
@@ -776,4 +813,24 @@ const resultatsDetail = async (req, res) => {
     }
 };
 
-module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment, resultatsOverview, resultatsDetail, aggregerQuestions };
+/**
+ * DELETE /api/quizzes/reponse/:id — supprime UNE réponse de stagiaire à un QCM.
+ * Les réponses détaillées (quiz_answer) suivent par cascade (fk_qa_resp ON DELETE CASCADE).
+ * Réservé au bureau (l'auditeur est en lecture seule) : effacer une réponse change une
+ * statistique — c'est une correction, pas une consultation.
+ */
+const deleteResponse = async (req, res) => {
+    try {
+        const [r] = await db.promise().query(
+            'DELETE FROM quiz_response WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Réponse introuvable.' });
+        logAudit(req, 'quiz.response_delete', 'QuizResponse', req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur suppression réponse QCM :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment, resultatsOverview, resultatsDetail, aggregerQuestions, deleteResponse, clauseFiltre };

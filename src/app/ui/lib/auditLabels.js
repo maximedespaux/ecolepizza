@@ -114,6 +114,7 @@ const ACTION_LABEL = {
     'quiz.duplicate': ['Quiz dupliqué', G],
     'quiz.submit': ['Quiz passé', N],
     'quiz.send': ['Quiz envoyé', B],
+    'quiz.response_delete': ['Réponse QCM supprimée', R],
 
     /* Pièces justificatives fournies par le STAGIAIRE — le sens inverse du reste. Le dépôt et
        la vérification se tracent : ce sont des copies de pièces d'identité, et « qui a vu quoi,
@@ -211,6 +212,7 @@ const ENTITY_LABEL = {
     AttendanceSheet: ['Feuille d\'émargement', 'f'],
     TrainingSession: ['Session de formation', 'f'],
     Quiz: ['Quiz', 'm'],
+    QuizResponse: ['Réponse QCM', 'f'],
     Expense: ['Dépense', 'f'],
     RevenueExtra: ['Recette annexe', 'f'],
     AccountingSettings: ['Réglages comptables', 'm'],
