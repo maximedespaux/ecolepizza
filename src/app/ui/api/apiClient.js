@@ -903,6 +903,14 @@ export function pieceFichierUrl(fichierId) { return `${API_BASE_URL}/pieces/fich
 // Personnel : valider ou refuser (motif requis si REFUSEE).
 export function verifierPiece(depotId, statut, motif_refus) { return request(`/pieces/depot/${depotId}`, { method: "PATCH", body: JSON.stringify({ statut, motif_refus }) }); }
 
+// --- Référentiel des TYPES de pièces (géré depuis Modèles de documents) ---
+// Un type de pièce = ce que l'école PEUT demander (libellé, consigne, nb de fichiers, taille max,
+// formats acceptés). Distinct des dépôts ci-dessus, qui sont ce qu'un dossier a fourni.
+export function getPieceTypes() { return request("/pieces"); }
+export function createPieceType(payload) { return request("/pieces", { method: "POST", body: JSON.stringify(payload) }); }
+export function updatePieceType(id, payload) { return request(`/pieces/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
+export function deletePieceType(id) { return request(`/pieces/${id}`, { method: "DELETE" }); }
+
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }

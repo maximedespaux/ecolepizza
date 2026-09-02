@@ -6,7 +6,8 @@ import { getTemplates, saveTemplate, deleteTemplate, resetTemplate, duplicateTem
   getConditionCatalog, getConditions, createCondition, updateCondition, deleteCondition, getFieldValues,
   getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
-  reorderEmargementTemplates } from "../api/apiClient.js";
+  reorderEmargementTemplates,
+  getPieceTypes, createPieceType, updatePieceType, deletePieceType } from "../api/apiClient.js";
 import { EMARG_DEFAULTS } from "./EmargementEditor.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -60,6 +61,21 @@ function condValueLabel(c) {
 
 /** Une feuille d'émargement n'est pas un document : elle ne se signe ni ne se rédige pareil. */
 const estEmarg = (t) => t.kind === "emargement";
+// Formats qu'une pièce peut accepter (sous-ensemble de ceux que l'app sait recevoir/resservir).
+const FORMATS_PIECE = [
+  { mime: "image/jpeg", label: "JPEG" }, { mime: "image/png", label: "PNG" },
+  { mime: "image/webp", label: "WebP" }, { mime: "application/pdf", label: "PDF" },
+];
+const MO = 1024 * 1024;
+// Résumé lisible d'un type de pièce, pour la liste : « 2 fichiers max · 3 Mo max · JPEG, PDF ».
+function resumePiece(p) {
+  const n = p.fichiers_attendus || 1;
+  const parts = [`${n} fichier${n > 1 ? "s" : ""} max`];
+  if (p.max_octets) parts.push(`${Math.round((p.max_octets / MO) * 10) / 10} Mo max`);
+  const fmts = Array.isArray(p.mimes) && p.mimes.length ? p.mimes : null;
+  if (fmts) parts.push(fmts.map((m) => (FORMATS_PIECE.find((f) => f.mime === m) || {}).label || m).join(", "));
+  return parts.join(" · ");
+}
 
 const LBL_SIGNATAIRE = { ORG: "Org", STAGIAIRE: "Stagiaire", ENTREPRISE: "Entreprise", EXTERNAL: "Externe" };
 
@@ -101,6 +117,7 @@ function Modeles() {
   const [conditions, setConditions] = useState([]);   // conditions personnalisées de l'organisme
   const [catalog, setCatalog] = useState({ fields: [], operators: {} });
   const [emargItems, setEmargItems] = useState([]); // modèles de feuille d'émargement
+  const [pieceItems, setPieceItems] = useState([]); // référentiel des types de pièces à fournir
   const [view, setView] = useState("documents");      // onglet : "documents" | "conditions"
   const condBySlug = Object.fromEntries(conditions.map((c) => [c.slug, c]));
 
@@ -120,8 +137,18 @@ function Modeles() {
   async function loadConditions() {
     try { const { data } = await getConditions(); setConditions(data || []); } catch { /* silencieux */ }
   }
+  async function loadPieces() {
+    try { const { data } = await getPieceTypes(); setPieceItems((data || []).map((p) => ({ ...p, kind: "piece" }))); }
+    catch { /* table peut-être absente (migration 127) */ }
+  }
+  async function supprimerPiece(p) {
+    // Le serveur REFUSE (409) si un dossier l'utilise, et propose de la désactiver : on relaie son message.
+    if (!window.confirm(`Supprimer la pièce « ${p.label} » du référentiel ?`)) return;
+    try { await deletePieceType(p.id); setStatus({ type: "success", message: "Pièce supprimée." }); loadPieces(); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
   const reloadCatalog = () => getConditionCatalog().then((r) => setCatalog(r.data)).catch(() => {});
-  useEffect(() => { load(); loadEmarg(); loadConditions(); reloadCatalog(); }, []);
+  useEffect(() => { load(); loadEmarg(); loadPieces(); loadConditions(); reloadCatalog(); }, []);
 
   // Liste affichée : documents classiques + modèles d'émargement, triés par ordre.
   const allItems = [...items.map((t) => ({ ...t, kind: t.kind || "document" })), ...emargItems]
@@ -246,7 +273,7 @@ function Modeles() {
         </button>
       </div>
 
-      {view === "documents" && (
+      {view === "documents" && (<>
       <Card title={`Étapes (${allItems.length})`}>
         {/* Les trois colonnes calculées le sont maintenant par des FONCTIONS NOMMÉES, hors
             du rendu. Elles étaient des fonctions immédiates de vingt lignes plantées au
@@ -312,6 +339,36 @@ function Modeles() {
           ]}
         />
       </Card>
+
+      {/* PIÈCES À FOURNIR — le référentiel de ce que l'école peut DEMANDER au stagiaire (distinct
+          des documents qu'elle PRODUIT). On les crée aussi via « ＋ Ajouter un document » (type
+          « Pièce à fournir ») ; on les rattache ensuite à un parcours dans Formations. */}
+      <Card title={`Pièces à fournir par le stagiaire (${pieceItems.length})`}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
+          <p className="hint" style={{ margin: 0 }}>
+            Ce que l'école peut <b>demander</b> (carte d'identité, justificatif…). Chaque pièce fixe son nombre de fichiers, sa taille et ses formats. Rattachez-les à un parcours dans <b>Formations → Parcours documentaire</b>.
+          </p>
+          <button type="button" className="btn sm primary" style={{ flex: "none" }}
+            onClick={() => setEditing({ _new: true, kind: "piece", active: true })}>＋ Ajouter une pièce</button>
+        </div>
+        {pieceItems.length === 0 ? (
+          <p className="hint" style={{ margin: 0 }}>Aucune pièce au référentiel. « ＋ Ajouter une pièce » pour en créer une.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {pieceItems.map((p) => (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--border-soft)", borderRadius: 10, opacity: p.active ? 1 : 0.5 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <b>{p.label}</b>{!p.active && <span className="hint"> · inactive</span>}
+                  <div className="hint" style={{ fontSize: 12 }}>{resumePiece(p)}</div>
+                </div>
+                <button type="button" className="btn sm ghost" onClick={() => setEditing({ ...p })}><Icon name="settings" size={14} /> Réglages</button>
+                <button type="button" className="btn sm ghost" onClick={() => supprimerPiece(p)}>Supprimer</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+      </>
       )}
 
       {view === "conditions" && (
@@ -331,7 +388,7 @@ function Modeles() {
           step={editing}
           conditions={conditions}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); setStatus({ type: "success", message: "Étape enregistrée." }); load(); loadEmarg(); }}
+          onSaved={() => { setEditing(null); setStatus({ type: "success", message: "Enregistré." }); load(); loadEmarg(); loadPieces(); }}
           onError={(m) => setStatus({ type: "error", message: m })}
         />
       )}
@@ -526,8 +583,9 @@ function ConditionsPanel({ conditions, catalog, onChanged, onCatalogChanged, onS
 function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
   const isNew = !!step._new;
   const a = step.applies_when || {};
-  const [kind, setKind] = useState(step.kind || "document"); // "document" | "emargement"
+  const [kind, setKind] = useState(step.kind || "document"); // "document" | "emargement" | "piece"
   const isEmarg = kind === "emargement";
+  const isPiece = kind === "piece";
   const [form, setForm] = useState({
     slug: step.slug || "",
     label: step.label || step.name || "",
@@ -546,6 +604,11 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     sign_organization: !!(step.config && step.config.show_organization),
     active: step.active == null ? true : !!step.active,
     conditions: Array.isArray(a.conditions) ? a.conditions : [],
+    // Champs propres aux PIÈCES À FOURNIR (kind === "piece").
+    consigne: step.consigne || "",
+    fichiers_attendus: step.fichiers_attendus || 1,
+    max_mo: step.max_octets ? Math.round((step.max_octets / MO) * 10) / 10 : "", // "" = plafond commun
+    mimes: Array.isArray(step.mimes) && step.mimes.length ? step.mimes : FORMATS_PIECE.map((f) => f.mime),
   });
   const toggleCond = (slug) => setForm((p) => ({
     ...p,
@@ -563,7 +626,19 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     if (form.conditions.length) applies_when.conditions = form.conditions;
     setSaving(true);
     try {
-      if (isEmarg) {
+      if (isPiece) {
+        // Type de PIÈCE À FOURNIR (référentiel) : ni slug ni corps, mais des limites de dépôt.
+        const payload = {
+          code: step.code || undefined, // conservé à la modif ; dérivé du libellé à la création (serveur)
+          label: form.label.trim(),
+          consigne: form.consigne.trim() || null,
+          fichiers_attendus: Number(form.fichiers_attendus) || 1,
+          max_octets: form.max_mo ? Math.round(Number(form.max_mo) * MO) : null,
+          mimes: form.mimes,
+          active: form.active,
+        };
+        if (isNew) await createPieceType(payload); else await updatePieceType(step.id, payload);
+      } else if (isEmarg) {
         // La mise en page détaillée s'édite ensuite via « Éditer ». Ici : nom, conditions, signataires, actif.
         const baseCfg = step.config || EMARG_DEFAULTS;
         const config = { ...baseCfg, show_formateurs: form.sign_formateur, show_intervenants: form.sign_intervenant, show_organization: form.sign_organization };
@@ -597,7 +672,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
-          <h3>{isNew ? "Nouveau document" : (isEmarg ? "Réglages de la feuille d'émargement" : "Modifier l'étape")}</h3>
+          <h3>{isNew ? (isPiece ? "Nouvelle pièce à fournir" : "Nouveau document") : (isPiece ? "Réglages de la pièce" : isEmarg ? "Réglages de la feuille d'émargement" : "Modifier l'étape")}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
         <div className="mbody">
@@ -606,6 +681,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
               <select value={kind} onChange={(e) => setKind(e.target.value)}>
                 <option value="document">Document</option>
                 <option value="emargement">Feuille d'émargement</option>
+                <option value="piece">Pièce à fournir (par le stagiaire)</option>
               </select>
             </div>
           )}
@@ -631,15 +707,45 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
             </div>
           )}
           <div className="field"><label>Intitulé</label>
-            <input className="inp" value={form.label} onChange={set("label")} placeholder={isEmarg ? "ex. Feuille d'émargement 5 jours" : "ex. Attestation de TVA"} /></div>
-          {!isEmarg && (
+            <input className="inp" value={form.label} onChange={set("label")} placeholder={isEmarg ? "ex. Feuille d'émargement 5 jours" : isPiece ? "ex. Pièce d'identité" : "ex. Attestation de TVA"} /></div>
+          {isPiece && (
+            <>
+              <div className="field"><label>Consigne au stagiaire</label>
+                <textarea className="inp" rows={2} value={form.consigne} onChange={set("consigne")}
+                  placeholder="ex. Recto ET verso, lisibles, non rognés." />
+                <p className="hint" style={{ margin: "4px 0 0", fontSize: 12 }}>Affichée au stagiaire au moment du dépôt — c'est elle qui évite la moitié des refus.</p>
+              </div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <div className="field" style={{ flex: "1 1 130px" }}><label>Nombre de fichiers max</label>
+                  <input className="inp" type="number" min={1} max={12} value={form.fichiers_attendus}
+                    onChange={(e) => setForm((p) => ({ ...p, fichiers_attendus: e.target.value }))} /></div>
+                <div className="field" style={{ flex: "1 1 130px" }}><label>Taille max par fichier (Mo)</label>
+                  <input className="inp" type="number" min={0.1} step={0.1} value={form.max_mo}
+                    onChange={(e) => setForm((p) => ({ ...p, max_mo: e.target.value }))} placeholder="défaut 3" />
+                  <p className="hint" style={{ margin: "4px 0 0", fontSize: 12 }}>Vide = 3 Mo (plafond commun).</p></div>
+              </div>
+              <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--muted)", display: "block", margin: "10px 0 4px" }}>Formats acceptés</label>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 4 }}>
+                {FORMATS_PIECE.map((fmt) => (
+                  <label key={fmt.mime} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                    <input type="checkbox" checked={form.mimes.includes(fmt.mime)}
+                      onChange={() => setForm((p) => ({ ...p, mimes: p.mimes.includes(fmt.mime) ? p.mimes.filter((m) => m !== fmt.mime) : [...p.mimes, fmt.mime] }))} />
+                    {fmt.label}</label>
+                ))}
+              </div>
+              <p className="hint" style={{ margin: "0 0 8px" }}>Tout coché = aucune restriction (JPEG, PNG, WebP, PDF). Décochez pour limiter (ex. PDF seul).</p>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
+                <input type="checkbox" checked={form.active} onChange={chk("active")} /> Actif (proposé dans les parcours)</label>
+            </>
+          )}
+          {!isEmarg && !isPiece && (
             <div className="field"><label>Type de document</label>
               <input className="inp" list="doctypes" value={form.doc_type} onChange={set("doc_type")} placeholder="DEVIS, CONTRAT…" />
               <datalist id="doctypes">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
             </div>
           )}
 
-          {conditions.length > 0 ? (
+          {!isPiece && (conditions.length > 0 ? (
             <>
               <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 4px" }}>
                 Conditions personnalisées
@@ -661,9 +767,9 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
             <p className="hint" style={{ margin: "6px 0 0" }}>
               Aucune condition définie. Créez des conditions dans l'onglet « Conditions » pour restreindre l'application de ce document.
             </p>
-          )}
+          ))}
 
-          {isEmarg ? (
+          {!isPiece && (isEmarg ? (
             <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 6 }}>
               <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14, opacity: 0.7 }}>
                 <input type="checkbox" checked readOnly /> Signé par le stagiaire</label>
@@ -697,17 +803,19 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
                   <input type="checkbox" checked={form.company_level} onChange={chk("company_level")} /> 🏢 Document entreprise (groupe)</label>
               </div>
             </>
-          )}
+          ))}
           {!isEmarg && form.company_level && (
             <p className="hint" style={{ margin: "8px 0 0" }}>
               Généré par <b>entreprise + OPCO + session</b>. Jeton <b>« Stagiaires »</b> = liste ; bloc <code>{"{#Stagiaires}…{/Stagiaires}"}</code> = ligne par stagiaire (palette <b>Groupe entreprise</b>).
             </p>
           )}
+          {!isPiece && (
           <p className="sub" style={{ marginTop: 10 }}>
             {isEmarg
               ? "Après enregistrement, utilisez « Éditer » sur la ligne pour la mise en page (orientation, colonnes, logo…)."
               : "Après enregistrement, utilisez « Éditer » sur la ligne pour composer le document."}
           </p>
+          )}
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>
