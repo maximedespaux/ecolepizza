@@ -203,8 +203,19 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible,summary:focus-visi
 .adm-app .btn:active:not(:disabled),.adm-app .iconbtn:active,.adm-app .icon-btn:active{transform:translateY(1px)}
 
 /* Layout ------------------------------------------------------------- */
-.app{display:flex;min-height:100vh}
-.sidebar{width:258px;flex:0 0 258px;position:sticky;top:0;height:100vh;background:var(--bg2);border-right:1px solid var(--border-soft);display:flex;flex-direction:column;z-index:40}
+/* `100dvh` APRÈS `100vh`, et pas à la place : sur iOS, `100vh` vaut la hauteur du viewport
+   SANS la barre d'adresse — celle qu'on obtient une fois la page défilée. Barre d'adresse
+   déployée, la zone réellement visible est plus courte d'environ quatre-vingt-dix pixels, et
+   le bas du tiroir — donc le bouton de profil, dernier enfant de la colonne — se retrouve
+   physiquement sous l'écran. Ce n'est pas un défaut de défilement : `nav.menu` défile déjà.
+   C'est le conteneur lui-même qui dépasse.
+
+   `dvh` (dynamic viewport height) suit la hauteur RÉELLEMENT visible et se réajuste quand la
+   barre d'adresse se rétracte. La déclaration `100vh` reste en première ligne comme repli pour
+   les navigateurs qui ignorent `dvh` : ils lisent la première, les autres écrasent avec la
+   seconde. Même procédé que `.login-wrap`, déjà en place plus bas dans ce fichier. */
+.app{display:flex;min-height:100vh;min-height:100dvh}
+.sidebar{width:258px;flex:0 0 258px;position:sticky;top:0;height:100vh;height:100dvh;background:var(--bg2);border-right:1px solid var(--border-soft);display:flex;flex-direction:column;z-index:40}
 .brand{padding:20px 18px 14px;display:flex;align-items:center;gap:11px}
 .brand img{width:42px;height:42px;border-radius:11px;object-fit:contain;background:#fff;padding:4px}
 .brand .name{font-family:var(--font-d);font-weight:700;font-size:20px}
@@ -236,7 +247,11 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .sk-round{border-radius:50%}
 @keyframes shimmer{100%{transform:translateX(100%)}}
 @media (prefers-reduced-motion:reduce){.skeleton::after{animation:none;opacity:.5}}
-.side-foot-wrap{position:relative;border-top:1px solid var(--border-soft)}
+/* `flex-shrink:0` : le pied ne doit JAMAIS céder de place au menu, même très long — c'est lui
+   qui porte l'identité connectée et la déconnexion. `env(safe-area-inset-bottom)` le dégage de
+   la barre d'accueil (iPhone, iPad récents), qui recouvrait sinon le bas du bouton. La valeur
+   vaut 0 partout ailleurs : aucun effet sur un écran d'ordinateur. */
+.side-foot-wrap{position:relative;border-top:1px solid var(--border-soft);flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0px)}
 .side-foot{width:100%;padding:11px 16px;display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;cursor:pointer;color:inherit;font:inherit}
 .side-foot:hover,.side-foot.open{background:var(--hover,rgba(0,0,0,.04))}
 .side-foot .chev{margin-left:auto;color:var(--dim);display:grid;place-items:center}
