@@ -195,69 +195,20 @@ const saveTemplate = async (req, res) => {
     }
 };
 
-/**
- * PUT /api/templates/:slug/rename — change l'IDENTIFIANT (slug) d'un modèle, en RÉPERCUTANT le
- * changement partout où le slug est référencé. Le slug est un identifiant : le renommer sans
- * cascade orphelinerait le parcours (program_step), le réglage boutique, les factures, les
- * documents générés, les points de rupture d'émargement et les slugs stockés dans du JSON
- * (company_steps, arborescences d'archivage). On met donc tout à jour d'un bloc.
+/* LE RENOMMAGE DE SLUG A ÉTÉ RETIRÉ (2026-09-09), à la demande de l'organisme.
  *
- * On refuse de renommer un slug du SOCLE (il réapparaîtrait par défaut) ou vers un slug déjà pris.
- */
-const renameTemplate = async (req, res) => {
-    const orgId = req.user.organization_id;
-    const oldSlug = String(req.params.slug || '').trim().toLowerCase();
-    const newSlug = String(req.body.new_slug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
-    if (!newSlug) return res.status(422).json({ message: 'Nouvel identifiant (slug) requis.' });
-    if (newSlug === oldSlug) return res.json({ slug: oldSlug, message: 'Identifiant inchangé.' });
-    if (DEFAULT_SLUGS.has(oldSlug)) return res.status(422).json({ message: 'Un modèle du socle ne peut pas être renommé — dupliquez-le pour repartir d\'un slug libre.' });
-    if (DEFAULT_SLUGS.has(newSlug)) return res.status(422).json({ message: 'Cet identifiant est réservé à un modèle du socle. Choisissez-en un autre.' });
-    const conn = db.promise();
-    try {
-        const [[row]] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, oldSlug]);
-        if (!row) return res.status(404).json({ message: 'Modèle introuvable.' });
-        const [[clash]] = await conn.query('SELECT id FROM document_template WHERE organization_id = ? AND slug = ?', [orgId, newSlug]);
-        if (clash) return res.status(422).json({ message: 'Un modèle porte déjà cet identifiant.' });
-
-        // Cascade RÉSILIENTE : chaque cible peut manquer selon les migrations jouées.
-        const upd = async (sql, params) => {
-            try { await conn.query(sql, params); }
-            catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
-        };
-        await conn.query('UPDATE document_template SET slug = ? WHERE organization_id = ? AND slug = ?', [newSlug, orgId, oldSlug]);
-        // Références en colonnes.
-        await upd('UPDATE program_step SET slug = ? WHERE organization_id = ? AND slug = ?', [newSlug, orgId, oldSlug]);
-        await upd('UPDATE shop_settings SET invoice_template_slug = ? WHERE organization_id = ? AND invoice_template_slug = ?', [newSlug, orgId, oldSlug]);
-        await upd('UPDATE invoice SET template_slug = ? WHERE organization_id = ? AND template_slug = ?', [newSlug, orgId, oldSlug]);
-        await upd('UPDATE generated_document SET template_slug = ? WHERE organization_id = ? AND template_slug = ?', [newSlug, orgId, oldSlug]);
-        await upd('UPDATE training_program SET emargement_break_slug = ? WHERE organization_id = ? AND emargement_break_slug = ?', [newSlug, orgId, oldSlug]);
-        await upd('UPDATE training_program SET company_break_slug = ? WHERE organization_id = ? AND company_break_slug = ?', [newSlug, orgId, oldSlug]);
-        // Références DANS du JSON (tableaux de slugs, arbres) : le slug y est une chaîne entre
-        // guillemets. On remplace le jeton EXACT "old" par "new" — jamais un préfixe (le guillemet
-        // fermant borne le remplacement, donc "facture" ne touche pas "facture-copie").
-        for (const col of ['company_steps', 'archive_tree', 'company_archive_tree']) {
-            await upd(`UPDATE training_program SET ${col} = REPLACE(${col}, ?, ?) WHERE organization_id = ? AND ${col} LIKE ?`,
-                [`"${oldSlug}"`, `"${newSlug}"`, orgId, `%"${oldSlug}"%`]);
-        }
-        /* LES ÉQUIVALENCES MANQUAIENT À CETTE LISTE, et c'est la cible la plus punitive de toutes.
-         * `document_equivalence.members` est un tableau JSON de slugs, comme les trois colonnes
-         * ci-dessus. Oublié ici, un renommage laissait le VIEUX slug dans le groupe « OU » — un
-         * membre qui ne désigne plus rien. Or la validation d'une équivalence exige que tous ses
-         * membres existent : le groupe devenait donc IMPOSSIBLE À MODIFIER par l'écran, avec un
-         * message citant un identifiant que l'utilisateur n'avait jamais tapé.
-         * Constaté sur le parcours RS7404 après un renommage `devis-particulier-copie` →
-         * `devis-professionnel` : plus aucune variante ajoutable au jalon « Devis particulier ».
-         * Même remplacement borné par les guillemets que plus haut. */
-        await upd('UPDATE document_equivalence SET members = REPLACE(members, ?, ?) WHERE organization_id = ? AND members LIKE ?',
-            [`"${oldSlug}"`, `"${newSlug}"`, orgId, `%"${oldSlug}"%`]);
-        logAudit(req, 'template.rename', 'DocumentTemplate', newSlug);
-        res.json({ slug: newSlug, message: 'Identifiant mis à jour.' });
-    } catch (e) {
-        console.error('Erreur renommage modèle :', e);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
-
+ * Il existait `PUT /:slug/rename`, qui répercutait le nouveau slug partout où il était référencé —
+ * parcours, réglage boutique, factures, documents générés, points de rupture, et les slugs enfouis
+ * dans du JSON. Une cascade de dix requêtes pour renommer un identifiant.
+ *
+ * POURQUOI ON L'ENLÈVE. Un slug est un IDENTIFIANT : sa valeur ne veut rien dire, seule sa
+ * stabilité compte. Le renommer n'apporte rien qui ne soit déjà couvert par l'intitulé, qui est
+ * libre et modifiable, lui — et fait porter à chaque référence le risque d'être oubliée. Une
+ * cascade qui rate une table ne se voit pas le jour du renommage : elle se voit des semaines plus
+ * tard, sur un document qui ne se génère plus.
+ *
+ * Le slug se choisit donc À LA CRÉATION et ne bouge plus. Pour en changer, on duplique le modèle
+ * sous le slug voulu. */
 // Échantillon d'aperçu RÉALISTE selon le type et le NOM de colonne (pas le libellé, qui
 // afficherait « Intitulé de la formation » au lieu d'une vraie valeur d'exemple).
 /**
@@ -950,6 +901,6 @@ const reorderTemplates = async (req, res) => {
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate, duplicateTemplate,
-    renameTemplate, getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
+    getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
     loadCustomTokens, getCustomTokens, saveCustomTokens,
 };

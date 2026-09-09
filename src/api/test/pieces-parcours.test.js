@@ -31,18 +31,14 @@ const path = require('path');
 const API = path.join(__dirname, '..');
 const APP = path.join(API, '..', 'app');
 const srcEq = fs.readFileSync(path.join(API, 'lib/equivalence.js'), 'utf8');
-const srcTpl = fs.readFileSync(path.join(API, 'controllers/template.controller.js'), 'utf8');
 const srcPiece = fs.readFileSync(path.join(API, 'controllers/piece.controller.js'), 'utf8');
 const srcPage = fs.readFileSync(path.join(APP, 'ui/pages/Formations.jsx'), 'utf8');
 
-test('renommer un slug suit AUSSI dans les équivalences', () => {
-    assert.match(srcTpl, /UPDATE document_equivalence SET members = REPLACE\(members, \?, \?\)/,
-        'la cible manquante de la cascade');
-    // Remplacement borné par les guillemets, comme les autres colonnes JSON : sans eux,
-    // « facture » toucherait « facture-copie ».
-    assert.match(srcTpl, /\[`"\$\{oldSlug\}"`, `"\$\{newSlug\}"`, orgId, `%"\$\{oldSlug\}"%`\]\);/,
-        'le jeton exact, jamais un prefixe');
-});
+/* Le test « renommer un slug suit AUSSI dans les équivalences » a été RETIRÉ avec la
+   fonctionnalité elle-même (2026-09-09) : le renommage de slug n'existe plus, la cascade non
+   plus. Ce qui garde sa place ici, c'est la RÉPARATION juste en dessous — un groupe dont un
+   membre a disparu ne doit pas rester bloqué —, car elle vaut indépendamment du renommage :
+   un membre peut disparaître par suppression du modèle. Cf. `slug-non-renommable.test.js`. */
 
 test('un membre qui n\'existe plus ne bloque plus le groupe', () => {
     /* C'est la réparation : aucune cascade ne rattrapera les groupes déjà cassés, et refuser

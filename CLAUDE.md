@@ -179,9 +179,13 @@ rien ne se transmet avant.
 - **Acheteur** : ses coordonnées viennent des **Champs documents**
   (`field:company.*` / `field:learner.*`, remplis par `invoiceCtx`), regroupées dans un groupe de
   palette « Acheteur (facture) ». Colonnes techniques/sensibles exclues.
-- **Slug renommable** : `PUT /templates/:slug/rename` renomme **en cascade** (parcours, réglage
-  boutique, factures, documents générés, points de rupture, slugs dans le JSON). Socle non
-  renommable, collision refusée.
+- **Slug NON renommable** (retiré le 2026-09-09, à la demande de l'organisme). Il a existé un
+  `PUT /templates/:slug/rename` qui répercutait le nouveau slug en cascade sur dix tables. Un slug
+  est un IDENTIFIANT : seule sa stabilité compte, et l'intitulé — libre, lui — porte déjà tout ce
+  qu'on lit à l'écran. Une cascade qui rate une référence ne se voit pas le jour du renommage mais
+  des semaines plus tard, sur un document qui ne se génère plus. Le slug se choisit donc à la
+  **création** et ne bouge plus ; pour en changer, on **duplique** le modèle sous le slug voulu.
+  Le libellé d'audit `template.rename` est CONSERVÉ pour les lignes déjà journalisées.
 - **Remise (migration 122)** : elle n'était écrite **nulle part** — fondue dans le prix net, sa
   seule trace étant du texte dans le libellé (« Biberon valve (remise 10%) »). Deux colonnes sur
   `invoice_line` : le **taux** (affichage fidèle à la saisie) et le **prix brut** (les euros, par
