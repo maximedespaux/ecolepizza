@@ -55,6 +55,10 @@ const ACTION_LABEL = {
     'template.save': ['Modèle enregistré', A],
     'template.upload': ['Modèle importé', G],
     'template.duplicate': ['Modèle dupliqué', G],
+    /* LA FONCTIONNALITÉ A ÉTÉ RETIRÉE (2026-09-09), PAS SON LIBELLÉ. Plus aucun code
+       « template.rename » ne sera écrit, mais ceux DÉJÀ inscrits au journal le resteront : une
+       trace d'audit ne se réécrit pas. Supprimer l'entrée rendrait ces lignes-là illisibles —
+       exactement ce qu'un journal existe pour empêcher. */
     'template.rename': ['Identifiant de modèle renommé', A],
     'template.reorder': ['Modèles réordonnés', A],
     'template.delete': ['Modèle supprimé', R],
