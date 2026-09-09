@@ -4,6 +4,11 @@ const db = require('../config/database.js');
 const { encrypt, decrypt, generatePassword } = require('../lib/crypto.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { credentialsEmail, resetEmail } = require('../lib/mailTemplates.js');
+/* NI LA CRÉATION NI LA SUPPRESSION D'UN STAGIAIRE N'ÉTAIENT JOURNALISÉES. Le journal d'audit
+   couvrait les factures, les modèles, les partenaires — mais pas la fiche autour de laquelle
+   tourne toute l'application. Conséquence : aucune trace de qui a créé ou supprimé qui, et la
+   cloche restait muette sur l'événement le plus courant de la journée. */
+const { logAudit } = require('../lib/audit.js');
 const { couperSessions } = require('./auth.controller.js'); // évincer les sessions après un reset
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
@@ -181,6 +186,10 @@ const createLearner = async (req, res) => {
                  VALUES (?, ?, ${placeholders})`,
                 [companyId, organizationId, ...values]
             );
+            // Une entreprise créée EN PASSANT reste une entreprise créée : elle signera des
+            // conventions et recevra des factures. Elle n'a pas à être moins tracée qu'une autre
+            // parce qu'elle est née dans le formulaire d'un stagiaire.
+            logAudit(req, 'company.create', 'Company', companyId);
         }
 
         // Compte de connexion du stagiaire (rôle STAGIAIRE) à partir de son email.
@@ -198,11 +207,16 @@ const createLearner = async (req, res) => {
             f === 'social_security' ? encrypt(clean(body[f])) : clean(body[f])
         );
 
+        /* L'identifiant est tiré ICI et non par UUID() en base : sans lui, la ligne de journal
+           dirait « un stagiaire a été créé » sans pouvoir dire lequel — une trace à moitié
+           utile, qu'on ne peut pas relier à la fiche au moment du contrôle. */
+        const learnerId = crypto.randomUUID();
         await conn.query(
             `INSERT INTO learner (id, organization_id, company_id, user_id, ${cols.join(', ')})
-             VALUES (UUID(), ?, ?, ?, ${placeholders})`,
-            [organizationId, companyId, account?.userId || null, ...values]
+             VALUES (?, ?, ?, ?, ${placeholders})`,
+            [learnerId, organizationId, companyId, account?.userId || null, ...values]
         );
+        logAudit(req, 'learner.create', 'Learner', learnerId);
 
         res.status(201).json({ message: 'Stagiaire créé', password: account?.password || null });
     } catch (err) {
@@ -260,6 +274,7 @@ const updateLearner = async (req, res) => {
                      VALUES (?, ?, ${cols.map(() => '?').join(', ')})`,
                     [companyId, organizationId, ...vals]
                 );
+                logAudit(req, 'company.create', 'Company', companyId); // même raison qu'à la création
             }
         }
 
@@ -327,6 +342,7 @@ const updateLearner = async (req, res) => {
             );
         }
 
+        logAudit(req, 'learner.update', 'Learner', req.params.id);
         res.status(200).json({ success: true, message: 'Stagiaire mis à jour' });
     } catch (err) {
         console.error('Erreur mise à jour stagiaire :', err);
@@ -446,6 +462,7 @@ const deleteLearner = async (req, res) => {
                 await conn.query("DELETE FROM user WHERE id = ? AND organization_id = ? AND role = 'STAGIAIRE'", [uid, orgId]);
             }
         }
+        logAudit(req, 'learner.delete', 'Learner', req.params.id);
         res.status(200).json({ success: true, message: 'Stagiaire supprimé' });
     } catch (err) {
         console.error('Erreur suppression stagiaire :', err);

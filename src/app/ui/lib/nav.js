@@ -184,6 +184,18 @@ export function navAllowed(user, path) {
 }
 
 /**
+ * Cette personne a-t-elle cette capacité (« cap:… ») ?
+ *
+ * Passe par `navMap`, qui sait déjà normaliser les trois formes de `nav_access` — un quatrième
+ * décodage écrit à la main aurait fini par diverger des trois autres. Un `nav_access` non réglé
+ * retombe sur le menu par défaut du rôle, qui ne contient aucune capacité : sans octroi
+ * explicite, la réponse est non.
+ */
+export function aLaCapacite(user, cap) {
+  return Object.prototype.hasOwnProperty.call(navMap(user), cap);
+}
+
+/**
  * Mode d'accès de l'utilisateur pour ce chemin :
  *  · "write" (modification) / "read" (lecture seule) / null (non accordé).
  * Les propriétaires sont toujours en écriture.
@@ -267,6 +279,18 @@ export const GRANTABLE_NAV = NAV
 // présence de la clé = capacité accordée (le mode read/write ne s'applique pas).
 // `defaultRoles` = rôles qui l'ont d'office (case cochée et verrouillée).
 export const EXTRA_ACCESS = [
+  {
+    /* Une notification d'organisme est UNE ligne partagée : la supprimer ne la retire pas de ma
+       cloche, elle la retire de celle de tout le monde, y compris de qui ne l'a pas encore lue.
+       Effacer une information chez les autres n'est pas un attribut de rôle, c'est un droit que
+       l'organisme désigne — d'où une capacité, comme « Révéler les montants ». Les lignes
+       d'activité, elles, ne se suppriment jamais : elles viennent du journal d'audit. */
+    to: "cap:delete-notifications",
+    label: "Supprimer les notifications",
+    hint: "Retirer une notification de la cloche. Une notification d'organisme disparaît alors pour TOUT le monde. Les lignes d'activité (journal) ne sont jamais supprimables.",
+    ic: "trash",
+    defaultRoles: ["SUPER_ADMIN", "ADMIN_ORGANISME"],
+  },
   {
     to: "cap:reveal-money",
     label: "Révéler les montants",

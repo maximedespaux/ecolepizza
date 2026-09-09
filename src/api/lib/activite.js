@@ -31,6 +31,7 @@ const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'];
 /** Entité journalisée → rubrique de menu. Les clés sont celles posées par `logAudit`. */
 const SECTION_PAR_ENTITE = {
     Learner: '/stagiaires', PieceDepot: '/stagiaires', GeneratedDocument: '/stagiaires',
+    Company: '/entreprises',
     TrainingSession: '/sessions', AttendanceSheet: '/sessions',
     Invoice: '/factures', BillingProfile: '/reglages-facturation',
     AccountingSettings: '/comptabilite', Expense: '/comptabilite', RevenueExtra: '/comptabilite',
@@ -95,7 +96,36 @@ function estLu({ quand, vue, dormant }) {
     return new Date(quand) <= new Date(vue);
 }
 
+/**
+ * Regroupe les lignes CONSÉCUTIVES identiques — même geste, même entité, même auteur.
+ *
+ * POURQUOI. L'inscription d'un groupe crée douze stagiaires en une fois, et chacun laisse sa
+ * trace : c'est voulu, un contrôle veut savoir LESQUELS. Mais recopié tel quel dans la cloche,
+ * ce lot chasse tout le reste de l'écran — douze fois « Stagiaire ajouté », et la facture
+ * envoyée juste avant n'est plus visible. La trace reste fine, l'affichage se resserre.
+ *
+ * CONSÉCUTIVES seulement, et c'est important : deux séries séparées par un autre geste restent
+ * deux lignes. Fusionner à distance ferait remonter un événement ancien au rang du récent et
+ * mentirait sur l'ordre des choses.
+ *
+ * Les lignes arrivent de la plus récente à la plus ancienne : le groupe garde donc la date de
+ * la plus récente. Il est non lu dès qu'une seule de ses lignes l'est.
+ */
+function regrouperConsecutives(lignes) {
+    const out = [];
+    for (const l of lignes) {
+        const p = out[out.length - 1];
+        if (p && p.action === l.action && p.entity === l.entity && p.auteur === l.auteur) {
+            p.nombre += 1;
+            p.is_read = p.is_read && l.is_read ? 1 : 0;
+            continue;
+        }
+        out.push({ ...l, nombre: 1 });
+    }
+    return out;
+}
+
 module.exports = {
     SECTION_PAR_ENTITE, sectionDeLEntite, sectionsVisibles, entitesVisibles, estLu,
-    OWNER_ROLES, ADMIN_ROLES,
+    regrouperConsecutives, OWNER_ROLES, ADMIN_ROLES,
 };

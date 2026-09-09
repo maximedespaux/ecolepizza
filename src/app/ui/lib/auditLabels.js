@@ -99,6 +99,15 @@ const ACTION_LABEL = {
     'partner.create': ['Partenaire créé', G],
     'partner.update': ['Partenaire modifié', A],
     'partner.delete': ['Partenaire supprimé', R],
+    /* CES TROIS-LÀ NE PARLENT PAS DU PARTENAIRE, MAIS DE DONNÉES PERSONNELLES.
+       `partner_disclosure.create` se lisait « Partenaire créé » — mot pour mot le libellé de
+       `partner.create`. Or c'est l'ENVOI EFFECTIF des coordonnées de stagiaires consentants à
+       une entreprise : l'événement RGPD le plus lourd du journal, rendu indiscernable d'une
+       création de fiche. Les deux `partner.destinataire.*`, eux, ne se lisaient pas du tout
+       (code brut à l'écran) : ils disent qui a le droit de recevoir ces coordonnées. */
+    'partner_disclosure.create': ['Coordonnées transmises à un partenaire', B],
+    'partner.destinataire.oui': ['Partenaire déclaré destinataire de données', A],
+    'partner.destinataire.non': ['Partenaire retiré des destinataires', N],
     'partner.contribution.create': ['Financement enregistré', G],
     'partner.contribution.delete': ['Financement supprimé', R],
     // Catalogue vendu par un partenaire, visible des stagiaires : ces prix les engagent, donc
@@ -109,11 +118,13 @@ const ACTION_LABEL = {
     'opco.create': ['OPCO créé', G],
 
     // Quiz
-    'quiz.create': ['Quiz créé', G],
-    'quiz.save': ['Quiz enregistré', A],
-    'quiz.duplicate': ['Quiz dupliqué', G],
-    'quiz.submit': ['Quiz passé', N],
-    'quiz.send': ['Quiz envoyé', B],
+    /* « QCM » et non « Quiz » : c'est le mot de l'interface (menu « Modèles de QCM », page
+       « Résultats QCM »), et le journal parlait seul sa propre langue. */
+    'quiz.create': ['QCM créé', G],
+    'quiz.save': ['QCM enregistré', A],
+    'quiz.duplicate': ['QCM dupliqué', G],
+    'quiz.submit': ['QCM passé par un stagiaire', N],
+    'quiz.send': ['QCM envoyé', B],
     'quiz.response_delete': ['Réponse QCM supprimée', R],
 
     /* Pièces justificatives fournies par le STAGIAIRE — le sens inverse du reste. Le dépôt et
@@ -121,9 +132,12 @@ const ACTION_LABEL = {
        quand » est précisément ce qu'un contrôle demandera. La suppression d'un fichier est en
        ROUGE et non en neutre : tant que la règle de conservation n'est pas tranchée, c'est la
        seule purge existante — elle doit se repérer d'un coup d'œil dans le journal. */
-    'piecetype.create': ['Pièce justificative créée', G],
-    'piecetype.update': ['Pièce justificative modifiée', A],
-    'piecetype.delete': ['Pièce justificative supprimée', R],
+    /* « Pièce justificative créée » laissait croire qu'un stagiaire venait d'en déposer une.
+       Ce sont les TYPES de pièces (carte d'identité, RIB…) que l'organisme paramètre, avec leur
+       poids maximum et leurs formats — le dépôt, lui, c'est `piece.depot`. */
+    'piecetype.create': ['Type de pièce créé', G],
+    'piecetype.update': ['Type de pièce modifié', A],
+    'piecetype.delete': ['Type de pièce supprimé', R],
     'piece.depot': ['Pièce déposée', B],
     'piece.validee': ['Pièce validée', G],
     'piece.refusee': ['Pièce refusée', R],
@@ -166,6 +180,26 @@ const ACTION_LABEL = {
  * Certaines actions sont enregistrées sous un simple `CREATE` / `UPDATE` / `DELETE` : seule
  * l'entité dit de quoi il s'agit. « CREATE » seul n'apprend rien ; « Chapitre créé » si.
  */
+/**
+ * CODES CONSTRUITS À L'EXÉCUTION — reconnus par leur PRÉFIXE, faute de pouvoir être énumérés.
+ *
+ * Trois points d'appel fabriquent leur code au vol : `consent.${accorde ? 'accorde' : 'refuse'}`
+ * suivi de la finalité, parfois de la source (« consent.accorde.partenaires.espace »). Aucune
+ * table exhaustive n'est possible — une finalité ajoutée demain en créerait deux de plus.
+ *
+ * Sans cette règle, le repli affichait le CODE BRUT : un consentement RGPD, c'est-à-dire la
+ * pièce qui prouve qu'un stagiaire a dit oui ou non à la transmission de ses coordonnées,
+ * s'écrivait « consent.refuse.partenaires » dans le journal. Illisible là où il faut justement
+ * pouvoir relire.
+ *
+ * La finalité n'est pas reprise dans le libellé : elle varie, et « Consentement accordé » suffit
+ * à l'écran — le journal garde le code entier, lui, qui reste la trace exacte.
+ */
+const PREFIXE = [
+    ['consent.accorde.', ['Consentement accordé', G]],
+    ['consent.refuse.', ['Consentement refusé', A]],
+];
+
 const VERBE = {
     CREATE: ['créé', G], UPDATE: ['modifié', A], DELETE: ['supprimé', R],
 };
@@ -195,9 +229,10 @@ const ENTITY_LABEL = {
     // La remise à zéro de Pizza Quest vise le STAGIAIRE lui-même : c'est sa progression qui
     // disparaît, pas un objet qu'il possède.
     Learner: ['Stagiaire', 'm'],
+    Company: ['Entreprise', 'f'],
     CommunityPost: ['Publication', 'f'],
     CommunityAnswer: ['Réponse', 'f'],
-    PieceType: ['Pièce justificative', 'f'],
+    PieceType: ['Type de pièce', 'm'],
     PieceDepot: ['Dépôt de pièce', 'm'],
     Recipe: ['Fiche technique', 'f'],
     Invoice: ['Facture', 'f'],
@@ -211,7 +246,7 @@ const ENTITY_LABEL = {
     EmargementTemplate: ['Modèle d\'émargement', 'm'],
     AttendanceSheet: ['Feuille d\'émargement', 'f'],
     TrainingSession: ['Session de formation', 'f'],
-    Quiz: ['Quiz', 'm'],
+    Quiz: ['QCM', 'm'],
     QuizResponse: ['Réponse QCM', 'f'],
     Expense: ['Dépense', 'f'],
     RevenueExtra: ['Recette annexe', 'f'],
@@ -244,6 +279,11 @@ const ENTITY_LABEL = {
 function auditLabel(action, entity) {
     const exact = ACTION_LABEL[action];
     if (exact) return { label: exact[0], tone: exact[1] };
+
+    // Familles à code variable (cf. PREFIXE) — avant les règles génériques, qui découpent sur
+    // les points et prendraient la finalité pour un verbe.
+    const pre = PREFIXE.find(([p]) => String(action || '').startsWith(p));
+    if (pre) return { label: pre[1][0], tone: pre[1][1] };
 
     const v = VERBE[action];
     if (v) {

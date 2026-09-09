@@ -1938,6 +1938,10 @@ const updateMyInfos = async (req, res) => {
                     await conn.query(
                         `INSERT INTO company (id, organization_id, ${cols.join(', ')}) VALUES (?, ?, ${cols.map(() => '?').join(', ')})`,
                         [cid, learner.organization_id, ...Object.values(cvals)]);
+                    /* Saisie par le STAGIAIRE lui-même, depuis son espace : c'est justement
+                       celle-là qu'il faut tracer. L'école découvre autrement une entreprise
+                       apparue dans sa base sans savoir ni quand ni par qui. */
+                    logAudit(req, 'company.create', 'Company', cid);
                     await conn.query('UPDATE learner SET company_id = ? WHERE id = ?', [cid, learner.id]);
                 }
             }
