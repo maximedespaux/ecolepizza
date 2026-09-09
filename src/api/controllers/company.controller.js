@@ -6,6 +6,11 @@ const { generatePassword } = require('../lib/crypto.js');
 // Même lacune que pour le stagiaire : l'entreprise, qui signe les conventions et reçoit les
 // factures, n'apparaissait nulle part dans le journal.
 const { logAudit } = require('../lib/audit.js');
+/* Les conventions de saisie d'un stagiaire viennent de SON contrôleur, pas d'une copie : nom en
+   capitales, e-mail en minuscules, espaces épurés. L'inscription de groupe ne les appliquait pas
+   — un lot de douze arrivait en « dupont », « Dupont », « DUPONT » selon ce qu'avait tapé
+   l'entreprise, et c'est exactement le mélange que la convention existe pour empêcher. */
+const { normaliserSaisie, RE_EMAIL } = require('./learner.controller.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { representativeEmail } = require('../lib/mailTemplates.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
@@ -227,6 +232,40 @@ const registerCompanyStagiaires = async (req, res) => {
     const learnerIds = Array.isArray(req.body?.learner_ids) ? req.body.learner_ids.filter(Boolean) : [];
     const sessionId = req.body?.session_id || null;
     if (!list.length && !learnerIds.length) return res.status(422).json({ error: 'Aucun stagiaire à inscrire.' });
+
+    /* PRÉNOM **ET** NOM, la règle du formulaire — cette voie ne l'appliquait pas.
+     *
+     * Le test était `if (!first && !last) continue;` : un ET, donc une ligne où seul le prénom
+     * était rempli passait la garde et atterrissait en base à moitié nommée. Aucun message : la
+     * ligne était simplement acceptée. La même personne passait ou non selon la porte empruntée —
+     * refusée par 422 dans la fiche stagiaire, admise en silence par l'inscription de groupe.
+     *
+     * Une ligne ENTIÈREMENT vide reste ignorée, et ce n'est pas une exception mais la distinction
+     * utile : c'est le résidu d'un copier-coller, pas une saisie fautive. Ce qu'on refuse, c'est
+     * la ligne À MOITIÉ remplie, la seule qui trahisse une intention incomplète.
+     *
+     * Contrôle AVANT la boucle, pour la raison déjà écrite plus bas à propos des parcours :
+     * refuser au dixième d'une liste de vingt laisserait neuf fiches créées et onze non, un état
+     * que personne ne peut rattraper à la main. Et le RANG est nommé : « une ligne est
+     * incomplète » sur une liste de vingt collées d'un coup oblige à toutes les relire. */
+    const rempli = (v) => String(v ?? '').trim(); // `clean` ne coupe PAS les espaces : « \u00a0 » resterait « rempli »
+    const incompletes = []; const emailsFautifs = [];
+    list.forEach((s, i) => {
+        const first = rempli(s.first_name); const last = rempli(s.last_name);
+        if ((first || last) && !(first && last)) incompletes.push(i + 1);
+        const mail = rempli(s.email);
+        if (mail && !RE_EMAIL.test(mail.toLowerCase())) emailsFautifs.push(i + 1);
+    });
+    const rangs = (l) => `ligne${l.length > 1 ? 's' : ''} ${l.join(', ')}`;
+    if (incompletes.length) {
+        return res.status(422).json({ error: `Prénom et nom requis pour chaque stagiaire — ${rangs(incompletes)}.` });
+    }
+    /* L'e-mail est validé ici pour la même raison que dans la fiche stagiaire : il SERT
+       d'identifiant de connexion. Une adresse malformée ne fait pas échouer l'import, elle crée
+       douze fiches dont l'une n'aura jamais de compte, sans que personne ne l'apprenne. */
+    if (emailsFautifs.length) {
+        return res.status(422).json({ error: `Adresse e-mail invalide — ${rangs(emailsFautifs)}.` });
+    }
     try {
         const conn = db.promise();
         const [[company]] = await conn.query('SELECT id, opco FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
@@ -295,15 +334,17 @@ const registerCompanyStagiaires = async (req, res) => {
 
         // 2) NOUVEAUX stagiaires : créés puis inscrits.
         for (const s of list) {
-            const first = clean(s.first_name), last = clean(s.last_name);
-            if (!first && !last) continue;
-            const email = clean(s.email);
-            const account = email ? await createStagiaireAccount(conn, orgId, { email, first_name: first, last_name: last, phone: clean(s.phone) }) : null;
+            // Mêmes conventions que la fiche stagiaire : nom en capitales, e-mail en minuscules.
+            const n = normaliserSaisie(s);
+            const first = clean(n.first_name), last = clean(n.last_name);
+            if (!first && !last) continue; // ligne vide d'un copier-coller — les incomplètes ont déjà été refusées
+            const email = clean(n.email);
+            const account = email ? await createStagiaireAccount(conn, orgId, { email, first_name: first, last_name: last, phone: clean(n.phone) }) : null;
             const learnerId = crypto.randomUUID();
             await conn.query(
                 `INSERT INTO learner (id, organization_id, company_id, user_id, civility, first_name, last_name, email, phone, financing, opco, levels)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PROFESSIONNEL', ?, ?)`,
-                [learnerId, orgId, company.id, account?.userId || null, clean(s.civility), first, last, email, clean(s.phone), company.opco || null, badge || null]
+                [learnerId, orgId, company.id, account?.userId || null, clean(n.civility), first, last, email, clean(n.phone), company.opco || null, badge || null]
             );
             let enrolled = false;
             if (sessionId) {
