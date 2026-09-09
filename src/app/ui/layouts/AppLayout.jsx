@@ -55,6 +55,19 @@ function AppLayout() {
   const FINANCE = ["/ventes", "/inventaire", "/factures", "/comptabilite", "/partenaires", "/dashboard"];
   const moneyMask = FINANCE.some((p) => location.pathname.startsWith(p)) && (!canRevealMoney(user) || moneyMasked);
 
+  /* LE TIROIR SE REFERME QUAND ON NAVIGUE. Sur téléphone et tablette, la barre latérale est un
+     tiroir posé PAR-DESSUS la page : cliquer une rubrique naviguait bien, mais laissait le
+     tiroir ouvert sur la page qu'on venait de demander — il fallait un second geste, sur le
+     voile, pour découvrir le résultat. Le premier clic ne montrait rien.
+
+     Ici plutôt que sur chaque lien : ça couvre TOUTES les navigations d'un coup — les rubriques,
+     l'entrée « Paramètres » du menu profil (qui appelle `navigate`), et tout lien ajouté demain.
+     Sur un écran large le tiroir n'existe pas et `open` vaut déjà faux : sans effet.
+
+     Ne couvre PAS le clic sur la rubrique où l'on est déjà (le chemin ne change pas, l'effet ne
+     se déclenche pas) — d'où le `onClose` porté aussi par les liens eux-mêmes, cf. Sidebar. */
+  useEffect(() => { setOpen(false); }, [location.pathname]);
+
   // Charge une fois les couleurs personnalisées des formations pour que les
   // badges (formation / stagiaire / session) soient cohérents partout.
   useEffect(() => {
@@ -86,7 +99,7 @@ function AppLayout() {
        retour à l'appui. Exactement le pendant de `.stu-app` côté stagiaire : on redéfinit les
        tokens, on ne réécrit aucun composant. */
     <div className="app adm-app">
-      <Sidebar open={open} />
+      <Sidebar open={open} onClose={() => setOpen(false)} />
       <div className={"scrim" + (open ? " show" : "")} onClick={() => setOpen(false)} />
       <div className="main">
         <Topbar onMenu={() => setOpen(true)} />

@@ -71,3 +71,33 @@ test('le menu, lui, défile — c\'est ce qui rend le pied tenable', () => {
     assert.match(regle[1], /flex:1/);
     assert.match(regle[1], /overflow-y:auto/);
 });
+
+/* ---------------------------------------------------------------------------------------------
+ * LE TIROIR SE REFERME QUAND ON NAVIGUE.
+ * ------------------------------------------------------------------------------------------- */
+
+const LAYOUT = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'app/ui/layouts/AppLayout.jsx'), 'utf8');
+const SIDEBAR = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'app/ui/components/Sidebar.jsx'), 'utf8');
+
+test('naviguer referme le tiroir', () => {
+    /* LE DÉFAUT, reproduit sur le site en production : tiroir ouvert, clic sur « Entreprises »
+       → `location.pathname` devient « /entreprises », mais `.sidebar` garde la classe `open` et
+       le voile reste affiché. On atterrit sur la page demandée SANS la voir : le premier clic ne
+       montre rien, il faut un second geste sur le voile. */
+    assert.match(LAYOUT, /useEffect\(\(\) => \{ setOpen\(false\); \}, \[location\.pathname\]\);/,
+        'la fermeture doit suivre le changement de chemin');
+    /* Placé dans le LAYOUT et non sur chaque lien : ça couvre toutes les navigations d'un coup —
+       les rubriques, l'entrée « Paramètres » du menu profil qui appelle `navigate`, et tout lien
+       ajouté demain. Une liste de `onClick` se serait périmée au premier oubli. */
+    assert.match(LAYOUT, /<Sidebar open=\{open\} onClose=\{\(\) => setOpen\(false\)\} \/>/);
+});
+
+test('cliquer la rubrique où l\'on est DÉJÀ referme aussi', () => {
+    /* Le cas que l'effet de route ne peut pas voir : le chemin ne change pas, donc rien ne se
+       déclenche, et le tiroir resterait ouvert sur la page qu'on regardait. Les deux mécanismes
+       ne font donc pas double emploi — ils couvrent deux cas distincts. */
+    assert.match(SIDEBAR, /function Sidebar\(\{ open, onClose \}\)/);
+    assert.match(SIDEBAR, /<NavLink key=\{it\.to\} to=\{it\.to\} onClick=\{onClose\}/);
+});
