@@ -25,7 +25,7 @@ const ROLE_LABELS = {
 };
 
 /** Barre latérale : marque, menu groupé filtré par rôle, pied utilisateur. */
-function Sidebar({ open }) {
+function Sidebar({ open, onClose }) {
   const { user, logout } = useContext(UserContext);
   const navigate = useNavigate();
   const role = user?.role;
@@ -89,7 +89,12 @@ function Sidebar({ open }) {
             <div key={group.grp}>
               <div className="grp">{group.grp}</div>
               {items.map((it) => (
-                <NavLink key={it.to} to={it.to} className={({ isActive }) => (isActive ? "on" : "")}>
+                /* `onClose` EN PLUS de l'effet de route d'AppLayout, et non à sa place : cliquer la
+                   rubrique où l'on se trouve DÉJÀ ne change pas le chemin, donc ne déclenche aucun
+                   effet — le tiroir resterait ouvert sur la page qu'on regardait. Sur un écran large,
+                   `open` vaut déjà faux : l'appel ne fait rien. */
+                <NavLink key={it.to} to={it.to} onClick={onClose}
+                  className={({ isActive }) => (isActive ? "on" : "")}>
                   <span className="ic"><Icon name={it.ic} size={18} /></span> {it.label}
                   {badges[it.to] > 0 && <span className="count">{badges[it.to]}</span>}
                 </NavLink>
