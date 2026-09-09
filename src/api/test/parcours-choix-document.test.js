@@ -69,20 +69,18 @@ test('« aucun résultat » n\'est jamais une impasse', () => {
 });
 
 test('les variantes « OU » respectent la nature de l\'étape', () => {
-    /* Un jalon-DOCUMENT ne se voit proposer que des documents en variante (jamais QCM, émargement
-       ni pièce : leur « OU » n'a pas la même mécanique). */
+    /* Un jalon ne se voit proposer que des DOCUMENTS en variante — jamais QCM, émargement ni
+       pièce. Pour les pièces, ce n'est plus une question de mécanique différente : le « OU »
+       leur a été RETIRÉ (2026-09-09). Une pièce est une étape exigée, point ; deux pièces sont
+       demandées toutes les deux. Cf. `groupes-pieces.test.js`. */
     assert.match(srcPage, /!s\.quiz_id && !s\.company_level && s\.doc_type !== "EMARGEMENT"\s*\n\s*&& s\.doc_type !== "PIECE"/,
-        'un jalon-document exclut QCM / émargement / pièce de ses variantes');
-    /* Un jalon-PIÈCE, lui, ne propose que d'AUTRES pièces : « identité OU justificatif » se
-       choisit par condition du dossier, pas en mélangeant pièce et document. C'est la capacité
-       nouvelle — l'ancienne exclusion pure et simple des pièces du « OU » est levée. */
-    assert.match(srcPage, /jalonPiece\s*\n?\s*\? steps\.filter\(\(s\) => s\.doc_type === "PIECE" && !jalon\.steps\.some/,
-        'un jalon-pièce ne propose que des pièces en variante');
-    // La section « Pièces » s'affiche donc en ajout libre OU quand on cherche une variante de pièce.
-    assert.match(srcPage, /\{\(jalonPiece \|\| !jalon\) && \(/,
-        'les pièces sont proposées comme variante d\'un jalon-pièce (plus seulement en ajout libre)');
-    /* TROIS natures d'étape dans le sélecteur : ranger une pièce parmi les « Documents » tromperait
-       — ceux-là, l'école les produit ; celle-ci, le stagiaire l'envoie. */
+        'un jalon exclut QCM / émargement / pièce de ses variantes');
+    // Et la section « Pièces » ne s'affiche plus QU'EN AJOUT LIBRE : elle ne peut plus être
+    // la variante de quoi que ce soit.
+    assert.match(srcPage, /\{!jalon && \(\n\s*<>\n\s*<div className="pf-add-title" style=\{\{ marginTop: 12 \}\}>/,
+        'les pièces ne sont proposées qu\'en ajout libre');
+    /* TROIS natures d'étape dans le sélecteur : ranger une pièce parmi les « Documents »
+       tromperait — ceux-là, l'école les produit ; celle-ci, le stagiaire l'envoie. */
     assert.match(srcPage, /const isPiece = \(s\) => s\.doc_type === "PIECE";/, 'la troisieme nature');
     assert.match(srcPage, /Pièces à fournir par le stagiaire\{pieces\.length/, 'son propre groupe, nomme sans ambiguite');
 });

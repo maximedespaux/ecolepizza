@@ -1,45 +1,40 @@
 /**
- * UN « OU » ENTRE PIÈCES N'EXISTE QU'À PARTIR DE DEUX VARIANTES ACTIVES.
+ * UNE PIÈCE À FOURNIR N'A JAMAIS DE « OU ». Les deux sont exigées, toujours.
  *
- * LE PIÈGE, constaté sur la formation RS7404. Deux pièces partageaient un groupe « OU » —
- * « Pièce d'identité » (active) et « Justificatif » (INACTIVE). À l'écran, le parcours annonçait
- * donc un choix… entre une seule option. Et surtout : réactiver « Justificatif » ne rendait pas
- * les deux pièces exigées, il les rendait INTERCHANGEABLES, en silence, parce que le groupe était
- * resté collé à la variante endormie. L'organisme croyait demander deux documents, il n'en
- * obtenait qu'un.
+ * L'HISTOIRE, parce qu'elle explique la forme de cette règle. Les pièces ont d'abord eu un
+ * regroupement « OU » emprunté aux documents (`or_group`, migration 052), pour dire « carte
+ * d'identité OU justificatif ». En pratique ça n'a produit que des dégâts :
  *
- * LA RÈGLE : un groupe se compte sur ses membres ACTIFS. En dessous de deux, il ne veut plus rien
- * dire et disparaît. Désactiver une variante dissout donc le choix au lieu de le laisser en
- * embuscade, et la réactiver plus tard donne deux pièces indépendantes — les deux exigées, ce qui
- * est le comportement par DÉFAUT et attendu.
+ * · une variante DÉSACTIVÉE gardait le groupe collé à elle. Sur RS7404, « Justificatif » dormait
+ *   attaché à « Pièce d'identité » : le parcours annonçait un choix entre une seule option, et
+ *   réactiver la seconde ne rendait pas les deux pièces exigées — il les rendait
+ *   INTERCHANGEABLES, en silence. L'organisme croyait demander deux documents, il n'en obtenait
+ *   qu'un ;
+ * · et l'écran ne laissait aucune place pour poser la seconde pièce APRÈS la première : ajoutée,
+ *   elle venait s'empiler dans la carte de la première au lieu de devenir une étape.
  *
- * Appliquée À LA LECTURE autant qu'à l'écriture : à la lecture pour que les parcours déjà
- * enregistrés se présentent correctement sans qu'on ait à les rouvrir, à l'écriture pour que la
- * base finisse par se nettoyer d'elle-même. Aucune migration : c'est une règle de sens, pas de
- * schéma, et elle vaut avant comme après.
+ * D'où le retrait complet, demandé par l'organisme. Ce qu'on veut d'une pièce, c'est qu'elle
+ * arrive ; s'il faut n'en demander qu'une selon le dossier, `applies_when` (migration 140) le dit
+ * déjà, pièce par pièce, et sans rendre les autres facultatives par effet de bord.
+ *
+ * La colonne `or_group` RESTE en base : elle sert toujours aux documents, et une migration pour
+ * effacer des valeurs devenues inertes ne vaut pas son risque. On les ignore, simplement — à la
+ * lecture comme à l'écriture, pour que la base se nettoie d'elle-même au premier enregistrement.
  */
 
 /* Une pièce se reconnaît à son `doc_type` À LA LECTURE, mais l'enregistrement n'envoie que
    `{slug, active, or_group, applies_when}` — sans `doc_type`. Les deux marques sont donc
-   acceptées : sans ça, la règle s'appliquerait à l'affichage et pas à la sauvegarde, et la base
-   garderait éternellement des groupes fantômes. */
+   acceptées : sans ça, la règle vaudrait à l'affichage et pas à la sauvegarde, et la base
+   garderait éternellement ses groupes fantômes. */
 const estPiece = (s) => s.doc_type === 'PIECE' || String(s.slug || '').startsWith('piece:');
 
 /**
- * Renvoie une COPIE des étapes où tout groupe de pièces à moins de deux membres actifs est retiré.
- * Ne touche ni aux documents (leurs équivalences sont gérées par l'organisme, pas ici) ni à
- * l'ordre : seul `or_group` change.
+ * Renvoie une COPIE des étapes où aucune pièce ne porte de groupe « OU ».
+ * Les documents ne sont pas touchés : leur « OU » passe par les équivalences d'organisme, et
+ * l'appliquer ici dissoudrait des équivalences qui ne nous appartiennent pas.
  */
 function normaliserGroupesPieces(steps) {
-    const actifsParGroupe = new Map();
-    for (const s of steps) {
-        if (!estPiece(s) || !s.or_group || !s.active) continue;
-        actifsParGroupe.set(s.or_group, (actifsParGroupe.get(s.or_group) || 0) + 1);
-    }
-    return steps.map((s) => {
-        if (!estPiece(s) || !s.or_group) return s;
-        return (actifsParGroupe.get(s.or_group) || 0) >= 2 ? s : { ...s, or_group: null };
-    });
+    return steps.map((s) => (estPiece(s) && s.or_group ? { ...s, or_group: null } : s));
 }
 
 module.exports = { normaliserGroupesPieces, estPiece };

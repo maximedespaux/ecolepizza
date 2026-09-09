@@ -22,16 +22,24 @@ const CTRL = fs.readFileSync(
 
 const piece = (label, active, or_group) => ({ slug: `piece:${label}`, doc_type: 'PIECE', label, active, or_group });
 
-test('une variante endormie ne maintient plus le choix en vie', () => {
-    // Le cas exact de RS7404.
-    const r = normaliserGroupesPieces([piece('identite', true, 'g1'), piece('justificatif', false, 'g1')]);
-    assert.deepStrictEqual(r.map((s) => s.or_group), [null, null],
-        'réactiver « Justificatif » doit donner deux pièces exigées, pas un choix entre les deux');
+test('une pièce ne porte JAMAIS de groupe « OU »', () => {
+    /* Le cas de RS7404 : « Justificatif » dormait attaché à « Pièce d'identité ». Mais la règle
+       ne s'arrête plus là — deux pièces ACTIVES ne se groupent pas davantage. Le « OU » des pièces
+       a été retiré : les deux sont exigées, toujours. */
+    const r = normaliserGroupesPieces([
+        piece('identite', true, 'g1'), piece('justificatif', false, 'g1'),
+        piece('rib', true, 'g2'), piece('iban', true, 'g2'),
+    ]);
+    assert.deepStrictEqual(r.map((s) => s.or_group), [null, null, null, null]);
 });
 
-test('un vrai choix entre deux variantes ACTIVES est conservé', () => {
-    const r = normaliserGroupesPieces([piece('rib', true, 'g2'), piece('iban', true, 'g2')]);
-    assert.deepStrictEqual(r.map((s) => s.or_group), ['g2', 'g2'], 'là, le OU a un sens : on ne le casse pas');
+test('la colonne reste en base — on l\'ignore, on ne migre pas', () => {
+    /* `or_group` sert toujours aux documents ; une migration pour effacer des valeurs devenues
+       inertes ne vaut pas son risque. La règle vaut donc à la lecture ET à l'écriture, ce qui
+       nettoie la base au premier enregistrement, sans toucher au schéma. */
+    const CTRL = fs.readFileSync(path.join(__dirname, '..', 'controllers/formationProgram.controller.js'), 'utf8');
+    assert.match(CTRL, /const propres = normaliserGroupesPieces\(steps\);/, 'lecture');
+    assert.match(CTRL, /const aEcrire = normaliserGroupesPieces\(steps\);/, 'écriture');
 });
 
 test('les documents ne sont pas touchés', () => {
@@ -60,13 +68,21 @@ test('l\'ordre et les autres champs passent intacts', () => {
     assert.strictEqual(entree[0].or_group, 'g', 'l\'entrée n\'est pas modifiée sur place');
 });
 
-test('la règle vaut À LA LECTURE comme à l\'écriture', () => {
-    /* À la lecture pour que les parcours DÉJÀ enregistrés se présentent correctement sans qu'on
-       les rouvre un par un ; à l'écriture pour que la base se nettoie d'elle-même. Sans le second,
-       le groupe fantôme est réenregistré tel quel et le nettoyage ne finit jamais. */
-    assert.match(CTRL, /const propres = normaliserGroupesPieces\(steps\);/, 'lecture');
-    assert.match(CTRL, /const aEcrire = normaliserGroupesPieces\(steps\);/, 'écriture');
-    // La boucle d'écriture lit la version normalisée, pas l'entrée brute.
+test('la boucle d\'écriture lit la version normalisée, pas l\'entrée brute', () => {
     const boucle = CTRL.slice(CTRL.indexOf('const aEcrire'), CTRL.indexOf("message: 'Parcours enregistré."));
     assert.doesNotMatch(boucle, /steps\[i\]/, 'aucune lecture résiduelle du tableau d\'origine');
+});
+
+test('L\'ÉCRAN n\'offre plus de « OU » sur une pièce', () => {
+    /* Le serveur seul ne suffisait pas : l'écran continuait de proposer « ＋ OU » sur une carte
+       « pièce », et l'ajout venait s'empiler DANS cette carte au lieu de créer une étape. C'est
+       ce qui rendait impossible de poser « Justificatif » APRÈS « Pièce d'identité » — il n'y
+       avait aucune position où le glisser. */
+    const PAGE = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/pages/Formations.jsx'), 'utf8');
+    assert.match(PAGE, /&& g\.steps\[0\]\.doc_type !== "PIECE" && \(/, 'pas de « ＋ OU » sur une pièce');
+    for (const mort of ['grouperPiece(', 'degrouperPiece(', 'onGrouperPiece', 'jalonPiece']) {
+        assert.ok(!PAGE.includes(mort), `${mort} ne doit plus exister`);
+    }
+    // Et l'enregistrement n'entretient plus la valeur morte.
+    assert.doesNotMatch(PAGE, /or_group: s\.or_group \|\| null/, 'plus de or_group envoyé pour une pièce');
 });

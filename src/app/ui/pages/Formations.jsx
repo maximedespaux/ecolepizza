@@ -249,35 +249,14 @@ function FormationModal({ program, onClose, onSaved, onError }) {
     }
   }
 
-  /* PIÈCES EN « OU », PAR FORMATION (état local, persisté à l'enregistrement). Volontairement
-     DISTINCT des équivalences d'organisme des documents : une pièce n'a pas de définition globale,
-     donc son regroupement (or_group) et sa condition (applies_when) vivent sur program_step. */
-  function grouperPiece(jalonSlugs, addSlug) {
-    setSteps((ss) => {
-      // Réutilise le groupe existant du jalon, sinon en crée un (borné à 60 car., cf. colonne).
-      const gid = ss.find((s) => jalonSlugs.includes(s.slug) && s.or_group)?.or_group
-        || `p-${(crypto.randomUUID?.() || String(Date.now())).replace(/-/g, "").slice(0, 20)}`;
-      return ss.map((s) => {
-        if (s.slug === addSlug) return { ...s, or_group: gid, active: true };
-        if (jalonSlugs.includes(s.slug)) return { ...s, or_group: gid };
-        return s;
-      });
-    });
-  }
-  function degrouperPiece(slug) {
-    setSteps((ss) => {
-      const grp = ss.find((s) => s.slug === slug)?.or_group;
-      if (!grp) return ss;
-      // S'il ne resterait qu'une variante, le « OU » n'a plus d'objet : on le dissout entièrement.
-      const dissoudre = ss.filter((s) => s.or_group === grp && s.slug !== slug).length < 2;
-      return ss.map((s) => ((s.slug === slug || (dissoudre && s.or_group === grp)) ? { ...s, or_group: null } : s));
-    });
-  }
+  /* LE « OU » DES PIÈCES A ÉTÉ RETIRÉ (2026-09-09) : `grouperPiece` / `degrouperPiece`
+     vivaient ici. Une pièce est désormais une étape exigée, point. La condition par pièce
+     (`applies_when`) reste : c'est elle qui dit « seulement si… », sans rendre les autres
+     pièces facultatives par effet de bord. Cf. api/lib/groupesPieces.js. */
   const setPieceCondition = (slug, aw) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, applies_when: aw } : s)));
   // Retirer une variante d'un choix : pièce → dégroupe (local) ; document → équivalence d'organisme.
   const retirerVariante = (slug) => {
     const st = steps.find((s) => s.slug === slug);
-    if (st && st.doc_type === "PIECE") return degrouperPiece(slug);
     return removeOuVariant(slug);
   };
 
@@ -304,10 +283,12 @@ function FormationModal({ program, onClose, onSaved, onError }) {
         onSaved("Formation créée.");
       } else {
         await updateFormation(program.id, form);
-        // Les pièces emportent leur groupe « OU » (or_group) et leur condition (applies_when) —
-        // les documents, eux, gèrent leur « OU » par les équivalences d'organisme, pas ici.
+        // Les pièces emportent leur seule condition (applies_when) : elles n'ont plus de « OU ».
+        // Les documents, eux, gèrent le leur par les équivalences d'organisme, pas ici.
         await saveFormationSteps(program.id, steps.map((s) => (s.doc_type === "PIECE"
-          ? { slug: s.slug, active: s.active, or_group: s.or_group || null, applies_when: s.applies_when || null }
+          // Plus de `or_group` : une pièce n'a plus de « OU ». Le serveur l'ignore de toute façon
+            // (lib/groupesPieces.js) ; ne pas l'envoyer évite d'entretenir une valeur morte.
+            ? { slug: s.slug, active: s.active, applies_when: s.applies_when || null }
           : { slug: s.slug, active: s.active })), breakSlug || null, companySteps, companyBreakSlug || null);
         await saveArchiveTree(program.id, archiveTree, companyArchiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved("Formation mise à jour.");
@@ -423,7 +404,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
                   breakSlug={breakSlug} onSetBreak={setBreakSlug} onAddOu={addOuVariant}
                   refusOu={refusOu} onEffacerRefus={() => setRefusOu(null)}
                   eqDe={(slug) => { const g = eqMap.get(slug); return g ? equivs.find((e) => e.key === g.group) : null; }}
-                  onRetirerOu={retirerVariante} onGrouperPiece={grouperPiece}
+                  onRetirerOu={retirerVariante}
                   onSetPieceCondition={setPieceCondition} conditions={conditions} />
               )}
             </>
@@ -498,7 +479,7 @@ function condFromValue(v) {
 function groupMilestones(steps, eqMap) {
   const groupOf = (s) => {
     if (eqMap && eqMap.get(s.slug)) return eqMap.get(s.slug).group; // documents : équivalences d'organisme
-    if (s.doc_type === "PIECE" && s.or_group) return `piece:${s.or_group}`; // pièces : groupe « OU » par formation
+    // Les pièces ne se groupent plus : une pièce = une étape, exigée. Cf. lib/groupesPieces.js.
     return null;
   };
   const groups = [];
@@ -539,7 +520,7 @@ function stepBadge(s) {
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
-function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu, refusOu, onEffacerRefus, eqDe, onRetirerOu, onGrouperPiece, onSetPieceCondition, conditions }) {
+function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu, refusOu, onEffacerRefus, eqDe, onRetirerOu, onSetPieceCondition, conditions }) {
   // Les documents de GROUPE (🏢 company_level) ne font PAS partie du parcours du
   // dossier : ils se gèrent uniquement dans « À l'arrivée via une entreprise ».
   const included = steps.filter((s) => s.active && !s.company_level);
@@ -642,7 +623,9 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                   parcours. Dix-huit documents tenaient dans une boîte de 220 px, sans recherche.
                   Le bouton ouvre désormais LE MÊME panneau que « Ajouter une étape », posé sous
                   le flux : même geste, même endroit où regarder, et toute la largeur disponible. */}
-              {typeof onAddOu === "function" && !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT" && (
+              {typeof onAddOu === "function" && !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT"
+                  /* Ni sur une PIÈCE : elles n'ont plus de « OU », les deux sont exigées. */
+                  && g.steps[0].doc_type !== "PIECE" && (
                 <button type="button" className={"pf-or-add" + (ouFor === g.steps[0].slug ? " on" : "")}
                   onClick={() => { setAdding(false); setChercheDoc(""); onEffacerRefus?.(); setOuFor(ouFor === g.steps[0].slug ? null : g.steps[0].slug); }}
                   title="Ajouter une variante « OU » (choisie par condition)">＋ OU</button>
@@ -676,12 +659,12 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
         // « OU » relève des équivalences d'organisme). Variante d'un DOCUMENT : le référentiel
         // documentaire, hors QCM / émargement / pièces / docs déjà dans le jalon. « Ajouter » (hors
         // jalon) ne propose que ce qui n'est pas encore dans le parcours.
-        const jalonPiece = !!jalon && jalon.steps[0].doc_type === "PIECE";
+        /* Un jalon ne peut plus être une pièce : le « OU » leur a été retiré. Le vivier d'une
+           variante ne contient donc que des documents ; les pièces restent proposées par
+           « Ajouter une étape », comme étapes à part entière. */
         const pool = jalon
-          ? (jalonPiece
-              ? steps.filter((s) => s.doc_type === "PIECE" && !jalon.steps.some((x) => x.slug === s.slug))
-              : steps.filter((s) => !s.quiz_id && !s.company_level && s.doc_type !== "EMARGEMENT"
-                  && s.doc_type !== "PIECE" && !jalon.steps.some((x) => x.slug === s.slug)))
+          ? steps.filter((s) => !s.quiz_id && !s.company_level && s.doc_type !== "EMARGEMENT"
+              && s.doc_type !== "PIECE" && !jalon.steps.some((x) => x.slug === s.slug))
           : available;
         const t = chercheDoc.trim().toLowerCase();
         const filtre = (l) => (!t ? l : l.filter((s) =>
@@ -700,10 +683,6 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
            Une activation d'étape, elle, ne peut pas échouer : on ferme aussitôt. */
         const choisir = async (s) => {
           if (!jalon) { onToggle(s.slug); setAdding(false); setOuFor(null); setChercheDoc(""); return; }
-          if (jalonPiece) { // pièce : regroupement LOCAL par or_group (persisté à l'enregistrement)
-            onGrouperPiece?.(jalon.steps.map((x) => x.slug), s.slug);
-            setAdding(false); setOuFor(null); setChercheDoc(""); return;
-          }
           const ok = await onAddOu(jalon.steps.map((x) => x.slug), s.slug);
           if (ok) { setAdding(false); setOuFor(null); setChercheDoc(""); }
         };
@@ -766,35 +745,25 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
             )}
             {pool.length === 0 ? (
               <div className="pf-add-empty">
-                {jalonPiece ? "Aucune autre pièce à proposer en variante."
-                  : jalon ? "Aucun autre document à proposer en variante."
+                {jalon ? "Aucun autre document à proposer en variante."
                   : "Toutes les étapes disponibles sont déjà dans le parcours."}
               </div>
-            ) : (jalonPiece ? pieces.length === 0 : docs.length === 0 && quizzes.length === 0) ? (
+            ) : (docs.length === 0 && quizzes.length === 0) ? (
               // Pas une impasse : on dit ce qui a été cherché, et comment en sortir.
-              jalonPiece ? (
-                <div className="pf-add-empty">Aucune pièce ne correspond à « {chercheDoc.trim()} ».{" "}
-                  <button type="button" className="lien-nu" onClick={() => setChercheDoc("")}>Tout afficher</button></div>
-              ) : (
-                <div className="pf-add-empty">Aucun document ne correspond à « {chercheDoc.trim()} ».{" "}
-                  <button type="button" className="lien-nu" onClick={() => setChercheDoc("")}>Tout afficher</button></div>
-              )
+              <div className="pf-add-empty">Aucun document ne correspond à « {chercheDoc.trim()} ».{" "}
+                <button type="button" className="lien-nu" onClick={() => setChercheDoc("")}>Tout afficher</button></div>
             ) : (
               <>
-                {!jalonPiece && (
+                <div className="pf-add-title">Documents{docs.length ? ` (${docs.length})` : ""}</div>
+                {docs.length === 0
+                  ? <div className="pf-add-empty">Aucun document.</div>
+                  : <div className="pf-add-grid">{docs.map(item)}</div>}
+                {/* Les pièces ne s'affichent plus QU'EN AJOUT LIBRE (hors jalon) : elles n'ont plus
+                    de « OU », donc ne peuvent plus être la variante de quoi que ce soit. Chacune est
+                    une étape à part entière, exigée. */}
+                {!jalon && (
                   <>
-                    <div className="pf-add-title">Documents{docs.length ? ` (${docs.length})` : ""}</div>
-                    {docs.length === 0
-                      ? <div className="pf-add-empty">Aucun document.</div>
-                      : <div className="pf-add-grid">{docs.map(item)}</div>}
-                  </>
-                )}
-                {/* Une pièce peut être la variante « OU » d'une AUTRE pièce (choix par condition) ;
-                    un QCM ou un document, non. La section « Pièces » s'affiche donc en ajout libre
-                    (hors jalon) ET quand on cherche une variante d'un jalon-pièce. */}
-                {(jalonPiece || !jalon) && (
-                  <>
-                    <div className="pf-add-title" style={jalonPiece ? undefined : { marginTop: 12 }}>
+                    <div className="pf-add-title" style={{ marginTop: 12 }}>
                       Pièces à fournir par le stagiaire{pieces.length ? ` (${pieces.length})` : ""}
                     </div>
                     {pieces.length === 0
