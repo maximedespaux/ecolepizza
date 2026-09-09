@@ -2,6 +2,8 @@ const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
 const path = require('path');
 const db = require('../config/database.js');
+// Sens unique : sectionAccess ne requiert PAS auth (il décode le jeton lui-même) — pas de cycle.
+const { accesAccordeParMenu } = require('./sectionAccess.middleware.js');
 
 dotenv.config({ path: path.join(__dirname, '..', 'config', '.env') });
 
@@ -95,15 +97,27 @@ const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'];
 const AUDIT_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'AUDITEUR'];
 
 /**
- * Restreint l'accès à une liste de rôles.
+ * Restreint l'accès à une liste de rôles — ou, à défaut, à ce que l'ACCÈS MENU accorde.
  * À utiliser APRÈS authenticateToken. Ex : authorizeRoles('ADMIN_ORGANISME', 'SECRETARIAT')
+ *
+ * Le rôle reste le chemin rapide, et ne coûte aucune lecture en base. S'il ne suffit pas, on
+ * demande à `accesAccordeParMenu` si l'organisme a EXPLICITEMENT accordé cette rubrique à ce
+ * membre depuis « Équipe & accès ». Sans ce repli, le réglage d'accès au menu ne savait que
+ * restreindre : cocher « modification » sur une rubrique n'ouvrait rien, l'API refusant sur le
+ * seul rôle. Les bornes de la délégation (rôles éligibles, rubriques jamais déléguables) sont
+ * documentées dans sectionAccess.middleware.js.
  */
 function authorizeRoles(...roles) {
-    return (req, res, next) => {
-        if (!req.user || !roles.includes(req.user.role)) {
-            return res.status(403).json({ message: 'Accès refusé' });
+    return async (req, res, next) => {
+        if (req.user && roles.includes(req.user.role)) return next();
+        try {
+            if (await accesAccordeParMenu(req)) return next();
+        } catch (e) {
+            // Base injoignable : on refuse. Accorder un droit qu'on n'a PAS pu vérifier serait pire
+            // que de refuser un droit légitime — l'utilisateur réessaiera, la faille non.
+            console.error('Contrôle accès menu :', e.message);
         }
-        next();
+        return res.status(403).json({ message: 'Accès refusé' });
     };
 }
 
