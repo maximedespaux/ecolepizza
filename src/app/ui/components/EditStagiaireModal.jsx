@@ -9,6 +9,15 @@ const STATUTS = ["En activité", "Demandeur d'emploi", "Sans activité", "Étudi
 const UNITES = ["mois", "année(s)"];
 const CONTRATS = ["CDI", "CDD", "Intérim", "Saisonnier", "Apprentissage", "Indépendant / Gérant", "Fonctionnaire", "Autre"];
 const STATUTS_ENTREPRISE = ["SARL", "SAS", "SASU", "EURL", "EI", "Auto-entrepreneur", "EIRL", "SA", "Autre"];
+/* DEUX CHAMPS LIBRES PASSÉS EN LISTES. Saisis à la main, ils accumulaient « mail », « Mail »,
+   « e-mail », « tel », « Tél. », « bac+2 », « Bac + 2 » : impossible de compter d'où viennent les
+   contacts, ni de filtrer sur un niveau. Une liste tranche la question à la saisie. */
+const CONTACTS = ["Mail", "Téléphone"];
+const DIPLOMES = ["Sans diplôme", "CAP", "BEP", "BAC", "BAC +1", "BAC +2", "BAC +3", "BAC +4", "BAC +5", "BAC +8"];
+/* Conserve une valeur HÉRITÉE hors liste : passer un champ libre en liste déroulante ne doit pas
+   effacer en silence ce qu'un ancien dossier contenait (« Site web », « Bac pro »…). Elle reste
+   proposée pour ce dossier-là, sans polluer la liste des autres. */
+const optionsAvec = (liste, valeur) => (valeur && !liste.includes(valeur) ? [valeur, ...liste] : liste);
 
 const EMPTY = {
   contacted_at: "", contacted_by: "", civility: "", first_name: "", last_name: "",
@@ -69,6 +78,14 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
 
   const opcoNames = opcos.length ? opcos.filter((o) => o.active).map((o) => o.name) : OPCOS;
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
+  // NOM en majuscules dès la frappe (usage administratif français). Les accents sont conservés
+  // dans tous les cas (« Déspaux » → « DÉSPAUX ») ; la locale est ÉPINGLÉE à "fr" pour que la
+  // casse ne dépende pas de celle du poste — sans argument, un navigateur en turc écrirait
+  // « İLE » pour « ile ».
+  const setNom = (e) => setForm((p) => ({ ...p, last_name: e.target.value.toLocaleUpperCase("fr") }));
+  // E-MAIL en minuscules et sans espace : c'est aussi l'identifiant de connexion du stagiaire,
+  // et « Jean@X.fr » puis « jean@x.fr » finiraient en deux comptes pour la même personne.
+  const setEmail = (e) => setForm((p) => ({ ...p, email: e.target.value.trim().toLowerCase() }));
   const toggle = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked }));
   const toggleLevel = (code) => setForm((p) => {
     const s = new Set((p.levels || "").split(",").map((x) => x.trim()).filter(Boolean));
@@ -104,6 +121,8 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!String(form.first_name).trim() || !String(form.last_name).trim()) { onError?.("Prénom et nom requis."); return; }
+    // Même règle que le serveur, dite ICI : un 422 après enregistrement fait perdre la saisie de vue.
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email)) { onError?.("Adresse email invalide."); return; }
     setSaving(true);
     try {
       // On lie l'entreprise via sa FK (company_id) : plus de saisie dupliquée par stagiaire.
@@ -138,40 +157,46 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
               <h3 style={{ fontSize: 15, marginBottom: 10 }}>Prise de contact &amp; identité</h3>
               <div className="row2">
                 <Field label="Contact le" type="date" value={form.contacted_at} onChange={set("contacted_at")} />
-                <Field label="Contacté par" value={form.contacted_by} onChange={set("contacted_by")} />
+                <SelectField label="Contacté par" value={form.contacted_by} onChange={set("contacted_by")}>
+                  <option value="">-</option>
+                  {optionsAvec(CONTACTS, form.contacted_by).map((c) => <option key={c} value={c}>{c}</option>)}
+                </SelectField>
               </div>
               <div className="row3">
                 <SelectField label="Civilité" value={form.civility} onChange={set("civility")}>
                   <option value="">-</option>
                   {CIVILITES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </SelectField>
-                <Field label="Prénom" value={form.first_name} onChange={set("first_name")} required />
-                <Field label="Nom" value={form.last_name} onChange={set("last_name")} required />
+                <Field label="Prénom" value={form.first_name} onChange={set("first_name")} placeholder="Marie" required />
+                <Field label="Nom" value={form.last_name} onChange={setNom} placeholder="DUPONT" required />
               </div>
               <div className="row2">
                 <Field label="Date de naissance" type="date" value={form.birthday} onChange={set("birthday")} />
-                <Field label="Lieu de naissance" value={form.birth_place} onChange={set("birth_place")} />
+                <Field label="Lieu de naissance" value={form.birth_place} onChange={set("birth_place")} placeholder="Tarbes" />
               </div>
               <div className="row2">
-                <Field label="Téléphone" value={form.phone} onChange={set("phone")} />
-                <Field label="Adresse email" type="email" value={form.email} onChange={set("email")} />
+                <Field label="Téléphone" value={form.phone} onChange={set("phone")} placeholder="06 12 34 56 78" />
+                <Field label="Adresse email" type="email" value={form.email} onChange={setEmail} placeholder="marie.dupont@exemple.fr" />
               </div>
               <div className="row3">
-                <Field label="Adresse" value={form.address} onChange={set("address")} />
-                <Field label="Code postal" value={form.zip_code} onChange={set("zip_code")} />
-                <Field label="Ville" value={form.town} onChange={set("town")} />
+                <Field label="Adresse" value={form.address} onChange={set("address")} placeholder="12 rue des Lilas" />
+                <Field label="Code postal" value={form.zip_code} onChange={set("zip_code")} placeholder="65300" />
+                <Field label="Ville" value={form.town} onChange={set("town")} placeholder="Lannemezan" />
               </div>
 
               <div className="divider" />
               <h3 style={{ fontSize: 15, marginBottom: 10 }}>Parcours scolaire</h3>
               <div className="row3">
-                <Field label="Niveau du diplôme le plus élevé" value={form.diploma_level} onChange={set("diploma_level")} />
-                <Field label="Nom du diplôme" value={form.diploma_name} onChange={set("diploma_name")} />
-                <Field label="Année d'obtention" value={form.diploma_year} onChange={set("diploma_year")} />
+                <SelectField label="Niveau du diplôme le plus élevé" value={form.diploma_level} onChange={set("diploma_level")}>
+                  <option value="">-</option>
+                  {optionsAvec(DIPLOMES, form.diploma_level).map((d) => <option key={d} value={d}>{d}</option>)}
+                </SelectField>
+                <Field label="Nom du diplôme" value={form.diploma_name} onChange={set("diploma_name")} placeholder="CAP Cuisine" />
+                <Field label="Année d'obtention" value={form.diploma_year} onChange={set("diploma_year")} placeholder="2015" />
               </div>
               <div className="row3">
-                <Field label="Dernière expérience professionnelle" value={form.last_experience} onChange={set("last_experience")} />
-                <Field label="Durée (nombre)" value={form.experience_value} onChange={set("experience_value")} />
+                <Field label="Dernière expérience professionnelle" value={form.last_experience} onChange={set("last_experience")} placeholder="Commis de cuisine" />
+                <Field label="Durée (nombre)" value={form.experience_value} onChange={set("experience_value")} placeholder="18" />
                 <SelectField label="Durée (unité)" value={form.experience_unit} onChange={set("experience_unit")}>
                   <option value="">-</option>
                   {UNITES.map((u) => <option key={u} value={u}>{u}</option>)}
@@ -185,12 +210,12 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                   <option value="">-</option>
                   {STATUTS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </SelectField>
-                <Field label="Montant CPF (€)" type="number" step="0.01" value={form.cpf_amount} onChange={set("cpf_amount")} />
-                <Field label="N° de sécurité sociale" value={form.social_security} onChange={set("social_security")} />
+                <Field label="Montant CPF (€)" type="number" step="0.01" value={form.cpf_amount} onChange={set("cpf_amount")} placeholder="1500" />
+                <Field label="N° de sécurité sociale" value={form.social_security} onChange={set("social_security")} placeholder="1 85 07 65 123 456 78" />
               </div>
               {isJobSeeker && (
                 <div className="row2">
-                  <Field label="Identifiant France Travail (Pôle emploi)" value={form.france_travail_id} onChange={set("france_travail_id")} />
+                  <Field label="Identifiant France Travail (Pôle emploi)" value={form.france_travail_id} onChange={set("france_travail_id")} placeholder="1234567A" />
                 </div>
               )}
               {isEmployed && (
