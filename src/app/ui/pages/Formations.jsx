@@ -135,7 +135,7 @@ function Formations() {
 // Champs éditables (miroir des colonnes du tableau fourni).
 const FIELDS = [
   "code", "title", "level", "color", "days", "hours", "price",
-  "audience", "objective_general", "objectives", "duration_detail", "program_detail",
+  "audience", "prerequisites", "objective_general", "objectives", "duration_detail", "program_detail",
   "horaires", "rs_code", "hygiene", "needs_emargement", "active",
 ];
 
@@ -355,6 +355,13 @@ function FormationModal({ program, onClose, onSaved, onError }) {
 
           <div className="field"><label>Public</label>
             <textarea className="inp" rows={2} value={form.audience} onChange={set("audience")} /></div>
+
+          {/* PRÉREQUIS, distinct de « Public » : celui-ci dit à QUI la formation s'adresse,
+              celui-là ce qu'il faut DÉJÀ savoir ou posséder pour y entrer. Qualiopi les contrôle
+              séparément, et le jeton {Prérequis} les reprend tels quels sur le programme. */}
+          <div className="field"><label>Prérequis (jeton {"{Prérequis}"})</label>
+            <textarea className="inp" rows={3} value={form.prerequisites} onChange={set("prerequisites")}
+              placeholder={"Savoir lire et écrire le français.\nAucun diplôme exigé."} /></div>
 
           <div className="field"><label>Objectif général (ObjectifG)</label>
             <textarea className="inp" rows={3} value={form.objective_general} onChange={set("objective_general")} /></div>
