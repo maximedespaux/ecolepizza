@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const { colonneOuNull } = require('../lib/colonnes.js');
 const { CONTRAT_VALABLE } = require('../lib/contratPartenaire.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const consentements = require('../lib/consentements.js');
@@ -559,8 +560,11 @@ const getMyFormations = async (req, res) => {
         //
         // Les colonnes quest_* (migration 101) peuvent ne pas exister : on retente sans elles
         // plutôt que de casser la page « Mes formations » pour un paramétrage optionnel.
+        // `prerequisites` (migration 143) est sondée plutôt que devinée : la page « Mes
+        // formations » ne doit pas tomber si la migration n'est pas encore jouée.
         const PROG_COLS = `id, code, title, level, color, days, hours, price, hygiene, rs_code,
-                    audience, objectives, objective_general, duration_detail, program_detail`;
+                    audience, objectives, objective_general, duration_detail, program_detail,
+                    ${await colonneOuNull(conn, 'training_program', 'prerequisites')}`;
         let programs;
         try {
             [programs] = await conn.query(
@@ -670,6 +674,7 @@ const getMyFormations = async (req, res) => {
                 level: p.level, color: p.color, days: p.days, hours: p.hours, price: p.price,
                 hygiene: p.hygiene, rs_code: p.rs_code,
                 audience: p.audience, objectives: p.objectives, objective_general: p.objective_general,
+                prerequisites: p.prerequisites,
                 duration_detail: p.duration_detail, program_detail: p.program_detail,
                 enrolled: !!e, has_badge: hasBadge, finished, revoked,
                 // Rangement Pizza Quest (facultatif).

@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { normaliserGroupesPieces } = require('../lib/groupesPieces.js');
+const { colonneOuNull } = require('../lib/colonnes.js');
 const db = require('../config/database.js');
 const { matchFormation, matchStep, stepSigners } = require('../lib/documents.js');
 const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
@@ -229,6 +230,7 @@ const getPrograms = async (req, res) => {
         const [progs] = await conn.query(
             `SELECT id, organization_id, code, level, color, title, days, hours, price, audience,
                     objectives, objective_general, duration_detail, program_detail,
+                    ${await colonneOuNull(conn, 'training_program', 'prerequisites')},
                     rs_code, hygiene, active, sort_order, created_at
              FROM training_program WHERE organization_id = ? ORDER BY sort_order, code`, [orgId]);
         try {
@@ -282,7 +284,8 @@ const getProgram = (req, res) => {
  */
 const CREATE_FIELDS = [
     'code', 'title', 'level', 'color', 'days', 'hours', 'price', 'audience', 'objectives',
-    'objective_general', 'duration_detail', 'program_detail', 'rs_code', 'hygiene', 'needs_emargement', 'horaires', 'active',
+    'objective_general', 'duration_detail', 'program_detail', 'prerequisites',
+    'rs_code', 'hygiene', 'needs_emargement', 'horaires', 'active',
 ];
 const createProgram = (req, res) => {
     const b = req.body || {};
@@ -308,7 +311,7 @@ const createProgram = (req, res) => {
                 if (err) {
                     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Ce code de formation est déjà utilisé.' });
                     if (err.code === 'ER_BAD_FIELD_ERROR' && allowRetry) {
-                        const drop = new Set(['horaires']);
+                        const drop = new Set(['horaires', 'prerequisites']); // colonnes récentes, cf. migrations
                         const fCols = [], fVals = [];
                         colList.forEach((c, i) => { if (!drop.has(c)) { fCols.push(c); fVals.push(valList[i]); } });
                         return runInsert(fCols, fVals, false);
@@ -329,7 +332,7 @@ const createProgram = (req, res) => {
 const updateProgram = (req, res) => {
     const ALLOWED = [
         'code', 'title', 'level', 'color', 'days', 'hours', 'price', 'audience', 'objectives',
-        'objective_general', 'duration_detail', 'program_detail',
+        'objective_general', 'duration_detail', 'program_detail', 'prerequisites',
         'rs_code', 'hygiene', 'needs_emargement', 'horaires', 'active', 'sort_order',
     ];
     const sets = [];
@@ -364,7 +367,7 @@ const updateProgram = (req, res) => {
                     }
                     if (err.code === 'ER_BAD_FIELD_ERROR' && allowRetry) {
                         // Retire les colonnes récentes potentiellement absentes puis réessaie.
-                        const drop = new Set(['horaires']);
+                        const drop = new Set(['horaires', 'prerequisites']); // colonnes récentes, cf. migrations
                         const fSets = [], fVals = [];
                         setList.forEach((s, i) => {
                             const col = s.split(' = ')[0];

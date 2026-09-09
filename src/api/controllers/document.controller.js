@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
+const { colonneOuNull } = require('../lib/colonnes.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
 const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc } = require('../lib/documents.js');
 const { estSignatureValide } = require('../lib/signatures.js');
@@ -127,6 +128,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     const [formations] = await conn.query(
         `SELECT p.code, p.title, p.days, p.hours, p.price, p.hygiene, p.rs_code AS rs_code,
                 p.audience, p.objectives, p.objective_general, p.duration_detail, p.program_detail,
+                ${await colonneOuNull(conn, 'training_program', 'prerequisites', 'p.')},
                 s.year, s.week,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                 DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,

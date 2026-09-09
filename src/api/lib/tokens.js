@@ -65,6 +65,10 @@ const TOKEN_CATALOG = [
             { key: 'Formation', label: 'Intitulé', sample: 'Fabriquer des pizzas artisanales' },
             { key: 'Code', label: 'Code formation', sample: 'RS7404' },
             { key: 'Public', label: 'Public visé', sample: 'Tout public' },
+            /* Placé contre « Public visé » parce que les deux se lisent ensemble sur un programme :
+               l'un dit À QUI la formation s'adresse, l'autre CE QU'IL FAUT DÉJÀ savoir ou posséder.
+               Qualiopi les contrôle séparément — d'où deux jetons, et pas un seul fourre-tout. */
+            { key: 'Prérequis', label: 'Prérequis', sample: 'Savoir lire et écrire le français. Aucun diplôme exigé.' },
             { key: 'Objectifs', label: 'Objectifs', sample: 'Maîtriser la pâte, la cuisson…' },
             { key: 'ObjectifG', label: 'Objectif général', sample: 'Devenir pizzaïolo autonome' },
             { key: 'DuréeDétail', label: 'Durée (détail)', sample: '35 h sur 5 jours' },
@@ -895,6 +899,7 @@ function resolveTokens(ctx = {}) {
         Code: uniq(forms.map((x) => x.code || x.rs_code)).join(', ') || (f.code || f.rs_code || ''),
         Public: multi ? uniq(forms.map((x) => x.audience)).join(', ') : (f.audience || ''),
         Objectifs: block('objectives'),
+        'Prérequis': block('prerequisites'),
         ObjectifG: multi ? uniq(forms.map((x) => x.objective_general)).join('\n') : (f.objective_general || ''),
         'DuréeDétail': durationDetail, 'Déroulé': block('program_detail'),
         Heures: sumHours ? String(sumHours) : (f.hours != null ? String(f.hours) : ''),
@@ -958,6 +963,7 @@ function resolveTokens(ctx = {}) {
             Titre: x.title || '', Code: x.code || '', Heures: x.hours != null ? String(x.hours) : '',
             Jours: x.days != null ? String(x.days) : '', PrixLigne: euro(x.enroll_price || x.price || 0),
             Objectifs: x.objectives || '', 'Déroulé': x.program_detail || '', 'DuréeDétail': x.duration_detail || '',
+            'Prérequis': x.prerequisites || '',
             Debut: frDate(x.start_date), Fin: frDate(x.end_date),
         })),
         // Jetons propres a une FACTURE. Fusionnes en dernier : ils ne remplacent rien, ils
