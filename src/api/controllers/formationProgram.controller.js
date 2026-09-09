@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { normaliserGroupesPieces } = require('../lib/groupesPieces.js');
 const db = require('../config/database.js');
 const { matchFormation, matchStep, stepSigners } = require('../lib/documents.js');
 const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
@@ -456,7 +457,12 @@ const getFormationSteps = async (req, res) => {
          * même question, et deux calculs auraient divergé. */
         const bySlug = new Map(steps.map((x) => [x.slug, x]));
         const alertes = alertesParSlug(await loadEquivalences(conn, req.user.organization_id), bySlug);
-        res.json({ data: steps.map((x) => (alertes.has(x.slug) ? { ...x, alerte: alertes.get(x.slug) } : x)) });
+        /* Un « OU » entre pièces n'existe qu'à partir de DEUX variantes actives (cf.
+           lib/groupesPieces.js). Normalisé ici, à la lecture, pour que les parcours déjà
+           enregistrés — dont celui où « Justificatif » dormait collé à « Pièce d'identité » —
+           se présentent correctement sans qu'on ait à les rouvrir un par un. */
+        const propres = normaliserGroupesPieces(steps);
+        res.json({ data: propres.map((x) => (alertes.has(x.slug) ? { ...x, alerte: alertes.get(x.slug) } : x)) });
     } catch (err) {
         console.error('Erreur étapes formation :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -524,19 +530,22 @@ const saveFormationSteps = async (req, res) => {
         let hasAppliesWhen = true;
         try { await conn.query('SELECT applies_when FROM program_step LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasAppliesWhen = false; else throw e; }
-        for (let i = 0; i < steps.length; i++) {
-            const slug = String(steps[i].slug || '').trim().toLowerCase();
+        // Même règle à l'écriture : un groupe devenu solitaire ne doit pas être réenregistré,
+        // sinon il ressurgit au prochain chargement et le nettoyage ne finit jamais.
+        const aEcrire = normaliserGroupesPieces(steps);
+        for (let i = 0; i < aEcrire.length; i++) {
+            const slug = String(aEcrire[i].slug || '').trim().toLowerCase();
             if (!slug) continue;
-            const og = steps[i].or_group ? String(steps[i].or_group).slice(0, 60) : null;
+            const og = aEcrire[i].or_group ? String(aEcrire[i].or_group).slice(0, 60) : null;
             if (hasOrGroup) {
                 await conn.query(
                     'INSERT INTO program_step (id, organization_id, program_id, slug, sort_order, active, or_group) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, steps[i].active ? 1 : 0, og]
+                    [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, aEcrire[i].active ? 1 : 0, og]
                 );
             } else {
                 await conn.query(
                     'INSERT INTO program_step (id, organization_id, program_id, slug, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)',
-                    [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, steps[i].active ? 1 : 0]
+                    [crypto.randomUUID(), req.user.organization_id, req.params.id, slug, (i + 1) * 10, aEcrire[i].active ? 1 : 0]
                 );
             }
             /* Une pièce à fournir porte son identifiant DANS SA COLONNE, pas seulement dans le
@@ -551,13 +560,13 @@ const saveFormationSteps = async (req, res) => {
              * comme un document a la sienne, mais globalement. Réservé aux pièces. NULL = variante
              * par défaut (aucune condition : demandée quand aucune autre du groupe ne correspond). */
             if (hasAppliesWhen && slug.startsWith('piece:')) {
-                const cond = steps[i].applies_when;
+                const cond = aEcrire[i].applies_when;
                 const aw = cond && typeof cond === 'object' && Object.keys(cond).length ? JSON.stringify(cond) : null;
                 await conn.query('UPDATE program_step SET applies_when = ? WHERE program_id = ? AND slug = ?',
                     [aw, req.params.id, slug]).catch(() => {});
             }
             // QCM ajouté au parcours et non encore rattaché : on le lie à cette formation.
-            if (steps[i].active && slug.startsWith('quiz:')) {
+            if (aEcrire[i].active && slug.startsWith('quiz:')) {
                 const quizId = slug.slice(5);
                 await conn.query('UPDATE quiz SET program_id = ? WHERE id = ? AND organization_id = ? AND program_id IS NULL',
                     [req.params.id, quizId, req.user.organization_id]).catch(() => {});
