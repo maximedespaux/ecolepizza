@@ -77,6 +77,49 @@ test('pièces : déposer reste un acte de participant, vérifier un acte de doss
     assert.strictEqual(sect('/api/pieces'), '/modeles', 'gérer le référentiel des types = Modèles');
 });
 
+test('RÉGRESSION : la rubrique se lit sur le chemin COMPLET, pas sur le req.path du routeur', () => {
+    /* Sous app.use('/api/carte', …), Express donne req.path === '/'. S'y fier faisait perdre la
+       rubrique, donc refuser TOUTES les délégations — et ça ne se voyait pas : le premier jeu de
+       tests fabriquait un faux `req` portant le chemin complet, c'est-à-dire la forme du niveau
+       app, jamais celle que voit authorizeRoles. Le vert était trompeur. */
+    assert.strictEqual(sectionDeLaRequete({ originalUrl: '/api/carte', baseUrl: '/api/carte', path: '/' }), '/carte');
+    assert.strictEqual(sectionDeLaRequete({ baseUrl: '/api/carte', path: '/' }), '/carte', 'sans originalUrl : baseUrl + path');
+    assert.strictEqual(sectionDeLaRequete({ originalUrl: '/api/stagiaires?actifs=1', baseUrl: '/api/stagiaires', path: '/' }),
+        '/stagiaires', 'la chaîne de requête ne fausse pas la rubrique');
+    assert.strictEqual(sectionDeLaRequete({ originalUrl: '/api/pieces/dossier/e1/p1', baseUrl: '/api/pieces', path: '/dossier/e1/p1' }),
+        null, 'les exceptions de sous-chemin restent respectées');
+});
+
+test('BOUT EN BOUT (Express) : la délégation traverse un routeur monté', async () => {
+    /* Le seul test qui aurait attrapé le défaut ci-dessus : il passe par un VRAI routeur monté,
+       là où req.path se réduit à « / ». `req._navAccess` est pré-rempli pour ne pas toucher la
+       base (cache de navAccessDe) — le pool reste donc fermé et npm test rend la main. */
+    const express = require('express');
+    const { authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
+
+    const appliPour = (role, nav) => {
+        const app = express();
+        app.use((req, _res, next) => { req.user = { id: 'u1', role }; req._navAccess = JSON.stringify(nav); next(); });
+        const r = express.Router();
+        r.get('/', authorizeRoles(...ADMIN_ROLES), (_req, res) => res.status(200).end());
+        app.use('/api/carte', r);
+        return app;
+    };
+    const appel = (app) => new Promise((ok) => {
+        const srv = app.listen(0, () => {
+            require('http').get({ host: '127.0.0.1', port: srv.address().port, path: '/api/carte' },
+                (res) => { srv.close(); ok(res.statusCode); });
+        });
+    });
+
+    assert.strictEqual(await appel(appliPour('FORMATEUR', { '/carte': 'write' })), 200,
+        'formateur avec « Modifier » sur Carte : doit passer malgré ADMIN_ROLES');
+    assert.strictEqual(await appel(appliPour('FORMATEUR', { '/stagiaires': 'write' })), 403,
+        'accordé ailleurs ≠ accordé ici');
+    assert.strictEqual(await appel(appliPour('STAGIAIRE', { '/carte': 'write' })), 403,
+        'un stagiaire ne s\'élève jamais, même avec la rubrique en écriture');
+});
+
 test('authorizeRoles : le rôle d\'abord, l\'accès menu ensuite, et jamais d\'octroi sur erreur', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'middlewares', 'auth.middleware.js'), 'utf8');
     const fn = /function authorizeRoles[\s\S]*?\n\}/.exec(src);
