@@ -99,9 +99,21 @@ function modeFor(navAccess, section) {
    ces bases un jour sans voir la conséquence. */
 const SECTIONS_NON_DELEGUEES = ['/equipe', '/roles'];
 
+/* CHEMIN COMPLET — et c'est tout l'enjeu. `req.path` est RELATIF AU POINT DE MONTAGE dès qu'on
+   se trouve dans un routeur : sous app.use('/api/carte', …), il vaut « / », pas « /api/carte ».
+   Le contrôle global (monté sur l'app) voyait donc le bon chemin, mais authorizeRoles — qui vit
+   DANS le routeur — n'y trouvait AUCUNE rubrique, et refusait donc tout : la délégation par le
+   menu semblait n'avoir strictement aucun effet, sur toutes les routes à la fois.
+   Ce défaut a survécu au premier correctif parce que les tests fabriquaient un faux `req` avec
+   le chemin complet — la forme du niveau app, pas celle que voit le vrai code. */
+function cheminComplet(req) {
+    const brut = req.originalUrl || `${req.baseUrl || ''}${req.path || ''}`;
+    return brut.split('?')[0]; // la chaîne de requête ne fait pas partie de la rubrique
+}
+
 // Rubrique d'une requête, d'après son chemin (/api/<base>/<reste>).
 function sectionDeLaRequete(req) {
-    const m = req.path.match(/^\/api\/([^/]+)\/?(.*)$/);
+    const m = cheminComplet(req).match(/^\/api\/([^/]+)\/?(.*)$/);
     return (m && sectionFor(m[1], m[2])) || null;
 }
 
