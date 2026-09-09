@@ -62,8 +62,12 @@ function Topbar({ onMenu }) {
       <button className="menu-btn icon-btn" onClick={onMenu} aria-label="Ouvrir le menu">
         <Icon name="menu" size={20} />
       </button>
+      {/* La marque est dans SA propre balise pour pouvoir céder la place sur un écran étroit :
+          « Impastio / » est constant, il n'apprend rien, et il coûtait les quelque quatre-vingts
+          pixels qui poussaient les commandes hors de l'écran. Le titre, lui, reste. */}
       <div className="crumbs">
-        Impastio <span style={{ opacity: 0.4 }}>/</span> <b>{title}</b>
+        <span className="crumbs-marque">Impastio <span style={{ opacity: 0.4 }}>/</span> </span>
+        <b>{title}</b>
       </div>
       <div className="spacer" />
       <SpaceSwitcher />
