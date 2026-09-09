@@ -132,3 +132,57 @@ test('le lot applique les MÊMES conventions de saisie que la fiche', () => {
     assert.doesNotMatch(src, /clean\(s\.civility\)|clean\(s\.phone\)|clean\(s\.email\)/,
         'plus aucune lecture brute de la ligne après normalisation');
 });
+
+/* ---------------------------------------------------------------------------------------------
+ * CHAMPS OBLIGATOIRES DE L'ENTREPRISE — ceux qui figurent sur une convention.
+ * ------------------------------------------------------------------------------------------- */
+
+const { createCompany } = require('../controllers/company.controller.js');
+const SRC_COMPANY = fs.readFileSync(path.join(__dirname, '..', 'controllers/company.controller.js'), 'utf8');
+const MODALE_STAGIAIRE = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'app/ui/components/EditStagiaireModal.jsx'), 'utf8');
+
+async function creerEntreprise(body) {
+    let code = 200; let corps = null;
+    const res = { status(c) { code = c; return this; }, json(b) { corps = b; return this; } };
+    await createCompany({ body, user: { organization_id: 'o1' } }, res);
+    return { code, corps };
+}
+
+test('créer une entreprise exige les cinq champs d\'une convention', async () => {
+    /* Une entreprise sans SIRET ni référent se découvre au moment d'éditer la convention —
+       c'est-à-dire au pire moment : la session démarre, le document ne peut pas se remplir, et
+       il faut rappeler le client. */
+    const { code, corps } = await creerEntreprise({ name: 'SARL Le Petit Four' });
+    assert.strictEqual(code, 422);
+    for (const attendu of ['SIRET', 'E-mail', 'Téléphone', 'Nom du référent']) {
+        assert.ok(corps.error.includes(attendu), `${attendu} doit être nommé comme manquant`);
+    }
+    // Le message NOMME ce qui manque : « champs requis » sur neuf champs oblige à tous les relire.
+    assert.match((await creerEntreprise({ name: 'X', siret: '879', email: 'c@x.fr', phone: '05' })).corps.error,
+        /^Champ requis : Nom du référent\.$/);
+});
+
+test('MODIFIER une entreprise ne les exige pas', () => {
+    // Même raison que pour la fiche stagiaire : exiger un SIRET pour corriger un code postal
+    // rendrait irréparables les fiches créées avant cette règle.
+    const maj = SRC_COMPANY.slice(SRC_COMPANY.indexOf('const updateCompany'), SRC_COMPANY.indexOf('const registerCompanyStagiaires'));
+    assert.doesNotMatch(maj, /Champ\$\{|manquants/, 'updateCompany ne doit rien réclamer de neuf');
+});
+
+test('le sous-formulaire de la fiche stagiaire collecte bien ces champs', () => {
+    /* LE DÉFAUT ÉVITÉ. Ce sous-formulaire appelle la MÊME route que « Nouvelle entreprise ».
+       En rendant e-mail et téléphone obligatoires côté serveur sans les ajouter ici, créer une
+       entreprise depuis une fiche stagiaire devenait impossible : un 422 portant sur un champ que
+       l'écran ne proposait même pas — l'utilisateur ne pouvant ni comprendre ni corriger. */
+    const bloc = MODALE_STAGIAIRE.slice(MODALE_STAGIAIRE.indexOf('{newCo && ('));
+    for (const champ of ['label="Nom" requis', 'label="SIRET" requis', 'label="E-mail" requis',
+        'label="Téléphone" requis', 'label="Représentant (nom & prénom)" requis']) {
+        assert.ok(bloc.includes(champ), `${champ} manquant dans le sous-formulaire`);
+    }
+    assert.match(MODALE_STAGIAIRE, /setNewCo\(\{ name: "", siret: "", town: "", email: "", phone: "", representative_name: "" \}\)/,
+        'l\'état initial doit porter les deux champs neufs, sinon ils sont non contrôlés');
+    // Et le sous-formulaire vérifie AVANT d'envoyer : un 422 après coup fait perdre la saisie.
+    assert.match(MODALE_STAGIAIRE, /const manquants = \[\["name", "Nom de l'entreprise"\]/,
+        'le sous-formulaire doit contrôler les cinq champs lui-même');
+});
