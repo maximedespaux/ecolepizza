@@ -258,7 +258,8 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
 .topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;padding:12px 28px;background:var(--glass);backdrop-filter:blur(16px) saturate(140%);border-bottom:1px solid var(--border-soft)}
 .topbar .menu-btn{display:none;background:transparent;border:none;color:var(--text);font-size:20px}
-.crumbs{font-size:13px;color:var(--muted)}.crumbs b{color:var(--text)}
+/* .crumbs : tout est regroupé en fin de fichier (barre étroite). */
+.crumbs b{color:var(--text)}
 .spacer{flex:1}
 .icon-btn{width:38px;height:38px;border-radius:11px;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;color:var(--muted);transition:.15s var(--ease);font-size:16px}
 .icon-btn:hover{color:var(--text);border-color:var(--ember1)}
@@ -5001,4 +5002,40 @@ label .requis {
   color: var(--red);
   margin-left: 3px;
   font-weight: 700;
+}
+
+/* ═══ BARRE SUPÉRIEURE : les commandes ne sortent jamais de l'écran ═══════════════════════════
+   Le fil d'Ariane n'avait ni `min-width:0` ni `white-space` : un élément flex ne peut pas
+   descendre sous la largeur de son contenu tant que son `min-width` vaut `auto`. Le titre
+   gardait donc SA place, le `.spacer` tombait à zéro, et ce qui restait était pris sur les
+   boutons — qui se laissent comprimer, eux.
+
+   Mesuré à 375 px sur le site en production : les enfants de la barre totalisaient exactement
+   299 px pour 299 px disponibles. « Impastio / Tableau de bord » passait alors sur TROIS lignes
+   (barre à 87 px de haut) et le sélecteur d'espace, réduit à 55 px, n'affichait plus que
+   « Espace » — « stagiaire » coupé net. Le seul bouton qui mène à l'autre espace, illisible.
+
+   Trois règles, dans cet ordre d'importance :
+   · le fil d'Ariane rétrécit et se termine en « … » plutôt que de passer à la ligne ;
+   · les commandes ne rétrécissent plus (`flex-shrink:0`) — ciblées une par une, car
+     `.stu-topbar` partage cette classe et sa navigation, elle, DOIT pouvoir se comprimer ;
+   · sous 560 px, la marque et le libellé du sélecteur cèdent la place. Ce sont les deux seuls
+     textes qui n'apprennent rien : « Impastio » est écrit partout ailleurs, et le sélecteur
+     garde son icône, son `title` et son `aria-label`. */
+.crumbs {
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 0;          /* sans lui, les deux règles suivantes ne servent à rien */
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar > .icon-btn,
+.topbar > .theme-toggle,
+.topbar > .btn { flex-shrink: 0; }
+
+@media (max-width: 560px) {
+  .crumbs-marque { display: none; }
+  .ss-txt { display: none; }
 }

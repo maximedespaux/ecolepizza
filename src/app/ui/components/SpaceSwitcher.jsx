@@ -20,6 +20,7 @@ export default function SpaceSwitcher() {
       type="button"
       className="btn sm ghost"
       title={versStagiaire ? "Passer à mon espace stagiaire" : "Revenir au backoffice"}
+      aria-label={versStagiaire ? "Passer à mon espace stagiaire" : "Revenir au backoffice"}
       style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
       onClick={() => {
         const v = versStagiaire ? "stagiaire" : "backoffice";
@@ -28,7 +29,11 @@ export default function SpaceSwitcher() {
       }}
     >
       <Icon name={versStagiaire ? "graduation" : "building"} size={15} />
-      {versStagiaire ? "Espace stagiaire" : "Backoffice"}
+      {/* Le LIBELLÉ s'efface sous 560px, jamais le bouton : c'est la seule porte vers l'autre
+          espace pour un compte qui a les deux casquettes. Écrasé par le manque de place, il
+          n'affichait plus que « Espace » — le reste coupé — et devenait indéchiffrable.
+          `aria-label` porte alors le sens, puisque le texte visible disparaît. */}
+      <span className="ss-txt">{versStagiaire ? "Espace stagiaire" : "Backoffice"}</span>
     </button>
   );
 }
