@@ -15,8 +15,8 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Base d'URL API -> rubrique de navigation. Une base absente = non contrôlée
 // (on laisse passer, pour ne jamais casser un endpoint non cartographié).
 const SECTION_BY_BASE = {
-    stagiaires: '/stagiaires', documents: '/stagiaires',
-    formations: '/formations', sessions: '/sessions',
+    stagiaires: '/stagiaires', documents: '/stagiaires', enrollments: '/stagiaires',
+    formations: '/formations', sessions: '/sessions', attendance: '/sessions',
     partenaires: '/partenaires', ventes: '/ventes', inventaire: '/ventes',
     factures: '/factures', comptabilite: '/comptabilite', carte: '/carte',
     quizzes: '/qcm', templates: '/modeles', suivi: '/suivi', audit: '/audit',
@@ -25,6 +25,13 @@ const SECTION_BY_BASE = {
     // bien en lecture seule dans le menu, mais l'API acceptait quand même ses écritures.
     // Menu fermé, route ouverte — l'écart exact qu'un contrôle par rubrique doit interdire.
     companies: '/entreprises', opcos: '/opcos', quest: '/pizza-quest-admin', boutique: '/demandes-boutique',
+    /* AJOUTÉES AVEC LA DÉLÉGATION PAR MENU (cf. accesAccordeParMenu). Tant qu'une base n'est
+       rattachée à aucune rubrique, accorder « Modèles » ou « Facturation » en écriture à un rôle
+       configurable ne débloquait RIEN : faute de rubrique, il n'y a rien à comparer au menu, et
+       la garde de rôle refusait seule. Une base absente d'ici reste donc simplement non
+       déléguable — jamais un trou de sécurité, mais un écran qui « ne marche pas ». */
+    conditions: '/modeles', 'emargement-templates': '/modeles', equivalences: '/modeles',
+    emetteurs: '/reglages-facturation', community: '/communaute',
 };
 
 /**
@@ -52,6 +59,16 @@ function sectionFor(base, reste) {
     // pour son rôle, le geste tombait en « Accès en lecture seule ». On NE dé-cadenasse PAS
     // /sign-link (création d'un lien de signature partageable = acte bureau, resté sous /stagiaires).
     if (base === 'documents' && /\/sign\/?$/.test(reste || '')) return null;
+    /* PIÈCES : trois natures sous une même base. DÉPOSER un fichier ou le retirer sont des actes
+       de PARTICIPANT — le stagiaire propriétaire, garde de propriété dans piece.controller — et
+       jamais l'écriture d'une rubrique : les y rattacher gèlerait le dépôt d'un compte à deux
+       casquettes, exactement comme la signature ci-dessus. VÉRIFIER un dépôt est un acte de
+       dossier (/stagiaires) ; gérer le RÉFÉRENTIEL des types de pièces se fait dans Modèles. */
+    if (base === 'pieces') {
+        if (/^(dossier|fichier)(\/|$)/.test(reste || '')) return null;
+        if (/^depot(\/|$)/.test(reste || '')) return '/stagiaires';
+        return '/modeles';
+    }
     return SECTION_BY_BASE[base];
 }
 
@@ -74,6 +91,69 @@ function modeFor(navAccess, section) {
     return null;
 }
 
+/* RUBRIQUES NON DÉLÉGUABLES — celles qui distribuent les accès eux-mêmes. Accorder « Équipe » en
+   écriture à un rôle configurable lui permettrait de se promouvoir, ou de s'ouvrir toutes les
+   autres rubriques : l'escalade de privilèges par la porte de service. Leurs bases API
+   (/equipe, /user, /access-profiles) ne figurent déjà pas dans SECTION_BY_BASE — cette liste est
+   la ceinture en plus des bretelles, pour que l'intention reste lisible si quelqu'un cartographie
+   ces bases un jour sans voir la conséquence. */
+const SECTIONS_NON_DELEGUEES = ['/equipe', '/roles'];
+
+// Rubrique d'une requête, d'après son chemin (/api/<base>/<reste>).
+function sectionDeLaRequete(req) {
+    const m = req.path.match(/^\/api\/([^/]+)\/?(.*)$/);
+    return (m && sectionFor(m[1], m[2])) || null;
+}
+
+// `nav_access` du membre, lu UNE SEULE FOIS par requête : les deux gardes (celle-ci et
+// authorizeRoles) le réclament, et c'est la même ligne de la même table.
+async function navAccessDe(req, userId) {
+    if (req._navAccess === undefined) {
+        const [[row]] = await db.promise().query('SELECT nav_access FROM user WHERE id = ?', [userId]);
+        req._navAccess = row ? row.nav_access : null;
+    }
+    return req._navAccess;
+}
+
+/**
+ * Décision PURE (donc testable seule) : cet accès au menu autorise-t-il CETTE requête ?
+ * Lecture (GET/HEAD) : « read » suffit. Écriture : « write » exigé. Hors rôles configurables,
+ * ou sur une rubrique inconnue/non délégable : jamais.
+ */
+function accesParMenuAutorise({ role, method, section, mode }) {
+    if (!CONFIGURABLE_ROLES.includes(role)) return false;
+    if (!section || SECTIONS_NON_DELEGUEES.includes(section)) return false;
+    if (!mode) return false;
+    return MUTATING.has(method) ? mode === 'write' : true;
+}
+
+/**
+ * L'ACCÈS MENU FAIT FOI, PAS SEULEMENT LE RÔLE.
+ *
+ * Le défaut corrigé : `nav_access` ne savait que RESTREINDRE. On pouvait donner à un formateur la
+ * rubrique « Sessions » en écriture — menu affiché, case « modification » cochée — et l'API lui
+ * répondait quand même « Accès refusé », parce que soixante-sept routes mutantes sont gardées par
+ * `authorizeRoles(...ADMIN_ROLES)`, liste où FORMATEUR ne figure pas. L'écran promettait un droit
+ * que le serveur ne donnait jamais : le réglage n'avait aucun effet, sans le dire.
+ *
+ * Désormais, ce que l'organisme accorde dans « Équipe & accès » ACCORDE vraiment. Le pouvoir reste
+ * borné, et c'est ce qui rend la délégation sûre :
+ *   · seuls les rôles CONFIGURABLES (secrétariat, formateur, auditeur) peuvent être élevés — un
+ *     stagiaire, une entreprise ou un intervenant ne le sont jamais, quel que soit leur nav_access ;
+ *   · il faut une rubrique CONNUE pour le chemin demandé, explicitement accordée (« write » pour
+ *     écrire, « read » suffit pour lire) — l'absence de rubrique refuse, elle n'ouvre pas ;
+ *   · les rubriques qui distribuent les accès ne se délèguent jamais (SECTIONS_NON_DELEGUEES) ;
+ *   · c'est un propriétaire (SUPER_ADMIN / ADMIN_ORGANISME) qui accorde, sur un écran réservé.
+ */
+async function accesAccordeParMenu(req) {
+    const user = req.user; // posé par authenticateToken (rôle relu en base à chaque requête)
+    if (!user || !CONFIGURABLE_ROLES.includes(user.role)) return false; // évite la lecture en base
+    const section = sectionDeLaRequete(req);
+    if (!section || SECTIONS_NON_DELEGUEES.includes(section)) return false;
+    const mode = modeFor(await navAccessDe(req, user.id), section);
+    return accesParMenuAutorise({ role: user.role, method: req.method, section, mode });
+}
+
 /**
  * Bloque les requêtes de MODIFICATION (POST/PUT/PATCH/DELETE) sur une rubrique
  * accordée en lecture seule (ou non accordée) aux rôles configurables.
@@ -87,12 +167,10 @@ async function enforceSectionMode(req, res, next) {
         const user = decodeUser(req);
         if (!user || !CONFIGURABLE_ROLES.includes(user.role)) return next();
 
-        const m = req.path.match(/^\/api\/([^/]+)\/?(.*)$/);
-        const section = m && sectionFor(m[1], m[2]);
+        const section = sectionDeLaRequete(req);
         if (!section) return next(); // rubrique non contrôlée
 
-        const [[row]] = await db.promise().query('SELECT nav_access FROM user WHERE id = ?', [user.id]);
-        if (row && modeFor(row.nav_access, section) === 'write') return next();
+        if (modeFor(await navAccessDe(req, user.id), section) === 'write') return next();
         return res.status(403).json({ error: 'Accès en lecture seule : modification non autorisée pour cette rubrique.' });
     } catch (e) {
         console.error('Erreur contrôle accès rubrique :', e);
@@ -100,4 +178,7 @@ async function enforceSectionMode(req, res, next) {
     }
 }
 
-module.exports = { enforceSectionMode, sectionFor };
+module.exports = {
+    enforceSectionMode, sectionFor, sectionDeLaRequete,
+    accesAccordeParMenu, accesParMenuAutorise, SECTIONS_NON_DELEGUEES, CONFIGURABLE_ROLES,
+};
