@@ -4991,3 +4991,14 @@ button.av-wrap:active{transform:scale(.94)}
 .acc-pourquoi{padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);font-size:12.5px}
 .acc-pourquoi p{margin:0}
 .acc-pourquoi p + p{margin-top:4px}
+
+/* Étoile « champ obligatoire ». Rouge parce que c'est la couleur de l'exigence dans toute
+   l'application, mais jamais SEULE porteuse de l'information : le champ porte `aria-required`
+   (cf. components/Field.jsx). Un daltonien, ou quiconque lit l'écran, ne doit pas dépendre
+   d'une nuance pour savoir ce qu'il faut remplir. */
+.field label .requis,
+label .requis {
+  color: var(--red);
+  margin-left: 3px;
+  font-weight: 700;
+}

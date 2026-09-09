@@ -10,13 +10,17 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
+import { Requis } from "../components/Field.jsx";
 import { dateHeure } from "../lib/format.js";
 
 const LEGAL_STATUSES = ["SARL", "SAS", "SASU", "EURL", "EI", "Micro / Auto", "SA", "SCI", "Association", "Autre"];
 const REP_ROLES = ["Gérant(e)", "Président(e)", "Directeur / Directrice", "Directeur général / Directrice générale", "Chef(fe) d'entreprise", "Responsable formation", "Responsable RH / DRH", "Responsable administratif", "Associé(e)", "Autre"];
+/* `requis` : les cinq champs qu'une convention réclame. Ici l'étoile est PUREMENT indicative —
+   `updateCompany` ne les exige pas. Imposer un SIRET pour corriger un code postal rendrait
+   irréparables les fiches créées avant cette règle ; l'exigence porte sur la création. */
 const CFIELDS = [
-  { k: "name", label: "Nom de l'entreprise", full: true, placeholder: "SARL Le Petit Four" },
-  { k: "siret", label: "SIRET", placeholder: "879 955 136 00012" },
+  { k: "name", label: "Nom de l'entreprise", requis: true, full: true, placeholder: "SARL Le Petit Four" },
+  { k: "siret", label: "SIRET", requis: true, placeholder: "879 955 136 00012" },
   // Mention attendue dès qu'on facture une société, obligatoire en intracommunautaire.
   // Le serveur ignore ce champ tant que la migration 123 n'est pas jouée.
   { k: "vat_number", label: "N° TVA intracommunautaire", placeholder: "FR76123456789" },
@@ -26,10 +30,10 @@ const CFIELDS = [
   { k: "address", label: "Adresse", full: true, placeholder: "12 rue des Lilas" },
   { k: "zip_code", label: "Code postal", placeholder: "65300" },
   { k: "town", label: "Ville", placeholder: "Lannemezan" },
-  { k: "email", label: "E-mail", placeholder: "contact@lepetitfour.fr" },
-  { k: "phone", label: "Téléphone", placeholder: "05 62 98 12 34" },
+  { k: "email", label: "E-mail", requis: true, placeholder: "contact@lepetitfour.fr" },
+  { k: "phone", label: "Téléphone", requis: true, placeholder: "05 62 98 12 34" },
   { k: "representative_civ", label: "Civilité du référent", type: "select", options: ["M.", "Mme"] },
-  { k: "representative_name", label: "Nom du référent", placeholder: "DUPONT" },
+  { k: "representative_name", label: "Nom du référent", requis: true, placeholder: "DUPONT" },
   { k: "representative_role", label: "Fonction du référent", full: true, type: "select", options: REP_ROLES },
 ];
 
@@ -342,7 +346,7 @@ export default function EntrepriseDetail() {
           {/* Coordonnées de l'entreprise */}
           <Card title={<span className="card-ttl"><Icon name="building" size={16} /> Coordonnées</span>}>
             <div className="grid cols-2" style={{ gap: 12 }}>
-              {CFIELDS.map(({ k, label, full, type, options, dyn, placeholder }) => {
+              {CFIELDS.map(({ k, label, full, type, options, dyn, placeholder, requis }) => {
                 const opts = dyn === "opco" ? opcoNames : (options || []);
                 const cur = form[k];
                 const allOpts = cur && !opts.includes(cur) ? [cur, ...opts] : opts;

@@ -176,7 +176,21 @@ function normaliserEntreprise(b) {
 /** POST /api/companies — crée une entreprise. */
 const createCompany = async (req, res) => {
     const b = normaliserEntreprise(req.body || {});
-    if (!b.name) return res.status(422).json({ error: "Nom de l'entreprise requis" });
+    /* CINQ CHAMPS EXIGÉS À LA CRÉATION — ce sont ceux qui figurent sur une convention.
+     *
+     * Une entreprise sans SIRET ni référent se découvre au moment d'éditer la convention, c'est-
+     * à-dire au pire moment : la session démarre, le document ne peut pas se remplir, et il faut
+     * rappeler le client. Les exiger à la saisie déplace ce coût là où il est indolore.
+     *
+     * `updateCompany` ne les réclame PAS, pour la même raison que la fiche stagiaire : imposer
+     * un SIRET pour corriger un code postal rendrait les anciennes fiches irréparables. */
+    const manquants = [
+        ['name', "Nom de l'entreprise"], ['siret', 'SIRET'], ['email', 'E-mail'],
+        ['phone', 'Téléphone'], ['representative_name', 'Nom du référent'],
+    ].filter(([k]) => !String(b[k] || '').trim()).map(([, libelle]) => libelle);
+    if (manquants.length) {
+        return res.status(422).json({ error: `Champ${manquants.length > 1 ? 's' : ''} requis : ${manquants.join(', ')}.` });
+    }
     if (b.email && !RE_EMAIL_ENT.test(b.email)) return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     try {
         const id = crypto.randomUUID();

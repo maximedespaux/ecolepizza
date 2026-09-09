@@ -74,3 +74,59 @@ test('les champs libres portent un exemple (placeholder), pas une étiquette ré
         assert.ok(MODALE.includes(attendu), `${attendu} manquant`);
     }
 });
+
+/* ---------------------------------------------------------------------------------------------
+ * CHAMPS OBLIGATOIRES — l'étoile rouge, et la règle qu'elle annonce.
+ * ------------------------------------------------------------------------------------------- */
+
+const { createLearner } = require('../controllers/learner.controller.js');
+const SRC_LEARNER = fs.readFileSync(path.join(__dirname, '..', 'controllers/learner.controller.js'), 'utf8');
+const FIELD = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/components/Field.jsx'), 'utf8');
+const CSS = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/styles/app.css'), 'utf8');
+
+async function creer(body) {
+    let code = 200; let corps = null;
+    const res = { status(c) { code = c; return this; }, json(b) { corps = b; return this; } };
+    await createLearner({ body, user: { organization_id: 'o1' } }, res);
+    return { code, corps };
+}
+
+test('créer un stagiaire exige téléphone ET e-mail', async () => {
+    assert.strictEqual((await creer({ first_name: 'Marie', last_name: 'DUPONT', email: 'm@x.fr' })).code, 422, 'sans téléphone');
+    assert.strictEqual((await creer({ first_name: 'Marie', last_name: 'DUPONT', phone: '0612345678' })).code, 422, 'sans e-mail');
+    // L'e-mail n'est pas un ornement : sans lui, `createStagiaireAccount` renvoie null et la
+    // personne ne pourra jamais ouvrir son espace, alors que sa fiche existe.
+    assert.match((await creer({ first_name: 'Marie', last_name: 'DUPONT' })).corps.error, /Téléphone et adresse e-mail/);
+});
+
+test('MODIFIER une fiche ne les exige PAS — sinon l\'ancien devient irréparable', () => {
+    /* La moitié qui compte. Imposer le téléphone en modification bloquerait toute correction sur
+       une fiche où il n'a jamais été collecté : on serait incapable de corriger une adresse faute
+       d'un numéro qu'on n'a pas. Une contrainte de qualité qui empêche de réparer les données
+       travaille contre elle-même. Les fiches NEUVES sont complètes, l'existant se complète au fil
+       de l'eau. */
+    const maj = SRC_LEARNER.slice(SRC_LEARNER.indexOf('const updateLearner'), SRC_LEARNER.indexOf('const deleteLearner'));
+    assert.doesNotMatch(maj, /Téléphone et adresse e-mail requis/,
+        'updateLearner ne doit pas réclamer téléphone et e-mail');
+});
+
+test('l\'étoile est une INFORMATION, pas seulement une couleur', () => {
+    /* Une étoile rouge ne dit rien à un lecteur d'écran, et lue telle quelle donne « Prénom
+       étoile ». L'obligation est portée par `aria-required` sur le champ ; la couleur ne fait
+       que la rappeler à l'œil — un daltonien ne doit pas dépendre d'une nuance. */
+    assert.match(FIELD, /<span className="requis" aria-hidden="true">\*<\/span>/);
+    assert.match(FIELD, /aria-required=\{requis \|\| undefined\}/);
+    assert.match(CSS, /\.requis[\s\S]{0,120}color: var\(--red\)/, 'la classe existe et est rouge');
+    /* SÉPARÉE du `required` natif, à dessein : `required` bloquerait aussi la modification d'une
+       ancienne fiche, ce que la règle retenue exclut. */
+    assert.match(FIELD, /requis = false/, 'la prop est distincte de `required`');
+});
+
+test('les quatre champs du stagiaire portent l\'étoile', () => {
+    for (const champ of ['label="Prénom"', 'label="Nom"', 'label="Téléphone"', 'label="Adresse email"']) {
+        const ligne = MODALE.split('\n').find((l) => l.includes(champ));
+        assert.ok(ligne && ligne.includes('requis'), `${champ} doit porter l'étoile`);
+    }
+    // Et le blocage ne vaut qu'à la création (`!id`), conformément à la règle retenue.
+    assert.match(MODALE, /if \(!id && \(!String\(form\.phone \|\| ""\)\.trim\(\)/);
+});

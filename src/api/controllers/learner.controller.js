@@ -162,6 +162,20 @@ const createLearner = async (req, res) => {
     if (!body.first_name || !body.last_name) {
         return res.status(422).json({ error: 'Nom et prénom requis' });
     }
+    /* TÉLÉPHONE ET E-MAIL EXIGÉS — À LA CRÉATION SEULEMENT, et c'est la moitié qui compte.
+     *
+     * `updateLearner` ne les réclame pas : les imposer là bloquerait toute correction sur une
+     * fiche ancienne dont le numéro n'a jamais été collecté. On serait incapable de corriger une
+     * adresse faute d'un téléphone qu'on n'a pas — une contrainte de qualité qui empêche
+     * justement de réparer les données. Les fiches NEUVES sont complètes, l'existant reste
+     * modifiable, et se complète au fil de l'eau.
+     *
+     * L'e-mail n'est pas un ornement : il SERT d'identifiant de connexion. Sans lui,
+     * `createStagiaireAccount` renvoie null et la fiche existe sans que la personne puisse
+     * jamais ouvrir son espace. */
+    if (!String(body.phone || '').trim() || !String(body.email || '').trim()) {
+        return res.status(422).json({ error: 'Téléphone et adresse e-mail requis pour créer un stagiaire.' });
+    }
     // L'e-mail sert de compte de connexion : mieux vaut le refuser ici que créer un accès mort.
     if (body.email && !RE_EMAIL.test(body.email)) {
         return res.status(422).json({ error: 'Adresse e-mail invalide.' });

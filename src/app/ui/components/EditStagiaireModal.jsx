@@ -100,7 +100,12 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
     return { ...p, completed_levels: [...cs].join(",") };
   });
   async function saveNewCompany() {
-    if (!newCo.name.trim()) { onError?.("Nom de l'entreprise requis."); return; }
+    /* Mêmes cinq champs que la route, nommés un par un : « champs requis » sur six champs
+       oblige à tous les relire pour trouver lequel manque. */
+    const manquants = [["name", "Nom de l'entreprise"], ["siret", "SIRET"], ["email", "E-mail"],
+      ["phone", "Téléphone"], ["representative_name", "Représentant"]]
+      .filter(([k]) => !String(newCo[k] || "").trim()).map(([, l]) => l);
+    if (manquants.length) { onError?.(`Champ${manquants.length > 1 ? "s" : ""} requis : ${manquants.join(", ")}.`); return; }
     try {
       const r = await createCompany(newCo);
       const list = (await getCompanies()).data || [];
@@ -121,6 +126,13 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!String(form.first_name).trim() || !String(form.last_name).trim()) { onError?.("Prénom et nom requis."); return; }
+    /* Téléphone et e-mail sont exigés À LA CRÉATION seulement (`!id`). Les imposer aussi en
+       modification bloquerait toute correction sur une ancienne fiche dont le numéro n'a jamais
+       été collecté : on serait incapable de corriger une adresse faute d'un téléphone qu'on n'a
+       pas. Les fiches neuves sont complètes, l'existant reste réparable. */
+    if (!id && (!String(form.phone || "").trim() || !String(form.email || "").trim())) {
+      onError?.("Téléphone et adresse e-mail requis pour créer un stagiaire."); return;
+    }
     // Même règle que le serveur, dite ICI : un 422 après enregistrement fait perdre la saisie de vue.
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email)) { onError?.("Adresse email invalide."); return; }
     setSaving(true);
@@ -167,16 +179,16 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                   <option value="">-</option>
                   {CIVILITES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </SelectField>
-                <Field label="Prénom" value={form.first_name} onChange={set("first_name")} placeholder="Marie" required />
-                <Field label="Nom" value={form.last_name} onChange={setNom} placeholder="DUPONT" required />
+                <Field label="Prénom" value={form.first_name} onChange={set("first_name")} placeholder="Marie" requis required />
+                <Field label="Nom" value={form.last_name} onChange={setNom} placeholder="DUPONT" requis required />
               </div>
               <div className="row2">
                 <Field label="Date de naissance" type="date" value={form.birthday} onChange={set("birthday")} />
                 <Field label="Lieu de naissance" value={form.birth_place} onChange={set("birth_place")} placeholder="Tarbes" />
               </div>
               <div className="row2">
-                <Field label="Téléphone" value={form.phone} onChange={set("phone")} placeholder="06 12 34 56 78" />
-                <Field label="Adresse email" type="email" value={form.email} onChange={setEmail} placeholder="marie.dupont@exemple.fr" />
+                <Field label="Téléphone" value={form.phone} onChange={set("phone")} placeholder="06 12 34 56 78" requis />
+                <Field label="Adresse email" type="email" value={form.email} onChange={setEmail} placeholder="marie.dupont@exemple.fr" requis />
               </div>
               <div className="row3">
                 <Field label="Adresse" value={form.address} onChange={set("address")} placeholder="12 rue des Lilas" />
@@ -283,18 +295,24 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                       {companies.map((c) => <option key={c.id} value={c.id}>{c.name}{c.town ? ` · ${c.town}` : ""}</option>)}
                     </SelectField>
                     <div style={{ display: "flex", alignItems: "flex-end" }}>
-                      {!newCo && <button type="button" className="btn ghost" onClick={() => setNewCo({ name: "", siret: "", town: "", representative_name: "" })}>＋ Nouvelle entreprise</button>}
+                      {!newCo && <button type="button" className="btn ghost" onClick={() => setNewCo({ name: "", siret: "", town: "", email: "", phone: "", representative_name: "" })}>＋ Nouvelle entreprise</button>}
                     </div>
                   </div>
                   {newCo && (
                     <div className="card" style={{ padding: 12, marginTop: 4 }}>
+                      {/* E-mail et téléphone AJOUTÉS ici : ce sous-formulaire appelle la MÊME route que
+                          « Nouvelle entreprise », qui les exige désormais. Sans eux, créer une entreprise
+                          depuis une fiche stagiaire serait devenu impossible — un 422 portant sur un champ
+                          que l'écran ne proposait même pas, donc ni compréhensible ni corrigeable. */}
                       <div className="row3">
-                        <Field label="Nom *" value={newCo.name} onChange={(e) => setNewCo((n) => ({ ...n, name: e.target.value }))} />
-                        <Field label="SIRET" value={newCo.siret} onChange={(e) => setNewCo((n) => ({ ...n, siret: e.target.value }))} />
-                        <Field label="Ville" value={newCo.town} onChange={(e) => setNewCo((n) => ({ ...n, town: e.target.value }))} />
+                        <Field label="Nom" requis value={newCo.name} onChange={(e) => setNewCo((n) => ({ ...n, name: e.target.value }))} />
+                        <Field label="SIRET" requis placeholder="879 955 136 00012" value={newCo.siret} onChange={(e) => setNewCo((n) => ({ ...n, siret: e.target.value }))} />
+                        <Field label="Ville" placeholder="Lannemezan" value={newCo.town} onChange={(e) => setNewCo((n) => ({ ...n, town: e.target.value }))} />
                       </div>
-                      <div className="row2">
-                        <Field label="Représentant (nom & prénom)" value={newCo.representative_name} onChange={(e) => setNewCo((n) => ({ ...n, representative_name: e.target.value }))} />
+                      <div className="row3">
+                        <Field label="E-mail" requis type="email" placeholder="contact@lepetitfour.fr" value={newCo.email} onChange={(e) => setNewCo((n) => ({ ...n, email: e.target.value }))} />
+                        <Field label="Téléphone" requis placeholder="05 62 98 12 34" value={newCo.phone} onChange={(e) => setNewCo((n) => ({ ...n, phone: e.target.value }))} />
+                        <Field label="Représentant (nom & prénom)" requis placeholder="DUPONT" value={newCo.representative_name} onChange={(e) => setNewCo((n) => ({ ...n, representative_name: e.target.value }))} />
                       </div>
                       <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                         <button type="button" className="btn sm ghost" onClick={() => setNewCo(null)}>Annuler</button>
