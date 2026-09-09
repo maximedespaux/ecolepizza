@@ -125,3 +125,52 @@ test('une ligne d\'activité ne se marque pas comme lue individuellement', () =>
     assert.match(PAGE, /if \(!n\.is_read && n\.type !== "ACTIVITE"\)/);
     assert.match(NOTIF, /activite:\$\{r\.id\}/, 'le préfixe qui rend ces identifiants reconnaissables');
 });
+
+/* ---------------------------------------------------------------------------------------------
+ * SUPPRIMER UNE NOTIFICATION — un droit accordé par l'organisme, et qui s'arrête au journal.
+ * ------------------------------------------------------------------------------------------- */
+
+const NAV = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/lib/nav.js'), 'utf8');
+
+test('une ligne d\'activité ne se supprime JAMAIS — le journal ne s\'efface pas', async () => {
+    /* Le vrai risque de cette fonctionnalité. Un droit de ménage dans la cloche ne doit pas
+       devenir, par un simple préfixe d'identifiant, un droit d'effacer l'historique de qui a
+       fait quoi. Le refus est EXPLICITE : un DELETE qui ne trouve rien et répond « c'est fait »
+       laisserait croire que la ligne est partie, et elle reviendrait au rechargement. */
+    const { deleteNotification } = require('../controllers/notification.controller.js');
+    let code = 200; let corps = null;
+    const res = { status(c) { code = c; return this; }, json(b) { corps = b; return this; } };
+    await deleteNotification(
+        { params: { id: 'activite:6f2b' }, user: { id: 'u1', role: 'SUPER_ADMIN', organization_id: 'o1' } },
+        res);
+    assert.strictEqual(code, 422, 'même un super administrateur ne peut pas effacer le journal');
+    assert.match(corps.message, /journal/i, 'et on lui dit pourquoi');
+});
+
+test('le droit de supprimer se lit dans la capacité, pas dans le rôle', () => {
+    const { CAP_SUPPRIMER_NOTIF, ROLES_SUPPRESSION_DOFFICE } = require('../controllers/notification.controller.js');
+    // Le serveur relit la capacité EN BASE : un rôle porté par le jeton resterait valable
+    // jusqu'à sept jours après le retrait du droit.
+    assert.match(NOTIF, /aLaCapaciteEnBase\(req\.user, CAP_SUPPRIMER_NOTIF, ROLES_SUPPRESSION_DOFFICE\)/);
+    assert.doesNotMatch(
+        fs.readFileSync(path.join(__dirname, '..', 'routes/notification.routes.js'), 'utf8'),
+        /authorizeRoles\(/, 'la route ne doit pas être gardée par un rôle');
+
+    // L'écran et le serveur doivent nommer LA MÊME capacité : une faute de frappe donnerait une
+    // case à cocher sans effet, et rien ne le signalerait.
+    assert.ok(NAV.includes(`to: "${CAP_SUPPRIMER_NOTIF}"`), 'la capacité doit exister dans EXTRA_ACCESS');
+    /* Et les rôles qui l'ont D'OFFICE doivent être exactement ceux annoncés à l'écran, sinon la
+       fenêtre affiche « non » à quelqu'un que le serveur autorise quand même. */
+    const bloc = new RegExp(`to: "${CAP_SUPPRIMER_NOTIF}"[\\s\\S]*?defaultRoles: \\[([^\\]]+)\\]`).exec(NAV);
+    assert.ok(bloc, 'defaultRoles introuvable pour cette capacité');
+    const affiches = [...bloc[1].matchAll(/"([A-Z_]+)"/g)].map((m) => m[1]);
+    assert.deepStrictEqual(affiches, ROLES_SUPPRESSION_DOFFICE);
+});
+
+test('la corbeille n\'apparaît pas sur une ligne d\'activité, ni sans le droit', () => {
+    assert.match(PAGE, /peutSupprimer && n\.type !== "ACTIVITE"/,
+        'le bouton est doublement conditionné : le droit ET la nature de la ligne');
+    // Un bouton visible qui répond 403 fait croire à une panne là où il n'y a qu'un droit absent.
+    assert.match(PAGE, /aLaCapacite\(user, "cap:delete-notifications"\)/);
+    assert.match(PAGE, /window\.confirm\(/, 'une suppression d\'organisme se confirme avant, pas après');
+});

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getNotifications, markNotificationRead, markAllNotificationsRead } from "../api/apiClient.js";
+import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from "../api/apiClient.js";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -11,7 +11,8 @@ import { Squelette } from "../components/Squelette.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { dateHeure } from "../lib/format.js";
 import { auditLabel, entityLabel } from "../lib/auditLabels.js";
-import { PAGE_TITLES } from "../lib/nav.js";
+import { PAGE_TITLES, aLaCapacite, OWNER_ROLES } from "../lib/nav.js";
+import { UserContext } from "../context/UserContext.jsx";
 
 const TONE = { SIGNATURE: "g", PAIEMENT: "a", RELANCE: "r", QUALIOPI: "b", BOUTIQUE: "b", INFO: "n", SYSTEME: "n" };
 
@@ -41,6 +42,11 @@ function ligneLisible(n) {
 
 function Notifications() {
   const navigate = useNavigate();
+  const { user } = useContext(UserContext);
+  /* Le bouton n'apparaît que si le droit existe VRAIMENT. Un bouton visible qui répond 403 est
+     pire que pas de bouton : il fait croire à une panne là où il n'y a qu'un droit non accordé.
+     Les propriétaires l'ont d'office — même liste que `ROLES_SUPPRESSION_DOFFICE` au serveur. */
+  const peutSupprimer = !!user && (OWNER_ROLES.includes(user.role) || aLaCapacite(user, "cap:delete-notifications"));
   const [rows, setRows] = useState(null); // `null` = on charge, `[]` = aucune notification
   const [status, setStatus] = useState(null);
 
@@ -56,6 +62,13 @@ function Notifications() {
   async function readAll() {
     try { await markAllNotificationsRead(); setStatus(null); load(); }
     catch (e) { setStatus({ type: "error", message: e.message || "Impossible de tout marquer comme lu." }); }
+  }
+
+  async function supprimer(n) {
+    // Une notification d'organisme part pour tout le monde : on le dit AVANT, pas après.
+    if (!window.confirm("Supprimer cette notification ? Si elle s'adresse à tout l'organisme, elle disparaîtra pour chacun.")) return;
+    try { await deleteNotification(n.id); setStatus(null); load(); }
+    catch (e) { setStatus({ type: "error", message: e.message || "Suppression impossible." }); }
   }
 
   // Clic sur une notification : la marque comme lue puis redirige (si un lien existe).
@@ -118,6 +131,17 @@ function Notifications() {
                       `aria-hidden` : il redit ce que le nom de la ligne annonce déjà. */}
                   {n.link && <Icon name="chevron-right" size={15} aria-hidden="true" />}
                   <span className="notif-date">{dateHeure(n.created_at)}</span>
+                  {/* Pas de corbeille sur une ligne d'ACTIVITÉ : elle vient du journal d'audit,
+                      qui ne s'efface pas. Le serveur refuse d'ailleurs explicitement — le bouton
+                      absent et le refus disent la même chose, ce qui est le but. */}
+                  {peutSupprimer && n.type !== "ACTIVITE" && (
+                    <button type="button" className="icon-btn sm"
+                      onClick={(e) => { e.stopPropagation(); supprimer(n); }}
+                      title="Supprimer cette notification"
+                      aria-label={`Supprimer la notification : ${titre}`}>
+                      <Icon name="trash" size={14} />
+                    </button>
+                  )}
                   {!n.is_read && <span className="notif-point" aria-hidden="true" />}
                 </div>
               );

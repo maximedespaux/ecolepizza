@@ -345,6 +345,9 @@ export function markNotificationRead(id) {
 export function markAllNotificationsRead() {
   return request("/notifications/read-all", { method: "POST" });
 }
+export function deleteNotification(id) {
+  return request(`/notifications/${id}`, { method: "DELETE" });
+}
 
 // --- Authentification ---
 export function login({ email, password, org_code, stayConnected }) {

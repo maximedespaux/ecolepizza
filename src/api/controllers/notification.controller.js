@@ -3,6 +3,17 @@ const db = require('../config/database.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { notificationEmail } = require('../lib/mailTemplates.js');
 const { sectionsVisibles, entitesVisibles, sectionDeLEntite, estLu } = require('../lib/activite.js');
+const { aLaCapaciteEnBase } = require('../lib/capacites.js');
+
+/* SUPPRIMER UNE NOTIFICATION EST UN DROIT NOMINATIF, pas un attribut de rôle. La raison tient à
+   une particularité de la table : une notification d'organisme (`user_id` nul) est UNE ligne
+   partagée. La supprimer ne la retire pas de ma cloche, elle la retire de CELLE DE TOUT LE
+   MONDE — y compris de quelqu'un qui ne l'a pas encore lue. Ce n'est donc pas « ranger chez
+   soi », c'est effacer une information chez les autres, et ça se donne à qui l'organisme
+   désigne. Les propriétaires l'ont d'office ; la liste ci-dessous doit rester identique au
+   `defaultRoles` affiché dans « Équipe & accès » (un test le vérifie). */
+const CAP_SUPPRIMER_NOTIF = 'cap:delete-notifications';
+const ROLES_SUPPRESSION_DOFFICE = ['SUPER_ADMIN', 'ADMIN_ORGANISME'];
 
 /**
  * Crée une notification (best-effort). user_id null = visible par tout l'organisme.
@@ -195,4 +206,39 @@ const markAllRead = async (req, res) => {
     }
 };
 
-module.exports = { getNotifications, markRead, markAllRead, notify };
+/**
+ * DELETE /api/notifications/:id — retire une notification.
+ *
+ * REFUSE LES LIGNES D'ACTIVITÉ, et c'est le cœur de cette fonction. Elles viennent du journal
+ * d'audit : les supprimer, ce serait effacer la trace de qui a fait quoi — exactement ce qu'un
+ * journal existe pour empêcher, et ce que `auditLabels.js` formule déjà (« ce qui a été écrit
+ * reste écrit »). Un droit de ménage dans la cloche ne doit jamais devenir, par un préfixe
+ * d'identifiant, un droit d'effacer l'historique. D'où un refus explicite plutôt qu'un DELETE
+ * qui ne trouverait rien et répondrait « c'est fait » : silencieux, il laisserait croire que
+ * la ligne est partie, et elle reviendrait au rechargement suivant.
+ */
+const deleteNotification = async (req, res) => {
+    if (String(req.params.id || '').startsWith('activite:')) {
+        return res.status(422).json({
+            message: 'Cette ligne vient du journal d\u2019activité : elle ne se supprime pas.',
+        });
+    }
+    try {
+        if (!await aLaCapaciteEnBase(req.user, CAP_SUPPRIMER_NOTIF, ROLES_SUPPRESSION_DOFFICE)) {
+            return res.status(403).json({ message: 'Suppression des notifications non autorisée.' });
+        }
+        const [r] = await db.promise().query(
+            'DELETE FROM notification WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Notification introuvable.' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur suppression notification :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = {
+    getNotifications, markRead, markAllRead, notify, deleteNotification,
+    CAP_SUPPRIMER_NOTIF, ROLES_SUPPRESSION_DOFFICE,
+};

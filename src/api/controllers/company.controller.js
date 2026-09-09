@@ -3,6 +3,9 @@ const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
 const { generatePassword } = require('../lib/crypto.js');
+// Même lacune que pour le stagiaire : l'entreprise, qui signe les conventions et reçoit les
+// factures, n'apparaissait nulle part dans le journal.
+const { logAudit } = require('../lib/audit.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { representativeEmail } = require('../lib/mailTemplates.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
@@ -177,6 +180,7 @@ const createCompany = async (req, res) => {
             `INSERT INTO company (id, organization_id, ${cols.join(', ')}) VALUES (?, ?, ${cols.map(() => '?').join(', ')})`,
             [id, req.user.organization_id, ...cols.map((k) => clean(b[k]))]
         );
+        logAudit(req, 'company.create', 'Company', id);
         res.status(201).json({ message: 'Entreprise créée', data: { id } });
     } catch (err) {
         console.error('Erreur création entreprise :', err);
@@ -199,6 +203,7 @@ const updateCompany = async (req, res) => {
                 [...cols.map((k) => clean(b[k])), req.params.id, req.user.organization_id]
             );
         }
+        logAudit(req, 'company.update', 'Company', req.params.id);
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur mise à jour entreprise :', err);
@@ -477,6 +482,7 @@ const deleteCompany = async (req, res) => {
         const conn = db.promise();
         const [r] = await conn.query('DELETE FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!r.affectedRows) return res.status(404).json({ message: 'Entreprise introuvable.' });
+        logAudit(req, 'company.delete', 'Company', req.params.id);
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur suppression entreprise :', err);

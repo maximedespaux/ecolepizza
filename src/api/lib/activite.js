@@ -31,6 +31,7 @@ const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'];
 /** Entité journalisée → rubrique de menu. Les clés sont celles posées par `logAudit`. */
 const SECTION_PAR_ENTITE = {
     Learner: '/stagiaires', PieceDepot: '/stagiaires', GeneratedDocument: '/stagiaires',
+    Company: '/entreprises',
     TrainingSession: '/sessions', AttendanceSheet: '/sessions',
     Invoice: '/factures', BillingProfile: '/reglages-facturation',
     AccountingSettings: '/comptabilite', Expense: '/comptabilite', RevenueExtra: '/comptabilite',

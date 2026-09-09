@@ -22,19 +22,14 @@
  * (`isStudent || isIntervenant`) et participe au fil comme les autres.
  */
 const db = require('../config/database.js');
+// La lecture du format `nav_access` vit dans `capacites.js` : elle servait déjà ici et côté
+// écran, et une troisième copie naissait avec la suppression des notifications.
+const { aLaCapacite } = require('./capacites.js');
 
 const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'];
 const estStaff = (u) => STAFF.includes(u.role);
 
 const CAP_MODERER = 'cap:moderate-community';
-
-const aLaCapacite = (navAccess, cap) => {
-    if (!navAccess) return false;
-    let map = navAccess;
-    if (typeof map === 'string') { try { map = JSON.parse(map); } catch { return false; } }
-    if (Array.isArray(map)) return map.includes(cap);              // ancien format = tout accordé
-    return !!map && typeof map === 'object' && Object.prototype.hasOwnProperty.call(map, cap);
-};
 
 const peutModerer = async (user) => {
     if (estStaff(user)) return true;
