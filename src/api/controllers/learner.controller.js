@@ -186,6 +186,10 @@ const createLearner = async (req, res) => {
                  VALUES (?, ?, ${placeholders})`,
                 [companyId, organizationId, ...values]
             );
+            // Une entreprise créée EN PASSANT reste une entreprise créée : elle signera des
+            // conventions et recevra des factures. Elle n'a pas à être moins tracée qu'une autre
+            // parce qu'elle est née dans le formulaire d'un stagiaire.
+            logAudit(req, 'company.create', 'Company', companyId);
         }
 
         // Compte de connexion du stagiaire (rôle STAGIAIRE) à partir de son email.
@@ -270,6 +274,7 @@ const updateLearner = async (req, res) => {
                      VALUES (?, ?, ${cols.map(() => '?').join(', ')})`,
                     [companyId, organizationId, ...vals]
                 );
+                logAudit(req, 'company.create', 'Company', companyId); // même raison qu'à la création
             }
         }
 

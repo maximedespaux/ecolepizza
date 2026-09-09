@@ -174,3 +174,24 @@ test('la corbeille n\'apparaît pas sur une ligne d\'activité, ni sans le droit
     assert.match(PAGE, /aLaCapacite\(user, "cap:delete-notifications"\)/);
     assert.match(PAGE, /window\.confirm\(/, 'une suppression d\'organisme se confirme avant, pas après');
 });
+
+test('un lot de créations tient sur UNE ligne, sans mentir sur l\'ordre', () => {
+    const { regrouperConsecutives } = require('../lib/activite.js');
+    const l = (action, auteur, is_read = 0) => ({ action, entity: 'Learner', auteur, is_read });
+    /* L'inscription d'un groupe crée douze fiches d'un coup. Recopiées telles quelles, elles
+       chassent tout le reste de la cloche — la facture envoyée juste avant devient invisible. */
+    const r = regrouperConsecutives([
+        l('learner.create', 'Marie'), l('learner.create', 'Marie'), l('learner.create', 'Marie'),
+        l('invoice.create', 'Jean'),
+        l('learner.create', 'Marie'),
+    ]);
+    assert.deepStrictEqual(r.map((x) => `${x.action}×${x.nombre}`),
+        ['learner.create×3', 'invoice.create×1', 'learner.create×1'],
+        'CONSÉCUTIVES seulement : fusionner à distance remonterait un événement ancien au rang du récent');
+
+    // Auteurs différents : deux lignes, sinon on attribuerait à l'un le geste de l'autre.
+    assert.strictEqual(regrouperConsecutives([l('learner.create', 'Marie'), l('learner.create', 'Sophie')]).length, 2);
+    // Un groupe est NEUF dès qu'une seule de ses lignes l'est.
+    assert.strictEqual(regrouperConsecutives([l('learner.create', 'Marie', 1), l('learner.create', 'Marie', 0)])[0].is_read, 0);
+    assert.match(PAGE, /×\$\{n\.nombre\}/, 'et l\'écran dit le nombre');
+});

@@ -314,6 +314,13 @@ const registerCompanyStagiaires = async (req, res) => {
                 );
                 enrolled = true;
             }
+            /* UNE TRACE PAR STAGIAIRE, pas une pour le lot. L'inscription de groupe est le
+               chemin le plus courant vers une fiche neuve dans cet organisme — la journaliser en
+               bloc dirait « douze stagiaires ont été créés » sans pouvoir dire lesquels, ce qui
+               est précisément ce qu'un contrôle vient vérifier. Le fil d'activité, lui, regroupe
+               les lignes identiques à l'affichage (cf. lib/activite.js) : la trace reste fine,
+               la cloche reste lisible. */
+            logAudit(req, 'learner.create', 'Learner', learnerId);
             created.push({ learner_id: learnerId, name: [first, last].filter(Boolean).join(' '), email: email || null, password: account?.password || null, account: !!account, enrolled, existing: false });
         }
 

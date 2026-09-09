@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { notificationEmail } = require('../lib/mailTemplates.js');
-const { sectionsVisibles, entitesVisibles, sectionDeLEntite, estLu } = require('../lib/activite.js');
+const { sectionsVisibles, entitesVisibles, sectionDeLEntite, estLu, regrouperConsecutives } = require('../lib/activite.js');
 const { aLaCapaciteEnBase } = require('../lib/capacites.js');
 
 /* SUPPRIMER UNE NOTIFICATION EST UN DROIT NOMINATIF, pas un attribut de rôle. La raison tient à
@@ -114,7 +114,7 @@ async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
           ORDER BY a.created_at DESC
           LIMIT 30`, params);
 
-    return rows.map((r) => ({
+    return regrouperConsecutives(rows.map((r) => ({
         /* Préfixe `activite:` — l'identifiant vient d'`audit_log`, pas de `notification`. Il ne
            doit jamais être envoyé à « marquer comme lue » : une marque « jusqu'ici » ne sait pas
            dire l'état d'UNE ligne. C'est « Tout marquer comme lu » qui fait avancer la date. */
@@ -134,7 +134,7 @@ async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
         link: sectionDeLEntite(r.entity),
         is_read: estLu({ quand: r.quand, vue, dormant }) ? 1 : 0,
         created_at: r.created_at,
-    }));
+    })));
 }
 
 /**

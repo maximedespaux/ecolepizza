@@ -121,3 +121,30 @@ test('la création d\'un stagiaire et d\'une entreprise est journalisée', async
     assert.strictEqual(sectionDeLEntite('Company'), '/entreprises', 'sinon l\'entreprise n\'est visible que des propriétaires');
     assert.strictEqual(sectionDeLEntite('Learner'), '/stagiaires');
 });
+
+test('TOUT chemin qui crée un stagiaire ou une entreprise laisse une trace', () => {
+    /* La première passe n'avait journalisé que le CRUD principal. Il restait quatre chemins
+       muets, et ce sont les plus courants de cet organisme :
+         · l'inscription d'un GROUPE crée les fiches en lot (company.controller) ;
+         · la fiche stagiaire crée une entreprise « en passant », à la création comme à la
+           modification (learner.controller, saisie inline) ;
+         · le STAGIAIRE lui-même en saisit une depuis son espace (espace.controller) — celle-là
+           surtout : sans trace, l'école découvre une entreprise dans sa base sans savoir ni
+           quand ni par qui.
+       Ce test compte les INSERT et exige autant de logAudit : un chemin ajouté demain sans sa
+       trace fait virer au rouge, ce qu'une liste de cas écrite à la main n'aurait pas fait. */
+    const compte = (s, re) => [...s.matchAll(re)].length;
+    for (const f of ['learner.controller.js', 'company.controller.js', 'espace.controller.js']) {
+        const src = fs.readFileSync(path.join(CTRL, f), 'utf8');
+        // « INSERT INTO learner ( » et non « learner » seul : learner_avatar et
+        // learner_quest_progress ne créent pas de stagiaire.
+        assert.strictEqual(
+            compte(src, /INSERT INTO learner \(/g),
+            compte(src, /logAudit\(req, 'learner\.create'/g),
+            `${f} : autant de traces que de créations de stagiaire`);
+        assert.strictEqual(
+            compte(src, /INSERT INTO company \(/g),
+            compte(src, /logAudit\(req, 'company\.create'/g),
+            `${f} : autant de traces que de créations d'entreprise`);
+    }
+});

@@ -37,7 +37,10 @@ function ligneLisible(n) {
   }
   const { label, tone } = auditLabel(n.action, n.entity);
   const rubrique = PAGE_TITLES[n.link] || entityLabel(n.entity) || "Activité";
-  return { titre: label, corps: n.auteur ? `par ${n.auteur}` : null, ton: tone, etiquette: rubrique };
+  // « ×12 » : l'inscription d'un groupe crée douze fiches d'un coup. Le journal les garde une
+  // par une ; ici on dit le nombre plutôt que de répéter douze fois la même phrase.
+  const titre = n.nombre > 1 ? `${label} ×${n.nombre}` : label;
+  return { titre, corps: n.auteur ? `par ${n.auteur}` : null, ton: tone, etiquette: rubrique };
 }
 
 function Notifications() {
