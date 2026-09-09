@@ -147,10 +147,29 @@ async function colonnesEntreprise(conn) {
     return [...COMPANY_COLS, ...dispo];
 }
 
+/* CONVENTIONS DE SAISIE — mêmes raisons que pour un stagiaire (cf. learner.controller), et
+   appliquées ici aussi parce que le formulaire n'est pas le seul chemin d'entrée :
+   · NOM DU RÉFÉRENT en majuscules : il ressort tel quel sur les conventions et les liens de
+     signature, et « dupont » / « Dupont » / « DUPONT » empêchent tout tri comme tout regroupement ;
+   · E-MAIL en minuscules, sans espaces, refusé s'il est malformé : c'est l'adresse à laquelle
+     partent la convention et le lien de signature du représentant.
+   La RAISON SOCIALE, en revanche, n'est PAS mise en capitales : « SARL Le Petit Four » a une
+   casse officielle, et l'écraser ferait mentir tous les documents qui la reprennent. */
+const RE_EMAIL_ENT = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function normaliserEntreprise(b) {
+    const out = { ...b };
+    if (out.representative_name != null) out.representative_name = String(out.representative_name).trim().toLocaleUpperCase('fr');
+    if (out.name != null) out.name = String(out.name).trim();
+    if (out.email != null) out.email = String(out.email).trim().toLowerCase();
+    return out;
+}
+
 /** POST /api/companies — crée une entreprise. */
 const createCompany = async (req, res) => {
-    const b = req.body || {};
+    const b = normaliserEntreprise(req.body || {});
     if (!b.name) return res.status(422).json({ error: "Nom de l'entreprise requis" });
+    if (b.email && !RE_EMAIL_ENT.test(b.email)) return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     try {
         const id = crypto.randomUUID();
         const cols = (await colonnesEntreprise(db.promise())).filter((k) => b[k] !== undefined);
@@ -167,7 +186,8 @@ const createCompany = async (req, res) => {
 
 /** PUT /api/companies/:id — met à jour une entreprise. */
 const updateCompany = async (req, res) => {
-    const b = req.body || {};
+    const b = normaliserEntreprise(req.body || {}); // mêmes conventions qu'à la création
+    if (b.email && !RE_EMAIL_ENT.test(b.email)) return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     try {
         const conn = db.promise();
         const [[c]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
@@ -764,4 +784,4 @@ const createRepresentativeAccount = async (req, res) => {
     }
 };
 
-module.exports = { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount };
+module.exports = { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount, normaliserEntreprise, RE_EMAIL_ENT };

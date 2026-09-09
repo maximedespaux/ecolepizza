@@ -15,23 +15,33 @@ import { dateHeure } from "../lib/format.js";
 const LEGAL_STATUSES = ["SARL", "SAS", "SASU", "EURL", "EI", "Micro / Auto", "SA", "SCI", "Association", "Autre"];
 const REP_ROLES = ["Gérant(e)", "Président(e)", "Directeur / Directrice", "Directeur général / Directrice générale", "Chef(fe) d'entreprise", "Responsable formation", "Responsable RH / DRH", "Responsable administratif", "Associé(e)", "Autre"];
 const CFIELDS = [
-  { k: "name", label: "Nom de l'entreprise", full: true },
-  { k: "siret", label: "SIRET" },
+  { k: "name", label: "Nom de l'entreprise", full: true, placeholder: "SARL Le Petit Four" },
+  { k: "siret", label: "SIRET", placeholder: "879 955 136 00012" },
   // Mention attendue dès qu'on facture une société, obligatoire en intracommunautaire.
   // Le serveur ignore ce champ tant que la migration 123 n'est pas jouée.
   { k: "vat_number", label: "N° TVA intracommunautaire", placeholder: "FR76123456789" },
-  { k: "naf_ape", label: "Code NAF / APE" },
+  { k: "naf_ape", label: "Code NAF / APE", placeholder: "5610C" },
   { k: "legal_status", label: "Forme juridique", type: "select", options: LEGAL_STATUSES },
   { k: "opco", label: "OPCO / financeur", type: "select", dyn: "opco" },
-  { k: "address", label: "Adresse", full: true },
-  { k: "zip_code", label: "Code postal" },
-  { k: "town", label: "Ville" },
-  { k: "email", label: "E-mail" },
-  { k: "phone", label: "Téléphone" },
+  { k: "address", label: "Adresse", full: true, placeholder: "12 rue des Lilas" },
+  { k: "zip_code", label: "Code postal", placeholder: "65300" },
+  { k: "town", label: "Ville", placeholder: "Lannemezan" },
+  { k: "email", label: "E-mail", placeholder: "contact@lepetitfour.fr" },
+  { k: "phone", label: "Téléphone", placeholder: "05 62 98 12 34" },
   { k: "representative_civ", label: "Civilité du référent", type: "select", options: ["M.", "Mme"] },
-  { k: "representative_name", label: "Nom du référent" },
+  { k: "representative_name", label: "Nom du référent", placeholder: "DUPONT" },
   { k: "representative_role", label: "Fonction du référent", full: true, type: "select", options: REP_ROLES },
 ];
+
+/* Mêmes conventions qu'à la saisie d'un stagiaire : le NOM DU RÉFÉRENT passe en capitales (il
+   ressort tel quel sur les conventions et les liens de signature) et l'E-MAIL est normalisé —
+   c'est l'adresse à laquelle part la demande de signature. La RAISON SOCIALE garde SA casse :
+   « SARL Le Petit Four » est un nom officiel, pas une donnée à uniformiser. */
+function valeurNormalisee(k, v) {
+  if (k === "representative_name") return v.toLocaleUpperCase("fr");
+  if (k === "email") return v.trim().toLowerCase();
+  return v;
+}
 const sessLabel = (s) => `${s.program_code || s.program_title} · S${s.week} ${s.year}`;
 const DOC_STATUS = { A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"] };
 
@@ -223,7 +233,7 @@ export default function EntrepriseDetail() {
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
-  const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
+  const set = (k) => (e) => setForm((p) => ({ ...p, [k]: valeurNormalisee(k, e.target.value) }));
   async function saveInfo() {
     setSavingInfo(true); setStatus(null);
     try { await updateCompany(id, form); setStatus({ type: "success", message: "Entreprise enregistrée." }); load(); }

@@ -123,10 +123,20 @@ export default function Entreprises() {
 function CreateCompanyModal({ onClose, onCreated, onError }) {
   const [f, setF] = useState({ name: "", siret: "", address: "", zip_code: "", town: "", email: "", phone: "", representative_civ: "", representative_name: "" });
   const [busy, setBusy] = useState(false);
-  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  /* Mêmes conventions que la fiche entreprise et la fiche stagiaire : nom du référent en
+     capitales (il ressort sur les conventions et les liens de signature), e-mail normalisé —
+     c'est l'adresse de la demande de signature. La raison sociale garde SA casse officielle. */
+  const set = (k) => (e) => setF((p) => ({
+    ...p,
+    [k]: k === "representative_name" ? e.target.value.toLocaleUpperCase("fr")
+      : k === "email" ? e.target.value.trim().toLowerCase()
+        : e.target.value,
+  }));
 
   async function save() {
     if (!f.name.trim()) { onError("Nom de l'entreprise requis."); return; }
+    // Même règle que le serveur, dite ici : un 422 après coup fait perdre la saisie de vue.
+    if (f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email)) { onError("Adresse e-mail invalide."); return; }
     setBusy(true);
     try { const r = await createCompany(f); onCreated(r.data?.id); }
     catch (e) { onError(e.message); setBusy(false); }
@@ -137,21 +147,21 @@ function CreateCompanyModal({ onClose, onCreated, onError }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mhead"><h3>Nouvelle entreprise</h3><button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button></div>
         <div className="mbody">
-          <div className="field"><label>Nom de l'entreprise *</label><input className="inp" value={f.name} onChange={set("name")} autoFocus /></div>
+          <div className="field"><label>Nom de l'entreprise *</label><input className="inp" value={f.name} onChange={set("name")} placeholder="SARL Le Petit Four" autoFocus /></div>
           <div className="grid cols-2" style={{ gap: 12 }}>
-            <div className="field"><label>SIRET</label><input className="inp" value={f.siret} onChange={set("siret")} /></div>
-            <div className="field"><label>Téléphone</label><input className="inp" value={f.phone} onChange={set("phone")} /></div>
+            <div className="field"><label>SIRET</label><input className="inp" value={f.siret} onChange={set("siret")} placeholder="879 955 136 00012" /></div>
+            <div className="field"><label>Téléphone</label><input className="inp" value={f.phone} onChange={set("phone")} placeholder="05 62 98 12 34" /></div>
           </div>
-          <div className="field"><label>Adresse</label><input className="inp" value={f.address} onChange={set("address")} /></div>
+          <div className="field"><label>Adresse</label><input className="inp" value={f.address} onChange={set("address")} placeholder="12 rue des Lilas" /></div>
           <div className="grid cols-2" style={{ gap: 12 }}>
-            <div className="field"><label>Code postal</label><input className="inp" value={f.zip_code} onChange={set("zip_code")} /></div>
-            <div className="field"><label>Ville</label><input className="inp" value={f.town} onChange={set("town")} /></div>
+            <div className="field"><label>Code postal</label><input className="inp" value={f.zip_code} onChange={set("zip_code")} placeholder="65300" /></div>
+            <div className="field"><label>Ville</label><input className="inp" value={f.town} onChange={set("town")} placeholder="Lannemezan" /></div>
           </div>
-          <div className="field"><label>E-mail</label><input className="inp" type="email" value={f.email} onChange={set("email")} /></div>
+          <div className="field"><label>E-mail</label><input className="inp" type="email" value={f.email} onChange={set("email")} placeholder="contact@lepetitfour.fr" /></div>
           <div className="grid cols-2" style={{ gap: 12 }}>
             <div className="field"><label>Civilité référent</label>
               <select className="inp" value={f.representative_civ} onChange={set("representative_civ")}><option value="">-</option><option>M.</option><option>Mme</option></select></div>
-            <div className="field"><label>Nom du référent</label><input className="inp" value={f.representative_name} onChange={set("representative_name")} /></div>
+            <div className="field"><label>Nom du référent</label><input className="inp" value={f.representative_name} onChange={set("representative_name")} placeholder="DUPONT" /></div>
           </div>
         </div>
         <div className="mfoot">

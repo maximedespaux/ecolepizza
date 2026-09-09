@@ -193,4 +193,9 @@ async function enforceSectionMode(req, res, next) {
 module.exports = {
     enforceSectionMode, sectionFor, sectionDeLaRequete,
     accesAccordeParMenu, accesParMenuAutorise, SECTIONS_NON_DELEGUEES, CONFIGURABLE_ROLES,
+    /* `modeFor` sort d'ici pour que le fil d'activité (lib/activite.js) lise `nav_access` avec
+       EXACTEMENT la même règle que la garde d'accès — trois formes historiques comprises (nul,
+       JSON en chaîne, ancien tableau = écriture). Une seconde lecture écrite à côté finirait par
+       diverger, et une divergence sur ce point-là s'appelle une fuite. */
+    modeFor,
 };
