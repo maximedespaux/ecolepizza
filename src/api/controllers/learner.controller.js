@@ -60,6 +60,26 @@ const COMPANY_FIELDS = [
 // Normalise une valeur de formulaire (chaîne vide -> null).
 const clean = (v) => (v === undefined || v === '' ? null : v);
 
+/* CONVENTIONS DE SAISIE — appliquées CÔTÉ SERVEUR, pas seulement dans le formulaire : ce n'est
+   pas le seul chemin d'entrée (reprise de données, second écran, appel direct). Une base où
+   « despaux », « Despaux » et « DESPAUX » cohabitent ne se trie plus, ne se dédoublonne plus, et
+   ressort telle quelle sur les attestations.
+   · NOM en majuscules — l'usage administratif français. Les accents sont conservés de toute
+     façon (« déspaux » donne « DÉSPAUX », vérifié : toUpperCase() le fait déjà) ; ce qu'on
+     épingle avec `toLocaleUpperCase('fr')`, c'est la LOCALE, pour que la casse ne dépende jamais
+     de celle du serveur — sans argument, un hôte turc écrirait « İLE » pour « ile » ;
+   · E-MAIL en minuscules et sans espaces : c'est aussi l'identifiant de connexion du stagiaire,
+     et « Jean@X.fr » puis « jean@x.fr » finiraient en DEUX comptes pour la même personne. */
+const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function normaliserSaisie(b) {
+    const out = { ...b };
+    if (out.last_name != null) out.last_name = String(out.last_name).trim().toLocaleUpperCase('fr');
+    if (out.first_name != null) out.first_name = String(out.first_name).trim();
+    if (out.email != null) out.email = String(out.email).trim().toLowerCase();
+    return out;
+}
+
 /**
  * GET /api/stagiaires — liste des stagiaires de l'organisme, filtre ?q= (nom/email).
  */
@@ -132,10 +152,14 @@ const getLearner = async (req, res) => {
  */
 const createLearner = async (req, res) => {
     const organizationId = req.user.organization_id;
-    const body = req.body;
+    const body = normaliserSaisie(req.body);
 
     if (!body.first_name || !body.last_name) {
         return res.status(422).json({ error: 'Nom et prénom requis' });
+    }
+    // L'e-mail sert de compte de connexion : mieux vaut le refuser ici que créer un accès mort.
+    if (body.email && !RE_EMAIL.test(body.email)) {
+        return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     }
 
     try {
@@ -193,7 +217,10 @@ const createLearner = async (req, res) => {
 const updateLearner = async (req, res) => {
     const organizationId = req.user.organization_id;
     const learnerId = req.params.id;
-    const body = req.body;
+    const body = normaliserSaisie(req.body); // mêmes conventions qu'à la création
+    if (body.email && !RE_EMAIL.test(body.email)) {
+        return res.status(422).json({ error: 'Adresse e-mail invalide.' });
+    }
 
     try {
         const conn = db.promise();
@@ -458,5 +485,5 @@ const deleteStagiaireAccount = async (req, res) => {
 
 module.exports = {
     getLearners, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
-    deleteStagiaireAccount, createStagiaireAccount,
+    deleteStagiaireAccount, createStagiaireAccount, normaliserSaisie, RE_EMAIL,
 };
