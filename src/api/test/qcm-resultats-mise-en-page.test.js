@@ -62,3 +62,23 @@ test('empilé, le détail est ramené dans le champ de vision', () => {
        apprendre pour un seul écran toucherait un composant utilisé partout. */
     assert.match(PAGE, /<div ref=\{detailRef\}>/);
 });
+
+test('la rangée de liste est COMPACTE — deux lignes, aucune colonne fixe', () => {
+    /* MESURÉ dans la colonne de 380 px. L'ancienne rangée alignait cinq blocs : titre, badge
+       « Noté », 86 px de moyenne, 104 px de réussite, chevron. Les largeurs fixes prenaient
+       254 px, le titre était écrasé à DIX pixels et se pliait lettre par lettre — chaque rangée
+       montait à 177 px pour dix-neuf QCM. Après refonte : 50 px de haut, titre sur 238 px coupé
+       proprement. */
+    const bloc = PAGE.slice(PAGE.indexOf('function QcmRow'), PAGE.indexOf('function ResultatsQCM'));
+    assert.doesNotMatch(bloc, /minWidth: 86|minWidth: 104/, 'plus de colonnes à largeur fixe');
+    /* `minWidth: 0` : sans lui un élément flex refuse de descendre sous la largeur de son contenu
+       et l'ellipse ne se déclenche JAMAIS — même piège que le fil d'Ariane de la barre du haut. */
+    assert.match(bloc, /flex: 1, minWidth: 0/);
+    assert.match(bloc, /textOverflow: "ellipsis", whiteSpace: "nowrap"/);
+    // Le titre entier reste atteignable au survol, puisqu'il est coupé à l'écran.
+    assert.match(bloc, /title=\{q\.title\}/);
+    /* La pastille de réussite SURVIT à la compaction : c'est la seule donnée qui se lit à la
+       couleur, sans être lue. Le reste (moyenne, nombre de réponses) descend en petit. */
+    assert.match(bloc, /<Badge tone=\{pctTone\(q\.pass_rate\)\}>\{q\.pass_rate\} %<\/Badge>/);
+    assert.match(bloc, /\$\{q\.avg_pct \?\? "—"\} % moy\./);
+});
