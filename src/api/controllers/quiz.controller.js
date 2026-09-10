@@ -727,6 +727,10 @@ const resultatsOverview = async (req, res) => {
         const [rows] = await conn.query(
             `SELECT q.id, q.title, q.kind, q.pass_score, q.active, q.program_id,
                     p.code AS program_code, p.title AS program_title,
+                    /* La COULEUR choisie sur la formation voyage avec la ligne : l'écran des
+                       résultats affiche la même pastille que partout ailleurs, sans avoir à
+                       recharger tout le référentiel des formations juste pour une teinte. */
+                    p.color AS program_color,
                     COUNT(fr.id) AS responses,
                     ROUND(AVG(CASE WHEN fr.max_score > 0 THEN fr.score / fr.max_score * 100 END)) AS avg_pct,
                     ROUND(AVG(CASE WHEN fr.max_score > 0 AND q.pass_score IS NOT NULL

@@ -7,6 +7,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { dateHeure } from "../lib/format.js";
+import { colorForLevel } from "../lib/levels.js";
 
 // Couleur d'un pourcentage de réussite : vert / ambre / rouge.
 const pctTone = (p) => (p == null ? "n" : p >= 75 ? "g" : p >= 50 ? "a" : "r");
@@ -151,7 +152,12 @@ function grouperParFormation(rows) {
       parCle.set(cle, {
         cle,
         autre: !q.program_id,
-        label: q.program_id ? [q.program_code, q.program_title].filter(Boolean).join(" · ") : "Autre — sans formation",
+        /* Le CODE reste séparé de l'intitulé : fondus dans une seule chaîne, on ne pouvait plus
+           en faire une pastille. La couleur vient de la ligne (choix de l'organisme) et retombe
+           sur la palette commune sinon — même ordre de priorité que `setBadgeColors` ailleurs. */
+        code: q.program_id ? (q.program_code || "") : "",
+        titre: q.program_id ? (q.program_title || "") : "Autre — sans formation",
+        couleur: q.program_color || null,
         items: [],
       });
     }
@@ -274,9 +280,16 @@ function ResultatsQCM() {
         <Card title={`QCM (${rows.length})`}>
           {grouperParFormation(rows).map((g) => (
             <div key={g.cle} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase",
-                color: g.autre ? "var(--dim)" : "var(--ember1,#c0392b)", margin: "2px 2px 6px" }}>
-                {g.label} <span className="hint" style={{ fontWeight: 400 }}>({g.items.length})</span>
+              {/* La couleur passe du TEXTE à la PASTILLE : garder les deux ferait deux signaux
+                  pour une seule information, et le rouge de l'en-tête entrait en concurrence
+                  avec la teinte propre de la formation. L'intitulé redevient neutre. */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 700,
+                letterSpacing: ".06em", textTransform: "uppercase",
+                color: "var(--muted)", margin: "2px 2px 6px" }}>
+                {g.code && (
+                  <span className="lvl-chip" style={{ background: g.couleur || colorForLevel(g.code) }}>{g.code}</span>
+                )}
+                {g.titre} <span className="hint" style={{ fontWeight: 400 }}>({g.items.length})</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {g.items.map((q) => <QcmRow key={q.id} q={q} on={q.id === sel} onClick={() => ouvrir(q.id)} />)}
