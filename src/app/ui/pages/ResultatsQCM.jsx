@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { getQcmResultats, getQcmResultatDetail, deleteQcmResponse, getPreuveReponse } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
@@ -212,11 +212,21 @@ function ResultatsQCM() {
     if (sel) getQcmResultatDetail(sel, selSession || null, selYear || null).then((r) => setDetail(r.data)).catch(() => {});
   }, [selSession, selYear]);
 
+  /* Sous 940 px les deux colonnes s'empilent : le détail repasse SOUS la liste, hors du
+     champ de vision. On l'y ramène — sans quoi le clic ne montrerait toujours rien, ce qui
+     est le défaut qu'on corrige. Au-dessus de ce palier la grille suffit, et déplacer la
+     page serait au mieux inutile, au pire désorientant. */
+  const detailRef = useRef(null);
   function ouvrir(id) {
     if (id === sel) { setSel(null); setDetail(null); return; } // re-clic = replier
     setSel(id); setDetail(null); setVue("questions"); setLoadingDetail(true);
     getQcmResultatDetail(id, selSession || null, selYear || null)
-      .then((r) => setDetail(r.data))
+      .then((r) => {
+        setDetail(r.data);
+        if (window.matchMedia("(max-width: 1220px)").matches) {
+          requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+        }
+      })
       .catch((e) => setStatus({ type: "error", message: e.message }))
       .finally(() => setLoadingDetail(false));
   }
@@ -296,7 +306,8 @@ function ResultatsQCM() {
       ) : rows.length === 0 ? (
         <Card title="Résultats QCM"><p className="hint" style={{ margin: 0 }}>Aucun QCM au référentiel. Créez-en dans Configuration → Modèles de QCM.</p></Card>
       ) : (
-        <Card title={`QCM (${rows.length})`}>
+        <div className={sel ? "qcm-split" : undefined}>
+        <Card className="qcm-liste" title={`QCM (${rows.length})`}>
           {grouperParFormation(rows).map((g) => (
             <div key={g.cle} style={{ marginBottom: 14 }}>
               {/* La couleur passe du TEXTE à la PASTILLE : garder les deux ferait deux signaux
@@ -316,48 +327,51 @@ function ResultatsQCM() {
             </div>
           ))}
         </Card>
+          {sel && (
+            <div ref={detailRef}>
+              <Card title={detail ? detail.quiz.title : "Détail"}>
+                {loadingDetail ? (
+                  <p className="hint">Chargement…</p>
+                ) : !detail ? null : (
+                  <>
+                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: detail.responses ? 16 : 0 }}>
+                      <Stat label="Réponses" value={detail.responses} />
+                      {detail.quiz.kind === "GRADED" && <Stat label="Score moyen" value={detail.responses ? `${detail.avg_pct ?? "—"}%` : "—"} />}
+                      {detail.quiz.kind === "GRADED" && detail.quiz.pass_score != null && (
+                        <Stat label={`Réussite (≥ ${detail.quiz.pass_score} %)`} value={detail.pass_rate != null ? `${detail.pass_rate}%` : "—"} tone={pctTone(detail.pass_rate)} />
+                      )}
+                    </div>
+                    {detail.responses === 0 ? (
+                      <p className="hint" style={{ margin: 0 }}>Aucun stagiaire n'a encore répondu à ce QCM.</p>
+                    ) : (
+                      <>
+                        <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border-soft)" }}>
+                          <button type="button" role="tab" className={"tab" + (vue === "questions" ? " on" : "")} onClick={() => setVue("questions")}>Par question</button>
+                          <button type="button" role="tab" className={"tab" + (vue === "stagiaires" ? " on" : "")} onClick={() => setVue("stagiaires")}>Par stagiaire ({detail.learners.length})</button>
+                        </div>
+                        {vue === "questions" ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                            {detail.questions.map((q, i) => <DetailQuestion key={q.id} q={q} num={i + 1} />)}
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                              <button type="button" className="btn sm" onClick={exporterStagiaires} title="Exporter la liste par stagiaire (CSV)">⬇ Exporter (CSV)</button>
+                            </div>
+                            <StagiairesTable learners={detail.learners} quiz={detail.quiz} isAdmin={isAdmin}
+                              onDelete={supprimerReponse} onPreuve={ouvrirPreuve} />
+                          </>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </Card>
+            </div>
+            )}
+        </div>
       )}
 
-      {sel && (
-        <Card title={detail ? detail.quiz.title : "Détail"}>
-          {loadingDetail ? (
-            <p className="hint">Chargement…</p>
-          ) : !detail ? null : (
-            <>
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: detail.responses ? 16 : 0 }}>
-                <Stat label="Réponses" value={detail.responses} />
-                {detail.quiz.kind === "GRADED" && <Stat label="Score moyen" value={detail.responses ? `${detail.avg_pct ?? "—"}%` : "—"} />}
-                {detail.quiz.kind === "GRADED" && detail.quiz.pass_score != null && (
-                  <Stat label={`Réussite (≥ ${detail.quiz.pass_score} %)`} value={detail.pass_rate != null ? `${detail.pass_rate}%` : "—"} tone={pctTone(detail.pass_rate)} />
-                )}
-              </div>
-              {detail.responses === 0 ? (
-                <p className="hint" style={{ margin: 0 }}>Aucun stagiaire n'a encore répondu à ce QCM.</p>
-              ) : (
-                <>
-                  <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border-soft)" }}>
-                    <button type="button" role="tab" className={"tab" + (vue === "questions" ? " on" : "")} onClick={() => setVue("questions")}>Par question</button>
-                    <button type="button" role="tab" className={"tab" + (vue === "stagiaires" ? " on" : "")} onClick={() => setVue("stagiaires")}>Par stagiaire ({detail.learners.length})</button>
-                  </div>
-                  {vue === "questions" ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                      {detail.questions.map((q, i) => <DetailQuestion key={q.id} q={q} num={i + 1} />)}
-                    </div>
-                  ) : (
-                    <>
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-                        <button type="button" className="btn sm" onClick={exporterStagiaires} title="Exporter la liste par stagiaire (CSV)">⬇ Exporter (CSV)</button>
-                      </div>
-                      <StagiairesTable learners={detail.learners} quiz={detail.quiz} isAdmin={isAdmin}
-                        onDelete={supprimerReponse} onPreuve={ouvrirPreuve} />
-                    </>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </Card>
-      )}
       {preuve && <PreuveModal etat={preuve} onClose={() => setPreuve(null)} />}
     </>
   );
