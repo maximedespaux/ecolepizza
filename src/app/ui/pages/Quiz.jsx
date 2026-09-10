@@ -11,6 +11,7 @@ import DataTable from "../components/DataTable.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Squelette } from "../components/Squelette.jsx";
+import { colorForLevel, setBadgeColors } from "../lib/levels.js";
 
 const KINDS = [
   { v: "GRADED", label: "Noté (correction + score)" },
@@ -69,7 +70,18 @@ function Quiz() {
     try { const { data } = await getQuizzes(); setQuizzes(data); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
-  useEffect(() => { load(); getFormations().then((r) => setFormations(r.data)).catch(() => {}); }, []);
+  useEffect(() => {
+    load();
+    /* Les couleurs CHOISIES sur une formation priment sur la palette par défaut : sans ce
+       relais, la pastille d'un QCM afficherait une autre couleur que la même formation
+       ailleurs dans l'application — deux vérités pour un seul code. */
+    getFormations().then((r) => {
+      setFormations(r.data);
+      const m = {};
+      for (const f of r.data || []) if (f.color) { if (f.code) m[f.code] = f.color; if (f.level) m[f.level] = f.color; }
+      setBadgeColors(m);
+    }).catch(() => {});
+  }, []);
 
   async function onNew() {
     try {
@@ -125,7 +137,16 @@ function Quiz() {
           text="Crée un QCM : il pourra ensuite être envoyé aux stagiaires d'une session, à la main ou automatiquement." /></Card>
       ) : (
         groupByFormation(quizzes).map((g) => (
-          <Card key={g.key} title={g.program_code ? `${g.program_code}, ${g.program_title}` : "Non rattachés à une formation"}
+          /* PASTILLE DE FORMATION plutôt que le code en texte : c'est la même que sur les
+             stagiaires, les sessions et la carte (`.lvl-chip` + `colorForLevel`), donc « NIV1H » a
+             partout la même couleur. Un code en gris parmi d'autres titres ne se repère pas ; la
+             couleur, si — et c'est elle qui relie l'écran des QCM au reste de l'application. */
+          <Card key={g.key} title={g.program_code ? (
+            <span className="card-ttl">
+              <span className="lvl-chip" style={{ background: colorForLevel(g.program_code) }}>{g.program_code}</span>
+              {g.program_title}
+            </span>
+          ) : "Non rattachés à une formation"}
             more={<Badge tone="n">{g.items.length}</Badge>}>
             <DataTable
               rows={g.items}
