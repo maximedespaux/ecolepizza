@@ -279,10 +279,14 @@ function FormationModal({ program, onClose, onSaved, onError }) {
     setSaving(true);
     try {
       if (isNew) {
-        await createFormation(form);
-        onSaved("Formation créée.");
+        /* `avertissement` : le serveur signale ici les champs qu'un repli a dû écarter faute de
+           migration jouée. Sans ce relais, l'écran annoncerait « créée » alors qu'une partie de la
+           saisie a été jetée en route — c'est exactement ce qui a fait croire que les prérequis
+           ne s'enregistraient pas. */
+        const rc = await createFormation(form);
+        onSaved(rc?.avertissement ? `Formation créée. ${rc.avertissement}` : "Formation créée.");
       } else {
-        await updateFormation(program.id, form);
+        const ru = await updateFormation(program.id, form);
         // Les pièces emportent leur seule condition (applies_when) : elles n'ont plus de « OU ».
         // Les documents, eux, gèrent le leur par les équivalences d'organisme, pas ici.
         await saveFormationSteps(program.id, steps.map((s) => (s.doc_type === "PIECE"
@@ -291,7 +295,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
             ? { slug: s.slug, active: s.active, applies_when: s.applies_when || null }
           : { slug: s.slug, active: s.active })), breakSlug || null, companySteps, companyBreakSlug || null);
         await saveArchiveTree(program.id, archiveTree, companyArchiveTree).catch(() => {}); // tolère l'absence de migration
-        onSaved("Formation mise à jour.");
+        onSaved(ru?.avertissement ? `Formation mise à jour. ${ru.avertissement}` : "Formation mise à jour.");
       }
     } catch (e) {
       onError(e.message);

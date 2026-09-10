@@ -282,6 +282,30 @@ const getProgram = (req, res) => {
 /**
  * POST /api/formations
  */
+/* COLONNES RÉCENTES : celles qu'un repli retire quand la migration n'est pas encore jouée.
+ *
+ * POURQUOI CETTE TABLE EXISTE. Le repli faisait son travail — enregistrer le reste plutôt que de
+ * tout refuser — mais il répondait « Formation mise à jour » comme si de rien n'était. L'utilisateur
+ * saisissait ses prérequis, voyait le message de succès, rouvrait la fiche : champ vide. Aucun
+ * moyen de deviner que la valeur avait été jetée en route, ni qu'il fallait jouer une migration.
+ * Un enregistrement qui ment est pire qu'un refus : le refus, au moins, se comprend.
+ *
+ * On nomme donc ce qui n'a pas été gardé, et la migration qui le débloque. Même esprit que le
+ * 409 « Migration 131 non jouée » des partenaires destinataires. */
+const COLONNES_RECENTES = {
+    horaires: { libelle: 'Horaires', migration: '056' },
+    prerequisites: { libelle: 'Prérequis', migration: '143' },
+};
+
+/** Message d'avertissement pour les colonnes qu'un repli vient d'écarter, ou null. */
+function avertissementColonnes(colonnes) {
+    const connues = colonnes.filter((c) => COLONNES_RECENTES[c]);
+    if (!connues.length) return null;
+    const noms = connues.map((c) => COLONNES_RECENTES[c].libelle).join(', ');
+    const migs = [...new Set(connues.map((c) => COLONNES_RECENTES[c].migration))].join(', ');
+    return `${noms} NON enregistré${connues.length > 1 ? 's' : ''} : migration ${migs} non jouée.`;
+}
+
 const CREATE_FIELDS = [
     'code', 'title', 'level', 'color', 'days', 'hours', 'price', 'audience', 'objectives',
     'objective_general', 'duration_detail', 'program_detail', 'prerequisites',
@@ -302,7 +326,7 @@ const createProgram = (req, res) => {
         cols.push(f);
         vals.push(v);
     }
-    const runInsert = (colList, valList, allowRetry) => {
+    const runInsert = (colList, valList, allowRetry, avertissement = null) => {
         db.query(
             `INSERT INTO training_program (id, organization_id, ${colList.join(', ')})
              VALUES (UUID(), ?, ${colList.map(() => '?').join(', ')})`,
@@ -312,14 +336,17 @@ const createProgram = (req, res) => {
                     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Ce code de formation est déjà utilisé.' });
                     if (err.code === 'ER_BAD_FIELD_ERROR' && allowRetry) {
                         const drop = new Set(['horaires', 'prerequisites']); // colonnes récentes, cf. migrations
-                        const fCols = [], fVals = [];
-                        colList.forEach((c, i) => { if (!drop.has(c)) { fCols.push(c); fVals.push(valList[i]); } });
-                        return runInsert(fCols, fVals, false);
+                        const fCols = [], fVals = [], ecartees = [];
+                        colList.forEach((c, i) => {
+                            if (drop.has(c)) { ecartees.push(c); return; }
+                            fCols.push(c); fVals.push(valList[i]);
+                        });
+                        return runInsert(fCols, fVals, false, avertissementColonnes(ecartees));
                     }
                     console.error('Erreur création formation :', err);
                     return res.status(500).json({ error: 'Internal Server Error' });
                 }
-                res.status(201).json({ message: 'Formation créée' });
+                res.status(201).json({ message: 'Formation créée', avertissement });
             }
         );
     };
@@ -356,7 +383,7 @@ const updateProgram = (req, res) => {
     // Exécution avec repli : si une colonne récente (ex. horaires) n'existe pas
     // encore (migration non passée), on rejoue la requête sans ce champ pour ne
     // pas bloquer l'enregistrement du reste.
-    const runUpdate = (setList, valList, allowRetry) => {
+    const runUpdate = (setList, valList, allowRetry, avertissement = null) => {
         db.query(
             `UPDATE training_program SET ${setList.join(', ')} WHERE id = ? AND organization_id = ?`,
             valList,
@@ -368,15 +395,18 @@ const updateProgram = (req, res) => {
                     if (err.code === 'ER_BAD_FIELD_ERROR' && allowRetry) {
                         // Retire les colonnes récentes potentiellement absentes puis réessaie.
                         const drop = new Set(['horaires', 'prerequisites']); // colonnes récentes, cf. migrations
-                        const fSets = [], fVals = [];
+                        const fSets = [], fVals = [], ecartees = [];
                         setList.forEach((s, i) => {
                             const col = s.split(' = ')[0];
-                            if (drop.has(col)) return;
+                            if (drop.has(col)) { ecartees.push(col); return; }
                             fSets.push(s); fVals.push(valList[i]);
                         });
                         fVals.push(valList[valList.length - 2], valList[valList.length - 1]);
-                        if (fSets.length === 0) return res.status(200).json({ success: true, message: 'Formation mise à jour' });
-                        return runUpdate(fSets, fVals, false);
+                        const avert = avertissementColonnes(ecartees);
+                        if (fSets.length === 0) {
+                            return res.status(200).json({ success: true, message: 'Formation mise à jour', avertissement: avert });
+                        }
+                        return runUpdate(fSets, fVals, false, avert);
                     }
                     console.error('Erreur mise à jour formation :', err);
                     return res.status(500).json({ error: 'Internal Server Error' });
@@ -384,7 +414,7 @@ const updateProgram = (req, res) => {
                 if (result.affectedRows === 0) {
                     return res.status(404).json({ message: 'Formation introuvable' });
                 }
-                res.status(200).json({ success: true, message: 'Formation mise à jour' });
+                res.status(200).json({ success: true, message: 'Formation mise à jour', avertissement });
             }
         );
     };
