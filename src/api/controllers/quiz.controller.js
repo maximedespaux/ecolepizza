@@ -190,11 +190,26 @@ const saveQuiz = async (req, res) => {
              b.pass_score != null && b.pass_score !== '' ? Number(b.pass_score) : null,
              b.active === false ? 0 : 1, req.params.id]
         );
-        // Remplace questions + options + lignes de grille.
-        try { await conn.query('DELETE qr FROM quiz_row qr JOIN quiz_question qq ON qq.id = qr.question_id WHERE qq.quiz_id = ?', [req.params.id]); }
-        catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
-        await conn.query('DELETE FROM quiz_question WHERE quiz_id = ?', [req.params.id]);
-        // La colonne image existe-t-elle ? (migration 062) — sinon on insère sans.
+        /* RÉCONCILIER, PAS REMPLACER — et c'est tout le correctif.
+           Avant, enregistrer un QCM faisait `DELETE FROM quiz_question` puis réinsérait TOUT sous de
+           nouveaux identifiants, même quand on n'avait changé que le titre. Or `quiz_answer.question_id`
+           ne porte aucune clé étrangère : les réponses déjà données n'étaient ni supprimées ni recalées,
+           elles désignaient des lignes disparues. La vue d'ensemble annonçait « 12 réponses, moyenne
+           74 % » pendant que chaque question affichait « 0 réponse ».
+
+           Désormais : une question déjà présente est MISE À JOUR sous son identifiant, une nouvelle est
+           insérée, une disparue est supprimée. Les réponses restent donc raccordées.
+
+           MÊME TRAITEMENT POUR LES OPTIONS, et ce n'est pas un détail : `quiz_answer.value` contient des
+           identifiants d'OPTIONS. Garder l'id de la question sans garder ceux des options laisserait les
+           compteurs par réponse à zéro — le défaut réparé à moitié se voit autant qu'entier.
+
+           L'identifiant n'est réutilisé QUE s'il appartient déjà à ce QCM (`idsQ`) : un id inventé ou
+           venu d'un autre questionnaire créerait une ligne neuve, jamais un écrasement. Et une option
+           sans id (ajoutée à l'écran) reçoit toujours un identifiant neuf — on ne devine JAMAIS par
+           position, car insérer une option en tête décalerait tout et réattribuerait les réponses à la
+           mauvaise, ce qui est pire que de les perdre. */
+        // La colonne image existe-t-elle ? (migration 062) — sinon on écrit sans.
         let hasImage = true;
         try { await conn.query('SELECT image FROM quiz_question LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasImage = false; else throw e; }
@@ -202,11 +217,18 @@ const saveQuiz = async (req, res) => {
         let hasRowPoints = true;
         try { await conn.query('SELECT points FROM quiz_row LIMIT 1'); }
         catch (e) { if (e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE')) hasRowPoints = false; else throw e; }
+
+        const [dejaQ] = await conn.query('SELECT id FROM quiz_question WHERE quiz_id = ?', [req.params.id]);
+        const idsQ = new Set(dejaQ.map((r) => r.id));
+        const gardees = [];
+
         const questions = Array.isArray(b.questions) ? b.questions : [];
         for (let i = 0; i < questions.length; i++) {
             const q = questions[i];
             if (!q.text || !String(q.text).trim()) continue;
-            const qid = crypto.randomUUID();
+            const reutilise = !!q.id && idsQ.has(q.id);
+            const qid = reutilise ? q.id : crypto.randomUUID();
+            gardees.push(qid);
             const qType = ['SINGLE', 'MULTI', 'SCALE', 'GRID_SINGLE', 'GRID_MULTI'].includes(q.type) ? q.type : 'SINGLE';
             // Points : on autorise 0 (question sans note / informative).
             const pts = Number(q.points);
@@ -214,54 +236,89 @@ const saveQuiz = async (req, res) => {
             // « Points par bonne réponse » : pertinent seulement pour les QCM (MULTI).
             const partial = qType === 'MULTI' && q.partial_scoring ? 1 : 0;
             const img = q.image && /^data:image\//.test(q.image) ? q.image : null;
-            if (hasImage) {
+            const texte = String(q.text).slice(0, 2000);
+            const echelle = Number(q.scale_max) || 5;
+            if (reutilise) {
+                await conn.query(
+                    `UPDATE quiz_question SET position = ?, text = ?, type = ?, scale_max = ?, points = ?, partial_scoring = ?${hasImage ? ', image = ?' : ''} WHERE id = ? AND quiz_id = ?`,
+                    [i, texte, qType, echelle, points, partial].concat(hasImage ? [img] : []).concat([qid, req.params.id]));
+            } else if (hasImage) {
                 await conn.query(
                     `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [qid, req.params.id, i, String(q.text).slice(0, 2000), qType, Number(q.scale_max) || 5, points, partial, img]
-                );
+                    [qid, req.params.id, i, texte, qType, echelle, points, partial, img]);
             } else {
                 await conn.query(
                     `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [qid, req.params.id, i, String(q.text).slice(0, 2000), qType, Number(q.scale_max) || 5, points, partial]
-                );
+                    [qid, req.params.id, i, texte, qType, echelle, points, partial]);
             }
-            if (q.type !== 'SCALE') {
-                // Colonnes (grilles) OU options (SINGLE/MULTI) : même table quiz_option.
+
+            // Colonnes (grilles) OU options (SINGLE/MULTI) : même table quiz_option.
+            if (qType === 'SCALE') {
+                await conn.query('DELETE FROM quiz_option WHERE question_id = ?', [qid]);
+            } else {
+                const [dejaO] = await conn.query('SELECT id FROM quiz_option WHERE question_id = ?', [qid]);
+                const idsO = new Set(dejaO.map((r) => r.id));
+                const gardesO = [];
                 const opts = Array.isArray(q.options) ? q.options : [];
                 for (let j = 0; j < opts.length; j++) {
                     const o = opts[j];
                     if (!o.text || !String(o.text).trim()) continue;
                     // Pour une grille, la justesse est PAR LIGNE (quiz_row.correct), pas sur la colonne.
                     const correctOpt = GRID_TYPES.has(qType) ? 0 : (o.is_correct ? 1 : 0);
-                    await conn.query(
-                        `INSERT INTO quiz_option (id, question_id, position, text, is_correct) VALUES (?, ?, ?, ?, ?)`,
-                        [crypto.randomUUID(), qid, j, String(o.text).slice(0, 500), correctOpt]
-                    );
+                    const oid = o.id && idsO.has(o.id) ? o.id : crypto.randomUUID();
+                    gardesO.push(oid);
+                    if (o.id && idsO.has(o.id)) {
+                        await conn.query('UPDATE quiz_option SET position = ?, text = ?, is_correct = ? WHERE id = ? AND question_id = ?',
+                            [j, String(o.text).slice(0, 500), correctOpt, oid, qid]);
+                    } else {
+                        await conn.query('INSERT INTO quiz_option (id, question_id, position, text, is_correct) VALUES (?, ?, ?, ?, ?)',
+                            [oid, qid, j, String(o.text).slice(0, 500), correctOpt]);
+                    }
                 }
+                if (gardesO.length) await conn.query('DELETE FROM quiz_option WHERE question_id = ? AND id NOT IN (?)', [qid, gardesO]);
+                else await conn.query('DELETE FROM quiz_option WHERE question_id = ?', [qid]);
             }
+
             // Lignes de grille (avec, pour un QCM noté, les positions de colonnes correctes).
-            if (GRID_TYPES.has(qType)) {
-                const rows = Array.isArray(q.rows) ? q.rows : [];
-                for (let j = 0; j < rows.length; j++) {
-                    const rw = rows[j];
-                    if (!rw.text || !String(rw.text).trim()) continue;
-                    const correct = Array.isArray(rw.correct) ? rw.correct.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 0) : [];
-                    const rp = Number(rw.points);
-                    const rowPoints = Number.isFinite(rp) && rp >= 0 ? Math.floor(rp) : 1;
-                    const rid = crypto.randomUUID();
-                    const cj = correct.length ? JSON.stringify(correct) : null;
-                    try {
-                        if (hasRowPoints) {
+            try {
+                if (!GRID_TYPES.has(qType)) {
+                    await conn.query('DELETE FROM quiz_row WHERE question_id = ?', [qid]);
+                } else {
+                    const [dejaR] = await conn.query('SELECT id FROM quiz_row WHERE question_id = ?', [qid]);
+                    const idsR = new Set(dejaR.map((r) => r.id));
+                    const gardesR = [];
+                    const rows = Array.isArray(q.rows) ? q.rows : [];
+                    for (let j = 0; j < rows.length; j++) {
+                        const rw = rows[j];
+                        if (!rw.text || !String(rw.text).trim()) continue;
+                        const correct = Array.isArray(rw.correct) ? rw.correct.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 0) : [];
+                        const rp = Number(rw.points);
+                        const rowPoints = Number.isFinite(rp) && rp >= 0 ? Math.floor(rp) : 1;
+                        const cj = correct.length ? JSON.stringify(correct) : null;
+                        const rid = rw.id && idsR.has(rw.id) ? rw.id : crypto.randomUUID();
+                        gardesR.push(rid);
+                        const texteL = String(rw.text).slice(0, 500);
+                        if (rw.id && idsR.has(rw.id)) {
+                            await conn.query(`UPDATE quiz_row SET position = ?, text = ?, correct = ?${hasRowPoints ? ', points = ?' : ''} WHERE id = ? AND question_id = ?`,
+                                [j, texteL, cj].concat(hasRowPoints ? [rowPoints] : []).concat([rid, qid]));
+                        } else if (hasRowPoints) {
                             await conn.query(`INSERT INTO quiz_row (id, question_id, position, text, correct, points) VALUES (?, ?, ?, ?, ?, ?)`,
-                                [rid, qid, j, String(rw.text).slice(0, 500), cj, rowPoints]);
+                                [rid, qid, j, texteL, cj, rowPoints]);
                         } else {
                             await conn.query(`INSERT INTO quiz_row (id, question_id, position, text, correct) VALUES (?, ?, ?, ?, ?)`,
-                                [rid, qid, j, String(rw.text).slice(0, 500), cj]);
+                                [rid, qid, j, texteL, cj]);
                         }
-                    } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
+                    }
+                    if (gardesR.length) await conn.query('DELETE FROM quiz_row WHERE question_id = ? AND id NOT IN (?)', [qid, gardesR]);
+                    else await conn.query('DELETE FROM quiz_row WHERE question_id = ?', [qid]);
                 }
-            }
+            } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
         }
+
+        // Les questions RETIRÉES de l'écran disparaissent — celles-là seulement.
+        if (gardees.length) await conn.query('DELETE FROM quiz_question WHERE quiz_id = ? AND id NOT IN (?)', [req.params.id, gardees]);
+        else await conn.query('DELETE FROM quiz_question WHERE quiz_id = ?', [req.params.id]);
+
         logAudit(req, 'quiz.save', 'Quiz', req.params.id);
         res.json({ success: true, message: 'QCM enregistré' });
     } catch (err) {
