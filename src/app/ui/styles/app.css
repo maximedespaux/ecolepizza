@@ -5054,3 +5054,37 @@ label .requis {
   .crumbs-marque { display: none; }
   .ss-txt { display: none; }
 }
+
+/* ═══ RÉSULTATS QCM : la liste et le détail CÔTE À CÔTE ═══════════════════════════════════════
+   Le détail s'ouvrait SOUS la liste. Avec neuf QCM groupés par formation, cliquer le premier
+   obligeait à faire défiler toute la liste pour voir ce qu'on venait d'ouvrir — le clic ne
+   montrait rien. Deux colonnes : on lit le détail à hauteur du QCM choisi.
+
+   La LISTE défile dans sa propre colonne (`overflow:auto`) plutôt que d'allonger la page : sans
+   ça, une longue liste repousserait le bas du détail hors de vue, ce qui ramènerait exactement
+   le problème qu'on corrige. `100dvh` et non `100vh` : sur iOS, `vh` ignore la barre d'adresse
+   et le bas de la colonne passerait sous l'écran (même piège que la barre latérale).
+
+   LE PALIER EST À 1220 px, ET IL EST MESURÉ, pas choisi. La barre latérale prend 258 px : à
+   1138 px de fenêtre, le détail ne recevait que 420 px — deux colonnes serrées valent moins
+   qu'une seule lisible. Il faut 1218 px pour lui en donner 500. En dessous, la grille retombe sur
+   une colonne et le détail repasse dessous ; c'est alors le défilement automatique qui l'y amène.
+
+   ⚠ CE NOMBRE EST RÉPÉTÉ dans `ResultatsQCM.jsx` (`matchMedia`). Les désaccorder rouvrirait le
+   défaut : une bande de largeurs où la page s'empile SANS ramener le détail dans le champ de
+   vision — exactement le clic qui ne montre rien. */
+.qcm-split {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(300px, 380px) 1fr;
+  align-items: start;
+}
+.qcm-split > .qcm-liste {
+  max-height: calc(100vh - 150px);
+  max-height: calc(100dvh - 150px);
+  overflow-y: auto;
+}
+@media (max-width: 1220px) {
+  .qcm-split { grid-template-columns: 1fr; }
+  .qcm-split > .qcm-liste { max-height: none; overflow-y: visible; }
+}
