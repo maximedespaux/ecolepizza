@@ -581,6 +581,9 @@ function qcmFiltreQuery(session, year) {
 }
 export function getQcmResultats(session, year) { return request(`/quizzes/resultats${qcmFiltreQuery(session, year)}`); }
 export function getQcmResultatDetail(id, session, year) { return request(`/quizzes/resultats/${id}${qcmFiltreQuery(session, year)}`); }
+export function getPreuveReponse(id) {
+  return request(`/quizzes/resultats/reponse/${id}`);
+}
 export function deleteQcmResponse(id) { return request(`/quizzes/reponse/${id}`, { method: "DELETE" }); }
 
 // --- Parcours documentaire par formation ---
