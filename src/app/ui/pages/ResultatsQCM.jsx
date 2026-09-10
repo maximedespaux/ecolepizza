@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { getQcmResultats, getQcmResultatDetail, deleteQcmResponse } from "../api/apiClient.js";
+import { getQcmResultats, getQcmResultatDetail, deleteQcmResponse, getPreuveReponse } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -92,7 +92,7 @@ function DetailQuestion({ q, num }) {
 
 // Par stagiaire : une ligne par réponse (score + réussi/échoué pour un QCM noté, date). Une reprise
 // apparaît comme une ligne de plus, avec sa date — on voit qui a repassé et progressé.
-function StagiairesTable({ learners, quiz, isAdmin, onDelete }) {
+function StagiairesTable({ learners, quiz, isAdmin, onDelete, onPreuve }) {
   const note = quiz.kind === "GRADED";
   if (!learners.length) return <p className="hint" style={{ margin: 0 }}>Aucune réponse.</p>;
   return (
@@ -105,6 +105,16 @@ function StagiairesTable({ learners, quiz, isAdmin, onDelete }) {
             {note && <span style={{ flex: "none", minWidth: 50, textAlign: "right", fontWeight: 600 }}>{l.pct != null ? `${l.pct}%` : "—"}</span>}
             {reussi != null && <Badge tone={reussi ? "g" : "r"}>{reussi ? "Réussi" : "Échoué"}</Badge>}
             <span className="hint" style={{ flex: "none", fontSize: 12 }}>{dateHeure(l.completed_at)}</span>
+            {/* PREUVE : le questionnaire tel qu'il était le jour de la réponse. Le bouton n'apparaît
+                que s'il y en a une — une réponse antérieure à la migration 144 n'en a pas, et ouvrir
+                sur du vide laisserait croire que le stagiaire n'avait rien répondu. */}
+            {l.a_preuve ? (
+              <button type="button" className="icon-btn" title="Voir la preuve : le questionnaire tel qu'il était"
+                aria-label={`Voir la preuve de ${l.name}`}
+                onClick={() => onPreuve(l.id)} style={{ flex: "none" }}><Icon name="eye" size={14} /></button>
+            ) : (
+              <span className="hint" style={{ flex: "none", fontSize: 11 }} title="Réponse antérieure à l'enregistrement des preuves">—</span>
+            )}
             {isAdmin && l.id && (
               <button type="button" className="icon-btn" title="Supprimer cette réponse" aria-label="Supprimer cette réponse"
                 onClick={() => onDelete(l.id)} style={{ flex: "none" }}><Icon name="x" size={14} /></button>
@@ -177,6 +187,15 @@ function ResultatsQCM() {
   const [status, setStatus] = useState(null);
   const [sel, setSel] = useState(null);        // id du QCM ouvert
   const [detail, setDetail] = useState(null);
+  const [preuve, setPreuve] = useState(null); // { name, completed_at, preuve|null, raison? }
+
+  /* La preuve se charge À LA DEMANDE : quelques kilo-octets par réponse, pour un écran qu'on
+     ouvre d'abord pour lire des pourcentages. La liste dit seulement qu'elle existe. */
+  async function ouvrirPreuve(id) {
+    setPreuve({ chargement: true });
+    try { setPreuve((await getPreuveReponse(id)).data); }
+    catch (e) { setPreuve(null); setStatus({ type: "error", message: e.message }); }
+  }
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [vue, setVue] = useState("questions"); // "questions" | "stagiaires"
   const [filtres, setFiltres] = useState({ sessions: [], years: [] }); // options disponibles
@@ -329,7 +348,8 @@ function ResultatsQCM() {
                       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
                         <button type="button" className="btn sm" onClick={exporterStagiaires} title="Exporter la liste par stagiaire (CSV)">⬇ Exporter (CSV)</button>
                       </div>
-                      <StagiairesTable learners={detail.learners} quiz={detail.quiz} isAdmin={isAdmin} onDelete={supprimerReponse} />
+                      <StagiairesTable learners={detail.learners} quiz={detail.quiz} isAdmin={isAdmin}
+                        onDelete={supprimerReponse} onPreuve={ouvrirPreuve} />
                     </>
                   )}
                 </>
@@ -338,8 +358,80 @@ function ResultatsQCM() {
           )}
         </Card>
       )}
+      {preuve && <PreuveModal etat={preuve} onClose={() => setPreuve(null)} />}
     </>
   );
 }
+
+/**
+ * LA PREUVE D'UNE RÉPONSE — le questionnaire tel qu'il était le jour où le stagiaire a répondu.
+ *
+ * Elle ne se reconstitue PAS depuis le QCM d'aujourd'hui, et c'est tout l'intérêt : enregistrer un
+ * QCM supprime ses questions et les recrée sous de nouveaux identifiants, une option retirée
+ * disparaît, un énoncé corrigé ne dit plus la même chose. Ce qu'on affiche ici a été recopié en
+ * toutes lettres à la seconde de la validation, et ne dépend d'aucune autre table.
+ *
+ * TROIS ABSENCES DISTINCTES, qu'on ne confond pas — afficher un questionnaire vide dans l'un de
+ * ces cas laisserait croire que le stagiaire n'a rien répondu :
+ *   · « migration » : la colonne n'existe pas encore, aucune preuve n'est enregistrée ;
+ *   · « anterieure » : la réponse précède l'enregistrement des preuves, irrécupérable ;
+ *   · « illisible » : la preuve existe mais ne se relit pas (cas qui ne devrait jamais arriver).
+ */
+function PreuveModal({ etat, onClose }) {
+  const p = etat.preuve;
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760 }}>
+        <div className="mhead">
+          <h3>Preuve de réponse{etat.name ? ` — ${etat.name}` : ""}</h3>
+          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
+        </div>
+        <div className="mbody">
+          {etat.chargement ? <p className="hint">Chargement…</p> : !p ? (
+            <p className="hint" style={{ margin: 0 }}>
+              {etat.raison === "migration"
+                ? "L'enregistrement des preuves n'est pas encore actif sur ce serveur (migration 144 à jouer)."
+                : etat.raison === "illisible"
+                  ? "La preuve enregistrée n'est pas lisible. Le score, lui, reste exact."
+                  : "Cette réponse est antérieure à l'enregistrement des preuves : le détail n'a jamais été conservé. Le score et la date, eux, restent exacts."}
+            </p>
+          ) : (
+            <>
+              <p className="hint" style={{ marginTop: 0 }}>
+                {p.quiz?.titre} · répondu le {dateHeure(etat.completed_at)}
+                {p.score_max ? ` · ${p.score}/${p.score_max}` : ""}
+              </p>
+              {(p.questions || []).map((q) => (
+                <div key={q.rang} style={{ borderTop: "1px solid var(--border-soft)", padding: "10px 0" }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>{q.rang}. {q.enonce}</div>
+                  {q.options ? (
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {q.options.map((o, k) => (
+                        <li key={k} style={{ color: o.choisie ? "var(--text)" : "var(--muted)", fontWeight: o.choisie ? 600 : 400 }}>
+                          {o.choisie ? "☑" : "☐"} {o.texte}
+                          {o.correcte && <span className="hint"> · bonne réponse</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : q.lignes ? (
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {q.lignes.map((li, k) => (
+                        <li key={k}>{li.libelle} : <b>{li.choisi.length ? li.choisi.join(", ") : "—"}</b></li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div>Réponse : <b>{q.valeur ?? q.reponse_brute ?? "—"}</b></div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+        <div className="mfoot"><button className="btn ghost" onClick={onClose}>Fermer</button></div>
+      </div>
+    </div>
+  );
+}
+
 
 export default ResultatsQCM;
