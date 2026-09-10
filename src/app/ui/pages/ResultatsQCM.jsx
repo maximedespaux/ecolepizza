@@ -126,29 +126,43 @@ function StagiairesTable({ learners, quiz, isAdmin, onDelete, onPreuve }) {
   );
 }
 
-// Une ligne QCM de la vue d'ensemble (sélectionnable, ouvre le détail).
+/**
+ * Une ligne QCM de la liste (sélectionnable, ouvre le détail).
+ *
+ * COMPACTE PARCE QUE LA COLONNE FAIT 380 px. La version large empilait cinq blocs sur une ligne —
+ * titre, badge « Noté », 86 px de moyenne, 104 px de réussite, chevron. Mesuré dans la colonne :
+ * les largeurs fixes prenaient 254 px, le titre était écrasé à DIX pixels et se pliait lettre par
+ * lettre — chaque rangée montait à 177 px de haut pour dix-neuf QCM. Illisible et interminable.
+ *
+ * Deux lignes de texte à la place : l'intitulé, puis les chiffres en petit. Rien n'est perdu — la
+ * moyenne et le nombre de réponses descendent d'un cran, et le TAUX DE RÉUSSITE garde sa pastille
+ * colorée, seule information qui se lit sans être lue. Le reste du détail est de toute façon à
+ * côté, dans l'autre colonne : cette liste sert à CHOISIR, pas à analyser.
+ *
+ * `minWidth: 0` sur le bloc de texte : sans lui, un élément flex refuse de descendre sous la
+ * largeur de son contenu et l'ellipse ne se déclenche jamais (même piège que le fil d'Ariane de
+ * la barre supérieure).
+ */
 function QcmRow({ q, on, onClick }) {
   const note = q.kind === "GRADED";
+  const coupe = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
   return (
-    <button type="button" onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", padding: "10px 12px", borderRadius: 10, cursor: "pointer", color: "var(--text)",
+    <button type="button" onClick={onClick} title={q.title}
+      style={{ display: "flex", alignItems: "center", gap: 8, textAlign: "left", padding: "7px 9px", borderRadius: 9, cursor: "pointer", color: "var(--text)",
         background: on ? "var(--surface2)" : "transparent", border: on ? "1px solid var(--ember1,#c0392b)" : "1px solid var(--border-soft)", opacity: q.active ? 1 : 0.55 }}>
       <span style={{ flex: 1, minWidth: 0 }}>
-        <b>{q.title}</b>{!q.active && <span className="hint"> · inactif</span>}
-        <div className="hint" style={{ fontSize: 12 }}>{q.responses} réponse{q.responses > 1 ? "s" : ""}</div>
+        <span style={{ display: "block", fontWeight: 600, fontSize: 13, ...coupe }}>
+          {q.title}{!q.active && <span className="hint"> · inactif</span>}
+        </span>
+        <span className="hint" style={{ display: "block", fontSize: 11.5, ...coupe }}>
+          {!note && "Enquête · "}
+          {q.responses} rép.
+          {note && q.responses > 0 && ` · ${q.avg_pct ?? "—"} % moy.`}
+        </span>
       </span>
-      <Badge tone={note ? "b" : "n"}>{note ? "Noté" : "Enquête"}</Badge>
-      {note && (
-        <span style={{ flex: "none", minWidth: 86, textAlign: "right" }}>
-          {q.responses > 0 ? <><b>{q.avg_pct ?? "—"}%</b><span className="hint"> moy.</span></> : <span className="hint">—</span>}
-        </span>
-      )}
-      {note && (
-        <span style={{ flex: "none", minWidth: 104, textAlign: "right" }}>
-          {q.pass_rate != null ? <Badge tone={pctTone(q.pass_rate)}>{q.pass_rate}% réussite</Badge> : <span className="hint">—</span>}
-        </span>
-      )}
-      <Icon name="chevron-right" size={16} />
+      {/* La pastille de réussite reste : c'est la seule donnée qu'on lit à la couleur, sans lire. */}
+      {note && q.pass_rate != null && <Badge tone={pctTone(q.pass_rate)}>{q.pass_rate} %</Badge>}
+      <Icon name="chevron-right" size={14} style={{ flex: "none" }} />
     </button>
   );
 }
