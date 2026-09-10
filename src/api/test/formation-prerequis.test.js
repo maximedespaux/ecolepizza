@@ -77,3 +77,29 @@ test('le champ est saisissable, et annoncé avec son jeton', () => {
     // L'étiquette nomme le jeton : c'est ce qui relie la saisie au document qui l'imprimera.
     assert.match(PAGE, /Prérequis \(jeton \{"\{Prérequis\}"\}\)/);
 });
+
+test('un repli SILENCIEUX est un enregistrement qui ment', () => {
+    /* LE DÉFAUT, vécu : le champ « Prérequis » se saisissait, l'écran répondait « Formation mise à
+       jour », et la fiche rouverte était vide. Le repli faisait pourtant son travail — enregistrer
+       le reste plutôt que tout refuser — mais sans le dire. Rien ne permettait de deviner que la
+       valeur avait été jetée en route, ni qu'il fallait jouer une migration.
+
+       Un enregistrement qui ment est pire qu'un refus : le refus, au moins, se comprend. Le repli
+       NOMME donc ce qu'il écarte et la migration qui le débloque — même esprit que le 409
+       « Migration 131 non jouée » des partenaires destinataires. */
+    assert.match(PROG, /const COLONNES_RECENTES = \{/, 'la table des colonnes récentes');
+    assert.match(PROG, /prerequisites: \{ libelle: 'Prérequis', migration: '143' \}/);
+    // Le numéro de migration doit être VRAI : celui d'`horaires` est 056, vérifié dans le dossier.
+    assert.match(PROG, /horaires: \{ libelle: 'Horaires', migration: '056' \}/,
+        'un numéro inventé dans un message utilisateur envoie chercher une migration qui n\'existe pas');
+    const d = path.join(RACINE, 'database/migrations');
+    assert.ok(fs.existsSync(path.join(d, '056_program_horaires.sql')), '056 doit exister');
+
+    // Les DEUX chemins d'écriture le remontent, pas seulement la mise à jour.
+    assert.match(PROG, /return runInsert\(fCols, fVals, false, avertissementColonnes\(ecartees\)\);/, 'création');
+    assert.match(PROG, /return runUpdate\(fSets, fVals, false, avert\);/, 'mise à jour');
+
+    // Et l'écran le RELAIE : sans ça, l'avertissement resterait lettre morte dans le JSON.
+    assert.match(PAGE, /rc\?\.avertissement \? `Formation créée\. \$\{rc\.avertissement\}`/);
+    assert.match(PAGE, /ru\?\.avertissement \? `Formation mise à jour\. \$\{ru\.avertissement\}`/);
+});
