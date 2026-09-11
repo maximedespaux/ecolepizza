@@ -234,6 +234,12 @@ const TOKEN_CATALOG = [
         group: 'Dates',
         tokens: [
             { key: 'Date', label: 'Date du jour', sample: '06/07/2026' },
+            /* {Today} EXISTAIT DÉJÀ comme valeur, mais pas au catalogue : il fonctionnait si on le
+               tapait à la main et n'apparaissait nulle part dans la palette. On l'y ajoute sous le nom
+               demandé. {Date} RESTE au catalogue — les modèles qui l'emploient continuent de le faire,
+               et le contrôle des jetons inconnus continue de le reconnaître. Seul {Today} est proposé
+               dans la palette : deux entrées pour une même valeur n'apprendraient rien. */
+            { key: 'Today', label: 'Date du jour', sample: '11/09/2026' },
         ],
     },
     {

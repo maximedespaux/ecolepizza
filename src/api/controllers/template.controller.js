@@ -322,7 +322,12 @@ async function fieldTokenGroups(orgId, ident) {
 
 // Groupe « Calculé / dates » : jetons INTÉGRÉS dérivés du dossier (dates de session,
 // semaine, durées…). Ils sont calculés au rendu par resolveTokens.
-const COMPUTED_KEYS = ['Jour1', 'endDate', 'Semaine', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Formateur', 'Heures', 'Jours', 'DuréeDétail', 'Prix', 'Acompte', 'Financement'];
+/* CETTE LISTE DÉCIDE SEULE de ce qui apparaît dans « Dates et valeurs calculées ». Un jeton
+   ajouté au catalogue mais absent d'ici fonctionne si on le TAPE et reste introuvable dans la
+   palette — c'était le cas de {Today} depuis toujours, et ça a bien failli l'être de
+   {HorairesJours}, livré la veille. Ajouter un jeton calculé, c'est donc DEUX gestes. */
+const COMPUTED_KEYS = ['Today', 'Jour1', 'endDate', 'Semaine', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi',
+    'HorairesJours', 'Formateur', 'Heures', 'Jours', 'DuréeDétail', 'Prix', 'Acompte', 'Financement'];
 function computedGroup() {
     const byKey = {};
     for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
