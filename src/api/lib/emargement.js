@@ -559,4 +559,12 @@ async function buildEmargementDocHtml(conn, orgId, enrollmentId, opts = {}) {
     return renderEmargementHtml({ org, e, rows, participants, config: opts.config });
 }
 
-module.exports = { regenEmargement, buildEmargementDocHtml, DEFAULT_EMARG_CONFIG, mergeEmargConfig };
+module.exports = {
+    regenEmargement, buildEmargementDocHtml, DEFAULT_EMARG_CONFIG, mergeEmargConfig,
+    /* `parseDaySchedules` et `fmtHM` sortent d'ici pour le jeton {HorairesJours} (lib/tokens.js).
+       Ils NE SONT PAS recopiés là-bas : ce parseur connaît les formes réelles écrites par
+       l'organisme — « Jour 5 : 9h-12h », « Jours 1 à 4 », une ligne unique valant pour tous —
+       et une seconde lecture finirait par diverger de la feuille d'émargement. Le document et
+       la feuille doivent annoncer les MÊMES horaires, sinon lequel croire ? */
+    parseDaySchedules, fmtHM,
+};
