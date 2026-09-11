@@ -128,6 +128,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     const [formations] = await conn.query(
         `SELECT p.code, p.title, p.days, p.hours, p.price, p.hygiene, p.rs_code AS rs_code,
                 p.audience, p.objectives, p.objective_general, p.duration_detail, p.program_detail,
+                p.horaires,   /* {HorairesJours} : les plages par journée (colonne de la migration 056) */
                 ${await colonneOuNull(conn, 'training_program', 'prerequisites', 'p.')},
                 s.year, s.week,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,

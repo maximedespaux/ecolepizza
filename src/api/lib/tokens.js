@@ -10,6 +10,7 @@
 // rétro-compatibles ({Personne}, {Niveau suggérer}, {Nom entreprise}…).
 
 const { resolveCustomTokens, shiftDate } = require('./customtokens.js');
+const { parseDaySchedules, fmtHM } = require('./emargement.js');
 
 // --- Formatage ---
 const pad = (n) => String(n).padStart(2, '0');
@@ -24,6 +25,50 @@ function euro(v) {
     if (!Number.isFinite(n) || n === 0) return '';
     return n.toLocaleString('fr-FR') + ' €';
 }
+/**
+ * {HorairesJours} — les journées de formation avec leurs plages, une par ligne :
+ *
+ *     Lundi 8h45-12h00 & 13h00-17h15
+ *     Mardi 8h00-12h00 & 13h00-17h00
+ *     Mercredi 8h00-12h00 & 13h00-14h30
+ *
+ * POURQUOI ÇA NE POUVAIT PAS SE FAIRE AVEC L'EXISTANT. {Lundi}…{Vendredi} donnent des DATES
+ * (02/06/2025), et {field:training_program.horaires} rend le texte libre tel qu'il a été saisi —
+ * sans jamais rapprocher les deux. Ce jeton fait la jonction : le NOM du jour vient du calendrier
+ * de la session, les plages viennent des horaires de la formation.
+ *
+ * LE PARSEUR EST CELUI DE LA FEUILLE D'ÉMARGEMENT, importé et non recopié. Il connaît les formes
+ * réelles écrites par l'organisme (« Jour 5 : 9h-12h », « Jours 1 à 4 », une ligne unique valant
+ * pour tous) ; une seconde lecture finirait par diverger, et le document annoncerait alors
+ * d'autres horaires que la feuille signée le même jour.
+ *
+ * Sans horaires saisis, le jeton rend une chaîne vide — comme tous les autres jetons de
+ * formation : un modèle qui le porte s'imprime sans trou ni « undefined ».
+ */
+function horairesParJour(horaires, nbJours, startStr) {
+    const jours = Number(nbJours);
+    if (!horaires || !startStr || !Number.isFinite(jours) || jours < 1) return '';
+    const par = parseDaySchedules(horaires, jours);
+    const NOMS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+    const d = new Date(startStr);
+    if (Number.isNaN(d.getTime())) return '';
+    const lignes = [];
+    for (let i = 1; i <= jours; i++) {
+        if (i > 1) {
+            /* On avance de jour OUVRÉ en jour ouvré, comme `businessDay` : une formation de cinq
+               jours commencée un jeudi se termine le mercredi suivant, pas le lundi. */
+            do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+        }
+        const s = par[i];
+        if (!s || !s.matin) continue;
+        const nom = NOMS[d.getDay()];
+        const matin = `${fmtHM(s.matin[0])}-${fmtHM(s.matin[1])}`;
+        const aprem = s.aprem ? ` & ${fmtHM(s.aprem[0])}-${fmtHM(s.aprem[1])}` : '';
+        lignes.push(`${nom.charAt(0).toUpperCase()}${nom.slice(1)} ${matin}${aprem}`);
+    }
+    return lignes.join('\n');
+}
+
 function businessDay(startStr, offset) {
     if (!startStr) return '';
     const d = new Date(startStr);
@@ -90,6 +135,9 @@ const TOKEN_CATALOG = [
             { key: 'Mercredi', label: 'Date — Mercredi (jour 3)', sample: '04/06/2025' },
             { key: 'Jeudi', label: 'Date — Jeudi (jour 4)', sample: '05/06/2025' },
             { key: 'Vendredi', label: 'Date — Vendredi (jour 5)', sample: '06/06/2025' },
+            /* Le seul jeton qui RAPPROCHE le calendrier de la session et les horaires de la
+               formation : les autres donnent soit des dates, soit du texte libre, jamais les deux. */
+            { key: 'HorairesJours', label: 'Journées et horaires', sample: 'Lundi 8h45-12h00 & 13h00-17h15\nMardi 8h00-12h00 & 13h00-17h00' },
         ],
     },
     {
@@ -911,6 +959,7 @@ function resolveTokens(ctx = {}) {
         'Semaine de la formation': semaine, Formateur: f.trainer || '',
         Lundi: businessDay(start, 0), Mardi: businessDay(start, 1), Mercredi: businessDay(start, 2),
         Jeudi: businessDay(start, 3), Vendredi: businessDay(start, 4),
+        HorairesJours: horairesParJour(f.horaires, sumDays || f.days, start),
         // Dossier
         Financement: f.financing || '', Prix: euro(totalPrice), Offre: euro(totalPrice), Acompte: euro(totalAcompte),
         'Reste à payer': euro(totalPrice - totalAcompte),
@@ -972,4 +1021,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay };
+module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay, horairesParJour};

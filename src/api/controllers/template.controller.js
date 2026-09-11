@@ -275,7 +275,16 @@ function sampleForField(f, ident) {
     if (/(date|birth|naissance|debut|fin|jour1)/.test(c)) return '02/06/2025';
     if (/(status|statut)/.test(c)) return "Demandeur d'emploi";
     if (/(financ)/.test(c)) return 'CPF';
-    if (/(objectif|programme|deroul|contenu)/.test(c)) return 'Maîtriser la pâte, la cuisson…';
+    /* CES CINQ-LÀ TOMBAIENT SUR « Exemple », le dernier recours — un mot qui ne montre rien et
+       qui, dans l'aperçu d'un modèle, occupe la place d'un vrai paragraphe sans en donner la
+       forme. Les colonnes sont en ANGLAIS (`objectives`, `objective_general`) alors que le motif
+       ne testait que le français (`objectif`) : elles passaient à côté de leur propre règle.
+       `objective_general` doit précéder `objectives`, sinon le motif général l'attrape le premier. */
+    if (/horaire/.test(c)) return '9h00 – 12h30 / 13h30 – 17h00';
+    if (/duration_detail|duree_detail/.test(c)) return '35 h sur 5 jours';
+    if (/prerequis|prerequisite/.test(c)) return 'Savoir lire et écrire le français. Aucun diplôme exigé.';
+    if (/objectiv\w*_general|objectif\w*_general/.test(c)) return 'Devenir pizzaïolo autonome';
+    if (/(objectiv|objectif|programme|deroul|contenu)/.test(c)) return 'Maîtriser la pâte, la cuisson…';
     if (/(audience|public)/.test(c)) return 'Tout public';
     if (/level|niveau/.test(c)) return 'Débutant';
     return 'Exemple';
@@ -499,11 +508,20 @@ const getTokens = async (req, res) => {
         // Sans catégorie → groupe « Personnalisés ». On fusionne dans un groupe existant
         // du même nom (ex. « Groupe entreprise »), sinon on le crée.
         const defs = await loadCustomTokens(orgId);
+        /* L'EXEMPLE D'UN JETON PERSONNALISÉ, C'EST CE QU'IL PRODUIRA. Il était vide : dans la
+           palette, « Periode de la formation » ne montrait rien, et il fallait l'insérer dans un
+           modèle puis lancer un aperçu pour découvrir ce qu'il donne. Or un jeton personnalisé
+           n'est qu'une COMPOSITION d'autres jetons — on la résout donc contre leurs exemples, et
+           l'aperçu se lit dans la palette. `resolveCustomTokens` est la même fonction qui les
+           calcule à la génération : le même moteur, donc le même résultat. */
+        const echantillons = {};
+        for (const g of groups) for (const t of (g.tokens || [])) if (t.sample) echantillons[t.key] = t.sample;
+        const resolus = resolveCustomTokens(defs, echantillons);
         for (const d of defs) {
             const cat = (d.category && String(d.category).trim()) || 'Personnalisés';
             let g = groups.find((x) => x.group === cat);
             if (!g) { g = { group: cat, tokens: [] }; groups.push(g); }
-            g.tokens.push({ key: `custom:${d.token_key}`, label: d.label, sample: '' });
+            g.tokens.push({ key: `custom:${d.token_key}`, label: d.label, sample: resolus[`custom:${d.token_key}`] || '' });
         }
 
         // Réorganisation : ordre de groupes canonique + tri alphabétique des jetons
