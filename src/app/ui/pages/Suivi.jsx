@@ -353,7 +353,20 @@ function ArchivesView({ onError, onInfo }) {
     setBusy(true);
     try {
       const { data } = await importArchives(files, paths);
-      onInfo?.(`${data.imported} document(s) importé(s)${data.skipped ? `, ${data.skipped} ignoré(s) (non PDF)` : ""}.`);
+      /* LES DOUBLONS SE DISENT À PART DES NON-PDF. Un fichier écarté parce qu'il est déjà là et
+         un fichier écarté parce que ce n'est pas un PDF n'appellent pas le même geste : le
+         premier ne demande rien, le second signale un lot mal préparé. Les confondre sous un
+         seul « ignoré(s) » ferait chercher une erreur là où l'import a bien travaillé. */
+      const parts = [`${data.imported} document(s) importé(s)`];
+      if (data.doublons) {
+        /* ON NOMME. Un compte ne dit pas LEQUEL a été écarté — et c'est lequel qui compte quand
+           on voulait remplacer une version par sa correction : il faut alors supprimer l'ancien
+           avant de réimporter. Les vingt premiers suffisent à reconnaître le lot. */
+        const noms = (data.noms_doublons || []).slice(0, 5).join(", ");
+        parts.push(`${data.doublons} déjà présent(s), non réimporté(s)${noms ? ` — ${noms}${data.doublons > 5 ? "…" : ""}` : ""}`);
+      }
+      if (data.skipped) parts.push(`${data.skipped} ignoré(s) (non PDF)`);
+      onInfo?.(`${parts.join(", ")}.`);
       load();
     } catch (err) { onError?.(err.message); }
     finally { setBusy(false); }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAccessProfiles, createAccessProfile, updateAccessProfile, deleteAccessProfile, upsertSystemRole } from "../api/apiClient.js";
-import { GRANTABLE_NAV, EXTRA_ACCESS, PAGE_CAPS, BUILTIN_ROLES, builtinRoleAccess, ROLE_COLORS } from "../lib/nav.js";
+import { GRANTABLE_NAV, EXTRA_ACCESS, PAGE_CAPS, NAV_LECTURE_SEULE, BUILTIN_ROLES, builtinRoleAccess, ROLE_COLORS } from "../lib/nav.js";
 
 const Dot = ({ color }) => <span style={{ width: 12, height: 12, borderRadius: 3, background: color || "#999", display: "inline-block", marginRight: 8, verticalAlign: "middle" }} />;
 import PageHead from "../components/PageHead.jsx";
@@ -172,6 +172,7 @@ function RoleModal({ role, onClose, onSaved, onError }) {
                   // Même règle que dans Équipe & accès : une page peut porter une CAPACITÉ au
                   // lieu d'un mode. Voir `PAGE_CAPS` — le pourquoi y est écrit une seule fois.
                   const pc = PAGE_CAPS[it.to];
+                  const lectureSeule = NAV_LECTURE_SEULE.includes(it.to);
                   const capOffice = !!pc && pc.defaultRoles.includes(role._system);
                   const capOn = !!pc && (capOffice || granted(pc.cap));
                   return (
@@ -180,7 +181,12 @@ function RoleModal({ role, onClose, onSaved, onError }) {
                         <input type="checkbox" checked={on} onChange={() => toggle(it.to)} />
                         <span style={{ width: 20, display: "inline-grid", placeItems: "center" }}><Icon name={it.ic} size={16} /></span> {it.label}
                       </label>
-                      {on && (pc ? (
+                      {/* LECTURE SEULE IMPOSÉE. Ces rubriques distribuent les accès : y écrire
+                          permettrait de se promouvoir. Le serveur refuse l'écriture quoi qu'on
+                          stocke — on n'affiche donc PAS un choix qui n'en est pas un. */}
+                      {on && lectureSeule ? (
+                        <span className="badge b" title="Consultation seule : ces pages distribuent les accès, les modifier reste aux propriétaires.">Lecture</span>
+                      ) : on && (pc ? (
                         <button type="button" className={"btn sm " + (capOn ? "primary" : "ghost")}
                           disabled={capOffice} onClick={() => toggle(pc.cap)}
                           title={capOffice ? "Accordé d'office à ce rôle." : pc.hint}>

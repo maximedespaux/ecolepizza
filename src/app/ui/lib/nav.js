@@ -230,8 +230,18 @@ const SECTION_OF = {
   "/realisations": "/realisations", "/notions": "/notions",
   "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
+  /* `/demandes-boutique` manquait aussi : sa base API est pourtant cartographiée côté serveur
+     (`boutique`), si bien qu'un accès en lecture y était bien refusé en écriture par l'API,
+     mais la page s'ouvrait avec ses boutons vivants. Découvert par le test d'invariant. */
+  "/demandes-boutique": "/demandes-boutique", "/opcos": "/opcos",
+  "/reglages-partenaires": "/reglages-partenaires",
   "/comptabilite": "/comptabilite", "/carte": "/carte",
   "/reglages": "/reglages", "/reglages-mailing": "/reglages-mailing", "/reglages-facturation": "/reglages-facturation", "/modeles": "/modeles", "/equipe": "/equipe",
+  /* `/roles` MANQUAIT. Sans rubrique, `modeForPath` rend `null`, le mode lecture seule ne
+     s'applique pas, et la page s'ouvre avec ses boutons vivants pour qui n'a que la
+     consultation : il clique, et le serveur refuse. Le bandeau et les clics interceptés
+     dépendent tous les deux de cette ligne. */
+  "/roles": "/roles",
   "/audit": "/audit", "/suivi": "/suivi", "/qcm-resultats": "/qcm-resultats", "/dashboard": "/dashboard",
 };
 
@@ -284,11 +294,20 @@ export function landingPath(user) {
   return "/aucun-acces";
 }
 
-// Items de menu que le super administrateur peut accorder (tout sauf la gestion
-// d'équipe, réservée aux propriétaires).
-export const GRANTABLE_NAV = NAV
-  .map((g) => ({ grp: g.grp, items: g.items.filter((it) => it.to !== "/equipe") }))
-  .filter((g) => g.items.length > 0);
+/* RUBRIQUES ACCORDABLES EN LECTURE SEULE. Elles DISTRIBUENT les accès : y écrire permettrait
+   à un membre de se promouvoir, ou de s'ouvrir toutes les autres rubriques. La consultation, en
+   revanche, ne donne aucun pouvoir — et la refuser obligeait à déranger un propriétaire pour
+   savoir qui compose l'équipe ou ce qu'un rôle accorde.
+
+   LA GARANTIE NE TIENT PAS ICI. Le serveur ignore le mode « écriture » sur ces rubriques, quoi
+   que cet écran propose (cf. SECTIONS_LECTURE_SEULE côté API). Cette liste sert à ne pas
+   PROMETTRE un droit qui serait refusé — le défaut que ce projet a déjà payé une fois : menu
+   ouvert, route fermée, et un réglage qui semble sans effet. */
+export const NAV_LECTURE_SEULE = ["/equipe", "/roles"];
+
+// Items de menu que le super administrateur peut accorder. « Équipe & accès » en fait
+// désormais partie, en lecture seule comme « Rôles d'accès ».
+export const GRANTABLE_NAV = NAV.filter((g) => g.items.length > 0);
 
 // Accès « supplémentaires » : des capacités transverses (pas des pages) qu'on
 // accorde par rôle ou par membre, stockées dans nav_access comme une page. La
@@ -356,6 +375,6 @@ export const ROLE_COLORS = ["#c0392b", "#e0932e", "#b8860b", "#2e9e5b", "#2f9e6f
 // Accès menu par défaut d'un rôle système (toutes les pages qu'il peut ouvrir, en écriture).
 export function builtinRoleAccess(roleCode) {
   const o = {};
-  for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(roleCode, it.roles)) o[it.to] = "write";
+  for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(roleCode, it.roles)) o[it.to] = NAV_LECTURE_SEULE.includes(it.to) ? "read" : "write";
   return o;
 }
