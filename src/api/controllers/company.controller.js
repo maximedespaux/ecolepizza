@@ -19,6 +19,7 @@ const { formationSteps, enrollmentSteps } = require('./formationProgram.controll
 const { companySignsDoc, stepSigners } = require('../lib/documents.js');
 const { loadConditionMap, getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
+const { SQL_BADGE_FORMATION } = require('../lib/badges.js');
 
 // Résout, pour chaque stagiaire de l'entreprise dans la session, les documents (slugs)
 // applicables à son dossier (conditions + variantes « OU »). Base du parcours de groupe.
@@ -289,7 +290,10 @@ const registerCompanyStagiaires = async (req, res) => {
         let badge = null;
         if (sessionId) {
             const [[sess]] = await conn.query(
-                `SELECT COALESCE(NULLIF(p.level, ''), p.code) AS badge FROM training_session s
+                /* Même règle qu'à l'inscription depuis la fiche : le CODE, jamais le
+                   niveau (cf. lib/badges.js). Elle était écrite deux fois — et deux copies
+                   d'une même règle finissent par diverger. */
+                `SELECT ${SQL_BADGE_FORMATION} FROM training_session s
                  JOIN training_program p ON p.id = s.program_id WHERE s.id = ? AND s.organization_id = ?`,
                 [sessionId, orgId]
             );

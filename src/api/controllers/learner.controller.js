@@ -10,6 +10,7 @@ const { credentialsEmail, resetEmail } = require('../lib/mailTemplates.js');
    cloche restait muette sur l'événement le plus courant de la journée. */
 const { logAudit } = require('../lib/audit.js');
 const { couperSessions } = require('./auth.controller.js'); // évincer les sessions après un reset
+const { resolveurBadges, resoudreCsv } = require('../lib/badges.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -105,17 +106,23 @@ const getLearners = (req, res) => {
            AND (l.first_name LIKE ? OR l.last_name LIKE ? OR l.email LIKE ?)
          ORDER BY l.last_name, l.first_name`,
         [organizationId, q, q, q],
-        (err, results) => {
+        async (err, results) => {
             if (err) {
                 console.error('Erreur récupération stagiaires :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
-            // Les badges (niveaux/codes) sont la source stockée sur le stagiaire :
-            // ajoutés automatiquement à l'inscription, mais entièrement modifiables à la main.
-            const data = results.map(({ account_email, levels, ...rest }) => {
-                const set = new Set(String(levels || '').split(',').map((s) => s.trim()).filter(Boolean));
-                return { ...rest, levels: [...set].join(','), has_account: !!account_email };
-            });
+            /* Les badges (niveaux/codes) sont la source stockée sur le stagiaire : ajoutés
+               automatiquement à l'inscription, mais entièrement modifiables à la main.
+               TRADUITS À LA LECTURE en code de formation : l'attribution a longtemps écrit le
+               NIVEAU quand la formation en avait un, si bien qu'un stagiaire RS7404 porte « RS »
+               en base. Le corriger par une migration obligerait à découper une colonne CSV pour
+               y remplacer un jeton — et « RS » étant un préfixe de « RS7404 », un REPLACE naïf
+               produirait « RS74047404 ». On traduit donc à l'affichage, et les anciennes lignes
+               redeviennent justes sans que personne n'y touche. */
+            const resoudre = await resolveurBadges(db.promise(), req.user.organization_id);
+            const data = results.map(({ account_email, levels, ...rest }) => ({
+                ...rest, levels: resoudreCsv(levels, resoudre), has_account: !!account_email,
+            }));
             res.json({ data });
         }
     );
