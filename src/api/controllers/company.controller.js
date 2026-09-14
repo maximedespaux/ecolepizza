@@ -166,12 +166,42 @@ async function colonnesEntreprise(conn) {
    casse officielle, et l'écraser ferait mentir tous les documents qui la reprennent. */
 const RE_EMAIL_ENT = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+/* NUMÉRO DE TVA INTRACOMMUNAUTAIRE — treize caractères, ni plus ni moins.
+ *
+ * DEUX FORMES ACCEPTÉES, et c'est délibéré. La forme officielle française est « FR » suivi de
+ * onze chiffres (deux de clé, puis le SIREN) : c'est elle que les modèles de l'application
+ * donnent en exemple, et c'est elle que Factur-X transmet sous `schemeID="VA"` — un identifiant
+ * intracommunautaire sans son code pays n'y est pas valide. Mais treize chiffres nus se
+ * rencontrent sur les documents que l'école reçoit, et refuser ce qu'on lit sur une facture
+ * obligerait à deviner la transformation. On accepte donc les deux, sans jamais en réécrire une
+ * en l'autre : ajouter « FR » nous-mêmes reviendrait à inventer un pays.
+ *
+ * Les espaces sont retirés (« FR 76 123456789 » se recopie tel quel depuis un courrier) et les
+ * lettres passent en capitales — « fr76… » désigne le même numéro. */
+const RE_TVA = /^(FR[0-9]{11}|[0-9]{13})$/;
+
 function normaliserEntreprise(b) {
     const out = { ...b };
     if (out.representative_name != null) out.representative_name = String(out.representative_name).trim().toLocaleUpperCase('fr');
     if (out.name != null) out.name = String(out.name).trim();
     if (out.email != null) out.email = String(out.email).trim().toLowerCase();
+    if (out.vat_number != null) {
+        const v = String(out.vat_number).replace(/[\s.]/g, '').toUpperCase();
+        out.vat_number = v || null;   // champ vidé = effacé, pas une chaîne vide
+    }
     return out;
+}
+
+/* Renvoie le message d'erreur, ou null. Le champ reste FACULTATIF : beaucoup d'entreprises
+   n'en fournissent pas, et l'exiger rendrait irréparables les quatre cent soixante-neuf fiches
+   déjà en base, toutes sans numéro. On ne contrôle que ce qui est saisi. */
+function erreurTva(vat) {
+    if (!vat) return null;
+    if (!RE_TVA.test(vat)) {
+        return 'Numéro de TVA invalide : treize caractères attendus — « FR » suivi de onze chiffres '
+            + '(FR76123456789), ou treize chiffres.';
+    }
+    return null;
 }
 
 /** POST /api/companies — crée une entreprise. */
@@ -193,6 +223,8 @@ const createCompany = async (req, res) => {
         return res.status(422).json({ error: `Champ${manquants.length > 1 ? 's' : ''} requis : ${manquants.join(', ')}.` });
     }
     if (b.email && !RE_EMAIL_ENT.test(b.email)) return res.status(422).json({ error: 'Adresse e-mail invalide.' });
+    const mauvaiseTva = erreurTva(b.vat_number);
+    if (mauvaiseTva) return res.status(422).json({ error: mauvaiseTva });
     try {
         const id = crypto.randomUUID();
         const cols = (await colonnesEntreprise(db.promise())).filter((k) => b[k] !== undefined);
@@ -212,6 +244,10 @@ const createCompany = async (req, res) => {
 const updateCompany = async (req, res) => {
     const b = normaliserEntreprise(req.body || {}); // mêmes conventions qu'à la création
     if (b.email && !RE_EMAIL_ENT.test(b.email)) return res.status(422).json({ error: 'Adresse e-mail invalide.' });
+    /* MÊME CONTRÔLE QU'À LA CRÉATION. La fiche se corrige aussi par cette route, et un numéro
+       mal formé y entrerait sans rien rencontrer — puis ressortirait sur une facture Factur-X. */
+    const mauvaiseTva = erreurTva(b.vat_number);
+    if (mauvaiseTva) return res.status(422).json({ error: mauvaiseTva });
     try {
         const conn = db.promise();
         const [[c]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
