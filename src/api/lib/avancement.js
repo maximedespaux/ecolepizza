@@ -28,7 +28,7 @@ const { enrollmentSteps, formationSteps } = require('../controllers/formationPro
  *        existent, financing / opco / program_* / enr_company_id / session_id.
  * @param avecDocuments true pour obtenir en plus la feuille de route (le suivi en a besoin,
  *        pas une pastille de pourcentage : c'est le gros de la charge utile).
- * @returns Map enrollment_id -> { percent, done, total, score, signed, toSign, documents }
+ * @returns Map enrollment_id -> { percent, done, total, score, signed, toSign, currentKey, documents }
  */
 async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false } = {}) {
     const out = new Map();
@@ -66,7 +66,7 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
     }
 
     for (const e of dossiers) {
-        const vide = { percent: 0, done: 0, total: 0, score: 'ROUGE', signed: 0, toSign: 0, documents: [] };
+        const vide = { percent: 0, done: 0, total: 0, score: 'ROUGE', signed: 0, toSign: 0, currentKey: null, documents: [] };
         if (!e.program_id) { out.set(e.enrollment_id, vide); continue; }
 
         const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
@@ -101,6 +101,11 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
             percent: parc.percent,
             done,
             total,
+            /* L'ÉTAPE COURANTE, pour le tableau du pipeline : c'est elle qui décide dans quelle
+               COLONNE tombe la carte. Sans les pièces au calcul, elle désignait la première
+               pièce du parcours et la carte n'en bougeait plus — quatre dossiers à moitié faits
+               restaient empilés dans la toute première colonne. */
+            currentKey: parc.currentKey,
             score: total > 0 && done >= total ? 'VERT' : (done > 0 || anyHandled) ? 'ORANGE' : 'ROUGE',
             signed: signable.filter((s) => s.docStatus === 'SIGNE').length,
             toSign: signable.length,
