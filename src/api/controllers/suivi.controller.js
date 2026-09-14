@@ -43,6 +43,29 @@ const getSuivi = async (req, res) => {
         const factsMap = await loadDossierFactsMap(
             conn, req.user.organization_id, enrollments.map((e) => e.enrollment_id), fieldCatalog);
 
+        /* STATUT DES PIÈCES DÉPOSÉES, pour TOUS les dossiers en une seule requête.
+           Il manquait ici : `computeDocParcours` était appelé sans `pieces`, si bien qu'une
+           étape « pièce » y était toujours évaluée contre un objet vide, donc jamais validée.
+           Comme l'avancement s'arrête à la PREMIÈRE étape non faite, le pourcentage de
+           conformité plafonnait à la première pièce du parcours — une carte d'identité en
+           deuxième position figeait tout le dossier à 10 %, quoi que l'école fasse ensuite.
+           La fiche dossier, elle, passait bien `pieces` : les deux écrans se contredisaient.
+           Une requête pour la boucle entière, pas une par dossier : ce tableau porte tous les
+           dossiers de l'organisme. */
+        let piecesParDossier = new Map();
+        try {
+            const [pd] = await conn.query(
+                'SELECT enrollment_id, piece_type_id, statut FROM piece_depot WHERE organization_id = ?',
+                [req.user.organization_id]);
+            for (const r of pd) {
+                if (!piecesParDossier.has(r.enrollment_id)) piecesParDossier.set(r.enrollment_id, {});
+                piecesParDossier.get(r.enrollment_id)[r.piece_type_id] = r.statut;
+            }
+        } catch (err) {
+            // Migration 127 non jouée : aucune pièce, le parcours reste lisible sans elles.
+            if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err;
+        }
+
         // Le parcours « à l'arrivée via une entreprise » vit dans lib/parcours.js, partagé
         // avec la fiche dossier et le tableau du Pipeline.
         const orgId = req.user.organization_id;
@@ -83,7 +106,7 @@ const getSuivi = async (req, res) => {
                     () => allStepsFor(program));
                 if (ent.steps) steps = ent.steps;
                 if (ent.docs.length) docs.push(...ent.docs);
-                const parc = computeDocParcours({ steps, docs });
+                const parc = computeDocParcours({ steps, docs, pieces: piecesParDossier.get(e.enrollment_id) || {} });
                 total = parc.steps.length;
                 done = parc.currentIndex;
                 percent = parc.percent;
@@ -92,6 +115,11 @@ const getSuivi = async (req, res) => {
                     num: i + 1, type: s.key, label: s.label,
                     stagiaireSign: !!s.signable, quiz: !!s.quiz,
                     company_level: !!s.company_level,
+                    /* Une pièce n'a PAS de document généré : son état ne peut pas venir de
+                       `docStatus`, qui vaudrait « à faire » à vie. La feuille de route le lisait
+                       ainsi et affichait « à faire » sous une pièce pourtant validée. */
+                    piece: !!s.piece,
+                    pieceStatus: s.pieceStatus || null,
                     status: s.docStatus || 'A_FAIRE',
                 }));
                 const signable = parc.steps.filter((s) => s.signable || s.quiz);

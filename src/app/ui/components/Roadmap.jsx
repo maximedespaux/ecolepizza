@@ -7,6 +7,17 @@ const TAG = { todo: "À faire", progress: "En cours", done: "Terminé" };
 
 /** État d'une étape à partir du statut du document. */
 function stepState(doc) {
+  /* UNE PIÈCE N'A PAS DE DOCUMENT GÉNÉRÉ : son état vient de son dépôt, pas d'un
+     `status`. Sans ce cas, elle tombait dans la règle générale — `status` valant « à faire »
+     à vie — et la feuille de route affichait « à faire » sous une carte d'identité pourtant
+     validée, pendant que le parcours du dossier, lui, la donnait terminée.
+     Refusée ⇒ « à faire » : il y a bien quelque chose à refaire, et le motif se lit dans la
+     carte des pièces du dossier, pas ici. */
+  if (doc.piece) {
+    if (doc.pieceStatus === "VALIDEE") return "done";
+    if (doc.pieceStatus === "DEPOSEE") return "progress";
+    return "todo";
+  }
   if (doc.status === "SIGNE") return "done";
   if (doc.stagiaireSign) {
     return ["ENVOYE", "CONSULTE", "GENERE"].includes(doc.status) ? "progress" : "todo";
