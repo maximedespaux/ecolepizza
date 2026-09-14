@@ -185,7 +185,14 @@ SELECT uuid(), c.organization_id, c.id, 'VF', v.texte, v.pourquoi, d.id, v.repon
 /* ── 6. Le même chapitre, recopié vers RS7404 ───────────────────────────────────────────── */
 /* Certification professionnelle : quiconque manipule des denrées est tenu à ces règles. On
    repasse par la copie en base plutôt que de réécrire les douze questions — deux textes à
-   maintenir pour un même contenu, ce serait la faute qu'on cherche justement à éviter. */
+   maintenir pour un même contenu, ce serait la faute qu'on cherche justement à éviter.
+
+   À QUOI SERT LA TABLE DE CORRESPONDANCE CI-DESSOUS. À relier chaque question d'origine à sa
+   copie, pour que ses OPTIONS puissent suivre. Les douze questions écrites plus haut sont
+   toutes en VRAI/FAUX et n'en portent aucune — mais si ce chapitre existait déjà, créé à la
+   main avec des QCM, ceux-ci seraient copiés SANS leurs choix : des questions à zéro réponse,
+   que rien ne signalerait ni à l'écran ni en base. Sans la table, on ne saurait pas quelle
+   nouvelle question porte quelles options, `uuid()` étant engendré à la volée. */
 CREATE TABLE IF NOT EXISTS _quest_copie_hygiene (
     ancienne_question uuid NOT NULL,
     nouvelle_question uuid NOT NULL,
@@ -223,5 +230,12 @@ SELECT m.nouvelle_question, q.organization_id, cible.id, q.type, q.text, q.expla
   JOIN quest_question q ON q.id = m.ancienne_question
   JOIN quest_chapter cible ON cible.title = 'Hygiène alimentaire'
   JOIN training_program p ON p.id = cible.program_id AND p.code = 'RS7404';
+
+/* Les options, s'il y en a — cf. le commentaire de la table ci-dessus. Rien à copier pour des
+   questions VRAI/FAUX ; tout à copier si le chapitre en contenait d'autres. */
+INSERT INTO quest_option (id, question_id, sort_order, text, match_text, is_correct)
+SELECT uuid(), m.nouvelle_question, o.sort_order, o.text, o.match_text, o.is_correct
+  FROM _quest_copie_hygiene m
+  JOIN quest_option o ON o.question_id = m.ancienne_question;
 
 DROP TABLE IF EXISTS _quest_copie_hygiene;

@@ -100,6 +100,45 @@ test('douze questions d\'hygiène, chacune avec sa réponse et son explication',
     assert.strictEqual(reponses, 12, 'chaque question vrai/faux doit porter sa réponse');
 });
 
+test('toute copie de questions emporte leurs options', () => {
+    /* LE DÉFAUT QUE CE TEST GÈLE. Le bloc d'hygiène créait une table de correspondance
+       ancienne → nouvelle question, s'en servait pour poser les questions… et s'arrêtait là.
+       Or cette table n'existe QUE pour que les options suivent : sans leur copie, elle ne
+       faisait qu'un travail que `uuid()` aurait fait en ligne.
+
+       Inoffensif tant que les questions sont en VRAI/FAUX — elles ne portent aucune option —
+       mais si le chapitre existait déjà, créé à la main avec des QCM, ils auraient été copiés
+       SANS leurs choix. Des questions à zéro réponse, que rien ne signale : ni erreur SQL, ni
+       message à l'écran.
+
+       L'INVARIANT : toute table de correspondance qui sert à insérer des questions doit servir
+       aussi à insérer leurs options.
+
+       LE RAISONNEMENT SE FAIT PAR INSTRUCTION, et c'est le cœur du test. Une première version
+       cherchait `INSERT INTO quest_option[\s\S]*?FROM _quest_copie_hygiene` sur le fichier
+       entier : le quantificateur traversait les instructions et attrapait le `FROM
+       _quest_copie_hygiene` du bloc de QUESTIONS, depuis un `INSERT INTO quest_option` situé
+       cent lignes plus haut. Le test restait vert alors que la copie d'options avait été
+       retirée — il ne prouvait rien. */
+    const sansChaines = sansCommentaires(lire(ALLER)).replace(/'(?:[^']|'')*'/g, "''");
+    const instructions = sansChaines.split(';').filter((x) => x.trim());
+
+    const tableDe = (st) => (st.match(/FROM\s+(_quest_copie_\w+)/) || [])[1];
+    const copiesQuestions = new Set(
+        instructions.filter((st) => /INSERT INTO quest_question/.test(st)).map(tableDe).filter(Boolean)
+    );
+    const copiesOptions = new Set(
+        instructions.filter((st) => /INSERT INTO quest_option/.test(st)).map(tableDe).filter(Boolean)
+    );
+
+    assert.ok(copiesQuestions.size >= 2,
+        `attendu au moins deux copies de questions par correspondance, trouvé ${copiesQuestions.size}`);
+    for (const t of copiesQuestions) {
+        assert.ok(copiesOptions.has(t),
+            `${t} sert à copier des questions mais jamais leurs options : un QCM y perdrait ses choix`);
+    }
+});
+
 test('le revert retire les deux formations visées, et JAMAIS la source', () => {
     const sql = sansCommentaires(lire(RETOUR));
     assert.match(sql, /DELETE c FROM quest_chapter c/);
