@@ -114,20 +114,26 @@ test('sans les statuts de pièces, le parcours se fige — le défaut du suivi',
 
 /* ------------------------------------------------------------------ contrats lus au source */
 
+/* LE CALCUL A DÉMÉNAGÉ dans `lib/avancement.js` : le tableau de bord et la page session en
+   ont besoin aussi, et n'ont pas les mêmes droits que le suivi. Ces assertions suivent le
+   code, elles ne le suivaient pas par hasard — c'est bien ce fichier qui porte la règle. */
+const AVANCEMENT = fs.readFileSync(path.join(__dirname, '..', 'lib/avancement.js'), 'utf8');
 const SUIVI = fs.readFileSync(path.join(__dirname, '..', 'controllers/suivi.controller.js'), 'utf8');
 const ROADMAP = fs.readFileSync(
     path.join(__dirname, '..', '..', 'app/ui/components/Roadmap.jsx'), 'utf8');
 
 test('le suivi Qualiopi passe les statuts de pièces au calcul', () => {
-    assert.match(SUIVI, /computeDocParcours\(\{ steps, docs, pieces: piecesParDossier\.get\(e\.enrollment_id\) \|\| \{\} \}\)/,
+    assert.match(AVANCEMENT, /computeDocParcours\(\{ steps, docs, pieces: piecesParDossier\.get\(e\.enrollment_id\) \|\| \{\} \}\)/,
         'sans `pieces`, le pourcentage de conformité plafonne à la première pièce du parcours');
-    assert.match(SUIVI, /FROM piece_depot WHERE organization_id = \?/,
-        'les dépôts se lisent en UNE requête pour toute la boucle, pas une par dossier');
+    assert.match(AVANCEMENT, /FROM piece_depot WHERE organization_id = \?/,
+        'les dépôts se lisent en UNE requête pour toute la série, pas une par dossier');
+    assert.match(SUIVI, /avancementDossiers\(conn, req\.user\.organization_id, enrollments, \{ avecDocuments: true \}\)/,
+        'le suivi doit passer par le calcul partagé');
 });
 
 test('la feuille de route lit l\'état d\'une pièce, pas un statut de document', () => {
     assert.match(ROADMAP, /if \(doc\.piece\) \{/);
     assert.match(ROADMAP, /doc\.pieceStatus === "VALIDEE"\) return "done"/);
-    assert.match(SUIVI, /pieceStatus: s\.pieceStatus \|\| null,/,
-        'le suivi doit transmettre l\'état de la pièce à la feuille de route');
+    assert.match(AVANCEMENT, /pieceStatus: s\.pieceStatus \|\| null,/,
+        'la feuille de route doit recevoir l\'état de la pièce');
 });

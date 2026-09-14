@@ -3,14 +3,14 @@ import { Link } from "react-router-dom";
 import { getStagiaires, getFormations, getSessions, getEnrollments, getSales, getAudit, getOrganisation, getInvoices, getPartenaires } from "../api/apiClient.js";
 import Card from "../components/Card.jsx";
 import DataTable from "../components/DataTable.jsx";
-import Badge from "../components/Badge.jsx";
 import Skeleton from "../components/Skeleton.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js";
 import { auditLabel } from "../lib/auditLabels.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
-import { scoreBadge, euro, colorOf, dateHeure } from "../lib/format.js";
+import { euro, colorOf, dateHeure } from "../lib/format.js";
+import ProgressPct from "../components/ProgressPct.jsx";
 
 const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "-");
 
@@ -124,9 +124,12 @@ function Dashboard() {
         const inv = val(iv, { data: [], totals: {} });
         const aRelancer = (inv.data || []).filter((i) =>
           i.status === "IMPAYEE" || (i.status === "EMISE" && i.due_date && i.due_date < todayStr));
-        // Un dossier incomplet est celui qui n'atteint pas 100 : c'est le seuil de l'audit,
-        // pas une moyenne à surveiller.
-        const incomplets = activeEnr.filter((x) => Number(x.conformite_score) < 100);
+        /* Un dossier incomplet est celui qui n'atteint pas 100 % : c'est le seuil de l'audit,
+           pas une moyenne à surveiller.
+           LE TEST PORTAIT SUR `conformite_score`, qui vaut « ROUGE » — une CHAÎNE. `Number()`
+           en tirait NaN, et `NaN < 100` est faux : le compte restait à zéro quoi qu'il arrive,
+           et la vignette « dossiers à compléter » ne s'affichait jamais. */
+        const incomplets = activeEnr.filter((x) => (Number(x.percent) || 0) < 100);
         const imminentes = activeSessions.filter((sess) =>
           sess.start_date && sess.start_date >= todayStr && sess.start_date <= j7Str);
 
@@ -285,8 +288,13 @@ function Dashboard() {
             <p className="lead" style={{ margin: 0 }}>Aucun dossier pour le moment.</p>
           ) : recent.map((e) => (
             <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: "1px solid var(--border-soft)" }}>
-              <span style={{ flex: 1 }}>{e.first_name} {e.last_name}, {e.program_title || "Formation"}</span>
-              <Badge tone={scoreBadge(e.conformite_score)}>{e.conformite_score}</Badge>
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {e.first_name} {e.last_name}, {e.program_title || "Formation"}
+              </span>
+              {/* L'AVANCEMENT RÉEL, pas `conformite_score` : cette colonne est écrite « ROUGE »
+                  à l'inscription et n'est jamais recalculée. Les cinq dossiers de l'école y
+                  étaient tous à « ROUGE » pour un avancement de 31, 0, 19, 44 et 19 %. */}
+              <ProgressPct percent={e.percent} score={e.score} />
             </div>
           ))}
         </Card>

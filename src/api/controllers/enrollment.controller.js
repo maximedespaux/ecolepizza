@@ -6,6 +6,7 @@ const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../
 const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
+const { avancementDossiers } = require('../lib/avancement.js');
 
 const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
 
@@ -21,8 +22,11 @@ const getEnrollments = async (req, res) => {
         const [results] = await conn.query(
             `SELECT e.id, e.organization_id, e.learner_id, e.session_id, e.company_id,
                     e.financing, e.crm_stage, e.conformite_score, e.created_at,
-                    l.first_name, l.last_name,
-                    p.code AS program_code, p.title AS program_title,
+                    l.first_name, l.last_name, l.opco,
+                    p.id AS program_id, p.code AS program_code, p.title AS program_title,
+                    /* Pour l'avancement réel, calculé plus bas : le parcours dépend du code RS
+                       et du volet hygiène de la formation. */
+                    p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs,
                     s.year, s.week,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
@@ -60,6 +64,22 @@ const getEnrollments = async (req, res) => {
                 e.crm_stage = target;
             }
         }
+        /* AVANCEMENT RÉEL DE CHAQUE DOSSIER. La colonne `conformite_score` que renvoyait cette
+           liste est écrite « ROUGE » à l'inscription et n'est JAMAIS recalculée — mesuré en
+           production : cinq dossiers stockés à « ROUGE » pour un avancement réel de 31, 0, 19,
+           44 et 19 %. Le tableau de bord affichait donc une constante.
+           `avecDocuments` reste à faux : une pastille de pourcentage n'a que faire de la
+           feuille de route, qui est le gros de la charge utile. */
+        const avancement = await avancementDossiers(conn, req.user.organization_id,
+            results.map((e) => ({ ...e, enrollment_id: e.id, enr_company_id: e.company_id })));
+        for (const e of results) {
+            const a = avancement.get(e.id);
+            e.percent = a ? a.percent : 0;
+            e.done = a ? a.done : 0;
+            e.total = a ? a.total : 0;
+            e.score = a ? a.score : 'ROUGE';
+        }
+
         res.json({ data: results });
     } catch (err) {
         console.error('Erreur récupération dossiers :', err);

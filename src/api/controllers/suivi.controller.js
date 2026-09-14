@@ -1,5 +1,6 @@
 const db = require('../config/database.js');
 const { computeDocParcours, companyParcours } = require('../lib/parcours.js');
+const { avancementDossiers } = require('../lib/avancement.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
@@ -36,98 +37,17 @@ const getSuivi = async (req, res) => {
              WHERE e.organization_id = ?`,
             [req.user.organization_id]
         );
-        // Conditions + faits des dossiers chargés une seule fois pour toute la boucle.
-        const condById = await loadConditionMap(conn, req.user.organization_id);
-        const eqMap = equivalenceMap(await loadEquivalences(conn, req.user.organization_id));
-        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id, 'condition');
-        const factsMap = await loadDossierFactsMap(
-            conn, req.user.organization_id, enrollments.map((e) => e.enrollment_id), fieldCatalog);
-
-        /* STATUT DES PIÈCES DÉPOSÉES, pour TOUS les dossiers en une seule requête.
-           Il manquait ici : `computeDocParcours` était appelé sans `pieces`, si bien qu'une
-           étape « pièce » y était toujours évaluée contre un objet vide, donc jamais validée.
-           Comme l'avancement s'arrête à la PREMIÈRE étape non faite, le pourcentage de
-           conformité plafonnait à la première pièce du parcours — une carte d'identité en
-           deuxième position figeait tout le dossier à 10 %, quoi que l'école fasse ensuite.
-           La fiche dossier, elle, passait bien `pieces` : les deux écrans se contredisaient.
-           Une requête pour la boucle entière, pas une par dossier : ce tableau porte tous les
-           dossiers de l'organisme. */
-        let piecesParDossier = new Map();
-        try {
-            const [pd] = await conn.query(
-                'SELECT enrollment_id, piece_type_id, statut FROM piece_depot WHERE organization_id = ?',
-                [req.user.organization_id]);
-            for (const r of pd) {
-                if (!piecesParDossier.has(r.enrollment_id)) piecesParDossier.set(r.enrollment_id, {});
-                piecesParDossier.get(r.enrollment_id)[r.piece_type_id] = r.statut;
-            }
-        } catch (err) {
-            // Migration 127 non jouée : aucune pièce, le parcours reste lisible sans elles.
-            if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err;
-        }
-
-        // Le parcours « à l'arrivée via une entreprise » vit dans lib/parcours.js, partagé
-        // avec la fiche dossier et le tableau du Pipeline.
-        const orgId = req.user.organization_id;
-        // formationSteps par formation (toutes les étapes candidates), en cache.
-        const allStepsCache = new Map(); // program_id -> allSteps
-        async function allStepsFor(program) {
-            if (allStepsCache.has(program.id)) return allStepsCache.get(program.id);
-            const all = await formationSteps(conn, orgId, program);
-            allStepsCache.set(program.id, all);
-            return all;
-        }
+        /* LE CALCUL D'AVANCEMENT VIT DANS `lib/avancement.js` : le tableau de bord et la page
+           session en ont besoin aussi, et ils n'ont pas les mêmes droits que cet écran —
+           `/api/suivi` est réservé aux rôles d'audit, un formateur peut ouvrir une session.
+           Une seule implémentation, trois appelants. */
+        const avancement = await avancementDossiers(conn, req.user.organization_id, enrollments, { avecDocuments: true });
 
         const dossiers = [];
         for (const e of enrollments) {
-            // Parcours = celui de la formation (Parcours documentaire), filtré aux
-            // conditions du dossier, et progression réelle du stagiaire.
-            let documents = [], score = 'ROUGE', signed = 0, toSign = 0, percent = 0, done = 0, total = 0;
-            if (e.program_id) {
-                const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
-                const ctx = {
-                    financing: e.financing, rsCode: e.program_rs, hygiene: !!e.program_hygiene,
-                    jours: e.program_days || 1, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
-                    ...(factsMap.get(e.enrollment_id) || {}),
-                };
-                let steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
-                const [docs] = await conn.query(
-                    `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id
-                     FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
-                     WHERE df.enrollment_id = ?
-                     ORDER BY gd.created_at DESC`,
-                    [e.enrollment_id]
-                );
-                // Dossier envoyé par une entreprise : même parcours que l'entreprise
-                // (section company_steps, TOUTES les étapes) + statut des documents de
-                // GROUPE rattaché.
-                const ent = await companyParcours(conn, orgId,
-                    { programId: program.id, companyId: e.enr_company_id, sessionId: e.session_id },
-                    () => allStepsFor(program));
-                if (ent.steps) steps = ent.steps;
-                if (ent.docs.length) docs.push(...ent.docs);
-                const parc = computeDocParcours({ steps, docs, pieces: piecesParDossier.get(e.enrollment_id) || {} });
-                total = parc.steps.length;
-                done = parc.currentIndex;
-                percent = parc.percent;
-                // Format attendu par la feuille de route (Roadmap).
-                documents = parc.steps.map((s, i) => ({
-                    num: i + 1, type: s.key, label: s.label,
-                    stagiaireSign: !!s.signable, quiz: !!s.quiz,
-                    company_level: !!s.company_level,
-                    /* Une pièce n'a PAS de document généré : son état ne peut pas venir de
-                       `docStatus`, qui vaudrait « à faire » à vie. La feuille de route le lisait
-                       ainsi et affichait « à faire » sous une pièce pourtant validée. */
-                    piece: !!s.piece,
-                    pieceStatus: s.pieceStatus || null,
-                    status: s.docStatus || 'A_FAIRE',
-                }));
-                const signable = parc.steps.filter((s) => s.signable || s.quiz);
-                toSign = signable.length;
-                signed = signable.filter((s) => s.docStatus === 'SIGNE').length;
-                const anyHandled = parc.steps.some((s) => ['GENERE', 'ENVOYE', 'CONSULTE', 'SIGNE'].includes(s.docStatus));
-                score = total > 0 && done >= total ? 'VERT' : (done > 0 || anyHandled) ? 'ORANGE' : 'ROUGE';
-            }
+            const a = avancement.get(e.enrollment_id)
+                || { percent: 0, done: 0, total: 0, score: 'ROUGE', signed: 0, toSign: 0, documents: [] };
+            const { documents, score, signed, toSign, percent, done, total } = a;
 
             dossiers.push({
                 enrollment_id: e.enrollment_id,
