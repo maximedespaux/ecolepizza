@@ -14,7 +14,10 @@ import { dateHeure } from "../lib/format.js";
  */
 const ETAT = { VALIDEE: ["Validée", "g"], DEPOSEE: ["À vérifier", "a"], REFUSEE: ["Refusée", "r"], ATTENDUE: ["À fournir", "n"] };
 
-export default function PiecesReview({ enrollmentId }) {
+/* `refresh` : un compteur que l'appelant incrémente après avoir déposé une pièce POUR le
+   stagiaire. Sans lui, la carte garderait l'état d'avant le dépôt — la pièce apparaîtrait
+   encore « à fournir » alors qu'elle vient d'arriver, et il faudrait recharger la page. */
+export default function PiecesReview({ enrollmentId, refresh }) {
   const [pieces, setPieces] = useState(null);
   const [erreur, setErreur] = useState(null);
 
@@ -22,7 +25,7 @@ export default function PiecesReview({ enrollmentId }) {
     if (!enrollmentId) { setPieces([]); return; }
     getDossierPieces(enrollmentId).then((r) => setPieces(r.data || [])).catch(() => setPieces([]));
   }
-  useEffect(() => { load(); }, [enrollmentId]);
+  useEffect(() => { load(); }, [enrollmentId, refresh]);
 
   async function decider(depotId, statut) {
     let motif = "";

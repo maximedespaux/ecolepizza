@@ -203,10 +203,16 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
               besoin naît justement quand personne n'a rien généré et que la convention revient
               signée par courriel. Écarté sur un QCM — un questionnaire ne se remplace pas par un
               fichier : sans réponses enregistrées, il ne prouve rien et ne se rejoue pas. */}
+          {/* LE MOT CHANGE PARCE QUE LA DESTINATION CHANGE. Une pièce ne rejoint pas les
+              documents du dossier mais le circuit des pièces justificatives, où elle attend
+              d'être vérifiée : annoncer « importer un document » ferait chercher le fichier
+              au mauvais endroit. */}
           {onImport && !String(step.key || "").startsWith("quiz:") && (
             <button className="btn ghost" onClick={() => onImport(step)}
-              title="Rattacher à cette étape un document reçu par e-mail ou scanné">
-              Importer un document reçu
+              title={step.piece
+                ? "Déposer ici une pièce reçue par e-mail ou scannée — elle restera à vérifier"
+                : "Rattacher à cette étape un document reçu par e-mail ou scanné"}>
+              {step.piece ? "Déposer la pièce reçue" : "Importer un document reçu"}
             </button>
           )}
           {onSignLink && step.docId && (
