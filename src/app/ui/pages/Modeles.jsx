@@ -8,7 +8,7 @@ import { getTemplates, saveTemplate, deleteTemplate, resetTemplate, duplicateTem
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
   reorderEmargementTemplates,
   getPieceTypes, createPieceType, updatePieceType, deletePieceType,
-  uploadTemplate } from "../api/apiClient.js";
+  uploadTemplate, API_BASE_URL } from "../api/apiClient.js";
 import { EMARG_DEFAULTS } from "./EmargementEditor.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -130,6 +130,7 @@ function Modeles() {
   const condBySlug = Object.fromEntries(conditions.map((c) => [c.slug, c]));
   const fichierRef = useRef(null);              // sélecteur de PDF, caché
   const [slugFichier, setSlugFichier] = useState(null); // modèle visé par le prochain envoi
+  const [apercu, setApercu] = useState(null);           // modèle figé montré en aperçu
 
   /* JOINDRE UN PDF. Le sélecteur de fichier est unique et caché : un `<input type="file">`
      par ligne en ferait vingt-deux, dont vingt et un inutiles à chaque instant. On mémorise
@@ -365,9 +366,20 @@ function Modeles() {
                       qu'un corps est envoyé) : mettre ce bouton en avant reviendrait à poser un
                       piège, où l'on croit retoucher le livret et où l'on débranche son PDF. */}
                   {estFige(t) ? (
-                    <button className="btn sm primary" disabled={busy === t.slug}
-                      title={`Remplacer le PDF joint${t.file_name ? ` (${t.file_name})` : ""}`}
-                      onClick={() => demanderFichier(t)}>Remplacer le PDF</button>
+                    <>
+                      {/* VOIR AVANT DE REMPLACER. Un modèle figé n'a pas d'éditeur où l'on
+                          constaterait ce qu'il contient : sans ce bouton, la seule façon de
+                          savoir quel PDF est joint serait de générer le document sur un
+                          stagiaire. Le nom du fichier ne suffit pas — deux versions d'un livret
+                          portent le même. */}
+                      <button className="btn sm ghost" title="Voir le PDF joint"
+                        onClick={() => setApercu(t)} aria-label={`Voir le PDF de ${t.label}`}>
+                        <Icon name="eye" size={15} />
+                      </button>
+                      <button className="btn sm primary" disabled={busy === t.slug}
+                        title={`Remplacer le PDF joint${t.file_name ? ` (${t.file_name})` : ""}`}
+                        onClick={() => demanderFichier(t)}>Remplacer le PDF</button>
+                    </>
                   ) : (
                     <button className="btn sm primary" title={estEmarg(t) ? "Éditer la mise en page" : "Ouvrir l'éditeur de document"}
                       onClick={() => navigate(estEmarg(t) ? `/modeles/emargement/${t.id}` : `/modeles/${t.slug}/editeur`)}>Éditer</button>
@@ -451,6 +463,36 @@ function Modeles() {
       )}
 
       {view === "equivalences" && <EquivalencesPanel onStatus={setStatus} />}
+
+      {/* APERÇU DU PDF JOINT. Le cadre pointe la route du modèle : le cookie de session part
+          avec la requête, l'API étant servie sur la même origine. Portail vers `document.body`
+          — la ligne vit dans une `<Card>`, et un voile `position:fixed` se recentre sur tout
+          ancêtre porteur d'une transformation. */}
+      {apercu && createPortal(
+        <div className="overlay" onClick={() => setApercu(null)}>
+          <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+            <div className="mhead">
+              <h3 style={{ fontSize: 17 }}>{apercu.label}</h3>
+              <button className="x" onClick={() => setApercu(null)} aria-label="Fermer">×</button>
+            </div>
+            <div className="mbody" style={{ padding: 0, background: "var(--surface3)" }}>
+              <div className="hint" style={{ padding: "10px 14px" }}>
+                PDF joint{apercu.file_name ? ` — ${apercu.file_name}` : ""}. C'est ce fichier, tel
+                quel, qui est remis au stagiaire : il ne dépend ni du dossier ni des jetons.
+              </div>
+              <iframe src={`${API_BASE_URL}/templates/${apercu.slug}/file`}
+                title={`PDF joint : ${apercu.label}`} className="doc-pdf-frame" />
+            </div>
+            <div className="mfoot">
+              <button className="btn ghost" onClick={() => setApercu(null)}>Fermer</button>
+              <button className="btn" onClick={() => { const t = apercu; setApercu(null); demanderFichier(t); }}>
+                Remplacer le PDF
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {editing && (
         <StepModal

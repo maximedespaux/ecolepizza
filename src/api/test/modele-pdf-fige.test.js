@@ -25,11 +25,13 @@ const path = require('path');
 
 const cheminDb = require.resolve('../config/database.js');
 let dernierUpsert = null;
+let ligneModele = null;          // ce que la base renvoie pour le modèle interrogé
 const faux = {
     promise: () => ({
         query: async (sql, params) => {
             if (/^\s*SELECT id FROM document_template/i.test(sql)) return [[]];        // pas encore de ligne
             if (/^\s*INSERT INTO document_template/i.test(sql)) { dernierUpsert = { sql, params }; return [{}]; }
+            if (/SELECT kind, file, name, mime FROM document_template/i.test(sql)) return [ligneModele ? [ligneModele] : []];
             return [[]];
         },
     }),
@@ -37,7 +39,7 @@ const faux = {
 };
 require.cache[cheminDb] = { id: cheminDb, filename: cheminDb, loaded: true, exports: faux };
 
-const { uploadTemplate } = require('../controllers/template.controller.js');
+const { uploadTemplate, downloadTemplate } = require('../controllers/template.controller.js');
 
 const requete = (nom, buffer) => ({
     params: { slug: 'livret-accueil' },
@@ -79,6 +81,39 @@ test('un format non géré est refusé avant toute écriture', async () => {
     await uploadTemplate(requete('livret.odt', Buffer.from('quoi que ce soit')), res);
     assert.strictEqual(res.code, 422);
     assert.strictEqual(dernierUpsert, null, 'rien ne doit être écrit');
+});
+
+function entetesDe(slug) {
+    const e = {};
+    const res = {
+        set: (k, v) => { e[k] = v; return res; },
+        send: (b) => { e._corps = b; return res; },
+        status: () => res, json: () => res,
+    };
+    return downloadTemplate({ params: { slug }, user: { organization_id: 'o1' } }, res).then(() => e);
+}
+
+test('le PDF est servi sous SON type, et en ligne', async () => {
+    /* LE DÉFAUT : `downloadTemplate` posait l'en-tête .docx EN DUR — type MIME de document
+       Word et extension .docx — parce qu'un seul format existait quand il a été écrit. Servi
+       ainsi, le livret d'accueil devenait un fichier que rien n'ouvre. Et `attachment` le
+       téléchargeait au lieu de l'afficher, ce qui viderait de son sens le bouton d'aperçu :
+       un cadre ne rend que ce qu'on lui sert EN LIGNE. */
+    ligneModele = { kind: 'pdf', file: Buffer.from('%PDF-1.7'), name: 'livret.pdf', mime: 'application/pdf' };
+    const e = await entetesDe('livret-accueil');
+    assert.strictEqual(e['Content-Type'], 'application/pdf');
+    assert.match(e['Content-Disposition'], /^inline;/,
+        'un PDF doit être servi en ligne, sinon l\'aperçu ne peut rien afficher');
+    assert.match(e['Content-Disposition'], /livret\.pdf/);
+});
+
+test('un .docx reste téléchargé, pas affiché', async () => {
+    /* Un document Word ne se rend pas dans un navigateur : le proposer en ligne n'ouvrirait
+       qu'un cadre vide, ou un téléchargement déguisé. */
+    ligneModele = { kind: 'docx', file: Buffer.from('PK'), name: 'contrat.docx', mime: null };
+    const e = await entetesDe('contrat');
+    assert.match(e['Content-Disposition'], /^attachment;/);
+    assert.match(e['Content-Type'], /wordprocessingml/);
 });
 
 /* ------------------------------------------------------------------ contrats lus au source */
@@ -148,11 +183,25 @@ test('l\'aperçu montre le fichier au lieu de régénérer le modèle', () => {
         'les deux provenances partagent le même affichage');
 });
 
+test('un modèle figé se laisse regarder avant d\'être remplacé', () => {
+    /* Sans ce bouton, la seule façon de savoir QUEL PDF est joint serait de générer le
+       document sur un stagiaire : un modèle figé n'a pas d'éditeur où le constater, et le nom
+       du fichier ne suffit pas — deux versions d'un livret portent le même. */
+    assert.match(MODELES, /onClick=\{\(\) => setApercu\(t\)\}/, 'la ligne doit offrir un aperçu');
+    assert.match(MODELES, /templates\/\$\{apercu\.slug\}\/file/,
+        'le cadre doit pointer la route du fichier du modèle');
+    assert.match(MODELES, /apercu && createPortal\(/,
+        'la fenêtre passe par un portail : la ligne vit dans une <Card>, dont une transformation piégerait le voile');
+});
+
 test('« Éditer » n\'est pas le geste mis en avant sur un modèle figé', () => {
     /* LE PIÈGE : le serveur repasse l'étape en mode éditeur dès qu'un corps lui est envoyé
        (`if (b.body_html !== undefined) fields.kind = 'builder'`). Mettre « Éditer » en avant
        sur un livret invite donc à débrancher son PDF en croyant le retoucher. */
-    assert.match(MODELES, /estFige\(t\) \? \(\s*<button className="btn sm primary"[^>]*\s*[^>]*disabled=\{busy === t\.slug\}/,
+    const branche = MODELES.slice(MODELES.indexOf('{estFige(t) ? ('), MODELES.indexOf(') : ('));
+    assert.ok(branche.length > 100, 'branche du modèle figé introuvable');
+    assert.match(branche, /btn sm primary[\s\S]*Remplacer le PDF/,
         'sur un modèle figé, le bouton principal doit être « Remplacer le PDF »');
-    assert.match(MODELES, /Remplacer le PDF<\/button>/);
+    assert.doesNotMatch(branche, /editeur/,
+        'l\'éditeur HTML ne doit pas être le geste principal : y enregistrer débranche le PDF');
 });

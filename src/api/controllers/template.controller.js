@@ -89,6 +89,8 @@ async function documentSetForOrg(organizationId, ctx) {
  * Contenu du modèle (Buffer) pour un organisme + slug : fichier propre s'il
  * existe, sinon modèle par défaut fourni. null si aucune source.
  */
+const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
 async function getTemplateBuffer(organizationId, slug) {
     const [rows] = await db.promise().query(
         'SELECT file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
@@ -96,6 +98,33 @@ async function getTemplateBuffer(organizationId, slug) {
     );
     if (rows.length && rows[0].file) return rows[0].file; // Buffer
     return defaultTemplateBuffer(slug);
+}
+
+/* Le fichier d'un modèle AVEC son type et son nom. `getTemplateBuffer` ne rend que des octets,
+   ce qui suffisait tant qu'un seul format existait : le téléchargement posait alors l'en-tête
+   .docx en dur. Depuis qu'un modèle peut porter un PDF, cet en-tête écrit à l'avance servait le
+   livret d'accueil sous un type MIME de document Word, avec une extension .docx — un fichier
+   que rien n'ouvre. Le type doit venir de la ligne, pas d'une supposition. */
+async function getTemplateFile(organizationId, slug) {
+    const [rows] = await db.promise().query(
+        'SELECT kind, file, name, mime FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+        [organizationId, slug]
+    );
+    const row = rows[0];
+    if (row && row.file) {
+        const pdf = row.kind === 'pdf';
+        return {
+            buffer: row.file,
+            mime: row.mime || (pdf ? 'application/pdf' : MIME_DOCX),
+            nom: row.name || `${slug}.${pdf ? 'pdf' : 'docx'}`,
+            /* Un PDF s'AFFICHE : c'est tout l'intérêt du bouton d'aperçu, qui le montre dans un
+               cadre. Un .docx ne se rend pas dans un navigateur — le proposer en ligne
+               n'ouvrirait qu'un cadre vide, ou un téléchargement déguisé. */
+            enLigne: pdf,
+        };
+    }
+    const repli = defaultTemplateBuffer(slug);
+    return repli ? { buffer: repli, mime: MIME_DOCX, nom: `${slug}.docx`, enLigne: false } : null;
 }
 
 /** GET /api/templates — liste des étapes/modèles (statut + métadonnées). */
@@ -850,11 +879,11 @@ const uploadTemplate = async (req, res) => {
 const downloadTemplate = async (req, res) => {
     const { slug } = req.params;
     try {
-        const buf = await getTemplateBuffer(req.user.organization_id, slug);
-        if (!buf) return res.status(404).json({ message: 'Aucun modèle pour cette étape.' });
-        res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-        res.set('Content-Disposition', `attachment; filename="${slug}.docx"`);
-        res.send(buf);
+        const f = await getTemplateFile(req.user.organization_id, slug);
+        if (!f) return res.status(404).json({ message: 'Aucun modèle pour cette étape.' });
+        res.set('Content-Type', f.mime);
+        res.set('Content-Disposition', `${f.enLigne ? 'inline' : 'attachment'}; filename="${encodeURIComponent(f.nom)}"`);
+        res.send(f.buffer);
     } catch (err) {
         console.error('Erreur téléchargement modèle :', err);
         res.status(500).json({ error: 'Internal Server Error' });
