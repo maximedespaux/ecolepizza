@@ -114,6 +114,25 @@ test('aucun réglage par défaut ne pose « write » sur ces rubriques', () => {
     }
 });
 
+test('TOUTE rubrique accordable est rattachée à une rubrique côté écran', () => {
+    /* L'INVARIANT QUI AURAIT ÉVITÉ CE DÉFAUT. `/roles` manquait dans `SECTION_OF` : sans
+       rubrique, `modeForPath` rend `null`, le mode lecture seule ne s'applique pas, et la page
+       s'ouvre avec ses boutons vivants pour qui n'a que la consultation. Il clique, le serveur
+       refuse — et rien à l'écran ne lui avait dit qu'il ne pouvait pas.
+
+       Le bandeau « Lecture seule », l'extinction des boutons et l'interception des clics
+       dépendent TOUS de cette table. Une page absente n'est pas un trou de sécurité : c'est une
+       promesse faite à quelqu'un qui ne peut pas la tenir. */
+    const sectionOf = NAV.slice(NAV.indexOf('const SECTION_OF = {'));
+    const table = sectionOf.slice(0, sectionOf.indexOf('};'));
+    const chemins = [...NAV.matchAll(/\{ to: "(\/[a-z0-9-]+)"/g)].map((m) => m[1]);
+    assert.ok(chemins.length > 20, `trop peu d'entrées de menu trouvées : ${chemins.length}`);
+    for (const to of new Set(chemins)) {
+        assert.ok(table.includes(`"${to}": "`),
+            `${to} figure au menu mais n'est rattachée à aucune rubrique : le mode lecture seule ne s'y appliquera pas`);
+    }
+});
+
 test('« Équipe & accès » est devenue accordable', () => {
     /* Elle était retirée de la liste des rubriques délégables : on ne pouvait même pas la
        proposer en consultation. */

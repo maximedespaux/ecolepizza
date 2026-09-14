@@ -230,8 +230,18 @@ const SECTION_OF = {
   "/realisations": "/realisations", "/notions": "/notions",
   "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
+  /* `/demandes-boutique` manquait aussi : sa base API est pourtant cartographiée côté serveur
+     (`boutique`), si bien qu'un accès en lecture y était bien refusé en écriture par l'API,
+     mais la page s'ouvrait avec ses boutons vivants. Découvert par le test d'invariant. */
+  "/demandes-boutique": "/demandes-boutique", "/opcos": "/opcos",
+  "/reglages-partenaires": "/reglages-partenaires",
   "/comptabilite": "/comptabilite", "/carte": "/carte",
   "/reglages": "/reglages", "/reglages-mailing": "/reglages-mailing", "/reglages-facturation": "/reglages-facturation", "/modeles": "/modeles", "/equipe": "/equipe",
+  /* `/roles` MANQUAIT. Sans rubrique, `modeForPath` rend `null`, le mode lecture seule ne
+     s'applique pas, et la page s'ouvre avec ses boutons vivants pour qui n'a que la
+     consultation : il clique, et le serveur refuse. Le bandeau et les clics interceptés
+     dépendent tous les deux de cette ligne. */
+  "/roles": "/roles",
   "/audit": "/audit", "/suivi": "/suivi", "/qcm-resultats": "/qcm-resultats", "/dashboard": "/dashboard",
 };
 
