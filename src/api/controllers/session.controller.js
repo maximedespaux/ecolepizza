@@ -1,8 +1,7 @@
 const db = require('../config/database.js');
-const { computeDocParcours, companyParcours, companyStepSlugs } = require('../lib/parcours.js');
-const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
+const { companyStepSlugs } = require('../lib/parcours.js');
+const { formationSteps } = require('./formationProgram.controller.js');
 const { parseApplies } = require('../lib/documents.js');
-const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { notify } = require('./notification.controller.js');
 const { avancementDossiers } = require('../lib/avancement.js');
@@ -319,44 +318,40 @@ const getSessionBoard = async (req, res) => {
              ORDER BY l.last_name, l.first_name`,
             [req.params.id, req.user.organization_id]
         );
-        const condById = await loadConditionMap(conn, req.user.organization_id);
-        const fieldCatalog = await getEnabledFields(conn, req.user.organization_id, 'condition');
-        const factsMap = await loadDossierFactsMap(
-            conn, req.user.organization_id, enr.map((e) => e.enrollment_id), fieldCatalog);
+        /* LE CALCUL D'AVANCEMENT EST CELUI DE `lib/avancement.js`, comme le suivi, le tableau
+           de bord et la fiche session. Ce tableau en gardait une COPIE, et cette copie appelait
+           `computeDocParcours({ steps, docs })` — sans les statuts de pièces. Une étape « pièce »
+           y était donc évaluée contre rien, donc jamais franchie, et l'avancement s'arrêtant à
+           la première étape non faite, tout se figeait là.
+           Ce n'était pas qu'un pourcentage faux : `currentKey` désigne la COLONNE où tombe la
+           carte. Mesuré en production sur la session RS7404 — les quatre stagiaires affichés à
+           « 0 % (0/16) », empilés dans la toute première colonne, quand le suivi les donnait à
+           « 50 % (8/16) ». Le tableau était inutilisable pour cette formation.
+           Le fichier avait déjà dérivé une fois : un commentaire plus haut raconte qu'il était
+           « le SEUL des trois écrans » à ignorer le parcours entreprise. Une copie finit
+           toujours par diverger — celle-ci n'existe plus. */
+        const avancement = await avancementDossiers(conn, req.user.organization_id,
+            enr.map((e) => ({
+                enrollment_id: e.enrollment_id, financing: e.financing, opco: e.opco,
+                program_id: program.id, program_code: s.code, program_days: s.days,
+                program_hygiene: s.hygiene, program_rs: s.rs_code,
+                enr_company_id: e.company_id, session_id: e.session_id,
+            })));
 
-        const cards = [];
-        for (const e of enr) {
-            const ctx = {
-                financing: e.financing, rsCode: s.rs_code, hygiene: !!s.hygiene,
-                jours: s.days, agefice: (e.opco || '').toUpperCase() === 'AGEFICE',
-                ...(factsMap.get(e.enrollment_id) || {}),
-            };
-            let steps = await enrollmentSteps(conn, req.user.organization_id, program, ctx, condById, eqMap);
-            const [docs] = await conn.query(
-                `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id FROM generated_document gd
-                 JOIN document_formation df ON df.document_id = gd.id
-                 WHERE df.enrollment_id = ?
-                 ORDER BY gd.created_at DESC`,
-                [e.enrollment_id]
-            );
-            // Dossier envoyé par une entreprise : parcours plus court, et documents de groupe
-            // à compter. Ce tableau était le SEUL des trois écrans à l'ignorer — il montrait
-            // les mêmes dossiers à 1/14 quand le Suivi disait 1/2.
-            const ent = await companyParcours(conn, req.user.organization_id,
-                { programId: program.id, companyId: e.company_id, sessionId: e.session_id },
-                () => formationSteps(conn, req.user.organization_id, program));
-            if (ent.steps) steps = ent.steps;
-            if (ent.docs.length) docs.push(...ent.docs);
-            const parc = computeDocParcours({ steps, docs });
-            const column = parc.currentKey == null
+        const cards = enr.map((e) => {
+            const a = avancement.get(e.enrollment_id)
+                || { percent: 0, done: 0, total: 0, currentKey: null };
+            /* Étape courante inconnue (parcours terminé, ou clé absente des colonnes) : la carte
+               va dans la colonne finale « Terminé », ajoutée côté écran après les autres. */
+            const column = a.currentKey == null || !keyIndex.has(a.currentKey)
                 ? columns.length
-                : (keyIndex.has(parc.currentKey) ? keyIndex.get(parc.currentKey) : columns.length);
-            cards.push({
+                : keyIndex.get(a.currentKey);
+            return {
                 learner_id: e.learner_id, enrollment_id: e.enrollment_id,
                 name: `${e.last_name || ''} ${e.first_name || ''}`.trim(),
-                column, done: parc.currentIndex, total: steps.length, percent: parc.percent,
-            });
-        }
+                column, done: a.done, total: a.total, percent: a.percent,
+            };
+        });
 
         res.json({ data: {
             session: { id: s.id, code: s.code, title: s.title, year: s.year, week: s.week, start_date: s.start_date, end_date: s.end_date },
