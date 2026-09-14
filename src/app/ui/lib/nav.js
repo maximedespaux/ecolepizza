@@ -33,6 +33,16 @@ export const NAV = [
          Rangé en « Formation » : c'est la vie du groupe pendant le stage, pas de la relation
          commerciale. Ouvert au formateur, qui est en salle avec eux. */
       { to: "/communaute", ic: "message-circle", label: "Communauté", roles: STAFF },
+      /* LES OUTILS D'ATELIER, ouverts au bureau pour la MÊME raison que la Communauté juste
+         au-dessus : leurs API sont cadrées sur le COMPTE, pas sur une fiche stagiaire —
+         `/api/recipes/mine` répond 200 à un administrateur, qui possède déjà des recettes.
+         Seule la coquille d'écran les réservait à l'espace stagiaire, et la bascule vers cet
+         espace exige `has_learner` : un formateur sans fiche de stagiaire n'y entrait pas.
+         Absurde pour qui ENSEIGNE l'empâtement et doit préparer ses exemples. */
+      { to: "/empatements", ic: "wheat", label: "Empâtements", roles: STAFF },
+      { to: "/garnitures", ic: "list-checks", label: "Garnitures", roles: STAFF },
+      { to: "/realisations", ic: "pizza", label: "Réalisations", roles: STAFF },
+      { to: "/notions", ic: "book-open", label: "Notions & lexique", roles: STAFF },
     ],
   },
   {
@@ -136,6 +146,10 @@ export const PAGE_TITLES = {
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
   "/communaute": "Communauté",
+  "/empatements": "Empâtements",
+  "/garnitures": "Garnitures",
+  "/realisations": "Réalisations",
+  "/notions": "Notions & lexique",
   "/inventaire": "Inventaire",
   "/ventes": "Ventes de Matériels et Inventaire",
   "/demandes-boutique": "Demandes boutique",
@@ -212,6 +226,8 @@ const SECTION_OF = {
   "/stagiaires": "/stagiaires", "/entreprises": "/entreprises", "/sessions": "/sessions", "/formations": "/formations",
   "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
   "/communaute": "/communaute",
+  "/empatements": "/empatements", "/garnitures": "/garnitures",
+  "/realisations": "/realisations", "/notions": "/notions",
   "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   "/comptabilite": "/comptabilite", "/carte": "/carte",

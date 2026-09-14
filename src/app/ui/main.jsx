@@ -241,6 +241,16 @@ function AppRoutes() {
               partagé : il sait déjà distinguer le personnel (qui peut publier une annonce) du
               stagiaire. Deux chemins, une seule page. */}
           <Route path="communaute" element={<Guard nav="/communaute" roles={STAFF}><Communaute /></Guard>} />
+          {/* LES OUTILS D'ATELIER, mêmes composants que côté stagiaire. Leurs API sont cadrées
+              sur le COMPTE et non sur une fiche stagiaire : un administrateur possède déjà des
+              recettes, `/api/recipes/mine` lui répond. Seule la coquille d'écran les réservait
+              à l'espace stagiaire — et la bascule vers cet espace exige `has_learner`, qu'un
+              formateur n'a pas. Celui qui ENSEIGNE l'empâtement ne pouvait pas préparer ses
+              exemples dans l'outil qu'il fait utiliser. Deux chemins, une seule page. */}
+          <Route path="empatements" element={<Guard nav="/empatements" roles={STAFF}><PateWizard /></Guard>} />
+          <Route path="garnitures" element={<Guard nav="/garnitures" roles={STAFF}><GarnitureWizard /></Guard>} />
+          <Route path="realisations" element={<Guard nav="/realisations" roles={STAFF}><RealisationWizard /></Guard>} />
+          <Route path="notions" element={<Guard nav="/notions" roles={STAFF}><Notions /></Guard>} />
           <Route path="ventes" element={<Guard nav="/ventes" roles={ADMIN}><Ventes /></Guard>} />
           <Route path="inventaire" element={<Guard nav="/ventes" roles={ADMIN}><Inventaire /></Guard>} />
           <Route path="demandes-boutique" element={<Guard nav="/demandes-boutique" roles={ADMIN}><DemandesBoutique /></Guard>} />
