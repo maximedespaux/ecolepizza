@@ -1,5 +1,6 @@
 const db = require('../config/database.js');
 const { geocodeBatch } = require('../lib/geocode.js');
+const { resolveurBadges } = require('../lib/badges.js');
 
 // Déduit le département français à partir d'un code postal.
 function deptOf(zip) {
@@ -40,7 +41,7 @@ const getCarte = (req, res) => {
                  WHERE e.learner_id = l.id) AS formation_codes
           FROM learner l
          WHERE l.organization_id = ?`;
-    db.query(sql, [orgId], (err, rows) => {
+    db.query(sql, [orgId], async (err, rows) => {
         if (err) {
             console.error('Erreur carte :', err);
             return res.status(500).json({ error: 'Internal Server Error' });
@@ -48,6 +49,10 @@ const getCarte = (req, res) => {
         const map = new Map(); // dept -> { count, towns: Map }
         const points = [];
         let total = 0, ungeo = 0, geocoded = 0, pending = 0;
+
+        /* Chargé UNE fois avant la boucle : elle parcourt tous les stagiaires de l'organisme,
+           et une requête par point ferait un millier d'allers-retours pour la même table. */
+        const resoudre = await resolveurBadges(db.promise(), orgId);
 
         for (const r of rows) {
             const d = deptOf(r.zip_code);
@@ -63,8 +68,11 @@ const getCarte = (req, res) => {
             }
             if (r.lat != null && r.lng != null) {
                 geocoded++;
-                // Priorité à l'étiquette du stagiaire (1re du CSV), sinon niveau de sa formation.
-                const badges = (r.levels || '').split(',').map((s) => s.trim()).filter(Boolean);
+                /* Priorité à l'étiquette du stagiaire (1re du CSV), sinon niveau de sa formation.
+                   Traduite en code de formation : l'attribution a longtemps écrit le NIVEAU
+                   quand la formation en avait un, et l'info-bulle annonçait « RS » là où toute
+                   l'application dit « RS7404 ». */
+                const badges = (r.levels || '').split(',').map((s) => resoudre(s.trim())).filter(Boolean);
                 const formations = (r.formation_codes || '').split(',').map((s) => s.trim()).filter(Boolean);
                 points.push({
                     id: r.id,

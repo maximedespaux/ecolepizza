@@ -1,6 +1,7 @@
 const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
 const { computeDocParcours, companyParcours } = require('../lib/parcours.js');
+const { SQL_BADGE_FORMATION } = require('../lib/badges.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
@@ -173,7 +174,10 @@ const createEnrollment = async (req, res) => {
         );
         // Badge de la formation : son niveau si défini, sinon son code.
         const [[sess]] = await conn.query(
-            `SELECT COALESCE(NULLIF(p.level, ''), p.code) AS badge FROM training_session s
+            /* LE BADGE EST LE CODE DE LA FORMATION (cf. lib/badges.js). Il valait le NIVEAU
+               quand il existait : une seule formation sur neuf en a un, et elle était donc la
+               seule à ne jamais donner son code — un stagiaire RS7404 recevait « RS ». */
+            `SELECT ${SQL_BADGE_FORMATION} FROM training_session s
              JOIN training_program p ON p.id = s.program_id
              WHERE s.id = ? AND s.organization_id = ?`,
             [session_id, orgId]
