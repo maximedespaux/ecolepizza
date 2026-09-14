@@ -28,6 +28,10 @@ const ACTION_LABEL = {
     'document.pdf': ['Document généré (PDF)', B],
     'document.send': ['Document envoyé', B],
     'document.sign': ['Document signé', G],
+    /* IMPORTÉ, et le libellé le dit. L'étape passe à SIGNÉ et compte dans la conformité, mais
+       aucune signature électronique n'a eu lieu ici : « Document signé » au journal effacerait
+       justement la distinction que l'import doit préserver. */
+    'document.import': ['Document reçu et importé', B],
     'document.sign_link': ['Lien de signature émis', B],
     'document.delete': ['Document supprimé', R],
 

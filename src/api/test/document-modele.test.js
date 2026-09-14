@@ -42,7 +42,13 @@ test('le rendu codé en dur n\'existe plus dans le dépôt', () => {
 
 test('la consultation ne fabrique pas de corps sans modèle', () => {
     // getDocument passe par buildDocHtml, qui rend `null` quand le modèle manque.
-    const bloc = doc.slice(doc.indexOf('const getDocument'), doc.indexOf('const getDocument') + 3000);
+    /* ANCRE EXACTE (`const getDocument =`) et non le simple préfixe : `indexOf('const getDocument')`
+       attrapait la PREMIÈRE fonction dont le nom commence pareil — `getDocumentFile`, ajoutée
+       depuis pour relire un document importé — et le test lisait alors le mauvais corps. Un
+       préfixe n'identifie pas une fonction ; il en identifie une famille. */
+    const debut = doc.indexOf('const getDocument =');
+    assert.notStrictEqual(debut, -1, 'getDocument introuvable');
+    const bloc = doc.slice(debut, debut + 3000);
     assert.match(bloc, /const html = await buildDocHtml\(/,
         'le corps doit venir du modèle, via buildDocHtml');
     assert.match(bloc, /no_template:/,

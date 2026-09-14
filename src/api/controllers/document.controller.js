@@ -1,6 +1,9 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
+// Fichiers importés chiffrés AU REPOS, comme les pièces : une convention signée porte un nom,
+// une adresse et une image de signature.
+const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneOuNull } = require('../lib/colonnes.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
 const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc } = require('../lib/documents.js');
@@ -277,12 +280,22 @@ const listDocuments = async (req, res) => {
             `SELECT d.id, d.type, d.title, d.status,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at, d.signer_name,
-                    GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations
+                    GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations,
+                    /* Métadonnées du document IMPORTÉ — jamais la colonne bytes : quelques
+                       mégaoctets par ligne transformeraient la liste du dossier en
+                       téléchargement. L'écran a seulement besoin de savoir qu'il existe, et de
+                       quoi le nommer. (Pas d'accent grave ici : on est DANS un littéral de
+                       gabarit, il refermerait la chaîne.) */
+                    ${await colonneExiste(conn, 'document_fichier', 'document_id')
+                        ? 'fi.nom AS fichier_nom, fi.taille AS fichier_taille, fi.importe_le'
+                        : 'NULL AS fichier_nom, NULL AS fichier_taille, NULL AS importe_le'}
              FROM generated_document d
              LEFT JOIN document_formation df ON df.document_id = d.id
              LEFT JOIN enrollment e ON e.id = df.enrollment_id
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
+             ${await colonneExiste(conn, 'document_fichier', 'document_id')
+                 ? 'LEFT JOIN document_fichier fi ON fi.document_id = d.id' : ''}
              WHERE d.learner_id = ? AND d.organization_id = ?
              GROUP BY d.id
              ORDER BY d.created_at DESC`,
@@ -331,6 +344,115 @@ async function prepareLearnerDoc(conn, orgId, { learnerId, type, templateSlug, t
     if (type === 'FICHE_SEMAINE') await advanceEnrollments(conn, orgId, documentId, 'CONTACTE');
     return documentId;
 }
+
+/**
+ * POST /api/documents/import — rattache un document REÇU (courriel, scan) à son étape du dossier.
+ *
+ * POURQUOI. Le parcours fait signer dans l'application, mais certains documents reviennent
+ * autrement : un stagiaire sans accès, une entreprise qui renvoie la convention scannée, un OPCO
+ * qui écrit. L'étape restait « à faire » alors que le document existait — le dossier paraissait
+ * incomplet pendant que le classeur, lui, était complet.
+ *
+ * DEUX ENTRÉES, une seule route. Avec `document_id`, on rattache à une étape existante. Sans lui,
+ * l'étape n'a jamais été générée : on la crée par `prepareLearnerDoc`, c'est-à-dire par le MÊME
+ * chemin que le bouton « Générer ». Recopier cette préparation ici aurait fait diverger les deux
+ * (rattachement aux inscriptions, suppression des doublons non signés, avancement du CRM).
+ *
+ * L'ÉTAPE PASSE À SIGNÉ : le document signé fait foi, quel que soit le canal, et il doit compter
+ * dans le score de conformité — c'est le sens de la demande. Mais on n'écrit NI `signature_data`
+ * NI `signer_name` : aucune signature électronique n'a eu lieu ici, et en fabriquer la trace
+ * rendrait indiscernable ce qui ne doit surtout pas l'être. Qui a importé et quand sont
+ * enregistrés à côté, sur le fichier.
+ */
+const importDocumentFile = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const f = req.file;
+    if (!f || !f.buffer || !f.buffer.length) return res.status(422).json({ error: 'Aucun fichier reçu.' });
+    try {
+        const conn = db.promise();
+        let documentId = req.body.document_id || null;
+
+        if (documentId) {
+            const [[d]] = await conn.query(
+                'SELECT id FROM generated_document WHERE id = ? AND organization_id = ?', [documentId, orgId]);
+            if (!d) return res.status(404).json({ message: 'Document introuvable.' });
+        } else {
+            const { learner_id, type, template_slug, title } = req.body;
+            let enrIds = [];
+            try { enrIds = JSON.parse(req.body.enrollment_ids || '[]'); } catch { enrIds = []; }
+            if (!learner_id || !type || !enrIds.length) {
+                return res.status(422).json({ error: 'Stagiaire, type et inscription requis pour créer l\'étape.' });
+            }
+            const [[l]] = await conn.query('SELECT id FROM learner WHERE id = ? AND organization_id = ?', [learner_id, orgId]);
+            if (!l) return res.status(404).json({ message: 'Stagiaire introuvable.' });
+            /* Les inscriptions sont revérifiées contre CE stagiaire et CET organisme : sans ce
+               contrôle, un identifiant deviné rattacherait le document au dossier d'un autre. */
+            const [enr] = await conn.query(
+                'SELECT id FROM enrollment WHERE id IN (?) AND organization_id = ? AND learner_id = ?',
+                [enrIds, orgId, learner_id]);
+            if (!enr.length) return res.status(422).json({ error: 'Inscription introuvable pour ce stagiaire.' });
+            documentId = await prepareLearnerDoc(conn, orgId, {
+                learnerId: learner_id, type, templateSlug: template_slug || null, title,
+                enrollmentIds: enr.map((x) => x.id),
+            });
+        }
+
+        try {
+            // Réimporter REMPLACE : on corrige un mauvais envoi sans accumuler des versions dont
+            // personne ne saurait dire laquelle fait foi (d'où la clé unique, migration 145).
+            await conn.query('DELETE FROM document_fichier WHERE document_id = ?', [documentId]);
+            await conn.query(
+                `INSERT INTO document_fichier (id, document_id, nom, mime, bytes, taille, importe_par)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [crypto.randomUUID(), documentId, String(f.originalname || '').slice(0, 200),
+                 f.mimetype || 'application/pdf', encryptBytes(f.buffer), f.buffer.length, req.user.id || null]);
+        } catch (e) {
+            if (e && e.code === 'ER_NO_SUCH_TABLE') {
+                return res.status(409).json({ error: "Migration 145 non jouée : l'import de documents n'est pas encore disponible." });
+            }
+            throw e;
+        }
+
+        await conn.query(
+            "UPDATE generated_document SET status = 'SIGNE', signed_at = NOW() WHERE id = ? AND organization_id = ?",
+            [documentId, orgId]);
+        logAudit(req, 'document.import', 'GeneratedDocument', documentId);
+        res.status(201).json({ success: true, data: { id: documentId } });
+    } catch (err) {
+        console.error('Erreur import de document :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/documents/:id/fichier — renvoie le document IMPORTÉ (déchiffré à la volée).
+ * Jamais stocké ni renvoyé en clair ailleurs, comme les fichiers de pièces.
+ */
+const getDocumentFile = async (req, res) => {
+    try {
+        const conn = db.promise();
+        let rows = [];
+        try {
+            [rows] = await conn.query(
+                `SELECT f.nom, f.mime, f.bytes FROM document_fichier f
+                 JOIN generated_document d ON d.id = f.document_id
+                 WHERE f.document_id = ? AND d.organization_id = ?`,
+                [req.params.id, req.user.organization_id]);
+        } catch (e) {
+            if (e && e.code === 'ER_NO_SUCH_TABLE') return res.status(404).json({ message: 'Aucun fichier importé.' });
+            throw e;
+        }
+        const f = rows[0];
+        if (!f) return res.status(404).json({ message: 'Aucun fichier importé.' });
+        const clair = decryptBytes(f.bytes);
+        res.setHeader('Content-Type', f.mime || 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(f.nom || 'document')}"`);
+        res.send(clair);
+    } catch (err) {
+        console.error('Erreur lecture du document importé :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
 
 /**
  * POST /api/documents — prépare un document (statut A_FAIRE, non envoyé).
@@ -1117,4 +1239,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp };
+module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp };

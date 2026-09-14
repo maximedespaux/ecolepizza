@@ -82,7 +82,7 @@ function actionFor(s) {
  * la formation, dans l'ordre), détail de l'étape sélectionnée à droite.
  * `onOpenDoc(docId)` ouvre l'aperçu/signature ; `onGoto('documents')` remonte à la section Documents.
  */
-function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink }) {
+function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
@@ -198,6 +198,16 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
           {action && (
             <button className="btn primary" onClick={runAction}>{action.label}</button>
+          )}
+          {/* IMPORTER UN DOCUMENT REÇU. Proposé sur toute étape documentaire, générée ou NON : le
+              besoin naît justement quand personne n'a rien généré et que la convention revient
+              signée par courriel. Écarté sur un QCM — un questionnaire ne se remplace pas par un
+              fichier : sans réponses enregistrées, il ne prouve rien et ne se rejoue pas. */}
+          {onImport && !String(step.key || "").startsWith("quiz:") && (
+            <button className="btn ghost" onClick={() => onImport(step)}
+              title="Rattacher à cette étape un document reçu par e-mail ou scanné">
+              Importer un document reçu
+            </button>
           )}
           {onSignLink && step.docId && (
             <button className="btn ghost" onClick={() => onSignLink(step.docId)} title="Copier un lien pour que le représentant signe">🔗 Lien de signature</button>
