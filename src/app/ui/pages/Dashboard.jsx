@@ -288,8 +288,17 @@ function Dashboard() {
             <p className="lead" style={{ margin: 0 }}>Aucun dossier pour le moment.</p>
           ) : recent.map((e) => (
             <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: "1px solid var(--border-soft)" }}>
-              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {e.first_name} {e.last_name}, {e.program_title || "Formation"}
+              {/* DEUX LIGNES, comme la liste des inscrits d'une session et la revue des pièces.
+                  Sur une seule, la colonne ne laisse que ~296 px : le titre de formation le plus
+                  long de l'école y était coupé en plein mot, et le nom — la seule chose qu'on
+                  cherche dans « derniers dossiers » — se retrouvait à l'étroit. */}
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <b style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {e.first_name} {e.last_name}
+                </b>
+                <span style={{ display: "block", fontSize: 12, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {e.program_title || "Formation"}
+                </span>
               </span>
               {/* L'AVANCEMENT RÉEL, pas `conformite_score` : cette colonne est écrite « ROUGE »
                   à l'inscription et n'est jamais recalculée. Les cinq dossiers de l'école y
