@@ -1240,3 +1240,21 @@ export function deleteContribution(id) {
   return request(`/partenaires/contributions/${id}`, { method: "DELETE" });
 }
 
+
+/* ÉVALUATION PRATIQUE (migration 148) — la grille d'une formation, les notes d'une session.
+   Les POINTS ne sont jamais envoyés : on transmet la MESURE (un temps, une note, un geste
+   acquis) et le serveur applique le barème. Cf. api/lib/bareme.js. */
+export function getGrilleEvaluation(programId) {
+  return request(`/evaluations/formation/${programId}`);
+}
+export function saveGrilleEvaluation(programId, payload) {
+  return request(`/evaluations/formation/${programId}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function getEvaluationSession(sessionId, silent) {
+  /* `silent` : la relecture qui suit CHAQUE note ne doit pas faire clignoter la barre de
+     chargement — le formateur saisit en rafale, et l'écran passerait son temps à scintiller. */
+  return request(`/evaluations/session/${sessionId}`, { silent });
+}
+export function saveNoteEvaluation(payload) {
+  return request("/evaluations/note", { method: "PUT", body: JSON.stringify(payload) });
+}

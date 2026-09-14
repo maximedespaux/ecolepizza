@@ -14,6 +14,7 @@ import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import SessionIntervenants from "../components/SessionIntervenants.jsx";
 import SessionRetraits from "../components/SessionRetraits.jsx";
 import SessionConsentements from "../components/SessionConsentements.jsx";
+import SessionEvaluation from "../components/SessionEvaluation.jsx";
 import NotesModal from "../components/NotesModal.jsx";
 import { colorOf, initials, dateHeure } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
@@ -471,6 +472,14 @@ function SessionDetail() {
         {isAdmin && <SessionConsentements sessionId={id} canEdit={isAdmin} />}
         <SessionRetraits startDate={session.start_date} endDate={session.end_date} />
         <SessionIntervenants sessionId={id} startDate={session.start_date} endDate={session.end_date} canEdit={isAdmin} />
+      </div>
+
+      {/* AU-DESSUS DE L'ÉMARGEMENT, et sans condition de rôle : noter est le geste du
+          FORMATEUR, précisément celui qu'`isAdmin` exclut. Le serveur décide seul de qui a le
+          droit d'écrire (STAFF), et le composant s'efface de lui-même quand la formation n'a
+          pas de grille. */}
+      <div style={{ marginTop: 16 }}>
+        <SessionEvaluation sessionId={id} />
       </div>
 
       <div style={{ marginTop: 16 }}>

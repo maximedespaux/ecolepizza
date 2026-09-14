@@ -8,6 +8,7 @@ import DataTable from "../components/DataTable.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import HelpDot from "../components/HelpDot.jsx";
+import GrilleEvaluation from "../components/GrilleEvaluation.jsx";
 import { euro, colorOf } from "../lib/format.js";
 import { setBadgeColors } from "../lib/levels.js";
 
@@ -156,7 +157,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
   const [equivs, setEquivs] = useState([]); // liste des équivalences (pour l'ajout de variantes OU)
   const [conditions, setConditions] = useState([]); // conditions perso (pour conditionner une pièce en « OU »)
-  const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives"
+  const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives" | "evaluation"
   const [archKind, setArchKind] = useState("stagiaire"); // arborescence : "stagiaire" | "entreprise"
   const [parcoursKind, setParcoursKind] = useState("stagiaire"); // parcours : "stagiaire" | "entreprise"
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -323,6 +324,14 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               Arborescence d'archivage
             </button>
           )}
+          {/* LA GRILLE EST PROPRE À LA FORMATION, et c'est tout l'objet : on ne note pas un
+              CAP hygiène comme un perfectionnement au four à bois. C'est aussi pourquoi elle
+              vit ici, à côté du parcours documentaire, et non dans un réglage d'organisme. */}
+          {!isNew && (
+            <button type="button" role="tab" className={"tab" + (tab === "evaluation" ? " on" : "")} onClick={() => setTab("evaluation")}>
+              Évaluation pratique
+            </button>
+          )}
         </div>
         <div className="mbody">
           <div style={{ display: tab === "infos" ? "block" : "none" }}>
@@ -456,6 +465,14 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               );
             })()}
           </div>
+
+          {/* MONTÉ SEULEMENT QUAND ON L'OUVRE, à la différence des autres onglets qu'un
+              `display:none` garde en vie. La grille s'enregistre par son PROPRE bouton, sans
+              passer par « Enregistrer » ci-dessous : la garder montée en permanence
+              chargerait la grille de chaque formation qu'on ouvre, pour rien. */}
+          {tab === "evaluation" && !isNew && (
+            <GrilleEvaluation programId={program.id} programTitle={form.title} />
+          )}
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>
