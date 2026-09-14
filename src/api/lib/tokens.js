@@ -283,6 +283,19 @@ const TOKEN_CATALOG = [
             { key: 'Résultats', label: 'Tableau des résultats par bloc', sample: '(tableau bloc / points / seuil / verdict)' },
             { key: 'Décision', label: 'Décision du jury', sample: 'BLOCS ACQUIS' },
             { key: 'Observations', label: 'Observations du jury', sample: 'C1.7 non acquise : cause du défaut non identifiée.' },
+            /* LE PROCÈS-VERBAL DE LA COMMISSION (migration 150). Les jetons ci-dessus décrivent
+               la session d'examen ; ceux-ci décrivent la SÉANCE de délibération : qui siégeait,
+               à quelle heure, combien de candidats, et ce qui a été décidé pour chacun. */
+            { key: 'PVHeure', label: 'Heure de la commission', sample: '9 h 30' },
+            { key: 'PVJury', label: 'Composition de la commission', sample: 'Mme Hélène Ferrand — présidente · M. Paul Rossi — membre du jury' },
+            { key: 'PVReprésentant', label: 'Représentant du certificateur', sample: 'Mme Hélène Ferrand' },
+            { key: 'PVFonction représentant', label: 'Fonction du représentant', sample: 'Responsable administrative et handicap' },
+            { key: 'PVInscrits', label: 'Nombre de candidats inscrits', sample: '2' },
+            { key: 'PVAdmis', label: 'Nombre de candidats admis', sample: '1' },
+            { key: 'PVNonAdmis', label: 'Nombre de candidats non admis', sample: '1' },
+            { key: 'PVCandidats', label: 'Liste des candidats et décisions', sample: '(tableau nom / naissance / décision)' },
+            { key: 'PVMembres', label: 'Émargement des membres de la commission', sample: '(tableau nom / fonction / émargement)' },
+            { key: 'PVAléas', label: 'Aléas et dysfonctionnements', sample: 'Néant.' },
         ],
     },
     /* ÉVALUATION PRATIQUE (migration 148) — la grille du formateur, imprimable.
@@ -338,7 +351,7 @@ const TOKEN_CATALOG = [
 ];
 
 // Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles', 'Règlements', 'NoteDétail', 'JuryDétail', 'JuryCritères', 'JuryMembres']);
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles', 'Règlements', 'NoteDétail', 'JuryDétail', 'JuryCritères', 'JuryMembres', 'PVCandidats', 'PVMembres']);
 
 // Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
 const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -620,6 +633,35 @@ function juryMembresTable(membres) {
     const head = '<tr><th>Nom et prénom</th><th>Qualité</th><th>Signature</th></tr>';
     const body = membres.map((m) => `<tr><td>${escCell(`${m.last_name || ''} ${m.first_name || ''}`.trim())}</td>`
         + `<td>${escCell(m.specialty || 'Membre du jury')}</td><td>&nbsp;<br>&nbsp;</td></tr>`).join('');
+    return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
+}
+
+/* Tableaux du procès-verbal. RAW, et `width="100%"` en ATTRIBUT (LibreOffice ignore le CSS). */
+const PV_ADMIS = new Set(['CERTIFIE', 'BLOCS_ACQUIS']);
+function pvCandidatsTable(lignes) {
+    if (!lignes || !lignes.length) return '';
+    const head = '<tr><th>NOM</th><th>Prénom</th><th>Date de naissance</th><th>Émargement</th>'
+        + '<th>Décision du jury</th></tr>';
+    const body = lignes.map((c) => {
+        /* « — » ET NON « Non admis » QUAND LA COMMISSION NE S'EST PAS PRONONCÉE. Compter comme
+           refusé quelqu'un qu'on n'a pas examiné serait faux, et le PV est signé. */
+        const d = PV_ADMIS.has(c.decision) ? 'Admis' : c.decision === 'EN_COURS' ? '—' : 'Non admis';
+        return `<tr><td>${escCell((c.last_name || '').toUpperCase())}</td><td>${escCell(c.first_name)}</td>`
+            + `<td>${escCell(c.birthday ? `Né(e) le ${c.birthday}` : '')}</td><td>&nbsp;<br>&nbsp;</td>`
+            + `<td>${escCell(d)}</td></tr>`;
+    }).join('');
+    return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
+}
+function pvMembresTable(jury) {
+    if (!jury || !jury.length) return '';
+    const head = '<tr><th>NOM</th><th>Prénom</th><th>Fonction</th><th>Émargement</th></tr>';
+    const body = jury.map((m) => {
+        /* Le nom est saisi d'un bloc (« DESPAUX Marie-Christine ») : on sépare sur le premier
+           espace, le patronyme étant écrit en tête et en capitales sur le PV. */
+        const [nom, ...reste] = String(m.nom || '').trim().split(/\s+/);
+        return `<tr><td>${escCell((nom || '').toUpperCase())}</td><td>${escCell(reste.join(' '))}</td>`
+            + `<td>${escCell(m.qualite || 'Membre du jury')}</td><td>&nbsp;<br>&nbsp;</td></tr>`;
+    }).join('');
     return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
 }
 
@@ -1158,6 +1200,7 @@ function resolveTokens(ctx = {}) {
           + `Aucun membre n'a formé les candidats évalués.`
         : '';
 
+    const pvLignes = Array.isArray(ctx.pvCandidats) ? ctx.pvCandidats : [];
     const factureVals = invoiceTokens(ctx.invoice);
     const evalVals = evaluationTokens(ctx.evaluation);
     const juryVals = juryTokens(ctx.jury);
@@ -1227,6 +1270,18 @@ function resolveTokens(ctx = {}) {
         'Blocs acquis': blocsAcquis.join(', '),
         'Résultats': resultatsTable(verdicts),
         'Décision': DECISIONS[res.decision] || '', Observations: res.observations || '',
+        // Procès-verbal de la commission de délibération (migration 150).
+        PVHeure: ex.heure || '', PVJury: jury.map(juryMembre).filter(Boolean).join(' · '),
+        'PVReprésentant': ex.representant || '', 'PVFonction représentant': ex.representant_fonction || '',
+        PVInscrits: pvLignes.length ? String(pvLignes.length) : '',
+        PVAdmis: pvLignes.length ? String(pvLignes.filter((c) => PV_ADMIS.has(c.decision)).length) : '',
+        /* NON ADMIS = décision prise ET défavorable. Les « en cours » ne sont ni d'un côté ni de
+           l'autre : les additionner ferait un PV dont les comptes ne tombent pas juste. */
+        PVNonAdmis: pvLignes.length
+            ? String(pvLignes.filter((c) => c.decision !== 'EN_COURS' && !PV_ADMIS.has(c.decision)).length) : '',
+        PVCandidats: pvCandidatsTable(pvLignes),
+        PVMembres: pvMembresTable(jury),
+        'PVAléas': ex.aleas || '',
         // Évaluation pratique (grille du formateur) — vide sans grille sur la formation.
         ...evalVals,
         // Jury externe (grille de la 149) — vide sans grille de jury sur la formation.

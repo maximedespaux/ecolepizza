@@ -494,14 +494,14 @@ async function loadCustomTokens(orgId) {
 // Les groupes non listés tombent à la fin, triés alphabétiquement.
 const GROUP_ORDER = [
     'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
-    'Inscription', 'Formation', 'Session', 'Évaluation pratique', 'Jury', 'Lieu de formation',
+    'Inscription', 'Formation', 'Session', 'Évaluation pratique', 'Jury', 'Examen', 'Lieu de formation',
     'Organisme', 'Émetteur (identité)', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
 /* L'ordre des jetons d'évaluation est réfléchi (intitulé, total, points, seuil, résultat,
    détail) : trié alphabétiquement, « NoteDétail » ouvrirait le groupe et le total arriverait
    après le seuil. */
-const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
+const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -551,6 +551,11 @@ const getTokens = async (req, res) => {
            à la main, et n'apparaissait nulle part dans l'éditeur. */
         groups.push(catalogGroup('Évaluation pratique'));
         groups.push(catalogGroup('Jury'));
+        /* EXAMEN : le procès-verbal de la commission. Le groupe existait au catalogue depuis la
+           migration 100 et n'a JAMAIS été poussé dans la palette — ses jetons se résolvaient si
+           on les tapait, et n'apparaissaient nulle part. Le même défaut que celui mesuré sur
+           l'évaluation pratique, resté invisible deux ans faute d'écran qui s'en serve. */
+        groups.push(catalogGroup('Examen'));
         groups.push(factureTokensGroup());
         // Sur une facture/devis, l'ACHETEUR est un stagiaire OU une entreprise. Ses coordonnées
         // (e-mail, téléphone, adresse…) existent déjà dans les Champs documents (field:learner.* /
