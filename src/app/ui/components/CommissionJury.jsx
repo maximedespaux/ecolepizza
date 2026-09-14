@@ -38,7 +38,16 @@ const DECISIONS = [
   { v: "EXCLU", l: "Exclu" },
 ];
 const DEFAVORABLE = new Set(["AJOURNE", "EXCLU"]);
-const membreVide = () => ({ nom: "", qualite: "", employeur: "", externe: false, na_pas_forme: true });
+/* LA QUALITÉ EST PRÉ-REMPLIE avec la formule du procès-verbal papier (« présidente de la
+   présente commission de délibération »). Elle est reprise TELLE QUELLE dans le document : la
+   laisser vide obligerait à la retaper à chaque commission, et la moindre variation de
+   formulation se verrait d'un PV à l'autre. */
+const QUALITE_PRESIDENT = "présidente de la présente commission de délibération";
+const QUALITE_MEMBRE = "membre du jury de la présente commission de délibération";
+const membreVide = (premier) => ({
+  nom: "", qualite: premier ? QUALITE_PRESIDENT : QUALITE_MEMBRE,
+  employeur: "", externe: false, na_pas_forme: true,
+});
 
 function CommissionJury({ sessionId }) {
   const { user } = useContext(UserContext);
@@ -65,12 +74,12 @@ function CommissionJury({ sessionId }) {
     if (!data || f) return;
     const c = data.commission;
     setF(c ? {
-      ...c, jury: (c.jury || []).length ? c.jury : [membreVide(), membreVide(), membreVide()],
+      ...c, jury: (c.jury || []).length ? c.jury : [membreVide(true), membreVide(), membreVide()],
     } : {
       certification: data.session?.title || "", rncp_code: data.session?.rs_code || "",
       voie_acces: "FORMATION_CONTINUE", pv_ref: "", date_examen: data.session?.start_date || "",
       heure: "", lieu: "", centre: "", representant: "", representant_fonction: "", aleas: "",
-      jury: [membreVide(), membreVide(), membreVide()],
+      jury: [membreVide(true), membreVide(), membreVide()],
     });
   }, [data, f]);
 
@@ -198,7 +207,7 @@ function CommissionJury({ sessionId }) {
                     <input className="inp" style={{ flex: "1 1 180px", minWidth: 0 }} value={m.nom}
                       onChange={(e) => setJure(i, { nom: e.target.value })} placeholder="NOM Prénom" />
                     <input className="inp" style={{ flex: "1 1 160px", minWidth: 0 }} value={m.qualite}
-                      onChange={(e) => setJure(i, { qualite: e.target.value })} placeholder={i === 0 ? "président(e)" : "membre du jury"} />
+                      onChange={(e) => setJure(i, { qualite: e.target.value })} placeholder={i === 0 ? "présidente de la présente commission de délibération" : "membre du jury de la présente commission de délibération"} />
                     <input className="inp" style={{ flex: "1 1 140px", minWidth: 0 }} value={m.employeur}
                       onChange={(e) => setJure(i, { employeur: e.target.value })} placeholder="Employeur" />
                     <label style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: 12 }}>

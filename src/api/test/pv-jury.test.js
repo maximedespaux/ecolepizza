@@ -152,6 +152,19 @@ test('« EN COURS » N\'EST NI ADMIS NI NON ADMIS', () => {
     assert.match(v.PVCandidats, /Vincent<\/td><td>Né\(e\) le 19\/01\/1973<\/td><td>&nbsp;<br>&nbsp;<\/td><td>—/);
 });
 
+test('INSCRIT N\'EST PAS PRÉSENTÉ : un absent compte dans l\'un, pas dans l\'autre', () => {
+    /* Le procès-verbal distingue les deux en toutes lettres — « Sur les 2 candidats inscrits,
+       1 se sont présentés ». Les confondre ferait ATTESTER une présence qui n'a pas eu lieu,
+       sur un document signé par trois personnes. */
+    const v = resolveTokens(ctxPv(['CERTIFIE', 'ABSENT']));
+    assert.strictEqual(v.PVInscrits, '2');
+    assert.strictEqual(v['PVPrésentés'], '1');
+    assert.match(v.PVListeCandidats, /QUET/, 'l\'absent reste un inscrit');
+    assert.doesNotMatch(v['PVListePrésentés'], /QUET/, 'mais il ne s\'est pas présenté');
+    /* Un absent n'est pas admis : il tombe donc dans les non admis, comme sur le papier. */
+    assert.strictEqual(v.PVNonAdmis, '1');
+});
+
 test('les comptes du PV suivent les décisions', () => {
     const v = resolveTokens(ctxPv(['CERTIFIE', 'AJOURNE']));
     assert.strictEqual(v.PVAdmis, '1');
@@ -197,10 +210,56 @@ test('le modèle de PV porte les jetons, et ne se signe pas électroniquement', 
        document papier actuel avec ses cases vides. Le déclarer « à signer par le stagiaire »
        le ferait apparaître dans le parcours de chacun, alors qu'il n'appartient à personne. */
     const { PV_JURY } = require('../lib/modelesJury.js');
-    for (const k of ['PV', 'PVJury', 'PVInscrits', 'PVAdmis', 'PVNonAdmis', 'PVCandidats', 'PVMembres', 'PVAléas', 'Jury mention']) {
+    for (const k of ['PV', 'PVHeure', 'PVJuryListe', 'PVReprésentant', 'PVInscrits', 'PVPrésentés',
+        'PVListePrésentés', 'PVListeCandidats', 'PVAdmis', 'PVListeAdmis', 'PVNonAdmis',
+        'PVListeNonAdmis', 'PVAléas', 'Jury mention', 'PVSignatures', 'PVMembres', 'PVCandidats']) {
         assert.ok(PV_JURY.body.includes(`data-token="${k}"`), `le modèle doit porter {${k}}`);
     }
     assert.deepStrictEqual(PV_JURY.signers, []);
+});
+
+test('LE MODÈLE REPREND LES FORMULES DU DOCUMENT, pas une paraphrase', () => {
+    /* Ces phrases ne sont pas du remplissage : ce sont elles qui attestent que la séance s'est
+       tenue régulièrement, et un instructeur les cherche à leur place habituelle. Les réécrire
+       « en mieux » obligerait à comparer ligne à ligne avec le papier pour vérifier que rien
+       n'a changé — ce que l'organisme a justement demandé d'éviter. */
+    const { PV_JURY } = require('../lib/modelesJury.js');
+    const texte = PV_JURY.body.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+    for (const phrase of [
+        'PROCÈS-VERBAL DE JURY DE CERTIFICATION',
+        'les membres du jury se sont réunis en commission de délibération',
+        'Un représentant de l’organisme de certification était présent',
+        'Il a été établi et signé une feuille d’émargement des membres présents, annexée au présent procès-verbal.',
+        'le président déclare que la commission peut valablement délibérer, et que l’ordre du jour est le suivant',
+        '1. Candidats',
+        '2. Délibération des résultats',
+        '3. Aléas et dysfonctionnements',
+        'Signatures de la commission de délibération',
+        'Annexe 1 : Feuille d’émargement des membres présents de la commission de délibération',
+        'Annexe 2 : Liste des candidats et décision de certification',
+    ]) {
+        assert.ok(texte.includes(phrase), `phrase absente du modèle : « ${phrase} »`);
+    }
+    /* Les annexes forment une pièce à part, qu'on détache et qu'on fait émarger. Le saut de page
+       ne vit que sur un `<p>` NON VIDE (cf. CLAUDE.md § 3) — d'où l'espace insécable. */
+    assert.match(PV_JURY.body, /<p class="doc-pagebreak">&nbsp;<\/p>/);
+});
+
+test('LA GRILLE REPREND LES INTITULÉS DU DOCUMENT', () => {
+    const { GRILLE_JURY } = require('../lib/modelesJury.js');
+    const texte = GRILLE_JURY.body.replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+    for (const phrase of ['Grille d’évaluation', 'Nom / Prénom du Candidat :', 'En date du',
+        'Nombre de compétences validées :', 'Avis', 'Rattrapage', 'Noms & Prénoms du Jury']) {
+        assert.ok(texte.includes(phrase), `phrase absente de la grille : « ${phrase} »`);
+    }
+    /* Les quatre colonnes du papier, au mot près : c'est le tableau que le jury relit. */
+    const { resolveTokens } = require('../lib/tokens.js');
+    const html = resolveTokens({ jury: { grille: { label: 'g' }, competences: [
+        { id: 'k', code: 'C1', label: 'Pâte', criteres: [{ id: 'x', label: 'C1.1 - Farine', active: 1 }] }],
+        resultat: { validees: 0, total: 1, details: [] }, notes: [], verdict: {} } })['JuryCritères'];
+    assert.match(html, /<th>Compétence<\/th><th>Mise en situation professionnelle<\/th>/);
+    assert.match(html, /<th>Remarque\/recommandation\/axe de progression éventuel<\/th>/);
 });
 
 test('le groupe Examen est ENFIN dans la palette', () => {

@@ -287,13 +287,20 @@ const TOKEN_CATALOG = [
                la session d'examen ; ceux-ci décrivent la SÉANCE de délibération : qui siégeait,
                à quelle heure, combien de candidats, et ce qui a été décidé pour chacun. */
             { key: 'PVHeure', label: 'Heure de la commission', sample: '9 h 30' },
-            { key: 'PVJury', label: 'Composition de la commission', sample: 'Mme Hélène Ferrand — présidente · M. Paul Rossi — membre du jury' },
+            { key: 'PVJury', label: 'Composition de la commission (en ligne)', sample: 'Ferrand Hélène — présidente · Rossi Paul — membre du jury' },
+            { key: 'PVJuryListe', label: 'Composition de la commission (une par ligne)', sample: '- Ferrand Hélène, présidente…' },
+            { key: 'PVSignatures', label: 'Cases de signature de la commission', sample: '(colonnes qualité / nom / signature)' },
             { key: 'PVReprésentant', label: 'Représentant du certificateur', sample: 'Mme Hélène Ferrand' },
             { key: 'PVFonction représentant', label: 'Fonction du représentant', sample: 'Responsable administrative et handicap' },
             { key: 'PVInscrits', label: 'Nombre de candidats inscrits', sample: '2' },
             { key: 'PVAdmis', label: 'Nombre de candidats admis', sample: '1' },
             { key: 'PVNonAdmis', label: 'Nombre de candidats non admis', sample: '1' },
-            { key: 'PVCandidats', label: 'Liste des candidats et décisions', sample: '(tableau nom / naissance / décision)' },
+            { key: 'PVPrésentés', label: 'Nombre de candidats présentés', sample: '2' },
+            { key: 'PVListeCandidats', label: 'Candidats inscrits (une ligne par candidat)', sample: 'Monsieur QUET Vincent' },
+            { key: 'PVListePrésentés', label: 'Candidats présentés (une ligne par candidat)', sample: 'Monsieur QUET Vincent' },
+            { key: 'PVListeAdmis', label: 'Candidats admis (une ligne par candidat)', sample: 'Monsieur QUET Vincent' },
+            { key: 'PVListeNonAdmis', label: 'Candidats non admis (une ligne par candidat)', sample: '—' },
+            { key: 'PVCandidats', label: 'Annexe 2 : liste des candidats et décisions', sample: '(tableau nom / naissance / décision)' },
             { key: 'PVMembres', label: 'Émargement des membres de la commission', sample: '(tableau nom / fonction / émargement)' },
             { key: 'PVAléas', label: 'Aléas et dysfonctionnements', sample: 'Néant.' },
         ],
@@ -351,7 +358,8 @@ const TOKEN_CATALOG = [
 ];
 
 // Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles', 'Règlements', 'NoteDétail', 'JuryDétail', 'JuryCritères', 'JuryMembres', 'PVCandidats', 'PVMembres']);
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles', 'Règlements', 'NoteDétail', 'JuryDétail', 'JuryCritères', 'JuryMembres', 'PVCandidats', 'PVMembres', 'PVJuryListe', 'PVSignatures',
+    'PVListeCandidats', 'PVListePrésentés', 'PVListeAdmis', 'PVListeNonAdmis']);
 
 // Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
 const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -616,7 +624,7 @@ function juryTable(lignes) {
 function juryCriteresTable(lignes) {
     if (!lignes || !lignes.length) return '';
     const head = '<tr><th>Compétence</th><th>Mise en situation professionnelle</th>'
-        + '<th>Validation</th><th>Remarque / axe de progression</th></tr>';
+        + '<th>Validation</th><th>Remarque/recommandation/axe de progression éventuel</th></tr>';
     const body = lignes.map((l) => `<tr><td>${escCell(l.competence)}</td><td>${escCell(l.critere)}</td>`
         + `<td>${escCell(l.validation)}</td><td>${escCell(l.remarque)}</td></tr>`).join('');
     return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
@@ -652,6 +660,43 @@ function pvCandidatsTable(lignes) {
     }).join('');
     return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
 }
+/**
+ * La composition, une ligne par membre, telle que le procès-verbal l'écrit :
+ *   - DESPAUX Marie-Christine, présidente de la présente commission de délibération
+ * Le nom EST EN GRAS comme sur le document ; la qualité est reprise telle qu'elle a été saisie.
+ */
+function pvJuryListe(jury) {
+    if (!jury || !jury.length) return '';
+    return jury.map((m) => `- <strong>${escCell(m.nom)}</strong>${m.qualite ? `, ${escCell(m.qualite)}` : ''}`)
+        .join('<br>');
+}
+
+/**
+ * Les cases de signature de la commission, CÔTE À CÔTE comme sur le procès-verbal : une colonne
+ * par membre, sa qualité, son nom, puis l'espace où il signe.
+ *
+ * UN TABLEAU ET NON DES COLONNES FLOTTANTES : il n'y a rien à faire retomber sous une colonne
+ * voisine (chaque cellule tient sur une ligne), et un tableau garde les trois blocs alignés
+ * quelle que soit la longueur des noms.
+ */
+function pvSignaturesTable(jury) {
+    if (!jury || !jury.length) return '';
+    const cel = (v) => `<td valign="top">${v}</td>`;
+    const qualites = jury.map((m) => cel(`<strong>${escCell(m.qualite || 'Membre du jury')},</strong>`)).join('');
+    const noms = jury.map((m) => cel(`<strong>${escCell(m.nom)}</strong>`)).join('');
+    const vides = jury.map(() => cel('&nbsp;<br>&nbsp;<br>&nbsp;')).join('');
+    const sigs = jury.map(() => cel('<strong>Signature</strong>')).join('');
+    return `<table width="100%" data-border="0"><tbody><tr>${qualites}</tr><tr>${noms}</tr>`
+        + `<tr>${vides}</tr><tr>${sigs}</tr></tbody></table>`;
+}
+
+/** « Monsieur QUET Vincent » — une ligne par candidat, comme sur le procès-verbal. */
+function pvListe(lignes) {
+    if (!lignes || !lignes.length) return '';
+    return lignes.map((c) => `- ${escCell([c.civility, (c.last_name || '').toUpperCase(), c.first_name]
+        .filter(Boolean).join(' '))}`).join('<br>');
+}
+
 function pvMembresTable(jury) {
     if (!jury || !jury.length) return '';
     const head = '<tr><th>NOM</th><th>Prénom</th><th>Fonction</th><th>Émargement</th></tr>';
@@ -1279,8 +1324,18 @@ function resolveTokens(ctx = {}) {
            l'autre : les additionner ferait un PV dont les comptes ne tombent pas juste. */
         PVNonAdmis: pvLignes.length
             ? String(pvLignes.filter((c) => c.decision !== 'EN_COURS' && !PV_ADMIS.has(c.decision)).length) : '',
+        /* PRÉSENTÉS ≠ INSCRITS : un candidat ABSENT est inscrit mais ne s'est pas présenté, et
+           le procès-verbal distingue les deux en toutes lettres (« Sur les 2 candidats inscrits,
+           se sont présentés… »). Les confondre ferait attester une présence qui n'a pas eu lieu. */
+        'PVPrésentés': pvLignes.length ? String(pvLignes.filter((c) => c.decision !== 'ABSENT').length) : '',
+        PVListeCandidats: pvListe(pvLignes),
+        'PVListePrésentés': pvListe(pvLignes.filter((c) => c.decision !== 'ABSENT')),
+        PVListeAdmis: pvListe(pvLignes.filter((c) => PV_ADMIS.has(c.decision))),
+        PVListeNonAdmis: pvListe(pvLignes.filter((c) => c.decision !== 'EN_COURS' && !PV_ADMIS.has(c.decision))),
         PVCandidats: pvCandidatsTable(pvLignes),
         PVMembres: pvMembresTable(jury),
+        PVJuryListe: pvJuryListe(jury),
+        PVSignatures: pvSignaturesTable(jury),
         'PVAléas': ex.aleas || '',
         // Évaluation pratique (grille du formateur) — vide sans grille sur la formation.
         ...evalVals,
