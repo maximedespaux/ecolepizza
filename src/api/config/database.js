@@ -1,4 +1,5 @@
 const mysql = require('mysql2');
+const { FUSEAU, decalageCourant } = require('../lib/fuseau.js');
 const dotenv = require('dotenv');
 const path = require('path');
 
@@ -52,8 +53,56 @@ function getPool() {
             keepAliveInitialDelay: 10000,
             idleTimeout: 60000,
         });
+        reglerFuseau(pool);
     }
     return pool;
+}
+
+/**
+ * FUSEAU DE SESSION — sans lui, l'application affichait l'heure d'UTC.
+ *
+ * LE DÉFAUT, mesuré en production : il était 18:47 à Lannemezan, l'en-tête `Date` du serveur
+ * disait 16:47 (UTC, cohérent), et la dernière ligne du journal d'audit portait 16:38. Deux
+ * heures de retard partout où l'on lit un horodatage — journal, cloche, publications de la
+ * communauté. Le VPS tourne en UTC, MariaDB en hérite, et `DATE_FORMAT` rend donc de l'UTC.
+ *
+ * POURQUOI RÉGLER LA SESSION SUFFIT, ET POURQUOI IL N'Y A AUCUNE MIGRATION DE DONNÉES. Une
+ * colonne `TIMESTAMP` est stockée en UTC par MariaDB et CONVERTIE à la lecture selon le fuseau
+ * de session. Les trente-neuf colonnes de ce schéma qui en sont — `created_at` du journal, des
+ * notifications, des publications — se remettent donc à l'heure toutes seules, lignes anciennes
+ * comprises. Corriger les données aurait été une faute : elles sont justes, c'est leur lecture
+ * qui ne l'était pas.
+ *
+ * ⚠️ LES COLONNES `DATETIME` NE SE CONVERTISSENT PAS. Ce schéma en compte une petite dizaine —
+ * horodatages de signature, `paid_at`, les `*_seen_at`. Elles gardent la valeur écrite : les
+ * anciennes, posées sous une session UTC, resteront deux heures en arrière ; les nouvelles
+ * seront à l'heure de Paris. Les remettre d'aplomb demande un `CONVERT_TZ` par colonne, donc
+ * une migration à part — et un contrôle préalable, car `CONVERT_TZ` rend NULL si les tables de
+ * fuseaux de MySQL ne sont pas chargées, ce qui EFFACERAIT les horodatages qu'on veut corriger.
+ *
+ * ON NE FAIT JAMAIS ÉCHOUER L'APPLICATION POUR UN FUSEAU. Le nom « Europe/Paris » exige les
+ * tables de fuseaux côté serveur ; à défaut, on retombe sur le décalage courant calculé ici,
+ * qui suit l'heure d'été puisqu'il est recalculé à chaque nouvelle connexion du pool. Le repli
+ * se DIT dans le journal : un décalage figé se périmerait au prochain changement d'heure si
+ * personne n'apprenait qu'il est en place.
+ */
+function reglerFuseau(p) {
+    p.on('connection', (conn) => {
+        conn.query(`SET time_zone = ${conn.escape(FUSEAU)}`, (err) => {
+            if (!err) return;
+            const repli = decalageCourant(FUSEAU);
+            conn.query(`SET time_zone = ${conn.escape(repli)}`, (err2) => {
+                if (err2) {
+                    console.error(`Fuseau de session : ni « ${FUSEAU} » ni « ${repli} » acceptés `
+                        + `(${err2.message}). Les horodatages resteront en UTC.`);
+                } else {
+                    console.warn(`Fuseau de session : « ${FUSEAU} » inconnu du serveur — repli sur `
+                        + `${repli}. Chargez les tables de fuseaux (mysql_tzinfo_to_sql) pour que `
+                        + `le changement d'heure suive tout seul.`);
+                }
+            });
+        });
+    });
 }
 
 /**
