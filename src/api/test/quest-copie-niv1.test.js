@@ -53,6 +53,67 @@ test('aucun littéral de chaîne n\'est laissé ouvert', () => {
     }
 });
 
+/* Découpe un fichier SQL comme le ferait un analyseur CONSCIENT des chaînes et des
+   commentaires : seuls comptent les points-virgules qui terminent vraiment une instruction. */
+function instructionsReelles(sql) {
+    let i = 0, chaine = false, commentaire = false, nb = 0;
+    while (i < sql.length) {
+        const c = sql[i];
+        if (commentaire) {
+            if (sql.startsWith('*/', i)) { commentaire = false; i += 2; continue; }
+            i += 1; continue;
+        }
+        if (chaine) {
+            if (c === "'") {
+                if (sql[i + 1] === "'") { i += 2; continue; }
+                chaine = false;
+            }
+            i += 1; continue;
+        }
+        if (sql.startsWith('/*', i)) { commentaire = true; i += 2; continue; }
+        if (c === "'") { chaine = true; i += 1; continue; }
+        if (c === ';') nb += 1;
+        i += 1;
+    }
+    return { nb, chaineOuverte: chaine, commentaireOuvert: commentaire };
+}
+
+test('le fichier se découpe pareil pour TOUS les clients SQL', () => {
+    /* LE DÉFAUT VÉCU. La migration était syntaxiquement correcte — vingt instructions bien
+       formées — et le client de l\'organisme l\'a pourtant refusée : « You have an error in your
+       SQL syntax… near \'\'Au-dessus de +63 °C… ». Un client qui découpe un script sur les
+       points-virgules SANS tenir compte des chaînes coupait au milieu d\'un texte, et envoyait
+       au serveur une moitié d\'instruction.
+
+       ÊTRE CORRECT NE SUFFIT PAS : le fichier doit être INTERPRÉTÉ pareil par un analyseur
+       naïf et par un analyseur averti. On compare donc les deux découpages — ils doivent
+       donner le même nombre d\'instructions. Cela interdit tout point-virgule ailleurs qu\'en
+       fin d\'instruction : ni dans un texte, ni dans un commentaire. */
+    for (const f of [ALLER, RETOUR]) {
+        const sql = lire(f);
+        const vrai = instructionsReelles(sql);
+        const naif = sql.split(';').filter((x) => x.trim()).length;
+        assert.ok(!vrai.chaineOuverte, `${path.basename(f)} : une chaîne reste ouverte`);
+        assert.ok(!vrai.commentaireOuvert, `${path.basename(f)} : un commentaire reste ouvert`);
+        assert.strictEqual(naif, vrai.nb,
+            `${path.basename(f)} : ${naif} morceaux au découpage naïf contre ${vrai.nb} instructions `
+            + 'réelles — un point-virgule traîne dans un texte ou un commentaire, et un client qui '
+            + 'découpe naïvement cassera le script');
+    }
+});
+
+test('aucune apostrophe échappée : on écrit l\'apostrophe française', () => {
+    /* `s\'\'arrête` est valide en SQL, mais tous les clients ne comprennent pas le doublement —
+       certains y voient une chaîne qui se ferme puis une autre qui s\'ouvre, et la suite du
+       fichier part de travers. L\'apostrophe typographique « ’ » ne demande aucun échappement,
+       et c\'est de toute façon le bon caractère en français : le projet l\'emploie déjà dans les
+       textes destinés aux gens. */
+    for (const f of [ALLER, RETOUR]) {
+        assert.ok(!lire(f).includes("''"),
+            `${path.basename(f)} : apostrophe échappée — écrire « ’ » plutôt que deux quotes`);
+    }
+});
+
 test('les formations sont désignées par leur CODE, jamais par un identifiant écrit en dur', () => {
     /* Un identifiant recopié à la main rattacherait le contenu à la mauvaise formation SANS
        ERREUR : l'insertion réussirait, et 139 questions atterriraient ailleurs. Le code, lui,
