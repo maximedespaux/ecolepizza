@@ -39,6 +39,9 @@ const SECTION_PAR_ENTITE = {
     DocumentTemplate: '/modeles', DocumentCondition: '/modeles', DocumentEquivalence: '/modeles',
     ConditionField: '/modeles', EmargementTemplate: '/modeles', PieceType: '/modeles',
     Quiz: '/qcm', QuizResponse: '/qcm',
+    /* La grille se configure dans Formations, la note se saisit depuis la session : chaque
+       entité pointe la rubrique où se fait le GESTE, pas celle où l'on consulte le résultat. */
+    EvaluationGrille: '/formations', EvaluationNote: '/sessions',
     Partner: '/partenaires', PartnerContribution: '/partenaires', PartnerProduct: '/partenaires',
     Opco: '/opcos', Organization: '/reglages', Archive: '/suivi',
     CommunityPost: '/communaute', CommunityAnswer: '/communaute', Recipe: '/communaute',
@@ -76,6 +79,9 @@ const ENTITES_REGLAGE = new Set([
     'EmargementTemplate', 'PieceType',
     // Le QCM en tant que MODÈLE. Une réponse de stagiaire (`QuizResponse`), elle, est un événement.
     'Quiz',
+    /* La GRILLE d'évaluation est un réglage au même titre : on y fixe le barème et le seuil.
+       La NOTE, elle, reste un événement — c'est un résultat d'examen qui arrive à quelqu'un. */
+    'EvaluationGrille',
     // Catalogue partenaire et stock : des tarifs et des références. Une CONTRIBUTION, en
     // revanche, est de l'argent qui arrive — elle reste un événement.
     'Partner', 'PartnerProduct', 'InventoryItem',
