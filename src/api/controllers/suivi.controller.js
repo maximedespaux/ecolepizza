@@ -234,7 +234,65 @@ const getArchive = async (req, res) => {
              WHERE ad.organization_id = ?`,
             [req.user.organization_id]
         );
-        res.json({ data: [...gen, ...comp, ...arch] });
+        /* PIÈCES JUSTIFICATIVES — la quatrième source, qui manquait. Le coffre réunissait les
+           documents que l'école PRODUIT et les PDF importés à la main ; les pièces déposées par
+           le stagiaire (identité, justificatif de domicile) n'y figuraient nulle part. Elles
+           font pourtant partie du dossier au même titre, et c'est dans ce coffre qu'on va les
+           chercher un an plus tard.
+
+           UNE LIGNE PAR FICHIER, pas par dépôt : un justificatif peut en compter six, et n'en
+           montrer qu'un rendrait les autres introuvables — le défaut qu'on vient de corriger
+           dans la fiche du dossier.
+
+           Les octets ne sortent pas d'ici : la liste ne porte que de quoi nommer et ouvrir. */
+        let pieces = [];
+        try {
+            const [pf] = await conn.query(
+                `SELECT pf.id AS doc_id, pf.nom AS fichier_nom, pf.sort_order,
+                        pt.label AS piece_label, d.id AS depot_id, d.statut,
+                        DATE_FORMAT(d.depose_le, '%Y-%m-%d %H:%i') AS depose_le,
+                        s.year, s.week,
+                        p.code AS program_code, p.title AS program_title,
+                        l.id AS learner_id, l.first_name, l.last_name
+                   FROM piece_fichier pf
+                   JOIN piece_depot d ON d.id = pf.depot_id
+                   JOIN piece_type pt ON pt.id = d.piece_type_id
+                   JOIN enrollment e ON e.id = d.enrollment_id
+                   JOIN learner l ON l.id = e.learner_id
+                   LEFT JOIN training_session s ON s.id = e.session_id
+                   LEFT JOIN training_program p ON p.id = s.program_id
+                  WHERE d.organization_id = ?
+                  ORDER BY pf.depot_id, pf.sort_order, pf.created_at`,
+                [req.user.organization_id]);
+            /* Le rang « 2/6 » se calcule ICI plutôt qu'en SQL : une fonction de fenêtrage
+               obligerait à une version minimale de MariaDB pour un simple numéro d'ordre, et
+               la liste est déjà triée par dépôt. Un dépôt d'un seul fichier ne porte AUCUN
+               rang — « (1/1) » n'apprend rien et alourdit chaque ligne. */
+            const parDepot = new Map();
+            for (const f of pf) parDepot.set(f.depot_id, (parDepot.get(f.depot_id) || 0) + 1);
+            const vus = new Map();
+            pieces = pf.map((f) => {
+                const total = parDepot.get(f.depot_id);
+                const rang = (vus.get(f.depot_id) || 0) + 1;
+                vus.set(f.depot_id, rang);
+                return {
+                    doc_id: f.doc_id,
+                    title: total > 1 ? `${f.piece_label} (${rang}/${total})` : f.piece_label,
+                    type: 'PIECE', status: f.statut, quiz_id: null, scope: 'LEARNER',
+                    company_id: null, company_name: null,
+                    sent_at: f.depose_le, signed_at: null,
+                    year: f.year, week: f.week,
+                    program_code: f.program_code, program_title: f.program_title,
+                    learner_id: f.learner_id, first_name: f.first_name, last_name: f.last_name,
+                    source: 'piece',
+                };
+            });
+        } catch (e) {
+            // Migration 127 non jouée : le coffre reste lisible sans les pièces.
+            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+        }
+
+        res.json({ data: [...gen, ...comp, ...arch, ...pieces] });
     } catch (err) {
         console.error('Erreur archives documents :', err);
         res.status(500).json({ error: 'Internal Server Error' });
