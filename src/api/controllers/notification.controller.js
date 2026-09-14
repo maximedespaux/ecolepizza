@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { notificationEmail } = require('../lib/mailTemplates.js');
-const { sectionsVisibles, entitesVisibles, sectionDeLEntite, estLu, regrouperConsecutives } = require('../lib/activite.js');
+const { sectionsVisibles, entitesVisibles, sectionDeLEntite, estLu, regrouperConsecutives, estEvenement, SECTION_PAR_ENTITE } = require('../lib/activite.js');
 const { aLaCapaciteEnBase } = require('../lib/capacites.js');
 
 /* SUPPRIMER UNE NOTIFICATION EST UN DROIT NOMINATIF, pas un attribut de rôle. La raison tient à
@@ -94,15 +94,18 @@ async function profilActivite(userId) {
  * l'est pas.
  */
 async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
-    const entites = entitesVisibles(sectionsVisibles({ role, navAccess }));
-    if (entites && entites.length === 0) return [];
+    /* DEUX FILTRES, QUI NE RÉPONDENT PAS À LA MÊME QUESTION.
+       `entitesVisibles` dit ce que cette personne a le DROIT de voir ; `estEvenement` dit ce
+       qui MÉRITE une cloche. Sans le second, le carillon annonçait « Produit partenaire
+       modifié » ou « Modèle enregistré » — configurer l'outil n'est pas un événement, et la
+       cloche n'était qu'un second journal d'audit, plus court et moins consultable. */
+    const visibles = entitesVisibles(sectionsVisibles({ role, navAccess }));
+    const entites = (visibles || Object.keys(SECTION_PAR_ENTITE)).filter(estEvenement);
+    if (entites.length === 0) return [];
 
     const params = [orgId, moi];
-    let filtre = '';
-    if (entites) {
-        filtre = ` AND a.entity IN (${entites.map(() => '?').join(',')})`;
-        params.push(...entites);
-    }
+    const filtre = ` AND a.entity IN (${entites.map(() => '?').join(',')})`;
+    params.push(...entites);
 
     const [rows] = await db.promise().query(
         `SELECT a.id, a.action, a.entity, a.created_at AS quand,
