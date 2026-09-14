@@ -192,3 +192,38 @@ test('les résultats ne sont lus QUE si une condition s\'en sert', () => {
     assert.match(CONDITIONS, /const needEval = catalog\.some/);
     assert.match(CONDITIONS, /needEval \? await resultatsParDossier\(/);
 });
+
+/* ---------------------------------------------------------------------------------------- */
+
+const PALETTE = fs.readFileSync(path.join(__dirname, '..', 'controllers/template.controller.js'), 'utf8');
+
+test('LES JETONS SONT DANS LA PALETTE — sinon ils existent sans que personne puisse les insérer', () => {
+    /* DÉFAUT MESURÉ EN PRODUCTION, juste après la mise en ligne. LA PALETTE N'EST PAS LE
+       CATALOGUE : elle en est une composition choisie, groupe par groupe. {NoteTotale} se
+       résolvait parfaitement si on le tapait à la main, et n'apparaissait nulle part dans
+       l'éditeur de modèles — un jeton qu'on ne peut pas insérer n'est pas imprimable, ce qui
+       était pourtant l'usage demandé.
+       Ni le build ni les tests de résolution ne pouvaient le voir : les deux moitiés étaient
+       justes séparément. */
+    assert.match(PALETTE, /groups\.push\(catalogGroup\('Évaluation pratique'\)\)/,
+        'le groupe doit être poussé dans la palette');
+    assert.match(PALETTE, /GROUP_ORDER = \[[\s\S]*?'Évaluation pratique'[\s\S]*?\];/,
+        'et rangé à sa place, sinon il tombe en fin de liste');
+    /* Le groupe qu'on pousse doit exister dans le catalogue : une faute de frappe rendrait un
+       groupe VIDE, sans erreur ni trace. */
+    const pousses = [...PALETTE.matchAll(/catalogGroup\('([^']+)'/g)].map((m) => m[1]);
+    const connus = new Set(TOKEN_CATALOG.map((g) => g.group));
+    for (const nom of pousses) assert.ok(connus.has(nom), `catalogGroup('${nom}') : groupe absent du catalogue`);
+});
+
+test('l\'ordre des jetons d\'évaluation n\'est pas trié alphabétiquement', () => {
+    /* « NoteDétail » ouvrirait le groupe et le total arriverait après le seuil : on lit une
+       note dans l'ordre où on la compose. */
+    assert.match(PALETTE, /CURATED_GROUPS = new Set\(\['Évaluation pratique'/);
+});
+
+test('une évaluation ne s\'imprime pas sur un document de GROUPE', () => {
+    /* Elle note UNE personne : sur un document d'entreprise, ces jetons n'auraient aucun
+       dossier à lire et sortiraient vides — la même raison que « Stagiaire » et « Inscription ». */
+    assert.match(PALETTE, /HIDDEN_FOR_COMPANY = new Set\(\['Stagiaire', 'Inscription', 'Évaluation pratique'\]\)/);
+});
