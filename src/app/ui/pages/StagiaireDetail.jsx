@@ -310,11 +310,19 @@ function StagiaireDetail() {
 
   function demanderImport(step) {
     setEtapeImport(step);
+    /* `multiple` SE POSE AVANT LE CLIC, sur l'unique sélecteur partagé par toutes les étapes.
+       Un document reçu remplace une étape : il est seul par nature. Une pièce, elle, peut en
+       attendre plusieurs — un justificatif de domicile en six pages — et le plafond vient de
+       son type. L'attribut suit donc l'étape visée, il n'est pas figé dans le JSX. */
+    const plusieurs = !!step.piece && (step.fichiers_attendus || 1) > 1;
+    if (fichierRef.current) fichierRef.current.multiple = plusieurs;
     fichierRef.current?.click();
   }
 
   async function envoyerImport(e) {
-    const file = e.target.files?.[0];
+    // Lus AVANT la remise à zéro : vider le champ vide aussi sa liste de fichiers.
+    const fichiers = Array.from(e.target.files || []);
+    const file = fichiers[0];
     e.target.value = "";
     const step = etapeImport;
     setEtapeImport(null);
@@ -330,14 +338,42 @@ function StagiaireDetail() {
     if (step.piece) {
       if (!curEnrId) { setStatus({ type: "error", message: "Sélectionne d'abord une inscription." }); return; }
       if (!step.piece_id) { setStatus({ type: "error", message: "Cette pièce n'est pas identifiable. Rechargez la page." }); return; }
-      try {
-        await deposerPiece(curEnrId, step.piece_id, file);
-        /* On annonce l'étape SUIVANTE : un dépôt par le personnel ne vaut pas validation, et
-           la pièce reste « à vérifier » tant que quelqu'un ne l'a pas contrôlée. */
-        setStatus({ type: "success", message: `« ${file.name} » déposé pour « ${step.label} ». À vérifier dans les pièces du dossier.` });
-        setParcoursRefresh((n) => n + 1);
-      } catch (err) {
-        setStatus({ type: "error", message: err.message });
+      /* UN FICHIER PAR REQUÊTE : la route du dépôt est `single('fichier')`, et c'est elle qui
+         compte les fichiers déjà présents pour refuser celui de trop. Les envoyer EN SÉRIE,
+         jamais en parallèle — deux dépôts simultanés liraient le même compte et passeraient
+         tous les deux le plafond. */
+      let deposes = 0;
+      let echec = null;
+      for (const f of fichiers) {
+        try {
+          await deposerPiece(curEnrId, step.piece_id, f);
+          deposes += 1;
+        } catch (err) {
+          /* On s'arrête au premier refus : la suite tomberait sur le même motif (plafond
+             atteint, format refusé) et empilerait des messages identiques. */
+          echec = err.message;
+          break;
+        }
+      }
+      if (deposes) setParcoursRefresh((n) => n + 1);
+      /* LE COMPTE RENDU DIT CE QUI EST PASSÉ ET CE QUI NE L'EST PAS. Un dépôt partiel annoncé
+         comme un succès laisserait croire que les six pages sont arrivées. Et l'on annonce
+         l'étape suivante : un dépôt par le personnel ne vaut pas validation, la pièce reste
+         à vérifier tant que quelqu'un ne l'a pas contrôlée. */
+      if (echec) {
+        setStatus({
+          type: "error",
+          message: deposes
+            ? `${deposes} fichier${deposes > 1 ? "s" : ""} sur ${fichiers.length} déposé${deposes > 1 ? "s" : ""}. Les suivants ont été refusés : ${echec}`
+            : echec,
+        });
+      } else {
+        setStatus({
+          type: "success",
+          message: deposes > 1
+            ? `${deposes} fichiers déposés pour « ${step.label} ». À vérifier dans les pièces du dossier.`
+            : `« ${file.name} » déposé pour « ${step.label} ». À vérifier dans les pièces du dossier.`,
+        });
       }
       return;
     }
