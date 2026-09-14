@@ -251,12 +251,51 @@ const importArchive = async (req, res) => {
     try { paths = JSON.parse(req.body.paths || '[]'); } catch { paths = []; }
     try {
         const conn = db.promise();
-        let imported = 0, skipped = 0;
+        let imported = 0, skipped = 0, doublons = 0;
+        const nomsDoublons = [];
+        /* MÊME NOM, MÊME PLACE : c'est déjà là. Un import se relance facilement — on reprend un
+           dossier « pour être sûr », on redépose un lot déjà traité — et rien n'empêchait le
+           coffre de garder deux fois le même document.
+
+           POURQUOI PAS « NOM + POIDS », LA RÈGLE QUI PARAÎT ÉVIDENTE. Parce qu'elle ne marche
+           pas. Mesuré sur les doublons réellement présents : « Droit image GERVAIS Raphaelle »
+           pèse 817 196 octets d'un côté, 731 771 de l'autre ; « Invitation LAMBERT Sylvain »,
+           300 290 contre 298 524. Ce sont des RÉ-EXPORTS du même document — le même Google Doc
+           réimprimé en PDF donne des octets différents (horodatage interne, compression). Sur
+           quatre paires examinées, trois avaient des tailles distinctes : la règle « nom +
+           poids » en aurait laissé passer trois sur quatre, et l'empreinte du contenu, quatre
+           sur quatre. C'est d'ailleurs pourquoi l'écran de stockage, qui regroupe par empreinte,
+           n'en signalait AUCUN.
+
+           LA PLACE COMPTE AUTANT QUE LE NOM. Le même document classé sous deux stagiaires n'est
+           pas un doublon : c'est la même pièce rangée à deux endroits, et les deux ont lieu
+           d'être. On compare donc l'année, la semaine, la formation et le stagiaire.
+
+           CE QUE CETTE RÈGLE REFUSE AUSSI : une version CORRIGÉE déposée sous le même nom, au
+           même endroit. C'est assumé — dans un coffre, un nom à un endroit désigne un document
+           et un seul. Pour remplacer, on supprime puis on réimporte ; et l'import NOMME ce
+           qu'il a écarté, pour qu'on s'en aperçoive au lieu de croire que tout est passé. */
+        const dejaLa = async (meta) => {
+            const [[r]] = await conn.query(
+                `SELECT 1 AS oui FROM archive_document
+                  WHERE organization_id = ?
+                    AND title = ?
+                    AND COALESCE(year, -1) = COALESCE(?, -1)
+                    AND COALESCE(week, -1) = COALESCE(?, -1)
+                    AND COALESCE(formation_label, '') = COALESCE(?, '')
+                    AND COALESCE(learner_name, '') = COALESCE(?, '')
+                  LIMIT 1`,
+                [req.user.organization_id, meta.title.slice(0, 255), meta.year, meta.week,
+                    meta.formation || null, meta.learner || null]);
+            return !!r;
+        };
+
         for (let i = 0; i < files.length; i++) {
             const f = files[i];
             const isPdf = /pdf$/i.test(f.mimetype || '') || /\.pdf$/i.test(f.originalname || '');
             if (!isPdf) { skipped++; continue; }
             const meta = parsePath(paths[i] || f.originalname);
+            if (await dejaLa(meta)) { doublons++; nomsDoublons.push(meta.title); continue; }
             await conn.query(
                 `INSERT INTO archive_document
                     (id, organization_id, year, week, formation_label, learner_name, title, status, mime, file)
@@ -266,7 +305,15 @@ const importArchive = async (req, res) => {
             );
             imported++;
         }
-        res.status(201).json({ data: { imported, skipped } });
+        /* `doublons` À PART DE `skipped` : un fichier écarté parce qu'il n'est pas un PDF et un
+           fichier écarté parce qu'il est déjà là ne demandent pas le même geste. Les confondre
+           ferait croire à un import raté là où il n'y avait rien à faire. */
+        /* `doublons` À PART DE `skipped` : un fichier écarté parce qu'il n'est pas un PDF et un
+           fichier écarté parce qu'il est déjà là ne demandent pas le même geste. Les confondre
+           ferait croire à un import raté là où il n'y avait rien à faire.
+           Les NOMS partent aussi : un compte ne dit pas lequel, et c'est lequel qui compte
+           quand on voulait justement remplacer une version par sa correction. */
+        res.status(201).json({ data: { imported, skipped, doublons, noms_doublons: nomsDoublons.slice(0, 20) } });
     } catch (err) {
         console.error('Erreur import archives :', err);
         if (err && /max_allowed_packet|packet/i.test(err.message || '')) {
