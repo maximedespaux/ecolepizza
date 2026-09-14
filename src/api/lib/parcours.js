@@ -76,6 +76,11 @@ function computeDocParcours({ steps = [], docs = [], pieces = {} } = {}) {
            pièce visée. Il cherchait à la place un MODÈLE DE DOCUMENT portant ce slug, qui
            n'existe pas : une pièce vit dans `piece_type`, pas dans `document_template`. */
         piece_id: r.s.piece_id || null,
+        /* COMBIEN DE FICHIERS CETTE PIÈCE ATTEND. Le plafond est appliqué au dépôt (le serveur
+           refuse le fichier de trop en nommant le nombre admis), mais l'écran doit le connaître
+           AVANT : sans lui, le sélecteur reste mono-fichier et un justificatif en six pages se
+           dépose en six allers-retours. */
+        fichiers_attendus: Math.max(1, Number(r.s.fichiers_attendus) || 1),
         pieceStatus: r.pieceStatus || null, // ATTENDUE | DEPOSEE | VALIDEE | REFUSEE (étapes « pièce »)
         status: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo',
     }));

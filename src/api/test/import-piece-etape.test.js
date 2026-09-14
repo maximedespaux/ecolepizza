@@ -58,7 +58,10 @@ test('l\'écran aiguille la pièce vers son circuit, pas vers les documents', ()
     const corps = bloc.slice(0, bloc.indexOf('\n  }'));
     assert.match(corps, /if \(step\.piece\) \{/,
         'une étape « pièce » doit être aiguillée AVANT la recherche d\'un modèle de document');
-    assert.match(corps, /deposerPiece\(curEnrId, step\.piece_id, file\)/,
+    /* Le troisième argument n'est plus `file` mais la variable de boucle : une pièce peut
+       attendre plusieurs fichiers, déposés en série (cf. piece-depot-multiple). Ce qui est
+       gelé ici, c'est la ROUTE et la CIBLE, pas le nom de la variable. */
+    assert.match(corps, /deposerPiece\(curEnrId, step\.piece_id, /,
         'le dépôt passe par la route des pièces, avec le type visé');
     assert.ok(corps.indexOf('step.piece') < corps.indexOf('templates.find'),
         'l\'aiguillage doit précéder `templates.find`, sinon le message « Modèle introuvable » revient');

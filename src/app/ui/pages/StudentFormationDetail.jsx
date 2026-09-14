@@ -54,16 +54,45 @@ function StudentFormationDetail() {
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
-  function choisirFichier(pieceTypeId) { pieceCible.current = pieceTypeId; fileRef.current?.click(); }
+  /* `multiple` SE POSE AVANT LE CLIC : une pièce peut attendre plusieurs fichiers — un
+     justificatif de domicile en six pages — et le plafond vient de son type. Sans cela, le
+     stagiaire photographie six pages et n'en envoie qu'une, sans que rien ne le lui dise. */
+  function choisirFichier(pieceTypeId, attendus = 1) {
+    pieceCible.current = pieceTypeId;
+    if (fileRef.current) fileRef.current.multiple = (attendus || 1) > 1;
+    fileRef.current?.click();
+  }
+
   async function onFichier(e) {
-    const file = e.target.files?.[0];
+    // Lus AVANT la remise à zéro : vider le champ vide aussi sa liste de fichiers.
+    const fichiers = Array.from(e.target.files || []);
     e.target.value = "";
-    if (!file || !pieceCible.current) return;
-    try {
-      await deposerPiece(id, pieceCible.current, file);
-      setStatus({ type: "success", message: "Document envoyé. Il sera vérifié par l'école." });
-      load();
-    } catch (err) { setStatus({ type: "error", message: err.message }); }
+    if (!fichiers.length || !pieceCible.current) return;
+    /* UN FICHIER PAR REQUÊTE, EN SÉRIE : la route est `single('fichier')`, et c'est elle qui
+       compte les fichiers déjà déposés pour refuser celui de trop. En parallèle, deux envois
+       liraient le même compte et passeraient tous les deux le plafond. */
+    let envoyes = 0;
+    let echec = null;
+    for (const f of fichiers) {
+      try { await deposerPiece(id, pieceCible.current, f); envoyes += 1; }
+      catch (err) { echec = err.message; break; }  // la suite tomberait sur le même motif
+    }
+    if (envoyes) load();
+    if (echec) {
+      setStatus({
+        type: "error",
+        message: envoyes
+          ? `${envoyes} document${envoyes > 1 ? "s" : ""} sur ${fichiers.length} envoyé${envoyes > 1 ? "s" : ""}. Les suivants ont été refusés : ${echec}`
+          : echec,
+      });
+    } else {
+      setStatus({
+        type: "success",
+        message: envoyes > 1
+          ? `${envoyes} documents envoyés. Ils seront vérifiés par l'école.`
+          : "Document envoyé. Il sera vérifié par l'école.",
+      });
+    }
   }
 
   // Construit la liste ordonnée des ÉTAPES : d'abord les pièces à fournir, puis les documents.
@@ -136,7 +165,7 @@ function StudentFormationDetail() {
                               </button>
                             )}
                             {(e.etat === "todo" || e.etat === "refused") && (
-                              <button className="btn sm primary" onClick={() => choisirFichier(e.p.piece_type_id)}>
+                              <button className="btn sm primary" onClick={() => choisirFichier(e.p.piece_type_id, e.p.fichiers_attendus)}>
                                 <Icon name="upload" size={14} /> {e.etat === "refused" ? "Renvoyer" : "Fournir"}
                               </button>
                             )}
