@@ -283,6 +283,19 @@ const TOKEN_CATALOG = [
             { key: 'Résultats', label: 'Tableau des résultats par bloc', sample: '(tableau bloc / points / seuil / verdict)' },
             { key: 'Décision', label: 'Décision du jury', sample: 'BLOCS ACQUIS' },
             { key: 'Observations', label: 'Observations du jury', sample: 'C1.7 non acquise : cause du défaut non identifiée.' },
+            /* LE PROCÈS-VERBAL DE LA COMMISSION (migration 150). Les jetons ci-dessus décrivent
+               la session d'examen ; ceux-ci décrivent la SÉANCE de délibération : qui siégeait,
+               à quelle heure, combien de candidats, et ce qui a été décidé pour chacun. */
+            { key: 'PVHeure', label: 'Heure de la commission', sample: '9 h 30' },
+            { key: 'PVJury', label: 'Composition de la commission', sample: 'Mme Hélène Ferrand — présidente · M. Paul Rossi — membre du jury' },
+            { key: 'PVReprésentant', label: 'Représentant du certificateur', sample: 'Mme Hélène Ferrand' },
+            { key: 'PVFonction représentant', label: 'Fonction du représentant', sample: 'Responsable administrative et handicap' },
+            { key: 'PVInscrits', label: 'Nombre de candidats inscrits', sample: '2' },
+            { key: 'PVAdmis', label: 'Nombre de candidats admis', sample: '1' },
+            { key: 'PVNonAdmis', label: 'Nombre de candidats non admis', sample: '1' },
+            { key: 'PVCandidats', label: 'Liste des candidats et décisions', sample: '(tableau nom / naissance / décision)' },
+            { key: 'PVMembres', label: 'Émargement des membres de la commission', sample: '(tableau nom / fonction / émargement)' },
+            { key: 'PVAléas', label: 'Aléas et dysfonctionnements', sample: 'Néant.' },
         ],
     },
     /* ÉVALUATION PRATIQUE (migration 148) — la grille du formateur, imprimable.
@@ -311,10 +324,34 @@ const TOKEN_CATALOG = [
             { key: 'NoteDétail', label: 'Tableau des exercices', sample: '(tableau exercice / mesure / points)' },
         ],
     },
+    /* JURY (migration 149) — la grille remplie par un jury externe le jour de l'examen.
+     *
+     * DISTINCT DE L'ÉVALUATION PRATIQUE ci-dessus, et ce n'est pas un doublon : le formateur
+     * compte des points en continu pendant le stage, le jury COCHE des critères le jour de
+     * l'épreuve et valide des compétences. Le document du jury imprime « 5 sur 7 », jamais un
+     * pourcentage — forcer l'un dans l'autre ferait dire au papier signé autre chose que ce que
+     * le jury a coché. Les deux peuvent coexister sur une même formation. */
+    {
+        group: 'Jury',
+        tokens: [
+            { key: 'JuryGrille', label: 'Intitulé de la grille', sample: "Grille d'évaluation — RS7404" },
+            { key: 'JuryCompétences', label: 'Compétences validées', sample: '5 / 7' },
+            { key: 'JuryDétail', label: 'Tableau des compétences', sample: '(tableau compétence / critères / validée)' },
+            { key: 'JuryCritères', label: 'Grille complète, critère par critère', sample: '(tableau compétence / critère / validation / remarque)',
+              desc: 'La grille entière, dans les quatre colonnes du document papier. C’est la '
+                  + 'trace de ce qui a été observé ; {JuryDétail} n’en est que la synthèse.' },
+            { key: 'JuryAvis', label: 'Avis du jury', sample: 'Favorable',
+              desc: 'Prononcé par le jury, jamais déduit du compte. Vide tant qu’il ne l’a pas donné.' },
+            { key: 'JuryRattrapage', label: 'Rattrapage', sample: 'Non' },
+            { key: 'JuryObservations', label: 'Observations du jury', sample: 'Corniche irrégulière sur deux pizzas.' },
+            { key: 'JuryMembres', label: 'Membres du jury et signatures', sample: '(tableau nom / signature)' },
+            { key: 'JuryDate', label: "Date de clôture de l'évaluation", sample: '03/07/2026' },
+        ],
+    },
 ];
 
 // Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles', 'Règlements', 'NoteDétail']);
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles', 'Règlements', 'NoteDétail', 'JuryDétail', 'JuryCritères', 'JuryMembres', 'PVCandidats', 'PVMembres']);
 
 // Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
 const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -421,6 +458,64 @@ function totalRow(cellules, mixte, remise) {
  * imprimer « 0 / 0 — Non réussi » sur l'attestation d'une formation qui n'évalue rien ferait
  * dire au document l'exact contraire de la réalité.
  */
+/**
+ * Jetons du document du jury. Tout est vide sans grille de jury — même raison que plus haut :
+ * « 0 / 7 — Non validée » sur le document d'une formation sans jury dirait le contraire du vrai.
+ */
+function juryTokens(jv) {
+    const vide = {
+        JuryGrille: '', 'JuryCompétences': '', 'JuryDétail': '', 'JuryCritères': '', JuryAvis: '',
+        JuryRattrapage: '', JuryObservations: '', JuryMembres: '', JuryDate: '',
+    };
+    if (!jv || !jv.grille || !jv.competences || !jv.competences.length) return vide;
+    const r = jv.resultat || { validees: 0, total: 0, details: [] };
+    const remarques = jv.remarques || {};
+    const lignes = (r.details || []).map((d) => {
+        const comp = jv.competences.find((c) => c.id === d.id) || {};
+        const criteres = (comp.criteres || []).filter((c) => c.active);
+        /* Les remarques des critères de CETTE compétence, mises bout à bout. Les répartir sur
+           une ligne par critère ferait un tableau de trente-huit lignes sur un document que le
+           jury signe à la main. */
+        const mots = criteres.map((c) => remarques[c.id]).filter(Boolean).join(' · ');
+        return {
+            label: `${comp.code ? `${comp.code}. ` : ''}${comp.label || ''}`,
+            'critères': `${d.valides} / ${d.total}`,
+            validee: d.validee === true ? 'OUI' : d.validee === false ? 'NON' : '—',
+            remarques: mots,
+        };
+    });
+    /* La grille entière, à plat. Un critère NON VU se dit « — » et non « NON » : le jury ne
+       l'a pas refusé, il ne l'a pas regardé — et la clôture l'interdit de toute façon. */
+    const plat = [];
+    for (const comp of jv.competences) {
+        const criteres = (comp.criteres || []).filter((c) => c.active);
+        criteres.forEach((c, i) => {
+            const p = (jv.notes || []).find((n) => n.exercice_id === c.id);
+            plat.push({
+                competence: i === 0 ? `${comp.code ? `${comp.code}. ` : ''}${comp.label || ''}` : '',
+                critere: c.label || '',
+                validation: !p || p.points === null ? '—' : (p.points === 1 ? 'OUI' : 'NON'),
+                remarque: (p && p.commentaire) || '',
+            });
+        });
+    }
+
+    const v = jv.verdict || {};
+    return {
+        JuryGrille: jv.grille.label || '',
+        'JuryCritères': juryCriteresTable(plat),
+        'JuryCompétences': `${r.validees} / ${r.total}`,
+        'JuryDétail': juryTable(lignes),
+        JuryAvis: v.avis === 'FAVORABLE' ? 'Favorable' : v.avis === 'DEFAVORABLE' ? 'Défavorable' : '',
+        /* « Non » PLUTÔT QUE VIDE quand le jury a délibéré : une case blanche sur un document
+           signé se lit comme un oubli, pas comme un refus de rattrapage. */
+        JuryRattrapage: v.avis ? (v.rattrapage ? 'Oui' : 'Non') : '',
+        JuryObservations: v.observations || '',
+        JuryMembres: juryMembresTable(jv.membres),
+        JuryDate: v.cloture_le || '',
+    };
+}
+
 function evaluationTokens(ev) {
     const vide = {
         'Évaluation': '', NoteTotale: '', NotePoints: '', NoteMax: '', NotePourcent: '',
@@ -488,6 +583,85 @@ function evaluationTable(lignes) {
     const head = '<tr><th>Exercice</th><th>Résultat</th><th>Points</th></tr>';
     const body = lignes.map((l) => `<tr><td>${escCell(l.label)}</td><td>${escCell(l.mesure)}</td>`
         + `<td>${escCell(l.points)}</td></tr>`).join('');
+    return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
+}
+
+/**
+ * Détail d'une grille de jury, une compétence par ligne. RAW : injecté tel quel.
+ *
+ * LES TROIS COLONNES DE LA GRILLE PAPIER, dans son ordre : la compétence, ce qui a été validé,
+ * le verdict. La REMARQUE y est reprise parce qu'elle est souvent la seule chose que le
+ * candidat relira — « Remarque / recommandation / axe de progression éventuel » n'est pas une
+ * colonne décorative, c'est ce qui lui dit quoi travailler.
+ */
+function juryTable(lignes) {
+    if (!lignes || !lignes.length) return '';
+    const head = '<tr><th>Compétence</th><th>Critères</th><th>Validée</th><th>Remarques</th></tr>';
+    const body = lignes.map((l) => `<tr><td>${escCell(l.label)}</td><td>${escCell(l.critères)}</td>`
+        + `<td>${escCell(l.validee)}</td><td>${escCell(l.remarques)}</td></tr>`).join('');
+    return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
+}
+
+/**
+ * LA GRILLE ENTIÈRE, critère par critère — les quatre colonnes du document papier. RAW.
+ *
+ * C'EST LA TRACE DE CE QUI A ÉTÉ OBSERVÉ, et c'est ce qu'un contrôle vient chercher : « 5
+ * compétences sur 7 » ne dit pas lesquelles ni pourquoi. La synthèse ({JuryDétail}) sert au
+ * candidat ; celle-ci sert à la preuve, et c'est elle qui ressemble au papier signé aujourd'hui.
+ *
+ * LA COMPÉTENCE N'EST RÉPÉTÉE QUE SUR SA PREMIÈRE LIGNE : LibreOffice ne fusionne pas les
+ * cellules verticalement de façon fiable (cf. CLAUDE.md § 3), et répéter l'intitulé à chaque
+ * ligne rendrait le tableau illisible.
+ */
+function juryCriteresTable(lignes) {
+    if (!lignes || !lignes.length) return '';
+    const head = '<tr><th>Compétence</th><th>Mise en situation professionnelle</th>'
+        + '<th>Validation</th><th>Remarque / axe de progression</th></tr>';
+    const body = lignes.map((l) => `<tr><td>${escCell(l.competence)}</td><td>${escCell(l.critere)}</td>`
+        + `<td>${escCell(l.validation)}</td><td>${escCell(l.remarque)}</td></tr>`).join('');
+    return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
+}
+
+/**
+ * Les membres du jury, avec leur case de signature. RAW.
+ *
+ * UNE CASE VIDE PAR MEMBRE, et non une seule pour « le jury » : le règlement d'examen fait
+ * signer chacun, et une case unique laisserait croire qu'un seul a évalué.
+ */
+function juryMembresTable(membres) {
+    if (!membres || !membres.length) return '';
+    const head = '<tr><th>Nom et prénom</th><th>Qualité</th><th>Signature</th></tr>';
+    const body = membres.map((m) => `<tr><td>${escCell(`${m.last_name || ''} ${m.first_name || ''}`.trim())}</td>`
+        + `<td>${escCell(m.specialty || 'Membre du jury')}</td><td>&nbsp;<br>&nbsp;</td></tr>`).join('');
+    return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
+}
+
+/* Tableaux du procès-verbal. RAW, et `width="100%"` en ATTRIBUT (LibreOffice ignore le CSS). */
+const PV_ADMIS = new Set(['CERTIFIE', 'BLOCS_ACQUIS']);
+function pvCandidatsTable(lignes) {
+    if (!lignes || !lignes.length) return '';
+    const head = '<tr><th>NOM</th><th>Prénom</th><th>Date de naissance</th><th>Émargement</th>'
+        + '<th>Décision du jury</th></tr>';
+    const body = lignes.map((c) => {
+        /* « — » ET NON « Non admis » QUAND LA COMMISSION NE S'EST PAS PRONONCÉE. Compter comme
+           refusé quelqu'un qu'on n'a pas examiné serait faux, et le PV est signé. */
+        const d = PV_ADMIS.has(c.decision) ? 'Admis' : c.decision === 'EN_COURS' ? '—' : 'Non admis';
+        return `<tr><td>${escCell((c.last_name || '').toUpperCase())}</td><td>${escCell(c.first_name)}</td>`
+            + `<td>${escCell(c.birthday ? `Né(e) le ${c.birthday}` : '')}</td><td>&nbsp;<br>&nbsp;</td>`
+            + `<td>${escCell(d)}</td></tr>`;
+    }).join('');
+    return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
+}
+function pvMembresTable(jury) {
+    if (!jury || !jury.length) return '';
+    const head = '<tr><th>NOM</th><th>Prénom</th><th>Fonction</th><th>Émargement</th></tr>';
+    const body = jury.map((m) => {
+        /* Le nom est saisi d'un bloc (« DESPAUX Marie-Christine ») : on sépare sur le premier
+           espace, le patronyme étant écrit en tête et en capitales sur le PV. */
+        const [nom, ...reste] = String(m.nom || '').trim().split(/\s+/);
+        return `<tr><td>${escCell((nom || '').toUpperCase())}</td><td>${escCell(reste.join(' '))}</td>`
+            + `<td>${escCell(m.qualite || 'Membre du jury')}</td><td>&nbsp;<br>&nbsp;</td></tr>`;
+    }).join('');
     return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
 }
 
@@ -1026,8 +1200,10 @@ function resolveTokens(ctx = {}) {
           + `Aucun membre n'a formé les candidats évalués.`
         : '';
 
+    const pvLignes = Array.isArray(ctx.pvCandidats) ? ctx.pvCandidats : [];
     const factureVals = invoiceTokens(ctx.invoice);
     const evalVals = evaluationTokens(ctx.evaluation);
+    const juryVals = juryTokens(ctx.jury);
 
     return {
         // Stagiaire
@@ -1094,8 +1270,22 @@ function resolveTokens(ctx = {}) {
         'Blocs acquis': blocsAcquis.join(', '),
         'Résultats': resultatsTable(verdicts),
         'Décision': DECISIONS[res.decision] || '', Observations: res.observations || '',
+        // Procès-verbal de la commission de délibération (migration 150).
+        PVHeure: ex.heure || '', PVJury: jury.map(juryMembre).filter(Boolean).join(' · '),
+        'PVReprésentant': ex.representant || '', 'PVFonction représentant': ex.representant_fonction || '',
+        PVInscrits: pvLignes.length ? String(pvLignes.length) : '',
+        PVAdmis: pvLignes.length ? String(pvLignes.filter((c) => PV_ADMIS.has(c.decision)).length) : '',
+        /* NON ADMIS = décision prise ET défavorable. Les « en cours » ne sont ni d'un côté ni de
+           l'autre : les additionner ferait un PV dont les comptes ne tombent pas juste. */
+        PVNonAdmis: pvLignes.length
+            ? String(pvLignes.filter((c) => c.decision !== 'EN_COURS' && !PV_ADMIS.has(c.decision)).length) : '',
+        PVCandidats: pvCandidatsTable(pvLignes),
+        PVMembres: pvMembresTable(jury),
+        'PVAléas': ex.aleas || '',
         // Évaluation pratique (grille du formateur) — vide sans grille sur la formation.
         ...evalVals,
+        // Jury externe (grille de la 149) — vide sans grille de jury sur la formation.
+        ...juryVals,
         // Dates
         Date: today, Today: today,
         // Signature (valeurs HTML : cf. RAW_TOKENS)

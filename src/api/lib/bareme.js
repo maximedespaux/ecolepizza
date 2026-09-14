@@ -181,4 +181,97 @@ function reussite(grille, totaux) {
     return totaux.percent >= seuil;
 }
 
-module.exports = { BAREMES, lirePaliers, maximumExercice, pointsPour, dureeLisible, totalGrille, reussite };
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * VALIDATION PAR COMPÉTENCE — la règle du jury, qui n'est pas un total de points.
+ *
+ * SUR LA GRILLE PAPIER DE L'ÉCOLE, chaque bloc porte sa règle en toutes lettres : « le candidat
+ * doit valider les 6 critères », « au moins 5 critères sur 6, le critère C2.3 est obligatoire ».
+ * UN TOTAL NE SAIT PAS DIRE CELA : cinq critères sur six, et cinq sur six DONT LE BON, font cinq
+ * points l'un comme l'autre — et pourtant l'un valide la compétence et l'autre non.
+ *
+ * C'est pour cette seule raison que la compétence existe comme niveau à part, et non comme une
+ * façon d'afficher des exercices par paquets.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** Un critère est-il ACQUIS ? Un critère vaut 1 point : acquis, ou pas. */
+const critereAcquis = (points) => entier(points) === 1;
+
+/**
+ * Validation d'UNE compétence.
+ * @param comp     { min_valides }  `min_valides` null = TOUS les critères
+ * @param criteres exercices ACTIFS de la compétence, chacun { id, obligatoire }
+ * @param notes    { [exercice_id]: points }
+ * @returns { valides, total, requis, manquants, obligatoiresManques, notes: n, complet, validee }
+ *
+ * `validee` VAUT `null` TANT QUE TOUT N'EST PAS COCHÉ, et pas `false`. Une compétence dont il
+ * reste un critère à voir n'est pas refusée, elle n'est pas finie — sauf quand le résultat est
+ * DÉJÀ joué : un critère obligatoire manqué, ou trop de critères ratés pour que le seuil reste
+ * atteignable. Prononcer l'échec avant d'avoir tout vu serait faux ; le prononcer quand il est
+ * arithmétiquement acquis est simplement exact.
+ */
+function validationCompetence(comp, criteres, notes) {
+    const actifs = (criteres || []).filter((c) => c && c.active !== 0 && c.active !== false);
+    const total = actifs.length;
+    /* `min_valides` absent = tous. C'est la règle la plus fréquente sur la grille de l'école, et
+       la seule qui reste juste quand on ajoute un critère : un 6 écrit en dur deviendrait faux
+       en silence au septième. */
+    const brut = entier(comp && comp.min_valides);
+    const requis = brut === null ? total : Math.min(Math.max(brut, 0), total);
+
+    let valides = 0;
+    let rates = 0;
+    let n = 0;
+    const obligatoiresManques = [];
+    for (const c of actifs) {
+        const p = notes ? notes[c.id] : undefined;
+        if (p === null || p === undefined) continue;
+        n += 1;
+        if (critereAcquis(p)) valides += 1;
+        else {
+            rates += 1;
+            if (c.obligatoire) obligatoiresManques.push(c.id);
+        }
+    }
+    const complet = total > 0 && n === total;
+    /* Les critères obligatoires NON ENCORE VUS ne sont pas des manques : on les distingue, sinon
+       une compétence à peine commencée s'annoncerait perdue. */
+    const seuilInatteignable = total - rates < requis;
+    const echecAcquis = obligatoiresManques.length > 0 || seuilInatteignable;
+
+    let validee;
+    if (echecAcquis) validee = false;
+    else if (!complet) validee = null;
+    else validee = valides >= requis;
+
+    return {
+        valides, total, requis, notes: n, complet,
+        manquants: Math.max(0, requis - valides),
+        obligatoiresManques, validee,
+    };
+}
+
+/**
+ * Résultat d'un candidat sur une grille de jury.
+ * @param competences [{ ...comp, criteres: [...] }]
+ * @param notes       { [exercice_id]: points }
+ * @returns { validees, total, complet, details: Map code→validation }
+ *
+ * On compte les compétences VALIDÉES, pas les critères : c'est le « Nombre de compétences
+ * validées : /7 » du pied de grille, et c'est sur lui que le jury donne son avis.
+ */
+function resultatJury(competences, notes) {
+    const actives = (competences || []).filter((c) => c && c.active !== 0 && c.active !== false);
+    const details = [];
+    let validees = 0;
+    let complet = actives.length > 0;
+    for (const comp of actives) {
+        const v = validationCompetence(comp, comp.criteres, notes);
+        details.push({ ...v, id: comp.id, code: comp.code, label: comp.label });
+        if (v.validee === true) validees += 1;
+        if (v.validee === null) complet = false;
+    }
+    return { validees, total: actives.length, complet, details };
+}
+
+module.exports = { BAREMES, lirePaliers, maximumExercice, pointsPour, dureeLisible, totalGrille, reussite, critereAcquis, validationCompetence, resultatJury };

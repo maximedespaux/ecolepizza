@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const {
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate, duplicateTemplate,
-    getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
+    getTokens, poserModelesJury, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
     getCustomTokens, saveCustomTokens,
 } = require('../controllers/template.controller.js');
 const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
@@ -16,6 +16,7 @@ router.use(authenticateToken, authorizeRoles(...ADMIN_ROLES));
 
 router.get('/', listTemplates);
 router.put('/reorder', reorderTemplates);                 // ordre des modèles (glisser-déposer)
+router.post('/modeles-jury', poserModelesJury);   // pose les modèles du jury (sans rien écraser)
 router.get('/tokens', getTokens);                         // catalogue de jetons (palette)
 router.get('/custom-tokens', getCustomTokens);            // jetons personnalisés (liste)
 router.put('/custom-tokens', saveCustomTokens);           // jetons personnalisés (enregistrer)

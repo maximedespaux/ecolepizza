@@ -47,7 +47,7 @@ const { encrypt, decrypt } = require('../lib/crypto.js');
 const { getEnabledFields, loadDossierFactsMap, evalCondition } = require('../lib/conditions.js');
 const { matchStep } = require('../lib/documents.js');
 const { notify } = require('./notification.controller.js');
-const { resultatDossier } = require('./evaluation.controller.js');
+const { resultatDossier, resultatJuryDossier } = require('./evaluation.controller.js');
 
 // IP « client » (best-effort, derrière proxy éventuel).
 function clientIp(req) {
@@ -255,12 +255,14 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
        n'est pas jouée : les jetons sortent alors VIDES, et un modèle qui les porte reste
        imprimable. C'est la même tolérance que les autres blocs de cette fonction. */
     let evaluation = null;
+    let jury = null;
     if (documentId) {
         try {
             const [[dfEval]] = await conn.query(
                 'SELECT enrollment_id FROM document_formation WHERE document_id = ? LIMIT 1', [documentId]);
             if (dfEval && dfEval.enrollment_id) {
                 evaluation = await resultatDossier(conn, organizationId, dfEval.enrollment_id);
+                jury = await resultatJuryDossier(conn, organizationId, dfEval.enrollment_id);
             }
         } catch (e) { /* évaluation indisponible : jetons vides */ }
     }
@@ -277,7 +279,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     // Jetons personnalisés de l'organisme (calculés à partir des autres au rendu).
     let customTokens = [];
     try { customTokens = await loadCustomTokens(organizationId); } catch { /* migration absente */ }
-    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation };
+    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury };
 }
 
 // Un document d'émargement (type EMARGEMENT) : rendu via le moteur d'émargement

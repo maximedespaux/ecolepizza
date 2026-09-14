@@ -1244,16 +1244,74 @@ export function deleteContribution(id) {
 /* ÉVALUATION PRATIQUE (migration 148) — la grille d'une formation, les notes d'une session.
    Les POINTS ne sont jamais envoyés : on transmet la MESURE (un temps, une note, un geste
    acquis) et le serveur applique le barème. Cf. api/lib/bareme.js. */
-export function getGrilleEvaluation(programId) {
-  return request(`/evaluations/formation/${programId}`);
+/* Pose les modèles de document du jury. N'écrase jamais un modèle existant : le corps livré
+   n'est qu'un point de départ, et l'organisme le retouche ensuite. */
+export function poserModelesJury() {
+  return request("/templates/modeles-jury", { method: "POST" });
+}
+/* PROCÈS-VERBAL DE JURY — la commission de délibération d'une session (migration 150). */
+export function getCommission(sessionId) {
+  return request(`/examens/session/${sessionId}`);
+}
+export function saveCommission(sessionId, payload) {
+  return request(`/examens/session/${sessionId}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function saveDecisionJury(payload) {
+  return request("/examens/decision", { method: "PUT", body: JSON.stringify(payload) });
+}
+export function cloturerCommission(sessionId) {
+  return request(`/examens/session/${sessionId}/cloturer`, { method: "POST" });
+}
+/* Le PV est un PDF rendu à la demande depuis les données FIGÉES de la commission : il n'est pas
+   rangé dans le parcours d'un stagiaire, puisqu'il n'appartient à aucun.
+   PAS UN SIMPLE LIEN `href` : la route est en POST (elle journalise l'édition), et un lien nu
+   avalerait l'erreur — « modèle introuvable » s'afficherait en page blanche au lieu d'un
+   message. On passe donc par `fetch`, comme les factures. */
+export async function ouvrirPvJury(sessionId) {
+  startLoading();
+  let res;
+  try {
+    res = await fetch(`${API_BASE_URL}/examens/session/${sessionId}/pv`, { method: "POST", credentials: "include" });
+  } finally {
+    stopLoading();
+  }
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.message || d.error || "Édition du procès-verbal impossible.");
+  }
+  const url = URL.createObjectURL(await res.blob());
+  window.open(url, "_blank", "noopener");
+  /* On révoque APRÈS un délai : révoquer tout de suite couperait le chargement de l'onglet qui
+     vient de s'ouvrir, et la page resterait blanche. */
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+export function getGrilleEvaluation(programId, role) {
+  /* Une formation porte DEUX grilles : celle du formateur (notation continue) et celle du jury
+     (examen). Le rôle dit laquelle on demande. */
+  return request(`/evaluations/formation/${programId}${role ? `?role=${encodeURIComponent(role)}` : ""}`);
 }
 export function saveGrilleEvaluation(programId, payload) {
   return request(`/evaluations/formation/${programId}`, { method: "PUT", body: JSON.stringify(payload) });
 }
-export function getEvaluationSession(sessionId, silent) {
+/* ESPACE INTERVENANT — les mêmes gestes, sous une porte de plus : le serveur y revérifie que
+   le membre du jury est AFFECTÉ à la session avant de déléguer aux contrôleurs d'évaluation. */
+export function getMaGrilleJury(sessionId, silent) {
+  return request(`/intervenant/evaluation/${sessionId}`, { silent });
+}
+export function noterJury(payload) {
+  return request("/intervenant/evaluation/note", { method: "PUT", body: JSON.stringify(payload) });
+}
+export function verdictJury(payload) {
+  return request("/intervenant/evaluation/verdict", { method: "PUT", body: JSON.stringify(payload) });
+}
+export function cloturerJury(payload) {
+  return request("/intervenant/evaluation/cloturer", { method: "POST", body: JSON.stringify(payload) });
+}
+export function getEvaluationSession(sessionId, silent, role) {
   /* `silent` : la relecture qui suit CHAQUE note ne doit pas faire clignoter la barre de
      chargement — le formateur saisit en rafale, et l'écran passerait son temps à scintiller. */
-  return request(`/evaluations/session/${sessionId}`, { silent });
+  return request(`/evaluations/session/${sessionId}${role ? `?role=${encodeURIComponent(role)}` : ""}`, { silent });
 }
 export function saveNoteEvaluation(payload) {
   return request("/evaluations/note", { method: "PUT", body: JSON.stringify(payload) });

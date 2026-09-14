@@ -3,7 +3,8 @@ import { Icon } from "./Icon.jsx";
 import HelpDot from "./HelpDot.jsx";
 import StatusMessage from "./StatusMessage.jsx";
 import { Squelette } from "./Squelette.jsx";
-import { getGrilleEvaluation, saveGrilleEvaluation } from "../api/apiClient.js";
+import { getGrilleEvaluation, saveGrilleEvaluation, getTemplates, poserModelesJury } from "../api/apiClient.js";
+import { grilleDepart } from "../lib/grilleRS7404.js";
 import { secondesEnMinSec, minSecEnSecondes } from "../lib/format.js";
 
 /**
@@ -42,27 +43,41 @@ function maximumExercice(ex) {
 
 const vide = () => ({ id: null, label: "", consigne: "", bareme: "POINTS", max_points: 20, paliers: [] });
 
-function GrilleEvaluation({ programId, programTitle }) {
+function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
+  const jury = role === "JURY";
   const [chargement, setChargement] = useState(true);
   const [status, setStatus] = useState(null);
   const [label, setLabel] = useState("Évaluation pratique");
   const [seuil, setSeuil] = useState("");
   const [exercices, setExercices] = useState([]);
   const [ouvert, setOuvert] = useState(null); // exercice dont la consigne est dépliée
+  const [competences, setCompetences] = useState([]);
+  const [slug, setSlug] = useState("");        // modèle de document produit à la clôture
+  const [modeles, setModeles] = useState([]);
 
   useEffect(() => {
     let vivant = true;
     setChargement(true);
-    getGrilleEvaluation(programId).then((r) => {
+    getGrilleEvaluation(programId, role).then((r) => {
       if (!vivant) return;
       const g = r.data;
       if (g) {
         setLabel(g.label || "Évaluation pratique");
         setSeuil(g.pass_score == null ? "" : String(g.pass_score));
+        setSlug(g.template_slug || "");
+        /* Même règle que pour les exercices : les compétences DÉSACTIVÉES ne remontent pas —
+           les renvoyer telles quelles les ressusciterait à l'enregistrement. */
+        setCompetences((g.competences || []).filter((c) => c.active).map((c) => ({
+          ...c, criteres: (c.criteres || []).filter((x) => x.active).map((x) => ({ ...x })),
+        })));
         /* Les exercices DÉSACTIVÉS ne remontent pas à l'écran : ils ne comptent plus, mais
            gardent leurs notes en base. Les réafficher inviterait à les réactiver par
            mégarde — et les renvoyer tels quels les ressusciterait à l'enregistrement. */
-        setExercices((g.exercices || []).filter((e) => e.active).map((e) => ({
+        /* `!e.competence_id` : LES CRITÈRES SONT DES EXERCICES, mais ils appartiennent à leur
+           compétence et sont renvoyés par elle. Sans cette exclusion ils remontaient AUSSI dans
+           la liste plate et repartaient en double à l'enregistrement — une fois comme critère,
+           une fois comme exercice libre, donc détachés de leur compétence. */
+        setExercices((g.exercices || []).filter((e) => e.active && !e.competence_id).map((e) => ({
           ...e,
           consigne: e.consigne || "",
           paliers: (() => { try { return typeof e.paliers === "string" ? JSON.parse(e.paliers) || [] : (e.paliers || []); } catch { return []; } })(),
@@ -75,7 +90,14 @@ function GrilleEvaluation({ programId, programTitle }) {
       setChargement(false);
     });
     return () => { vivant = false; };
-  }, [programId]);
+  }, [programId, role]);
+
+  /* Les modèles de document ne servent qu'à la grille de jury (le document de clôture) : on ne
+     les charge pas pour le formateur, qui n'en produit pas. */
+  useEffect(() => {
+    if (!jury) return;
+    getTemplates().then((r) => setModeles(r.data || [])).catch(() => {});
+  }, [jury]);
 
   const maj = (i, patch) => setExercices((xs) => xs.map((x, k) => (k === i ? { ...x, ...patch } : x)));
   const majPalier = (i, j, patch) => setExercices((xs) => xs.map((x, k) => (k === i
@@ -117,14 +139,42 @@ function GrilleEvaluation({ programId, programTitle }) {
 
   const total = exercices.reduce((s, ex) => s + maximumExercice(ex), 0);
 
+  /* Pose le modèle livré, puis le sélectionne : l'utilisateur voulait un document, pas une
+     liste rafraîchie. */
+  async function poserModele() {
+    setStatus(null);
+    try {
+      const r = await poserModelesJury();
+      const rt = await getTemplates();
+      setModeles(rt.data || []);
+      setSlug("grille-jury");
+      setStatus({ type: "success", message: (r.data?.poses || []).length
+        ? "Modèle « Grille d'évaluation du jury » créé. Vous pouvez le retoucher dans Modèles."
+        : "Le modèle existait déjà, il n'a pas été modifié." });
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+
   async function enregistrer() {
-    const manquant = exercices.findIndex((e) => !String(e.label).trim());
-    if (manquant >= 0) { setStatus({ type: "error", message: `Nommez l'exercice n° ${manquant + 1}.` }); return; }
+    if (jury) {
+      const c = competences.findIndex((x) => !String(x.label).trim());
+      if (c >= 0) { setStatus({ type: "error", message: `Nommez la compétence n° ${c + 1}.` }); return; }
+      const vide = competences.find((x) => (x.criteres || []).some((y) => !String(y.label).trim()));
+      if (vide) { setStatus({ type: "error", message: `Un critère de « ${vide.label} » n'a pas d'intitulé.` }); return; }
+    } else {
+      const manquant = exercices.findIndex((e) => !String(e.label).trim());
+      if (manquant >= 0) { setStatus({ type: "error", message: `Nommez l'exercice n° ${manquant + 1}.` }); return; }
+    }
     setStatus(null);
     try {
       const r = await saveGrilleEvaluation(programId, {
+        role,
         label,
         pass_score: seuil === "" ? null : Number(seuil),
+        template_slug: jury ? (slug || null) : undefined,
+        competences: jury ? competences.map((c) => ({
+          id: c.id, code: c.code, label: c.label, min_valides: c.min_valides,
+          criteres: (c.criteres || []).map((x) => ({ id: x.id, label: x.label, obligatoire: x.obligatoire ? 1 : 0 })),
+        })) : undefined,
         exercices: exercices.map((e) => ({
           id: e.id, label: e.label, consigne: e.consigne || null,
           bareme: e.bareme, max_points: e.max_points, paliers: e.paliers,
@@ -133,10 +183,15 @@ function GrilleEvaluation({ programId, programTitle }) {
       /* On REPREND les identifiants renvoyés : sans cela, un deuxième enregistrement
          recréerait les exercices tout juste créés au lieu de les mettre à jour. */
       const g = r.data;
-      if (g) setExercices((g.exercices || []).filter((e) => e.active).map((e) => ({
-        ...e, consigne: e.consigne || "",
-        paliers: (() => { try { return typeof e.paliers === "string" ? JSON.parse(e.paliers) || [] : (e.paliers || []); } catch { return []; } })(),
-      })));
+      if (g) {
+        setExercices((g.exercices || []).filter((e) => e.active && !e.competence_id).map((e) => ({
+          ...e, consigne: e.consigne || "",
+          paliers: (() => { try { return typeof e.paliers === "string" ? JSON.parse(e.paliers) || [] : (e.paliers || []); } catch { return []; } })(),
+        })));
+        setCompetences((g.competences || []).filter((c) => c.active).map((c) => ({
+          ...c, criteres: (c.criteres || []).filter((x) => x.active).map((x) => ({ ...x })),
+        })));
+      }
       setStatus({ type: "success", message: "Grille enregistrée." });
     } catch (e) {
       setStatus({ type: "error", message: e.message });
@@ -149,26 +204,59 @@ function GrilleEvaluation({ programId, programTitle }) {
     <>
       <StatusMessage status={status} />
       <p className="hint" style={{ marginTop: 0 }}>
-        Ce que le formateur notera sur le terrain pour {programTitle ? <b>{programTitle}</b> : "cette formation"}, et ce que chaque mesure vaut en points.
-        Il saisira un chrono ou une appréciation&nbsp;: <b>les points sont calculés ici</b>, jamais tapés à la main.
+        {jury ? (
+          <>Ce que le jury cochera le jour de l'examen pour {programTitle ? <b>{programTitle}</b> : "cette formation"}.
+            Chaque critère vaut <b>1 point</b>&nbsp;: acquis ou non. C'est la <b>compétence</b> qui se valide,
+            selon la règle que vous posez ci-dessous.</>
+        ) : (
+          <>Ce que le formateur notera sur le terrain pour {programTitle ? <b>{programTitle}</b> : "cette formation"}, et ce que chaque mesure vaut en points.
+            Il saisira un chrono ou une appréciation&nbsp;: <b>les points sont calculés ici</b>, jamais tapés à la main.</>
+        )}
       </p>
 
       <div className="row2" style={{ alignItems: "flex-start" }}>
         <div className="field">
           <label>Intitulé de la grille</label>
-          <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Évaluation pratique" />
+          <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)}
+            placeholder={jury ? "Grille d'évaluation — jury" : "Évaluation pratique"} />
         </div>
-        <div className="field">
-          <label>
-            Seuil de réussite (%)
-            <HelpDot text={"Pourcentage du total à atteindre pour que l'évaluation soit réussie.\n\nLaisser vide : la grille compte les points sans prononcer de réussite.\n\nTant que tous les exercices ne sont pas notés, l'échec n'est jamais prononcé — un stagiaire à mi-parcours n'a pas échoué, il n'a pas fini."} />
-          </label>
-          <input className="inp" type="number" min="0" max="100" value={seuil} placeholder="Aucun"
-            onChange={(e) => setSeuil(e.target.value)} style={{ maxWidth: 140 }} />
-        </div>
+        {jury ? (
+          <div className="field">
+            <label>
+              Document produit à la clôture
+              <HelpDot text={"Le modèle imprimé quand le jury clôture l'évaluation d'un candidat.\n\nIl reçoit les jetons de la grille ({JuryDétail}, {JuryCompétences}, {JuryAvis}) et se fait signer par les membres du jury, le stagiaire et l'organisme.\n\nLaisser vide : la grille se remplit quand même, elle n'imprime simplement rien."} />
+            </label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select className="inp" style={{ flex: 1, minWidth: 0 }} value={slug} onChange={(e) => setSlug(e.target.value)}>
+                <option value="">Aucun document</option>
+                {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.title || m.slug}</option>)}
+              </select>
+              {/* LE MODÈLE MANQUE AU MOMENT OÙ ON LE CHERCHE : le poser depuis la liste
+                  déroulante évite d'aller le monter dans un autre écran puis de revenir.
+                  Il n'écrase jamais un modèle existant — le serveur le dit. */}
+              {!modeles.some((m) => m.slug === "grille-jury") && (
+                <button type="button" className="btn sm ghost" onClick={poserModele}>Créer le modèle</button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="field">
+            <label>
+              Seuil de réussite (%)
+              <HelpDot text={"Pourcentage du total à atteindre pour que l'évaluation soit réussie.\n\nLaisser vide : la grille compte les points sans prononcer de réussite.\n\nTant que tous les exercices ne sont pas notés, l'échec n'est jamais prononcé — un stagiaire à mi-parcours n'a pas échoué, il n'a pas fini."} />
+            </label>
+            <input className="inp" type="number" min="0" max="100" value={seuil} placeholder="Aucun"
+              onChange={(e) => setSeuil(e.target.value)} style={{ maxWidth: 140 }} />
+          </div>
+        )}
       </div>
 
-      {exercices.length === 0 ? (
+      {jury && (
+        <CompetencesEditor competences={competences} onChange={setCompetences}
+          onSemer={() => setCompetences(grilleDepart())} />
+      )}
+
+      {jury ? null : exercices.length === 0 ? (
         <p className="hint">Aucun exercice. Ajoutez-en un ci-dessous.</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -232,16 +320,25 @@ function GrilleEvaluation({ programId, programTitle }) {
       )}
 
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
-        <button type="button" className="btn sm ghost" onClick={() => setExercices((xs) => [...xs, vide()])}>＋ Ajouter un exercice</button>
+        {!jury && (
+          <button type="button" className="btn sm ghost" onClick={() => setExercices((xs) => [...xs, vide()])}>＋ Ajouter un exercice</button>
+        )}
         <span className="hint" style={{ margin: 0 }}>
-          Total de la grille&nbsp;: <b>{total}</b> pts
-          {seuil !== "" && total > 0 && <> · réussite à partir de <b>{Math.ceil((total * Number(seuil)) / 100)}</b> pts</>}
+          {jury ? (
+            <>{competences.length} compétence{competences.length > 1 ? "s" : ""} ·{" "}
+              {competences.reduce((n, c) => n + (c.criteres || []).length, 0)} critères</>
+          ) : (
+            <>Total de la grille&nbsp;: <b>{total}</b> pts
+              {seuil !== "" && total > 0 && <> · réussite à partir de <b>{Math.ceil((total * Number(seuil)) / 100)}</b> pts</>}</>
+          )}
         </span>
         <span style={{ flex: 1 }} />
         <button type="button" className="btn primary" onClick={enregistrer}>Enregistrer la grille</button>
       </div>
       <p className="hint" style={{ marginBottom: 0 }}>
-        La saisie des notes se fait ensuite depuis la page d'une session de cette formation.
+        {jury
+          ? "Le jury remplit ensuite cette grille depuis son espace intervenant, sur les sessions où il est affecté."
+          : "La saisie des notes se fait ensuite depuis la page d'une session de cette formation."}
       </p>
     </>
   );
@@ -306,5 +403,122 @@ function PaliersNiveaux({ paliers, onChange, onAdd, onRemove }) {
     </div>
   );
 }
+
+/**
+ * LES COMPÉTENCES DU JURY — des critères cochables, et la règle qui les valide.
+ *
+ * LA RÈGLE EST LE CŒUR DE L'ÉCRAN, pas un réglage de coin. « Le candidat doit valider les 6
+ * critères » et « au moins 5 sur 6, dont C2.3 » sont deux règles que rien d'autre ne distingue :
+ * même nombre de critères, même compte, verdicts opposés. Elle est donc posée en clair sur
+ * chaque compétence, dans les mots de la grille papier.
+ */
+function CompetencesEditor({ competences, onChange, onSemer }) {
+  const maj = (i, patch) => onChange(competences.map((c, k) => (k === i ? { ...c, ...patch } : c)));
+  const majCrit = (i, j, patch) => maj(i, {
+    criteres: competences[i].criteres.map((x, m) => (m === j ? { ...x, ...patch } : x)),
+  });
+  const deplacer = (i, d) => {
+    const j = i + d;
+    if (j < 0 || j >= competences.length) return;
+    const out = [...competences];
+    [out[i], out[j]] = [out[j], out[i]];
+    onChange(out);
+  };
+  const retirer = (i) => {
+    const c = competences[i];
+    /* On DIT ce qui arrive aux notes : le serveur désactive, il ne supprime pas. « Supprimer »
+       tout court laisserait croire que les évaluations déjà passées perdent leur trace. */
+    const msg = c.id
+      ? `Retirer « ${c.label || "cette compétence"} » de la grille ?\n\nLes évaluations déjà passées la gardent ; elle cesse simplement de compter pour les suivantes.`
+      : "Retirer cette compétence ?";
+    if (!window.confirm(msg)) return;
+    onChange(competences.filter((_, k) => k !== i));
+  };
+
+  if (!competences.length) {
+    return (
+      <div style={{ border: "1px dashed var(--border-soft)", borderRadius: 10, padding: 16, textAlign: "center" }}>
+        <p className="hint" style={{ marginTop: 0 }}>Aucune compétence.</p>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <button type="button" className="btn sm ghost" onClick={() => onChange([nouvelleCompetence(1)])}>＋ Ajouter une compétence</button>
+          {/* PARTIR DU DOCUMENT EXISTANT plutôt que d'une page blanche : sept compétences et
+              trente-huit critères aux libellés longs, c'est une demi-journée de saisie — et une
+              faute de frappe dans un critère d'examen ne se voit qu'à la contestation. */}
+          <button type="button" className="btn sm" onClick={onSemer}>Partir de la grille RS7404</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {competences.map((c, i) => {
+        const n = (c.criteres || []).length;
+        return (
+          <div key={c.id || `c${i}`} style={{ border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface2)" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input className="inp mono" style={{ width: 70 }} value={c.code || ""} placeholder="C1"
+                onChange={(e) => maj(i, { code: e.target.value })} aria-label="Code de la compétence" />
+              <input className="inp" style={{ flex: "1 1 220px", minWidth: 0 }} value={c.label}
+                onChange={(e) => maj(i, { label: e.target.value })} placeholder="Fabriquer une pâte à pizza artisanale" />
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--muted)" }}>
+                valider
+                <select className="inp" style={{ width: 130 }}
+                  value={c.min_valides == null ? "" : String(c.min_valides)}
+                  onChange={(e) => maj(i, { min_valides: e.target.value === "" ? null : Number(e.target.value) })}>
+                  {/* « TOUS » N'EST PAS « N = le nombre actuel ». Écrire 6 en dur deviendrait faux
+                      en silence au septième critère ajouté ; « tous » reste juste. */}
+                  <option value="">tous les critères</option>
+                  {Array.from({ length: Math.max(n, 1) }, (_, k) => k + 1).map((k) => (
+                    <option key={k} value={k}>au moins {k} sur {n}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="iconbtn" title="Monter" disabled={i === 0} onClick={() => deplacer(i, -1)}>↑</button>
+              <button type="button" className="iconbtn" title="Descendre" disabled={i === competences.length - 1} onClick={() => deplacer(i, 1)}>↓</button>
+              <button type="button" className="iconbtn del" title="Retirer" onClick={() => retirer(i)}><Icon name="trash" size={15} /></button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+              {(c.criteres || []).map((cr, j) => (
+                <div key={cr.id || `x${j}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <textarea className="inp" rows={1} style={{ flex: 1, minWidth: 0, resize: "vertical" }}
+                    value={cr.label} onChange={(e) => majCrit(i, j, { label: e.target.value })}
+                    placeholder="C1.1 - Utilisation correcte des ingrédients de base…" />
+                  {/* OBLIGATOIRE : ce que la grille papier imprime en rouge. Sans lui, « 5 sur 6 »
+                      et « 5 sur 6 dont le bon » seraient la même règle. */}
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: cr.obligatoire ? "var(--ember1)" : "var(--muted)", whiteSpace: "nowrap" }}
+                    title="Sans ce critère, la compétence tombe quel que soit le compte">
+                    <input type="checkbox" checked={!!cr.obligatoire}
+                      onChange={(e) => majCrit(i, j, { obligatoire: e.target.checked ? 1 : 0 })} />
+                    obligatoire
+                  </label>
+                  <button type="button" className="iconbtn del" title="Retirer ce critère"
+                    onClick={() => maj(i, { criteres: c.criteres.filter((_, m) => m !== j) })}>
+                    <Icon name="trash" size={14} />
+                  </button>
+                </div>
+              ))}
+              <div>
+                <button type="button" className="btn sm ghost"
+                  onClick={() => maj(i, { criteres: [...(c.criteres || []), { id: null, label: "", obligatoire: 0 }] })}>
+                  ＋ Critère
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      <div>
+        <button type="button" className="btn sm ghost"
+          onClick={() => onChange([...competences, nouvelleCompetence(competences.length + 1)])}>
+          ＋ Ajouter une compétence
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const nouvelleCompetence = (n) => ({ id: null, code: `C${n}`, label: "", min_valides: null, criteres: [] });
 
 export default GrilleEvaluation;

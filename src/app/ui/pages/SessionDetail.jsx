@@ -15,6 +15,7 @@ import SessionIntervenants from "../components/SessionIntervenants.jsx";
 import SessionRetraits from "../components/SessionRetraits.jsx";
 import SessionConsentements from "../components/SessionConsentements.jsx";
 import SessionEvaluation from "../components/SessionEvaluation.jsx";
+import CommissionJury from "../components/CommissionJury.jsx";
 import NotesModal from "../components/NotesModal.jsx";
 import { colorOf, initials, dateHeure } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
@@ -481,6 +482,15 @@ function SessionDetail() {
       <div style={{ marginTop: 16 }}>
         <SessionEvaluation sessionId={id} />
       </div>
+
+      {/* LE PROCÈS-VERBAL DE LA COMMISSION, replié par défaut : la plupart des sessions n'en
+          ont pas, et un formulaire de dix champs ouvert sur chaque session noierait le reste
+          de la page. Il s'ouvre d'un clic, et se résume en une ligne quand il existe. */}
+      {isAdmin && (
+        <div style={{ marginTop: 16 }}>
+          <CommissionJury sessionId={id} />
+        </div>
+      )}
 
       <div style={{ marginTop: 16 }}>
         <Emargement sessionId={id} />

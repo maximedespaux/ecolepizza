@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
+const { getNotesSession, saveNote, saveVerdict, cloturerCandidat } = require('./evaluation.controller.js');
 
 const SLOTS = ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'];
 const SLOT_LABEL = { MATIN: 'Matin', APRES_MIDI: 'Après-midi', EXAMEN: 'Examen', DISTANCIEL: 'Distanciel' };
@@ -272,7 +273,107 @@ const signMyIntervenantSheet = async (req, res) => {
     }
 };
 
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * LA GRILLE DU JURY, DEPUIS L'ESPACE DE L'INTERVENANT.
+ *
+ * ON NE RECOPIE PAS LES CONTRÔLEURS D'ÉVALUATION, on les APPELLE. Ils portent déjà tout ce qui
+ * compte — le barème, le refus d'écrire sur une évaluation clôturée, la vérification des deux
+ * appartenances en base. Une seconde implémentation « pour l'espace intervenant » finirait par
+ * perdre l'une de ces gardes, et c'est celle-là qu'un membre externe utiliserait.
+ *
+ * CE QUI S'AJOUTE ICI, et rien d'autre : l'AFFECTATION. Un membre du jury n'accède qu'aux
+ * sessions où l'organisme l'a inscrit. Sans ce filtre, un compte INTERVENANT valide verrait et
+ * noterait toutes les sessions de l'organisme.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** Cet intervenant est-il affecté à cette session ? */
+async function affecteASession(conn, userId, orgId, sessionId) {
+    const [[r]] = await conn.query(
+        `SELECT id FROM session_intervenant
+          WHERE user_id = ? AND organization_id = ? AND session_id = ? LIMIT 1`,
+        [userId, orgId, sessionId]);
+    return !!r;
+}
+
+/** Ce dossier appartient-il à une session où cet intervenant est affecté ? */
+async function monCandidat(conn, userId, orgId, enrollmentId) {
+    if (!enrollmentId) return false;
+    const [[r]] = await conn.query(
+        `SELECT e.id FROM enrollment e
+           JOIN session_intervenant si ON si.session_id = e.session_id
+          WHERE e.id = ? AND e.organization_id = ? AND si.user_id = ? LIMIT 1`,
+        [enrollmentId, orgId, userId]);
+    return !!r;
+}
+
+const refus = (res) => res.status(403).json({ message: 'Session non affectée.' });
+
+/** GET /api/intervenant/evaluation/:id — la grille de jury d'une de mes sessions. */
+const getMyJuryGrille = async (req, res) => {
+    try {
+        const conn = db.promise();
+        if (!await affecteASession(conn, req.user.id, req.user.organization_id, req.params.id)) return refus(res);
+        /* Le rôle est IMPOSÉ, pas lu dans la requête : l'espace intervenant n'ouvre que la
+           grille du jury. La notation du formateur ne le regarde pas. */
+        req.query = { ...(req.query || {}), role: 'JURY' };
+        return getNotesSession(req, res);
+    } catch (err) {
+        console.error('Erreur grille jury intervenant :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/intervenant/evaluation/note — coche un critère pour un de mes candidats. */
+const noterJury = async (req, res) => {
+    try {
+        const conn = db.promise();
+        if (!await monCandidat(conn, req.user.id, req.user.organization_id, (req.body || {}).enrollment_id)) {
+            return res.status(403).json({ message: 'Candidat non affecté à vos sessions.' });
+        }
+        return saveNote(req, res);
+    } catch (err) {
+        console.error('Erreur notation jury :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/intervenant/evaluation/verdict — l'avis du jury sur un de mes candidats. */
+const verdictJury = async (req, res) => {
+    try {
+        const conn = db.promise();
+        if (!await monCandidat(conn, req.user.id, req.user.organization_id, (req.body || {}).enrollment_id)) {
+            return res.status(403).json({ message: 'Candidat non affecté à vos sessions.' });
+        }
+        return saveVerdict(req, res);
+    } catch (err) {
+        console.error('Erreur verdict jury :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** POST /api/intervenant/evaluation/cloturer — fige la grille et produit le document. */
+const cloturerJury = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const enrollmentId = (req.body || {}).enrollment_id;
+        if (!await monCandidat(conn, req.user.id, req.user.organization_id, enrollmentId)) {
+            return res.status(403).json({ message: 'Candidat non affecté à vos sessions.' });
+        }
+        const r = await cloturerCandidat(conn, req.user.organization_id, req.user.id, enrollmentId);
+        if (r.erreur) return res.status(r.code || 422).json({ message: r.erreur });
+        logAudit(req, 'evaluation.cloture', 'EvaluationVerdict', enrollmentId);
+        res.json({ data: r });
+    } catch (err) {
+        if (err && err.code === 'ER_NO_SUCH_TABLE') {
+            return res.status(409).json({ message: 'Migration 149 non jouée : évaluation jury indisponible.' });
+        }
+        console.error('Erreur clôture jury :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
     listSessionIntervenants, addSessionIntervenant, setIntervenantSlots, removeSessionIntervenant,
     getMyIntervenantSheets, signMyIntervenantSheet, getMyIntervenantProfile, setMyIntervenantSignature,
+    getMyJuryGrille, noterJury, verdictJury, cloturerJury,
 };
