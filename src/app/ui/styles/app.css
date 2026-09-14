@@ -311,7 +311,7 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .pagehead .eyebrow{color:currentColor}
 /* L'icône arrive un souffle après le texte : le mouvement dessine l'ordre de lecture au lieu
    de tout poser d'un bloc. */
-.pagehead-ic{animation:pheadPop .42s var(--spring) .06s both}
+.pagehead-ic{animation:pheadPop .42s var(--spring) .06s backwards}
 @keyframes pheadPop{from{opacity:0;transform:scale(.78) rotate(-6deg)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.pagehead-ic{animation:none}}
 @media(max-width:640px){.pagehead-ic{width:38px;height:38px;border-radius:11px}}
@@ -387,7 +387,7 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
    chercher, il ne doit pas arriver en deuxième.
    `overflow:hidden` pour que le filet d'accent épouse les coins arrondis. */
 .kpi{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
-  padding:17px 20px 16px;animation:rise .45s var(--ease) both;box-shadow:var(--shadow-1),var(--relief);
+  padding:17px 20px 16px;animation:rise .45s var(--ease) backwards;box-shadow:var(--shadow-1),var(--relief);
   transition:transform .2s var(--ease),box-shadow .2s var(--ease),border-color .2s var(--ease)}
 /* Filet teinté sur l'arête haute : c'est ce qui différencie quatre tuiles autrement
    identiques, à la vitesse du coup d'œil, sans lire un mot. */
@@ -719,7 +719,7 @@ tbody tr:last-child td{border-bottom:none}
 .login-aside-orb--1{width:290px;height:290px;top:-70px;right:-50px;background:radial-gradient(circle,rgba(240,86,79,.55),transparent 68%)}
 .login-aside-orb--2{width:360px;height:360px;bottom:-130px;left:-90px;background:radial-gradient(circle,rgba(58,66,145,.65),transparent 68%);animation-delay:-7.5s}
 @keyframes loginFloat{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(0,-28px,0)}}
-.login-aside-inner{position:relative;display:flex;flex-direction:column;gap:16px;max-width:470px;animation:loginRise .6s var(--ease) both}
+.login-aside-inner{position:relative;display:flex;flex-direction:column;gap:16px;max-width:470px;animation:loginRise .6s var(--ease) backwards}
 .login-brandmark{display:flex;align-items:center;gap:13px;margin-bottom:8px}
 .login-brandmark img{width:52px;height:52px;border-radius:14px;background:#fff;padding:6px;object-fit:contain;box-shadow:0 12px 30px -12px rgba(0,0,0,.7)}
 .lb-name{font-family:var(--font-d);font-weight:700;font-size:24px}
@@ -733,7 +733,7 @@ tbody tr:last-child td{border-bottom:none}
 
 /* --- Volet formulaire (droite) --- */
 .login-panel{position:relative;display:grid;place-items:center;padding:32px;background:var(--bg)}
-.login-card{width:100%;max-width:410px;animation:loginRise .55s var(--ease) .05s both}
+.login-card{width:100%;max-width:410px;animation:loginRise .55s var(--ease) .05s backwards}
 .login-card h1{font-size:28px;margin:2px 0 6px;letter-spacing:-.01em}
 .login-sub{font-size:14px;color:var(--muted);margin:0 0 22px}
 .field-opt{font-weight:500;color:var(--muted)}
@@ -807,7 +807,7 @@ tbody tr:last-child td{border-bottom:none}
 
 /* Animations --------------------------------------------------------- */
 @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-.pagehead{animation:rise .4s var(--ease) both}
+.pagehead{animation:rise .4s var(--ease) backwards}
 .grid > *:nth-child(2){animation-delay:.05s}.grid > *:nth-child(3){animation-delay:.1s}
 .grid > *:nth-child(4){animation-delay:.15s}
 
@@ -1158,8 +1158,16 @@ tbody tr:last-child td{border-bottom:none}
 .hud-panel{background:color-mix(in srgb,var(--surface) 88%,transparent);
   -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
   border:1px solid var(--border);border-radius:var(--r-sm);box-shadow:var(--shadow-2);
-  animation:hudPose .32s var(--ease) both}
+  animation:hudPose .32s var(--ease) backwards}
 @keyframes hudPose{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+/* Variante pour un élément DÉJÀ transformé. `hudPose` finit sur `transform:none`, ce qui
+   écrase la transformation propre de la cible : `.carte-rien` se centre par
+   `translate(-50%,-50%)`, et l'animation la lui retirait — mesuré en production, le panneau
+   pendait 170 px à droite et 31 px sous le centre, soit exactement la moitié de ses 340×62.
+   Une animation ne peut pas « ajouter » une transformation : elle remplace la propriété
+   entière. Il faut donc réécrire le centrage dans chaque image. */
+@keyframes hudPoseCentre{from{opacity:0;transform:translate(-50%,-50%) translateY(-4px)}
+                         to{opacity:1;transform:translate(-50%,-50%)}}
 
 .hud-search{display:flex;align-items:center;gap:8px;padding:0 10px;height:38px;
   color:var(--dim);min-width:170px;max-width:280px}
@@ -1254,7 +1262,7 @@ tbody tr:last-child td{border-bottom:none}
 .menuact-pop{position:fixed;z-index:60;min-width:186px;padding:5px;display:flex;
   flex-direction:column;gap:2px;text-align:left;background:var(--surface);
   border:1px solid var(--border);border-radius:var(--r-sm);box-shadow:var(--shadow-3);
-  animation:hudPose .16s var(--ease) both}
+  animation:hudPose .16s var(--ease) backwards}
 .menuact-pop button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px;
   border:none;background:none;cursor:pointer;font:inherit;font-size:13px;color:var(--text);
   border-radius:7px;text-align:left;white-space:nowrap}
@@ -1472,7 +1480,7 @@ tbody tr:last-child td{border-bottom:none}
   text-align:center;padding:20px 22px;border-radius:var(--r);
   background:color-mix(in srgb,var(--surface) 94%,transparent);
   -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
-  border:1px solid var(--border);box-shadow:var(--shadow-3);animation:hudPose .32s var(--ease) both}
+  border:1px solid var(--border);box-shadow:var(--shadow-3);animation:hudPoseCentre .32s var(--ease) backwards}
 .carte-rien>svg{color:var(--dim)}
 .carte-rien b{font-size:14.5px;line-height:1.35;text-wrap:balance}
 .carte-rien p{margin:0;font-size:12.5px;line-height:1.5;color:var(--dim)}
@@ -1861,7 +1869,7 @@ tbody tr:last-child td{border-bottom:none}
    jeu où il y a quelque chose à savourer — les vides, elles, sont posées d'emblée. */
 .pq-fin-stars{display:flex;justify-content:center;gap:8px;margin-bottom:10px;color:var(--gold)}
 .pq-fin-stars > svg{opacity:.22}
-.pq-fin-stars > svg.on{opacity:1;animation:pqEtoile .5s var(--spring) both}
+.pq-fin-stars > svg.on{opacity:1;animation:pqEtoile .5s var(--spring) backwards}
 @keyframes pqEtoile{from{opacity:0;transform:scale(.3) rotate(-25deg)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.pq-fin-stars > svg.on{animation:none}}
 
@@ -1870,7 +1878,7 @@ tbody tr:last-child td{border-bottom:none}
    récompense et son annonce doivent se reconnaître, sinon l'anneau qui apparaîtra plus tard sur
    l'avatar semblera venir d'ailleurs. */
 .pq-fete-fond{backdrop-filter:blur(2px)}
-.pq-fete{border-top:3px solid var(--fc);animation:pqFeteEntre .42s var(--spring) both}
+.pq-fete{border-top:3px solid var(--fc);animation:pqFeteEntre .42s var(--spring) backwards}
 @keyframes pqFeteEntre{from{opacity:0;transform:scale(.86) translateY(14px)}to{opacity:1;transform:none}}
 
 /* Le halo est un carré fixe : c'est LUI qui ancre les éclats, qui sont en `position:absolute`.
@@ -1886,6 +1894,9 @@ tbody tr:last-child td{border-bottom:none}
    l'extérieur et s'éteignent — le geste dit « ça éclate », pas « ça tourne ». */
 .pq-fete-eclat{position:absolute;width:7px;height:7px;border-radius:2px;background:var(--fc);
   transform:rotate(calc(var(--i)*45deg)) translateY(-30px);opacity:0;
+  /* `both` ASSUMÉ : l'éclat doit RESTER éteint (`opacity:0`) après ses deux tours, ce que
+     seul `forwards` garantit. Et l'élément porte de toute façon sa propre rotation en
+     permanence — le mode de remplissage ne change rien à ce qu'il contient (rien). */
   animation:pqEclat 1.5s var(--ease) calc(var(--i)*.055s) 2 both}
 @keyframes pqEclat{
   0%{opacity:0;transform:rotate(calc(var(--i)*45deg)) translateY(-26px) scale(.4)}
@@ -2287,7 +2298,7 @@ tbody tr:last-child td{border-bottom:none}
 /* Arrivée en cascade des cartes : le décalage fait lire la rangée dans l'ordre du parcours,
    de gauche à droite, au lieu de la faire apparaître d'un bloc. Cinq crans suffisent — au-delà
    la dernière carte se ferait attendre. Ressort court, sans rebond marqué. */
-.pq-row > *{animation:pqPose .38s var(--spring) both}
+.pq-row > *{animation:pqPose .38s var(--spring) backwards}
 .pq-row > *:nth-child(2){animation-delay:.06s}
 .pq-row > *:nth-child(3){animation-delay:.12s}
 .pq-row > *:nth-child(4){animation-delay:.18s}
@@ -2598,7 +2609,7 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
    box-shadow sur `.prof-ava`, il aurait recouvert l'anneau de cadre.
    ⚠️ `position:relative` obligatoire — l'anneau de cadre est un `::before` absolu, sans ancêtre
    positionné il s'accroche à la modale et dessine une ellipse sur toute la fenêtre. */
-.prof-ava-wrap{position:relative;display:inline-grid;place-items:center;animation:profPop .42s var(--spring) both}
+.prof-ava-wrap{position:relative;display:inline-grid;place-items:center;animation:profPop .42s var(--spring) backwards}
 .prof-ava-wrap::before{content:"";position:absolute;inset:-14px;border-radius:50%;z-index:-1;pointer-events:none;
   background:radial-gradient(closest-side,color-mix(in srgb,var(--halo) 42%,transparent),transparent);
   opacity:0;animation:profHalo .5s var(--ease) .12s forwards}
@@ -3415,7 +3426,7 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
      laisser porter. Il garde son propre defilement pour les listes longues. */
   .stu-drawer{display:flex;flex-direction:column;
     padding:8px;background:var(--surface);border-bottom:1px solid var(--border);
-    box-shadow:0 16px 32px -16px rgba(10,12,30,.4);animation:rise .18s var(--ease) both;
+    box-shadow:0 16px 32px -16px rgba(10,12,30,.4);animation:rise .18s var(--ease) backwards;
     max-height:calc(100vh - 56px);overflow-y:auto}
 }
 @media(max-width:560px){
@@ -3544,11 +3555,11 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 
 /* Le bandeau de titre est le plus gros bloc de chaque page : il apparaissait sec pendant que
    les cartes, elles, montaient. Il ouvre maintenant le mouvement au lieu de le contredire. */
-.hero{animation:rise .4s var(--ease) both}
+.hero{animation:rise .4s var(--ease) backwards}
 
 /* Les cartes de la Communauté montent comme celles du reste de l'application, et se soulèvent
    au survol comme `.card.hover` : elles s'ouvrent au clic, autant l'annoncer. */
-.comm-card2{animation:rise .45s var(--ease) both}
+.comm-card2{animation:rise .45s var(--ease) backwards}
 .comm-card2:hover{transform:translateY(-2px);box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
 
 /* Le tiroir de navigation se déplie déjà ; son contenu suit en cascade courte. Le retard est
@@ -3556,7 +3567,7 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
    La cascade porte sur TOUS les enfants, pas sur les seules entrées : l'intertitre « Outils »
    et le séparateur en sont aussi. Les viser par leur classe décalait le compte, et une entrée
    sautait une marche. */
-.stu-drawer > *{animation:rise .26s var(--ease) both}
+.stu-drawer > *{animation:rise .26s var(--ease) backwards}
 .stu-drawer > *:nth-child(2){animation-delay:.03s}
 .stu-drawer > *:nth-child(3){animation-delay:.06s}
 .stu-drawer > *:nth-child(4){animation-delay:.09s}
@@ -3566,6 +3577,9 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 /* Le voile des fenêtres modales apparaissait d'un bloc alors que la fenêtre, elle, montait en
    douceur : le fond arrivait avant son contenu. */
 @keyframes voile{from{opacity:0}to{opacity:1}}
+/* `both` ASSUMÉ ici, contrairement aux autres animations d'entrée : `voile` n'anime que
+   l'opacité. Sans transformation dans ses images, rien ne peut figer de matrice, donc
+   l'élément ne devient pas le bloc conteneur de ses descendants `position:fixed`. */
 .overlay{animation:voile .2s var(--ease) both}
 
 /* Onglets segmentés : la pastille active glissait d'un onglet à l'autre sans transition. */
@@ -3574,7 +3588,7 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 /* Une pastille de comptage qui apparaît mérite d'être vue apparaître — c'est une information
    nouvelle, pas un élément de décor déjà là. */
 @keyframes pastille{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
-.stu-count,.stu-burger-dot{animation:pastille .24s var(--ease) both}
+.stu-count,.stu-burger-dot{animation:pastille .24s var(--ease) backwards}
 
 /* Lignes de liste (documents, émargements) : un fond au survol dit ce que la souris désigne,
    sur des lignes hautes où l'œil se perd facilement. Le retrait négatif fait déborder le fond
@@ -3610,7 +3624,7 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
    boutons). Rien n'y interdit donc le relief au survol. */
 .pipe-card{transition:transform .14s var(--ease),box-shadow .14s var(--ease),border-color .14s var(--ease)}
 .pipe-card:hover{transform:translateY(-2px);box-shadow:0 10px 24px -14px rgba(44,51,113,.4)}
-.pipe-col{animation:rise .4s var(--ease) both}
+.pipe-col{animation:rise .4s var(--ease) backwards}
 .pipe-col:nth-child(2){animation-delay:.05s}
 .pipe-col:nth-child(3){animation-delay:.1s}
 .pipe-col:nth-child(4){animation-delay:.15s}
@@ -3625,10 +3639,10 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
    `accOpen` existe et sert déjà aux dépliants de l'espace stagiaire : on le réutilise plutôt
    que d'écrire une seconde animation qui ferait la même chose à quelques millisecondes près. */
 .arch-sum,.qb-grp-head,.qb-ch-head{transition:background .14s var(--ease),border-color .14s var(--ease)}
-.arch-in,.qb-grp-body,.qb-ch-body{animation:accOpen .2s var(--ease) both}
+.arch-in,.qb-grp-body,.qb-ch-body{animation:accOpen .2s var(--ease) backwards}
 
 /* --- Popover d'icônes (banque de questions) : il surgissait sec. */
-.qb-ico-pop{animation:rise .16s var(--ease) both}
+.qb-ico-pop{animation:rise .16s var(--ease) backwards}
 .qb-ico-btn,.qb-ico-opt,.tb-btn{transition:background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
 
 /* --- Onglets soulignés : la couleur du texte glissait, le soulignement sautait. Pas
@@ -3643,7 +3657,7 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 /* --- Feuille de route (Suivi) : le passage « à faire → en cours → fait » était instantané.
    C'est pourtant le seul endroit où l'on voit un dossier avancer. */
 .rm-dot,.rm-conn{transition:background .3s var(--ease),border-color .3s var(--ease),color .3s var(--ease)}
-.rm-step{animation:rise .4s var(--ease) both}
+.rm-step{animation:rise .4s var(--ease) backwards}
 .rm-step:nth-child(2){animation-delay:.06s}
 .rm-step:nth-child(3){animation-delay:.12s}
 .rm-step:nth-child(4){animation-delay:.18s}
@@ -3653,14 +3667,14 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
    celles-ci sautaient à leur largeur finale. Même durée, pour que deux barres côte à côte
    sur la même page ne se remplissent pas à deux vitesses. */
 .poste-bar > span,.stack-bar > span{transition:width .5s var(--ease)}
-.mini-kpi{animation:rise .45s var(--ease) both}
+.mini-kpi{animation:rise .45s var(--ease) backwards}
 
 /* --- Barre latérale. Le liseré de la rubrique active apparaissait d'un coup : un ::before
    n'hérite pas de la transition de son parent, il lui faut la sienne. */
 .menu a.on::before{transition:opacity .18s var(--ease),transform .18s var(--ease)}
-.menu a .count{animation:pastille .24s var(--ease) both}
+.menu a .count{animation:pastille .24s var(--ease) backwards}
 .side-foot{transition:background .15s var(--ease)}
-.profile-menu{animation:rise .16s var(--ease) both}
+.profile-menu{animation:rise .16s var(--ease) backwards}
 
 /* --- Calendrier : la case ajoutable ne signalait rien avant le clic. */
 .cal-cell.addable{transition:background .14s var(--ease),border-color .14s var(--ease)}
