@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Field } from "./Field.jsx";
 
 /**
  * Fenêtre de signature électronique simple (SES) : nom saisi + consentement +
  * signature manuscrite (canvas). onConfirm({ signer_name, signature_data }).
+ *
+ * RENDUE DANS `document.body`, PAS À SA PLACE DANS L'ARBRE. Un voile `position:fixed` n'est
+ * centré sur l'ÉCRAN que si aucun ancêtre ne porte de `transform` / `filter` / `contain` :
+ * la moindre transformation, même l'identité, fait de cet ancêtre le bloc conteneur et le
+ * voile se recentre sur LUI. `Emargement` monte cette fenêtre à l'intérieur d'une `<Card>`,
+ * et une carte survolée (`.card.hover:hover`) se translate de 2 px — le survol remontant
+ * depuis la fenêtre elle-même, la popup se serait déplacée sous la souris. Le portail coupe
+ * court : plus aucun ancêtre, donc plus rien à piéger.
  */
 function SignatureModal({ doc, defaultName = "", onConfirm, onClose }) {
   const canvasRef = useRef(null);
@@ -60,7 +69,7 @@ function SignatureModal({ doc, defaultName = "", onConfirm, onClose }) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mhead">
@@ -93,7 +102,8 @@ function SignatureModal({ doc, defaultName = "", onConfirm, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
