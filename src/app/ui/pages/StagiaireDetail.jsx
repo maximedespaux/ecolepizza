@@ -357,9 +357,9 @@ function StagiaireDetail() {
       }
       if (deposes) setParcoursRefresh((n) => n + 1);
       /* LE COMPTE RENDU DIT CE QUI EST PASSÉ ET CE QUI NE L'EST PAS. Un dépôt partiel annoncé
-         comme un succès laisserait croire que les six pages sont arrivées. Et l'on annonce
-         l'étape suivante : un dépôt par le personnel ne vaut pas validation, la pièce reste
-         à vérifier tant que quelqu'un ne l'a pas contrôlée. */
+         comme un succès laisserait croire que les six pages sont arrivées. Et il dit que la
+         pièce est VALIDÉE : déposée par l'école, elle l'est du même geste — on ne réclame pas
+         un second clic à qui vient d'ouvrir le document pour le téléverser. */
       if (echec) {
         setStatus({
           type: "error",
@@ -371,8 +371,8 @@ function StagiaireDetail() {
         setStatus({
           type: "success",
           message: deposes > 1
-            ? `${deposes} fichiers déposés pour « ${step.label} ». À vérifier dans les pièces du dossier.`
-            : `« ${file.name} » déposé pour « ${step.label} ». À vérifier dans les pièces du dossier.`,
+            ? `${deposes} fichiers enregistrés pour « ${step.label} ». La pièce est validée : vous venez de la voir.`
+            : `« ${file.name} » enregistré pour « ${step.label} ». La pièce est validée : vous venez de la voir.`,
         });
       }
       return;

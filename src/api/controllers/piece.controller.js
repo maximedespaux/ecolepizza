@@ -286,13 +286,23 @@ const deposer = async (req, res) => {
         const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
         if (e.user_id !== req.user.id && !staff) return res.status(403).json({ message: 'Dossier d\'un autre stagiaire.' });
 
-        // Le dépôt existe-t-il déjà ? `INSERT ... ON DUPLICATE KEY` sur (dossier, pièce).
+        /* UN DÉPÔT FAIT PAR L'ÉCOLE VAUT VÉRIFICATION. Le circuit normal est « le stagiaire
+           dépose, l'école contrôle » : le statut DEPOSEE signifie « quelqu'un attend un
+           contrôle ». Mais quand c'est l'école elle-même qui dépose — la pièce est arrivée par
+           courriel, elle l'a ouverte pour la téléverser — ce contrôle a déjà eu lieu. Laisser
+           la pièce « à vérifier » réclamerait un second clic à qui vient de regarder le
+           document, et surtout : tant qu'elle n'est pas VALIDÉE, l'étape ne se termine pas et
+           le dossier reste bloqué au même pourcentage dans le suivi Qualiopi.
+           La trace reste honnête — `verifie_par` nomme la personne, `verifie_le` l'horodate. */
+        const valide = staff;
         await conn.query(
-            `INSERT INTO piece_depot (id, organization_id, enrollment_id, piece_type_id, statut, depose_le)
-             VALUES (?, ?, ?, ?, 'DEPOSEE', NOW())
-             ON DUPLICATE KEY UPDATE statut = 'DEPOSEE', depose_le = NOW(),
-                                     motif_refus = NULL, verifie_par = NULL, verifie_le = NULL`,
-            [crypto.randomUUID(), req.user.organization_id, req.params.enrollmentId, req.params.pieceTypeId]);
+            `INSERT INTO piece_depot (id, organization_id, enrollment_id, piece_type_id, statut, depose_le, verifie_par, verifie_le)
+             VALUES (?, ?, ?, ?, ?, NOW(), ?, ${valide ? 'NOW()' : 'NULL'})
+             ON DUPLICATE KEY UPDATE statut = VALUES(statut), depose_le = NOW(),
+                                     motif_refus = NULL,
+                                     verifie_par = VALUES(verifie_par), verifie_le = VALUES(verifie_le)`,
+            [crypto.randomUUID(), req.user.organization_id, req.params.enrollmentId, req.params.pieceTypeId,
+                valide ? 'VALIDEE' : 'DEPOSEE', valide ? req.user.id : null]);
         const [[d]] = await conn.query(
             'SELECT id FROM piece_depot WHERE enrollment_id = ? AND piece_type_id = ?',
             [req.params.enrollmentId, req.params.pieceTypeId]);
@@ -313,7 +323,11 @@ const deposer = async (req, res) => {
             'INSERT INTO piece_fichier (id, depot_id, sort_order, nom, mime, bytes, taille) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [crypto.randomUUID(), d.id, n.m + 1, String(f.originalname || '').slice(0, 200) || null,
                 f.mimetype, encryptBytes(f.buffer), f.buffer.length]); // `taille` = taille CLAIRE (affichage)
+        /* Deux journaux quand l'école dépose : le dépôt ET la validation qu'il emporte. Une
+           seule ligne « pièce déposée » cacherait que la pièce est du même coup acceptée —
+           c'est précisément ce qu'un contrôle Qualiopi vient lire. */
         logAudit(req, 'piece.depot', 'PieceDepot', d.id);
+        if (valide) logAudit(req, 'piece.validee', 'PieceDepot', d.id);
         res.status(201).json({ success: true });
     } catch (err) {
         if (noTable(err)) return res.status(503).json(ABSENTE);

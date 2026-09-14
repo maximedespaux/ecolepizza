@@ -210,7 +210,7 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
           {onImport && !String(step.key || "").startsWith("quiz:") && (
             <button className="btn ghost" onClick={() => onImport(step)}
               title={step.piece
-                ? "Déposer ici une pièce reçue par e-mail ou scannée — elle restera à vérifier"
+                ? "Déposer ici une pièce reçue par e-mail ou scannée — elle sera validée du même geste"
                 : "Rattacher à cette étape un document reçu par e-mail ou scanné"}>
               {step.piece ? "Déposer la pièce reçue" : "Importer un document reçu"}
             </button>
