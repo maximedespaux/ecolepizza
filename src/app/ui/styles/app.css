@@ -362,6 +362,16 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
    dépendent les cascades `.grid > *:nth-child(n)`) et relâche l'élément à la fin. L'état final
    de `rise` étant déjà l'état naturel, rien ne bouge à l'écran. */
 .grid{display:grid;gap:16px}.cols-2{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:repeat(3,1fr)}.cols-4{grid-template-columns:repeat(4,1fr)}
+/* `min-width:0` SUR LES ENFANTS, sans quoi `1fr` ne vaut pas ce qu'il annonce. Un élément de
+   grille a `min-width:auto` par défaut : il REFUSE de descendre sous sa taille min-content. Une
+   seule ligne insécable suffit alors à faire exploser sa colonne — et comme `1fr` ne peut pas
+   passer sous ce plancher, la grille déborde au lieu de partager.
+   Mesuré sur « Derniers dossiers », dont une ligne porte le titre de formation le plus long de
+   l'école : conteneur de 895 px, colonnes calculées à `1231px 234px`. La carte débordait la
+   FENÊTRE (1231 px pour 1217 px de large), sa voisine était écrasée à 234 px, et l'`ellipsis`
+   posé à l'intérieur ne servait à rien puisque rien ne contraignait jamais la largeur. Avec le
+   plancher levé : `439.5px 439.5px`, et le texte se coupe enfin. */
+.grid > *{min-width:0}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-1),var(--relief);transition:box-shadow .2s var(--ease),transform .2s var(--ease),border-color .2s var(--ease);animation:rise .45s var(--ease) backwards}
 .card.hover{cursor:pointer}
 .card.hover:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
