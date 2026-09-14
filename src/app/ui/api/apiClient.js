@@ -738,6 +738,26 @@ export async function importArchives(files, paths) {
     stopLoading();
   }
 }
+
+/**
+ * Rattache un document REÇU (courriel, scan) à une étape du dossier.
+ *
+ * `FormData` sans `Content-Type` explicite, comme l'import d'archives : le navigateur doit poser
+ * lui-même la frontière multipart, et la fixer à la main casse l'envoi de façon illisible côté
+ * serveur (« Unexpected end of form »).
+ */
+export async function importDocumentFile(fd) {
+  startLoading();
+  try {
+    marquerMutationLocale();
+    const res = await fetch(`${API_BASE_URL}/documents/import`, { method: "POST", credentials: "include", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Import échoué");
+    return data;
+  } finally {
+    stopLoading();
+  }
+}
 export function archiveFileUrl(id) {
   return `${API_BASE_URL}/suivi/archives/${id}/file`;
 }
@@ -964,6 +984,11 @@ export function getDocument(id) {
 // Document final PDF (non modifiable) — téléchargement.
 export function downloadDocumentPdf(id, filename = "document.pdf") {
   return download(`/documents/${id}/pdf`, filename);
+}
+
+/** Ouvre le document IMPORTÉ d'une étape (déchiffré par le serveur à la volée). */
+export function downloadDocumentImporte(id, filename) {
+  return download(`/documents/${id}/fichier`, filename || "document-recu");
 }
 // Aperçu HTML fidèle du document (rendu identique au PDF), affichable en ligne
 // sans dépendre du lecteur PDF du navigateur. Renvoie { html }. Propage err.missing.

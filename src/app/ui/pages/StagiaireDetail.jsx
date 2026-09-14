@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, updateStagiaire,
-} from "../api/apiClient.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, updateStagiaire, importDocumentFile, downloadDocumentImporte} from "../api/apiClient.js";
 import { CADRES, cadreClass } from "../lib/cadres.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -297,6 +296,52 @@ function StagiaireDetail() {
   const curEnrId = parcoursEnr || enrollments[0]?.id || null;
   // Depuis une étape du parcours : pré-remplit le modèle + le dossier courant,
   // puis descend au formulaire (le groupement de formations reste possible).
+  /* IMPORTER UN DOCUMENT REÇU (courriel, scan) SUR UNE ÉTAPE.
+     Le sélecteur de fichier est un `<input>` caché déclenché par le bouton de l'étape : une
+     fenêtre de plus pour choisir un fichier n'apporterait rien, le navigateur en ouvre déjà une.
+     `value = ""` après coup, sinon réimporter LE MÊME fichier ne déclencherait aucun `change`
+     — et l'utilisateur croirait que le bouton ne marche plus. */
+  const fichierRef = useRef(null);
+  const [etapeImport, setEtapeImport] = useState(null);
+
+  function demanderImport(step) {
+    setEtapeImport(step);
+    fichierRef.current?.click();
+  }
+
+  async function envoyerImport(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    const step = etapeImport;
+    setEtapeImport(null);
+    if (!file || !step) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    if (step.docId) {
+      fd.append("document_id", step.docId);
+    } else {
+      /* Étape jamais générée : on fournit de quoi la CRÉER, exactement comme le formulaire
+         « Générer » — même dérivation du type depuis le modèle, sinon les deux chemins
+         produiraient des étapes différentes pour le même slug. */
+      const tpl = templates.find((t) => t.slug === step.key);
+      if (!tpl) { setStatus({ type: "error", message: "Modèle introuvable pour cette étape." }); return; }
+      if (!curEnrId) { setStatus({ type: "error", message: "Sélectionne d'abord une inscription." }); return; }
+      fd.append("learner_id", id);
+      fd.append("type", tpl.doc_type || tpl.slug.toUpperCase().replace(/-/g, "_"));
+      fd.append("template_slug", tpl.slug);
+      fd.append("title", step.label || tpl.label || "");
+      fd.append("enrollment_ids", JSON.stringify([curEnrId]));
+    }
+    try {
+      await importDocumentFile(fd);
+      setStatus({ type: "success", message: `« ${file.name} » rattaché à l'étape.` });
+      loadDocs();
+      setParcoursRefresh((n) => n + 1);
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    }
+  }
+
   function prepareStep(slug) {
     setPrep((p) => ({ ...p, slug, title: "", enrollment_ids: curEnrId ? [curEnrId] : p.enrollment_ids }));
     setTimeout(() => document.getElementById("sd-prepare")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
@@ -397,7 +442,10 @@ function StagiaireDetail() {
               onOpenDoc={(docId) => setViewId(docId)}
               onPrepare={prepareStep}
               onSendQuiz={handleSendQuiz}
+              onImport={demanderImport}
             />
+            <input ref={fichierRef} type="file" onChange={envoyerImport} style={{ display: "none" }}
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" aria-hidden="true" tabIndex={-1} />
             {/* Pièces justificatives du dossier sélectionné : validation/refus par le personnel. */}
             <PiecesReview enrollmentId={curEnrId} />
             <div className="divider" style={{ margin: "18px 0" }} />
@@ -503,12 +551,24 @@ function StagiaireDetail() {
                           <b>{d.title}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
                             {d.formations || "-"}{d.sent_at ? ` · envoyé le ${dateHeure(d.sent_at)}` : ""}{d.signed_at ? ` · signé le ${dateHeure(d.signed_at)}` : ""}
+                        {/* REÇU PAR E-MAIL, ET ON LE DIT. L'étape compte comme signée, mais aucune
+                            signature électronique n'a eu lieu ici : sans cette mention, on ne
+                            saurait plus distinguer, six mois plus tard, un document signé dans
+                            l'application d'un document rentré par courriel. */}
+                        {d.importe_le && (
+                          <span style={{ color: "var(--muted)" }}> · reçu et importé le {dateHeure(d.importe_le)}</span>
+                        )}
                           </span>
                         </span>
                         <Badge tone={tone}>{label}</Badge>
                         <button className="iconbtn" title="Aperçu / vérifier" aria-label={`Aperçu de ${d.title}`} onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
                         {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer au stagiaire" aria-label={`Envoyer ${d.title} au stagiaire`} onClick={() => handleSend(d.id)}><Icon name="send" size={16} /></button>}
-                        <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${d.title}`} onClick={() => handleDelete(d.id)}><Icon name="trash" size={15} /></button>
+                        {d.importe_le && (
+                      <button className="iconbtn" title={`Ouvrir le document reçu${d.fichier_nom ? ` (${d.fichier_nom})` : ""}`}
+                        aria-label={`Ouvrir le document reçu pour ${d.title}`}
+                        onClick={() => downloadDocumentImporte(d.id, d.fichier_nom)}><Icon name="file-text" size={16} /></button>
+                    )}
+                    <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${d.title}`} onClick={() => handleDelete(d.id)}><Icon name="trash" size={15} /></button>
                       </div>
                     );
                   })}

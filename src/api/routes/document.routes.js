@@ -1,10 +1,16 @@
 const express = require('express');
+const multer = require('multer');
 const {
     listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument, createSignLink, checkDocumentConditions,
+    importDocumentFile, getDocumentFile,
 } = require('../controllers/document.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
+
+/* UN SEUL FICHIER, 25 Mo — le même plafond que l'import d'archives Qualiopi. En mémoire, comme
+   partout dans l'application : tout est stocké EN BASE, jamais sur le disque du serveur. */
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
 
 // Consultation de la liste : tout le personnel, y compris le formateur.
 router.get('/', authenticateToken, authorizeRoles(...STAFF_ROLES), listDocuments);
@@ -12,6 +18,11 @@ router.get('/', authenticateToken, authorizeRoles(...STAFF_ROLES), listDocuments
 router.post('/', authenticateToken, authorizeRoles(...ADMIN_ROLES), createDocument);
 // Vérifie qu'un modèle s'applique aux dossiers choisis (règles de l'organisme) — aperçu avant génération.
 router.post('/check-conditions', authenticateToken, authorizeRoles(...ADMIN_ROLES), checkDocumentConditions);
+/* DÉCLARÉ AVANT `/:id/...` génériques ? Non : « import » n'est pas un identifiant, il ne peut
+   pas être confondu avec un `:id`. En revanche l'ordre compte face à `/:id` tout court, plus bas. */
+router.post('/import', authenticateToken, authorizeRoles(...ADMIN_ROLES), upload.single('file'), importDocumentFile);
+// Relire le document importé : tout le personnel, comme l'aperçu d'un document généré.
+router.get('/:id/fichier', authenticateToken, authorizeRoles(...STAFF_ROLES), getDocumentFile);
 router.post('/:id/send', authenticateToken, authorizeRoles(...ADMIN_ROLES), sendDocument);
 router.delete('/:id', authenticateToken, authorizeRoles(...ADMIN_ROLES), deleteDocument);
 
