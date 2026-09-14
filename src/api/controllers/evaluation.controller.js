@@ -536,7 +536,104 @@ async function resultatDossier(conn, orgId, enrollmentId) {
     }
 }
 
+/**
+ * Résultat d'un candidat sur la grille du JURY — lu par les jetons du document.
+ *
+ * DISTINCT DE `resultatDossier`, qui compte des points. Le jury ne compte pas : il valide des
+ * compétences, et son document imprime « 5 sur 7 », pas un pourcentage. Forcer l'un dans
+ * l'autre ferait dire au papier signé autre chose que ce que le jury a coché.
+ */
+async function resultatJuryDossier(conn, orgId, enrollmentId) {
+    try {
+        const [[e]] = await conn.query(
+            `SELECT e.id, s.program_id FROM enrollment e
+               JOIN training_session s ON s.id = e.session_id
+              WHERE e.id = ? AND e.organization_id = ?`, [enrollmentId, orgId]);
+        if (!e || !e.program_id) return null;
+        const grille = await grilleDeLaFormation(conn, orgId, e.program_id, 'JURY');
+        if (!grille || !grille.competences.length) return null;
+
+        const [notes] = await conn.query(
+            'SELECT exercice_id, valeur, points, commentaire FROM evaluation_note WHERE enrollment_id = ?',
+            [enrollmentId]);
+        const parEx = Object.fromEntries(notes.map((n) => [n.exercice_id, n.points]));
+        const remarques = Object.fromEntries(notes.map((n) => [n.exercice_id, n.commentaire]));
+        const competences = grille.competences.filter((c) => c.active);
+        const resultat = resultatJury(competences, parEx);
+
+        let verdict = null;
+        try {
+            const [[v]] = await conn.query(
+                `SELECT avis, rattrapage, observations, DATE_FORMAT(cloture_le, '%d/%m/%Y') AS cloture_le
+                   FROM evaluation_verdict WHERE grille_id = ? AND enrollment_id = ?`,
+                [grille.id, enrollmentId]);
+            verdict = v || null;
+        } catch (err) { if (!(err && err.code === 'ER_NO_SUCH_TABLE')) throw err; }
+
+        /* LES MEMBRES DU JURY sont ceux AFFECTÉS À LA SESSION : c'est l'organisme qui les
+           inscrit, et le document doit porter les noms de ceux qui ont réellement évalué —
+           pas une liste saisie à part, qui divergerait au premier changement. */
+        let membres = [];
+        try {
+            const [ms] = await conn.query(
+                `SELECT u.first_name, u.last_name, si.specialty
+                   FROM enrollment e
+                   JOIN session_intervenant si ON si.session_id = e.session_id
+                   JOIN user u ON u.id = si.user_id
+                  WHERE e.id = ? AND si.organization_id = ?
+                  ORDER BY u.last_name, u.first_name`, [enrollmentId, orgId]);
+            membres = ms;
+        } catch { /* intervenants indisponibles : le document sort sans les noms */ }
+
+        return { grille, competences, resultat, notes, remarques, verdict, membres };
+    } catch (err) {
+        if (err && (err.code === 'ER_NO_SUCH_TABLE' || err.code === 'ER_BAD_FIELD_ERROR')) return null;
+        throw err;
+    }
+}
+
+/**
+ * Clôture l'évaluation d'un candidat et produit son document.
+ *
+ * LA CLÔTURE EST LE POINT DE NON-RETOUR, et c'est sa raison d'être : à partir d'ici la grille
+ * ne bouge plus (cf. `estCloture`), et le document imprimé dit exactement ce que le jury a
+ * coché. Sans ce gel, un procès-verbal signé pourrait être contredit par sa propre grille.
+ *
+ * ON REFUSE DE CLÔTURER UNE GRILLE INCOMPLÈTE. Un document qui annonce « 4 compétences sur 7 »
+ * alors que trois n'ont pas été regardées est faux, et il est signé : l'erreur devient
+ * opposable. Le jury voit ce qui manque et y retourne.
+ */
+async function cloturerCandidat(conn, orgId, userId, enrollmentId) {
+    const r = await resultatJuryDossier(conn, orgId, enrollmentId);
+    if (!r) return { erreur: 'Aucune grille de jury pour cette formation.', code: 404 };
+    if (r.verdict && r.verdict.cloture_le) return { erreur: 'Évaluation déjà clôturée.', code: 409 };
+    if (!r.resultat.complet) {
+        const restant = r.resultat.details.filter((d) => d.validee === null).map((d) => d.code || d.label);
+        return { erreur: `Compétences non terminées : ${restant.join(', ')}.`, code: 422 };
+    }
+    /* L'AVIS EST EXIGÉ. Le compte se calcule, l'avis se prononce : un document sans avis ne dit
+       pas ce que le jury a décidé, et c'est pourtant la seule ligne que le candidat lira. */
+    if (!r.verdict || !r.verdict.avis) return { erreur: "Prononcez l'avis du jury avant de clôturer.", code: 422 };
+
+    /* LE DOCUMENT EST FACULTATIF : une grille sans modèle se clôture quand même. Refuser la
+       clôture faute de mise en page bloquerait le jury sur un réglage qui ne le regarde pas. */
+    let documentId = null;
+    if (r.grille.template_slug) {
+        const [[enr]] = await conn.query('SELECT learner_id FROM enrollment WHERE id = ?', [enrollmentId]);
+        const { prepareLearnerDoc } = require('./document.controller.js');
+        documentId = await prepareLearnerDoc(conn, orgId, {
+            learnerId: enr.learner_id, type: 'EVALUATION', templateSlug: r.grille.template_slug,
+            title: r.grille.label || 'Évaluation du jury', enrollmentIds: [enrollmentId],
+        });
+    }
+    await conn.query(
+        `UPDATE evaluation_verdict SET cloture_le = NOW(), cloture_par = ?, document_id = ?
+          WHERE grille_id = ? AND enrollment_id = ?`,
+        [userId, documentId, r.grille.id, enrollmentId]);
+    return { documentId, resultat: r.resultat };
+}
+
 module.exports = {
     getGrille, saveGrille, getNotesSession, saveNote, saveVerdict,
-    grilleDeLaFormation, resultatDossier, estCloture, roleValide,
+    grilleDeLaFormation, resultatDossier, resultatJuryDossier, cloturerCandidat, estCloture, roleValide,
 };

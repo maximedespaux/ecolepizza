@@ -1,5 +1,5 @@
 const express = require('express');
-const { getMyIntervenantSheets, signMyIntervenantSheet, getMyIntervenantProfile, setMyIntervenantSignature, getMyJuryGrille, noterJury, verdictJury } = require('../controllers/intervenant.controller.js');
+const { getMyIntervenantSheets, signMyIntervenantSheet, getMyIntervenantProfile, setMyIntervenantSignature, getMyJuryGrille, noterJury, verdictJury, cloturerJury } = require('../controllers/intervenant.controller.js');
 const { authenticateToken, authorizeRoles } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -16,5 +16,6 @@ router.post('/emargement/sign', signMyIntervenantSheet);
 router.get('/evaluation/:id', getMyJuryGrille);
 router.put('/evaluation/note', noterJury);
 router.put('/evaluation/verdict', verdictJury);
+router.post('/evaluation/cloturer', cloturerJury);
 
 module.exports = router;

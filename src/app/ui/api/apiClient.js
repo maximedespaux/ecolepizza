@@ -1244,6 +1244,11 @@ export function deleteContribution(id) {
 /* ÉVALUATION PRATIQUE (migration 148) — la grille d'une formation, les notes d'une session.
    Les POINTS ne sont jamais envoyés : on transmet la MESURE (un temps, une note, un geste
    acquis) et le serveur applique le barème. Cf. api/lib/bareme.js. */
+/* Pose les modèles de document du jury. N'écrase jamais un modèle existant : le corps livré
+   n'est qu'un point de départ, et l'organisme le retouche ensuite. */
+export function poserModelesJury() {
+  return request("/templates/modeles-jury", { method: "POST" });
+}
 export function getGrilleEvaluation(programId, role) {
   /* Une formation porte DEUX grilles : celle du formateur (notation continue) et celle du jury
      (examen). Le rôle dit laquelle on demande. */
@@ -1262,6 +1267,9 @@ export function noterJury(payload) {
 }
 export function verdictJury(payload) {
   return request("/intervenant/evaluation/verdict", { method: "PUT", body: JSON.stringify(payload) });
+}
+export function cloturerJury(payload) {
+  return request("/intervenant/evaluation/cloturer", { method: "POST", body: JSON.stringify(payload) });
 }
 export function getEvaluationSession(sessionId, silent, role) {
   /* `silent` : la relecture qui suit CHAQUE note ne doit pas faire clignoter la barre de

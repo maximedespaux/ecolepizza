@@ -4,7 +4,7 @@ import Badge from "./Badge.jsx";
 import StatusMessage from "./StatusMessage.jsx";
 import { Squelette } from "./Squelette.jsx";
 import { Icon } from "./Icon.jsx";
-import { getMaGrilleJury, noterJury, verdictJury } from "../api/apiClient.js";
+import { getMaGrilleJury, noterJury, verdictJury, cloturerJury } from "../api/apiClient.js";
 
 /**
  * LA GRILLE DU JURY — l'écran du membre externe, dans son espace.
@@ -86,6 +86,27 @@ function JuryGrille({ sessionId }) {
         observations, ...patch,
       });
       await charger(true);
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+
+  async function cloturer() {
+    if (!courant) return;
+    /* ON DIT CE QUE LA CLÔTURE FAIT AVANT DE LA FAIRE. C'est le seul geste irréversible de
+       l'écran : après lui, plus une coche ne bouge. Un bouton qui fige une évaluation sans
+       prévenir se cliquerait par curiosité. */
+    const msg = `Clôturer l'évaluation de ${courant.nom} ?\n\n`
+      + `Compétences validées : ${jury.validees} / ${jury.total}\n`
+      + `Avis : ${verdict?.avis === "FAVORABLE" ? "Favorable" : verdict?.avis === "DEFAVORABLE" ? "Défavorable" : "—"}`
+      + `${verdict?.rattrapage ? " · Rattrapage" : ""}\n\n`
+      + `La grille ne sera plus modifiable, et le document du candidat sera produit.`;
+    if (!window.confirm(msg)) return;
+    setStatus(null);
+    try {
+      const r = await cloturerJury({ enrollment_id: courant.enrollment_id });
+      await charger(true);
+      setStatus({ type: "success", message: r.data?.documentId
+        ? "Évaluation clôturée. Le document du candidat est prêt à signer."
+        : "Évaluation clôturée. Aucun modèle de document n'est configuré sur cette grille." });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
@@ -208,11 +229,24 @@ function JuryGrille({ sessionId }) {
           placeholder="Axes de progression, réserves, motif d'un avis défavorable…" />
       </div>
 
-      {!jury.complet && !fige && (
-        <p className="hint" style={{ marginBottom: 0 }}>
-          Il reste des critères à cocher : {jury.total - (jury.details || []).filter((d) => d.validee !== null).length} compétence(s) en cours.
-        </p>
-      )}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
+        <span className="hint" style={{ margin: 0 }}>
+          {fige
+            ? "Évaluation close."
+            : !jury.complet
+              ? `Il reste ${jury.total - (jury.details || []).filter((d) => d.validee !== null).length} compétence(s) à terminer.`
+              : !verdict?.avis
+                ? "Prononcez l'avis du jury pour pouvoir clôturer."
+                : "Tout est renseigné."}
+        </span>
+        <span style={{ flex: 1 }} />
+        {/* DÉSACTIVÉ PLUTÔT QUE CACHÉ tant que la grille n'est pas prête : un bouton absent
+            laisse chercher, un bouton grisé avec sa raison écrite à côté dit quoi faire. */}
+        <button type="button" className="btn primary" onClick={cloturer}
+          disabled={fige || !jury.complet || !verdict?.avis}>
+          Clôturer et générer
+        </button>
+      </div>
     </Card>
   );
 }

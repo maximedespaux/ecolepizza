@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
-const { getNotesSession, saveNote, saveVerdict } = require('./evaluation.controller.js');
+const { getNotesSession, saveNote, saveVerdict, cloturerCandidat } = require('./evaluation.controller.js');
 
 const SLOTS = ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'];
 const SLOT_LABEL = { MATIN: 'Matin', APRES_MIDI: 'Après-midi', EXAMEN: 'Examen', DISTANCIEL: 'Distanciel' };
@@ -351,8 +351,29 @@ const verdictJury = async (req, res) => {
     }
 };
 
+/** POST /api/intervenant/evaluation/cloturer — fige la grille et produit le document. */
+const cloturerJury = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const enrollmentId = (req.body || {}).enrollment_id;
+        if (!await monCandidat(conn, req.user.id, req.user.organization_id, enrollmentId)) {
+            return res.status(403).json({ message: 'Candidat non affecté à vos sessions.' });
+        }
+        const r = await cloturerCandidat(conn, req.user.organization_id, req.user.id, enrollmentId);
+        if (r.erreur) return res.status(r.code || 422).json({ message: r.erreur });
+        logAudit(req, 'evaluation.cloture', 'EvaluationVerdict', enrollmentId);
+        res.json({ data: r });
+    } catch (err) {
+        if (err && err.code === 'ER_NO_SUCH_TABLE') {
+            return res.status(409).json({ message: 'Migration 149 non jouée : évaluation jury indisponible.' });
+        }
+        console.error('Erreur clôture jury :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
     listSessionIntervenants, addSessionIntervenant, setIntervenantSlots, removeSessionIntervenant,
     getMyIntervenantSheets, signMyIntervenantSheet, getMyIntervenantProfile, setMyIntervenantSignature,
-    getMyJuryGrille, noterJury, verdictJury,
+    getMyJuryGrille, noterJury, verdictJury, cloturerJury,
 };

@@ -151,6 +151,7 @@ const ACTION_LABEL = {
     'evaluation.grille': ['Grille d\'évaluation enregistrée', A],
     'evaluation.note': ['Note d\'évaluation saisie', B],
     'evaluation.verdict': ['Avis du jury enregistré', B],
+    'evaluation.cloture': ['Évaluation du jury clôturée', B],
     'piece.depot': ['Pièce déposée', B],
     'piece.validee': ['Pièce validée', G],
     'piece.refusee': ['Pièce refusée', R],

@@ -11,6 +11,7 @@ const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
 const { getEnabledFields } = require('../lib/conditions.js');
 const { resolveCustomTokens } = require('../lib/customtokens.js');
 const { identiteExemple } = require('../lib/echantillons.js');
+const { MODELES: MODELES_JURY } = require('../lib/modelesJury.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
@@ -493,14 +494,14 @@ async function loadCustomTokens(orgId) {
 // Les groupes non listés tombent à la fin, triés alphabétiquement.
 const GROUP_ORDER = [
     'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
-    'Inscription', 'Formation', 'Session', 'Évaluation pratique', 'Lieu de formation',
+    'Inscription', 'Formation', 'Session', 'Évaluation pratique', 'Jury', 'Lieu de formation',
     'Organisme', 'Émetteur (identité)', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
 /* L'ordre des jetons d'évaluation est réfléchi (intitulé, total, points, seuil, résultat,
    détail) : trié alphabétiquement, « NoteDétail » ouvrirait le groupe et le total arriverait
    après le seuil. */
-const CURATED_GROUPS = new Set(['Évaluation pratique', 'Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
+const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -509,7 +510,7 @@ const CURATED_GROUPS = new Set(['Évaluation pratique', 'Dates et valeurs calcul
 //    masque le groupe « Groupe entreprise ».
 /* Une évaluation note UNE personne : sur un document de groupe, ces jetons n'auraient
    aucun dossier à lire et sortiraient vides. */
-const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Inscription', 'Évaluation pratique']);
+const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Inscription', 'Évaluation pratique', 'Jury']);
 const HIDDEN_FOR_LEARNER = new Set(['Groupe entreprise']);
 
 /** GET /api/templates/tokens?slug= — jetons de la palette, filtrés selon le type de document. */
@@ -549,6 +550,7 @@ const getTokens = async (req, res) => {
            juste après la mise en ligne : {NoteTotale} se résolvait correctement si on le tapait
            à la main, et n'apparaissait nulle part dans l'éditeur. */
         groups.push(catalogGroup('Évaluation pratique'));
+        groups.push(catalogGroup('Jury'));
         groups.push(factureTokensGroup());
         // Sur une facture/devis, l'ACHETEUR est un stagiaire OU une entreprise. Ses coordonnées
         // (e-mail, téléphone, adresse…) existent déjà dans les Champs documents (field:learner.* /
@@ -1006,9 +1008,51 @@ const reorderTemplates = async (req, res) => {
     }
 };
 
+/**
+ * POST /api/templates/modeles-jury — pose les modèles de document du jury.
+ *
+ * ON NE REMPLACE JAMAIS UN MODÈLE EXISTANT. Le corps livré n'est qu'un point de départ ;
+ * l'organisme le retouche ensuite dans l'éditeur, et un second clic sur ce bouton — par
+ * curiosité, ou parce qu'on ne sait plus s'il a été cliqué — effacerait sa mise en page sans
+ * rien demander. Le bouton dit donc ce qu'il a fait : posé, ou déjà là.
+ */
+const poserModelesJury = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [existants] = await conn.query(
+            'SELECT slug FROM document_template WHERE organization_id = ? AND slug IN (?)',
+            [orgId, MODELES_JURY.map((m) => m.slug)]);
+        const deja = new Set(existants.map((r) => r.slug));
+
+        const poses = [];
+        for (const m of MODELES_JURY) {
+            if (deja.has(m.slug)) continue;
+            await upsertTemplate(conn, orgId, m.slug, {
+                label: m.label, doc_type: m.doc_type, kind: 'builder', body_html: m.body,
+                signers: JSON.stringify(m.signers),
+                /* Les anciens drapeaux restent synchronisés : du code les lit encore
+                   directement (cf. lib/documents.js, repli de `stepSigners`). */
+                signable: m.signers.includes('ORG') ? 1 : 0,
+                stagiaire_sign: m.signers.includes('STAGIAIRE') ? 1 : 0,
+                /* HORS PARCOURS : ce document naît de la CLÔTURE d'une évaluation, pas d'une
+                   étape du dossier. Actif mais non rangé dans le flux, il ne réclamerait
+                   sinon d'être « fait » pour tout stagiaire, jury ou pas. */
+                active: 1, sort_order: 900,
+            });
+            logAudit(req, 'template.save', 'DocumentTemplate', m.slug);
+            poses.push(m.slug);
+        }
+        res.json({ data: { poses, deja: [...deja] } });
+    } catch (err) {
+        console.error('Erreur pose des modèles jury :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
     getTemplateBuffer, getTemplateContent, loadOrgSteps, documentSetForOrg,
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate, duplicateTemplate,
     getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
-    loadCustomTokens, getCustomTokens, saveCustomTokens,
+    loadCustomTokens, getCustomTokens, saveCustomTokens, poserModelesJury,
 };

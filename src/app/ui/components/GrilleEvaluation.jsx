@@ -3,7 +3,7 @@ import { Icon } from "./Icon.jsx";
 import HelpDot from "./HelpDot.jsx";
 import StatusMessage from "./StatusMessage.jsx";
 import { Squelette } from "./Squelette.jsx";
-import { getGrilleEvaluation, saveGrilleEvaluation, getTemplates } from "../api/apiClient.js";
+import { getGrilleEvaluation, saveGrilleEvaluation, getTemplates, poserModelesJury } from "../api/apiClient.js";
 import { grilleDepart } from "../lib/grilleRS7404.js";
 import { secondesEnMinSec, minSecEnSecondes } from "../lib/format.js";
 
@@ -139,6 +139,21 @@ function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
 
   const total = exercices.reduce((s, ex) => s + maximumExercice(ex), 0);
 
+  /* Pose le modèle livré, puis le sélectionne : l'utilisateur voulait un document, pas une
+     liste rafraîchie. */
+  async function poserModele() {
+    setStatus(null);
+    try {
+      const r = await poserModelesJury();
+      const rt = await getTemplates();
+      setModeles(rt.data || []);
+      setSlug("grille-jury");
+      setStatus({ type: "success", message: (r.data?.poses || []).length
+        ? "Modèle « Grille d'évaluation du jury » créé. Vous pouvez le retoucher dans Modèles."
+        : "Le modèle existait déjà, il n'a pas été modifié." });
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+
   async function enregistrer() {
     if (jury) {
       const c = competences.findIndex((x) => !String(x.label).trim());
@@ -211,10 +226,18 @@ function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
               Document produit à la clôture
               <HelpDot text={"Le modèle imprimé quand le jury clôture l'évaluation d'un candidat.\n\nIl reçoit les jetons de la grille ({JuryDétail}, {JuryCompétences}, {JuryAvis}) et se fait signer par les membres du jury, le stagiaire et l'organisme.\n\nLaisser vide : la grille se remplit quand même, elle n'imprime simplement rien."} />
             </label>
-            <select className="inp" value={slug} onChange={(e) => setSlug(e.target.value)}>
-              <option value="">Aucun document</option>
-              {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.title || m.slug}</option>)}
-            </select>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select className="inp" style={{ flex: 1, minWidth: 0 }} value={slug} onChange={(e) => setSlug(e.target.value)}>
+                <option value="">Aucun document</option>
+                {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.title || m.slug}</option>)}
+              </select>
+              {/* LE MODÈLE MANQUE AU MOMENT OÙ ON LE CHERCHE : le poser depuis la liste
+                  déroulante évite d'aller le monter dans un autre écran puis de revenir.
+                  Il n'écrase jamais un modèle existant — le serveur le dit. */}
+              {!modeles.some((m) => m.slug === "grille-jury") && (
+                <button type="button" className="btn sm ghost" onClick={poserModele}>Créer le modèle</button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="field">
