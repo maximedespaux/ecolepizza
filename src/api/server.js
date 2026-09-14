@@ -170,6 +170,36 @@ app.use('/api/public', publicRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'impastio-api' }));
 
+/* DERNIER MAILLON : LES ERREURS LEVÉES HORS D'UN CONTRÔLEUR.
+   Il n'y en avait AUCUN. Tout ce qui échoue AVANT que le code métier ne voie la requête —
+   multer refusant un fichier trop lourd, un corps JSON illisible — tombait sur le gestionnaire
+   par défaut d'Express, qui répond en HTML. Le front, lui, lit du JSON : il n'y trouvait ni
+   `message` ni `error` et affichait son texte de repli. « Envoi du fichier échoué » ne dit ni
+   ce qui s'est passé ni quoi faire, et c'est ce qu'a vu l'école en déposant un justificatif de
+   5,1 Mo sur une pièce plafonnée plus bas.
+
+   Quatre arguments OBLIGATOIRES : c'est à l'arité qu'Express reconnaît un gestionnaire
+   d'erreurs. En retirer un le transformerait en middleware ordinaire, jamais appelé — et la
+   panne serait invisible, puisque tout continuerait de fonctionner sauf ce cas-ci. */
+app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    const code = err && err.code;
+    if (code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ message: 'Fichier trop lourd : il dépasse la taille maximale acceptée.' });
+    }
+    if (code === 'LIMIT_FILE_COUNT' || code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(422).json({ message: 'Envoi refusé : trop de fichiers, ou un champ de fichier inattendu.' });
+    }
+    /* Corps JSON malformé : `express.json()` lève une SyntaxError avec le statut déjà posé. */
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+        return res.status(400).json({ message: 'Requête illisible (JSON invalide).' });
+    }
+    console.error('Erreur non rattrapée :', err);
+    /* Le détail ne sort JAMAIS : un message d'erreur porte des chemins de fichiers, parfois des
+       fragments de requête SQL. Le journal du serveur, lui, garde tout. */
+    res.status(500).json({ error: 'Internal Server Error' });
+});
+
 app.listen(port, () => {
     console.log(`Impastio API en écoute sur http://localhost:${port}`);
     // Le pool est PARESSEUX (cf. config/database.js) : sans cet appel, rien ne toucherait la

@@ -42,7 +42,12 @@ test('parseMimes : texte JSON -> tableau, sinon null', () => {
 test('deposer applique les limites PROPRES à la pièce, avec repli sur les plafonds communs', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'piece.controller.js'), 'utf8');
     // La pièce est lue AVANT d'accepter le fichier ; taille et formats viennent d'ELLE, sinon des défauts.
-    assert.match(src, /const maxOctets = \(pt && pt\.max_octets\) \|\| MAX_OCTETS/, 'taille max de la pièce, sinon le plafond commun');
+    /* La limite vient de la pièce, à défaut du plafond commun — et jamais au-dessus du plafond
+       ABSOLU, qui borne aussi la coupure de transport. Sans ce dernier borne, une valeur écrite
+       en base à la main pourrait dépasser ce que multer laisse passer : le fichier mourrait au
+       transport, sans message lisible, pour une limite que l'écran annonce pourtant acceptée. */
+    assert.match(src, /const maxOctets = Math\.min\(MAX_OCTETS_ABSOLU, \(pt && pt\.max_octets\) \|\| MAX_OCTETS\)/,
+        'taille max de la pièce, sinon le plafond commun, jamais au-dessus de l\'absolu');
     assert.match(src, /const mimesOk = \(pt && parseMimes\(pt\.mimes\)\) \|\| MIMES/, 'formats de la pièce, sinon les formats par défaut');
     assert.match(src, /f\.buffer\.length > maxOctets/, 'la taille est comparée au plafond DE LA PIÈCE');
     assert.match(src, /!mimesOk\.includes\(String\(f\.mimetype\)\)/, 'le format est vérifié contre les formats DE LA PIÈCE');

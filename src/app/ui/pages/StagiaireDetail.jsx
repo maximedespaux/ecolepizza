@@ -343,16 +343,18 @@ function StagiaireDetail() {
          jamais en parallèle — deux dépôts simultanés liraient le même compte et passeraient
          tous les deux le plafond. */
       let deposes = 0;
-      let echec = null;
+      const echecs = [];
       for (const f of fichiers) {
         try {
           await deposerPiece(curEnrId, step.piece_id, f);
           deposes += 1;
         } catch (err) {
-          /* On s'arrête au premier refus : la suite tomberait sur le même motif (plafond
-             atteint, format refusé) et empilerait des messages identiques. */
-          echec = err.message;
-          break;
+          /* ON CONTINUE. S'arrêter au premier refus paraissait économe — la suite tomberait
+             sur le même motif — mais c'est faux dès que le motif est PROPRE au fichier : une
+             taille, un format. Mesuré : deux fichiers, le petit passe, le gros est refusé, et
+             la sélection suivante aurait été abandonnée pour rien. On retient donc chaque
+             refus avec le NOM du fichier, sans quoi il reste à deviner lequel manque. */
+          echecs.push(`${f.name} (${err.message})`);
         }
       }
       if (deposes) setParcoursRefresh((n) => n + 1);
@@ -360,12 +362,12 @@ function StagiaireDetail() {
          comme un succès laisserait croire que les six pages sont arrivées. Et il dit que la
          pièce est VALIDÉE : déposée par l'école, elle l'est du même geste — on ne réclame pas
          un second clic à qui vient d'ouvrir le document pour le téléverser. */
-      if (echec) {
+      if (echecs.length) {
         setStatus({
           type: "error",
           message: deposes
-            ? `${deposes} fichier${deposes > 1 ? "s" : ""} sur ${fichiers.length} déposé${deposes > 1 ? "s" : ""}. Les suivants ont été refusés : ${echec}`
-            : echec,
+            ? `${deposes} fichier${deposes > 1 ? "s" : ""} sur ${fichiers.length} enregistré${deposes > 1 ? "s" : ""}. Refusé${echecs.length > 1 ? "s" : ""} : ${echecs.join(" · ")}`
+            : `Refusé${echecs.length > 1 ? "s" : ""} : ${echecs.join(" · ")}`,
         });
       } else {
         setStatus({

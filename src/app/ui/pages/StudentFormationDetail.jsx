@@ -72,18 +72,21 @@ function StudentFormationDetail() {
        compte les fichiers déjà déposés pour refuser celui de trop. En parallèle, deux envois
        liraient le même compte et passeraient tous les deux le plafond. */
     let envoyes = 0;
-    let echec = null;
+    const echecs = [];
     for (const f of fichiers) {
+      /* ON CONTINUE après un refus : le motif est souvent PROPRE au fichier (taille, format),
+         et abandonner les suivants les perdrait sans raison. Chaque refus garde le NOM du
+         fichier, sans quoi il reste à deviner lequel n'est pas passé. */
       try { await deposerPiece(id, pieceCible.current, f); envoyes += 1; }
-      catch (err) { echec = err.message; break; }  // la suite tomberait sur le même motif
+      catch (err) { echecs.push(`${f.name} (${err.message})`); }
     }
     if (envoyes) load();
-    if (echec) {
+    if (echecs.length) {
       setStatus({
         type: "error",
         message: envoyes
-          ? `${envoyes} document${envoyes > 1 ? "s" : ""} sur ${fichiers.length} envoyé${envoyes > 1 ? "s" : ""}. Les suivants ont été refusés : ${echec}`
-          : echec,
+          ? `${envoyes} document${envoyes > 1 ? "s" : ""} sur ${fichiers.length} envoyé${envoyes > 1 ? "s" : ""}. Refusé${echecs.length > 1 ? "s" : ""} : ${echecs.join(" · ")}`
+          : `Refusé${echecs.length > 1 ? "s" : ""} : ${echecs.join(" · ")}`,
       });
     } else {
       setStatus({
