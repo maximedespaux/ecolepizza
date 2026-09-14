@@ -122,7 +122,7 @@ export default function Entreprises() {
 }
 
 function CreateCompanyModal({ onClose, onCreated, onError }) {
-  const [f, setF] = useState({ name: "", siret: "", address: "", zip_code: "", town: "", email: "", phone: "", representative_civ: "", representative_name: "" });
+  const [f, setF] = useState({ name: "", siret: "", vat_number: "", address: "", zip_code: "", town: "", email: "", phone: "", representative_civ: "", representative_name: "" });
   const [busy, setBusy] = useState(false);
   /* Mêmes conventions que la fiche entreprise et la fiche stagiaire : nom du référent en
      capitales (il ressort sur les conventions et les liens de signature), e-mail normalisé —
@@ -157,6 +157,19 @@ function CreateCompanyModal({ onClose, onCreated, onError }) {
           <div className="grid cols-2" style={{ gap: 12 }}>
             <div className="field"><label>SIRET<Requis /></label><input className="inp" value={f.siret} onChange={set("siret")} placeholder="879 955 136 00012" /></div>
             <div className="field"><label>Téléphone<Requis /></label><input className="inp" value={f.phone} onChange={set("phone")} placeholder="05 62 98 12 34" /></div>
+          </div>
+          {/* LE N° DE TVA MANQUAIT ICI, alors que la colonne existe (migration 123) et que la
+              FICHE le propose déjà : on pouvait donc le saisir après coup, jamais à la création.
+              Résultat mesuré : quatre cent soixante-neuf entreprises, aucune avec un numéro.
+              Facultatif — toutes n'en ont pas — mais le contrôle de format s'applique dès qu'il
+              est saisi, ici comme au serveur, qui reste seul juge. */}
+          <div className="field">
+            <label>N° TVA intracommunautaire</label>
+            <input className="inp" value={f.vat_number} onChange={set("vat_number")}
+              placeholder="FR76123456789" maxLength={16} />
+            <p className="hint" style={{ margin: "4px 0 0", fontSize: 12 }}>
+              Treize caractères : « FR » suivi de onze chiffres, ou treize chiffres. Laissez vide si l'entreprise n'en a pas.
+            </p>
           </div>
           <div className="field"><label>Adresse</label><input className="inp" value={f.address} onChange={set("address")} placeholder="12 rue des Lilas" /></div>
           <div className="grid cols-2" style={{ gap: 12 }}>

@@ -96,17 +96,23 @@ function modeFor(navAccess, section) {
     return null;
 }
 
-/* RUBRIQUES DÉLÉGUABLES EN LECTURE SEULE — celles qui distribuent les accès eux-mêmes.
-   Accorder « Équipe » ou « Rôles d'accès » en ÉCRITURE à un rôle configurable lui permettrait de
-   se promouvoir, ou de s'ouvrir toutes les autres rubriques : l'escalade de privilèges par la
-   porte de service. Cette borne-là ne bouge pas.
-   LA CONSULTATION, ELLE, NE LA FRANCHIT PAS. Voir qui compose l'équipe, ou ce qu'un rôle accorde,
-   ne donne aucun pouvoir supplémentaire — et le refuser obligeait l'organisme à déranger un
-   propriétaire pour une question de simple lecture. Ces rubriques étaient donc totalement
-   fermées à la délégation ; elles s'accordent désormais, mais le serveur ignore le mode
-   « écriture » qui pourrait être stocké pour elles : c'est ici que la garantie tient, pas dans
-   l'écran qui propose les cases. */
-const SECTIONS_LECTURE_SEULE = ['/equipe', '/roles'];
+/* RUBRIQUE DÉLÉGUABLE EN LECTURE SEULE — « Rôles d'accès », qui définit ce que chaque rôle
+   SYSTÈME accorde. Y écrire, c'est redéfinir les droits de tout le monde d'un coup, y compris
+   les siens : la borne ne bouge pas, quoi que l'écran propose. Le serveur ignore le mode
+   « écriture » stocké pour elle — c'est ici que la garantie tient, pas dans les cases.
+
+   « ÉQUIPE & ACCÈS » N'Y FIGURE PLUS : elle se délègue en écriture, sur décision de l'organisme.
+   Ce qui rend la chose sûre n'est pas une interdiction de rubrique mais les bornes du contrôleur
+   lui-même, renforcées pour l'occasion (cf. equipe.controller.js) :
+     · `nav_access` reste réservé au SUPER_ADMIN — un délégué ne peut ouvrir aucune rubrique,
+       ni à lui-même ni à personne ;
+     · on n'attribue jamais un rôle de propriétaire sans en être un ;
+     · un compte de propriétaire ne se modifie que par un propriétaire — sans quoi la simple
+       réinitialisation de mot de passe suffisait à prendre sa place ;
+     · nul ne change son propre rôle.
+   La consultation, elle, n'a jamais rien franchi : voir qui compose l'équipe ne donne aucun
+   pouvoir, et le refuser obligeait à déranger un propriétaire pour une simple lecture. */
+const SECTIONS_LECTURE_SEULE = ['/roles'];
 
 /* CHEMIN COMPLET — et c'est tout l'enjeu. `req.path` est RELATIF AU POINT DE MONTAGE dès qu'on
    se trouve dans un routeur : sous app.use('/api/carte', …), il vaut « / », pas « /api/carte ».

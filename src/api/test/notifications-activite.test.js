@@ -16,8 +16,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const {
-    SECTION_PAR_ENTITE, sectionDeLEntite, sectionsVisibles, entitesVisibles, estLu,
-} = require('../lib/activite.js');
+    SECTION_PAR_ENTITE, sectionDeLEntite, sectionsVisibles, entitesVisibles, estLu, estEvenement } = require('../lib/activite.js');
 
 const CTRL = path.join(__dirname, '..', 'controllers');
 const NOTIF = fs.readFileSync(path.join(CTRL, 'notification.controller.js'), 'utf8');
@@ -61,10 +60,16 @@ test('un formateur n\'est prévenu que des rubriques qu\'on lui a accordées', (
     }
 });
 
-test('les rubriques qui distribuent les accès ne se racontent jamais', () => {
-    // /equipe et /roles sont non délégables : savoir qui a été converti ou quel profil a changé
-    // est une information d'administration, pas une nouvelle d'équipe.
-    const vues = sectionsVisibles({ role: 'FORMATEUR', navAccess: nav({ '/equipe': 'write', '/roles': 'write' }) });
+test('les changements d\'administration ne se racontent jamais', () => {
+    /* CE QUI COMPTE N'EST PAS LA RUBRIQUE MAIS L'ENTITÉ. « Équipe & accès » se délègue désormais,
+       y compris en écriture : la borne ne peut donc plus venir d'une liste de rubriques
+       interdites. Elle vient de `estEvenement` — `User` et `AccessProfile` sont des RÉGLAGES,
+       et un réglage ne sonne pas. Savoir qu'un membre a changé de profil est une information
+       d'administration, pas une nouvelle d'équipe. */
+    assert.ok(!estEvenement('User'), 'un changement de membre ne doit pas sonner');
+    assert.ok(!estEvenement('AccessProfile'), 'un changement de profil non plus');
+    // « Rôles d'accès » reste hors des rubriques dont on tient quelqu'un au courant.
+    const vues = sectionsVisibles({ role: 'FORMATEUR', navAccess: nav({ '/roles': 'write' }) });
     assert.deepStrictEqual(vues, []);
     assert.deepStrictEqual(entitesVisibles(vues), []);
 });

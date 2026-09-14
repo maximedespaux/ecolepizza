@@ -294,16 +294,18 @@ export function landingPath(user) {
   return "/aucun-acces";
 }
 
-/* RUBRIQUES ACCORDABLES EN LECTURE SEULE. Elles DISTRIBUENT les accès : y écrire permettrait
-   à un membre de se promouvoir, ou de s'ouvrir toutes les autres rubriques. La consultation, en
-   revanche, ne donne aucun pouvoir — et la refuser obligeait à déranger un propriétaire pour
-   savoir qui compose l'équipe ou ce qu'un rôle accorde.
+/* RUBRIQUE ACCORDABLE EN LECTURE SEULE : « Rôles d'accès », qui définit ce que chaque rôle
+   SYSTÈME accorde. Y écrire redéfinirait les droits de tout le monde d'un coup, les siens
+   compris. « Équipe & accès » s'accorde en revanche en lecture OU en écriture : ce qui la rend
+   sûre tient aux bornes du contrôleur (nav_access réservé au super administrateur, aucun rôle
+   de propriétaire attribuable sans l'être, aucun compte de propriétaire modifiable), pas à une
+   interdiction de rubrique.
 
    LA GARANTIE NE TIENT PAS ICI. Le serveur ignore le mode « écriture » sur ces rubriques, quoi
    que cet écran propose (cf. SECTIONS_LECTURE_SEULE côté API). Cette liste sert à ne pas
    PROMETTRE un droit qui serait refusé — le défaut que ce projet a déjà payé une fois : menu
    ouvert, route fermée, et un réglage qui semble sans effet. */
-export const NAV_LECTURE_SEULE = ["/equipe", "/roles"];
+export const NAV_LECTURE_SEULE = ["/roles"];
 
 // Items de menu que le super administrateur peut accorder. « Équipe & accès » en fait
 // désormais partie, en lecture seule comme « Rôles d'accès ».

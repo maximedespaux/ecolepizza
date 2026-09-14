@@ -20,9 +20,20 @@ const PUBLIC_FIELDS =
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Un acteur (req.user) peut-il attribuer ce rôle ? */
+/**
+ * Un acteur (req.user) peut-il attribuer ce rôle ?
+ *
+ * CETTE FONCTION SUPPOSAIT QUE SEUL UN PROPRIÉTAIRE L'ATTEIGNE, parce que la route « Équipe »
+ * leur était réservée. Depuis qu'elle se délègue, l'hypothèse ne tient plus : un secrétariat
+ * autorisé à écrire ici aurait pu promouvoir un collègue en ADMIN_ORGANISME, puis lui demander
+ * tout le reste. L'escalade par personne interposée.
+ *
+ * ON NE MONTE JAMAIS AU-DESSUS DE SOI : attribuer un rôle de propriétaire exige d'en être un,
+ * et le rôle de super administrateur exige de l'être.
+ */
 function canAssignRole(actorRole, targetRole) {
     if (targetRole === 'SUPER_ADMIN') return actorRole === 'SUPER_ADMIN';
+    if (OWNER_ROLES.includes(targetRole) && !OWNER_ROLES.includes(actorRole)) return false;
     return ASSIGNABLE_BY_ADMIN.includes(targetRole);
 }
 
@@ -138,6 +149,14 @@ const updateMember = async (req, res) => {
         // Seul un SUPER_ADMIN peut modifier un compte SUPER_ADMIN.
         if (target.role === 'SUPER_ADMIN' && req.user.role !== 'SUPER_ADMIN') {
             return res.status(403).json({ error: 'Modification réservée à un super administrateur.' });
+        }
+        /* UN COMPTE DE PROPRIÉTAIRE NE SE TOUCHE QUE PAR UN PROPRIÉTAIRE. Cette garde n'existait
+           que pour les SUPER_ADMIN, la route étant fermée aux autres. Depuis qu'elle se délègue,
+           son absence ouvrait la plus courte des escalades : la réinitialisation du mot de passe
+           ne vérifiait RIEN sur la cible — un secrétariat autorisé à écrire ici aurait pu donner
+           un nouveau mot de passe à un administrateur, puis se connecter à sa place. */
+        if (OWNER_ROLES.includes(target.role) && !OWNER_ROLES.includes(req.user.role)) {
+            return res.status(403).json({ error: 'Ce compte ne peut être modifié que par un administrateur.' });
         }
 
         const updates = [];
