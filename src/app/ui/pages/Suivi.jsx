@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
   importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage, pieceFichierUrl } from "../api/apiClient.js";
+import ProgressPct from "../components/ProgressPct.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -22,17 +23,6 @@ const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIG
   VALIDEE: ["Validée", "g"], DEPOSEE: ["À vérifier", "a"] };
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 
-// Barre de progression compacte + pourcentage (réutilisée pour dossier et groupe).
-function ProgressPct({ percent }) {
-  return (
-    <span style={{ width: 90, flexShrink: 0 }} title={`${percent || 0}% du parcours`}>
-      <span style={{ display: "block", height: 6, borderRadius: 4, background: "var(--border-soft, #e3e3e6)", overflow: "hidden" }}>
-        <span style={{ display: "block", height: "100%", width: `${percent || 0}%`, background: "var(--ember1, #c0392b)" }} />
-      </span>
-      <span style={{ display: "block", fontSize: 11, color: "var(--muted)", textAlign: "right", marginTop: 2 }}>{percent || 0}%</span>
-    </span>
-  );
-}
 
 // État d'une étape d'un dossier (identique à Roadmap.stepState) pour l'agrégat groupe.
 function docState(doc) {
@@ -85,7 +75,7 @@ function DossierRow({ d, isOpen, onToggle, navigate, nested }) {
             {d.program_title} · {d.done}/{d.total} étape(s){d.to_sign ? ` · ${d.signed}/${d.to_sign} signé(s)` : ""}
           </span>
         </span>
-        <ProgressPct percent={d.percent} />
+        <ProgressPct percent={d.percent} score={d.score} />
         <Badge tone={scoreBadge(d.score)}>{d.score}</Badge>
       </button>
       {isOpen && (
@@ -276,7 +266,7 @@ function Suivi() {
                             {g.members.length} stagiaire(s) · {g.done}/{g.total} étape(s)
                           </span>
                         </span>
-                        <ProgressPct percent={g.percent} />
+                        <ProgressPct percent={g.percent} score={g.score} />
                         <Badge tone={scoreBadge(g.score)}>{g.score}</Badge>
                       </button>
                       {cOpen && (

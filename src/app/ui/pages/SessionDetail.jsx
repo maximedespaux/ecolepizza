@@ -15,7 +15,8 @@ import SessionIntervenants from "../components/SessionIntervenants.jsx";
 import SessionRetraits from "../components/SessionRetraits.jsx";
 import SessionConsentements from "../components/SessionConsentements.jsx";
 import NotesModal from "../components/NotesModal.jsx";
-import { colorOf, initials, scoreBadge, dateHeure } from "../lib/format.js";
+import { colorOf, initials, dateHeure } from "../lib/format.js";
+import ProgressPct from "../components/ProgressPct.jsx";
 
 function SessionDetail() {
   const { id } = useParams();
@@ -390,7 +391,9 @@ function SessionDetail() {
                   <b style={{ color: "var(--text)" }}>{e.last_name} {e.first_name}</b>
                   <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{e.email || "-"}</span>
                 </button>
-                <Badge tone={scoreBadge(e.conformite_score)}>{e.conformite_score}</Badge>
+                {/* Même remplacement qu'au tableau de bord : `conformite_score` n'est jamais
+                    recalculé, il affichait « ROUGE » pour tout le monde. */}
+                <ProgressPct percent={e.percent} score={e.score} width={78} />
                 <button className="iconbtn" title="Notes de suivi" onClick={() => setNotesFor({ id: e.id, name: `${e.last_name} ${e.first_name}` })}><Icon name="pencil" size={15} /></button>
                 <button className="iconbtn del" title="Retirer de la session" onClick={() => removeStagiaire(e.id)}><Icon name="trash" size={15} /></button>
               </div>

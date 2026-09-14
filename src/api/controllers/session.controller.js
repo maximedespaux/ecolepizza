@@ -5,6 +5,7 @@ const { parseApplies } = require('../lib/documents.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { notify } = require('./notification.controller.js');
+const { avancementDossiers } = require('../lib/avancement.js');
 
 // Deux étapes sont des « variantes » du même jalon si elles ne peuvent JAMAIS
 // s'appliquer au même dossier (conditions incompatibles : financement, RS, hygiène
@@ -108,7 +109,10 @@ const getSession = async (req, res) => {
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                     p.code AS program_code, p.title AS program_title,
-                    p.days AS program_days, p.hours AS program_hours
+                    p.days AS program_days, p.hours AS program_hours,
+                    /* Pour le calcul d'avancement des dossiers, plus bas : le parcours d'une
+                       formation dépend de son code RS et de son volet hygiène. */
+                    p.hygiene AS program_hygiene, p.rs_code AS program_rs
              FROM training_session s
              LEFT JOIN training_program p ON p.id = s.program_id
              WHERE s.id = ? AND s.organization_id = ?`,
@@ -118,8 +122,8 @@ const getSession = async (req, res) => {
             return res.status(404).json({ message: 'Session introuvable' });
         }
         const [enrollments] = await conn.query(
-            `SELECT e.id, e.learner_id, e.crm_stage, e.conformite_score,
-                    l.first_name, l.last_name, l.email, l.phone,
+            `SELECT e.id, e.learner_id, e.crm_stage, e.conformite_score, e.financing,
+                    l.first_name, l.last_name, l.email, l.phone, l.opco,
                     e.company_id, c.name AS company_name
              FROM enrollment e
              LEFT JOIN learner l ON l.id = e.learner_id
@@ -128,6 +132,29 @@ const getSession = async (req, res) => {
              ORDER BY (e.company_id IS NULL), c.name, l.last_name, l.first_name`,
             [req.params.id, req.user.organization_id]
         );
+        /* AVANCEMENT RÉEL DE CHAQUE DOSSIER. L'écran affichait `conformite_score`, une colonne
+           écrite « ROUGE » à l'inscription et JAMAIS recalculée : mesuré en production, les cinq
+           dossiers de l'école étaient tous stockés à « ROUGE » alors qu'ils valaient 31, 0, 19,
+           44 et 19 %. La pastille n'était pas imprécise, elle était constante.
+           Le calcul est partagé avec le suivi (`lib/avancement.js`) : on ne peut pas appeler
+           `/api/suivi` depuis ici, il est réservé aux rôles d'audit — un formateur ouvre cette
+           page et n'en fait pas partie. */
+        const sess = rows[0];
+        const avancement = await avancementDossiers(conn, req.user.organization_id,
+            enrollments.map((e) => ({
+                enrollment_id: e.id, financing: e.financing, opco: e.opco,
+                program_id: sess.program_id, program_code: sess.program_code,
+                program_days: sess.program_days, program_hygiene: sess.program_hygiene,
+                program_rs: sess.program_rs, enr_company_id: e.company_id, session_id: sess.id,
+            })));
+        for (const e of enrollments) {
+            const a = avancement.get(e.id);
+            e.percent = a ? a.percent : 0;
+            e.done = a ? a.done : 0;
+            e.total = a ? a.total : 0;
+            e.score = a ? a.score : 'ROUGE';
+        }
+
         const [trainers] = await conn.query(
             `SELECT u.id, u.first_name, u.last_name
              FROM session_trainer st JOIN user u ON u.id = st.user_id
