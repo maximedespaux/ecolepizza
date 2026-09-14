@@ -4,7 +4,7 @@ const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 // Fichiers importés chiffrés AU REPOS, comme les pièces : une convention signée porte un nom,
 // une adresse et une image de signature.
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
-const { colonneOuNull } = require('../lib/colonnes.js');
+const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
 const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc } = require('../lib/documents.js');
 const { estSignatureValide } = require('../lib/signatures.js');

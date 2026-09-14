@@ -132,6 +132,12 @@ function StagiaireDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [parcoursEnr, setParcoursEnr] = useState(null);
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // force le rechargement du parcours après édition
+  /* DÉCLARÉS ICI, ET PAS PRÈS DE LEUR GESTIONNAIRE : la fiche a un retour anticipé
+     (`if (!l)`) pendant le chargement. Des hooks placés APRÈS lui ne s'exécutent qu'une fois
+     la fiche arrivée — React en compte alors deux de plus qu'au rendu précédent et lève
+     l'erreur #310, ce qui vide la page. Un hook ne se met jamais derrière un `return`. */
+  const fichierRef = useRef(null);
+  const [etapeImport, setEtapeImport] = useState(null);
 
   function loadLearner() {
     return getStagiaire(id).then((r) => setL(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
@@ -301,8 +307,6 @@ function StagiaireDetail() {
      fenêtre de plus pour choisir un fichier n'apporterait rien, le navigateur en ouvre déjà une.
      `value = ""` après coup, sinon réimporter LE MÊME fichier ne déclencherait aucun `change`
      — et l'utilisateur croirait que le bouton ne marche plus. */
-  const fichierRef = useRef(null);
-  const [etapeImport, setEtapeImport] = useState(null);
 
   function demanderImport(step) {
     setEtapeImport(step);
