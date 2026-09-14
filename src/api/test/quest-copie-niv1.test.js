@@ -1,0 +1,109 @@
+/**
+ * MIGRATION 146 — la banque Pizza Quest de NIV1 recopiée vers RS7404 et NIV1H.
+ *
+ * L'ÉTAT DE DÉPART, relevé en production : 26 chapitres et 175 questions, tous rattachés à NIV1
+ * (20 chapitres, 139 questions) ou NIV2 (6 chapitres, 36 questions). RS7404 et NIV1H n'ont AUCUN
+ * chapitre : leurs stagiaires ouvrent Pizza Quest sur un chemin vide, alors que ces formations
+ * couvrent le même socle que NIV1.
+ *
+ * POURQUOI CE TEST LIT DU SQL. Le projet n'exécute jamais de migration : elle est écrite ici et
+ * jouée par l'organisme. Personne ne la relira avant qu'elle ne touche la base de production —
+ * ce fichier est donc la seule relecture qu'elle aura. Il vérifie ce qui, sur une migration de
+ * DONNÉES, ne se rattrape pas après coup.
+ */
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+
+const MIG = path.join(__dirname, '..', '..', '..', 'database/migrations');
+const ALLER = path.join(MIG, '146_quest_niv1_vers_rs7404_niv1h.sql');
+const RETOUR = path.join(MIG, '146_revert_quest_niv1_vers_rs7404_niv1h.sql');
+
+const lire = (f) => fs.readFileSync(f, 'utf8');
+const sansCommentaires = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '');
+
+test('l\'aller et son revert existent tous les deux', () => {
+    for (const f of [ALLER, RETOUR]) {
+        assert.ok(fs.existsSync(f), `${path.basename(f)} manquant`);
+    }
+});
+
+test('les commentaires sont en blocs, jamais en tirets', () => {
+    /* Convention du projet : un commentaire SQL en double tiret dont l'espace manque devient du
+       SQL, et un fichier joué en une passe n'offre aucune occasion de s'en apercevoir. */
+    for (const f of [ALLER, RETOUR]) {
+        for (const [i, l] of lire(f).split('\n').entries()) {
+            assert.ok(!/^\s*--/.test(l), `${path.basename(f)} ligne ${i + 1} : commentaire en tirets`);
+        }
+    }
+});
+
+test('aucun littéral de chaîne n\'est laissé ouvert', () => {
+    /* LE RISQUE PROPRE À CE FICHIER : douze explications en français, pleines d'apostrophes
+       (« l'eau », « qu'elle », « d'où »). Une seule non doublée et tout ce qui suit est avalé
+       dans la chaîne — l'erreur ne se verrait qu'au moment de jouer la migration, sur une base
+       de production, avec la moitié des instructions déjà passées. */
+    const marque = sansCommentaires(lire(ALLER)).replace(/''/g, ' ');
+    assert.strictEqual(marque.split("'").length % 2, 1,
+        'nombre impair d\'apostrophes : un littéral n\'est pas refermé');
+    for (const [i, l] of marque.split('\n').entries()) {
+        assert.strictEqual((l.match(/'/g) || []).length % 2, 0,
+            `ligne ${i + 1} : apostrophes impaires — ${l.trim().slice(0, 80)}`);
+    }
+});
+
+test('les formations sont désignées par leur CODE, jamais par un identifiant écrit en dur', () => {
+    /* Un identifiant recopié à la main rattacherait le contenu à la mauvaise formation SANS
+       ERREUR : l'insertion réussirait, et 139 questions atterriraient ailleurs. Le code, lui,
+       est lisible et se vérifie d'un coup d'œil. */
+    const sql = sansCommentaires(lire(ALLER));
+    assert.doesNotMatch(sql, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+        'un identifiant est écrit en dur dans la migration');
+    for (const code of ['NIV1', 'RS7404', 'NIV1H']) {
+        assert.ok(sql.includes(`'${code}'`), `la formation ${code} doit être désignée par son code`);
+    }
+});
+
+test('la migration se rejoue sans rien dupliquer', () => {
+    /* Une migration de DONNÉES n'a pas de garde de schéma qui la protège comme une colonne :
+       relancée, elle réinsère. Chaque copie est donc conditionnée à l'absence de contenu sur la
+       formation cible — ce qui la rend aussi sûre si quelqu'un a créé des questions à la main
+       entre-temps : elle s'abstient au lieu de mélanger deux banques. */
+    const sql = sansCommentaires(lire(ALLER));
+    const gardes = (sql.match(/NOT EXISTS\s*\(/g) || []).length;
+    assert.ok(gardes >= 4, `attendu au moins quatre gardes d'absence, trouvé ${gardes}`);
+});
+
+test('les tables de correspondance ne survivent pas à la migration', () => {
+    /* Elles ne servent qu'à relier les identifiants engendrés à leur source. Laissées en base,
+       elles ressembleraient à du schéma et personne n'oserait plus y toucher. */
+    const sql = lire(ALLER);
+    for (const t of ['_quest_copie_chapitre', '_quest_copie_question', '_quest_copie_hygiene']) {
+        assert.ok(sql.includes(`CREATE TABLE IF NOT EXISTS ${t}`), `${t} doit être créée`);
+        assert.ok(sql.includes(`DROP TABLE IF EXISTS ${t}`), `${t} doit être supprimée à la fin`);
+    }
+});
+
+test('douze questions d\'hygiène, chacune avec sa réponse et son explication', () => {
+    /* Le schéma le dit : l'explication « distingue un quiz d'un outil de révision — sans elle le
+       stagiaire retient la bonne case, pas la raison ». Sur de l'hygiène, la raison est tout
+       l'enjeu : on ne se lave pas les mains parce que c'est la bonne case. */
+    const sql = lire(ALLER);
+    const bloc = sql.slice(sql.indexOf('AS texte'));
+    const questions = (bloc.match(/UNION ALL SELECT \d+,/g) || []).length + 1;
+    assert.strictEqual(questions, 12, `attendu douze questions d'hygiène, trouvé ${questions}`);
+    /* La première ligne de données nomme ses colonnes (`1 AS reponse,`), les suivantes n'ont
+       que la valeur — c'est la forme d'un UNION. Le motif accepte les deux, sinon il compte
+       onze et accuse un fichier correct. */
+    const reponses = (bloc.match(/^\s+[01](?: AS reponse)?,$/gm) || []).length;
+    assert.strictEqual(reponses, 12, 'chaque question vrai/faux doit porter sa réponse');
+});
+
+test('le revert retire les deux formations visées, et JAMAIS la source', () => {
+    const sql = sansCommentaires(lire(RETOUR));
+    assert.match(sql, /DELETE c FROM quest_chapter c/);
+    assert.match(sql, /p\.code IN \('RS7404', 'NIV1H'\)/);
+    assert.ok(!/'NIV1'/.test(sql),
+        'le revert ne doit jamais toucher NIV1, dont la banque est la source');
+});

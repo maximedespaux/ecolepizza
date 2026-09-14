@@ -24,7 +24,15 @@ npm-debug.log*
 # Données locales sensibles — NE PAS versionner
 # seed.sql contient des données personnelles réelles (stagiaires) ; les
 # dumps de base sont propres à un poste et ne doivent pas être poussés.
-database/
+#
+# `database/*` ET NON `database/` : un répertoire exclu ne se rouvre pas — git cesse d'y
+# descendre, et toute exception écrite ensuite reste sans effet. Les MIGRATIONS sont du code,
+# et 254 d'entre elles sont versionnées ; mais depuis cette règle, toute NOUVELLE migration
+# était écartée en silence : `git status` ne la montrait pas, `git add -A` ne la prenait pas.
+# Elle serait restée sur le seul poste qui l'a écrite, pendant que le VPS déploie une base
+# sans elle.
+database/*
+!database/migrations/
 database/*.sql
 database/seed.sql
 database/*_dump.sql
