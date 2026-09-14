@@ -12,7 +12,7 @@
  * testées ici, parce que les desserrer se fait en une ligne et ne se voit pas :
  *   1. seuls les rôles configurables se délèguent (jamais un stagiaire) ;
  *   2. « read » ouvre la lecture, jamais l'écriture ;
- *   3. les rubriques qui DISTRIBUENT les accès ne se délèguent jamais ;
+ *   3. les rubriques qui DISTRIBUENT les accès ne se délèguent qu'en LECTURE ;
  *   4. une rubrique inconnue refuse — l'absence de correspondance ne doit pas ouvrir.
  */
 const test = require('node:test');
@@ -20,7 +20,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const {
-    accesParMenuAutorise, sectionDeLaRequete, SECTIONS_NON_DELEGUEES,
+    accesParMenuAutorise, sectionDeLaRequete, SECTIONS_LECTURE_SEULE,
 } = require('../middlewares/sectionAccess.middleware.js');
 
 const sect = (p) => sectionDeLaRequete({ path: p });
@@ -45,15 +45,51 @@ test('AUCUNE ESCALADE : hors rôles configurables, le nav_access n\'accorde rien
     }
 });
 
-test('les rubriques qui distribuent les accès ne se délèguent jamais', () => {
-    for (const section of SECTIONS_NON_DELEGUEES) {
-        assert.strictEqual(accesParMenuAutorise({ role: 'SECRETARIAT', method: 'POST', section, mode: 'write' }), false,
-            `${section} déléguée = un membre peut se promouvoir lui-même`);
+test('les rubriques qui distribuent les accès ne s\'écrivent JAMAIS par délégation', () => {
+    /* LA BORNE QUI NE BOUGE PAS. Écrire sur « Équipe » ou « Rôles d\'accès », c\'est distribuer
+       les accès : un membre pourrait se promouvoir, ou s\'ouvrir toutes les autres rubriques.
+       L\'escalade de privilèges par la porte de service.
+
+       LE MODE STOCKÉ N\'Y CHANGE RIEN, et c\'est le cœur du test : on passe `write` exprès. Si la
+       garantie dépendait de ce que l\'écran propose, une base modifiée à la main la
+       contournerait. Elle tient dans la décision, pas dans les cases. */
+    for (const section of SECTIONS_LECTURE_SEULE) {
+        for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+            assert.strictEqual(
+                accesParMenuAutorise({ role: 'SECRETARIAT', method, section, mode: 'write' }), false,
+                `${method} ${section} délégué = un membre peut se promouvoir lui-même`);
+        }
     }
-    // Et structurellement : leurs bases API ne se rattachent à AUCUNE rubrique.
-    assert.strictEqual(sect('/api/equipe/abc'), null);
+});
+
+test('… mais elles se CONSULTENT quand elles sont accordées', () => {
+    /* CE QUI A CHANGÉ, ET POURQUOI. Elles étaient totalement fermées à la délégation : un
+       secrétariat à qui l\'on accordait « Rôles d\'accès » voyait la page s\'ouvrir et l\'API
+       répondre « Accès refusé » — le menu promettait, le serveur refusait, et l\'organisme devait
+       déranger un propriétaire pour une simple lecture.
+       Consulter ne donne aucun pouvoir : c\'est écrire qui en donne, et cela reste fermé. */
+    for (const section of SECTIONS_LECTURE_SEULE) {
+        for (const mode of ['read', 'write']) {
+            assert.strictEqual(
+                accesParMenuAutorise({ role: 'SECRETARIAT', method: 'GET', section, mode }), true,
+                `GET ${section} accordé doit être lisible (mode ${mode})`);
+        }
+        assert.strictEqual(
+            accesParMenuAutorise({ role: 'SECRETARIAT', method: 'GET', section, mode: null }), false,
+            `${section} NON accordée reste fermée`);
+    }
+});
+
+test('les bases API de ces rubriques sont enfin rattachées', () => {
+    /* Elles ne l\'étaient pas, et c\'est ce qui rendait la délégation inopérante : sans rubrique
+       pour le chemin demandé, il n\'y a rien à comparer au menu et la garde de rôle refuse
+       seule. Une base absente n\'est jamais un trou de sécurité — c\'est un écran qui ne marche
+       pas, en silence. */
+    assert.strictEqual(sect('/api/equipe/abc'), '/equipe');
+    assert.strictEqual(sect('/api/access-profiles/abc'), '/roles');
+    /* `/api/user` reste hors rubriques : aucune route d\'organisme n\'y est montée, et lui
+       ouvrir une rubrique par anticipation serait accorder sans savoir quoi. */
     assert.strictEqual(sect('/api/user/abc'), null);
-    assert.strictEqual(sect('/api/access-profiles/abc'), null);
 });
 
 test('une rubrique inconnue REFUSE (l\'absence de correspondance n\'ouvre pas)', () => {

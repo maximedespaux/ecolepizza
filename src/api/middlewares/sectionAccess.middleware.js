@@ -32,6 +32,11 @@ const SECTION_BY_BASE = {
        déléguable — jamais un trou de sécurité, mais un écran qui « ne marche pas ». */
     conditions: '/modeles', 'emargement-templates': '/modeles', equivalences: '/modeles',
     emetteurs: '/reglages-facturation', community: '/communaute',
+    /* ÉQUIPE ET RÔLES, en LECTURE SEULE (cf. SECTIONS_LECTURE_SEULE). Elles manquaient ici, si
+       bien qu'accorder « Rôles d'accès » à un secrétariat depuis l'écran ne débloquait rien :
+       l'API répondait « Accès refusé » sur le seul rôle. Le menu promettait, le serveur
+       refusait — l'écart exact qu'un contrôle par rubrique doit interdire. */
+    equipe: '/equipe', 'access-profiles': '/roles',
 };
 
 /**
@@ -91,13 +96,17 @@ function modeFor(navAccess, section) {
     return null;
 }
 
-/* RUBRIQUES NON DÉLÉGUABLES — celles qui distribuent les accès eux-mêmes. Accorder « Équipe » en
-   écriture à un rôle configurable lui permettrait de se promouvoir, ou de s'ouvrir toutes les
-   autres rubriques : l'escalade de privilèges par la porte de service. Leurs bases API
-   (/equipe, /user, /access-profiles) ne figurent déjà pas dans SECTION_BY_BASE — cette liste est
-   la ceinture en plus des bretelles, pour que l'intention reste lisible si quelqu'un cartographie
-   ces bases un jour sans voir la conséquence. */
-const SECTIONS_NON_DELEGUEES = ['/equipe', '/roles'];
+/* RUBRIQUES DÉLÉGUABLES EN LECTURE SEULE — celles qui distribuent les accès eux-mêmes.
+   Accorder « Équipe » ou « Rôles d'accès » en ÉCRITURE à un rôle configurable lui permettrait de
+   se promouvoir, ou de s'ouvrir toutes les autres rubriques : l'escalade de privilèges par la
+   porte de service. Cette borne-là ne bouge pas.
+   LA CONSULTATION, ELLE, NE LA FRANCHIT PAS. Voir qui compose l'équipe, ou ce qu'un rôle accorde,
+   ne donne aucun pouvoir supplémentaire — et le refuser obligeait l'organisme à déranger un
+   propriétaire pour une question de simple lecture. Ces rubriques étaient donc totalement
+   fermées à la délégation ; elles s'accordent désormais, mais le serveur ignore le mode
+   « écriture » qui pourrait être stocké pour elles : c'est ici que la garantie tient, pas dans
+   l'écran qui propose les cases. */
+const SECTIONS_LECTURE_SEULE = ['/equipe', '/roles'];
 
 /* CHEMIN COMPLET — et c'est tout l'enjeu. `req.path` est RELATIF AU POINT DE MONTAGE dès qu'on
    se trouve dans un routeur : sous app.use('/api/carte', …), il vaut « / », pas « /api/carte ».
@@ -134,8 +143,11 @@ async function navAccessDe(req, userId) {
  */
 function accesParMenuAutorise({ role, method, section, mode }) {
     if (!CONFIGURABLE_ROLES.includes(role)) return false;
-    if (!section || SECTIONS_NON_DELEGUEES.includes(section)) return false;
+    if (!section) return false;
     if (!mode) return false;
+    /* Le mode stocké n'est même pas consulté : sur ces rubriques, aucune écriture ne peut venir
+       d'une délégation, quoi qu'une base modifiée à la main puisse contenir. */
+    if (SECTIONS_LECTURE_SEULE.includes(section)) return !MUTATING.has(method);
     return MUTATING.has(method) ? mode === 'write' : true;
 }
 
@@ -154,14 +166,20 @@ function accesParMenuAutorise({ role, method, section, mode }) {
  *     stagiaire, une entreprise ou un intervenant ne le sont jamais, quel que soit leur nav_access ;
  *   · il faut une rubrique CONNUE pour le chemin demandé, explicitement accordée (« write » pour
  *     écrire, « read » suffit pour lire) — l'absence de rubrique refuse, elle n'ouvre pas ;
- *   · les rubriques qui distribuent les accès ne se délèguent jamais (SECTIONS_NON_DELEGUEES) ;
+ *   · les rubriques qui distribuent les accès ne se délèguent qu'en LECTURE
+ *     (SECTIONS_LECTURE_SEULE) : consulter l'équipe ou ce qu'un rôle accorde ne donne aucun
+ *     pouvoir, mais y écrire permettrait de se promouvoir ;
  *   · c'est un propriétaire (SUPER_ADMIN / ADMIN_ORGANISME) qui accorde, sur un écran réservé.
  */
 async function accesAccordeParMenu(req) {
     const user = req.user; // posé par authenticateToken (rôle relu en base à chaque requête)
     if (!user || !CONFIGURABLE_ROLES.includes(user.role)) return false; // évite la lecture en base
     const section = sectionDeLaRequete(req);
-    if (!section || SECTIONS_NON_DELEGUEES.includes(section)) return false;
+    if (!section) return false;
+    /* LA DÉCISION EST DÉLÉGUÉE À `accesParMenuAutorise`, ET À ELLE SEULE. Cette fonction écartait
+       ici les rubriques de lecture seule AVANT d'appeler la décision — une seconde garde, plus
+       grossière, qui rendait la première inatteignable pour elles. Deux endroits où se décide la
+       même chose finissent par diverger ; c'est la fonction PURE, testable seule, qui tranche. */
     const mode = modeFor(await navAccessDe(req, user.id), section);
     return accesParMenuAutorise({ role: user.role, method: req.method, section, mode });
 }
@@ -192,7 +210,7 @@ async function enforceSectionMode(req, res, next) {
 
 module.exports = {
     enforceSectionMode, sectionFor, sectionDeLaRequete,
-    accesAccordeParMenu, accesParMenuAutorise, SECTIONS_NON_DELEGUEES, CONFIGURABLE_ROLES,
+    accesAccordeParMenu, accesParMenuAutorise, SECTIONS_LECTURE_SEULE, CONFIGURABLE_ROLES,
     /* `modeFor` sort d'ici pour que le fil d'activité (lib/activite.js) lise `nav_access` avec
        EXACTEMENT la même règle que la garde d'accès — trois formes historiques comprises (nul,
        JSON en chaîne, ancien tableau = écriture). Une seconde lecture écrite à côté finirait par

@@ -20,7 +20,7 @@
  * silencieusement du journal. On s'en tient donc à ce qui est EXPLICITEMENT accordé en base
  * (`nav_access`) — le reste ferme, il n'ouvre pas.
  */
-const { modeFor, SECTIONS_NON_DELEGUEES } = require('../middlewares/sectionAccess.middleware.js');
+const { modeFor, SECTIONS_LECTURE_SEULE } = require('../middlewares/sectionAccess.middleware.js');
 
 /* Propriétaires : voient tout, toujours (ce sont eux qui distribuent les accès).
    ADMIN_ROLES inclut le secrétariat : tant qu'aucun accès n'a été restreint pour lui, il garde
@@ -115,7 +115,10 @@ function sectionsVisibles({ role, navAccess }) {
     // Les rubriques qui distribuent les accès (Équipe, Rôles) ne se délèguent pas — donc ne se
     // racontent pas non plus : savoir qui a été converti ou quel profil a changé, c'est déjà
     // une information d'administration.
-    return RUBRIQUES.filter((s) => !SECTIONS_NON_DELEGUEES.includes(s) && modeFor(navAccess, s));
+    /* ÉQUIPE ET RÔLES RESTENT HORS DE LA CLOCHE, même depuis qu'ils se délèguent en lecture.
+       Savoir qu'un membre a changé de profil est une information d'ADMINISTRATION, pas une
+       nouvelle d'équipe : pouvoir la consulter ne veut pas dire vouloir être réveillé par elle. */
+    return RUBRIQUES.filter((s) => !SECTIONS_LECTURE_SEULE.includes(s) && modeFor(navAccess, s));
 }
 
 /**

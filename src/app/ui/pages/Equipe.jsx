@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { getTeam, createMember, updateMember, deleteMember, getAccessProfiles, createAccessProfile, getStagiaires } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
-import { GRANTABLE_NAV, EXTRA_ACCESS, PAGE_CAPS, canAccess, OWNER_ROLES, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
+import { GRANTABLE_NAV, EXTRA_ACCESS, PAGE_CAPS, NAV_LECTURE_SEULE, canAccess, OWNER_ROLES, BUILTIN_ROLES, builtinRoleAccess } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
@@ -207,7 +207,9 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
   // Défauts du rôle (en écriture) — sert d'amorce et de bouton « réinitialiser ».
   const roleDefaults = () => {
     const o = {};
-    for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(member.role, it.roles)) o[it.to] = "write";
+    /* Jamais « write » sur une rubrique en lecture seule : le serveur l'ignorerait, et
+       l'écran promettrait un droit inexistant. */
+    for (const g of GRANTABLE_NAV) for (const it of g.items) if (canAccess(member.role, it.roles)) o[it.to] = NAV_LECTURE_SEULE.includes(it.to) ? "read" : "write";
     return o;
   };
   // Propriétaire (super admin / admin) : les pages sont toujours pleines (bypass du
@@ -258,7 +260,7 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
     // Les capacités sont CONSERVÉES : « Tout cocher » les effaçait, alors qu'il ne parle que
     // des pages. On perdait « Administrer » sans que rien ne le dise.
     const o = Object.fromEntries(Object.entries(modes).filter(([k]) => k.startsWith("cap:")));
-    for (const g of GRANTABLE_NAV) for (const it of g.items) o[it.to] = modes[it.to] || "write";
+    for (const g of GRANTABLE_NAV) for (const it of g.items) o[it.to] = NAV_LECTURE_SEULE.includes(it.to) ? "read" : (modes[it.to] || "write");
     setModes(o);
   };
 
@@ -326,6 +328,7 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
                      capacité vivait tout en bas de la fenêtre, sans rapport visible avec la
                      ligne à laquelle elle s'applique. */
                   const pc = PAGE_CAPS[it.to];
+                  const lectureSeule = NAV_LECTURE_SEULE.includes(it.to);
                   const capOffice = !!pc && pc.defaultRoles.includes(member.role);
                   const capOn = !!pc && (capOffice || granted(pc.cap));
                   return (
@@ -334,7 +337,12 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
                         <input type="checkbox" checked={on} onChange={() => toggle(it.to)} />
                         <span style={{ width: 20, display: "inline-grid", placeItems: "center" }}><Icon name={it.ic} size={16} /></span> {it.label}
                       </label>
-                      {on && (pc ? (
+                      {/* LECTURE SEULE IMPOSÉE. Ces rubriques distribuent les accès : y écrire
+                          permettrait de se promouvoir. Le serveur refuse l'écriture quoi qu'on
+                          stocke — on n'affiche donc PAS un choix qui n'en est pas un. */}
+                      {on && lectureSeule ? (
+                        <span className="badge b" title="Consultation seule : ces pages distribuent les accès, les modifier reste aux propriétaires.">Lecture</span>
+                      ) : on && (pc ? (
                         <button type="button" className={"btn sm " + (capOn ? "primary" : "ghost")}
                           disabled={capOffice} onClick={() => toggle(pc.cap)}
                           title={capOffice ? "Accordé d'office à ce rôle." : pc.hint}>
