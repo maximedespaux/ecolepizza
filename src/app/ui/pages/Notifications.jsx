@@ -46,6 +46,9 @@ function ligneLisible(n) {
 function Notifications() {
   const navigate = useNavigate();
   const { user } = useContext(UserContext);
+  /* Le journal est réservé aux rôles d'audit : proposer le lien à un formateur l'enverrait
+     sur une page fermée. On ne montre que ce qui s'ouvre. */
+  const journalVisible = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'AUDITEUR'].includes(user?.role);
   /* Le bouton n'apparaît que si le droit existe VRAIMENT. Un bouton visible qui répond 403 est
      pire que pas de bouton : il fait croire à une panne là où il n'y a qu'un droit non accordé.
      Les propriétaires l'ont d'office — même liste que `ROLES_SUPPRESSION_DOFFICE` au serveur. */
@@ -91,10 +94,24 @@ function Notifications() {
 
   return (
     <>
+      {/* LES DEUX ÉCRANS DOIVENT SE DISTINGUER À LA LECTURE, pas seulement dans le code. Sans
+          ces deux phrases, la cloche et le journal se ressemblaient au point qu'on ne savait pas
+          lequel ouvrir — ils lisent la même table. */}
       <PageHead
         eyebrow="Système"
         title="Notifications"
-        actions={<button className="btn sm" onClick={readAll}>Tout marquer comme lu</button>}
+        lead="Ce qui bouge dans les dossiers et appelle un geste. Les réglages de l'outil (modèles, tarifs, paramètres) ne sonnent pas : ils se retrouvent dans le journal d'audit."
+        actions={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {journalVisible && (
+              <button className="btn sm ghost" onClick={() => navigate("/audit")}
+                title="La trace complète : toutes les actions, y compris les vôtres et les réglages">
+                Journal d'audit
+              </button>
+            )}
+            <button className="btn sm" onClick={readAll}>Tout marquer comme lu</button>
+          </div>
+        }
       />
       <StatusMessage status={status} />
 
@@ -103,7 +120,7 @@ function Notifications() {
           <Squelette lignes={6} h={52} />
         ) : rows.length === 0 ? (
           <EmptyState icon="bell" title="Aucune notification"
-            text="Les signatures, relances et alertes de conformité s'afficheront ici, avec les changements faits par le reste de l'équipe." />
+            text="Les signatures, dépôts de pièces, relances et alertes de conformité s'afficheront ici, avec ce que fait le reste de l'équipe sur les dossiers." />
         ) : (
           <div className="notif-liste">
             {rows.map((n) => {

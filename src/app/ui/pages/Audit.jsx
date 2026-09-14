@@ -52,7 +52,11 @@ function Audit() {
 
   return (
     <>
-      <PageHead eyebrow="Système" title="Journal d'audit" lead="Traçabilité des actions sensibles (100 dernières)." />
+      {/* Le pendant de la phrase posée sur les Notifications : l'une dit « ce qui appelle un
+          geste », l'autre « ce qui s'est passé ». Les deux écrans lisent la même table, et sans
+          le dire on ne savait pas lequel ouvrir. */}
+      <PageHead eyebrow="Système" title="Journal d'audit"
+        lead="La trace complète des 100 dernières actions : les vôtres comprises, et les réglages de l'outil que la cloche ne signale pas. On y cherche ce qui s'est passé, on n'y attend rien." />
       <StatusMessage status={status} />
 
       <div className="filtres">

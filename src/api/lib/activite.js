@@ -48,6 +48,53 @@ const SECTION_PAR_ENTITE = {
     quest_question: '/pizza-quest-admin',
 };
 
+/**
+ * RÉGLER L'OUTIL N'EST PAS UN ÉVÉNEMENT — ce qui sépare la cloche du journal d'audit.
+ *
+ * LES DEUX ÉCRANS DISAIENT LA MÊME CHOSE. La cloche relit `audit_log`, exactement comme le
+ * journal : elle en devenait un second exemplaire, plus court et moins consultable. Relevé en
+ * production, ce qu'elle annonçait : « Produit partenaire modifié », « Produit partenaire
+ * supprimé », à côté de « Document envoyé » et « Pièce déposée ». Personne n'a besoin d'un
+ * carillon pour apprendre qu'un tarif de catalogue a bougé.
+ *
+ * LA RÈGLE : une cloche répond à « quelque chose a bougé dans un DOSSIER, dois-je agir ? ». Le
+ * journal répond à « que s'est-il passé, exactement, et qui l'a fait ? ». Modifier un modèle de
+ * document, un type de pièce, un tarif partenaire ou les réglages de l'organisme, c'est
+ * configurer l'outil : ça se retrouve, ça ne se signale pas.
+ *
+ * ON A ÉCARTÉ LE TRI PAR AUTEUR (personnel / stagiaire), qui semblait plus élégant : sur les
+ * cent dernières lignes du journal, les cent venaient de trois membres du personnel. Une cloche
+ * muette pour tout ce que fait un collègue serait vide dans une école de trois personnes.
+ *
+ * UNE ENTITÉ INCONNUE EST UN RÉGLAGE. Le silence est le défaut sûr : ajouter une entité demain
+ * ne peut pas se mettre à sonner chez tout le monde par oubli — même logique que la règle
+ * d'accès ci-dessus, qui ferme au lieu d'ouvrir.
+ */
+const ENTITES_REGLAGE = new Set([
+    // Modèles et conditions : la forme des documents, pas les documents.
+    'DocumentTemplate', 'DocumentCondition', 'DocumentEquivalence', 'ConditionField',
+    'EmargementTemplate', 'PieceType',
+    // Le QCM en tant que MODÈLE. Une réponse de stagiaire (`QuizResponse`), elle, est un événement.
+    'Quiz',
+    // Catalogue partenaire et stock : des tarifs et des références. Une CONTRIBUTION, en
+    // revanche, est de l'argent qui arrive — elle reste un événement.
+    'Partner', 'PartnerProduct', 'InventoryItem',
+    // Paramétrage de la maison : facturation, comptabilité, rôles, équipe, financeurs.
+    'BillingProfile', 'AccountingSettings', 'Opco', 'Organization', 'AccessProfile', 'User',
+    // Administration de Pizza Quest.
+    'quest_category', 'quest_chapter', 'quest_difficulty', 'quest_prerequisite', 'quest_question',
+]);
+
+/** Cette action mérite-t-elle la cloche, ou seulement le journal ? */
+function estEvenement(entity) {
+    /* L'ENTITÉ DOIT ÊTRE CONNUE. Écrit d'abord `!ENTITES_REGLAGE.has(entity)`, ce test rendait
+       VRAI pour n'importe quel nom inventé — l'inverse de ce que la note ci-dessus annonce. Les
+       appelants n'exposent aujourd'hui que des entités connues, si bien que rien ne l'aurait
+       révélé ; mais une fonction doit tenir sa promesse seule, sans dépendre de la prudence de
+       qui l'appelle. */
+    return !!entity && !!SECTION_PAR_ENTITE[entity] && !ENTITES_REGLAGE.has(entity);
+}
+
 const RUBRIQUES = [...new Set(Object.values(SECTION_PAR_ENTITE))];
 
 /** Rubrique d'une entité journalisée, ou null si on ne la connaît pas. */
@@ -126,6 +173,7 @@ function regrouperConsecutives(lignes) {
 }
 
 module.exports = {
+    ENTITES_REGLAGE, estEvenement,
     SECTION_PAR_ENTITE, sectionDeLEntite, sectionsVisibles, entitesVisibles, estLu,
     regrouperConsecutives, OWNER_ROLES, ADMIN_ROLES,
 };
