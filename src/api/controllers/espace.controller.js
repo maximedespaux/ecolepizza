@@ -5,9 +5,10 @@ const { colonneOuNull } = require('../lib/colonnes.js');
 const { CONTRAT_VALABLE } = require('../lib/contratPartenaire.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const consentements = require('../lib/consentements.js');
-const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, matchStep, stepSigners } = require('../lib/documents.js');
+const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, stepSigners } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
-const { formationSteps } = require('./formationProgram.controller.js');
+const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
+const { getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
 const { cadresQuest, possedeCadreQuest, parseCadre: parseCadreQuest, PALIER_IDS, EXPLOIT_IDS } = require('../lib/cadresQuest.js');
@@ -241,10 +242,31 @@ async function dossierEmargementGate(conn, e, orgId, agefice = false) {
     if (!brk) return { locked: false, need: 0, done: 0, break_label: null };
     const threshold = Number(brk.sort_order);
 
+    /* LES ÉTAPES EXIGÉES SONT CELLES DU DOSSIER, PAS CELLES DE LA FORMATION.
+       Cette garde filtrait avec `matchStep`, qui ne connaît que les conditions INTÉGRÉES
+       (financement, RS, hygiène, jours, AGEFICE) et ignore purement et simplement les
+       conditions PERSONNALISÉES — celles que l'organisme écrit dans Modèles → Conditions.
+       Un `{conditions:['financeur-particulier']}` lui rendait donc `true` sans rien évaluer.
+
+       Mesuré sur NIV1H : le parcours réel d'un dossier PARTICULIER compte cinq étapes avant le
+       point d'accès, dont deux à signer — devis particulier et contrat, tous deux signés. La
+       garde, elle, en exigeait QUATRE : les deux variantes de devis ET les deux de contrat,
+       mutuellement exclusives. Elle comptait 2 sur 4 et refusait l'accès à l'émargement quelle
+       que soit la position du point de rupture — deux des quatre documents ne pouvant pas
+       exister pour ce dossier, aucun geste ne pouvait la satisfaire.
+
+       `enrollmentSteps` est ce que lisent déjà le suivi, le pipeline et l'espace stagiaire :
+       il applique les conditions personnalisées ET les équivalences « OU ». La garde ne peut
+       pas exiger autre chose que ce que le parcours affiche, sinon elle réclame l'impossible. */
     const ctx = { hygiene: !!e.program_hygiene, rsCode: e.program_rs, jours: e.program_days || 1, financing: e.financing, agefice };
-    const required = pSteps.filter((s) => s.active && s.stagiaire_sign
+    try {
+        const catalogue = await getEnabledFields(conn, orgId, 'condition');
+        const faits = await loadDossierFactsMap(conn, orgId, [e.enrollment_id], catalogue);
+        Object.assign(ctx, faits.get(e.enrollment_id) || {});
+    } catch { /* champs de condition indisponibles : on s'en tient aux conditions intégrées */ }
+    const etapesDuDossier = await enrollmentSteps(conn, orgId, program, ctx);
+    const required = etapesDuDossier.filter((s) => s.stagiaire_sign
         && s.doc_type !== 'QCM' && s.doc_type !== 'EMARGEMENT'
-        && matchStep(s.applies_when || {}, ctx)
         && Number(s.sort_order) <= threshold);
     const break_label = brk.label;
     if (!required.length) return { locked: false, need: 0, done: 0, break_label };
