@@ -150,6 +150,7 @@ const ACTION_LABEL = {
        la NOTE est un résultat d'examen, qui appartient à un stagiaire. */
     'evaluation.grille': ['Grille d\'évaluation enregistrée', A],
     'evaluation.note': ['Note d\'évaluation saisie', B],
+    'evaluation.verdict': ['Avis du jury enregistré', B],
     'piece.depot': ['Pièce déposée', B],
     'piece.validee': ['Pièce validée', G],
     'piece.refusee': ['Pièce refusée', R],
@@ -248,6 +249,7 @@ const ENTITY_LABEL = {
     PieceDepot: ['Dépôt de pièce', 'm'],
     EvaluationGrille: ['Grille d\'évaluation', 'f'],
     EvaluationNote: ['Note d\'évaluation', 'f'],
+    EvaluationVerdict: ['Avis du jury', 'm'],
     Recipe: ['Fiche technique', 'f'],
     Invoice: ['Facture', 'f'],
     MaterialSale: ['Vente de matériel', 'f'],

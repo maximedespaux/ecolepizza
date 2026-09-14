@@ -41,7 +41,7 @@ const SECTION_PAR_ENTITE = {
     Quiz: '/qcm', QuizResponse: '/qcm',
     /* La grille se configure dans Formations, la note se saisit depuis la session : chaque
        entité pointe la rubrique où se fait le GESTE, pas celle où l'on consulte le résultat. */
-    EvaluationGrille: '/formations', EvaluationNote: '/sessions',
+    EvaluationGrille: '/formations', EvaluationNote: '/sessions', EvaluationVerdict: '/sessions',
     Partner: '/partenaires', PartnerContribution: '/partenaires', PartnerProduct: '/partenaires',
     Opco: '/opcos', Organization: '/reglages', Archive: '/suivi',
     CommunityPost: '/communaute', CommunityAnswer: '/communaute', Recipe: '/communaute',
