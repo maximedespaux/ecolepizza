@@ -52,6 +52,7 @@ const platformRoutes = require('./routes/platform.routes.js');
 const opcoRoutes = require('./routes/opco.routes.js');
 const pieceRoutes = require('./routes/piece.routes.js');
 const accessProfileRoutes = require('./routes/accessProfile.routes.js');
+const evaluationRoutes = require('./routes/evaluation.routes.js');
 const billingProfileRoutes = require('./routes/billingProfile.routes.js');
 const eventsRoutes = require('./routes/events.routes.js');
 
@@ -161,6 +162,8 @@ app.use('/api/platform', platformRoutes);
 app.use('/api/opcos', opcoRoutes);
 // Pièces justificatives fournies par le stagiaire (migration 127).
 app.use('/api/pieces', pieceRoutes);
+/* Évaluation pratique : grille par formation, notes par dossier (migration 148). */
+app.use('/api/evaluations', evaluationRoutes);
 app.use('/api/access-profiles', accessProfileRoutes);
 app.use('/api/emetteurs', billingProfileRoutes);
 app.use('/api/events', eventsRoutes);

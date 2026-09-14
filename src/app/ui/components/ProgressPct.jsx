@@ -21,13 +21,15 @@ const TEINTE = {
   ROUGE: "var(--ember1, #c0392b)",
 };
 
-export default function ProgressPct({ percent, score, width = 90 }) {
+/* `titre` : l'info-bulle. Elle annonçait « du parcours documentaire » en dur — exact tant que
+   la barre ne servait qu'à cela, faux depuis qu'elle montre aussi un total d'évaluation. */
+export default function ProgressPct({ percent, score, width = 90, titre }) {
   const p = Math.max(0, Math.min(100, Number(percent) || 0));
   /* Sans score fourni, on le déduit du pourcentage : l'appelant n'a pas toujours les deux, et
      une barre grise n'apprendrait rien. */
   const s = score || (p >= 100 ? "VERT" : p > 0 ? "ORANGE" : "ROUGE");
   return (
-    <span style={{ width, flexShrink: 0 }} title={`${p}% du parcours documentaire`}>
+    <span style={{ width, flexShrink: 0 }} title={titre || `${p}% du parcours documentaire`}>
       <span style={{ display: "block", height: 6, borderRadius: 4, background: "var(--border-soft, #e3e3e6)", overflow: "hidden" }}>
         <span style={{ display: "block", height: "100%", width: `${p}%`, background: TEINTE[s] || TEINTE.ROUGE, transition: "width .3s var(--ease, ease)" }} />
       </span>

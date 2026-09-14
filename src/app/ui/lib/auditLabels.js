@@ -146,6 +146,10 @@ const ACTION_LABEL = {
     'piecetype.create': ['Type de pièce créé', G],
     'piecetype.update': ['Type de pièce modifié', A],
     'piecetype.delete': ['Type de pièce supprimé', R],
+    /* Évaluation pratique (migration 148). La GRILLE est un réglage — on y fixe le barème ;
+       la NOTE est un résultat d'examen, qui appartient à un stagiaire. */
+    'evaluation.grille': ['Grille d\'évaluation enregistrée', A],
+    'evaluation.note': ['Note d\'évaluation saisie', B],
     'piece.depot': ['Pièce déposée', B],
     'piece.validee': ['Pièce validée', G],
     'piece.refusee': ['Pièce refusée', R],
@@ -242,6 +246,8 @@ const ENTITY_LABEL = {
     CommunityAnswer: ['Réponse', 'f'],
     PieceType: ['Type de pièce', 'm'],
     PieceDepot: ['Dépôt de pièce', 'm'],
+    EvaluationGrille: ['Grille d\'évaluation', 'f'],
+    EvaluationNote: ['Note d\'évaluation', 'f'],
     Recipe: ['Fiche technique', 'f'],
     Invoice: ['Facture', 'f'],
     MaterialSale: ['Vente de matériel', 'f'],

@@ -72,3 +72,51 @@ export function listeCategories(v) {
     .map((x) => x.trim())
     .filter(Boolean);
 }
+
+/* DURÉES D'ÉVALUATION — une performance se saisit et se lit en minutes et secondes.
+   La base, elle, ne stocke que des SECONDES : un seul nombre se compare, se trie et se
+   compte sans ambiguïté, là où « 1:30 » demanderait d'être ré-analysé à chaque usage. */
+export function secondesEnMinSec(total) {
+  const s = Math.max(0, Math.round(Number(total) || 0));
+  return { min: Math.floor(s / 60), sec: s % 60 };
+}
+export function minSecEnSecondes(min, sec) {
+  return Math.max(0, Math.round(Number(min) || 0)) * 60 + Math.max(0, Math.round(Number(sec) || 0));
+}
+/**
+ * Une durée saisie à la volée : « 90 », « 1:30 », « 1'30 », « 1m30 ». `null` = illisible.
+ *
+ * ON NE DEVINE PAS. Une saisie incomprise rend `null` plutôt qu'un nombre plausible : noter un
+ * examen sur une durée mal interprétée est pire que ne pas la noter, et l'écran réaffiche ce
+ * qu'il a COMPRIS pour que l'ambiguïté se voie tout de suite.
+ */
+export function lireDuree(txt) {
+  const s = String(txt == null ? "" : txt).trim().replace(/\s+/g, "");
+  if (!s) return null;
+  const mm = /^(\d+)[:'m](\d{1,2})?$/i.exec(s);
+  if (mm) return Number(mm[1]) * 60 + Number(mm[2] || 0);
+  if (/^\d+$/.test(s)) return Number(s);
+  return null;
+}
+
+/**
+ * L'inverse, pour REMPLIR un champ de saisie : « 100 » → « 1:40 ».
+ *
+ * LA BASE STOCKE DES SECONDES, le formateur a tapé « 1:40 ». Réafficher « 100 » au rechargement
+ * lui ferait relire sa propre saisie dans une autre unité — et douter de ce qu'il a noté.
+ * Sous la minute, on garde le nombre nu : « 45 » se retape tel quel.
+ */
+export function dureeSaisissable(v) {
+  if (v === "" || v === null || v === undefined) return "";
+  const s = Number(v);
+  if (!Number.isFinite(s)) return String(v);
+  const m = Math.floor(s / 60);
+  return m ? `${m}:${String(s % 60).padStart(2, "0")}` : String(s);
+}
+
+/** « 1 min 12 s » — même écriture que le serveur (api/lib/bareme.js). */
+export function dureeLisible(total) {
+  const { min, sec } = secondesEnMinSec(total);
+  if (!min) return `${sec} s`;
+  return sec ? `${min} min ${String(sec).padStart(2, "0")} s` : `${min} min`;
+}

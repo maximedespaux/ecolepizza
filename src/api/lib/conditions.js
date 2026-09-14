@@ -4,6 +4,7 @@
 // désactivés par l'organisme (éditeur de document → « Champs documents »). Le moteur du parcours
 // évalue ces conditions en plus des conditions intégrées (financement, RS, hygiène…).
 const { parseApplies } = require('./documents.js');
+const { resultatsParDossier } = require('./evaluationDossiers.js');
 
 // Tables réellement rattachées à UN dossier (inscription). Alias SQL utilisés par
 // loadDossierFactsMap (jointures depuis enrollment).
@@ -32,6 +33,14 @@ const VIRTUALS = [
     { key: 'virtual.age', table: 'virtual', column: 'age', label: 'Âge du stagiaire', type: 'number' },
     { key: 'virtual.has_company', table: 'virtual', column: 'has_company', label: 'Rattaché à une entreprise', type: 'bool' },
     { key: 'virtual.certifiante', table: 'virtual', column: 'certifiante', label: 'Formation certifiante (RS/RNCP)', type: 'bool' },
+    /* ÉVALUATION PRATIQUE (migration 148) — la CONDITION DE RÉUSSITE demandée sur le parcours.
+       Elle est virtuelle et non une colonne : le résultat se recalcule à partir des notes et du
+       barème, il ne se stocke pas. Le figer dans une colonne le laisserait périmé dès qu'une
+       note est corrigée — exactement le défaut de `conformite_score`.
+       « Réussie » est FAUX tant que le verdict n'est pas prononcé (grille sans seuil, dossier
+       incomplet) : un document conditionné à la réussite ne doit pas sortir par défaut. */
+    { key: 'virtual.evaluation_reussie', table: 'virtual', column: 'evaluation_reussie', label: 'Évaluation pratique réussie', type: 'bool' },
+    { key: 'virtual.evaluation_percent', table: 'virtual', column: 'evaluation_percent', label: 'Évaluation pratique (% obtenu)', type: 'number' },
 ];
 
 // Champs SPÉCIAUX (non introspectés). La signature de l'organisme est une image (jeton),
@@ -53,6 +62,7 @@ const DEFAULT_ENABLED = new Set([
     'organization.address', 'organization.zip_code', 'organization.town',
     'organization.phone', 'organization.email', 'organization.signature_image',
     'virtual.age', 'virtual.has_company', 'virtual.certifiante',
+    'virtual.evaluation_reussie', 'virtual.evaluation_percent',
 ]);
 
 // Opérateurs disponibles selon le type de champ.
@@ -248,6 +258,10 @@ async function loadDossierFactsMap(conn, orgId, enrollmentIds, catalog) {
     const needAge = catalog.some((f) => f.key === 'virtual.age');
     const needCompany = catalog.some((f) => f.key === 'virtual.has_company');
     const needCertif = catalog.some((f) => f.key === 'virtual.certifiante');
+    /* DEUX REQUÊTES DE PLUS, ET SEULEMENT SI ON S'EN SERT. Même précaution que l'âge ou
+       l'entreprise au-dessus : cette fonction alimente des listes entières, et payer trois
+       jointures d'évaluation sur chaque écran qui n'y touche pas serait gratuit. */
+    const needEval = catalog.some((f) => f.key === 'virtual.evaluation_reussie' || f.key === 'virtual.evaluation_percent');
 
     const selects = real.map((f, i) => `${TABLE_ALIAS[f.table]}.\`${f.column}\` AS c${i}`);
     if (needAge) selects.push('l.birthday AS __birthday');
@@ -265,6 +279,7 @@ async function loadDossierFactsMap(conn, orgId, enrollmentIds, catalog) {
          WHERE e.organization_id = ? AND e.id IN (?)`,
         [orgId, enrollmentIds]
     );
+    const evals = needEval ? await resultatsParDossier(conn, orgId, enrollmentIds) : new Map();
     for (const r of rows) {
         const facts = {};
         real.forEach((f, i) => {
@@ -276,6 +291,13 @@ async function loadDossierFactsMap(conn, orgId, enrollmentIds, catalog) {
         if (needAge) facts['virtual.age'] = computeAge(r.__birthday);
         if (needCompany) facts['virtual.has_company'] = !!r.__company_id;
         if (needCertif) facts['virtual.certifiante'] = !!String(r.__rs_code == null ? '' : r.__rs_code).trim();
+        if (needEval) {
+            const ev = evals.get(r.__eid);
+            facts['virtual.evaluation_reussie'] = ev ? ev.reussi === true : false;
+            /* SANS GRILLE, LE POURCENTAGE EST `null` ET NON ZÉRO : « 0 % » se compare comme une
+               note et ferait passer « en dessous de 50 % » à un dossier qu'on n'évalue pas. */
+            facts['virtual.evaluation_percent'] = ev ? ev.percent : null;
+        }
         map.set(r.__eid, facts);
     }
     return map;

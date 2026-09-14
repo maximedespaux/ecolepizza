@@ -11,6 +11,9 @@
 
 const { resolveCustomTokens, shiftDate } = require('./customtokens.js');
 const { parseDaySchedules, fmtHM } = require('./emargement.js');
+/* Le barème RETRADUIT la mesure pour le tableau de détail : « 100 » seul ne dirait pas s'il
+   s'agit de secondes, de points ou d'un index de niveau. Même source que la saisie. */
+const { pointsPour, maximumExercice } = require('./bareme.js');
 
 // --- Formatage ---
 const pad = (n) => String(n).padStart(2, '0');
@@ -282,10 +285,36 @@ const TOKEN_CATALOG = [
             { key: 'Observations', label: 'Observations du jury', sample: 'C1.7 non acquise : cause du défaut non identifiée.' },
         ],
     },
+    /* ÉVALUATION PRATIQUE (migration 148) — la grille du formateur, imprimable.
+     *
+     * DISTINCTE DE L'EXAMEN ci-dessus, et ce n'est pas un doublon : l'examen est le PASSAGE
+     * DEVANT UN JURY qui délivre une certification RNCP ; ceci est la notation continue d'un
+     * formateur pendant le stage, sur les exercices de SA formation. On peut avoir l'une sans
+     * l'autre — la plupart des formations ne sont pas certifiantes.
+     *
+     * Ces jetons restent VIDES sur un dossier sans grille : un modèle partagé entre plusieurs
+     * formations n'a donc rien à conditionner pour rester imprimable. */
+    {
+        group: 'Évaluation pratique',
+        tokens: [
+            { key: 'Évaluation', label: 'Intitulé de la grille', sample: 'Évaluation pratique' },
+            { key: 'NoteTotale', label: 'Points obtenus sur le total', sample: '82 / 100' },
+            { key: 'NotePoints', label: 'Points obtenus (nombre seul)', sample: '82' },
+            { key: 'NoteMax', label: 'Total possible (nombre seul)', sample: '100' },
+            { key: 'NotePourcent', label: 'Pourcentage obtenu', sample: '82 %' },
+            { key: 'NoteSeuil', label: 'Seuil de réussite', sample: '70 %',
+              desc: 'Vide quand la grille ne fixe aucun seuil — la notation compte alors les '
+                  + 'points sans prononcer de réussite.' },
+            { key: 'NoteRésultat', label: 'Résultat', sample: 'Réussi',
+              desc: '« Réussi », « Non réussi », ou « En cours » tant que tous les exercices ne '
+                  + 'sont pas notés et que le seuil n’est pas déjà atteint. Vide sans seuil.' },
+            { key: 'NoteDétail', label: 'Tableau des exercices', sample: '(tableau exercice / mesure / points)' },
+        ],
+    },
 ];
 
 // Jetons dont la valeur est du HTML (image de signature, tableau) : insérés SANS échappement.
-const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles', 'Règlements']);
+const RAW_TOKENS = new Set(['Signature stagiaire', 'Signature organisme', 'Stagiaires', 'Résultats', 'Articles', 'Règlements', 'NoteDétail']);
 
 // Échappement minimal pour insérer du texte dans une cellule HTML (jeton {Stagiaires}).
 const escCell = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -385,6 +414,46 @@ function totalRow(cellules, mixte, remise) {
 // Le verdict n'est pas recalculé ici — il est lu depuis `verdicts`, figé à la clôture de la
 // session. Un candidat garde le résultat obtenu sous le barème en vigueur ce jour-là, même
 // si le barème évolue ensuite.
+/**
+ * Jetons d'une évaluation pratique, depuis le résultat calculé côté contrôleur.
+ *
+ * TOUT EST VIDE SANS GRILLE, plutôt que « 0 / 0 » ou « 0 % ». Un zéro se lit comme une note :
+ * imprimer « 0 / 0 — Non réussi » sur l'attestation d'une formation qui n'évalue rien ferait
+ * dire au document l'exact contraire de la réalité.
+ */
+function evaluationTokens(ev) {
+    const vide = {
+        'Évaluation': '', NoteTotale: '', NotePoints: '', NoteMax: '', NotePourcent: '',
+        NoteSeuil: '', 'NoteRésultat': '', 'NoteDétail': '',
+    };
+    if (!ev || !ev.grille || !ev.exercices || !ev.exercices.length) return vide;
+    const t = ev.totaux || {};
+    const parEx = new Map((ev.notes || []).map((n) => [n.exercice_id, n]));
+    const lignes = ev.exercices.map((ex) => {
+        const n = parEx.get(ex.id);
+        const pts = n && n.points !== null && n.points !== undefined ? n.points : null;
+        return {
+            label: ex.label || '',
+            /* La mesure telle qu'elle a été SAISIE, retraduite par le barème : un « 100 » brut
+               ne dirait pas s'il s'agit de secondes, de points ou d'un index de niveau. */
+            mesure: pts === null ? 'Non noté' : pointsPour(ex, n.valeur).libelle,
+            points: pts === null ? '—' : `${pts} / ${maximumExercice(ex)}`,
+        };
+    });
+    const seuil = ev.grille.pass_score;
+    return {
+        'Évaluation': ev.grille.label || '',
+        NoteTotale: `${t.points || 0} / ${t.max || 0}`,
+        NotePoints: String(t.points || 0),
+        NoteMax: String(t.max || 0),
+        NotePourcent: `${t.percent || 0} %`,
+        NoteSeuil: seuil === null || seuil === undefined ? '' : `${seuil} %`,
+        'NoteRésultat': seuil === null || seuil === undefined ? ''
+            : (ev.reussi === null || ev.reussi === undefined ? 'En cours' : (ev.reussi ? 'Réussi' : 'Non réussi')),
+        'NoteDétail': evaluationTable(lignes),
+    };
+}
+
 function resultatsTable(verdicts) {
     const rows = Object.entries(verdicts || {});
     if (!rows.length) return '';
@@ -402,6 +471,24 @@ function resultatsTable(verdicts) {
              + `<td>${escCell(v && v.seuil)}</td><td>${escCell(acquis + motif)}</td></tr>`;
     }).join('');
     return `<table><tbody>${head}${body}</tbody></table>`;
+}
+
+/**
+ * Détail d'une évaluation pratique, un exercice par ligne. RAW : injecté tel quel.
+ *
+ * LA MESURE FIGURE À CÔTÉ DES POINTS, et c'est le but de ce tableau. « 50 points » ne se
+ * conteste pas et ne s'explique pas ; « 1 min 40 s → 50 points » se relit, et le stagiaire
+ * voit sur quel palier il est tombé. C'est aussi ce qu'un contrôle attend d'une évaluation :
+ * la trace de ce qui a été observé, pas seulement la note.
+ *
+ * `width="100%"` en ATTRIBUT HTML : LibreOffice ignore la largeur en CSS (cf. CLAUDE.md § 3).
+ */
+function evaluationTable(lignes) {
+    if (!lignes || !lignes.length) return '';
+    const head = '<tr><th>Exercice</th><th>Résultat</th><th>Points</th></tr>';
+    const body = lignes.map((l) => `<tr><td>${escCell(l.label)}</td><td>${escCell(l.mesure)}</td>`
+        + `<td>${escCell(l.points)}</td></tr>`).join('');
+    return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
 }
 
 // « M. Paul Rossi — pizzaïolo, La Napoli ». Le rôle vient de la position dans le jury.
@@ -940,6 +1027,7 @@ function resolveTokens(ctx = {}) {
         : '';
 
     const factureVals = invoiceTokens(ctx.invoice);
+    const evalVals = evaluationTokens(ctx.evaluation);
 
     return {
         // Stagiaire
@@ -1006,6 +1094,8 @@ function resolveTokens(ctx = {}) {
         'Blocs acquis': blocsAcquis.join(', '),
         'Résultats': resultatsTable(verdicts),
         'Décision': DECISIONS[res.decision] || '', Observations: res.observations || '',
+        // Évaluation pratique (grille du formateur) — vide sans grille sur la formation.
+        ...evalVals,
         // Dates
         Date: today, Today: today,
         // Signature (valeurs HTML : cf. RAW_TOKENS)
