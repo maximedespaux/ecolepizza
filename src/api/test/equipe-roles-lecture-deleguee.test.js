@@ -35,8 +35,21 @@ const NAV = lireUi('lib/nav.js');
 const ROLES = lireUi('pages/AccessRoles.jsx');
 const EQUIPE = lireUi('pages/Equipe.jsx');
 
-test('les deux rubriques sont bien celles qui distribuent les accès', () => {
-    assert.deepStrictEqual([...SECTIONS_LECTURE_SEULE].sort(), ['/equipe', '/roles']);
+test('seule « Rôles d\'accès » est bornée à la lecture', () => {
+    /* « Équipe & accès » s'accorde désormais en écriture, sur décision de l'organisme. Ce qui
+       rend la chose sûre n'est pas une interdiction de rubrique mais les bornes du contrôleur —
+       vérifiées dans `equipe-ecriture-deleguee.test.js`. « Rôles d'accès », elle, définit ce que
+       chaque rôle SYSTÈME accorde : y écrire redéfinirait les droits de tout le monde d'un
+       coup, les siens compris. */
+    assert.deepStrictEqual([...SECTIONS_LECTURE_SEULE], ['/roles']);
+});
+
+test('« Équipe & accès » accepte l\'écriture quand elle est accordée ainsi', () => {
+    assert.strictEqual(
+        accesParMenuAutorise({ role: 'SECRETARIAT', method: 'POST', section: '/equipe', mode: 'write' }), true);
+    assert.strictEqual(
+        accesParMenuAutorise({ role: 'SECRETARIAT', method: 'POST', section: '/equipe', mode: 'read' }), false,
+        'accordée en lecture, elle ne laisse pas écrire');
 });
 
 test('accordées, elles se consultent — quel que soit le mode stocké', () => {
@@ -92,7 +105,7 @@ test('les bases API mènent à leur rubrique — sans quoi rien ne s\'ouvre', ()
 test('l\'écran ne propose pas une écriture que le serveur refusera', () => {
     /* Le défaut « menu ouvert, route fermée » dans l'autre sens : afficher un bouton
        « Modifier » qui ne produirait rien apprendrait à se méfier de tous les autres. */
-    assert.match(NAV, /export const NAV_LECTURE_SEULE = \["\/equipe", "\/roles"\];/);
+    assert.match(NAV, /export const NAV_LECTURE_SEULE = \["\/roles"\];/);
     for (const [nom, SRC] of [['Rôles d\'accès', ROLES], ['Équipe & accès', EQUIPE]]) {
         assert.match(SRC, /const lectureSeule = NAV_LECTURE_SEULE\.includes\(it\.to\);/,
             `${nom} doit reconnaître les rubriques en lecture seule`);
