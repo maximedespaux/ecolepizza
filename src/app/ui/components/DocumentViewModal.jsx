@@ -20,19 +20,26 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
   const [signing, setSigning] = useState(false);
   // Même origine que l'API : le cookie de session part avec la requête du cadre.
   const fichierUrl = `${API_BASE_URL}/documents/${id}/fichier`;
+  /* Les deux provenances d'un corps-fichier partagent la même route et le même affichage —
+     l'écran pose la même question dans les deux cas : « montre-moi le fichier ». Seule la
+     phrase qui l'introduit change, parce que l'une engage le dossier du stagiaire et l'autre
+     non. */
+  const fichier = doc?.importe || doc?.modele_fichier || null;
+  const titreFichier = doc?.importe ? "Document reçu" : "Document du modèle";
 
   useEffect(() => {
     getDocument(id).then((r) => setDoc(r.data)).catch((e) => setStatus({ type: "error", message: e.message }));
   }, [id]);
 
   // Aperçu = rendu HTML du modèle rempli (affiché en ligne, sans lecteur PDF).
-  /* UN DOCUMENT IMPORTÉ NE PASSE PAS PAR LE RENDU DU MODÈLE : le vrai document est le
-     fichier reçu. Demander l'aperçu afficherait une convention VIERGE là où le signé
-     existe — l'écran montrerait autre chose que ce qui fait foi. On attend donc de savoir
-     (`doc` chargé) avant de décider, d'où la dépendance sur `doc`. */
+  /* UN DOCUMENT DONT LE CORPS EST UN FICHIER NE PASSE PAS PAR LE RENDU DU MODÈLE. Deux cas
+     le produisent : le document REÇU par e-mail, et le modèle FIGÉ (un PDF servi tel quel,
+     livret d'accueil ou règlement intérieur). Demander l'aperçu afficherait une convention
+     VIERGE là où le signé existe — l'écran montrerait autre chose que ce qui fait foi. On
+     attend donc de savoir (`doc` chargé) avant de décider, d'où la dépendance sur `doc`. */
   useEffect(() => {
-    if (!doc) return;              // on ne sait pas encore s'il est importé
-    if (doc.importe) return;       // il l'est : rien à rendre, le fichier parle
+    if (!doc) return;                              // on ne sait pas encore ce qu'il est
+    if (doc.importe || doc.modele_fichier) return; // son corps EST un fichier : il parle seul
     documentPreviewHtml(id)
       .then((html) => setPreviewHtml(html))
       .catch((e) => { setPdfError(e.message); setMissing(e.missing || null); });
@@ -114,18 +121,21 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
           {/* LE FICHIER REÇU D'ABORD. Un PDF s'affiche en ligne ; une image aussi. Tout autre
               format (un .docx scanné, par exemple) ne se rend pas dans un navigateur : on propose
               alors de l'ouvrir, plutôt qu'un cadre vide qui ferait croire à un document blanc. */}
-          {doc?.importe ? (
+          {fichier ? (
             <div style={{ padding: "12px 14px" }}>
               <div className="hint" style={{ marginBottom: 10 }}>
-                Document reçu et importé{doc.importe.importe_le ? ` le ${dateHeure(doc.importe.importe_le)}` : ""}
-                {doc.importe.nom ? ` — ${doc.importe.nom}` : ""}. Il n'a pas été signé dans l'application.
+                {doc.importe
+                  ? <>Document reçu et importé{fichier.importe_le ? ` le ${dateHeure(fichier.importe_le)}` : ""}
+                      {fichier.nom ? ` — ${fichier.nom}` : ""}. Il n'a pas été signé dans l'application.</>
+                  : <>Document remis tel quel, depuis le fichier du modèle{fichier.nom ? ` — ${fichier.nom}` : ""}.
+                      Son contenu ne dépend pas du dossier : il est identique pour tous.</>}
               </div>
-              {/pdf/i.test(doc.importe.mime || "") ? (
-                <iframe src={fichierUrl} title="Document reçu" className="doc-pdf-frame" />
-              ) : /^image\//.test(doc.importe.mime || "") ? (
-                <img src={fichierUrl} alt={`Document reçu : ${doc.title}`} style={{ maxWidth: "100%" }} />
+              {/pdf/i.test(fichier.mime || "") ? (
+                <iframe src={fichierUrl} title={titreFichier} className="doc-pdf-frame" />
+              ) : /^image\//.test(fichier.mime || "") ? (
+                <img src={fichierUrl} alt={`${titreFichier} : ${doc.title}`} style={{ maxWidth: "100%" }} />
               ) : (
-                <a className="btn" href={fichierUrl} target="_blank" rel="noreferrer">Ouvrir le document reçu</a>
+                <a className="btn" href={fichierUrl} target="_blank" rel="noreferrer">Ouvrir le document</a>
               )}
             </div>
           ) : previewHtml ? (

@@ -36,19 +36,20 @@ async function loadRows(organizationId) {
 /**
  * Contenu de rendu pour un organisme + slug.
  * Renvoie { kind:'builder', html } (corps propre ou défaut) ou
- * { kind:'docx', buffer } (ancien mode fichier), ou null si aucune source.
+ * { kind:'docx', buffer } (ancien mode fichier), { kind:'pdf', buffer } (fichier servi
+ * tel quel), ou null si aucune source.
  */
 async function getTemplateContent(organizationId, slug) {
     let rows;
     try {
         [rows] = await db.promise().query(
-            'SELECT kind, body_html, header_html, footer_html, layout, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+            'SELECT kind, body_html, header_html, footer_html, layout, file, name, mime FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
             [organizationId, slug]
         );
     } catch (e) {
         if (e && e.code === 'ER_BAD_FIELD_ERROR') { // colonne layout absente (migration 065)
             [rows] = await db.promise().query(
-                'SELECT kind, body_html, header_html, footer_html, file FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
+                'SELECT kind, body_html, header_html, footer_html, file, name, mime FROM document_template WHERE organization_id = ? AND slug = ? LIMIT 1',
                 [organizationId, slug]
             );
         } else { throw e; }
@@ -57,7 +58,14 @@ async function getTemplateContent(organizationId, slug) {
     if (row) {
         let layout = null;
         if (row.layout) { try { layout = typeof row.layout === 'string' ? JSON.parse(row.layout) : row.layout; } catch { layout = null; } }
-        if (row.kind === 'docx') {
+        /* MODÈLE « FICHIER PDF » : le document EST le fichier, servi tel quel. Aucun jeton, aucune
+           conversion — un livret d'accueil mis en page dans un outil de PAO ne survivrait ni à un
+           passage par l'éditeur ni à un aller-retour LibreOffice. Les octets vivent en UN
+           exemplaire sur le modèle : les recopier dans chaque dossier ferait grossir la base du
+           poids du livret multiplié par le nombre de stagiaires. */
+        if (row.kind === 'pdf') {
+            if (row.file) return { kind: 'pdf', buffer: row.file, name: row.name || null, mime: row.mime || 'application/pdf' };
+        } else if (row.kind === 'docx') {
             if (row.file) return { kind: 'docx', buffer: row.file };
         } else if (row.body_html) {
             return { kind: 'builder', html: row.body_html, header: row.header_html || '', footer: row.footer_html || '', layout };
@@ -182,7 +190,10 @@ const saveTemplate = async (req, res) => {
     if (b.body_html !== undefined) { fields.body_html = b.body_html || null; fields.kind = 'builder'; }
     if (b.header_html !== undefined) { fields.header_html = b.header_html || null; fields.kind = 'builder'; }
     if (b.footer_html !== undefined) { fields.footer_html = b.footer_html || null; fields.kind = 'builder'; }
-    if (b.kind !== undefined && (b.kind === 'builder' || b.kind === 'docx')) fields.kind = b.kind;
+    /* `pdf` accepté au même titre : c'est ce qui permet de REVENIR à un fichier déjà
+       téléversé après un passage par l'éditeur, sans avoir à le re-choisir. Les octets
+       n'ayant jamais été effacés, le basculement est réversible dans les deux sens. */
+    if (b.kind !== undefined && ['builder', 'docx', 'pdf'].includes(b.kind)) fields.kind = b.kind;
     // Réglages de mise en page (bord à bord par zone…). Passe aussi en mode builder.
     if (b.layout !== undefined) { fields.layout = b.layout ? JSON.stringify(b.layout) : null; fields.kind = fields.kind || 'builder'; }
     try {
@@ -752,18 +763,14 @@ const getTemplateBody = async (req, res) => {
 };
 
 /** POST /api/templates/:slug — téléverse (remplace) le fichier .docx de l'étape. */
-const uploadTemplate = async (req, res) => {
-    const slug = String(req.params.slug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
-    if (!slug) return res.status(422).json({ error: 'Identifiant (slug) requis.' });
-    if (!req.file || !req.file.buffer) return res.status(422).json({ error: 'Fichier .docx requis.' });
-    const name = req.file.originalname || '';
-    if (!/\.docx$/i.test(name)) return res.status(422).json({ error: 'Le fichier doit être un .docx.' });
-    // Vérifie la signature ZIP (un .docx est un conteneur OOXML = archive ZIP « PK »).
-    const b = req.file.buffer;
-    if (b.length < 4 || b[0] !== 0x50 || b[1] !== 0x4b) {
-        return res.status(422).json({ error: 'Fichier .docx invalide (format inattendu).' });
-    }
-
+/* Validation d'un .docx de modèle : conteneur OOXML lisible, borné, et dont les jetons se
+   rendent. Rendue séparément parce que l'upload accepte désormais DEUX formats et qu'une
+   cascade de `if` imbriqués dans le contrôleur rendait illisible la seule chose qui compte :
+   ce que chaque format doit prouver avant d'entrer en base. Renvoie un message d'erreur,
+   ou null si le fichier est valide. */
+function erreurDocx(b) {
+    // Signature ZIP (un .docx est un conteneur OOXML = archive ZIP « PK »).
+    if (b.length < 4 || b[0] !== 0x50 || b[1] !== 0x4b) return { error: 'Fichier .docx invalide (format inattendu).' };
     try {
         const zip = new PizZip(b);
         // Garde-fou anti « zip bomb » : borne la taille décompressée et le nombre
@@ -773,22 +780,60 @@ const uploadTemplate = async (req, res) => {
         let totalUnc = 0, entries = 0;
         for (const key of Object.keys(zip.files)) {
             entries++;
-            if (entries > MAX_ENTRIES) return res.status(422).json({ error: 'Archive .docx trop complexe.' });
+            if (entries > MAX_ENTRIES) return { error: 'Archive .docx trop complexe.' };
             const data = zip.files[key]?._data;
             const size = (data && (data.uncompressedSize ?? data.length)) || 0;
             totalUnc += size;
-            if (totalUnc > MAX_UNCOMPRESSED) return res.status(422).json({ error: 'Archive .docx trop volumineuse une fois décompressée.' });
+            if (totalUnc > MAX_UNCOMPRESSED) return { error: 'Archive .docx trop volumineuse une fois décompressée.' };
         }
         const doc = new Docxtemplater(zip, { delimiters: { start: '{', end: '}' }, paragraphLoop: true, linebreaks: true, nullGetter: () => '' });
         doc.render({});
     } catch (e) {
         const first = e.properties && e.properties.errors && e.properties.errors[0];
-        return res.status(422).json({ error: 'Modèle .docx invalide', detail: first ? (first.properties?.explanation || first.message) : e.message });
+        return { error: 'Modèle .docx invalide', detail: first ? (first.properties?.explanation || first.message) : e.message };
+    }
+    return null;
+}
+
+const uploadTemplate = async (req, res) => {
+    const slug = String(req.params.slug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    if (!slug) return res.status(422).json({ error: 'Identifiant (slug) requis.' });
+    if (!req.file || !req.file.buffer) return res.status(422).json({ error: 'Fichier .docx ou .pdf requis.' });
+    const name = req.file.originalname || '';
+    const b = req.file.buffer;
+
+    /* DEUX FAMILLES DE MODÈLES-FICHIERS, qui ne servent pas à la même chose.
+       Un .docx est un GABARIT : ses jetons sont remplis, puis LibreOffice le convertit.
+       Un .pdf est un document FIGÉ, remis tel quel — pour une pièce mise en page ailleurs
+       (livret d'accueil, règlement intérieur, plan d'accès) que ni l'éditeur ni un
+       aller-retour LibreOffice ne sauraient reproduire fidèlement. */
+    const estPdf = /\.pdf$/i.test(name);
+    if (!estPdf && !/\.docx$/i.test(name)) {
+        return res.status(422).json({ error: 'Le fichier doit être un .docx ou un .pdf.' });
+    }
+
+    /* On vérifie l'EN-TÊTE, pas l'extension seule : le type MIME transmis par le navigateur
+       n'est qu'une déclaration du client. */
+    if (estPdf) {
+        if (b.length < 5 || b.subarray(0, 5).toString('latin1') !== '%PDF-') {
+            return res.status(422).json({ error: 'Fichier PDF invalide (format inattendu).' });
+        }
+    } else {
+        const mauvais = erreurDocx(b);
+        if (mauvais) return res.status(422).json(mauvais);
     }
 
     try {
+        /* `kind` EST POSÉ EXPLICITEMENT. Il ne l'était pas : la colonne vaut `builder` par
+           défaut, si bien qu'un .docx téléversé était bien stocké mais que `getTemplateContent`
+           ne le regardait jamais — il cherchait un `body_html` absent et concluait « aucun
+           modèle ». Le fichier dormait en base sans que rien ne le signale.
+           `body_html` n'est PAS effacé : repasser le modèle en mode éditeur doit rester
+           possible sans avoir perdu le corps qu'on y avait écrit. */
         await upsertTemplate(db.promise(), req.user.organization_id, slug, {
-            file: req.file.buffer, name, mime: req.file.mimetype || null,
+            kind: estPdf ? 'pdf' : 'docx',
+            file: b, name,
+            mime: estPdf ? 'application/pdf' : (req.file.mimetype || null),
         });
         logAudit(req, 'template.upload', 'DocumentTemplate', slug);
         res.status(201).json({ success: true, message: 'Modèle enregistré' });
