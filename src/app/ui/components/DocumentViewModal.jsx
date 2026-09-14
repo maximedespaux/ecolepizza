@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import InfosManquantes from "./InfosManquantes.jsx";
-import { getDocument, signDocument, downloadDocumentPdf, documentPdfUrl, documentPreviewHtml, createSignLink } from "../api/apiClient.js";
+import { getDocument, signDocument, downloadDocumentPdf, documentPdfUrl, documentPreviewHtml, createSignLink, API_BASE_URL } from "../api/apiClient.js";
+import { dateHeure } from "../lib/format.js";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
 
@@ -17,17 +18,25 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
   const [missing, setMissing] = useState(null);   // infos manquantes (jetons vides)
   const [status, setStatus] = useState(null);
   const [signing, setSigning] = useState(false);
+  // Même origine que l'API : le cookie de session part avec la requête du cadre.
+  const fichierUrl = `${API_BASE_URL}/documents/${id}/fichier`;
 
   useEffect(() => {
     getDocument(id).then((r) => setDoc(r.data)).catch((e) => setStatus({ type: "error", message: e.message }));
   }, [id]);
 
   // Aperçu = rendu HTML du modèle rempli (affiché en ligne, sans lecteur PDF).
+  /* UN DOCUMENT IMPORTÉ NE PASSE PAS PAR LE RENDU DU MODÈLE : le vrai document est le
+     fichier reçu. Demander l'aperçu afficherait une convention VIERGE là où le signé
+     existe — l'écran montrerait autre chose que ce qui fait foi. On attend donc de savoir
+     (`doc` chargé) avant de décider, d'où la dépendance sur `doc`. */
   useEffect(() => {
+    if (!doc) return;              // on ne sait pas encore s'il est importé
+    if (doc.importe) return;       // il l'est : rien à rendre, le fichier parle
     documentPreviewHtml(id)
       .then((html) => setPreviewHtml(html))
       .catch((e) => { setPdfError(e.message); setMissing(e.missing || null); });
-  }, [id]);
+  }, [id, doc]);
 
   // Ouvre le PDF réel dans un nouvel onglet (à la demande).
   async function openPdf() {
@@ -102,7 +111,24 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
               )}
             </div>
           )}
-          {previewHtml ? (
+          {/* LE FICHIER REÇU D'ABORD. Un PDF s'affiche en ligne ; une image aussi. Tout autre
+              format (un .docx scanné, par exemple) ne se rend pas dans un navigateur : on propose
+              alors de l'ouvrir, plutôt qu'un cadre vide qui ferait croire à un document blanc. */}
+          {doc?.importe ? (
+            <div style={{ padding: "12px 14px" }}>
+              <div className="hint" style={{ marginBottom: 10 }}>
+                Document reçu et importé{doc.importe.importe_le ? ` le ${dateHeure(doc.importe.importe_le)}` : ""}
+                {doc.importe.nom ? ` — ${doc.importe.nom}` : ""}. Il n'a pas été signé dans l'application.
+              </div>
+              {/pdf/i.test(doc.importe.mime || "") ? (
+                <iframe src={fichierUrl} title="Document reçu" className="doc-pdf-frame" />
+              ) : /^image\//.test(doc.importe.mime || "") ? (
+                <img src={fichierUrl} alt={`Document reçu : ${doc.title}`} style={{ maxWidth: "100%" }} />
+              ) : (
+                <a className="btn" href={fichierUrl} target="_blank" rel="noreferrer">Ouvrir le document reçu</a>
+              )}
+            </div>
+          ) : previewHtml ? (
             <iframe srcDoc={previewHtml} title="Aperçu du document" className="doc-pdf-frame" sandbox="allow-same-origin" />
           ) : missing ? (
             <MissingPanel />

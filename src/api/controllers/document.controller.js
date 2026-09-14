@@ -587,7 +587,21 @@ const getDocument = async (req, res) => {
         // part. Il dépendait du code de rendu, donc deux signatures apposées à six mois
         // d'intervalle pouvaient porter sur des textes différents, sans que rien ne le dise.
         // Un document sans modèle n'a pas de contenu — on l'annonce, on n'en invente pas un.
-        const html = await buildDocHtml(conn, doc.organization_id, doc);
+        /* UN DOCUMENT IMPORTÉ N'A PAS DE CORPS À RENDRE : le vrai document est le fichier reçu.
+           Régénérer son modèle afficherait une convention VIERGE là où le signé existe — un écran
+           qui montre autre chose que ce qui fait foi, ce qu'un aperçu ne doit jamais faire. On
+           l'annonce au front, qui affiche alors le fichier au lieu du modèle. */
+        let importe = null;
+        try {
+            if (await colonneExiste(conn, 'document_fichier', 'document_id')) {
+                const [[fi]] = await conn.query(
+                    `SELECT nom, mime, taille, DATE_FORMAT(importe_le, '%Y-%m-%d %H:%i') AS importe_le
+                     FROM document_fichier WHERE document_id = ?`, [doc.id]);
+                if (fi) importe = fi;
+            }
+        } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
+
+        const html = importe ? null : await buildDocHtml(conn, doc.organization_id, doc);
         // Signature stagiaire pilotée par le modèle (Modeles de document : stagiaire_sign).
         const orgSteps = await loadOrgSteps(doc.organization_id);
         // Document dont la signature incombe à l'entreprise : pas signable par le stagiaire.
@@ -609,6 +623,8 @@ const getDocument = async (req, res) => {
                 signer_user_agent: decrypt(doc.signer_user_agent) || null,
                 signed_hash: doc.signed_hash || null,
                 html,
+                // Métadonnées du fichier reçu (jamais son contenu : il se lit par /:id/fichier).
+                importe,
                 // Dit au front POURQUOI il n'y a pas de corps, pour qu'il n'affiche pas un
                 // cadre vide sans explication.
                 no_template: html === null || html === undefined,
@@ -852,6 +868,22 @@ const downloadPdf = async (req, res) => {
                     allowed = own.length > 0;
                 }
                 if (allowed) {
+                    /* LE FICHIER REÇU PASSE AVANT TOUT — même raison que le PDF signé figé juste en
+                       dessous : ce qui fait foi ne se régénère pas. Réservé au PDF : servir une image ou
+                       un .docx sous l'en-tête « application/pdf » donnerait un fichier que rien n'ouvre.
+                       Les autres formats se lisent par /:id/fichier, ce que fait l'aperçu. */
+                    try {
+                        if (await colonneExiste(conn, 'document_fichier', 'document_id')) {
+                            const [[fi]] = await conn.query(
+                                'SELECT nom, mime, bytes FROM document_fichier WHERE document_id = ?', [sdoc.id]);
+                            if (fi && /pdf/i.test(fi.mime || '')) {
+                                logAudit(req, 'document.pdf', 'GeneratedDocument', sdoc.id);
+                                res.set('Content-Type', 'application/pdf');
+                                res.set('Content-Disposition', `inline; filename="${encodeURIComponent(fi.nom || 'document.pdf')}"`);
+                                return res.send(decryptBytes(fi.bytes));
+                            }
+                        }
+                    } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
                     const stored = await loadSignedPdf(conn, sdoc.id);
                     if (stored) {
                         logAudit(req, 'document.pdf', 'GeneratedDocument', sdoc.id);

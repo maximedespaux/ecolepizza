@@ -96,3 +96,38 @@ test('la route est gardée, et le fichier se relit', () => {
     assert.match(ROUTES, /router\.post\('\/import', authenticateToken, authorizeRoles\(\.\.\.ADMIN_ROLES\), upload\.single\('file'\), importDocumentFile\)/);
     assert.match(ROUTES, /router\.get\('\/:id\/fichier', authenticateToken, authorizeRoles\(\.\.\.STAFF_ROLES\), getDocumentFile\)/);
 });
+
+test('l\'APERÇU sert le fichier reçu, pas le modèle régénéré', () => {
+    /* LE DÉFAUT : l'aperçu rendait le MODÈLE. On importait la convention signée, on cliquait
+       « Aperçu », et on voyait une convention VIERGE — l'écran montrait autre chose que ce qui
+       fait foi. Le petit bouton de téléchargement était le seul chemin vers le vrai document. */
+    const MODALE = fs.readFileSync(
+        path.join(RACINE, 'src/app/ui/components/DocumentViewModal.jsx'), 'utf8');
+    // Le serveur annonce le fichier et NE rend pas de corps pour un document importé.
+    assert.match(CTRL, /const html = importe \? null : await buildDocHtml\(/);
+    // L'écran n'appelle même plus le rendu, et attend de SAVOIR avant de décider.
+    assert.match(MODALE, /if \(doc\.importe\) return;/);
+    assert.match(MODALE, /\}, \[id, doc\]\);/, 'l\'effet dépend de `doc`, sinon il décide avant de savoir');
+    // PDF en ligne, image en ligne, tout le reste par un lien : un cadre vide ferait croire à un
+    // document blanc.
+    assert.match(MODALE, /\/pdf\/i\.test\(doc\.importe\.mime/);
+    assert.match(MODALE, /\^image\\\//);
+    assert.match(MODALE, /Ouvrir le document reçu/);
+    /* ET LES IMPORTS SUIVENT. C'est le défaut d'hier, à l'identique : un symbole utilisé sans
+       être importé ne se voit ni à la compilation ni au build, seulement à l'exécution. */
+    assert.match(MODALE, /import \{[^}]*API_BASE_URL[^}]*\} from "\.\.\/api\/apiClient\.js"/);
+    assert.match(MODALE, /import \{ dateHeure \} from "\.\.\/lib\/format\.js"/);
+});
+
+test('le PDF téléchargé est le fichier reçu, quand c\'en est un', () => {
+    /* Même raison que le PDF signé figé : ce qui fait foi ne se régénère pas. Réservé au PDF —
+       servir une image sous « application/pdf » donnerait un fichier que rien n'ouvre. */
+    /* Bornes prises sur le corps RÉEL : `downloadDocx` est déclaré AVANT `downloadPdf` dans le
+       fichier, et la tranche sortait vide — un test qui ne lit rien passe pour vert. */
+    const deb = CTRL.indexOf('const downloadPdf');
+    const pdf = CTRL.slice(deb, CTRL.indexOf('const previewHtml', deb));
+    assert.ok(pdf.length > 500, 'la tranche doit contenir le corps de downloadPdf');
+    assert.match(pdf, /if \(fi && \/pdf\/i\.test\(fi\.mime \|\| ''\)\)/);
+    assert.ok(pdf.indexOf('document_fichier') < pdf.indexOf('loadSignedPdf'),
+        'le fichier reçu est consulté AVANT le PDF figé');
+});
