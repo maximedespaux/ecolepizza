@@ -87,7 +87,7 @@ SELECT mq.nouvelle_question, q.organization_id, mq.nouveau_chapitre, q.type, q.t
   FROM _quest_copie_question mq
   JOIN quest_question q ON q.id = mq.ancienne_question;
 
-/* ── 4. Les options (QCM et ASSOC ; une question VF n'en a aucune) ──────────────────────── */
+/* ── 4. Les options (QCM et ASSOC  — une question VF n'en a aucune) ──────────────────────── */
 INSERT INTO quest_option (id, question_id, sort_order, text, match_text, is_correct)
 SELECT uuid(), mq.nouvelle_question, o.sort_order, o.text, o.match_text, o.is_correct
   FROM _quest_copie_question mq
@@ -133,49 +133,49 @@ SELECT uuid(), c.organization_id, c.id, 'VF', v.texte, v.pourquoi, d.id, v.repon
            1 AS reponse,
            'Trente secondes au savon, ongles compris, puis séchage à usage unique. Le passage aux toilettes est le cas le plus évident, mais la règle vaut aussi après avoir touché des déchets, un carton de livraison, son téléphone ou son visage.' AS pourquoi
     UNION ALL SELECT 2,
-           'Une denrée réfrigérée peut rester à température ambiante tant qu''elle est encore froide au toucher.',
+           'Une denrée réfrigérée peut rester à température ambiante tant qu’elle est encore froide au toucher.',
            0,
-           'Le toucher ne mesure rien. Entre +4 °C et +63 °C s''étend la zone où les bactéries se multiplient le plus vite : une pâte ou une garniture sortie « juste un moment » y entre en quelques minutes, sans que rien ne se voie ni ne se sente.'
+           'Le toucher ne mesure rien. Entre +4 °C et +63 °C s’étend la zone où les bactéries se multiplient le plus vite : une pâte ou une garniture sortie « juste un moment » y entre en quelques minutes, sans que rien ne se voie ni ne se sente.'
     UNION ALL SELECT 3,
            'Les denrées les plus périssables se conservent entre 0 °C et +4 °C.',
            1,
-           'C''est la chaîne du froid positive. Elle ne tue pas les bactéries, elle les ralentit — d''où l''importance de relever les températures des enceintes et de consigner les écarts, plutôt que de s''en remettre au bruit du groupe froid.'
+           'C’est la chaîne du froid positive. Elle ne tue pas les bactéries, elle les ralentit — d’où l’importance de relever les températures des enceintes et de consigner les écarts, plutôt que de s’en remettre au bruit du groupe froid.'
     UNION ALL SELECT 4,
-           'Une planche ayant servi à de la viande crue peut servir aux légumes crus après un simple rinçage à l''eau.',
+           'Une planche ayant servi à de la viande crue peut servir aux légumes crus après un simple rinçage à l’eau.',
            0,
-           'C''est la contamination croisée : le rinçage déplace les micro-organismes sans les éliminer. Il faut nettoyer ET désinfecter, ou changer de planche. Les légumes crus ne subiront aucune cuisson qui rattraperait l''erreur.'
+           'C’est la contamination croisée : le rinçage déplace les micro-organismes sans les éliminer. Il faut nettoyer ET désinfecter, ou changer de planche. Les légumes crus ne subiront aucune cuisson qui rattraperait l’erreur.'
     UNION ALL SELECT 5,
            'Les quatorze allergènes à déclaration obligatoire doivent être indiqués au client, y compris en vente à emporter.',
            1,
-           'L''information est due quel que soit le mode de vente, sur place comme à emporter. Elle peut être écrite sur un support consultable, mais elle doit être disponible sans que le client ait à la demander.'
+           'L’information est due quel que soit le mode de vente, sur place comme à emporter. Elle peut être écrite sur un support consultable, mais elle doit être disponible sans que le client ait à la demander.'
     UNION ALL SELECT 6,
            'Le gluten ne fait pas partie des allergènes à déclaration obligatoire.',
            0,
-           'Les céréales contenant du gluten sont le premier des quatorze allergènes de la liste. Dans une pizzeria, c''est l''ingrédient le plus présent : la farine, la semoule de saupoudrage, et parfois des garnitures panées ou des sauces.'
+           'Les céréales contenant du gluten sont le premier des quatorze allergènes de la liste. Dans une pizzeria, c’est l’ingrédient le plus présent : la farine, la semoule de saupoudrage, et parfois des garnitures panées ou des sauces.'
     UNION ALL SELECT 7,
            'Un plat maintenu au chaud doit être conservé à +63 °C au minimum.',
            1,
-           'Au-dessus de +63 °C, la multiplication bactérienne s''arrête. En dessous, le plat entre dans la zone dangereuse et le temps commence à compter : un maintien tiède est plus risqué qu''un refroidissement rapide suivi d''une remise en température.'
+           'Au-dessus de +63 °C, la multiplication bactérienne s’arrête. En dessous, le plat entre dans la zone dangereuse et le temps commence à compter : un maintien tiède est plus risqué qu’un refroidissement rapide suivi d’une remise en température.'
     UNION ALL SELECT 8,
-           'On peut recongeler un produit décongelé s''il n''est resté sorti qu''une heure.',
+           'On peut recongeler un produit décongelé s’il n’est resté sorti qu’une heure.',
            0,
            'Jamais. La décongélation réveille les bactéries et la recongélation ne fait que les figer en plus grand nombre, dans un produit dont la structure a déjà souffert. Un produit décongelé se travaille et se consomme, ou se jette.'
     UNION ALL SELECT 9,
-           'La méthode HACCP consiste à maîtriser les points critiques du processus plutôt qu''à contrôler seulement le produit fini.',
+           'La méthode HACCP consiste à maîtriser les points critiques du processus plutôt qu’à contrôler seulement le produit fini.',
            1,
-           'Contrôler à la fin ne dit que si l''on a échoué. HACCP identifie les dangers étape par étape — réception, stockage, préparation, cuisson, service — et place la surveillance là où la maîtrise est encore possible.'
+           'Contrôler à la fin ne dit que si l’on a échoué. HACCP identifie les dangers étape par étape — réception, stockage, préparation, cuisson, service — et place la surveillance là où la maîtrise est encore possible.'
     UNION ALL SELECT 10,
-           'Les bagues et bracelets sont tolérés en cuisine s''ils sont propres.',
+           'Les bagues et bracelets sont tolérés en cuisine s’ils sont propres.',
            0,
-           'Ils retiennent les résidus sous et autour d''eux, empêchent un lavage correct des mains, et peuvent tomber dans une préparation. Seule l''alliance lisse est généralement admise ; le reste se retire avant le service.'
+           'Ils retiennent les résidus sous et autour d’eux, empêchent un lavage correct des mains, et peuvent tomber dans une préparation. Seule l’alliance lisse est généralement admise, le reste se retire avant le service.'
     UNION ALL SELECT 11,
            'Une personne atteinte de troubles digestifs peut travailler au poste de garniture à condition de porter des gants.',
            0,
-           'Les gants ne font pas barrière à une infection digestive : ils se contaminent comme une main et donnent l''illusion de la propreté. Un trouble digestif se signale au responsable, qui écarte la personne des denrées.'
+           'Les gants ne font pas barrière à une infection digestive : ils se contaminent comme une main et donnent l’illusion de la propreté. Un trouble digestif se signale au responsable, qui écarte la personne des denrées.'
     UNION ALL SELECT 12,
            'La traçabilité impose de conserver les étiquettes des lots de denrées utilisées.',
            1,
-           'C''est ce qui permet, en cas d''alerte, de savoir quel lot a été servi et quel jour. Sans étiquette conservée, on ne peut ni répondre à un retrait de produit ni démontrer d''où venait une denrée — et c''est tout l''établissement qui est mis en cause.'
+           'C’est ce qui permet, en cas d’alerte, de savoir quel lot a été servi et quel jour. Sans étiquette conservée, on ne peut ni répondre à un retrait de produit ni démontrer d’où venait une denrée — et c’est tout l’établissement qui est mis en cause.'
   ) AS v
  WHERE c.title = 'Hygiène alimentaire'
    AND NOT EXISTS (
@@ -185,7 +185,14 @@ SELECT uuid(), c.organization_id, c.id, 'VF', v.texte, v.pourquoi, d.id, v.repon
 /* ── 6. Le même chapitre, recopié vers RS7404 ───────────────────────────────────────────── */
 /* Certification professionnelle : quiconque manipule des denrées est tenu à ces règles. On
    repasse par la copie en base plutôt que de réécrire les douze questions — deux textes à
-   maintenir pour un même contenu, ce serait la faute qu'on cherche justement à éviter. */
+   maintenir pour un même contenu, ce serait la faute qu'on cherche justement à éviter.
+
+   À QUOI SERT LA TABLE DE CORRESPONDANCE CI-DESSOUS. À relier chaque question d'origine à sa
+   copie, pour que ses OPTIONS puissent suivre. Les douze questions écrites plus haut sont
+   toutes en VRAI/FAUX et n'en portent aucune — mais si ce chapitre existait déjà, créé à la
+   main avec des QCM, ceux-ci seraient copiés SANS leurs choix : des questions à zéro réponse,
+   que rien ne signalerait ni à l'écran ni en base. Sans la table, on ne saurait pas quelle
+   nouvelle question porte quelles options, `uuid()` étant engendré à la volée. */
 CREATE TABLE IF NOT EXISTS _quest_copie_hygiene (
     ancienne_question uuid NOT NULL,
     nouvelle_question uuid NOT NULL,
@@ -223,5 +230,12 @@ SELECT m.nouvelle_question, q.organization_id, cible.id, q.type, q.text, q.expla
   JOIN quest_question q ON q.id = m.ancienne_question
   JOIN quest_chapter cible ON cible.title = 'Hygiène alimentaire'
   JOIN training_program p ON p.id = cible.program_id AND p.code = 'RS7404';
+
+/* Les options, s'il y en a — cf. le commentaire de la table ci-dessus. Rien à copier pour des
+   questions VRAI/FAUX  — tout à copier si le chapitre en contenait d'autres. */
+INSERT INTO quest_option (id, question_id, sort_order, text, match_text, is_correct)
+SELECT uuid(), m.nouvelle_question, o.sort_order, o.text, o.match_text, o.is_correct
+  FROM _quest_copie_hygiene m
+  JOIN quest_option o ON o.question_id = m.ancienne_question;
 
 DROP TABLE IF EXISTS _quest_copie_hygiene;
