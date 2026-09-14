@@ -350,8 +350,19 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .iconbtn.del:hover{color:#fff;background:var(--ember1);border-color:var(--ember1)}
 
 /* Cards / grid ------------------------------------------------------- */
+/* `backwards` et NON `both` sur l'animation d'entrée — la nuance coûte cher.
+   `rise` finit sur `transform:none`, mais une animation qui INTERPOLE une transformation ne
+   rend jamais le mot-clé : elle fige la valeur calculée, c'est-à-dire la matrice IDENTITÉ.
+   Avec `both`, chaque carte gardait donc `transform:matrix(1,0,0,1,0,0)` à vie — invisible à
+   l'œil, mais une transformation non nulle fait de l'élément le BLOC CONTENEUR de ses
+   descendants `position:fixed`. Toute fenêtre modale ouverte depuis l'intérieur d'une carte
+   se centrait sur la CARTE au lieu de l'écran : sur l'émargement, la popup de signature
+   sortait du champ de vision et son bouton « Signer » devenait inatteignable.
+   `backwards` garde le seul effet utile (l'état de départ pendant le `animation-delay`, dont
+   dépendent les cascades `.grid > *:nth-child(n)`) et relâche l'élément à la fin. L'état final
+   de `rise` étant déjà l'état naturel, rien ne bouge à l'écran. */
 .grid{display:grid;gap:16px}.cols-2{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:repeat(3,1fr)}.cols-4{grid-template-columns:repeat(4,1fr)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-1),var(--relief);transition:box-shadow .2s var(--ease),transform .2s var(--ease),border-color .2s var(--ease);animation:rise .45s var(--ease) both}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-1),var(--relief);transition:box-shadow .2s var(--ease),transform .2s var(--ease),border-color .2s var(--ease);animation:rise .45s var(--ease) backwards}
 .card.hover{cursor:pointer}
 .card.hover:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
 .card h3{font-size:17px}
@@ -1488,7 +1499,10 @@ tbody tr:last-child td{border-bottom:none}
 
 /* ===== Fenêtres modales (édition, signature, notes…) =================== */
 .overlay{position:fixed;inset:0;background:rgba(15,17,40,.55);backdrop-filter:blur(3px);display:grid;place-items:center;z-index:100;padding:20px}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);width:100%;max-width:560px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 70px -16px rgba(10,12,30,.5);animation:rise .25s var(--ease) both}
+/* `backwards`, même piège que `.card` : avec `both`, la fenêtre gardait la matrice identité
+   et devenait le bloc conteneur de tout `position:fixed` ouvert DEPUIS son contenu — une
+   liste déroulante ou une popup imbriquée s'y serait recentrée. */
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);width:100%;max-width:560px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 70px -16px rgba(10,12,30,.5);animation:rise .25s var(--ease) backwards}
 .modal.wide{max-width:840px}
 .mhead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border-soft)}
 .mhead h3{font-size:17px}
@@ -3718,7 +3732,9 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 /* Entrée des cartes : léger dépassement d'échelle (le « pop » d'une appli ludique) plutôt que
    la montée sobre de l'admin. */
 @keyframes stuPop{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
-.stu-app .card{animation:stuPop .42s var(--spring) both}
+/* `backwards`, même raison que `.card` : `both` figeait la matrice identité et piégeait
+   les fenêtres modales à l'intérieur de la carte. */
+.stu-app .card{animation:stuPop .42s var(--spring) backwards}
 
 /* — Hero stagiaire ————————————————————————————————————————————————————————————————
    L'admin garde le hero navy (sérieux, institutionnel) ; l'élève reçoit la braise du four.  */
