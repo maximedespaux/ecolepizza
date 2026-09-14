@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -12,6 +12,7 @@ import SaveToast from "../components/SaveToast.jsx";
 import WGauge from "../components/WGauge.jsx";
 import { euro } from "../lib/format.js";
 import { getMyRecipes, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMyFormations } from "../api/apiClient.js";
+import { UserContext } from "../context/UserContext.jsx";
 import {
   num, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, W_MIN, W_MAX,
   hydraMinForW, maxTotalForW, wUsage, NAPO_SPECS, napoSpecOf, DP_DEFAULT,
@@ -55,16 +56,23 @@ export default function PateWizard() {
   const [guide, setGuide] = useState(false); // false | "general" (hub) | "empatement" (outil)
   const closeGuide = () => { if (guide === "general") { try { localStorage.setItem(GUIDE_KEY, "1"); } catch { /* ignore */ } } setGuide(false); };
 
+  const { user } = useContext(UserContext);
   const reload = () => getMyRecipes().then((res) => setSaved((res.data || []).filter((s) => s.kind === "PATE"))).catch(() => {});
   useEffect(() => { reload(); }, []);
   useEffect(() => { if (!localStorage.getItem(GUIDE_KEY)) setGuide("general"); }, []);
+  /* LES OPTIONS AVANCÉES SE DÉBLOQUENT PAR LES FORMATIONS SUIVIES — sauf pour le bureau, qui
+     les ENSEIGNE. Cette page est désormais ouverte au personnel, et `getMyFormations` répond
+     404 à qui n'a pas de fiche stagiaire : sans ce cas, un formateur de niveau II se voyait
+     refuser la napolitaine dans l'outil qu'il fait utiliser à ses stagiaires. */
+  const estPersonnel = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"].includes(user?.role);
   useEffect(() => {
+    if (estPersonnel) { setNiv2(true); setNapo(true); setSpe(true); return; }
     getMyFormations().then((res) => {
       const fs = (res.data || []).filter((f) => f.enrolled).map((f) => `${f.program_title} ${f.program_code}`.toLowerCase());
       const has = (re) => fs.some((t) => re.test(t));
       setNiv2(has(/niveau\s+ii|expert/)); setNapo(has(/napolit/)); setSpe(has(/teglia|pala/));
     }).catch(() => {});
-  }, []);
+  }, [estPersonnel]);
 
   const dp = r.dough_params;
   const setDP = (k, v) => setR((p) => ({ ...p, dough_params: { ...p.dough_params, [k]: v } }));
