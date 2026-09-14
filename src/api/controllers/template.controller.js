@@ -493,18 +493,23 @@ async function loadCustomTokens(orgId) {
 // Les groupes non listés tombent à la fin, triés alphabétiquement.
 const GROUP_ORDER = [
     'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
-    'Inscription', 'Formation', 'Session', 'Lieu de formation',
+    'Inscription', 'Formation', 'Session', 'Évaluation pratique', 'Lieu de formation',
     'Organisme', 'Émetteur (identité)', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
-const CURATED_GROUPS = new Set(['Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
+/* L'ordre des jetons d'évaluation est réfléchi (intitulé, total, points, seuil, résultat,
+   détail) : trié alphabétiquement, « NoteDétail » ouvrirait le groupe et le total arriverait
+   après le seuil. */
+const CURATED_GROUPS = new Set(['Évaluation pratique', 'Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
 //    jetons propres à UN stagiaire / une inscription (on garde {Stagiaires} du groupe).
 //  - Document STAGIAIRE (company_level=0) : la liste {Stagiaires} n'a pas de sens → on
 //    masque le groupe « Groupe entreprise ».
-const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Inscription']);
+/* Une évaluation note UNE personne : sur un document de groupe, ces jetons n'auraient
+   aucun dossier à lire et sortiraient vides. */
+const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Inscription', 'Évaluation pratique']);
 const HIDDEN_FOR_LEARNER = new Set(['Groupe entreprise']);
 
 /** GET /api/templates/tokens?slug= — jetons de la palette, filtrés selon le type de document. */
@@ -538,6 +543,12 @@ const getTokens = async (req, res) => {
         // une facture ils reprennent l'identité de l'entité émettrice. Distincts des « Champs
         // documents » (field:organization.*), qui viennent de la fiche organisme.
         groups.push(catalogGroup('Organisme', 'Émetteur (identité)'));
+        /* ÉVALUATION PRATIQUE : le résultat du stagiaire sur la grille de sa formation.
+           SANS CETTE LIGNE, LES JETONS EXISTENT MAIS PERSONNE NE PEUT LES INSÉRER — la palette
+           n'est pas le catalogue, elle en est une composition choisie. Mesuré en production
+           juste après la mise en ligne : {NoteTotale} se résolvait correctement si on le tapait
+           à la main, et n'apparaissait nulle part dans l'éditeur. */
+        groups.push(catalogGroup('Évaluation pratique'));
         groups.push(factureTokensGroup());
         // Sur une facture/devis, l'ACHETEUR est un stagiaire OU une entreprise. Ses coordonnées
         // (e-mail, téléphone, adresse…) existent déjà dans les Champs documents (field:learner.* /
