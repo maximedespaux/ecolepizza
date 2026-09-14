@@ -4,8 +4,7 @@ import { Icon } from "../components/Icon.jsx";
 import { useNavigate } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
-  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage,
-} from "../api/apiClient.js";
+  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage, pieceFichierUrl } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -16,7 +15,11 @@ import Roadmap from "../components/Roadmap.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf, dateHeure } from "../lib/format.js";
 
-const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"] };
+/* Les états d'une PIÈCE ne sont pas ceux d'un document : elle n'est ni envoyée ni signée,
+   elle est déposée puis vérifiée. Sans ces deux entrées, le coffre affichait « VALIDEE » brut
+   en gris, au milieu de libellés soignés. */
+const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"],
+  VALIDEE: ["Validée", "g"], DEPOSEE: ["À vérifier", "a"] };
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 
 // Barre de progression compacte + pourcentage (réutilisée pour dossier et groupe).
@@ -372,11 +375,22 @@ function ArchivesView({ onError, onInfo }) {
     const archive_ids = docs.filter((d) => d.source === "archive").map((d) => d.doc_id);
     const document_ids = docs.filter((d) => d.source === "gen").map((d) => d.doc_id);
     const total = archive_ids.length + document_ids.length;
-    if (!total) { onError?.("Aucun document à supprimer ici."); return false; }
+    /* LES PIÈCES NE SE SUPPRIMENT PAS D'ICI, et il faut le DIRE. Les compter en silence
+       laisserait croire qu'un « supprimer tout le stagiaire » a tout emporté, alors que les
+       scans d'identité resteraient en base — exactement l'inverse de ce qu'on croit avoir fait.
+       Leur effacement appartient au dossier, où il passe par la purge prévue. */
+    const pieces = docs.filter((d) => d.source === "piece").length;
+    if (!total) {
+      onError?.(pieces
+        ? `Rien à supprimer ici : ${pieces} pièce(s) justificative(s), qui s'effacent depuis le dossier du stagiaire.`
+        : "Aucun document à supprimer ici.");
+      return false;
+    }
     const detail = document_ids.length && archive_ids.length
       ? ` (${document_ids.length} généré(s), ${archive_ids.length} archivé(s))`
       : "";
-    if (!window.confirm(`Supprimer définitivement ${total} document(s)${what ? `, ${what}` : ""}${detail} ?\nCette action est irréversible et les supprime de la base.`)) return false;
+    const garde = pieces ? `\n${pieces} pièce(s) justificative(s) ne seront PAS supprimées : elles s'effacent depuis le dossier du stagiaire.` : "";
+    if (!window.confirm(`Supprimer définitivement ${total} document(s)${what ? `, ${what}` : ""}${detail} ?\nCette action est irréversible et les supprime de la base.${garde}`)) return false;
     try {
       const { deleted } = await bulkDeleteArchives(archive_ids, document_ids);
       onInfo?.(`${deleted} document(s) supprimé(s).`);
@@ -465,15 +479,26 @@ function ArchivesView({ onError, onInfo }) {
                                         <span style={{ flex: 1, minWidth: 0 }}>
                                           <b>{d.title}</b>
                                           <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
-                                            {d.signed_at ? `signé le ${dateHeure(d.signed_at)}` : d.sent_at ? `envoyé le ${dateHeure(d.sent_at)}` : ""}
+                                            {d.source === "piece"
+                                              ? (d.sent_at ? `déposée le ${dateHeure(d.sent_at)}` : "")
+                                              : d.signed_at ? `signé le ${dateHeure(d.signed_at)}` : d.sent_at ? `envoyé le ${dateHeure(d.sent_at)}` : ""}
                                           </span>
                                         </span>
                                         <Badge tone={tone}>{lab}</Badge>
                                         <button className="iconbtn" title="Aperçu" aria-label={`Aperçu de ${d.title}`}
-                                          onClick={() => d.source === "archive" ? window.open(archiveFileUrl(d.doc_id), "_blank", "noopener") : setViewId(d.doc_id)}><Icon name="eye" size={16} /></button>
-                                        <button className="iconbtn" title="Télécharger le PDF" aria-label={`Télécharger le PDF de ${d.title}`}
-                                          onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
-                                        {isAdmin && (
+                                          onClick={() => d.source === "piece" ? window.open(pieceFichierUrl(d.doc_id), "_blank", "noopener")
+                                            : d.source === "archive" ? window.open(archiveFileUrl(d.doc_id), "_blank", "noopener") : setViewId(d.doc_id)}><Icon name="eye" size={16} /></button>
+                                        {/* NI TÉLÉCHARGEMENT NI SUPPRESSION SUR UNE PIÈCE. Le fichier n'est pas
+                                            forcément un PDF (une photo de carte d'identité, le plus souvent) et
+                                            s'ouvre déjà en ligne — d'où on l'enregistre. Surtout, l'effacer
+                                            appartient au dossier, où il passe par la purge prévue : un scan
+                                            d'identité supprimé doit l'être avec son dépôt, pas isolément depuis
+                                            un coffre qui range par formation. */}
+                                        {d.source !== "piece" && (
+                                          <button className="iconbtn" title="Télécharger le PDF" aria-label={`Télécharger le PDF de ${d.title}`}
+                                            onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
+                                        )}
+                                        {isAdmin && d.source !== "piece" && (
                                           <button className="iconbtn del" title="Supprimer ce document" aria-label={`Supprimer ${d.title}`} onClick={() => deleteDocs([d], d.title)}><Icon name="trash" size={15} /></button>
                                         )}
                                       </div>

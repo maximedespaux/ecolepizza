@@ -35,6 +35,14 @@ const STATUTS = ['ATTENDUE', 'DEPOSEE', 'VALIDEE', 'REFUSEE'];
  * s'édite pas, et accepter du .docx ouvrirait la porte aux macros. */
 const MIMES = ['image/webp', 'image/jpeg', 'image/png', 'application/pdf'];
 const MAX_OCTETS = 3 * 1024 * 1024;
+/* PLAFOND ABSOLU, celui qu'aucune pièce ne peut dépasser. `MAX_OCTETS` n'est que le plafond
+   COMMUN, celui qui s'applique à une pièce sans réglage propre ; chaque pièce peut relever le
+   sien jusqu'ici (cf. `champsType`). La coupure de transport doit donc se caler sur CE nombre,
+   pas sur le plafond commun : calée sur `MAX_OCTETS`, elle tranchait à 3,5 Mo tout envoi, et
+   régler une pièce à 10 Mo ne changeait rien — le fichier mourait avant d'atteindre le code qui
+   connaît la limite. Mesuré : un justificatif de 5,1 Mo refusé sur une pièce réglée plus haut,
+   avec un message vide puisque l'erreur venait de multer et non du contrôleur. */
+const MAX_OCTETS_ABSOLU = 25 * 1024 * 1024;
 
 // Formats que l'app sait recevoir, déchiffrer et resservir. Une pièce peut n'en accepter qu'un
 // SOUS-ENSEMBLE (ex. « PDF seul »), jamais un format hors de cette liste (cf. § .docx ci-dessus).
@@ -90,7 +98,7 @@ const champsType = (b) => ({
     fichiers_attendus: Math.min(12, Math.max(1, Number(b?.fichiers_attendus) || 1)),
     // Taille max PAR PIÈCE en octets, bornée [100 Ko, 25 Mo] ; null = plafond commun (3 Mo).
     max_octets: Number(b?.max_octets) > 0
-        ? Math.min(25 * 1024 * 1024, Math.max(100 * 1024, Math.round(Number(b.max_octets)))) : null,
+        ? Math.min(MAX_OCTETS_ABSOLU, Math.max(100 * 1024, Math.round(Number(b.max_octets)))) : null,
     // Formats acceptés PAR PIÈCE (sous-ensemble des formats connus). Rien coché, ou tous : null
     // (= aucune restriction propre, on retombe sur les formats par défaut).
     mimes: (() => {
@@ -272,7 +280,7 @@ const deposer = async (req, res) => {
                 [req.params.pieceTypeId, req.user.organization_id]);
             pt = row || null;
         } catch (err) { if (!noTable(err)) throw err; }
-        const maxOctets = (pt && pt.max_octets) || MAX_OCTETS;
+        const maxOctets = Math.min(MAX_OCTETS_ABSOLU, (pt && pt.max_octets) || MAX_OCTETS);
         const mimesOk = (pt && parseMimes(pt.mimes)) || MIMES;
         if (f.buffer.length > maxOctets) {
             const mo = Math.round(maxOctets / 1024 / 1024 * 10) / 10;
@@ -455,4 +463,4 @@ const verifier = async (req, res) => {
 
 module.exports = { listTypes, createType, updateType, deleteType, listDossier, piecesDuDossier,
     deposer, servirFichier, supprimerFichier, verifier,
-    STATUTS, MIMES, MIMES_CONNUS, MAX_OCTETS, champsType, parseMimes, noTable, ABSENTE };
+    STATUTS, MIMES, MIMES_CONNUS, MAX_OCTETS, MAX_OCTETS_ABSOLU, champsType, parseMimes, noTable, ABSENTE };

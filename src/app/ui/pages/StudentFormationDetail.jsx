@@ -72,18 +72,21 @@ function StudentFormationDetail() {
        compte les fichiers déjà déposés pour refuser celui de trop. En parallèle, deux envois
        liraient le même compte et passeraient tous les deux le plafond. */
     let envoyes = 0;
-    let echec = null;
+    const echecs = [];
     for (const f of fichiers) {
+      /* ON CONTINUE après un refus : le motif est souvent PROPRE au fichier (taille, format),
+         et abandonner les suivants les perdrait sans raison. Chaque refus garde le NOM du
+         fichier, sans quoi il reste à deviner lequel n'est pas passé. */
       try { await deposerPiece(id, pieceCible.current, f); envoyes += 1; }
-      catch (err) { echec = err.message; break; }  // la suite tomberait sur le même motif
+      catch (err) { echecs.push(`${f.name} (${err.message})`); }
     }
     if (envoyes) load();
-    if (echec) {
+    if (echecs.length) {
       setStatus({
         type: "error",
         message: envoyes
-          ? `${envoyes} document${envoyes > 1 ? "s" : ""} sur ${fichiers.length} envoyé${envoyes > 1 ? "s" : ""}. Les suivants ont été refusés : ${echec}`
-          : echec,
+          ? `${envoyes} document${envoyes > 1 ? "s" : ""} sur ${fichiers.length} envoyé${envoyes > 1 ? "s" : ""}. Refusé${echecs.length > 1 ? "s" : ""} : ${echecs.join(" · ")}`
+          : `Refusé${echecs.length > 1 ? "s" : ""} : ${echecs.join(" · ")}`,
       });
     } else {
       setStatus({
@@ -159,7 +162,12 @@ function StudentFormationDetail() {
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                             <b style={{ flex: 1, minWidth: 0 }}>Fournir&nbsp;: {e.p.label}</b>
                             <Badge tone={{ done: "g", wait: "a", refused: "r", todo: "n", current: "b" }[etat]}>{pas.label}</Badge>
-                            {e.p.fichiers?.length > 0 && (
+                            {/* UN SEUL FICHIER : un bouton « Voir » suffit, la ligne reste courte.
+                                PLUSIEURS : ils sont listés en dessous, chacun avec son nom — le
+                                bouton unique pointait `fichiers[0]`, et le stagiaire qui envoyait
+                                six pages n'avait aucun moyen de vérifier que les six étaient
+                                parties. */}
+                            {e.p.fichiers?.length === 1 && (
                               <button className="btn sm ghost" onClick={() => window.open(pieceFichierUrl(e.p.fichiers[0].id), "_blank", "noopener")}>
                                 <Icon name="eye" size={14} /> Voir
                               </button>
@@ -170,6 +178,22 @@ function StudentFormationDetail() {
                               </button>
                             )}
                           </div>
+                          {e.p.fichiers?.length > 1 && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3, margin: "5px 0 0" }}>
+                              {e.p.fichiers.map((f, k) => (
+                                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5 }}>
+                                  <span style={{ color: "var(--dim)", flex: "0 0 auto", fontVariantNumeric: "tabular-nums" }}>{k + 1}.</span>
+                                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                    title={f.nom || `Fichier ${k + 1}`}>{f.nom || `Fichier ${k + 1}`}</span>
+                                  <button className="btn sm ghost" style={{ flex: "0 0 auto" }}
+                                    aria-label={`Voir ${f.nom || `le fichier ${k + 1}`}`}
+                                    onClick={() => window.open(pieceFichierUrl(f.id), "_blank", "noopener")}>
+                                    <Icon name="eye" size={13} /> Voir
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           {e.p.consigne && <p className="hint" style={{ margin: "2px 0 0" }}>{e.p.consigne}</p>}
                           {e.etat === "refused" && e.p.motif_refus && (
                             <p className="hint" style={{ margin: "4px 0 0", color: "var(--red, #c0392b)" }}>
