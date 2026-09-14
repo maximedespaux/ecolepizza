@@ -67,6 +67,26 @@ async function getOrgSigner(conn, orgId, orgName) {
     return p12;
 }
 
+/* MODÈLE FIGÉ — un modèle dont le corps EST un PDF, servi tel quel : livret d'accueil,
+   règlement intérieur, plan d'accès. Rien à remplir, rien à convertir : ces pièces sont mises
+   en page ailleurs et ni l'éditeur ni un aller-retour LibreOffice ne les reproduiraient
+   fidèlement.
+
+   Les octets vivent en UN exemplaire, sur le modèle. Les recopier dans chaque dossier —
+   comme le fait `document_fichier` pour un document REÇU, qui lui est propre à un stagiaire —
+   multiplierait le poids du livret par le nombre de stagiaires : quelques mégaoctets fois un
+   millier de dossiers, pour mille fois le même fichier.
+
+   On ne résout QUE `template_slug`, sans la cascade de repli sur le type de document : un
+   document rattaché à un modèle-fichier est forcément né après lui, donc avec son slug écrit
+   par `prepareLearnerDoc`. La cascade ne sert qu'aux lignes anciennes, qui par construction
+   ne peuvent pas en dépendre. */
+async function modeleFige(orgId, doc) {
+    if (!doc || !doc.template_slug) return null;
+    const content = await getTemplateContent(orgId, doc.template_slug);
+    return content && content.kind === 'pdf' ? content : null;
+}
+
 // Rend le HTML rempli d'un document (déterministe, sans LibreOffice) pour empreinte.
 async function buildDocHtml(conn, orgId, doc) {
     const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
@@ -443,11 +463,24 @@ const getDocumentFile = async (req, res) => {
             throw e;
         }
         const f = rows[0];
-        if (!f) return res.status(404).json({ message: 'Aucun fichier importé.' });
-        const clair = decryptBytes(f.bytes);
-        res.setHeader('Content-Type', f.mime || 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(f.nom || 'document')}"`);
-        res.send(clair);
+        if (f) {
+            const clair = decryptBytes(f.bytes);
+            res.setHeader('Content-Type', f.mime || 'application/pdf');
+            res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(f.nom || 'document')}"`);
+            return res.send(clair);
+        }
+
+        /* AUCUN FICHIER REÇU : le document tient peut-être son corps d'un MODÈLE FIGÉ. La même
+           route sert les deux, parce que c'est la même question côté écran — « montre-moi le
+           fichier de ce document » — et que l'aperçu n'a pas à savoir d'où il vient. */
+        const [[doc]] = await conn.query(
+            'SELECT template_slug, title FROM generated_document WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        const fige = await modeleFige(req.user.organization_id, doc);
+        if (!fige) return res.status(404).json({ message: 'Aucun fichier importé.' });
+        res.setHeader('Content-Type', fige.mime || 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fige.name || (doc && doc.title) || 'document')}"`);
+        res.send(fige.buffer);
     } catch (err) {
         console.error('Erreur lecture du document importé :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -601,7 +634,15 @@ const getDocument = async (req, res) => {
             }
         } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
 
-        const html = importe ? null : await buildDocHtml(conn, doc.organization_id, doc);
+        /* MÊME LOGIQUE POUR UN MODÈLE FIGÉ : il n'y a pas de corps à rendre, le PDF du modèle
+           EST le document. On l'annonce au front, qui affiche le fichier au lieu d'un cadre
+           vide accompagné d'un « ce document n'a pas encore de modèle » — il en a un. */
+        const fige = importe ? null : await modeleFige(doc.organization_id, doc);
+        const modele_fichier = fige
+            ? { nom: fige.name || null, mime: fige.mime || 'application/pdf', taille: fige.buffer.length }
+            : null;
+
+        const html = (importe || modele_fichier) ? null : await buildDocHtml(conn, doc.organization_id, doc);
         // Signature stagiaire pilotée par le modèle (Modeles de document : stagiaire_sign).
         const orgSteps = await loadOrgSteps(doc.organization_id);
         // Document dont la signature incombe à l'entreprise : pas signable par le stagiaire.
@@ -625,9 +666,14 @@ const getDocument = async (req, res) => {
                 html,
                 // Métadonnées du fichier reçu (jamais son contenu : il se lit par /:id/fichier).
                 importe,
+                // Idem pour un modèle figé : le PDF se lit par la même route.
+                modele_fichier,
                 // Dit au front POURQUOI il n'y a pas de corps, pour qu'il n'affiche pas un
                 // cadre vide sans explication.
-                no_template: html === null || html === undefined,
+                /* Un fichier — reçu ou figé — n'est PAS un document sans modèle : il a un
+                   corps, simplement pas un corps à rendre. Sans cette nuance l'écran
+                   annoncerait « ce document n'a pas encore de modèle » au-dessus du PDF. */
+                no_template: !importe && !modele_fichier && (html === null || html === undefined),
             },
         });
     } catch (err) {
@@ -729,6 +775,9 @@ async function composeDocPdf(conn, r) {
             bleed: (r.content.layout && r.content.layout.bleed) || {},
         });
     }
+    /* LE PDF FIGÉ EST LE DOCUMENT. Le repasser par LibreOffice le dégraderait sans rien
+       apporter : il n'a ni jeton à remplir ni mise en page à recalculer. */
+    if (r.content.kind === 'pdf') return r.content.buffer;
     const out = renderTemplate(r.content.buffer, r.ctx, r.slug);
     return docxToPdf(out.buffer);
 }

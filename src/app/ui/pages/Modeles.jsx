@@ -7,7 +7,8 @@ import { getTemplates, saveTemplate, deleteTemplate, resetTemplate, duplicateTem
   getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence,
   getEmargementTemplates, createEmargementTemplate, updateEmargementTemplate, deleteEmargementTemplate,
   reorderEmargementTemplates,
-  getPieceTypes, createPieceType, updatePieceType, deletePieceType } from "../api/apiClient.js";
+  getPieceTypes, createPieceType, updatePieceType, deletePieceType,
+  uploadTemplate } from "../api/apiClient.js";
 import { EMARG_DEFAULTS } from "./EmargementEditor.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -61,6 +62,9 @@ function condValueLabel(c) {
 
 /** Une feuille d'émargement n'est pas un document : elle ne se signe ni ne se rédige pareil. */
 const estEmarg = (t) => t.kind === "emargement";
+/* MODÈLE FIGÉ : son corps est un PDF servi tel quel, pour une pièce mise en page ailleurs
+   (livret d'accueil, règlement intérieur). Ni jeton ni éditeur — le fichier EST le document. */
+const estFige = (t) => t.kind === "pdf" && t.has_file;
 // Formats qu'une pièce peut accepter (sous-ensemble de ceux que l'app sait recevoir/resservir).
 const FORMATS_PIECE = [
   { mime: "image/jpeg", label: "JPEG" }, { mime: "image/png", label: "PNG" },
@@ -104,6 +108,10 @@ function cellSignature(t) {
 /** Le document a-t-il un corps ? Un émargement n'en a pas : il a une mise en page. */
 function cellEtat(t) {
   if (estEmarg(t)) return <Badge tone="g">Mise en page</Badge>;
+  /* UN MODÈLE FIGÉ DOIT SE VOIR COMME TEL. Son `body_html` est conservé — le basculement
+     reste réversible — si bien qu'il afficherait « Créé » en laissant croire que c'est le
+     corps de l'éditeur qui sort à l'impression. C'est le PDF qui sort. */
+  if (estFige(t)) return <Badge tone="b" title={t.file_name || "Fichier PDF joint"}>PDF joint</Badge>;
   return t.has_body ? <Badge tone="g">Créé</Badge> : <span className="hint">à créer</span>;
 }
 
@@ -120,6 +128,43 @@ function Modeles() {
   const [pieceItems, setPieceItems] = useState([]); // référentiel des types de pièces à fournir
   const [view, setView] = useState("documents");      // onglet : "documents" | "conditions"
   const condBySlug = Object.fromEntries(conditions.map((c) => [c.slug, c]));
+  const fichierRef = useRef(null);              // sélecteur de PDF, caché
+  const [slugFichier, setSlugFichier] = useState(null); // modèle visé par le prochain envoi
+
+  /* JOINDRE UN PDF. Le sélecteur de fichier est unique et caché : un `<input type="file">`
+     par ligne en ferait vingt-deux, dont vingt et un inutiles à chaque instant. On mémorise
+     le slug visé, puis on déclenche le clic. */
+  function demanderFichier(t) {
+    setSlugFichier(t.slug);
+    fichierRef.current?.click();
+  }
+
+  async function envoyerFichier(e) {
+    const f = e.target.files?.[0];
+    /* Remise à zéro immédiate : sans elle, re-choisir LE MÊME fichier après un échec
+       n'émettrait aucun évènement `change` et le bouton paraîtrait mort. */
+    e.target.value = "";
+    if (!f || !slugFichier) return;
+    setBusy(slugFichier);
+    try {
+      await uploadTemplate(slugFichier, f);
+      setStatus({ type: "success", message: `PDF joint : ${f.name}` });
+      await load();
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
+    finally { setBusy(null); setSlugFichier(null); }
+  }
+
+  /* REVENIR À L'ÉDITEUR. Les octets ne sont pas effacés : seul `kind` bascule, donc le
+     chemin inverse reste ouvert tant que le fichier est en base. */
+  async function rendreALEditeur(t) {
+    setBusy(t.slug);
+    try {
+      await saveTemplate(t.slug, { kind: "builder" });
+      setStatus({ type: "success", message: "Le modèle repasse à l'éditeur. Le PDF reste joint." });
+      await load();
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
+    finally { setBusy(null); }
+  }
 
   async function load() {
     try { const { data } = await getTemplates(); setItems([...data].sort((a, b) => a.sort_order - b.sort_order)); }
@@ -315,13 +360,33 @@ function Modeles() {
                    sur vingt-deux lignes font quatre-vingt-seize boutons, et l'œil doit relire
                    la série entière à chaque ligne avant de viser. */
                 <div className="tpl-actions">
-                  <button className="btn sm primary" title={estEmarg(t) ? "Éditer la mise en page" : "Ouvrir l'éditeur de document"}
-                    onClick={() => navigate(estEmarg(t) ? `/modeles/emargement/${t.id}` : `/modeles/${t.slug}/editeur`)}>Éditer</button>
+                  {/* SUR UN MODÈLE FIGÉ, LE GESTE PRINCIPAL N'EST PAS « ÉDITER ». Enregistrer
+                      depuis l'éditeur HTML repasse l'étape en mode éditeur (le serveur le fait dès
+                      qu'un corps est envoyé) : mettre ce bouton en avant reviendrait à poser un
+                      piège, où l'on croit retoucher le livret et où l'on débranche son PDF. */}
+                  {estFige(t) ? (
+                    <button className="btn sm primary" disabled={busy === t.slug}
+                      title={`Remplacer le PDF joint${t.file_name ? ` (${t.file_name})` : ""}`}
+                      onClick={() => demanderFichier(t)}>Remplacer le PDF</button>
+                  ) : (
+                    <button className="btn sm primary" title={estEmarg(t) ? "Éditer la mise en page" : "Ouvrir l'éditeur de document"}
+                      onClick={() => navigate(estEmarg(t) ? `/modeles/emargement/${t.id}` : `/modeles/${t.slug}/editeur`)}>Éditer</button>
+                  )}
                   <MenuActions label={`Autres actions pour ${t.label}`}>
                     <button type="button" onClick={() => setEditing({ ...t })}><Icon name="settings" size={15} /> Réglages</button>
                     {!estEmarg(t) && (
                       <button type="button" disabled={busy === t.slug} onClick={() => onDuplicate(t)}>
                         <Icon name="copy" size={15} /> Dupliquer
+                      </button>
+                    )}
+                    {!estEmarg(t) && !estFige(t) && (
+                      <button type="button" disabled={busy === t.slug} onClick={() => demanderFichier(t)}>
+                        <Icon name="file-text" size={15} /> Joindre un PDF
+                      </button>
+                    )}
+                    {estFige(t) && (
+                      <button type="button" disabled={busy === t.slug} onClick={() => rendreALEditeur(t)}>
+                        <Icon name="history" size={15} /> Revenir à l'éditeur
                       </button>
                     )}
                     {!estEmarg(t) && t.is_default && (
@@ -338,6 +403,10 @@ function Modeles() {
               ) },
           ]}
         />
+        {/* Sélecteur de PDF, unique et caché : il sert toutes les lignes, le slug visé étant
+            mémorisé avant le clic. `accept` filtre la boîte de dialogue ; le serveur, lui,
+            vérifie l'en-tête %PDF- — un nom de fichier ne prouve rien. */}
+        <input ref={fichierRef} type="file" accept="application/pdf,.pdf" hidden onChange={envoyerFichier} />
       </Card>
 
       {/* PIÈCES À FOURNIR — le référentiel de ce que l'école peut DEMANDER au stagiaire (distinct

@@ -104,15 +104,18 @@ test('l\'APERÇU sert le fichier reçu, pas le modèle régénéré', () => {
     const MODALE = fs.readFileSync(
         path.join(RACINE, 'src/app/ui/components/DocumentViewModal.jsx'), 'utf8');
     // Le serveur annonce le fichier et NE rend pas de corps pour un document importé.
-    assert.match(CTRL, /const html = importe \? null : await buildDocHtml\(/);
-    // L'écran n'appelle même plus le rendu, et attend de SAVOIR avant de décider.
-    assert.match(MODALE, /if \(doc\.importe\) return;/);
+    assert.match(CTRL, /const html = \(importe \|\| modele_fichier\) \? null : await buildDocHtml\(/);
+    /* L'écran n'appelle même plus le rendu, et attend de SAVOIR avant de décider. La garde
+       couvre désormais les DEUX corps-fichiers : le document reçu par e-mail, et le modèle
+       figé (un PDF servi tel quel). Même raison dans les deux cas — régénérer le modèle
+       montrerait autre chose que ce qui fait foi. */
+    assert.match(MODALE, /if \(doc\.importe \|\| doc\.modele_fichier\) return;/);
     assert.match(MODALE, /\}, \[id, doc\]\);/, 'l\'effet dépend de `doc`, sinon il décide avant de savoir');
     // PDF en ligne, image en ligne, tout le reste par un lien : un cadre vide ferait croire à un
     // document blanc.
-    assert.match(MODALE, /\/pdf\/i\.test\(doc\.importe\.mime/);
+    assert.match(MODALE, /\/pdf\/i\.test\(fichier\.mime/);
     assert.match(MODALE, /\^image\\\//);
-    assert.match(MODALE, /Ouvrir le document reçu/);
+    assert.match(MODALE, /Ouvrir le document</);
     /* ET LES IMPORTS SUIVENT. C'est le défaut d'hier, à l'identique : un symbole utilisé sans
        être importé ne se voit ni à la compilation ni au build, seulement à l'exécution. */
     assert.match(MODALE, /import \{[^}]*API_BASE_URL[^}]*\} from "\.\.\/api\/apiClient\.js"/);
