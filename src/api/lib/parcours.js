@@ -70,6 +70,12 @@ function computeDocParcours({ steps = [], docs = [], pieces = {} } = {}) {
         docId: r.doc ? r.doc.id : null,
         docStatus: r.doc ? r.doc.status : null,
         piece: !!r.s.piece_id, // étape « pièce » (dépôt du stagiaire) — gérée par le panneau Pièces, pas « à préparer »
+        /* L'IDENTIFIANT DU TYPE DE PIÈCE, et pas seulement le drapeau. Sans lui, l'écran sait
+           qu'une étape est une pièce mais ne peut rien en faire : déposer un fichier pour le
+           compte du stagiaire — une carte d'identité reçue par courriel — exige de nommer la
+           pièce visée. Il cherchait à la place un MODÈLE DE DOCUMENT portant ce slug, qui
+           n'existe pas : une pièce vit dans `piece_type`, pas dans `document_template`. */
+        piece_id: r.s.piece_id || null,
         pieceStatus: r.pieceStatus || null, // ATTENDUE | DEPOSEE | VALIDEE | REFUSEE (étapes « pièce »)
         status: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo',
     }));

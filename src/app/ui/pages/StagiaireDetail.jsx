@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, updateStagiaire, importDocumentFile, downloadDocumentImporte} from "../api/apiClient.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, updateStagiaire, importDocumentFile, downloadDocumentImporte, deposerPiece} from "../api/apiClient.js";
 import { CADRES, cadreClass } from "../lib/cadres.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -319,6 +319,29 @@ function StagiaireDetail() {
     const step = etapeImport;
     setEtapeImport(null);
     if (!file || !step) return;
+
+    /* UNE ÉTAPE « PIÈCE » NE PASSE PAS PAR LES DOCUMENTS GÉNÉRÉS. Une carte d'identité n'est
+       pas une pièce que l'école PRODUIT : elle vit dans `piece_type` / `piece_depot`, avec son
+       circuit de vérification (déposée → validée ou refusée avec motif) et sa suppression
+       propre. Le code cherchait ici un MODÈLE DE DOCUMENT portant le slug de l'étape — il n'en
+       existe aucun — et l'écran répondait « Modèle introuvable pour cette étape » à qui
+       importait simplement une carte d'identité reçue par courriel.
+       Le serveur autorise explicitement le personnel à déposer pour le compte du stagiaire. */
+    if (step.piece) {
+      if (!curEnrId) { setStatus({ type: "error", message: "Sélectionne d'abord une inscription." }); return; }
+      if (!step.piece_id) { setStatus({ type: "error", message: "Cette pièce n'est pas identifiable. Rechargez la page." }); return; }
+      try {
+        await deposerPiece(curEnrId, step.piece_id, file);
+        /* On annonce l'étape SUIVANTE : un dépôt par le personnel ne vaut pas validation, et
+           la pièce reste « à vérifier » tant que quelqu'un ne l'a pas contrôlée. */
+        setStatus({ type: "success", message: `« ${file.name} » déposé pour « ${step.label} ». À vérifier dans les pièces du dossier.` });
+        setParcoursRefresh((n) => n + 1);
+      } catch (err) {
+        setStatus({ type: "error", message: err.message });
+      }
+      return;
+    }
+
     const fd = new FormData();
     fd.append("file", file);
     if (step.docId) {
@@ -451,7 +474,7 @@ function StagiaireDetail() {
             <input ref={fichierRef} type="file" onChange={envoyerImport} style={{ display: "none" }}
               accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" aria-hidden="true" tabIndex={-1} />
             {/* Pièces justificatives du dossier sélectionné : validation/refus par le personnel. */}
-            <PiecesReview enrollmentId={curEnrId} />
+            <PiecesReview enrollmentId={curEnrId} refresh={parcoursRefresh} />
             <div className="divider" style={{ margin: "18px 0" }} />
           </>
         )}
