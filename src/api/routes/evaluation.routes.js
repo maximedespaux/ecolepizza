@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    getGrille, saveGrille, getNotesSession, saveNote, saveVerdict,
+    getGrille, saveGrille, getNotesSession, saveNote,
 } = require('../controllers/evaluation.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -17,9 +17,10 @@ router.put('/formation/:programId', authorizeRoles(...ADMIN_ROLES), saveGrille);
 router.get('/session/:id', authorizeRoles(...STAFF_ROLES), getNotesSession);
 router.put('/note', authorizeRoles(...STAFF_ROLES), saveNote);
 
-/* L'AVIS DU JURY est un acte du jury, pas de l'administration : il vit sur la même route que
-   la note, avec les mêmes droits. C'est l'espace intervenant (routes/intervenant.routes.js)
-   qui ouvre la porte aux membres externes, sous leur propre vérification d'affectation. */
-router.put('/verdict', authorizeRoles(...STAFF_ROLES), saveVerdict);
+/* PAS DE ROUTE « VERDICT » ICI, ET C'EST VOULU. L'avis est prononcé par le jury, qui le saisit
+   depuis son espace (routes/intervenant.routes.js) — celle-ci délègue au même contrôleur après
+   avoir vérifié l'affectation. Ouvrir en plus une porte pour le bureau créerait une capacité
+   que personne n'emprunte : du code mort, ou pire, un chemin qui contourne la vérification
+   d'affectation sans que personne ne s'en serve assez pour le remarquer. */
 
 module.exports = router;

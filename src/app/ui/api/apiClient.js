@@ -1244,16 +1244,29 @@ export function deleteContribution(id) {
 /* ÉVALUATION PRATIQUE (migration 148) — la grille d'une formation, les notes d'une session.
    Les POINTS ne sont jamais envoyés : on transmet la MESURE (un temps, une note, un geste
    acquis) et le serveur applique le barème. Cf. api/lib/bareme.js. */
-export function getGrilleEvaluation(programId) {
-  return request(`/evaluations/formation/${programId}`);
+export function getGrilleEvaluation(programId, role) {
+  /* Une formation porte DEUX grilles : celle du formateur (notation continue) et celle du jury
+     (examen). Le rôle dit laquelle on demande. */
+  return request(`/evaluations/formation/${programId}${role ? `?role=${encodeURIComponent(role)}` : ""}`);
 }
 export function saveGrilleEvaluation(programId, payload) {
   return request(`/evaluations/formation/${programId}`, { method: "PUT", body: JSON.stringify(payload) });
 }
-export function getEvaluationSession(sessionId, silent) {
+/* ESPACE INTERVENANT — les mêmes gestes, sous une porte de plus : le serveur y revérifie que
+   le membre du jury est AFFECTÉ à la session avant de déléguer aux contrôleurs d'évaluation. */
+export function getMaGrilleJury(sessionId, silent) {
+  return request(`/intervenant/evaluation/${sessionId}`, { silent });
+}
+export function noterJury(payload) {
+  return request("/intervenant/evaluation/note", { method: "PUT", body: JSON.stringify(payload) });
+}
+export function verdictJury(payload) {
+  return request("/intervenant/evaluation/verdict", { method: "PUT", body: JSON.stringify(payload) });
+}
+export function getEvaluationSession(sessionId, silent, role) {
   /* `silent` : la relecture qui suit CHAQUE note ne doit pas faire clignoter la barre de
      chargement — le formateur saisit en rafale, et l'écran passerait son temps à scintiller. */
-  return request(`/evaluations/session/${sessionId}`, { silent });
+  return request(`/evaluations/session/${sessionId}${role ? `?role=${encodeURIComponent(role)}` : ""}`, { silent });
 }
 export function saveNoteEvaluation(payload) {
   return request("/evaluations/note", { method: "PUT", body: JSON.stringify(payload) });

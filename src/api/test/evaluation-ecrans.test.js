@@ -53,7 +53,7 @@ test('LES TOTAUX SONT RELUS DU SERVEUR après chaque note, pas recalculés à l\
 test('la relecture ne fait pas clignoter la barre de chargement', () => {
     /* Le formateur saisit en rafale : une barre de chargement par note transformerait l'écran
        en stroboscope. `silent` existe déjà pour les relectures de fond. */
-    assert.match(lire('api/apiClient.js'), /getEvaluationSession\(sessionId, silent\)/);
+    assert.match(lire('api/apiClient.js'), /getEvaluationSession\(sessionId, silent, role\)/);
     assert.match(SAISIE, /charger\(true\)/);
 });
 
@@ -63,14 +63,29 @@ test('UN EXERCICE DÉSACTIVÉ NE REMONTE PAS DANS L\'ÉDITEUR — sinon l\'enreg
        qu'on croyait sorti de la grille se remettrait à compter dans les totaux. */
     /* CHAQUE lecture de la réponse du serveur est vérifiée, pas seulement la première : il y en
        a deux (au chargement et après enregistrement), et n'en contrôler qu'une laisserait
-       l'autre casser en silence — c'est ce qui vient d'arriver en éprouvant ce test. */
-    const lectures = [...GRILLE.matchAll(/\(g\.exercices \|\| \[\]\)(\.[a-zA-Z]+)/g)];
-    assert.ok(lectures.length >= 2, 'le serveur renvoie la grille au chargement ET après enregistrement');
-    for (const m of lectures) {
-        assert.strictEqual(m[1], '.filter',
-            'toute lecture de la grille renvoyée doit d\'abord écarter les exercices désactivés');
+       l'autre casser en silence — c'est ce qui vient d'arriver en éprouvant ce test.
+       LES COMPÉTENCES SONT SOUMISES À LA MÊME RÈGLE : le serveur désactive une compétence
+       retirée, et la renvoyer telle quelle la ressusciterait exactement comme un exercice. */
+    /* ET LES CRITÈRES NE REMONTENT PAS DANS LA LISTE PLATE : ils appartiennent à leur
+       compétence, qui les renvoie déjà. Sans cette exclusion ils repartaient en double à
+       l'enregistrement — une fois comme critère, une fois comme exercice libre, donc détachés
+       de leur compétence. Trouvé en éprouvant ce test. */
+    for (const champ of ['exercices', 'competences']) {
+        const lectures = [...GRILLE.matchAll(new RegExp(`\\(g\\.${champ} \\|\\| \\[\\]\\)(.{0,70})`, 'gs'))];
+        assert.ok(lectures.length >= 2, `${champ} : le serveur renvoie la grille au chargement ET après enregistrement`);
+        for (const m of lectures) {
+            assert.match(m[1], /^\.filter\(/, `toute lecture de g.${champ} doit commencer par un filtre`);
+            assert.match(m[1], /\bactive\b/, `le filtre de g.${champ} doit écarter les éléments désactivés`);
+            /* ET LES CRITÈRES NE REMONTENT PAS DANS LA LISTE PLATE : ils appartiennent à leur
+               compétence, qui les renvoie déjà. Sans cette exclusion ils repartaient en DOUBLE à
+               l'enregistrement — une fois comme critère, une fois comme exercice libre, donc
+               détachés de leur compétence. Trouvé en éprouvant ce test. */
+            if (champ === 'exercices') {
+                assert.match(m[1], /!e\.competence_id/,
+                    'la liste plate ne doit pas reprendre les critères d\'une compétence');
+            }
+        }
     }
-    assert.ok(GRILLE.split('(g.exercices || []).filter((e) => e.active)').length - 1 === lectures.length);
 });
 
 test('l\'éditeur REPREND les identifiants renvoyés par le serveur', () => {
@@ -87,7 +102,11 @@ test('la grille se configure DANS LA FORMATION, et seulement sur une formation e
        au four à bois. Et une formation pas encore créée n'a pas d'identifiant : l'onglet
        ouvrirait sur une grille qui ne pourrait jamais s'enregistrer. */
     assert.match(FORMATIONS, /tab === "evaluation" && !isNew/);
-    assert.match(FORMATIONS, /<GrilleEvaluation programId=\{program\.id\}/);
+    assert.match(FORMATIONS, /<GrilleEvaluation [^>]*programId=\{program\.id\}/);
+    /* CHANGER DE RÔLE DOIT REMONTER LE COMPOSANT. Sans `key`, l'état de la grille précédente
+       (compétences, exercices) resterait affiché le temps du chargement — et un « Enregistrer »
+       à cet instant écrirait la mauvaise grille sur le mauvais rôle. */
+    assert.match(FORMATIONS, /<GrilleEvaluation key=\{evalRole\}/);
 });
 
 test('la rangée d\'onglets défile DANS SON CADRE, pas en poussant la page', () => {

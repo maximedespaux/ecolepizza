@@ -160,6 +160,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives" | "evaluation"
   const [archKind, setArchKind] = useState("stagiaire"); // arborescence : "stagiaire" | "entreprise"
   const [parcoursKind, setParcoursKind] = useState("stagiaire"); // parcours : "stagiaire" | "entreprise"
+  const [evalRole, setEvalRole] = useState("FORMATEUR"); // grille affichée : formateur ou jury
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
   // Couleur effective du badge + valeur hexadécimale pour le sélecteur natif.
@@ -471,7 +472,19 @@ function FormationModal({ program, onClose, onSaved, onError }) {
               passer par « Enregistrer » ci-dessous : la garder montée en permanence
               chargerait la grille de chaque formation qu'on ouvre, pour rien. */}
           {tab === "evaluation" && !isNew && (
-            <GrilleEvaluation programId={program.id} programTitle={form.title} />
+            <>
+              {/* DEUX GRILLES, DEUX ACTES. Le formateur note en continu pendant le stage ; le
+                  jury évalue le jour de l'examen, sur d'autres critères et avec d'autres
+                  règles. Une formation a besoin des deux en même temps. */}
+              <div className="seg" style={{ marginBottom: 12 }}>
+                <button type="button" className={"seg-btn" + (evalRole === "FORMATEUR" ? " on" : "")} onClick={() => setEvalRole("FORMATEUR")}>Notation du formateur</button>
+                <button type="button" className={"seg-btn" + (evalRole === "JURY" ? " on" : "")} onClick={() => setEvalRole("JURY")}>Grille du jury</button>
+              </div>
+              {/* `key` : changer de rôle doit REMONTER le composant, sinon l'état de la grille
+                  précédente (compétences, exercices) resterait affiché le temps du chargement —
+                  et un « Enregistrer » à ce moment-là écrirait la mauvaise grille. */}
+              <GrilleEvaluation key={evalRole} programId={program.id} programTitle={form.title} role={evalRole} />
+            </>
           )}
         </div>
         <div className="mfoot">

@@ -9,6 +9,7 @@ import { Icon } from "../components/Icon.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
+import JuryGrille from "../components/JuryGrille.jsx";
 
 const frDay = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
 
@@ -175,6 +176,11 @@ function IntervenantEspace() {
           </Card>
         ))
       )}
+
+      {/* LA GRILLE DU JURY, sous les demi-journées de la session concernée. Elle s'efface
+          d'elle-même quand la formation n'a pas de grille de jury — la plupart n'en ont pas, et
+          une carte vide sur chaque session ferait du bruit pour rien. */}
+      {(data || []).map((s) => <JuryGrille key={`j-${s.session_id}`} sessionId={s.session_id} />)}
 
       {signing && (
         <SignatureModal doc={{ label: signing.label }} defaultName={fullName} onConfirm={drawSign} onClose={() => setSigning(null)} />
