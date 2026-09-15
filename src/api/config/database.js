@@ -97,7 +97,14 @@ function reglerFuseau(p) {
                         + `(${err2.message}). Les horodatages resteront en UTC.`);
                 } else {
                     console.warn(`Fuseau de session : « ${FUSEAU} » inconnu du serveur — repli sur `
-                        + `${repli}. Chargez les tables de fuseaux (mysql_tzinfo_to_sql) pour que `
+                        /* LE NOM DE L'OUTIL A CHANGÉ : `mysql_tzinfo_to_sql` n'existe plus sur
+                           MariaDB 11 (le VPS est en 11.8), où il s'appelle `mariadb-tzinfo-to-sql`.
+                           Le message envoyait donc chercher une commande introuvable — mesuré en
+                           le suivant : « command not found », et le chargement silencieusement
+                           sans effet. On donne la commande ENTIÈRE et le nom actuel. */
+                        + `${repli}. Chargez les tables de fuseaux — `
+                        + `« sudo mariadb-tzinfo-to-sql /usr/share/zoneinfo | sudo mysql mysql » `
+                        + `(mysql_tzinfo_to_sql avant MariaDB 11) — pour que `
                         + `le changement d'heure suive tout seul.`);
                 }
             });
