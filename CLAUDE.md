@@ -126,7 +126,7 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **153 en attente (2026-09-15)**
+## 4. Migrations — **154 en attente (2026-09-15)**
 
 > **153 + reprise du coffre.** `153_archives_chiffrees.sql` ajoute `archive_document.empreinte`
 > et `.octets` ; le chiffrement des 1140 PDF déjà en base se fait ensuite avec
@@ -136,6 +136,11 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 > après, dans les deux sens. Vérification, plutôt que de croire cette ligne :
 > `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio'
 > AND table_name='archive_document' AND column_name='empreinte';`
+>
+> **154 — classeurs libres du coffre.** Ajoute `archive_document.dossier` : un rangement qui
+> n'est pas celui des sessions (assurance, agrément, certificat). Le code marche avant comme
+> après — sans la colonne, un dépôt en classeur est refusé par un 422 explicite, et tout le
+> reste se comporte comme aujourd'hui. Aucune reprise de données.
 
 
 **Vérifié le 2026-08-22 contre la base de production** (VPS, 85 tables), colonne par colonne et

@@ -38,8 +38,13 @@ test('TOUT CE QUI EST DANS database/ EST VERSIONNÉ', { skip: dansUnDepot ? fals
             if (!suivis.has(rel)) oublies.push(rel);
         }
     }
+    /* LE MESSAGE DIT LE GESTE. Ce test vire au rouge pendant qu'on écrit une migration, tant
+       qu'on ne l'a pas ajoutée — c'est voulu, et c'est même le moment le plus utile pour le
+       dire. Encore faut-il qu'il dise QUOI FAIRE : `git add` suffit (un fichier indexé est
+       suivi, le commit peut attendre). Sans cette phrase, on cherche une erreur dans le code. */
     assert.deepStrictEqual(oublies, [],
-        'Ces fichiers existent sur ce poste et NULLE PART AILLEURS : ils ne seront pas déployés.');
+        `Ces fichiers existent sur ce poste et NULLE PART AILLEURS : ils ne seront pas déployés.\n`
+        + `  Geste : git add ${oublies.join(' ')}`);
 });
 
 test('L\'OUTIL DE REPRISE DU COFFRE EST BIEN DANS LE DÉPÔT', { skip: dansUnDepot ? false : 'hors dépôt git' }, () => {

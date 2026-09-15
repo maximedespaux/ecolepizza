@@ -6,6 +6,7 @@ const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
 const { logAudit } = require('../lib/audit.js');
 const { aRanger, aServir, mesureDisponible } = require('../lib/coffre.js'); // coffre chiffré AU REPOS
+const { colonneExiste } = require('../lib/colonnes.js');
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 // Statuts « partagé avec le stagiaire » (envoyé / consulté / signé).
@@ -100,7 +101,8 @@ const getArchive = async (req, res) => {
                     DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
                     s.year, s.week,
                     p.code AS program_code, p.title AS program_title,
-                    l.id AS learner_id, l.first_name, l.last_name, 'gen' AS source
+                    l.id AS learner_id, l.first_name, l.last_name, 'gen' AS source,
+                    NULL AS dossier
              FROM generated_document gd
              JOIN learner l ON l.id = gd.learner_id
              LEFT JOIN document_formation df ON df.document_id = gd.id
@@ -121,7 +123,8 @@ const getArchive = async (req, res) => {
                         DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
                         s.year, s.week,
                         p.code AS program_code, p.title AS program_title,
-                        NULL AS learner_id, '' AS first_name, c.name AS last_name, 'gen' AS source
+                        NULL AS learner_id, '' AS first_name, c.name AS last_name, 'gen' AS source,
+                        NULL AS dossier
                  FROM generated_document gd
                  JOIN company c ON c.id = gd.company_id
                  LEFT JOIN training_session s ON s.id = gd.session_id
@@ -135,6 +138,9 @@ const getArchive = async (req, res) => {
         // stagiaire via le dossier, afin qu'il se range dans le MÊME dossier que ses
         // autres documents (regroupement par learner_id côté client) et non dans un
         // dossier « Nom Prénom » séparé.
+        /* Sondée AVANT la requête : la 154 peut ne pas être jouée, et l'écran doit alors
+           fonctionner exactement comme avant — sans classeur, pas avec une erreur SQL. */
+        const colDossier = await colonneExiste(conn, 'archive_document', 'dossier');
         const [arch] = await conn.query(
             `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id, 'LEARNER' AS scope,
                     NULL AS company_id, NULL AS company_name,
@@ -145,7 +151,8 @@ const getArchive = async (req, res) => {
                     l.id AS learner_id,
                     COALESCE(l.first_name, '') AS first_name,
                     COALESCE(l.last_name, ad.learner_name) AS last_name,
-                    'archive' AS source
+                    'archive' AS source,
+                    ${colDossier ? 'ad.dossier' : 'NULL AS dossier'}
              FROM archive_document ad
              LEFT JOIN enrollment e ON ad.ref LIKE 'emarg:%'
                   AND e.id = SUBSTRING_INDEX(SUBSTRING(ad.ref, 7), ':', 1)
@@ -205,6 +212,7 @@ const getArchive = async (req, res) => {
                     year: f.year, week: f.week,
                     program_code: f.program_code, program_title: f.program_title,
                     learner_id: f.learner_id, first_name: f.first_name, last_name: f.last_name,
+                    dossier: null,
                     source: 'piece',
                 };
             });
@@ -222,6 +230,14 @@ const getArchive = async (req, res) => {
 
 // Extrait année / semaine / formation / stagiaire depuis un chemin de dossier
 // (webkitRelativePath) : « …/2024/S12/[Formation]/Dupont Jean/devis.pdf ».
+/* Le titre d'un document déposé dans un CLASSEUR : son nom de fichier, sans le chemin ni
+   l'extension. `parsePath` ne convient pas — elle lit le chemin pour en tirer une année et une
+   semaine, ce qui n'a aucun sens ici : un classeur est justement ce qui ne se range pas ainsi. */
+function nomSeul(rel) {
+    const file = String(rel || '').split('/').filter(Boolean).pop() || 'document.pdf';
+    return file.replace(/\.[^.]+$/, '');
+}
+
 function parsePath(rel) {
     const parts = String(rel || '').split('/').filter(Boolean);
     const file = parts.pop() || 'document.pdf';
@@ -250,6 +266,10 @@ const importArchive = async (req, res) => {
     if (!files.length) return res.status(422).json({ error: 'Aucun fichier reçu.' });
     let paths = [];
     try { paths = JSON.parse(req.body.paths || '[]'); } catch { paths = []; }
+    /* UN CLASSEUR NOMMÉ met en sommeil TOUT le classement par session : ni année, ni semaine,
+       ni formation, ni stagiaire. Un document d'assurance n'appartient à aucune promotion, et
+       lui inventer une semaine le rendrait introuvable là où on ira le chercher. */
+    const dossier = String(req.body.dossier || '').trim().slice(0, 160) || null;
     try {
         const conn = db.promise();
         let imported = 0, skipped = 0, doublons = 0;
@@ -276,7 +296,13 @@ const importArchive = async (req, res) => {
            même endroit. C'est assumé — dans un coffre, un nom à un endroit désigne un document
            et un seul. Pour remplacer, on supprime puis on réimporte ; et l'import NOMME ce
            qu'il a écarté, pour qu'on s'en aperçoive au lieu de croire que tout est passé. */
+        const colDossier = await colonneExiste(conn, 'archive_document', 'dossier');
+        if (dossier && !colDossier) return res.status(422).json({ error: 'Classeurs indisponibles : migration 154 non jouée.' });
         const dejaLa = async (meta) => {
+            /* DANS UN CLASSEUR, LA PLACE C'EST LE CLASSEUR. La règle générale compare aussi
+               l'année, la semaine, la formation et le stagiaire — tous NULL ici, si bien que
+               deux fichiers du même nom rangés dans DEUX classeurs différents se seraient pris
+               pour des doublons, et le second aurait été écarté en silence. */
             const [[r]] = await conn.query(
                 `SELECT 1 AS oui FROM archive_document
                   WHERE organization_id = ?
@@ -285,9 +311,11 @@ const importArchive = async (req, res) => {
                     AND COALESCE(week, -1) = COALESCE(?, -1)
                     AND COALESCE(formation_label, '') = COALESCE(?, '')
                     AND COALESCE(learner_name, '') = COALESCE(?, '')
+                    ${colDossier ? "AND COALESCE(dossier, '') = COALESCE(?, '')" : ''}
                   LIMIT 1`,
                 [req.user.organization_id, meta.title.slice(0, 255), meta.year, meta.week,
-                    meta.formation || null, meta.learner || null]);
+                    meta.formation || null, meta.learner || null,
+                    ...(colDossier ? [dossier] : [])]);
             return !!r;
         };
 
@@ -297,7 +325,9 @@ const importArchive = async (req, res) => {
             const f = files[i];
             const isPdf = /pdf$/i.test(f.mimetype || '') || /\.pdf$/i.test(f.originalname || '');
             if (!isPdf) { skipped++; continue; }
-            const meta = parsePath(paths[i] || f.originalname);
+            const meta = dossier
+                ? { year: null, week: null, formation: null, learner: null, title: nomSeul(paths[i] || f.originalname) }
+                : parsePath(paths[i] || f.originalname);
             /* UN FICHIER VIDE N'ENTRE PAS AU COFFRE. Trouvé en production le 2026-09-15 : une
                ligne d'archive à ZÉRO octet, importée le 8 juillet, qui rend un PDF que rien
                n'ouvre. Un import de dossier peut porter 3000 fichiers ; il suffit qu'un seul
@@ -315,11 +345,12 @@ const importArchive = async (req, res) => {
             const range = aRanger(f.buffer);
             await conn.query(
                 `INSERT INTO archive_document
-                    (id, organization_id, year, week, formation_label, learner_name, title, status, mime, file${mesure ? ', empreinte, octets' : ''})
-                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ARCHIVE', ?, ?${mesure ? ', ?, ?' : ''})`,
+                    (id, organization_id, year, week, formation_label, learner_name, title, status, mime, file${mesure ? ', empreinte, octets' : ''}${colDossier ? ', dossier' : ''})
+                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ARCHIVE', ?, ?${mesure ? ', ?, ?' : ''}${colDossier ? ', ?' : ''})`,
                 [req.user.organization_id, meta.year, meta.week, meta.formation || null,
                  meta.learner || null, meta.title.slice(0, 255), f.mimetype || 'application/pdf', range.file,
-                 ...(mesure ? [range.empreinte, range.octets] : [])]
+                 ...(mesure ? [range.empreinte, range.octets] : []),
+                 ...(colDossier ? [dossier] : [])]
             );
             imported++;
         }
@@ -467,14 +498,18 @@ const getArchiveStockage = async (req, res) => {
            déjà chiffré passerait inaperçu. */
         const conn = db.promise();
         const mesure = await mesureDisponible(conn);
+        /* Le détenteur d'un document de classeur n'est pas un stagiaire, c'est le CLASSEUR :
+           sans lui, les plus gros fichiers s'afficheraient sans rien pour les situer. */
+        const colDossier = await colonneExiste(conn, 'archive_document', 'dossier');
+        const quiDetient = colDossier ? 'COALESCE(learner_name, dossier)' : 'learner_name';
         const [rows] = mesure
             ? await conn.query(
-                `SELECT id, title, learner_name, year, week, octets, empreinte
+                `SELECT id, title, ${quiDetient} AS learner_name, year, week, octets, empreinte
                    FROM archive_document WHERE organization_id = ? AND octets IS NOT NULL`,
                 [req.user.organization_id])
             : [[]];
         const [aMesurer] = await conn.query(
-            `SELECT id, title, learner_name, year, week,
+            `SELECT id, title, ${quiDetient} AS learner_name, year, week,
                     LENGTH(file) AS octets, SHA2(file, 256) AS empreinte
                FROM archive_document
               WHERE organization_id = ?${mesure ? ' AND octets IS NULL' : ''}`,
