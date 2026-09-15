@@ -13,6 +13,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Roadmap from "../components/Roadmap.jsx";
+import { stepState } from "../lib/etapes.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf, dateHeure } from "../lib/format.js";
 
@@ -23,13 +24,6 @@ const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIG
   VALIDEE: ["Validée", "g"], DEPOSEE: ["À vérifier", "a"] };
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 
-
-// État d'une étape d'un dossier (identique à Roadmap.stepState) pour l'agrégat groupe.
-function docState(doc) {
-  if (doc.status === "SIGNE") return "done";
-  if (doc.stagiaireSign) return ["ENVOYE", "CONSULTE", "GENERE"].includes(doc.status) ? "progress" : "todo";
-  return ["GENERE", "ENVOYE", "CONSULTE"].includes(doc.status) ? "done" : "todo";
-}
 
 const RM_TAG = { todo: "À faire", progress: "En cours", done: "Terminé" };
 
@@ -114,7 +108,7 @@ function Suivi() {
     const m = new Map();
     for (const d of dossiers) {
       for (const doc of (d.documents || [])) {
-        if (docState(doc) === "done") continue;
+        if (stepState(doc) === "done") continue;
         if (!m.has(doc.type)) m.set(doc.type, { type: doc.type, label: doc.label, n: 0 });
         m.get(doc.type).n++;
       }
@@ -126,7 +120,7 @@ function Suivi() {
   const dossiersVus = useMemo(() => {
     if (!manqueFiltre) return dossiers;
     return dossiers.filter((d) => (d.documents || [])
-      .some((doc) => doc.type === manqueFiltre && docState(doc) !== "done"));
+      .some((doc) => doc.type === manqueFiltre && stepState(doc) !== "done"));
   }, [dossiers, manqueFiltre]);
 
   // Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise
@@ -169,7 +163,7 @@ function Suivi() {
           const st = stepMap.get(doc.type);
           if (!st) continue;
           st.total++;
-          const s = docState(doc);
+          const s = stepState(doc);
           if (s === "done") st.done++; else if (s === "progress") st.prog++;
         }
       }
