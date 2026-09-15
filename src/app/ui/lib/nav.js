@@ -26,6 +26,12 @@ export const NAV = [
       { to: "/entreprises", ic: "building", label: "Entreprises", roles: ADMIN },
       { to: "/sessions", ic: "calendar", label: "Sessions", roles: STAFF },
       { to: "/formations", ic: "graduation", label: "Formations", roles: STAFF },
+      /* NOTATION : l'addition de ce qui est saisi ailleurs. Les notes existaient déjà mais
+         éparpillées — le QCM rangé PAR QUESTIONNAIRE dans « Résultats QCM », l'évaluation
+         pratique sur la page de la session, le jury dans l'espace de l'intervenant. Personne ne
+         pouvait dire « où en est cette personne » sans ouvrir trois écrans et faire l'addition
+         de tête. Rangé en « Formation » : c'est l'acte pédagogique, pas un indicateur qualité. */
+      { to: "/notation", ic: "clipboard-check", label: "Notation", roles: STAFF },
       /* Le fil de la communauté, le MÊME que celui des stagiaires (l'API cadre sur
          l'organisme, pas sur le stagiaire). L'école y publiait déjà des annonces — la page
          prévoit `peutAnnoncer` pour le personnel — mais aucun chemin ne l'y menait : il fallait
@@ -242,7 +248,8 @@ const SECTION_OF = {
      consultation : il clique, et le serveur refuse. Le bandeau et les clics interceptés
      dépendent tous les deux de cette ligne. */
   "/roles": "/roles",
-  "/audit": "/audit", "/suivi": "/suivi", "/qcm-resultats": "/qcm-resultats", "/dashboard": "/dashboard",
+  "/audit": "/audit", "/suivi": "/suivi", "/qcm-resultats": "/qcm-resultats", "/notation": "/notation",
+  "/dashboard": "/dashboard",
 };
 
 /**

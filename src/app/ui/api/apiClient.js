@@ -1249,6 +1249,14 @@ export function deleteContribution(id) {
 export function poserModelesJury() {
   return request("/templates/modeles-jury", { method: "POST" });
 }
+/* NOTATION — l'addition de ce qui a été saisi ailleurs (QCM, évaluation pratique, jury). */
+export function getSessionsANoter() {
+  return request("/notation/sessions");
+}
+export function getNotationSession(sessionId) {
+  return request(`/notation/session/${sessionId}`);
+}
+
 /* PROCÈS-VERBAL DE JURY — la commission de délibération d'une session (migration 150). */
 export function getCommission(sessionId) {
   return request(`/examens/session/${sessionId}`);

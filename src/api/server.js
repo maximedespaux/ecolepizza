@@ -54,6 +54,7 @@ const pieceRoutes = require('./routes/piece.routes.js');
 const accessProfileRoutes = require('./routes/accessProfile.routes.js');
 const evaluationRoutes = require('./routes/evaluation.routes.js');
 const examenRoutes = require('./routes/examen.routes.js');
+const notationRoutes = require('./routes/notation.routes.js');
 const billingProfileRoutes = require('./routes/billingProfile.routes.js');
 const eventsRoutes = require('./routes/events.routes.js');
 
@@ -166,6 +167,7 @@ app.use('/api/pieces', pieceRoutes);
 /* Évaluation pratique : grille par formation, notes par dossier (migration 148). */
 app.use('/api/evaluations', evaluationRoutes);
 app.use('/api/examens', examenRoutes);
+app.use('/api/notation', notationRoutes);
 app.use('/api/access-profiles', accessProfileRoutes);
 app.use('/api/emetteurs', billingProfileRoutes);
 app.use('/api/events', eventsRoutes);
