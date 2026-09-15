@@ -366,6 +366,14 @@ function ArchivesView({ onError, onInfo }) {
         parts.push(`${data.doublons} déjà présent(s), non réimporté(s)${noms ? ` — ${noms}${data.doublons > 5 ? "…" : ""}` : ""}`);
       }
       if (data.skipped) parts.push(`${data.skipped} ignoré(s) (non PDF)`);
+      /* ET LES VIDES À PART DES DEUX AUTRES. Un fichier de zéro octet n'est ni un doublon ni un
+         mauvais format : c'est un fichier ABÎMÉ, et c'est le seul des trois cas qui demande
+         d'aller rechercher l'original. Le fondre dans « ignoré(s) » ferait croire à un lot mal
+         préparé alors qu'il manque vraiment un document. */
+      if (data.vides) {
+        const noms = (data.noms_vides || []).slice(0, 5).join(", ");
+        parts.push(`${data.vides} vide(s), non importé(s)${noms ? ` — ${noms}${data.vides > 5 ? "…" : ""}` : ""}`);
+      }
       onInfo?.(`${parts.join(", ")}.`);
       load();
     } catch (err) { onError?.(err.message); }
