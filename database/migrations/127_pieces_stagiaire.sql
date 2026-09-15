@@ -23,20 +23,17 @@
    donc aucun orphelin a nettoyer, et la suppression suit la cascade.
 
    ############################################################################################
-   #  ATTENTION — QUESTION DE CONSERVATION NON TRANCHEE (RGPD)                                #
+   #  CONSERVATION — TRANCHE LE 2026-09-15 : SUPPRESSION MANUELLE, ET RIEN D'AUTOMATIQUE.     #
    #                                                                                          #
-   #  Une copie de carte d'identite est une DONNEE PERSONNELLE SENSIBLE. La question « combien #
-   #  de temps la garde-t-on ? » n'est PAS tranchee a ce jour (2026-08-01).                    #
+   #  La question est restee ouverte du 2026-08-01 au 2026-09-15. La reponse est : on garde la #
+   #  suppression manuelle. Ce n'est plus un choix d'attente, c'est la regle retenue.          #
    #                                                                                          #
-   #  Choix d'attente, explicitement provisoire : SUPPRESSION MANUELLE UNIQUEMENT. Un scan     #
-   #  reste donc en base indefiniment tant que personne ne le supprime — ce qui est exactement #
-   #  ce que le principe de minimisation interdit.                                            #
+   #  `piece_depot.purge_at` reste donc NULL partout. La colonne est CONSERVEE : le jour ou    #
+   #  l'on changerait d'avis, il suffira de la remplir et d'ecrire la purge, sans nouvelle     #
+   #  migration ni reprise de donnees. C'est exactement ce pour quoi elle a ete creee.         #
    #                                                                                          #
-   #  `piece_depot.purge_at` est cree DES MAINTENANT, volontairement NULL partout : le jour ou #
-   #  la regle est arretee, il suffira de la remplir et d'ecrire la purge, sans nouvelle       #
-   #  migration ni reprise de donnees.                                                        #
-   #                                                                                          #
-   #  Voir le bloc « QUESTION OUVERTE » en tete de CLAUDE.md. A reposer jusqu'a reponse.       #
+   #  Les fichiers sont chiffres au repos (AES-256-GCM, cf. piece.controller.js) : ils         #
+   #  n'apparaissent en clair dans aucune sauvegarde. Voir le bloc en tete de CLAUDE.md.       #
    ############################################################################################
 
    Commentaires en blocs : memes raisons qu'en 101/102. */
@@ -77,9 +74,10 @@ CREATE TABLE IF NOT EXISTS piece_depot (
     verifie_par      uuid        DEFAULT NULL,
     verifie_le       timestamp   NULL DEFAULT NULL,
     depose_le        timestamp   NULL DEFAULT NULL,
-    /* Date d'effacement automatique des FICHIERS. NULL = jamais, ce qui est l'etat actuel et le
-       choix d'attente. Colonne creee des maintenant pour n'avoir qu'une regle a ecrire le jour
-       ou la question de conservation sera tranchee — cf. l'encadre en tete de fichier. */
+    /* Date d'effacement automatique des FICHIERS. NULL = jamais, et c'est la REGLE RETENUE
+       (2026-09-15) : suppression manuelle uniquement. La colonne reste, inutilisee, pour que
+       changer d'avis un jour ne demande qu'une regle a ecrire — pas une migration de plus.
+       Cf. l'encadre en tete de fichier. */
     purge_at         timestamp   NULL DEFAULT NULL,
     created_at       timestamp   NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),

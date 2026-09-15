@@ -7,31 +7,30 @@ l'**état de reprise**. Pour le détail (audits, dette, plan de refonte), lire `
 
 ---
 
-## ⚠️ QUESTION OUVERTE — À TRANCHER, ET À REPOSER TANT QU'ELLE NE L'EST PAS
+## Conservation des pièces d'identité — **TRANCHÉ le 2026-09-15**
 
-> ### Combien de temps garde-t-on la copie d'une pièce d'identité ?
+> ### Règle retenue : suppression MANUELLE, et rien d'automatique.
 >
 > Les **pièces justificatives déposées par les stagiaires** (migration 127) contiennent des
-> copies de cartes d'identité : une **donnée personnelle sensible**, soumise au RGPD.
+> copies de cartes d'identité. La question « combien de temps les garde-t-on ? » est restée
+> ouverte du 2026-08-01 au 2026-09-15. **L'utilisateur a tranché : on garde la suppression
+> manuelle.** Ce n'est plus un choix d'attente, c'est la règle.
 >
-> **État actuel : suppression MANUELLE uniquement.** C'est un choix d'attente, explicitement
-> provisoire, pris le 2026-08-01 faute de décision. Il signifie qu'un scan de carte d'identité
-> reste en base indéfiniment tant que personne ne clique sur « Supprimer ».
+> **Ce que ça veut dire concrètement** : aucune purge n'est écrite, `piece_depot.purge_at` reste
+> NULL partout, et un fichier ne disparaît que si quelqu'un clique sur « Supprimer » — le
+> stagiaire tant que sa pièce n'est pas validée, le personnel à tout moment (cf.
+> `supprimerFichier`, qui EST la purge manuelle). Les copies sont chiffrées au repos
+> (AES-256-GCM) et n'apparaissent en clair dans aucune sauvegarde.
 >
-> **Ce que dit le principe de minimisation** : la copie sert à VÉRIFIER une identité, pas à
-> l'archiver. Le contrôle Qualiopi porte sur la trace de vérification (« vérifiée le 12/03 par
-> X »), pas sur le scan lui-même. Les deux autres options écartées pour l'instant étaient
-> l'effacement automatique **à la validation**, et **à la clôture de la session**.
+> **Ce qui reste vrai, dit une fois et pas davantage** : le principe de minimisation demande
+> qu'une donnée serve à quelque chose. Une copie conservée après vérification ne sert plus à
+> rien — le contrôle Qualiopi porte sur la trace (« vérifiée le 12/03 par X »), pas sur le scan.
+> Le risque est donc assumé, pas ignoré.
 >
-> **Ce qu'il reste à décider** : la durée, et ce qui déclenche l'effacement. Tant que ce n'est
-> pas tranché, l'organisme accumule des copies de pièces d'identité sans limite de durée — ce
-> qui est exactement ce que le RGPD interdit.
->
-> **CONSIGNE EXPLICITE DE L'UTILISATEUR** : reposer la question à chaque occasion jusqu'à ce
-> qu'elle soit tranchée. Ne pas la laisser s'enterrer. Quand la réponse arrive, remplacer ce
-> bloc par la règle retenue et écrire la purge correspondante.
-
----
+> **NE PLUS REPOSER LA QUESTION.** Elle a été posée à chaque occasion pendant six semaines,
+> c'était la consigne ; la réponse est arrivée. Pour changer d'avis un jour, tout est déjà en
+> place : remplir `purge_at` à la validation ou à la clôture, et écrire la purge
+> correspondante — aucune migration ni reprise de données ne sera nécessaire.
 
 ## 1. Le projet
 
