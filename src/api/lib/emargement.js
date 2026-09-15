@@ -4,6 +4,7 @@
 const crypto = require('crypto');
 const { htmlToPdf } = require('./docxpdf.js');
 const { decrypt } = require('./crypto.js');
+const { aRanger, mesureDisponible } = require('./coffre.js'); // le coffre est chiffré au repos
 
 const SLOT = { MATIN: 'Matin', APRES_MIDI: 'Après-midi', EXAMEN: 'Examen', DISTANCIEL: 'Distanciel' };
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -417,22 +418,33 @@ async function regenEmargement(conn, orgId, enrollmentId) {
         const allSignedFlag = rows.every((r) => r.signature_data);
         const status = allSignedFlag ? 'SIGNE' : 'ARCHIVE';
 
+        /* Sondé UNE fois : `colonneExiste` n'a volontairement aucun cache (cf. lib/colonnes.js),
+           et un dossier peut produire une feuille par modèle d'émargement. */
+        const mesure = await mesureDisponible(conn);
         // Upsert d'une feuille dans le coffre documentaire (clé = ref). Renvoie true si écrite.
         const upsert = async (ref, title, config) => {
             let pdf;
             try { pdf = htmlToPdf(renderEmargementHtml({ org, e, rows, participants, config })); }
             catch (err) { console.warn('Émargement PDF non généré :', err.code || err.message); return false; }
+            /* LA FEUILLE D'ÉMARGEMENT PART CHIFFRÉE, comme tout ce qui entre au coffre. Elle
+               porte les signatures manuscrites de la promotion entière : c'est la pièce la plus
+               nominative que l'application produise d'elle-même, et la seule qui s'y range sans
+               que personne ne l'ait demandé. Les colonnes de mesure datent de la 153 — avant,
+               on écrit sans, et le chiffrement, lui, s'applique quand même. */
+            const range = aRanger(pdf);
             const [[ex]] = await conn.query('SELECT id FROM archive_document WHERE organization_id = ? AND ref = ?', [orgId, ref]);
             if (ex) {
                 await conn.query(
-                    'UPDATE archive_document SET year=?, week=?, formation_label=?, learner_name=?, title=?, status=?, mime=?, file=? WHERE id=?',
-                    [e.year, e.week, e.program_code || null, learnerName, title.slice(0, 255), status, 'application/pdf', pdf, ex.id]
+                    `UPDATE archive_document SET year=?, week=?, formation_label=?, learner_name=?, title=?, status=?, mime=?, file=?${mesure ? ', empreinte=?, octets=?' : ''} WHERE id=?`,
+                    [e.year, e.week, e.program_code || null, learnerName, title.slice(0, 255), status, 'application/pdf', range.file,
+                        ...(mesure ? [range.empreinte, range.octets] : []), ex.id]
                 );
             } else {
                 await conn.query(
-                    `INSERT INTO archive_document (id, organization_id, ref, year, week, formation_label, learner_name, title, status, mime, file)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [crypto.randomUUID(), orgId, ref, e.year, e.week, e.program_code || null, learnerName, title.slice(0, 255), status, 'application/pdf', pdf]
+                    `INSERT INTO archive_document (id, organization_id, ref, year, week, formation_label, learner_name, title, status, mime, file${mesure ? ', empreinte, octets' : ''})
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${mesure ? ', ?, ?' : ''})`,
+                    [crypto.randomUUID(), orgId, ref, e.year, e.week, e.program_code || null, learnerName, title.slice(0, 255), status, 'application/pdf', range.file,
+                        ...(mesure ? [range.empreinte, range.octets] : [])]
                 );
             }
             return true;

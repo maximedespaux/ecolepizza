@@ -12,6 +12,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { enrichirAuteurs } = require('../lib/auteurs.js');
+const { encryptBytes, decryptBytes } = require('../lib/crypto.js'); // images chiffrées au repos
 
 // Migration 114 non jouée : les tables n'existent pas encore. Même garde que partout ailleurs.
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
@@ -290,9 +291,12 @@ const savePostImage = async (req, res) => {
         if (p.author_user_id !== req.user.id) return res.status(403).json({ message: 'Publication d\'un autre stagiaire.' });
         // Une seule photo par publication : on remplace plutôt que d'accumuler.
         await conn.query('DELETE FROM community_image WHERE post_id = ?', [req.params.id]);
+        /* CHIFFRÉE AU REPOS, comme la photo de profil : une publication montre des personnes
+           identifiables — la promotion au four, un stagiaire devant sa pizza. Le fil est
+           interne à l'organisme ; la sauvegarde nocturne, elle, sort de l'application. */
         await conn.query(
             'INSERT INTO community_image (id, post_id, organization_id, mime, bytes) VALUES (?, ?, ?, ?, ?)',
-            [crypto.randomUUID(), req.params.id, req.user.organization_id, mime, f.buffer]);
+            [crypto.randomUUID(), req.params.id, req.user.organization_id, mime, encryptBytes(f.buffer)]);
         res.json({ success: true });
     } catch (err) {
         if (noTable(err)) return res.status(503).json({ message: 'Migration 114 non jouée.' });
@@ -315,11 +319,14 @@ const getPostImage = async (req, res) => {
             'SELECT mime, bytes FROM community_image WHERE post_id = ? AND organization_id = ? LIMIT 1',
             [req.params.id, req.user.organization_id]);
         if (!i) return res.status(404).end();
+        // Photos déposées avant le chiffrement : `decryptBytes` les rend telles quelles.
+        const clair = decryptBytes(i.bytes);
+        if (clair === null) return res.status(404).end();
         res.set('Content-Type', i.mime);
         // Photo immuable : une publication n'a qu'une image et la remplacer crée une autre
         // ligne. Un cache long évite de la retélécharger à chaque passage dans le fil.
         res.set('Cache-Control', 'private, max-age=86400');
-        res.send(i.bytes);
+        res.send(clair);
     } catch (err) {
         if (noTable(err)) return res.status(404).end();
         console.error('Erreur image publication :', err);

@@ -127,7 +127,17 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **aucune en attente**
+## 4. Migrations — **153 en attente (2026-09-15)**
+
+> **153 + reprise du coffre.** `153_archives_chiffrees.sql` ajoute `archive_document.empreinte`
+> et `.octets` ; le chiffrement des 1140 PDF déjà en base se fait ensuite avec
+> `sudo -u impastio node database/tools/chiffrer-coffre.js` (rejouable, `--essai` pour voir sans
+> rien écrire). **À VÉRIFIER AVANT DE LANCER LA REPRISE : `SSN_ENC_KEY` est-elle sauvegardée
+> hors du serveur ?** Après elle, la perdre coûte le coffre entier. Le code marche avant comme
+> après, dans les deux sens. Vérification, plutôt que de croire cette ligne :
+> `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio'
+> AND table_name='archive_document' AND column_name='empreinte';`
+
 
 **Vérifié le 2026-08-22 contre la base de production** (VPS, 85 tables), colonne par colonne et
 index par index. Les 119 et 120 ont été jouées ce jour-là ; tout le reste l'avait été sur

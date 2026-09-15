@@ -25,14 +25,30 @@ const bloc = /const getArchiveStockage[\s\S]*?\n};/.exec(ctrl);
 
 test('l\'inventaire ne lit les blobs QU\'UNE FOIS', () => {
     assert.ok(bloc, 'getArchiveStockage introuvable');
-    /* `LENGTH()` et `MD5()` obligent InnoDB à lire chaque blob : sur 681 Mo c'est ~7 secondes
-       mesurées. Une seconde requête doublerait ce coût. On lit tout une fois, on calcule le
-       reste en mémoire — 1188 lignes de métadonnées, c'est gratuit. */
-    const requetes = bloc[0].match(/\.query\(/g) || [];
-    assert.strictEqual(requetes.length, 1,
-        `${requetes.length} requête(s) : chacune relit les 681 Mo de blobs.`);
-    assert.match(bloc[0], /LENGTH\(file\) AS octets,\s*MD5\(file\) AS empreinte/,
+    /* `LENGTH()` et l'empreinte obligent InnoDB à lire chaque blob : sur 681 Mo c'est ~7
+       secondes mesurées. Une SECONDE lecture doublerait ce coût. On lit tout une fois, on
+       calcule le reste en mémoire — 1188 lignes de métadonnées, c'est gratuit.
+
+       CE QUI A CHANGÉ, ET POURQUOI LE COMPTE NE PORTE PLUS SUR LES REQUÊTES. Depuis que le
+       coffre est chiffré (migration 153), la taille et l'empreinte du CLAIR sont mémorisées à
+       l'écriture : la requête principale ne touche plus `file` du tout, et l'écran devient
+       instantané. Une seconde requête ramasse les lignes pas encore reprises — elle ne rend
+       plus rien une fois la reprise faite. Compter les requêtes aurait donc condamné une
+       amélioration ; ce qui compte, et qui est ici gelé, c'est qu'UNE SEULE d'entre elles
+       lise les blobs. */
+    const requetes = bloc[0].split('.query(').slice(1);
+    const lisentLesBlobs = requetes.filter((q) => /\(file[,)]/.test(q.slice(0, 400)));
+    assert.strictEqual(lisentLesBlobs.length, 1,
+        `${lisentLesBlobs.length} requête(s) relisent les 681 Mo de blobs.`);
+    assert.match(bloc[0], /LENGTH\(file\) AS octets,\s*SHA2\(file, 256\) AS empreinte/,
         'Taille et empreinte doivent être prises dans la MÊME lecture.');
+    /* LA MESURE MÉMORISÉE SE LIT SANS OUVRIR LE DOCUMENT : c'est tout l'intérêt des deux
+       colonnes. Si cette requête-là mentionnait `file`, on aurait ajouté une requête sans rien
+       gagner. */
+    const principale = requetes.find((q) => /octets IS NOT NULL/.test(q.slice(0, 400)));
+    assert.ok(principale, 'les mesures mémorisées doivent être lues en priorité');
+    assert.ok(!/\bfile\b/.test(principale.slice(0, 400)),
+        'la requête des lignes déjà mesurées ne doit PAS toucher au blob.');
 });
 
 test('l\'inventaire est réservé à l\'administration', () => {

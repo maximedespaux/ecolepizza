@@ -5,6 +5,7 @@ const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
 const { logAudit } = require('../lib/audit.js');
+const { aRanger, aServir, mesureDisponible } = require('../lib/coffre.js'); // coffre chiffré AU REPOS
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 // Statuts « partagé avec le stagiaire » (envoyé / consulté / signé).
@@ -290,18 +291,26 @@ const importArchive = async (req, res) => {
             return !!r;
         };
 
+        const mesure = await mesureDisponible(conn); // une seule fois : l'import peut porter 3000 fichiers
         for (let i = 0; i < files.length; i++) {
             const f = files[i];
             const isPdf = /pdf$/i.test(f.mimetype || '') || /\.pdf$/i.test(f.originalname || '');
             if (!isPdf) { skipped++; continue; }
             const meta = parsePath(paths[i] || f.originalname);
             if (await dejaLa(meta)) { doublons++; nomsDoublons.push(meta.title); continue; }
+            /* LE PDF PART CHIFFRÉ — il ne repassera jamais en clair en base. `aRanger` rend du
+               même coup l'empreinte et la taille du CLAIR : sans elles, l'écran de stockage
+               compterait des octets de chiffré et ne verrait plus aucun doublon (IV aléatoire).
+               Les deux colonnes datent de la 153 : tant qu'elle n'est pas jouée, on écrit sans,
+               et l'écran retombe sur la mesure faite en base. */
+            const range = aRanger(f.buffer);
             await conn.query(
                 `INSERT INTO archive_document
-                    (id, organization_id, year, week, formation_label, learner_name, title, status, mime, file)
-                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ARCHIVE', ?, ?)`,
+                    (id, organization_id, year, week, formation_label, learner_name, title, status, mime, file${mesure ? ', empreinte, octets' : ''})
+                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ARCHIVE', ?, ?${mesure ? ', ?, ?' : ''})`,
                 [req.user.organization_id, meta.year, meta.week, meta.formation || null,
-                 meta.learner || null, meta.title.slice(0, 255), f.mimetype || 'application/pdf', f.buffer]
+                 meta.learner || null, meta.title.slice(0, 255), f.mimetype || 'application/pdf', range.file,
+                 ...(mesure ? [range.empreinte, range.octets] : [])]
             );
             imported++;
         }
@@ -331,13 +340,24 @@ const getArchiveFile = async (req, res) => {
             [req.params.id, req.user.organization_id]
         );
         if (!row || !row.file) return res.status(404).json({ message: 'Document introuvable.' });
+        /* DÉCHIFFRÉ À LA VOLÉE, comme les pièces justificatives : le clair n'existe que dans
+           cette réponse. `null` = illisible (clé changée, contenu altéré — le tag GCM le
+           détecte) ; on le DIT au lieu de servir un PDF vide qui ferait croire à un document
+           corrompu à l'import. */
+        const clair = aServir(row.file);
+        if (clair === null) return res.status(500).json({ message: 'Archive illisible (déchiffrement — clé ?).' });
         const name = (row.title || 'document').replace(/[\\/:*?"<>|]/g, '') + '.pdf';
         // Les archives sont des PDF : on force le type (ne jamais renvoyer un mime
         // fourni par le client, qui pourrait provoquer un rendu HTML/JS = XSS).
         res.set('Content-Type', 'application/pdf');
         res.set('X-Content-Type-Options', 'nosniff');
         res.set('Content-Disposition', `inline; filename="${encodeURIComponent(name)}"`);
-        res.send(row.file);
+        /* AUCUN CACHE — même raison que pour une pièce d'identité : un contrat signé, une
+           feuille d'émargement nominative n'ont pas à rester sur le disque du navigateur après
+           la déconnexion, surtout sur un poste partagé. Chiffrer en base et laisser une copie
+           en clair dans le cache du poste, c'est fermer une porte et en ouvrir une autre. */
+        res.set('Cache-Control', 'no-store, private');
+        res.send(clair);
     } catch (err) {
         console.error('Erreur lecture archive :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -419,11 +439,32 @@ const TRANCHES = [
 
 const getArchiveStockage = async (req, res) => {
     try {
-        const [rows] = await db.promise().query(
+        /* DEUX REQUÊTES, ET C'EST UN GAIN. Les mesures sont désormais MÉMORISÉES à l'écriture
+           (migration 153) : la première requête ne lit aucun blob, donc l'écran devient
+           instantané là où il lisait 681 Mo. La seconde ne ramasse que les lignes pas encore
+           reprises et les mesure en base, comme avant — elle ne rend rien une fois la reprise
+           faite. Un `COALESCE(octets, LENGTH(file))` aurait été plus court d'une ligne, mais
+           aurait forcé la lecture de TOUS les blobs pour une colonne déjà connue.
+
+           SHA2 ET NON PLUS MD5 : c'est la même fonction que celle utilisée pour l'empreinte
+           mémorisée, si bien qu'une ligne en clair et la même ligne une fois chiffrée rendent
+           la MÊME valeur. Sans cela, pendant la reprise, un doublon dont un exemplaire serait
+           déjà chiffré passerait inaperçu. */
+        const conn = db.promise();
+        const mesure = await mesureDisponible(conn);
+        const [rows] = mesure
+            ? await conn.query(
+                `SELECT id, title, learner_name, year, week, octets, empreinte
+                   FROM archive_document WHERE organization_id = ? AND octets IS NOT NULL`,
+                [req.user.organization_id])
+            : [[]];
+        const [aMesurer] = await conn.query(
             `SELECT id, title, learner_name, year, week,
-                    LENGTH(file) AS octets, MD5(file) AS empreinte
-               FROM archive_document WHERE organization_id = ?`,
+                    LENGTH(file) AS octets, SHA2(file, 256) AS empreinte
+               FROM archive_document
+              WHERE organization_id = ?${mesure ? ' AND octets IS NULL' : ''}`,
             [req.user.organization_id]);
+        rows.push(...aMesurer);
 
         const total = rows.reduce((s, r) => s + Number(r.octets || 0), 0);
 

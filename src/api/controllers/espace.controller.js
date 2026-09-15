@@ -12,7 +12,7 @@ const { getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js'
 const { regenEmargement } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
 const { cadresQuest, possedeCadreQuest, parseCadre: parseCadreQuest, PALIER_IDS, EXPLOIT_IDS } = require('../lib/cadresQuest.js');
-const { encrypt } = require('../lib/crypto.js');
+const { encrypt, encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
 const { prixStagiaire } = require('../lib/remise.js');
@@ -1657,10 +1657,14 @@ const saveMyAvatarImage = async (req, res) => {
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
 
+        /* CHIFFRÉE AU REPOS. Une photo de profil est le VISAGE d'une personne identifiée, rangé
+           à côté de son nom : dans une sauvegarde égarée, elle vaut la pièce d'identité qu'elle
+           accompagne. Elle ne coûte pourtant presque rien à protéger — 500x500 compressé, un
+           déchiffrement de quelques dizaines de kilo-octets à l'affichage. */
         await conn.query(
             `INSERT INTO learner_avatar (learner_id, organization_id, mime, bytes) VALUES (?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE mime = VALUES(mime), bytes = VALUES(bytes)`,
-            [learner.id, learner.organization_id, mime, f.buffer]
+            [learner.id, learner.organization_id, mime, encryptBytes(f.buffer)]
         );
         // On garde la couleur de fond déjà choisie, s'il y en a une.
         const color = String(req.body && req.body.color ? req.body.color : '');
@@ -1694,10 +1698,14 @@ const getAvatarImage = async (req, res) => {
         // la communauté en affiche beaucoup — sans ça, on la retélécharge à chaque écran.
         const etag = `W/"${new Date(row.updated_at).getTime()}"`;
         if (req.headers['if-none-match'] === etag) return res.status(304).end();
+        /* `decryptBytes` rend le tampon TEL QUEL s'il n'est pas chiffré : les photos déposées
+           avant ce changement s'affichent sans reprise de données. */
+        const clair = decryptBytes(row.bytes);
+        if (clair === null) return res.status(404).end(); // illisible : pas de photo, plutôt qu'une image cassée
         res.set('Content-Type', row.mime);
         res.set('Cache-Control', 'private, max-age=0, must-revalidate');
         res.set('ETag', etag);
-        res.send(row.bytes);
+        res.send(clair);
     } catch (err) {
         if (isMissingSchema(err)) return res.status(404).end();
         console.error('Erreur lecture photo de profil :', err);
