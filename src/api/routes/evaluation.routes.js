@@ -15,7 +15,10 @@ router.get('/formation/:programId', authorizeRoles(...STAFF_ROLES), getGrille);
 router.put('/formation/:programId', authorizeRoles(...ADMIN_ROLES), saveGrille);
 
 router.get('/session/:id', authorizeRoles(...STAFF_ROLES), getNotesSession);
-router.put('/note', authorizeRoles(...STAFF_ROLES), saveNote);
+/* LE BUREAU ÉCRIT LA GRILLE DU FORMATEUR, et elle seule : les critères du jury se cochent
+   depuis l'espace de l'intervenant. Le rôle est imposé ICI, par la route — jamais reçu de la
+   requête, où il serait tamponnable. */
+router.put('/note', authorizeRoles(...STAFF_ROLES), (req, res) => saveNote(req, res, 'FORMATEUR'));
 
 /* PAS DE ROUTE « VERDICT » ICI, ET C'EST VOULU. L'avis est prononcé par le jury, qui le saisit
    depuis son espace (routes/intervenant.routes.js) — celle-ci délègue au même contrôleur après

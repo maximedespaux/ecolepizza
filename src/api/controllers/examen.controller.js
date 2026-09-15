@@ -280,7 +280,10 @@ const pvPdf = async (req, res) => {
         const conn = db.promise();
         const ctx = await contextePv(conn, orgId, req.params.id);
         if (!ctx) return res.status(404).json({ error: 'Aucune commission pour cette session.' });
-        const slug = String(req.query.slug || 'pv-jury');
+        /* LE MODÈLE EST ÉPINGLÉ. Le slug venait de la requête : un formateur — qui n'a aucun
+           accès à /api/templates — pouvait faire rendre en PDF n'importe quel modèle « builder »
+           de l'organisme en le nommant dans l'URL. Le procès-verbal n'a qu'un modèle. */
+        const slug = 'pv-jury';
         const content = await getTemplateContent(orgId, slug);
         if (!content || content.kind !== 'builder') {
             return res.status(404).json({ error: `Modèle « ${slug} » introuvable. Créez-le depuis Modèles.` });

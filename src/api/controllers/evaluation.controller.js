@@ -17,6 +17,9 @@ const COLS_EX = 'id, grille_id, label, consigne, bareme, max_points, paliers, so
 /* Colonnes de la 149. Sondées à chaque appel plutôt que mémorisées : le serveur doit voir la
    migration jouée pendant qu'il tourne (cf. lib/colonnes.js). */
 const COLS_EX_149 = 'competence_id, obligatoire';
+/* La même liste, préfixée pour une jointure : `id` et `grille_id` existent sur les deux tables
+   et MariaDB refuserait la requête. Dérivée de COLS_EX, jamais recopiée. */
+const COLS_EX_X = COLS_EX.split(', ').map((c) => `x.${c}`).join(', ');
 const ROLES = ['FORMATEUR', 'JURY'];
 const roleValide = (r) => (ROLES.includes(String(r || '').toUpperCase()) ? String(r).toUpperCase() : 'FORMATEUR');
 
@@ -247,7 +250,10 @@ const saveGrille = async (req, res) => {
                 paliers: paliersPropres(bareme, ex && ex.paliers),
                 sort_order: (i + 1) * 10,
                 active: 1,
-                competence_id: ex && ex.competence_id ? ex.competence_id : null,
+                /* La compétence doit être une de CETTE grille : un identifiant étranger glissé
+                   dans l'envoi détacherait l'exercice de son barème sans rien signaler. */
+                competence_id: ex && ex.competence_id && idComp.has(ex.competence_id)
+                    ? idComp.get(ex.competence_id) : null,
                 obligatoire: ex && ex.obligatoire ? 1 : 0,
             };
             const reutilise = ex && ex.id && connus.has(ex.id);
@@ -298,7 +304,7 @@ const saveGrille = async (req, res) => {
  * C'EST L'ÉCRAN DU FORMATEUR : il a son groupe devant lui, pas un dossier à la fois. On renvoie
  * donc la grille une fois et les notes de tout le monde, plutôt qu'une requête par stagiaire.
  */
-const getNotesSession = async (req, res) => {
+const getNotesSession = async (req, res, roleImpose) => {
     const orgId = req.user.organization_id;
     try {
         const conn = db.promise();
@@ -308,7 +314,14 @@ const getNotesSession = async (req, res) => {
               WHERE s.id = ? AND s.organization_id = ?`, [req.params.id, orgId]);
         if (!s) return res.status(404).json({ error: 'Session introuvable.' });
 
-        const role = roleValide(req.query.role);
+        /* LE RÔLE IMPOSÉ PAR L'APPELANT L'EMPORTE, ET IL ARRIVE EN ARGUMENT.
+           Il était posé par `req.query = { ...req.query, role: 'JURY' }` dans l'espace
+           intervenant — une AFFECTATION SANS EFFET : sous Express 5, `req.query` est un
+           accesseur en LECTURE SEULE sur le prototype de la requête, et l'écriture échoue en
+           silence en mode non strict. Vérifié contre l'Express installé (5.2.1) : `?role=
+           FORMATEUR` traversait intact. Un membre externe du jury lisait donc la grille du
+           formateur en ajoutant un paramètre d'URL. */
+        const role = roleImpose ? roleValide(roleImpose) : roleValide(req.query && req.query.role);
         const grille = await grilleDeLaFormation(conn, orgId, s.program_id, role);
         if (!grille) return res.json({ data: { session: s, grille: null, stagiaires: [] } });
 
@@ -318,13 +331,19 @@ const getNotesSession = async (req, res) => {
               WHERE e.session_id = ? AND e.organization_id = ?
               ORDER BY l.last_name, l.first_name`, [req.params.id, orgId]);
 
+        /* LES NOTES SONT BORNÉES À LA GRILLE SERVIE. Sans la jointure, la requête rendait
+           TOUTES les notes de ces dossiers — les deux grilles — et l'écran du jury recevait les
+           appréciations libres que le formateur a écrites sur chaque stagiaire pendant le stage.
+           Un membre externe du jury n'a pas à les lire : il évalue le jour de l'examen. */
         let notes = [];
         if (enr.length) {
             [notes] = await conn.query(
-                `SELECT enrollment_id, exercice_id, valeur, points, commentaire,
-                        DATE_FORMAT(note_le, '%Y-%m-%d %H:%i') AS note_le
-                   FROM evaluation_note WHERE enrollment_id IN (?)`,
-                [enr.map((e) => e.enrollment_id)]);
+                `SELECT n.enrollment_id, n.exercice_id, n.valeur, n.points, n.commentaire,
+                        DATE_FORMAT(n.note_le, '%Y-%m-%d %H:%i') AS note_le
+                   FROM evaluation_note n
+                   JOIN evaluation_exercice x ON x.id = n.exercice_id
+                  WHERE x.grille_id = ? AND n.enrollment_id IN (?)`,
+                [grille.id, enr.map((e) => e.enrollment_id)]);
         }
         const parDossier = new Map();
         for (const n of notes) {
@@ -387,7 +406,7 @@ const getNotesSession = async (req, res) => {
  * VIDER LA VALEUR EFFACE LA NOTE. Se tromper de ligne arrive ; sans retour en arrière, il
  * faudrait laisser une note fausse ou passer par la base.
  */
-const saveNote = async (req, res) => {
+const saveNote = async (req, res, roleAttendu) => {
     const orgId = req.user.organization_id;
     const { enrollment_id: enrollmentId, exercice_id: exerciceId } = req.body || {};
     if (!enrollmentId || !exerciceId) {
@@ -395,15 +414,31 @@ const saveNote = async (req, res) => {
     }
     try {
         const conn = db.promise();
-        /* LES DEUX APPARTENANCES SONT VÉRIFIÉES. Sans cela, un identifiant d'un autre organisme
-           passé dans le corps de la requête ferait noter le dossier de quelqu'un d'autre. */
-        const [[ex]] = await conn.query(
-            `SELECT ${COLS_EX} FROM evaluation_exercice WHERE id = ? AND organization_id = ?`,
-            [exerciceId, orgId]);
-        if (!ex) return res.status(404).json({ error: 'Exercice introuvable.' });
         const [[enr]] = await conn.query(
             'SELECT id FROM enrollment WHERE id = ? AND organization_id = ?', [enrollmentId, orgId]);
         if (!enr) return res.status(404).json({ error: 'Dossier introuvable.' });
+        /* La colonne `role` n'existe qu'après la 149 : sans elle, la jointure sur le PARCOURS
+           protège déjà l'essentiel, et l'on ne refuse pas d'écrire faute de migration. */
+        const avecRole = await supporteJury(conn);
+
+        /* L'EXERCICE DOIT ÊTRE CELUI DE CE CANDIDAT, PAS SEULEMENT DE CET ORGANISME.
+           Les deux identifiants étaient vérifiés séparément, chacun contre l'organisme — ce qui
+           laissait les APPARIER LIBREMENT. Un membre externe du jury, affecté à une session,
+           pouvait donc noter un exercice de la grille du FORMATEUR sur son candidat : des points
+           qui alimentent les totaux, la condition de réussite et les jetons imprimés sur des
+           documents signés. Dans l'autre sens, un compte du bureau pouvait cocher les critères
+           du jury, que la route « verdict » lui refuse pourtant explicitement.
+           La jointure lie désormais l'exercice au PARCOURS du dossier, et `roleAttendu` — posé
+           par l'APPELANT, jamais par la requête — dit de quelle grille il a le droit. */
+        const [[ex]] = await conn.query(
+            `SELECT ${COLS_EX_X} FROM evaluation_exercice x
+               JOIN evaluation_grille g ON g.id = x.grille_id AND g.organization_id = x.organization_id
+               JOIN enrollment e ON e.id = ?
+               JOIN training_session s ON s.id = e.session_id AND s.program_id = g.program_id
+              WHERE x.id = ? AND x.organization_id = ?${roleAttendu && avecRole ? ' AND g.role = ?' : ''}`,
+            roleAttendu && avecRole ? [enrollmentId, exerciceId, orgId, roleValide(roleAttendu)]
+                : [enrollmentId, exerciceId, orgId]);
+        if (!ex) return res.status(404).json({ error: 'Exercice introuvable pour ce dossier.' });
 
         /* UNE GRILLE CLÔTURÉE NE BOUGE PLUS. Le jury a délibéré et le document est signé : un
            procès-verbal dont on pourrait encore changer les notes ne prouve rien. Le refus est

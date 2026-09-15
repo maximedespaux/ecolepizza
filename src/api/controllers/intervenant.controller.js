@@ -313,10 +313,12 @@ const getMyJuryGrille = async (req, res) => {
     try {
         const conn = db.promise();
         if (!await affecteASession(conn, req.user.id, req.user.organization_id, req.params.id)) return refus(res);
-        /* Le rôle est IMPOSÉ, pas lu dans la requête : l'espace intervenant n'ouvre que la
-           grille du jury. La notation du formateur ne le regarde pas. */
-        req.query = { ...(req.query || {}), role: 'JURY' };
-        return getNotesSession(req, res);
+        /* LE RÔLE EST IMPOSÉ PAR ARGUMENT, et non en réécrivant `req.query`. Cette réécriture
+           était SANS EFFET : sous Express 5, `req.query` est un accesseur en lecture seule sur
+           le prototype de la requête, et l'affectation échoue en silence. Vérifié contre
+           l'Express installé — `?role=FORMATEUR` traversait intact, et un membre externe du jury
+           lisait la grille du formateur en ajoutant un paramètre d'URL. */
+        return getNotesSession(req, res, 'JURY');
     } catch (err) {
         console.error('Erreur grille jury intervenant :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -330,7 +332,8 @@ const noterJury = async (req, res) => {
         if (!await monCandidat(conn, req.user.id, req.user.organization_id, (req.body || {}).enrollment_id)) {
             return res.status(403).json({ message: 'Candidat non affecté à vos sessions.' });
         }
-        return saveNote(req, res);
+        /* Le jury ne coche que SA grille (cf. saveNote) : le rôle est imposé ici. */
+        return saveNote(req, res, 'JURY');
     } catch (err) {
         console.error('Erreur notation jury :', err);
         res.status(500).json({ error: 'Internal Server Error' });
