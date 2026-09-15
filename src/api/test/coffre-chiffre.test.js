@@ -213,3 +213,69 @@ test('LA MIGRATION 153 EST REJOUABLE ET N\'EFFACE AUCUN DOCUMENT', () => {
     assert.match(MIG153, /ADD COLUMN IF NOT EXISTS octets/);
     assert.ok(!/DROP TABLE|DELETE FROM|TRUNCATE/i.test(MIG153), 'elle n\'ajoute que deux colonnes');
 });
+
+test('LE CONTRÔLE ROUVRE TOUT, ET NOMME CE QUI CLOCHE', async () => {
+    /* POURQUOI CE MODE EXISTE. Après la reprise, la façon évidente de s'assurer que rien n'est
+       cassé est d'ouvrir deux ou trois documents dans l'application. Cela prouve deux ou trois
+       documents. Sur 1151 pièces de preuve Qualiopi, c'est un sondage, pas une vérification —
+       et la ligne abîmée, s'il y en a une, ne se découvrirait qu'un jour de contrôle.
+
+       Éprouvé ici sur les quatre cas qui peuvent se présenter, montés à la main : une ligne
+       saine, une ligne dont le contenu n'est plus celui qui est entré, une ligne illisible, et
+       une ligne pas encore reprise — qui, elle, n'est PAS une anomalie. */
+    const bon = aRanger(PDF);
+    const truque = aRanger(PDF);
+    truque.empreinte = 'f'.repeat(64); // l'empreinte ne correspond plus au contenu
+    const abime = { file: Buffer.from(aRanger(PDF).file), empreinte: bon.empreinte, octets: PDF.length };
+    abime.file[abime.file.length - 1] ^= 0xff; // le tag GCM le détectera
+
+    const lignes = {
+        sain: { v: bon.file, empreinte: bon.empreinte, taille: bon.octets },
+        truque: { v: truque.file, empreinte: truque.empreinte, taille: truque.octets },
+        abime: { v: abime.file, empreinte: abime.empreinte, taille: abime.octets },
+        pasRepris: { v: PDF, empreinte: null, taille: null }, // encore en clair
+    };
+    const conn = {
+        query: async (sql, params) => {
+            if (/information_schema/.test(sql)) return [[{ 1: 1 }]];
+            if (/IS NOT NULL ORDER BY/.test(sql)) return [Object.keys(lignes).map((id) => ({ id }))];
+            return [[lignes[params[0]]]];
+        },
+    };
+    const sorties = [];
+    const [l, e] = [console.log, console.error];
+    console.log = (m) => sorties.push(String(m));
+    console.error = (m) => sorties.push(String(m));
+    let ennuis;
+    try {
+        ennuis = await outil.verifier(conn, { table: 'archive_document', cle: 'id', colonne: 'file', libelle: 'coffre', mesures: true });
+    } finally { console.log = l; console.error = e; }
+
+    assert.strictEqual(ennuis, 2, 'deux lignes en défaut : celle qui a changé et celle qui est abîmée');
+    const texte = sorties.join('\n');
+    assert.match(texte, /Rouverts et conformes : 1/, 'une seule ligne saine');
+    assert.match(texte, /encore en clair : 1/, 'la ligne pas encore reprise est comptée à part, pas en défaut');
+    assert.match(texte, /truque : empreinte différente/, 'un contenu qui a changé doit être NOMMÉ');
+    assert.match(texte, /abime : ILLISIBLE/, 'une ligne altérée doit être NOMMÉE');
+});
+
+test('LE CONTRÔLE N\'ÉCRIT JAMAIS RIEN', async () => {
+    /* La promesse tient la moitié de l'intérêt du mode : on doit pouvoir le lancer sur la
+       production, en pleine journée, sans se demander ce qu'il touche. */
+    const vues = [];
+    const conn = {
+        query: async (sql, params) => {
+            vues.push(sql);
+            if (/information_schema/.test(sql)) return [[{ 1: 1 }]];
+            if (/IS NOT NULL ORDER BY/.test(sql)) return [[{ id: 'x' }]];
+            return [[{ v: aRanger(PDF).file, empreinte: aRanger(PDF).empreinte, taille: PDF.length }]];
+        },
+    };
+    const l = console.log; console.log = () => {};
+    try { await outil.verifier(conn, { table: 'archive_document', cle: 'id', colonne: 'file', libelle: 'coffre', mesures: true }); }
+    finally { console.log = l; }
+    for (const sql of vues) {
+        assert.doesNotMatch(sql, /\b(UPDATE|INSERT|DELETE|REPLACE|TRUNCATE|ALTER|DROP)\b/i,
+            `le contrôle ne doit émettre que des lectures — vu : ${sql.slice(0, 60)}`);
+    }
+});
