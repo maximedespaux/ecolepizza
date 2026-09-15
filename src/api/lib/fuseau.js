@@ -19,7 +19,8 @@ const FUSEAU = process.env.DB_TIMEZONE || 'Europe/Paris';
  * Décalage courant d'un fuseau, au format accepté par `SET time_zone` (« +02:00 »).
  *
  * SERT DE REPLI quand le serveur ne connaît pas les noms de fuseaux : `SET time_zone =
- * 'Europe/Paris'` exige les tables chargées par `mysql_tzinfo_to_sql`, absentes de beaucoup
+ * 'Europe/Paris'` exige les tables chargées par `mariadb-tzinfo-to-sql` (`mysql_tzinfo_to_sql`
+ * avant MariaDB 11), absentes de beaucoup
  * d'installations. Le décalage, lui, est toujours accepté.
  *
  * IL SUIT L'HEURE D'ÉTÉ parce qu'il est recalculé à chaque nouvelle connexion du pool, et non
