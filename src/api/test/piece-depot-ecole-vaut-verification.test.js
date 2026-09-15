@@ -119,8 +119,15 @@ test('sans les statuts de pièces, le parcours se fige — le défaut du suivi',
    code, elles ne le suivaient pas par hasard — c'est bien ce fichier qui porte la règle. */
 const AVANCEMENT = fs.readFileSync(path.join(__dirname, '..', 'lib/avancement.js'), 'utf8');
 const SUIVI = fs.readFileSync(path.join(__dirname, '..', 'controllers/suivi.controller.js'), 'utf8');
-const ROADMAP = fs.readFileSync(
-    path.join(__dirname, '..', '..', 'app/ui/components/Roadmap.jsx'), 'utf8');
+/* LA RÈGLE A DÉMÉNAGÉ, et ce test l'a signalé en virant au rouge — c'est son travail.
+   Elle vivait dans `components/Roadmap.jsx` ; une COPIE divergente traînait dans
+   `pages/Suivi.jsx`, et le suivi Qualiopi réclamait des pièces d'identité pourtant validées
+   (production, 2026-09-15). Elle est désormais seule dans `lib/etapes.js`, où elle s'IMPORTE
+   au lieu de se recopier — et où `etape-etat-unique.test.js` l'éprouve sur son comportement
+   plutôt que sur un motif. Ce fichier-ci garde ce qu'il gelait : que le calcul REÇOIVE l'état
+   de la pièce. Sans cette donnée, la meilleure règle du monde ne peut rien dire. */
+const ETAPES = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'app/ui/lib/etapes.js'), 'utf8');
 
 test('le suivi Qualiopi passe les statuts de pièces au calcul', () => {
     assert.match(AVANCEMENT, /computeDocParcours\(\{ steps, docs, pieces: piecesParDossier\.get\(e\.enrollment_id\) \|\| \{\} \}\)/,
@@ -132,8 +139,8 @@ test('le suivi Qualiopi passe les statuts de pièces au calcul', () => {
 });
 
 test('la feuille de route lit l\'état d\'une pièce, pas un statut de document', () => {
-    assert.match(ROADMAP, /if \(doc\.piece\) \{/);
-    assert.match(ROADMAP, /doc\.pieceStatus === "VALIDEE"\) return "done"/);
+    assert.match(ETAPES, /if \(doc\.piece\) \{/);
+    assert.match(ETAPES, /doc\.pieceStatus === "VALIDEE"\) return "done"/);
     assert.match(AVANCEMENT, /pieceStatus: s\.pieceStatus \|\| null,/,
         'la feuille de route doit recevoir l\'état de la pièce');
 });
