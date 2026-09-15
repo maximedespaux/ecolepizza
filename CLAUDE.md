@@ -131,7 +131,7 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 > **153 + reprise du coffre.** `153_archives_chiffrees.sql` ajoute `archive_document.empreinte`
 > et `.octets` ; le chiffrement des 1140 PDF déjà en base se fait ensuite avec
 > `sudo -u impastio node database/tools/chiffrer-coffre.js` (rejouable, `--essai` pour voir sans
-> rien écrire). **À VÉRIFIER AVANT DE LANCER LA REPRISE : `SSN_ENC_KEY` est-elle sauvegardée
+> rien écrire, `--verifier` pour rouvrir et contrôler les 1151 lignes en lecture seule). **À VÉRIFIER AVANT DE LANCER LA REPRISE : `SSN_ENC_KEY` est-elle sauvegardée
 > hors du serveur ?** Après elle, la perdre coûte le coffre entier. Le code marche avant comme
 > après, dans les deux sens. Vérification, plutôt que de croire cette ligne :
 > `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio'
