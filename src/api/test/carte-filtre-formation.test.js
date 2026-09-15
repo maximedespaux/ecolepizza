@@ -23,7 +23,14 @@ const fs = require('fs');
 const path = require('path');
 
 const UI = path.join(__dirname, '..', '..', 'app', 'ui');
-const CARTE = fs.readFileSync(path.join(UI, 'pages/Carte.jsx'), 'utf8');
+/* COMMENTAIRES RETIRÉS AVANT DE SCANNER — leçon déjà payée deux fois dans ce projet, et
+   re-payée ici : l'assertion « plus aucun `towns: []` » trouvait le motif dans MON PROPRE
+   commentaire, celui qui explique justement qu'on ne le fait plus. Un test qui lit du source
+   doit lire le CODE, pas ce qu'on raconte à son sujet. */
+const sansCommentaires = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+const CARTE = sansCommentaires(fs.readFileSync(path.join(UI, 'pages/Carte.jsx'), 'utf8'));
 
 test('UN POINT SE RETROUVE SOUS LE NOM QUE LA CARTE AFFICHE', async () => {
     const { codesDuPoint } = await import('../../app/ui/lib/levels.js');
@@ -92,4 +99,51 @@ test('LE COMPTEUR NE CONFOND PLUS DEUX POPULATIONS', () => {
         'la mention « comptés dans leur département » n\'apparaît QUE pour `pending`');
     assert.match(CARTE, /\{ungeo > 0 && <>[^]*?\{ungeo\} sans code postal exploitable/,
         'et celle des absents de la carte QUE pour `ungeo`');
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   LES AUTRES FILTRES DE LA CARTE, éprouvés sur l'écran réel le 2026-09-15.
+
+   Ce qui marchait : le code de département (« 31 »), le nom exact (« haute-garonne »), une
+   ville (« toulouse »), la sélection d'un département et son retour « Tous les départements ».
+   Deux défauts trouvés en tapant, eux, ce qu'un humain tape. */
+
+test('LA RECHERCHE IGNORE LES ACCENTS — dans les deux sens', async () => {
+    /* MESURÉ SUR LA PRODUCTION : « hérault » → 1 résultat, « herault » → 0. Personne ne tape
+       les accents dans un champ de recherche, et la moitié des départements en portent.
+       Normaliser la SAISIE seule n'aurait rien réglé : c'est le NOM qui porte l'accent. */
+    const { normaliseRecherche } = await import('../../app/ui/lib/format.js');
+    const n = normaliseRecherche;
+    assert.strictEqual(n('Hérault'), 'herault');
+    assert.strictEqual(n('HERAULT'), 'herault', 'la casse aussi');
+    assert.strictEqual(n("Côte-d'Or"), "cote-d'or", 'le trait d\'union et l\'apostrophe restent : ils se tapent');
+    for (const [saisi, nom] of [['herault', 'Hérault'], ['ardeche', 'Ardèche'],
+        ['finistere', 'Finistère'], ['cotes-d\'armor', "Côtes-d'Armor"], ['HÉRAULT', 'Hérault']]) {
+        assert.ok(n(nom).includes(n(saisi)), `« ${saisi} » doit trouver « ${nom} »`);
+    }
+    assert.ok(!n('Gironde').includes(n('herault')), 'et ne trouve pas n\'importe quoi');
+});
+
+test('LA RECHERCHE NORMALISE LES DEUX CÔTÉS, PAS UN SEUL', () => {
+    const zone = CARTE.slice(CARTE.indexOf('const filtered = useMemo'), CARTE.indexOf('const maxCount'));
+    assert.match(zone, /const n = normaliseRecherche\(q\.trim\(\)\)/, 'la saisie');
+    assert.match(zone, /normaliseRecherche\(deptName\(d\.dept\)\)\.includes\(n\)/, 'le nom du département');
+    assert.match(zone, /normaliseRecherche\(t\.town\)\.includes\(n\)/, 'et le nom de la ville');
+    assert.ok(!/\.toLowerCase\(\)\.includes\(n\)/.test(zone),
+        'plus aucune comparaison qui se contente de la casse');
+});
+
+test('LES VILLES SURVIVENT AU FILTRE PAR FORMATION', () => {
+    /* LE DÉFAUT, SILENCIEUX : quand une formation était cochée, la répartition par département
+       était reconstruite avec `towns: []`. Or les villes ne servent QU'À LA RECHERCHE — rien ne
+       les affiche. Chercher « Toulouse » cessait donc de fonctionner dès qu'on filtrait, sans
+       message et sans différence visible à l'écran. */
+    const zone = CARTE.slice(CARTE.indexOf('const byDeptView'), CARTE.indexOf('const filtered'));
+    assert.ok(!/towns: \[\]/.test(zone), 'les villes ne sont plus jetées');
+    assert.match(zone, /e\.towns\.set\(t, \(e\.towns\.get\(t\) \|\| 0\) \+ 1\)/,
+        'elles se recomptent depuis les points retenus');
+    /* ET ELLES DEVIENNENT COHÉRENTES AVEC LE FILTRE : recomptées depuis les points affichés,
+       « Toulouse » ne remonte que si un point de Toulouse répond au filtre — ce qu'une liste
+       figée, héritée de l'agrégat global, n'aurait pas su faire. */
+    assert.match(zone, /for \(const p of shownPoints\)/);
 });

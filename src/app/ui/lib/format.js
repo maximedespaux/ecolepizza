@@ -120,3 +120,21 @@ export function dureeLisible(total) {
   if (!min) return `${sec} s`;
   return sec ? `${min} min ${String(sec).padStart(2, "0")} s` : `${min} min`;
 }
+
+/**
+ * TEXTE PRÊT POUR UNE RECHERCHE HUMAINE — minuscules, sans accents.
+ *
+ * LE DÉFAUT QUE ÇA CORRIGE, mesuré sur la carte des stagiaires le 2026-09-15 : taper
+ * « herault » ne trouvait RIEN, « hérault » trouvait le département. Or personne ne tape les
+ * accents dans un champ de recherche — et sur une carte de démarchage, la moitié des noms de
+ * départements en portent : Hérault, Ardèche, Côte-d'Or, Finistère, Côtes-d'Armor.
+ *
+ * `NFD` sépare la lettre de son accent (« é » → « e » + ◌́), et l'on retire les diacritiques
+ * restants. Le résultat se compare donc à la saisie la plus paresseuse.
+ *
+ * À EMPLOYER DES DEUX CÔTÉS : normaliser la saisie sans normaliser le texte cherché ne règle
+ * que la moitié du problème — c'est « Hérault » qui porte l'accent, pas la requête.
+ */
+export function normaliseRecherche(s) {
+  return String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}

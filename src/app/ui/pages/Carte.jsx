@@ -4,6 +4,7 @@ import PageHead from "../components/PageHead.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { LEVELS, colorForLevel, LEVEL_LABEL, setBadgeColors, codesDuPoint } from "../lib/levels.js";
+import { normaliseRecherche } from "../lib/format.js";
 
 // Centroïdes (préfecture) par département — suffisant pour une carte à bulles.
 const DEPTS = {
@@ -146,18 +147,38 @@ function Carte() {
   const byDeptView = useMemo(() => {
     if (!data) return [];
     if (!forms.length) return data.byDept;
+    /* LES VILLES SUIVENT LE FILTRE, elles ne disparaissent pas. Cette reconstruction rendait
+       `towns: []` : dès qu'une formation était cochée, chercher une ville ne trouvait plus
+       rien — sans message, sans différence visible, puisque les villes ne servent qu'à la
+       RECHERCHE. On les recompte donc depuis les points retenus, ce qui les rend en outre
+       cohérentes avec le filtre : « Toulouse » ne remonte que si un point de Toulouse y
+       répond. */
     const m = new Map();
-    for (const p of shownPoints) { if (!p.dept) continue; m.set(p.dept, (m.get(p.dept) || 0) + 1); }
-    return [...m.entries()].map(([dp, count]) => ({ dept: dp, count, towns: [] })).sort((a, b) => b.count - a.count);
+    for (const p of shownPoints) {
+      if (!p.dept) continue;
+      if (!m.has(p.dept)) m.set(p.dept, { count: 0, towns: new Map() });
+      const e = m.get(p.dept);
+      e.count++;
+      const t = (p.town || "").trim();
+      if (t) e.towns.set(t, (e.towns.get(t) || 0) + 1);
+    }
+    return [...m.entries()]
+      .map(([dp, e]) => ({ dept: dp, count: e.count,
+        towns: [...e.towns.entries()].map(([town, n]) => ({ town, n })).sort((a, b) => b.n - a.n) }))
+      .sort((a, b) => b.count - a.count);
   }, [data, forms, shownPoints]);
 
   const filtered = useMemo(() => {
-    const n = q.trim().toLowerCase();
+    /* SANS ACCENTS DES DEUX CÔTÉS. « herault » ne trouvait rien, « hérault » trouvait —
+       vérifié sur l'écran réel. Personne ne tape les accents dans une recherche, et la moitié
+       des départements en portent : Hérault, Ardèche, Côte-d'Or, Finistère, Côtes-d'Armor.
+       Normaliser la saisie seule ne réglerait rien : c'est le NOM qui porte l'accent. */
+    const n = normaliseRecherche(q.trim());
     if (!n) return byDeptView;
     return byDeptView.filter((d) =>
       d.dept.includes(n) ||
-      deptName(d.dept).toLowerCase().includes(n) ||
-      d.towns.some((t) => t.town.toLowerCase().includes(n))
+      normaliseRecherche(deptName(d.dept)).includes(n) ||
+      (d.towns || []).some((t) => normaliseRecherche(t.town).includes(n))
     );
   }, [byDeptView, q]);
 
