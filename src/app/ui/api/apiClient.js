@@ -626,6 +626,9 @@ export function createQuestDifficulty(p) { return request("/quest/difficulties",
 export function updateQuestDifficulty(id, p) { return request(`/quest/difficulties/${id}`, { method: "PUT", body: JSON.stringify(p) }); }
 export function deleteQuestDifficulty(id) { return request(`/quest/difficulties/${id}`, { method: "DELETE" }); }
 
+/* Bilan d'usage de Pizza Quest — à la demande : la requête monte la banque entière pour
+   rattacher chaque partie à son chapitre. */
+export function getQuestUsage() { return request("/quest/usage"); }
 export function createQuestChapter(p) { return request("/quest/chapters", { method: "POST", body: JSON.stringify(p) }); }
 export function updateQuestChapter(id, p) { return request(`/quest/chapters/${id}`, { method: "PUT", body: JSON.stringify(p) }); }
 export function deleteQuestChapter(id) { return request(`/quest/chapters/${id}`, { method: "DELETE" }); }

@@ -161,6 +161,16 @@ function palierDuMonde(etoiles = {}, nbChapitres = 0) {
  * @param mondes       [{ code, title, color, chapitres }]
  * @returns [{ id, valeur, palier, nom, code, title, color }] — `valeur` est ce qui s'enregistre.
  */
+/**
+ * UN CHAPITRE EST FAIT DÈS LA PREMIÈRE ÉTOILE. C'est la règle du jeu : on ne rejoue pas un
+ * chapitre acquis, même sans les trois étoiles (cf. PizzaQuest.jsx). Elle est EXPORTÉE parce
+ * que l'écran d'usage la redemande — et qu'une règle de comptage écrite à deux endroits finit
+ * par donner deux chiffres, comme on l'a vu ailleurs dans cette application.
+ */
+function chapitreFait(etoiles) {
+    return (Number(etoiles) || 0) > 0;
+}
+
 function cadresQuest(progression = {}, mondes = []) {
     const out = [];
     /* Le bilan de TOUS les mondes, pour les exploits. Il se construit dans la même boucle : le
@@ -178,7 +188,7 @@ function cadresQuest(progression = {}, mondes = []) {
         for (const v of Object.values(etoiles)) {
             const n = Number(v) || 0;
             bilan.etoiles += n;
-            if (n > 0) bilan.chapitresFaits += 1;
+            if (chapitreFait(n)) bilan.chapitresFaits += 1;
         }
         if (Object.values(etoiles).some((v) => Number(v) > 0)) bilan.mondesTouches += 1;
 
@@ -215,4 +225,5 @@ function possedeCadreQuest(valeur, cadres = []) {
     return cadres.some((c) => String(c.valeur).toLowerCase() === v);
 }
 
-module.exports = { PALIERS, PALIER_IDS, EXPLOITS, EXPLOIT_IDS, PALETTE, parseCadre, palierDuMonde, cadresQuest, possedeCadreQuest, couleurFormation };
+module.exports = {
+    chapitreFait, PALIERS, PALIER_IDS, EXPLOITS, EXPLOIT_IDS, PALETTE, parseCadre, palierDuMonde, cadresQuest, possedeCadreQuest, couleurFormation };
