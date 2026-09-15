@@ -182,13 +182,19 @@ async function verifier(conn, cible) {
     console.log(`\n· ${libelle} (${table}) — ${ids.length} ligne(s) à rouvrir`);
 
     let ok = 0; let clair = 0; let octets = 0;
-    const ennuis = [];
+    const vides = []; const ennuis = [];
     for (const { id } of ids) {
         const [[row]] = await conn.query(
             `SELECT \`${colonne}\` AS v${mesure ? ', empreinte, octets AS taille' : ''}
                FROM \`${table}\` WHERE \`${cle}\` = ?`, [id]);
         const buf = row && row.v;
-        if (!buf || !buf.length) continue;
+        /* UNE LIGNE VIDE SE NOMME. Elle passait en `continue` muet — et sur la production, le
+           contrôle a rapporté « 1150 conformes » pour « 1151 à rouvrir » sans dire où était la
+           1151e. Un compte qui ne tombe pas juste est un défaut du RAPPORT avant d'être un
+           défaut des données : la seule chose qu'on demande à une vérification, c'est de ne
+           rien laisser hors du compte. Un document de zéro octet n'est pas une anomalie de
+           chiffrement — c'est une pièce du coffre qui ne s'ouvrira jamais, et ça se sait. */
+        if (!buf || !buf.length) { vides.push(String(id)); continue; }
 
         if (!estChiffre(buf)) { clair++; continue; } // pas encore repris : ce n'est pas une anomalie
 
@@ -210,9 +216,22 @@ async function verifier(conn, cible) {
     }
     console.log(`  Rouverts et conformes : ${ok} (${mo(octets)})`
         + (clair ? ` — encore en clair : ${clair}` : '')
-        + (mesure ? '' : ' — sans empreinte mémorisée (migration 153 non jouée)'));
+        + (vides.length ? ` — VIDES : ${vides.length}` : '')
+        /* Le message ne vaut que pour le coffre : les autres tables n'ont jamais eu de colonne
+           d'empreinte, et leur annoncer « migration 153 non jouée » était faux — c'est ce qu'a
+           affiché la production sous « photos de profil » et « images de la communauté ». */
+        + (cible.mesures && !mesure ? ' — sans empreinte mémorisée (migration 153 non jouée)' : ''));
+    for (const v of vides) console.error(`  ✗ ${v} : document VIDE (0 octet) — il ne s'ouvrira jamais`);
     for (const e of ennuis) console.error(`  ✗ ${e}`);
-    return ennuis.length;
+    /* LE COMPTE DOIT TOMBER JUSTE, et c'est ce qui le prouve : tout ce qui est entré ressort
+       dans exactement une catégorie. Un écart signifie qu'une ligne a échappé au contrôle —
+       précisément ce qu'on ne veut pas découvrir un jour d'audit. */
+    const compte = ok + clair + vides.length + ennuis.length;
+    if (compte !== ids.length) {
+        console.error(`  ✗ ${ids.length - compte} ligne(s) NON CLASSÉE(S) — le contrôle est incomplet.`);
+        return ennuis.length + (ids.length - compte);
+    }
+    return ennuis.length + vides.length;
 }
 
 async function reprendre(conn, cible, mesures) {
@@ -225,14 +244,16 @@ async function reprendre(conn, cible, mesures) {
         `SELECT \`${cle}\` AS id FROM \`${table}\` WHERE \`${colonne}\` IS NOT NULL ORDER BY \`${cle}\``);
     console.log(`\n· ${libelle} (${table}) — ${ids.length} ligne(s) à examiner`);
 
-    let faites = 0; let sautees = 0; let octets = 0;
+    let faites = 0; let sautees = 0; let vides = 0; let octets = 0;
     for (const { id } of ids) {
         /* UNE LIGNE À LA FOIS : un PDF du coffre pèse jusqu'à 25 Mo, et tout charger d'un coup
            ferait tenir 681 Mo en mémoire — sur un VPS qui sert l'application en même temps. */
         const [[row]] = await conn.query(
             `SELECT \`${colonne}\` AS octets FROM \`${table}\` WHERE \`${cle}\` = ?`, [id]);
         const buf = row && row.octets;
-        if (!buf || !buf.length) { sautees++; continue; }
+        /* Vide : il n'y a rien à chiffrer, mais ce n'est pas « déjà en état » pour autant. Les
+           confondre, c'est ce qui a fait annoncer 1151 lignes reprises pour 1150 documents. */
+        if (!buf || !buf.length) { vides++; continue; }
 
         const chiffre = estChiffre(buf);
         if (DECHIFFRER ? !chiffre : chiffre) { sautees++; continue; }
@@ -269,7 +290,8 @@ async function reprendre(conn, cible, mesures) {
         faites++; octets += source.length;
         if (faites % 50 === 0) process.stdout.write(`  … ${faites} (${mo(octets)})\n`);
     }
-    console.log(`  ${ESSAI ? 'À reprendre' : 'Reprises'} : ${faites} (${mo(octets)}) — déjà en état : ${sautees}`);
+    console.log(`  ${ESSAI ? 'À reprendre' : 'Reprises'} : ${faites} (${mo(octets)}) — déjà en état : ${sautees}`
+        + (vides ? ` — vides, rien à chiffrer : ${vides}` : ''));
 }
 
 /* `require.main === module` : LANCÉ, pas REQUIS. Sans cette garde, un test qui importe ce

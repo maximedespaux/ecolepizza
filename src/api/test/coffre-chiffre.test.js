@@ -279,3 +279,70 @@ test('LE CONTRÔLE N\'ÉCRIT JAMAIS RIEN', async () => {
             `le contrôle ne doit émettre que des lectures — vu : ${sql.slice(0, 60)}`);
     }
 });
+
+test('LE COMPTE TOMBE JUSTE — aucune ligne ne sort du contrôle en silence', async () => {
+    /* DÉFAUT MESURÉ EN PRODUCTION le 2026-09-15. Le contrôle a annoncé « 1151 ligne(s) à
+       rouvrir » puis « Rouverts et conformes : 1150 », sans un mot sur la 1151e. Elle avait un
+       `file` de ZÉRO octet — un document du coffre qui ne s'ouvrira jamais — et mon code la
+       passait en `continue` muet.
+
+       CE QUE ÇA DIT DU RAPPORT AVANT DE DIRE QUELQUE CHOSE DES DONNÉES : la seule promesse
+       d'une vérification est de ne rien laisser hors du compte. Un écart entre ce qu'on annonce
+       examiner et ce qu'on rapporte est un défaut en soi, même quand la ligne manquante est
+       inoffensive — parce qu'on ne peut pas savoir qu'elle l'est tant qu'elle n'est pas nommée.
+
+       La ligne vide n'est d'ailleurs PAS inoffensive : servie par l'application, elle rend un
+       PDF de zéro octet. C'est une pièce Qualiopi qu'un contrôleur ne pourra pas ouvrir. */
+    const bon = aRanger(PDF);
+    /* `pasPdf` est là pour le garde-fou du COMPTE, pas pour lui-même : c'est la ligne qu'un
+       futur `continue` muet ferait disparaître du rapport sans qu'aucune autre assertion ne
+       s'en aperçoive. Sans elle, le garde-fou serait du code que rien n'éprouve. */
+    const pasPdf = aRanger(Buffer.from('ceci n\'est pas un PDF'));
+    const lignes = {
+        sain: { v: bon.file, empreinte: bon.empreinte, taille: bon.octets },
+        pasPdf: { v: pasPdf.file, empreinte: pasPdf.empreinte, taille: pasPdf.octets },
+        vide: { v: Buffer.alloc(0), empreinte: null, taille: null },
+    };
+    const conn = {
+        query: async (sql, params) => {
+            if (/information_schema/.test(sql)) return [[{ 1: 1 }]];
+            if (/IS NOT NULL ORDER BY/.test(sql)) return [Object.keys(lignes).map((id) => ({ id }))];
+            return [[lignes[params[0]]]];
+        },
+    };
+    const sorties = [];
+    const [l, e] = [console.log, console.error];
+    console.log = (m) => sorties.push(String(m));
+    console.error = (m) => sorties.push(String(m));
+    let ennuis;
+    try {
+        ennuis = await outil.verifier(conn, { table: 'archive_document', cle: 'id', colonne: 'file', libelle: 'coffre', mesures: true });
+    } finally { console.log = l; console.error = e; }
+
+    const texte = sorties.join('\n');
+    assert.match(texte, /VIDES : 1/, 'la ligne vide doit être comptée…');
+    assert.match(texte, /vide : document VIDE/, '…et NOMMÉE, pour qu\'on puisse aller la voir');
+    assert.match(texte, /pasPdf : rouvert, mais ce n'est pas un PDF/, 'et celle-ci aussi est nommée');
+    assert.doesNotMatch(texte, /NON CLASSÉE/, 'tout est classé : le compte tombe juste');
+    assert.strictEqual(ennuis, 2, 'le vide et le non-PDF sont deux défauts');
+});
+
+test('LE MESSAGE « MIGRATION 153 » NE S\'ADRESSE QU\'AU COFFRE', async () => {
+    /* Vu en production sous « photos de profil » et « images de la communauté » : « sans
+       empreinte mémorisée (migration 153 non jouée) ». Ces deux tables n'ont JAMAIS eu de
+       colonne d'empreinte et n'en veulent pas. Un message d'aide qui accuse une migration
+       innocente envoie chercher un problème qui n'existe pas. */
+    const conn = {
+        query: async (sql) => {
+            if (/information_schema/.test(sql)) return [/empreinte/.test(sql) ? [] : [{ 1: 1 }]];
+            return [[]];
+        },
+    };
+    const sorties = [];
+    const l = console.log; console.log = (m) => sorties.push(String(m));
+    try {
+        await outil.verifier(conn, { table: 'learner_avatar', cle: 'learner_id', colonne: 'bytes', libelle: 'photos' });
+    } finally { console.log = l; }
+    assert.doesNotMatch(sorties.join('\n'), /migration 153/,
+        'une table qui n\'a jamais eu d\'empreinte ne doit pas réclamer la 153');
+});
