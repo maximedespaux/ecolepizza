@@ -19,6 +19,14 @@ const SECTION_BY_BASE = {
        est saisi ailleurs). La rubrique existe quand même, sinon le mode lecture seule ne
        s'applique pas à la page et ses liens s'ouvriraient sans bandeau. */
     notation: '/notation',
+    /* ÉVALUATION ET COMMISSION SONT DES ÉCRITURES DE SESSION, et doivent donc obéir au mode
+       lecture seule de la rubrique « Sessions ». Sans ces deux lignes, `sectionDeLaRequete`
+       rendait `null`, `enforceSectionMode` laissait passer (« rubrique non contrôlée »), et un
+       secrétariat passé en LECTURE sur /sessions pouvait quand même noter, décider de la
+       certification d'un candidat et CLÔTURER la commission — geste irréversible. C'est le
+       défaut « menu fermé, route ouverte » déjà payé sur companies, opcos, quest et boutique. */
+    evaluations: '/sessions',
+    examens: '/sessions',
     stagiaires: '/stagiaires', documents: '/stagiaires', enrollments: '/stagiaires',
     formations: '/formations', sessions: '/sessions', attendance: '/sessions',
     partenaires: '/partenaires', ventes: '/ventes', inventaire: '/ventes',

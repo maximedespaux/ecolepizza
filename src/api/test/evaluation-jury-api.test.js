@@ -24,7 +24,7 @@ const faux = {
     promise: () => ({
         query: async (sql, params) => {
             if (/information_schema/i.test(sql)) return [[{ 1: 1 }]];           // la 149 est jouée
-            if (/FROM evaluation_exercice WHERE id = \?/i.test(sql)) return [[CRITERE]];
+            if (/FROM evaluation_exercice x\s+JOIN evaluation_grille g/i.test(sql)) return [[CRITERE]];
             if (/FROM enrollment WHERE id = \?/i.test(sql)) return [dossierConnu ? [{ id: 'enr-1' }] : []];
             if (/FROM evaluation_grille WHERE id = \?/i.test(sql)) return [grilleConnue ? [grilleConnue] : []];
             if (/SELECT cloture_le FROM evaluation_verdict/i.test(sql)) return [cloture ? [{ cloture_le: cloture }] : []];

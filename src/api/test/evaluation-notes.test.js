@@ -32,7 +32,11 @@ let dossierConnu = true;
 const faux = {
     promise: () => ({
         query: async (sql, params) => {
-            if (/FROM evaluation_exercice WHERE id = \?/i.test(sql)) {
+            /* LA REQUÊTE A CHANGÉ DE FORME, et le double avec : l'exercice est désormais JOINT
+               au parcours du dossier et au rôle de sa grille, pour qu'on ne puisse plus apparier
+               librement un exercice et un dossier du même organisme. Le double répond donc à la
+               jointure — répondre encore à l'ancienne forme validerait du code disparu. */
+            if (/FROM evaluation_exercice x\s+JOIN evaluation_grille g/i.test(sql)) {
                 return [exerciceConnu ? [exerciceConnu] : []];
             }
             if (/FROM enrollment WHERE id = \?/i.test(sql)) return [dossierConnu ? [{ id: 'enr-1' }] : []];
