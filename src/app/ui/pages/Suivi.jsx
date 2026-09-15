@@ -13,7 +13,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Roadmap from "../components/Roadmap.jsx";
-import { stepState } from "../lib/etapes.js";
+import { stepState, manquesParFormation, dossiersDuManque } from "../lib/etapes.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf, dateHeure } from "../lib/format.js";
 
@@ -104,24 +104,16 @@ function Suivi() {
      On agrège donc par TYPE de document : c'est ainsi qu'on traite: on ne relance pas
      « le dossier Durand », on édite les douze conventions qui manquent. */
   const [manqueFiltre, setManqueFiltre] = useState(null);
-  const manques = useMemo(() => {
-    const m = new Map();
-    for (const d of dossiers) {
-      for (const doc of (d.documents || [])) {
-        if (stepState(doc) === "done") continue;
-        if (!m.has(doc.type)) m.set(doc.type, { type: doc.type, label: doc.label, n: 0 });
-        m.get(doc.type).n++;
-      }
-    }
-    return [...m.values()].sort((a, b) => b.n - a.n);
-  }, [dossiers]);
+  const manques = useMemo(() => manquesParFormation(dossiers), [dossiers]);
+
+  /* LE CODE NE S'AFFICHE QUE S'IL DISTINGUE QUELQUE CHOSE. Sur un organisme qui n'a qu'une
+     formation en cours, le répéter sur chaque carte est du bruit — et la couleur ne dirait rien
+     non plus, puisqu'elle serait la même partout. */
+  const plusieursFormations = useMemo(
+    () => new Set(manques.map((m) => m.code)).size > 1, [manques]);
 
   // Cliquer un manque filtre la liste : la page se termine par un geste, pas par un constat.
-  const dossiersVus = useMemo(() => {
-    if (!manqueFiltre) return dossiers;
-    return dossiers.filter((d) => (d.documents || [])
-      .some((doc) => doc.type === manqueFiltre && stepState(doc) !== "done"));
-  }, [dossiers, manqueFiltre]);
+  const dossiersVus = useMemo(() => dossiersDuManque(dossiers, manqueFiltre), [dossiers, manqueFiltre]);
 
   // Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise
   // apparaît sous l'entreprise (complétion agrégée), les autres restent autonomes.
@@ -209,13 +201,27 @@ function Suivi() {
                 )}
               </div>
               <div className="manque-row">
-                {manques.map((m) => (
-                  <button key={m.type} type="button" aria-pressed={manqueFiltre === m.type}
-                    className={"manque-i" + (manqueFiltre === m.type ? " on" : "")}
-                    onClick={() => setManqueFiltre((f) => (f === m.type ? null : m.type))}>
-                    <b className="chiffres">{m.n}</b><span>{m.label}</span>
-                  </button>
-                ))}
+                {manques.map((m) => {
+                  const actif = manqueFiltre && manqueFiltre.cle === m.cle;
+                  /* `--teinte` PLUTÔT QU'UN STYLE PAR PROPRIÉTÉ : la CSS s'en sert pour le
+                     liseré, le chiffre, la bordure au survol ET le fond de l'état choisi. Une
+                     variable posée ici les emmène tous les quatre, sans dupliquer les règles
+                     en JavaScript — et sans couleur, la carte retombe sur le rouge d'origine.
+                     La palette est celle de `colorOf` : même code couleur que les badges de
+                     formation et l'arbre des archives, pour qu'une couleur veuille dire la
+                     même chose partout dans l'application. */
+                  const teinte = plusieursFormations && m.code ? colorOf(m.code) : null;
+                  return (
+                    <button key={m.cle} type="button" aria-pressed={!!actif}
+                      className={"manque-i" + (actif ? " on" : "")}
+                      style={teinte ? { "--teinte": teinte } : undefined}
+                      aria-label={`${m.n} ${m.label}${m.code ? ` — formation ${m.code}` : ""}`}
+                      onClick={() => setManqueFiltre((f) => (f && f.cle === m.cle ? null : m))}>
+                      <b className="chiffres">{m.n}</b>
+                      <span>{m.label}{plusieursFormations && m.code && <i>{m.code}</i>}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : dossiers.length > 0 && (
