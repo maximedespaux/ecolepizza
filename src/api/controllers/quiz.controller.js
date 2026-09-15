@@ -553,7 +553,12 @@ const submitQuiz = async (req, res) => {
                     const selPos = [...new Set(selCols.map((cid) => optPos[cid]).filter((x) => x != null))].sort((a, b) => a - b);
                     if (selPos.length) compact[ri] = selPos;
                 });
-                value = JSON.stringify(compact).slice(0, 255);
+                /* PLUS DE TRONQUEMENT À 255 : il coupait EN SILENCE les grilles à partir d'une
+                   dizaine de lignes cochées — sans erreur, sans trace, avec une réponse qui
+                   avait l'air enregistrée. Un défaut plus vicieux que le dépassement de colonne
+                   qu'il côtoyait, puisque celui-là, au moins, se voyait. La colonne est un TEXT
+                   depuis la migration 151. */
+                value = JSON.stringify(compact);
                 if (graded && rows.length) {
                     rows.forEach((row, ri) => {
                         const rp = Number(row.points);
@@ -603,18 +608,39 @@ const submitQuiz = async (req, res) => {
             : null;
         const colonnes = ['id', 'organization_id', 'quiz_id', 'learner_id', 'enrollment_id', 'document_id', 'score', 'max_score']
             .concat(avecPreuve ? ['snapshot'] : []);
-        await conn.query(
-            `INSERT INTO quiz_response (${colonnes.join(', ')})
-             VALUES (?, ?, ?, (SELECT learner_id FROM generated_document WHERE id = ?), ?, ?, ?, ?${avecPreuve ? ', ?' : ''})`,
-            [responseId, req.user.organization_id, r.quiz.id, req.params.documentId, r.enrollment_id, req.params.documentId,
-             graded ? Math.round(score) : null, graded ? Math.round(maxScore) : null]
-                .concat(avecPreuve ? [preuve] : [])
-        );
-        for (const a of answerRows) {
-            await conn.query('INSERT INTO quiz_answer (id, response_id, question_id, value) VALUES (?, ?, ?, ?)', [crypto.randomUUID(), responseId, a.question_id, a.value]);
+        /* TOUT OU RIEN. Sans transaction, l'envoi du 2026-09-15 a laissé en base des réponses
+           À MOITIÉ ÉCRITES : la ligne de réponse existait, une partie des réponses aussi, et le
+           document n'était jamais passé à SIGNÉ. Le stagiaire apparaissait « En cours » alors
+           qu'il avait répondu, et l'écran — voyant une réponse existante — lui refusait de
+           recommencer. Il était bloqué, et rien dans l'application ne le disait.
+           Une transaction ne laisse que les deux seuls états acceptables : la réponse est
+           enregistrée en entier, ou elle ne l'est pas du tout et l'on peut repasser le test.
+
+           La connexion est prise JUSTE ICI : au-dessus vivent un sondage de colonne et la
+           construction de la preuve, qui peuvent lever — la connexion aurait alors fuité, dix
+           fois de suite jusqu'à épuiser le pool. */
+        const cx = await conn.getConnection();
+        try {
+            await cx.beginTransaction();
+            await cx.query(
+                `INSERT INTO quiz_response (${colonnes.join(', ')})
+                 VALUES (?, ?, ?, (SELECT learner_id FROM generated_document WHERE id = ?), ?, ?, ?, ?${avecPreuve ? ', ?' : ''})`,
+                [responseId, req.user.organization_id, r.quiz.id, req.params.documentId, r.enrollment_id, req.params.documentId,
+                 graded ? Math.round(score) : null, graded ? Math.round(maxScore) : null]
+                    .concat(avecPreuve ? [preuve] : [])
+            );
+            for (const a of answerRows) {
+                await cx.query('INSERT INTO quiz_answer (id, response_id, question_id, value) VALUES (?, ?, ?, ?)', [crypto.randomUUID(), responseId, a.question_id, a.value]);
+            }
+            // Le document est considéré fait (signé) une fois le QCM rempli.
+            await cx.query("UPDATE generated_document SET status = 'SIGNE', signed_at = NOW() WHERE id = ?", [req.params.documentId]);
+            await cx.commit();
+        } catch (e) {
+            await cx.rollback().catch(() => {});
+            throw e;
+        } finally {
+            cx.release();
         }
-        // Le document est considéré fait (signé) une fois le QCM rempli.
-        await conn.query("UPDATE generated_document SET status = 'SIGNE', signed_at = NOW() WHERE id = ?", [req.params.documentId]);
         logAudit(req, 'quiz.submit', 'Quiz', r.quiz.id);
 
         const percent = graded && maxScore > 0 ? Math.round((score / maxScore) * 100) : null;
