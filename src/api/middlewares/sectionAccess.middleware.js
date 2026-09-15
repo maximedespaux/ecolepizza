@@ -15,6 +15,10 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Base d'URL API -> rubrique de navigation. Une base absente = non contrôlée
 // (on laisse passer, pour ne jamais casser un endpoint non cartographié).
 const SECTION_BY_BASE = {
+    /* LECTURE SEULE PARTOUT : l'écran de notation n'a aucune écriture (il additionne ce qui
+       est saisi ailleurs). La rubrique existe quand même, sinon le mode lecture seule ne
+       s'applique pas à la page et ses liens s'ouvriraient sans bandeau. */
+    notation: '/notation',
     stagiaires: '/stagiaires', documents: '/stagiaires', enrollments: '/stagiaires',
     formations: '/formations', sessions: '/sessions', attendance: '/sessions',
     partenaires: '/partenaires', ventes: '/ventes', inventaire: '/ventes',
