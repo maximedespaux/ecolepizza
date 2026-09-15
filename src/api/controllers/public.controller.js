@@ -5,7 +5,15 @@ const { renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp 
 const { estSignatureValide } = require('../lib/signatures.js');
 
 async function loadLink(conn, token) {
-    const [[link]] = await conn.query('SELECT * FROM document_sign_link WHERE token = ?', [token]);
+    /* L'EXPIRATION EST TRANCHÉE PAR LA BASE, pas par une Date reconstruite en JS. Le pilote
+       construit un objet Date dans le fuseau du PROCESSUS, alors que MariaDB a rendu la valeur
+       dans celui de la SESSION : sur le VPS (processus en UTC, session en Europe/Paris) un lien
+       survivait DEUX HEURES à son échéance. Le même écart avait rendu « Session expirée » tout
+       jeton fraîchement émis, côté authentification. Comparer deux instants dans la base
+       supprime l'interprétation — et le changement d'heure avec. */
+    const [[link]] = await conn.query(
+        `SELECT *, (expires_at IS NOT NULL AND expires_at < NOW()) AS expire
+           FROM document_sign_link WHERE token = ?`, [token]);
     return link || null;
 }
 
@@ -15,7 +23,7 @@ const getSignPage = async (req, res) => {
         const conn = db.promise();
         const link = await loadLink(conn, req.params.token);
         if (!link) return res.status(404).json({ message: 'Lien invalide.' });
-        if (link.expires_at && new Date(link.expires_at) < new Date()) return res.status(410).json({ message: 'Ce lien a expiré.' });
+        if (link.expire) return res.status(410).json({ message: 'Ce lien a expiré.' });
         const [[doc]] = await conn.query('SELECT * FROM generated_document WHERE id = ?', [link.document_id]);
         if (!doc) return res.status(404).json({ message: 'Document introuvable.' });
         let company = null;
@@ -36,7 +44,7 @@ const submitSign = async (req, res) => {
         const conn = db.promise();
         const link = await loadLink(conn, req.params.token);
         if (!link) return res.status(404).json({ message: 'Lien invalide.' });
-        if (link.expires_at && new Date(link.expires_at) < new Date()) return res.status(410).json({ message: 'Ce lien a expiré.' });
+        if (link.expire) return res.status(410).json({ message: 'Ce lien a expiré.' });
         if (link.used_at) return res.status(409).json({ message: 'Ce document a déjà été signé.' });
         const signer_name = String((req.body || {}).signer_name || '').trim();
         const signature_data = (req.body || {}).signature_data;

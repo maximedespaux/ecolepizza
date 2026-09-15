@@ -26,12 +26,6 @@ export const NAV = [
       { to: "/entreprises", ic: "building", label: "Entreprises", roles: ADMIN },
       { to: "/sessions", ic: "calendar", label: "Sessions", roles: STAFF },
       { to: "/formations", ic: "graduation", label: "Formations", roles: STAFF },
-      /* NOTATION : l'addition de ce qui est saisi ailleurs. Les notes existaient déjà mais
-         éparpillées — le QCM rangé PAR QUESTIONNAIRE dans « Résultats QCM », l'évaluation
-         pratique sur la page de la session, le jury dans l'espace de l'intervenant. Personne ne
-         pouvait dire « où en est cette personne » sans ouvrir trois écrans et faire l'addition
-         de tête. Rangé en « Formation » : c'est l'acte pédagogique, pas un indicateur qualité. */
-      { to: "/notation", ic: "clipboard-check", label: "Notation", roles: STAFF },
       /* Le fil de la communauté, le MÊME que celui des stagiaires (l'API cadre sur
          l'organisme, pas sur le stagiaire). L'école y publiait déjà des annonces — la page
          prévoit `peutAnnoncer` pour le personnel — mais aucun chemin ne l'y menait : il fallait
@@ -72,6 +66,15 @@ export const NAV = [
     grp: "Qualité & conformité", // Qualiopi + traçabilité
     items: [
       { to: "/suivi", ic: "clipboard-check", label: "Suivi Qualiopi", roles: AUDIT },
+      /* NOTATION : l'addition de ce qui est saisi ailleurs. Les notes existaient déjà mais
+         éparpillées — le QCM rangé PAR QUESTIONNAIRE juste en dessous, l'évaluation pratique sur
+         la page de la session, le jury dans l'espace de l'intervenant. Personne ne pouvait dire
+         « où en est cette personne » sans ouvrir trois écrans et faire l'addition de tête.
+         Rangée ici, au-dessus des « Résultats QCM » dont elle est la vue PAR STAGIAIRE : les
+         deux lisent les mêmes réponses, l'une par questionnaire, l'autre par personne.
+         `STAFF` et non `AUDIT` comme ses voisines : le FORMATEUR en est le premier lecteur,
+         c'est lui qui a noté. */
+      { to: "/notation", ic: "clipboard-check", label: "Notation", roles: STAFF },
       { to: "/qcm-resultats", ic: "list-checks", label: "Résultats QCM", roles: AUDIT },
       { to: "/audit", ic: "history", label: "Journal d'audit", roles: AUDIT },
     ],

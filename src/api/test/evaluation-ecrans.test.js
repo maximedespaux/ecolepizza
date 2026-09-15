@@ -16,17 +16,39 @@ const SESSION = lire('pages/SessionDetail.jsx');
 const SAISIE = lire('components/SessionEvaluation.jsx');
 const GRILLE = lire('components/GrilleEvaluation.jsx');
 const FORMATIONS = lire('pages/Formations.jsx');
+const NOTATION = lire('pages/Notation.jsx');
+const MAIN = lire('main.jsx');
+const NAV = lire('lib/nav.js');
 
-test('LE FORMATEUR VOIT LA SAISIE — la carte n\'est pas réservée au bureau', () => {
-    /* LE DÉFAUT LE PLUS FACILE À RÉINTRODUIRE. Trois blocs voisins de cette page sont montés
-       sous `isAdmin` (consentements, formateurs, intervenants), et `isAdmin` EXCLUT le rôle
-       FORMATEUR. Aligner celui-ci sur ses voisins « pour faire propre » retirerait l'écran de
-       notation à la seule personne qui note. Le serveur décide seul du droit d'écrire (STAFF). */
-    const i = SESSION.indexOf('<SessionEvaluation');
-    assert.ok(i > 0, 'la carte d\'évaluation doit être montée sur la page de la session');
-    const avant = SESSION.slice(Math.max(0, i - 400), i);
-    assert.doesNotMatch(avant, /isAdmin\s*&&\s*[^}]*$/,
-        'la saisie des notes ne doit pas être conditionnée à isAdmin — le formateur en est exclu');
+test('LE FORMATEUR ATTEINT LA SAISIE — elle n\'est pas réservée au bureau', () => {
+    /* LE DÉFAUT LE PLUS FACILE À RÉINTRODUIRE, et il a changé d'adresse : la saisie vivait sur
+       la page de la session, au milieu de cinq cartes montées sous `isAdmin` — un rôle qui
+       EXCLUT le formateur. Elle vit maintenant dans « Notation », dont la porte est la route et
+       l'entrée de menu. Les régler sur ADMIN ou SUIVI « pour faire propre avec les voisines »
+       retirerait l'écran de notation à la seule personne qui note.
+       Le serveur, lui, décide seul du droit d'ÉCRIRE (STAFF_ROLES). */
+    assert.match(NOTATION, /<SessionEvaluation key=\{choisie\} sessionId=\{choisie\} \/>/,
+        'la saisie doit être montée dans la page Notation');
+    assert.match(MAIN, /path="notation"[^\n]*roles=\{STAFF\}/,
+        'la route /notation doit être ouverte au STAFF, formateur compris');
+    assert.match(NAV, /\{ to: "\/notation",[^}]*roles: STAFF \}/,
+        'et l\'entrée de menu aussi, sinon il ne la voit pas');
+});
+
+test('LA SESSION NE PORTE PLUS LA SAISIE — elle était noyée', () => {
+    /* Elle y voisinait l'inscription, les consentements, les formateurs, les intervenants,
+       l'émargement et le procès-verbal. La remettre là déplacerait le problème plutôt que de
+       le régler, et l'on aurait DEUX endroits où noter — qui finiraient par ne plus dire la
+       même chose. */
+    assert.ok(!SESSION.includes('SessionEvaluation'),
+        'la page de la session ne doit plus monter l\'écran de saisie');
+});
+
+test('CHANGER DE SESSION REMONTE L\'ÉCRAN DE SAISIE', () => {
+    /* Sans `key`, les notes du groupe précédent resteraient affichées le temps du chargement —
+       et une coche à cet instant partirait sur le mauvais dossier. Le même défaut, et la même
+       parade, que la bascule formateur/jury dans l'éditeur de grille. */
+    assert.match(NOTATION, /<SessionEvaluation key=\{choisie\}/);
 });
 
 test('LA SAISIE ENVOIE LA MESURE, jamais des points', () => {
