@@ -339,6 +339,12 @@ function ArchivesView({ onError, onInfo }) {
   const [viewId, setViewId] = useState(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
+  /* CLASSEURS LIBRES. `cibleClasseur` est une ref et non un état : elle porte le classeur visé
+     entre le clic et le retour du sélecteur de fichiers, deux instants qui ne doivent PAS
+     provoquer de rendu — un rendu entre les deux refermerait le sélecteur. */
+  const [nouveauClasseur, setNouveauClasseur] = useState("");
+  const classeurRef = useRef(null);
+  const cibleClasseur = useRef(null);
 
   function load() {
     getArchives().then((r) => setRows(r.data)).catch((e) => { setRows([]); onError?.(e.message); });
@@ -353,31 +359,57 @@ function ArchivesView({ onError, onInfo }) {
     setBusy(true);
     try {
       const { data } = await importArchives(files, paths);
-      /* LES DOUBLONS SE DISENT À PART DES NON-PDF. Un fichier écarté parce qu'il est déjà là et
-         un fichier écarté parce que ce n'est pas un PDF n'appellent pas le même geste : le
-         premier ne demande rien, le second signale un lot mal préparé. Les confondre sous un
-         seul « ignoré(s) » ferait chercher une erreur là où l'import a bien travaillé. */
-      const parts = [`${data.imported} document(s) importé(s)`];
-      if (data.doublons) {
-        /* ON NOMME. Un compte ne dit pas LEQUEL a été écarté — et c'est lequel qui compte quand
-           on voulait remplacer une version par sa correction : il faut alors supprimer l'ancien
-           avant de réimporter. Les vingt premiers suffisent à reconnaître le lot. */
-        const noms = (data.noms_doublons || []).slice(0, 5).join(", ");
-        parts.push(`${data.doublons} déjà présent(s), non réimporté(s)${noms ? ` — ${noms}${data.doublons > 5 ? "…" : ""}` : ""}`);
-      }
-      if (data.skipped) parts.push(`${data.skipped} ignoré(s) (non PDF)`);
-      /* ET LES VIDES À PART DES DEUX AUTRES. Un fichier de zéro octet n'est ni un doublon ni un
-         mauvais format : c'est un fichier ABÎMÉ, et c'est le seul des trois cas qui demande
-         d'aller rechercher l'original. Le fondre dans « ignoré(s) » ferait croire à un lot mal
-         préparé alors qu'il manque vraiment un document. */
-      if (data.vides) {
-        const noms = (data.noms_vides || []).slice(0, 5).join(", ");
-        parts.push(`${data.vides} vide(s), non importé(s)${noms ? ` — ${noms}${data.vides > 5 ? "…" : ""}` : ""}`);
-      }
-      onInfo?.(`${parts.join(", ")}.`);
+      onInfo?.(messageImport(data));
       load();
     } catch (err) { onError?.(err.message); }
     finally { setBusy(false); }
+  }
+
+  /* DÉPÔT DANS UN CLASSEUR. Pas de `webkitdirectory` ici : on choisit des FICHIERS, pas une
+     arborescence — un classeur n'a pas de structure à lire, c'est justement sa définition. */
+  function deposerDans(nom) {
+    cibleClasseur.current = nom;
+    classeurRef.current?.click();
+  }
+
+  async function onPickClasseur(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    const nom = cibleClasseur.current;
+    cibleClasseur.current = null;
+    if (!files.length || !nom) return;
+    setBusy(true);
+    try {
+      const { data } = await importArchives(files, files.map((f) => f.name), nom);
+      onInfo?.(`${messageImport(data)} Classeur « ${nom} ».`);
+      setNouveauClasseur("");
+      load();
+    } catch (err) { onError?.(err.message); }
+    finally { setBusy(false); }
+  }
+
+  /* LE COMPTE RENDU D'UN IMPORT, au même endroit pour les deux chemins — l'arbre des sessions
+     et les classeurs. Il tenait dans `onPick`, et un classeur qui aurait recopié ses quinze
+     lignes aurait fini par ne plus dire la même chose qu'elles.
+
+     LES QUATRE CAS SE DISENT SÉPARÉMENT, et ce n'est pas du zèle : un fichier déjà là ne
+     demande RIEN ; un non-PDF signale un lot mal préparé ; un fichier VIDE veut dire qu'il
+     manque vraiment un document et qu'il faut aller rechercher l'original. Les fondre sous un
+     seul « ignoré(s) » ferait chercher une erreur là où l'import a bien travaillé, ou croire
+     que tout est passé alors qu'il manque une pièce. */
+  function messageImport(data) {
+    const parts = [`${data.imported} document(s) importé(s)`];
+    /* ON NOMME. Un compte ne dit pas LEQUEL a été écarté — et c'est lequel qui compte quand on
+       voulait remplacer une version par sa correction : il faut alors supprimer l'ancien avant
+       de réimporter. Les cinq premiers suffisent à reconnaître le lot. */
+    const nommer = (n, noms, texte) => {
+      const cinq = (noms || []).slice(0, 5).join(", ");
+      parts.push(`${n} ${texte}${cinq ? ` — ${cinq}${n > 5 ? "…" : ""}` : ""}`);
+    };
+    if (data.doublons) nommer(data.doublons, data.noms_doublons, "déjà présent(s), non réimporté(s)");
+    if (data.skipped) parts.push(`${data.skipped} ignoré(s) (non PDF)`);
+    if (data.vides) nommer(data.vides, data.noms_vides, "vide(s), non importé(s)");
+    return `${parts.join(", ")}.`;
   }
 
   // Supprime définitivement un ensemble de documents (en base). `docs` = lignes
@@ -418,13 +450,65 @@ function ArchivesView({ onError, onInfo }) {
       style={{ marginLeft: 8 }}><Icon name="trash" size={15} /></button>
   );
 
-  const tree = useMemo(() => {
-    if (!rows) return [];
+  /* UNE LIGNE DE DOCUMENT, EXTRAITE — parce que les classeurs affichent EXACTEMENT les mêmes.
+     Recopier ces trente lignes, c'est garantir qu'un jour l'aperçu marchera dans l'arbre des
+     sessions et pas dans les classeurs, ou que la garde sur les pièces ne sera corrigée que
+     d'un côté. Le coffre a déjà payé ce genre de dette ailleurs. */
+  const DocLigne = ({ d }) => {
+    const [lab, tone] = DOC_STATUS[d.status] || [d.status, "n"];
+    return (
+      <div className="arch-doc">
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <b>{d.title}</b>
+          <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
+            {d.source === "piece"
+              ? (d.sent_at ? `déposée le ${dateHeure(d.sent_at)}` : "")
+              : d.signed_at ? `signé le ${dateHeure(d.signed_at)}` : d.sent_at ? `envoyé le ${dateHeure(d.sent_at)}` : ""}
+          </span>
+        </span>
+        <Badge tone={tone}>{lab}</Badge>
+        <button className="iconbtn" title="Aperçu" aria-label={`Aperçu de ${d.title}`}
+          onClick={() => d.source === "piece" ? window.open(pieceFichierUrl(d.doc_id), "_blank", "noopener")
+            : d.source === "archive" ? window.open(archiveFileUrl(d.doc_id), "_blank", "noopener") : setViewId(d.doc_id)}><Icon name="eye" size={16} /></button>
+        {/* NI TÉLÉCHARGEMENT NI SUPPRESSION SUR UNE PIÈCE. Le fichier n'est pas forcément un
+            PDF (une photo de carte d'identité, le plus souvent) et s'ouvre déjà en ligne — d'où
+            on l'enregistre. Surtout, l'effacer appartient au dossier, où il passe par la purge
+            prévue : un scan d'identité supprimé doit l'être avec son dépôt, pas isolément
+            depuis un coffre qui range par formation. */}
+        {d.source !== "piece" && (
+          <button className="iconbtn" title="Télécharger le PDF" aria-label={`Télécharger le PDF de ${d.title}`}
+            onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
+        )}
+        {isAdmin && d.source !== "piece" && (
+          <button className="iconbtn del" title="Supprimer ce document" aria-label={`Supprimer ${d.title}`} onClick={() => deleteDocs([d], d.title)}><Icon name="trash" size={15} /></button>
+        )}
+      </div>
+    );
+  };
+
+
+  /* UN CLASSEUR N'EST PAS UNE TABLE : comme l'année, la semaine et la formation, il existe
+     parce que des documents s'y trouvent, et disparaît avec son dernier document. Rien à
+     nettoyer, aucun dossier vide que personne n'ose supprimer. Le revers assumé : on ne crée
+     pas un classeur à l'avance, on le nomme en y déposant. */
+  const { tree, classeurs } = useMemo(() => {
+    if (!rows) return { tree: [], classeurs: [] };
     const needle = q.trim().toLowerCase();
     const filtered = needle
-      ? rows.filter((r) => `${r.last_name} ${r.first_name} ${r.company_name || ""} ${r.program_code} ${r.program_title} ${r.title}`.toLowerCase().includes(needle))
+      ? rows.filter((r) => `${r.last_name} ${r.first_name} ${r.company_name || ""} ${r.program_code} ${r.program_title} ${r.title} ${r.dossier || ""}`.toLowerCase().includes(needle))
       : rows;
-    return buildTree(filtered);
+    const parNom = new Map();
+    for (const r of filtered) {
+      if (!r.dossier) continue;
+      if (!parNom.has(r.dossier)) parNom.set(r.dossier, []);
+      parNom.get(r.dossier).push(r);
+    }
+    return {
+      tree: buildTree(filtered.filter((r) => !r.dossier)),
+      classeurs: [...parNom.entries()]
+        .map(([nom, docs]) => ({ nom, docs }))
+        .sort((a, b) => a.nom.localeCompare(b.nom)),
+    };
   }, [rows, q]);
 
   if (rows === null) return <Card title="Archives"><p className="hint">Chargement…</p></Card>;
@@ -448,6 +532,59 @@ function ArchivesView({ onError, onInfo }) {
         <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
           Dossier <b>année / semaine / formation / stagiaire</b> · PDF uniquement.
         </p>
+      )}
+
+      {isAdmin && (
+        <input ref={classeurRef} type="file" multiple accept="application/pdf,.pdf"
+          style={{ display: "none" }} onChange={onPickClasseur} />
+      )}
+
+      {/* CLASSEURS — ce qui n'appartient à aucune session. Placés AVANT l'arbre : ils sont peu
+          nombreux et concernent l'organisme entier, quand l'arbre concerne les promotions. */}
+      {(classeurs.length > 0 || isAdmin) && (
+        <details className="arch" open={classeurs.length > 0} style={{ marginBottom: 14 }}>
+          <summary className="arch-sum arch-y">
+            Classeurs <span className="arch-count">{classeurs.reduce((n, c) => n + c.docs.length, 0)}</span>
+          </summary>
+          <div className="arch-in">
+            {isAdmin && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "8px 0 4px" }}>
+                <input className="inp" placeholder="Nom du classeur — Assurances, Agréments…" value={nouveauClasseur}
+                  onChange={(e) => setNouveauClasseur(e.target.value)} style={{ maxWidth: 300 }} maxLength={160}
+                  onKeyDown={(e) => { if (e.key === "Enter" && nouveauClasseur.trim()) deposerDans(nouveauClasseur.trim()); }} />
+                <button className="btn" disabled={busy || !nouveauClasseur.trim()}
+                  onClick={() => deposerDans(nouveauClasseur.trim())}>
+                  {busy ? "Dépôt en cours…" : "Créer et déposer des PDF…"}
+                </button>
+              </div>
+            )}
+            {classeurs.length === 0
+              ? <p className="hint" style={{ marginTop: 4 }}>
+                  Aucun classeur. Un classeur range ce qui n'appartient à aucune session —
+                  attestation d'assurance, agrément, certificat Qualiopi. Il existe tant qu'il
+                  contient un document.
+                </p>
+              : classeurs.map((C) => (
+                <details key={C.nom}>
+                  <summary className="arch-sum">
+                    <Icon name="folder" size={13} style={{ marginRight: 5, verticalAlign: "-2px" }} />
+                    {C.nom} <span className="arch-count">{C.docs.length}</span>
+                    {isAdmin && (
+                      <>
+                        <button type="button" className="iconbtn" title={`Ajouter des PDF dans « ${C.nom} »`}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); deposerDans(C.nom); }}
+                          style={{ marginLeft: 8 }}><Icon name="plus" size={15} /></button>
+                        <DelBtn title="Supprimer tout le classeur" onClick={() => deleteDocs(C.docs, `classeur « ${C.nom} »`)} />
+                      </>
+                    )}
+                  </summary>
+                  <div className="arch-docs">
+                    {C.docs.map((d) => <DocLigne key={d.doc_id} d={d} />)}
+                  </div>
+                </details>
+              ))}
+          </div>
+        </details>
       )}
 
       {isAdmin && <PanneauStockage onError={onError} onSupprime={(ids, quoi) => deleteDocs(
@@ -483,38 +620,7 @@ function ArchivesView({ onError, onInfo }) {
                                   {isAdmin && <DelBtn title={L.company ? "Supprimer cette entreprise" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
                                 </summary>
                                 <div className="arch-docs">
-                                  {L.docs.map((d) => {
-                                    const [lab, tone] = DOC_STATUS[d.status] || [d.status, "n"];
-                                    return (
-                                      <div key={d.doc_id} className="arch-doc">
-                                        <span style={{ flex: 1, minWidth: 0 }}>
-                                          <b>{d.title}</b>
-                                          <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
-                                            {d.source === "piece"
-                                              ? (d.sent_at ? `déposée le ${dateHeure(d.sent_at)}` : "")
-                                              : d.signed_at ? `signé le ${dateHeure(d.signed_at)}` : d.sent_at ? `envoyé le ${dateHeure(d.sent_at)}` : ""}
-                                          </span>
-                                        </span>
-                                        <Badge tone={tone}>{lab}</Badge>
-                                        <button className="iconbtn" title="Aperçu" aria-label={`Aperçu de ${d.title}`}
-                                          onClick={() => d.source === "piece" ? window.open(pieceFichierUrl(d.doc_id), "_blank", "noopener")
-                                            : d.source === "archive" ? window.open(archiveFileUrl(d.doc_id), "_blank", "noopener") : setViewId(d.doc_id)}><Icon name="eye" size={16} /></button>
-                                        {/* NI TÉLÉCHARGEMENT NI SUPPRESSION SUR UNE PIÈCE. Le fichier n'est pas
-                                            forcément un PDF (une photo de carte d'identité, le plus souvent) et
-                                            s'ouvre déjà en ligne — d'où on l'enregistre. Surtout, l'effacer
-                                            appartient au dossier, où il passe par la purge prévue : un scan
-                                            d'identité supprimé doit l'être avec son dépôt, pas isolément depuis
-                                            un coffre qui range par formation. */}
-                                        {d.source !== "piece" && (
-                                          <button className="iconbtn" title="Télécharger le PDF" aria-label={`Télécharger le PDF de ${d.title}`}
-                                            onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
-                                        )}
-                                        {isAdmin && d.source !== "piece" && (
-                                          <button className="iconbtn del" title="Supprimer ce document" aria-label={`Supprimer ${d.title}`} onClick={() => deleteDocs([d], d.title)}><Icon name="trash" size={15} /></button>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
+                                  {L.docs.map((d) => <DocLigne key={d.doc_id} d={d} />)}
                                 </div>
                               </details>
                             ))}

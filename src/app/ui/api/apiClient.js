@@ -722,11 +722,19 @@ export function getSuivi() {
 export function getArchives() {
   return request("/suivi/archives");
 }
-// Import de PDF historiques (dossier). `files` = File[], `paths` = chemins relatifs alignés.
-export async function importArchives(files, paths) {
+/**
+ * Import de PDF historiques. `files` = File[], `paths` = chemins relatifs alignés.
+ *
+ * `dossier` (facultatif) range les fichiers dans un CLASSEUR libre au lieu de l'arbre
+ * année / semaine / formation / stagiaire : le serveur met alors tout le classement par session
+ * en sommeil. Sert aux pièces qui n'appartiennent à aucune promotion — assurance, agrément,
+ * certificat Qualiopi.
+ */
+export async function importArchives(files, paths, dossier) {
   const fd = new FormData();
   files.forEach((f) => fd.append("files", f));
   fd.append("paths", JSON.stringify(paths));
+  if (dossier) fd.append("dossier", dossier);
   startLoading();
   try {
     marquerMutationLocale();
