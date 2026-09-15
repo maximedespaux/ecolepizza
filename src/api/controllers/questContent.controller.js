@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { buildChapters } = require('../lib/questcontent.js');
+const { usageQuest } = require('../lib/questUsage.js');
 
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
 const MIGRATION_HINT = 'Migration requise : appliquez 102_quest_questions.sql.';
@@ -458,7 +459,54 @@ const getPlayableChapters = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/quest/usage — Pizza Quest est-il utilisé, et sur quoi ?
+ *
+ * TOUT EST DÉDUIT DE L'EXISTANT : aucune donnée nouvelle n'est collectée, et le bilan porte sur
+ * tout l'historique déjà accumulé. Le détail du calcul — et ses limites, qui sont réelles — est
+ * écrit en tête de `lib/questUsage.js`.
+ *
+ * UNE ROUTE À PART, comme l'inventaire du coffre : elle monte la banque entière pour retrouver
+ * la position de chaque chapitre jouable. Ce n'est pas une consultation, c'est un bilan — il se
+ * demande, il ne s'impose pas à l'ouverture de l'écran de paramétrage.
+ */
+const getQuestUsage = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [programs] = await conn.query(
+            'SELECT id, code, title FROM training_program WHERE organization_id = ? AND active = 1 ORDER BY code',
+            [orgId]);
+        const bank = await loadBank(conn, orgId);
+        let progress = [];
+        let derniere = null;
+        try {
+            [progress] = await conn.query(
+                'SELECT learner_id, world, step, stars FROM learner_quest_progress WHERE organization_id = ?',
+                [orgId]);
+            /* FORMATÉE EN BASE, jamais reconstruite en JS : le pilote rendrait un `Date` dans le
+               fuseau du PROCESSUS quand MariaDB a répondu dans celui de la SESSION — deux heures
+               d'écart sur le VPS, le défaut qui avait fait « expirer » des jetons tout neufs. */
+            const [[d]] = await conn.query(
+                "SELECT DATE_FORMAT(MAX(updated_at), '%Y-%m-%d %H:%i') AS quand FROM learner_quest_progress WHERE organization_id = ?",
+                [orgId]);
+            derniere = (d && d.quand) || null;
+        } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 070 non jouée : aucun usage
+        const [[eff]] = await conn.query(
+            'SELECT COUNT(*) AS n FROM learner WHERE organization_id = ?', [orgId]);
+
+        res.json({ data: {
+            ...usageQuest({ programs, bank, progress, stagiaires: Number(eff && eff.n) || 0 }),
+            derniereActivite: derniere,
+        } });
+    } catch (err) {
+        console.error('Erreur usage Pizza Quest :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
+    getQuestUsage,
     getQuestContent, getPlayableChapters,
     createQuestDifficulty, updateQuestDifficulty, deleteQuestDifficulty,
     createQuestChapter, updateQuestChapter, deleteQuestChapter,

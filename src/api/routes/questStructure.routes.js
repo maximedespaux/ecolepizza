@@ -7,6 +7,7 @@ const {
     getQuestContent, createQuestDifficulty, updateQuestDifficulty, deleteQuestDifficulty,
     createQuestChapter, updateQuestChapter, deleteQuestChapter,
     createQuestQuestion, updateQuestQuestion, deleteQuestQuestion,
+    getQuestUsage,
 } = require('../controllers/questContent.controller.js');
 const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -17,6 +18,10 @@ const router = express.Router();
 router.use(authenticateToken, authorizeRoles(...ADMIN_ROLES));
 
 router.get('/structure', getQuestStructure);
+/* Bilan d'usage : route SÉPARÉE et à la demande. Elle monte la banque entière pour retrouver la
+   position de chaque chapitre jouable — ce n'est pas une consultation, c'est un inventaire, au
+   même titre que celui du coffre documentaire. */
+router.get('/usage', getQuestUsage);
 
 router.post('/categories', createQuestCategory);
 router.put('/categories/:id', updateQuestCategory);

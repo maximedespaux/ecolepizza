@@ -10,6 +10,7 @@ import {
   getQuestStructure, createQuestCategory, updateQuestCategory, deleteQuestCategory,
   setProgramQuestCategories, addQuestPrerequisite, deleteQuestPrerequisite,
   getQuestContent, createQuestDifficulty, updateQuestDifficulty, deleteQuestDifficulty,
+  getQuestUsage,
 } from "../api/apiClient.js";
 
 /**
@@ -85,6 +86,9 @@ export default function QuestManager() {
         <button type="button" className={"seg-btn" + (tab === "questions" ? " on" : "")} onClick={() => setTab("questions")}>
           Questions
         </button>
+        <button type="button" className={"seg-btn" + (tab === "usage" ? " on" : "")} onClick={() => setTab("usage")}>
+          Usage
+        </button>
       </div>
 
       {tab === "categories" && AXES.map((axe) => (
@@ -105,6 +109,8 @@ export default function QuestManager() {
         <QuestBankEditor programs={programs} difficulties={difficulties} onStatus={setStatus} />
       )}
 
+      {tab === "usage" && <UsageCard onStatus={setStatus} />}
+
     </>
   );
 }
@@ -114,6 +120,160 @@ export default function QuestManager() {
    `api/lib/questlives.js`, les routes /quest/vies, les colonnes `quest_max_hearts` /
    `quest_regen_minutes` et la table `learner_quest_life` (migration 115).
    La progression se lit désormais aux CADRES, gagnés sur les formations terminées. */
+
+
+/* ---- Usage : Pizza Quest sert-il, et sur quoi ? ----------------------------------------- */
+
+/**
+ * CE QUE CET ÉCRAN PEUT DIRE, ET CE QU'IL NE PEUT PAS.
+ *
+ * La base ne garde pas les réponses : une ligne par (stagiaire, chapitre) avec ses étoiles, et
+ * rien d'autre. Le nombre de questions est donc DÉDUIT — un chapitre terminé vaut ses questions
+ * jouables. C'est une estimation BASSE, et l'écran le dit au lieu de laisser croire à un compte
+ * exact : un stagiaire qui répond à quatre questions sur sept et s'arrête compte pour zéro.
+ *
+ * CHARGÉ À L'OUVERTURE DE L'ONGLET, pas de la page : la requête monte la banque entière pour
+ * rattacher chaque partie à son chapitre. C'est un bilan qu'on demande, pas une donnée qu'on
+ * traîne à chaque visite.
+ */
+function UsageCard({ onStatus }) {
+  const [data, setData] = useState(null);
+  const [charge, setCharge] = useState(false);
+
+  useEffect(() => {
+    let vivant = true;
+    setCharge(true);
+    getQuestUsage()
+      .then((r) => { if (vivant) setData(r.data); })
+      .catch((e) => onStatus?.({ type: "error", message: e.message }))
+      .finally(() => { if (vivant) setCharge(false); });
+    return () => { vivant = false; };
+  }, []);
+
+  if (charge && !data) return <Card title="Usage"><p className="hint">Calcul en cours…</p></Card>;
+  if (!data) return null;
+
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  const aucun = data.joueurs === 0;
+
+  return (
+    <>
+      <Card title={<span className="card-ttl"><Icon name="dashboard" size={16} /> Ce qui a été joué</span>}>
+        {aucun ? (
+          <EmptyState icon="pizza">
+            Personne n'a encore joué à Pizza Quest. Les {data.questionsDisponibles} questions de
+            vos {data.chapitresDisponibles} chapitres attendent leur premier stagiaire.
+          </EmptyState>
+        ) : (
+          <>
+            <div className="manque-row" style={{ marginBottom: 12 }}>
+              <div className="manque-i" style={{ cursor: "default" }}>
+                <b className="chiffres">{data.questionsParcourues}</b>
+                <span>questions parcourues<i>sur {data.questionsDisponibles} en banque</i></span>
+              </div>
+              <div className="manque-i" style={{ cursor: "default" }}>
+                <b className="chiffres">{data.joueurs}</b>
+                <span>stagiaire(s) ont joué<i>sur {data.stagiaires} au total</i></span>
+              </div>
+              <div className="manque-i" style={{ cursor: "default" }}>
+                <b className="chiffres">{data.chapitresTermines}</b>
+                <span>chapitres terminés<i>{data.chapitresTouches} chapitres différents sur {data.chapitresDisponibles}</i></span>
+              </div>
+              <div className="manque-i" style={{ cursor: "default" }}>
+                <b className="chiffres">{data.parfaits}</b>
+                <span>sans faute<i>{pct(data.parfaits, data.chapitresTermines)} % des chapitres terminés</i></span>
+              </div>
+            </div>
+
+            {/* LA LIMITE EST ÉCRITE À CÔTÉ DU CHIFFRE, pas en note de bas de page : un nombre
+                sans sa réserve se cite ensuite tout seul, et devient un fait. */}
+            <p className="hint" style={{ marginTop: 0 }}>
+              <b>Estimation basse.</b> Les réponses ne sont pas enregistrées une à une : on compte
+              les questions des chapitres <b>terminés</b>. Un chapitre commencé puis abandonné
+              compte pour zéro, et les reprises comme les erreurs n'apparaissent pas.
+              {data.derniereActivite && <> Dernière partie : <b>{data.derniereActivite}</b>.</>}
+            </p>
+            {data.orphelines > 0 && (
+              <p className="hint">
+                <Icon name="alert-triangle" size={13} style={{ verticalAlign: "-2px" }} />{" "}
+                {data.orphelines} partie(s) ne se rattachent plus à aucun chapitre — la banque a
+                changé depuis. Elles ne sont comptées nulle part ci-dessus.
+              </p>
+            )}
+          </>
+        )}
+      </Card>
+
+      {!aucun && (
+        <Card title={<span className="card-ttl"><Icon name="graduation" size={16} /> Par formation</span>}>
+          <div className="grid" style={{ gap: 8 }}>
+            {data.parFormation.filter((f) => f.chapitres > 0).map((f) => (
+              <div key={f.code} className="dept-row" style={{ cursor: "default" }}>
+                <span style={{ width: 210, flexShrink: 0, fontSize: 13, textAlign: "left" }}>
+                  <span className="badge n mono" style={{ background: colorOf(f.code), color: "#fff", borderColor: "transparent" }}>{f.code}</span>{" "}
+                  <span className="sub" style={{ color: "var(--dim)" }}>{f.chapitres} ch. · {f.questions} q.</span>
+                </span>
+                <div style={{ flex: 1, height: 8, borderRadius: 999, background: "var(--surface3)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct(f.questionsParcourues, Math.max(1, data.questionsParcourues))}%`,
+                    background: colorOf(f.code), borderRadius: 999 }} />
+                </div>
+                <span style={{ width: 150, textAlign: "right", fontSize: 12, color: "var(--dim)" }}>
+                  <b className="chiffres" style={{ color: "var(--text)" }}>{f.questionsParcourues}</b> q. · {f.joueurs} joueur(s)
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {!aucun && data.chapitres.length > 0 && (
+        <Card title={<span className="card-ttl"><Icon name="list-ordered" size={16} /> Chapitres les plus joués</span>}>
+          {/* Vingt suffisent : au-delà on est dans la queue, et la liste entière ferait une page
+              de plus sans rien apprendre. */}
+          <div className="grid" style={{ gap: 6 }}>
+            {data.chapitres.slice(0, 20).map((c) => (
+              <div key={c.id} className="arch-doc">
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <b>{c.titre}</b>
+                  <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
+                    {c.formation} · {c.questions} question(s) · {c.moyenneEtoiles} étoile(s) en moyenne
+                  </span>
+                </span>
+                <span className="arch-count">{c.joueurs} joueur(s)</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {data.miniJeux.length > 0 && (
+        <Card title={<span className="card-ttl"><Icon name="flask" size={16} /> Mini-jeux</span>}>
+          {/* LES MINI-JEUX NE SONT PAS DES CHAPITRES et ne comptent pas dans les questions —
+              ils n'en posent aucune. Mais ils sont enregistrés dans la même table, et les
+              passer sous silence donnerait une image fausse de ce qui est réellement joué. */}
+          <div className="manque-row">
+            {data.miniJeux.map((m) => (
+              <div key={m.cle} className="manque-i" style={{ cursor: "default" }}>
+                <b className="chiffres">{m.joueurs}</b>
+                <span>{MINI_JEUX[m.cle] || m.cle}<i>{m.etoiles} étoile(s)</i></span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </>
+  );
+}
+
+/* Les libellés des mini-jeux. La LISTE FAISANT FOI est celle de `PizzaQuest.jsx`, où chacun est
+   défini avec son icône et sa teinte ; celle-ci ne sert qu'à nommer une clé venue de la base.
+   Un mini-jeu ajouté là-bas et oublié ici s'afficherait sous sa clé brute — lisible, mais pas
+   soigné : `quest-usage.test.js` compare les deux listes et refuse l'oubli. */
+const MINI_JEUX = {
+  accords: "Les accords", constructeur: "Le Constructeur", pate: "Complète la pâte",
+  piege: "La commande piège", prix: "Le juste prix", service: "Le service",
+  simulateur: "Fais ta pizza", substitutions: "La substitution",
+};
 
 /* ---- Difficultés & XP ----------------------------------------------------------------- */
 
