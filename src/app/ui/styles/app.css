@@ -1364,16 +1364,20 @@ tbody tr:last-child td{border-bottom:none}
 .manque-t{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:10.5px;
   font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--dim)}
 .manque-row{display:flex;flex-wrap:wrap;gap:8px}
+/* `--teinte` : la COULEUR DE LA FORMATION concernée, posée en ligne sur la carte. Elle emmène
+   d'un coup le liseré, le chiffre, la bordure au survol et le fond de l'état choisi — d'où la
+   variable plutôt que quatre styles en JavaScript. Non définie (formation unique, ou aucune),
+   on retombe sur le rouge d'origine : aucune carte ne perd sa couleur. */
 .manque-i{display:inline-flex;align-items:center;gap:9px;padding:8px 13px;cursor:pointer;
   font:inherit;font-size:13px;text-align:left;color:var(--text);background:var(--surface);
-  border:1px solid var(--border);border-left:3px solid var(--ember1);
+  border:1px solid var(--border);border-left:3px solid var(--teinte,var(--ember1));
   border-radius:var(--r-sm);box-shadow:var(--shadow-1);
   transition:transform .14s var(--ease),border-color .14s var(--ease),background .14s var(--ease)}
-.manque-i:hover{transform:translateY(-1px);border-color:var(--ember1)}
+.manque-i:hover{transform:translateY(-1px);border-color:var(--teinte,var(--ember1))}
 /* `color-mix` et non `--rosso-bg` : ce jeton n'est défini qu'en thème clair et resterait
    rose pâle sur fond sombre. Mêlé à la transparence, il suit la surface qui le porte. */
-.manque-i.on{background:color-mix(in srgb,var(--ember1) 13%,transparent);border-color:var(--ember1)}
-.manque-i b{font-size:16px;font-weight:800;color:var(--ember1);letter-spacing:-.02em}
+.manque-i.on{background:color-mix(in srgb,var(--teinte,var(--ember1)) 13%,transparent);border-color:var(--teinte,var(--ember1))}
+.manque-i b{font-size:16px;font-weight:800;color:var(--teinte,var(--ember1));letter-spacing:-.02em}
 /* La puce accepte un sous-titre — l'état du stock et son seuil, sur l'inventaire. */
 .manque-i > span{display:flex;flex-direction:column;gap:1px;line-height:1.25}
 .manque-i i{font-style:normal;font-size:11px;font-weight:400;color:var(--dim)}

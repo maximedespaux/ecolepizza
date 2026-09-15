@@ -72,9 +72,125 @@ test('IL N\'EXISTE QU\'UNE SEULE DÉFINITION DANS TOUT LE FRONT', () => {
 
 test('LES DEUX ÉCRANS TIRENT DE LA MÊME SOURCE', () => {
     for (const f of ['components/Roadmap.jsx', 'pages/Suivi.jsx']) {
-        assert.match(lire(f), /import \{ stepState \} from ["']\.\.\/lib\/etapes\.js["']/,
+        /* L'import peut amener d'autres fonctions de la même lib — ce qui compte est que
+           `stepState` VIENNE de là, pas la forme exacte de la ligne. Écrite trop littéralement,
+           l'assertion a cassé à la première fonction ajoutée : un test doit tenir le contrat,
+           pas la ponctuation. */
+        assert.match(lire(f), /import \{[^}]*\bstepState\b[^}]*\} from ["']\.\.\/lib\/etapes\.js["']/,
             `${f} doit importer la règle, pas la réécrire`);
     }
     assert.doesNotMatch(lire('pages/Suivi.jsx'), /function docState/,
         'la copie de Suivi.jsx est supprimée, pas seulement corrigée');
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   « CE QUI MANQUE » : DEUX CARTES IDENTIQUES, ET RIEN POUR LES DÉPARTAGER.
+
+   RELEVÉ EN PRODUCTION le 2026-09-15, sur douze cartes : « Évaluation Formative du Mercredi »
+   apparaissait DEUX FOIS — une à 4, une à 1 — et pareil pour le Jeudi et le Vendredi. Ce ne
+   sont pas des doublons : chaque formation a son propre QCM, donc son propre `type`. Mais
+   l'écran n'affichait que le libellé, et les deux formations portent le même.
+
+   Le jeu d'essai ci-dessous reproduit la forme EXACTE des données de production, y compris le
+   cas inverse : la feuille d'émargement, elle, est un seul `type` partagé par les deux
+   formations — une carte unique ne pourrait donc porter aucune couleur juste. */
+const DOSSIERS = [
+    { program_code: 'RS7404', documents: [
+        { type: 'quiz:merc-rs', label: 'Évaluation Formative du Mercredi', status: 'A_FAIRE' },
+        { type: 'esheet-commune', label: "Feuille d'émargement", status: 'A_FAIRE' },
+        { type: 'piece:id', label: "Pièce d'identité", status: 'A_FAIRE', piece: true, pieceStatus: 'VALIDEE' },
+    ] },
+    { program_code: 'RS7404', documents: [
+        { type: 'quiz:merc-rs', label: 'Évaluation Formative du Mercredi', status: 'A_FAIRE' },
+        { type: 'esheet-commune', label: "Feuille d'émargement", status: 'SIGNE' },
+    ] },
+    { program_code: 'NIV1H', documents: [
+        { type: 'quiz:merc-niv1', label: 'Évaluation Formative du Mercredi', status: 'A_FAIRE' },
+        { type: 'esheet-commune', label: "Feuille d'émargement", status: 'A_FAIRE' },
+    ] },
+];
+
+test('DEUX FORMATIONS, DEUX CARTES — chacune la sienne', async () => {
+    const { manquesParFormation } = await import('../../app/ui/lib/etapes.js');
+    const cartes = manquesParFormation(DOSSIERS);
+    const merc = cartes.filter((c) => c.label === 'Évaluation Formative du Mercredi');
+    assert.strictEqual(merc.length, 2, 'le même libellé dans deux formations fait DEUX cartes');
+    assert.deepStrictEqual(merc.map((c) => [c.code, c.n]).sort(), [['NIV1H', 1], ['RS7404', 2]]);
+    /* CE QUI LES REND DÉPARTAGEABLES : chaque carte porte sa formation. Sans `code`, l'écran
+       afficherait deux fois la même chose — le défaut d'origine. */
+    assert.ok(merc.every((c) => c.code), 'chaque carte nomme sa formation');
+});
+
+test('UN TYPE PARTAGÉ SE DÉCOUPE AUSSI — sinon sa couleur serait un mensonge', async () => {
+    const { manquesParFormation } = await import('../../app/ui/lib/etapes.js');
+    const emarg = manquesParFormation(DOSSIERS).filter((c) => c.label === "Feuille d'émargement");
+    assert.strictEqual(emarg.length, 2, 'un type commun aux deux formations donne deux cartes');
+    assert.deepStrictEqual(emarg.map((c) => [c.code, c.n]).sort(), [['NIV1H', 1], ['RS7404', 1]],
+        'et le dossier dont la feuille est SIGNÉE ne compte pas');
+});
+
+test('AUCUN LIBELLÉ N\'APPARAÎT DEUX FOIS À L\'IDENTIQUE', async () => {
+    /* L'invariant qui résume tout : deux cartes peuvent porter le même libellé, jamais le même
+       libellé ET la même formation. C'est exactement ce qui manquait à l'écran. */
+    const { manquesParFormation } = await import('../../app/ui/lib/etapes.js');
+    const vus = manquesParFormation(DOSSIERS).map((c) => `${c.label}|${c.code}`);
+    assert.strictEqual(new Set(vus).size, vus.length);
+});
+
+test('UNE PIÈCE VALIDÉE NE FAIT PLUS DE CARTE', async () => {
+    const { manquesParFormation } = await import('../../app/ui/lib/etapes.js');
+    assert.ok(!manquesParFormation(DOSSIERS).some((c) => c.label === "Pièce d'identité"),
+        'l\'agrégation passe par stepState : le correctif des pièces vaut aussi ici');
+});
+
+test('LE FILTRE AU CLIC VISE LE TYPE **ET** LA FORMATION', async () => {
+    const { manquesParFormation, dossiersDuManque } = await import('../../app/ui/lib/etapes.js');
+    const cartes = manquesParFormation(DOSSIERS);
+
+    /* LE CAS QUI MET VRAIMENT LE FILTRE À L'ÉPREUVE : un type PARTAGÉ par les deux formations.
+       Sur deux QCM distincts, retirer le contrôle de formation ne se voit pas — les types
+       diffèrent, le filtre trie quand même. C'est la feuille d'émargement, un seul `type` pour
+       tout le monde, qui révèle le défaut : sans la formation, cliquer la carte NIV1H ramène
+       AUSSI le dossier RS7404. Un jeu d'essai qui ne contient que des types distincts laisse
+       donc passer le bug — il m'a laissé passer une première fois. */
+    const emargNiv1 = cartes.find((c) => c.code === 'NIV1H' && c.label === "Feuille d'émargement");
+    const vusEmarg = dossiersDuManque(DOSSIERS, emargNiv1);
+    assert.strictEqual(vusEmarg.length, 1, 'une seule formation visée, malgré un type commun');
+    assert.strictEqual(vusEmarg[0].program_code, 'NIV1H');
+
+    const cible = cartes.find((c) => c.code === 'NIV1H' && c.label.includes('Mercredi'));
+    const vus = dossiersDuManque(DOSSIERS, cible);
+    assert.strictEqual(vus.length, 1, 'un seul dossier NIV1H manque ce QCM');
+    assert.strictEqual(vus[0].program_code, 'NIV1H');
+    assert.strictEqual(dossiersDuManque(DOSSIERS, null).length, 3, 'sans filtre, tout revient');
+});
+
+test('LA TEINTE VIENT DE LA PALETTE PARTAGÉE, ET LA CSS LA SUIT PARTOUT', () => {
+    const suivi = lire('pages/Suivi.jsx');
+    assert.match(suivi, /const teinte = plusieursFormations && m\.code \? colorOf\(m\.code\) : null/,
+        'même palette que les badges de formation et l\'arbre des archives');
+    /* LE CODE NE S'AFFICHE QUE S'IL DISTINGUE QUELQUE CHOSE : sur un organisme qui n'a qu'une
+       formation en cours, le répéter sur chaque carte est du bruit, et la couleur ne dirait
+       rien puisqu'elle serait la même partout. */
+    assert.match(suivi, /new Set\(manques\.map\(\(m\) => m\.code\)\)\.size > 1/);
+
+    /* UNE SEULE VARIABLE POUR QUATRE USAGES — liseré, chiffre, bordure au survol, fond de
+       l'état choisi. Vérifié en production sur l'écran réel : les quatre suivent bien la
+       couleur de la formation, et une carte sans formation retombe sur le rouge d'origine. */
+    const css = fs.readFileSync(path.join(UI, 'styles/app.css'), 'utf8');
+    const T = 'var\\(--teinte,var\\(--ember1\\)\\)';
+    for (const [quoi, motif] of [
+        ['le liseré', `border-left:3px solid ${T}`],
+        ['la bordure au survol', `\\.manque-i:hover\\{[^}]*border-color:${T}`],
+        ['le fond de l\'état choisi', `\\.manque-i\\.on\\{[^}]*${T} 13%`],
+        ['la bordure de l\'état choisi', `\\.manque-i\\.on\\{[^}]*border-color:${T}`],
+        ['le chiffre', `\\.manque-i b\\{[^}]*color:${T}`],
+    ]) {
+        assert.match(css, new RegExp(motif), `${quoi} doit suivre la teinte de la formation`);
+    }
+    /* Et AUCUNE couleur en dur ne subsiste : le repli passe par la valeur par défaut de la
+       variable, ce qui garde son rouge d'origine à une carte sans formation. */
+    const bloc = css.slice(css.indexOf('.manque-i{'), css.indexOf('.compteurs'));
+    assert.ok(!/var\(--ember1\)/.test(bloc.replace(/var\(--teinte,var\(--ember1\)\)/g, '')),
+        'plus aucune référence directe à --ember1 dans les règles de carte');
 });
