@@ -58,8 +58,18 @@ function authenticateToken(req, res, next) {
                     'SELECT active, role, organization_id FROM user WHERE id = ?', [user.id]);
             } else {
                 try {
+                    /* `UNIX_TIMESTAMP` ET NON LA COLONNE — UN SECONDE COMPARÉE À UNE SECONDE.
+                       Lire `sessions_valid_after` telle quelle rend un objet Date que le pilote
+                       construit dans le fuseau du PROCESSUS, alors que MariaDB la lui a donnée
+                       dans le fuseau de la SESSION. Sur le VPS, processus en UTC et session en
+                       Europe/Paris : la borne atterrissait DEUX HEURES DANS L'AVENIR, et tout
+                       jeton fraîchement émis était refusé « Session expirée » pendant deux
+                       heures après une coupure de session — donc juste après la création d'un
+                       compte stagiaire, qui coupe les sessions avant que la personne se connecte.
+                       Un entier d'époque n'a pas de fuseau : il n'y a plus rien à interpréter,
+                       et le changement d'heure ne peut plus le décaler. */
                     [rows] = await db.promise().query(
-                        'SELECT active, role, organization_id, sessions_valid_after FROM user WHERE id = ?', [user.id]);
+                        'SELECT active, role, organization_id, UNIX_TIMESTAMP(sessions_valid_after) AS sva_epoch FROM user WHERE id = ?', [user.id]);
                     colonneSVA = true;
                 } catch (e) {
                     if (e && e.code === 'ER_BAD_FIELD_ERROR') {
@@ -76,8 +86,7 @@ function authenticateToken(req, res, next) {
                `sessions_valid_after` passe à l'instant présent : tout jeton émis AVANT (le `iat` du
                JWT, en secondes) cesse d'être accepté. C'est ce qui déconnecte réellement un pirate
                dont on annule le méfait, là où un JWT sans état survivrait sinon des jours. */
-            const borne = rows[0].sessions_valid_after
-                ? Math.floor(new Date(rows[0].sessions_valid_after).getTime() / 1000) : 0;
+            const borne = Number(rows[0].sva_epoch) || 0;
             if (borne && typeof user.iat === 'number' && user.iat < borne) {
                 return res.status(401).json({ message: 'Session expirée' });
             }
