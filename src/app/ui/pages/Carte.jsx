@@ -3,7 +3,7 @@ import { getCarte, geocodeCarte, getFormations } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
-import { LEVELS, colorForLevel, LEVEL_LABEL, setBadgeColors } from "../lib/levels.js";
+import { LEVELS, colorForLevel, LEVEL_LABEL, setBadgeColors, codesDuPoint } from "../lib/levels.js";
 
 // Centroïdes (préfecture) par département — suffisant pour une carte à bulles.
 const DEPTS = {
@@ -130,10 +130,16 @@ function Carte() {
   // sur les points (au cas où une formation aurait été supprimée du catalogue).
   const formationOptions = useMemo(() => {
     const s = new Set(programs.map((p) => p.code).filter(Boolean));
-    for (const p of (data?.points || [])) (p.formations || []).forEach((c) => s.add(c));
+    for (const p of (data?.points || [])) codesDuPoint(p).forEach((c) => s.add(c));
     return [...s].sort();
   }, [programs, data]);
-  const pointMatch = (p) => !forms.length || (p.formations || []).some((c) => forms.includes(c));
+  /* ON FILTRE SUR CE QUE LA CARTE MONTRE — cf. `codesDuPoint`. Le filtre ne lisait que
+     `formations` (les inscriptions), alors que la couleur et l'info-bulle affichent
+     `program_code || level` : un point annoncé « NIV1 » disparaissait quand on filtrait NIV1. */
+  const pointMatch = (p) => !forms.length || codesDuPoint(p).some((c) => forms.includes(c));
+  // Combien de points portent une formation CONNUE — ce qui borne ce que le filtre peut montrer.
+  const situesAvecFormation = useMemo(
+    () => (data?.points || []).filter((p) => codesDuPoint(p).length > 0).length, [data]);
   const shownPoints = useMemo(() => (data?.points || []).filter(pointMatch), [data, forms]);
 
   // Répartition par département : globale, ou recalculée depuis les points filtrés.
@@ -248,6 +254,19 @@ function Carte() {
             <b>Aucun stagiaire situé ne suit {forms.length > 1 ? "ces formations" : `la formation ${forms[0]}`}.</b>
             <p>Ce filtre ne porte que sur les {geocoded} stagiaires localisés précisément, pas sur
               les {total} comptés par département.</p>
+            {/* LA VRAIE RAISON, DITE EN CHIFFRES. Sans elle, un filtre qui ne rend rien passe pour
+                cassé — c'est d'ailleurs comme ça qu'il a été signalé. Sur cet organisme : deux
+                points sur cent cinquante-cinq portent une formation connue, les autres n'ont ni
+                inscription ni étiquette. Le filtre fonctionne ; c'est la donnée qui manque, et
+                elle se remplit ailleurs (étiquette du stagiaire, ou inscription à une session). */}
+            {situesAvecFormation === 0 ? (
+              <p><b>Aucun</b> des {geocoded} stagiaires situés n'a de formation renseignée — ni inscription
+                à une session, ni étiquette sur sa fiche. Le filtre ne peut donc rien montrer,
+                quelle que soit la formation choisie.</p>
+            ) : (
+              <p>Seuls <b>{situesAvecFormation}</b> des {geocoded} stagiaires situés ont une formation
+                renseignée ; les {geocoded - situesAvecFormation} autres n'ont ni inscription ni étiquette.</p>
+            )}
             <button className="btn sm" onClick={() => setForms([])}>Retirer le filtre</button>
           </div>
         )}
@@ -320,7 +339,15 @@ function Carte() {
       {(pending + ungeo) > 0 && (
         <div className="carte-dette">
           <Icon name="target" size={16} />
-          <span><b className="chiffres">{pending + ungeo}</b> stagiaire(s) sans point précis, comptés dans leur département, mais pas situés à la ville.</span>
+          {/* DEUX POPULATIONS DISTINCTES, et la phrase les confondait. `pending` a un code postal
+              exploitable : il EST compté dans son département, il lui manque la ville. `ungeo`
+              n'en a pas : il n'est compté nulle part sur la carte. Annoncer les deux comme
+              « comptés dans leur département » faisait mentir le total affiché juste au-dessus. */}
+          <span>
+            <b className="chiffres">{pending + ungeo}</b> stagiaire(s) sans point précis
+            {pending > 0 && <> — {pending} comptés dans leur département, à situer à la ville</>}
+            {ungeo > 0 && <>{pending > 0 ? "," : " —"} {ungeo} sans code postal exploitable, absents de la carte</>}.
+          </span>
           {/* Pas de `title` quand le bouton porte déjà le nombre : l'infobulle DEVIENT le nom
               accessible et remplace l'intitulé lu à voix haute par une phrase qui n'est pas celui
               affiché à l'écran. Elle ne sert que dans le cas désactivé, qu'elle explique. */}
