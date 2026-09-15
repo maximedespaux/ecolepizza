@@ -50,3 +50,29 @@ export function badgeColor(v) {
 
 // Rétro-compat : les anciens appels passent désormais par la palette unifiée.
 export const colorForLevel = (lv) => badgeColor(lv);
+
+/**
+ * TOUS LES CODES SOUS LESQUELS UN POINT DE LA CARTE PEUT ÊTRE RECONNU.
+ *
+ * LE DÉFAUT QUE ÇA CORRIGE, relevé en production le 2026-09-15. La carte COLORE un point avec
+ * `program_code || level` et l'annonce sous ce nom dans son info-bulle — mais le filtre, lui,
+ * ne regardait que `formations`, alimenté par les INSCRIPTIONS. Un stagiaire importé porte sa
+ * formation dans son étiquette (`learner.levels`), pas dans une inscription : son point
+ * s'affichait donc « NIV1 » et disparaissait dès qu'on filtrait sur NIV1. Le point annonçait
+ * une formation sous laquelle il était introuvable.
+ *
+ * Mesuré sur les 155 points géocodés de l'organisme : `formations` était vide sur les 155.
+ * Autrement dit, AUCUN choix de formation ne pouvait rien afficher — le filtre répondait
+ * « personne ne suit cette formation » quelle que soit la formation choisie.
+ *
+ * LES TROIS SOURCES SONT LÉGITIMES et disent la même chose dans des vocabulaires réconciliés
+ * côté serveur (`resolveurBadges` traduit une étiquette en code de formation) :
+ *   · `formations`    — toutes les formations suivies, via les inscriptions ;
+ *   · `program_code`  — la plus récente, celle qui donne sa couleur au point ;
+ *   · `level`         — l'étiquette du stagiaire, seule information des dossiers importés.
+ *
+ * ON FILTRE DONC SUR CE QUE LA CARTE MONTRE. C'est la seule règle qui ne puisse pas mentir.
+ */
+export function codesDuPoint(p) {
+  return [...new Set([...(p?.formations || []), p?.program_code, p?.level].filter(Boolean))];
+}
