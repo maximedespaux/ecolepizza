@@ -33,6 +33,11 @@ npm-debug.log*
 # sans elle.
 database/*
 !database/migrations/
+# ET `database/tools/`, POUR LA MÊME RAISON — le piège a resservi. Les trois `.mjs` déjà
+# présents restaient suivis (un fichier suivi ignore le .gitignore), si bien que le répertoire
+# avait l'air versionné : un outil NEUF y était écarté sans un mot, `git add -A` passait
+# dessus, le commit partait complet en apparence, et le VPS déployait tout sauf lui.
+!database/tools/
 database/*.sql
 database/seed.sql
 database/*_dump.sql
