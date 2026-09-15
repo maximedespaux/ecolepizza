@@ -291,12 +291,21 @@ const importArchive = async (req, res) => {
             return !!r;
         };
 
+        let vides = 0; const nomsVides = [];
         const mesure = await mesureDisponible(conn); // une seule fois : l'import peut porter 3000 fichiers
         for (let i = 0; i < files.length; i++) {
             const f = files[i];
             const isPdf = /pdf$/i.test(f.mimetype || '') || /\.pdf$/i.test(f.originalname || '');
             if (!isPdf) { skipped++; continue; }
             const meta = parsePath(paths[i] || f.originalname);
+            /* UN FICHIER VIDE N'ENTRE PAS AU COFFRE. Trouvé en production le 2026-09-15 : une
+               ligne d'archive à ZÉRO octet, importée le 8 juillet, qui rend un PDF que rien
+               n'ouvre. Un import de dossier peut porter 3000 fichiers ; il suffit qu'un seul
+               soit vide — une copie interrompue, un fichier de synchronisation — pour qu'il
+               s'installe dans le coffre avec un titre crédible. Il y passerait inaperçu
+               jusqu'au jour où quelqu'un essaie de l'ouvrir, et ce jour-là, c'est un contrôle
+               Qualiopi. On le REFUSE, et on le NOMME : un compte ne dit pas lequel reprendre. */
+            if (!f.buffer || !f.buffer.length) { vides++; nomsVides.push(meta.title); continue; }
             if (await dejaLa(meta)) { doublons++; nomsDoublons.push(meta.title); continue; }
             /* LE PDF PART CHIFFRÉ — il ne repassera jamais en clair en base. `aRanger` rend du
                même coup l'empreinte et la taille du CLAIR : sans elles, l'écran de stockage
@@ -322,7 +331,8 @@ const importArchive = async (req, res) => {
            ferait croire à un import raté là où il n'y avait rien à faire.
            Les NOMS partent aussi : un compte ne dit pas lequel, et c'est lequel qui compte
            quand on voulait justement remplacer une version par sa correction. */
-        res.status(201).json({ data: { imported, skipped, doublons, noms_doublons: nomsDoublons.slice(0, 20) } });
+        res.status(201).json({ data: { imported, skipped, doublons, noms_doublons: nomsDoublons.slice(0, 20),
+            vides, noms_vides: nomsVides.slice(0, 20) } });
     } catch (err) {
         console.error('Erreur import archives :', err);
         if (err && /max_allowed_packet|packet/i.test(err.message || '')) {
@@ -340,6 +350,11 @@ const getArchiveFile = async (req, res) => {
             [req.params.id, req.user.organization_id]
         );
         if (!row || !row.file) return res.status(404).json({ message: 'Document introuvable.' });
+        /* ZÉRO OCTET : un Buffer vide est « vrai » en JavaScript, donc le test ci-dessus le
+           laisse passer — et l'écran recevait un PDF de zéro octet, que le navigateur ouvre sur
+           une page blanche ou une erreur illisible. Mieux vaut le DIRE : le document existe
+           dans le coffre, son contenu non. */
+        if (!row.file.length) return res.status(422).json({ message: 'Ce document est vide (0 octet) : son contenu n\'a jamais été enregistré. Réimportez-le, ou supprimez la ligne.' });
         /* DÉCHIFFRÉ À LA VOLÉE, comme les pièces justificatives : le clair n'existe que dans
            cette réponse. `null` = illisible (clé changée, contenu altéré — le tag GCM le
            détecte) ; on le DIT au lieu de servir un PDF vide qui ferait croire à un document

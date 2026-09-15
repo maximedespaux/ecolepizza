@@ -346,3 +346,26 @@ test('LE MESSAGE « MIGRATION 153 » NE S\'ADRESSE QU\'AU COFFRE', async () => {
     assert.doesNotMatch(sorties.join('\n'), /migration 153/,
         'une table qui n\'a jamais eu d\'empreinte ne doit pas réclamer la 153');
 });
+
+test('UN FICHIER VIDE N\'ENTRE PAS AU COFFRE, ET NE SORT PAS EN PDF BLANC', () => {
+    /* TROUVÉ EN PRODUCTION le 2026-09-15, par le contrôle : une archive de ZÉRO octet,
+       importée le 8 juillet 2026 (l'UUID est un v1, il porte son horodatage). Elle n'était pas
+       un dégât du chiffrement — elle était là avant, et personne ne l'avait vue.
+
+       DEUX PORTES, ET IL FALLAIT FERMER LES DEUX. À l'ENTRÉE, l'import contrôlait le format
+       mais pas le POIDS : un import de dossier porte jusqu'à 3000 fichiers, et il suffit qu'un
+       seul soit vide — copie interrompue, fichier de synchronisation — pour qu'il s'installe
+       avec un titre crédible. À la SORTIE, `if (!row.file)` ne l'arrêtait pas non plus : un
+       Buffer de longueur nulle est « vrai » en JavaScript, si bien que l'écran recevait un PDF
+       de zéro octet — une page blanche, ou une erreur que personne ne sait lire.
+
+       CE QUE ÇA COÛTAIT : un document du coffre qui ne s'ouvre jamais, découvert le jour d'un
+       contrôle Qualiopi. */
+    const src = sansCommentaires(SUIVI);
+    assert.match(src, /if \(!f\.buffer \|\| !f\.buffer\.length\) \{ vides\+\+/,
+        'un fichier vide est refusé à l\'import');
+    assert.match(src, /nomsVides\.push/, 'et NOMMÉ : un compte ne dit pas lequel reprendre');
+    assert.match(src, /noms_vides/, 'le nom remonte jusqu\'à l\'écran');
+    assert.match(src, /if \(!row\.file\.length\) return res\.status\(422\)/,
+        'et un document vide déjà en base se dit, au lieu de sortir en PDF blanc');
+});
