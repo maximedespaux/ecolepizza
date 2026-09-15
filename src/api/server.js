@@ -106,6 +106,17 @@ app.use((req, res, next) => {
     // L'API ne renvoie que du JSON/binaire : une CSP stricte limite l'impact
     // d'une éventuelle injection (aucun script/ressource tiers autorisé).
     res.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+    /* RIEN NE SE MET EN CACHE PAR DÉFAUT — le pendant côté POSTE du chiffrement au repos.
+       Sans en-tête, un navigateur applique une heuristique et garde volontiers sur son DISQUE
+       une réponse 200 sans validateur : un contrat signé, une facture, une feuille d'émargement
+       nominative restaient alors lisibles dans le cache du poste APRÈS la déconnexion — sur un
+       ordinateur partagé, c'est exactement la fuite que le chiffrement en base vient de fermer.
+
+       ICI ET PAS DANS CHAQUE CONTRÔLEUR : deux routes sur quinze le posaient, et la seizième
+       l'aurait oublié. La position fermée est le défaut ; ce qui veut être gardé le DIT — la
+       photo de profil et l'image de publication réécrivent cet en-tête, et `res.set` remplace.
+       C'est sans coût : l'API ne sert aucune ressource statique. */
+    res.set('Cache-Control', 'no-store');
     // HSTS en production (l'app est servie en HTTPS).
     if (process.env.NODE_ENV === 'production') {
         res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
