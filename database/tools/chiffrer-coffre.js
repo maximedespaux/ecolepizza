@@ -35,6 +35,7 @@
  *   sudo -u impastio node database/tools/chiffrer-coffre.js --essai     # ne touche à rien
  *   sudo -u impastio node database/tools/chiffrer-coffre.js
  *   sudo -u impastio node database/tools/chiffrer-coffre.js --dechiffrer
+ *   … --sans-temoin   # seulement si aucune valeur déjà chiffrée n'existe pour confronter la clé
  *
  * Il est REJOUABLE et REPRENABLE : une ligne déjà chiffrée est reconnue et sautée. Interrompu,
  * il se relance et continue là où il en était.
@@ -46,6 +47,7 @@ const { colonneExiste } = require('../../src/api/lib/colonnes.js');
 
 const ESSAI = process.argv.includes('--essai');
 const DECHIFFRER = process.argv.includes('--dechiffrer');
+const SANS_TEMOIN = process.argv.includes('--sans-temoin'); // passer outre l'absence de témoin
 const MARQUEUR = Buffer.from('encb1');
 
 const estChiffre = (buf) => !!buf && buf.length >= MARQUEUR.length && buf.subarray(0, MARQUEUR.length).equals(MARQUEUR);
@@ -61,10 +63,34 @@ const CIBLES = [
 /**
  * La clé en mémoire est-elle bien celle avec laquelle l'application a déjà chiffré ?
  *
- * On ne se contente pas de « la variable est définie » : une clé neuve, régénérée par erreur,
- * passerait ce test-là et rendrait tout le reste illisible.
+ * ON NE SE CONTENTE PAS DE « LA VARIABLE EST DÉFINIE ». Une clé régénérée par erreur passerait
+ * ce test-là et rendrait le coffre illisible pour le serveur — on ne s'en apercevrait qu'en
+ * ouvrant un document, des semaines plus tard. On cherche donc une valeur DÉJÀ chiffrée par
+ * l'application et on vérifie qu'on sait la rouvrir.
+ *
+ * POURQUOI LA LISTE EST AUSSI LONGUE. Les trois premières sondes n'ont RIEN trouvé en
+ * production, et le script a continué en avertissant — ce qui, à quelques secondes de réécrire
+ * 660 Mo, est la mauvaise réponse. Trois sondes disaient « base neuve ? » d'une base de 1,4 Go
+ * vieille d'un an. L'explication est dans l'histoire : les quatre valeurs chiffrées qui
+ * existaient ont été VIDÉES du dump avant l'import de 2026-08 (la clé d'AlwaysData avait été
+ * perdue), et il se trouve que trois d'entre elles étaient exactement mes trois sondes. On
+ * ratisse donc tout ce que l'application chiffre, texte ET octets.
  */
-async function cleConfirmee(conn) {
+const SONDES_TEXTE = [
+    ['organization', 'signature_image'], ['organization', 'sign_cert'],
+    ['document_signature', 'signature_data'],
+    ['generated_document', 'signature_data'], ['generated_document', 'org_signature_data'],
+    ['document_signed_pdf', 'pdf'],
+    ['attendance_record', 'signature_data'], ['attendance_trainer_sign', 'signature_data'],
+    ['user', 'signature_image'], ['learner', 'sign_cert'], ['learner', 'social_security'],
+];
+/* Les colonnes d'OCTETS ne portent pas le préfixe « enc: » mais le marqueur binaire « encb1 » :
+   elles se sondent autrement, et se vérifient avec `decryptBytes`. */
+const SONDES_OCTETS = [
+    ['piece_fichier', 'bytes'], ['document_fichier', 'bytes'],
+];
+
+async function cleConfirmee(conn, { essai = ESSAI, sansTemoin = SANS_TEMOIN } = {}) {
     if (!String(process.env.SSN_ENC_KEY || '').trim()) {
         console.error('\n  ARRÊT — SSN_ENC_KEY absente.\n');
         console.error('  Sans elle, lib/crypto.js se rabat sur une clé de développement dérivée');
@@ -73,20 +99,20 @@ async function cleConfirmee(conn) {
         console.error('  src/api/config/.env (sur le VPS : sudo -u impastio node …).\n');
         return false;
     }
-    /* Trois sources possibles de témoin, par ordre de probabilité. On prend la première valeur
-       qui porte le préfixe « enc: » — c'est une chaîne chiffrée par l'application elle-même. */
-    const sondes = [
-        ['organization', 'signature_image'],
-        ['document_signature', 'signature_data'],
-        ['generated_document', 'signature_data'],
-    ];
-    for (const [table, colonne] of sondes) {
+
+    const essayees = [];
+    for (const [table, colonne, octets] of [
+        ...SONDES_TEXTE.map((s) => [...s, false]),
+        ...SONDES_OCTETS.map((s) => [...s, true]),
+    ]) {
         if (!await colonneExiste(conn, table, colonne)) continue;
+        essayees.push(`${table}.${colonne}`);
         const [rows] = await conn.query(
             `SELECT \`${colonne}\` AS v FROM \`${table}\`
-              WHERE \`${colonne}\` LIKE 'enc:%' LIMIT 1`);
+              WHERE ${octets ? `LEFT(\`${colonne}\`, 5) = 'encb1'` : `\`${colonne}\` LIKE 'enc:%'`} LIMIT 1`);
         if (!rows.length) continue;
-        if (decrypt(rows[0].v) === null) {
+        const ouvert = octets ? decryptBytes(rows[0].v) : decrypt(rows[0].v);
+        if (ouvert === null) {
             console.error('\n  ARRÊT — la clé chargée n\'ouvre PAS ce que l\'application a déjà chiffré.');
             console.error(`  Témoin essayé : ${table}.${colonne}.\n`);
             console.error('  Chiffrer le coffre avec cette clé-là le rendrait illisible pour le serveur.');
@@ -96,9 +122,25 @@ async function cleConfirmee(conn) {
         console.log(`  Clé vérifiée sur un témoin existant (${table}.${colonne}) — elle ouvre bien.`);
         return true;
     }
-    console.warn('\n  AVERTISSEMENT — aucune valeur déjà chiffrée trouvée pour vérifier la clé.');
-    console.warn('  Base neuve ? La reprise continue, mais la clé n\'a pas pu être confrontée.\n');
-    return true;
+
+    /* AUCUN TÉMOIN : on ne DEVINE pas. En essai, on laisse voir ce qui serait fait ; pour
+       écrire, il faut le dire explicitement. Le cas n'est pas théorique — `dotenv` n'écrase pas
+       une variable déjà présente dans l'environnement, si bien qu'un `SSN_ENC_KEY=…` posé dans
+       le shell l'emporterait SILENCIEUSEMENT sur le fichier .env que lit l'application. */
+    console.warn('\n  AUCUN TÉMOIN — aucune valeur déjà chiffrée trouvée pour confronter la clé.');
+    console.warn(`  Sondé : ${essayees.join(', ') || 'aucune colonne connue'}.\n`);
+    if (essai) {
+        console.warn('  Essai : on continue pour montrer ce qui serait fait, sans rien écrire.\n');
+        return true;
+    }
+    if (sansTemoin) {
+        console.warn('  --sans-temoin : vous passez outre. La reprise commence.\n');
+        return true;
+    }
+    console.error('  Pour écrire quand même, relancer avec --sans-temoin — après avoir vérifié');
+    console.error('  que SSN_ENC_KEY n\'est pas posée dans l\'environnement du shell (elle');
+    console.error('  l\'emporterait sur le fichier .env sans le dire).\n');
+    return false;
 }
 
 async function reprendre(conn, cible, mesures) {
@@ -158,7 +200,12 @@ async function reprendre(conn, cible, mesures) {
     console.log(`  ${ESSAI ? 'À reprendre' : 'Reprises'} : ${faites} (${mo(octets)}) — déjà en état : ${sautees}`);
 }
 
-(async () => {
+/* `require.main === module` : LANCÉ, pas REQUIS. Sans cette garde, un test qui importe ce
+   fichier pour éprouver ses garde-fous ouvrirait une connexion à la base DISTANTE et ne rendrait
+   jamais la main — le défaut exact que `config/database.js` documente à propos du pool
+   paresseux. Le rendre importable est ce qui permet de VÉRIFIER qu'il refuse d'écrire sans
+   témoin, au lieu de se contenter de relire son source. */
+if (require.main === module) (async () => {
     const conn = db.promise();
     console.log(`\nReprise du chiffrement au repos — ${DECHIFFRER ? 'DÉCHIFFREMENT' : 'chiffrement'}${ESSAI ? ' (essai : aucune écriture)' : ''}\n`);
     try {
@@ -178,3 +225,5 @@ async function reprendre(conn, cible, mesures) {
         await db.end();
     }
 })();
+
+module.exports = { cleConfirmee, estChiffre, SONDES_TEXTE, SONDES_OCTETS };

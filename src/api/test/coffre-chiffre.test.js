@@ -25,6 +25,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { aRanger, aServir, empreinteClaire } = require('../lib/coffre.js');
+const outil = require('../../../database/tools/chiffrer-coffre.js');
 
 const LIRE = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 const SUIVI = LIRE('controllers/suivi.controller.js');
@@ -148,7 +149,56 @@ test('L\'OUTIL DE REPRISE REFUSE DE TRAVAILLER SANS LA VRAIE CLÉ', () => {
     const src = sansCommentaires(OUTIL);
     assert.match(src, /SSN_ENC_KEY/, 'la variable est contrôlée');
     assert.match(src, /LIKE 'enc:%'/, 'et confrontée à une valeur déjà chiffrée par l\'application');
-    assert.match(src, /decrypt\(rows\[0\]\.v\) === null/, 'un témoin qui ne s\'ouvre pas arrête tout');
+    assert.match(src, /ouvert === null/, 'un témoin qui ne s\'ouvre pas arrête tout');
+});
+
+test('SANS TÉMOIN, L\'OUTIL NE SE LANCE PAS TOUT SEUL', async () => {
+    /* DÉFAUT MESURÉ EN PRODUCTION le 2026-09-15 : les trois premières sondes n'ont rien trouvé
+       dans une base de 1,4 Go vieille d'un an, et le script a répondu « base neuve ? » avant de
+       continuer — à quelques secondes de réécrire 660 Mo. L'explication tient à l'histoire :
+       les quatre valeurs chiffrées qui existaient ont été VIDÉES du dump avant l'import d'août
+       (clé d'AlwaysData perdue), et trois d'entre elles étaient exactement ces sondes.
+
+       DEUX CORRECTIFS, ET IL FALLAIT LES DEUX : ratisser tout ce que l'application chiffre —
+       texte ET octets —, et refuser d'ÉCRIRE quand il n'y a malgré tout aucun témoin. Le cas
+       n'est pas théorique : `dotenv` n'écrase pas une variable déjà posée dans l'environnement,
+       donc un `SSN_ENC_KEY=…` dans le shell l'emporterait en silence sur le fichier que lit
+       l'application. */
+    /* ÉPROUVÉ POUR DE VRAI, pas relu. Une fausse connexion répond « la colonne existe » à
+       toutes les sondes et « aucune ligne » à toutes les recherches de témoin : c'est
+       exactement la situation rencontrée en production. Un test de SOURCE aurait laissé passer
+       un `return false` devenu inatteignable — il l'a d'ailleurs laissé passer une fois. */
+    const conn = {
+        query: async (sql) => (/information_schema/.test(sql) ? [[{ 1: 1 }]] : [[]]),
+    };
+    const muet = () => {};
+    const sansBruit = async (fn) => {
+        const [w, e, l] = [console.warn, console.error, console.log];
+        console.warn = muet; console.error = muet; console.log = muet;
+        try { return await fn(); } finally { console.warn = w; console.error = e; console.log = l; }
+    };
+    process.env.SSN_ENC_KEY = process.env.SSN_ENC_KEY || 'a'.repeat(64);
+
+    assert.strictEqual(await sansBruit(() => outil.cleConfirmee(conn, { essai: false, sansTemoin: false })),
+        false, 'sans témoin et sans le drapeau : on N\'ÉCRIT PAS.');
+    assert.strictEqual(await sansBruit(() => outil.cleConfirmee(conn, { essai: true, sansTemoin: false })),
+        true, 'un essai reste permis — il n\'écrit rien.');
+    assert.strictEqual(await sansBruit(() => outil.cleConfirmee(conn, { essai: false, sansTemoin: true })),
+        true, 'passer outre reste possible, mais c\'est un geste explicite.');
+});
+
+test('LES TÉMOINS COUVRENT TOUT CE QUE L\'APPLICATION CHIFFRE', () => {
+    const texte = outil.SONDES_TEXTE.map((s) => s.join('.'));
+    const octets = outil.SONDES_OCTETS.map((s) => s.join('.'));
+    for (const attendu of ['learner.social_security', 'attendance_record.signature_data',
+        'document_signed_pdf.pdf', 'user.signature_image']) {
+        assert.ok(texte.includes(attendu), `${attendu} doit faire partie des témoins cherchés`);
+    }
+    /* Les colonnes d'OCTETS portent le marqueur binaire « encb1 », pas le préfixe « enc: » :
+       les chercher avec le mauvais motif revenait à ne pas les chercher. */
+    assert.ok(octets.includes('piece_fichier.bytes'));
+    assert.match(sansCommentaires(OUTIL), /= 'encb1'/,
+        'les témoins binaires se reconnaissent à leur marqueur, pas au préfixe texte');
 });
 
 test('L\'OUTIL VÉRIFIE L\'ALLER-RETOUR AVANT D\'ÉCRASER UN DOCUMENT', () => {
