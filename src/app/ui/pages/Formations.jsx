@@ -860,11 +860,19 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
   const [drag, setDrag] = useState(null);
   const ref = useRef(null);
   const bySlug = new Map(steps.map((s) => [s.slug, s]));
-  const chosen = value.map((sl) => bySlug.get(sl)).filter((s) => s && s.active);
-  // Éligibles : documents de GROUPE (activables ici, qu'ils soient actifs ou non),
-  // documents STAGIAIRE, QCM et feuilles d'émargement déjà actifs dans le parcours
-  // du dossier (repère).
-  const eligible = steps.filter((s) => !value.includes(s.slug) && (s.company_level ? true : s.active));
+  /* AUCUN FILTRE SUR `active`, NI ICI NI DANS LES ÉLIGIBLES — et ce n'est pas un relâchement.
+     Cette section N'EST PAS un réordonnancement du parcours du dossier : pour une arrivée par
+     entreprise, elle le REMPLACE (`companyParcours` → `if (ent.steps) steps = ent.steps`). Le
+     serveur mappe donc ses slugs sur TOUTES les étapes candidates, sans regarder `active` —
+     il le fait depuis toujours. Seul cet écran l'interdisait.
+
+     CE QUE LE VERROU COÛTAIT. Pour qu'un document n'existe QUE sur le chemin entreprise — une
+     convention de formation professionnelle, un accord de prise en charge — il fallait
+     l'activer dans le parcours du dossier, ce qui l'ajoutait du même coup aux arrivées
+     individuelles. L'exact contraire du besoin. Un document choisi ici SANS être actif est
+     désormais « entreprise seulement », et c'est le seul moyen de l'exprimer. */
+  const chosen = value.map((sl) => bySlug.get(sl)).filter(Boolean);
+  const eligible = steps.filter((s) => !value.includes(s.slug));
   const isGroup = (s) => !!s.company_level;
   const isQuiz = (s) => !!s.quiz_id || s.doc_type === "QCM";
   const isEmargement = (s) => s.doc_type === "EMARGEMENT";
@@ -877,9 +885,11 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
   }, [adding]);
 
   const add = (slug) => {
-    const s = bySlug.get(slug);
+    /* ON N'ACTIVE PLUS RIEN À L'AJOUT. Activer un document de groupe était sans effet utile —
+       `companyParcours` ne regarde pas `active` — et activer un document stagiaire l'aurait
+       ajouté aux arrivées individuelles, ce qu'on cherche justement à éviter. La section
+       entreprise décide pour elle-même. */
     onChange([...value.filter((x) => x !== slug), slug]);
-    if (s && s.company_level && !s.active) onToggleActive?.(slug); // doc de groupe : activer ici
     setAdding(false);
   };
   const remove = (slug) => {
@@ -912,7 +922,9 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
   return (
     <div className="parcours compact" ref={ref}>
       <p className="hint" style={{ marginTop: 0 }}>
-        Parcours quand une <b>entreprise</b> inscrit ses stagiaires : documents de <b>groupe</b> (🏢) <b>et</b> stagiaire. Glissez pour réordonner ·{" "}
+        Parcours quand une <b>entreprise</b> inscrit ses stagiaires : il <b>remplace</b> celui du dossier. Un document
+        absent du parcours du dossier n'existera donc que par ce chemin — c'est ainsi qu'on réserve une convention
+        professionnelle aux arrivées par entreprise. Glissez pour réordonner ·{" "}
         <b style={{ color: "var(--ember1)" }}>🚧</b> = accès émargement (les documents à gauche doivent être signés).
       </p>
       <div className="parcours-flow">
@@ -925,6 +937,16 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
               <div className="pf-opt">
                 <span className="pf-label">{s.label}</span>
                 {badge(s)}
+                {/* SANS CE REPÈRE, ON NE COMPRENDRAIT PAS pourquoi l'étape est absente de
+                    l'autre onglet. Un document choisi ici et inactif dans le parcours du
+                    dossier n'existe QUE pour les stagiaires inscrits par une entreprise —
+                    c'est une propriété qu'il faut lire, pas déduire. */}
+                {!s.active && !s.company_level && (
+                  <span className="pf-badge" title="Absent du parcours du dossier : ce document n'existe que pour une arrivée par entreprise"
+                    style={{ background: "var(--surface2)", color: "var(--muted)", fontStyle: "italic" }}>
+                    entreprise seulement
+                  </span>
+                )}
                 <button type="button" className="pf-x" title="Retirer de la section entreprise" onClick={() => remove(s.slug)}><Icon name="x" size={13} /></button>
               </div>
             </div>

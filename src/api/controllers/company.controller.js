@@ -3,6 +3,9 @@ const { colonneOuNull } = require('../lib/colonnes.js');
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
+/* La section « À l'arrivée via une entreprise » — la MÊME lecture que celle du parcours, pas
+   une relecture du JSON écrite une seconde fois ici. */
+const { companyStepSlugs } = require('../lib/parcours.js');
 const { generatePassword } = require('../lib/crypto.js');
 // Même lacune que pour le stagiaire : l'entreprise, qui signe les conventions et reçoit les
 // factures, n'apparaissait nulle part dans le journal.
@@ -772,12 +775,28 @@ const generateGroupDocuments = async (req, res) => {
         if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
         const grp = await resolveGroupSteps(conn, orgId, company.id, session_id);
         if (!grp) return res.status(404).json({ message: 'Session introuvable.' });
-        const step = grp.allSteps.find((s) => s.slug === slug && s.active);
+        /* UN DOCUMENT « ENTREPRISE SEULEMENT » N'EST PAS ACTIF, et c'est tout son intérêt.
+           La section « À l'arrivée via une entreprise » REMPLACE le parcours du dossier : on y
+           place une convention de formation professionnelle ou un accord de prise en charge,
+           qui n'ont aucun sens pour un particulier. Les activer dans le parcours du dossier les
+           donnerait justement à ceux qu'ils ne concernent pas.
+           La garde acceptait `s.active` seul : l'étape s'affichait dans le parcours entreprise
+           — cette liste-là ne filtre pas sur `active` — mais la générer répondait
+           « Document introuvable dans le parcours ». Visible et impossible. */
+        const intake = new Set(await companyStepSlugs(conn, orgId, grp.program.id));
+        const step = grp.allSteps.find((s) => s.slug === slug && (s.active || intake.has(slug)));
         if (!step) return res.status(422).json({ error: 'Document introuvable dans le parcours.' });
         if (step.company_level) return res.status(422).json({ error: 'Document de groupe : utilisez « Générer » (entreprise).' });
 
         const { prepareLearnerDoc, sendPreparedDoc } = require('./document.controller.js');
-        const applicable = grp.enrollments.filter((e) => e.slugs.has(slug));
+        /* À QUI. Le cas ordinaire reste celui-ci : les dossiers dont le parcours APPELLE ce
+           document — c'est ce qui fait respecter ses conditions (financement, niveau…).
+           Une étape « entreprise seulement » n'est dans AUCUN parcours individuel, par
+           construction : `enrollmentSteps` écarte ce qui est inactif. Filtrer dessus rendrait
+           zéro destinataire et « 0 document(s) préparé(s) », sans rien expliquer. Elle vise
+           donc TOUT le groupe — et c'est exactement pourquoi on l'a mise là. */
+        const seulementEntreprise = !step.active && intake.has(slug);
+        const applicable = seulementEntreprise ? grp.enrollments : grp.enrollments.filter((e) => e.slugs.has(slug));
         let created = 0, sent = 0;
         for (const e of applicable) {
             const docId = await prepareLearnerDoc(conn, orgId, { learnerId: e.learner_id, type: step.doc_type, templateSlug: slug, enrollmentIds: [e.id] });
