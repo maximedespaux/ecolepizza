@@ -24,7 +24,11 @@ async function loadRows(organizationId) {
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
          FROM document_template WHERE organization_id = ?`;
     // Colonnes optionnelles (migrations 077 / 086 / 087 / 088 / 119) : on retombe en cascade si absentes.
+    /* `parcours_defaut` (migration 155) en tête de cascade : absente, on retombe sur les
+       combinaisons existantes et le code se comporte comme avant — un modèle sans cette
+       colonne est réputé entrer dans les parcours, ce qui EST l'ancien comportement. */
     for (const extra of [
+        ', company_level, company_sign, signers, buyer_audience, parcours_defaut',
         ', company_level, company_sign, signers, buyer_audience',
         ', company_level, company_sign, signers',
         ', company_level, company_sign', ', company_level', '']) {
@@ -166,10 +170,24 @@ async function upsertTemplate(conn, orgId, slug, fields) {
             return ex[0].id;
         }
         const id = crypto.randomUUID();
-        await conn.query(
-            `INSERT INTO document_template (id, organization_id, slug, ${keys.join(', ')}) VALUES (?, ?, ?, ${keys.map(() => '?').join(', ')})`,
-            [id, orgId, slug, ...keys.map((k) => f[k])]
-        );
+        /* UN MODÈLE NEUF N'ENTRE DANS AUCUN PARCOURS — et SEULEMENT à la création. Cette
+           fonction sert aussi aux mises à jour (branche `ex.length` ci-dessus) : poser la
+           colonne là aussi retirerait de tous les parcours un modèle qu'on vient simplement de
+           réenregistrer. C'est la distinction qui compte ici.
+           Colonne de la 155 : si elle manque, on réinsère sans elle plutôt que d'échouer. */
+        const insere = async (avecDefaut) => {
+            const cols = avecDefaut ? [...keys, 'parcours_defaut'] : keys;
+            const vals = avecDefaut ? [...keys.map((k) => f[k]), 0] : keys.map((k) => f[k]);
+            await conn.query(
+                `INSERT INTO document_template (id, organization_id, slug, ${cols.join(', ')}) VALUES (?, ?, ?, ${cols.map(() => '?').join(', ')})`,
+                [id, orgId, slug, ...vals]
+            );
+        };
+        try { await insere(true); }
+        catch (e) {
+            if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e;
+            await insere(false);
+        }
         return id;
     };
     try {
