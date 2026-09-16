@@ -34,9 +34,13 @@ const COFFRE = fs.readFileSync(path.join(RACINE, 'app/ui/pages/Suivi.jsx'), 'utf
 const REVUE = fs.readFileSync(path.join(RACINE, 'app/ui/components/PiecesReview.jsx'), 'utf8');
 const ESPACE = fs.readFileSync(path.join(RACINE, 'app/ui/pages/StudentFormationDetail.jsx'), 'utf8');
 
-test('le coffre réunit QUATRE sources, pièces comprises', () => {
-    assert.match(SUIVI, /res\.json\(\{ data: \[\.\.\.gen, \.\.\.comp, \.\.\.arch, \.\.\.pieces\] \}\)/,
-        'les pièces déposées doivent rejoindre le coffre');
+test('le coffre réunit CINQ sources, pièces comprises', () => {
+    /* La cinquième est arrivée avec la migration 157 : les documents de SESSION — un contrat
+       d'hygiène signé par un intervenant externe n'appartient ni à un stagiaire ni à une
+       entreprise. Sans elle, il n'existait nulle part dans le coffre, et un document qu'on ne
+       retrouve pas six mois plus tard ne sert à rien le jour d'un contrôle. */
+    assert.match(SUIVI, /res\.json\(\{ data: \[\.\.\.gen, \.\.\.comp, \.\.\.sess, \.\.\.arch, \.\.\.pieces\] \}\)/,
+        'les pièces déposées ET les documents de session doivent rejoindre le coffre');
     assert.match(SUIVI, /FROM piece_fichier pf/, 'une ligne par FICHIER, pas par dépôt');
     assert.match(SUIVI, /source: 'piece'/, 'la provenance doit être identifiable par l\'écran');
 });

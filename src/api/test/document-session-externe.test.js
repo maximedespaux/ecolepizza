@@ -122,3 +122,46 @@ test('LA MIGRATION 157 N\'EFFACE RIEN, ET SON REVERT PRÉVIENT', () => {
     assert.match(revert, /SELECT id, title, session_id FROM generated_document WHERE scope = 'SESSION'/,
         'le revert doit dire comment relever ce qu\'il rendrait invisible');
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   ET LE COFFRE LES RETROUVE.
+
+   Un document de session n'appartient ni à un stagiaire ni à une entreprise. Le coffre range en
+   année → semaine → formation → STAGIAIRE : sans troisième nature de feuille, le contrat
+   d'hygiène tombait sous un nom vide, entre deux stagiaires — présent et introuvable, ce qui
+   est pire qu'absent le jour d'un contrôle.
+
+   UNE SEULE FEUILLE « Documents de session » PAR SEMAINE ET PAR FORMATION : la clé ne porte pas
+   l'identifiant du document, sinon chaque contrat ferait son propre dossier à un élément. */
+const SUIVI_CTRL = lire('controllers/suivi.controller.js');
+const UI_SUIVI = sansCommentaires(
+    fs.readFileSync(path.join(API, '..', 'app', 'ui/pages/Suivi.jsx'), 'utf8'));
+
+test('LE COFFRE A UNE CINQUIÈME SOURCE', () => {
+    assert.match(SUIVI_CTRL, /res\.json\(\{ data: \[\.\.\.gen, \.\.\.comp, \.\.\.sess, \.\.\.arch, \.\.\.pieces\] \}\)/);
+    assert.match(SUIVI_CTRL, /gd\.scope = 'SESSION' AND gd\.status IN \(\?\)/,
+        'même filtre de partage que les autres documents : on ne montre pas un brouillon');
+    /* JOINTURE INTERNE SUR LA SESSION : un document de session sans session n'a ni année, ni
+       semaine, ni formation — aucune branche où se poser. */
+    assert.match(SUIVI_CTRL, /JOIN training_session s ON s\.id = gd\.session_id\s*\n\s*LEFT JOIN training_program/);
+});
+
+test('LE COFFRE RESTE LISIBLE SANS LA MIGRATION 157', () => {
+    /* Règle du projet : le code marche AVANT comme APRÈS. Sans la 157, l'énumération ignore
+       'SESSION' — la requête échoue, et le coffre doit montrer ses quatre autres sources plutôt
+       que de tomber en 500. */
+    const bloc = SUIVI_CTRL.slice(SUIVI_CTRL.indexOf('let sess = [];'));
+    const corps = bloc.slice(0, bloc.indexOf('// Documents archivés'));
+    assert.match(corps, /ER_BAD_FIELD_ERROR/);
+    assert.match(corps, /ER_DATA_TRUNCATED/, 'une énumération sans la valeur rend cette erreur-là');
+});
+
+test('LA TROISIÈME FEUILLE EXISTE, ET N\'EN FAIT QU\'UNE', () => {
+    assert.match(UI_SUIVI, /const isSess = r\.scope === "SESSION"/);
+    assert.match(UI_SUIVI, /: isSess \? "sess:documents"/,
+        'clé CONSTANTE : une seule feuille par semaine et par formation, pas une par document');
+    assert.match(UI_SUIVI, /: isSess \? "Documents de session"/);
+    /* La suppression groupée doit nommer ce qu'elle efface — « Supprimer ce stagiaire » sur des
+       documents de session serait un mensonge, et un geste irréversible mal annoncé. */
+    assert.match(UI_SUIVI, /L\.session \? "Supprimer ces documents de session"/);
+});

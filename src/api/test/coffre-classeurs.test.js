@@ -73,8 +73,8 @@ test('TOUTES LES SOURCES DU COFFRE RENDENT LA MÊME FORME', () => {
     /* L'écran distingue un document de classeur d'un document de session sur la SEULE présence
        de `dossier`. Si une source omettait la clé, ses lignes seraient indiscernables de celles
        d'un classeur nommé `undefined` — même raison que l'alias imposé par `colonneOuNull`. */
-    assert.strictEqual((SUIVI.match(/NULL AS dossier/g) || []).length, 3,
-        'les documents générés (stagiaire et entreprise) et le repli sans colonne');
+    assert.strictEqual((SUIVI.match(/NULL AS dossier/g) || []).length, 4,
+        'les documents générés — stagiaire, entreprise, SESSION (migration 157) — et le repli sans colonne');
     assert.match(SUIVI, /dossier: null,/, 'et les pièces justificatives, construites en JS');
 });
 

@@ -307,15 +307,25 @@ function buildTree(rows) {
     const y = r.year != null ? String(r.year) : "-";
     const wKey = r.week != null ? String(r.week) : "-";
     const fKey = r.program_code || "-";
-    // Feuille = stagiaire, ou ENTREPRISE pour un document de groupe (scope COMPANY).
+    /* Feuille = stagiaire, ENTREPRISE pour un document de groupe (scope COMPANY), ou LA SESSION
+       elle-même (scope SESSION, migration 157) — un contrat d'hygiène signé par un intervenant
+       externe n'appartient à personne en particulier. Sans cette troisième feuille, il tombait
+       sous un nom vide, entre deux stagiaires, et devenait introuvable.
+       UNE SEULE FEUILLE PAR SEMAINE ET PAR FORMATION : la clé ne porte pas l'identifiant du
+       document, sinon chaque contrat ferait son propre dossier à un élément. */
     const isCo = r.scope === "COMPANY";
-    const lKey = isCo ? `co:${r.company_id || r.company_name || "?"}` : (r.learner_id || `${r.last_name}${r.first_name}`);
+    const isSess = r.scope === "SESSION";
+    const lKey = isCo ? `co:${r.company_id || r.company_name || "?"}`
+      : isSess ? "sess:documents"
+      : (r.learner_id || `${r.last_name}${r.first_name}`);
     const Y = years[y] || (years[y] = { label: y, total: 0, weeks: {} });
     const W = Y.weeks[wKey] || (Y.weeks[wKey] = { week: r.week || 0, total: 0, formations: {} });
     const F = W.formations[fKey] || (W.formations[fKey] = { code: r.program_code || "-", title: r.program_title || "", total: 0, learners: {} });
     const L = F.learners[lKey] || (F.learners[lKey] = {
-      name: isCo ? (r.company_name || "Entreprise") : (`${r.last_name || ""} ${r.first_name || ""}`.trim() || "-"),
-      learner_id: r.learner_id, company: isCo, docs: [],
+      name: isCo ? (r.company_name || "Entreprise")
+        : isSess ? "Documents de session"
+        : (`${r.last_name || ""} ${r.first_name || ""}`.trim() || "-"),
+      learner_id: r.learner_id, company: isCo, session: isSess, docs: [],
     });
     L.docs.push(r);
     Y.total++; W.total++; F.total++;
@@ -616,8 +626,9 @@ function ArchivesView({ onError, onInfo }) {
                               <details key={L.learner_id || L.name}>
                                 <summary className="arch-sum">
                                   {L.company && <Icon name="building" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--ember1, #c0392b)" }} />}
+                                  {L.session && <Icon name="calendar" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--dim)" }} />}
                                   {L.name} <span className="arch-count">{L.docs.length}</span>
-                                  {isAdmin && <DelBtn title={L.company ? "Supprimer cette entreprise" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
+                                  {isAdmin && <DelBtn title={L.company ? "Supprimer cette entreprise" : L.session ? "Supprimer ces documents de session" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
                                 </summary>
                                 <div className="arch-docs">
                                   {L.docs.map((d) => <DocLigne key={d.doc_id} d={d} />)}

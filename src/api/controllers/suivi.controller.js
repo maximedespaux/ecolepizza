@@ -133,6 +133,38 @@ const getArchive = async (req, res) => {
                 [req.user.organization_id, SHARED]
             );
         } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+        /* DOCUMENTS DE LA SESSION (migration 157) — contrat d'hygiène signé par un intervenant
+           externe, et ce qui suivra. Ils n'appartiennent NI à un stagiaire NI à une entreprise :
+           c'est le troisième cas, et sans cette requête ils n'existaient nulle part dans le
+           coffre. Un document qu'on ne retrouve pas six mois plus tard ne sert à rien le jour
+           d'un contrôle — c'est même toute la raison d'être de cet écran.
+
+           JOINTURE INTERNE SUR LA SESSION, et c'est voulu : un document de session sans session
+           n'a ni année, ni semaine, ni formation. Il n'aurait aucune branche où se poser, et
+           remonterait dans un « - / Sans session » que personne n'irait ouvrir. */
+        let sess = [];
+        try {
+            [sess] = await conn.query(
+                `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'SESSION' AS scope,
+                        NULL AS company_id, NULL AS company_name,
+                        DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
+                        DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                        s.year, s.week,
+                        p.code AS program_code, p.title AS program_title,
+                        NULL AS learner_id, '' AS first_name, '' AS last_name, 'gen' AS source,
+                        NULL AS dossier
+                   FROM generated_document gd
+                   JOIN training_session s ON s.id = gd.session_id
+                   LEFT JOIN training_program p ON p.id = s.program_id
+                  WHERE gd.organization_id = ? AND gd.scope = 'SESSION' AND gd.status IN (?)`,
+                [req.user.organization_id, SHARED]);
+        } catch (e) {
+            /* La 157 n'est pas jouée : l'énumération ignore 'SESSION'. Le coffre doit rester
+               lisible — il l'était avant cette fonctionnalité, il le reste sans elle. */
+            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'
+                || e.code === 'WARN_DATA_TRUNCATED' || e.code === 'ER_DATA_TRUNCATED'))) throw e;
+        }
+
         // Documents archivés (PDF importés + feuilles d'émargement générées).
         // Pour l'émargement (ref « emarg:<enrollment>[:<slug>] »), on résout le vrai
         // stagiaire via le dossier, afin qu'il se range dans le MÊME dossier que ses
@@ -221,7 +253,7 @@ const getArchive = async (req, res) => {
             if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
         }
 
-        res.json({ data: [...gen, ...comp, ...arch, ...pieces] });
+        res.json({ data: [...gen, ...comp, ...sess, ...arch, ...pieces] });
     } catch (err) {
         console.error('Erreur archives documents :', err);
         res.status(500).json({ error: 'Internal Server Error' });
