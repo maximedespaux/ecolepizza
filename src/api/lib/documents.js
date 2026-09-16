@@ -68,6 +68,10 @@ function mergeSteps(rows = []) {
             slug: d.slug, label: d.label, doc_type: d.doc_type, sort_order: d.sort_order,
             signable: d.signable, stagiaire_sign: d.stagiaire_sign, applies_when: d.applies_when,
             or_group: d.or_group || null, company_level: d.company_level ? 1 : 0, company_sign: d.company_sign ? 1 : 0,
+            /* LE SOCLE ENTRE TOUJOURS DANS LES PARCOURS : ce sont les documents que toute
+               formation doit produire. Le nouveau défaut « hors parcours » ne vise que les
+               modèles créés par l'organisme (cf. migration 155). */
+            parcours_defaut: 1,
             active: 1, has_file: false, is_default: true, customized: false,
         });
     }
@@ -77,6 +81,7 @@ function mergeSteps(rows = []) {
         const base = bySlug.get(r.slug) || {
             slug: r.slug, label: r.slug, doc_type: r.doc_type || null, sort_order: 100,
             signable: 0, stagiaire_sign: 0, applies_when: {}, or_group: null, company_level: 0, company_sign: 0, active: 1, has_file: false,
+            parcours_defaut: 1, // sans la colonne (migration 155 non jouée) : comportement d'avant
             is_default: false, customized: false,
         };
         const m = { ...base, customized: true };
@@ -87,6 +92,7 @@ function mergeSteps(rows = []) {
         if (r.stagiaire_sign != null) m.stagiaire_sign = r.stagiaire_sign;
         if (r.applies_when != null) m.applies_when = parseApplies(r.applies_when);
         if (r.company_level != null) m.company_level = r.company_level ? 1 : 0;
+        if (r.parcours_defaut != null) m.parcours_defaut = Number(r.parcours_defaut);
         if (r.company_sign != null) m.company_sign = r.company_sign ? 1 : 0;
         if (r.signers != null) m.signers = r.signers; // nouveau modèle : liste de signataires
         if (r.buyer_audience != null) m.buyer_audience = r.buyer_audience; // destinataire facture (119)

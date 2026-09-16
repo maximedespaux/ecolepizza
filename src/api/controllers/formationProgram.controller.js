@@ -50,7 +50,13 @@ async function formationSteps(conn, orgId, program) {
             company_level: !!s.company_level,
             or_group: o ? (o.or_group || null) : (s.or_group || null),
             sort_order: o ? o.sort_order : s.sort_order,
-            active: o ? !!o.active : true,
+            /* SANS EXCEPTION ENREGISTRÉE, C'EST LE MODÈLE QUI DÉCIDE. Un modèle du socle, ou
+               créé avant la migration 155, entre dans le parcours comme toujours. Un modèle
+               créé depuis n'y entre QUE si on l'y active — sans quoi il fallait penser à le
+               désactiver dans chaque formation, une par une, à chaque création.
+               Même logique que les pièces et les feuilles d'émargement juste en dessous :
+               jamais imposées d'office à toutes les formations. */
+            active: o ? !!o.active : s.parcours_defaut !== 0,
         };
     });
 
