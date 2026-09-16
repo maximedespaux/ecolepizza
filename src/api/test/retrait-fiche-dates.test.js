@@ -99,10 +99,14 @@ test('le formateur de date tient debout sur les entrées douteuses', () => {
     /* Chargé ici comme du texte : `lib/format.js` est un module ES, que ces tests (CommonJS)
        ne peuvent pas importer. On vérifie donc le contrat écrit — vide en entrée, vide en
        sortie : une date manquante ne doit pas afficher « Invalid Date » au milieu d'un fil. */
-    assert.match(srcFormat, /if \(!v\) return "";/, 'une date vide rend une chaine vide');
-    assert.match(srcFormat, /if \(!m\) return String\(v\);/, 'une forme inconnue passe telle quelle');
+    /* LE DÉCOUPAGE A ÉTÉ EXTRAIT dans `morceaux()`, partagé par `dateFr` (date seule) et
+       `dateHeure` (date + heure) — il s'écrivait deux fois sinon. Le contrat vérifié ici est
+       le même, à la forme près. */
+    assert.match(srcFormat, /if \(!v\) return null;/, 'une date vide ne donne aucun morceau…');
+    assert.match(srcFormat, /return p \? .+ : \(v \? String\(v\) : ""\);/, '…donc une chaine vide en sortie');
+    assert.match(srcFormat, /if \(!p\) return v \? String\(v\) : "";/, 'une forme inconnue passe telle quelle');
     assert.match(srcFormat, /\(\?:\[T \]/, 'ISO avec `T` ou espace, les deux formes circulent');
-    assert.match(srcFormat, /\+ \(h \? ` \$\{h\}:\$\{mi\}` : ""\)/, 'l\'heure reste facultative');
+    assert.match(srcFormat, /\+ \(p\.h \? ` \$\{p\.h\}:\$\{p\.mi\}` : ""\)/, 'l\'heure reste facultative');
 });
 
 test('les hashtags d\'une annonce se voient DANS la phrase', () => {

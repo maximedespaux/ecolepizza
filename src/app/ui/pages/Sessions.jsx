@@ -46,7 +46,8 @@ function Sessions() {
     getConsentsManquants().then((r) => setASolliciter(r.data || {})).catch(() => {});
   }, []);
 
-  const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "-");
+  // `T00:00:00` : lecture en heure locale, sinon la date recule d'un jour en fuseau négatif.
+  const frDate = (d) => (d ? new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "-");
 
   // Stagiaires inscrits regroupés par session (pour l'agenda).
   const studentsBySession = useMemo(() => {

@@ -461,6 +461,13 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
    perte d'information silencieuse : on lisait un tableau en croyant le voir en entier.
    `overflow-y:hidden` conservé pour que les coins arrondis continuent de rogner les angles
    des lignes. L'ombre de défilement dit qu'il reste quelque chose à droite. */
+/* En-tete de colonne TRIABLE : l'intitule lui-meme est le bouton. Il herite de la casse et de
+   la graisse du `th` pour ne pas se distinguer d'une colonne ordinaire — seul le chevron dit
+   qu'on peut cliquer. Cible tactile portee a 44 px de haut par le padding du th. */
+.dt-tri{background:none;border:none;padding:0;font:inherit;color:inherit;letter-spacing:inherit;
+  text-transform:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:2px}
+.dt-tri:hover{color:var(--text)}
+.dt-tri span{opacity:.45}
 .tablewrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
   overflow-x:auto;overflow-y:hidden;
   background-image:linear-gradient(to right,var(--surface),var(--surface)),

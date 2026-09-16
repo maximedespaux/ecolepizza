@@ -16,7 +16,7 @@ import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PiecesReview from "../components/PiecesReview.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
-import { initials, euro, dateHeure } from "../lib/format.js";
+import { initials, euro, dateHeure, dateFr } from "../lib/format.js";
 
 const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
 
@@ -44,7 +44,11 @@ function Row({ label, value }) {
   );
 }
 
-const d10 = (v) => (v ? String(v).slice(0, 10) : "");
+/* `d10` A ÉTÉ SUPPRIMÉ D'ICI. Il tronquait la valeur du serveur à ses dix premiers caractères
+   et rendait donc l'ISO tel quel : la date de naissance s'affichait « 1987-03-12 ». Il PASSAIT
+   au travers du garde-fou de `dates-affichage.test.js`, qui interdit d'afficher un champ de date
+   brut — mais ne voyait pas un appel de fonction qui avait l'air de formater. Toute date
+   affichée passe par `dateFr` ou `dateHeure` de lib/format.js, sans exception locale. */
 
 // Titre de carte avec icône de tête.
 const T = (icon, text) => (
@@ -432,12 +436,12 @@ function StagiaireDetail() {
           <Row label="Civilité" value={l.civility} />
           <Row label="Nom" value={l.last_name} />
           <Row label="Prénom" value={l.first_name} />
-          <Row label="Date de naissance" value={d10(l.birthday)} />
+          <Row label="Date de naissance" value={dateFr(l.birthday)} />
           <Row label="Lieu de naissance" value={l.birth_place} />
           <Row label="Téléphone" value={l.phone} />
           <Row label="Email" value={l.email} />
           <Row label="Adresse" value={[l.address, l.zip_code, l.town].filter(Boolean).join(", ")} />
-          <Row label="Contact le" value={d10(l.contacted_at)} />
+          <Row label="Contact le" value={dateFr(l.contacted_at)} />
           <Row label="Contacté par" value={l.contacted_by} />
         </Card>
 
@@ -556,8 +560,10 @@ function StagiaireDetail() {
                   { k: "semaine", t: "Semaine", cell: (e) => <span className="chiffres">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "-"}</span> },
                   { k: "dates", t: "Dates", td: { fontSize: 12.5, whiteSpace: "nowrap" },
                     cell: (e) => {
-                      const fr = (v) => (v ? new Date(v).toLocaleDateString("fr-FR") : "");
-                      return e.start_date ? `${fr(e.start_date)}${e.end_date ? ` → ${fr(e.end_date)}` : ""}` : "-";
+                      /* Troisième format sur la MÊME page avant aujourd'hui : celui-ci rendait
+                         bien « 12/03/1987 », mais par `new Date(iso)`, qui se lit en UTC et rend
+                         la veille dans tout fuseau négatif. `dateFr` découpe la chaîne. */
+                      return e.start_date ? `${dateFr(e.start_date)}${e.end_date ? ` → ${dateFr(e.end_date)}` : ""}` : "-";
                     } },
                   { k: "type", t: "Type", td: { fontSize: 12.5 },
                     cell: (e) => (e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier") },

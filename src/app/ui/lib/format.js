@@ -32,22 +32,45 @@ export function scoreBadge(score) {
 }
 
 /**
- * Date et heure d'une publication, au format français : « 01-08-2026 14:32 ».
+ * LE SEUL ENDROIT QUI DÉCOUPE UNE DATE ISO. Tout affichage passe par les deux fonctions
+ * ci-dessous — `dateFr` pour une date seule, `dateHeure` quand l'heure compte.
  *
- * LE SERVEUR CONTINUE D'ENVOYER DE L'ISO (`2026-08-01 14:32`), et c'est délibéré : le fil TRIE
- * sur cette valeur par comparaison de chaînes (`localeCompare`). En `jj-mm-aaaa`, le tri se
- * ferait sur le JOUR d'abord — le 31 janvier passerait devant le 1er décembre. Le format est
- * donc affaire d'affichage, jamais de transport.
+ * LE SERVEUR CONTINUE D'ENVOYER DE L'ISO (`2026-08-01 14:32`), et c'est délibéré : les listes
+ * TRIENT sur cette valeur par comparaison de chaînes. En « jj/mm/aaaa », le tri se ferait sur le
+ * JOUR d'abord — le 31 janvier passerait devant le 1er décembre. Le format est donc affaire
+ * d'affichage, jamais de transport.
+ *
+ * SURTOUT PAS `new Date(iso).toLocaleDateString()` : `new Date('2027-01-15')` se lit en UTC, et
+ * rend la veille dans tout fuseau négatif (cf. lib/contrat.js, qui l'a déjà payé). Ici rien
+ * n'est converti — on découpe la chaîne, donc la date affichée est celle qui est écrite.
  *
  * Tolérant à l'entrée : ISO avec ou sans heure, avec `T` ou espace. Une valeur vide rend une
  * chaîne vide plutôt qu'un « Invalid Date » — une date manquante ne doit pas crier.
  */
-export function dateHeure(v) {
-  if (!v) return "";
+function morceaux(v) {
+  if (!v) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(String(v));
-  if (!m) return String(v);
-  const [, a, mo, j, h, mi] = m;
-  return `${j}-${mo}-${a}` + (h ? ` ${h}:${mi}` : "");
+  return m ? { a: m[1], mo: m[2], j: m[3], h: m[4], mi: m[5] } : null;
+}
+
+/**
+ * Une date seule, au format français : « 01/08/2026 ».
+ *
+ * LA BARRE OBLIQUE, ET PAS LE TIRET. « 01-08-2026 » n'est le format d'aucun pays : ni l'ISO
+ * (2026-08-01), ni le français (01/08/2026). L'école lisait donc des dates à deux formats selon
+ * l'écran, et un troisième — l'ISO brut — là où un raccourci local court-circuitait ces
+ * fonctions (`d10` sur la fiche stagiaire).
+ */
+export function dateFr(v) {
+  const p = morceaux(v);
+  return p ? `${p.j}/${p.mo}/${p.a}` : (v ? String(v) : "");
+}
+
+/** Date ET heure : « 01/08/2026 14:32 ». L'heure n'apparaît que si la valeur en porte une. */
+export function dateHeure(v) {
+  const p = morceaux(v);
+  if (!p) return v ? String(v) : "";
+  return `${p.j}/${p.mo}/${p.a}` + (p.h ? ` ${p.h}:${p.mi}` : "");
 }
 
 /**

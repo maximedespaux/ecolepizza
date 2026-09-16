@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import InfosManquantes from "./InfosManquantes.jsx";
 import { getDocument, signDocument, downloadDocumentPdf, documentPdfUrl, documentPreviewHtml, createSignLink, API_BASE_URL } from "../api/apiClient.js";
-import { dateHeure } from "../lib/format.js";
+import { dateHeure, dateFr } from "../lib/format.js";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
 
@@ -102,7 +102,7 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
           {doc && doc.org_signable && (
             <div style={{ padding: "6px 14px", fontSize: 12, background: doc.org_signed ? "rgba(22,163,74,.08)" : "rgba(184,134,11,.10)", borderBottom: "1px solid var(--border-soft)" }}>
               {doc.org_signed
-                ? <><b style={{ color: "#16a34a" }}><Icon name="check" size={13} style={{ verticalAlign: "text-bottom" }} /> Signé par l'organisme</b>{doc.org_signer_name ? ` (${doc.org_signer_name})` : ""}{doc.org_signed_at ? ` le ${new Date(doc.org_signed_at).toLocaleDateString("fr-FR")}` : ""}</>
+                ? <><b style={{ color: "#16a34a" }}><Icon name="check" size={13} style={{ verticalAlign: "text-bottom" }} /> Signé par l'organisme</b>{doc.org_signer_name ? ` (${doc.org_signer_name})` : ""}{doc.org_signed_at ? ` le ${dateFr(doc.org_signed_at)}` : ""}</>
                 : <span style={{ color: "var(--amber, #b8860b)" }}><Icon name="pencil" size={13} style={{ verticalAlign: "text-bottom" }} /> L'organisme contresigne automatiquement <b>en dernier</b>, après les autres signataires (signature enregistrée requise).</span>}
             </div>
           )}

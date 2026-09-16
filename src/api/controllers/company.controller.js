@@ -64,6 +64,12 @@ const getCompanies = (req, res) => {
            lien pour une entreprise sans e-mail ou dont l'e-mail ne pointe sur aucun stagiaire. */
         `SELECT c.id, c.organization_id, c.name, c.siret, c.town, c.email, c.phone, c.opco,
                 c.representative_civ, c.representative_name, c.created_at,
+                /* cree_le : la date de creation MISE EN FORME PAR LA BASE, sous un autre nom.
+                   created_at brut arrive en objet Date, et dateHeure() ne sait lire qu'une
+                   chaine ISO : elle rendrait « Tue Sep 16 2026 17:50:09 GMT+0200 » tel quel.
+                   Un alias DISTINCT plutot qu'un doublon de created_at dans le meme SELECT :
+                   deux colonnes de meme nom, c'est le pilote qui decide laquelle survit. */
+                DATE_FORMAT(c.created_at, '%Y-%m-%d %H:%i') AS cree_le,
                 (SELECT COUNT(*) FROM learner l WHERE l.company_id = c.id) AS learner_count,
                 (SELECT sl.id FROM learner sl
                    WHERE sl.organization_id = c.organization_id AND c.email <> '' AND sl.email = c.email
@@ -86,7 +92,12 @@ const getCompanies = (req, res) => {
 const getCompany = async (req, res) => {
     try {
         const conn = db.promise();
-        const [[company]] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        const [[company]] = await conn.query(
+            // `cree_le` : même raison qu'à la liste — la mise en forme appartient à la base,
+            // qui seule connaît le fuseau de session (cf. config/database.js).
+            `SELECT c.*, DATE_FORMAT(c.created_at, '%Y-%m-%d %H:%i') AS cree_le
+               FROM company c WHERE c.id = ? AND c.organization_id = ?`,
+            [req.params.id, req.user.organization_id]);
         if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
         const [learners] = await conn.query(
             `SELECT l.id, l.civility, l.first_name, l.last_name, l.email, l.phone, l.financing,

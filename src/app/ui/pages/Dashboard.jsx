@@ -12,7 +12,10 @@ import MoneyToggle from "../components/MoneyToggle.jsx";
 import { euro, colorOf, dateHeure } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 
-const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "-");
+/* `T00:00:00` FORCE LA LECTURE EN HEURE LOCALE. Sans lui, `new Date("2026-09-14")` se lit en
+   UTC et l'affichage reculerait d'un jour sur tout fuseau négatif. Même idiome que les cinq
+   autres rendus « jour + mois en toutes lettres » de l'application. */
+const frDate = (d) => (d ? new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "-");
 
 const QUICK = [
   ["/stagiaires", "user-plus", "Ajouter un stagiaire"],

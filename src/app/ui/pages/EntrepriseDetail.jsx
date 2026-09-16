@@ -263,7 +263,12 @@ export default function EntrepriseDetail() {
     <>
       <PageHead eyebrow={<button className="eyebrow" style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "var(--muted)", WebkitTextFillColor: "var(--muted)" }} onClick={() => navigate("/entreprises")}><Icon name="chevron-left" size={13} /> Entreprises</button>}
         title={data.name}
-        lead={[data.town, data.siret && `SIRET ${data.siret}`].filter(Boolean).join(" · ")} />
+        /* « créée le » EN TÊTE DE FICHE et non dans un encart : c'est un repère de lecture, pas
+           une donnée qu'on vient consulter. Sur un import de plusieurs centaines d'entreprises,
+           il répond à la seule question qu'on se pose en ouvrant une fiche inconnue — d'où
+           sort-elle, et depuis quand. */
+        lead={[data.town, data.siret && `SIRET ${data.siret}`,
+               data.cree_le && `créée le ${dateHeure(data.cree_le)}`].filter(Boolean).join(" · ")} />
 
       <StatusMessage status={status} />
 

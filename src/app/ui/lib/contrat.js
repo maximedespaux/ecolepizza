@@ -41,7 +41,14 @@ export function finISO(debut, dureeMois) {
 }
 
 /**
- * `2027-01-15` → `15/01/2027`, PAR DÉCOUPAGE DE CHAÎNE.
+ * `2027-01-15` → `15/01/2027`, PAR DÉCOUPAGE DE CHAÎNE. Jumelle de `dateFr` (lib/format.js).
+ *
+ * ⚠️ NE PAS LA REMPLACER PAR UN IMPORT DE `dateFr`, si tentant que ce soit. CE FICHIER NE DOIT
+ * CONTENIR AUCUN `import` : `contrat-partenaire.test.js` le lit comme du TEXTE et l'évalue par
+ * `new Function`, seul moyen d'éprouver le vrai calcul du navigateur depuis des tests CommonJS.
+ * Un `import` en tête et ce test entier tombe sur « Cannot use import statement outside a
+ * module » — essayé le 2026-09-16. La duplication est donc DÉLIBÉRÉE ; c'est son silence qui
+ * serait dangereux, et un test vérifie que les deux rendent exactement la même chose.
  *
  * Surtout pas `new Date(iso).toLocaleDateString()` : `new Date('2027-01-15')` se lit en UTC, et
  * l'affichage se fait en heure locale — sur un fuseau négatif, la date reculerait d'un jour. Pour

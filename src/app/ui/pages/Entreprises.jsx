@@ -11,6 +11,7 @@ import ListePlus from "../components/ListePlus.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { Requis } from "../components/Field.jsx";
 import { useListeBornee } from "../lib/listeBornee.js";
+import { dateHeure } from "../lib/format.js";
 
 /**
  * Entreprises — clients / financeurs de l'organisme. Une entreprise regroupe plusieurs
@@ -23,15 +24,40 @@ export default function Entreprises() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(null);
   const [creating, setCreating] = useState(false);
+  /* TRI DANS LA PAGE, PAS DANS LE TABLEAU. `DataTable` ne trie pas, et il ne le POURRAIT pas
+     ici : la liste lui est passée déjà COUPÉE à `max` lignes (quatre cent soixante et onze
+     entreprises, on n'en montre qu'une tranche). Trier à l'intérieur ne trierait que la tranche
+     visible — « la plus récente » serait la plus récente DES CINQUANTE AFFICHÉES, ce qui est
+     faux sans jamais en avoir l'air. */
+  const [tri, setTri] = useState({ col: "name", sens: 1 });
 
   const load = () => getCompanies().then((r) => setRows(r.data || [])).catch((e) => setStatus({ type: "error", message: e.message }));
   useEffect(() => { load(); }, []);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((c) => [c.name, c.siret, c.town, c.email, c.representative_name].some((f) => String(f || "").toLowerCase().includes(q)));
-  }, [rows, query]);
+    const filtrees = !q ? rows
+      : rows.filter((c) => [c.name, c.siret, c.town, c.email, c.representative_name].some((f) => String(f || "").toLowerCase().includes(q)));
+    /* `cree_le` se compare comme une CHAÎNE : la base la rend en « AAAA-MM-JJ hh:mm », dont
+       l'ordre alphabétique EST l'ordre chronologique. Une fiche sans date passe en dernier
+       plutôt que de se ranger avant 1970. */
+    const cle = (c) => (tri.col === "cree_le" ? (c.cree_le || "") : String(c.name || ""));
+    return [...filtrees].sort((a, b) => {
+      const va = cle(a); const vb = cle(b);
+      if (!va !== !vb) return !va ? 1 : -1;
+      return tri.sens * va.localeCompare(vb, "fr");
+    });
+  }, [rows, query, tri]);
+
+  /* L'en-tête d'une colonne triable EST le bouton de tri : `DataTable` accepte un nœud comme
+     intitulé, donc rien à changer dans le composant partagé — et les trente autres tableaux
+     ne bougent pas. */
+  const enTete = (col, libelle) => (
+    <button type="button" className="dt-tri" onClick={() => setTri((t) => ({ col, sens: t.col === col ? -t.sens : 1 }))}
+      aria-label={`Trier par ${libelle}`}>
+      {libelle}<span aria-hidden="true">{tri.col === col ? (tri.sens > 0 ? " ↑" : " ↓") : " ↕"}</span>
+    </button>
+  );
 
   // Même mécanisme que /stagiaires — le MÊME, pas un semblable : la page souffrait du même
   // défaut (469 lignes d'un bloc, 49 écrans) et doit hériter de la même correction.
@@ -81,7 +107,7 @@ export default function Entreprises() {
               onKeyDown: (e) => { if (e.key === "Enter") navigate(`/entreprises/${c.id}`); },
             })}
             cols={[
-              { k: "name", t: "Entreprise", principal: true,
+              { k: "name", t: enTete("name", "Entreprise"), principal: true,
                 cell: (c) => (
                   <>
                     <b>{c.name}</b>
@@ -103,6 +129,12 @@ export default function Entreprises() {
               { k: "town", t: "Ville", cell: (c) => c.town || null },
               { k: "ref", t: "Référent", cell: (c) => [c.representative_civ, c.representative_name].filter(Boolean).join(" ") || null },
               { k: "nb", t: "Stagiaires", cell: (c) => <Badge tone={c.learner_count > 0 ? "b" : "n"}>{c.learner_count || 0}</Badge> },
+              /* DEPUIS QUAND CETTE FICHE EXISTE. Sur quatre cent soixante et onze entreprises
+                 dont beaucoup viennent d'un import, rien ne distinguait ce qui a été saisi hier
+                 de ce qui est arrivé en bloc. La colonne existait en base et n'était affichée
+                 nulle part. */
+              { k: "cree_le", t: enTete("cree_le", "Créé le"), td: { fontSize: 12, whiteSpace: "nowrap" },
+                cell: (c) => dateHeure(c.cree_le) || null },
               // Le chevron ne sert qu'au mode TABLEAU : en carte, c'est la carte entière qui
               // s'ouvre, et une flèche seule en pied ressemble à un bouton qui ferait autre
               // chose. `sansCarte` la retire — c'est exactement ce marqueur qui manquait.
