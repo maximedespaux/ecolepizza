@@ -11,7 +11,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { Requis } from "../components/Field.jsx";
-import { dateHeure } from "../lib/format.js";
+import { dateHeure, dateFr } from "../lib/format.js";
 
 const LEGAL_STATUSES = ["SARL", "SAS", "SASU", "EURL", "EI", "Micro / Auto", "SA", "SCI", "Association", "Autre"];
 const REP_ROLES = ["Gérant(e)", "Président(e)", "Directeur / Directrice", "Directeur général / Directrice générale", "Chef(fe) d'entreprise", "Responsable formation", "Responsable RH / DRH", "Responsable administratif", "Associé(e)", "Autre"];
@@ -25,6 +25,12 @@ const CFIELDS = [
   // Le serveur ignore ce champ tant que la migration 123 n'est pas jouée.
   { k: "vat_number", label: "N° TVA intracommunautaire", placeholder: "FR76123456789" },
   { k: "naf_ape", label: "Code NAF / APE", placeholder: "5610C" },
+  /* LA DATE DU KBIS, PAS CELLE DE LA FICHE (migration 159). `created_at` dit quand
+     l'entreprise est entrée dans l'application — pour les quatre cent soixante et onze fiches
+     importées, c'est la même seconde pour toutes, et ça ne dit rien de l'entreprise. Rangée
+     ici, entre le NAF et la forme juridique : c'est le bloc d'identité légale, celui qu'on
+     recopie depuis un extrait Kbis. */
+  { k: "date_creation", label: "Date de création", type: "date" },
   { k: "legal_status", label: "Forme juridique", type: "select", options: LEGAL_STATUSES },
   { k: "opco", label: "OPCO / financeur", type: "select", dyn: "opco" },
   { k: "address", label: "Adresse", full: true, placeholder: "12 rue des Lilas" },
@@ -97,7 +103,13 @@ export default function EntrepriseDetail() {
 
   function load() {
     getCompany(id).then((r) => {
-      setData(r.data); setForm(r.data || {});
+      /* UNE COLONNE `DATE` REVIENT EN « 2020-03-15T00:00:00.000Z », pas en « 2020-03-15 ».
+         Un `<input type="date">` nourri de la forme longue s'affiche VIDE, sans erreur ni
+         message — même piège que `dateOnly` sur la fiche stagiaire. On tronque à la saisie ;
+         l'affichage, lui, passe par `dateFr`. */
+      const d = r.data || {};
+      setData(d);
+      setForm({ ...d, date_creation: d.date_creation ? String(d.date_creation).slice(0, 10) : "" });
       // Vue par défaut = session la plus récente DE L'ENTREPRISE.
       setViewSessionId((cur) => cur || (r.data?.sessions?.[0]?.id || ""));
     }).catch((e) => setStatus({ type: "error", message: e.message }));
@@ -263,12 +275,11 @@ export default function EntrepriseDetail() {
     <>
       <PageHead eyebrow={<button className="eyebrow" style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "var(--muted)", WebkitTextFillColor: "var(--muted)" }} onClick={() => navigate("/entreprises")}><Icon name="chevron-left" size={13} /> Entreprises</button>}
         title={data.name}
-        /* « créée le » EN TÊTE DE FICHE et non dans un encart : c'est un repère de lecture, pas
-           une donnée qu'on vient consulter. Sur un import de plusieurs centaines d'entreprises,
-           il répond à la seule question qu'on se pose en ouvrant une fiche inconnue — d'où
-           sort-elle, et depuis quand. */
+        /* « créée le » = la date du KBIS, à côté de la ville et du SIRET : les trois repères
+           qu'on recopie d'un extrait d'immatriculation. Absente tant qu'elle n'est pas
+           renseignée — inventer une date de création serait pire que n'en montrer aucune. */
         lead={[data.town, data.siret && `SIRET ${data.siret}`,
-               data.cree_le && `créée le ${dateHeure(data.cree_le)}`].filter(Boolean).join(" · ")} />
+               data.date_creation && `créée le ${dateFr(data.date_creation)}`].filter(Boolean).join(" · ")} />
 
       <StatusMessage status={status} />
 
@@ -363,7 +374,10 @@ export default function EntrepriseDetail() {
                         <option value="">-</option>
                         {allOpts.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
-                    : <input className="inp" value={cur || ""} onChange={set(k)} placeholder={placeholder || ""} />}
+                    /* `type` était ignoré pour tout ce qui n'est pas `select` : un champ déclaré
+                       « date » serait resté une zone de texte libre, sans calendrier ni contrôle
+                       de forme. `"text"` par défaut — les treize autres champs ne bougent pas. */
+                    : <input className="inp" type={type || "text"} value={cur || ""} onChange={set(k)} placeholder={placeholder || ""} />}
                 </div>
                 );
               })}

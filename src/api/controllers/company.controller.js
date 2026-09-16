@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { colonneOuNull } = require('../lib/colonnes.js');
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
@@ -55,8 +56,12 @@ const clean = (v) => (v === undefined || v === '' ? null : v);
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
 
 /** GET /api/companies — entreprises de l'organisme (avec nb de stagiaires rattachés). */
-const getCompanies = (req, res) => {
-    db.query(
+/* ASYNCHRONE DEPUIS LA 159 : il fallait sonder `information_schema` avant de composer le
+   SELECT, ce qu'un rappel ne permet pas. Le reste du fichier est déjà en `db.promise()`. */
+const getCompanies = async (req, res) => {
+  try {
+    const conn = db.promise();
+    const [results] = await conn.query(
         /* `learner_id` / `learner_name` : LE stagiaire dont l'adresse est EXACTEMENT celle de
            l'entreprise — c.-à-d. le cas « le référent EST un stagiaire » (petite société au nom
            du propriétaire). Sert à afficher côté admin un lien vers sa fiche. Une adresse vide
@@ -64,12 +69,7 @@ const getCompanies = (req, res) => {
            lien pour une entreprise sans e-mail ou dont l'e-mail ne pointe sur aucun stagiaire. */
         `SELECT c.id, c.organization_id, c.name, c.siret, c.town, c.email, c.phone, c.opco,
                 c.representative_civ, c.representative_name, c.created_at,
-                /* cree_le : la date de creation MISE EN FORME PAR LA BASE, sous un autre nom.
-                   created_at brut arrive en objet Date, et dateHeure() ne sait lire qu'une
-                   chaine ISO : elle rendrait « Tue Sep 16 2026 17:50:09 GMT+0200 » tel quel.
-                   Un alias DISTINCT plutot qu'un doublon de created_at dans le meme SELECT :
-                   deux colonnes de meme nom, c'est le pilote qui decide laquelle survit. */
-                DATE_FORMAT(c.created_at, '%Y-%m-%d %H:%i') AS cree_le,
+                ${await colonneOuNull(conn, 'company', 'date_creation', 'c.')},
                 (SELECT COUNT(*) FROM learner l WHERE l.company_id = c.id) AS learner_count,
                 (SELECT sl.id FROM learner sl
                    WHERE sl.organization_id = c.organization_id AND c.email <> '' AND sl.email = c.email
@@ -80,24 +80,19 @@ const getCompanies = (req, res) => {
          FROM company c
          WHERE c.organization_id = ?
          ORDER BY c.name`,
-        [req.user.organization_id],
-        (err, results) => {
-            if (err) { console.error('Erreur récupération entreprises :', err); return res.status(500).json({ error: 'Internal Server Error' }); }
-            res.json({ data: results });
-        }
-    );
+        [req.user.organization_id]);
+    res.json({ data: results });
+  } catch (err) {
+    console.error('Erreur récupération entreprises :', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 };
 
 /** GET /api/companies/:id — une entreprise + ses stagiaires. */
 const getCompany = async (req, res) => {
     try {
         const conn = db.promise();
-        const [[company]] = await conn.query(
-            // `cree_le` : même raison qu'à la liste — la mise en forme appartient à la base,
-            // qui seule connaît le fuseau de session (cf. config/database.js).
-            `SELECT c.*, DATE_FORMAT(c.created_at, '%Y-%m-%d %H:%i') AS cree_le
-               FROM company c WHERE c.id = ? AND c.organization_id = ?`,
-            [req.params.id, req.user.organization_id]);
+        const [[company]] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
         const [learners] = await conn.query(
             `SELECT l.id, l.civility, l.first_name, l.last_name, l.email, l.phone, l.financing,
@@ -153,7 +148,12 @@ const COMPANY_COLS = ['name', 'siret', 'naf_ape', 'legal_status', 'address', 'zi
 /* Colonnes arrivées par migration, donc pas forcément là. Écrire `vat_number` sur une base où
  * la 123 n'a pas été jouée ferait échouer TOUTE la création d'entreprise en ER_BAD_FIELD_ERROR —
  * on perdrait la fiche entière pour un champ facultatif. On sonde une fois par requête. */
-const COMPANY_COLS_OPT = ['vat_number'];
+/* `date_creation` (migration 159) — la date d'IMMATRICULATION de l'entreprise, à ne pas
+   confondre avec `created_at`, qui dit quand sa fiche est entrée dans l'application. Les quatre
+   cent soixante et onze fiches importées portent toutes le même `created_at`, à la seconde
+   près : il ne dit rien de l'entreprise. C'est la date du Kbis que réclament une convention,
+   un dossier OPCO ou un contrôle. */
+const COMPANY_COLS_OPT = ['vat_number', 'date_creation'];
 async function colonnesEntreprise(conn) {
     const dispo = [];
     for (const c of COMPANY_COLS_OPT) {
@@ -200,6 +200,9 @@ function normaliserEntreprise(b) {
         const v = String(out.vat_number).replace(/[\s.]/g, '').toUpperCase();
         out.vat_number = v || null;   // champ vidé = effacé, pas une chaîne vide
     }
+    /* Un `<input type="date">` vidé envoie la CHAÎNE VIDE, que MariaDB range en '0000-00-00' ou
+       refuse selon son mode strict. Vide veut dire inconnue : on écrit NULL. */
+    if (out.date_creation != null) out.date_creation = String(out.date_creation).trim() || null;
     return out;
 }
 
