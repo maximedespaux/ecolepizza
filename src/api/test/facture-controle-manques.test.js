@@ -124,7 +124,11 @@ test('la migration 123 ajoute le n° de TVA client, avec son revert', () => {
 test('écrire le n° de TVA ne casse PAS une base où la 123 n\'est pas jouée', () => {
     // Sans la sonde, un INSERT sur une colonne absente ferait échouer la création d'entreprise
     // ENTIÈRE (ER_BAD_FIELD_ERROR) — on perdrait la fiche pour un champ facultatif.
-    assert.match(srcCompany, /const COMPANY_COLS_OPT = \['vat_number'\]/);
+    /* La liste s'est allongée (la 159 y a ajouté `date_creation`) : on vérifie que `vat_number`
+       Y FIGURE, pas que la liste vaut exactement ça. Une assertion épinglée au contenu exact
+       aurait condamné tout ajout ultérieur d'une colonne facultative — alors que c'est
+       précisément le mécanisme qu'elle protège. */
+    assert.match(srcCompany, /const COMPANY_COLS_OPT = \[[^\]]*'vat_number'[^\]]*\]/);
     assert.match(srcCompany, /information_schema\.columns[\s\S]{0,160}table_name = 'company'/,
         'la colonne optionnelle doit être sondée');
     assert.doesNotMatch(srcCompany, /const cols = COMPANY_COLS\.filter/,

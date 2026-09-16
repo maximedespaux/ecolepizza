@@ -11,7 +11,7 @@ import ListePlus from "../components/ListePlus.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { Requis } from "../components/Field.jsx";
 import { useListeBornee } from "../lib/listeBornee.js";
-import { dateHeure } from "../lib/format.js";
+import { dateFr } from "../lib/format.js";
 
 /**
  * Entreprises — clients / financeurs de l'organisme. Une entreprise regroupe plusieurs
@@ -38,10 +38,11 @@ export default function Entreprises() {
     const q = query.trim().toLowerCase();
     const filtrees = !q ? rows
       : rows.filter((c) => [c.name, c.siret, c.town, c.email, c.representative_name].some((f) => String(f || "").toLowerCase().includes(q)));
-    /* `cree_le` se compare comme une CHAÎNE : la base la rend en « AAAA-MM-JJ hh:mm », dont
-       l'ordre alphabétique EST l'ordre chronologique. Une fiche sans date passe en dernier
-       plutôt que de se ranger avant 1970. */
-    const cle = (c) => (tri.col === "cree_le" ? (c.cree_le || "") : String(c.name || ""));
+    /* Comparaison de CHAÎNES sur les dix premiers caractères — « AAAA-MM-JJ », dont l'ordre
+       alphabétique EST l'ordre chronologique. Le pilote rend une colonne `DATE` sous la forme
+       « 2020-03-15T00:00:00.000Z » : tronquer évite de comparer des fuseaux. Une entreprise
+       sans date passe en dernier plutôt que de se ranger avant 1970. */
+    const cle = (c) => (tri.col === "date_creation" ? String(c.date_creation || "").slice(0, 10) : String(c.name || ""));
     return [...filtrees].sort((a, b) => {
       const va = cle(a); const vb = cle(b);
       if (!va !== !vb) return !va ? 1 : -1;
@@ -129,12 +130,14 @@ export default function Entreprises() {
               { k: "town", t: "Ville", cell: (c) => c.town || null },
               { k: "ref", t: "Référent", cell: (c) => [c.representative_civ, c.representative_name].filter(Boolean).join(" ") || null },
               { k: "nb", t: "Stagiaires", cell: (c) => <Badge tone={c.learner_count > 0 ? "b" : "n"}>{c.learner_count || 0}</Badge> },
-              /* DEPUIS QUAND CETTE FICHE EXISTE. Sur quatre cent soixante et onze entreprises
-                 dont beaucoup viennent d'un import, rien ne distinguait ce qui a été saisi hier
-                 de ce qui est arrivé en bloc. La colonne existait en base et n'était affichée
-                 nulle part. */
-              { k: "cree_le", t: enTete("cree_le", "Créé le"), td: { fontSize: 12, whiteSpace: "nowrap" },
-                cell: (c) => dateHeure(c.cree_le) || null },
+              /* LA DATE DU KBIS (migration 159), triable. Cette colonne a d'abord montré
+                 `created_at` — la date d'ENTRÉE DE LA FICHE dans l'application. Ça n'intéresse
+                 personne : les quatre cent soixante et onze fiches importées portent toutes la
+                 même seconde, et ça ne dit rien des entreprises. Vide tant que la date n'est
+                 pas renseignée : on ne devine pas une immatriculation. */
+              { k: "date_creation", t: enTete("date_creation", "Date de création"),
+                td: { fontSize: 12, whiteSpace: "nowrap" },
+                cell: (c) => dateFr(c.date_creation) || null },
               // Le chevron ne sert qu'au mode TABLEAU : en carte, c'est la carte entière qui
               // s'ouvre, et une flèche seule en pied ressemble à un bouton qui ferait autre
               // chose. `sansCarte` la retire — c'est exactement ce marqueur qui manquait.
@@ -154,7 +157,7 @@ export default function Entreprises() {
 }
 
 function CreateCompanyModal({ onClose, onCreated, onError }) {
-  const [f, setF] = useState({ name: "", siret: "", vat_number: "", address: "", zip_code: "", town: "", email: "", phone: "", representative_civ: "", representative_name: "" });
+  const [f, setF] = useState({ name: "", siret: "", vat_number: "", date_creation: "", address: "", zip_code: "", town: "", email: "", phone: "", representative_civ: "", representative_name: "" });
   const [busy, setBusy] = useState(false);
   /* Mêmes conventions que la fiche entreprise et la fiche stagiaire : nom du référent en
      capitales (il ressort sur les conventions et les liens de signature), e-mail normalisé —
@@ -189,6 +192,12 @@ function CreateCompanyModal({ onClose, onCreated, onError }) {
           <div className="grid cols-2" style={{ gap: 12 }}>
             <div className="field"><label>SIRET<Requis /></label><input className="inp" value={f.siret} onChange={set("siret")} placeholder="879 955 136 00012" /></div>
             <div className="field"><label>Téléphone<Requis /></label><input className="inp" value={f.phone} onChange={set("phone")} placeholder="05 62 98 12 34" /></div>
+          </div>
+          <div className="row2">
+            {/* La date du KBIS (migration 159) — saisissable dès la création, à côté du SIRET
+                qu'on recopie du même extrait. Facultative : l'école ne la connaît pas toujours,
+                et une date inventée vaut moins que pas de date. */}
+            <div className="field"><label>Date de création</label><input className="inp" type="date" value={f.date_creation} onChange={set("date_creation")} /></div>
           </div>
           {/* LE N° DE TVA MANQUAIT ICI, alors que la colonne existe (migration 123) et que la
               FICHE le propose déjà : on pouvait donc le saisir après coup, jamais à la création.
