@@ -3,6 +3,7 @@ import Card from "./Card.jsx";
 import Badge from "./Badge.jsx";
 import EmptyState from "./EmptyState.jsx";
 import { Icon } from "./Icon.jsx";
+import BoutonsDocument from "./BoutonsDocument.jsx";
 import { getDocumentsSession, envoyerDocumentSession } from "../api/apiClient.js";
 
 /**
@@ -106,6 +107,7 @@ function DocumentsExternes({ sessionId, isAdmin, onStatus }) {
                 </span>
               </span>
               {d.signe_le ? <Badge tone="g">Signé</Badge> : <Badge tone="a">En attente</Badge>}
+              <BoutonsDocument id={d.id} nom={d.title} />
             </div>
           ))}
         </div>

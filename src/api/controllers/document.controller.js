@@ -933,6 +933,17 @@ const downloadPdf = async (req, res) => {
                     const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [sdoc.learner_id, req.user.id]);
                     allowed = own.length > 0;
                 }
+                if (!allowed) {
+                    /* LE SIGNATAIRE ATTRIBUÉ PEUT RELIRE CE QU'ON LUI DEMANDE DE SIGNER. Un
+                       document de session (migration 157) n'a pas de stagiaire : les deux gardes
+                       ci-dessus le refusaient donc à l'intervenant à qui il est justement
+                       destiné — on lui demandait de signer sans pouvoir ouvrir. La garde reste
+                       étroite : sa case, sur CE document, et rien d'autre. */
+                    const [att] = await conn.query(
+                        'SELECT id FROM document_signature WHERE document_id = ? AND user_id = ?',
+                        [sdoc.id, req.user.id]);
+                    allowed = att.length > 0;
+                }
                 if (allowed) {
                     /* LE FICHIER REÇU PASSE AVANT TOUT — même raison que le PDF signé figé juste en
                        dessous : ce qui fait foi ne se régénère pas. Réservé au PDF : servir une image ou
