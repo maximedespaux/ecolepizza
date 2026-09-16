@@ -66,8 +66,31 @@ document a déjà été **revertée** par l'utilisateur. Ne pas réintroduire.
 - Ne jamais lire les `.env`. Catalogue Metro en lecture seule (aucun achat).
 
 ### 2.4 Le build qui passe ne prouve RIEN
-Pas d'ESLint dans le projet. `esbuild` ne détecte pas les références non définies. Après toute
-suppression de variable / refactor, **vérifier à la main** (et dans le navigateur).
+`esbuild` et `vite build` sont des EMPAQUETEURS, pas des analyseurs : ils ne détectent aucune
+référence non définie. Un composant peut se rendre parfaitement et n'échouer qu'au clic.
+
+**ESLint EXISTE depuis le 2026-09-16** — il était installé depuis toujours, mais sans fichier de
+configuration : la commande répondait « couldn't find an eslint.config file », donc personne ne
+la lançait, et ce paragraphe a longtemps affirmé qu'il n'y en avait pas. Un outil installé mais
+muet est pire qu'un outil absent : on se croit couvert.
+
+```bash
+cd src/app && npm run lint     # interface — navigateur, ESM, JSX, react-hooks
+cd src/api && npm run lint     # API — Node, CommonJS (emprunte le binaire du front)
+```
+
+**`no-undef` est la règle pour laquelle tout ceci existe.** Deux défauts du même jour tenaient
+entièrement dedans : un état React appelé depuis un AUTRE composant (deux cent trois
+`ReferenceError` en production, rien à l'écran), et une fonction appelée sans son `require`.
+
+Sévérités : **erreur** pour ce qui casse à l'exécution, **avertissement** pour ce qui salit. Le
+dépôt porte une centaine d'avertissements — variables inutilisées, dépendances d'effet — et les
+passer en erreur rendrait la commande rouge en permanence ; un contrôle toujours rouge ne se lit
+plus. `npm run lint` doit sortir en **0 erreur** : c'est ça, le contrat.
+
+⚠️ **Il ne remplace pas la vérification à la main.** Un linteur ne sait pas qu'une liste est
+coupée avant d'être triée, ni qu'un accusé de réception ne doit pas être signé par l'école.
+Après toute suppression de variable / refactor : **relire**, et **ouvrir le navigateur**.
 
 Compile-check d'un fichier JSX :
 ```bash
