@@ -95,3 +95,40 @@ test('la migration 160 respecte les règles du dépôt', () => {
     assert.ok(down.indexOf('remise_fichier') < down.indexOf('remise_document'));
     assert.ok(down.indexOf('remise_document') < down.indexOf('DROP TABLE IF EXISTS remise_type'));
 });
+
+const REVIEW = readFileSync(path.join(__dirname, '../../app/ui/components/RemisesReview.jsx'), 'utf8');
+const ESPACE = readFileSync(path.join(__dirname, '../../app/ui/pages/StudentFormationDetail.jsx'), 'utf8');
+
+test('l\'écran de l\'école n\'offre AUCUN bouton « reçu »', () => {
+    /* LA RÈGLE SE VOIT, ELLE NE SE DEVINE PAS. Le serveur refuse le personnel sur la route
+       d'accusé ; si l'écran proposait quand même le bouton, on aurait une commande qui répond
+       par une erreur — pire qu'une commande absente. Surtout, offrir le geste suggérerait qu'il
+       est légitime, alors qu'une preuve de remise signée par l'école à la place du stagiaire ne
+       vaut rien. */
+    assert.ok(!/accuserRemise/.test(REVIEW), 'le côté école n\'appelle jamais l\'accusé');
+    assert.match(REVIEW, /deposerRemise/, 'il dépose…');
+    assert.match(REVIEW, /supprimerRemiseFichier/, '…et retire, c\'est tout');
+    /* Les deux dates se disent séparément : le contrôle lit le DÉLAI entre mise à disposition
+       et réception, que fondre les deux effacerait. */
+    assert.match(REVIEW, /dateHeure\(r\.remis_le\)/);
+    assert.match(REVIEW, /dateHeure\(r\.accuse_le\)/);
+});
+
+test('le stagiaire ne peut confirmer que ce qui a été déposé', () => {
+    assert.match(ESPACE, /e\.r\.statut === "REMISE" && \([\s\S]{0,300}J'ai bien reçu/,
+        'le bouton n\'apparaît qu\'une fois le document là');
+    assert.match(ESPACE, /accuserRemise\(r\.remise_id\)/);
+    // Confirmer engage : on demande, et la phrase dit ce qu'on signe.
+    assert.match(ESPACE, /window\.confirm\(`Confirmer que vous avez bien reçu/);
+});
+
+test('les états du stagiaire sont l\'INVERSE de ceux des pièces', () => {
+    /* Le piège de symétrie : recopier `PIECE_ETAT` donnerait « ATTENDUE → todo », donc une étape
+       « À faire » alors que le stagiaire ne peut RIEN faire — l'école n'a pas encore déposé. Et
+       « REMISE → wait » afficherait « En vérification », alors que c'est à LUI de jouer. Les deux
+       valeurs sont échangées par rapport aux pièces, et c'est le sens du flux qui le commande. */
+    assert.match(ESPACE, /const REMISE_ETAT = \{ RECUE: "done", REMISE: "todo", ATTENDUE: "wait" \};/);
+    assert.match(ESPACE, /const PIECE_ETAT = \{ VALIDEE: "done", DEPOSEE: "wait", REFUSEE: "refused", ATTENDUE: "todo" \};/);
+    // « En vérification » ne veut rien dire pour un document qu'on reçoit : libellés propres.
+    assert.match(ESPACE, /REMISE_LABEL/);
+});

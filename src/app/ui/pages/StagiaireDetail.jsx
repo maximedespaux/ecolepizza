@@ -14,6 +14,7 @@ import { Squelette } from "../components/Squelette.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PiecesReview from "../components/PiecesReview.jsx";
+import RemisesReview from "../components/RemisesReview.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro, dateHeure, dateFr } from "../lib/format.js";
@@ -517,6 +518,10 @@ function StagiaireDetail() {
               accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" aria-hidden="true" tabIndex={-1} />
             {/* Pièces justificatives du dossier sélectionné : validation/refus par le personnel. */}
             <PiecesReview enrollmentId={curEnrId} refresh={parcoursRefresh} />
+            {/* L'AUTRE SENS, juste en dessous : ce que l'ÉCOLE remet. Les deux cartes se
+                ressemblent volontairement — c'est le même geste, dans les deux directions — et
+                chacune disparaît si son parcours n'en prévoit aucune. */}
+            <RemisesReview enrollmentId={curEnrId} refresh={parcoursRefresh} />
             <div className="divider" style={{ margin: "18px 0" }} />
           </>
         )}

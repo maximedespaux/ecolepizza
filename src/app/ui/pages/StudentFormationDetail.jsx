@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getMyFormation, signMyEmargement, getDossierPieces, deposerPiece, pieceFichierUrl } from "../api/apiClient.js";
+import { getMyFormation, signMyEmargement, getDossierPieces, deposerPiece, pieceFichierUrl,
+  getDossierRemises, remiseFichierUrl, accuserRemise } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -25,6 +26,14 @@ const PASTILLE = {
   todo:    { bg: "var(--border)", ic: "circle", label: "À venir" },
 };
 const PIECE_ETAT = { VALIDEE: "done", DEPOSEE: "wait", REFUSEE: "refused", ATTENDUE: "todo" };
+/* REMISES — L'INVERSE DES PIÈCES, jusque dans les états. « ATTENDUE » veut dire que l'école n'a
+   rien déposé : le stagiaire n'a RIEN à faire, donc `wait`. « REMISE » veut dire que le document
+   est là et qu'il reste à en accuser réception : c'est à LUI de jouer, donc `todo` — la seule
+   valeur qui rende l'étape éligible à la pastille « À faire ». */
+const REMISE_ETAT = { RECUE: "done", REMISE: "todo", ATTENDUE: "wait" };
+/* Et ses propres libellés : « En vérification » ne veut rien dire pour un document qu'on reçoit.
+   La pastille garde son dessin, seul le mot change. */
+const REMISE_LABEL = { done: "Reçue", wait: "Pas encore remis", current: "À confirmer", todo: "À confirmer", refused: "À confirmer" };
 
 function StudentFormationDetail() {
   const { id } = useParams(); // = enrollment_id (le dossier)
@@ -32,6 +41,7 @@ function StudentFormationDetail() {
   const { user } = useContext(UserContext);
   const [data, setData] = useState(null);
   const [pieces, setPieces] = useState([]); // pièces à fournir (dossier de cette inscription)
+  const [remises, setRemises] = useState([]); // documents que l'école REMET (migration 160)
   const [status, setStatus] = useState(null);
   const [viewId, setViewId] = useState(null);
   const [quizDoc, setQuizDoc] = useState(null);
@@ -42,6 +52,7 @@ function StudentFormationDetail() {
   function load() {
     getMyFormation(id).then((r) => setData(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
     getDossierPieces(id).then((r) => setPieces(r.data || [])).catch(() => setPieces([]));
+    getDossierRemises(id).then((r) => setRemises(r.data || [])).catch(() => setRemises([]));
   }
   useEffect(() => { load(); }, [id]);
 
@@ -98,10 +109,27 @@ function StudentFormationDetail() {
     }
   }
 
+  /* CONFIRMER, C'EST S'ENGAGER — donc on demande. Le clic produit une preuve horodatée que
+     l'école pourra opposer lors d'un contrôle ; la phrase dit exactement ce qu'on signe, et
+     invite à ouvrir le document d'abord. Un « oui » donné par réflexe sur un document jamais
+     ouvert vaut mieux que rien, mais le dire évite qu'on le regrette. */
+  async function confirmerRemise(r) {
+    if (!window.confirm(`Confirmer que vous avez bien reçu « ${r.label} » ?\n\n`
+      + "Ouvrez-le d'abord si ce n'est pas déjà fait : votre confirmation est datée et vaut preuve de remise.")) return;
+    try {
+      await accuserRemise(r.remise_id);
+      setStatus({ type: "success", message: "Réception confirmée. Merci." });
+      getDossierRemises(id).then((x) => setRemises(x.data || [])).catch(() => {});
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+
   // Construit la liste ordonnée des ÉTAPES : d'abord les pièces à fournir, puis les documents.
   const etapesPieces = pieces.map((p) => ({ kind: "piece", key: `p-${p.piece_type_id}`, p, etat: PIECE_ETAT[p.statut] || "todo" }));
   const etapesDocs = (data?.documents || []).map((d) => ({ kind: "doc", key: `d-${d.id}`, d, etat: d.status === "SIGNE" ? "done" : "todo" }));
-  const etapes = [...etapesPieces, ...etapesDocs];
+  /* Les remises viennent APRÈS les documents : on fournit ses pièces au début, on signe pendant,
+     on reçoit son attestation à la fin. L'ordre de la liste raconte le déroulé. */
+  const etapesRemises = remises.map((r) => ({ kind: "remise", key: `r-${r.remise_type_id}`, r, etat: REMISE_ETAT[r.statut] || "wait" }));
+  const etapes = [...etapesPieces, ...etapesDocs, ...etapesRemises];
   // La PREMIÈRE étape non terminée (et non en attente de vérif) porte la pastille « en cours ».
   const idxCourant = etapes.findIndex((e) => e.etat === "todo" || e.etat === "refused");
 
@@ -198,6 +226,41 @@ function StudentFormationDetail() {
                           {e.etat === "refused" && e.p.motif_refus && (
                             <p className="hint" style={{ margin: "4px 0 0", color: "var(--red, #c0392b)" }}>
                               <Icon name="x" size={12} /> Refusé&nbsp;: {e.p.motif_refus} — merci d'en envoyer un nouveau.
+                            </p>
+                          )}
+                        </>
+                      ) : e.kind === "remise" ? (
+                        <>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <span style={{ color: "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name="file-text" size={16} /></span>
+                            <b style={{ flex: 1, minWidth: 0 }}>{e.r.label}</b>
+                            <Badge tone={{ done: "g", wait: "n", todo: "b", current: "b" }[etat] || "n"}>
+                              {REMISE_LABEL[etat] || REMISE_LABEL.wait}
+                            </Badge>
+                            {(e.r.fichiers || []).map((f, k) => (
+                              <button key={f.id} className="btn sm ghost"
+                                aria-label={`Voir ${f.nom || `le document ${k + 1}`} — ${e.r.label}`}
+                                onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
+                                <Icon name="eye" size={14} /> Voir{(e.r.fichiers.length > 1) ? ` (${k + 1})` : ""}
+                              </button>
+                            ))}
+                            {/* LE BOUTON N'APPARAÎT QU'UNE FOIS LE DOCUMENT DÉPOSÉ. Confirmer la
+                                réception de ce qui n'existe pas encore n'a pas de sens, et le
+                                serveur refuserait (422) — un bouton qui répond par une erreur est
+                                pire qu'un bouton absent. */}
+                            {e.r.statut === "REMISE" && (
+                              <button className="btn sm primary" onClick={() => confirmerRemise(e.r)}>
+                                <Icon name="check" size={14} /> J'ai bien reçu
+                              </button>
+                            )}
+                          </div>
+                          {e.r.consigne && <p className="hint" style={{ margin: "2px 0 0" }}>{e.r.consigne}</p>}
+                          {e.r.statut === "ATTENDUE" && (
+                            <p className="hint" style={{ margin: "2px 0 0" }}>L'école ne l'a pas encore déposé.</p>
+                          )}
+                          {e.r.accuse_le && (
+                            <p className="hint" style={{ margin: "2px 0 0", color: "var(--green, #2e9e5b)" }}>
+                              Réception confirmée le {dateHeure(e.r.accuse_le)}.
                             </p>
                           )}
                         </>
