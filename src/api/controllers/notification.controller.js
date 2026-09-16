@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { notificationEmail } = require('../lib/mailTemplates.js');
-const { sectionsVisibles, entitesVisibles, sectionDeLEntite, estLu, regrouperConsecutives, estEvenement, SECTION_PAR_ENTITE } = require('../lib/activite.js');
+const { sectionsVisibles, entitesVisibles, sectionDeLEntite, lienDeLEntite, estLu, regrouperConsecutives, estEvenement, SECTION_PAR_ENTITE } = require('../lib/activite.js');
 const { aLaCapaciteEnBase } = require('../lib/capacites.js');
 
 /* SUPPRIMER UNE NOTIFICATION EST UN DROIT NOMINATIF, pas un attribut de rôle. La raison tient à
@@ -108,7 +108,7 @@ async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
     params.push(...entites);
 
     const [rows] = await db.promise().query(
-        `SELECT a.id, a.action, a.entity, a.created_at AS quand,
+        `SELECT a.id, a.action, a.entity, a.entity_id, a.created_at AS quand,
                 DATE_FORMAT(a.created_at, '%Y-%m-%d %H:%i') AS created_at,
                 u.first_name, u.last_name
            FROM audit_log a
@@ -132,9 +132,18 @@ async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
         auteur: [r.first_name, r.last_name].filter(Boolean).join(' ') || 'Quelqu\u2019un',
         title: null,
         body: null,
-        // La rubrique EST une route de menu valide, et c'est une rubrique qu'on a le droit
-        // d'ouvrir puisqu'elle vient d'être filtrée sur les accès. Un lien qui marche toujours.
-        link: sectionDeLEntite(r.entity),
+        /* LE LIEN NE MÈNE QU'À L'ENREGISTREMENT LUI-MÊME, sinon il n'y a pas de lien.
+           Ici se trouvait `sectionDeLEntite(r.entity)`, avec pour justification « un lien qui
+           marche toujours ». Il marchait, en effet : il ne tombait jamais sur une 404. Mais sur
+           les cent dernières lignes du journal, quatre-vingt-onze déposaient sur une LISTE — le
+           calendrier des sessions pour un émargement précis, l'annuaire complet des stagiaires
+           pour un document précis. Un lien qui marche toujours et n'emmène nulle part. */
+        link: lienDeLEntite(r.entity, r.entity_id),
+        /* La rubrique reste, mais pour ce qu'elle est vraiment : une ÉTIQUETTE (« où ça s'est
+           passé »), que l'interface affiche à gauche de la ligne. Elle voyage à part depuis
+           qu'elle n'est plus le lien — le front la lisait dans `link`, ce qui la faisait
+           disparaître dès que le lien devenait précis ou nul. */
+        section: sectionDeLEntite(r.entity),
         is_read: estLu({ quand: r.quand, vue, dormant }) ? 1 : 0,
         created_at: r.created_at,
     })));

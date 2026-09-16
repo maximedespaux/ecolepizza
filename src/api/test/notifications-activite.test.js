@@ -121,7 +121,11 @@ test('aucun libellé français côté serveur — la traduction reste dans l\'in
     assert.match(PAGE, /auditLabel\(n\.action, n\.entity\)/, '…et c\'est l\'écran qui le traduit');
     /* L'étiquette dit OÙ, pas QUOI : avec l'entité, la ligne affichait « Dépense » puis
        « Dépense supprimée » — la même information deux fois, et rien sur la rubrique visée. */
-    assert.match(PAGE, /PAGE_TITLES\[n\.link\]/, 'l\'étiquette porte la rubrique');
+    /* DEPUIS QUE LE LIEN N'EST PLUS LA RUBRIQUE, l'étiquette la lit dans `section`. La chercher
+       dans `link` la faisait disparaître dès que le lien devenait précis (« /stagiaires/<id> »
+       n'est pas une clé de PAGE_TITLES) ou nul. */
+    assert.match(PAGE, /PAGE_TITLES\[n\.section\]/, 'l\'étiquette porte la rubrique');
+    assert.match(NOTIF, /section: sectionDeLEntite\(r\.entity\)/, '…que le serveur envoie à part');
 });
 
 test('une ligne d\'activité ne se marque pas comme lue individuellement', () => {
@@ -199,4 +203,44 @@ test('un lot de créations tient sur UNE ligne, sans mentir sur l\'ordre', () =>
     // Un groupe est NEUF dès qu'une seule de ses lignes l'est.
     assert.strictEqual(regrouperConsecutives([l('learner.create', 'Marie', 1), l('learner.create', 'Marie', 0)])[0].is_read, 0);
     assert.match(PAGE, /×\$\{n\.nombre\}/, 'et l\'écran dit le nombre');
+});
+
+test('un lien de notification ne mène qu\'à l\'enregistrement, ou nulle part', async () => {
+    /* DÉFAUT MESURÉ EN PRODUCTION le 2026-09-16 : sur les CENT dernières lignes du journal,
+       QUATRE-VINGT-ONZE menaient à une liste. Le lien traduisait le TYPE d'entité en rubrique de
+       menu — « Émargement signé » déposait sur le calendrier des sessions, « Note d'évaluation
+       saisie » aussi, « Document signé » sur l'annuaire complet des stagiaires. On savait ce qui
+       s'était passé et il fallait le rechercher à la main, en ayant perdu sa place.
+
+       La justification écrite était « un lien qui marche toujours ». Elle était exacte et
+       répondait à côté : elle garantissait de ne jamais tomber sur une 404, pas d'emmener
+       quelque part. */
+    const { lienDeLEntite } = await import('../lib/activite.js');
+
+    // Les trois entités dont l'identifiant du journal EST la clé d'une route de détail.
+    assert.strictEqual(lienDeLEntite('Learner', 'abc'), '/stagiaires/abc');
+    assert.strictEqual(lienDeLEntite('Company', 'abc'), '/entreprises/abc');
+    assert.strictEqual(lienDeLEntite('TrainingSession', 'abc'), '/sessions/abc');
+
+    /* LE PIÈGE QU'ON REFUSE. `AttendanceSheet` est rangée sous `/sessions`, mais son `entity_id`
+       est celui de la FEUILLE, pas de la session : « /sessions/<id-de-feuille> » serait une page
+       qui n'existe pas. Un lien cassé est strictement pire qu'un lien absent. */
+    for (const e of ['AttendanceSheet', 'GeneratedDocument', 'PieceDepot', 'EvaluationNote', 'Quiz']) {
+        assert.strictEqual(lienDeLEntite(e, 'abc'), null, `${e} n'a pas de page à elle`);
+    }
+    // Sans identifiant, pas de lien — 10 appels de logAudit sur 128 n'en écrivent pas.
+    assert.strictEqual(lienDeLEntite('Learner', null), null);
+});
+
+test('une ligne groupée « ×12 » perd son lien : elle ne nomme plus un enregistrement', async () => {
+    /* Douze fiches créées d'un coup se regroupent en une ligne. Garder le lien de la première
+       ferait ouvrir l'une des douze au hasard, sans rien dire du choix. */
+    const { regrouperConsecutives } = await import('../lib/activite.js');
+    const l = (link) => ({ action: 'learner.create', entity: 'Learner', auteur: 'X', is_read: 1, link });
+    const seule = regrouperConsecutives([l('/stagiaires/a')]);
+    assert.strictEqual(seule[0].link, '/stagiaires/a', 'une ligne seule garde son lien');
+    const groupe = regrouperConsecutives([l('/stagiaires/a'), l('/stagiaires/b'), l('/stagiaires/c')]);
+    assert.strictEqual(groupe.length, 1);
+    assert.strictEqual(groupe[0].nombre, 3);
+    assert.strictEqual(groupe[0].link, null, 'un groupe ne nomme plus un enregistrement');
 });

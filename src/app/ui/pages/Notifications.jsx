@@ -36,7 +36,11 @@ function ligneLisible(n) {
     return { titre: n.title, corps: n.body, ton: TONE[n.type] || "n", etiquette: n.type };
   }
   const { label, tone } = auditLabel(n.action, n.entity);
-  const rubrique = PAGE_TITLES[n.link] || entityLabel(n.entity) || "Activité";
+  /* LA RUBRIQUE VIENT DE `section`, PAS DE `link`. Elle se lisait dans le lien tant que le
+     lien ÉTAIT la rubrique ; depuis que le serveur n'envoie un lien que s'il mène à
+     l'enregistrement lui-même, `link` vaut « /stagiaires/<id> » ou rien du tout — et
+     l'étiquette serait retombée sur le nom de l'entité, ou aurait disparu. */
+  const rubrique = PAGE_TITLES[n.section] || PAGE_TITLES[n.link] || entityLabel(n.entity) || "Activité";
   // « ×12 » : l'inscription d'un groupe crée douze fiches d'un coup. Le journal les garde une
   // par une ; ici on dit le nombre plutôt que de répéter douze fois la même phrase.
   const titre = n.nombre > 1 ? `${label} ×${n.nombre}` : label;

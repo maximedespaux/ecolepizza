@@ -109,6 +109,50 @@ function sectionDeLEntite(entity) {
 }
 
 /**
+ * LES TROIS SEULES ENTITÉS DONT `audit_log.entity_id` EST LA CLÉ D'UNE PAGE.
+ *
+ * Le front ne déclare que trois routes de détail : `/stagiaires/:id`, `/entreprises/:id` et
+ * `/sessions/:id`. Pour ces trois-là, et pour elles seules, l'identifiant écrit au journal est
+ * CELUI QUE LA ROUTE ATTEND.
+ *
+ * ⚠️ LE PIÈGE, ET C'EST POURQUOI CETTE TABLE EST SI COURTE. `SECTION_PAR_ENTITE` range
+ * `AttendanceSheet` sous `/sessions` — mais son `entity_id` est l'identifiant de la FEUILLE,
+ * pas de la session. Coller l'un derrière l'autre donnerait `/sessions/<id-de-feuille>` : une
+ * page qui n'existe pas. Même chose pour `GeneratedDocument`, `PieceDepot`, `EvaluationNote`.
+ * On remplacerait un lien inutile par un lien cassé — strictement pire.
+ *
+ * Pour en ajouter une, il ne suffit donc PAS de l'écrire ici : il faut d'abord une route de
+ * détail pour elle, ou une requête qui remonte à son parent.
+ */
+const DETAIL_PAR_ENTITE = {
+    Learner: '/stagiaires',
+    Company: '/entreprises',
+    TrainingSession: '/sessions',
+};
+
+/**
+ * Lien d'une ligne d'activité — l'enregistrement LUI-MÊME, ou rien.
+ *
+ * LE DÉFAUT QUE ÇA CORRIGE, mesuré en production : sur les cent dernières lignes du journal,
+ * QUATRE-VINGT-ONZE menaient à une liste. « Émargement signé » déposait sur le calendrier des
+ * sessions, « Note d'évaluation saisie » aussi. On savait ce qui s'était passé, et il fallait
+ * le retrouver à la main — en ayant perdu sa place.
+ *
+ * Le code d'avant traduisait le TYPE d'entité en rubrique de menu, avec ce commentaire :
+ * « un lien qui marche toujours ». C'était vrai, et ça répondait à côté : il garantissait de ne
+ * jamais tomber sur une 404, pas d'emmener quelque part.
+ *
+ * LA RÈGLE RETENUE (choix de l'utilisateur, 2026-09-16) : un lien ne survit que s'il mène à
+ * l'enregistrement dont la ligne parle. Sinon il n'y a pas de lien, et la ligne reste ce
+ * qu'elle est — une information, pas un geste. Le front sait déjà rendre une ligne sans lien :
+ * ni chevron, ni rôle « bouton », ni curseur.
+ */
+function lienDeLEntite(entity, entityId) {
+    const base = entityId && DETAIL_PAR_ENTITE[entity];
+    return base ? `${base}/${entityId}` : null;
+}
+
+/**
  * Rubriques dont cette personne doit être tenue au courant.
  * @returns {null|string[]} `null` = tout, `[]` = rien.
  */
@@ -174,6 +218,11 @@ function regrouperConsecutives(lignes) {
         if (p && p.action === l.action && p.entity === l.entity && p.auteur === l.auteur) {
             p.nombre += 1;
             p.is_read = p.is_read && l.is_read ? 1 : 0;
+            /* UN GROUPE NE NOMME PLUS UN ENREGISTREMENT, donc il perd son lien. « Stagiaire créé
+               ×12 », c'est douze fiches ; garder le lien de la première ferait ouvrir l'une des
+               douze au hasard, sans dire que c'en est une parmi douze. Même règle que
+               `lienDeLEntite` : on ne mène qu'à ce dont la ligne parle vraiment. */
+            p.link = null;
             continue;
         }
         out.push({ ...l, nombre: 1 });
@@ -183,6 +232,7 @@ function regrouperConsecutives(lignes) {
 
 module.exports = {
     ENTITES_REGLAGE, estEvenement,
-    SECTION_PAR_ENTITE, sectionDeLEntite, sectionsVisibles, entitesVisibles, estLu,
+    SECTION_PAR_ENTITE, sectionDeLEntite, DETAIL_PAR_ENTITE, lienDeLEntite,
+    sectionsVisibles, entitesVisibles, estLu,
     regrouperConsecutives, OWNER_ROLES, ADMIN_ROLES,
 };
