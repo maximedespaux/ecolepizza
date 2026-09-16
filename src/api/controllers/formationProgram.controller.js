@@ -92,6 +92,37 @@ async function formationSteps(conn, orgId, program) {
         });
     } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
 
+    /* REMISES (slug « remise:<id> ») — la QUATRIÈME nature d'étape, et le miroir de la
+     * précédente : ici c'est l'école qui remet un fichier NOMINATIF au stagiaire (diplôme obtenu
+     * ailleurs, attestation d'un certificateur, carte professionnelle), et le stagiaire qui en
+     * accuse réception. À ne pas confondre avec un modèle dont le corps est un PDF : celui-là
+     * est identique pour tout le monde, c'est précisément ce qui le disqualifie ici.
+     * Même prudence qu'au-dessus : la table arrive avec la migration 160, le parcours doit
+     * rester utilisable sans elle. */
+    let remiseSteps = [];
+    try {
+        const [remises] = await conn.query(
+            'SELECT id, label, consigne FROM remise_type WHERE organization_id = ? AND active = 1 ORDER BY label',
+            [orgId]);
+        remiseSteps = remises.map((rm) => {
+            const slug = `remise:${rm.id}`;
+            const o = overlay.get(slug);
+            return {
+                slug, label: rm.label, doc_type: 'REMISE', quiz_id: null, piece_id: null, remise_id: rm.id,
+                consigne: rm.consigne, day: null,
+                // Une remise ne se signe pas : elle se dépose, puis s'accuse. Afficher des badges
+                // de signature ferait attendre un geste qui n'existe pas.
+                signable: false, stagiaire_sign: false, company_sign: false, company_level: false,
+                or_group: o ? (o.or_group || null) : null,
+                applies_when: parseAW(o && o.applies_when),
+                // TARD dans le parcours, à l'inverse d'une pièce à fournir : on remet un diplôme
+                // à la fin, on demande une carte d'identité au début.
+                sort_order: o ? o.sort_order : 900,
+                active: o ? !!o.active : false,    // jamais imposée d'office à toutes les formations
+            };
+        });
+    } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
+
     // QCM ajoutables comme étapes (slug « quiz:<id> ») : ceux rattachés à cette
     // formation, ET ceux non rattachés (program_id NULL) — pour qu'un QCM nouvellement
     // créé soit proposé dans le parcours de n'importe quelle formation.
@@ -160,7 +191,7 @@ async function formationSteps(conn, orgId, program) {
         });
     } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
 
-    return [...docSteps, ...quizSteps, ...pieceSteps, ...emargSteps].sort((a, b) => a.sort_order - b.sort_order);
+    return [...docSteps, ...quizSteps, ...pieceSteps, ...remiseSteps, ...emargSteps].sort((a, b) => a.sort_order - b.sort_order);
 }
 
 /**
@@ -581,6 +612,13 @@ const saveFormationSteps = async (req, res) => {
         try { await conn.query('SELECT piece_id FROM program_step LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasPiece = false; else throw e; }
         // Colonne applies_when disponible ? (migration 140) — condition « OU » des pièces.
+        /* `remise_id` (migration 160) : même sonde que `piece_id` juste au-dessus. Sans elle, le
+           parcours s'enregistre quand même — une étape de remise garde son slug et perd
+           seulement sa clé étrangère, donc elle ne remonte pas dans le dossier. Dégradé, pas
+           cassé : c'est ce que « le code marche avant et après » veut dire. */
+        let hasRemise = true;
+        try { await conn.query('SELECT remise_id FROM program_step LIMIT 1'); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasRemise = false; else throw e; }
         let hasAppliesWhen = true;
         try { await conn.query('SELECT applies_when FROM program_step LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasAppliesWhen = false; else throw e; }
@@ -611,9 +649,17 @@ const saveFormationSteps = async (req, res) => {
                     [slug.slice(6), req.params.id, slug]).catch(() => {});
             }
             /* Condition « OU » de CETTE pièce dans son groupe (migration 140), PAR formation —
-             * comme un document a la sienne, mais globalement. Réservé aux pièces. NULL = variante
-             * par défaut (aucune condition : demandée quand aucune autre du groupe ne correspond). */
-            if (hasAppliesWhen && slug.startsWith('piece:')) {
+             * comme un document a la sienne, mais globalement. Pièces ET remises : les deux
+             * natures se règlent par formation, et les traiter différemment obligerait à
+             * expliquer pourquoi. NULL = variante par défaut (aucune condition : demandée quand
+             * aucune autre du groupe ne correspond). */
+            /* Une remise porte son identifiant dans SA colonne, exactement comme une pièce et
+             * pour la même raison : c'est `remise_id` que joignent les requêtes du dossier. */
+            if (hasRemise && slug.startsWith('remise:')) {
+                await conn.query('UPDATE program_step SET remise_id = ? WHERE program_id = ? AND slug = ?',
+                    [slug.slice(7), req.params.id, slug]).catch(() => {});
+            }
+            if (hasAppliesWhen && (slug.startsWith('piece:') || slug.startsWith('remise:'))) {
                 const cond = aEcrire[i].applies_when;
                 const aw = cond && typeof cond === 'object' && Object.keys(cond).length ? JSON.stringify(cond) : null;
                 await conn.query('UPDATE program_step SET applies_when = ? WHERE program_id = ? AND slug = ?',

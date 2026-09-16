@@ -31,6 +31,10 @@ const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'];
 /** Entité journalisée → rubrique de menu. Les clés sont celles posées par `logAudit`. */
 const SECTION_PAR_ENTITE = {
     Learner: '/stagiaires', PieceDepot: '/stagiaires', GeneratedDocument: '/stagiaires',
+    /* Une remise SE FAIT depuis la fiche du stagiaire — c'est là qu'on dépose et qu'on suit
+       l'accusé. Son TYPE, lui, se déclare dans les modèles, comme `PieceType` : la rubrique
+       suit le GESTE, pas le nom de la table. */
+    RemiseDocument: '/stagiaires',
     Company: '/entreprises',
     TrainingSession: '/sessions', AttendanceSheet: '/sessions',
     Invoice: '/factures', BillingProfile: '/reglages-facturation',
@@ -38,6 +42,7 @@ const SECTION_PAR_ENTITE = {
     MaterialSale: '/ventes', InventoryItem: '/ventes',
     DocumentTemplate: '/modeles', DocumentCondition: '/modeles', DocumentEquivalence: '/modeles',
     ConditionField: '/modeles', EmargementTemplate: '/modeles', PieceType: '/modeles',
+    RemiseType: '/modeles',
     Quiz: '/qcm', QuizResponse: '/qcm',
     /* La grille se configure dans Formations, la note se saisit depuis la session : chaque
        entité pointe la rubrique où se fait le GESTE, pas celle où l'on consulte le résultat. */
@@ -76,7 +81,7 @@ const SECTION_PAR_ENTITE = {
 const ENTITES_REGLAGE = new Set([
     // Modèles et conditions : la forme des documents, pas les documents.
     'DocumentTemplate', 'DocumentCondition', 'DocumentEquivalence', 'ConditionField',
-    'EmargementTemplate', 'PieceType',
+    'EmargementTemplate', 'PieceType', 'RemiseType',
     // Le QCM en tant que MODÈLE. Une réponse de stagiaire (`QuizResponse`), elle, est un événement.
     'Quiz',
     /* La GRILLE d'évaluation est un réglage au même titre : on y fixe le barème et le seuil.
