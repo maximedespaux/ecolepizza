@@ -45,7 +45,7 @@ function stepDone(step, doc) {
  * Renvoie { steps:[{key,ic,label,sub,signable,quiz,docId,docStatus,status}],
  *           percent, currentIndex, currentKey }.
  */
-function computeDocParcours({ steps = [], docs = [], pieces = {} } = {}) {
+function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {} } = {}) {
     const rows = steps.map((s) => {
         // Étape « pièce » (dépôt du stagiaire, ex. carte d'identité) : sa complétion vient de
         // piece_depot.statut, PAS d'un document généré (il n'y en a pas). VALIDÉE ⇒ étape faite,
@@ -53,6 +53,23 @@ function computeDocParcours({ steps = [], docs = [], pieces = {} } = {}) {
         if (s.piece_id) {
             const st = pieces[s.piece_id] || null;
             return { s, doc: null, done: st === 'VALIDEE', pieceStatus: st || 'ATTENDUE' };
+        }
+        /* Étape « remise » (l'école remet un document au stagiaire) : sa complétion vient de
+           `remise_document`, pas d'un document généré — il n'y en a pas non plus. DÉPOSER NE
+           SUFFIT PAS : seul l'accusé de réception termine l'étape (cf. migration 160).
+           « SANS OBJET » (161) la fait compter comme faite ICI, parce que ce calcul mesure une
+           PROGRESSION et qu'une étape exclue ne doit rien bloquer. Le décompte de conformité,
+           lui, l'écarte des deux côtés de la fraction — c'est `stepState` qui le dit. */
+        if (s.remise_id) {
+            const r = remises[s.remise_id] || null;
+            const sansObjet = !!(r && r.sans_objet);
+            return {
+                s, doc: null,
+                done: sansObjet || (r && r.statut === 'RECUE'),
+                remiseStatus: (r && r.statut) || 'ATTENDUE',
+                remiseId: (r && r.id) || null,
+                sansObjet,
+            };
         }
         const doc = matchDoc(s, docs);
         return { s, doc, done: stepDone(s, doc) };
@@ -82,6 +99,11 @@ function computeDocParcours({ steps = [], docs = [], pieces = {} } = {}) {
            dépose en six allers-retours. */
         fichiers_attendus: Math.max(1, Number(r.s.fichiers_attendus) || 1),
         pieceStatus: r.pieceStatus || null, // ATTENDUE | DEPOSEE | VALIDEE | REFUSEE (étapes « pièce »)
+        remise: !!r.s.remise_id,       // étape « remise » — gérée par le panneau Documents remis
+        remise_id: r.s.remise_id || null,
+        remiseId: r.remiseId || null,  // l'identifiant de LA remise du dossier (pas du type) : c'est lui qu'on exclut
+        remiseStatus: r.remiseStatus || null, // ATTENDUE | REMISE | RECUE
+        sansObjet: !!r.sansObjet,
         status: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo',
     }));
 

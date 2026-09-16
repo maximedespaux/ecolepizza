@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { getDossierRemises, deposerRemise, remiseFichierUrl, supprimerRemiseFichier } from "../api/apiClient.js";
+import { getDossierRemises, deposerRemise, remiseFichierUrl, supprimerRemiseFichier,
+  basculerRemiseSansObjet } from "../api/apiClient.js";
 import Badge from "./Badge.jsx";
 import { Icon } from "./Icon.jsx";
 import { dateHeure } from "../lib/format.js";
@@ -56,6 +57,19 @@ export default function RemisesReview({ enrollmentId, refresh }) {
     catch (e) { setErreur(e.message); }
   }
 
+  /* ÉCARTER N'EFFACE RIEN, et la confirmation le dit dans les deux sens. Une remise écartée
+     sort du décompte de conformité pour cette personne — ni due, ni faite — et se rétablit d'un
+     clic, avec ses fichiers et son accusé intacts. */
+  async function basculer(r) {
+    const exclu = !r.sans_objet;
+    const phrase = exclu
+      ? `Écarter « ${r.label} » du dossier de ce stagiaire ?\n\nElle cessera de compter comme due. Rien n'est supprimé : vous pourrez la rétablir.`
+      : `Rétablir « ${r.label} » dans le dossier de ce stagiaire ?`;
+    if (!window.confirm(phrase)) return;
+    try { await basculerRemiseSansObjet(enrollmentId, r.remise_type_id, exclu); setErreur(null); load(); }
+    catch (e) { setErreur(e.message); }
+  }
+
   if (!remises || remises.length === 0) return null;
 
   return (
@@ -88,15 +102,21 @@ export default function RemisesReview({ enrollmentId, refresh }) {
                     </span>
                   )}
                 </span>
-                <Badge tone={tone}>{label}</Badge>
+                <Badge tone={r.sans_objet ? "n" : tone}>{r.sans_objet ? "Sans objet" : label}</Badge>
+                <button className="btn sm ghost" onClick={() => basculer(r)}
+                  title={r.sans_objet ? "Cette remise concerne à nouveau ce stagiaire" : "Cette remise ne concerne pas ce stagiaire"}>
+                  {r.sans_objet ? "Rétablir" : "Sans objet"}
+                </button>
                 <input type="file" ref={(el) => { champs.current[r.remise_type_id] = el; }} style={{ display: "none" }}
                   accept="application/pdf,image/jpeg,image/png,image/webp"
                   onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; envoyer(r.remise_type_id, f); }} />
-                <button className="btn sm primary" disabled={occupe === r.remise_type_id}
+                {/* Rien a deposer sur une remise ecartee : la commande disparait plutot que de
+                    rester vivante sur une etape qui ne concerne plus personne. */}
+                {!r.sans_objet && <button className="btn sm primary" disabled={occupe === r.remise_type_id}
                   onClick={() => champs.current[r.remise_type_id]?.click()}
                   aria-label={`Déposer un document pour « ${r.label} »`}>
                   <Icon name="plus" size={14} /> {occupe === r.remise_type_id ? "Envoi…" : "Déposer"}
-                </button>
+                </button>}
               </div>
 
               {fichiers.length > 0 && (

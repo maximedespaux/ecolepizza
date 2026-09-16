@@ -154,8 +154,12 @@ function Suivi() {
         for (const doc of (m.documents || [])) {
           const st = stepMap.get(doc.type);
           if (!st) continue;
-          st.total++;
           const s = stepState(doc);
+          /* HORS DÉCOMPTE AVANT D'INCRÉMENTER LE TOTAL. Une remise « sans objet » (migration 161)
+             sort des DEUX côtés de la fraction : la compter au dénominateur empêcherait le
+             groupe d'atteindre cent pour cent dès qu'une seule personne est écartée. */
+          if (s === "skip") continue;
+          st.total++;
           if (s === "done") st.done++; else if (s === "progress") st.prog++;
         }
       }

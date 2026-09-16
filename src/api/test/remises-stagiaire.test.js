@@ -132,3 +132,57 @@ test('les états du stagiaire sont l\'INVERSE de ceux des pièces', () => {
     // « En vérification » ne veut rien dire pour un document qu'on reçoit : libellés propres.
     assert.match(ESPACE, /REMISE_LABEL/);
 });
+
+test('« sans objet » sort du DÉCOMPTE, il ne le remplit pas', async () => {
+    /* LE PIÈGE, et il n'a que deux issues fausses. La compter comme FAITE gonflerait le score de
+       conformité d'un dossier avec une étape que personne n'a faite — un contrôle y lirait un
+       document remis qui ne l'a jamais été. La compter comme DUE empêcherait le dossier
+       d'atteindre cent pour cent à jamais, ce qui est précisément le défaut qu'on corrige.
+
+       Elle sort donc des DEUX côtés de la fraction, d'où un quatrième état de retour. */
+    const { stepState, manquesParFormation } = await import('../../app/ui/lib/etapes.js');
+    assert.strictEqual(stepState({ remise: true, sansObjet: true }), 'skip');
+    assert.strictEqual(stepState({ remise: true, remiseStatus: 'RECUE', sansObjet: true }), 'skip',
+        'l\'exclusion prime, même sur un accusé déjà donné');
+
+    // Et le bandeau « Ce qui manque » ne la réclame pas.
+    const dossiers = [{ program_code: 'NIV1', documents: [
+        { type: 'r1', label: 'Diplôme', remise: true, sansObjet: true },
+        { type: 'r2', label: 'Attestation', remise: true, remiseStatus: 'REMISE' },
+    ] }];
+    const m = manquesParFormation(dossiers);
+    assert.deepStrictEqual(m.map((x) => x.label), ['Attestation'],
+        'une remise écartée n\'est pas un manque');
+
+    // Le suivi Qualiopi l'écarte AVANT d'incrémenter le total, sinon le groupe plafonne.
+    const suivi = readFileSync(path.join(__dirname, '../../app/ui/pages/Suivi.jsx'), 'utf8');
+    assert.match(suivi, /if \(s === "skip"\) continue;\s*\n\s*st\.total\+\+;/,
+        'écarté avant le total, pas après');
+});
+
+test('exclure est une décision de l\'école, et n\'efface rien', () => {
+    const CTRL2 = readFileSync(path.join(__dirname, '../controllers/remise.controller.js'), 'utf8');
+    const R2 = readFileSync(path.join(__dirname, '../routes/remise.routes.js'), 'utf8');
+    /* Laisser le stagiaire écarter une étape de son propre dossier reviendrait à lui laisser
+       décider de ce qu'on lui doit. */
+    assert.match(R2, /sans-objet', authorizeRoles\(\.\.\.STAFF_ROLES\)/);
+    const bloc = CTRL2.slice(CTRL2.indexOf('const basculerSansObjet'), CTRL2.indexOf('const servirFichier'));
+    /* LA LIGNE EST CRÉÉE SI ELLE N'EXISTE PAS : on écarte le plus souvent AVANT tout dépôt, et
+       il n'y a alors rien en base à marquer. Sans l'INSERT, le geste serait impossible au seul
+       moment où on y pense — à l'inscription. */
+    assert.match(bloc, /INSERT INTO remise_document[\s\S]{0,260}ON DUPLICATE KEY UPDATE sans_objet = VALUES\(sans_objet\)/);
+    // Un drapeau, pas un statut : rétablir doit rendre l'étape telle qu'elle était.
+    assert.ok(!/statut = 'SANS_OBJET'/.test(bloc));
+    assert.ok(!/DELETE|accuse_le = NULL/.test(bloc), 'exclure n\'efface ni fichier ni accusé');
+});
+
+test('sans la 161, les remises restent visibles', () => {
+    /* DÉFAUT QUE J'AI INTRODUIT PUIS CORRIGÉ EN L'ÉCRIVANT : demander `sans_objet` sans cascade
+       faisait échouer la requête ENTIÈRE, et le rattrapage `noTable` rendait une liste vide.
+       Toutes les remises auraient disparu de l'écran chez qui a joué la 160 mais pas la 161 —
+       une fonctionnalité qui marchait, effacée par l'ajout d'une option. */
+    const CTRL2 = readFileSync(path.join(__dirname, '../controllers/remise.controller.js'), 'utf8');
+    const bloc = CTRL2.slice(CTRL2.indexOf('async function remisesDuDossier'), CTRL2.indexOf('const listDossier'));
+    assert.match(bloc, /const requete = \(col\) =>/, 'la requête est paramétrée…');
+    assert.match(bloc, /catch \(e\) \{[\s\S]{0,200}requete\('0'\)/, '…et relue sans la colonne');
+});

@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { listTypes, createType, updateType, deleteType, listDossier,
-    deposer, accuser, servirFichier, supprimerFichier, MAX_OCTETS } = require('../controllers/remise.controller.js');
+    deposer, accuser, basculerSansObjet, servirFichier, supprimerFichier, MAX_OCTETS } = require('../controllers/remise.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -34,6 +34,9 @@ router.get('/fichier/:id', servirFichier);
    lui-même, et l'accusé qu'il signerait ensuite ne vaudrait rien. */
 router.post('/dossier/:enrollmentId/:remiseTypeId', authorizeRoles(...STAFF_ROLES), depot.single('fichier'), deposer);
 router.delete('/fichier/:id', authorizeRoles(...STAFF_ROLES), supprimerFichier);
+/* EXCLURE UNE PERSONNE est une décision de l'école, jamais du stagiaire : lui laisser écarter
+   une étape de son propre dossier reviendrait à lui laisser décider de ce qu'on lui doit. */
+router.patch('/dossier/:enrollmentId/:remiseTypeId/sans-objet', authorizeRoles(...STAFF_ROLES), basculerSansObjet);
 
 /* ACCUSER RÉCEPTION N'EST PAS FILTRÉ PAR RÔLE — et surtout pas ouvert au personnel. Le
    contrôleur exige que le demandeur SOIT le stagiaire du dossier : une preuve de remise signée

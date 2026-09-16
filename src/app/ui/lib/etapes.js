@@ -23,7 +23,7 @@
 /**
  * @param {{status?: string, stagiaireSign?: boolean, piece?: boolean, pieceStatus?: string,
  *          remise?: boolean, remiseStatus?: string}} doc
- * @returns {"todo"|"progress"|"done"}
+ * @returns {"todo"|"progress"|"done"|"skip"} — « skip » = hors décompte (remise sans objet).
  */
 export function stepState(doc) {
     /* UNE PIÈCE N'A PAS DE DOCUMENT GÉNÉRÉ : son état vient de son DÉPÔT, pas d'un `status` —
@@ -43,6 +43,12 @@ export function stepState(doc) {
        score de conformité du dossier sur un document que le stagiaire n'a peut-être jamais
        ouvert. Seul son accusé de réception termine l'étape. */
     if (doc.remise) {
+        /* « SANS OBJET » (migration 161) SORT DU DÉCOMPTE, il ne le remplit pas. La compter comme
+           « done » gonflerait le score de conformité d'un dossier avec une étape que personne
+           n'a faite ; la compter comme due l'empêcherait d'atteindre cent pour cent à jamais.
+           D'où un QUATRIÈME état, que les appelants doivent écarter des DEUX côtés de la
+           fraction — c'est la seule valeur de retour qui ne soit pas un avancement. */
+        if (doc.sansObjet) return "skip";
         if (doc.remiseStatus === "RECUE") return "done";
         if (doc.remiseStatus === "REMISE") return "progress";
         return "todo";
@@ -77,7 +83,9 @@ export function manquesParFormation(dossiers) {
     const m = new Map();
     for (const d of dossiers || []) {
         for (const doc of (d.documents || [])) {
-            if (stepState(doc) === "done") continue;
+            /* « skip » AUSSI : une remise sans objet n'est pas un manque. L'oublier ici ferait
+               réclamer au bandeau un document que l'école a explicitement écarté. */
+            if (["done", "skip"].includes(stepState(doc))) continue;
             const cle = `${doc.type}|${d.program_code || ""}`;
             if (!m.has(cle)) m.set(cle, { cle, type: doc.type, code: d.program_code || null, label: doc.label, n: 0 });
             m.get(cle).n++;

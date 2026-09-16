@@ -996,6 +996,11 @@ export function remiseFichierUrl(fichierId) { return `${API_BASE_URL}/remises/fi
 export function supprimerRemiseFichier(fichierId) { return request(`/remises/fichier/${fichierId}`, { method: "DELETE" }); }
 // Le STAGIAIRE confirme avoir reçu. Le serveur refuse quiconque n'est pas le stagiaire du dossier.
 export function accuserRemise(remiseId) { return request(`/remises/${remiseId}/accuser`, { method: "POST" }); }
+// PERSONNEL : écarter cette remise pour CE stagiaire (migration 161) — elle sort du décompte.
+export function basculerRemiseSansObjet(enrollmentId, remiseTypeId, sansObjet) {
+  return request(`/remises/dossier/${enrollmentId}/${remiseTypeId}/sans-objet`,
+    { method: "PATCH", body: JSON.stringify({ sans_objet: sansObjet }) });
+}
 
 // --- Référentiel des TYPES de remises (géré depuis Modèles de documents) ---
 export function getRemiseTypes() { return request("/remises"); }

@@ -130,8 +130,14 @@ const ETAPES = fs.readFileSync(
     path.join(__dirname, '..', '..', 'app/ui/lib/etapes.js'), 'utf8');
 
 test('le suivi Qualiopi passe les statuts de pièces au calcul', () => {
-    assert.match(AVANCEMENT, /computeDocParcours\(\{ steps, docs, pieces: piecesParDossier\.get\(e\.enrollment_id\) \|\| \{\} \}\)/,
+    /* L'appel porte maintenant DEUX cartes d'états — les pièces et les remises (migration 160) —
+       et s'écrit donc sur plusieurs lignes. On vérifie ce qui compte, que `pieces` soit bien
+       TRANSMIS : épinglée à la forme exacte de l'appel, l'assertion condamnait tout ajout
+       d'argument, alors que c'est précisément le mécanisme qu'elle protège. */
+    assert.match(AVANCEMENT, /pieces: piecesParDossier\.get\(e\.enrollment_id\) \|\| \{\}/,
         'sans `pieces`, le pourcentage de conformité plafonne à la première pièce du parcours');
+    assert.match(AVANCEMENT, /remises: remisesParDossier\.get\(e\.enrollment_id\) \|\| \{\}/,
+        'et sans `remises`, il plafonnerait à la première remise');
     assert.match(AVANCEMENT, /FROM piece_depot WHERE organization_id = \?/,
         'les dépôts se lisent en UNE requête pour toute la série, pas une par dossier');
     assert.match(SUIVI, /avancementDossiers\(conn, req\.user\.organization_id, enrollments, \{ avecDocuments: true \}\)/,

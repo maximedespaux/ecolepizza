@@ -56,6 +56,29 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
         if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err;
     }
 
+    /* Statut des REMISES, même principe et même prudence. `sans_objet` (161) est lu à part de
+       la table : sans la colonne, on relit sans elle et aucune remise n'est exclue — le
+       comportement d'avant la migration. */
+    const remisesParDossier = new Map();
+    try {
+        const selRemises = (col) =>
+            `SELECT id, enrollment_id, remise_type_id, statut${col} FROM remise_document WHERE organization_id = ?`;
+        let rd;
+        try { [rd] = await conn.query(selRemises(', sans_objet'), [orgId]); }
+        catch (e) {
+            if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
+            [rd] = await conn.query(selRemises(''), [orgId]);
+        }
+        for (const r of rd) {
+            if (!remisesParDossier.has(r.enrollment_id)) remisesParDossier.set(r.enrollment_id, {});
+            remisesParDossier.get(r.enrollment_id)[r.remise_type_id] =
+                { id: r.id, statut: r.statut, sans_objet: !!r.sans_objet };
+        }
+    } catch (err) {
+        // Migration 160 non jouée : aucune remise, le parcours reste lisible sans elles.
+        if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err;
+    }
+
     // `formationSteps` par formation (toutes les étapes candidates), en cache.
     const cacheEtapes = new Map();
     async function toutesLesEtapes(program) {
@@ -91,7 +114,11 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
         if (ent.steps) steps = ent.steps;
         if (ent.docs.length) docs.push(...ent.docs);
 
-        const parc = computeDocParcours({ steps, docs, pieces: piecesParDossier.get(e.enrollment_id) || {} });
+        const parc = computeDocParcours({
+            steps, docs,
+            pieces: piecesParDossier.get(e.enrollment_id) || {},
+            remises: remisesParDossier.get(e.enrollment_id) || {},
+        });
         const total = parc.steps.length;
         const done = parc.currentIndex;
         const signable = parc.steps.filter((s) => s.signable || s.quiz);
@@ -118,6 +145,7 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
                    `docStatus`, qui vaudrait « à faire » à vie. */
                 piece: !!s.piece,
                 pieceStatus: s.pieceStatus || null,
+                remise: !!s.remise, remiseStatus: s.remiseStatus || null, sansObjet: !!s.sansObjet,
                 status: s.docStatus || 'A_FAIRE',
             })) : [],
         });

@@ -142,9 +142,14 @@ const deleteType = async (req, res) => {
 /* ─── Les remises d'un dossier ───────────────────────────────────────────────────────────── */
 
 async function remisesDuDossier(conn, orgId, enrollmentId) {
-    const [rows] = await conn.query(
+    /* CASCADE SUR `sans_objet` (migration 161), et ce n'est pas du zèle : demander une colonne
+       absente fait échouer la requête ENTIÈRE, et `noTable` la rattrape en rendant une liste
+       vide. Toutes les remises auraient donc disparu de l'écran chez qui a joué la 160 mais pas
+       la 161 — une fonctionnalité qui marchait, effacée par l'ajout d'une option. On relit sans
+       la colonne, et personne n'est exclu : le comportement d'avant la 161. */
+    const requete = (col) =>
         `SELECT rt.id AS remise_type_id, rt.code, rt.label, rt.consigne,
-                r.id AS remise_id, r.statut,
+                r.id AS remise_id, r.statut, ${col} AS sans_objet,
                 DATE_FORMAT(r.remis_le, '%Y-%m-%d %H:%i') AS remis_le,
                 DATE_FORMAT(r.accuse_le, '%Y-%m-%d %H:%i') AS accuse_le,
                 COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''), u.email) AS remis_par
@@ -155,8 +160,13 @@ async function remisesDuDossier(conn, orgId, enrollmentId) {
            LEFT JOIN remise_document r ON r.enrollment_id = e.id AND r.remise_type_id = rt.id
            LEFT JOIN user u ON u.id = r.remis_par
           WHERE e.id = ? AND e.organization_id = ?
-          ORDER BY ps.sort_order, rt.label`,
-        [enrollmentId, orgId]);
+          ORDER BY ps.sort_order, rt.label`;
+    let rows;
+    try { [rows] = await conn.query(requete('COALESCE(r.sans_objet, 0)'), [enrollmentId, orgId]); }
+    catch (e) {
+        if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
+        [rows] = await conn.query(requete('0'), [enrollmentId, orgId]);
+    }
     const ids = rows.map((r) => r.remise_id).filter(Boolean);
     let parRemise = {};
     if (ids.length) {
@@ -166,7 +176,10 @@ async function remisesDuDossier(conn, orgId, enrollmentId) {
             [ids]);
         parRemise = fs.reduce((acc, f) => { (acc[f.remise_id] ||= []).push(f); return acc; }, {});
     }
-    return rows.map((r) => ({ ...r, statut: r.statut || 'ATTENDUE', fichiers: parRemise[r.remise_id] || [] }));
+    return rows.map((r) => ({
+        ...r, statut: r.statut || 'ATTENDUE', sans_objet: !!r.sans_objet,
+        fichiers: parRemise[r.remise_id] || [],
+    }));
 }
 
 /**
@@ -298,6 +311,49 @@ const accuser = async (req, res) => {
 };
 
 /**
+ * PATCH /api/remises/dossier/:enrollmentId/:remiseTypeId/sans-objet — exclure CETTE personne.
+ *
+ * POURQUOI CE GESTE EXISTE. Une remise cochée dans un parcours s'applique à tous les stagiaires
+ * de la formation. Or certaines ne concernent qu'une partie d'entre eux — un diplôme que
+ * plusieurs ont déjà, une carte professionnelle acquise ailleurs. L'étape restait « à faire »
+ * pour des gens qui n'attendaient rien, et leur dossier paraissait incomplet à vie.
+ *
+ * POURQUOI PAS `applies_when`, QUI EXISTE DÉJÀ. Cette colonne-là porte une RÈGLE, évaluée sur
+ * les données de la fiche : « seulement si le financement est X ». Elle répond parfaitement
+ * quand la distinction se lit dans une donnée. Ici c'est l'autre cas — un jugement au cas par
+ * cas, qu'aucune règle n'anticipe. Les deux coexistent sans se remplacer.
+ *
+ * LA LIGNE EST CRÉÉE SI ELLE N'EXISTE PAS : on exclut le plus souvent AVANT tout dépôt, et il
+ * n'y a alors rien en base à marquer. C'est ce qui rend l'exclusion utilisable au moment où on
+ * y pense — à l'inscription — plutôt qu'après un dépôt qu'on ne voulait pas faire.
+ *
+ * ON NE TOUCHE NI AUX FICHIERS NI À L'ACCUSÉ. Exclure n'efface rien : rétablir rend l'étape
+ * telle qu'elle était. Un drapeau, pas un statut — cf. migration 161.
+ */
+const basculerSansObjet = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const e = await dossierDe(conn, req.params.enrollmentId, req.user.organization_id);
+        if (!e) return res.status(404).json({ message: 'Dossier introuvable.' });
+        const [[rt]] = await conn.query('SELECT id FROM remise_type WHERE id = ? AND organization_id = ?',
+            [req.params.remiseTypeId, req.user.organization_id]);
+        if (!rt) return res.status(404).json({ message: 'Type de remise introuvable.' });
+        const exclu = req.body && req.body.sans_objet === false ? 0 : 1;
+        await conn.query(
+            `INSERT INTO remise_document (id, organization_id, enrollment_id, remise_type_id, statut, sans_objet)
+             VALUES (?, ?, ?, ?, 'ATTENDUE', ?)
+             ON DUPLICATE KEY UPDATE sans_objet = VALUES(sans_objet)`,
+            [crypto.randomUUID(), req.user.organization_id, req.params.enrollmentId, req.params.remiseTypeId, exclu]);
+        logAudit(req, exclu ? 'remise.sans_objet' : 'remise.reintegree', 'RemiseDocument', req.params.remiseTypeId);
+        res.json({ success: true, sans_objet: !!exclu });
+    } catch (err) {
+        if (noTable(err)) return res.status(503).json({ message: 'Migration 161 non jouée.' });
+        console.error('Erreur exclusion de remise :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
  * GET /api/remises/fichier/:id — servir un fichier.
  *
  * `inline` avec son nom : un document remis se REGARDE avant d'en accuser réception. Aucun
@@ -367,6 +423,6 @@ const supprimerFichier = async (req, res) => {
 
 module.exports = {
     listTypes, createType, updateType, deleteType,
-    listDossier, remisesDuDossier, deposer, accuser, servirFichier, supprimerFichier,
+    listDossier, remisesDuDossier, deposer, accuser, basculerSansObjet, servirFichier, supprimerFichier,
     STATUTS, MIMES, MAX_OCTETS,
 };
