@@ -153,8 +153,23 @@ const getParcours = async (req, res) => {
                 const [pd] = await conn.query('SELECT piece_type_id, statut FROM piece_depot WHERE enrollment_id = ? AND organization_id = ?', [e.id, orgId]);
                 pieces = Object.fromEntries(pd.map((r) => [r.piece_type_id, r.statut]));
             } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; } // migration 127 non jouée
+            /* Statut des REMISES (migration 160) : même rôle que les pièces au-dessus, dans
+               l'autre sens. `sans_objet` (161) est relu à part — sans la colonne, on relit sans
+               elle et aucune remise n'est exclue. */
+            let remises = {};
+            try {
+                const sel = (col) => `SELECT id, remise_type_id, statut${col} FROM remise_document WHERE enrollment_id = ? AND organization_id = ?`;
+                let rd;
+                try { [rd] = await conn.query(sel(', sans_objet'), [e.id, orgId]); }
+                catch (err2) {
+                    if (!(err2 && err2.code === 'ER_BAD_FIELD_ERROR')) throw err2;
+                    [rd] = await conn.query(sel(''), [e.id, orgId]);
+                }
+                remises = Object.fromEntries(rd.map((r) => [r.remise_type_id,
+                    { id: r.id, statut: r.statut, sans_objet: !!r.sans_objet }]));
+            } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; } // migration 160 non jouée
             const steps = ent.steps || await enrollmentSteps(conn, orgId, program, ctx, condById);
-            parc = computeDocParcours({ steps, docs, pieces });
+            parc = computeDocParcours({ steps, docs, pieces, remises });
         }
 
         res.json({

@@ -176,6 +176,10 @@ const ACTION_LABEL = {
     'remise.depot': ['Document remis au stagiaire', B],
     'remise.accusee': ['Réception confirmée par le stagiaire', G],
     'remise.fichier_supprime': ['Document remis retiré', R],
+    /* Les deux sens du même geste. « Écartée » n'est pas « supprimée » : rien n'est effacé,
+       l'étape sort seulement du décompte pour cette personne-là. */
+    'remise.sans_objet': ['Remise écartée pour ce stagiaire', A],
+    'remise.reintegree': ['Remise réintégrée au dossier', A],
     'remise_type.create': ['Type de remise créé', A],
     'remise_type.update': ['Type de remise modifié', A],
     'remise_type.delete': ['Type de remise supprimé', R],
