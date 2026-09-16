@@ -187,7 +187,7 @@ const getNotifications = async (req, res) => {
         // Le format « AAAA-MM-JJ hh:mm » se trie comme une date : comparaison de chaînes suffisante.
         const tri = (a, b) => (a.created_at < b.created_at ? 1 : -1);
         /* Le compte des non-lus, lui, reste sur l'ENSEMBLE : la pastille de la cloche annonce
-           un total, pas le contenu d'un bloc. */
+           un total, pas le contenu de l'onglet ouvert. */
         const unread = [...notifs, ...activite].filter((r) => !r.is_read).length;
         res.json({ data: notifs.sort(tri), activite: activite.sort(tri), unread });
     } catch (err) {

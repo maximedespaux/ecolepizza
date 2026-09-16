@@ -281,5 +281,18 @@ test('la ligne de notification n\'est écrite qu\'UNE fois, et ne lit rien hors 
        aurait été vraie quoi qu'on fasse — verte, et sans rien vérifier. */
     assert.strictEqual((PAGE.match(/"notif-ligne"/g) || []).length, 1,
         'le balisage de la ligne n\'existe qu\'à un seul endroit');
-    assert.strictEqual((PAGE.match(/<Liste /g) || []).length, 2, 'rendu par les deux blocs');
+    /* UN SEUL `<Liste>` depuis que les deux natures sont des ONGLETS et non deux blocs empilés :
+       l'onglet fermé n'est pas rendu du tout. C'est encore mieux pour ce que ce test protège —
+       il ne reste plus qu'un endroit où la ligne s'écrit. */
+    assert.strictEqual((PAGE.match(/<Liste /g) || []).length, 1, 'un seul point de rendu');
+});
+
+test('les onglets réutilisent le motif de l\'application, pas un troisième style', () => {
+    /* Sept pages emploient déjà `.tabs` / `role="tablist"` (Ventes, Résultats QCM, Comptabilité,
+       Formations, Modèles, Partenaires, Session). En écrire un huitième à la main aurait donné
+       deux styles d'onglet qui divergent — le défaut que ce projet paie à chaque fois. */
+    assert.match(PAGE, /className="tabs" role="tablist"/);
+    assert.strictEqual((PAGE.match(/role="tab" aria-selected=/g) || []).length, 2,
+        'deux onglets, tous deux annoncés à la navigation vocale');
+    assert.match(PAGE, /useState\("alertes"\)/, '« Alertes » ouvert par défaut : c\'est ce qui appelle un geste');
 });
