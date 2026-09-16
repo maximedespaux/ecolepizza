@@ -127,8 +127,8 @@ function BroderieModal({ produit, defaults, onClose, onAdd }) {
   const valider = () => { if (ok) { onAdd({ nom: nom.trim(), prenom: prenom.trim(), taille, coupe }); onClose(); } };
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 420 }}>
         <div className="mhead">
           <h3>{produit.name}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>

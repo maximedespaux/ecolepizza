@@ -277,8 +277,8 @@ function NavAccessModal({ member, onClose, onError, onSaved }) {
   const who = [member.first_name, member.last_name].filter(Boolean).join(" ") || member.email;
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal">
         <div className="mhead">
           <h3>Accès menu, {who}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
@@ -443,8 +443,8 @@ function MemberModal({ member, actorRole, onClose, onError, onCreated, onSaved }
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal">
         <div className="mhead">
           <h3>{isNew ? "Nouveau membre" : "Modifier le membre"}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>

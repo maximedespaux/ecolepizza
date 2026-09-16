@@ -42,6 +42,33 @@ async function createStagiaireAccount(conn, organizationId, { email, first_name,
     return { userId, password };
 }
 
+/**
+ * LA LISTE BLANCHE, FILTRÉE SUR CE QUE LA TABLE PORTE VRAIMENT.
+ *
+ * Sans ce filtre, ajouter une colonne à `LEARNER_FIELDS` cassait l'enregistrement d'une fiche
+ * TANT QUE LA MIGRATION N'ÉTAIT PAS JOUÉE : le formulaire envoie tous ses champs, l'INSERT
+ * nommait donc une colonne inexistante, et la création échouait sur un `ER_BAD_FIELD_ERROR`
+ * incompréhensible pour qui n'a rien demandé de nouveau. C'est la règle « le code marche AVANT
+ * et APRÈS » (CLAUDE.md § 2.1), appliquée une fois pour toutes plutôt qu'une fois par colonne :
+ * celle qu'on ajoutera demain en hérite sans y penser.
+ *
+ * Rien n'est mémorisé, pour la même raison que `colonneExiste` : une migration jouée pendant que
+ * le serveur tourne doit prendre effet sans redémarrage.
+ */
+async function champsEcrivables(conn) {
+    try {
+        const [cols] = await conn.query(
+            `SELECT column_name AS c FROM information_schema.columns
+              WHERE table_schema = DATABASE() AND table_name = 'learner'`);
+        const presentes = new Set(cols.map((r) => r.c));
+        return LEARNER_FIELDS.filter((f) => presentes.has(f));
+    } catch {
+        /* Ne pas savoir ne doit pas empêcher d'enregistrer : on retombe sur la liste complète,
+           c'est-à-dire sur le comportement d'avant ce filtre. */
+        return LEARNER_FIELDS;
+    }
+}
+
 // Champs de la « fiche d'expression du stagiaire » stockés sur learner.
 const LEARNER_FIELDS = [
     'contacted_at', 'contacted_by', 'civility', 'first_name', 'last_name', 'email',
@@ -49,7 +76,12 @@ const LEARNER_FIELDS = [
     'diploma_level', 'diploma_name', 'diploma_year', 'last_experience',
     'experience_value', 'experience_unit', 'professional_status', 'cpf_amount',
     'france_travail_id', 'current_contract', 'social_security', 'financing', 'opco', 'levels',
+    /* `project_improvement` (migration 158) : le projet de qui EXERCE DEJA et vient se
+       perfectionner. Les cinq autres disent toutes un changement — creer, reprendre, s'equiper,
+       chercher un poste — et ces stagiaires-la ressortaient donc avec zero case cochee,
+       indiscernables de ceux qui n'avaient rien rempli. */
     'project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job',
+    'project_improvement',
     // Cadres exclusifs accordés par l'école (migration 113) — même idiome que `levels` : une
     // liste séparée par des virgules. Passe par cette liste blanche, donc par PATCH /:id, donc
     // par `authorizeRoles(...ADMIN_ROLES)` : un formateur ne peut pas s'accorder un Champion.
@@ -239,7 +271,7 @@ const createLearner = async (req, res) => {
         });
 
         // Stagiaire. Le n° de sécurité sociale est chiffré au repos (AES-256-GCM).
-        const cols = LEARNER_FIELDS.filter((f) => body[f] !== undefined);
+        const cols = (await champsEcrivables(conn)).filter((f) => body[f] !== undefined);
         const placeholders = cols.map(() => '?').join(', ');
         const values = cols.map((f) =>
             f === 'social_security' ? encrypt(clean(body[f])) : clean(body[f])
@@ -324,7 +356,7 @@ const updateLearner = async (req, res) => {
         const REQUIRED = new Set(['first_name', 'last_name', 'financing']);
         const updates = [];
         const values = [];
-        for (const field of LEARNER_FIELDS) {
+        for (const field of await champsEcrivables(conn)) {
             if (body[field] === undefined) continue;
             if (body[field] === '' && REQUIRED.has(field)) continue; // ne pas vider un champ requis
             updates.push(`${field} = ?`);

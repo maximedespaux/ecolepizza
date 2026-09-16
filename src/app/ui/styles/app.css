@@ -1520,6 +1520,11 @@ tbody tr:last-child td{border-bottom:none}
 }
 
 /* ===== Fenêtres modales (édition, signature, notes…) =================== */
+/* LE FOND D'UNE MODALE NE LA FERME PAS. Il n'a aucun `onClick`, et ce n'est pas un oubli :
+   un clic à côté fermait la fenêtre et jetait tout ce qui venait d'être saisi — sur « Nouveau
+   stagiaire », c'est une fiche entière. On sort par la croix ou par le bouton d'enregistrement,
+   jamais par accident. Les 54 fenêtres de l'application portent toutes la croix `.modal .x`,
+   vérifié ; un test interdit de remettre un gestionnaire sur `.overlay`. */
 .overlay{position:fixed;inset:0;background:rgba(15,17,40,.55);backdrop-filter:blur(3px);display:grid;place-items:center;z-index:100;padding:20px}
 /* `backwards`, même piège que `.card` : avec `both`, la fenêtre gardait la matrice identité
    et devenait le bloc conteneur de tout `position:fixed` ouvert DEPUIS son contenu — une

@@ -341,8 +341,8 @@ function Inventaire({ embedded = false }) {
       <datalist id="inv-cats">{allCats.map((c) => <option key={c} value={c} />)}</datalist>
 
       {editing && (
-        <div className="overlay" onClick={() => setEditing(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="overlay">
+          <div className="modal">
             <div className="mhead">
               <h3 style={{ fontSize: 16 }}>Modifier l'article</h3>
               <button className="x" onClick={() => setEditing(null)} aria-label="Fermer">×</button>

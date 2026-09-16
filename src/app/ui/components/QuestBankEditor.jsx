@@ -425,8 +425,8 @@ function QuestionModal({ question, options, difficulties, onClose, onSave }) {
   });
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal wide">
         <form onSubmit={submit} style={{ display: "contents" }}>
           <div className="mhead">
             <h3>{question ? "Modifier la question" : "Nouvelle question"}</h3>

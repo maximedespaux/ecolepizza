@@ -168,8 +168,8 @@ export default function ProfileModal({ onClose }) {
   const refreshUser = () => getCurrentUser().then((r) => setUser(r.data)).catch(() => {});
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 480 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>Mon profil</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>

@@ -73,8 +73,8 @@ export default function ConsentModal() {
   };
 
   return createPortal(
-    <div className="overlay" onClick={() => setADemander(null)}>
-      <div className="modal consent-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal consent-modal">
         <div className="mhead">
           <h3 style={{ fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
             <Icon name="shield" size={17} /> {maj ? "Votre accord doit être mis à jour" : aDemander.titre}

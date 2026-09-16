@@ -469,8 +469,8 @@ function Modeles() {
           — la ligne vit dans une `<Card>`, et un voile `position:fixed` se recentre sur tout
           ancêtre porteur d'une transformation. */}
       {apercu && createPortal(
-        <div className="overlay" onClick={() => setApercu(null)}>
-          <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+        <div className="overlay">
+          <div className="modal wide">
             <div className="mhead">
               <h3 style={{ fontSize: 17 }}>{apercu.label}</h3>
               <button className="x" onClick={() => setApercu(null)} aria-label="Fermer">×</button>
@@ -602,8 +602,8 @@ function ConditionsPanel({ conditions, catalog, onChanged, onCatalogChanged, onS
       </p>
 
       {showFields && createPortal(
-        <div className="overlay" onClick={closeFields}>
-          <div className="modal" style={{ maxWidth: 760, width: "92%" }} onClick={(e) => e.stopPropagation()}>
+        <div className="overlay">
+          <div className="modal" style={{ maxWidth: 760, width: "92%" }}>
             <div className="mhead">
               <h3>Champs documents</h3>
               <button className="x" onClick={closeFields} aria-label="Fermer">×</button>
@@ -774,8 +774,8 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal">
         <div className="mhead">
           <h3>{isNew ? (isPiece ? "Nouvelle pièce à fournir" : "Nouveau document") : (isPiece ? "Réglages de la pièce" : isEmarg ? "Réglages de la feuille d'émargement" : "Modifier l'étape")}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>

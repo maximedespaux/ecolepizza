@@ -69,8 +69,8 @@ export default function ConstructorGame({ onClose, onFinish }) {
   const unplace = (i) => { if (!checked) setPlaced((p) => p.filter((x) => x !== i)); };
 
   return (
-    <div className="overlay" onClick={fermer}>
-      <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 520 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>🍕 Le Constructeur de pizza</h3>
           {/* Dans l'EN-TÊTE, pas sous le sous-titre : à 375 px la rangée passait à la ligne et

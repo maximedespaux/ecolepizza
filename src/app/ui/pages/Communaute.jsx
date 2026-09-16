@@ -231,8 +231,8 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
        « administration » (Mulish, coins 12 px) au milieu de l'espace stagiaire. `stu-app-nu`
        coupe le halo, sinon peint une seconde fois par-dessus le voile. */
     <div className="stu-app stu-app-nu">
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 360 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>Profil</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
@@ -731,8 +731,8 @@ export default function Communaute() {
       {/* Modale détail : ingrédients, coût, prix, commentaires */}
       {openId && createPortal(
         <div className="stu-app stu-app-nu">
-        <div className="overlay" onClick={() => setOpenId(null)}>
-          <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+        <div className="overlay">
+          <div className="modal" style={{ maxWidth: 560 }}>
             {!detail ? (
               <div className="mbody" style={{ padding: 28 }}><p className="hint" style={{ margin: 0 }}>Chargement…</p></div>
             ) : (() => {

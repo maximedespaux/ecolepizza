@@ -88,8 +88,8 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 820, width: "94%" }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 820, width: "94%" }}>
         <div className="mhead">
           <h3>Jetons personnalisés</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>

@@ -510,8 +510,8 @@ export default function JustePrix({ onClose, onFinish }) {
     || (q?.choix || []).some((c) => c.label === p.nom);
 
   return (
-    <div className="overlay" onClick={fermer}>
-      <div className="modal cp-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal cp-modal">
         <div className="mhead">
           <h3 style={{ fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
             <Icon name="coins" size={17} /> Le juste prix

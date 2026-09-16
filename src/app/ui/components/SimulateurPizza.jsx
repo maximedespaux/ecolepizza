@@ -208,8 +208,8 @@ export default function SimulateurPizza({ onClose, onFinish, objectifId = null }
   }
 
   return (
-    <div className="overlay" onClick={fermer}>
-      <div className="modal sim" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal sim">
         <div className="mhead">
           <h3><Icon name="pizza" size={18} /> Fais ta pizza</h3>
           {/* L'AVANCEMENT DU SERVICE, à demeure. Il vivait dans le bandeau de commande, retiré

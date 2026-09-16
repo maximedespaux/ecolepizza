@@ -501,8 +501,8 @@ function TemplateEditor() {
       )}
 
       {showFields && (
-        <div className="overlay" onClick={() => { setShowFields(false); reloadCatalog(); }}>
-          <div className="modal" style={{ maxWidth: 720, width: "92%" }} onClick={(e) => e.stopPropagation()}>
+        <div className="overlay">
+          <div className="modal" style={{ maxWidth: 720, width: "92%" }}>
             <div className="mhead">
               <h3>Champs documents</h3>
               <button className="x" onClick={() => { setShowFields(false); reloadCatalog(); }} aria-label="Fermer">×</button>

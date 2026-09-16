@@ -118,8 +118,8 @@ export default function CompleterPate({ onClose, onFinish }) {
   const suivante = () => { setVerdict(null); setSaisie({}); setManche((m) => m + 1); };
 
   return (
-    <div className="overlay" onClick={fermer}>
-      <div className="modal sim" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal sim">
         <div className="mhead">
           <h3><Icon name="wheat" size={18} /> Complète la pâte</h3>
           {!fini && <span className="sim-manche-n chiffres">Fiche {manche + 1}/{MANCHES}</span>}

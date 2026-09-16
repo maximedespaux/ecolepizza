@@ -48,11 +48,18 @@ function ligneLisible(n) {
 }
 
 /**
- * UNE SEULE ÉCRITURE DE LA LIGNE, rendue par les deux blocs.
+ * UNE SEULE ÉCRITURE DE LA LIGNE, rendue par l'onglet ouvert.
  *
  * Au niveau du module, et non dans la page : un composant défini dans le corps du rendu est
  * recréé à chaque passage, React remonte alors tout le sous-arbre, et le focus clavier saute.
  */
+/** « (3) » tant qu'il reste des non-lues dans cette liste — rien du tout sinon. Sur l'onglet
+ *  fermé, c'est la seule chose qui dit qu'il s'y passe quelque chose. */
+function compte(liste) {
+  const n = (liste || []).filter((l) => !l.is_read).length;
+  return n ? ` (${n})` : "";
+}
+
 function Liste({ lignes, onOuvrir, onSupprimer, peutSupprimer }) {
   return (
     <div className="notif-liste">
@@ -117,6 +124,8 @@ function Notifications() {
      natures. Une seule liste triée par date laissait l'activité du jour recouvrir les alertes
      adressées : la relance d'émargement la plus récente arrivait au onzième rang. */
   const [rows, setRows] = useState(null);
+  // « Alertes » d'abord : c'est ce qui appelle un geste, et c'était le but de la séparation.
+  const [onglet, setOnglet] = useState("alertes");
   const [status, setStatus] = useState(null);
 
   async function load() {
@@ -155,6 +164,15 @@ function Notifications() {
     else load();
   }
 
+  const lignes = rows == null ? [] : (onglet === "alertes" ? rows.alertes : rows.activite);
+  /* Deux vides DISTINCTS : « aucune notification » sur l'onglet Activité laisserait croire que
+     le journal est cassé, alors qu'il n'y a simplement rien eu. */
+  const vide = onglet === "alertes"
+    ? { icone: "bell", titre: "Rien à traiter",
+        texte: "Les émargements à signer, dépôts de pièces, commandes et signatures s'afficheront ici." }
+    : { icone: "history", titre: "Aucune activité",
+        texte: "Ce que fait le reste de l'équipe sur les dossiers s'affichera ici." };
+
   return (
     <>
       {/* LES DEUX ÉCRANS DOIVENT SE DISTINGUER À LA LECTURE, pas seulement dans le code. Sans
@@ -178,29 +196,32 @@ function Notifications() {
       />
       <StatusMessage status={status} />
 
-      <Card title="Ce qui appelle un geste">
-        {rows == null ? (
-          <Squelette lignes={4} h={52} />
-        ) : rows.alertes.length === 0 ? (
-          <EmptyState icon="bell" title="Rien à traiter"
-            text="Les émargements à signer, dépôts de pièces, commandes et signatures s'afficheront ici." />
-        ) : (
-          <Liste lignes={rows.alertes} onOuvrir={open} onSupprimer={supprimer} peutSupprimer={peutSupprimer} />
-        )}
-      </Card>
+      {/* DEUX ONGLETS PLUTÔT QUE DEUX BLOCS EMPILÉS. Empilés, la page faisait deux fois sa
+          hauteur et il fallait défiler pour savoir s'il restait quelque chose en bas — alors
+          que le tout premier objet de cette séparation était justement qu'on VOIE ses alertes.
+          L'onglet dit les deux natures en une ligne, ouvre « Alertes » par défaut (c'est ce qui
+          appelle un geste) et porte le compte des non-lues, pour qu'on sache sans cliquer.
+          Motif déjà employé par sept pages : on ne réinvente pas un troisième style d'onglet. */}
+      <div className="tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={onglet === "alertes"}
+          className={"tab" + (onglet === "alertes" ? " on" : "")}
+          onClick={() => setOnglet("alertes")}>
+          Alertes{compte(rows?.alertes)}
+        </button>
+        <button type="button" role="tab" aria-selected={onglet === "activite"}
+          className={"tab" + (onglet === "activite" ? " on" : "")}
+          onClick={() => setOnglet("activite")}>
+          Activité de l'équipe{compte(rows?.activite)}
+        </button>
+      </div>
 
-      {/* CE QUI S'EST PASSÉ, et qui n'appelle rien. Séparé du bloc ci-dessus parce que les deux
-          se disputaient les mêmes quarante lignes et que l'activité, plus récente par nature,
-          gagnait toujours : la relance d'émargement la plus récente arrivait au onzième rang.
-          Aucune de ces lignes n'est cliquable sauf si elle mène à une fiche précise. */}
-      <Card title="Activité de l'équipe">
+      <Card>
         {rows == null ? (
-          <Squelette lignes={4} h={52} />
-        ) : rows.activite.length === 0 ? (
-          <EmptyState icon="history" title="Aucune activité"
-            text="Ce que fait le reste de l'équipe sur les dossiers s'affichera ici." />
+          <Squelette lignes={6} h={52} />
+        ) : lignes.length === 0 ? (
+          <EmptyState icon={vide.icone} title={vide.titre} text={vide.texte} />
         ) : (
-          <Liste lignes={rows.activite} onOuvrir={open} onSupprimer={supprimer} peutSupprimer={peutSupprimer} />
+          <Liste lignes={lignes} onOuvrir={open} onSupprimer={supprimer} peutSupprimer={peutSupprimer} />
         )}
       </Card>
     </>

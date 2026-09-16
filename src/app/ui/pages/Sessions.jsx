@@ -166,8 +166,8 @@ function Sessions() {
       <StatusMessage status={status} />
 
       {showAdd && (
-        <div className="overlay" onClick={() => setShowAdd(false)}>
-          <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+        <div className="overlay">
+          <div className="modal" style={{ maxWidth: 460 }}>
             <div className="mhead">
               <h3>Ajouter une formation</h3>
               <button className="x" onClick={() => setShowAdd(false)} aria-label="Fermer"><Icon name="x" size={16} /></button>

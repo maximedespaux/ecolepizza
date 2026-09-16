@@ -482,8 +482,8 @@ function CategoriesModal({ categories, onClose, onChange, onReload, onError }) {
   };
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 560 }}>
         <div className="mhead"><h3>Catégories de partenaires</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button></div>
         <div className="mbody">
@@ -600,8 +600,8 @@ function PartnerModal({ partner, categories, onClose, onSaved, onError }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal wide">
         <div className="mhead"><h3>{isNew ? "Nouveau partenaire" : "Modifier le partenaire"}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button></div>
         <div className="mbody">
@@ -725,8 +725,8 @@ function ApportModal({ apport, partners, onClose, onSaved, onError }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal">
         <div className="mhead"><h3>Modifier l'apport</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button></div>
         <div className="mbody">

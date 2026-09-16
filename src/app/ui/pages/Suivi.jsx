@@ -705,8 +705,8 @@ function PanneauStockage({ onError, onSupprime }) {
      obtenir un bouton libre juste à côté — et c'est précisément le reclic répété qu'on veut
      empêcher, pas le premier. */
   const verrou = demande && createPortal(
-    <div className="overlay" onClick={() => setDemande(false)}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 460 }}>
         <div className="mhead">
           <h3>Lancer l'inventaire du coffre ?</h3>
           <button className="x" onClick={() => setDemande(false)} aria-label="Fermer"><Icon name="x" size={16} /></button>

@@ -189,8 +189,8 @@ function OpcoModal({ opco, onClose, onSaved, onError }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal">
         <div className="mhead"><h3>{isNew ? "Nouvel OPCO" : "Modifier l'OPCO"}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button></div>
         <div className="mbody">

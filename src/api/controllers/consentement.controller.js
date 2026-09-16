@@ -3,6 +3,11 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const consentements = require('../lib/consentements.js');
 const { etatContrat } = require('../lib/contratPartenaire.js');
+/* `project_improvement` (migration 158) peut ne pas être en base : les deux SELECT explicites
+   ci-dessous la demandent donc par `colonneOuNull`, qui rend « NULL AS project_improvement »
+   tant qu'elle manque. Sans alias, la ligne n'aurait pas la clé du tout et l'export ne saurait
+   pas distinguer « case absente » de « case non cochée ». */
+const { colonneOuNull } = require('../lib/colonnes.js');
 
 /**
  * LE CÔTÉ ORGANISME DU REGISTRE — voir qui a répondu quoi, saisir une réponse donnée hors ligne,
@@ -108,7 +113,7 @@ async function sessionAvecInscrits(conn, sessionId, orgId) {
         `SELECT l.id, l.first_name, l.last_name, l.email, l.phone,
                 l.civility, l.address, l.zip_code, l.town, l.professional_status,
                 l.project_creation, l.project_takeover, l.project_oven, l.project_truck,
-                l.project_job,
+                l.project_job, ${await colonneOuNull(conn, 'learner', 'project_improvement', 'l.')},
                 c.name AS company_name, c.siret AS company_siret,
                 c.legal_status AS company_legal, c.naf_ape AS company_naf,
                 c.address AS company_address, c.zip_code AS company_zip, c.town AS company_town
@@ -349,7 +354,7 @@ async function composerLignes(conn, orgId, retenus, etats) {
     const PROJETS = [
         ['project_creation', 'création'], ['project_takeover', 'reprise'],
         ['project_oven', 'four'], ['project_truck', 'camion'],
-        ['project_job', 'recherche de poste'],
+        ['project_job', 'recherche de poste'], ['project_improvement', 'perfectionnement'],
     ];
     const valeurs = (l) => ({
         civilite: l.civility || '',
@@ -472,6 +477,7 @@ const produireTransmissionPartenaire = async (req, res) => {
             `SELECT l.id, l.first_name, l.last_name, l.email, l.phone, l.civility, l.address,
                     l.zip_code, l.town, l.professional_status, l.project_creation,
                     l.project_takeover, l.project_oven, l.project_truck, l.project_job,
+                    ${await colonneOuNull(conn, 'learner', 'project_improvement', 'l.')},
                     c.name AS company_name, c.siret AS company_siret, c.legal_status AS company_legal,
                     c.naf_ape AS company_naf, c.address AS company_address,
                     c.zip_code AS company_zip, c.town AS company_town,

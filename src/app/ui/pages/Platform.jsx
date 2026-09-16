@@ -131,8 +131,8 @@ function OrgModal({ onClose, onError, onCreated }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal">
         <div className="mhead">
           <h3>Nouvel organisme</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>

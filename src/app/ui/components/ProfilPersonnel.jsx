@@ -49,8 +49,8 @@ export default function ProfilPersonnel({ onClose }) {
      principal passait devant, et la modale apparaissait comme un simple voile gris.
      `createPortal` la sort au niveau du body, seul endroit où son z-index compte. */
   return createPortal(
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 470 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 470 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>Personnalisation</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>

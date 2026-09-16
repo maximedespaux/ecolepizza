@@ -97,8 +97,8 @@ function QuizModal({ documentId, onClose, onDone }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 620 }}>
         <div className="mhead">
           <h3>{quiz ? quiz.title : "QCM"}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
