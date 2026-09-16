@@ -165,3 +165,56 @@ test('LA TROISIÈME FEUILLE EXISTE, ET N\'EN FAIT QU\'UNE', () => {
        documents de session serait un mensonge, et un geste irréversible mal annoncé. */
     assert.match(UI_SUIVI, /L\.session \? "Supprimer ces documents de session"/);
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   VOIR ET TÉLÉCHARGER, DES DEUX CÔTÉS.
+
+   DEMANDÉ : « toujours mettre la possibilité de voir le document et de le télécharger, des deux
+   côtés ». L'école relit ce qu'elle a envoyé ; l'intervenant, ce qu'on lui demande de signer —
+   et ce second cas est le plus important : signer sans pouvoir ouvrir n'est pas signer.
+
+   LE DÉFAUT QUE ÇA A RÉVÉLÉ. `/documents/:id/pdf` acceptait le personnel, ou le stagiaire
+   PROPRIÉTAIRE. Un document de session n'a pas de stagiaire : les deux gardes refusaient donc
+   le document à l'intervenant à qui il est justement destiné. On lui demandait de signer un
+   document qu'il ne pouvait pas ouvrir.
+*/
+const DOC_CTRL = lire('controllers/document.controller.js');
+const BOUTONS = sansCommentaires(
+    fs.readFileSync(path.join(API, '..', 'app', 'ui/components/BoutonsDocument.jsx'), 'utf8'));
+const EXTERNES = sansCommentaires(
+    fs.readFileSync(path.join(API, '..', 'app', 'ui/components/DocumentsExternes.jsx'), 'utf8'));
+const ESPACE = sansCommentaires(
+    fs.readFileSync(path.join(API, '..', 'app', 'ui/pages/IntervenantEspace.jsx'), 'utf8'));
+
+test('LE SIGNATAIRE ATTRIBUÉ PEUT OUVRIR CE QU\'ON LUI DEMANDE DE SIGNER', () => {
+    const zone = DOC_CTRL.slice(DOC_CTRL.indexOf("const STAFF = ['SUPER_ADMIN'"));
+    assert.match(zone, /SELECT id FROM document_signature WHERE document_id = \? AND user_id = \?/);
+    assert.match(zone, /\[sdoc\.id, req\.user\.id\]/,
+        'la garde porte sur CE document et CE compte : ni le document d\'un collègue, ni un autre');
+    /* ET ELLE VIENT APRÈS LES DEUX AUTRES : on n'élargit pas, on ajoute une troisième porte
+       étroite. Le personnel et le stagiaire propriétaire passent toujours par les leurs. */
+    assert.ok(zone.indexOf('FROM learner WHERE id = ? AND user_id = ?')
+        < zone.indexOf('FROM document_signature WHERE document_id = ?'));
+});
+
+test('LES DEUX ÉCRANS EMPLOIENT LE MÊME COMPOSANT', () => {
+    /* Deux paires de boutons auraient divergé — l'une gagnant un correctif que l'autre n'aurait
+       pas eu. C'est la leçon la plus répétée de cette semaine. */
+    for (const [quoi, src] of [['la carte de session', EXTERNES], ['l\'espace intervenant', ESPACE]]) {
+        assert.match(src, /import BoutonsDocument from/, `${quoi} doit importer le composant`);
+        assert.match(src, /<BoutonsDocument id=\{d\.id\} nom=\{d\.title\} \/>/, `${quoi} doit le rendre`);
+    }
+});
+
+test('L\'URL DU PDF EST LIBÉRÉE, MAIS PAS TOUT DE SUITE', () => {
+    /* Révoquer l'URL blob immédiatement donnerait un onglet VIDE — le navigateur n'a pas encore
+       chargé le document quand `window.open` rend la main. Ne jamais la révoquer garderait le
+       PDF en mémoire pour la durée de la session. */
+    assert.match(BOUTONS, /window\.open\(url, "_blank", "noopener"\)/);
+    assert.match(BOUTONS, /setTimeout\(\(\) => URL\.revokeObjectURL\(url\), 60000\)/);
+});
+
+test('LE NOM DE FICHIER NE PEUT PAS CASSER L\'ENREGISTREMENT', () => {
+    // Un titre de modèle est saisi à la main : il peut contenir « / » ou « : ».
+    assert.match(BOUTONS, /replace\(\/\[\\\\\/:\*\?"<>\|\]\/g, ""\)/);
+});

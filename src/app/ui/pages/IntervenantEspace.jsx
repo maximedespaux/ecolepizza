@@ -11,6 +11,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
 import JuryGrille from "../components/JuryGrille.jsx";
+import BoutonsDocument from "../components/BoutonsDocument.jsx";
 
 const frDay = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
 
@@ -69,6 +70,9 @@ function MesDocuments({ onStatus, fullName }) {
                   {d.signe_le ? `signé le ${d.signe_le}` : `reçu le ${d.envoye_le}`}
                 </span>
               </span>
+              {/* VOIR AVANT DE SIGNER, toujours — et relire après. Les deux boutons sont posés
+                  avant l'action, pas après : on ouvre, puis on signe. */}
+              <BoutonsDocument id={d.id} nom={d.title} />
               {d.signe_le
                 ? <Badge tone="g">Signé</Badge>
                 : (
