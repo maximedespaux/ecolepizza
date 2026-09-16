@@ -40,7 +40,7 @@ const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
 function AppLayout() {
   const { user, isConnected, isLoading } = useContext(UserContext);
   const [open, setOpen] = useState(false);
-  const [, bumpColors] = useState(0);
+  const [paletteChargee, setPaletteChargee] = useState(false);
   const location = useLocation();
   const readOnly = user ? modeForPath(user, location.pathname) === "read" : false;
 
@@ -68,18 +68,42 @@ function AppLayout() {
      se déclenche pas) — d'où le `onClose` porté aussi par les liens eux-mêmes, cf. Sidebar. */
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
-  // Charge une fois les couleurs personnalisées des formations pour que les
-  // badges (formation / stagiaire / session) soient cohérents partout.
+  /* LES COULEURS DE FORMATION SONT CHARGÉES AVANT LE PREMIER RENDU, et c'est tout l'objet de
+     `paletteChargee`.
+     LE DÉFAUT, signalé depuis un téléphone le 2026-09-16 : « au chargement, la couleur du badge
+     ne correspond pas aux données, mais se corrige dès qu'on clique ». Mesuré — NIV1H vaut
+     #00b2b2 (cyan) dans les réglages de l'école, et #1e3a8a (bleu marine) dans la palette de
+     repli du code. Le badge s'affichait donc marine, puis devenait cyan.
+     POURQUOI ÇA NE SE CORRIGEAIT PAS TOUT SEUL. `setBadgeColors` écrit dans une table de module,
+     que personne n'observe : aucun composant n'est abonné. Le `bumpColors` qui vivait ici
+     re-rendait bien CE layout — mais `<Outlet />` rend un élément dont React Router garde
+     l'identité d'un rendu à l'autre, et React saute alors tout le sous-arbre. La page ne se
+     re-rendait donc jamais, jusqu'au premier clic qui la faisait se re-rendre pour une autre
+     raison. Sur un téléphone, où le réseau est plus lent, la page paraît TOUJOURS avant les
+     couleurs : le défaut y est systématique.
+     PLUTÔT QUE D'ABONNER TOUTE L'APPLICATION à une table mutable, on attend. La requête part en
+     PARALLÈLE du contrôle de session déjà en cours : elle n'ajoute du délai que si elle est la
+     plus lente des deux. Et elle ne peut pas retenir l'application — échec ou lenteur, on
+     continue au bout de deux secondes et demie, avec la palette par défaut. */
   useEffect(() => {
-    if (!isConnected) return;
-    getFormations().then((r) => {
-      const map = {};
-      for (const f of r.data || []) if (f.color) { if (f.code) map[f.code] = f.color; if (f.level) map[f.level] = f.color; }
-      if (Object.keys(map).length) { setBadgeColors(map); bumpColors((v) => v + 1); }
-    }).catch(() => {});
+    if (!isConnected) { setPaletteChargee(true); return undefined; } // rien à charger : on n'attend pas
+    let vivant = true;
+    const fini = () => { if (vivant) setPaletteChargee(true); };
+    const filet = setTimeout(fini, 2500);
+    getFormations()
+      .then((r) => {
+        const map = {};
+        for (const f of r.data || []) if (f.color) { if (f.code) map[f.code] = f.color; if (f.level) map[f.level] = f.color; }
+        if (Object.keys(map).length) setBadgeColors(map);
+      })
+      .catch(() => {})
+      .finally(() => { clearTimeout(filet); fini(); });
+    return () => { vivant = false; clearTimeout(filet); };
   }, [isConnected]);
 
-  if (isLoading) {
+  /* La palette entre dans l'écran d'attente qui existait déjà : une page ne paraît jamais avec
+     des couleurs qu'elle devra corriger. */
+  if (isLoading || !paletteChargee) {
     return (
       <div className="app-loading">
         <div className="brand-splash">
