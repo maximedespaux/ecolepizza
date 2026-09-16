@@ -165,6 +165,42 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
          WHERE df.document_id = ?`,
         [documentId]
     );
+    /* ─── DOCUMENT DE SESSION : la session est SUR LE DOCUMENT, pas sous un stagiaire ───────
+       DÉFAUT SIGNALÉ : « les jetons ne marchent pas, sauf la signature de l'organisme ». Mesuré
+       sur le modèle « Contrat Hygiène », qui emploie {Mardi} et {Jeudi} — des jetons du groupe
+       SESSION. Or tout ce bloc se construit depuis `document_formation`, c'est-à-dire depuis les
+       INSCRIPTIONS : un document de session (migration 157) n'en a aucune, donc `formations`
+       était vide et chaque jeton de session rendait du vide. Seuls tenaient les jetons de
+       l'organisme, qui ne dépendent de personne — d'où l'impression que « seule la signature
+       organisme marche ».
+
+       ON REPART DONC DE `generated_document.session_id`, avec les MÊMES colonnes : le reste de
+       la fonction ne voit pas la différence, et les jetons de session se remplissent comme sur
+       n'importe quel document. Ni financement, ni prix, ni entreprise : un contrat d'hygiène
+       n'appartient à aucun dossier, et inventer des valeurs de dossier ici serait pire que de
+       les laisser vides. */
+    if (!formations.length && documentId) {
+        try {
+            const [[sid]] = await conn.query('SELECT session_id FROM generated_document WHERE id = ?', [documentId]);
+            if (sid && sid.session_id) {
+                const [viaSession] = await conn.query(
+                    `SELECT p.code, p.title, p.days, p.hours, p.price, p.hygiene, p.rs_code AS rs_code,
+                            p.audience, p.objectives, p.objective_general, p.duration_detail, p.program_detail,
+                            p.horaires,
+                            ${await colonneOuNull(conn, 'training_program', 'prerequisites', 'p.')},
+                            s.year, s.week,
+                            DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                            DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
+                            NULL AS financing, NULL AS enroll_price, NULL AS acompte, NULL AS company_id
+                       FROM training_session s
+                       LEFT JOIN training_program p ON p.id = s.program_id
+                      WHERE s.id = ? AND s.organization_id = ?`,
+                    [sid.session_id, organizationId]);
+                formations.push(...viaSession);
+            }
+        } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+    }
+
     // L'entreprise dont on remplira les jetons est celle DU DOSSIER de ce document. Lire
     // learner.company_id faisait apparaître l'employeur sur les documents d'une inscription
     // que le stagiaire portait seul — même raison que dans docSignedByCompany.

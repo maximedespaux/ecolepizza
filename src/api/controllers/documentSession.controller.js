@@ -24,11 +24,32 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
-const { loadOrgSteps } = require('./template.controller.js');
+const { loadOrgSteps, getTemplateContent } = require('./template.controller.js');
 const { stepSigners } = require('../lib/documents.js');
 
-/** Le créneau de signature de l'intervenant. Un seul par document : un contrat, un signataire. */
-const SLOT = 'externe';
+/**
+ * LE CRÉNEAU DE SIGNATURE SE LIT DANS LE MODÈLE, il ne s'impose pas.
+ *
+ * DÉFAUT SIGNALÉ, et il rendait la fonctionnalité inutile : le modèle « Contrat Hygiène » place
+ * une case `{sig:intervenant}` — c'est l'école qui a choisi ce nom dans l'éditeur. Le code, lui,
+ * écrivait un créneau nommé « externe ». La signature de l'intervenant atterrissait donc dans un
+ * créneau que le document n'affiche nulle part : il signait, et la case restait vide.
+ *
+ * ON PART DONC DU MODÈLE. Le premier `sig:<créneau>` qu'il contient est celui qu'on remplira.
+ * Le repli « externe » ne sert qu'aux modèles qui n'en déclarent aucun — ils n'afficheront pas
+ * la signature, mais le document restera signable et scellé.
+ */
+const SLOT_DEFAUT = 'externe';
+
+async function creneauDuModele(orgId, slug) {
+    try {
+        const c = await getTemplateContent(orgId, slug);
+        const corps = `${(c && c.html) || ''}${(c && c.header) || ''}${(c && c.footer) || ''}`;
+        const m = /data-token="sig:([^"]+)"|\{\s*sig:([^}\s]+)\s*\}/.exec(corps);
+        const trouve = m && (m[1] || m[2]);
+        return trouve ? String(trouve).trim() : SLOT_DEFAUT;
+    } catch { return SLOT_DEFAUT; }
+}
 
 const noSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'
     || e.code === 'WARN_DATA_TRUNCATED' || e.code === 'ER_DATA_TRUNCATED');
@@ -75,10 +96,13 @@ const listerDocumentsSession = async (req, res) => {
                         CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')) AS signataire,
                         DATE_FORMAT(d.org_signed_at, '%Y-%m-%d %H:%i') AS org_signe_le
                    FROM generated_document d
-                   LEFT JOIN document_signature ds ON ds.document_id = d.id AND ds.slot = ?
+                   /* LA CASE ATTRIBUÉE, quel que soit son NOM : il vient du modèle et peut
+                      changer d'un document à l'autre. Chercher un créneau nommé en dur
+                      remontrait « en attente » sur un document pourtant signé. */
+                   LEFT JOIN document_signature ds ON ds.document_id = d.id AND ds.user_id IS NOT NULL
                    LEFT JOIN user u ON u.id = ds.user_id
                   WHERE d.organization_id = ? AND d.session_id = ? AND d.scope = 'SESSION'
-                  ORDER BY d.created_at DESC`, [SLOT, orgId, req.params.id]);
+                  ORDER BY d.created_at DESC`, [orgId, req.params.id]);
         } catch (e) { if (!noSchema(e)) throw e; } // migration 157 non jouée : aucun envoi
 
         res.json({ data: { modeles: await modelesExternes(orgId), intervenants: intervenants.map(
@@ -140,7 +164,7 @@ const envoyerDocumentSession = async (req, res) => {
         await conn.query(
             `INSERT INTO document_signature (id, organization_id, document_id, slot, label, user_id)
              VALUES (?, ?, ?, ?, ?, ?)`,
-            [crypto.randomUUID(), orgId, docId, SLOT, 'Intervenant externe', userId]);
+            [crypto.randomUUID(), orgId, docId, await creneauDuModele(orgId, slug), 'Intervenant externe', userId]);
 
         logAudit(req, 'document.session_externe', 'GeneratedDocument', docId);
         res.status(201).json({ data: { id: docId }, message: `Document envoyé à ${String(affecte.nom || '').trim()}.` });
@@ -150,4 +174,4 @@ const envoyerDocumentSession = async (req, res) => {
     }
 };
 
-module.exports = { listerDocumentsSession, envoyerDocumentSession, modelesExternes, SLOT };
+module.exports = { listerDocumentsSession, envoyerDocumentSession, modelesExternes, creneauDuModele, SLOT_DEFAUT };

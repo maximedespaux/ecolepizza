@@ -437,7 +437,7 @@ const signerMonDocument = async (req, res) => {
            l'organisation : un intervenant ne signe que ce qu'on lui a confié, jamais le
            document d'un collègue. */
         const [[ligne]] = await conn.query(
-            `SELECT ds.id, ds.signed_at, d.id AS doc_id, d.template_slug, d.learner_id, d.title
+            `SELECT ds.id, ds.slot, ds.signed_at, d.id AS doc_id, d.template_slug, d.learner_id, d.title
                FROM document_signature ds JOIN generated_document d ON d.id = ds.document_id
               WHERE ds.document_id = ? AND ds.user_id = ? AND ds.organization_id = ?`,
             [req.params.id, req.user.id, orgId]);
@@ -460,15 +460,19 @@ const signerMonDocument = async (req, res) => {
         const [[doc]] = await conn.query('SELECT * FROM generated_document WHERE id = ? AND organization_id = ?',
             [ligne.doc_id, orgId]);
         const nom = [req.user.first_name, req.user.last_name].filter(Boolean).join(' ').trim() || 'Intervenant';
+        /* LE CRÉNEAU VIENT DE LA CASE, pas d'une constante : c'est le modèle qui le nomme
+           (`sig:intervenant` sur le contrat d'hygiène), et il peut différer d'un document à
+           l'autre. Une constante ici renverrait la signature dans un créneau que le document
+           n'affiche pas — le défaut qu'on vient de corriger. */
         await applySlotSignature(conn, orgId, doc, {
-            slot: SLOT_EXTERNE, label: 'Intervenant externe', signerName: nom,
+            slot: ligne.slot || SLOT_EXTERNE, label: 'Intervenant externe', signerName: nom,
             signatureData: signature, ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
         });
         /* `user_id` n'est pas touché par `applySlotSignature` (elle ne connaît que le créneau) :
            on le RÉAFFIRME, sinon l'attribution disparaîtrait au premier passage et l'espace
            cesserait d'afficher le document une fois signé. */
         await conn.query('UPDATE document_signature SET user_id = ? WHERE document_id = ? AND slot = ?',
-            [req.user.id, ligne.doc_id, SLOT_EXTERNE]);
+            [req.user.id, ligne.doc_id, ligne.slot || SLOT_EXTERNE]);
         logAudit(req, 'document.sign_externe', 'GeneratedDocument', ligne.doc_id);
         res.json({ success: true, message: 'Document signé.' });
     } catch (err) {
