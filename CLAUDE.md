@@ -77,8 +77,13 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~0,4 s**. État de référence :
-**373 tests — 366 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-16** :
+**1300 tests — 1293 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+
+Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
+précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
+deux : il fait croire que neuf cents tests ont disparu. **Le remettre à jour en même temps que
+les migrations.**
 
 Les **7 ignorés sont volontaires** : ce sont des défauts connus et non corrigés, chacun en
 `{ skip: "…" }` avec sa raison écrite (`backoffice-invariants`, `finance`). C'est un registre de
@@ -126,22 +131,36 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **154 en attente (2026-09-15)**
+## 4. Migrations — **aucune en attente (vérifié le 2026-09-16)**
 
-> **153 + reprise du coffre.** `153_archives_chiffrees.sql` ajoute `archive_document.empreinte`
-> et `.octets` ; le chiffrement des 1140 PDF déjà en base se fait ensuite avec
-> `sudo -u impastio node database/tools/chiffrer-coffre.js` (rejouable, `--essai` pour voir sans
-> rien écrire, `--verifier` pour rouvrir et contrôler les 1151 lignes en lecture seule). **À VÉRIFIER AVANT DE LANCER LA REPRISE : `SSN_ENC_KEY` est-elle sauvegardée
-> hors du serveur ?** Après elle, la perdre coûte le coffre entier. Le code marche avant comme
-> après, dans les deux sens. Vérification, plutôt que de croire cette ligne :
-> `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio'
-> AND table_name='archive_document' AND column_name='empreinte';`
->
-> **154 — classeurs libres du coffre.** Ajoute `archive_document.dossier` : un rangement qui
-> n'est pas celui des sessions (assurance, agrément, certificat). Le code marche avant comme
-> après — sans la colonne, un dépôt en classeur est refusé par un 422 explicite, et tout le
-> reste se comporte comme aujourd'hui. Aucune reprise de données.
+Les migrations **153 à 157 sont jouées**. Elles avaient été annoncées « en attente » dans ce
+paragraphe et y sont restées après avoir été jouées : exactement le travers décrit plus bas.
 
+**Comment ça a été vérifié, sans SQL et sans croire ce fichier** — les contrôleurs relisent ces
+colonnes en CASCADE (`ER_BAD_FIELD_ERROR` → on retombe sur la forme d'avant), donc leur présence
+se lit dans la RÉPONSE de l'API : la colonne n'apparaît dans la charge utile que si la première
+branche a réussi.
+
+| # | Colonne ajoutée | Ce qui l'a prouvée en production |
+|---|---|---|
+| 153 | `archive_document.empreinte` + `.octets` | la reprise du coffre a écrit puis rouvert 1150 lignes (`--verifier`), et l'écran de stockage répond par la branche `octets IS NOT NULL` |
+| 154 | `archive_document.dossier` | `GET /suivi/archives` renvoie la clé `dossier` |
+| 155 | `document_template.parcours_defaut` | `GET /templates` renvoie la clé `parcours_defaut` — c'est la tête de cascade |
+| 157 | `generated_document.scope` = `…,'SESSION'` | un document de session a été créé le 2026-09-16 : sans la migration, l'ENUM aurait refusé l'INSERT |
+
+⚠️ **156 (`quiz.parcours_defaut`) n'a PAS pu être vérifiée par l'API** : aucune réponse ne porte
+la colonne — le parcours la CONSOMME (`active: q.parcours_defaut !== 0`) sans la renvoyer, et la
+liste des QCM ne la demande jamais. L'utilisateur a rapporté l'avoir jouée. Pour lever le doute,
+une seule requête :
+
+```sql
+SELECT COUNT(*) FROM information_schema.COLUMNS
+ WHERE table_schema='impastio' AND table_name='quiz' AND column_name='parcours_defaut';
+```
+
+Si elle rend 0, rejouer `156_qcm_hors_parcours.sql` — c'est sans risque (`ADD COLUMN IF NOT
+EXISTS`), et en attendant un QCM nouvellement créé entre dans TOUS les parcours, ce qui est
+précisément ce que la migration corrige.
 
 **Vérifié le 2026-08-22 contre la base de production** (VPS, 85 tables), colonne par colonne et
 index par index. Les 119 et 120 ont été jouées ce jour-là ; tout le reste l'avait été sur
