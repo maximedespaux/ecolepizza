@@ -459,7 +459,15 @@ const signerMonDocument = async (req, res) => {
 
         const [[doc]] = await conn.query('SELECT * FROM generated_document WHERE id = ? AND organization_id = ?',
             [ligne.doc_id, orgId]);
-        const nom = [req.user.first_name, req.user.last_name].filter(Boolean).join(' ').trim() || 'Intervenant';
+        /* LE NOM VIENT DE LA BASE, PAS DU JETON. Défaut constaté sur un contrat RÉELLEMENT
+           signé en production : la case portait « Intervenant » au lieu de « Maurice PENE ».
+           Le jeton d'authentification ne transporte que `id`, `email`, `role` et
+           `organization_id` — jamais le nom. `req.user.first_name` était donc toujours
+           `undefined`, et le repli s'appliquait à chaque signature.
+           La base est de toute façon la bonne source : un jeton vit sept jours, un nom peut
+           changer entre-temps, et c'est celui du jour de la signature qui doit figurer. */
+        const [[moi]] = await conn.query('SELECT first_name, last_name FROM user WHERE id = ?', [req.user.id]);
+        const nom = [moi && moi.first_name, moi && moi.last_name].filter(Boolean).join(' ').trim() || 'Intervenant';
         /* LE CRÉNEAU VIENT DE LA CASE, pas d'une constante : c'est le modèle qui le nomme
            (`sig:intervenant` sur le contrat d'hygiène), et il peut différer d'un document à
            l'autre. Une constante ici renverrait la signature dans un créneau que le document

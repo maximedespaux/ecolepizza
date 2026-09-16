@@ -270,3 +270,19 @@ test('L\'ORGANISME PEUT SUPPRIMER CE QU\'IL A ENVOYÉ', () => {
     assert.match(EXTERNES, /Ce document est SIGNÉ depuis le \$\{d\.signe_le\}\. La signature sera perdue\./);
     assert.match(EXTERNES, /Cette action est irréversible/);
 });
+
+test('LA SIGNATURE PORTE LE NOM DE L\'INTERVENANT, PAS « Intervenant »', () => {
+    /* DÉFAUT CONSTATÉ SUR UN CONTRAT RÉELLEMENT SIGNÉ en production : `signer_name` valait
+       « Intervenant » au lieu de « Maurice PENE ». Le jeton d'authentification ne transporte que
+       `id`, `email`, `role` et `organization_id` — jamais le nom. `req.user.first_name` était
+       donc TOUJOURS `undefined`, et le repli s'appliquait à chaque signature : le nom générique
+       se retrouvait imprimé sur le contrat, à la place de celui qui l'a signé.
+
+       LA BASE EST DE TOUTE FAÇON LA BONNE SOURCE : un jeton vit sept jours, un nom peut changer
+       entre-temps, et c'est celui du jour de la signature qui doit figurer. */
+    const zone = INTERV.slice(INTERV.indexOf('const signerMonDocument'));
+    assert.match(zone, /SELECT first_name, last_name FROM user WHERE id = \?/);
+    assert.ok(!/req\.user\.first_name/.test(zone),
+        'le jeton ne porte pas le nom : le lire là donne `undefined` à tous les coups');
+    assert.match(zone, /\|\| 'Intervenant'/, 'le repli reste, pour un compte sans nom saisi');
+});
