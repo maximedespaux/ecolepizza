@@ -307,8 +307,8 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal wide">
         <div className="mhead">
           <h3>{isNew ? "Nouvelle formation" : <>Modifier, <span className="mono" style={{ color: effColor }}>{program.code}</span></>}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>

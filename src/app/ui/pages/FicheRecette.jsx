@@ -248,8 +248,8 @@ function IngredientSearchModal({ onClose, onAdd, added }) {
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   return createPortal(
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 760 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 760 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>Catalogue d'ingrédients</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
@@ -337,8 +337,8 @@ function ComponentPickerModal({ onClose, onAdd, added, excludeId }) {
   }, [q, excludeId]);
   const kindLbl = (k) => (k === "PATE" ? "Empâtement" : "Garniture");
   return createPortal(
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 560 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>Importer une fiche technique</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>

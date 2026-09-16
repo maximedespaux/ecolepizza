@@ -274,8 +274,8 @@ function FacturerModal({ d, busy, onClose, onValider }) {
    * inatteignable : rien ne défilait, ni la page ni la modale.
    * `document.body` n'a aucun ancêtre transformé : le `fixed` retrouve la fenêtre. */
   return createPortal(
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 460 }}>
         <div className="mhead">
           <h3>Facturer la demande {d.ref}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>

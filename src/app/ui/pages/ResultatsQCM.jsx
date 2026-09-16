@@ -408,8 +408,8 @@ function ResultatsQCM() {
 function PreuveModal({ etat, onClose }) {
   const p = etat.preuve;
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760 }}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 760 }}>
         <div className="mhead">
           <h3>Preuve de réponse{etat.name ? ` — ${etat.name}` : ""}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>

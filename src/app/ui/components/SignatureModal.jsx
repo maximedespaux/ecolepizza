@@ -70,8 +70,8 @@ function SignatureModal({ doc, defaultName = "", onConfirm, onClose }) {
   }
 
   return createPortal(
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal">
         <div className="mhead">
           <h3 style={{ fontSize: 17 }}>Signer, {doc.label}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>

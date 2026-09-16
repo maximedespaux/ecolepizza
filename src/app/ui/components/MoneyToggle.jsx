@@ -45,8 +45,8 @@ export default function MoneyToggle({ sm = false }) {
       </button>
 
       {confirm && createPortal(
-        <div className="overlay" onClick={() => setConfirm(false)}>
-          <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+        <div className="overlay">
+          <div className="modal" style={{ maxWidth: 440 }}>
             <div className="mhead">
               <h3>Afficher les montants ?</h3>
               <button className="x" onClick={() => setConfirm(false)} aria-label="Fermer"><Icon name="x" size={16} /></button>

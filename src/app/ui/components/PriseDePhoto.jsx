@@ -87,8 +87,8 @@ export default function PriseDePhoto({ onPhoto, onClose }) {
   const fermer = () => { arreter(); onClose(); };
 
   return createPortal(
-    <div className="overlay" onClick={fermer}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 560 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>Prendre une photo</h3>
           <button className="x" onClick={fermer} aria-label="Fermer"><Icon name="x" size={16} /></button>

@@ -31,8 +31,8 @@ import { TRACEURS, NATURES, TOUT_EXEMPTE, TRANSMISSIONS } from "../lib/traceurs.
 function PourquoiPasDeBanniere({ onClose }) {
   useEchap(onClose);
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 470 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 470 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>Pourquoi aucune bannière ?</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>

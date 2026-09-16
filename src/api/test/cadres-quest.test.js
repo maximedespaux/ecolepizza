@@ -775,8 +775,12 @@ test('les jeux de l\'arcade ne jettent plus les étoiles gagnées', () => {
     for (const [f, re] of Object.entries(attendus)) {
         const src = fs.readFileSync(path.join(APP_UI, f), 'utf8');
         assert.match(src, re, `${f} : la sortie doit valider une fois qu'un score existe`);
-        // Les TROIS sorties, pas seulement la croix : le voile et Échap ferment aussi.
-        assert.match(src, /className="overlay" onClick=\{fermer\}/, `${f} : le voile aussi`);
+        /* TOUTES LES SORTIES, pas seulement la croix. Elles étaient trois ; le VOILE n'en est
+           plus une depuis le 2026-09-16 — aucune fenêtre de l'application ne se ferme sur un
+           clic à côté, parce qu'un geste qui ne demandait rien ne doit pas jeter ce qu'on
+           vient de faire. Ce que ce test protège est inchangé : AUCUNE sortie ne perd le
+           score. Il en reste deux, et toutes deux passent par `fermer`. */
+        assert.ok(!/className="overlay" onClick/.test(src), `${f} : le voile ne ferme plus`);
         assert.match(src, /className="x" onClick=\{fermer\}/, `${f} : la croix aussi`);
         assert.match(src, /useEchap\(fermer\)/, `${f} : Échap aussi`);
         /* ET LE HOOK DOIT ÊTRE IMPORTÉ. Le simulateur ne l'avait jamais eu : ajouter l'appel sans

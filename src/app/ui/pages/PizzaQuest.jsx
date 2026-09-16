@@ -308,8 +308,8 @@ function PizzaQuest() {
                 <Icon name="trash" size={13} /> Debug : tout effacer
               </button>
               {razOuverte && createPortal(
-                <div className="overlay" onClick={() => setRazOuverte(false)}>
-                  <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+                <div className="overlay">
+                  <div className="modal" style={{ maxWidth: 460 }}>
                     <div className="mhead">
                       <h3>Effacer toute ta progression ?</h3>
                       <button className="x" onClick={() => setRazOuverte(false)} aria-label="Fermer">
@@ -403,7 +403,7 @@ function FetePalier({ palier, monde, onClose }) {
   if (!f) return null;
   return (
     <div className="overlay pq-fete-fond" onClick={onClose}>
-      <div className="modal pq-fete" style={{ maxWidth: 400, "--fc": couleur }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal pq-fete" style={{ maxWidth: 400, "--fc": couleur }}>
         <div className="mbody" style={{ textAlign: "center", padding: "30px 24px 24px" }}>
           {/* Les éclats partent DE DERRIÈRE le cadre : ils sont posés avant lui dans le flux et
               en `position:absolute`, de sorte que l'anneau reste net au premier plan. */}
@@ -1050,8 +1050,8 @@ function QuizModal({ world, data, onClose, onFinish, onRetry }) {
   const answerLabel = type === "vf" ? (q.a ? "Vrai" : "Faux") : type === "qcm" ? q.c[q.a] : "";
 
   return (
-    <div className="overlay" onClick={() => onClose(!done)}>
-      <div className="modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 480 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
             <span className="pq-world-dot" style={{ background: world.color, width: 24, height: 24, fontSize: 11 }}>{world.code}</span>

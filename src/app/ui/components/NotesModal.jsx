@@ -35,8 +35,8 @@ function NotesModal({ enrollmentId, name, onClose }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal">
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>Notes de suivi, {name}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>

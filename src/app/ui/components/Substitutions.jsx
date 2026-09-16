@@ -129,8 +129,8 @@ export default function Substitutions({ onClose, onFinish }) {
   }
 
   return (
-    <div className="overlay" onClick={fermer}>
-      <div className="modal sim" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal sim">
         <div className="mhead">
           <h3><Icon name="calculator" size={18} /> La substitution</h3>
           {!fini && <span className="sim-manche-n chiffres">Problème {manche + 1}/{MANCHES}</span>}

@@ -384,8 +384,8 @@ export default function CommandePiege({ onClose, onFinish }) {
   useEchap(fermer);
 
   return (
-    <div className="overlay" onClick={fermer}>
-      <div className="modal cp-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal cp-modal">
         <div className="mhead">
           <h3 style={{ fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
             <Icon name="shield" size={17} /> La commande piège

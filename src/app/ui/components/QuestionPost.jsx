@@ -209,8 +209,8 @@ export function QuestionModal({ id, moi, cadreDe, onClose, onProfil, onChange })
 
   return createPortal(
     <div className="stu-app stu-app-nu">
-      <div className="overlay" onClick={onClose}>
-        <div className="modal" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
+      <div className="overlay">
+        <div className="modal" style={{ maxWidth: 620 }}>
           <div className="mhead">
             <h3 style={{ fontSize: 16, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
               <span className={"comm-kind " + (p?.kind === "ANNONCE" ? "k-annonce" : "k-question")} style={{ flex: "none" }}>
@@ -391,8 +391,8 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
 
   return createPortal(
     <div className="stu-app stu-app-nu">
-      <div className="overlay" onClick={onClose}>
-        <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+      <div className="overlay">
+        <div className="modal" style={{ maxWidth: 560 }}>
           <div className="mhead">
             <h3 style={{ fontSize: 16 }}>{annonce ? "Publier une annonce de l'école" : "Poser une question"}</h3>
             <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>

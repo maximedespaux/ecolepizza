@@ -321,8 +321,8 @@ function InfoRow({ label, value }) {
 function FormationInfoModal({ f, onClose }) {
   const color = f.color || colorOf(f.program_code);
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal wide">
         <div className="mhead">
           <h3 style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className="badge n mono" style={{ background: color, color: "#fff", borderColor: "transparent" }}>{f.program_code}</span>

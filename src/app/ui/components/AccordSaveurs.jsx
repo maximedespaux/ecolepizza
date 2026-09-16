@@ -101,8 +101,8 @@ export default function AccordSaveurs({ onClose, onFinish }) {
      on le DIT au lieu d'afficher une modale vide. */
   if (!total) {
     return (
-      <div className="overlay" onClick={onClose}>
-        <div className="modal sim" onClick={(e) => e.stopPropagation()}>
+      <div className="overlay">
+        <div className="modal sim">
           <div className="mhead"><h3><Icon name="heart" size={18} /> L'accord des saveurs</h3>
             <button className="x" onClick={onClose} aria-label="Fermer">×</button></div>
           <div className="mbody"><p className="hint">Aucune question ne peut être composée avec le
@@ -113,8 +113,8 @@ export default function AccordSaveurs({ onClose, onFinish }) {
   }
 
   return (
-    <div className="overlay" onClick={fermer}>
-      <div className="modal sim" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal sim">
         <div className="mhead">
           <h3><Icon name="heart" size={18} /> L'accord des saveurs</h3>
           {!fini && <span className="sim-manche-n chiffres">Question {idx + 1}/{total}</span>}

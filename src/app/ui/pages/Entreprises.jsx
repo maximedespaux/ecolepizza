@@ -149,8 +149,8 @@ function CreateCompanyModal({ onClose, onCreated, onError }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal">
         <div className="mhead"><h3>Nouvelle entreprise</h3><button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button></div>
         <div className="mbody">
           <div className="field"><label>Nom de l'entreprise<Requis /></label><input className="inp" value={f.name} onChange={set("name")} placeholder="SARL Le Petit Four" autoFocus /></div>

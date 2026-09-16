@@ -58,8 +58,8 @@ export default function IntroGuide({ open, onClose, page }) {
        et le retour tactile — sur le TOUT PREMIER écran d'un nouveau stagiaire. `stu-app-nu`
        coupe le halo, qui serait sinon peint une seconde fois par-dessus le voile. */
     <div className="stu-app stu-app-nu">
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 560 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 17, display: "flex", alignItems: "center", gap: 9 }}>
             <Icon name={tool ? tool.icon : "book-open"} size={18} /> {tool ? `${tool.title}, comment ça marche ?` : "Comment ça marche ?"}

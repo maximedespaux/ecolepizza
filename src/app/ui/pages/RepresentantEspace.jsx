@@ -117,8 +117,8 @@ function RepresentantEspace() {
       </Card>
 
       {preview && (
-        <div className="overlay" onClick={() => setPreview(null)}>
-          <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+        <div className="overlay">
+          <div className="modal wide">
             <div className="mhead"><h3 style={{ fontSize: 17 }}>{preview.title}</h3><button className="x" onClick={() => setPreview(null)} aria-label="Fermer">×</button></div>
             <div className="mbody"><div style={{ background: "#fff", padding: 16, borderRadius: 8 }} dangerouslySetInnerHTML={{ __html: preview.html }} /></div>
           </div>

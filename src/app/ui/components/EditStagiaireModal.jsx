@@ -166,8 +166,8 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   const codes = [...new Set([...formations.map((f) => f.code).filter(Boolean), ...current])];
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal wide">
         <div className="mhead">
           <h3>{id ? "Modifier le stagiaire" : "Nouveau stagiaire"}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
