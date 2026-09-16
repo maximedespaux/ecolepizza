@@ -280,7 +280,15 @@ function ChampNote({ ex, note, brouillon, occupe, onBrouillon, onNoter }) {
     const secondes = lireDuree(saisi);
     return (
       <>
-        <input className="inp" style={{ width: 96 }} value={saisi} placeholder="1:30" inputMode="numeric"
+        {/* PAS `inputMode="numeric"` — le pavé numérique d'un téléphone N'A PAS de deux-points.
+            Le champ accepte pourtant « 12:33 », « 12'33 » et « 12m33 » : aucun de ces trois
+            séparateurs n'était atteignable au doigt, et la notation se fait justement sur le
+            terrain, au téléphone, chronomètre en main. Signalé le 2026-09-16.
+            `text` ouvre un clavier complet, où le deux-points est à une bascule « 123 ».
+            On a écarté `decimal`, qui garderait le pavé chiffré en ajoutant un séparateur
+            décimal : « 12.5 » se lirait alors 12 min 05 s alors que tout le monde comprend
+            12 min 30 s. Un raccourci qui ment à moitié est pire que deux taps de plus. */}
+        <input className="inp" style={{ width: 96 }} value={saisi} placeholder="1:30" inputMode="text"
           onChange={(e) => onBrouillon(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
           onBlur={() => {
@@ -290,8 +298,11 @@ function ChampNote({ ex, note, brouillon, occupe, onBrouillon, onNoter }) {
             if (String(secondes) !== String(valeur)) onNoter(secondes);
           }}
           disabled={occupe} />
-        <span className="hint" style={{ margin: 0, minWidth: 82, fontSize: 12 }}>
-          {saisi.trim() === "" ? "min:s" : secondes === null ? "durée illisible" : `= ${dureeLisible(secondes)}`}
+        {/* L'AIDE DIT LES DEUX CHEMINS. Un nombre nu vaut des SECONDES et n'a jamais eu besoin
+            du deux-points : « 753 » note la même chose que « 12:33 ». Personne ne pouvait le
+            deviner tant que l'aide n'annonçait que « min:s ». */}
+        <span className="hint" style={{ margin: 0, minWidth: 96, fontSize: 12 }}>
+          {saisi.trim() === "" ? "min:s — ou des secondes" : secondes === null ? "durée illisible" : `= ${dureeLisible(secondes)}`}
         </span>
         {marque}
       </>
