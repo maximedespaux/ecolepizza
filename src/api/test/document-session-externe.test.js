@@ -74,8 +74,8 @@ test('LA CASE EST CRÉÉE VIDE ET ATTRIBUÉE — c\'est le rail dormant qu\'on b
        regardait que la liste des COLONNES, et restait verte quand on passait NULL à la place de
        `userId` — le document serait alors parti sans destinataire, invisible dans tous les
        espaces. Nommer une colonne ne dit rien de ce qu'on y met. */
-    assert.match(SESSION_CTRL, /\[crypto\.randomUUID\(\), orgId, docId, SLOT, 'Intervenant externe', userId\]/,
-        'la case doit porter l\'identifiant de l\'intervenant, pas NULL');
+    assert.match(SESSION_CTRL, /\[crypto\.randomUUID\(\), orgId, docId, await creneauDuModele\(orgId, slug\), 'Intervenant externe', userId\]/,
+        'la case doit porter l\'identifiant de l\'intervenant, pas NULL — et le créneau du MODÈLE');
     /* `signed_at` reste NULL : c'est ce qui distingue « en attente » de « signé », et c'est
        cette ligne que l'espace de l'intervenant lit. */
     assert.ok(!/signed_at = NOW\(\)/.test(SESSION_CTRL.slice(SESSION_CTRL.indexOf('INSERT INTO document_signature'))),
@@ -217,4 +217,56 @@ test('L\'URL DU PDF EST LIBÉRÉE, MAIS PAS TOUT DE SUITE', () => {
 test('LE NOM DE FICHIER NE PEUT PAS CASSER L\'ENREGISTREMENT', () => {
     // Un titre de modèle est saisi à la main : il peut contenir « / » ou « : ».
     assert.match(BOUTONS, /replace\(\/\[\\\\\/:\*\?"<>\|\]\/g, ""\)/);
+});
+
+test('LE CRÉNEAU VIENT DU MODÈLE, PAS D\'UNE CONSTANTE', async () => {
+    /* DÉFAUT SIGNALÉ, et il rendait la fonctionnalité inutile : le modèle « Contrat Hygiène »
+       place une case `{sig:intervenant}` — c'est l'école qui a choisi ce nom dans l'éditeur. Le
+       code écrivait « externe ». La signature atterrissait donc dans un créneau que le document
+       n'affiche nulle part : l'intervenant signait, et la case restait vide. D'où « les jetons
+       ne marchent pas, sauf la signature de l'organisme ». */
+    const { creneauDuModele, SLOT_DEFAUT } = require('../controllers/documentSession.controller.js');
+    assert.strictEqual(typeof creneauDuModele, 'function');
+    assert.strictEqual(SLOT_DEFAUT, 'externe', 'le repli ne sert qu\'aux modèles sans case');
+    assert.match(SESSION_CTRL, /data-token="sig:\(\[\^"\]\+\)"/,
+        'la puce de l\'éditeur, telle qu\'elle est enregistrée');
+    assert.match(SESSION_CTRL, /\\\{\\s\*sig:/, 'et la forme brute, au cas où');
+
+    /* ET LA LISTE NE CHERCHE PLUS UN NOM EN DUR : elle suit la case ATTRIBUÉE. Sinon un
+       document signé dans le créneau du modèle serait affiché « en attente » pour toujours. */
+    assert.match(SESSION_CTRL, /ds\.document_id = d\.id AND ds\.user_id IS NOT NULL/);
+
+    /* Côté intervenant aussi : le créneau vient de SA case. */
+    assert.match(INTERV, /slot: ligne\.slot \|\| SLOT_EXTERNE/);
+    assert.match(INTERV, /\[req\.user\.id, ligne\.doc_id, ligne\.slot \|\| SLOT_EXTERNE\]/);
+    assert.match(INTERV, /SELECT ds\.id, ds\.slot, ds\.signed_at/, 'il faut donc le LIRE');
+});
+
+test('LES JETONS DE SESSION SE REMPLISSENT SANS STAGIAIRE', () => {
+    /* L'AUTRE MOITIÉ DU DÉFAUT. Le contexte d'un document se construit depuis
+       `document_formation`, donc depuis les INSCRIPTIONS. Un document de session n'en a aucune :
+       `formations` restait vide et TOUS les jetons de session — {Mardi}, {Jeudi}, {Semaine},
+       {Formateur} — rendaient du vide. Seuls tenaient ceux de l'organisme, qui ne dépendent de
+       personne : d'où « rien ne marche sauf la signature organisme ». */
+    assert.match(DOC_CTRL, /if \(!formations\.length && documentId\) \{/);
+    assert.match(DOC_CTRL, /SELECT session_id FROM generated_document WHERE id = \?/);
+    assert.match(DOC_CTRL, /FROM training_session s\s*\n\s*LEFT JOIN training_program p ON p\.id = s\.program_id\s*\n\s*WHERE s\.id = \? AND s\.organization_id = \?/,
+        'et la session est lue DANS l\'organisme : jamais celle d\'un autre');
+    /* NI FINANCEMENT, NI PRIX, NI ENTREPRISE : un contrat d'hygiène n'appartient à aucun
+       dossier. Inventer des valeurs de dossier serait pire que de les laisser vides. */
+    assert.match(DOC_CTRL, /NULL AS financing, NULL AS enroll_price, NULL AS acompte, NULL AS company_id/);
+});
+
+test('L\'ORGANISME PEUT SUPPRIMER CE QU\'IL A ENVOYÉ', () => {
+    /* On se trompe de modèle, on se trompe d'intervenant. Sans ce geste, le document restait là
+       pour toujours et la carte accumulait des lignes qu'on ne savait plus lire.
+       CÔTÉ ORGANISME SEULEMENT — l'intervenant n'efface pas ce qu'on lui demande de signer. */
+    assert.match(EXTERNES, /await deleteDocument\(d\.id\)/);
+    assert.match(EXTERNES, /\{isAdmin && \(\s*\n\s*<button type="button" className="iconbtn del"/);
+    assert.ok(!/deleteDocument/.test(ESPACE), 'aucune suppression dans l\'espace intervenant');
+
+    /* LA CONFIRMATION NOMME LE DOCUMENT ET SON ÉTAT : effacer un contrat DÉJÀ SIGNÉ n'est pas le
+       même geste qu'annuler un envoi de la minute d'avant. La phrase doit le dire AVANT. */
+    assert.match(EXTERNES, /Ce document est SIGNÉ depuis le \$\{d\.signe_le\}\. La signature sera perdue\./);
+    assert.match(EXTERNES, /Cette action est irréversible/);
 });

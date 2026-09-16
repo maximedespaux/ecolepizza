@@ -4,7 +4,7 @@ import Badge from "./Badge.jsx";
 import EmptyState from "./EmptyState.jsx";
 import { Icon } from "./Icon.jsx";
 import BoutonsDocument from "./BoutonsDocument.jsx";
-import { getDocumentsSession, envoyerDocumentSession } from "../api/apiClient.js";
+import { getDocumentsSession, envoyerDocumentSession, deleteDocument } from "../api/apiClient.js";
 
 /**
  * DOCUMENTS DE LA SESSION SIGNÉS PAR UN INTERVENANT EXTERNE — contrat d'hygiène, convention
@@ -35,6 +35,22 @@ function DocumentsExternes({ sessionId, isAdmin, onStatus }) {
   const charger = () => getDocumentsSession(sessionId)
     .then((r) => setData(r.data)).catch(() => setData(null));
   useEffect(() => { charger(); }, [sessionId]);
+
+  /* SUPPRIMER CE QU'ON A ENVOYÉ — côté organisme seulement. On se trompe de modèle, on se
+     trompe d'intervenant : sans ce geste, le document restait là pour toujours, et l'écran
+     accumulait des lignes qu'on ne savait plus lire.
+     LA CONFIRMATION NOMME LE DOCUMENT ET SON ÉTAT : effacer un contrat DÉJÀ SIGNÉ n'est pas le
+     même geste qu'annuler un envoi de la minute d'avant, et la phrase doit le dire avant, pas
+     le regretter après. */
+  async function supprimer(d) {
+    const signe = d.signe_le ? `\n\nCe document est SIGNÉ depuis le ${d.signe_le}. La signature sera perdue.` : "";
+    if (!window.confirm(`Supprimer « ${d.title} » ?${signe}\n\nCette action est irréversible.`)) return;
+    try {
+      await deleteDocument(d.id);
+      onStatus?.({ type: "success", message: "Document supprimé." });
+      charger();
+    } catch (e) { onStatus?.({ type: "error", message: e.message }); }
+  }
 
   async function envoyer() {
     if (!modele || !qui) return;
@@ -108,6 +124,12 @@ function DocumentsExternes({ sessionId, isAdmin, onStatus }) {
               </span>
               {d.signe_le ? <Badge tone="g">Signé</Badge> : <Badge tone="a">En attente</Badge>}
               <BoutonsDocument id={d.id} nom={d.title} />
+              {isAdmin && (
+                <button type="button" className="iconbtn del" title="Supprimer ce document"
+                  aria-label={`Supprimer ${d.title}`} onClick={() => supprimer(d)}>
+                  <Icon name="trash" size={15} />
+                </button>
+              )}
             </div>
           ))}
         </div>
