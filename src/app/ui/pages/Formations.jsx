@@ -547,6 +547,9 @@ function stepBadge(s) {
      aucun sens ici. Le badge dit combien de fichiers sont attendus — c'est l'information qui
      manque le plus au stagiaire (« recto ET verso » se lit dans « 2 fichiers »). */
   if (s.doc_type === "PIECE") return s.fichiers_attendus > 1 ? `${s.fichiers_attendus} fichiers` : "à fournir";
+  /* Une remise ne se signe pas davantage : elle se dépose puis s'ACCUSE. Le badge dit le geste
+     attendu du stagiaire, qui n'est ni signer ni fournir. */
+  if (s.doc_type === "REMISE") return "à remettre";
   const a = s.applies_when || {};
   if (a.financing) return a.financing === "PROFESSIONNEL" ? "Pro" : "Particulier";
   if (a.rs === true) return "Certifiante";
@@ -705,19 +708,26 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
            « Ajouter une étape », comme étapes à part entière. */
         const pool = jalon
           ? steps.filter((s) => !s.quiz_id && !s.company_level && s.doc_type !== "EMARGEMENT"
-              && s.doc_type !== "PIECE" && !jalon.steps.some((x) => x.slug === s.slug))
+              && s.doc_type !== "PIECE" && s.doc_type !== "REMISE"
+              && !jalon.steps.some((x) => x.slug === s.slug))
           : available;
         const t = chercheDoc.trim().toLowerCase();
         const filtre = (l) => (!t ? l : l.filter((s) =>
           [s.label, s.doc_type, s.slug].some((v) => String(v || "").toLowerCase().includes(t))));
         const isQuiz = (s) => s.doc_type === "QCM" || !!s.quiz_id;
-        // TROIS natures d'étape, donc trois groupes. Ranger une pièce à fournir parmi les
-        // « Documents » tromperait : ceux-là, l'école les produit ; celle-ci, le stagiaire
-        // l'envoie. C'est le sens qui change, pas seulement l'étiquette.
+        /* QUATRE natures d'étape, donc quatre groupes. Ranger une pièce à fournir parmi les
+           « Documents » tromperait : ceux-là, l'école les PRODUIT ; celle-ci, le stagiaire
+           l'envoie. Une REMISE (migration 160) n'y a pas sa place non plus, et pour une raison
+           voisine : l'école la transmet sans l'avoir produite, et c'est le stagiaire qui en
+           accuse réception. Elle s'y est retrouvée le temps d'un déploiement — « OPCO » apparut
+           entre « Diplôme » et « Facture Boutique Stagiaire », trois natures confondues sous une
+           seule étiquette. C'est le SENS qui change, pas seulement le mot. */
         const isPiece = (s) => s.doc_type === "PIECE";
-        const docs = filtre(pool.filter((s) => !isQuiz(s) && !isPiece(s)));
+        const isRemise = (s) => s.doc_type === "REMISE";
+        const docs = filtre(pool.filter((s) => !isQuiz(s) && !isPiece(s) && !isRemise(s)));
         const quizzes = filtre(pool.filter(isQuiz));
         const pieces = filtre(pool.filter(isPiece));
+        const remises = filtre(pool.filter(isRemise));
         /* Le panneau ne se referme QUE si l'ajout a abouti. Il se fermait d'office, si bien
            qu'un refus faisait disparaître la surface où le motif devait s'afficher : on voyait
            le panneau se fermer et rien d'autre — d'où « je ne peux pas, sans savoir pourquoi ».
@@ -810,6 +820,18 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                     {pieces.length === 0
                       ? <div className="pf-add-empty">Aucune pièce au référentiel. Elles se créent dans Paramètres → Pièces justificatives.</div>
                       : <div className="pf-add-grid">{pieces.map(item)}</div>}
+                  </>
+                )}
+                {/* Une remise n'a pas de « OU » non plus : c'est une étape à part entière,
+                    proposée en ajout libre seulement. */}
+                {!jalon && (
+                  <>
+                    <div className="pf-add-title" style={{ marginTop: 12 }}>
+                      Documents remis au stagiaire{remises.length ? ` (${remises.length})` : ""}
+                    </div>
+                    {remises.length === 0
+                      ? <div className="pf-add-empty">Aucune remise au référentiel. Elles se créent dans Modèles de documents.</div>
+                      : <div className="pf-add-grid">{remises.map(item)}</div>}
                   </>
                 )}
                 {!jalon && (

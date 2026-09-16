@@ -186,3 +186,22 @@ test('sans la 161, les remises restent visibles', () => {
     assert.match(bloc, /const requete = \(col\) =>/, 'la requête est paramétrée…');
     assert.match(bloc, /catch \(e\) \{[\s\S]{0,200}requete\('0'\)/, '…et relue sans la colonne');
 });
+
+test('l\'éditeur de parcours range les QUATRE natures à part', () => {
+    /* DÉFAUT VU EN PRODUCTION le 2026-09-16, sur un type « OPCO » que l'école venait de créer :
+       il apparaissait dans le groupe « Documents », entre « Diplôme » et « Facture Boutique
+       Stagiaire ». Le fichier se gardait pourtant de la même confusion pour les pièces, en
+       toutes lettres — « ceux-là, l'école les produit ; celle-ci, le stagiaire l'envoie ». Une
+       remise ne s'y range pas davantage : l'école la transmet SANS l'avoir produite, et c'est
+       le stagiaire qui en accuse réception. Trois sens différents sous une seule étiquette. */
+    const F = readFileSync(path.join(__dirname, '../../app/ui/pages/Formations.jsx'), 'utf8');
+    assert.match(F, /const isRemise = \(s\) => s\.doc_type === "REMISE";/);
+    assert.match(F, /const docs = filtre\(pool\.filter\(\(s\) => !isQuiz\(s\) && !isPiece\(s\) && !isRemise\(s\)\)\);/,
+        'les remises sortent du groupe « Documents »');
+    assert.match(F, /Documents remis au stagiaire\{remises\.length/, 'et ont leur propre groupe');
+    /* Pas de « OU » sur une remise, même règle que les pièces : c'est une étape à part entière,
+       pas la variante de quelque chose. */
+    assert.match(F, /s\.doc_type !== "PIECE" && s\.doc_type !== "REMISE"/);
+    // Son badge dit le geste attendu, qui n'est ni signer ni fournir.
+    assert.match(F, /if \(s\.doc_type === "REMISE"\) return "à remettre";/);
+});
