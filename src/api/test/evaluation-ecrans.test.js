@@ -27,7 +27,11 @@ test('LE FORMATEUR ATTEINT LA SAISIE — elle n\'est pas réservée au bureau', 
        l'entrée de menu. Les régler sur ADMIN ou SUIVI « pour faire propre avec les voisines »
        retirerait l'écran de notation à la seule personne qui note.
        Le serveur, lui, décide seul du droit d'ÉCRIRE (STAFF_ROLES). */
-    assert.match(NOTATION, /<SessionEvaluation key=\{choisie\} sessionId=\{choisie\} \/>/,
+    /* La saisie n'est plus montée pour UNE session choisie mais pour CHAQUE formation de la
+       semaine (une carte chacune) : l'école installe ses épreuves une fois et note tout le
+       monde, formations mêlées. Ce qui reste gelé est ce qui compte — la saisie vit bien dans
+       Notation, et non sur la page de la session où elle était réservée au bureau. */
+    assert.match(NOTATION, /<SessionEvaluation key=\{session\.id\} sessionId=\{session\.id\} \/>/,
         'la saisie doit être montée dans la page Notation');
     assert.match(MAIN, /path="notation"[^\n]*roles=\{STAFF\}/,
         'la route /notation doit être ouverte au STAFF, formateur compris');
@@ -44,11 +48,16 @@ test('LA SESSION NE PORTE PLUS LA SAISIE — elle était noyée', () => {
         'la page de la session ne doit plus monter l\'écran de saisie');
 });
 
-test('CHANGER DE SESSION REMONTE L\'ÉCRAN DE SAISIE', () => {
+test('CHANGER DE SEMAINE REMONTE LES ÉCRANS DE SAISIE', () => {
     /* Sans `key`, les notes du groupe précédent resteraient affichées le temps du chargement —
        et une coche à cet instant partirait sur le mauvais dossier. Le même défaut, et la même
-       parade, que la bascule formateur/jury dans l'éditeur de grille. */
-    assert.match(NOTATION, /<SessionEvaluation key=\{choisie\}/);
+       parade, que la bascule formateur/jury dans l'éditeur de grille.
+       Le repère a suivi le passage à la semaine : la grille est identifiée par SA session, et
+       chaque carte porte la sienne. */
+    assert.match(NOTATION, /<SessionEvaluation key=\{session\.id\}/);
+    /* ET LA GRILLE N'EST MONTÉE QUE DÉPLIÉE : une carte refermée ne doit plus interroger le
+       serveur, sinon « repliable » ne servirait qu'à cacher du travail déjà fait. */
+    assert.match(NOTATION, /\{ouvert && <SessionEvaluation/);
 });
 
 test('LA SAISIE ENVOIE LA MESURE, jamais des points', () => {

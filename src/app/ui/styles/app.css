@@ -2556,6 +2556,29 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .arch-doc{display:flex;align-items:center;gap:10px;padding:6px 4px}
 .arch-doc+.arch-doc{border-top:1px solid var(--border-soft)}
 
+/* ─── Sélecteur de session : semaine → formation (Notation, Pipeline) ───────────────────────
+   `<details>` NATIF : il se ferme à Échap et se parcourt au clavier sans une ligne de script.
+   Le corps est en `absolute` pour SURVOLER la page au lieu de la pousser — un arbre qui
+   déplace tout le contenu à l'ouverture fait perdre la ligne qu'on regardait. */
+.sess-pick{position:relative;display:inline-block;min-width:260px}
+.sess-pick-tete{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;
+  font-size:13px;padding:7px 10px}
+.sess-pick-tete::-webkit-details-marker{display:none}
+.sess-pick[open] .sess-pick-tete{border-color:var(--ember1)}
+.sess-pick-corps{position:absolute;z-index:40;top:calc(100% + 4px);left:0;min-width:340px;
+  max-width:min(460px,92vw);max-height:60vh;overflow:auto;padding:6px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
+  box-shadow:var(--shadow-2,var(--shadow-1))}
+.sess-pick-item{display:flex;align-items:center;gap:9px;width:100%;padding:7px 8px;cursor:pointer;
+  font:inherit;color:var(--text);background:none;border:0;border-radius:var(--r-sm);text-align:left}
+.sess-pick-item:hover{background:var(--bg2)}
+.sess-pick-item.on{background:color-mix(in srgb,var(--ember1) 12%,transparent)}
+@media (max-width:640px){
+  /* Sur un téléphone, la fenêtre flottante déborderait : elle prend la largeur disponible. */
+  .sess-pick{display:block;min-width:0;width:100%}
+  .sess-pick-corps{min-width:0;width:100%}
+}
+
 /* Table de sélection des formations (préparation de document) */
 .enroll-table tbody tr:hover{background:var(--surface2)}
 .enroll-table tbody tr.on{background:var(--blue-bg)}

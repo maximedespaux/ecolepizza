@@ -10,8 +10,10 @@ import DataTable from "../components/DataTable.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import ProgressPct from "../components/ProgressPct.jsx";
 import SessionEvaluation from "../components/SessionEvaluation.jsx";
+import SelecteurSemaine from "../components/SelecteurSemaine.jsx";
 import { getSessionsANoter, getNotationSession } from "../api/apiClient.js";
-import { initials, dateHeure } from "../lib/format.js";
+import { initials, colorOf } from "../lib/format.js";
+import { grouperParSemaine, semaineParDefaut } from "../lib/sessions.js";
 
 /**
  * NOTATION — noter, puis lire ce que ça donne.
@@ -30,6 +32,26 @@ import { initials, dateHeure } from "../lib/format.js";
  * LA SESSION SE CHOISIT EN HAUT, UNE FOIS, et vaut pour les deux sections : on note un groupe
  * puis on regarde ses résultats — reposer la question entre les deux serait du travail en plus
  * pour rien.
+ *
+ * ON CHOISIT UNE SEMAINE, PAS UNE SESSION — et c'est le geste réel de l'école. Les épreuves
+ * s'installent une fois et tout le monde passe, que les stagiaires suivent la même formation ou
+ * non. Faire désigner une session revenait à faire cliquer pour dire ce que la semaine
+ * détermine déjà, puis à recommencer pour la formation d'à côté. Toutes les formations de la
+ * semaine sont donc à l'écran, séparées par leur badge, sans un clic de plus.
+ *
+ * L'ÉCRAN S'OUVRE SUR LA SEMAINE EN COURS — ou la prochaine qui a des sessions. Il s'ouvrait
+ * avant sur « la plus récente » au sens du serveur, qui trie par date décroissante : donc sur
+ * la plus LOINTAINE dans le futur. Mesuré le 2026-09-16 : une session de novembre, un jour de
+ * semaine 38. On vient noter ce qu'on enseigne.
+ *
+ * MÊMES COULEURS DE FORMATION que le coffre documentaire et le suivi Qualiopi : une couleur
+ * veut dire la même chose partout dans l'application.
+ *
+ * NOTE SE RÉPÈTE PAR FORMATION, RÉSULTAT NON — et ce n'est pas une inconséquence. On SAISIT par
+ * groupe : le formateur a une promotion devant lui, ses exercices, ses stagiaires. On LIT à
+ * plat : un seul tableau, badge de formation en colonne, qui se trie et se compare d'un bout à
+ * l'autre de la semaine. Deux tableaux de quatre et une lignes feraient beaucoup de cadre pour
+ * peu de contenu, et interdiraient la comparaison qu'on vient justement chercher.
  */
 
 const tonePct = (p) => (p == null ? "n" : p >= 75 ? "g" : p >= 50 ? "a" : "r");
@@ -45,9 +67,40 @@ function Note({ n, titre }) {
   );
 }
 
+/**
+ * UNE FORMATION DE LA SEMAINE, avec sa grille de saisie.
+ *
+ * DÉPLIÉE PAR DÉFAUT : on installe les épreuves une fois et on note tout le monde, formations
+ * mêlées. Un clic de plus par formation serait un clic de trop — c'est la demande même.
+ *
+ * REPLIABLE QUAND MÊME, et la grille n'est MONTÉE que dépliée : chaque grille interroge le
+ * serveur pour elle seule. Aujourd'hui une semaine en porte une ou deux, et tout charger ne
+ * coûte rien ; le jour où elle en portera quatre de douze stagiaires, refermer celles qu'on ne
+ * regarde pas cessera d'être décoratif. Ça ne coûte rien de l'écrire maintenant.
+ */
+function CarteNote({ session }) {
+  const [ouvert, setOuvert] = useState(true);
+  return (
+    <details className="arch" open={ouvert} onToggle={(e) => setOuvert(e.currentTarget.open)}
+      style={{ marginBottom: 14 }}>
+      <summary className="arch-sum arch-y">
+        {session.code && (
+          <span className="badge n mono" style={{ background: colorOf(session.code), color: "#fff", borderColor: "transparent" }}>{session.code}</span>
+        )}
+        {" "}{session.title || "Session"}
+        <span className="arch-count">{session.inscrits} inscrit(s)</span>
+      </summary>
+      {/* `key` : changer de semaine doit REMONTER la grille, sinon les notes du groupe précédent
+          resteraient affichées le temps du chargement — et une coche à cet instant partirait sur
+          le mauvais dossier. */}
+      {ouvert && <SessionEvaluation key={session.id} sessionId={session.id} />}
+    </details>
+  );
+}
+
 function Notation() {
   const [sessions, setSessions] = useState(null);
-  const [choisie, setChoisie] = useState("");
+  const [semaine, setSemaine] = useState("");
   const [vue, setVue] = useState("note");   // "note" | "resultat"
   const [data, setData] = useState(null);
   const [status, setStatus] = useState(null);
@@ -57,27 +110,40 @@ function Notation() {
       .then((r) => {
         const l = r.data || [];
         setSessions(l);
-        if (l.length) setChoisie(l[0].id);
+        setSemaine(semaineParDefaut(grouperParSemaine(l)) || "");
       })
       .catch((e) => { setSessions([]); setStatus({ type: "error", message: e.message }); });
   }, []);
 
+  const semaines = useMemo(() => grouperParSemaine(sessions), [sessions]);
+  const groupe = useMemo(() => semaines.find((g) => g.cle === semaine) || null, [semaines, semaine]);
+  const duGroupe = groupe ? groupe.sessions : [];
+
   /* Les résultats ne sont chargés QUE pour la section qui les montre : ouvrir la page pour
-     noter ne doit pas interroger la moitié de la base au passage. */
+     noter ne doit pas interroger la moitié de la base au passage.
+     UNE REQUÊTE PAR SESSION DE LA SEMAINE, en parallèle : l'API rend les résultats session par
+     session, et une semaine en compte une ou deux. Les fusionner ICI évite d'ajouter une route
+     « par semaine » qui referait le même travail côté serveur. */
   useEffect(() => {
-    if (!choisie || vue !== "resultat") return;
+    if (!semaine || vue !== "resultat" || !duGroupe.length) return;
     let vivant = true;
     setData(null);
-    getNotationSession(choisie)
-      .then((r) => { if (vivant) setData(r.data); })
+    Promise.all(duGroupe.map((s) =>
+      getNotationSession(s.id)
+        .then((r) => ({ session: s, stagiaires: (r.data && r.data.stagiaires) || [] }))
+        .catch(() => ({ session: s, stagiaires: [] }))))
+      .then((lots) => { if (vivant) setData(lots); })
       .catch((e) => { if (vivant) setStatus({ type: "error", message: e.message }); });
     return () => { vivant = false; };
-  }, [choisie, vue]);
+  }, [semaine, vue, duGroupe.length]);
 
-  const stagiaires = data?.stagiaires || [];
-  const sessionChoisie = useMemo(
-    () => (sessions || []).find((s) => s.id === choisie) || null,
-    [sessions, choisie]);
+  /* UN SEUL TABLEAU POUR LA SEMAINE, formation en colonne : on lit à plat ce qu'on a saisi par
+     groupe. Le code de formation voyage avec chaque ligne, sinon deux stagiaires de formations
+     différentes deviendraient indiscernables une fois mêlés. */
+  const stagiaires = useMemo(
+    () => (data || []).flatMap((lot) => lot.stagiaires.map((st) => ({ ...st, _code: lot.session.code }))),
+    [data]);
+
 
   /* La moyenne de la promotion, sur les seuls dossiers qui ont une note : ceux qui n'ont rien
      passé ne doivent pas la tirer vers le bas. */
@@ -90,6 +156,15 @@ function Notation() {
   }, [stagiaires]);
 
   const cols = [
+    {
+      /* LA FORMATION EN PREMIÈRE COLONNE. Sans elle, deux stagiaires de promotions différentes
+         deviennent indiscernables une fois mêlés dans le même tableau — et c'est précisément ce
+         qu'on vient de faire en passant à la semaine. */
+      k: "formation", t: "Formation",
+      cell: (s) => (s._code ? (
+        <span className="badge n mono" style={{ background: colorOf(s._code), color: "#fff", borderColor: "transparent" }}>{s._code}</span>
+      ) : null),
+    },
     {
       k: "nom", t: "Stagiaire", principal: true,
       cell: (s) => (
@@ -158,14 +233,7 @@ function Notation() {
       ) : (
         <>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", margin: "0 0 14px" }}>
-            <select className="inp" style={{ maxWidth: 460 }} value={choisie} aria-label="Session"
-              onChange={(e) => setChoisie(e.target.value)}>
-              {sessions.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.code ? `${s.code} — ` : ""}{s.title || "Session"} · {dateHeure(s.start_date)} · {s.inscrits} inscrit(s)
-                </option>
-              ))}
-            </select>
+            <SelecteurSemaine sessions={sessions} valeur={semaine} onChoisir={setSemaine} />
             <div className="seg">
               <button type="button" className={"seg-btn" + (vue === "note" ? " on" : "")} onClick={() => setVue("note")}>Note</button>
               <button type="button" className={"seg-btn" + (vue === "resultat" ? " on" : "")} onClick={() => setVue("resultat")}>Résultat</button>
@@ -173,15 +241,18 @@ function Notation() {
           </div>
 
           {vue === "note" ? (
-            /* `key` : changer de session doit REMONTER l'écran de saisie, sinon les notes du
-               groupe précédent resteraient affichées le temps du chargement — et une coche à cet
-               instant partirait sur le mauvais dossier. */
-            <SessionEvaluation key={choisie} sessionId={choisie} />
+            /* UNE CARTE PAR FORMATION DE LA SEMAINE, dépliée. Toutes à l'écran : on installe les
+               épreuves une fois et on note tout le monde, un clic de plus par formation serait
+               un clic de trop. Repliables quand même — le jour où une semaine portera quatre
+               sessions de douze, la page doit pouvoir se refermer. */
+            duGroupe.length === 0 ? (
+              <Card><EmptyState icon="calendar">Aucune session cette semaine-là.</EmptyState></Card>
+            ) : duGroupe.map((s) => <CarteNote key={s.id} session={s} />)
           ) : !data ? (
             <Squelette lignes={4} h={56} />
           ) : (
             <Card
-              title={sessionChoisie ? `${sessionChoisie.code || ""} ${sessionChoisie.title || ""}`.trim() : "Résultats"}
+              title={groupe ? `Semaine ${groupe.semaine} · ${groupe.annee}` : "Résultats"}
               more={
                 <span style={{ display: "inline-flex", gap: 12, alignItems: "center" }}>
                   {moyenne && (
@@ -189,14 +260,13 @@ function Notation() {
                       Moyenne&nbsp;: <b>{moyenne.percent}&nbsp;%</b> sur {moyenne.n} noté(s)
                     </span>
                   )}
-                  <Link to={`/sessions/${choisie}`} className="card-more">Ouvrir la session →</Link>
                 </span>
               }>
               <DataTable
                 rows={stagiaires}
                 rowKey={(s) => s.enrollment_id}
                 cols={cols}
-                vide={<EmptyState icon="users">Aucun stagiaire inscrit à cette session.</EmptyState>}
+                vide={<EmptyState icon="users">Aucun stagiaire inscrit cette semaine-là.</EmptyState>}
               />
 
               {/* LA LÉGENDE EXPLIQUE LES DEUX CHOSES QU'ON NE DEVINE PAS en regardant le tableau :
