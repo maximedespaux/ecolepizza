@@ -246,6 +246,68 @@ function UsageCard({ onStatus }) {
         </Card>
       )}
 
+      {!aucun && data.parSession.some((s) => s.stagiaires > 0) && (
+        <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Par session — qui a joué</span>}>
+          {/* UNE SESSION EST LE NIVEAU OÙ L'ÉCOLE AGIT : on ne relance pas « les stagiaires »,
+              on relance la promotion de la semaine 38. D'où ce découpage plutôt qu'une simple
+              liste de joueurs. */}
+          <p className="hint" style={{ marginTop: 0 }}>
+            <b>« Au moins N bonnes réponses »</b> et non un pourcentage exact : le jeu
+            n'enregistre que les étoiles, et elles bornent le score — 3 étoiles valent 90 % de
+            bonnes réponses, 2 en valent 70 %, 1 en vaut 50 %. Le chiffre est donc un
+            <b> minimum garanti</b>, au meilleur essai de chacun.
+          </p>
+          <div className="arch">
+            {data.parSession.filter((s) => s.stagiaires > 0).map((sess) => (
+              <details key={sess.id}>
+                <summary className="arch-sum">
+                  {sess.code && (
+                    <span className="badge n mono" style={{ background: colorOf(sess.code), color: "#fff", borderColor: "transparent" }}>{sess.code}</span>
+                  )}{" "}
+                  <b>S{sess.semaine} · {sess.annee}</b>
+                  <span className="sub" style={{ color: "var(--dim)", marginLeft: 8 }}>
+                    {sess.joueurs}/{sess.stagiaires} ont joué
+                    {sess.completion != null && <> · {sess.completion} % des chapitres</>}
+                    {sess.questions > 0 && <> · {sess.questions} questions, au moins {sess.bonnesMin} justes</>}
+                  </span>
+                  <span className="arch-count">{sess.termines}</span>
+                </summary>
+                <div className="arch-docs">
+                  {sess.chapitres === 0 ? (
+                    <p className="hint" style={{ margin: "4px 0" }}>
+                      Cette formation n'a aucun chapitre en banque : il n'y a rien à jouer.
+                    </p>
+                  ) : sess.apprenants.map((a) => (
+                    <div key={a.id} className="arch-doc">
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <b>{a.nom}</b>
+                        <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
+                          {a.termines === 0 && a.horsFormation === 0
+                            ? "n'a pas joué"
+                            : <>
+                                {a.termines}/{a.chapitres} chapitre(s) · {a.questions} question(s) ·
+                                {" "}au moins {a.bonnesMin} juste(s) · {a.moyenneEtoiles} étoile(s) en moyenne
+                                {a.horsFormation > 0 && <> · {a.horsFormation} chapitre(s) hors de sa formation</>}
+                                {a.derniere && <> · dernière partie {a.derniere}</>}
+                              </>}
+                        </span>
+                      </span>
+                      {/* La barre porte la complétion : elle se compare d'un coup d'œil d'une
+                          ligne à l'autre, ce qu'un pourcentage écrit ne permet pas. */}
+                      <div style={{ width: 90, height: 8, borderRadius: 999, background: "var(--surface3)", overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${a.completion || 0}%`,
+                          background: sess.code ? colorOf(sess.code) : "var(--navy)", borderRadius: 999 }} />
+                      </div>
+                      <span className="arch-count">{a.completion == null ? "—" : `${a.completion} %`}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {data.miniJeux.length > 0 && (
         <Card title={<span className="card-ttl"><Icon name="flask" size={16} /> Mini-jeux</span>}>
           {/* LES MINI-JEUX NE SONT PAS DES CHAPITRES et ne comptent pas dans les questions —

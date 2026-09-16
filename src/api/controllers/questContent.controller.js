@@ -481,8 +481,13 @@ const getQuestUsage = async (req, res) => {
         let progress = [];
         let derniere = null;
         try {
+            /* `updated_at` FORMATÉE EN BASE, jamais reconstruite en JS — même raison que
+               ci-dessous, et en prime une chaîne « AAAA-MM-JJ hh:mm » se compare directement :
+               la plus récente se trouve sans convertir quoi que ce soit. */
             [progress] = await conn.query(
-                'SELECT learner_id, world, step, stars FROM learner_quest_progress WHERE organization_id = ?',
+                `SELECT learner_id, world, step, stars,
+                        DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
+                   FROM learner_quest_progress WHERE organization_id = ?`,
                 [orgId]);
             /* FORMATÉE EN BASE, jamais reconstruite en JS : le pilote rendrait un `Date` dans le
                fuseau du PROCESSUS quand MariaDB a répondu dans celui de la SESSION — deux heures
@@ -495,8 +500,24 @@ const getQuestUsage = async (req, res) => {
         const [[eff]] = await conn.query(
             'SELECT COUNT(*) AS n FROM learner WHERE organization_id = ?', [orgId]);
 
+        /* SESSIONS ET INSCRITS — pour dire À QUI le jeu sert, pas seulement s'il sert. Trois
+           requêtes à plat plutôt qu'une jointure : le rapprochement se fait en mémoire, où il
+           est lisible et testable, et aucune des trois ne dépend des deux autres. */
+        const [sessions] = await conn.query(
+            `SELECT id, program_id, year, week, status FROM training_session
+              WHERE organization_id = ? ORDER BY year DESC, week DESC`, [orgId]);
+        const [enrollments] = await conn.query(
+            'SELECT learner_id, session_id FROM enrollment WHERE organization_id = ?', [orgId]);
+        /* Seuls les stagiaires INSCRITS quelque part : la liste sert à nommer les lignes d'une
+           session, pas à recopier le fichier des 1073. */
+        const [apprenants] = await conn.query(
+            `SELECT DISTINCT l.id, CONCAT(COALESCE(l.last_name, ''), ' ', COALESCE(l.first_name, '')) AS nom
+               FROM learner l JOIN enrollment e ON e.learner_id = l.id
+              WHERE l.organization_id = ?`, [orgId]);
+
         res.json({ data: {
-            ...usageQuest({ programs, bank, progress, stagiaires: Number(eff && eff.n) || 0 }),
+            ...usageQuest({ programs, bank, progress, stagiaires: Number(eff && eff.n) || 0,
+                sessions, enrollments, apprenants: apprenants.map((a) => ({ id: a.id, nom: a.nom.trim() })) }),
             derniereActivite: derniere,
         } });
     } catch (err) {
